@@ -25,7 +25,9 @@ extern "C" {
 // scratch and join shared pending native results without waiting on workers.
 // Execution of already prepared commands does not access this object.
 // Native requests with identical source bytes and ordered source roots
-// share loaded executables inside this catalog's fixed target/pipeline domain.
+// share compilation inside this catalog's fixed target/pipeline domain.
+// Distinct inputs emitting identical bytes share the loaded executable while
+// retaining their own entry mappings and direct launch configurations.
 // Prepared stages retain their executables independently of catalog lifetime.
 typedef struct loom_serve_jit_t loom_serve_jit_t;
 typedef struct loom_serve_jit_stage_t loom_serve_jit_stage_t;
@@ -69,7 +71,9 @@ void loom_serve_jit_release(loom_serve_jit_t* jit);
 typedef struct loom_serve_jit_cache_storage_t {
   // Loaded native inputs still indexed for exact reuse.
   iree_host_size_t count;
-  // Requested host bytes for keys, entries, diagnostics, and the lookup array.
+  // Distinct emitted images loaded, independent of native-input count.
+  iree_host_size_t executable_count;
+  // Requested bytes for keys, images, entries, diagnostics, and lookup arrays.
   iree_host_size_t host_bytes;
   // Lookup capacity included in host_bytes; retained as catalog infrastructure
   // independently of individual native entries.

@@ -1,5 +1,7 @@
 config.def @increment.delta = 5 : index
 
+config.def @increment.groups = 2 : index
+
 config.def @increment.temporary_bytes = 64 : offset
 
 // The catalog encounters declarations before the implementation provider.

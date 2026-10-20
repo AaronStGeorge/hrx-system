@@ -2,6 +2,29 @@ config.decl @increment.delta : %value: index where [range(%value, 1, 8)]
 
 config.decl @increment.temporary_bytes : offset
 
+config.decl @increment.groups : %value: index where [range(%value, 2, 8)]
+
+// Grid specialization changes the invocation without changing native code.
+kernel.def @increment_groups() {
+  %groups = config.get @increment.groups : index
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%groups, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch(%storage: buffer) {
+  %element = kernel.workgroup.id<x> : index
+  %c0 = index.constant 0 : offset
+  %data = buffer.view %storage[%c0] : buffer -> view<8xi32>
+  %value = view.load %data[%element] : view<8xi32> -> i32
+  %increment = scalar.constant 7 : i32
+  %next = scalar.addi %value, %increment : i32
+  view.store %next, %data[%element] : i32, view<8xi32>
+  kernel.return
+}
+
+command.program.def public @advance_groups() launch(%storage: buffer) {
+  kernel.launch @increment_groups(%storage) : (buffer)
+  command.return
+}
+
 func.def @increment_element(%element: index, %delta: index, %storage: buffer) {
   // Native specialization resolves target facts in retained helper callees.
   // Both supported wave sizes select one increment per element.

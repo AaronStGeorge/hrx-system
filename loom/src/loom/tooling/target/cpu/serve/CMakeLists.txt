@@ -109,6 +109,35 @@ loom_cc_binary(
 endif()
 
 if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_test(
+  NAME
+    executable_test
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/executable_test.cc"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/config.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/stage.loom"
+  DEPS
+    ::test_compiler
+    ::test_device
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::program::executable
+    loom::serve::runtime::program::jit
+    loom::serve::testing::jit
+  ARGS
+    "--jit_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/config.loom}}"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 iree_py_test(
   NAME
     serve_command_test

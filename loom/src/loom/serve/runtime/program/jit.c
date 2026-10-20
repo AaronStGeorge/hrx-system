@@ -10,6 +10,7 @@
 
 #include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
+#include "loom/serve/runtime/program/executable.h"
 #include "loom/serve/runtime/program/target.h"
 #include "loom/target/arch/cmd/hal_command_buffer.h"
 #include "loomc/compile.h"
@@ -36,26 +37,6 @@ typedef struct loom_serve_jit_compiler_t {
 
 typedef struct loom_serve_jit_job_t loom_serve_jit_job_t;
 typedef struct loom_serve_jit_request_t loom_serve_jit_request_t;
-
-// Loaded code shared by a cache entry and every compiled stage using it.
-// Recorded consumers retain HAL objects independently; their lifetime also
-// protects the native key from cache trimming.
-typedef struct loom_serve_jit_executable_t {
-  // Cache and stage ownership; recorded commands retain HAL objects directly.
-  iree_atomic_ref_count_t ref_count;
-  // Allocator owning this record and its executable-local function array.
-  iree_allocator_t host_allocator;
-  // Owned loaded executable, or NULL during construction.
-  iree_hal_executable_t* handle;
-  // Owned direct-stage launch contract, or NULL for command children.
-  loom_serve_dispatch_t* dispatch;
-  // Input artifact bytes, excluding driver-private loader allocations.
-  iree_host_size_t image_length;
-  // Number of native roots, in request order.
-  iree_host_size_t root_count;
-  // Executable-local functions in request root order, not parent slot order.
-  iree_hal_executable_function_t functions[];
-} loom_serve_jit_executable_t;
 
 // Ordered callback state that can outlive the device-owning source catalog.
 // Accepted jobs retain this independently so catalog teardown never runs after
@@ -96,7 +77,15 @@ typedef struct loom_serve_jit_native_t {
   // Copied evidence shared by consuming stages, or NULL for clean compilation.
   loom_serve_compilation_diagnostics_t* diagnostics;
   // Owned loaded-code record, shared with stages after successful publication.
-  loom_serve_jit_executable_t* executable;
+  loom_serve_executable_t* executable;
+  // Borrowed catalog retained by pending parents through publication.
+  loom_serve_jit_t* jit;
+  // Emitted-image load submitted after compiler accesses retire.
+  loom_serve_executable_request_t load;
+  // Direct launch facts from this input, independent of emitted image reuse.
+  loomc_launch_config_t launch_config;
+  // Owned root names retained through output-cache completion.
+  iree_string_view_t roots[];
 } loom_serve_jit_native_t;
 
 struct loom_serve_jit_t {
@@ -122,6 +111,8 @@ struct loom_serve_jit_t {
   loomc_link_index_t* index;
   // Immutable linker for direct kernel roots in the shared source catalog.
   loomc_linker_t* linker;
+  // Exact output reuse, independent of input specialization and entry mapping.
+  loom_serve_executable_cache_t* executables;
   // Exact native reuse, scoped to this catalog's fixed compiler and loader.
   struct {
     // Stable native entries sorted by their exact keys.
@@ -158,7 +149,7 @@ struct loom_serve_jit_stage_t {
   // Number of initialized loaded-code owners.
   iree_host_size_t executable_count;
   // Loaded-code owners in request order, independent of cache-key lifetime.
-  loom_serve_jit_executable_t* executables[];
+  loom_serve_executable_t* executables[];
 };
 
 static void loom_serve_jit_compiler_deinitialize(
@@ -266,26 +257,13 @@ static iree_status_t loom_serve_jit_initialize_compilation(
   return status;
 }
 
-static void loom_serve_jit_executable_release(
-    loom_serve_jit_executable_t* executable) {
-  if (!executable) {
-    return;
-  }
-  if (iree_atomic_ref_count_dec(&executable->ref_count) != 1) {
-    return;
-  }
-  loom_serve_dispatch_release(executable->dispatch);
-  iree_hal_executable_release(executable->handle);
-  iree_allocator_free(executable->host_allocator, executable);
-}
-
 static void loom_serve_jit_native_release(loom_serve_jit_native_t* native,
                                           iree_allocator_t host_allocator) {
   if (!native || iree_atomic_ref_count_dec(&native->ref_count) != 1) {
     return;
   }
   iree_status_free(native->status);
-  loom_serve_jit_executable_release(native->executable);
+  loom_serve_executable_release(native->executable);
   iree_allocator_free(host_allocator, native->diagnostics);
   iree_allocator_free(host_allocator, (void*)native->key.data);
   iree_allocator_free(host_allocator, native);
@@ -337,6 +315,7 @@ static void loom_serve_jit_destroy(loom_serve_jit_t* jit) {
     loom_serve_jit_native_release(jit->natives.values[i], jit->host_allocator);
   }
   iree_allocator_free(jit->host_allocator, jit->natives.values);
+  loom_serve_executable_cache_free(jit->executables);
   loomc_link_index_release(jit->index);
   loomc_linker_release(jit->linker);
   loom_serve_jit_compiler_deinitialize(&jit->kernel);
@@ -361,49 +340,39 @@ void loom_serve_jit_release(loom_serve_jit_t* jit) {
 
 loom_serve_jit_cache_storage_t loom_serve_jit_cache_storage(
     const loom_serve_jit_t* jit) {
+  const loom_serve_executable_cache_storage_t images =
+      loom_serve_executable_cache_storage(jit->executables);
   loom_serve_jit_cache_storage_t storage = {
       .count = jit->natives.count,
-      .host_bytes = jit->natives.capacity * sizeof(*jit->natives.values),
-      .index_bytes = jit->natives.capacity * sizeof(*jit->natives.values)};
+      .executable_count = images.count,
+      .host_bytes = jit->natives.capacity * sizeof(*jit->natives.values) +
+                    images.host_bytes,
+      .index_bytes = jit->natives.capacity * sizeof(*jit->natives.values) +
+                     images.index_bytes,
+      .code_bytes = images.code_bytes};
   for (iree_host_size_t i = 0; i < jit->natives.count; ++i) {
     const loom_serve_jit_native_t* native = jit->natives.values[i];
-    const loom_serve_jit_executable_t* executable = native->executable;
     storage.host_bytes +=
-        sizeof(*native) + native->key_capacity +
+        sizeof(*native) + native->load.root_count * sizeof(*native->roots) +
+        native->key_capacity +
         loom_serve_compilation_diagnostics_storage_size(native->diagnostics) +
-        sizeof(*executable) +
-        executable->root_count * sizeof(*executable->functions);
-    storage.code_bytes += executable->image_length;
+        loom_serve_executable_storage_size(native->executable);
   }
   return storage;
-}
-
-static bool loom_serve_jit_executable_is_shared(
-    const loom_serve_jit_executable_t* executable) {
-  if (iree_atomic_ref_count_load(&executable->ref_count) != 1 ||
-      (executable->dispatch &&
-       loom_serve_dispatch_is_shared(executable->dispatch))) {
-    return true;
-  }
-  const iree_hal_resource_t* resource =
-      (const iree_hal_resource_t*)executable->handle;
-  // The cache owns one HAL reference and a direct descriptor owns another.
-  // Any remaining reference is a recorded command or accepted device work.
-  const int32_t owned_references = executable->dispatch ? 2 : 1;
-  return iree_atomic_ref_count_load(&resource->ref_count) != owned_references;
 }
 
 void loom_serve_jit_trim(loom_serve_jit_t* jit) {
   iree_host_size_t count = 0;
   for (iree_host_size_t i = 0; i < jit->natives.count; ++i) {
     loom_serve_jit_native_t* native = jit->natives.values[i];
-    if (!loom_serve_jit_executable_is_shared(native->executable)) {
+    if (!loom_serve_executable_is_shared(native->executable)) {
       loom_serve_jit_native_release(native, jit->host_allocator);
     } else {
       jit->natives.values[count++] = native;
     }
   }
   jit->natives.count = count;
+  loom_serve_executable_cache_trim(jit->executables);
 }
 
 iree_status_t loom_serve_jit_create(iree_hal_device_t* device,
@@ -469,6 +438,11 @@ iree_status_t loom_serve_jit_create(iree_hal_device_t* device,
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(
         loomc_linker_create(jit->kernel.context, NULL, ca, &jit->linker));
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_executable_cache_allocate(
+        iree_hal_queue_family(dispatch), jit->target, host_allocator,
+        &jit->executables);
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_jit_initialize_compilation(jit, host);
@@ -637,19 +611,13 @@ static iree_status_t loom_serve_jit_acquire_native(
         (void**)&jit->natives.values));
   }
   loom_serve_jit_native_t* native = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(jit->host_allocator,
-                                             sizeof(*native), (void**)&native));
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_struct_array(
+      jit->host_allocator, sizeof(*native), root_count, sizeof(*native->roots),
+      (void**)&native));
   iree_atomic_ref_count_init(&native->ref_count);
-  iree_status_t status = iree_allocator_malloc_struct_array(
-      jit->host_allocator, sizeof(*native->executable), root_count,
-      sizeof(*native->executable->functions), (void**)&native->executable);
-  if (!iree_status_is_ok(status)) {
-    loom_serve_jit_native_release(native, jit->host_allocator);
-    return status;
-  }
-  iree_atomic_ref_count_init(&native->executable->ref_count);
-  native->executable->host_allocator = jit->host_allocator;
-  native->executable->root_count = root_count;
+  native->jit = jit;
+  native->load.root_count = root_count;
+  native->load.roots = native->roots;
   native->key_capacity = iree_string_builder_capacity(key);
   native->key = iree_make_const_byte_span(iree_string_builder_take_storage(key),
                                           key_view.size);
@@ -695,84 +663,12 @@ static iree_status_t loom_serve_jit_plan_request(loom_serve_jit_t* jit,
   return status;
 }
 
-static iree_status_t loom_serve_jit_load_request(
-    loom_serve_jit_t* jit, loomc_workspace_t* workspace,
-    loom_serve_jit_request_t* node, loom_serve_compilation_report_t* report) {
-  IREE_TRACE_ZONE_BEGIN(z0);
-  loom_serve_jit_native_t* native = node->native;
-  loom_serve_jit_executable_t* loaded = native->executable;
-  const loomc_allocator_t host_allocator =
-      loomc_allocator_from_iree(jit->host_allocator);
-  loomc_string_view_t* roots = NULL;
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_allocator_malloc_array(jit->host_allocator, loaded->root_count,
-                                      sizeof(*roots), (void**)&roots));
-  loomc_target_specialization_t* specializations = NULL;
-  iree_status_t status = iree_allocator_malloc_array(
-      jit->host_allocator, loaded->root_count, sizeof(*specializations),
-      (void**)&specializations);
-  loomc_module_t* module = NULL;
-  if (iree_status_is_ok(status)) {
-    loomc_result_t* result = NULL;
-    const loomc_status_t operation = loomc_module_deserialize_request(
-        jit->kernel.context, workspace, node->request, host_allocator, &module,
-        roots, &result);
-    status = loom_serve_compilation_result(operation, result, report);
-  }
-  for (iree_host_size_t i = 0;
-       i < loaded->root_count && iree_status_is_ok(status); ++i) {
-    // Names must survive module mutation through compile and native emission.
-    status = iree_status_from_loomc(loomc_string_view_clone(
-        roots[i], host_allocator, &specializations[i].function_symbol));
-    specializations[i].target_profile = jit->kernel.profile;
-  }
-  iree_allocator_free(jit->host_allocator, roots);
-  iree_const_byte_span_t image = iree_const_byte_span_empty();
-  if (iree_status_is_ok(status)) {
-    status = loom_serve_jit_emit_module(
-        &jit->kernel, workspace, module, loaded->root_count, specializations,
-        jit->artifact_format, report, jit->host_allocator, &image);
-  }
-  loomc_module_release(module);
-  iree_hal_executable_t* executable = NULL;
-  if (iree_status_is_ok(status)) {
-    iree_hal_executable_load_params_t params;
-    iree_hal_executable_load_params_initialize(&params);
-    params.executable_data = image;
-    status = iree_hal_executable_load(iree_hal_queue_family(jit->dispatch),
-                                      jit->target, &params, &executable);
-    loaded->image_length = image.data_length;
-  }
-  iree_allocator_free(jit->host_allocator, (void*)image.data);
-  for (iree_host_size_t i = 0;
-       i < loaded->root_count && iree_status_is_ok(status); ++i) {
-    status = iree_hal_executable_lookup_function_by_name(
-        executable,
-        iree_string_view_from_loomc(specializations[i].function_symbol),
-        &loaded->functions[i]);
-  }
-  if (iree_status_is_ok(status)) {
-    loaded->handle = executable;
-  } else {
-    iree_hal_executable_release(executable);
-  }
-  if (specializations) {
-    for (iree_host_size_t i = 0; i < loaded->root_count; ++i) {
-      loomc_allocator_free(host_allocator,
-                           (void*)specializations[i].function_symbol.data);
-    }
-  }
-  iree_allocator_free(jit->host_allocator, specializations);
-  IREE_TRACE_ZONE_END(z0);
-  return status;
-}
-
 void loom_serve_jit_stage_free(loom_serve_jit_stage_t* stage) {
   if (!stage) {
     return;
   }
   for (iree_host_size_t i = 0; i < stage->executable_count; ++i) {
-    loom_serve_jit_executable_release(stage->executables[i]);
+    loom_serve_executable_release(stage->executables[i]);
   }
   iree_allocator_free(stage->host_allocator, stage->entries);
   iree_allocator_free(stage->host_allocator, (void*)stage->image.data);
@@ -910,12 +806,12 @@ static iree_status_t loom_serve_jit_job_bind(
   stage->host_allocator = jit->host_allocator;
   for (loom_serve_jit_request_t* node = job->requests; node;
        node = node->next) {
-    loom_serve_jit_executable_t* executable = node->native->executable;
-    iree_atomic_ref_count_inc(&executable->ref_count);
+    loom_serve_executable_t* executable = node->native->executable;
+    loom_serve_executable_retain(executable);
     stage->executables[stage->executable_count++] = executable;
   }
   if (job->direct_dispatch) {
-    stage->dispatch = stage->executables[0]->dispatch;
+    stage->dispatch = loom_serve_executable_dispatch(stage->executables[0]);
     *out_stage = stage;
     return iree_ok_status();
   }
@@ -1029,9 +925,10 @@ static void loom_serve_jit_job_release(loom_serve_jit_job_t* job) {
         loom_cmd_program_hal_entry_t* entry =
             &job->requirements[binding.requirement_ordinal];
         *entry = (loom_cmd_program_hal_entry_t){
-            .executable = node->native->executable->handle,
-            .function =
-                node->native->executable->functions[binding.root_ordinal],
+            .executable =
+                loom_serve_executable_handle(node->native->executable),
+            .function = loom_serve_executable_function(node->native->executable,
+                                                       binding.root_ordinal),
         };
         iree_hal_executable_retain(entry->executable);
       }
@@ -1089,6 +986,78 @@ static void loom_serve_jit_native_complete(loom_serve_jit_t* jit,
   }
 }
 
+static void loom_serve_jit_native_loaded(void* user_data, iree_status_t status,
+                                         loom_serve_executable_t* executable) {
+  loom_serve_jit_native_t* native = user_data;
+  loom_serve_jit_t* jit = native->jit;
+  native->status = status;
+  native->executable = executable;
+  for (iree_host_size_t i = 0; i < native->load.root_count; ++i) {
+    iree_allocator_free(jit->host_allocator, (void*)native->roots[i].data);
+    native->roots[i] = iree_string_view_empty();
+  }
+  loom_serve_jit_native_complete(jit, native);
+}
+
+static void loom_serve_jit_load_native(loom_serve_jit_native_t* native) {
+  loom_serve_jit_t* jit = native->jit;
+  if (!iree_status_is_ok(native->status)) {
+    iree_allocator_free(jit->host_allocator, (void*)native->load.image.data);
+    native->load.image = iree_const_byte_span_empty();
+    loom_serve_jit_native_loaded(native, native->status, NULL);
+    return;
+  }
+  native->load.completion = loom_serve_jit_native_loaded;
+  native->load.user_data = native;
+  loom_serve_executable_cache_load(jit->executables, &native->load);
+}
+
+static iree_status_t loom_serve_jit_compile_request(
+    loom_serve_jit_t* jit, loomc_workspace_t* workspace,
+    loom_serve_jit_request_t* node, loom_serve_compilation_report_t* report) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  loom_serve_jit_native_t* native = node->native;
+  const loomc_allocator_t host_allocator =
+      loomc_allocator_from_iree(jit->host_allocator);
+  loomc_string_view_t* roots = NULL;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0,
+      iree_allocator_malloc_array(jit->host_allocator, native->load.root_count,
+                                  sizeof(*roots), (void**)&roots));
+  loomc_target_specialization_t* specializations = NULL;
+  iree_status_t status = iree_allocator_malloc_array(
+      jit->host_allocator, native->load.root_count, sizeof(*specializations),
+      (void**)&specializations);
+  loomc_module_t* module = NULL;
+  if (iree_status_is_ok(status)) {
+    loomc_result_t* result = NULL;
+    const loomc_status_t operation = loomc_module_deserialize_request(
+        jit->kernel.context, workspace, node->request, host_allocator, &module,
+        roots, &result);
+    status = loom_serve_compilation_result(operation, result, report);
+  }
+  for (iree_host_size_t i = 0;
+       i < native->load.root_count && iree_status_is_ok(status); ++i) {
+    // Names must survive module mutation through compile and native emission.
+    status = iree_status_from_loomc(loomc_string_view_clone(
+        roots[i], host_allocator, &specializations[i].function_symbol));
+    native->roots[i] =
+        iree_string_view_from_loomc(specializations[i].function_symbol);
+    specializations[i].target_profile = jit->kernel.profile;
+  }
+  iree_allocator_free(jit->host_allocator, roots);
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_jit_emit_module(
+        &jit->kernel, workspace, module, native->load.root_count,
+        specializations, jit->artifact_format, report, jit->host_allocator,
+        &native->load.image);
+  }
+  loomc_module_release(module);
+  iree_allocator_free(jit->host_allocator, specializations);
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
 typedef struct loom_serve_jit_task_t {
   // Queue-owned native work record.
   loomc_task_t base;
@@ -1103,7 +1072,7 @@ static void loom_serve_jit_task_execute(loomc_task_t* base,
   loom_serve_jit_task_t* task = (loom_serve_jit_task_t*)base;
   loom_serve_jit_job_t* job = task->job;
   loom_serve_compilation_report_t report = {0};
-  task->request->native->status = loom_serve_jit_load_request(
+  task->request->native->status = loom_serve_jit_compile_request(
       job->jit, job->jit->compilation.workspaces[worker_ordinal], task->request,
       &report);
   task->request->native->status = iree_status_join(
@@ -1117,7 +1086,7 @@ static void loom_serve_jit_task_destroy(loomc_task_t* base) {
   loom_serve_jit_t* jit = task->job->jit;
   loom_serve_jit_native_t* native = task->request->native;
   iree_allocator_free(jit->host_allocator, task);
-  loom_serve_jit_native_complete(jit, native);
+  loom_serve_jit_load_native(native);
 }
 
 static const loomc_task_vtable_t jit_task_vtable = {
@@ -1174,9 +1143,9 @@ static loomc_status_t loom_serve_jit_publish(void* user_data,
   return loomc_status_from_iree(status);
 }
 
-// Cold compiler/HAL boundary: launch facts come from the same compilation as
-// the executable, never from source inspection or an assumed workgroup count.
-static iree_status_t loom_serve_jit_load_dispatch(
+// Emits code and launch facts without creating device objects. Image loading
+// can coalesce with another producer before resolving this input's entries.
+static iree_status_t loom_serve_jit_emit_dispatch(
     loom_serve_jit_job_t* job, loomc_workspace_t* workspace,
     loomc_module_t* module, loom_serve_jit_native_t* native,
     loom_serve_compilation_report_t* report) {
@@ -1184,7 +1153,11 @@ static iree_status_t loom_serve_jit_load_dispatch(
   const loomc_allocator_t host_allocator =
       loomc_allocator_from_iree(jit->host_allocator);
   const loomc_string_view_t root = loomc_string_view_from_iree(job->root);
-  loom_serve_jit_executable_t* loaded = native->executable;
+  loomc_string_view_t retained_root;
+  IREE_RETURN_IF_ERROR(iree_status_from_loomc(
+      loomc_string_view_clone(root, host_allocator, &retained_root)));
+  native->roots[0] = iree_string_view_from_loomc(retained_root);
+  native->load.launch_config = &native->launch_config;
   const loomc_emit_options_t emit_options = {
       .artifact_format = loomc_string_view_from_iree(jit->artifact_format),
       .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_PRIMARY,
@@ -1206,7 +1179,6 @@ static iree_status_t loom_serve_jit_load_dispatch(
   iree_status_t status =
       loom_serve_compilation_result(operation, result, report);
   loomc_launch_config_program_t* launch = NULL;
-  iree_hal_executable_t* executable = NULL;
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < loomc_result_artifact_count(result);
        ++i) {
@@ -1218,88 +1190,21 @@ static iree_status_t loom_serve_jit_load_dispatch(
       loomc_byte_span_t image = loomc_byte_span_empty();
       status = iree_status_from_loomc(loomc_byte_sequence_clone(
           artifact->contents, host_allocator, &image));
-      if (iree_status_is_ok(status)) {
-        iree_hal_executable_load_params_t params;
-        iree_hal_executable_load_params_initialize(&params);
-        params.executable_data = iree_const_byte_span_from_loomc(image);
-        status = iree_hal_executable_load(iree_hal_queue_family(jit->dispatch),
-                                          jit->target, &params, &executable);
-        loaded->image_length = image.data_length;
-      }
-      iree_allocator_free(jit->host_allocator, (void*)image.data);
+      native->load.image = iree_const_byte_span_from_loomc(image);
     }
   }
   loomc_result_release(result);
   loomc_launch_config_function_t launch_function =
       loomc_launch_config_function_invalid();
-  loomc_launch_config_t launch_config = {0};
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(loomc_launch_config_program_lookup_function(
         launch, root, &launch_function));
   }
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(loomc_launch_config_program_invoke(
-        launch, launch_function, NULL, 0, &launch_config));
+        launch, launch_function, NULL, 0, &native->launch_config));
   }
   loomc_launch_config_program_release(launch);
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_executable_lookup_function_by_name(executable, job->root,
-                                                         &loaded->functions[0]);
-  }
-  iree_hal_executable_function_info_t info = {0};
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_executable_function_info(executable, loaded->functions[0],
-                                               &info);
-  }
-  if (iree_status_is_ok(status) &&
-      (launch_config.workgroup_cluster_size.x != 1 ||
-       launch_config.workgroup_cluster_size.y != 1 ||
-       launch_config.workgroup_cluster_size.z != 1)) {
-    status =
-        iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                         "HAL direct stage cannot express clustered launch");
-  }
-  const uint64_t fixed_storage =
-      info.resource_usage.fixed_workgroup_local_memory_size;
-  if (iree_status_is_ok(status) && launch_config.workgroup_storage_bytes &&
-      (!iree_any_bit_set(
-           info.resource_usage.provided_flags,
-           IREE_HAL_EXECUTABLE_FUNCTION_RESOURCE_FLAG_WORKGROUP_LOCAL_MEMORY) ||
-       launch_config.workgroup_storage_bytes < fixed_storage ||
-       launch_config.workgroup_storage_bytes - fixed_storage > UINT32_MAX)) {
-    status = iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "direct stage requires representable reflected local storage");
-  }
-  if (iree_status_is_ok(status)) {
-    iree_hal_dispatch_config_t config = {
-        .workgroup_count = {launch_config.workgroup_count.x,
-                            launch_config.workgroup_count.y,
-                            launch_config.workgroup_count.z},
-        .dynamic_workgroup_local_memory =
-            launch_config.workgroup_storage_bytes > fixed_storage
-                ? (uint32_t)(launch_config.workgroup_storage_bytes -
-                             fixed_storage)
-                : 0,
-    };
-    // Static geometry is already part of the executable. An explicit override
-    // is a different HAL capability, needed only for dynamic workgroup size.
-    if (iree_any_bit_set(
-            info.flags,
-            IREE_HAL_EXECUTABLE_FUNCTION_FLAG_WORKGROUP_SIZE_DYNAMIC)) {
-      config.workgroup_size[0] = launch_config.workgroup_size.x;
-      config.workgroup_size[1] = launch_config.workgroup_size.y;
-      config.workgroup_size[2] = launch_config.workgroup_size.z;
-    }
-    status =
-        loom_serve_dispatch_create(executable, loaded->functions[0], config,
-                                   jit->host_allocator, &loaded->dispatch);
-  }
-  if (iree_status_is_ok(status)) {
-    loaded->handle = executable;
-  } else {
-    iree_hal_executable_release(executable);
-  }
   return status;
 }
 
@@ -1366,17 +1271,19 @@ static iree_status_t loom_serve_jit_compile_dispatch(
   loomc_source_release(source);
   if (iree_status_is_ok(status) && created) {
     loom_serve_compilation_report_t report = {0};
-    node->native->status = loom_serve_jit_load_dispatch(job, workspace, module,
+    node->native->status = loom_serve_jit_emit_dispatch(job, workspace, module,
                                                         node->native, &report);
     node->native->status = iree_status_join(
         node->native->status,
         loom_serve_compilation_diagnostics_clone(&report, jit->host_allocator,
                                                  &node->native->diagnostics));
-    loom_serve_jit_native_complete(jit, node->native);
   } else if (iree_status_is_ok(status)) {
     ++job->reused_count;
   }
   loomc_module_release(module);
+  if (iree_status_is_ok(status) && created) {
+    loom_serve_jit_load_native(node->native);
+  }
   return status;
 }
 
