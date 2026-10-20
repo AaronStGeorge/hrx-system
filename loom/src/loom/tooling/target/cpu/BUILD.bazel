@@ -131,6 +131,30 @@ iree_executable_test(
     ]) + ["@platforms//cpu:x86_64"],
 )
 
+# Floating exponent and division families share the portable numeric corpus.
+[
+    iree_executable_test(
+        name = "float_" + family + "_scenario_test",
+        src = "//loom/src/loom/tools/iree-test-loom",
+        args = [
+            "$(rootpath //loom/src/loom/test/corpus/numeric:float/" + family + ".loom)",
+            "--device=task",
+            "--task_topology_max_group_count=2",
+        ],
+        data = ["//loom/src/loom/test/corpus/numeric:float/" + family + ".loom"],
+        target_compatible_with = loom_config_compatible_with([
+            "//loom/config/target/arch:x86",
+            "//loom/config/target/arch:vm",
+            "//runtime/config/hal:executable_loader_embedded_elf",
+            "//loom/config/execute:task_hal",
+        ]) + ["@platforms//cpu:x86_64"],
+    )
+    for family in [
+        "exponent",
+        "reciprocal",
+    ]
+]
+
 # Exercises shared corpus programs through the task HAL and independent VM oracle.
 # Two workers retain concurrent scheduling without a machine-sized test pool.
 [

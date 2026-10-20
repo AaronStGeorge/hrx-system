@@ -99,6 +99,7 @@ static const loom_target_math_policy_direct_rule_t
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(ADDF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(SUBF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(MULF),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(DIVF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(CEILF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(FLOORF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(ROUNDEVENF),
@@ -178,9 +179,9 @@ static const loom_target_math_policy_rule_t
     kVmMathRules[LOOM_VM_MATH_RULE_COUNT_] = {
         [LOOM_VM_MATH_RULE_ARITHMETIC_NARROW] =
             {
-                .match = LOOM_VM_MATH_MATCH(
-                    LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_BF16,
-                    LOOM_TARGET_MATH_FASTMATH_FLAG_NONE),
+                .match =
+                    LOOM_VM_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+                                       LOOM_TARGET_MATH_FASTMATH_FLAG_NONE),
                 .recipe = LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND,
                 .decision_constraint =
                     LOOM_VM_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
@@ -216,6 +217,7 @@ static const loom_target_math_policy_rule_span_t
         LOOM_VM_MATH_ARITHMETIC_SPAN(ADDF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(SUBF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(MULF),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(DIVF),
 #undef LOOM_VM_MATH_ARITHMETIC_SPAN
 #define LOOM_VM_MATH_FALLBACK(op_, constraint_) \
   [LOOM_TARGET_MATH_OP_##op_] =                 \

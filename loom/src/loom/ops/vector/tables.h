@@ -103,6 +103,8 @@ extern const loom_op_vtable_t loom_vector_rotri_vtable;
 extern const loom_op_vtable_t loom_vector_ctlzi_vtable;
 extern const loom_op_vtable_t loom_vector_cttzi_vtable;
 extern const loom_op_vtable_t loom_vector_ctpopi_vtable;
+extern const loom_op_vtable_t loom_vector_ldexpf_vtable;
+extern const loom_op_vtable_t loom_vector_frexpf_vtable;
 extern const loom_op_vtable_t loom_vector_expf_vtable;
 extern const loom_op_vtable_t loom_vector_exp2f_vtable;
 extern const loom_op_vtable_t loom_vector_expm1f_vtable;

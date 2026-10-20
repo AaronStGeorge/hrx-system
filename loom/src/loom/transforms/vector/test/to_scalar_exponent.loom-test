@@ -1,0 +1,74 @@
+// RUN: pass vector-to-scalar,canonicalize
+
+func.def @static_decomposition(%input: vector<2xf64>) -> (vector<2xf64>, vector<2xi32>) {
+  %fraction, %exponent = vector.frexpf %input : vector<2xf64>, vector<2xi32>
+  func.return %fraction, %exponent : vector<2xf64>, vector<2xi32>
+}
+
+// ----
+func.def @static_decomposition(%input: vector<2xf64>) -> (vector<2xf64>, vector<2xi32>) {
+  %5 = vector.extract %input[0] : vector<2xf64> -> f64
+  %6, %7 = scalar.frexpf %5 : f64, i32
+  %8 = vector.extract %input[1] : vector<2xf64> -> f64
+  %9, %10 = scalar.frexpf %8 : f64, i32
+  %fraction = vector.from_elements %6, %9 : vector<2xf64>
+  %exponent = vector.from_elements %7, %10 : vector<2xi32>
+  func.return %fraction, %exponent : vector<2xf64>, vector<2xi32>
+}
+
+// ====
+
+func.def @dynamic_decomposition(%length: index, %input: vector<[%length]xf32>) -> (vector<[%length]xf32>, vector<[%length]xi32>) {
+  %fraction, %exponent = vector.frexpf %input : vector<[%length]xf32>, vector<[%length]xi32>
+  func.return %fraction, %exponent : vector<[%length]xf32>, vector<[%length]xi32>
+}
+
+// ----
+func.def @dynamic_decomposition(%length: index, %input: vector<[%length]xf32>) -> (vector<[%length]xf32>, vector<[%length]xi32>) {
+  %6 = vector.constant 0.0 : vector<[%length]xf32>
+  %7 = vector.constant 0 : vector<[%length]xi32>
+  %8 = index.constant 0 : index
+  %9 = index.constant 1 : index
+  %fraction, %exponent = scf.for %10 = [%8 to %length step %9](%11 = %6 : vector<[%length]xf32>, %12 = %7 : vector<[%length]xi32>) -> (vector<[%length]xf32>, vector<[%length]xi32>) {
+    %15 = vector.extract %input[%10] : vector<[%length]xf32> -> f32
+    %16, %17 = scalar.frexpf %15 : f32, i32
+    %18 = vector.insert %16 into %11[%10] : f32, vector<[%length]xf32>
+    %19 = vector.insert %17 into %12[%10] : i32, vector<[%length]xi32>
+    scf.yield %18, %19 : vector<[%length]xf32>, vector<[%length]xi32>
+  }
+  func.return %fraction, %exponent : vector<[%length]xf32>, vector<[%length]xi32>
+}
+
+// ====
+
+func.def @extracted_exponent(%input: vector<2xbf16>) -> (i32) {
+  %fraction, %exponent = vector.frexpf %input : vector<2xbf16>, vector<2xi32>
+  %lane = vector.extract %exponent[1] : vector<2xi32> -> i32
+  func.return %lane : i32
+}
+
+// ----
+func.def @extracted_exponent(%input: vector<2xbf16>) -> (i32) {
+  %8 = vector.extract %input[1] : vector<2xbf16> -> bf16
+  %9, %10 = scalar.frexpf %8 : bf16, i32
+  func.return %10 : i32
+}
+
+// ====
+
+func.def @scale(%input: vector<2xf16>, %exponent: vector<2xi32>) -> (vector<2xf16>) {
+  %result = vector.ldexpf %input, %exponent : vector<2xf16>, vector<2xi32>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+func.def @scale(%input: vector<2xf16>, %exponent: vector<2xi32>) -> (vector<2xf16>) {
+  %4 = vector.extract %input[0] : vector<2xf16> -> f16
+  %5 = vector.extract %exponent[0] : vector<2xi32> -> i32
+  %6 = scalar.ldexpf %4, %5 : f16, i32
+  %7 = vector.extract %input[1] : vector<2xf16> -> f16
+  %8 = vector.extract %exponent[1] : vector<2xi32> -> i32
+  %9 = scalar.ldexpf %7, %8 : f16, i32
+  %result = vector.from_elements %6, %9 : vector<2xf16>
+  func.return %result : vector<2xf16>
+}

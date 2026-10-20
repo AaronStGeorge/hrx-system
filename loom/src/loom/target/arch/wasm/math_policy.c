@@ -12,6 +12,8 @@
   _(ELEMENT_NATIVE_FLOAT, element_native_float, "math.element.native_float") \
   _(OP_NATIVE_FLOAT, op_native_float, "math.op.native_float")                \
   _(OP_SUPPORTED, op_supported, "math.op.supported")                         \
+  _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                          \
+    "math.recipe.widen_f32_round")                                           \
   _(RECIPE_RSQRT_SQRT_DIV, recipe_rsqrt_sqrt_div, "math.recipe.rsqrt_sqrt_div")
 
 enum loom_wasm_math_constraint_e {
@@ -70,6 +72,9 @@ static const loom_target_math_policy_direct_rule_t
         [LOOM_TARGET_MATH_OP_MULF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
+        [LOOM_TARGET_MATH_OP_DIVF] = LOOM_WASM_MATH_DIRECT_RULE(
+            LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_CEILF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
@@ -93,6 +98,19 @@ static const loom_target_math_policy_direct_rule_t
 
 #undef LOOM_WASM_MATH_DIRECT_RULE
 
+static const loom_target_math_policy_rule_t kWasmMathRules[] = {
+    {
+        .match =
+            {
+                .element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+                .lane_domains = LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,
+                .shape = LOOM_TARGET_MATH_POLICY_SHAPE_ANY,
+            },
+        .recipe = LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND,
+        .decision_constraint = LOOM_WASM_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
+    },
+};
+
 #define LOOM_WASM_MATH_NATIVE_FLOAT_SPAN \
   {.fallback_constraint = LOOM_WASM_MATH_CONSTRAINT_ELEMENT_NATIVE_FLOAT}
 
@@ -101,6 +119,12 @@ static const loom_target_math_policy_rule_span_t
         [LOOM_TARGET_MATH_OP_ADDF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
         [LOOM_TARGET_MATH_OP_SUBF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
         [LOOM_TARGET_MATH_OP_MULF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
+        [LOOM_TARGET_MATH_OP_DIVF] =
+            {
+                .rule_count = IREE_ARRAYSIZE(kWasmMathRules),
+                .fallback_constraint =
+                    LOOM_WASM_MATH_CONSTRAINT_ELEMENT_NATIVE_FLOAT,
+            },
         [LOOM_TARGET_MATH_OP_CEILF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
         [LOOM_TARGET_MATH_OP_FLOORF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
         [LOOM_TARGET_MATH_OP_ROUNDEVENF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
@@ -114,6 +138,7 @@ static const loom_target_math_policy_rule_span_t
 
 static const loom_target_math_policy_table_t kWasmMathPolicyTable = {
     .operation_spans = kWasmMathOperationSpans,
+    .rules = kWasmMathRules,
     .default_constraint = LOOM_WASM_MATH_CONSTRAINT_OP_SUPPORTED,
     .constraints = kWasmMathConstraints,
     .constraint_strings =

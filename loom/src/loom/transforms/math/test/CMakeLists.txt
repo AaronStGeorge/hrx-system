@@ -13,6 +13,7 @@ loom_check_test_suite(
   NAME
     test
   SRCS
+    "exponent.loom-test"
     "grouped_product_evaluation.loom-test"
     "legalize.loom-test"
     "trigonometry.loom-test"

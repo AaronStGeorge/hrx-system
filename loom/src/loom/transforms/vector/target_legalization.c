@@ -405,11 +405,8 @@ static iree_status_t loom_vector_build_widened_shift(
   return iree_ok_status();
 }
 
-// Keeps rejected shifts in vector IR when another vector representation can
-// satisfy a target contract. A valid 64-bit shift count is in [0, 63], so a
-// truncate/zero-extend round trip preserves the defined domain while exposing
-// an exact 32-bit lane origin. Sixteen-bit shifts use a logarithmic barrel made
-// from fixed shifts; sub-halfword shifts first widen to that domain and
+// Keeps rejected narrow shifts in vector IR with a logarithmic barrel made
+// from fixed shifts. Sub-halfword shifts first widen to that domain and
 // truncate at the source operation boundary. When widening the complete
 // authored vector would exceed the target carrier budget, the rewrite widens
 // bounded native packets instead of creating an oversized transient carrier.
@@ -421,61 +418,6 @@ static iree_status_t loom_vector_legalize_shift(
       loom_module_value_type(context->module, loom_op_results(op)[0]);
   const int32_t bit_width =
       loom_scalar_type_bitwidth(loom_type_element_type(result_type));
-  // Normalize counts only within a supported value carrier. An oversized
-  // vector still needs packetization; composing its truncate/extend pair can
-  // otherwise recreate the same rejected shift without changing its carrier.
-  // Fixed counts already expose their immediate value to target contracts.
-  if (bit_width == 64 &&
-      loom_target_legalization_op_has_source_vector_carriers(context, op) &&
-      !loom_vector_shift_count_is_fixed(context->rewriter,
-                                        loom_op_operands(op)[1])) {
-    const loom_value_id_t count = loom_op_operands(op)[1];
-    loom_value_fact_exact_lane_origin_t count_origin = {0};
-    const bool has_i32_count_origin =
-        loom_value_fact_table_query_exact_lane_origin(
-            context->fact_table, context->module, count, &count_origin) &&
-        loom_type_element_type(loom_module_value_type(
-            context->module, count_origin.source_value_id)) ==
-            LOOM_SCALAR_TYPE_I32;
-    if (!has_i32_count_origin) {
-      loom_rewriter_t* rewriter = context->rewriter;
-      loom_builder_t* builder = &rewriter->builder;
-      loom_builder_set_before(builder, op);
-      const loom_value_id_t checkpoint =
-          loom_rewriter_value_checkpoint(rewriter);
-      loom_type_t narrow_type = result_type;
-      narrow_type.header = loom_type_make_header(
-          loom_type_kind(result_type), LOOM_SCALAR_TYPE_I32,
-          loom_type_rank(result_type), loom_type_flags(result_type));
-      loom_op_t* truncate_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_vector_trunci_build(builder, count, result_type,
-                                                    narrow_type, op->location,
-                                                    &truncate_op));
-      loom_op_t* extend_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_vector_extui_build(
-          builder, loom_vector_trunci_result(truncate_op), narrow_type,
-          result_type, op->location, &extend_op));
-
-      loom_op_t* replacement_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
-          builder, op->kind, 2, 1, 0, 0, op->instance_flags, op->location,
-          &replacement_op));
-      loom_op_operands(replacement_op)[0] = loom_op_operands(op)[0];
-      loom_op_operands(replacement_op)[1] = loom_vector_extui_result(extend_op);
-      IREE_RETURN_IF_ERROR(loom_builder_define_result(
-          builder, result_type, &loom_op_results(replacement_op)[0]));
-      IREE_RETURN_IF_ERROR(loom_builder_finalize_op(builder, replacement_op));
-      loom_value_id_t replacement = loom_op_results(replacement_op)[0];
-      IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
-          rewriter, op, &replacement, 1, checkpoint));
-      IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
-          rewriter, op, &replacement, 1));
-      *out_result = (loom_target_legalizer_result_t){
-          .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
-      };
-      return iree_ok_status();
-    }
-  }
   if (bit_width >= 32) {
     return loom_vector_legalize_descriptor(entry, context, op, out_result);
   }

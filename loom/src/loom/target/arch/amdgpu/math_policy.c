@@ -152,6 +152,8 @@ static const loom_target_math_evaluation_t kAmdgpuMathEvaluations[] = {
         LOOM_SCALAR_TYPE_SET_BF16,                                             \
     ALL, ANY, 0, 0, NONE, NONE, WIDEN_F32_ROUND, NONE, NONE, NONE,             \
     RECIPE_WIDEN_F32_ROUND, NONE)                                              \
+  _(DIV_WIDEN, LOOM_SCALAR_TYPE_SET_FLOAT_LE16, ALL, ANY, 0, 0, NONE, NONE,    \
+    WIDEN_F32_ROUND, NONE, NONE, NONE, RECIPE_WIDEN_F32_ROUND, NONE)           \
   _(SUB_NATIVE_BF16, LOOM_SCALAR_TYPE_SET_BF16, VECTOR, RANK_ONE_EVEN, 1,      \
     LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES, NONE, NATIVE_PACKED_BF16,        \
     UNKNOWN, NONE, NONE, NONE, OP_NATIVE_PACKED_BF16, NONE)                    \
@@ -255,6 +257,8 @@ static const loom_target_math_policy_rule_t
     LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_F32 |                      \
         LOOM_SCALAR_TYPE_SET_F64,                                              \
     NONE, UNKNOWN, NONE, NONE, BASIC_KEEP, NONE)                               \
+  _(DIVF, LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64, NONE, UNKNOWN,  \
+    NONE, NONE, BASIC_KEEP, NONE)                                              \
   _(LOGF, LOOM_SCALAR_TYPE_SET_F32, AFN, LOG_LOG2_F32, NONE, NONE,             \
     RECIPE_LOG_LOG2_F32, LOG_EXACT_F32)                                        \
   _(LOG2F, LOOM_SCALAR_TYPE_SET_F32, AFN, UNKNOWN, NONE, NONE, OP_NATIVE_F32,  \
@@ -331,6 +335,7 @@ static const loom_target_math_policy_direct_rule_t
   _(GELUF_LOGISTIC, 0, 0, ELEMENT_F32)                                       \
   _(ADDF, LOOM_AMDGPU_MATH_RULE_BINARY_NATIVE_BF16, 2, BASIC_KEEP)           \
   _(MULF, LOOM_AMDGPU_MATH_RULE_BINARY_NATIVE_BF16, 2, BASIC_KEEP)           \
+  _(DIVF, LOOM_AMDGPU_MATH_RULE_DIV_WIDEN, 1, BASIC_KEEP)                    \
   _(LOGF, 0, 0, ELEMENT_F32)                                                 \
   _(LOG2F, 0, 0, ELEMENT_F32)                                                \
   _(SINF, 0, 0, ELEMENT_F32)                                                 \

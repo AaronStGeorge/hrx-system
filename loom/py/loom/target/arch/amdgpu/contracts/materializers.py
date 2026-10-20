@@ -16,6 +16,14 @@ REGISTERS_VGPR_MATERIALIZER = ValueMaterializer(
     header="loom/target/arch/amdgpu/lower/materializers.h",
 )
 
+I64_LOW_WORDS_MATERIALIZER = ValueMaterializer(
+    name="i64_low_words",
+    result_type="loom_amdgpu_materialized_i64_low_words_type",
+    can_materialize="loom_amdgpu_value_can_materialize_as_vgpr_registers",
+    materialize="loom_amdgpu_materialize_i64_low_words",
+    header="loom/target/arch/amdgpu/lower/materializers.h",
+)
+
 VOP3_BINARY_RHS_MATERIALIZER = ValueMaterializer(
     name="vop3_binary_rhs",
     result_type="loom_amdgpu_materialized_vop3_binary_rhs_type",

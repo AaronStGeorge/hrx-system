@@ -50,6 +50,16 @@ iree_status_t loom_amdgpu_emit_prepared_native_i1_mask(
 loom_type_t loom_amdgpu_materialized_vgpr_register_type(
     const loom_low_lower_context_t* context, loom_value_id_t source_value);
 
+// Projects each i64 lane to its low word, preserving the producer's bank.
+// Native 64-bit shifts consume only this word of each defined [0, 63] count.
+loom_type_t loom_amdgpu_materialized_i64_low_words_type(
+    const loom_low_lower_context_t* context, loom_value_id_t source_value);
+
+// Emits structural register slices for the low word of each i64 source lane.
+iree_status_t loom_amdgpu_materialize_i64_low_words(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value);
+
 // Applies the active target's scalar-source limit to a binary VOP3 RHS.
 loom_type_t loom_amdgpu_materialized_vop3_binary_rhs_type(
     const loom_low_lower_context_t* context, loom_value_id_t source_value);

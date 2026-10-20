@@ -21,11 +21,16 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.arch.amdgpu.contracts.bfloat import bfloat_narrow_rules
+from loom.target.arch.amdgpu.contracts.exponent import (
+    EXPONENT_DESCRIPTOR_KEYS,
+    exponent_rules,
+)
 from loom.target.arch.amdgpu.contracts.materializers import (
     ADDRESS_SGPR_MATERIALIZER,
     ADDRESS_VGPR_MATERIALIZER,
     F32_VGPR_MATERIALIZER,
     I1_NATIVE_MASK_MATERIALIZER,
+    I64_LOW_WORDS_MATERIALIZER,
     REGISTERS_VGPR_MATERIALIZER,
     VOP3_BINARY_RHS_MATERIALIZER,
 )
@@ -158,8 +163,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_sqrt_f32",
     "amdgpu.v_sqrt_f64",
     "amdgpu.v_rsq_f64",
-    "amdgpu.v_ldexp_f32",
-    "amdgpu.v_ldexp_f64",
+    *EXPONENT_DESCRIPTOR_KEYS,
     "amdgpu.v_cmp_class_f64",
     "amdgpu.v_cmp_olt_f64",
     "amdgpu.v_cvt_f64_i32",
@@ -681,14 +685,16 @@ def _i64_vector_shift_rule(
         descriptor=descriptor,
         guards=(
             *_typed_guards(("lhs", "rhs", "result"), _VEC_I64_STATIC),
-            Guard.exact_lane_origin_type("rhs", _VEC_I32_STATIC),
+            Guard.value_materializable("rhs", I64_LOW_WORDS_MATERIALIZER.name),
             Guard.descriptor_available(descriptor),
         ),
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
                 operands={
-                    "shift": ValueRef.exact_lane_origin_operand("rhs"),
+                    "shift": ValueRef.operand(
+                        "rhs", materializer=I64_LOW_WORDS_MATERIALIZER.name
+                    ),
                     "value": ValueRef.operand("lhs"),
                 },
                 results={"dst": ValueRef.result("result")},
@@ -2523,154 +2529,128 @@ def _sqrtf_exact_f64_rule() -> DescriptorRule:
     )
 
 
-def _divf_exact_f64_rule() -> DescriptorRule:
-    # Mirrors the strict f64 division sequence in LLVM's AMDGPU LowerFDIV64.
+def _divf_f64_rule(
+    source_op: Op, type_pattern: TypePattern, *, allow_reciprocal: bool
+) -> DescriptorRule:
     # DIV_SCALE handles denormal ranges; DIV_FMAS and DIV_FIXUP finish rounding
-    # and exceptional cases. The negated FMA source is an operand modifier.
-    scale = _descriptor("amdgpu.v_div_scale_f64")
-    reciprocal = _descriptor("amdgpu.v_rcp_f64")
-    fma = _descriptor("amdgpu.v_fma_f64")
-    neg_fma = _descriptor("amdgpu.v_fma_f64.neg_a")
-    neg_fma_one = _descriptor("amdgpu.v_fma_f64.neg_a_one")
-    multiply = _descriptor("amdgpu.v_mul_f64")
-    fmas = _descriptor("amdgpu.v_div_fmas_f64")
-    fixup = _descriptor("amdgpu.v_div_fixup_f64")
+    # and exceptional cases. ARCP permits one reciprocal Newton round: the
+    # quotient residual supplies the next correction, bounding finite error
+    # to two ULP without weakening the range or exceptional-value contract.
+    descriptors = {
+        name: _descriptor(f"amdgpu.v_{name}_f64")
+        for name in (
+            "div_scale",
+            "rcp",
+            "fma",
+            "mul",
+            "div_fmas",
+            "div_fixup",
+        )
+    }
+    descriptors["residual"] = _descriptor("amdgpu.v_fma_f64.neg_a")
+    descriptors["reciprocal_error"] = _descriptor("amdgpu.v_fma_f64.neg_a_one")
     numerator = ValueRef.operand("lhs", materializer=REGISTERS_VGPR_MATERIALIZER.name)
     denominator = ValueRef.operand("rhs", materializer=REGISTERS_VGPR_MATERIALIZER.name)
-    register_type = DescriptorResultType()
+    temp = ValueRef.temporary
+    emit = []
+
+    def instruction(
+        name: str, result: ValueRef, *, mask: str | None = None, **operands: ValueRef
+    ) -> ValueRef:
+        results = {"dst": result}
+        if mask is not None:
+            results["mask"] = temp(mask)
+        emit.append(
+            EmitDescriptorOp(
+                descriptor=descriptors[name],
+                operands=operands,
+                results=results,
+                result_types={
+                    role: DescriptorResultType()
+                    for role, value in results.items()
+                    if value.kind == SourceValueKind.TEMPORARY
+                },
+                form=_emit_form(type_pattern),
+            )
+        )
+        return result
+
+    scaled_denominator = instruction(
+        "div_scale",
+        temp("scaled_denominator"),
+        value=denominator,
+        denominator=denominator,
+        numerator=numerator,
+        mask="denominator_scale_mask",
+    )
+    reciprocal = instruction("rcp", temp("reciprocal"), input=scaled_denominator)
+    error = instruction(
+        "reciprocal_error", temp("error0"), a=scaled_denominator, b=reciprocal
+    )
+    refined = instruction(
+        "fma", temp("refined_reciprocal0"), a=reciprocal, b=error, c=reciprocal
+    )
+    if not allow_reciprocal:
+        error = instruction(
+            "reciprocal_error", temp("error1"), a=scaled_denominator, b=refined
+        )
+    scaled_numerator = instruction(
+        "div_scale",
+        temp("scaled_numerator"),
+        value=numerator,
+        denominator=denominator,
+        numerator=numerator,
+        mask="scale_mask",
+    )
+    if not allow_reciprocal:
+        refined = instruction(
+            "fma", temp("refined_reciprocal1"), a=refined, b=error, c=refined
+        )
+    quotient = instruction("mul", temp("quotient0"), lhs=scaled_numerator, rhs=refined)
+    remainder = instruction(
+        "residual",
+        temp("remainder"),
+        a=scaled_denominator,
+        b=quotient,
+        c=scaled_numerator,
+    )
+    corrected = instruction(
+        "div_fmas",
+        temp("quotient1"),
+        a=remainder,
+        b=refined,
+        c=quotient,
+        scale_mask=temp("scale_mask"),
+    )
+    instruction(
+        "div_fixup",
+        ValueRef.result("result"),
+        quotient=corrected,
+        denominator=denominator,
+        numerator=numerator,
+    )
     return DescriptorRule(
-        source_op=scalar_arithmetic.scalar_divf,
-        descriptor=scale,
-        report_key=_report_key(scalar_arithmetic.scalar_divf, "exact_f64_fixup"),
+        source_op=source_op,
+        descriptor=descriptors["div_scale"],
+        report_key=_report_key(
+            source_op,
+            "arcp_f64_refined" if allow_reciprocal else "exact_f64_fixup",
+        ),
         guards=(
-            *_typed_guards(("lhs", "rhs", "result"), _F64),
+            *_typed_guards(("lhs", "rhs", "result"), type_pattern),
+            *(
+                (Guard.instance_flags_has_all("fastmath", "arcp"),)
+                if allow_reciprocal
+                else ()
+            ),
             Guard.value_materializable("lhs", REGISTERS_VGPR_MATERIALIZER.name),
             Guard.value_materializable("rhs", REGISTERS_VGPR_MATERIALIZER.name),
             *(
                 Guard.descriptor_available(descriptor)
-                for descriptor in (
-                    scale,
-                    reciprocal,
-                    fma,
-                    neg_fma,
-                    neg_fma_one,
-                    multiply,
-                    fmas,
-                    fixup,
-                )
+                for descriptor in descriptors.values()
             ),
         ),
-        emit=(
-            EmitDescriptorOp(
-                descriptor=scale,
-                operands={
-                    "value": denominator,
-                    "denominator": denominator,
-                    "numerator": numerator,
-                },
-                results={
-                    "dst": ValueRef.temporary("scaled_denominator"),
-                    "mask": ValueRef.temporary("denominator_scale_mask"),
-                },
-                result_types={"dst": register_type, "mask": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=reciprocal,
-                operands={"input": ValueRef.temporary("scaled_denominator")},
-                results={"dst": ValueRef.temporary("reciprocal")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=neg_fma_one,
-                operands={
-                    "a": ValueRef.temporary("scaled_denominator"),
-                    "b": ValueRef.temporary("reciprocal"),
-                },
-                results={"dst": ValueRef.temporary("error0")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=fma,
-                operands={
-                    "a": ValueRef.temporary("reciprocal"),
-                    "b": ValueRef.temporary("error0"),
-                    "c": ValueRef.temporary("reciprocal"),
-                },
-                results={"dst": ValueRef.temporary("refined_reciprocal0")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=neg_fma_one,
-                operands={
-                    "a": ValueRef.temporary("scaled_denominator"),
-                    "b": ValueRef.temporary("refined_reciprocal0"),
-                },
-                results={"dst": ValueRef.temporary("error1")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=scale,
-                operands={
-                    "value": numerator,
-                    "denominator": denominator,
-                    "numerator": numerator,
-                },
-                results={
-                    "dst": ValueRef.temporary("scaled_numerator"),
-                    "mask": ValueRef.temporary("scale_mask"),
-                },
-                result_types={"dst": register_type, "mask": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=fma,
-                operands={
-                    "a": ValueRef.temporary("refined_reciprocal0"),
-                    "b": ValueRef.temporary("error1"),
-                    "c": ValueRef.temporary("refined_reciprocal0"),
-                },
-                results={"dst": ValueRef.temporary("refined_reciprocal1")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=multiply,
-                operands={
-                    "lhs": ValueRef.temporary("scaled_numerator"),
-                    "rhs": ValueRef.temporary("refined_reciprocal1"),
-                },
-                results={"dst": ValueRef.temporary("quotient0")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=neg_fma,
-                operands={
-                    "a": ValueRef.temporary("scaled_denominator"),
-                    "b": ValueRef.temporary("quotient0"),
-                    "c": ValueRef.temporary("scaled_numerator"),
-                },
-                results={"dst": ValueRef.temporary("remainder")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=fmas,
-                operands={
-                    "a": ValueRef.temporary("remainder"),
-                    "b": ValueRef.temporary("refined_reciprocal1"),
-                    "c": ValueRef.temporary("quotient0"),
-                    "scale_mask": ValueRef.temporary("scale_mask"),
-                },
-                results={"dst": ValueRef.temporary("quotient1")},
-                result_types={"dst": register_type},
-            ),
-            EmitDescriptorOp(
-                descriptor=fixup,
-                operands={
-                    "quotient": ValueRef.temporary("quotient1"),
-                    "denominator": denominator,
-                    "numerator": numerator,
-                },
-                results={"dst": ValueRef.result("result")},
-            ),
-        ),
+        emit=tuple(emit),
     )
 
 
@@ -4542,7 +4522,7 @@ def _minmax_family_rules() -> tuple[DescriptorRule | RecipeRule, ...]:
 
 
 def _rules() -> tuple[ContractCase, ...]:
-    rules: list[ContractCase] = []
+    rules: list[ContractCase] = list(exponent_rules(_DESCRIPTOR_SET))
     for type_pattern, type_suffix in ((_F16, "f16"), (_F32, "f32")):
         for source_op, instruction in (
             (scalar_arithmetic.scalar_addf, "add"),
@@ -4771,6 +4751,8 @@ def _rules() -> tuple[ContractCase, ...]:
             _divf_arcp_literal_lhs_rule(vector.vector_divf, _VEC_F32_STATIC),
             _divf_arcp_rule(vector.vector_divf, _VEC_F32_STATIC),
             _divf_exact_rule(vector.vector_divf, _VEC_F32_STATIC),
+            _divf_f64_rule(vector.vector_divf, _VEC_F64_STATIC, allow_reciprocal=True),
+            _divf_f64_rule(vector.vector_divf, _VEC_F64_STATIC, allow_reciprocal=False),
             _packed_f32_vector_fma_rule(),
             *_packed_f16_vector_fma_rules(),
             _packed_bf16_vector_fma_rule(),
@@ -5123,7 +5105,8 @@ def _rules() -> tuple[ContractCase, ...]:
             _divf_arcp_literal_lhs_rule(scalar_arithmetic.scalar_divf, _F32),
             _divf_arcp_rule(scalar_arithmetic.scalar_divf, _F32),
             _divf_exact_rule(scalar_arithmetic.scalar_divf, _F32),
-            _divf_exact_f64_rule(),
+            _divf_f64_rule(scalar_arithmetic.scalar_divf, _F64, allow_reciprocal=True),
+            _divf_f64_rule(scalar_arithmetic.scalar_divf, _F64, allow_reciprocal=False),
             *_f32_fma_rules(scalar_math.scalar_fmaf, _F32),
             _fma_rule(scalar_math.scalar_fmaf, _F64, "amdgpu.v_fma_f64"),
             _unary_rule(scalar_math.scalar_exp2f, _F32, "amdgpu.v_exp_f32"),
@@ -5413,6 +5396,7 @@ AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT = ContractFragment(
         ADDRESS_VGPR_MATERIALIZER,
         F32_VGPR_MATERIALIZER,
         I1_NATIVE_MASK_MATERIALIZER,
+        I64_LOW_WORDS_MATERIALIZER,
         REGISTERS_VGPR_MATERIALIZER,
         VOP3_BINARY_RHS_MATERIALIZER,
     ),

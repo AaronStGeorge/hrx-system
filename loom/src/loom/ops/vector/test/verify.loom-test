@@ -1,5 +1,29 @@
 // RUN: verify
 
+func.def @scale_exponent_shape(%input: vector<4xf64>, %power: vector<2xi32>) {
+  // ERROR@+1: SHAPE/002
+  %scaled = vector.ldexpf %input, %power : vector<4xf64>, vector<2xi32>
+  func.return
+}
+
+// ====
+
+func.def @decomposition_exponent_shape(%input: vector<4xf32>) {
+  // ERROR@+1: SHAPE/002
+  %fraction, %exponent = vector.frexpf %input : vector<4xf32>, vector<2xi32>
+  func.return
+}
+
+// ====
+
+func.def @decomposition_exponent_width(%input: vector<4xbf16>) {
+  // ERROR@+1: TYPE/004
+  %fraction, %exponent = vector.frexpf %input : vector<4xbf16>, vector<4xi16>
+  func.return
+}
+
+// ====
+
 // vector.refine may relate dynamic extents or narrow one to a static extent,
 // but it cannot assert an obvious static shape contradiction.
 func.def @refine_static_dimension_mismatch(%source: vector<4xf32>) {

@@ -331,6 +331,22 @@ Intrinsics::ScalarBinding Intrinsics::resolve_scalar(
     cxx::AST* owner) {
   const auto& traits = unit_.typeTraits();
   const auto* return_type = types_.unqualified(signature->returnType());
+  const RecordPartition* record = nullptr;
+  if (operation.scalar->result_count > 1) {
+    record = types_.record(return_type, owner);
+    if (!record || record->members.size() != operation.scalar->result_count) {
+      diagnostics_.reject(
+          unit_, owner,
+          "intrinsic result must be a record with one member per result");
+    }
+    for (const auto& member : record->members) {
+      if (member.partition->kind != ValueKind::SSA) {
+        diagnostics_.reject(unit_, owner,
+                            "intrinsic result members must be scalar values");
+      }
+    }
+    return_type = types_.unqualified(record->members.front().field->type());
+  }
   if (operation.scalar->category == LOOM_CXX_SCALAR_CATEGORY_INTEGER) {
     if (!traits.is_integral(return_type) ||
         return_type->kind() == cxx::TypeKind::kBool) {
@@ -348,13 +364,34 @@ Intrinsics::ScalarBinding Intrinsics::resolve_scalar(
     diagnostics_.reject(unit_, owner,
                         "intrinsic declaration has the wrong operand count");
   }
+  auto check_field = [&](const cxx::Type* type, size_t index,
+                         const char* mismatch) {
+    type = types_.unqualified(type);
+    if (operation.scalar->fixed_i32_mask & (1u << index)) {
+      if (!traits.is_integral(type) || types_.is_unsigned(type) ||
+          loom_type_element_type(types_.get(type, owner)) !=
+              LOOM_SCALAR_TYPE_I32) {
+        diagnostics_.reject(
+            unit_, owner,
+            "fixed i32 intrinsic fields must be signed 32-bit integers");
+      }
+    } else if (type != return_type) {
+      diagnostics_.reject(unit_, owner, mismatch);
+    }
+  };
+  size_t index = 0;
   for (const auto* parameter : signature->parameterTypes()) {
-    if (types_.unqualified(parameter) != return_type) {
-      diagnostics_.reject(unit_, owner,
-                          "intrinsic operands must have the result's type");
+    check_field(parameter, index++,
+                "intrinsic operands must have the result's type");
+  }
+  if (record) {
+    for (const auto& member : record->members) {
+      check_field(member.field->type(), index++,
+                  "intrinsic result members must share the primary type");
     }
   }
-  return {operation, types_.get(return_type, owner)};
+  return {operation, types_.get(return_type, owner),
+          record ? static_cast<const Partition*>(record) : &kSSAPartition};
 }
 
 TemplateApplyIntrinsic::Family* Intrinsics::intern_template_family(
@@ -526,7 +563,8 @@ IntrinsicCallResult Intrinsics::call(const Binding& admitted,
   loom_op_t* op;
   check(scalar.operation.scalar->build(builder, flags, flattened.data(),
                                        scalar.type, location, &op));
-  return {Value(loom_op_results(op)[0])};
+  return {arena.capture(*scalar.result,
+                        {loom_op_results(op), scalar.result->component_count})};
 }
 
 }  // namespace loom::cxx_import

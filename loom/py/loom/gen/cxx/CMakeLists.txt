@@ -32,4 +32,22 @@ iree_py_library(
     loom::py::loom::gen::cxx::intrinsics
 )
 
+iree_py_test(
+  NAME
+    intrinsics_test
+  MAIN
+    "../../tools/pytest_style_runner.py"
+  SRCS
+    "intrinsics_test.py"
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.cxx.intrinsics_test"
+  DEPS
+    loom::py::loom::gen::cxx::intrinsics
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

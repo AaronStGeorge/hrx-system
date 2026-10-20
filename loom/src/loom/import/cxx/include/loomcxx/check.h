@@ -298,12 +298,10 @@ template <class... Attributes>
                                                      long long expected);
 [[loom::op("check.expect.equal")]] void expect_equal(
     unsigned long long actual, unsigned long long expected);
-[[loom::op("check.expect.equal")]] void expect_equal(_Float16 actual,
-                                                     _Float16 expected);
-[[loom::op("check.expect.equal")]] void expect_equal(float actual,
-                                                     float expected);
-[[loom::op("check.expect.equal")]] void expect_equal(double actual,
-                                                     double expected);
+template <class Float>
+  requires(__is_floating_point(Float))
+[[loom::op("check.expect.equal")]] void expect_equal(Float actual,
+                                                     Float expected);
 
 }  // namespace loom::check
 

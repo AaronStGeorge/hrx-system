@@ -156,6 +156,33 @@ loom_type_t loom_amdgpu_materialized_vgpr_register_type(
       LOOM_AMDGPU_REG_CLASS_ID_VGPR, loom_low_register_type_unit_count(type));
 }
 
+loom_type_t loom_amdgpu_materialized_i64_low_words_type(
+    const loom_low_lower_context_t* context, loom_value_id_t source_value) {
+  const loom_type_t type =
+      loom_low_lower_value_binding_type(context, source_value);
+  return loom_low_register_carrier_type_with_unit_count(
+      type, loom_low_register_type_unit_count(type) / 2);
+}
+
+iree_status_t loom_amdgpu_materialize_i64_low_words(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value) {
+  const loom_value_id_t source =
+      loom_low_lower_lookup_value(context, source_value);
+  const loom_type_t result_type =
+      loom_amdgpu_materialized_i64_low_words_type(context, source_value);
+  const uint32_t lane_count = loom_low_register_type_unit_count(result_type);
+  const loom_type_t word_type =
+      loom_low_register_carrier_type_with_unit_count(result_type, 1);
+  loom_value_id_t words[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES / 2];
+  for (uint32_t i = 0; i < lane_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
+        context, source_op, source, i * 2, word_type, &words[i]));
+  }
+  return loom_amdgpu_build_low_register_range(
+      context, source_op, words, lane_count, result_type, out_low_value);
+}
+
 loom_type_t loom_amdgpu_materialized_vop3_binary_rhs_type(
     const loom_low_lower_context_t* context, loom_value_id_t source_value) {
   const loom_amdgpu_descriptor_set_info_t* info =

@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from loom.dialect.scalar import FastMathFlags, TrigonometryMathFlags
-from loom.dsl import ATTR_TYPE_FLAGS, FLOAT, INTEGER, Op
+from loom.dsl import ATTR_TYPE_FLAGS, FLOAT, I32, INTEGER, Op, Operand, Result
 from loom.gen import bootstrap
 from loom.gen.ops.model import load_dialect_generation
 from loom.gen.support.files import write_text_file
@@ -29,26 +29,28 @@ _INTEGER_PROJECTIONS = frozenset(("scalar.ctlzi", "scalar.cttzi", "scalar.ctpopi
 
 
 def validate_scalar_projection(op: Op) -> None:
-    """Checks the complete contract represented by the homogeneous projection."""
-    if op.regions or op.successors or len(op.results) != 1 or not op.operands:
-        raise ValueError(f"{op.name}: requires fixed operands and one scalar result")
+    """Checks one scalar type relationship with optional fixed i32 fields."""
+    if op.regions or op.successors or not op.results or not op.operands:
+        raise ValueError(f"{op.name}: requires fixed scalar operands and results")
     fields = (*op.operands, *op.results)
     category = op.results[0].type_constraint
-    if category not in (FLOAT, INTEGER) or any(field.variadic or field.type_constraint != category for field in fields) or any(operand.optional for operand in op.operands):
-        raise ValueError(f"{op.name}: requires fixed values in one scalar category")
+    if len(fields) > 8:
+        raise ValueError(f"{op.name}: fixed field mask has capacity for eight values")
+    if category not in (FLOAT, INTEGER) or any(field.variadic or field.type_constraint not in (category, I32) for field in fields) or any(operand.optional for operand in op.operands):
+        raise ValueError(f"{op.name}: requires one scalar category and fixed i32 fields")
     if (category == INTEGER and op.attrs) or any(
         attr.attr_type != ATTR_TYPE_FLAGS or (attr.name, attr.enum_def) not in (("fastmath", FastMathFlags), ("math", TrigonometryMathFlags)) for attr in op.attrs
     ):
         raise ValueError(f"{op.name}: requires an explicit attribute projection")
     if not any(trait.name == "Pure" for trait in op.traits):
         raise ValueError(f"{op.name}: requires a pure scalar operation")
-    names = {field.name for field in fields}
+    names = {field.name for field in fields if field.type_constraint == category}
     if not op.constraints or any(constraint.name != "SameType" or set(constraint.args) != names for constraint in op.constraints):
-        raise ValueError(f"{op.name}: requires one homogeneous type relationship")
+        raise ValueError(f"{op.name}: requires one scalar type relationship")
 
 
 def scalar_projections() -> tuple[Op, ...]:
-    """Selects homogeneous floating operations and integer bit counts, without
+    """Selects typed floating operations and integer bit counts, without
     inventing wrappers for regions, shaped types, or semantic attributes.
     """
     selected = []
@@ -57,18 +59,22 @@ def scalar_projections() -> tuple[Op, ...]:
             validate_scalar_projection(op)
             selected.append(op)
             continue
-        if len(op.results) != 1 or not op.operands:
+        if not op.results or op.results[0].type_constraint != FLOAT or not op.operands:
             continue
-        if any(field.type_constraint != FLOAT for field in (*op.operands, *op.results)):
+        if any(field.type_constraint not in (FLOAT, I32) for field in (*op.operands, *op.results)):
             continue
         if any(attr.name not in ("fastmath", "math") for attr in op.attrs):
             continue
-        names = {field.name for field in (*op.operands, *op.results)}
+        names = {field.name for field in (*op.operands, *op.results) if field.type_constraint == FLOAT}
         if not any(constraint.name == "SameType" and set(constraint.args) == names for constraint in op.constraints):
             continue
         validate_scalar_projection(op)
         selected.append(op)
     return tuple(sorted(selected, key=lambda op: op.name))
+
+
+def _field_cpp_type(field: Operand | Result, parameter: str) -> str:
+    return "int" if field.type_constraint == I32 else parameter
 
 
 def generate_header(ops: Sequence[Op]) -> str:
@@ -110,9 +116,18 @@ def generate_header(ops: Sequence[Op]) -> str:
             else:
                 parameter = "Float"
                 constraint = "__is_floating_point(Float)"
-            arguments = ", ".join(f"{parameter} {operand.name}" for operand in op.operands)
+
+            result_type = parameter
+            if len(op.results) > 1:
+                result_type = f"{name}_result<{parameter}>"
+                lines.append(f"template <class {parameter}> struct {name}_result {{")
+                for result in op.results:
+                    lines.extend("  // " + line for line in textwrap.wrap(result.doc or f"{op.name} {result.name} result.", 72))
+                    lines.append(f"  {_field_cpp_type(result, parameter)} {result.name};")
+                lines.append("};")
+            arguments = ", ".join(f"{_field_cpp_type(operand, parameter)} {operand.name}" for operand in op.operands)
             lines.append(f"template <class {parameter}> requires ({constraint})")
-            lines.append(f'[[loom::op("{op.name}"{flags})]] {parameter} {name}({arguments});')
+            lines.append(f'[[loom::op("{op.name}"{flags})]] {result_type} {name}({arguments});')
         if namespace:
             lines.extend(["", f"}}  // namespace {namespace}"])
     lines.extend(["", "}  // namespace loom::scalar", "", "#endif  // LOOMCXX_SCALAR_H_", ""])
@@ -150,7 +165,10 @@ def generate_source(ops: Sequence[Op]) -> str:
     for op in ops:
         category = "INTEGER" if op.results[0].type_constraint == INTEGER else "FLOAT"
         preserve_flag = next((case.value for attr in op.attrs for case in attr.enum_def.cases if case.keyword == "preserve"), 0)
-        lines.append(f'    {{"{op.name}", LOOM_CXX_SCALAR_CATEGORY_{category}, {len(op.operands)}, {str(bool(op.attrs)).lower()}, {preserve_flag}, {op.name.replace(".", "_")}}},')
+        fixed_i32_mask = sum(1 << index for index, field in enumerate((*op.operands, *op.results)) if field.type_constraint == I32)
+        lines.append(
+            f'    {{"{op.name}", LOOM_CXX_SCALAR_CATEGORY_{category}, {len(op.operands)}, {len(op.results)}, {fixed_i32_mask}, {str(bool(op.attrs)).lower()}, {preserve_flag}, {op.name.replace(".", "_")}}},'
+        )
     lines.extend(
         [
             "};",

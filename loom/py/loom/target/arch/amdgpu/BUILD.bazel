@@ -205,6 +205,7 @@ iree_py_library(
         "descriptors/common.py",
         "descriptors/contracts.py",
         "descriptors/control.py",
+        "descriptors/exponent.py",
         "descriptors/integer_multiply.py",
         "descriptors/matrix.py",
         "descriptors/matrix_schedule.py",

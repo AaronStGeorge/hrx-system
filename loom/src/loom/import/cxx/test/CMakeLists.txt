@@ -94,6 +94,7 @@ loom_check_test_suite(
     "enum_semantics.cxx-test"
     "enums.cxx-test"
     "enums_invalid.cxx-test"
+    "exponent.cxx-test"
     "fastmath.cxx-test"
     "fastmath_invalid.cxx-test"
     "float16.cxx-test"
@@ -145,6 +146,7 @@ loom_check_test_suite(
     "pointers.cxx-test"
     "predicate_contracts.cxx-test"
     "predicate_contracts_invalid.cxx-test"
+    "reciprocal.cxx-test"
     "record_arrays.cxx-test"
     "record_initialization.cxx-test"
     "record_memory.cxx-test"
@@ -348,6 +350,32 @@ loom_test_module(
   SRCS
     "integer_intrinsics.cxx"
 )
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+loom_test_module(
+  NAME
+    exponent_values_test_module
+  SRCS
+    "exponent.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_TARGET_ARCH_VM)
+loom_execution_test(
+  NAME
+    exponent_values_test_execute_vm_reference_test
+  MODULE
+    "::exponent_values_test_module"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+    "loom-execution-profile=vm_reference"
+    "loom-target-family=vm"
+    "loom-target-class=cpu"
+    "loom-executor=reference"
+)
+endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)

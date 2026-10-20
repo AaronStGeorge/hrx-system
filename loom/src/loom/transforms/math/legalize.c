@@ -23,6 +23,7 @@
 #include "loom/target/math_policy.h"
 #include "loom/target/pass_environment.h"
 #include "loom/target/reporting/report.h"
+#include "loom/transforms/math/exponent.h"
 #include "loom/transforms/math/patterns.h"
 
 //===----------------------------------------------------------------------===//
@@ -304,6 +305,8 @@ static loom_target_math_op_t loom_math_legalize_scalar_op_kind(
       return LOOM_TARGET_MATH_OP_SUBF;
     case LOOM_OP_SCALAR_MULF:
       return LOOM_TARGET_MATH_OP_MULF;
+    case LOOM_OP_SCALAR_DIVF:
+      return LOOM_TARGET_MATH_OP_DIVF;
     default:
       return LOOM_TARGET_MATH_OP_UNKNOWN;
   }
@@ -368,6 +371,8 @@ static loom_target_math_op_t loom_math_legalize_vector_op_kind(
       return LOOM_TARGET_MATH_OP_SUBF;
     case LOOM_OP_VECTOR_MULF:
       return LOOM_TARGET_MATH_OP_MULF;
+    case LOOM_OP_VECTOR_DIVF:
+      return LOOM_TARGET_MATH_OP_DIVF;
     default:
       return LOOM_TARGET_MATH_OP_UNKNOWN;
   }
@@ -822,10 +827,30 @@ static iree_status_t loom_math_target_legalize_float_sign(
   return iree_ok_status();
 }
 
-// Keep exact sign operations and narrow arithmetic introduced by reference
-// rewrites in the target fixed point. Native contracts remain preferred,
-// including packed BF16.
+// Keep exact sign/exponent operations and narrow arithmetic introduced by
+// reference rewrites in the target fixed point. Native contracts remain
+// preferred, including packed BF16.
 static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
+    {
+        .root_kind = LOOM_OP_SCALAR_LDEXPF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_math_legalize_exponent,
+    },
+    {
+        .root_kind = LOOM_OP_SCALAR_FREXPF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_math_legalize_exponent,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_LDEXPF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_math_legalize_exponent,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_FREXPF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_math_legalize_exponent,
+    },
     {
         .root_kind = LOOM_OP_SCALAR_ABSF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
@@ -875,6 +900,12 @@ static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
     },
     {
+        .root_kind = LOOM_OP_SCALAR_DIVF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .legalize = loom_math_target_legalize_binary,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+    },
+    {
         .root_kind = LOOM_OP_VECTOR_ADDF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
         .legalize = loom_math_target_legalize_binary,
@@ -888,6 +919,12 @@ static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
     },
     {
         .root_kind = LOOM_OP_VECTOR_MULF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .legalize = loom_math_target_legalize_binary,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DIVF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
         .legalize = loom_math_target_legalize_binary,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,

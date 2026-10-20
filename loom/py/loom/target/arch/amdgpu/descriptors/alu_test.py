@@ -39,33 +39,43 @@ def test_fma_residuals_use_operand_modifiers_on_every_family(target, bit_width) 
 
 
 @pytest.mark.parametrize("target", _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)
-@pytest.mark.parametrize("bit_width", [32, 64])
-def test_ldexp_descriptors_cover_every_family(target, bit_width: int) -> None:
+@pytest.mark.parametrize("bit_width", [16, 32, 64])
+def test_exponent_descriptors_preserve_mixed_operand_and_result_widths(
+    target, bit_width: int
+) -> None:
     overlays = {
         overlay.descriptor_key: overlay
         for overlay in _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS[target].overlay_rows()
     }
-    descriptor = overlays[f"amdgpu.v_ldexp_f{bit_width}"]
-
-    assert descriptor.instruction_name == f"V_LDEXP_F{bit_width}"
-    assert descriptor.semantic_tag == f"float.ldexp.f{bit_width}"
-    result, input_value, exponent = (
-        operand.descriptor_operand for operand in descriptor.operands
-    )
-    assert result.role is OperandRole.RESULT
-    assert result.unit_count == bit_width // 32
-    assert input_value.role is OperandRole.OPERAND
-    assert input_value.unit_count == bit_width // 32
-    assert input_value.reg_alts == (
-        RegClassAlt(_REG_SGPR),
-        RegClassAlt(_REG_VGPR),
-    )
-    assert exponent.role is OperandRole.OPERAND
-    assert exponent.unit_count == 1
-    assert exponent.reg_alts == (
-        RegClassAlt(_REG_SGPR),
-        RegClassAlt(_REG_VGPR),
-    )
+    exponent_width = min(bit_width, 32)
+    for operation, result_width in (
+        ("ldexp", bit_width),
+        ("frexp_mant", bit_width),
+        (f"frexp_exp_i{exponent_width}", exponent_width),
+    ):
+        descriptor = overlays[f"amdgpu.v_{operation}_f{bit_width}"]
+        assert descriptor.instruction_name == f"V_{operation.upper()}_F{bit_width}"
+        result, input_value, *exponents = (
+            operand.descriptor_operand for operand in descriptor.operands
+        )
+        assert result.role is OperandRole.RESULT
+        assert result.unit_count == max(1, result_width // 32)
+        assert input_value.role is OperandRole.OPERAND
+        assert input_value.unit_count == max(1, bit_width // 32)
+        if bit_width == 16:
+            assert input_value.reg_alts == (
+                RegClassAlt(_REG_VGPR, register_part="amdgpu.vgpr.low16"),
+            )
+            assert result.reg_alts == input_value.reg_alts
+        else:
+            assert input_value.reg_alts == (
+                RegClassAlt(_REG_SGPR),
+                RegClassAlt(_REG_VGPR),
+            )
+        assert len(exponents) == (operation == "ldexp")
+        if exponents:
+            assert exponents[0].unit_count == 1
+            assert exponents[0].reg_alts == input_value.reg_alts
 
 
 @pytest.mark.parametrize("target", _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)

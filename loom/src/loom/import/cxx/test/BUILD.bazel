@@ -104,6 +104,7 @@ loom_check_test_suite(
         "enum_semantics.cxx-test",
         "enums.cxx-test",
         "enums_invalid.cxx-test",
+        "exponent.cxx-test",
         "fastmath.cxx-test",
         "fastmath_invalid.cxx-test",
         "float16.cxx-test",
@@ -155,6 +156,7 @@ loom_check_test_suite(
         "pointers.cxx-test",
         "predicate_contracts.cxx-test",
         "predicate_contracts_invalid.cxx-test",
+        "reciprocal.cxx-test",
         "record_arrays.cxx-test",
         "record_initialization.cxx-test",
         "record_memory.cxx-test",
@@ -342,6 +344,13 @@ loom_test_module(
     name = "integer_intrinsics_module",
     srcs = ["integer_intrinsics.cxx"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+)
+
+loom_test(
+    name = "exponent_values_test",
+    srcs = ["exponent.cxx"],
+    execution_profiles = [VM_REFERENCE_PROFILE],
+    target_compatible_with = _HOST_COMPATIBILITY,
 )
 
 loom_test(

@@ -14,12 +14,16 @@ namespace loom {
 
 // Declares the reciprocal-approximation permission without weakening other
 // floating-point contracts. The importer validates this signature against divf.
-[[loom::op("scalar.divf", "arcp")]] float divide_reciprocal(float numerator,
-                                                            float denominator);
+template <class Float>
+  requires(__is_floating_point(Float))
+[[loom::op("scalar.divf", "arcp")]] Float divide_reciprocal(Float numerator,
+                                                            Float denominator);
 
-[[loom::device, loom::force_inline]] static inline float reciprocal(
-    float value) {
-  return divide_reciprocal(1.0f, value);
+template <class Float>
+  requires(__is_floating_point(Float))
+[[loom::device, loom::force_inline]] static inline Float reciprocal(
+    Float value) {
+  return divide_reciprocal(Float(1.0), value);
 }
 
 [[loom::device, loom::force_inline]] static inline float infinity() {

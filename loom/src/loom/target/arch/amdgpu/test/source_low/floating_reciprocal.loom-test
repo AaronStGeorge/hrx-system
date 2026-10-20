@@ -1,0 +1,112 @@
+// RUN: emit source-low target=amdgpu:gfx942 output=low
+
+// Reciprocal permission changes refinement depth, while the strict quotient
+// retains its second Newton round. Both keep scaling and exceptional fixup.
+func.def @double_division(%numerator: f64, %denominator: f64) -> (f64, f64, f64) {
+  %unit_numerator = scalar.constant 1.0 : f64
+  %reciprocal = scalar.divf<arcp> %unit_numerator, %denominator : f64
+  %approximate = scalar.divf<arcp> %numerator, %denominator : f64
+  %strict = scalar.divf %numerator, %denominator : f64
+  func.return %reciprocal, %approximate, %strict : f64, f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.cdna3.core> abi(hal_kernel) @double_division(%numerator: reg<amdgpu.vgpr x2>, %denominator: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %14 = v_mov_b32 0
+  %15 = v_mov_b32 1072693248
+  %unit_numerator = concat(%14, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %17, %18 = v_div_scale_f64 %denominator, %denominator, %unit_numerator
+  %19 = v_rcp_f64 %17
+  %20 = v_fma_f64_neg_a_one %17, %19
+  %21 = v_fma_f64 %19, %20, %19
+  %22, %23 = v_div_scale_f64 %unit_numerator, %denominator, %unit_numerator
+  %24 = v_mul_f64 %22, %21
+  %25 = v_fma_f64_neg_a %17, %24, %22
+  %26 = v_div_fmas_f64 %25, %21, %24, %23
+  %reciprocal = v_div_fixup_f64 %26, %denominator, %unit_numerator
+  %28, %29 = v_div_scale_f64 %denominator, %denominator, %numerator
+  %30 = v_rcp_f64 %28
+  %31 = v_fma_f64_neg_a_one %28, %30
+  %32 = v_fma_f64 %30, %31, %30
+  %33, %34 = v_div_scale_f64 %numerator, %denominator, %numerator
+  %35 = v_mul_f64 %33, %32
+  %36 = v_fma_f64_neg_a %28, %35, %33
+  %37 = v_div_fmas_f64 %36, %32, %35, %34
+  %approximate = v_div_fixup_f64 %37, %denominator, %numerator
+  %39, %40 = v_div_scale_f64 %denominator, %denominator, %numerator
+  %41 = v_rcp_f64 %39
+  %42 = v_fma_f64_neg_a_one %39, %41
+  %43 = v_fma_f64 %41, %42, %41
+  %44 = v_fma_f64_neg_a_one %39, %43
+  %45, %46 = v_div_scale_f64 %numerator, %denominator, %numerator
+  %47 = v_fma_f64 %43, %44, %43
+  %48 = v_mul_f64 %45, %47
+  %49 = v_fma_f64_neg_a %39, %48, %45
+  %50 = v_div_fmas_f64 %49, %47, %48, %46
+  %strict = v_div_fixup_f64 %50, %denominator, %numerator
+  return %reciprocal, %approximate, %strict
+}
+
+// ====
+
+// Single precision retains the native reciprocal and multiply paths.
+func.def @single_division(%numerator: f32, %denominator: f32) -> (f32, f32) {
+  %unit_numerator = scalar.constant 1.0 : f32
+  %reciprocal = scalar.divf<arcp> %unit_numerator, %denominator : f32
+  %quotient = scalar.divf<arcp> %numerator, %denominator : f32
+  func.return %reciprocal, %quotient : f32, f32
+}
+
+// ----
+low.func.def target<amdgpu.cdna3.core> abi(hal_kernel) @single_division(%numerator: reg<amdgpu.vgpr>, %denominator: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm {
+  %reciprocal = v_rcp_f32 %denominator
+  %quotient = v_mul_f32 %numerator, %reciprocal
+  return %reciprocal, %quotient
+}
+
+// ====
+
+// Each lane owns its scaling predicate and quotient correction.
+func.def @double_vector_division(%numerator: vector<3xf64>, %denominator: vector<3xf64>) -> (vector<3xf64>) {
+  %quotient = vector.divf<arcp> %numerator, %denominator : vector<3xf64>
+  func.return %quotient : vector<3xf64>
+}
+
+// ----
+low.func.def target<amdgpu.cdna3.core> abi(hal_kernel) @double_vector_division(%numerator: reg<amdgpu.vgpr x6>, %denominator: reg<amdgpu.vgpr x6>) -> (reg<amdgpu.vgpr x6>) asm {
+  %7 = slice %denominator[0] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr x2>
+  %9 = slice %numerator[0] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr x2>
+  %10, %11 = v_div_scale_f64 %7, %7, %9
+  %12 = slice %denominator[2] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr x2>
+  %14 = slice %numerator[2] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr x2>
+  %15, %16 = v_div_scale_f64 %12, %12, %14
+  %17 = slice %denominator[4] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr x2>
+  %19 = slice %numerator[4] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr x2>
+  %20, %21 = v_div_scale_f64 %17, %17, %19
+  %25 = v_rcp_f64 %10
+  %27 = v_rcp_f64 %15
+  %29 = v_rcp_f64 %20
+  %33 = v_fma_f64_neg_a_one %10, %25
+  %36 = v_fma_f64_neg_a_one %15, %27
+  %39 = v_fma_f64_neg_a_one %20, %29
+  %44 = v_fma_f64 %25, %33, %25
+  %48 = v_fma_f64 %27, %36, %27
+  %52 = v_fma_f64 %29, %39, %29
+  %57, %58 = v_div_scale_f64 %9, %7, %9
+  %62, %63 = v_div_scale_f64 %14, %12, %14
+  %67, %68 = v_div_scale_f64 %19, %17, %19
+  %73 = v_mul_f64 %57, %44
+  %76 = v_mul_f64 %62, %48
+  %79 = v_mul_f64 %67, %52
+  %84 = v_fma_f64_neg_a %10, %73, %57
+  %88 = v_fma_f64_neg_a %15, %76, %62
+  %92 = v_fma_f64_neg_a %20, %79, %67
+  %98 = v_div_fmas_f64 %84, %44, %73, %58
+  %103 = v_div_fmas_f64 %88, %48, %76, %63
+  %108 = v_div_fmas_f64 %92, %52, %79, %68
+  %113 = v_div_fixup_f64 %98, %7, %9
+  %117 = v_div_fixup_f64 %103, %12, %14
+  %121 = v_div_fixup_f64 %108, %17, %19
+  %quotient = concat(%113, %117, %121) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x6>
+  return %quotient
+}

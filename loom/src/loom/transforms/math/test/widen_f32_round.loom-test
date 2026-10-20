@@ -119,3 +119,49 @@ func.def target(@math_target) @vector_uniform_source_extension(%x: f8E4M3, %scal
   %result = vector.fptrunc %11 : vector<4xf32> to vector<4xbf16>
   func.return %result : vector<4xbf16>
 }
+
+// ====
+
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+// Widening preserves reciprocal permission, including its absence.
+func.def target(@math_target) @scalar_division(%x: f16, %y: f16) -> (f16, f16) {
+  %strict = scalar.divf %x, %y : f16
+  %approximate = scalar.divf<arcp> %x, %y : f16
+  func.return %strict, %approximate : f16, f16
+}
+
+// ----
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+func.def target(@math_target) @scalar_division(%x: f16, %y: f16) -> (f16, f16) {
+  %10 = scalar.extf %x : f16 to f32
+  %11 = scalar.extf %y : f16 to f32
+  %12 = scalar.divf %10, %11 : f32
+  %strict = scalar.fptrunc %12 : f32 to f16
+  %6 = scalar.extf %x : f16 to f32
+  %7 = scalar.extf %y : f16 to f32
+  %8 = scalar.divf<arcp> %6, %7 : f32
+  %approximate = scalar.fptrunc %8 : f32 to f16
+  func.return %strict, %approximate : f16, f16
+}
+
+// ====
+
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+func.def target(@math_target) @vector_division(%x: vector<3xbf16>, %y: vector<3xbf16>) -> (vector<3xbf16>) {
+  %quotient = vector.divf<arcp> %x, %y : vector<3xbf16>
+  func.return %quotient : vector<3xbf16>
+}
+
+// ----
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+func.def target(@math_target) @vector_division(%x: vector<3xbf16>, %y: vector<3xbf16>) -> (vector<3xbf16>) {
+  %4 = vector.extf %x : vector<3xbf16> to vector<3xf32>
+  %5 = vector.extf %y : vector<3xbf16> to vector<3xf32>
+  %6 = vector.divf<arcp> %4, %5 : vector<3xf32>
+  %quotient = vector.fptrunc %6 : vector<3xf32> to vector<3xbf16>
+  func.return %quotient : vector<3xbf16>
+}
