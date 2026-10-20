@@ -21,6 +21,7 @@
 #include "loom/target/arch/wasm/records/target_records.h"
 #include "loom/target/emit/wasm/lower/lower.h"
 #include "loom/transforms/scalar/target_legalization.h"
+#include "loom/transforms/vector/packet_insert_legalization.h"
 #include "loom/transforms/vector/packet_legalization.h"
 #include "loom/transforms/vector/shape_legalization.h"
 #include "loom/transforms/vector/target_legalization.h"
@@ -304,6 +305,27 @@ static iree_status_t loom_wasm_legalize_vector_extract(
   return iree_ok_status();
 }
 
+static iree_status_t loom_wasm_legalize_vector_insert(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (!loom_wasm_legalizer_descriptor_set_is_simd128(context->descriptor_set)) {
+    return iree_ok_status();
+  }
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_packet_legalize_insert(
+      context, op, context->vector_packet_policy,
+      /*insert_materializer=*/NULL, &rewritten));
+  if (rewritten) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_wasm_legalize_vector_slice(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -411,6 +433,12 @@ static const loom_target_legalizer_rule_t kLoomWasmLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_VECTOR_EXTRACT,
         .legalize = loom_wasm_legalize_vector_extract,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_INSERT,
+        .first_operand_element_types =
+            LOOM_SCALAR_TYPE_SET_INTEGER_PAYLOAD | LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_wasm_legalize_vector_insert,
     },
     {
         .root_kind = LOOM_OP_VECTOR_SLICE,
