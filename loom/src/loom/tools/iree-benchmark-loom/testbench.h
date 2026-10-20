@@ -34,6 +34,15 @@ typedef struct iree_benchmark_loom_reference_oracles_t {
       providers[IREE_BENCHMARK_LOOM_REFERENCE_ORACLE_PROVIDER_COUNT];
 } iree_benchmark_loom_reference_oracles_t;
 
+// Provisions the union of selected HAL roots before device creation. Uses the
+// work plan's record selection, excluding unselected records and host oracles.
+iree_status_t iree_benchmark_loom_add_runtime_requirements(
+    loom_run_hal_testbench_context_t* hal_context, const loomc_module_t* module,
+    const loomc_sanitizer_options_t* sanitizer_options,
+    const loom_testbench_module_plan_t* module_plan,
+    const iree_benchmark_loom_work_plan_t* work_plan,
+    iree_arena_block_pool_t* block_pool);
+
 // Evaluates each selected case or scenario's requirements once and retains the
 // skip decision in every selected benchmark referencing that record. Call
 // before binding generator invocations or preparing any execution resources.

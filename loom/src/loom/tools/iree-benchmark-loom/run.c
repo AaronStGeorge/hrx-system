@@ -580,13 +580,6 @@ iree_status_t iree_benchmark_loom_run_file(
     loomc_result_release(result);
   }
 
-  if (iree_status_is_ok(status) && failure_count == 0 &&
-      !benchmark_options->compile_only) {
-    status = loom_run_hal_testbench_context_add_module_runtime_requirements(
-        &hal_context.execution, module,
-        sanitizer_enabled ? &loomc_sanitizer_options : NULL);
-  }
-
   if (iree_status_is_ok(status) && failure_count == 0) {
     iree_arena_initialize(&block_pool, &plan_arena);
     iree_arena_initialize(&block_pool, &execution_arena);
@@ -671,9 +664,15 @@ iree_status_t iree_benchmark_loom_run_file(
     if (iree_status_is_ok(status) && failure_count == 0 &&
         !benchmark_options->dry_run && !benchmark_options->compile_only &&
         work_plan.selected_benchmark_count != 0) {
-      status = iree_benchmark_loom_evaluate_requirements(
-          options->configuration, &hal_context.execution, &module_plan,
-          &plan_arena, &work_plan);
+      status = iree_benchmark_loom_add_runtime_requirements(
+          &hal_context.execution, module,
+          sanitizer_enabled ? &loomc_sanitizer_options : NULL, &module_plan,
+          &work_plan, &block_pool);
+      if (iree_status_is_ok(status)) {
+        status = iree_benchmark_loom_evaluate_requirements(
+            options->configuration, &hal_context.execution, &module_plan,
+            &plan_arena, &work_plan);
+      }
     }
     const loom_testbench_function_call_provider_callback_t function_calls =
         options->configuration->function_call_provider;

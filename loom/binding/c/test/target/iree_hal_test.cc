@@ -348,14 +348,14 @@ TEST(LoomcIreeHalRuntimeFeaturesTest, RejectsInvalidArguments) {
       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
   LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT,
                          loomc_iree_hal_module_query_runtime_features(
-                             nullptr, nullptr, &runtime_features));
+                             nullptr, nullptr, nullptr, 0, &runtime_features));
   EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE);
 
   ModulePtr module = ParseModule("");
   ASSERT_NE(module, nullptr);
   LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT,
                          loomc_iree_hal_module_query_runtime_features(
-                             module.get(), nullptr, nullptr));
+                             module.get(), nullptr, nullptr, 0, nullptr));
 
   const loomc_sanitizer_options_t invalid_options = {
       .type = LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
@@ -367,7 +367,7 @@ TEST(LoomcIreeHalRuntimeFeaturesTest, RejectsInvalidArguments) {
   LOOMC_EXPECT_STATUS_IS(
       LOOMC_STATUS_INVALID_ARGUMENT,
       loomc_iree_hal_module_query_runtime_features(
-          module.get(), &invalid_options, &runtime_features));
+          module.get(), &invalid_options, nullptr, 0, &runtime_features));
   EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE);
 }
 
@@ -386,32 +386,44 @@ TEST(LoomcIreeHalRuntimeFeaturesTest, MapsRequestedSanitizerServices) {
   iree_hal_device_runtime_feature_flags_t runtime_features =
       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
   LOOMC_ASSERT_OK(loomc_iree_hal_module_query_runtime_features(
-      module.get(), &sanitizer_options, &runtime_features));
+      module.get(), &sanitizer_options, nullptr, 0, &runtime_features));
   EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK |
                                   IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN |
                                   IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN);
 
   sanitizer_options.reporting_mode = LOOMC_SANITIZER_REPORTING_MODE_TRAP;
   LOOMC_ASSERT_OK(loomc_iree_hal_module_query_runtime_features(
-      module.get(), &sanitizer_options, &runtime_features));
+      module.get(), &sanitizer_options, nullptr, 0, &runtime_features));
   EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN |
                                   IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN);
 }
 
-TEST(LoomcIreeHalRuntimeFeaturesTest, FindsAuthoredSanitizerOperations) {
-  ModulePtr module = ParseModule(R"(
-func.def @entry(%value: index) -> (index) {
-  %checked = sanitizer.assert.value %value [ne(%value, 0)] : index
-  func.return %checked : index
-}
-)");
+TEST(LoomcIreeHalRuntimeFeaturesTest, RejectsInvalidRootsAndClearsOutput) {
+  ModulePtr module = ParseModule("");
   ASSERT_NE(module, nullptr);
-
   iree_hal_device_runtime_feature_flags_t runtime_features =
-      IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
-  LOOMC_ASSERT_OK(loomc_iree_hal_module_query_runtime_features(
-      module.get(), nullptr, &runtime_features));
-  EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK);
+      IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      loomc_iree_hal_module_query_runtime_features(
+          module.get(), nullptr, nullptr, 1, &runtime_features));
+  EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE);
+
+  const loomc_string_view_t invalid_root = {nullptr, 1};
+  runtime_features = IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      loomc_iree_hal_module_query_runtime_features(
+          module.get(), nullptr, &invalid_root, 1, &runtime_features));
+  EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE);
+
+  const loomc_string_view_t missing_root = loomc_make_cstring_view("@missing");
+  runtime_features = IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_NOT_FOUND,
+      loomc_iree_hal_module_query_runtime_features(
+          module.get(), nullptr, &missing_root, 1, &runtime_features));
+  EXPECT_EQ(runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE);
 }
 
 }  // namespace

@@ -206,7 +206,8 @@ class SanitizerRuntimeRequirementsTest
   }
 
   loom_sanitizer_runtime_requirements_t Query(
-      loom_sanitizer_reporting_mode_t reporting_mode) {
+      loom_sanitizer_reporting_mode_t reporting_mode,
+      iree_string_view_list_t roots = iree_string_view_list_empty()) {
     const loom_sanitizer_options_t options = {
         .checks = 0,
         .flags = 0,
@@ -214,8 +215,8 @@ class SanitizerRuntimeRequirementsTest
     };
     loom_sanitizer_runtime_requirements_t requirements =
         LOOM_SANITIZER_RUNTIME_REQUIREMENT_NONE;
-    IREE_EXPECT_OK(loom_sanitizer_runtime_requirements_query(module_, &options,
-                                                             &requirements));
+    IREE_EXPECT_OK(loom_sanitizer_runtime_requirements_query(
+        module_, roots, &options, &requirements));
     return requirements;
   }
 
@@ -262,6 +263,20 @@ TEST_P(SanitizerRuntimeRequirementsTest, DerivesRequirementsFromAuthoredSite) {
   EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY),
             test_case.default_requirements);
   EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP),
+            test_case.trap_requirements);
+}
+
+TEST_P(SanitizerRuntimeRequirementsTest,
+       SelectedRootsRetainAuthoredRequirements) {
+  const SiteRequirementCase& test_case = GetParam();
+  BuildSite(test_case.kind);
+  const iree_string_view_t roots[] = {IREE_SV("entry"), IREE_SV(" @entry ")};
+  const iree_string_view_list_t root_list = {IREE_ARRAYSIZE(roots), roots};
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_DEFAULT, root_list),
+            test_case.default_requirements);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY, root_list),
+            test_case.default_requirements);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP, root_list),
             test_case.trap_requirements);
 }
 

@@ -32,7 +32,11 @@ loom_cc_library(
   DEPS
     ::options
     iree::base
+    iree::base::internal::arena
+    loom::analysis::symbol_liveness
+    loom::analysis::symbol_references
     loom::ir
+    loom::ir::symbol_map
     loom::ops::kernel
     loom::ops::op_defs
     loom::ops::sanitizer

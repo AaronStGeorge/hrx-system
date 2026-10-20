@@ -17,6 +17,7 @@ loom_cc_library(
   SRCS
     "iree_hal.c"
   DEPS
+    iree::base::internal::arena
     iree::hal
     loom::binding::c::loomc
     loom::sanitizer::runtime_requirements

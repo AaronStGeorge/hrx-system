@@ -76,15 +76,20 @@ void loom_run_hal_testbench_context_set_device_event_sink(
     loom_run_hal_testbench_context_t* context,
     iree_hal_device_event_sink_t device_event_sink);
 
-// Adds runtime requirements for executable sanitizer operations in |module|
-// and instrumentation requested by |sanitizer_options|.
+// Adds runtime requirements for the selected |root_symbols| in |module| and
+// instrumentation requested by |sanitizer_options|. The caller supplies every
+// HAL product it will prepare, excluding host-only generators and oracles.
 //
 // Requirements may be accumulated across modules before runtime creation. A
 // module added afterward must require only services already provisioned by the
-// active device.
+// active device. Collect the complete selection before capability admission or
+// target selection can create that device; product preparation does not rescan
+// source modules.
 iree_status_t loom_run_hal_testbench_context_add_module_runtime_requirements(
     loom_run_hal_testbench_context_t* context, const loomc_module_t* module,
-    const loomc_sanitizer_options_t* sanitizer_options);
+    const loomc_sanitizer_options_t* sanitizer_options,
+    const loomc_string_view_t* root_symbols,
+    iree_host_size_t root_symbol_count);
 
 // Releases HAL runtime resources owned by |context|.
 void loom_run_hal_testbench_context_deinitialize(

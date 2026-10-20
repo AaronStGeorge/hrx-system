@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "run selects a clean kernel without provisioning unrelated assertions",
+      "run": {
+        "tool": "run",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--root=@clean"]
+      }
+    },
+    {
+      "name": "direct assertions still require feedback",
+      "run": {
+        "tool": "run",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--root=@direct_feedback"]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {"contains": ["does not support requested runtime feature flags 0x1"]}
+    },
+    {
+      "name": "nested reachable template providers retain their callee requirements",
+      "run": {
+        "tool": "run",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--root=@template_feedback"]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {"contains": ["does not support requested runtime feature flags 0x1"]}
+    },
+    {
+      "name": "explicit sanitizer instrumentation still provisions feedback for clean roots",
+      "run": {
+        "tool": "run",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--root=@clean", "--sanitizer=value"]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {"contains": ["does not support requested runtime feature flags 0x1"]}
+    },
+    {
+      "name": "test selects a clean case without provisioning unrelated assertions",
+      "run": {
+        "tool": "test",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--case=@clean_case"]
+      }
+    },
+    {
+      "name": "test selects a clean command scenario without provisioning unrelated assertions",
+      "run": {
+        "tool": "test",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--case=@clean_scenario"]
+      }
+    },
+    {
+      "name": "selected legacy callees still require feedback",
+      "run": {
+        "tool": "test",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--case=@feedback_case"]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {"contains": ["does not support requested runtime feature flags 0x1"]}
+    },
+    {
+      "name": "benchmark aliases share the selected legacy kernel requirements",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--case=@clean_case", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "stdout": {"contains": ["\"timing_ns\""]}
+    },
+    {
+      "name": "benchmark selects a clean command product without provisioning unrelated assertions",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--case=@clean_scenario", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "stdout": {"contains": ["\"operation_timing_ns\""]}
+    },
+    {
+      "name": "selected command callees still require feedback",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--benchmark=@feedback_program_latency", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {"contains": ["does not support requested runtime feature flags 0x1"]},
+      "stdout": {"not_contains": ["\"operation_timing_ns\""]}
+    },
+    {
+      "name": "unchecked benchmark oracle assertions do not provision HAL feedback",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/selected_runtime_requirements.loom", "--device=task", "--task_topology_max_group_count=2", "--benchmark=@host_oracle_latency", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "stdout": {"contains": ["\"operation_timing_ns\""]}
+    }
+  ]
+}

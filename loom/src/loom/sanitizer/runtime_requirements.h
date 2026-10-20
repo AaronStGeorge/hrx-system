@@ -37,14 +37,20 @@ loom_sanitizer_runtime_requirements_from_options(
     const loom_sanitizer_options_t* options);
 
 // Returns runtime requirements for executable sanitizer operations in
-// |module| and instrumentation requested by |options|.
+// |module| and instrumentation requested by |options|. Nonempty |roots| select
+// only those symbols and their transitive dependencies; an empty list selects
+// all functions. Names may have a leading '@'. Missing roots are errors.
 //
 // The query is the source-IR ownership boundary for runtime provisioning. It
 // accounts for authored sanitizer operations that execute independently of
-// insertion options, including materializable semantic assertions. The module
-// is walked once and no result retains module storage.
+// insertion options, including materializable semantic assertions. Reachable
+// template families include every available provider because target and value
+// specialization have not run yet. Dependency closure uses the canonical symbol
+// reference/liveness analyses once for the entire root set. Scratch is scoped
+// to this query and no result retains module storage.
 iree_status_t loom_sanitizer_runtime_requirements_query(
-    const loom_module_t* module, const loom_sanitizer_options_t* options,
+    const loom_module_t* module, iree_string_view_list_t roots,
+    const loom_sanitizer_options_t* options,
     loom_sanitizer_runtime_requirements_t* out_requirements);
 
 #ifdef __cplusplus
