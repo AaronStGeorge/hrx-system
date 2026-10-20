@@ -4,12 +4,32 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:defs.bzl", "loom_kernel_binary", "loom_target_profile")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],
+)
+
+iree_runtime_cc_library(
+    name = "cpu_executable",
+    testonly = True,
+    srcs = ["cpu_executable.cc"],
+    hdrs = ["cpu_executable.h"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_task": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/task/executable",
+        "//runtime/src/iree/hal/drivers/task/executable/library:util",
+    ],
 )
 
 # Each composition declares its participants: CPU/XDNA coverage also runs on
@@ -33,6 +53,7 @@ iree_runtime_cc_test(
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
+        ":cpu_executable",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
@@ -42,8 +63,90 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/drivers/amd/xdna/image/testdata:mul_i32",
         "//runtime/src/iree/hal/drivers/amd/xdna/image/testdata:mul_i32_npu4",
         "//runtime/src/iree/hal/drivers/task:device",
-        "//runtime/src/iree/hal/drivers/task/executable",
-        "//runtime/src/iree/hal/drivers/task/executable/library:util",
+        "//runtime/src/iree/task",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target:amdgpu_artifacts",
+    "//loom/config/target/amdgpu:descriptor_set_gfx11_generic_core",
+    "//loom/config/target/amdgpu:descriptor_set_gfx12_generic_core",
+]) + select({
+    "//runtime/config/hal:driver_task": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+}) + select({
+    "//runtime/config/hal:driver_amd": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+}) + select({
+    "//libamdf/config/family:gpu": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+}) + select({
+    "//libamdf/config/family:xdna": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+_GPU_TARGETS = [
+    "gfx11-generic",
+    "gfx12-generic",
+]
+
+[
+    loom_target_profile(
+        name = "affine_profile_" + target,
+        family = "amdgpu",
+        selector = target,
+        target_compatible_with = _EXECUTION_COMPATIBLE_WITH,
+    )
+    for target in _GPU_TARGETS
+]
+
+[
+    loom_kernel_binary(
+        name = "affine_" + target,
+        testonly = True,
+        srcs = ["affine_i32.loom"],
+        out = "affine_" + target + ".hsaco",
+        target = ":affine_profile_" + target,
+        target_compatible_with = _EXECUTION_COMPATIBLE_WITH,
+    )
+    for target in _GPU_TARGETS
+]
+
+iree_c_embed_data(
+    name = "affine_images",
+    testonly = True,
+    srcs = [":affine_" + target for target in _GPU_TARGETS],
+    c_file_output = "affine_images.c",
+    h_file_output = "affine_images.h",
+    identifier = "iree_hal_amd_cts_affine_images",
+    target_compatible_with = _EXECUTION_COMPATIBLE_WITH,
+)
+
+iree_runtime_cc_test(
+    name = "execution_test",
+    srcs = ["execution_test.cc"],
+    tags = [
+        "iree-build-requirement=libamdf.gpu",
+        "iree-build-requirement=libamdf.xdna",
+        "iree-run-requirement=libamdf.resource.amd_gpu",
+        "iree-run-requirement=libamdf.resource.xdna",
+        "runtime-resource=amd-gpu",
+        "runtime-resource=amd-xdna",
+    ],
+    target_compatible_with = _EXECUTION_COMPATIBLE_WITH,
+    deps = [
+        ":affine_images",
+        ":cpu_executable",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
+        "//runtime/src/iree/hal/drivers/amd/registration",
+        "//runtime/src/iree/hal/drivers/amd/xdna/image/testdata:mul_i32",
+        "//runtime/src/iree/hal/drivers/amd/xdna/image/testdata:mul_i32_npu4",
+        "//runtime/src/iree/hal/drivers/task:device",
         "//runtime/src/iree/task",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

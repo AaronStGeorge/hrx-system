@@ -9,6 +9,23 @@
 
 iree_add_all_subdirs()
 
+if(AMDF_BUILD AND IREE_HAL_DRIVER_TASK)
+iree_cc_library(
+  NAME
+    cpu_executable
+  HDRS
+    "cpu_executable.h"
+  SRCS
+    "cpu_executable.cc"
+  DEPS
+    iree::hal
+    iree::hal::drivers::task::executable
+    iree::hal::drivers::task::executable::library::util
+  TESTONLY
+  PUBLIC
+)
+endif()
+
 if(AMDF_BUILD AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND AMDF_FAMILY_XDNA)
 iree_cc_test(
   NAME
@@ -16,6 +33,7 @@ iree_cc_test(
   SRCS
     "cpu_xdna_test.cc"
   DEPS
+    ::cpu_executable
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -25,14 +43,117 @@ iree_cc_test(
     iree::hal::drivers::amd::xdna::image::testdata::mul_i32
     iree::hal::drivers::amd::xdna::image::testdata::mul_i32_npu4
     iree::hal::drivers::task::device
-    iree::hal::drivers::task::executable
-    iree::hal::drivers::task::executable::library::util
     iree::task
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=libamdf.xdna"
     "iree-run-requirement=libamdf.resource.xdna"
+    "runtime-resource=amd-xdna"
+    "iree-build-requirement=libamdf"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+loom_target_profile(
+  NAME
+    "affine_profile_gfx11-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx11-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND AMDF_FAMILY_XDNA
+)
+
+loom_target_profile(
+  NAME
+    "affine_profile_gfx12-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx12-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND AMDF_FAMILY_XDNA
+)
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND AMDF_FAMILY_XDNA)
+loom_kernel_binary(
+  NAME
+    "affine_gfx11-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/cts:affine_gfx11-generic"
+  TARGET
+    "::affine_profile_gfx11-generic"
+  OUTPUT
+    "affine_gfx11-generic.hsaco"
+  SRCS
+    "affine_i32.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND AMDF_FAMILY_XDNA)
+loom_kernel_binary(
+  NAME
+    "affine_gfx12-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/cts:affine_gfx12-generic"
+  TARGET
+    "::affine_profile_gfx12-generic"
+  OUTPUT
+    "affine_gfx12-generic.hsaco"
+  SRCS
+    "affine_i32.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND AMDF_FAMILY_XDNA)
+iree_c_embed_data(
+  NAME
+    affine_images
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/affine_gfx11-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/affine_gfx12-generic.hsaco"
+  C_FILE_OUTPUT
+    "affine_images.c"
+  H_FILE_OUTPUT
+    "affine_images.h"
+  IDENTIFIER
+    "iree_hal_amd_cts_affine_images"
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND IREE_HAL_DRIVER_TASK AND IREE_HAL_DRIVER_AMD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND AMDF_FAMILY_XDNA)
+iree_cc_test(
+  NAME
+    execution_test
+  SRCS
+    "execution_test.cc"
+  DEPS
+    ::affine_images
+    ::cpu_executable
+    iree::base
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amd::gpu::target::identity
+    iree::hal::drivers::amd::registration
+    iree::hal::drivers::amd::xdna::image::testdata::mul_i32
+    iree::hal::drivers::amd::xdna::image::testdata::mul_i32_npu4
+    iree::hal::drivers::task::device
+    iree::task
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=libamdf.gpu"
+    "iree-build-requirement=libamdf.xdna"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "iree-run-requirement=libamdf.resource.xdna"
+    "runtime-resource=amd-gpu"
     "runtime-resource=amd-xdna"
     "iree-build-requirement=libamdf"
   RESOURCE_GROUP
