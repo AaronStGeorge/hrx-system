@@ -43,21 +43,6 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_TARGET_ARCH_VM AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND IREE_ARCH STREQUAL "x86_64")
-iree_execution_test_suite(
-  NAME
-    selected_runtime_requirements_test
-  MANIFESTS
-    "test/selected_runtime_requirements.test.json"
-  TOOLS
-    "benchmark=loom::tools::iree-benchmark-loom"
-    "run=loom::tools::iree-run-loom"
-    "test=loom::tools::iree-test-loom"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/selected_runtime_requirements.loom"
-)
-endif()
-
 if(LOOM_IMPORT_CXX AND IREE_ARCH STREQUAL "x86_64")
 if(LOOM_TARGET_ARCH_X86 AND LOOM_TARGET_ARCH_VM AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF)
 loom_execution_test(

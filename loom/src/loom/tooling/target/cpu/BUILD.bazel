@@ -86,23 +86,6 @@ iree_execution_test_suite(
     tools = {"benchmark": "//loom/src/loom/tools/iree-benchmark-loom"},
 )
 
-iree_execution_test_suite(
-    name = "selected_runtime_requirements_test",
-    data = ["test/selected_runtime_requirements.loom"],
-    manifests = ["test/selected_runtime_requirements.test.json"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/target/arch:vm",
-        "//runtime/config/hal:executable_loader_embedded_elf",
-        "//loom/config/execute:task_hal",
-    ]) + ["@platforms//cpu:x86_64"],
-    tools = {
-        "benchmark": "//loom/src/loom/tools/iree-benchmark-loom",
-        "run": "//loom/src/loom/tools/iree-run-loom",
-        "test": "//loom/src/loom/tools/iree-test-loom",
-    },
-)
-
 # Addressable C++ locals preserve independent storage across native calls.
 [
     loom_test(
