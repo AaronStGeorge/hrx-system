@@ -803,6 +803,34 @@ kernel.def @bounded() {
     assert "loom::assume(loom::predicate::range(bytes, 0, 255));" in result
 
 
+def test_preserves_signed_fixed_integer_interpretation_at_index_casts() -> None:
+    source = """\
+kernel.def @mixed_integer_address_uses() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1xi32>
+  %loaded = view.load %input_view[0] : view<1xi32> -> i32
+  %limit = scalar.constant 16 : i32
+  %below = scalar.cmpi ult, %loaded, %limit : i32
+  %logical = index.cast %loaded : i32 to index
+  %physical = index.cast %loaded : i32 to offset
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "unsigned loaded = loom::view::load(input_view, 0);" in result
+    assert "bool below = loaded < 16u;" in result
+    assert (
+        "loom::type::index logical = "
+        "loom::index::cast(static_cast<int>(loaded));" in result
+    )
+    assert "loom::type::offset physical = loom::offset::cast(loaded);" in result
+
+
 def test_projects_repeated_assumptions_in_each_lexical_scope() -> None:
     source = """\
 kernel.def @scoped_bounds() {

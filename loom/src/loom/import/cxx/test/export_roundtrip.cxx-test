@@ -242,11 +242,11 @@ void scoped_bounds(bool first, bool second, unsigned coordinate, unsigned* outpu
   auto output_view = loom::buffer::view<16>(output, {}, loom::encoding::layout::dense<1>());
   if (first) {
     loom::assume(coordinate < 16u);
-    loom::view::store(1u, output_view, loom::index::cast(coordinate));
+    loom::view::store(1u, output_view, loom::index::cast(static_cast<int>(coordinate)));
   }
   if (second) {
     loom::assume(coordinate < 16u);
-    loom::view::store(2u, output_view, loom::index::cast(coordinate));
+    loom::view::store(2u, output_view, loom::index::cast(static_cast<int>(coordinate)));
   }
 }
 
@@ -258,10 +258,10 @@ void scoped_bounds(bool first, bool second, unsigned coordinate, unsigned* outpu
   auto output_view = loom::buffer::view<16>(output, {}, loom::encoding::layout::dense<1>());
   if (first) {
     loom::assume(coordinate <= 15u);
-    loom::view::store(1u, output_view, loom::index::cast(coordinate));
+    loom::view::store(1u, output_view, loom::index::cast(static_cast<int>(coordinate)));
   }
   if (second) {
     loom::assume(coordinate <= 15u);
-    loom::view::store(2u, output_view, loom::index::cast(coordinate));
+    loom::view::store(2u, output_view, loom::index::cast(static_cast<int>(coordinate)));
   }
 }

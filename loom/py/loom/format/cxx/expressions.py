@@ -310,6 +310,27 @@ class CxxExpressionRenderer(CxxRenderContext):
             return f"static_cast<loom::type::index>({expression})"
         return f"loom::{domain}::cast({expression})"
 
+    def _fixed_integer_index_cast_operand(self, value_id: int) -> str:
+        """Projects index.cast's signed fixed-integer interpretation."""
+
+        expression = self.expression(value_id)
+        value_type = self.module.values[value_id].type
+        if not isinstance(value_type, ScalarType) or repr(value_type) not in {
+            "i8",
+            "i16",
+            "i32",
+            "i64",
+        }:
+            return expression
+        signed_type = self.cpp_type(value_id, signed=True)
+        unsigned_type = self.cpp_type(value_id, signed=False)
+        if (
+            signed_type != unsigned_type
+            and self.expression_type(value_id) == unsigned_type
+        ):
+            return f"static_cast<{signed_type}>({expression})"
+        return expression
+
     def _retains_address_identity(self, value_id: int) -> bool:
         expected_type = self.cpp_type(value_id)
         expression_type = self.expression_type(value_id)
@@ -616,6 +637,8 @@ class CxxExpressionRenderer(CxxRenderContext):
                 self.expressions[result] = self._literal(constant, result)
                 self.expression_types[result] = self.cpp_type(result)
                 return ()
+            if repr(self.module.values[result].type) == "index":
+                operand_expression = self._fixed_integer_index_cast_operand(operand)
             if self.cpp_type(result) == self.expression_type(operand):
                 expression = operand_expression
             elif self.expression_type(operand) == KERNEL_COORDINATE_CPP_TYPE:
