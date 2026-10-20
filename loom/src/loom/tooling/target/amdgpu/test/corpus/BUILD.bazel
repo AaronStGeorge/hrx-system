@@ -119,7 +119,7 @@ loom_test(
     srcs = ["gfx11/wave64_reductions.loom"],
     compile_targets = ["//loom/target/amdgpu:gfx1151"],
     execution_profiles = [AMDGPU_HARDWARE_PROFILE],
-    target_compatible_with = _GFX11_ARTIFACT_COMPATIBLE_WITH,
+    target_compatible_with = _GFX11_COMPATIBLE_WITH,
 )
 
 loom_module(
