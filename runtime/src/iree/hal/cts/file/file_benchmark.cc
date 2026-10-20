@@ -279,11 +279,19 @@ class FileReads {
       if (file_proactors_) {
         iree_async_proactor_t* proactor = nullptr;
         status = iree_async_proactor_pool_get(file_proactors_, i, &proactor);
+        // Each I/O owner needs an independent open file description. On
+        // Windows, duplicated handles share one irreversible IOCP association.
+        iree_io_file_handle_t* handle = nullptr;
+        if (iree_status_is_ok(status)) {
+          status = iree_io_file_handle_open(
+              mode, iree_make_cstring_view(FLAG_file), allocator, &handle);
+        }
         if (iree_status_is_ok(status)) {
           status =
-              iree_hal_fd_file_from_handle(IREE_HAL_MEMORY_ACCESS_READ, handle_,
+              iree_hal_fd_file_from_handle(IREE_HAL_MEMORY_ACCESS_READ, handle,
                                            proactor, allocator, &files_[i]);
         }
+        iree_io_file_handle_release(handle);
       } else {
         status = iree_hal_file_import(device_, nullptr, affinity,
                                       IREE_HAL_MEMORY_ACCESS_READ, handle_, 0,
