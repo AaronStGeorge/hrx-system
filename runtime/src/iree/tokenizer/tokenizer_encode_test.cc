@@ -898,7 +898,8 @@ TEST_F(TokenizerBatchEncodeTest, MatchesSingleEncode) {
 TEST_F(TokenizerStreamingTest, CJKTextWithSmallBuffer) {
   ScopedVocabBuilder vocab_builder(256);
   for (int i = 0; i < 256; ++i) {
-    char byte_token[2] = {static_cast<char>(i), '\0'};
+    char byte_token[8];
+    iree_snprintf(byte_token, sizeof(byte_token), "<0x%02X>", i);
     vocab_builder.AddToken(i, byte_token);
   }
   ScopedVocab vocab = vocab_builder.Build();
@@ -977,7 +978,10 @@ TEST_F(TokenizerStreamingTest, CJKTextWithSmallBuffer) {
       &final_tokens));
   total_tokens += final_tokens;
 
-  EXPECT_GT(total_tokens, 0u) << "Expected tokens from CJK text";
+  ASSERT_EQ(total_tokens, strlen(cjk_text));
+  for (size_t i = 0; i < total_tokens; ++i) {
+    EXPECT_EQ(tokens[i], static_cast<uint8_t>(cjk_text[i]));
+  }
 
   iree_tokenizer_encode_state_deinitialize(state);
   iree_tokenizer_free(tokenizer);
@@ -986,7 +990,8 @@ TEST_F(TokenizerStreamingTest, CJKTextWithSmallBuffer) {
 TEST_F(TokenizerStreamingTest, LongLetterRunWithoutPunctuation) {
   ScopedVocabBuilder vocab_builder(256);
   for (int i = 0; i < 256; ++i) {
-    char byte_token[2] = {static_cast<char>(i), '\0'};
+    char byte_token[8];
+    iree_snprintf(byte_token, sizeof(byte_token), "<0x%02X>", i);
     vocab_builder.AddToken(i, byte_token);
   }
   ScopedVocab vocab = vocab_builder.Build();
@@ -1069,8 +1074,11 @@ TEST_F(TokenizerStreamingTest, LongLetterRunWithoutPunctuation) {
   total_tokens += final_tokens;
 
   // With byte-level fallback, each CJK character (3 bytes) produces 3 tokens.
-  EXPECT_EQ(total_tokens, 1500u)
+  ASSERT_EQ(total_tokens, 1500u)
       << "Expected 1500 byte-level tokens from 500 CJK characters";
+  for (size_t i = 0; i < total_tokens; ++i) {
+    EXPECT_EQ(tokens[i], static_cast<uint8_t>(cjk_text[i]));
+  }
 
   iree_tokenizer_encode_state_deinitialize(state);
   iree_tokenizer_free(tokenizer);
@@ -1079,7 +1087,8 @@ TEST_F(TokenizerStreamingTest, LongLetterRunWithoutPunctuation) {
 TEST_F(TokenizerStreamingTest, LargeCJKTextWithCappedBuffer) {
   ScopedVocabBuilder vocab_builder(256);
   for (int i = 0; i < 256; ++i) {
-    char byte_token[2] = {static_cast<char>(i), '\0'};
+    char byte_token[8];
+    iree_snprintf(byte_token, sizeof(byte_token), "<0x%02X>", i);
     vocab_builder.AddToken(i, byte_token);
   }
   ScopedVocab vocab = vocab_builder.Build();
@@ -1175,7 +1184,10 @@ TEST_F(TokenizerStreamingTest, LargeCJKTextWithCappedBuffer) {
       &final_tokens));
   total_tokens += final_tokens;
 
-  EXPECT_GT(total_tokens, 0u);
+  ASSERT_EQ(total_tokens, cjk_text.size());
+  for (size_t i = 0; i < total_tokens; ++i) {
+    EXPECT_EQ(tokens[i], static_cast<uint8_t>(cjk_text[i]));
+  }
 
   iree_tokenizer_encode_state_deinitialize(state);
   iree_tokenizer_free(tokenizer);
@@ -1184,7 +1196,8 @@ TEST_F(TokenizerStreamingTest, LargeCJKTextWithCappedBuffer) {
 TEST_F(TokenizerStreamingTest, ChunkedEncodeWithUTF8BoundarySplits) {
   ScopedVocabBuilder vocab_builder(256);
   for (int i = 0; i < 256; ++i) {
-    char byte_token[2] = {static_cast<char>(i), '\0'};
+    char byte_token[8];
+    iree_snprintf(byte_token, sizeof(byte_token), "<0x%02X>", i);
     vocab_builder.AddToken(i, byte_token);
   }
   ScopedVocab vocab = vocab_builder.Build();
@@ -1240,7 +1253,10 @@ TEST_F(TokenizerStreamingTest, ChunkedEncodeWithUTF8BoundarySplits) {
     total_tokens += token_count;
   }
 
-  EXPECT_GT(total_tokens, 0u);
+  ASSERT_EQ(total_tokens, cjk_text.size());
+  for (size_t i = 0; i < total_tokens; ++i) {
+    EXPECT_EQ(tokens[i], static_cast<uint8_t>(cjk_text[i]));
+  }
   iree_tokenizer_free(tokenizer);
 }
 
@@ -4675,6 +4691,17 @@ TEST_F(ByteLevelBPEEncodeTest, ASCIIPrintable) {
   // Printable ASCII (0x21-0x7E) maps to identity in byte-level encoding.
   ScopedVocabBuilder vocab_builder;
   vocab_builder.AddToken(0, "hello");
+  vocab_builder.AddToken(1, "h");
+  vocab_builder.AddToken(2, "e");
+  vocab_builder.AddToken(3, "l");
+  vocab_builder.AddToken(4, "o");
+  vocab_builder.AddToken(5, "he");
+  vocab_builder.AddToken(6, "hel");
+  vocab_builder.AddToken(7, "hell");
+  vocab_builder.AddMerge(1, 2);
+  vocab_builder.AddMerge(5, 3);
+  vocab_builder.AddMerge(6, 3);
+  vocab_builder.AddMerge(7, 4);
   ScopedVocab vocab = vocab_builder.Build();
 
   ScopedBuilder builder;
@@ -5340,10 +5367,10 @@ TEST_F(BPEFlagsEncodeTest, EndOfWordSuffix) {
   // of a segment.
   ScopedVocabBuilder vocab_builder;
   vocab_builder.AddToken(0, "h");
-  vocab_builder.AddToken(1, "i");
+  vocab_builder.AddToken(1, "i</w>");
   vocab_builder.AddToken(2, "hi</w>");
-  // Add merges: h+i with suffix should produce "hi</w>".
-  vocab_builder.AddMerge(0, 1);  // h + i -> hi</w> (with suffix)
+  // The final character carries the suffix before merging begins.
+  vocab_builder.AddMerge(0, 1);  // h + i</w> -> hi</w>
   ScopedVocab vocab = vocab_builder.Build();
 
   ScopedBuilder builder;
@@ -5373,12 +5400,12 @@ TEST_F(BPEFlagsEncodeTest, EndOfWordSuffixWithMerges) {
   vocab_builder.AddToken(0, "h");
   vocab_builder.AddToken(1, "e");
   vocab_builder.AddToken(2, "l");
-  vocab_builder.AddToken(3, "o");
+  vocab_builder.AddToken(3, "o</w>");
   vocab_builder.AddToken(4, "he");
   vocab_builder.AddToken(5, "lo</w>");
   vocab_builder.AddToken(6, "helo</w>");
   vocab_builder.AddMerge(0, 1);  // h + e -> he (rank 0)
-  vocab_builder.AddMerge(2, 3);  // l + o -> lo</w> with suffix (rank 1)
+  vocab_builder.AddMerge(2, 3);  // l + o</w> -> lo</w> (rank 1)
   vocab_builder.AddMerge(4, 5);  // he + lo</w> -> helo</w> (rank 2)
   ScopedVocab vocab = vocab_builder.Build();
 
