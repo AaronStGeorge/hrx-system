@@ -55,7 +55,6 @@ iree_cc_library(
   DEPS
     amdf::headers
     libamdf::src::gpu::umd::memory
-    libamdf::src::gpu::umd::wddm::wkmi::bridge_api
     libamdf::src::memory_profile
     libamdf::src::platform
     libamdf::src::platform::windows::endpoint

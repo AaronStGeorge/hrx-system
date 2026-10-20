@@ -30,7 +30,7 @@ struct FakeKmtState {
   uint32_t adapter_close_success_count = 0;
   // Native result returned by memory-capability qualification.
   NTSTATUS memory_capabilities_status = kSuccess;
-  // Native address width, unavailable until explicit device activation.
+  // Native virtual-address width returned by the GPU MMU capability query.
   uint32_t virtual_address_bit_count = 48;
   // Number of native memory-capability queries.
   uint32_t memory_query_count = 0;
