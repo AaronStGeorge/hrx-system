@@ -38,7 +38,8 @@ ImageFixture MeasurementFixture() {
   fixture.entries[0].static_relocation_count = 0;
   fixture.entries[0].first_dynamic_relocation = 0;
   fixture.entries[0].dynamic_relocation_count = 3;
-  fixture.relocations.assign(3, fixture.relocations[1]);
+  const auto dynamic_relocation = fixture.relocations[1];
+  fixture.relocations.assign(3, dynamic_relocation);
   for (uint32_t i = 0; i < 3; ++i) {
     fixture.relocations[i].byte_offset = 16 + i * 24;
   }
