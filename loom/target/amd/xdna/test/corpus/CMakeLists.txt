@@ -40,12 +40,14 @@ loom_corpus_test(
     "numeric/vector/integer_comparison.loom"
     "numeric/vector/integer_extrema_reductions.loom"
     "numeric/vector/integer_shifts.loom"
-    "numeric/vector/integer_widening.loom"
     "numeric/vector/interleave.loom"
     "numeric/vector/packed/arithmetic.loom"
     "numeric/vector/packed/dot.loom"
     "numeric/vector/packed/narrowing.loom"
     "numeric/vector/reductions.loom"
+  EXCLUDES
+    "numeric/vector/integer_widening.loom"
+    "Quarantined after an NPU firmware context timeout during partial-width widening execution."
   XFAILS
     "function/rodata.loom"
     "@rodata_copy_values"
