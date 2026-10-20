@@ -822,6 +822,7 @@ loom_cc_test(
 loom_cc_test(
     name = "jit_test",
     srcs = [
+        "//loom/src/loom/serve/runtime/program:executable_test.cc",
         "//loom/src/loom/serve/runtime/program:jit_module_test.cc",
         "//loom/src/loom/serve/runtime/program:jit_test.cc",
         "//loom/src/loom/serve/runtime/program:jit_workspace_test.cc",
@@ -851,6 +852,7 @@ loom_cc_test(
         "//loom/binding/c:loomc",
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",
+        "//loom/src/loom/serve/runtime/program:executable",
         "//loom/src/loom/serve/runtime/program:jit",
         "//loom/src/loom/serve/runtime/program:module",
         "//loom/src/loom/serve/runtime/program:preparation",

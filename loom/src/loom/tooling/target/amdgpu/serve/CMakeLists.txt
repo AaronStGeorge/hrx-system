@@ -1109,6 +1109,7 @@ loom_cc_test(
   NAME
     jit_test
   SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/executable_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/jit_module_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/jit_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/jit_workspace_test.cc"
@@ -1134,6 +1135,7 @@ loom_cc_test(
     loom::binding::c::loomc
     loom::serve::runtime::device
     loom::serve::runtime::execution
+    loom::serve::runtime::program::executable
     loom::serve::runtime::program::jit
     loom::serve::runtime::program::module
     loom::serve::runtime::program::preparation

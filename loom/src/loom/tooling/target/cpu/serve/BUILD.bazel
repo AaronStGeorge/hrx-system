@@ -116,6 +116,38 @@ loom_cc_binary(
     ],
 )
 
+loom_cc_test(
+    name = "executable_test",
+    srcs = ["//loom/src/loom/serve/runtime/program:executable_test.cc"],
+    args = ["--jit_sources=$(rootpath //loom/src/loom/serve/runtime/program:testdata/jit/config.loom)"],
+    data = [
+        "//loom/src/loom/serve/runtime/program:testdata/jit/config.loom",
+        "//loom/src/loom/serve/runtime/program:testdata/jit/stage.loom",
+    ],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":test_compiler",
+        ":test_device",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/execution",
+        "//loom/src/loom/serve/runtime/program:executable",
+        "//loom/src/loom/serve/runtime/program:jit",
+        "//loom/src/loom/serve/testing:jit",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 # JITs an external source package and executes its command program through the
 # task HAL using the exact CPU serving composition.
 loom_py_test(

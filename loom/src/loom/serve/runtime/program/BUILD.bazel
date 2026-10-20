@@ -15,6 +15,7 @@ package(
 exports_files(
     [
         "control_test.cc",
+        "executable_test.cc",
         "jit_module_test.cc",
         "jit_test.cc",
         "jit_workspace_test.cc",
@@ -188,11 +189,25 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "executable",
+    srcs = ["executable.c"],
+    hdrs = ["executable.h"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/serve/runtime/execution:dispatch",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+loom_cc_library(
     name = "jit",
     srcs = ["jit.c"],
     hdrs = ["jit.h"],
     deps = [
         ":compilation",
+        ":executable",
         ":sources",
         ":target",
         "//loom/binding/c:loomc",

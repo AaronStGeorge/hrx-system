@@ -226,6 +226,24 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    executable
+  HDRS
+    "executable.h"
+  SRCS
+    "executable.c"
+  DEPS
+    iree::base
+    iree::base::threading
+    iree::hal
+    loom::binding::c::loomc
+    loom::serve::runtime::execution::dispatch
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     jit
   HDRS
     "jit.h"
@@ -233,6 +251,7 @@ loom_cc_library(
     "jit.c"
   DEPS
     ::compilation
+    ::executable
     ::sources
     ::target
     iree::base
