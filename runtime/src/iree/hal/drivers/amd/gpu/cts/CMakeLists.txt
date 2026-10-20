@@ -469,7 +469,7 @@ iree_cc_binary_benchmark(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND IREE_HAL_DRIVER_AMD)
 iree_cc_test(
   NAME
     native_test

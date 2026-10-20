@@ -278,6 +278,10 @@ iree_runtime_cc_benchmark(
 iree_runtime_cc_test(
     name = "native_test",
     srcs = ["native_test.cc"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_amd": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":test_device",
         "//libamdf:amdf_static",

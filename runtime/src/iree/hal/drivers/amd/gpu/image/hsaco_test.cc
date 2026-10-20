@@ -180,8 +180,16 @@ iree_status_t InitializeAsanImage(std::vector<uint8_t> bytes, Image* image,
   return status;
 }
 
-TEST(HsacoAsanTest, ExactGlobalRangesExcludeActualDescriptorsOnly) {
-  ASSERT_GT(iree_hal_amd_gpu_asan_images_size(), 0u);
+class HsacoAsanTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    if (!iree_hal_amd_gpu_asan_images_size()) {
+      GTEST_SKIP() << "HIP compiler fixtures were not built";
+    }
+  }
+};
+
+TEST_F(HsacoAsanTest, ExactGlobalRangesExcludeActualDescriptorsOnly) {
   const auto* files = iree_hal_amd_gpu_asan_images_create();
   for (size_t i = 0; i < iree_hal_amd_gpu_asan_images_size(); ++i) {
     SCOPED_TRACE(files[i].name);
@@ -202,8 +210,7 @@ TEST(HsacoAsanTest, ExactGlobalRangesExcludeActualDescriptorsOnly) {
   }
 }
 
-TEST(HsacoAsanTest, RejectsMalformedMarkedGlobalGeometry) {
-  ASSERT_GT(iree_hal_amd_gpu_asan_images_size(), 0u);
+TEST_F(HsacoAsanTest, RejectsMalformedMarkedGlobalGeometry) {
   const auto& file = iree_hal_amd_gpu_asan_images_create()[0];
   const std::vector<uint8_t> original(file.data, file.data + file.size);
   for (int variant = 0; variant < 7; ++variant) {
