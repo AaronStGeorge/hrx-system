@@ -18,6 +18,7 @@
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32.h"
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32_npu4.h"
 #include "iree/hal/drivers/task/device.h"
+#include "iree/hal/memory/fixed_block_pool.h"
 #include "iree/task/executor.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -34,6 +35,7 @@ enum class SubmissionMode {
   kExplicit,
   kRecordedIndirect,
   kRemappedDefaults,
+  kPooledDefaults,
 };
 
 struct Boundary {
@@ -397,7 +399,8 @@ class ExecutionTest
         participant.executable, participant.function, Config(engine), constants,
         bindings,
         (std::get<1>(GetParam()) == SubmissionMode::kDefaults ||
-         std::get<1>(GetParam()) == SubmissionMode::kRemappedDefaults)
+         std::get<1>(GetParam()) == SubmissionMode::kRemappedDefaults ||
+         std::get<1>(GetParam()) == SubmissionMode::kPooledDefaults)
             ? nullptr
             : &barriers,
         IREE_HAL_DISPATCH_FLAG_NONE));
@@ -433,10 +436,18 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
   const bool npu_first = std::get<0>(GetParam());
   const auto mode = std::get<1>(GetParam());
   const bool remapped = mode == SubmissionMode::kRemappedDefaults;
+  const bool pooled = mode == SubmissionMode::kPooledDefaults;
   const bool recorded = mode == SubmissionMode::kRecordedIndirect;
-  const bool defaults = mode == SubmissionMode::kDefaults || remapped;
+  const bool defaults = mode == SubmissionMode::kDefaults || remapped || pooled;
+  Ref<iree_hal_semaphore_t> memory_ready;
+  IREE_ASSERT_OK(iree_hal_semaphore_create(participants_[kCpu].device,
+                                           IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY,
+                                           0, 0, memory_ready.out()));
+  auto* memory_timeline = memory_ready.get();
+  auto* start = start_.get();
   std::array<Ref<iree_hal_buffer_t>, 2> backings;
   std::array<Payload, 2> expected_backings = {};
+  Ref<iree_hal_pool_t> block_pool;
   iree_device_size_t mapping_unit = 0;
   Ref<iree_hal_buffer_t> root;
   if (remapped) {
@@ -445,17 +456,30 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     if (IsSkipped()) {
       return;
     }
+  } else if (pooled) {
+    Ref<iree_hal_buffer_t> slab;
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool_, iree_hal_make_pool_reservation_request(512, 64),
+        iree_infinite_timeout(), slab.out()));
+    iree_hal_fixed_block_pool_options_t options;
+    iree_hal_fixed_block_pool_options_initialize(&options);
+    options.block_size = 512;
+    options.alignment = 64;
+    IREE_ASSERT_OK(iree_hal_fixed_block_pool_create_from_buffer(
+        slab, 0, 512, &options, iree_allocator_system(), block_pool.out()));
+    const auto request =
+        iree_hal_make_pool_reservation_request(sizeof(Payload), 64);
+    uint64_t gate = 1, allocated = 1;
+    IREE_ASSERT_OK(iree_hal_queue_alloca(participants_[kCpu].queue,
+                                         {1, &start, &gate},
+                                         {1, &memory_timeline, &allocated},
+                                         block_pool, 1, &request, root.out()));
   } else {
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
         pool_, iree_hal_make_pool_reservation_request(sizeof(Payload), 64),
         iree_infinite_timeout(), root.out()));
   }
   transition_table_ = iree_hal_buffer_transition_table(root);
-  Ref<iree_hal_semaphore_t> memory_ready;
-  IREE_ASSERT_OK(iree_hal_semaphore_create(participants_[kCpu].device,
-                                           IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY,
-                                           0, 0, memory_ready.out()));
-  auto* memory_timeline = memory_ready.get();
   const iree_hal_memory_scope_t all_scopes = {
       iree_hal_device_group_memory_domain(group_), IREE_HAL_MEMORY_SCOPE_ANY};
   std::array<Ref<iree_hal_buffer_t>, 3> views;
@@ -552,7 +576,6 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     ASSERT_NO_FATAL_FAILURE(Record(kCpu, {1, &references[2]}, 100, &consumer));
   }
   auto* cpu_timeline = participants_[kCpu].timeline.get();
-  auto* start = start_.get();
   for (uint32_t replay = 0; replay < 3; ++replay) {
     SCOPED_TRACE(replay);
     uint64_t gate = replay + 1;
@@ -567,6 +590,7 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
           static_cast<uint32_t>(0xFFFFFF00u + i * 11 + replay);
     }
     Payload result = {};
+    Payload recycled = {};
     iree_hal_transfer_operation_t download = {
         .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
     };
@@ -606,7 +630,8 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     upload.update.length = sizeof(initial);
     IREE_ASSERT_OK(iree_hal_queue_transfer(
         participants_[kCpu].queue,
-        {1, remapped ? &memory_timeline : &start, &gate},
+        {1, (remapped || (pooled && !replay)) ? &memory_timeline : &start,
+         &gate},
         {1, &cpu_timeline, &initialized}, 1, &upload,
         defaults ? nullptr : &upload_barriers));
     if (remapped) {
@@ -629,9 +654,54 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
           {replay ? 2u : 1u, waits, values}, {1, &memory_timeline, &gate}, 1,
           &mapping, IREE_HAL_QUEUE_MAP_FLAG_NONE));
     }
+    if (pooled && replay == 2) {
+      uint64_t released = 2, acquired = 3, filled = 4, read = 5, returned = 6;
+      auto* original = root.get();
+      // The one-block pool cannot grow. Publish the final reader's frontier
+      // while that reader is still gated, then acquire the same capacity on
+      // GPU.
+      IREE_ASSERT_OK(iree_hal_queue_dealloca(
+          participants_[kNpu].queue, {1, &cpu_timeline, &downloaded},
+          {1, &memory_timeline, &released}, 1, &original));
+      Ref<iree_hal_buffer_t> reused;
+      const auto request =
+          iree_hal_make_pool_reservation_request(sizeof(Payload), 64);
+      IREE_ASSERT_OK(iree_hal_queue_alloca(
+          participants_[kGpu].queue, {1, &memory_timeline, &released},
+          {1, &memory_timeline, &acquired}, block_pool, 1, &request,
+          reused.out()));
+      const uint32_t pattern = 0x71727374u;
+      IREE_ASSERT_OK(iree_hal_queue_fill(
+          participants_[kGpu].queue, {1, &memory_timeline, &acquired},
+          {1, &memory_timeline, &filled}, reused, 0, sizeof(Payload), &pattern,
+          sizeof(pattern), nullptr, IREE_HAL_FILL_FLAG_NONE));
+      iree_hal_transfer_operation_t readback = {
+          .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      };
+      readback.download.source_buffer = reused;
+      readback.download.target = recycled.data();
+      readback.download.length = sizeof(recycled);
+      IREE_ASSERT_OK(iree_hal_queue_transfer(
+          participants_[kCpu].queue, {1, &memory_timeline, &filled},
+          {1, &memory_timeline, &read}, 1, &readback, nullptr));
+      auto* next = reused.get();
+      IREE_ASSERT_OK(iree_hal_queue_dealloca(
+          participants_[kCpu].queue, {1, &memory_timeline, &read},
+          {1, &memory_timeline, &returned}, 1, &next));
+    }
     IREE_ASSERT_OK(iree_hal_semaphore_signal(start, gate, nullptr));
     IREE_ASSERT_OK(iree_hal_semaphore_wait(cpu_timeline, downloaded,
                                            iree_infinite_timeout(), 0));
+    if (pooled && replay == 2) {
+      IREE_ASSERT_OK(iree_hal_semaphore_wait(memory_timeline, 6,
+                                             iree_infinite_timeout(), 0));
+      Payload expected_recycled;
+      expected_recycled.fill(0x71727374u);
+      EXPECT_EQ(recycled, expected_recycled);
+      iree_hal_pool_stats_t stats;
+      iree_hal_pool_query_stats(block_pool, &stats);
+      EXPECT_EQ(stats.reservation_count, 0u);
+    }
     Payload expected = initial;
     for (size_t i = 0; i < kElementCount; ++i) {
       uint32_t lhs = initial[kElementCount + i] + 7;
@@ -685,7 +755,8 @@ INSTANTIATE_TEST_SUITE_P(
                        ::testing::Values(SubmissionMode::kDefaults,
                                          SubmissionMode::kExplicit,
                                          SubmissionMode::kRecordedIndirect,
-                                         SubmissionMode::kRemappedDefaults)),
+                                         SubmissionMode::kRemappedDefaults,
+                                         SubmissionMode::kPooledDefaults)),
     [](const ::testing::TestParamInfo<ExecutionTest::ParamType>& info) {
       std::string name =
           std::get<0>(info.param) ? "CpuNpuGpuCpu" : "CpuGpuNpuCpu";
@@ -698,6 +769,8 @@ INSTANTIATE_TEST_SUITE_P(
           return name + "RecordedIndirect";
         case SubmissionMode::kRemappedDefaults:
           return name + "RemappedDefaults";
+        case SubmissionMode::kPooledDefaults:
+          return name + "PooledDefaults";
       }
       return name;
     });

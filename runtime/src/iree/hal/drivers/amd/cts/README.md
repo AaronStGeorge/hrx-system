@@ -23,6 +23,11 @@ preservation of the previously detached backing before removing all mappings.
 A reservation's immutable transition table has no physical backing to qualify;
 these cases do not use that table to specialize barriers.
 
+Finite-pool cases allocate through Task, return the only block through XDNA after
+the final CPU reader, and reacquire it through RDNA while that reader is still
+pending. A GPU fill and CPU readback verify the reused storage; both reservations
+are returned explicitly.
+
 Each target declares its required engines and hardware separately. CPU/XDNA
 tests need an NPU; execution and virtual-buffer tests need both a GPU and an NPU.
 Ordinary runtime capability checks identify unsupported native profiles.

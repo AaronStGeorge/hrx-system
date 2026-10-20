@@ -145,6 +145,7 @@ iree_cc_test(
     iree::hal::drivers::amd::xdna::image::testdata::mul_i32
     iree::hal::drivers::amd::xdna::image::testdata::mul_i32_npu4
     iree::hal::drivers::task::device
+    iree::hal::memory::fixed_block_pool
     iree::task
     iree::testing::gtest
     iree::testing::gtest_main
