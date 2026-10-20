@@ -269,6 +269,41 @@ TEST(VocabBuilderTest, CapacityHintGrowth) {
   iree_tokenizer_vocab_free(vocab);
 }
 
+TEST(VocabBuilderTest, SealedTokensProvideFinalLookupIndex) {
+  iree_tokenizer_vocab_builder_t* builder = nullptr;
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_allocate(
+      2, iree_allocator_system(), &builder));
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_add_token_with_id(
+      builder, 2, IREE_SVL("gamma"), 0.0, IREE_TOKENIZER_TOKEN_ATTR_NONE));
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_add_token_with_id(
+      builder, 0, IREE_SVL("alpha"), 0.0, IREE_TOKENIZER_TOKEN_ATTR_NONE));
+
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_seal_tokens(builder));
+  EXPECT_EQ(iree_tokenizer_vocab_builder_lookup(builder, IREE_SVL("alpha")), 0);
+  EXPECT_EQ(iree_tokenizer_vocab_builder_lookup(builder, IREE_SVL("gamma")), 2);
+  EXPECT_EQ(iree_tokenizer_vocab_builder_lookup(builder, IREE_SVL("missing")),
+            -1);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      iree_tokenizer_vocab_builder_add_token(builder, IREE_SVL("late"), 0.0,
+                                             IREE_TOKENIZER_TOKEN_ATTR_NONE));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        iree_tokenizer_vocab_builder_add_token_attrs(
+                            builder, 0, IREE_TOKENIZER_TOKEN_ATTR_SPECIAL));
+
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_add_merge(builder, 0, 2));
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_set_special_token(
+      builder, IREE_TOKENIZER_SPECIAL_TOKEN_UNK, 0));
+  iree_tokenizer_vocab_t* vocab = nullptr;
+  IREE_ASSERT_OK(iree_tokenizer_vocab_builder_build(builder, &vocab));
+  EXPECT_EQ(iree_tokenizer_vocab_capacity(vocab), 3u);
+  EXPECT_EQ(iree_tokenizer_vocab_lookup(vocab, IREE_SVL("alpha")), 0);
+  EXPECT_EQ(iree_tokenizer_vocab_lookup(vocab, IREE_SVL("gamma")), 2);
+  EXPECT_EQ(iree_tokenizer_vocab_merge_count(vocab), 1u);
+  EXPECT_EQ(iree_tokenizer_vocab_special_ids(vocab).unk, 0);
+  iree_tokenizer_vocab_free(vocab);
+}
+
 TEST(VocabBuilderTest, FreeWithoutBuild) {
   iree_tokenizer_vocab_builder_t* builder = nullptr;
   IREE_ASSERT_OK(iree_tokenizer_vocab_builder_allocate(

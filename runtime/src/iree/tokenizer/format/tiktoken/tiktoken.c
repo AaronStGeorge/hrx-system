@@ -539,8 +539,7 @@ static iree_status_t iree_tokenizer_tiktoken_build_byte_to_rank(
 
 static iree_status_t iree_tokenizer_tiktoken_reconstruct_merges(
     const iree_tokenizer_tiktoken_parsed_t* parsed,
-    const uint32_t byte_to_rank[256], const iree_tokenizer_vocab_t* temp_vocab,
-    iree_tokenizer_vocab_builder_t* builder) {
+    const uint32_t byte_to_rank[256], iree_tokenizer_vocab_builder_t* builder) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
   uint32_t parts[IREE_TOKENIZER_TIKTOKEN_MAX_PARTS];
@@ -615,8 +614,8 @@ static iree_status_t iree_tokenizer_tiktoken_reconstruct_merges(
           utf8_length += utf8->length;
         }
 
-        int32_t concat_id = iree_tokenizer_vocab_lookup(
-            temp_vocab, iree_make_string_view(utf8_buffer, utf8_length));
+        int32_t concat_id = iree_tokenizer_vocab_builder_lookup(
+            builder, iree_make_string_view(utf8_buffer, utf8_length));
         if (concat_id >= 0 && (uint32_t)concat_id < best_merge_rank) {
           best_merge_rank = (uint32_t)concat_id;
           best_merge_index = i;
@@ -754,11 +753,8 @@ iree_status_t iree_tokenizer_parse_tiktoken(
     status = iree_tokenizer_tiktoken_build_byte_to_rank(&parsed, byte_to_rank);
   }
 
-  // Phase 2: Build temporary vocab (tokens only) for merge reconstruction.
-  // The temp vocab provides text->ID lookup needed to resolve merge pairs
-  // during BPE simulation.
+  // Phase 2: Populate the vocabulary token set once.
   iree_tokenizer_vocab_builder_t* vocab_builder = NULL;
-  iree_tokenizer_vocab_t* temp_vocab = NULL;
   if (iree_status_is_ok(status)) {
     status = iree_tokenizer_vocab_builder_allocate(parsed.entry_count,
                                                    allocator, &vocab_builder);
@@ -766,30 +762,6 @@ iree_status_t iree_tokenizer_parse_tiktoken(
   if (iree_status_is_ok(status)) {
     status = iree_tokenizer_tiktoken_add_tokens(&parsed, vocab_builder);
   }
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_vocab_builder_build(vocab_builder, &temp_vocab);
-    if (iree_status_is_ok(status)) {
-      vocab_builder = NULL;  // Consumed by build.
-    }
-  }
-
-  // Phase 3: Build final vocab (tokens + merges + special tokens).
-  iree_tokenizer_vocab_t* vocab = NULL;
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_vocab_builder_allocate(parsed.entry_count,
-                                                   allocator, &vocab_builder);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_tiktoken_add_tokens(&parsed, vocab_builder);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_tiktoken_reconstruct_merges(
-        &parsed, byte_to_rank, temp_vocab, vocab_builder);
-  }
-
-  // Done with temp vocab.
-  iree_tokenizer_vocab_free(temp_vocab);
-  temp_vocab = NULL;
 
   // Add special tokens to the vocabulary. Special tokens have IDs above the
   // BPE vocab range (e.g., cl100k_base BPE range is 0-100255, special tokens
@@ -804,7 +776,20 @@ iree_status_t iree_tokenizer_parse_tiktoken(
     }
   }
 
+  // Seal once so merge reconstruction and the final vocabulary share one
+  // text-to-ID lookup index.
+  if (iree_status_is_ok(status)) {
+    status = iree_tokenizer_vocab_builder_seal_tokens(vocab_builder);
+  }
+
+  // Phase 3: Reconstruct merge rules against the sealed token set.
+  if (iree_status_is_ok(status)) {
+    status = iree_tokenizer_tiktoken_reconstruct_merges(&parsed, byte_to_rank,
+                                                        vocab_builder);
+  }
+
   // Build final vocab.
+  iree_tokenizer_vocab_t* vocab = NULL;
   if (iree_status_is_ok(status)) {
     status = iree_tokenizer_vocab_builder_build(vocab_builder, &vocab);
     if (iree_status_is_ok(status)) {
@@ -899,7 +884,6 @@ iree_status_t iree_tokenizer_parse_tiktoken(
   iree_tokenizer_tiktoken_parsed_free(&parsed);
   if (!iree_status_is_ok(status)) {
     iree_tokenizer_vocab_builder_free(vocab_builder);
-    iree_tokenizer_vocab_free(temp_vocab);
     // vocab, model, segmenter, decoder are cleaned up by builder deinitialize.
   }
 

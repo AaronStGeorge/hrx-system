@@ -66,11 +66,28 @@ struct iree_tokenizer_vocab_builder_t {
 
   // Maximum token text length seen so far.
   iree_host_size_t max_token_length;
+
+  // Combined vocabulary header and lookup hash allocated when tokens seal.
+  iree_tokenizer_vocab_t* sealed_vocab;
+  // Lookup hash embedded in sealed_vocab, or NULL before tokens seal.
+  iree_tokenizer_vocab_hash_t* lookup_hash;
+  // Highest token ID captured when tokens seal (-1 for an empty vocabulary).
+  int32_t sealed_max_token_id;
 };
 
 //===----------------------------------------------------------------------===//
 // Helper Functions
 //===----------------------------------------------------------------------===//
+
+// Rejects token mutations after their lookup index has been constructed.
+static iree_status_t iree_tokenizer_vocab_builder_require_mutable_tokens(
+    const iree_tokenizer_vocab_builder_t* builder) {
+  if (builder->lookup_hash) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "vocabulary token set has already been sealed");
+  }
+  return iree_ok_status();
+}
 
 // Ensures token arrays have capacity for at least |min_capacity| tokens.
 // Materializes scores only when needed; absent scores are implicitly zero.
@@ -263,6 +280,7 @@ iree_status_t iree_tokenizer_vocab_builder_allocate(
   memset(builder, 0, sizeof(*builder));
   builder->allocator = allocator;
   builder->special_ids = iree_tokenizer_special_ids_none();
+  builder->sealed_max_token_id = -1;
 
   // Pre-allocate if hint provided.
   if (capacity_hint > 0) {
@@ -298,6 +316,8 @@ iree_status_t iree_tokenizer_vocab_builder_add_token(
     iree_tokenizer_vocab_builder_t* builder, iree_string_view_t text,
     double score, iree_tokenizer_token_attr_t attrs) {
   IREE_ASSERT_ARGUMENT(builder);
+  IREE_RETURN_IF_ERROR(
+      iree_tokenizer_vocab_builder_require_mutable_tokens(builder));
 
   // Validate text.size fits in uint16_t (max token length).
   if (text.size > UINT16_MAX) {
@@ -369,6 +389,8 @@ iree_status_t iree_tokenizer_vocab_builder_add_token_with_id(
     iree_tokenizer_vocab_builder_t* builder, int32_t token_id,
     iree_string_view_t text, double score, iree_tokenizer_token_attr_t attrs) {
   IREE_ASSERT_ARGUMENT(builder);
+  IREE_RETURN_IF_ERROR(
+      iree_tokenizer_vocab_builder_require_mutable_tokens(builder));
 
   // Lazily allocate target_ids array on first use.
   if (!builder->target_ids) {
@@ -576,6 +598,8 @@ iree_status_t iree_tokenizer_vocab_builder_add_token_attrs(
     iree_tokenizer_vocab_builder_t* builder, int32_t token_id,
     iree_tokenizer_token_attr_t attrs) {
   IREE_ASSERT_ARGUMENT(builder);
+  IREE_RETURN_IF_ERROR(
+      iree_tokenizer_vocab_builder_require_mutable_tokens(builder));
   if (!iree_tokenizer_vocab_builder_try_add_token_attrs(builder, token_id,
                                                         attrs)) {
     return iree_status_from_code(IREE_STATUS_NOT_FOUND);
@@ -587,6 +611,8 @@ iree_status_t iree_tokenizer_vocab_builder_ensure_token(
     iree_tokenizer_vocab_builder_t* builder, int32_t token_id,
     iree_string_view_t text, double score, iree_tokenizer_token_attr_t attrs) {
   IREE_ASSERT_ARGUMENT(builder);
+  IREE_RETURN_IF_ERROR(
+      iree_tokenizer_vocab_builder_require_mutable_tokens(builder));
 
   // Try to update attributes on existing token first.
   if (iree_tokenizer_vocab_builder_try_add_token_attrs(builder, token_id,
@@ -596,6 +622,64 @@ iree_status_t iree_tokenizer_vocab_builder_ensure_token(
   // Token doesn't exist - insert it.
   return iree_tokenizer_vocab_builder_add_token_with_id(builder, token_id, text,
                                                         score, attrs);
+}
+
+iree_status_t iree_tokenizer_vocab_builder_seal_tokens(
+    iree_tokenizer_vocab_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(builder);
+  if (builder->lookup_hash) {
+    return iree_ok_status();
+  }
+  IREE_TRACE_ZONE_BEGIN(z0);
+
+  // Sort explicit IDs and make sparse gaps concrete before indexing them.
+  int32_t max_token_id = (int32_t)builder->token_count - 1;
+  if (builder->needs_sort) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_tokenizer_vocab_builder_sort(builder, &max_token_id));
+  }
+  const iree_host_size_t array_size =
+      max_token_id >= 0 ? (iree_host_size_t)max_token_id + 1 : 0;
+
+  // Allocate the final vocabulary header and lookup hash together. build()
+  // fills the header and transfers this allocation without rebuilding the
+  // hash.
+  iree_host_size_t hash_storage_size = 0;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_tokenizer_vocab_hash_storage_size(
+              array_size, IREE_TOKENIZER_VOCAB_HASH_DEFAULT_LOAD_PERCENT,
+              &hash_storage_size));
+  iree_host_size_t total_size = 0;
+  iree_host_size_t hash_offset = 0;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, IREE_STRUCT_LAYOUT(
+              sizeof(iree_tokenizer_vocab_t), &total_size,
+              IREE_STRUCT_FIELD_ALIGNED(hash_storage_size, uint8_t,
+                                        sizeof(void*), &hash_offset)));
+
+  void* slab = NULL;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_allocator_malloc(builder->allocator, total_size, &slab));
+  builder->sealed_vocab = (iree_tokenizer_vocab_t*)slab;
+  builder->lookup_hash =
+      (iree_tokenizer_vocab_hash_t*)((uint8_t*)slab + hash_offset);
+  builder->sealed_max_token_id = max_token_id;
+
+  iree_const_byte_span_t string_span = {builder->string_data,
+                                        builder->string_size};
+  iree_tokenizer_vocab_hash_initialize(
+      builder->tokens, array_size, string_span,
+      IREE_TOKENIZER_VOCAB_HASH_DEFAULT_LOAD_PERCENT, builder->lookup_hash);
+
+  IREE_TRACE_ZONE_END(z0);
+  return iree_ok_status();
+}
+
+int32_t iree_tokenizer_vocab_builder_lookup(
+    const iree_tokenizer_vocab_builder_t* builder, iree_string_view_t text) {
+  IREE_ASSERT_ARGUMENT(builder);
+  IREE_ASSERT(builder->lookup_hash);
+  return iree_tokenizer_vocab_hash_lookup(builder->lookup_hash, text);
 }
 
 iree_status_t iree_tokenizer_vocab_builder_add_merge(
@@ -624,56 +708,17 @@ iree_status_t iree_tokenizer_vocab_builder_build(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_allocator_t allocator = builder->allocator;
-
-  // Sort automatically if explicit IDs were used.
-  // This handles sparse/non-contiguous IDs by allocating for max_id + 1.
-  int32_t max_token_id = (int32_t)builder->token_count - 1;
-  if (builder->needs_sort) {
-    IREE_RETURN_AND_END_ZONE_IF_ERROR(
-        z0, iree_tokenizer_vocab_builder_sort(builder, &max_token_id));
-  }
-
-  // Array size for tokens/scores (may be > token_count for sparse vocabs).
-  iree_host_size_t array_size = (iree_host_size_t)max_token_id + 1;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_tokenizer_vocab_builder_seal_tokens(builder));
+  const int32_t max_token_id = builder->sealed_max_token_id;
 
   // Validate special token IDs are in range.
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_tokenizer_vocab_builder_validate_special_ids(
               &builder->special_ids, max_token_id));
 
-  // Calculate hash storage size.
-  iree_host_size_t hash_storage_size = 0;
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_tokenizer_vocab_hash_storage_size(
-              array_size, IREE_TOKENIZER_VOCAB_HASH_DEFAULT_LOAD_PERCENT,
-              &hash_storage_size));
-
-  // Calculate combined vocab+hash allocation layout.
-  // Hash table alignment: the struct contains pointers, so sizeof(void*)
-  // is the minimum required alignment.
-  iree_host_size_t total_size = 0;
-  iree_host_size_t hash_offset = 0;
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, IREE_STRUCT_LAYOUT(
-              sizeof(iree_tokenizer_vocab_t), &total_size,
-              IREE_STRUCT_FIELD_ALIGNED(hash_storage_size, uint8_t,
-                                        sizeof(void*), &hash_offset)));
-
-  // Allocate combined vocab struct + hash table.
-  void* slab = NULL;
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_allocator_malloc(allocator, total_size, &slab));
-
-  iree_tokenizer_vocab_t* vocab = (iree_tokenizer_vocab_t*)slab;
-  iree_tokenizer_vocab_hash_t* hash =
-      (iree_tokenizer_vocab_hash_t*)((uint8_t*)slab + hash_offset);
-
-  // Initialize hash table in-place.
-  iree_const_byte_span_t string_span = {builder->string_data,
-                                        builder->string_size};
-  iree_tokenizer_vocab_hash_initialize(
-      builder->tokens, array_size, string_span,
-      IREE_TOKENIZER_VOCAB_HASH_DEFAULT_LOAD_PERCENT, hash);
+  iree_tokenizer_vocab_t* vocab = builder->sealed_vocab;
+  iree_tokenizer_vocab_hash_t* hash = builder->lookup_hash;
 
   // Transfer ownership from builder to vocab (zero-copy).
   vocab->allocator = allocator;
@@ -694,6 +739,8 @@ iree_status_t iree_tokenizer_vocab_builder_build(
   builder->token_slab = NULL;
   builder->string_data = NULL;
   builder->merges = NULL;
+  builder->sealed_vocab = NULL;
+  builder->lookup_hash = NULL;
 
   // Free builder struct (but not the data we transferred).
   iree_allocator_free(allocator, builder);
@@ -715,6 +762,7 @@ void iree_tokenizer_vocab_builder_free(
   iree_allocator_free(allocator, builder->target_ids);
   iree_allocator_free(allocator, builder->string_data);
   iree_allocator_free(allocator, builder->merges);
+  iree_allocator_free(allocator, builder->sealed_vocab);
   iree_allocator_free(allocator, builder);
   IREE_TRACE_ZONE_END(z0);
 }
