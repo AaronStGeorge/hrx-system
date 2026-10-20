@@ -13,6 +13,7 @@ import argparse
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -192,9 +193,28 @@ def dev_command(*args: str) -> tuple[str, ...]:
 
 
 def sanitizer_env(config: str | None) -> tuple[tuple[str, str], ...]:
-    if config != "tsan":
+    if config not in CMAKE_SANITIZER_OPTIONS:
         return ()
-    return (("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"),)
+    environment = []
+    if config == "tsan":
+        environment.append(("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"))
+
+    # Bazel's test environment does not inherit the host toolchain's PATH.
+    # Pass the symbolizer explicitly so sanitizer failures retain source frames.
+    symbolizer_key = f"{config.upper()}_SYMBOLIZER_PATH"
+    symbolizer = os.environ.get(symbolizer_key)
+    if not symbolizer and (rocm_root := os.environ.get("HRX_ROCM_ROOT")):
+        executable = (
+            "llvm-symbolizer.exe" if sys.platform == "win32" else "llvm-symbolizer"
+        )
+        candidate = Path(rocm_root) / "lib" / "llvm" / "bin" / executable
+        if candidate.is_file():
+            symbolizer = str(candidate)
+    if not symbolizer:
+        symbolizer = shutil.which("llvm-symbolizer")
+    if symbolizer:
+        environment.append((symbolizer_key, symbolizer))
+    return tuple(environment)
 
 
 def platform_coverage_enabled() -> bool:
