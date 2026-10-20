@@ -274,14 +274,27 @@ static bool loom_low_allocation_search_storage_conflicts(
     loom_low_allocation_storage_release_policy_t release_policy) {
   loom_low_allocation_write_interference_t* interference =
       context->unit_liveness->write_interference;
-  const loom_value_ordinal_t retained_origin =
-      interference != NULL
-          ? loom_low_allocation_write_interference_conflicting_read(
-                interference, context->assignment_map,
-                context->unit_liveness->end_points, candidate)
-          : LOOM_VALUE_ORDINAL_INVALID;
-  if (retained_origin != LOOM_VALUE_ORDINAL_INVALID) {
-    if (context->retained_fixed_value_index_plus_one == 0 &&
+  loom_low_allocation_storage_origin_t retained_origin =
+      LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID;
+  if (interference != NULL) {
+    const loom_value_ordinal_t value_ordinal =
+        loom_module_value_ordinal_scratch_lookup(context->module,
+                                                 candidate->value_id);
+    const loom_low_allocation_storage_origin_t candidate_origin =
+        loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+            interference, value_ordinal);
+    const loom_low_allocation_write_assignment_map_t write_assignments =
+        loom_low_allocation_write_assignment_map_from_value_map(
+            context->assignment_map);
+    retained_origin = loom_low_allocation_write_interference_conflicting_read(
+        interference, &write_assignments, context->unit_liveness->end_points,
+        candidate_origin, candidate);
+  }
+  if (retained_origin != LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID) {
+    // Only the original-value prefix can identify an authored fixed value.
+    // Its storage origins retain the corresponding liveness ordinals.
+    if (retained_origin < context->liveness->value_count &&
+        context->retained_fixed_value_index_plus_one == 0 &&
         context->target_constraints->fixed_value_count != 0) {
       context->retained_fixed_value_index_plus_one =
           context->target_constraints

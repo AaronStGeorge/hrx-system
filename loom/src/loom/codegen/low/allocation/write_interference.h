@@ -28,6 +28,34 @@ extern "C" {
 typedef struct loom_low_allocation_write_interference_t
     loom_low_allocation_write_interference_t;
 
+// Dense identity of one canonical storage owner in a retained-write table.
+// Original SSA values map into this domain; entries beyond that prefix do not
+// require module value IDs.
+typedef uint32_t loom_low_allocation_storage_origin_t;
+#define LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID \
+  ((loom_low_allocation_storage_origin_t)UINT32_MAX)
+
+// Borrowed assignment lookup indexed by canonical storage origin. Allocation
+// over original SSA values may project its value-ordinal index directly;
+// extended allocation domains supply their own index over the same records.
+typedef struct loom_low_allocation_write_assignment_map_t {
+  // Published assignment records.
+  const loom_low_allocation_assignment_t* assignments;
+  // Assignment indices by storage origin, or UINT32_MAX when unpublished.
+  const uint32_t* assignment_indices_by_origin;
+} loom_low_allocation_write_assignment_map_t;
+
+// Projects an ordinary local-value assignment map into its origin-compatible
+// lookup view. Canonical original origins retain their value ordinals.
+static inline loom_low_allocation_write_assignment_map_t
+loom_low_allocation_write_assignment_map_from_value_map(
+    const loom_low_allocation_assignment_map_t* map) {
+  return (loom_low_allocation_write_assignment_map_t){
+      .assignments = map->assignments,
+      .assignment_indices_by_origin = map->assignment_indices_by_value_ordinal,
+  };
+}
+
 // Creates arena-owned collection state for targets with an active
 // read-retention rule. Other targets leave |out_interference| NULL and allocate
 // no state. Unit-liveness has already bounded the sum of register interval
@@ -48,10 +76,10 @@ iree_status_t loom_low_allocation_write_interference_note_operand(
     uint16_t operand_index, uint32_t point, iree_arena_allocator_t* arena);
 
 // Retains the resolved fixed location of a value in the tracked bank. Required
-// tied aliases canonicalize to one origin; other banks contribute no facts.
+// tied aliases supply their canonical origin; other banks contribute no facts.
 void loom_low_allocation_write_interference_note_fixed(
     loom_low_allocation_write_interference_t* interference,
-    loom_value_ordinal_t ordinal,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* assignment);
 
 // Finalizes path-sensitive constraints and per-point temporary exclusions.
@@ -73,17 +101,22 @@ iree_status_t loom_low_allocation_write_interference_finalize(
 // Records a published assignment before the next candidate query. A successful
 // query's inferred locations remain a valid positive witness when publication
 // agrees with them. Other tracked physical assignments invalidate that witness;
-// provisional spills only remove constraints. |ordinal| is the published value,
-// before canonicalizing required aliases.
+// provisional spills only remove constraints.
 void loom_low_allocation_write_interference_note_assignment(
     loom_low_allocation_write_interference_t* interference,
-    loom_value_ordinal_t ordinal,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* assignment);
 
 // Ends an assignment attempt's inference lifetime on success or failure. The
 // immutable constraints remain available for a new coloring or relocation.
 void loom_low_allocation_write_interference_reset_inference(
     loom_low_allocation_write_interference_t* interference);
+
+// Returns the canonical storage origin of one original local value.
+loom_low_allocation_storage_origin_t
+loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+    const loom_low_allocation_write_interference_t* interference,
+    loom_value_ordinal_t value_ordinal);
 
 // Returns the retained origin rejecting a candidate, or INVALID. The search
 // owner skips this query when the optional finalized table is absent. Future
@@ -97,20 +130,22 @@ void loom_low_allocation_write_interference_reset_inference(
 // values. |unit_end_points| selects the current assignment attempt's physical
 // lifetime view; it may shorten canonical source observations after a covering
 // structural value is materialized.
-loom_value_ordinal_t loom_low_allocation_write_interference_conflicting_read(
+loom_low_allocation_storage_origin_t
+loom_low_allocation_write_interference_conflicting_read(
     loom_low_allocation_write_interference_t* interference,
-    const loom_low_allocation_assignment_map_t* assignments,
+    const loom_low_allocation_write_assignment_map_t* assignments,
     const uint32_t* unit_end_points,
+    loom_low_allocation_storage_origin_t candidate_origin,
     const loom_low_allocation_assignment_t* candidate);
 
-// A complete simultaneous location proposal, indexed by local value ordinal.
+// A complete simultaneous location proposal, indexed by storage origin.
 // UINT32_MAX entries preserve the current assignment. Affected origins are
 // listed once so transaction checks visit only their indexed constraints.
 typedef struct loom_low_allocation_write_proposal_t {
   // Proposed base per canonical origin, or UINT32_MAX when unchanged.
   uint32_t* bases;
   // Canonical origins whose locations change together.
-  loom_value_ordinal_t* origins;
+  loom_low_allocation_storage_origin_t* origins;
   // Number of initialized entries in |origins|.
   iree_host_size_t count;
 } loom_low_allocation_write_proposal_t;
@@ -128,14 +163,14 @@ void loom_low_allocation_write_proposal_reset(
 // Records one member of a complete coalesced relocation group or an eviction.
 void loom_low_allocation_write_proposal_add(
     const loom_low_allocation_write_interference_t* interference,
-    const loom_low_allocation_assignment_map_t* assignments,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* assignment, uint32_t base,
     loom_low_allocation_write_proposal_t* proposal);
 
 // Validates all endpoints against the simultaneous proposal before mutation.
 bool loom_low_allocation_write_proposal_conflicts(
     loom_low_allocation_write_interference_t* interference,
-    const loom_low_allocation_assignment_map_t* assignments,
+    const loom_low_allocation_write_assignment_map_t* assignments,
     const loom_low_allocation_write_proposal_t* proposal);
 
 // Returns whether a copy-cycle temporary would overwrite a retained unit at
@@ -144,7 +179,7 @@ bool loom_low_allocation_write_proposal_conflicts(
 // retained origin in the tracked bank.
 bool loom_low_allocation_write_interference_temporary_conflicts(
     const loom_low_allocation_write_interference_t* interference,
-    const loom_low_allocation_assignment_map_t* assignments,
+    const loom_low_allocation_write_assignment_map_t* assignments,
     uint32_t write_point, const loom_low_move_location_t* temporary);
 
 #ifdef __cplusplus

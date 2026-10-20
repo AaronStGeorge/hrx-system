@@ -117,6 +117,9 @@ static iree_status_t loom_low_allocation_move_plan_resolve_temporary(
         context->assignment_map.assignment_count, context->unit_liveness,
         plan->scratch_arena, &plan->storage_liveness_index));
   }
+  const loom_low_allocation_write_assignment_map_t write_assignments =
+      loom_low_allocation_write_assignment_map_from_value_map(
+          &context->assignment_map);
   for (uint32_t candidate_ordinal = 0; candidate_ordinal < candidate_count;
        ++candidate_ordinal) {
     const uint32_t location =
@@ -140,8 +143,8 @@ static iree_status_t loom_low_allocation_move_plan_resolve_temporary(
         loom_low_move_sequence_location_set_contains(occupied_locations,
                                                      &temporary) ||
         loom_low_allocation_write_interference_temporary_conflicts(
-            context->unit_liveness->write_interference,
-            &context->assignment_map, group_context->write_point, &temporary)) {
+            context->unit_liveness->write_interference, &write_assignments,
+            group_context->write_point, &temporary)) {
       continue;
     }
     *out_temporary = temporary;

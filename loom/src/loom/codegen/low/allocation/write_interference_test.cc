@@ -33,6 +33,9 @@ enum class SourceCopyKind { SingleUnit, WholeValue };
 
 class WriteInterferenceTest : public ::testing::Test {
  protected:
+  static constexpr loom_low_allocation_storage_origin_t kNoConflict =
+      LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID;
+
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &module_pool_);
@@ -353,6 +356,7 @@ class WriteInterferenceTest : public ::testing::Test {
     map_.assignments = assignments_.data();
     map_.assignment_count = domain_.value_count;
     map_.assignment_indices_by_value_ordinal = assignment_indices_.data();
+    write_map_ = loom_low_allocation_write_assignment_map_from_value_map(&map_);
   }
 
   void ResetArenas(iree_host_size_t failure_index = SIZE_MAX) {
@@ -384,16 +388,16 @@ class WriteInterferenceTest : public ::testing::Test {
         &unit_liveness_, &placement_);
     table_ = unit_liveness_.write_interference;
     if (binding == BindingKind::FixedSource) {
-      loom_low_allocation_write_interference_note_fixed(table_, 0,
+      loom_low_allocation_write_interference_note_fixed(table_, Origin(0),
                                                         &assignments_[0]);
     } else if (binding != BindingKind::Free) {
       assignments_[2].location_base = assignments_[0].location_base;
       for (uint32_t ordinal : {0u, 2u}) {
         loom_low_allocation_write_interference_note_fixed(
-            table_, ordinal, &assignments_[ordinal]);
+            table_, Origin(ordinal), &assignments_[ordinal]);
       }
       if (binding == BindingKind::ForcedWrite) {
-        loom_low_allocation_write_interference_note_fixed(table_, 1,
+        loom_low_allocation_write_interference_note_fixed(table_, Origin(1),
                                                           &assignments_[1]);
       }
     }
@@ -416,18 +420,27 @@ class WriteInterferenceTest : public ::testing::Test {
     }
   }
 
-  loom_value_ordinal_t Query(uint32_t ordinal, uint32_t base) {
+  loom_low_allocation_storage_origin_t Origin(uint32_t ordinal) const {
+    return loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+        table_, ordinal);
+  }
+
+  loom_low_allocation_storage_origin_t Query(uint32_t ordinal, uint32_t base) {
     auto candidate = assignments_[ordinal];
+    // Candidate identity is supplied by the planning domain rather than
+    // recovered from the assignment's optional SSA payload.
+    candidate.value_id = LOOM_VALUE_ID_INVALID;
     candidate.location_base = base;
     return loom_low_allocation_write_interference_conflicting_read(
-        table_, &map_, unit_liveness_.end_points, &candidate);
+        table_, &write_map_, unit_liveness_.end_points, Origin(ordinal),
+        &candidate);
   }
 
   void Publish(uint32_t ordinal, uint32_t base) {
     assignment_indices_[ordinal] = ordinal;
     assignments_[ordinal].location_base = base;
     loom_low_allocation_write_interference_note_assignment(
-        table_, ordinal, &assignments_[ordinal]);
+        table_, Origin(ordinal), &assignments_[ordinal]);
   }
 
   // Source module and value-domain lifetime, independent of injected failures.
@@ -494,6 +507,8 @@ class WriteInterferenceTest : public ::testing::Test {
   std::vector<uint32_t> assignment_indices_;
   // Assignment consumer view with module ordinal ownership intact.
   loom_low_allocation_assignment_map_t map_ = {};
+  // Origin-indexed assignment view consumed by retained-write queries.
+  loom_low_allocation_write_assignment_map_t write_map_ = {};
   // Published constructor result; usable only after successful finalization.
   loom_low_allocation_write_interference_t* table_ = nullptr;
 };
@@ -515,10 +530,10 @@ TEST_P(WriteInterferenceTieTest, LaterMemberRetainsTheWholePhysicalSource) {
     IREE_ASSERT_OK(BuildTable(binding));
     assignment_indices_[0] =
         binding == BindingKind::FixedSource ? UINT32_MAX : 0;
-    EXPECT_EQ(Query(copied, source_base), LOOM_VALUE_ORDINAL_INVALID);
+    EXPECT_EQ(Query(copied, source_base), kNoConflict);
     EXPECT_EQ(Query(copied, source_base + 1), 0u);
     EXPECT_EQ(Query(copied, source_base + 3), 0u);
-    EXPECT_EQ(Query(copied, source_base + 4), LOOM_VALUE_ORDINAL_INVALID);
+    EXPECT_EQ(Query(copied, source_base + 4), kNoConflict);
   }
 }
 
@@ -528,9 +543,9 @@ TEST_P(WriteInterferenceTieTest, DeadUnitsBetweenLiveRangesRemainReusable) {
   const uint32_t source_base = assignments_[0].location_base;
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
-  EXPECT_EQ(Query(copied, source_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(copied, source_base), kNoConflict);
   EXPECT_EQ(Query(copied, source_base + 1), 0u);
-  EXPECT_EQ(Query(copied, source_base + 2), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(copied, source_base + 2), kNoConflict);
   EXPECT_EQ(Query(copied, source_base + 3), 0u);
 }
 
@@ -540,9 +555,9 @@ TEST_P(WriteInterferenceTieTest, OtherBranchUseDoesNotFillThePhysicalHole) {
   const uint32_t source_base = assignments_[0].location_base;
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
-  EXPECT_EQ(Query(copied, source_base), LOOM_VALUE_ORDINAL_INVALID);
-  EXPECT_EQ(Query(copied, source_base + 1), LOOM_VALUE_ORDINAL_INVALID);
-  EXPECT_EQ(Query(copied, source_base + 3), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(copied, source_base), kNoConflict);
+  EXPECT_EQ(Query(copied, source_base + 1), kNoConflict);
+  EXPECT_EQ(Query(copied, source_base + 3), kNoConflict);
 }
 
 INSTANTIATE_TEST_SUITE_P(RequiredStorageFamilies, WriteInterferenceTieTest,
@@ -563,9 +578,9 @@ TEST_P(WriteInterferenceFragmentedTest,
   const uint32_t source_base = assignments_[0].location_base;
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
-  EXPECT_EQ(Query(copied, source_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(copied, source_base), kNoConflict);
   EXPECT_EQ(Query(copied, source_base + 1), 0u);
-  EXPECT_EQ(Query(copied, source_base + width), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(copied, source_base + width), kNoConflict);
 }
 
 INSTANTIATE_TEST_SUITE_P(Widths, WriteInterferenceFragmentedTest,
@@ -585,11 +600,11 @@ TEST_P(WriteInterferenceBoundaryTest,
   // Only the last copied unit overlaps. Every preceding row must remain
   // addressable, and dropping the partial final segment would miss the hazard.
   EXPECT_EQ(Query(2, 11), 0u);
-  EXPECT_EQ(Query(2, 10), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, 10), kNoConflict);
   // Equal locations remove the write even where the last unit overlaps the
   // retained range. This observes the source offset in that final row.
   Publish(1, 11);
-  EXPECT_EQ(Query(2, 11), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, 11), kNoConflict);
 }
 
 INSTANTIATE_TEST_SUITE_P(SegmentEdges, WriteInterferenceBoundaryTest,
@@ -600,7 +615,7 @@ TEST_F(WriteInterferenceTest, ReadWithoutSubsequentWrites) {
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
   ExpectScratchPreserved();
-  EXPECT_EQ(Query(0, 0), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(0, 0), kNoConflict);
 }
 
 TEST_F(WriteInterferenceTest, UnconditionalWriteKeepsItsFullExtent) {
@@ -608,7 +623,7 @@ TEST_F(WriteInterferenceTest, UnconditionalWriteKeepsItsFullExtent) {
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
   EXPECT_EQ(Query(1, 11), 0u);
-  EXPECT_EQ(Query(1, 10), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(1, 10), kNoConflict);
 }
 
 TEST_P(WriteInterferenceBoundaryTest,
@@ -617,13 +632,11 @@ TEST_P(WriteInterferenceBoundaryTest,
   ResetArenas();
   IREE_ASSERT_OK(BuildTable(BindingKind::AliasedDestination));
   ExpectScratchPreserved();
-  EXPECT_EQ(Query(1, assignments_[0].location_base),
-            LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(1, assignments_[0].location_base), kNoConflict);
   EXPECT_EQ(Query(1, assignments_[0].location_base + 1), 0u);
   loom_low_allocation_write_interference_reset_inference(table_);
   assignment_indices_[1] = UINT32_MAX;
-  EXPECT_EQ(Query(2, assignments_[0].location_base),
-            LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, assignments_[0].location_base), kNoConflict);
 }
 
 TEST_P(WriteInterferenceBoundaryTest, CompletedCopiesDoNotEnterTheFinalIndex) {
@@ -631,8 +644,7 @@ TEST_P(WriteInterferenceBoundaryTest, CompletedCopiesDoNotEnterTheFinalIndex) {
   ResetArenas();
   IREE_ASSERT_OK(BuildTable(BindingKind::ForcedWrite));
   ExpectScratchPreserved();
-  EXPECT_EQ(Query(2, assignments_[0].location_base),
-            LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, assignments_[0].location_base), kNoConflict);
 }
 
 TEST_F(WriteInterferenceTest, SimultaneousProposalUsesTheCompleteLocationSet) {
@@ -643,15 +655,15 @@ TEST_F(WriteInterferenceTest, SimultaneousProposalUsesTheCompleteLocationSet) {
   IREE_ASSERT_OK(loom_low_allocation_write_proposal_initialize(
       table_, &decision_, &proposal));
   for (uint32_t i = 0; i < 3; ++i) {
-    loom_low_allocation_write_proposal_add(table_, &map_, &assignments_[i], 10,
-                                           &proposal);
+    loom_low_allocation_write_proposal_add(table_, Origin(i), &assignments_[i],
+                                           10, &proposal);
   }
-  EXPECT_FALSE(
-      loom_low_allocation_write_proposal_conflicts(table_, &map_, &proposal));
-  loom_low_allocation_write_proposal_add(table_, &map_, &assignments_[1], 11,
-                                         &proposal);
-  EXPECT_TRUE(
-      loom_low_allocation_write_proposal_conflicts(table_, &map_, &proposal));
+  EXPECT_FALSE(loom_low_allocation_write_proposal_conflicts(table_, &write_map_,
+                                                            &proposal));
+  loom_low_allocation_write_proposal_add(table_, Origin(1), &assignments_[1],
+                                         11, &proposal);
+  EXPECT_TRUE(loom_low_allocation_write_proposal_conflicts(table_, &write_map_,
+                                                           &proposal));
   loom_low_allocation_write_proposal_reset(&proposal);
   EXPECT_EQ(proposal.count, 0u);
   EXPECT_EQ(Query(2, 11), 0u);
@@ -664,7 +676,7 @@ TEST_F(WriteInterferenceTest, PublicationInvalidatesAnIncompatibleWitness) {
   assignment_indices_[1] = UINT32_MAX;
   assignment_indices_[2] = UINT32_MAX;
   const uint32_t retained_base = assignments_[0].location_base;
-  EXPECT_EQ(Query(2, retained_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, retained_base), kNoConflict);
   // The unknown source was inferred at the destination. Publishing a distinct
   // source invalidates that witness even when the candidate itself repeats.
   Publish(1, retained_base + 1);
@@ -680,9 +692,9 @@ TEST_F(WriteInterferenceTest, RecoloringProofDoesNotReplaceCommittedLocation) {
   Publish(2, 2);
   // Both destination locations overlap the retained range. The first query
   // proves source=4 only under destination=4, without committing that move.
-  EXPECT_EQ(Query(2, 4), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, 4), kNoConflict);
   EXPECT_EQ(Query(1, 4), 0u);
-  EXPECT_EQ(Query(1, 2), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(1, 2), kNoConflict);
 }
 
 TEST_F(WriteInterferenceTest,
@@ -693,11 +705,11 @@ TEST_F(WriteInterferenceTest,
   assignment_indices_[1] = UINT32_MAX;
   assignment_indices_[2] = UINT32_MAX;
   const uint32_t retained_base = assignments_[0].location_base;
-  EXPECT_EQ(Query(2, retained_base + 2), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, retained_base + 2), kNoConflict);
   // The destination is not yet assigned, but its fixed binding still governs
   // a later query that is no longer hypothetically moving that destination.
   EXPECT_EQ(Query(1, retained_base + 2), 0u);
-  EXPECT_EQ(Query(1, retained_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(1, retained_base), kNoConflict);
 }
 
 TEST_F(WriteInterferenceTest, ProposalDiscardsASeparateCandidateWitness) {
@@ -705,17 +717,17 @@ TEST_F(WriteInterferenceTest, ProposalDiscardsASeparateCandidateWitness) {
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
   Publish(1, 1);
-  EXPECT_EQ(Query(2, 10), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, 10), kNoConflict);
   // Moving only the retained input must inspect the actual destination at 0,
   // not the speculative destination at 10 in the preceding candidate query.
   loom_low_allocation_write_proposal_t proposal = {};
   IREE_ASSERT_OK(loom_low_allocation_write_proposal_initialize(
       table_, &decision_, &proposal));
-  loom_low_allocation_write_proposal_add(table_, &map_, &assignments_[0], 0,
+  loom_low_allocation_write_proposal_add(table_, Origin(0), &assignments_[0], 0,
                                          &proposal);
-  EXPECT_TRUE(
-      loom_low_allocation_write_proposal_conflicts(table_, &map_, &proposal));
-  EXPECT_EQ(Query(2, 0), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_TRUE(loom_low_allocation_write_proposal_conflicts(table_, &write_map_,
+                                                           &proposal));
+  EXPECT_EQ(Query(2, 0), kNoConflict);
 }
 
 TEST_F(WriteInterferenceTest, MatchingPublicationAndSpillsPreserveFeasibility) {
@@ -725,12 +737,12 @@ TEST_F(WriteInterferenceTest, MatchingPublicationAndSpillsPreserveFeasibility) {
   assignment_indices_[1] = UINT32_MAX;
   assignment_indices_[2] = UINT32_MAX;
   const uint32_t retained_base = assignments_[0].location_base;
-  EXPECT_EQ(Query(2, retained_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, retained_base), kNoConflict);
   Publish(1, retained_base);
-  EXPECT_EQ(Query(1, retained_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(1, retained_base), kNoConflict);
   assignments_[1].location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT;
   Publish(1, 0);
-  EXPECT_EQ(Query(2, retained_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, retained_base), kNoConflict);
 }
 
 TEST_F(WriteInterferenceTest, RetainedPublicationActivatesAConditionalWrite) {
@@ -738,7 +750,7 @@ TEST_F(WriteInterferenceTest, RetainedPublicationActivatesAConditionalWrite) {
   ResetArenas();
   IREE_ASSERT_OK(BuildTable());
   assignment_indices_[0] = UINT32_MAX;
-  EXPECT_EQ(Query(2, 10), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, 10), kNoConflict);
   // An endpoint outside the prior inference can activate an incident row.
   Publish(0, 10);
   EXPECT_EQ(Query(2, 10), 0u);
@@ -751,7 +763,7 @@ TEST_F(WriteInterferenceTest, NewAssignmentAttemptDoesNotInheritInference) {
   assignment_indices_[1] = UINT32_MAX;
   assignment_indices_[2] = UINT32_MAX;
   const uint32_t retained_base = assignments_[0].location_base;
-  EXPECT_EQ(Query(2, retained_base), LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(Query(2, retained_base), kNoConflict);
   loom_low_allocation_write_interference_reset_inference(table_);
   assignment_indices_[1] = 1;
   EXPECT_EQ(Query(2, retained_base), 0u);

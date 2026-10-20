@@ -210,7 +210,7 @@ struct loom_low_allocation_write_interference_t {
   // Inferred bases in the current witness; other entries are UINT32_MAX.
   uint32_t* inferred_bases;
   // Origins reached by the current zero-copy implication witness.
-  loom_value_ordinal_t* inferred_origins;
+  loom_low_allocation_storage_origin_t* inferred_origins;
 };
 
 static loom_low_write_constraint_t* loom_low_write_constraint_at(
@@ -413,13 +413,11 @@ iree_status_t loom_low_allocation_write_interference_note_operand(
 
 void loom_low_allocation_write_interference_note_fixed(
     loom_low_allocation_write_interference_t* table,
-    loom_value_ordinal_t ordinal,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* assignment) {
-  if (table != NULL &&
-      loom_low_allocation_assignment_is_physical_register_class(
+  if (loom_low_allocation_assignment_is_physical_register_class(
           assignment, table->register_class)) {
-    table->values[table->values[ordinal].origin].fixed_base =
-        assignment->location_base;
+    table->values[origin].fixed_base = assignment->location_base;
   }
 }
 
@@ -1425,14 +1423,13 @@ void loom_low_allocation_write_interference_reset_inference(
 
 void loom_low_allocation_write_interference_note_assignment(
     loom_low_allocation_write_interference_t* table,
-    loom_value_ordinal_t ordinal,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* assignment) {
-  if (table == NULL || table->inferred_count == 0 ||
+  if (table->inferred_count == 0 ||
       !loom_low_allocation_assignment_is_physical_register_class(
           assignment, table->register_class)) {
     return;
   }
-  const loom_value_ordinal_t origin = table->values[ordinal].origin;
   if (table->inferred_bases[origin] != assignment->location_base) {
     loom_low_allocation_write_interference_reset_inference(table);
   }
@@ -1440,12 +1437,12 @@ void loom_low_allocation_write_interference_note_assignment(
 
 static int64_t loom_low_write_committed_location(
     const loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
-    loom_value_ordinal_t value) {
+    const loom_low_allocation_write_assignment_map_t* assignments,
+    loom_low_allocation_storage_origin_t value) {
   // Constraint endpoints and retained ranges already name valid local values.
   // The assignment owner publishes an index only after its record exists.
   const uint32_t assignment_index =
-      assignments->assignment_indices_by_value_ordinal[value];
+      assignments->assignment_indices_by_origin[value];
   if (assignment_index != UINT32_MAX) {
     const loom_low_allocation_assignment_t* assignment =
         &assignments->assignments[assignment_index];
@@ -1462,8 +1459,9 @@ static int64_t loom_low_write_committed_location(
 
 static int64_t loom_low_write_location(
     const loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
-    loom_value_ordinal_t value, loom_value_ordinal_t candidate, uint32_t base,
+    const loom_low_allocation_write_assignment_map_t* assignments,
+    loom_low_allocation_storage_origin_t value,
+    loom_low_allocation_storage_origin_t candidate, uint32_t base,
     const loom_low_allocation_write_proposal_t* proposal) {
   if (value == candidate) {
     return base;
@@ -1482,7 +1480,7 @@ static int64_t loom_low_write_location(
 // origin enters the queue only once.
 static bool loom_low_write_infer_conflicts(
     loom_low_allocation_write_interference_t* table,
-    loom_value_ordinal_t origin, int64_t required_base,
+    loom_low_allocation_storage_origin_t origin, int64_t required_base,
     uint32_t* pending_count) {
   if (required_base < 0 || required_base >= UINT32_MAX) {
     return true;
@@ -1513,16 +1511,19 @@ static bool loom_low_write_constraint_overlaps(
          row->source_lifetime.point;
 }
 
-static loom_value_ordinal_t loom_low_write_origin_conflicting_read(
+static loom_low_allocation_storage_origin_t
+loom_low_write_origin_conflicting_read(
     loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
-    const uint32_t* unit_end_points, loom_value_ordinal_t origin, uint32_t base,
+    const loom_low_allocation_write_assignment_map_t* assignments,
+    const uint32_t* unit_end_points,
+    loom_low_allocation_storage_origin_t origin, uint32_t base,
     const loom_low_allocation_write_proposal_t* proposal) {
   table->inferred_origins[0] = origin;
   table->inferred_bases[origin] = base;
   uint32_t pending_count = 1;
   bool conflicts = false;
-  loom_value_ordinal_t retained_origin = LOOM_VALUE_ORDINAL_INVALID;
+  loom_low_allocation_storage_origin_t retained_origin =
+      LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID;
   for (uint32_t pending = 0; pending < pending_count && !conflicts; ++pending) {
     const loom_low_write_range_t range =
         table->values[table->inferred_origins[pending]].constraints;
@@ -1531,7 +1532,7 @@ static loom_value_ordinal_t loom_low_write_origin_conflicting_read(
           table->indexed_constraints[range.start + i];
       const int64_t destination = loom_low_write_location(
           table, assignments, row->destination, origin, base, proposal);
-      const loom_value_ordinal_t observed =
+      const loom_low_allocation_storage_origin_t observed =
           loom_low_write_constraint_observed_value(row);
       if (row->retained.count != 0) {
         if (destination >= LOOM_LOW_WRITE_LOCATION_UNKNOWN) {
@@ -1584,35 +1585,34 @@ static loom_value_ordinal_t loom_low_write_origin_conflicting_read(
   return retained_origin;
 }
 
-static loom_value_ordinal_t loom_low_write_assignment_origin(
+loom_low_allocation_storage_origin_t
+loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
     const loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
-    const loom_low_allocation_assignment_t* assignment) {
-  const loom_value_ordinal_t ordinal = loom_module_value_ordinal_scratch_lookup(
-      assignments->module, assignment->value_id);
-  return table->values[ordinal].origin;
+    loom_value_ordinal_t value_ordinal) {
+  return table->values[value_ordinal].origin;
 }
 
-loom_value_ordinal_t loom_low_allocation_write_interference_conflicting_read(
+loom_low_allocation_storage_origin_t
+loom_low_allocation_write_interference_conflicting_read(
     loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
+    const loom_low_allocation_write_assignment_map_t* assignments,
     const uint32_t* unit_end_points,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* candidate) {
   if (table->constraint_count == 0 ||
       !loom_low_allocation_assignment_is_physical_register_class(
           candidate, table->register_class)) {
-    return LOOM_VALUE_ORDINAL_INVALID;
+    return LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID;
   }
-  const loom_value_ordinal_t origin =
-      loom_low_write_assignment_origin(table, assignments, candidate);
   if (table->inferred_bases[origin] == candidate->location_base) {
-    return LOOM_VALUE_ORDINAL_INVALID;
+    return LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID;
   }
   loom_low_allocation_write_interference_reset_inference(table);
-  const loom_value_ordinal_t retained = loom_low_write_origin_conflicting_read(
-      table, assignments, unit_end_points, origin, candidate->location_base,
-      NULL);
-  if (retained != LOOM_VALUE_ORDINAL_INVALID) {
+  const loom_low_allocation_storage_origin_t retained =
+      loom_low_write_origin_conflicting_read(table, assignments,
+                                             unit_end_points, origin,
+                                             candidate->location_base, NULL);
+  if (retained != LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID) {
     loom_low_allocation_write_interference_reset_inference(table);
   } else if (table->inferred_count > 1) {
     // A query may hypothetically recolor an assigned root. Another inferred
@@ -1656,7 +1656,7 @@ void loom_low_allocation_write_proposal_reset(
 
 void loom_low_allocation_write_proposal_add(
     const loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
+    loom_low_allocation_storage_origin_t origin,
     const loom_low_allocation_assignment_t* assignment, uint32_t base,
     loom_low_allocation_write_proposal_t* proposal) {
   if (proposal->bases == NULL ||
@@ -1664,8 +1664,6 @@ void loom_low_allocation_write_proposal_add(
           assignment, table->register_class)) {
     return;
   }
-  const loom_value_ordinal_t origin =
-      loom_low_write_assignment_origin(table, assignments, assignment);
   if (proposal->bases[origin] == UINT32_MAX) {
     proposal->origins[proposal->count++] = origin;
   }
@@ -1674,17 +1672,17 @@ void loom_low_allocation_write_proposal_add(
 
 bool loom_low_allocation_write_proposal_conflicts(
     loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
+    const loom_low_allocation_write_assignment_map_t* assignments,
     const loom_low_allocation_write_proposal_t* proposal) {
   loom_low_allocation_write_interference_reset_inference(table);
   for (iree_host_size_t i = 0; i < proposal->count; ++i) {
-    const loom_value_ordinal_t origin = proposal->origins[i];
-    const loom_value_ordinal_t retained =
+    const loom_low_allocation_storage_origin_t origin = proposal->origins[i];
+    const loom_low_allocation_storage_origin_t retained =
         loom_low_write_origin_conflicting_read(
             table, assignments, table->unit_liveness->end_points, origin,
             proposal->bases[origin], proposal);
     loom_low_allocation_write_interference_reset_inference(table);
-    if (retained != LOOM_VALUE_ORDINAL_INVALID) {
+    if (retained != LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID) {
       return true;
     }
   }
@@ -1693,7 +1691,7 @@ bool loom_low_allocation_write_proposal_conflicts(
 
 bool loom_low_allocation_write_interference_temporary_conflicts(
     const loom_low_allocation_write_interference_t* table,
-    const loom_low_allocation_assignment_map_t* assignments,
+    const loom_low_allocation_write_assignment_map_t* assignments,
     uint32_t write_point, const loom_low_move_location_t* temporary) {
   if (table == NULL ||
       temporary->descriptor_reg_class_id != table->register_class ||
@@ -1708,9 +1706,8 @@ bool loom_low_allocation_write_interference_temporary_conflicts(
     // Move planning consumes final spill-free assignments. Retained origins
     // already have physical locations; no speculative inference participates.
     const loom_low_allocation_assignment_t* assignment =
-        &assignments
-             ->assignments[assignments->assignment_indices_by_value_ordinal
-                               [retained->value]];
+        &assignments->assignments
+             [assignments->assignment_indices_by_origin[retained->value]];
     const int64_t offset = (int64_t)temporary->location -
                            assignment->location_base - retained->offset;
     if (offset >= 0 && offset < retained->count) {

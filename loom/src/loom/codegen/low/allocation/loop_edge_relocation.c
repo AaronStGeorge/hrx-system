@@ -53,6 +53,17 @@ typedef struct loom_low_allocation_loop_edge_relocation_state_t {
   loom_low_allocation_write_proposal_t write_proposal;
 } loom_low_allocation_loop_edge_relocation_state_t;
 
+static loom_low_allocation_storage_origin_t
+loom_low_allocation_loop_edge_write_origin(
+    const loom_low_allocation_loop_edge_relocation_state_t* state,
+    const loom_low_allocation_assignment_t* assignment) {
+  const loom_value_ordinal_t value_ordinal =
+      loom_module_value_ordinal_scratch_lookup(state->context->module,
+                                               assignment->value_id);
+  return loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+      state->context->unit_liveness->write_interference, value_ordinal);
+}
+
 static bool loom_low_allocation_loop_edge_write_conflicts(
     loom_low_allocation_loop_edge_relocation_state_t* state,
     const loom_low_allocation_loop_edge_candidate_t* candidates,
@@ -64,6 +75,9 @@ static bool loom_low_allocation_loop_edge_write_conflicts(
   }
   loom_low_allocation_write_interference_t* interference =
       state->context->unit_liveness->write_interference;
+  const loom_low_allocation_write_assignment_map_t write_assignments =
+      loom_low_allocation_write_assignment_map_from_value_map(
+          &state->assignment_map);
   loom_low_allocation_write_proposal_reset(&state->write_proposal);
   for (iree_host_size_t i = 0; i < candidate_count; ++i) {
     if (enabled != NULL && !enabled[i]) {
@@ -78,19 +92,21 @@ static bool loom_low_allocation_loop_edge_write_conflicts(
       const loom_low_allocation_assignment_t* assignment =
           &state->context->assignments[member];
       loom_low_allocation_write_proposal_add(
-          interference, &state->assignment_map, assignment,
-          (uint32_t)((int64_t)assignment->location_base + offset),
+          interference,
+          loom_low_allocation_loop_edge_write_origin(state, assignment),
+          assignment, (uint32_t)((int64_t)assignment->location_base + offset),
           &state->write_proposal);
       member = state->groups.next_members[member];
     } while (member != destination);
   }
   for (iree_host_size_t i = 0; i < eviction_count; ++i) {
     loom_low_allocation_write_proposal_add(
-        interference, &state->assignment_map, &evictions[i],
-        evictions[i].location_base, &state->write_proposal);
+        interference,
+        loom_low_allocation_loop_edge_write_origin(state, &evictions[i]),
+        &evictions[i], evictions[i].location_base, &state->write_proposal);
   }
   return loom_low_allocation_write_proposal_conflicts(
-      interference, &state->assignment_map, &state->write_proposal);
+      interference, &write_assignments, &state->write_proposal);
 }
 
 // Original storage color of one eviction assignment.
