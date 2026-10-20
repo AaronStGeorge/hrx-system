@@ -877,6 +877,25 @@ iree_status_t iree_benchmark_loom_work_plan_initialize(
     }
     iree_benchmark_loom_deduplicate_work_items(&plan, work_item_order);
   }
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < plan.work_item_count; ++i) {
+    iree_benchmark_loom_work_item_t* work_item = &plan.work_items[i];
+    if (work_item->hal_compile_item_index ==
+        IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID) {
+      continue;
+    }
+    iree_benchmark_loom_hal_compile_item_t* compile_item =
+        &plan.hal_compile_items[work_item->hal_compile_item_index];
+    work_item->execution_sample_base = compile_item->execution_sample_count;
+    if (!iree_host_size_checked_add(
+            compile_item->execution_sample_count,
+            work_item->end_benchmark_sample - work_item->begin_benchmark_sample,
+            &compile_item->execution_sample_count)) {
+      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "selected execution sample count exceeds "
+                                "host limits");
+    }
+  }
   iree_allocator_free(allocator, work_item_order);
   iree_allocator_free(allocator, case_compile_indices);
 

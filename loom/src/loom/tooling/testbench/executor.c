@@ -105,6 +105,7 @@ void loom_testbench_case_executor_deinitialize(
 
 iree_status_t loom_testbench_run_case_sample(
     loom_testbench_case_executor_t* executor, iree_host_size_t sample_ordinal,
+    iree_host_size_t execution_index,
     loom_testbench_case_sample_result_t* out_result) {
   memset(out_result, 0, sizeof(*out_result));
 
@@ -122,8 +123,9 @@ iree_status_t loom_testbench_run_case_sample(
       &executor->materializer_options, case_plan, sample_ordinal,
       &executor->value_table);
   if (iree_status_is_ok(status)) {
-    status = loom_testbench_run_case_invocations(
-        &executor->invocation_executor, sample_ordinal, &executor->value_table);
+    status = loom_testbench_run_case_invocations(&executor->invocation_executor,
+                                                 execution_index,
+                                                 &executor->value_table);
   }
   const bool has_sample_issues = iree_status_is_ok(status) &&
                                  executor->invocation_executor.issue_count != 0;

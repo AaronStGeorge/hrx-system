@@ -55,10 +55,10 @@ struct loom_run_hal_testbench_actual_sequence_span_t {
   iree_host_size_t binding_count;
   // Reusable recording descriptors in invocation order.
   loom_run_hal_dispatch_sequence_step_t* steps;
-  // Reusable dispatch sequence indexed by case sample ordinal.
-  loom_run_hal_dispatch_sequence_t* sample_sequences;
-  // Number of entries in |sample_sequences|.
-  iree_host_size_t sample_count;
+  // Reusable dispatch sequence indexed by dense execution slot.
+  loom_run_hal_dispatch_sequence_t* execution_sequences;
+  // Number of entries in |execution_sequences|.
+  iree_host_size_t execution_sample_count;
   // Value-table slots currently addressed by |input_values|.
   const loom_testbench_value_slot_t* value_slots;
   // True once every provider has completed its compile attempt.
@@ -1150,14 +1150,14 @@ static void loom_run_hal_testbench_actual_sequence_span_deinitialize(
   if (span == NULL) {
     return;
   }
-  if (span->sample_sequences != NULL) {
-    for (iree_host_size_t sample_index = 0; sample_index < span->sample_count;
-         ++sample_index) {
+  if (span->execution_sequences != NULL) {
+    for (iree_host_size_t execution_index = 0;
+         execution_index < span->execution_sample_count; ++execution_index) {
       loom_run_hal_dispatch_sequence_deinitialize(
-          &span->sample_sequences[sample_index]);
+          &span->execution_sequences[execution_index]);
     }
   }
-  iree_allocator_free(host_allocator, span->sample_sequences);
+  iree_allocator_free(host_allocator, span->execution_sequences);
   iree_allocator_free(host_allocator, span->steps);
   iree_allocator_free(host_allocator, span->binding_lengths);
   iree_allocator_free(host_allocator, span->binding_table);
@@ -1168,7 +1168,7 @@ static void loom_run_hal_testbench_actual_sequence_span_deinitialize(
 }
 
 static iree_status_t loom_run_hal_testbench_actual_sequence_span_initialize(
-    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t execution_sample_count,
     loom_run_hal_testbench_actual_sequence_invocation_t* invocations,
     iree_host_size_t first_invocation_index, iree_host_size_t invocation_count,
     iree_allocator_t host_allocator,
@@ -1178,7 +1178,7 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_span_initialize(
       .invocations = invocations,
       .first_invocation_index = first_invocation_index,
       .invocation_count = invocation_count,
-      .sample_count = case_plan->sample_count,
+      .execution_sample_count = execution_sample_count,
   };
 
   iree_host_size_t workload_count = 0;
@@ -1191,9 +1191,6 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_span_initialize(
     IREE_ASSERT(provider != NULL);
     IREE_ASSERT(provider->context == out_span->context);
     const loom_testbench_invocation_plan_t* invocation = provider->invocation;
-    IREE_ASSERT(
-        invocation ==
-        &case_plan->invocations[first_invocation_index + invocation_offset]);
     if (!iree_host_size_checked_add(workload_count, invocation->workload_count,
                                     &workload_count)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -1263,9 +1260,9 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_span_initialize(
   }
   if (iree_status_is_ok(status)) {
     status =
-        iree_allocator_malloc_array(host_allocator, case_plan->sample_count,
-                                    sizeof(*out_span->sample_sequences),
-                                    (void**)&out_span->sample_sequences);
+        iree_allocator_malloc_array(host_allocator, execution_sample_count,
+                                    sizeof(*out_span->execution_sequences),
+                                    (void**)&out_span->execution_sequences);
   }
   if (!iree_status_is_ok(status)) {
     loom_run_hal_testbench_actual_sequence_span_deinitialize(out_span,
@@ -1289,9 +1286,9 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_span_initialize(
            binding_count * sizeof(*out_span->binding_lengths));
   }
   memset(out_span->steps, 0, invocation_count * sizeof(*out_span->steps));
-  if (case_plan->sample_count != 0) {
-    memset(out_span->sample_sequences, 0,
-           case_plan->sample_count * sizeof(*out_span->sample_sequences));
+  if (execution_sample_count != 0) {
+    memset(out_span->execution_sequences, 0,
+           execution_sample_count * sizeof(*out_span->execution_sequences));
   }
 
   iree_host_size_t binding_offset = 0;
@@ -1340,7 +1337,7 @@ void loom_run_hal_testbench_actual_sequence_execution_free(
 
 iree_status_t loom_run_hal_testbench_actual_sequence_execution_allocate(
     const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t provider_count,
+    iree_host_size_t execution_sample_count, iree_host_size_t provider_count,
     loom_run_hal_testbench_actual_provider_t* const* providers,
     iree_allocator_t host_allocator,
     loom_run_hal_testbench_actual_sequence_execution_t** out_execution) {
@@ -1393,7 +1390,7 @@ iree_status_t loom_run_hal_testbench_actual_sequence_execution_allocate(
     loom_run_hal_testbench_actual_sequence_span_t* span =
         &execution->spans[execution->span_count++];
     status = loom_run_hal_testbench_actual_sequence_span_initialize(
-        case_plan, &execution->invocations[first_invocation_index],
+        execution_sample_count, &execution->invocations[first_invocation_index],
         first_invocation_index, invocation_index - first_invocation_index,
         host_allocator, span);
     for (iree_host_size_t i = first_invocation_index;
@@ -1476,7 +1473,7 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_resolve_values(
 
 static iree_status_t loom_run_hal_testbench_actual_sequence_prepare_sample(
     loom_run_hal_testbench_actual_sequence_span_t* span,
-    iree_host_size_t sample_ordinal) {
+    iree_host_size_t execution_index) {
   iree_host_size_t workload_offset = 0;
   iree_host_size_t input_offset = 0;
   iree_host_size_t binding_offset = 0;
@@ -1534,7 +1531,7 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_prepare_sample(
   return loom_run_hal_dispatch_sequence_prepare(
       &span->context->runtime, span->invocation_count, span->steps,
       &sequence_options, span->context->host_allocator,
-      &span->sample_sequences[sample_ordinal]);
+      &span->execution_sequences[execution_index]);
 }
 
 static void loom_run_hal_testbench_actual_sequence_populate_binding_table(
@@ -1551,7 +1548,7 @@ static void loom_run_hal_testbench_actual_sequence_populate_binding_table(
 }
 
 static iree_status_t loom_run_hal_testbench_actual_sequence_invoke_span(
-    void* user_data, iree_host_size_t sample_ordinal,
+    void* user_data, iree_host_size_t execution_index,
     iree_host_size_t invocation_count,
     const loom_testbench_prepared_invocation_t* invocations,
     loom_testbench_value_table_t* table) {
@@ -1565,7 +1562,7 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_invoke_span(
   IREE_ASSERT(span != NULL);
   IREE_ASSERT(span->first_invocation_index == first_invocation_index);
   IREE_ASSERT(span->invocation_count == invocation_count);
-  IREE_ASSERT(sample_ordinal < span->sample_count);
+  IREE_ASSERT(execution_index < span->execution_sample_count);
 
   if (span->value_slots != table->slots) {
     IREE_RETURN_IF_ERROR(
@@ -1586,11 +1583,11 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_invoke_span(
     return iree_ok_status();
   }
 
-  loom_run_hal_dispatch_sequence_t* sample_sequence =
-      &span->sample_sequences[sample_ordinal];
-  if (!loom_run_hal_dispatch_sequence_is_prepared(sample_sequence)) {
+  loom_run_hal_dispatch_sequence_t* execution_sequence =
+      &span->execution_sequences[execution_index];
+  if (!loom_run_hal_dispatch_sequence_is_prepared(execution_sequence)) {
     IREE_RETURN_IF_ERROR(loom_run_hal_testbench_actual_sequence_prepare_sample(
-        span, sample_ordinal));
+        span, execution_index));
   }
   loom_run_hal_testbench_actual_sequence_populate_binding_table(span);
   loom_run_hal_testbench_staging_t staging = {0};
@@ -1599,7 +1596,7 @@ static iree_status_t loom_run_hal_testbench_actual_sequence_invoke_span(
       execution->host_allocator, &staging);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_dispatch_sequence_execute(
-        &span->context->runtime, sample_sequence,
+        &span->context->runtime, execution_sequence,
         (iree_hal_buffer_binding_table_t){
             .count = span->binding_count,
             .bindings = span->binding_table,
@@ -1713,8 +1710,9 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
   }
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_testbench_actual_sequence_execution_allocate(
-        options->case_plan, out_sequence->provider_count, providers,
-        out_sequence->host_allocator, &out_sequence->execution);
+        options->case_plan, options->case_plan->sample_count,
+        out_sequence->provider_count, providers, out_sequence->host_allocator,
+        &out_sequence->execution);
   }
   iree_allocator_free(out_sequence->host_allocator, providers);
   if (!iree_status_is_ok(status)) {

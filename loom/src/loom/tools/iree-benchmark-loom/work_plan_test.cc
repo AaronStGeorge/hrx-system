@@ -28,6 +28,54 @@ namespace {
 using ::iree::testing::status::StatusIs;
 using ::testing::HasSubstr;
 
+TEST(BenchmarkWorkPlanApiTest, ExecutionSlotsCoverOnlySelectedPhysicalWork) {
+  const loom_testbench_parameter_plan_t parameter = {.sample_count = 32};
+  const loom_testbench_case_plan_t case_plan = {
+      .parameters = &parameter,
+      .parameter_count = 1,
+      .kernel_launch_count = 2,
+      .cartesian_sample_count = 32,
+      .sample_count = 2,
+      .sample_count_truncated = true,
+  };
+  const iree_host_size_t assignments[] = {29, 7, 29};
+  loom_testbench_benchmark_plan_t benchmarks[3] = {};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(benchmarks); ++i) {
+    benchmarks[i] = {
+        .case_index = 0,
+        .scenario_index = LOOM_TESTBENCH_SCENARIO_INDEX_INVALID,
+        .parameter_sample_ordinals = &assignments[i],
+        .parameter_sample_ordinal_count = 1,
+        .cartesian_sample_count = 1,
+        .sample_count = 1,
+    };
+  }
+  const loom_testbench_module_plan_t module_plan = {
+      .cases = &case_plan,
+      .case_count = 1,
+      .benchmarks = benchmarks,
+      .benchmark_count = IREE_ARRAYSIZE(benchmarks),
+  };
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  for (const char* measure : {"case_end_to_end", "dispatch_complete"}) {
+    SCOPED_TRACE(measure);
+    options.measure = iree_make_cstring_view(measure);
+    iree_benchmark_loom_work_plan_t plan = {};
+    IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+        &module_plan, &options, iree_allocator_system(), &plan));
+    ASSERT_EQ(plan.hal_compile_item_count, 1u);
+    ASSERT_EQ(plan.work_item_count, 2u);
+    EXPECT_EQ(plan.hal_compile_items[0].execution_sample_count, 2u);
+    EXPECT_EQ(plan.work_items[0].case_sample_ordinal, 29u);
+    EXPECT_EQ(plan.work_items[0].execution_sample_base, 0u);
+    EXPECT_EQ(plan.work_items[1].case_sample_ordinal, 7u);
+    EXPECT_EQ(plan.work_items[1].execution_sample_base, 1u);
+    EXPECT_EQ(plan.logical_samples[2].work_item_index, 0u);
+    iree_benchmark_loom_work_plan_deinitialize(&plan);
+  }
+}
+
 TEST(BenchmarkWorkPlanApiTest, CompareLookupPreservesRequestsAndDiagnostics) {
   const loom_testbench_trial_plan_t trial = {
       .trial_count = 1,
@@ -298,6 +346,17 @@ TEST(BenchmarkWorkPlanApiTest, CasePrefixIdentityMatchesEnumeratedSamples) {
         EXPECT_EQ(work.hal_compile_item_index, 0u);
       }
       EXPECT_EQ(plan.work_item_count, owners.size());
+      size_t execution_sample_count = 0;
+      for (size_t i = 0; i < plan.work_item_count; ++i) {
+        const auto& work = plan.work_items[i];
+        EXPECT_EQ(work.execution_sample_base, execution_sample_count);
+        execution_sample_count +=
+            work.end_benchmark_sample - work.begin_benchmark_sample;
+      }
+      if (plan.hal_compile_item_count != 0) {
+        EXPECT_EQ(plan.hal_compile_items[0].execution_sample_count,
+                  execution_sample_count);
+      }
       iree_benchmark_loom_work_plan_deinitialize(&plan);
     }
   }

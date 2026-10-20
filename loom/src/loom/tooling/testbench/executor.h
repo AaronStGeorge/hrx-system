@@ -113,12 +113,15 @@ iree_status_t loom_testbench_case_executor_initialize(
 void loom_testbench_case_executor_deinitialize(
     loom_testbench_case_executor_t* executor);
 
-// Executes one concrete sample.
+// Executes one concrete sample using |execution_index| in the caller's dense
+// prepared-execution domain. The storage index is independent of the sample's
+// position in the case parameter domain and remains stable across repetitions.
 //
 // A non-OK status means the sample could not execute. Ordinary expectation
 // mismatches are recorded in |out_result| with |passed| set to false.
 iree_status_t loom_testbench_run_case_sample(
     loom_testbench_case_executor_t* executor, iree_host_size_t sample_ordinal,
+    iree_host_size_t execution_index,
     loom_testbench_case_sample_result_t* out_result);
 
 // Writes a deterministic JSON object for |result|. The schema is production

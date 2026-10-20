@@ -314,9 +314,11 @@ iree_status_t loom_run_hal_testbench_actual_provider_materialize_invocation(
 // execution is destroyed; the pointer array itself is needed only during this
 // call. One execution may be reused across case executors but is submitted
 // serially; concurrent invocation requires a distinct execution object.
+// |execution_sample_count| bounds the dense storage indices supplied by those
+// executors, independently of their selected parameter coordinates.
 iree_status_t loom_run_hal_testbench_actual_sequence_execution_allocate(
     const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t provider_count,
+    iree_host_size_t execution_sample_count, iree_host_size_t provider_count,
     loom_run_hal_testbench_actual_provider_t* const* providers,
     iree_allocator_t host_allocator,
     loom_run_hal_testbench_actual_sequence_execution_t** out_execution);

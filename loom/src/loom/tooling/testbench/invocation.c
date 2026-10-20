@@ -345,7 +345,7 @@ static iree_status_t loom_testbench_query_invocation_span_issues(
 
 iree_status_t loom_testbench_run_case_invocations(
     loom_testbench_invocation_executor_t* executor,
-    iree_host_size_t sample_ordinal, loom_testbench_value_table_t* table) {
+    iree_host_size_t execution_index, loom_testbench_value_table_t* table) {
   loom_testbench_invocation_executor_reset_issues(executor);
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t span_index = 0;
@@ -358,7 +358,7 @@ iree_status_t loom_testbench_run_case_invocations(
     if (span->invocation_count > 1) {
       IREE_ASSERT(prepared->provider.invoke_sequence != NULL);
       status = prepared->provider.invoke_sequence(
-          prepared->provider.user_data, sample_ordinal, span->invocation_count,
+          prepared->provider.user_data, execution_index, span->invocation_count,
           prepared, table);
       if (iree_status_is_ok(status)) {
         status = loom_testbench_query_invocation_span_issues(executor, span);

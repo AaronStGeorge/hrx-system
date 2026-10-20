@@ -36,6 +36,8 @@ typedef struct iree_benchmark_loom_hal_compile_item_t {
   iree_host_size_t compile_item_index;
   // Representative selected benchmark ordinal used for compilation.
   iree_host_size_t representative_selection_index;
+  // Dense execution slots retained across the case's physical work windows.
+  iree_host_size_t execution_sample_count;
 } iree_benchmark_loom_hal_compile_item_t;
 
 typedef struct iree_benchmark_loom_logical_sample_t {
@@ -66,6 +68,8 @@ typedef struct iree_benchmark_loom_work_item_t {
   // HAL compile item index, or INDEX_INVALID when compilation is owned by the
   // work item or the subject has no actual call.
   iree_host_size_t hal_compile_item_index;
+  // First dense sequence slot in the HAL compile item's execution storage.
+  iree_host_size_t execution_sample_base;
   // First benchmark-local sample ordinal covered by this work item.
   iree_host_size_t begin_benchmark_sample;
   // One-past-end benchmark-local sample ordinal covered by this work item.

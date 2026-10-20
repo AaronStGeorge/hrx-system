@@ -69,6 +69,7 @@ iree_status_t iree_benchmark_loom_hal_actual_sequence_initialize(
     iree_benchmark_loom_hal_context_t* context,
     const iree_benchmark_loom_hal_compilation_options_t* compilation_options,
     const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t execution_sample_count,
     iree_benchmark_loom_hal_actual_sequence_t* out_sequence);
 
 // Releases storage owned by |sequence|.

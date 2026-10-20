@@ -15,6 +15,7 @@
 static iree_status_t iree_benchmark_loom_initialize_sequence_compile_context(
     const iree_benchmark_loom_hal_setup_options_t* options,
     const iree_benchmark_loom_selected_benchmark_t* selection,
+    iree_host_size_t execution_sample_count,
     iree_benchmark_loom_hal_compile_context_t* context) {
   const loom_testbench_case_plan_t* case_plan = selection->case_plan;
   context->uses_sequence = true;
@@ -34,7 +35,7 @@ static iree_status_t iree_benchmark_loom_initialize_sequence_compile_context(
         options->hal_context->execution.runtime.transfer_queue;
     status = iree_benchmark_loom_hal_actual_sequence_initialize(
         options->hal_context, options->compilation, case_plan,
-        &context->hal_sequence);
+        execution_sample_count, &context->hal_sequence);
   }
   if (iree_status_is_ok(status)) {
     context->hal_sequence_initialized = true;
@@ -166,7 +167,7 @@ iree_status_t iree_benchmark_loom_hal_compile_context_initialize(
   iree_status_t status = iree_ok_status();
   if (selection->case_plan->kernel_launch_count > 1) {
     status = iree_benchmark_loom_initialize_sequence_compile_context(
-        options, selection, context);
+        options, selection, compile_item->execution_sample_count, context);
   } else {
     status = iree_benchmark_loom_initialize_single_compile_context(
         options, selection, context);
