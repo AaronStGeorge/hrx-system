@@ -27,6 +27,8 @@ struct NativeState {
   uint32_t fail_call = 0;
   // Number of physical-local scopes advertised by this endpoint.
   uint32_t scope_count = 2;
+  // Number of native queue families, independently of memory availability.
+  uint32_t family_count = 3;
   // Target identity deliberately independent of its queue protocols.
   uint32_t gfx_major = 11;
   // Whether the dependency currently owns an endpoint.
@@ -78,7 +80,7 @@ amdf_status_t AMDF_CALL QueryEndpoint(amdf_endpoint_t* endpoint,
     return status;
   }
   EXPECT_EQ(out_info->type, AMDF_STRUCTURE_TYPE_ENDPOINT_INFO);
-  out_info->queue_family_count = 3;
+  out_info->queue_family_count = state->family_count;
   return AMDF_STATUS_OK;
 }
 
@@ -399,6 +401,22 @@ TEST_F(ContextTest, NoPhysicalLocalStorageStillHasSystemStorage) {
   EXPECT_EQ(context->memory_scopes, nullptr);
   EXPECT_EQ(context->fabric, fabric_);
   iree_hal_amd_gpu_context_free(context);
+}
+
+TEST_F(ContextTest, NoQueueFamiliesPreservesNativeMemoryContext) {
+  native_.family_count = 0;
+  const amdf_endpoint_id_t id = {{37, 0}};
+  iree_hal_amd_gpu_context_t* context = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_context_allocate(
+      fabric_, &id, {}, iree_allocator_system(), &context));
+  ASSERT_NE(context, nullptr);
+  EXPECT_EQ(context->endpoint_info.queue_family_count, 0u);
+  EXPECT_EQ(context->families, nullptr);
+  EXPECT_EQ(context->memory_scope_count, 2u);
+  EXPECT_TRUE(native_.device_live);
+  EXPECT_FALSE(native_.event_live);
+  iree_hal_amd_gpu_context_free(context);
+  EXPECT_EQ(native_.released, (std::vector<std::string>{"device", "endpoint"}));
 }
 
 TEST_F(ContextTest, EveryNativeConstructionFailureUnwindsAcquiredOwners) {

@@ -341,9 +341,11 @@ static iree_status_t iree_hal_amd_gpu_context_open(
       context->gpu->endpoint_query_info(context->endpoint,
                                         &context->target_info),
       "gpu.endpoint_query_info"));
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array_uninitialized(
-      context->host_allocator, context->endpoint_info.queue_family_count,
-      sizeof(*context->families), (void**)&context->families));
+  if (context->endpoint_info.queue_family_count) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array_uninitialized(
+        context->host_allocator, context->endpoint_info.queue_family_count,
+        sizeof(*context->families), (void**)&context->families));
+  }
   iree_status_t status = iree_ok_status();
   for (uint32_t i = 0; i < context->endpoint_info.queue_family_count &&
                        iree_status_is_ok(status);
