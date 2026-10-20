@@ -47,6 +47,7 @@ iree_runtime_cc_library(
     name = "launch",
     srcs = ["launch.c"],
     hdrs = ["launch.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         "//libamdf:headers",
@@ -60,6 +61,7 @@ iree_runtime_cc_library(
     name = "fixup",
     srcs = ["fixup.c"],
     hdrs = ["fixup.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":launch",
@@ -105,6 +107,7 @@ iree_runtime_cc_library(
     name = "dispatch",
     srcs = ["dispatch.c"],
     hdrs = ["dispatch.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":launch",
@@ -131,6 +134,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "dispatch_test",
     srcs = ["dispatch_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":dispatch",
         ":launch",
@@ -234,7 +238,7 @@ iree_c_embed_data(
 iree_runtime_cc_test(
     name = "fixup_test",
     srcs = ["fixup_test.cc"],
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
+    target_compatible_with = _PROGRAM_COMPATIBLE_WITH + _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":fixup",
         ":fixup_programs",
@@ -260,7 +264,7 @@ iree_c_embed_data(
 iree_runtime_cc_test(
     name = "blit_test",
     srcs = ["blit_test.cc"],
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
+    target_compatible_with = _PROGRAM_COMPATIBLE_WITH + _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":blit",
         ":blit_programs",
@@ -276,7 +280,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "dispatch_program_test",
     srcs = ["dispatch_program_test.cc"],
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
+    target_compatible_with = _PROGRAM_COMPATIBLE_WITH + _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":dispatch",
         ":dispatch_programs",
@@ -317,6 +321,7 @@ iree_runtime_cc_library(
     name = "recording",
     srcs = ["recording.c"],
     hdrs = ["recording.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":fixup",
@@ -328,6 +333,7 @@ iree_runtime_cc_library(
     name = "blit",
     srcs = ["blit.c"],
     hdrs = ["blit.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":launch",
@@ -596,6 +602,7 @@ iree_runtime_cc_benchmark(
 iree_runtime_cc_test(
     name = "launch_test",
     srcs = ["launch_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":launch",
@@ -614,6 +621,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_benchmark(
     name = "launch_benchmark",
     srcs = ["launch_benchmark.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":dispatch",
@@ -776,6 +784,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "recording_test",
     srcs = ["recording_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
         ":fixup",

@@ -36,6 +36,7 @@ iree_cc_library(
   PUBLIC
 )
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     launch
@@ -51,7 +52,9 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::target::identity
   PUBLIC
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     fixup
@@ -67,6 +70,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::target::identity
   PUBLIC
 )
+endif()
 
 iree_cc_library(
   NAME
@@ -109,6 +113,7 @@ iree_cc_library(
   PUBLIC
 )
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     dispatch
@@ -126,6 +131,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::target::identity
   PUBLIC
 )
+endif()
 
 iree_cc_test(
   NAME
@@ -140,6 +146,7 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+if(AMDF_BUILD)
 iree_cc_test(
   NAME
     dispatch_test
@@ -156,6 +163,7 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 loom_target_profile(
   NAME
@@ -494,7 +502,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE AND AMDF_BUILD)
 iree_cc_test(
   NAME
     fixup_test
@@ -533,7 +541,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE AND AMDF_BUILD)
 iree_cc_test(
   NAME
     blit_test
@@ -551,7 +559,7 @@ iree_cc_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE AND AMDF_BUILD)
 iree_cc_test(
   NAME
     dispatch_program_test
@@ -597,6 +605,7 @@ iree_cc_library(
 )
 endif()
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     recording
@@ -610,7 +619,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     blit
@@ -626,6 +637,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::target::identity
   PUBLIC
 )
+endif()
 
 if(AMDF_BUILD)
 iree_cc_library(
@@ -924,6 +936,7 @@ iree_cc_binary_benchmark(
   TESTONLY
 )
 
+if(AMDF_BUILD)
 iree_cc_test(
   NAME
     launch_test
@@ -942,7 +955,9 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_binary_benchmark(
   NAME
     launch_benchmark
@@ -958,6 +973,7 @@ iree_cc_binary_benchmark(
     iree::third_party::google_benchmark
   TESTONLY
 )
+endif()
 
 iree_cc_test(
   NAME
@@ -1131,6 +1147,7 @@ iree_cc_test(
 )
 endif()
 
+if(AMDF_BUILD)
 iree_cc_test(
   NAME
     recording_test
@@ -1144,5 +1161,6 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
