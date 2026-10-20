@@ -6,6 +6,8 @@
 
 """Tests for AIE2P packet-converting memory selection."""
 
+from collections import Counter, defaultdict
+
 from loom.dialect.encoding import defs as encoding
 from loom.dialect.vector import defs as vector
 from loom.dsl import EncodingOperandSummaryDef
@@ -212,7 +214,7 @@ def test_fused_packet_memory_rules_cover_the_native_shape_matrix() -> None:
             for pack_instruction in INTEGER_PACK_INSTRUCTIONS
         ),
     ]
-    expected_identities = set()
+    expected_identities = Counter()
     for root_kind, memory_spaces in _MEMORY_ROOTS:
         for volatile in (True, False):
             volatile_suffix = ".volatile" if volatile else ""
@@ -237,30 +239,34 @@ def test_fused_packet_memory_rules_cover_the_native_shape_matrix() -> None:
                     dynamic_byte_stride,
                     dynamic_strides,
                 ) in _fused_address_cases(width_bits):
-                    expected_identities.add(
+                    identity = (
+                        source_op.name,
+                        related_op.name,
+                        relation,
+                        report_key,
                         (
-                            source_op.name,
-                            related_op.name,
-                            relation,
-                            report_key,
-                            (
-                                f"{descriptor_prefix}.indexed.{address_family}"
-                                f"{volatile_suffix}"
-                            ),
-                            operation,
-                            root_kind,
-                            _expected_memory_spaces(operation, memory_spaces),
-                            element_byte_count,
-                            lane_count,
-                            width_bits // 8,
-                            static_minimum,
-                            static_maximum,
-                            dynamic_count,
-                            dynamic_minimum,
-                            dynamic_index_source,
-                            dynamic_byte_stride,
-                            dynamic_strides,
-                        )
+                            f"{descriptor_prefix}.indexed.{address_family}"
+                            f"{volatile_suffix}"
+                        ),
+                        operation,
+                        root_kind,
+                        _expected_memory_spaces(operation, memory_spaces),
+                        element_byte_count,
+                        lane_count,
+                        width_bits // 8,
+                        static_minimum,
+                        static_maximum,
+                        dynamic_count,
+                        dynamic_minimum,
+                        dynamic_index_source,
+                        dynamic_byte_stride,
+                        dynamic_strides,
+                    )
+                    expected_identities[identity] += (
+                        2
+                        if related_op in (vector.vector_extf, vector.vector_fptrunc)
+                        and lane_count == 16
+                        else 1
                     )
 
             # Both 64-byte packets must fit the selected addressing form.
@@ -274,7 +280,7 @@ def test_fused_packet_memory_rules_cover_the_native_shape_matrix() -> None:
                 dynamic_byte_stride,
                 dynamic_strides,
             ) in _fused_address_cases(512, maximum_chunk_offset=64):
-                expected_identities.add(
+                expected_identities[
                     (
                         vector.vector_load.name,
                         vector.vector_encode.name,
@@ -300,13 +306,12 @@ def test_fused_packet_memory_rules_cover_the_native_shape_matrix() -> None:
                         dynamic_byte_stride,
                         dynamic_strides,
                     )
-                )
+                ] += 1
 
-    actual_identities = [
+    actual_identities = Counter(
         _fused_rule_identity(rule) for rule in AIE2P_PACKET_MEMORY_RULES
-    ]
-    assert len(actual_identities) == len(set(actual_identities))
-    assert set(actual_identities) == expected_identities
+    )
+    assert actual_identities == expected_identities
 
 
 def test_fused_packet_memory_rules_preserve_graph_and_state_contracts() -> None:
@@ -370,29 +375,50 @@ def test_fused_float_memory_rules_publish_subnormal_policy() -> None:
         if rule.source_nodes[0].source_op is vector.vector_extf
         or rule.source_nodes[0].source_op is vector.vector_fptrunc
     ]
-    assert len(float_rules) == len(_fused_address_cases(256)) * 2 * 2 * 2
+    assert len(float_rules) == (
+        len(_MEMORY_ROOTS) * len(_fused_address_cases(256)) * 3 * 2 * 2
+    )
+    representation_variants = defaultdict(set)
     for rule in float_rules:
         source_node = rule.source_nodes[0]
         source_memory = _source_memory_emit(rule).source_memory
         assert source_memory is not None
         lane_count = source_memory.vector_lane_count
         if source_node.source_op is vector.vector_extf:
-            assert source_node.guards == (
+            base_guards = (
                 Guard.value_type("input", Vector("bf16", lanes=lane_count)),
                 Guard.value_type("result", Vector("f32", lanes=lane_count)),
                 Guard.value_not_subnormal_or_instance_flags_has_all(
                     "input", "subnormal", "daz"
                 ),
             )
+            register_field = "result"
         else:
             assert source_node.source_op is vector.vector_fptrunc
-            assert source_node.guards == (
+            base_guards = (
                 Guard.value_type("input", Vector("f32", lanes=lane_count)),
                 Guard.value_type("result", Vector("bf16", lanes=lane_count)),
                 Guard.value_not_subnormal_or_instance_flags_has_all(
                     "input", "subnormal", "daz"
                 ),
             )
+            register_field = "input"
+        if lane_count == 16:
+            assert source_node.guards[:3] == base_guards
+            assert len(source_node.guards) == 4
+            register_guard = source_node.guards[3]
+            assert register_guard == Guard.low_value_register_class(
+                register_field, register_guard.register_class
+            )
+            representation_variants[_fused_rule_identity(rule)].add(
+                register_guard.register_class
+            )
+        else:
+            assert source_node.guards == base_guards
+    assert all(
+        variants == {"aie2p.vec256", "aie2p.ebmll"}
+        for variants in representation_variants.values()
+    )
 
 
 def test_bfp_load_rules_preserve_two_native_chunks() -> None:

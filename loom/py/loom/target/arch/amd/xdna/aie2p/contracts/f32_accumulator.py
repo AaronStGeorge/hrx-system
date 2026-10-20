@@ -21,6 +21,7 @@ from loom.target.contracts import (
     DescriptorEmitForm,
     DescriptorResultType,
     EmitDescriptorOp,
+    EmitRegisterCopy,
     EmitRegisterSlice,
     ResultTypeBinding,
     ValueRef,
@@ -190,6 +191,46 @@ def emit_f32_vector_accumulator_binary(
                 form=DescriptorEmitForm.OP,
             )
         )
+    return tuple(program.emits)
+
+
+def emit_f32_planned_accumulator_binary(
+    lhs: ValueRef,
+    rhs: ValueRef,
+    result: ValueRef,
+    operation_descriptor_key: str,
+    *,
+    lhs_in_accumulator: bool,
+    rhs_in_accumulator: bool,
+    result_in_accumulator: bool,
+    temporary_prefix: str = "",
+) -> tuple[ContractEmit, ...]:
+    """Builds one F32 packet operation for planned X/accumulator carriers."""
+
+    program = F32AccumulatorProgram(temporary_prefix)
+    lhs_accumulator = (
+        lhs if lhs_in_accumulator else program.vector_to_accumulator("lhs", lhs)
+    )
+    rhs_accumulator = (
+        rhs if rhs_in_accumulator else program.vector_to_accumulator("rhs", rhs)
+    )
+    result_accumulator = program.binary(
+        "result", lhs_accumulator, rhs_accumulator, operation_descriptor_key
+    )
+    if result_in_accumulator:
+        accumulator_unit = program.temporary("result_accumulator_unit")
+        program.emits.extend(
+            (
+                EmitRegisterSlice(
+                    source=result_accumulator,
+                    result=accumulator_unit,
+                    unit_count=1,
+                ),
+                EmitRegisterCopy(source=accumulator_unit, result=result),
+            )
+        )
+    else:
+        program.accumulator_to_vector("result", result_accumulator, result)
     return tuple(program.emits)
 
 

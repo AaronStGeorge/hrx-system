@@ -1345,22 +1345,65 @@ def test_native_bfloat16_packet_conversions_publish_subnormal_policy() -> None:
         bf16_type = Vector(
             "bf16", minimum_lanes=minimum_lanes, maximum_lanes=maximum_lanes
         )
-        narrow = _rule(f"native_binary32x{lane_range}_to_bfloat16x{lane_range}")
-        assert narrow.guards == (
+        narrow_rules = [
+            rule
+            for rule in AIE2P_CONVERSION_RULES
+            if isinstance(rule, DescriptorRule)
+            and rule.report_key
+            == f"native_binary32x{lane_range}_to_bfloat16x{lane_range}"
+        ]
+        widen_rules = [
+            rule
+            for rule in AIE2P_CONVERSION_RULES
+            if isinstance(rule, DescriptorRule)
+            and rule.report_key
+            == f"native_bfloat16x{lane_range}_to_binary32x{lane_range}"
+        ]
+        narrow_base_guards = (
             Guard.value_type("input", f32_type),
             Guard.value_type("result", bf16_type),
             Guard.value_not_subnormal_or_instance_flags_has_all(
                 "input", "subnormal", "daz"
             ),
         )
-        widen = _rule(f"native_bfloat16x{lane_range}_to_binary32x{lane_range}")
-        assert widen.guards == (
+        widen_base_guards = (
             Guard.value_type("input", bf16_type),
             Guard.value_type("result", f32_type),
             Guard.value_not_subnormal_or_instance_flags_has_all(
                 "input", "subnormal", "daz"
             ),
         )
+        if lane_range == "16":
+            assert {rule.guards for rule in narrow_rules} == {
+                (
+                    *narrow_base_guards,
+                    Guard.low_value_register_class("input", register_class),
+                )
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+            }
+            assert {rule.guards for rule in widen_rules} == {
+                (
+                    *widen_base_guards,
+                    Guard.low_value_register_class("result", register_class),
+                )
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+            }
+        elif lane_range == "1-15":
+            assert [rule.guards for rule in narrow_rules] == [
+                (
+                    *narrow_base_guards,
+                    Guard.low_value_register_class("input", "aie2p.vec256"),
+                )
+            ]
+            assert [rule.guards for rule in widen_rules] == [
+                (
+                    *widen_base_guards,
+                    Guard.low_value_register_class("result", "aie2p.vec256"),
+                )
+            ]
+        else:
+            assert [rule.guards for rule in narrow_rules] == [narrow_base_guards]
+            assert [rule.guards for rule in widen_rules] == [widen_base_guards]
 
     narrow = _rule("native_binary32x32_to_bfloat16x32")
     assert [emit.descriptor.key for emit in narrow.emit] == [

@@ -1349,6 +1349,7 @@ def _derive_vector_storage_adapters(
         restrict_adapter("LOOM_mXm_OP_mMvBMXDst", "OP_mMvBMXDst", "mXm"),
         restrict_adapter("LOOM_mXm_OP_mMvBMXSrc", "OP_mMvBMXSrc", "mXm"),
         restrict_adapter("LOOM_eBMLL_OP_mMvBMXDst", "OP_mMvBMXDst", "eBMLL"),
+        restrict_adapter("LOOM_eBMLL_OP_mMvBMXSrc", "OP_mMvBMXSrc", "eBMLL"),
         restrict_adapter("LOOM_mBMs_OP_mMvBMXDst", "OP_mMvBMXDst", "mBMs"),
         restrict_adapter("LOOM_mBMs_OP_mMvBMXSrc", "OP_mMvBMXSrc", "mBMs"),
     )

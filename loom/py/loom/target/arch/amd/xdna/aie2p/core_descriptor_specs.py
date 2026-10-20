@@ -1066,6 +1066,18 @@ _BASE_DESCRIPTOR_SPECS = (
     ),
     _DescriptorSpec(
         "VMOV_alu_mv_mv_x",
+        f"{_TARGET_KEY}.move.accumulator512.low.to.vector512",
+        "register.move.accumulator512.low.to.vector512",
+        "II_VMOV_alu_mv_mv_x_eXe_eBMLL",
+        storage_overrides=(("dst", "VEC256"), ("src", "eBMLL")),
+        asm_mnemonic="vmov.accumulator512.low.to.vector512",
+        encoding_adapter_overrides=(
+            ("dst", "LOOM_mXm_OP_mMvBMXDst"),
+            ("src", "LOOM_eBMLL_OP_mMvBMXSrc"),
+        ),
+    ),
+    _DescriptorSpec(
+        "VMOV_alu_mv_mv_x",
         f"{_TARGET_KEY}.move.accumulator512",
         "register.move.accumulator512",
         "II_VMOV_alu_mv_mv_x_eBMLL_eBMLL",

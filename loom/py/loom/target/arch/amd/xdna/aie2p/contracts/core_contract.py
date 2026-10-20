@@ -352,6 +352,7 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
             core_rules._F32_VECTOR,
             "amd.xdna.aie2p.splat.i32x16",
             ValueProject.float_as_f32_i32("result"),
+            extra_guards=(vector_register_guard,),
         ),
         *(
             core_rules._address_vector_constant_rule(

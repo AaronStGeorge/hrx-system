@@ -11,6 +11,7 @@
 #include "loom/target/arch/amd/xdna/aie2p/contracts/core_lower_rules.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/core_descriptors.h"
 #include "loom/target/arch/amd/xdna/aie2p/gather.h"
+#include "loom/target/arch/amd/xdna/aie2p/lower/f32_representation.h"
 #include "loom/target/arch/amd/xdna/aie2p/lower/gather.h"
 #include "loom/target/arch/amd/xdna/aie2p/lower/interleave.h"
 #include "loom/target/arch/amd/xdna/aie2p/lower/lower.h"
@@ -163,6 +164,18 @@ static iree_status_t loom_aie2p_map_value(void* user_data,
                                           loom_value_id_t source_value_id,
                                           loom_type_t source_type,
                                           loom_type_t* out_low_type) {
+  if (loom_aie2p_f32_packet_type(source_type)) {
+    loom_low_representation_id_t representation =
+        LOOM_LOW_REPRESENTATION_ID_NONE;
+    loom_low_lower_representation_lookup_if_ready(context, source_value_id,
+                                                  &representation);
+    if (representation == LOOM_AIE2P_F32_REPRESENTATION_ACCUMULATOR) {
+      return loom_low_lower_make_register_type(
+          context, AIE2P_CORE_REG_CLASS_ID_AIE2P_EBMLL, 1, out_low_type);
+    }
+    IREE_ASSERT(representation == LOOM_LOW_REPRESENTATION_ID_NONE ||
+                representation == LOOM_AIE2P_F32_REPRESENTATION_VECTOR);
+  }
   if (loom_type_is_vector(source_type) && loom_type_rank(source_type) == 1 &&
       loom_type_element_type(source_type) == LOOM_SCALAR_TYPE_I8 &&
       loom_type_dim_static_size_at(source_type, 0) == 72 &&
@@ -424,6 +437,7 @@ static const loom_low_lower_policy_t kAie2pCoreLowLowerPolicy = {
             .attrs = NULL,
             .user_data = NULL,
         },
+    .source_plan_observer = &loom_aie2p_f32_representation_observer,
     .preselect_op = {.fn = loom_aie2p_preselect_op, .user_data = NULL},
     .mark_plan_storage_demands =
         {
