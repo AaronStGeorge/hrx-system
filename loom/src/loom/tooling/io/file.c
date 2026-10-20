@@ -10,8 +10,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <wchar.h>
 #if defined(IREE_PLATFORM_WINDOWS)
-#include <direct.h>
+#include <windows.h>
 #else
 #include <sys/types.h>
 #endif  // defined(IREE_PLATFORM_WINDOWS)
@@ -104,6 +105,27 @@ iree_status_t loom_tooling_file_path_is_directory(iree_string_view_t path,
     return iree_ok_status();
   }
 
+#if defined(IREE_PLATFORM_WINDOWS)
+  wchar_t* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_file_path_to_win32(path, allocator, &storage));
+  const DWORD attributes = GetFileAttributesW(storage);
+  const DWORD query_error =
+      attributes == INVALID_FILE_ATTRIBUTES ? GetLastError() : ERROR_SUCCESS;
+  iree_allocator_free(allocator, storage);
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    if (query_error == ERROR_FILE_NOT_FOUND ||
+        query_error == ERROR_PATH_NOT_FOUND) {
+      return iree_ok_status();
+    }
+    return iree_make_status(iree_status_code_from_win32_error(query_error),
+                            "failed to query path '%.*s' (Win32 error %lu)",
+                            (int)path.size, path.data,
+                            (unsigned long)query_error);
+  }
+  *out_is_directory =
+      (attributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY;
+  return iree_ok_status();
+#else
   char* storage = NULL;
   IREE_RETURN_IF_ERROR(loom_tooling_file_path_dup(path, allocator, &storage));
   struct stat file_stat;
@@ -118,12 +140,9 @@ iree_status_t loom_tooling_file_path_is_directory(iree_string_view_t path,
                             "failed to stat path '%.*s' (%d)", (int)path.size,
                             path.data, stat_error);
   }
-#if defined(IREE_PLATFORM_WINDOWS)
-  *out_is_directory = (file_stat.st_mode & _S_IFMT) == _S_IFDIR;
-#else
   *out_is_directory = S_ISDIR(file_stat.st_mode);
-#endif  // defined(IREE_PLATFORM_WINDOWS)
   return iree_ok_status();
+#endif  // defined(IREE_PLATFORM_WINDOWS)
 }
 
 iree_status_t loom_tooling_file_path_join(iree_string_view_t lhs,
@@ -168,6 +187,86 @@ iree_status_t loom_tooling_create_directory_if_needed(
     return iree_ok_status();
   }
 
+#if defined(IREE_PLATFORM_WINDOWS)
+  // Win32 directory creation needs the same UTF-8 to absolute extended-length
+  // conversion as file opening. The narrow CRT _mkdir function remains bound
+  // by MAX_PATH even when the host and executable opt in to long paths.
+  wchar_t* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_file_path_to_win32(path, allocator, &storage));
+
+  iree_host_size_t length = wcslen(storage);
+  iree_host_size_t root_length = 0;
+  if (length >= 8 && wcsncmp(storage, L"\\\\?\\UNC\\", 8) == 0) {
+    // Preserve the complete \\?\UNC\server\share\ root. Neither the server nor
+    // share prefix is itself a directory that can be created.
+    iree_host_size_t separator_count = 0;
+    for (iree_host_size_t i = 8; i < length; ++i) {
+      if (storage[i] == L'\\' || storage[i] == L'/') {
+        if (++separator_count == 2) {
+          root_length = i + 1;
+          break;
+        }
+      }
+    }
+    if (root_length == 0) {
+      root_length = length;
+    }
+  } else if (length >= 7 && storage[0] == L'\\' && storage[1] == L'\\' &&
+             (storage[2] == L'?' || storage[2] == L'.') &&
+             storage[3] == L'\\' && storage[5] == L':' &&
+             (storage[6] == L'\\' || storage[6] == L'/')) {
+    root_length = 7;  // Extended or device namespace drive root.
+  } else if (length >= 4 && storage[0] == L'\\' && storage[1] == L'\\' &&
+             (storage[2] == L'?' || storage[2] == L'.') &&
+             storage[3] == L'\\') {
+    // Preserve the first component of another Win32 namespace path.
+    root_length = 4;
+    while (root_length < length && storage[root_length] != L'\\' &&
+           storage[root_length] != L'/') {
+      ++root_length;
+    }
+    if (root_length < length) {
+      ++root_length;
+    }
+  }
+
+  while (length > root_length &&
+         (storage[length - 1] == L'\\' || storage[length - 1] == L'/')) {
+    storage[--length] = L'\0';
+  }
+
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = root_length;
+       i < length && iree_status_is_ok(status); ++i) {
+    if (storage[i] != L'\\' && storage[i] != L'/') {
+      continue;
+    }
+    const wchar_t separator = storage[i];
+    storage[i] = L'\0';
+    if (!CreateDirectoryW(storage, NULL)) {
+      const DWORD create_error = GetLastError();
+      if (create_error != ERROR_ALREADY_EXISTS) {
+        status = iree_make_status(
+            iree_status_code_from_win32_error(create_error),
+            "failed to create directory for '%.*s' (Win32 error %lu)",
+            (int)path.size, path.data, (unsigned long)create_error);
+      }
+    }
+    storage[i] = separator;
+  }
+  if (length > root_length && iree_status_is_ok(status) &&
+      !CreateDirectoryW(storage, NULL)) {
+    const DWORD create_error = GetLastError();
+    if (create_error != ERROR_ALREADY_EXISTS) {
+      status = iree_make_status(
+          iree_status_code_from_win32_error(create_error),
+          "failed to create directory '%.*s' (Win32 error %lu)", (int)path.size,
+          path.data, (unsigned long)create_error);
+    }
+  }
+  iree_allocator_free(allocator, storage);
+  return status;
+#else
   char* storage = NULL;
   IREE_RETURN_IF_ERROR(loom_tooling_file_path_dup(path, allocator, &storage));
   iree_host_size_t length = strlen(storage);
@@ -188,11 +287,7 @@ iree_status_t loom_tooling_create_directory_if_needed(
     const char separator = storage[i];
     storage[i] = '\0';
     if (!(i == 2 && storage[1] == ':') && strlen(storage) != 0) {
-#if defined(IREE_PLATFORM_WINDOWS)
-      const int result = _mkdir(storage);
-#else
       const int result = mkdir(storage, 0700);
-#endif  // defined(IREE_PLATFORM_WINDOWS)
       if (result != 0 && errno != EEXIST) {
         const int create_error = errno;
         status = iree_make_status(iree_status_code_from_errno(create_error),
@@ -203,11 +298,7 @@ iree_status_t loom_tooling_create_directory_if_needed(
     storage[i] = separator;
   }
   if (iree_status_is_ok(status)) {
-#if defined(IREE_PLATFORM_WINDOWS)
-    const int result = _mkdir(storage);
-#else
     const int result = mkdir(storage, 0700);
-#endif  // defined(IREE_PLATFORM_WINDOWS)
     if (result != 0 && errno != EEXIST) {
       const int create_error = errno;
       status = iree_make_status(iree_status_code_from_errno(create_error),
@@ -217,6 +308,7 @@ iree_status_t loom_tooling_create_directory_if_needed(
   }
   iree_allocator_free(allocator, storage);
   return status;
+#endif  // defined(IREE_PLATFORM_WINDOWS)
 }
 
 iree_status_t loom_tooling_create_parent_directory(iree_string_view_t path,

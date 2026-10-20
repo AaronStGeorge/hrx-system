@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <memory>
+#include <string>
 
 #include "iree/io/file_contents.h"
 #include "iree/io/vec_stream.h"
@@ -101,6 +102,42 @@ TEST(FileTest, ResolvesPathsRelativeToBase) {
     EXPECT_STREQ(resolved, test_case.expected);
     iree_allocator_free(iree_allocator_system(), resolved);
   }
+}
+
+TEST(FileTest, CreatesLongNestedParentDirectories) {
+  std::string output_path =
+      iree::testing::MakeTempFilePath("loom_long_directory_tree");
+  while (output_path.size() <= 300) {
+    output_path.append("/nested_directory");
+  }
+  const std::string directory_path = output_path;
+  output_path.append("/artifact.bin");
+  ASSERT_GT(output_path.size(), 260u);
+
+  IREE_ASSERT_OK(loom_tooling_create_parent_directory(
+      iree_make_string_view(output_path.data(), output_path.size()),
+      iree_allocator_system()));
+  IREE_ASSERT_OK(loom_tooling_create_parent_directory(
+      iree_make_string_view(output_path.data(), output_path.size()),
+      iree_allocator_system()));
+
+  bool is_directory = false;
+  IREE_ASSERT_OK(loom_tooling_file_path_is_directory(
+      iree_make_string_view(directory_path.data(), directory_path.size()),
+      iree_allocator_system(), &is_directory));
+  EXPECT_TRUE(is_directory);
+
+  IREE_ASSERT_OK(loom_tooling_write_output_file(
+      iree_make_string_view(output_path.data(), output_path.size()),
+      IREE_SV("long path contents"), iree_allocator_system()));
+  iree_io_file_contents_t* contents = nullptr;
+  IREE_ASSERT_OK(iree_io_file_contents_read(
+      iree_make_string_view(output_path.data(), output_path.size()),
+      iree_allocator_system(), &contents));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_tooling_file_contents_string_view(contents),
+                             IREE_SV("long path contents")));
+  iree_io_file_contents_free(contents);
 }
 
 TEST(FileTest, WritesSegmentedByteSequenceInLogicalOrder) {
