@@ -287,10 +287,14 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
                                    uint64_t memory_limit = 0) {
     const iree_allocator_t host_allocator = iree_allocator_system();
     loom_serve_host_t* host = nullptr;
-    IREE_ASSERT_OK(loom_serve_test_host_create(1, host_allocator, &host));
     iree_hal_driver_t* driver = nullptr;
-    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host, &driver));
-    for (size_t i = 0; i < IREE_ARRAYSIZE(groups_); ++i) {
+    iree_status_t status =
+        loom_serve_test_host_create(1, host_allocator, &host);
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_test_driver_acquire(host, &driver);
+    }
+    for (size_t i = 0; i < IREE_ARRAYSIZE(groups_) && iree_status_is_ok(status);
+         ++i) {
       const bool elastic = i != 0;
       const loom_serve_device_options_t options = {
           .driver = driver,
@@ -304,13 +308,16 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
           .memory_limit =
               elastic ? (memory_limit ? memory_limit : 2 * slab_size) : 0,
       };
-      IREE_ASSERT_OK(loom_serve_device_group_allocate(
-          host, 1, &options, native_allocators_[i].allocator(), &groups_[i]));
-      IREE_ASSERT_OK(native_allocators_[i].Observe(
-          loom_serve_device_group_at(groups_[i], 0)));
+      status = loom_serve_device_group_allocate(
+          host, 1, &options, native_allocators_[i].allocator(), &groups_[i]);
+      if (iree_status_is_ok(status)) {
+        status = native_allocators_[i].Observe(
+            loom_serve_device_group_at(groups_[i], 0));
+      }
     }
     iree_hal_driver_release(driver);
     loom_serve_host_release(host);
+    IREE_ASSERT_OK(status);
   }
 
   static void TearDownTestSuite() {
