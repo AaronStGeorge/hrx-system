@@ -14,6 +14,7 @@ loom_cc_library(
     main
   HDRS
     "case_execution.h"
+    "case_request.h"
     "comparison_execution.h"
     "configuration.h"
     "context.h"
@@ -44,6 +45,7 @@ loom_cc_library(
     "work_plan.h"
   SRCS
     "case_execution.c"
+    "case_request.c"
     "comparison_execution.c"
     "context.c"
     "device_spec_report.c"
@@ -83,6 +85,7 @@ loom_cc_library(
     iree::tooling::profile::summary
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::binding::c::target::cmd
     loom::binding::c::target::iree_hal
     loom::config::text_binding
     loom::error::diagnostic
@@ -111,6 +114,7 @@ loom_cc_library(
     loom::tooling::io::file
     loom::tooling::testbench
     loom::tooling::testbench::api
+    loom::tooling::testbench::case_command_program
     loom::tooling::testbench::compiled_provider
     loom::tooling::testbench::device_event
     loom::tooling::testbench::executor
@@ -143,6 +147,20 @@ loom_cc_test(
     loom::ops::check
     loom::tooling::testbench
     loom::tooling::testbench::executor
+)
+
+loom_cc_test(
+  NAME
+    case_request_test
+  SRCS
+    "case_request_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+    loom::binding::c::target::cmd
 )
 
 loom_cc_test(

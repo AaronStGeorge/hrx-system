@@ -101,6 +101,7 @@ loom_cc_library(
     name = "main",
     srcs = [
         "case_execution.c",
+        "case_request.c",
         "comparison_execution.c",
         "context.c",
         "device_spec_report.c",
@@ -130,6 +131,7 @@ loom_cc_library(
     ],
     hdrs = [
         "case_execution.h",
+        "case_request.h",
         "comparison_execution.h",
         "configuration.h",
         "context.h",
@@ -162,6 +164,7 @@ loom_cc_library(
     deps = [
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/target/cmd",
         "//loom/binding/c/target/iree_hal",
         "//loom/src/loom/config:text_binding",
         "//loom/src/loom/error:diagnostic",
@@ -190,6 +193,7 @@ loom_cc_library(
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/tooling/testbench",
         "//loom/src/loom/tooling/testbench:api",
+        "//loom/src/loom/tooling/testbench:case_command_program",
         "//loom/src/loom/tooling/testbench:compiled_provider",
         "//loom/src/loom/tooling/testbench:device_event",
         "//loom/src/loom/tooling/testbench:executor",
@@ -228,6 +232,19 @@ loom_cc_test(
         "//loom/src/loom/tooling/testbench:executor",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "case_request_test",
+    srcs = ["case_request_test.cc"],
+    deps = [
+        ":main",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/cmd",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
