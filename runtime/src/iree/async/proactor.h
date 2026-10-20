@@ -363,6 +363,15 @@ enum iree_async_proactor_capability_bits_e {
   //   n/a     | n/a      | Win 8.1+ | n/a
   IREE_ASYNC_PROACTOR_CAPABILITY_WAIT_COMPLETION_PACKET = 1u << 10,
 
+  // Supports register_buffer from a caller other than the active polling task.
+  // Page pinning, when required, runs on that caller; only attaching retained
+  // pins may require a synchronous handoff to the polling task. The caller
+  // still serializes access to its registration state and retains the memory.
+  // Absence does not prevent registration before polling or on the poll owner.
+  // io_uring probes CLONE_BUFFERS range replacement; metadata-only backends
+  // support this without a native registration handoff.
+  IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION = 1u << 11,
+
   // All capabilities enabled (for allowed_capabilities default).
   IREE_ASYNC_PROACTOR_CAPABILITY_ALL = ~0u,
 };
@@ -698,6 +707,28 @@ typedef struct iree_async_proactor_vtable_t {
   void (*unregister_relay)(iree_async_proactor_t* proactor,
                            iree_async_relay_t* relay,
                            iree_async_relay_unregistered_callback_t callback);
+
+  // Prepared buffer ownership separates cold pins from owner-task attachment.
+  iree_status_t (*prepare_buffer)(
+      iree_async_proactor_t* proactor,
+      iree_async_buffer_registration_state_t* state, iree_byte_span_t buffer,
+      iree_async_buffer_access_flags_t access_flags,
+      iree_async_buffer_registration_entry_t** out_entry);
+  // Creates an independent attachment view without acquiring new native pins.
+  iree_status_t (*clone_buffer_registration)(
+      iree_async_proactor_t* proactor,
+      iree_async_buffer_registration_state_t* state,
+      const iree_async_buffer_registration_entry_t* source_entry,
+      iree_async_buffer_access_flags_t access_flags,
+      iree_async_buffer_registration_entry_t** out_entry);
+  // Attaches prepared pins without waiting for another owner.
+  void (*attach_buffer)(iree_async_proactor_t* proactor,
+                        iree_async_buffer_registration_entry_t* entry,
+                        iree_async_buffer_registration_callback_t callback);
+  // Detaches native handles while retaining pins for cold caller cleanup.
+  void (*detach_buffer)(iree_async_proactor_t* proactor,
+                        iree_async_buffer_registration_entry_t* entry,
+                        iree_async_buffer_registration_callback_t callback);
 
   iree_status_t (*register_buffer)(
       iree_async_proactor_t* proactor,
@@ -1118,20 +1149,114 @@ void iree_async_cancel_request_complete(iree_async_cancel_request_t* request);
 //
 // See iree/async/types.h for the entry and state type definitions.
 
-// Registers host memory for zero-copy I/O.
+// Prepares a nonempty host range for asynchronous registration attachment.
+// Performs cold page pinning and reserves attachment/release storage on the
+// caller, without waiting for the polling owner. Failure publishes no entry.
+// Success links an owned entry into |state|; its region must not be used for
+// I/O until attach_buffer completes successfully. The proactor and borrowed
+// host range must outlive the entry, all accepted I/O, and
+// attachment/detachment.
 //
-// Pre-registering buffers with the kernel enables DMA directly to/from
-// application memory, eliminating copy overhead. This is the critical path
-// for achieving line-rate network throughput and NVMe bandwidth.
+// io_uring requires CONCURRENT_BUFFER_REGISTRATION and retains an independent
+// native pin owner. Prepared entries for the same exact range in |state| share
+// those pins across proactors using the same host allocator. Each entry has
+// independent slots, access flags, and attachment state. Metadata-only backends
+// retain the same entry/region lifetime. Registration retains pins across
+// reuse; buffered files still use the OS page cache. Slot geometry has the same
+// meaning as register_buffer below.
+IREE_API_EXPORT iree_status_t iree_async_proactor_prepare_buffer(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_state_t* state, iree_byte_span_t buffer,
+    iree_async_buffer_access_flags_t access_flags,
+    iree_async_buffer_registration_entry_t** out_entry);
+
+// Creates a detached registration for the exact host range of |source_entry|.
+// Shares compatible prepared native pins and reserves independent metadata and
+// attachment slots on |proactor|. This never pins pages, copies payload bytes,
+// or waits for polling progress. Incompatible preparation returns UNAVAILABLE;
+// allocation or slot exhaustion returns RESOURCE_EXHAUSTED. Failure publishes
+// no entry. Success links an owned entry into |state|, ready for attach_buffer.
+// |access_flags| must include READ or WRITE and be a subset of source access.
+//
+// The caller serializes |state| mutation and keeps |source_entry| alive through
+// this call. The source entry and its proactor may then be cleaned up normally.
+// The allocator used for the source preparation must outlive every clone, as
+// the final clone releases that preparation. The borrowed host range and each
+// entry's own proactor retain the same lifetime requirements as prepare_buffer.
+// Cloning allocates only registration metadata and can run independently of
+// cold backing preparation; final cleanup may still release native pins.
+IREE_API_EXPORT iree_status_t iree_async_proactor_clone_buffer_registration(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_state_t* state,
+    const iree_async_buffer_registration_entry_t* source_entry,
+    iree_async_buffer_access_flags_t access_flags,
+    iree_async_buffer_registration_entry_t** out_entry);
+
+// Attaches a prepared entry without pinning or waiting for polling progress.
+// Exactly one required callback receives the result, possibly inline. The
+// caller serializes transitions on each entry and retains it through callback
+// delivery. Failure leaves the entry detached and eligible for cold cleanup.
+// A successful attachment publishes its immutable region handles for I/O.
+IREE_API_EXPORT void iree_async_proactor_attach_buffer(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_entry_t* entry,
+    iree_async_buffer_registration_callback_t callback);
+
+// Detaches a prepared entry after its accepted I/O has completed. No additional
+// I/O may use the region until a later successful attachment. Exactly one
+// required callback receives the result, possibly inline. This does not wait
+// for the poll owner, allocate release storage, or release the prepared pins.
+//
+// Success permits cold unregister_buffer/state_deinitialize on the caller's
+// chosen memory owner. That cleanup drops the entry's pin reference before its
+// region reference, releasing native pins after the last sharing entry is
+// cleaned up. Outstanding completion bookkeeping may still retain the region
+// metadata. Failure does not authorize cleanup or backing release.
+IREE_API_EXPORT void iree_async_proactor_detach_buffer(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_entry_t* entry,
+    iree_async_buffer_registration_callback_t callback);
+
+// Shared prepared-registration implementation for metadata-only backends.
+// Native backends provide their own cold preparation and owner transitions.
+iree_status_t iree_async_proactor_prepare_buffer_emulated(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_state_t* state, iree_byte_span_t buffer,
+    iree_async_buffer_access_flags_t access_flags,
+    iree_async_buffer_registration_entry_t** out_entry);
+iree_status_t iree_async_proactor_clone_buffer_registration_emulated(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_state_t* state,
+    const iree_async_buffer_registration_entry_t* source_entry,
+    iree_async_buffer_access_flags_t access_flags,
+    iree_async_buffer_registration_entry_t** out_entry);
+void iree_async_proactor_transition_buffer_emulated(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_entry_t* entry,
+    iree_async_buffer_registration_callback_t callback);
+
+// Registers a nonempty host range for repeated I/O with the requested access.
 //
 // Availability:
 //   generic | io_uring | IOCP | kqueue
-//   emul    | 5.1+     | reg  | emul
+//   emul    | 5.1+     | emul | emul
 //
-// Registration limits:
-//   io_uring: Limited by IORING_MAX_FIXED_BUFFERS (typically 32768).
-//   IOCP: No hard limit; each registration pins pages.
-//   Others: Emulated; no kernel-side benefit but API is consistent.
+// io_uring pins the range into its fixed-buffer table for either READ or WRITE
+// access. Pinning or slot exhaustion fails registration; success never silently
+// substitutes an unpinned region. The kernel requires writable backing even for
+// READ-only I/O access. Ranges larger than 1 GiB occupy adjacent fixed slots;
+// operations contained within one slot use its retained page vector. Splitting
+// operations at region->buffer_size boundaries preserves that property. No
+// socket receive ring is created. Other backends retain metadata only.
+//
+// This is cold, synchronous setup and may block while pinning pages. io_uring
+// pins on the caller; a different bound polling owner only attaches the
+// retained pins. That cross-thread path requires kernel CLONE_BUFFERS range
+// replacement, reported by CONCURRENT_BUFFER_REGISTRATION, and fails with
+// UNIMPLEMENTED when unavailable. Registering before
+// polling starts, or from the polling task itself, uses ordinary buffer
+// registration. Registration does not guarantee zero-copy I/O: buffered files
+// still use the OS page cache.
 //
 // Buffer lifetime:
 //   The memory referenced by |buffer| must remain valid and at a stable
@@ -1147,8 +1272,10 @@ void iree_async_cancel_request_complete(iree_async_cancel_request_t* request);
 //
 // Returns:
 //   IREE_STATUS_OK: Buffer registered successfully.
-//   IREE_STATUS_RESOURCE_EXHAUSTED: Registration table full.
-//   IREE_STATUS_INVALID_ARGUMENT: Buffer address not suitably aligned.
+//   IREE_STATUS_RESOURCE_EXHAUSTED: Pinning or slot resources exhausted.
+//   IREE_STATUS_INVALID_ARGUMENT: Invalid range, access, or pinning source.
+//   IREE_STATUS_ALREADY_EXISTS: Legacy singleton buffer table already in use.
+//   IREE_STATUS_UNIMPLEMENTED: Kernel cannot attach pins across owner tasks.
 //
 // See also: iree_async_proactor_unregister_buffer()
 static inline iree_status_t iree_async_proactor_register_buffer(

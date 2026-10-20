@@ -252,6 +252,20 @@ iree_cc_test(
 
 iree_cc_binary_benchmark(
   NAME
+    semaphore_benchmark
+  SRCS
+    "semaphore_benchmark.cc"
+  DEPS
+    ::async
+    ::platform
+    iree::base
+    iree::testing::benchmark_main
+    iree::third_party::google_benchmark
+  TESTONLY
+)
+
+iree_cc_binary_benchmark(
+  NAME
     frontier_benchmark
   SRCS
     "frontier_benchmark.cc"
@@ -284,5 +298,19 @@ iree_cc_fuzz(
     ::async
     iree::base
 )
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
+iree_cc_test(
+  NAME
+    event_test
+  SRCS
+    "event_test.cc"
+  DEPS
+    ::async
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

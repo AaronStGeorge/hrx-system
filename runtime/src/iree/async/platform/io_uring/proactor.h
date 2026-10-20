@@ -306,7 +306,32 @@ iree_status_t iree_async_proactor_io_uring_detect_capabilities(
 iree_status_t iree_async_proactor_io_uring_probe_buffer_ring(
     iree_io_uring_ring_t* ring, void* probe_page, bool* out_supported);
 
+// Probes retained-pin attachment before publication. The destination already
+// has an empty sparse buffer table. Replacing one empty slot pins no pages and
+// leaves the table empty, including when the optional operation is unavailable.
+iree_status_t iree_async_proactor_io_uring_probe_buffer_clone(
+    iree_io_uring_ring_t* ring, bool* out_supported);
+
 // Buffer registration vtable implementations (in proactor_registration.c).
+iree_status_t iree_async_proactor_io_uring_prepare_buffer(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_state_t* state, iree_byte_span_t buffer,
+    iree_async_buffer_access_flags_t access_flags,
+    iree_async_buffer_registration_entry_t** out_entry);
+iree_status_t iree_async_proactor_io_uring_clone_buffer_registration(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_state_t* state,
+    const iree_async_buffer_registration_entry_t* source_entry,
+    iree_async_buffer_access_flags_t access_flags,
+    iree_async_buffer_registration_entry_t** out_entry);
+void iree_async_proactor_io_uring_attach_buffer(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_entry_t* entry,
+    iree_async_buffer_registration_callback_t callback);
+void iree_async_proactor_io_uring_detach_buffer(
+    iree_async_proactor_t* proactor,
+    iree_async_buffer_registration_entry_t* entry,
+    iree_async_buffer_registration_callback_t callback);
 iree_status_t iree_async_proactor_io_uring_register_buffer(
     iree_async_proactor_t* proactor,
     iree_async_buffer_registration_state_t* state, iree_byte_span_t buffer,

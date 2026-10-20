@@ -9,6 +9,8 @@
 #ifndef IREE_ASYNC_PLATFORM_IO_URING_URING_REGISTRATION_H_
 #define IREE_ASYNC_PLATFORM_IO_URING_URING_REGISTRATION_H_
 
+#include <sys/uio.h>
+
 #include "iree/async/platform/io_uring/defs.h"
 #include "iree/base/api.h"
 #include "iree/base/internal/atomics.h"
@@ -49,8 +51,30 @@ typedef enum iree_io_uring_registration_state_e {
   IREE_IO_URING_REGISTRATION_STATE_CLOSED = 3,
 } iree_io_uring_registration_state_t;
 
-typedef struct iree_io_uring_registration_request_t
-    iree_io_uring_registration_request_t;
+// Receives the raw syscall result or a negated errno after a request ends.
+// The request and argument storage may be freed or reused by the callback.
+typedef struct iree_io_uring_registration_callback_t {
+  // Required terminal callback, invoked without the registration mutex held.
+  void (*fn)(void* user_data, int result);
+  // Borrowed callback state, valid through terminal delivery.
+  void* user_data;
+} iree_io_uring_registration_callback_t;
+
+// Caller-owned native request, stable until its terminal callback. Submission
+// may complete inline. The registration owner outlives submission, completion,
+// and any concurrent drain or shutdown call.
+typedef struct iree_io_uring_registration_request_t {
+  // Intrusive FIFO linkage owned by registration dispatch while pending.
+  struct iree_io_uring_registration_request_t* next;
+  // io_uring_register opcode to execute.
+  uint32_t opcode;
+  // Caller-owned opcode argument memory, borrowed through completion.
+  void* arg;
+  // Opcode-specific argument count or size.
+  uint32_t argument_count;
+  // Exactly one terminal delivery, including owner-shutdown rejection.
+  iree_io_uring_registration_callback_t completion;
+} iree_io_uring_registration_request_t;
 
 // Serializes io_uring_register operations and dispatches them to the kernel's
 // SINGLE_ISSUER owner task when required.
@@ -76,6 +100,10 @@ typedef struct iree_io_uring_registration_t {
 
   // Non-zero when the pending queue may contain requests.
   iree_atomic_int32_t has_pending;
+
+  // The bound owner is delivering requests. Guarded by |mutex|; callbacks
+  // append asynchronous successors for that drain instead of recursing.
+  bool draining;
 
   // Callback used to wake the owner after a request is queued.
   // Guarded by |mutex|.
@@ -105,6 +133,18 @@ void iree_io_uring_registration_set_wake_callback(
 int iree_io_uring_registration_enable(
     iree_io_uring_registration_t* registration);
 
+// Submits a native registration request without waiting for polling progress.
+// Direct and unbound rings execute on the caller. Bound SINGLE_ISSUER rings
+// execute on their owner, preserving FIFO order with already pending requests.
+// Native execution can block when the caller is the execution owner. The
+// callback may run inline or on the owner and may reenter registration. Bound
+// owner drains defer asynchronous successors until their submitting callback
+// returns, keeping callback chains at constant stack depth.
+// No request storage is accessed after its callback begins.
+void iree_io_uring_registration_submit(
+    iree_io_uring_registration_t* registration,
+    iree_io_uring_registration_request_t* request);
+
 // Executes an io_uring_register operation synchronously.
 //
 // Operations execute directly before an R_DISABLED ring has an owner and on
@@ -116,6 +156,36 @@ int iree_io_uring_registration_enable(
 int iree_io_uring_registration_execute(
     iree_io_uring_registration_t* registration, uint32_t opcode, void* arg,
     uint32_t argument_count);
+
+// Pins buffers into an independent native ring on the caller. The returned
+// descriptor has no mapped queues or SINGLE_ISSUER owner and can be borrowed
+// by CLONE_BUFFERS requests until release_buffers. Returns zero or -errno;
+// failure leaves |out_source_fd| at -1 and owns no pins.
+int iree_io_uring_registration_prepare_buffers(const struct iovec* buffers,
+                                               uint32_t count,
+                                               int* out_source_fd);
+
+// Releases an independent pin owner's table and descriptor on the caller.
+// Every borrowing clone must have completed. Other rings retain their own pin
+// references; this call releases only this descriptor's ownership. Returns zero
+// or -errno. The descriptor is consumed even if unregistration fails.
+int iree_io_uring_registration_release_buffers(int source_fd);
+
+// Pins |buffers| on the caller and installs them at |offset| in the existing
+// fixed-buffer table. The caller owns these empty destination slots and keeps
+// every backing range alive until unregistration and accepted I/O complete.
+//
+// When the caller is not the bound SINGLE_ISSUER owner, a temporary ring pins
+// the pages before the owner attaches them with CLONE_BUFFERS. Only that
+// attachment is dispatched to the owner. Source-ring teardown leaves the
+// destination's references intact. No additional thread is created.
+//
+// Returns the installed count (possibly a prefix on the direct update path)
+// or a negated errno. -EOPNOTSUPP means the kernel cannot attach existing pins;
+// it never falls back to pinning on another task's progress loop.
+int iree_io_uring_registration_update_buffers(
+    iree_io_uring_registration_t* registration, uint32_t offset,
+    const struct iovec* buffers, uint32_t count);
 
 // Returns true when requests are waiting for the owner task.
 static inline bool iree_io_uring_registration_has_pending(

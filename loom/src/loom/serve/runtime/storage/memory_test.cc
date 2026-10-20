@@ -647,7 +647,8 @@ TEST_F(MemoryTest, FailedReadinessDoesNotReleaseNativeOperationOwnership) {
   }
   loom_serve_memory_operation_await(operation);
   EXPECT_TRUE(loom_serve_memory_operation_is_complete(operation));
-  IREE_EXPECT_OK(loom_serve_memory_operation_query_status(operation));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_CANCELLED,
+                        loom_serve_memory_operation_query_status(operation));
   IREE_EXPECT_OK(loom_serve_memory_pool_query_status(pool));
   uint64_t value = 0;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_CANCELLED,

@@ -193,6 +193,7 @@ iree_status_t iree_async_proactor_create_posix_with_backend(
   iree_async_proactor_capabilities_t supported_capabilities =
       IREE_ASYNC_PROACTOR_CAPABILITY_LINKED_OPERATIONS |
       IREE_ASYNC_PROACTOR_CAPABILITY_REGISTERED_BUFFERS |
+      IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION |
       IREE_ASYNC_PROACTOR_CAPABILITY_MULTISHOT |
       IREE_ASYNC_PROACTOR_CAPABILITY_DEVICE_FENCE;
   proactor->capabilities =
@@ -4491,6 +4492,11 @@ static const iree_async_proactor_vtable_t iree_async_proactor_posix_vtable = {
     .notification_wait = iree_async_proactor_posix_notification_wait,
     .register_relay = iree_async_proactor_posix_vtable_register_relay,
     .unregister_relay = iree_async_proactor_posix_vtable_unregister_relay,
+    .prepare_buffer = iree_async_proactor_prepare_buffer_emulated,
+    .clone_buffer_registration =
+        iree_async_proactor_clone_buffer_registration_emulated,
+    .attach_buffer = iree_async_proactor_transition_buffer_emulated,
+    .detach_buffer = iree_async_proactor_transition_buffer_emulated,
     .register_buffer = iree_async_proactor_posix_register_buffer,
     .register_dmabuf = iree_async_proactor_posix_register_dmabuf,
     .unregister_buffer = iree_async_proactor_posix_unregister_buffer,

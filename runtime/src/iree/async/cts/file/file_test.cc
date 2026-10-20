@@ -20,7 +20,9 @@
 #include "iree/async/cts/file/native_file.h"
 #include "iree/async/cts/util/registry.h"
 #include "iree/async/cts/util/test_base.h"
+#include "iree/async/event.h"
 #include "iree/async/operations/file.h"
+#include "iree/async/operations/scheduling.h"
 #include "iree/async/region.h"
 #include "iree/async/slab.h"
 #include "iree/async/span.h"
@@ -95,6 +97,128 @@ class FileTest : public CtsTestBase<> {
  private:
   std::vector<iree::testing::TempFilePath> temp_paths_;
 };
+
+class PreparedFileTest : public FileTest {
+ protected:
+  void TearDown() override {
+    if (attached_) {
+      ASSERT_NO_FATAL_FAILURE(SetAttached(false));
+    }
+    iree_async_buffer_registration_state_deinitialize(&state_);
+    iree_async_buffer_registration_state_deinitialize(&source_state_);
+    iree_async_proactor_release(source_proactor_);
+    iree_async_file_release(file_);
+    FileTest::TearDown();
+  }
+
+  void SetAttached(bool attached) {
+    CompletionTracker completion;
+    iree_async_buffer_registration_callback_t callback = {
+        +[](void* user_data, iree_status_t status) {
+          CompletionTracker::Callback(user_data, nullptr, status,
+                                      IREE_ASYNC_COMPLETION_FLAG_NONE);
+        },
+        &completion};
+    if (attached) {
+      iree_async_proactor_attach_buffer(proactor_, entry_, callback);
+    } else {
+      iree_async_proactor_detach_buffer(proactor_, entry_, callback);
+    }
+    PollUntilCondition([&] { return completion.call_count != 0; },
+                       "prepared file buffer transition");
+    IREE_ASSERT_OK(completion.ConsumeStatus());
+    EXPECT_EQ(completion.call_count, 1);
+    attached_ = attached;
+  }
+
+  // Canonical preparation owner, independently destroyed before file I/O.
+  iree_async_proactor_t* source_proactor_ = nullptr;
+  // Source preparation and its native pins, when still owned by the source.
+  iree_async_buffer_registration_state_t source_state_ = {};
+  // Independent destination registration list.
+  iree_async_buffer_registration_state_t state_ = {};
+  // Cloned destination view borrowed from state_.
+  iree_async_buffer_registration_entry_t* entry_ = nullptr;
+  // Whether teardown must first detach the cloned view.
+  bool attached_ = false;
+  // File owned by the destination proactor.
+  iree_async_file_t* file_ = nullptr;
+  // Payload storage outlives both views and every file operation.
+  std::vector<uint8_t> buffer_;
+};
+
+TEST_P(PreparedFileTest, CloneReadsAfterSourceProactorDestruction) {
+  if (!iree_any_bit_set(
+          capabilities_,
+          IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION)) {
+    GTEST_SKIP() << "Backend cannot attach prepared registrations";
+  }
+  IREE_ASSERT_OK_AND_ASSIGN(
+      source_proactor_,
+      GetParam().factory(iree_async_proactor_options_default()));
+  buffer_.resize(4096);
+  iree_async_buffer_registration_entry_t* source_entry = nullptr;
+  IREE_ASSERT_OK(iree_async_proactor_prepare_buffer(
+      source_proactor_, &source_state_,
+      iree_make_byte_span(buffer_.data(), buffer_.size()),
+      IREE_ASYNC_BUFFER_ACCESS_FLAG_READ | IREE_ASYNC_BUFFER_ACCESS_FLAG_WRITE,
+      &source_entry));
+
+  for (auto access : {IREE_ASYNC_BUFFER_ACCESS_FLAG_NONE,
+                      IREE_ASYNC_BUFFER_ACCESS_FLAG_REMOTE_WRITE}) {
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        iree_async_proactor_clone_buffer_registration(
+            proactor_, &state_, source_entry, access, &entry_));
+    EXPECT_EQ(entry_, nullptr);
+    EXPECT_TRUE(iree_async_buffer_registration_state_is_empty(&state_));
+  }
+  IREE_ASSERT_OK(iree_async_proactor_clone_buffer_registration(
+      proactor_, &state_, source_entry, IREE_ASYNC_BUFFER_ACCESS_FLAG_WRITE,
+      &entry_));
+  EXPECT_EQ(entry_->region->base_ptr, buffer_.data());
+  EXPECT_EQ(entry_->region->length, buffer_.size());
+  EXPECT_EQ(entry_->region->access_flags, IREE_ASYNC_BUFFER_ACCESS_FLAG_WRITE);
+  iree_async_buffer_registration_entry_t* widened_entry = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_async_proactor_clone_buffer_registration(
+          proactor_, &state_, entry_, IREE_ASYNC_BUFFER_ACCESS_FLAG_READ,
+          &widened_entry));
+  EXPECT_EQ(widened_entry, nullptr);
+  EXPECT_EQ(state_.head, entry_);
+  EXPECT_EQ(entry_->next, nullptr);
+
+  iree_async_buffer_registration_state_deinitialize(&source_state_);
+  iree_async_proactor_release(source_proactor_);
+  source_proactor_ = nullptr;
+
+  const std::vector<uint8_t> expected(buffer_.size(), 0xBA);
+  file_ = ImportTempFileForRead(
+      CreateTempFileWithContents(expected.data(), expected.size()));
+  ASSERT_NE(file_, nullptr);
+  for (int iteration = 0; iteration < 2; ++iteration) {
+    ASSERT_NO_FATAL_FAILURE(SetAttached(true));
+    std::fill(buffer_.begin(), buffer_.end(), 0);
+    CompletionTracker completion;
+    iree_async_file_read_operation_t read = {};
+    iree_async_operation_initialize(&read.base,
+                                    IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+                                    IREE_ASYNC_OPERATION_FLAG_NONE,
+                                    CompletionTracker::Callback, &completion);
+    read.file = file_;
+    read.buffer = iree_async_span_make(entry_->region, 0, buffer_.size());
+    IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &read.base));
+    PollUntilCondition([&] { return completion.call_count != 0; },
+                       "cloned buffer file read");
+    IREE_ASSERT_OK(completion.ConsumeStatus());
+    EXPECT_EQ(read.bytes_read, expected.size());
+    EXPECT_EQ(buffer_, expected);
+    ASSERT_NO_FATAL_FAILURE(SetAttached(false));
+  }
+}
+
+CTS_REGISTER_TEST_SUITE(PreparedFileTest);
 
 struct RegisteredReadContext {
   bool callback_fired = false;
@@ -680,6 +804,77 @@ TEST_P(FileTest, ConcurrentReadsAtDifferentOffsets) {
   EXPECT_EQ(read_b.bytes_read, 5u);
   EXPECT_EQ(memcmp(buffer_b, "abcde", 5), 0);
 
+  iree_async_file_release(file);
+}
+
+TEST_P(FileTest, BufferedFileEventChainPreservesIndependentProgress) {
+  const char initial[] = "abcdefghijkl";
+  std::string path = CreateTempFileWithContents(initial, sizeof(initial) - 1);
+  iree_async_file_t* file = ImportTempFileForReadWrite(path);
+  ASSERT_NE(file, nullptr);
+  iree_async_event_t* event = nullptr;
+  IREE_ASSERT_OK(iree_async_event_create(proactor_, &event));
+
+  char payload[] = "WXYZ";
+  char dependent_result[4] = {};
+  char independent_result[4] = {};
+  CompletionTracker write_completion;
+  CompletionTracker wait_completion;
+  CompletionTracker dependent_completion;
+  CompletionTracker independent_completion;
+  iree_async_file_write_operation_t write = {};
+  iree_async_operation_initialize(
+      &write.base, IREE_ASYNC_OPERATION_TYPE_FILE_WRITE,
+      IREE_ASYNC_OPERATION_FLAG_LINKED, CompletionTracker::Callback,
+      &write_completion);
+  write.file = file;
+  write.buffer = iree_async_span_from_ptr(payload, sizeof(dependent_result));
+  iree_async_event_wait_operation_t wait = {};
+  iree_async_operation_initialize(
+      &wait.base, IREE_ASYNC_OPERATION_TYPE_EVENT_WAIT,
+      IREE_ASYNC_OPERATION_FLAG_LINKED, CompletionTracker::Callback,
+      &wait_completion);
+  wait.event = event;
+  iree_async_file_read_operation_t dependent = {};
+  iree_async_operation_initialize(
+      &dependent.base, IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+      IREE_ASYNC_OPERATION_FLAG_NONE, CompletionTracker::Callback,
+      &dependent_completion);
+  dependent.file = file;
+  dependent.buffer =
+      iree_async_span_from_ptr(dependent_result, sizeof(dependent_result));
+  iree_async_file_read_operation_t independent = {};
+  iree_async_operation_initialize(
+      &independent.base, IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+      IREE_ASYNC_OPERATION_FLAG_NONE, CompletionTracker::Callback,
+      &independent_completion);
+  independent.file = file;
+  independent.offset = 8;
+  independent.buffer =
+      iree_async_span_from_ptr(independent_result, sizeof(independent_result));
+  iree_async_operation_t* operations[] = {&write.base, &wait.base,
+                                          &dependent.base, &independent.base};
+  IREE_ASSERT_OK(iree_async_proactor_submit(
+      proactor_,
+      iree_async_operation_list_make(operations, IREE_ARRAYSIZE(operations))));
+
+  PollUntilCondition([&] { return independent_completion.call_count == 1; });
+  EXPECT_EQ(wait_completion.call_count, 0);
+  EXPECT_EQ(dependent_completion.call_count, 0);
+  EXPECT_EQ(memcmp(independent_result, "ijkl", 4), 0);
+
+  iree_async_event_set(event);
+  PollUntilCondition([&] {
+    return write_completion.call_count == 1 &&
+           wait_completion.call_count == 1 &&
+           dependent_completion.call_count == 1;
+  });
+  IREE_EXPECT_OK(write_completion.ConsumeStatus());
+  IREE_EXPECT_OK(wait_completion.ConsumeStatus());
+  IREE_EXPECT_OK(dependent_completion.ConsumeStatus());
+  IREE_EXPECT_OK(independent_completion.ConsumeStatus());
+  EXPECT_EQ(memcmp(dependent_result, payload, 4), 0);
+  iree_async_event_release(event);
   iree_async_file_release(file);
 }
 

@@ -301,70 +301,28 @@ static void iree_async_proactor_io_uring_fill_socket_recv_pool(
   }
 }
 
-// Result of checking if a span can use fixed-buffer zero-copy send.
-typedef enum {
-  // Span is not eligible for fixed-buffer path. Use standard zero-copy.
-  // This is NOT an error - just means we fall back to page-pinning per send.
-  IREE_ASYNC_FIXED_BUFFER_INELIGIBLE = 0,
-  // Span is eligible. out_buffer_index contains the kernel buffer table index.
-  IREE_ASYNC_FIXED_BUFFER_ELIGIBLE = 1,
-} iree_async_fixed_buffer_eligibility_t;
-
-// Queries whether a validated span can use fixed-buffer zero-copy send.
-static iree_async_fixed_buffer_eligibility_t
-iree_async_span_query_fixed_buffer_send(
-    iree_async_proactor_io_uring_t* proactor, iree_async_span_t span,
-    uint16_t* out_buffer_index) {
+// Resolves a validated, nonempty span wholly within one kernel fixed buffer.
+// Registration establishes slot geometry; submission validation establishes
+// region ownership, access, and bounds. A span crossing slots uses ordinary
+// I/O.
+static bool iree_async_span_query_fixed_buffer(iree_async_span_t span,
+                                               uint16_t* out_buffer_index) {
   *out_buffer_index = 0;
-
-  if (!span.region) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
   iree_async_region_t* region = span.region;
-  IREE_ASSERT(region->proactor == &proactor->base);
-
-  if (region->type != IREE_ASYNC_REGION_TYPE_IOURING) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
-
-  uint32_t buffer_count = region->buffer_count;
-  if (buffer_count == 0) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
+  if (!region || region->type != IREE_ASYNC_REGION_TYPE_IOURING ||
+      region->handles.iouring.base_buffer_index < 0 || span.length == 0) {
+    return false;
   }
 
   iree_host_size_t buffer_size = region->buffer_size;
-  IREE_ASSERT_GT(buffer_size, 0);
-  if (IREE_UNLIKELY(buffer_size == 0)) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
-
-  if (!(region->access_flags & IREE_ASYNC_BUFFER_ACCESS_FLAG_READ)) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
-
-  uint64_t buffer_index_offset = span.offset / buffer_size;
-  if (buffer_index_offset >= buffer_count) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
-
   iree_host_size_t offset_in_buffer = span.offset % buffer_size;
-  if (offset_in_buffer + span.length > buffer_size) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
+  if (span.length > buffer_size - offset_in_buffer) {
+    return false;
   }
 
-  int32_t base_buffer_index = region->handles.iouring.base_buffer_index;
-  if (base_buffer_index < 0) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
-
-  uint64_t final_index = (uint64_t)base_buffer_index + buffer_index_offset;
-  IREE_ASSERT_LE(final_index, UINT16_MAX);
-  if (IREE_UNLIKELY(final_index > UINT16_MAX)) {
-    return IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
-  }
-
-  *out_buffer_index = (uint16_t)final_index;
-  return IREE_ASYNC_FIXED_BUFFER_ELIGIBLE;
+  *out_buffer_index = (uint16_t)(region->handles.iouring.base_buffer_index +
+                                 span.offset / buffer_size);
+  return true;
 }
 
 // Fills an SQE for a SOCKET_SEND operation.
@@ -387,15 +345,14 @@ static void iree_async_proactor_io_uring_fill_socket_send(
       proactor->capabilities, IREE_ASYNC_PROACTOR_CAPABILITY_ZERO_COPY_SEND);
   bool use_zero_copy = zero_copy_requested && zero_copy_available;
 
-  iree_async_fixed_buffer_eligibility_t eligibility =
-      IREE_ASYNC_FIXED_BUFFER_INELIGIBLE;
+  bool use_fixed_buffer = false;
   uint16_t fixed_buffer_index = 0;
   const uint8_t span_count = base_operation->acquired_span_count;
   if (use_zero_copy && span_count == 1) {
     iree_async_span_t first_buffer = iree_async_socket_prepared_span_resolve(
         send->platform.prepared.spans[0], send->retained_buffer_regions[0]);
-    eligibility = iree_async_span_query_fixed_buffer_send(
-        proactor, first_buffer, &fixed_buffer_index);
+    use_fixed_buffer =
+        iree_async_span_query_fixed_buffer(first_buffer, &fixed_buffer_index);
   }
 
   // Clear output fields.
@@ -423,7 +380,7 @@ static void iree_async_proactor_io_uring_fill_socket_send(
     if (use_zero_copy) {
       // Always request usage reporting so we can tell callers if ZC succeeded.
       sqe->ioprio |= IREE_IORING_SEND_ZC_REPORT_USAGE;
-      if (eligibility == IREE_ASYNC_FIXED_BUFFER_ELIGIBLE) {
+      if (use_fixed_buffer) {
         sqe->ioprio |= IREE_IORING_RECVSEND_FIXED_BUF;
         sqe->buf_index = fixed_buffer_index;
       }
@@ -615,47 +572,61 @@ static void iree_async_proactor_io_uring_fill_file_open(
 }
 
 // Fills an SQE for a FILE_READ operation.
-// Uses IORING_OP_READ for positioned file I/O (pread semantics).
+// Uses READ_FIXED when a registered span fits within one fixed buffer and READ
+// otherwise. Fixed I/O consumes the pinned pages without importing CPU PTEs.
+// Returns true for buffered I/O that may copy inline during submission.
 //
-// SQE layout (io_uring READ):
+// SQE layout (io_uring READ[_FIXED]):
 //   fd   = file descriptor
 //   off  = file offset
 //   addr = buffer address
 //   len  = buffer length
-static void iree_async_proactor_io_uring_fill_file_read(
+//   buf_index = kernel fixed-buffer slot (READ_FIXED only)
+static bool iree_async_proactor_io_uring_fill_file_read(
     iree_io_uring_sqe_t* sqe, iree_async_operation_t* base_operation) {
   iree_async_file_read_operation_t* read_op =
       (iree_async_file_read_operation_t*)base_operation;
 
   memset(sqe, 0, sizeof(*sqe));
-  sqe->opcode = IREE_IORING_OP_READ;
+  sqe->opcode =
+      iree_async_span_query_fixed_buffer(read_op->buffer, &sqe->buf_index)
+          ? IREE_IORING_OP_READ_FIXED
+          : IREE_IORING_OP_READ;
   sqe->fd = read_op->file->primitive.value.fd;
   sqe->off = read_op->offset;
   sqe->addr = (uint64_t)(uintptr_t)iree_async_span_ptr(read_op->buffer);
   sqe->len = (uint32_t)read_op->buffer.length;
   sqe->user_data = (uint64_t)(uintptr_t)base_operation;
+  return !iree_any_bit_set(read_op->file->flags, IREE_ASYNC_FILE_FLAG_DIRECT);
 }
 
 // Fills an SQE for a FILE_WRITE operation.
-// Uses IORING_OP_WRITE for positioned file I/O (pwrite semantics).
+// Uses WRITE_FIXED when a registered span fits within one fixed buffer and
+// WRITE otherwise, preserving positioned file I/O (pwrite semantics).
+// Returns true for buffered I/O that may copy inline during submission.
 //
-// SQE layout (io_uring WRITE):
+// SQE layout (io_uring WRITE[_FIXED]):
 //   fd   = file descriptor
 //   off  = file offset
 //   addr = buffer address
 //   len  = buffer length
-static void iree_async_proactor_io_uring_fill_file_write(
+//   buf_index = kernel fixed-buffer slot (WRITE_FIXED only)
+static bool iree_async_proactor_io_uring_fill_file_write(
     iree_io_uring_sqe_t* sqe, iree_async_operation_t* base_operation) {
   iree_async_file_write_operation_t* write_op =
       (iree_async_file_write_operation_t*)base_operation;
 
   memset(sqe, 0, sizeof(*sqe));
-  sqe->opcode = IREE_IORING_OP_WRITE;
+  sqe->opcode =
+      iree_async_span_query_fixed_buffer(write_op->buffer, &sqe->buf_index)
+          ? IREE_IORING_OP_WRITE_FIXED
+          : IREE_IORING_OP_WRITE;
   sqe->fd = write_op->file->primitive.value.fd;
   sqe->off = write_op->offset;
   sqe->addr = (uint64_t)(uintptr_t)iree_async_span_ptr(write_op->buffer);
   sqe->len = (uint32_t)write_op->buffer.length;
   sqe->user_data = (uint64_t)(uintptr_t)base_operation;
+  return !iree_any_bit_set(write_op->file->flags, IREE_ASYNC_FILE_FLAG_DIRECT);
 }
 
 // Fills an SQE for a FILE_CLOSE operation.
@@ -1394,6 +1365,7 @@ iree_status_t iree_async_proactor_io_uring_submit(
     // Fill SQEs for the active kernel prefixes. Software ops execute in Phase
     // 4 and deferred chain tails are submitted by their predecessors.
     defer_chain_tail = false;
+    bool chain_has_buffered_io = false;
     for (iree_host_size_t i = 0; i < operations.count; ++i) {
       if (!iree_async_proactor_io_uring_should_submit_batch_operation(
               operations, i, &defer_chain_tail)) {
@@ -1405,31 +1377,24 @@ iree_status_t iree_async_proactor_io_uring_submit(
         continue;
       }
 
+      // The terminal SQE owns both the native link and progress boundary for
+      // this operation, including the second SQE of an EVENT_WAIT pair.
+      iree_io_uring_sqe_t* terminal_sqe = NULL;
       // EVENT_WAIT uses linked POLL_ADD+READ; notification waits are software.
       if (operation->type == IREE_ASYNC_OPERATION_TYPE_EVENT_WAIT) {
         iree_io_uring_sqe_t* poll_sqe =
             iree_io_uring_ring_get_sqe(&proactor->ring);
-        iree_io_uring_sqe_t* read_sqe =
-            iree_io_uring_ring_get_sqe(&proactor->ring);
+        terminal_sqe = iree_io_uring_ring_get_sqe(&proactor->ring);
         IREE_ASSERT(poll_sqe);
-        IREE_ASSERT(read_sqe);
+        IREE_ASSERT(terminal_sqe);
 
-        iree_async_proactor_io_uring_fill_event_wait(poll_sqe, read_sqe,
+        iree_async_proactor_io_uring_fill_event_wait(poll_sqe, terminal_sqe,
                                                      operation);
-
-        // Apply kernel LINK to the terminal SQE of the internal pair when the
-        // edge does not require userspace status interpretation.
-        if (iree_any_bit_set(operation->flags,
-                             IREE_ASYNC_OPERATION_FLAG_LINKED) &&
-            !iree_async_proactor_io_uring_requires_userspace_link(
-                operation, operations.values[i + 1])) {
-          read_sqe->flags |= IREE_IOSQE_IO_LINK;
-          operation->linked_next = NULL;
-        }
       } else {
         // All other kernel operations use 1 SQE.
         iree_io_uring_sqe_t* sqe = iree_io_uring_ring_get_sqe(&proactor->ring);
         IREE_ASSERT(sqe);
+        terminal_sqe = sqe;
 
         switch (operation->type) {
           case IREE_ASYNC_OPERATION_TYPE_TIMER:
@@ -1477,10 +1442,12 @@ iree_status_t iree_async_proactor_io_uring_submit(
             iree_async_proactor_io_uring_fill_file_open(sqe, operation);
             break;
           case IREE_ASYNC_OPERATION_TYPE_FILE_READ:
-            iree_async_proactor_io_uring_fill_file_read(sqe, operation);
+            chain_has_buffered_io |=
+                iree_async_proactor_io_uring_fill_file_read(sqe, operation);
             break;
           case IREE_ASYNC_OPERATION_TYPE_FILE_WRITE:
-            iree_async_proactor_io_uring_fill_file_write(sqe, operation);
+            chain_has_buffered_io |=
+                iree_async_proactor_io_uring_fill_file_write(sqe, operation);
             break;
           case IREE_ASYNC_OPERATION_TYPE_FILE_CLOSE:
             iree_async_proactor_io_uring_fill_file_close(sqe, operation);
@@ -1489,16 +1456,20 @@ iree_status_t iree_async_proactor_io_uring_submit(
             IREE_ASSERT_UNREACHABLE("operation type must be validated");
             IREE_BUILTIN_UNREACHABLE();
         }
+      }
 
-        // Apply kernel LINK when the edge does not require userspace status
-        // interpretation.
-        if (iree_any_bit_set(operation->flags,
-                             IREE_ASYNC_OPERATION_FLAG_LINKED) &&
-            !iree_async_proactor_io_uring_requires_userspace_link(
-                operation, operations.values[i + 1])) {
-          sqe->flags |= IREE_IOSQE_IO_LINK;
-          operation->linked_next = NULL;
-        }
+      // Native chains cannot span separate io_uring_enter submissions. Carry
+      // buffered-I/O cost to the terminal SQE instead of cutting a chain at
+      // the file operation itself.
+      if (iree_any_bit_set(operation->flags,
+                           IREE_ASYNC_OPERATION_FLAG_LINKED) &&
+          !iree_async_proactor_io_uring_requires_userspace_link(
+              operation, operations.values[i + 1])) {
+        terminal_sqe->flags |= IREE_IOSQE_IO_LINK;
+        operation->linked_next = NULL;
+      } else if (chain_has_buffered_io) {
+        iree_io_uring_ring_mark_progress_boundary(&proactor->ring);
+        chain_has_buffered_io = false;
       }
 
       // Publish all writes to the operation (fill, resource retain, user data)
@@ -1544,21 +1515,21 @@ iree_status_t iree_async_proactor_io_uring_submit(
                                           iree_memory_order_relaxed);
   if (dispatch_tid != 0) {
     if (dispatch_tid == (int32_t)syscall(__NR_gettid)) {
-      // Poll thread during CQE processing: flush SQEs immediately for
-      // latency. This gets SQEs to the kernel promptly so inline sends
-      // (where the socket buffer has room) complete during io_uring_enter.
-      // NOTE: This is a latency optimization, not a data lifetime guarantee.
-      // Under socket buffer pressure, the kernel defers sends to io-wq
-      // worker threads that read buffer data after io_uring_enter returns.
-      // Callers must ensure buffer data survives until the completion
-      // callback fires.
+      // Poll thread during CQE processing: admit prepared chains immediately
+      // until completions are ready. This gets SQEs to the kernel promptly so
+      // inline sends (where the socket buffer has room) complete during
+      // io_uring_enter. NOTE: This is a latency optimization, not a data
+      // lifetime guarantee. Under socket buffer pressure, the kernel defers
+      // sends to io-wq worker threads that read buffer data after
+      // io_uring_enter returns. Callers must ensure buffer data survives until
+      // the completion callback fires.
       //
       // No GETEVENTS: we avoid running task_work mid-processing. The drain
       // loop handles deferred completions with GETEVENTS after the CQE loop.
-      iree_status_t flush_status = iree_io_uring_ring_submit(
-          &proactor->ring, /*min_complete=*/0, /*flags=*/0);
+      iree_status_t flush_status =
+          iree_io_uring_ring_progress(&proactor->ring, /*flags=*/0);
       if (!iree_status_is_ok(flush_status)) {
-        // ring_submit publishes the SQ tail before entering the kernel. The
+        // Progress publishes the SQ tail before entering the kernel. The
         // operations are therefore accepted even when io_uring_enter fails;
         // the poll loop's unconditional flush will either submit them or
         // propagate a persistent ring failure. Returning the flush error here

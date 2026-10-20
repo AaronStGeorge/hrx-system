@@ -385,10 +385,12 @@ iree_status_t iree_async_proactor_create_iocp(
 
   // Detect and apply capabilities.
   // MULTISHOT is supported via re-arm emulation (no kernel support needed).
-  proactor->capabilities = IREE_ASYNC_PROACTOR_CAPABILITY_REGISTERED_BUFFERS |
-                           IREE_ASYNC_PROACTOR_CAPABILITY_ABSOLUTE_TIMEOUT |
-                           IREE_ASYNC_PROACTOR_CAPABILITY_LINKED_OPERATIONS |
-                           IREE_ASYNC_PROACTOR_CAPABILITY_MULTISHOT;
+  proactor->capabilities =
+      IREE_ASYNC_PROACTOR_CAPABILITY_REGISTERED_BUFFERS |
+      IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION |
+      IREE_ASYNC_PROACTOR_CAPABILITY_ABSOLUTE_TIMEOUT |
+      IREE_ASYNC_PROACTOR_CAPABILITY_LINKED_OPERATIONS |
+      IREE_ASYNC_PROACTOR_CAPABILITY_MULTISHOT;
   if (nt_wait_api_detected) {
     proactor->capabilities |=
         IREE_ASYNC_PROACTOR_CAPABILITY_WAIT_COMPLETION_PACKET;
@@ -2707,6 +2709,11 @@ const iree_async_proactor_vtable_t iree_async_proactor_iocp_vtable = {
     .notification_wait = iree_async_iocp_notification_wait,
     .register_relay = iree_async_iocp_notification_register_relay,
     .unregister_relay = iree_async_iocp_notification_unregister_relay,
+    .prepare_buffer = iree_async_proactor_prepare_buffer_emulated,
+    .clone_buffer_registration =
+        iree_async_proactor_clone_buffer_registration_emulated,
+    .attach_buffer = iree_async_proactor_transition_buffer_emulated,
+    .detach_buffer = iree_async_proactor_transition_buffer_emulated,
     .register_buffer = iree_async_proactor_iocp_register_buffer,
     .register_dmabuf = iree_async_proactor_iocp_register_dmabuf,
     .unregister_buffer = iree_async_proactor_iocp_unregister_buffer,

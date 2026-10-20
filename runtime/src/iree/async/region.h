@@ -114,11 +114,12 @@ enum iree_async_region_type_e {
   // must register memory before RDMA read/write operations can target it.
   IREE_ASYNC_REGION_TYPE_RDMA,
 
-  // io_uring kernel registration. For WRITE-access slabs, creates a provided
+  // io_uring kernel registration. Host ranges have fixed slots for either I/O
+  // direction. For WRITE-access slabs, creates a provided
   // buffer ring (PBUF_RING) with a buffer_group_id for kernel-managed buffer
   // selection during recv. For READ-access slabs, registers into the kernel's
-  // fixed buffer table with a base_buffer_index for zero-copy send via
-  // IORING_OP_SEND_ZC with IORING_RECVSEND_FIXED_BUF.
+  // fixed buffer table with a base_buffer_index for file READ_FIXED/WRITE_FIXED
+  // and zero-copy send via IORING_OP_SEND_ZC with IORING_RECVSEND_FIXED_BUF.
   IREE_ASYNC_REGION_TYPE_IOURING,
 
   // DMA buffer backed by a file descriptor. Used for GPU-accessible memory
@@ -174,10 +175,9 @@ typedef struct iree_async_region_t {
   // Registered range length in bytes.
   iree_host_size_t length;
 
-  // Portable indexed buffer configuration (for buffer pools).
-  // Set by proactor during register_slab for indexed buffer regions.
-  // 0 if this region is not subdivided into indexed buffers.
-  // These are slab properties, independent of backend.
+  // Byte stride between indexed buffers, or zero for unpartitioned metadata.
+  // Slab registrations use their slab's buffer size. A fixed host range may
+  // have a shorter final slot, bounded by |length|.
   iree_host_size_t buffer_size;
   // Number of indexed buffers, or zero for an unpartitioned registration.
   uint32_t buffer_count;
@@ -201,11 +201,11 @@ typedef struct iree_async_region_t {
       // -1 if not in a provided buffer ring.
       int32_t buffer_group_id;
 
-      // For fixed buffer table (send - application selects buffer).
+      // For fixed file I/O and sends (application selects buffer).
       // buf_index = span.offset / buffer_size + base_buffer_index
       // Starting index in kernel's fixed buffer table.
       // -1 if not registered in the kernel's fixed buffer table (e.g.,
-      // RLIMIT_MEMLOCK too low to pin pages); send falls back to copy I/O.
+      // RLIMIT_MEMLOCK too low to pin pages); operations use ordinary I/O.
       int32_t base_buffer_index;
     } iouring;
     struct {
