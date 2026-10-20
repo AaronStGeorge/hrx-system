@@ -20,9 +20,17 @@ iree_status_t loom_wasm_legalize_vector_cmpf(
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result);
 
-// Lowers floating extrema and clamps on supported Wasm vector carriers through
-// exact comparisons, bit operations, and selects. Narrow comparisons widen to
-// F32 while every result retains its original payload representation.
+// Lowers rejected scalar floating extrema and clamps carrying nnan and nsz
+// through signed-order keys. Other semantics remain with the shared exact
+// reference legalizers.
+iree_status_t loom_wasm_legalize_scalar_float_extrema(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result);
+
+// Lowers floating extrema and clamps on supported Wasm vector carriers while
+// preserving packed source lanes. Relaxed extrema use signed-order keys;
+// remaining semantics use the shared exact reference legalization.
 iree_status_t loom_wasm_legalize_vector_float_extrema(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,

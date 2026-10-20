@@ -82,6 +82,7 @@ loom_cc_library(
     iree::base
     loom::ir
     loom::ops::scalar
+    loom::ops::scf
     loom::ops::vector
     loom::ops::view
     loom::target::arch::wasm::descriptors
@@ -96,6 +97,7 @@ loom_cc_library(
     loom::transforms::vector::shape_legalization
     loom::transforms::vector::target_legalization
     loom::transforms::vector::to_scalar
+    loom::util::numeric_format
   PUBLIC
 )
 endif()

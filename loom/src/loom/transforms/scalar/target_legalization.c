@@ -1766,21 +1766,18 @@ static const loom_target_legalizer_rule_t kScalarLegalizerRules[] = {
         .root_kind = LOOM_OP_SCALAR_CLAMPF,
         .first_operand_element_types =
             LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
-        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_UNHANDLED,
         .legalize = loom_scalar_legalize_clamp,
     },
     {
         .root_kind = LOOM_OP_SCALAR_MINNUMF,
         .first_operand_element_types =
             LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
-        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_UNHANDLED,
         .legalize = loom_scalar_legalize_number_extremum,
     },
     {
         .root_kind = LOOM_OP_SCALAR_MAXNUMF,
         .first_operand_element_types =
             LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
-        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_UNHANDLED,
         .legalize = loom_scalar_legalize_number_extremum,
     },
     {

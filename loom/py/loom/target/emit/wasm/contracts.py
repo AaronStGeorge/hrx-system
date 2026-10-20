@@ -45,6 +45,7 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     GuardDiagnostic,
+    RecipeRule,
     Scalar,
     SourceMemoryByteOffsetMaterializer,
     SourceMemoryConstraint,
@@ -130,6 +131,28 @@ _V128_LANE_TYPES = (
 _NATIVE_FLOAT_LANE_TYPES = (
     (Vector("f32", minimum_lanes=1, maximum_lanes=4), "f32x4"),
     (Vector("f64", minimum_lanes=1, maximum_lanes=2), "f64x2"),
+)
+
+# Bounded source-vector shapes handled by Wasm's floating-extrema legalizer.
+# Recipe rows make this target-owned capability visible to packet planning
+# before the source operation has been rewritten.
+_NARROW_FLOAT_VECTOR_CARRIER_TYPES = (
+    Vector(("f8E4M3", "f8E5M2"), minimum_lanes=1, maximum_lanes=16),
+    Vector(("f16", "bf16"), minimum_lanes=1, maximum_lanes=8),
+)
+_FLOAT_VECTOR_CARRIER_TYPES = (
+    *_NARROW_FLOAT_VECTOR_CARRIER_TYPES,
+    Vector("f32", minimum_lanes=1, maximum_lanes=4),
+    Vector("f64", minimum_lanes=1, maximum_lanes=2),
+)
+
+# Wasm has no native scalar number-extremum or clamp instructions. Explicit
+# contract rejection selects their exact shared reference legalization while
+# leaving room for future native descriptor cases to take precedence.
+_SCALAR_FLOAT_REFERENCE_FALLBACK_OPS = (
+    scalar_arithmetic.scalar_minnumf,
+    scalar_arithmetic.scalar_maxnumf,
+    scalar_arithmetic.scalar_clampf,
 )
 
 # Transient numeric values smaller than one physical SIMD register retain their
@@ -460,6 +483,34 @@ def _unary_rule(
             ),
         ),
     )
+
+
+def _vector_float_extrema_recipe_rules() -> tuple[RecipeRule, ...]:
+    rules: list[RecipeRule] = []
+    rules.extend(
+        RecipeRule(
+            source_op=source_op,
+            guards=_typed_guards(("lhs", "rhs", "result"), value_type),
+        )
+        for source_op in (vector.vector_minimumf, vector.vector_maximumf)
+        for value_type in _NARROW_FLOAT_VECTOR_CARRIER_TYPES
+    )
+    rules.extend(
+        RecipeRule(
+            source_op=source_op,
+            guards=_typed_guards(("lhs", "rhs", "result"), value_type),
+        )
+        for source_op in (vector.vector_minnumf, vector.vector_maxnumf)
+        for value_type in _FLOAT_VECTOR_CARRIER_TYPES
+    )
+    rules.extend(
+        RecipeRule(
+            source_op=vector.vector_clampf,
+            guards=_typed_guards(("value", "lower", "upper", "result"), value_type),
+        )
+        for value_type in _FLOAT_VECTOR_CARRIER_TYPES
+    )
+    return tuple(rules)
 
 
 def _integer_sign_rules(
@@ -2021,6 +2072,7 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
                 (vector.vector_sqrtf, "sqrt"),
             )
         ),
+        *_vector_float_extrema_recipe_rules(),
         *float_extension_rules(_descriptor, _value_type),
         *integer_arithmetic_rules(_descriptor, _value_type),
         *integer_extension_rules(_descriptor, _value_type),
@@ -2278,6 +2330,10 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
                 ),
             ),
             lane_count=4,
+        ),
+        *(
+            UnsupportedRule(source_op=source_op)
+            for source_op in _SCALAR_FLOAT_REFERENCE_FALLBACK_OPS
         ),
     ),
 )

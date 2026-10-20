@@ -16,10 +16,12 @@ from loom.target.contracts import (
     DescriptorEmitForm,
     DescriptorRule,
     GuardKind,
+    RecipeRule,
     UnsupportedRule,
     ValueAliasRule,
     ValueProject,
     ValueRef,
+    Vector,
 )
 from loom.target.emit.wasm.contracts import WASM_CORE_SIMD128_CONTRACT_FRAGMENT
 
@@ -824,12 +826,58 @@ def test_structural_planner_exclusively_owns_bitcast_and_numeric_select() -> Non
         assert result_type.kind != "vector" or result_type.elements == ("i1",)
 
 
-def test_vector_cast_family_explicitly_rejects_every_unmatched_native_case() -> None:
+def test_reference_fallback_families_explicitly_reject_unmatched_native_cases() -> None:
     assert {
         rule.source_op
         for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
         if isinstance(rule, UnsupportedRule)
-    } == set(vector.VECTOR_CAST_OPS)
+    } == set(vector.VECTOR_CAST_OPS) | {
+        arithmetic.scalar_minnumf,
+        arithmetic.scalar_maxnumf,
+        arithmetic.scalar_clampf,
+    }
+
+
+def test_float_extrema_recipes_cover_every_source_vector_carrier() -> None:
+    actual = {
+        (rule.source_op, guard.type_pattern)
+        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
+        if isinstance(rule, RecipeRule)
+        and rule.source_op
+        in {
+            vector.vector_minimumf,
+            vector.vector_maximumf,
+            vector.vector_minnumf,
+            vector.vector_maxnumf,
+            vector.vector_clampf,
+        }
+        for guard in rule.guards
+        if guard.kind is GuardKind.VALUE_TYPE and guard.field == "result"
+    }
+    narrow_types = {
+        Vector(("f8E4M3", "f8E5M2"), minimum_lanes=1, maximum_lanes=16),
+        Vector(("f16", "bf16"), minimum_lanes=1, maximum_lanes=8),
+    }
+    all_types = narrow_types | {
+        Vector("f32", minimum_lanes=1, maximum_lanes=4),
+        Vector("f64", minimum_lanes=1, maximum_lanes=2),
+    }
+    assert actual == {
+        *(
+            (source_op, value_type)
+            for source_op in (vector.vector_minimumf, vector.vector_maximumf)
+            for value_type in narrow_types
+        ),
+        *(
+            (source_op, value_type)
+            for source_op in (
+                vector.vector_minnumf,
+                vector.vector_maxnumf,
+                vector.vector_clampf,
+            )
+            for value_type in all_types
+        ),
+    }
 
 
 def test_narrow_scalar_selection_uses_integer_payloads() -> None:

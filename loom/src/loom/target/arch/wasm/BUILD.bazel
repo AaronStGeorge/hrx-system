@@ -92,6 +92,7 @@ loom_cc_library(
         ":math_policy",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target:legalization",
@@ -106,6 +107,7 @@ loom_cc_library(
         "//loom/src/loom/transforms/vector:shape_legalization",
         "//loom/src/loom/transforms/vector:target_legalization",
         "//loom/src/loom/transforms/vector:to_scalar",
+        "//loom/src/loom/util:numeric_format",
         "//runtime/src/iree/base",
     ],
 )
