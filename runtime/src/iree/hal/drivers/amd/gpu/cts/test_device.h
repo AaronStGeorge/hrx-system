@@ -151,6 +151,9 @@ class GpuNativeTest : public ::testing::Test {
   iree_hal_amd_gpu_device_options_t options_ = {};
   // Process-shared progress owners supplied through the public creation API.
   iree_async_proactor_pool_t* proactors_ = nullptr;
+  // Public I/O provisioning applied before any device acquires a poll owner.
+  iree_async_proactor_pool_options_t proactor_options_ =
+      iree_async_proactor_pool_options_default();
   // External tracker reference used to observe actual queue progress.
   iree_async_frontier_tracker_t* tracker_ = nullptr;
   // Allocator lifetime extends through the final worker cleanup.

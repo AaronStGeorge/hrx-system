@@ -905,6 +905,19 @@ TEST_P(GpuNativeFileTest, BufferedReadWritePreservesInternalCacheHandoffs) {
   ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip());
 }
 
+class GpuUnregisteredFileTest : public GpuNativeFileTest {
+ public:
+  GpuUnregisteredFileTest() {
+    proactor_options_.proactor_options.allowed_capabilities &=
+        ~IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION;
+  }
+};
+
+TEST_P(GpuUnregisteredFileTest, BufferedReadWriteWithoutPreparedPins) {
+  ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip());
+  IREE_ASSERT_OK(iree_hal_device_trim(device_));
+}
+
 TEST_P(GpuNativeFileLimitTest, StagingFitsNativeBackingLimit) {
   ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip());
 }
@@ -1179,7 +1192,7 @@ class GpuSharedFileStagingTest : public GpuNativeFileProgressTest {
     if (HasFatalFailure() || IsSkipped()) {
       return;
     }
-    auto options = iree_async_proactor_pool_options_default();
+    auto options = extra_proactor_options_;
     options.runner = detach_gate_.runner();
     IREE_ASSERT_OK(iree_async_proactor_pool_create(
         1, nullptr, options, iree_allocator_system(), &extra_proactors_));
@@ -1194,11 +1207,58 @@ class GpuSharedFileStagingTest : public GpuNativeFileProgressTest {
 
   // Owned independent runner, released after its file operations complete.
   iree_async_proactor_pool_t* extra_proactors_ = nullptr;
+  // Capabilities of the independently supplied file I/O owner.
+  iree_async_proactor_pool_options_t extra_proactor_options_ =
+      iree_async_proactor_pool_options_default();
   // Borrowed independent file I/O owner.
   iree_async_proactor_t* extra_proactor_ = nullptr;
   // Real dependency callback hold, alive through the independent runner.
   FileDetachGate detach_gate_;
 };
+
+class GpuUnregisteredFileOwnerTest : public GpuSharedFileStagingTest {
+ public:
+  GpuUnregisteredFileOwnerTest() {
+    extra_proactor_options_.proactor_options.allowed_capabilities &=
+        ~IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION;
+  }
+};
+
+TEST_P(GpuUnregisteredFileOwnerTest, SharesBackingWithRegisteredDeviceOwner) {
+  constexpr size_t kLength = 4096;
+  Ref<iree_hal_buffer_t> buffer;
+  ASSERT_NO_FATAL_FAILURE(Allocate(kBufferOffset + kLength, buffer.out()));
+  std::vector<uint32_t> expected(kLength / sizeof(uint32_t));
+  for (size_t i = 0; i < expected.size(); ++i) {
+    expected[i] = uint32_t(i * 37 + 3);
+  }
+  Ref<iree_hal_file_t> primary_file, extra_file;
+  IREE_ASSERT_OK(Open(expected, primary_file.out()));
+  IREE_ASSERT_OK(Open(expected, extra_file.out(), false, extra_proactor_));
+  auto* timeline = timeline_.get();
+  uint64_t one = 1, two = 2, three = 3;
+  // Provision staging through the device owner before the independent file
+  // owner accesses it without a compatible prepared-registration capability.
+  IREE_ASSERT_OK(iree_hal_queue_read(queues_[0], {}, {1, &timeline, &one},
+                                     primary_file, 0, buffer, kBufferOffset,
+                                     kLength, &barriers_, 0));
+  ASSERT_NO_FATAL_FAILURE(Wait(one));
+  IREE_ASSERT_OK(iree_hal_queue_read(
+      queues_[0], {1, &timeline, &one}, {1, &timeline, &two}, extra_file, 0,
+      buffer, kBufferOffset, kLength, &barriers_, 0));
+  ASSERT_NO_FATAL_FAILURE(Wait(two));
+  std::vector<uint32_t> observed(expected.size());
+  IREE_ASSERT_OK(iree_hal_queue_download(
+      queues_[0], {1, &timeline, &two}, {1, &timeline, &three}, buffer,
+      kBufferOffset, observed.data(), kLength, nullptr));
+  ASSERT_NO_FATAL_FAILURE(Wait(three));
+  EXPECT_EQ(observed, expected);
+  extra_file.reset();
+  iree_async_proactor_pool_release(extra_proactors_);
+  extra_proactors_ = nullptr;
+  extra_proactor_ = nullptr;
+  IREE_ASSERT_OK(iree_hal_device_trim(device_));
+}
 
 TEST_P(GpuSharedFileStagingTest,
        SharedBackingGrowthAndTrimPreservePreparedWork) {
@@ -1354,6 +1414,11 @@ class GpuSharedVirtualFileStagingTest : public GpuSharedFileStagingTest {};
 
 TEST_P(GpuSharedVirtualFileStagingTest,
        RetiredBackingDetachesOnceBeforeFileCompletion) {
+  if (!iree_any_bit_set(
+          iree_async_proactor_query_capabilities(extra_proactor_),
+          IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION)) {
+    GTEST_SKIP() << "File owner cannot attach prepared buffer pins";
+  }
   constexpr uint64_t kSmall = 1024 * 1024;
   Ref<iree_hal_buffer_t> buffer;
   ASSERT_NO_FATAL_FAILURE(Allocate(kLength + 256, buffer.out()));
@@ -1608,6 +1673,15 @@ INSTANTIATE_TEST_SUITE_P(
         FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered));
 
 INSTANTIATE_TEST_SUITE_P(PrivateBacking, GpuSharedFileStagingTest,
+                         ::testing::Values(FileBacking::kPhysicalPrivate,
+                                           FileBacking::kVirtualPrivate));
+
+INSTANTIATE_TEST_SUITE_P(PhysicalAndVirtual, GpuUnregisteredFileTest,
+                         ::testing::Values(FileBacking::kPhysicalHost,
+                                           FileBacking::kVirtualPrivate,
+                                           FileBacking::kPhysicalPrivate));
+
+INSTANTIATE_TEST_SUITE_P(PrivateBacking, GpuUnregisteredFileOwnerTest,
                          ::testing::Values(FileBacking::kPhysicalPrivate,
                                            FileBacking::kVirtualPrivate));
 

@@ -287,8 +287,7 @@ void GpuNativeTest::SetUp() {
   iree_hal_amd_gpu_device_options_initialize(&options_);
   options_.queue_count = 2;
   IREE_ASSERT_OK(iree_async_proactor_pool_create(
-      1, nullptr, iree_async_proactor_pool_options_default(),
-      iree_allocator_system(), &proactors_));
+      1, nullptr, proactor_options_, iree_allocator_system(), &proactors_));
   IREE_ASSERT_OK(iree_async_frontier_tracker_create(
       iree_async_frontier_tracker_options_default(), iree_allocator_system(),
       &tracker_));
