@@ -121,6 +121,11 @@ static iree_status_t iree_benchmark_loom_validate_compile_only_options(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "--compile-only conflicts with --dry-run");
   }
+  if (options->scenario_correctness) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--scenario-correctness is unavailable with --compile-only");
+  }
   if (iree_string_view_is_empty(iree_string_view_trim(options->target))) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "--compile-only requires --target");
@@ -751,6 +756,7 @@ iree_status_t iree_benchmark_loom_run_file(
 
     loom_testbench_execution_profile_t scenario_oracle_profile = {0};
     if (iree_status_is_ok(status) && !benchmark_options->dry_run &&
+        benchmark_options->scenario_correctness &&
         options->configuration->scenario_oracle_profile.fn != NULL) {
       const loom_testbench_bind_scenario_profile_callback_t binding =
           options->configuration->scenario_oracle_profile;

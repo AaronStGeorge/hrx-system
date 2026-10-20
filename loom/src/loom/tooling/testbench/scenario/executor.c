@@ -23,6 +23,7 @@ static void loom_testbench_prepared_product_deinitialize(
 void loom_testbench_scenario_execution_options_initialize(
     loom_testbench_scenario_execution_options_t* out_options) {
   *out_options = (loom_testbench_scenario_execution_options_t){
+      .prepare_oracles = true,
       .host_allocator = iree_allocator_system(),
   };
 }
@@ -165,7 +166,7 @@ iree_status_t loom_testbench_prepare_scenario_configuration(
         &options->target, &trial->action.target, &configuration->values,
         host_allocator, out_prepared->trials, trial_index,
         /*use_oracle=*/false, &prepared_trial->target);
-    if (iree_status_is_ok(status) &&
+    if (iree_status_is_ok(status) && options->prepare_oracles &&
         trial->action.kind == LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE) {
       status = loom_testbench_prepare_or_reuse_scenario_product(
           &options->oracle, &trial->action.oracle, &configuration->values,

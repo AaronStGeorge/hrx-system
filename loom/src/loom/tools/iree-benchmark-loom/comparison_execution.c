@@ -459,9 +459,10 @@ static iree_status_t iree_benchmark_loom_prepare_scenario_comparison_work(
           &candidates[i].runnable);
     }
     if (iree_status_is_ok(status)) {
-      candidates[i].correctness_sample_count = 1;
+      candidates[i].correctness_sample_count =
+          options->benchmark_options->scenario_correctness ? 1 : 0;
       candidates[i].correctness_failed_sample_count = !candidates[i].runnable;
-      ++*inout_correctness_sample_count;
+      *inout_correctness_sample_count += candidates[i].correctness_sample_count;
       *inout_correctness_failed_sample_count += !candidates[i].runnable;
       *inout_failed_benchmark_count += !candidates[i].runnable;
     }

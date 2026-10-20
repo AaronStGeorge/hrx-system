@@ -1940,11 +1940,12 @@ static iree_status_t iree_benchmark_loom_write_data_cache_materialization_json(
 
 static iree_status_t iree_benchmark_loom_write_data_cache_summary_json(
     const iree_benchmark_loom_data_cache_summary_t* summary,
-    loom_output_stream_t* stream) {
+    bool correctness_checked, loom_output_stream_t* stream) {
   loom_json_object_writer_t object;
   IREE_RETURN_IF_ERROR(loom_json_object_begin(stream, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
-      &object, IREE_SV("validity"), IREE_SV("check_ops")));
+      &object, IREE_SV("validity"),
+      correctness_checked ? IREE_SV("check_ops") : IREE_SV("unchecked")));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("cache_policy"), IREE_SV("binding_ring")));
   IREE_RETURN_IF_ERROR(
@@ -1998,14 +1999,14 @@ static iree_status_t iree_benchmark_loom_write_data_cache_summary_json(
 
 static iree_status_t iree_benchmark_loom_write_data_cache_summary_field_json(
     const iree_benchmark_loom_data_cache_summary_t* summary,
-    loom_json_object_writer_t* object) {
+    bool correctness_checked, loom_json_object_writer_t* object) {
   if (!summary->populated) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
       loom_json_object_begin_field(object, IREE_SV("data_cache")));
-  return iree_benchmark_loom_write_data_cache_summary_json(summary,
-                                                           object->stream);
+  return iree_benchmark_loom_write_data_cache_summary_json(
+      summary, correctness_checked, object->stream);
 }
 
 iree_status_t iree_benchmark_loom_write_benchmark_policy_json(
@@ -2031,6 +2032,14 @@ iree_status_t iree_benchmark_loom_write_benchmark_correctness_json(
       &object, IREE_SV("sample_count"), sample_count));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       &object, IREE_SV("failed_sample_count"), failed_sample_count));
+  iree_string_view_t state = IREE_SV("unchecked");
+  if (failed_sample_count != 0) {
+    state = IREE_SV("failed");
+  } else if (sample_count != 0) {
+    state = IREE_SV("passed");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_json_object_write_string_field(&object, IREE_SV("state"), state));
   return loom_json_object_end(&object);
 }
 
@@ -2151,7 +2160,7 @@ iree_status_t iree_benchmark_loom_write_benchmark_evidence_fields_json(
         policy, benchmark_result, object->stream));
   }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_data_cache_summary_field_json(
-      &benchmark_result->data_cache, object));
+      &benchmark_result->data_cache, correctness_sample_count != 0, object));
   if (benchmark_result->hal_benchmark.profile_replay.requested ||
       benchmark_result->hal_benchmark.profile_replay.executed ||
       benchmark_result->hal_benchmark.profile_replay.has_error) {

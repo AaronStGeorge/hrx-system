@@ -34,7 +34,7 @@ The stable author-facing snapshot contains:
 | `device` | Selected driver, backend, and inexpensive HAL identity when execution selected a device. |
 | `work_items` | Deduplicated physical compilation, correctness, and measurement results. |
 | `benchmarks` | Logical benchmark records referring to physical results by `work_item_index`. |
-| `failed_samples` | Correctness failures; omitted when every sample passed. |
+| `failed_samples` | Observed correctness failures; omitted when none were observed. |
 | `failures` | Parse, verification, selection, and planning failures; omitted when empty. |
 | `repetitions` | Individual interleaved measurement windows when comparison data is retained in the snapshot. |
 | `comparisons` | Aggregate baseline and candidate ratios when comparison data is present. |
@@ -43,6 +43,14 @@ Physical work items and JSONL `benchmark_result` payloads group the requested
 experiment under `policy`, correctness evidence under `correctness`, and timing
 evidence under `measurement`. An absent group means that stage did not produce
 evidence; it is not an all-zero result.
+
+Each result's `correctness.state` is `unchecked`, `passed`, or `failed`.
+Scenario timing is unchecked by default; `--scenario-correctness=true` enables
+the authored checks before timing. A top-level `state: "ok"` establishes that
+measurement succeeded, not that outputs were checked. Unchecked results have
+zero correctness sample counts, `data_cache.validity: "unchecked"`, and no
+`correctness_materialization`. Summary correctness totals count only observed
+checks and do not certify unchecked results elsewhere in the run.
 
 Begin with the run shape:
 
@@ -122,7 +130,7 @@ physical correctness work to its logical benchmark aliases.
 | `device` | Selected driver, backend, and inexpensive HAL identity. |
 | `compile` | Candidate compile state, diagnostics, and requested compile evidence. |
 | `sample` | Correctness result for one concrete case sample or scenario trial. |
-| `benchmark` | Correctness-gated measurement or failure evidence. |
+| `benchmark` | Measurement or failure evidence, with explicit correctness state. |
 | `benchmark.repetition` | One interleaved candidate measurement window. |
 | `comparison` | Aggregate baseline and candidate timing ratios. |
 | `profile_replay` | Instrumented replay evidence collected outside the scored window. |
@@ -142,10 +150,11 @@ tail -f results.jsonl | jq -c '
 ```
 
 Scenario samples contain the selected configuration, trial domain, trial
-ordinal, entropy root, and authored expectation results. Each selected trial
-is checked before timing; interleaved comparisons check each candidate before
+ordinal, entropy root, and authored expectation results. With
+`--scenario-correctness=true`, each selected trial is checked before timing;
+interleaved comparisons check each candidate before
 their first window, not before every repetition. A failed trial produces no
-timing score, and a comparison needs passing baseline and candidate trials.
+timing score, and a checked comparison needs passing baseline and candidate trials.
 `check.invoke` trials also execute before timing to check for unhandled device errors,
 but have no numerical oracle. A passing result establishes only the checks
 authored in the scenario.
@@ -176,7 +185,7 @@ jq 'select(.row == "compile" and .state != "ok") |
     .diagnostics[]?' results.jsonl
 ```
 
-Read correctness-gated dispatch scores:
+Read dispatch scores and their correctness evidence:
 
 ```shell
 jq 'select(.row == "benchmark") |

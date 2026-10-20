@@ -101,3 +101,36 @@ check.scenario @invoke_only {
 }
 
 check.benchmark<@invoke_only> @invoke_latency
+
+// Checking must observe the complete program, including the final overwrite.
+command.program.def @wrong_command() launch(%output: buffer) {
+  kernel.launch @write_right(%output) : (buffer)
+  kernel.launch @write_wrong(%output) : (buffer)
+  command.return
+}
+
+check.scenario @wrong_command_result {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@wrong_command, @oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.equal actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.benchmark<@wrong_command_result> @wrong_command_latency
+
+// The VM profile cannot execute command programs. Unchecked timing must not
+// prepare that unavailable oracle; opting in must expose the rejection.
+check.scenario @command_without_vm_oracle {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@wrong_command>(%output) : (tensor<1xi32>) -> () {
+      check.expect.equal actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.benchmark<@command_without_vm_oracle> @command_without_vm_oracle_latency

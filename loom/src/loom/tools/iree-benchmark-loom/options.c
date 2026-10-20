@@ -91,6 +91,14 @@ IREE_FLAG_NAMED(
     "Captures and compiles selected check.case samples as canonical requests "
     "without initializing a HAL device. Requires --target and "
     "--artifact-bundle-dir.");
+IREE_FLAG_NAMED(
+    bool, scenario_correctness, "scenario-correctness", false,
+    "Checks each selected check.scenario trial once before timing, including "
+    "command programs and interleaved candidates. Failures suppress timing. "
+    "Default false skips oracle preparation and execution and reports "
+    "unchecked "
+    "timing. Does not change check.case execution or its correctness "
+    "preflight. Unavailable with --compile-only.");
 IREE_FLAG(bool, agents_md, false,
           "Prints a compact Markdown snippet suitable for AGENTS.md and "
           "exits.");
@@ -283,6 +291,7 @@ iree_status_t iree_benchmark_loom_options_from_flags(
       iree_string_view_trim(iree_make_cstring_view(FLAG_artifact_bundle_dir));
   out_options->dry_run = FLAG_dry_run;
   out_options->compile_only = FLAG_compile_only;
+  out_options->scenario_correctness = FLAG_scenario_correctness;
   out_options->measure =
       iree_string_view_trim(iree_make_cstring_view(FLAG_measure));
   out_options->compile_report = iree_make_cstring_view(FLAG_compile_report);

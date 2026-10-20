@@ -715,6 +715,39 @@ TEST_F(ScenarioExecutorTest, ReusesProductsAcrossCorrectnessAndBenchmarkModes) {
   EXPECT_EQ(prepared.trials, nullptr);
   EXPECT_EQ(target_state.destroy_count, 2u);
   EXPECT_EQ(oracle_state.prepare_count, 1u);
+
+  // Target-only preparation neither requires nor calls an oracle profile.
+  // Supplying a profile must not accidentally enable its compilation.
+  options.prepare_oracles = false;
+  for (bool bind_oracle : {false, true}) {
+    SCOPED_TRACE(bind_oracle);
+    if (bind_oracle) {
+      options.oracle = {IREE_SV("oracle"), PrepareTestProduct, &oracle_state};
+    }
+    IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
+        &options, &configuration, &prepared));
+    EXPECT_EQ(prepared.trials[0].oracle.vtable, nullptr);
+    IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
+        &prepared, 0, LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK,
+        &materializer, 3, &benchmark));
+    IREE_ASSERT_OK(loom_testbench_benchmark_scenario_trial(
+        &benchmark, 2, &benchmark_options, &benchmark_result));
+    EXPECT_EQ(benchmark.oracle_calls, nullptr);
+    EXPECT_EQ(benchmark.results, nullptr);
+    EXPECT_EQ(benchmark.expectation_reports, nullptr);
+    for (iree_host_size_t i = 0; i < benchmark.batch_capacity; ++i) {
+      EXPECT_EQ(benchmark.trial_values[i].oracle.slot_count, 0u);
+    }
+    loom_testbench_scenario_trial_executor_deinitialize(&benchmark);
+    loom_testbench_prepared_scenario_configuration_deinitialize(&prepared);
+    EXPECT_EQ(oracle_state.prepare_count, 1u);
+    EXPECT_EQ(oracle_state.execute_count, 1u);
+    EXPECT_EQ(oracle_state.destroy_count, 1u);
+  }
+  EXPECT_EQ(target_state.prepare_count, 4u);
+  EXPECT_EQ(target_state.destroy_count, 4u);
+  EXPECT_EQ(target_state.execute_count, 1u);
+  EXPECT_EQ(target_state.benchmark_count, 3u);
   loom_testbench_scenario_configuration_values_deinitialize(&configuration);
   loom_module_free(module);
 }

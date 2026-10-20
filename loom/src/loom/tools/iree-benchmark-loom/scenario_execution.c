@@ -142,6 +142,8 @@ static iree_status_t iree_benchmark_loom_scenario_ensure_profile(
   execution->scenario_options.target =
       loom_run_hal_testbench_scenario_execution_profile(&execution->profile);
   execution->scenario_options.oracle = options->scenario_oracle_profile;
+  execution->scenario_options.prepare_oracles =
+      options->benchmark_options->scenario_correctness;
   execution->scenario_options.device_event_capture =
       options->case_execution_options->device_event_capture;
   execution->scenario_options.function_call =
@@ -252,17 +254,11 @@ static iree_status_t iree_benchmark_loom_scenario_query_layout(
       product, invocation, &calls[0], &query->layout);
 }
 
-iree_status_t iree_benchmark_loom_scenario_execution_prepare(
+static iree_status_t iree_benchmark_loom_scenario_check_trial(
     iree_benchmark_loom_scenario_execution_t* execution,
     const iree_benchmark_loom_selected_benchmark_t* selection,
     iree_host_size_t work_item_index, iree_host_size_t benchmark_sample_ordinal,
     loom_testbench_scenario_sample_coordinate_t coordinate, bool* out_passed) {
-  *out_passed = false;
-  iree_benchmark_loom_scenario_reset_trial_executor(execution);
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_profile(execution));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_configuration(
-      execution, selection->scenario_plan, coordinate.configuration_ordinal));
-
   // Correctness owns only one target/oracle realization. Release its graphs
   // and observations before allocating the independent target-only timing ring.
   loom_testbench_scenario_trial_executor_t checker = {0};
@@ -292,8 +288,31 @@ iree_status_t iree_benchmark_loom_scenario_execution_prepare(
         });
   }
   loom_testbench_scenario_trial_executor_deinitialize(&checker);
-  if (!iree_status_is_ok(status) || !*out_passed) {
-    return status;
+  return status;
+}
+
+iree_status_t iree_benchmark_loom_scenario_execution_prepare(
+    iree_benchmark_loom_scenario_execution_t* execution,
+    const iree_benchmark_loom_selected_benchmark_t* selection,
+    iree_host_size_t work_item_index, iree_host_size_t benchmark_sample_ordinal,
+    loom_testbench_scenario_sample_coordinate_t coordinate,
+    bool* out_runnable) {
+  *out_runnable = false;
+  iree_benchmark_loom_scenario_reset_trial_executor(execution);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_profile(execution));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_configuration(
+      execution, selection->scenario_plan, coordinate.configuration_ordinal));
+
+  const iree_benchmark_loom_options_t* benchmark_options =
+      execution->options->benchmark_options;
+  if (benchmark_options->scenario_correctness) {
+    bool passed = false;
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_check_trial(
+        execution, selection, work_item_index, benchmark_sample_ordinal,
+        coordinate, &passed));
+    if (!passed) {
+      return iree_ok_status();
+    }
   }
 
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_trial_executor(
@@ -306,8 +325,6 @@ iree_status_t iree_benchmark_loom_scenario_execution_prepare(
           .fn = iree_benchmark_loom_scenario_query_layout,
           .user_data = &layout_query,
       }));
-  const iree_benchmark_loom_options_t* benchmark_options =
-      execution->options->benchmark_options;
   const iree_host_size_t ring_count =
       iree_benchmark_loom_input_ring_select_count(
           benchmark_options->input_ring_count,
@@ -322,6 +339,7 @@ iree_status_t iree_benchmark_loom_scenario_execution_prepare(
   execution->prepared_coordinate = coordinate;
   execution->prepared_layout = layout_query.layout;
   execution->prepared_ring_count = ring_count;
+  *out_runnable = true;
   return iree_ok_status();
 }
 
@@ -886,7 +904,9 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
             {
                 .populated = true,
                 .correctness_materialization =
-                    IREE_BENCHMARK_LOOM_BUFFER_MATERIALIZATION_HOST_VISIBLE,
+                    benchmark_options->scenario_correctness
+                        ? IREE_BENCHMARK_LOOM_BUFFER_MATERIALIZATION_HOST_VISIBLE
+                        : IREE_BENCHMARK_LOOM_BUFFER_MATERIALIZATION_UNKNOWN,
                 .measurement_materialization =
                     IREE_BENCHMARK_LOOM_BUFFER_MATERIALIZATION_DEVICE_LOCAL,
                 .binding_count = measurement.result.binding_count_per_call,
@@ -928,13 +948,15 @@ iree_status_t iree_benchmark_loom_run_scenario_work_item(
   const iree_benchmark_loom_selected_benchmark_t* selection =
       &options->work_plan
            ->selected_benchmarks[work_item->representative_selection_index];
-  bool passed = false;
+  bool runnable = false;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_execution_prepare(
       execution, selection, work_item->work_item_index,
       work_item->begin_benchmark_sample, work_item->scenario_coordinate,
-      &passed));
-  ++*inout_correctness_sample_count;
-  *inout_correctness_failed_sample_count += !passed;
+      &runnable));
+  const iree_host_size_t correctness_sample_count =
+      options->benchmark_options->scenario_correctness ? 1 : 0;
+  *inout_correctness_sample_count += correctness_sample_count;
+  *inout_correctness_failed_sample_count += !runnable;
   if (!execution->device_emitted) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_event_sink_emit_device(
         options->event_sink, options->run, options->hal_context));
@@ -947,15 +969,15 @@ iree_status_t iree_benchmark_loom_run_scenario_work_item(
       .has_scenario_coordinate = true,
       .scenario_coordinate = work_item->scenario_coordinate,
       .samples_per_iteration = 1,
-      .failed_sample_count = !passed,
+      .failed_sample_count = !runnable,
   };
-  if (passed) {
+  if (runnable) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_execution_measure(
         execution, &selection->policy, &benchmark_result));
   }
   return iree_benchmark_loom_emit_work_item_result_aliases(
       options->run, options->module_plan, options->work_plan, work_item,
-      &benchmark_result, /*correctness_sample_count=*/1,
-      /*correctness_failed_sample_count=*/!passed, options->event_sink,
+      &benchmark_result, correctness_sample_count,
+      /*correctness_failed_sample_count=*/!runnable, options->event_sink,
       inout_failed_benchmark_count);
 }

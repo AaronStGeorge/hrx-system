@@ -38,6 +38,7 @@ iree_execution_test_suite(
   TOOLS
     "benchmark=loom::tools::iree-benchmark-loom"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/benchmark_scenarios.loom"
 )
 endif()
