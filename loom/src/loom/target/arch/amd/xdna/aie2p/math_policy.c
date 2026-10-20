@@ -53,6 +53,9 @@
   _(RECIPE_SILU_LOGISTIC_GROUPED_PRODUCT,                                     \
     recipe_silu_logistic_grouped_product,                                     \
     "math.recipe.silu_logistic_grouped_product")                              \
+  _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                           \
+    "math.recipe.widen_f32_round")                                            \
+  _(DIV_ARCP, div_arcp, "math.div.arcp")                                      \
   _(ROOT_RSQRT_EXACT_F32, root_rsqrt_exact_f32, "math.rsqrt.exact_f32")       \
   _(ROOT_SQRT_EXACT_F32, root_sqrt_exact_f32, "math.sqrt.exact_f32")          \
   _(SHAPE_APPROXIMATE_ACTIVATION_PACKET, shape_approximate_activation_packet, \
@@ -210,6 +213,11 @@ static const loom_target_math_evaluation_t kAie2pMathEvaluations[] = {
     OP_NATIVE_BF16_EXP, SHAPE_F32_EXP, SHAPE_F32_EXP, EXP_EXACT_F32)           \
   _(TANH, LOOM_SCALAR_TYPE_SET_F32, ALL, RANK_ONE, 1, 16, AFN, UNKNOWN, NONE,  \
     OP_NATIVE_BF16_TANH, SHAPE_F32_TANH, SHAPE_F32_TANH, TANH_EXACT_F32)       \
+  _(DIV_F32, LOOM_SCALAR_TYPE_SET_F32, ALL, ANY, 0, 0, ARCP, UNKNOWN, NONE,    \
+    OP_SUPPORTED, ELEMENT_F32, NONE, DIV_ARCP)                                 \
+  _(DIV_NARROW, LOOM_SCALAR_TYPE_SET_FLOAT_LE16, ALL, ANY, 0, 0, ARCP,         \
+    WIDEN_F32_ROUND, NONE, RECIPE_WIDEN_F32_ROUND, ELEMENT_F32, NONE,          \
+    DIV_ARCP)                                                                  \
   _(MUL_F16, LOOM_SCALAR_TYPE_SET_F16, SCALAR, RANK_ONE, 1, 1, NONE, UNKNOWN,  \
     NONE, OP_EXACT_BINARY16, SHAPE_F16_MULTIPLY, SHAPE_F16_MULTIPLY, NONE)     \
   _(MUL_F32, LOOM_SCALAR_TYPE_SET_F32, ALL, RANK_ONE, 1, 32, NONE, UNKNOWN,    \
@@ -305,6 +313,7 @@ static const loom_target_math_policy_rule_span_t
         [LOOM_TARGET_MATH_OP_EXPF] = LOOM_AIE2P_MATH_SPAN(EXP, 1),
         [LOOM_TARGET_MATH_OP_TANHF] = LOOM_AIE2P_MATH_SPAN(TANH, 1),
         [LOOM_TARGET_MATH_OP_MULF] = LOOM_AIE2P_MATH_SPAN(MUL_F16, 2),
+        [LOOM_TARGET_MATH_OP_DIVF] = LOOM_AIE2P_MATH_SPAN(DIV_F32, 2),
         [LOOM_TARGET_MATH_OP_ROUNDF] = LOOM_AIE2P_MATH_SPAN(ROUND, 1),
         [LOOM_TARGET_MATH_OP_ROUNDEVENF] = LOOM_AIE2P_MATH_SPAN(ROUNDEVEN, 1),
         [LOOM_TARGET_MATH_OP_TRUNCF] = LOOM_AIE2P_MATH_SPAN(TRUNC, 1),

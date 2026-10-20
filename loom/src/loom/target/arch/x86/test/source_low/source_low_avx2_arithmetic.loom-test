@@ -326,3 +326,24 @@ func.def @rotate_integer_family(%value_i1: vector<8xi1>, %amount_i1: vector<8xi1
 CHECK: COMPILE-REPORT: target_legalization * scalarized=0 * rows=10 *
 CHECK: COMPILE-REPORT: target_legalization[*] function=rotate_integer_family source_op=vector.rotli * scalarized=false *
 CHECK: COMPILE-REPORT: target_legalization[*] function=rotate_integer_family source_op=vector.rotri * scalarized=false *
+
+// ====
+// RUN: emit source-low target=x86:avx2 output=low
+
+// A final F32 packet lane retains its XMM carrier for the binary family.
+func.def @single_lane_float_arithmetic(%lhs: vector<1xf32>, %rhs: vector<1xf32>) -> (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) {
+  %sum = vector.addf %lhs, %rhs : vector<1xf32>
+  %difference = vector.subf %lhs, %rhs : vector<1xf32>
+  %product = vector.mulf %lhs, %rhs : vector<1xf32>
+  %quotient = vector.divf %lhs, %rhs : vector<1xf32>
+  func.return %sum, %difference, %product, %quotient : vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>
+}
+
+// ----
+low.func.def target<x86.avx2.core> abi(object_function) abi_layout({signature = (vector<1xf32>, vector<1xf32>) -> (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>)}) @single_lane_float_arithmetic(%lhs: reg<x86.xmm>, %rhs: reg<x86.xmm>) -> (reg<x86.xmm>, reg<x86.xmm>, reg<x86.xmm>, reg<x86.xmm>) asm {
+  %sum = vaddps.xmm %lhs, %rhs
+  %difference = vsubps.xmm %lhs, %rhs
+  %product = vmulps.xmm %lhs, %rhs
+  %quotient = vdivps.xmm %lhs, %rhs
+  return %sum, %difference, %product, %quotient
+}

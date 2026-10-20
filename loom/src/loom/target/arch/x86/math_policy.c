@@ -59,6 +59,8 @@ static const uint64_t kX86MathTargetFeatureMasks[] = {
     "math.op.native_rsqrt_estimate")                                         \
   _(OP_ROUNDING, op_rounding, "math.op.rounding")                            \
   _(OP_SUPPORTED, op_supported, "math.op.supported")                         \
+  _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                          \
+    "math.recipe.widen_f32_round")                                           \
   _(RECIPE_APPROXIMATE_COS_TURNS_F32, recipe_approximate_cos_turns_f32,      \
     "math.recipe.approximate_cos_turns_f32")                                 \
   _(RECIPE_APPROXIMATE_EXP2_F32, recipe_approximate_exp2_f32,                \
@@ -158,6 +160,7 @@ static const loom_target_math_policy_direct_rule_t
         LOOM_X86_MATH_NATIVE_RULE(ADDF),
         LOOM_X86_MATH_NATIVE_RULE(SUBF),
         LOOM_X86_MATH_NATIVE_RULE(MULF),
+        LOOM_X86_MATH_NATIVE_RULE(DIVF),
         LOOM_X86_MATH_NATIVE_RULE(SQRTF),
 #undef LOOM_X86_MATH_NATIVE_RULE
         [LOOM_TARGET_MATH_OP_RSQRTF] = LOOM_X86_MATH_DIRECT_RULE(
@@ -234,6 +237,7 @@ static const loom_target_math_policy_direct_rule_t
 
 enum loom_x86_math_rule_e {
   LOOM_X86_MATH_RULE_NATIVE_FP16 = 0,
+  LOOM_X86_MATH_RULE_DIV_NARROW,
   LOOM_X86_MATH_RULE_RSQRT_ESTIMATE_F64,
   LOOM_X86_MATH_RULE_RSQRT_ESTIMATE_F16,
   LOOM_X86_MATH_RULE_RSQRT_REFINE_F32,
@@ -256,6 +260,18 @@ static const loom_target_math_policy_rule_t
                     LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
                     LOOM_X86_MATH_FEATURE_CLASS_TARGET_FP16),
                 .decision_constraint = LOOM_X86_MATH_CONSTRAINT_OP_NATIVE_FLOAT,
+            },
+        [LOOM_X86_MATH_RULE_DIV_NARROW] =
+            {
+                .match =
+                    LOOM_X86_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+                                        LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,
+                                        LOOM_TARGET_MATH_POLICY_SHAPE_ANY, 0, 0,
+                                        LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
+                                        LOOM_X86_MATH_FEATURE_CLASS_NONE),
+                .recipe = LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND,
+                .decision_constraint =
+                    LOOM_X86_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
             },
         [LOOM_X86_MATH_RULE_RSQRT_ESTIMATE_F64] =
             {
@@ -390,6 +406,9 @@ static const loom_target_math_policy_rule_span_t
         LOOM_X86_MATH_NATIVE_SPAN(MULF),
         LOOM_X86_MATH_NATIVE_SPAN(SQRTF),
 #undef LOOM_X86_MATH_NATIVE_SPAN
+        [LOOM_TARGET_MATH_OP_DIVF] =
+            LOOM_X86_MATH_SPAN(LOOM_X86_MATH_RULE_NATIVE_FP16, 2,
+                               LOOM_X86_MATH_CONSTRAINT_ELEMENT_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_RSQRTF] = LOOM_X86_MATH_SPAN(
             LOOM_X86_MATH_RULE_RSQRT_ESTIMATE_F64,
             LOOM_X86_MATH_RULE_COUNT_ - LOOM_X86_MATH_RULE_RSQRT_ESTIMATE_F64,

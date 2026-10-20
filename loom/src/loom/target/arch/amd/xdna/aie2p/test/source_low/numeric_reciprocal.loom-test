@@ -1,6 +1,6 @@
 // RUN: emit source-low target=amd.xdna.aie2p:core output=low
 
-// The exact reciprocal path selects the native scalar instruction. General
+// Reciprocal permission selects the native scalar estimate. General
 // reciprocal multiplication is tracked in the expansion report.
 func.def @scalar_f32_reciprocal(%input: f32) -> (f32) {
   %numerator = scalar.constant 1.0 : f32
@@ -12,4 +12,46 @@ func.def @scalar_f32_reciprocal(%input: f32) -> (f32) {
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scalar_f32_reciprocal(%input: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %result = inv.f32 %input
   return %result
+}
+
+// ====
+
+// RUN: pass legalize-math
+
+aie2p.target<core> @target
+
+// Narrow forms share widening and preserve the native reciprocal permission.
+func.def target(@target) @narrow_division(%x: f16, %y: f16, %a: vector<3xbf16>, %b: vector<3xbf16>, %c: f8E4M3, %d: f8E5M2) -> (f16, vector<3xbf16>, f8E4M3, f8E5M2) {
+  %half = scalar.divf<arcp> %x, %y : f16
+  %bfloat = vector.divf<arcp> %a, %b : vector<3xbf16>
+  %one_e4 = scalar.constant 1.0 : f8E4M3
+  %one_e5 = scalar.constant 1.0 : f8E5M2
+  %e4 = scalar.divf<arcp> %one_e4, %c : f8E4M3
+  %e5 = scalar.divf<arcp> %one_e5, %d : f8E5M2
+  func.return %half, %bfloat, %e4, %e5 : f16, vector<3xbf16>, f8E4M3, f8E5M2
+}
+
+// ----
+aie2p.target<core> @target
+
+func.def target(@target) @narrow_division(%x: f16, %y: f16, %a: vector<3xbf16>, %b: vector<3xbf16>, %c: f8E4M3, %d: f8E5M2) -> (f16, vector<3xbf16>, f8E4M3, f8E5M2) {
+  %28 = scalar.extf %x : f16 to f32
+  %29 = scalar.extf %y : f16 to f32
+  %30 = scalar.divf<arcp> %28, %29 : f32
+  %half = scalar.fptrunc %30 : f32 to f16
+  %24 = vector.extf %a : vector<3xbf16> to vector<3xf32>
+  %25 = vector.extf %b : vector<3xbf16> to vector<3xf32>
+  %26 = vector.divf<arcp> %24, %25 : vector<3xf32>
+  %bfloat = vector.fptrunc %26 : vector<3xf32> to vector<3xbf16>
+  %one_e4 = scalar.constant 1.0 : f8E4M3
+  %one_e5 = scalar.constant 1.0 : f8E5M2
+  %20 = scalar.extf %one_e4 : f8E4M3 to f32
+  %21 = scalar.extf %c : f8E4M3 to f32
+  %22 = scalar.divf<arcp> %20, %21 : f32
+  %e4 = scalar.fptrunc %22 : f32 to f8E4M3
+  %16 = scalar.extf %one_e5 : f8E5M2 to f32
+  %17 = scalar.extf %d : f8E5M2 to f32
+  %18 = scalar.divf<arcp> %16, %17 : f32
+  %e5 = scalar.fptrunc %18 : f32 to f8E5M2
+  func.return %half, %bfloat, %e4, %e5 : f16, vector<3xbf16>, f8E4M3, f8E5M2
 }

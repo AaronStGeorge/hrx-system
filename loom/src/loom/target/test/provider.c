@@ -81,6 +81,14 @@ static const loom_target_math_policy_direct_rule_t
             LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, 0,
             LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
             LOOM_TEST_MATH_CONSTRAINT_NONE),
+        [LOOM_TARGET_MATH_OP_DIVF] = LOOM_TARGET_MATH_POLICY_DIRECT_RULE(
+            LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,
+            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
+            LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
+            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, 0,
+            LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
+            LOOM_TEST_MATH_CONSTRAINT_NONE),
 };
 
 static const loom_target_math_policy_rule_t kTestWidenMathRules[] = {
@@ -95,6 +103,11 @@ static const loom_target_math_policy_rule_t kTestWidenMathRules[] = {
 static const loom_target_math_policy_rule_span_t
     kTestWidenMathOperationSpans[LOOM_TARGET_MATH_OP_COUNT] = {
         [LOOM_TARGET_MATH_OP_MULF] =
+            {
+                .rule_count = IREE_ARRAYSIZE(kTestWidenMathRules),
+                .fallback_constraint = LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
+            },
+        [LOOM_TARGET_MATH_OP_DIVF] =
             {
                 .rule_count = IREE_ARRAYSIZE(kTestWidenMathRules),
                 .fallback_constraint = LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,

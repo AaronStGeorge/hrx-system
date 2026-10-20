@@ -173,6 +173,7 @@ loom_corpus_test(
     profile_sources = {
         VM_REFERENCE_PROFILE.name: [
             "numeric/float/exponent.loom",
+            "numeric/float/reciprocal.loom",
             "numeric/float/inverse_hyperbolic.loom",
             "numeric/float/inverse_hyperbolic_narrow.loom",
         ],

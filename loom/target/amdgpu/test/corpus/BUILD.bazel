@@ -70,6 +70,7 @@ _ADAPTER_ONLY_SCENARIOS = [
     "numeric/float/classification.loom",
     "numeric/float/comparison.loom",
     "numeric/float/exponent.loom",
+    "numeric/float/reciprocal.loom",
     "numeric/float/exponential.loom",
     "numeric/float/extrema.loom",
     "numeric/float/half_extrema.loom",

@@ -362,7 +362,8 @@ def avx2_vector_arithmetic_rules(
         *direct_vector_family_rules(
             descriptor_lookup,
             descriptor_key_prefix="x86.avx2",
-            vector_bit_widths=AVX2_FLOAT_VECTOR_BIT_WIDTHS,
+            # Packet tails can retain one F32 lane in an XMM carrier.
+            vector_bit_widths=(32, *AVX2_FLOAT_VECTOR_BIT_WIDTHS),
             integer_families=(),
             float_families=AVX2_FLOAT_BINARY_FAMILIES,
         ),

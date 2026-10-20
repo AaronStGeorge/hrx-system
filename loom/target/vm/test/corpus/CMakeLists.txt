@@ -451,6 +451,7 @@ loom_corpus_test(
     "function"
   SOURCES
     "numeric/float/exponent.loom"
+    "numeric/float/reciprocal.loom"
     "numeric/float/inverse_hyperbolic.loom"
     "numeric/float/inverse_hyperbolic_narrow.loom"
   LABELS

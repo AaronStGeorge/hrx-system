@@ -1,0 +1,133 @@
+// RUN: roundtrip
+#include <loomcxx/math.h>
+
+template <class Float>
+Float evaluate(Float numerator, Float denominator) {
+  return loom::reciprocal(denominator) +
+         loom::divide_reciprocal(numerator, denominator);
+}
+
+double double_precision(double x, double y) { return evaluate(x, y); }
+float single_precision(float x, float y) { return evaluate(x, y); }
+_Float16 half_precision(_Float16 x, _Float16 y) { return evaluate(x, y); }
+__bf16 bfloat_precision(__bf16 x, __bf16 y) { return evaluate(x, y); }
+__float8_e4m3fn e4m3(__float8_e4m3fn x, __float8_e4m3fn y) {
+  return evaluate(x, y);
+}
+__float8_e5m2 e5m2(__float8_e5m2 x, __float8_e5m2 y) {
+  return evaluate(x, y);
+}
+
+// ----
+func.def public @double_precision(%x: f64, %y: f64) -> (f64) {
+  %3 = func.call pure @evaluate_double(%x, %y) : (f64, f64) -> (f64)
+  func.return %3 : f64
+}
+
+func.def public @single_precision(%x: f32, %y: f32) -> (f32) {
+  %7 = func.call pure @evaluate_float(%x, %y) : (f32, f32) -> (f32)
+  func.return %7 : f32
+}
+
+func.def public @half_precision(%x: f16, %y: f16) -> (f16) {
+  %11 = func.call pure @evaluate__Float16(%x, %y) : (f16, f16) -> (f16)
+  func.return %11 : f16
+}
+
+func.def public @bfloat_precision(%x: bf16, %y: bf16) -> (bf16) {
+  %15 = func.call pure @evaluate___bf16(%x, %y) : (bf16, bf16) -> (bf16)
+  func.return %15 : bf16
+}
+
+func.def public @e4m3(%x: f8E4M3, %y: f8E4M3) -> (f8E4M3) {
+  %19 = func.call pure @evaluate___float8_e4m3fn(%x, %y) : (f8E4M3, f8E4M3) -> (f8E4M3)
+  func.return %19 : f8E4M3
+}
+
+func.def public @e5m2(%x: f8E5M2, %y: f8E5M2) -> (f8E5M2) {
+  %23 = func.call pure @evaluate___float8_e5m2(%x, %y) : (f8E5M2, f8E5M2) -> (f8E5M2)
+  func.return %23 : f8E5M2
+}
+
+func.def @evaluate_double(%numerator: f64, %denominator: f64) -> (f64) {
+  %27 = func.call pure @loom__reciprocal_double(%denominator) : (f64) -> (f64)
+  %28 = scalar.divf<arcp> %numerator, %denominator : f64
+  %29 = scalar.addf %27, %28 : f64
+  func.return %29 : f64
+}
+
+func.def @evaluate_float(%numerator: f32, %denominator: f32) -> (f32) {
+  %33 = func.call pure @loom__reciprocal_float(%denominator) : (f32) -> (f32)
+  %34 = scalar.divf<arcp> %numerator, %denominator : f32
+  %35 = scalar.addf %33, %34 : f32
+  func.return %35 : f32
+}
+
+func.def @evaluate__Float16(%numerator: f16, %denominator: f16) -> (f16) {
+  %39 = func.call pure @loom__reciprocal__Float16(%denominator) : (f16) -> (f16)
+  %40 = scalar.divf<arcp> %numerator, %denominator : f16
+  %41 = scalar.addf %39, %40 : f16
+  func.return %41 : f16
+}
+
+func.def @evaluate___bf16(%numerator: bf16, %denominator: bf16) -> (bf16) {
+  %45 = func.call pure @loom__reciprocal___bf16(%denominator) : (bf16) -> (bf16)
+  %46 = scalar.divf<arcp> %numerator, %denominator : bf16
+  %47 = scalar.addf %45, %46 : bf16
+  func.return %47 : bf16
+}
+
+func.def @evaluate___float8_e4m3fn(%numerator: f8E4M3, %denominator: f8E4M3) -> (f8E4M3) {
+  %51 = func.call pure @loom__reciprocal___float8_e4m3fn(%denominator) : (f8E4M3) -> (f8E4M3)
+  %52 = scalar.divf<arcp> %numerator, %denominator : f8E4M3
+  %53 = scalar.addf %51, %52 : f8E4M3
+  func.return %53 : f8E4M3
+}
+
+func.def @evaluate___float8_e5m2(%numerator: f8E5M2, %denominator: f8E5M2) -> (f8E5M2) {
+  %57 = func.call pure @loom__reciprocal___float8_e5m2(%denominator) : (f8E5M2) -> (f8E5M2)
+  %58 = scalar.divf<arcp> %numerator, %denominator : f8E5M2
+  %59 = scalar.addf %57, %58 : f8E5M2
+  func.return %59 : f8E5M2
+}
+
+func.def device inline @loom__reciprocal_double(%value: f64) -> (f64) {
+  %62 = scalar.constant 1.0 : f64
+  %63 = scalar.divf<arcp> %62, %value : f64
+  func.return %63 : f64
+}
+
+func.def device inline @loom__reciprocal_float(%value: f32) -> (f32) {
+  %66 = scalar.constant 1.0 : f64
+  %67 = scalar.fptrunc %66 : f64 to f32
+  %68 = scalar.divf<arcp> %67, %value : f32
+  func.return %68 : f32
+}
+
+func.def device inline @loom__reciprocal__Float16(%value: f16) -> (f16) {
+  %71 = scalar.constant 1.0 : f64
+  %72 = scalar.fptrunc %71 : f64 to f16
+  %73 = scalar.divf<arcp> %72, %value : f16
+  func.return %73 : f16
+}
+
+func.def device inline @loom__reciprocal___bf16(%value: bf16) -> (bf16) {
+  %76 = scalar.constant 1.0 : f64
+  %77 = scalar.fptrunc %76 : f64 to bf16
+  %78 = scalar.divf<arcp> %77, %value : bf16
+  func.return %78 : bf16
+}
+
+func.def device inline @loom__reciprocal___float8_e4m3fn(%value: f8E4M3) -> (f8E4M3) {
+  %81 = scalar.constant 1.0 : f64
+  %82 = scalar.fptrunc %81 : f64 to f8E4M3
+  %83 = scalar.divf<arcp> %82, %value : f8E4M3
+  func.return %83 : f8E4M3
+}
+
+func.def device inline @loom__reciprocal___float8_e5m2(%value: f8E5M2) -> (f8E5M2) {
+  %86 = scalar.constant 1.0 : f64
+  %87 = scalar.fptrunc %86 : f64 to f8E5M2
+  %88 = scalar.divf<arcp> %87, %value : f8E5M2
+  func.return %88 : f8E5M2
+}

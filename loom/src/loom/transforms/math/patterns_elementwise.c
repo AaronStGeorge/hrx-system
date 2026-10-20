@@ -823,6 +823,12 @@ static void loom_math_legalize_binary_source_initialize(
       out_source->fastmath_flags = loom_scalar_mulf_fastmath(op);
       out_source->binary_build = loom_scalar_mulf_build;
       return;
+    case LOOM_OP_SCALAR_DIVF:
+      out_source->lhs = loom_scalar_divf_lhs(op);
+      out_source->rhs = loom_scalar_divf_rhs(op);
+      out_source->fastmath_flags = loom_scalar_divf_fastmath(op);
+      out_source->binary_build = loom_scalar_divf_build;
+      return;
     case LOOM_OP_VECTOR_ADDF:
       out_source->lhs = loom_vector_addf_lhs(op);
       out_source->rhs = loom_vector_addf_rhs(op);
@@ -840,6 +846,12 @@ static void loom_math_legalize_binary_source_initialize(
       out_source->rhs = loom_vector_mulf_rhs(op);
       out_source->fastmath_flags = loom_vector_mulf_fastmath(op);
       out_source->binary_build = loom_vector_mulf_build;
+      return;
+    case LOOM_OP_VECTOR_DIVF:
+      out_source->lhs = loom_vector_divf_lhs(op);
+      out_source->rhs = loom_vector_divf_rhs(op);
+      out_source->fastmath_flags = loom_vector_divf_fastmath(op);
+      out_source->binary_build = loom_vector_divf_build;
       return;
     default:
       break;

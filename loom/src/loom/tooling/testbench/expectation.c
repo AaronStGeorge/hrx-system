@@ -430,6 +430,10 @@ static iree_status_t loom_testbench_compare_buffer_exact(
 static double loom_testbench_dense_floating_element_as_f64(
     iree_hal_element_type_t element_type, const uint8_t* element_data) {
   switch (element_type) {
+    case IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FN:
+      return (double)iree_math_f8e4m3fn_to_f32(*element_data);
+    case IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2:
+      return (double)iree_math_f8e5m2_to_f32(*element_data);
     case IREE_HAL_ELEMENT_TYPE_FLOAT_16: {
       uint16_t bits = 0;
       memcpy(&bits, element_data, sizeof(bits));
@@ -457,7 +461,9 @@ static double loom_testbench_dense_floating_element_as_f64(
 
 static bool loom_testbench_hal_element_type_is_close_supported(
     iree_hal_element_type_t element_type) {
-  return element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_16 ||
+  return element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FN ||
+         element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2 ||
+         element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_16 ||
          element_type == IREE_HAL_ELEMENT_TYPE_BFLOAT_16 ||
          element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_32 ||
          element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_64;
