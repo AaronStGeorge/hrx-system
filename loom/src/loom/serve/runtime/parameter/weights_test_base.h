@@ -300,7 +300,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
           .backing = elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
                              : LOOM_SERVE_DEVICE_BACKING_FIXED,
           .weight_slab_size = slab_size,
-          .state_slab_size = kSlabBytes,
+          .state_slab_size = slab_size,
           .memory_limit =
               elastic ? (memory_limit ? memory_limit : 2 * slab_size) : 0,
       };
