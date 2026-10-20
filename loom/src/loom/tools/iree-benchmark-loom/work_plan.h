@@ -101,6 +101,8 @@ typedef struct iree_benchmark_loom_work_plan_t {
 } iree_benchmark_loom_work_plan_t;
 
 // Builds a selected benchmark and deduplicated physical work plan.
+// Logical samples retain selection order. Shared work and compile products use
+// the first selected representative, preserving its execution order.
 iree_status_t iree_benchmark_loom_work_plan_initialize(
     const loom_testbench_module_plan_t* module_plan,
     const iree_benchmark_loom_options_t* options, iree_allocator_t allocator,
