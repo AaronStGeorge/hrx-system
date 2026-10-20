@@ -513,23 +513,7 @@ def test_native_scalar_float_contracts_cover_both_widths() -> None:
         for type_name in ("f32", "f64")
     }
 
-    direct_predicates = {
-        "oeq": "eq",
-        "ogt": "gt",
-        "oge": "ge",
-        "olt": "lt",
-        "ole": "le",
-        "une": "ne",
-    }
-    no_nan_predicates = {
-        "one": "ne",
-        "ueq": "eq",
-        "ugt": "gt",
-        "uge": "ge",
-        "ult": "lt",
-        "ule": "le",
-    }
-    actual_comparisons = set()
+    actual_comparisons = {}
     for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
         if (
             not isinstance(rule, DescriptorRule)
@@ -548,18 +532,54 @@ def test_native_scalar_float_contracts_cover_both_widths() -> None:
             guard.kind is GuardKind.INSTANCE_FLAGS_HAS_ALL and guard.field == "fastmath"
             for guard in rule.guards
         )
-        actual_comparisons.add(
-            (operand_type.elements[0], predicate, no_nan, rule.descriptor.key)
+        key = (operand_type.elements[0], predicate, no_nan)
+        assert key not in actual_comparisons
+        actual_comparisons[key] = tuple(emit.descriptor.key for emit in rule.emit)
+        mechanism = "native" if len(rule.emit) == 1 else "composed"
+        assert rule.report_key == (
+            f"wasm.scalar_float_compare.{mechanism}" + (".nnan" if no_nan else "")
         )
-    assert actual_comparisons == {
-        (type_name, predicate, no_nan, f"wasm.{type_name}.{operation}")
-        for type_name in ("f32", "f64")
-        for no_nan, predicates in (
-            (False, direct_predicates),
-            (True, no_nan_predicates),
-        )
-        for predicate, operation in predicates.items()
-    }
+        assert rule.priority == (1 if no_nan else 0)
+
+    expected_comparisons = {}
+    for type_name in ("f32", "f64"):
+        native_prefix = f"wasm.{type_name}."
+
+        strict = {
+            "oeq": (native_prefix + "eq",),
+            "ogt": (native_prefix + "gt",),
+            "oge": (native_prefix + "ge",),
+            "olt": (native_prefix + "lt",),
+            "ole": (native_prefix + "le",),
+            "one": (native_prefix + "lt", native_prefix + "gt", "wasm.i32.or"),
+            "ord": (native_prefix + "eq", native_prefix + "eq", "wasm.i32.and"),
+            "ueq": (
+                native_prefix + "lt",
+                native_prefix + "gt",
+                "wasm.i32.or",
+                "wasm.i32.eqz",
+            ),
+            "ugt": (native_prefix + "le", "wasm.i32.eqz"),
+            "uge": (native_prefix + "lt", "wasm.i32.eqz"),
+            "ult": (native_prefix + "ge", "wasm.i32.eqz"),
+            "ule": (native_prefix + "gt", "wasm.i32.eqz"),
+            "une": (native_prefix + "ne",),
+            "uno": (native_prefix + "ne", native_prefix + "ne", "wasm.i32.or"),
+        }
+        for predicate, descriptors in strict.items():
+            expected_comparisons[(type_name, predicate, False)] = descriptors
+        for predicate, operation in {
+            "one": "ne",
+            "ueq": "eq",
+            "ugt": "gt",
+            "uge": "ge",
+            "ult": "lt",
+            "ule": "le",
+        }.items():
+            expected_comparisons[(type_name, predicate, True)] = (
+                native_prefix + operation,
+            )
+    assert actual_comparisons == expected_comparisons
 
 
 def test_native_vector_float_contracts_cover_every_carrier_lane() -> None:

@@ -70,7 +70,13 @@ from loom.target.contracts.templates import (
 )
 from loom.target.emit.wasm.float_extension import float_extension_rules
 from loom.target.emit.wasm.float_narrowing import float_narrowing_rules
-from loom.target.emit.wasm.predicate import predicate_rules
+from loom.target.emit.wasm.predicate import (
+    FLOAT_PREDICATE_RECIPES,
+    FLOAT_PREDICATES,
+    NATIVE_FLOAT_PREDICATE_OPERATIONS,
+    NNAN_FLOAT_PREDICATES,
+    predicate_rules,
+)
 from loom.target.emit.wasm.vector_integer_arithmetic import (
     integer_arithmetic_rules,
 )
@@ -1005,6 +1011,94 @@ def _scalar_compare_rule(
     )
 
 
+def _scalar_float_compare_rule(
+    predicate: str,
+    operand_type: TypePattern,
+    type_name: str,
+    *,
+    emitted_predicate: str | None = None,
+    guards: tuple[Guard, ...] = (),
+    priority: int = 0,
+    suffix: str = "",
+) -> DescriptorRule:
+    recipe = FLOAT_PREDICATE_RECIPES[emitted_predicate or predicate]
+    operands = {
+        "lhs": ValueRef.operand("lhs"),
+        "rhs": ValueRef.operand("rhs"),
+    }
+    emits = []
+    term_values = []
+    direct = len(recipe.terms) == 1 and recipe.combine is None and not recipe.negate
+    for term_index, term in enumerate(recipe.terms):
+        term_result = (
+            ValueRef.result("result")
+            if direct
+            else ValueRef.temporary(f"predicate_term_{term_index}")
+        )
+        emits.append(
+            EmitDescriptorOp(
+                descriptor=_descriptor(
+                    f"wasm.{type_name}."
+                    f"{NATIVE_FLOAT_PREDICATE_OPERATIONS[term.native_predicate]}"
+                ),
+                operands={
+                    "lhs": operands[term.lhs],
+                    "rhs": operands[term.rhs],
+                },
+                results={"dst": term_result},
+                result_types={"dst": _I32} if not direct else None,
+                form=DescriptorEmitForm.OP,
+            )
+        )
+        term_values.append(term_result)
+
+    combined = term_values[0]
+    if recipe.combine is not None:
+        combined = (
+            ValueRef.temporary("predicate_combined")
+            if recipe.negate
+            else ValueRef.result("result")
+        )
+        emits.append(
+            EmitDescriptorOp(
+                descriptor=_descriptor(f"wasm.i32.{recipe.combine}"),
+                operands={"lhs": term_values[0], "rhs": term_values[1]},
+                results={"dst": combined},
+                result_types={"dst": _I32} if recipe.negate else None,
+                form=DescriptorEmitForm.OP,
+            )
+        )
+
+    if recipe.negate:
+        emits.append(
+            EmitDescriptorOp(
+                descriptor=_descriptor("wasm.i32.eqz"),
+                operands={"input": combined},
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            )
+        )
+
+    mechanism = "native" if len(emits) == 1 else "composed"
+    report_key = f"wasm.scalar_float_compare.{mechanism}"
+    if suffix:
+        report_key += f".{suffix}"
+    return DescriptorRule(
+        source_op=scalar_comparison.scalar_cmpf,
+        descriptor=emits[-1].descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate),
+            _value_type("lhs", operand_type),
+            _value_type("rhs", operand_type),
+            _value_type("result", _I1),
+            *guards,
+        ),
+        emit=tuple(emits),
+        priority=priority,
+        report_key=report_key,
+    )
+
+
 def _extract_rule(
     source_type: TypePattern,
     result_type: TypePattern,
@@ -1585,39 +1679,22 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             )
         ),
         *(
-            _scalar_compare_rule(
-                scalar_comparison.scalar_cmpf,
-                predicate,
-                value_type,
-                f"wasm.{type_name}.{operation}",
-            )
+            _scalar_float_compare_rule(predicate, value_type, type_name)
             for value_type, type_name in ((_F32, "f32"), (_F64, "f64"))
-            for predicate, operation in (
-                ("oeq", "eq"),
-                ("ogt", "gt"),
-                ("oge", "ge"),
-                ("olt", "lt"),
-                ("ole", "le"),
-                ("une", "ne"),
-            )
+            for predicate in FLOAT_PREDICATES
         ),
         *(
-            _scalar_compare_rule(
-                scalar_comparison.scalar_cmpf,
+            _scalar_float_compare_rule(
                 predicate,
                 value_type,
-                f"wasm.{type_name}.{operation}",
+                type_name,
+                emitted_predicate=native_predicate,
                 guards=(Guard.instance_flags_has_all("fastmath", "nnan"),),
+                priority=1,
+                suffix="nnan",
             )
             for value_type, type_name in ((_F32, "f32"), (_F64, "f64"))
-            for predicate, operation in (
-                ("one", "ne"),
-                ("ueq", "eq"),
-                ("ugt", "gt"),
-                ("uge", "ge"),
-                ("ult", "lt"),
-                ("ule", "le"),
-            )
+            for predicate, native_predicate in NNAN_FLOAT_PREDICATES.items()
         ),
         *(
             _scalar_compare_rule(

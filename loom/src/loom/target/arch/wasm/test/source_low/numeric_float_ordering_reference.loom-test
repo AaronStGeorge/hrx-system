@@ -11,34 +11,38 @@ func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f3
 
 // ----
 func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f32, f32, f32, f32, f32) {
-  %55 = scalar.bitcast %lhs : f32 to i32
-  %56 = scalar.bitcast %rhs : f32 to i32
-  %57 = scalar.ori %55, %56 : i32
-  %58 = scalar.bitcast %57 : i32 to f32
-  %59 = scalar.cmpf olt, %lhs, %rhs : f32
-  %60 = scalar.cmpf olt, %rhs, %lhs : f32
-  %61 = scf.select %60, %rhs, %58 : f32
-  %62 = scf.select %59, %lhs, %61 : f32
-  %63 = scalar.cmpf une, %lhs, %lhs : f32
-  %64 = scalar.cmpf une, %rhs, %rhs : f32
-  %65 = scf.select %64, %lhs, %62 : f32
-  %minnum = scf.select %63, %rhs, %65 : f32
-  %43 = scalar.bitcast %lhs : f32 to i32
-  %44 = scalar.bitcast %rhs : f32 to i32
-  %45 = scalar.andi %43, %44 : i32
-  %46 = scalar.bitcast %45 : i32 to f32
-  %47 = scalar.cmpf ogt, %lhs, %rhs : f32
-  %48 = scalar.cmpf ogt, %rhs, %lhs : f32
-  %49 = scf.select %48, %rhs, %46 : f32
-  %50 = scf.select %47, %lhs, %49 : f32
-  %51 = scalar.cmpf une, %lhs, %lhs : f32
-  %52 = scalar.cmpf une, %rhs, %rhs : f32
-  %53 = scf.select %52, %lhs, %50 : f32
-  %maxnum = scf.select %51, %rhs, %53 : f32
-  %39 = scalar.cmpf olt, %value, %lhs : f32
-  %40 = scf.select %39, %lhs, %value : f32
-  %41 = scalar.cmpf ogt, %40, %rhs : f32
-  %ordered = scf.select %41, %rhs, %40 : f32
+  %61 = scalar.bitcast %lhs : f32 to i32
+  %62 = scalar.bitcast %rhs : f32 to i32
+  %63 = scalar.ori %61, %62 : i32
+  %64 = scalar.bitcast %63 : i32 to f32
+  %65 = scalar.cmpf olt, %lhs, %rhs : f32
+  %66 = scalar.cmpf olt, %rhs, %lhs : f32
+  %67 = scf.select %66, %rhs, %64 : f32
+  %68 = scf.select %65, %lhs, %67 : f32
+  %69 = scalar.cmpf une, %lhs, %lhs : f32
+  %70 = scalar.cmpf une, %rhs, %rhs : f32
+  %71 = scalar.constant nan : f32
+  %72 = scf.select %70, %71, %rhs : f32
+  %73 = scf.select %70, %lhs, %68 : f32
+  %minnum = scf.select %69, %72, %73 : f32
+  %47 = scalar.bitcast %lhs : f32 to i32
+  %48 = scalar.bitcast %rhs : f32 to i32
+  %49 = scalar.andi %47, %48 : i32
+  %50 = scalar.bitcast %49 : i32 to f32
+  %51 = scalar.cmpf ogt, %lhs, %rhs : f32
+  %52 = scalar.cmpf ogt, %rhs, %lhs : f32
+  %53 = scf.select %52, %rhs, %50 : f32
+  %54 = scf.select %51, %lhs, %53 : f32
+  %55 = scalar.cmpf une, %lhs, %lhs : f32
+  %56 = scalar.cmpf une, %rhs, %rhs : f32
+  %57 = scalar.constant nan : f32
+  %58 = scf.select %56, %57, %rhs : f32
+  %59 = scf.select %56, %lhs, %54 : f32
+  %maxnum = scf.select %55, %58, %59 : f32
+  %43 = scalar.cmpf olt, %value, %lhs : f32
+  %44 = scf.select %43, %lhs, %value : f32
+  %45 = scalar.cmpf ogt, %44, %rhs : f32
+  %ordered = scf.select %45, %rhs, %44 : f32
   %15 = scalar.bitcast %value : f32 to i32
   %16 = scalar.bitcast %lhs : f32 to i32
   %17 = scalar.andi %15, %16 : i32
@@ -49,20 +53,24 @@ func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f3
   %22 = scf.select %19, %value, %21 : f32
   %23 = scalar.cmpf une, %value, %value : f32
   %24 = scalar.cmpf une, %lhs, %lhs : f32
-  %25 = scf.select %24, %value, %22 : f32
-  %26 = scf.select %23, %lhs, %25 : f32
-  %27 = scalar.bitcast %26 : f32 to i32
-  %28 = scalar.bitcast %rhs : f32 to i32
-  %29 = scalar.ori %27, %28 : i32
-  %30 = scalar.bitcast %29 : i32 to f32
-  %31 = scalar.cmpf olt, %26, %rhs : f32
-  %32 = scalar.cmpf olt, %rhs, %26 : f32
-  %33 = scf.select %32, %rhs, %30 : f32
-  %34 = scf.select %31, %26, %33 : f32
-  %35 = scalar.cmpf une, %26, %26 : f32
-  %36 = scalar.cmpf une, %rhs, %rhs : f32
-  %37 = scf.select %36, %26, %34 : f32
-  %number = scf.select %35, %rhs, %37 : f32
+  %25 = scalar.constant nan : f32
+  %26 = scf.select %24, %25, %lhs : f32
+  %27 = scf.select %24, %value, %22 : f32
+  %28 = scf.select %23, %26, %27 : f32
+  %29 = scalar.bitcast %28 : f32 to i32
+  %30 = scalar.bitcast %rhs : f32 to i32
+  %31 = scalar.ori %29, %30 : i32
+  %32 = scalar.bitcast %31 : i32 to f32
+  %33 = scalar.cmpf olt, %28, %rhs : f32
+  %34 = scalar.cmpf olt, %rhs, %28 : f32
+  %35 = scf.select %34, %rhs, %32 : f32
+  %36 = scf.select %33, %28, %35 : f32
+  %37 = scalar.cmpf une, %28, %28 : f32
+  %38 = scalar.cmpf une, %rhs, %rhs : f32
+  %39 = scalar.constant nan : f32
+  %40 = scf.select %38, %39, %rhs : f32
+  %41 = scf.select %38, %28, %36 : f32
+  %number = scf.select %37, %40, %41 : f32
   %13 = scalar.maximumf %value, %lhs : f32
   %ieee = scalar.minimumf %13, %rhs : f32
   func.return %minnum, %maxnum, %ordered, %number, %ieee : f32, f32, f32, f32, f32
@@ -83,34 +91,38 @@ func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f6
 
 // ----
 func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f64, f64, f64, f64, f64) {
-  %55 = scalar.bitcast %lhs : f64 to i64
-  %56 = scalar.bitcast %rhs : f64 to i64
-  %57 = scalar.ori %55, %56 : i64
-  %58 = scalar.bitcast %57 : i64 to f64
-  %59 = scalar.cmpf olt, %lhs, %rhs : f64
-  %60 = scalar.cmpf olt, %rhs, %lhs : f64
-  %61 = scf.select %60, %rhs, %58 : f64
-  %62 = scf.select %59, %lhs, %61 : f64
-  %63 = scalar.cmpf une, %lhs, %lhs : f64
-  %64 = scalar.cmpf une, %rhs, %rhs : f64
-  %65 = scf.select %64, %lhs, %62 : f64
-  %minnum = scf.select %63, %rhs, %65 : f64
-  %43 = scalar.bitcast %lhs : f64 to i64
-  %44 = scalar.bitcast %rhs : f64 to i64
-  %45 = scalar.andi %43, %44 : i64
-  %46 = scalar.bitcast %45 : i64 to f64
-  %47 = scalar.cmpf ogt, %lhs, %rhs : f64
-  %48 = scalar.cmpf ogt, %rhs, %lhs : f64
-  %49 = scf.select %48, %rhs, %46 : f64
-  %50 = scf.select %47, %lhs, %49 : f64
-  %51 = scalar.cmpf une, %lhs, %lhs : f64
-  %52 = scalar.cmpf une, %rhs, %rhs : f64
-  %53 = scf.select %52, %lhs, %50 : f64
-  %maxnum = scf.select %51, %rhs, %53 : f64
-  %39 = scalar.cmpf olt, %value, %lhs : f64
-  %40 = scf.select %39, %lhs, %value : f64
-  %41 = scalar.cmpf ogt, %40, %rhs : f64
-  %ordered = scf.select %41, %rhs, %40 : f64
+  %61 = scalar.bitcast %lhs : f64 to i64
+  %62 = scalar.bitcast %rhs : f64 to i64
+  %63 = scalar.ori %61, %62 : i64
+  %64 = scalar.bitcast %63 : i64 to f64
+  %65 = scalar.cmpf olt, %lhs, %rhs : f64
+  %66 = scalar.cmpf olt, %rhs, %lhs : f64
+  %67 = scf.select %66, %rhs, %64 : f64
+  %68 = scf.select %65, %lhs, %67 : f64
+  %69 = scalar.cmpf une, %lhs, %lhs : f64
+  %70 = scalar.cmpf une, %rhs, %rhs : f64
+  %71 = scalar.constant nan : f64
+  %72 = scf.select %70, %71, %rhs : f64
+  %73 = scf.select %70, %lhs, %68 : f64
+  %minnum = scf.select %69, %72, %73 : f64
+  %47 = scalar.bitcast %lhs : f64 to i64
+  %48 = scalar.bitcast %rhs : f64 to i64
+  %49 = scalar.andi %47, %48 : i64
+  %50 = scalar.bitcast %49 : i64 to f64
+  %51 = scalar.cmpf ogt, %lhs, %rhs : f64
+  %52 = scalar.cmpf ogt, %rhs, %lhs : f64
+  %53 = scf.select %52, %rhs, %50 : f64
+  %54 = scf.select %51, %lhs, %53 : f64
+  %55 = scalar.cmpf une, %lhs, %lhs : f64
+  %56 = scalar.cmpf une, %rhs, %rhs : f64
+  %57 = scalar.constant nan : f64
+  %58 = scf.select %56, %57, %rhs : f64
+  %59 = scf.select %56, %lhs, %54 : f64
+  %maxnum = scf.select %55, %58, %59 : f64
+  %43 = scalar.cmpf olt, %value, %lhs : f64
+  %44 = scf.select %43, %lhs, %value : f64
+  %45 = scalar.cmpf ogt, %44, %rhs : f64
+  %ordered = scf.select %45, %rhs, %44 : f64
   %15 = scalar.bitcast %value : f64 to i64
   %16 = scalar.bitcast %lhs : f64 to i64
   %17 = scalar.andi %15, %16 : i64
@@ -121,20 +133,24 @@ func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f6
   %22 = scf.select %19, %value, %21 : f64
   %23 = scalar.cmpf une, %value, %value : f64
   %24 = scalar.cmpf une, %lhs, %lhs : f64
-  %25 = scf.select %24, %value, %22 : f64
-  %26 = scf.select %23, %lhs, %25 : f64
-  %27 = scalar.bitcast %26 : f64 to i64
-  %28 = scalar.bitcast %rhs : f64 to i64
-  %29 = scalar.ori %27, %28 : i64
-  %30 = scalar.bitcast %29 : i64 to f64
-  %31 = scalar.cmpf olt, %26, %rhs : f64
-  %32 = scalar.cmpf olt, %rhs, %26 : f64
-  %33 = scf.select %32, %rhs, %30 : f64
-  %34 = scf.select %31, %26, %33 : f64
-  %35 = scalar.cmpf une, %26, %26 : f64
-  %36 = scalar.cmpf une, %rhs, %rhs : f64
-  %37 = scf.select %36, %26, %34 : f64
-  %number = scf.select %35, %rhs, %37 : f64
+  %25 = scalar.constant nan : f64
+  %26 = scf.select %24, %25, %lhs : f64
+  %27 = scf.select %24, %value, %22 : f64
+  %28 = scf.select %23, %26, %27 : f64
+  %29 = scalar.bitcast %28 : f64 to i64
+  %30 = scalar.bitcast %rhs : f64 to i64
+  %31 = scalar.ori %29, %30 : i64
+  %32 = scalar.bitcast %31 : i64 to f64
+  %33 = scalar.cmpf olt, %28, %rhs : f64
+  %34 = scalar.cmpf olt, %rhs, %28 : f64
+  %35 = scf.select %34, %rhs, %32 : f64
+  %36 = scf.select %33, %28, %35 : f64
+  %37 = scalar.cmpf une, %28, %28 : f64
+  %38 = scalar.cmpf une, %rhs, %rhs : f64
+  %39 = scalar.constant nan : f64
+  %40 = scf.select %38, %39, %rhs : f64
+  %41 = scf.select %38, %28, %36 : f64
+  %number = scf.select %37, %40, %41 : f64
   %13 = scalar.maximumf %value, %lhs : f64
   %ieee = scalar.minimumf %13, %rhs : f64
   func.return %minnum, %maxnum, %ordered, %number, %ieee : f64, f64, f64, f64, f64
@@ -285,6 +301,27 @@ func.def @vector_f64_reference_extrema(%value: vector<2xf64>, %lhs: vector<2xf64
 }
 
 // ====
+
+// RUN: with-checks pass target=wasm:simd128 target-legalize{mode=final}
+
+// Every narrow scalar encoding shares the exact widen-to-F32 comparison path.
+func.def @scalar_narrow_reference_comparisons(%e4_lhs: f8E4M3, %e4_rhs: f8E4M3, %e5_lhs: f8E5M2, %e5_rhs: f8E5M2, %f16_lhs: f16, %f16_rhs: f16, %bf16_lhs: bf16, %bf16_rhs: bf16) -> (i1, i1, i1, i1) {
+  %e4_one = scalar.cmpf one, %e4_lhs, %e4_rhs : f8E4M3
+  %e5_ord = scalar.cmpf ord, %e5_lhs, %e5_rhs : f8E5M2
+  %f16_ueq = scalar.cmpf ueq, %f16_lhs, %f16_rhs : f16
+  %bf16_uno = scalar.cmpf uno, %bf16_lhs, %bf16_rhs : bf16
+  func.return %e4_one, %e5_ord, %f16_ueq, %bf16_uno : i1, i1, i1, i1
+}
+
+// ----
+CHECK: %e4_one = scalar.cmpf one, *, * : f32
+CHECK: %e5_ord = scalar.cmpf ord, *, * : f32
+CHECK: %f16_ueq = scalar.cmpf ueq, *, * : f32
+CHECK: %bf16_uno = scalar.cmpf uno, *, * : f32
+
+// ====
+
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
 
 // Narrow comparisons widen exactly to F32 while retaining the canonical
 // four-lane Wasm predicate carrier. Full-width arguments keep the authored

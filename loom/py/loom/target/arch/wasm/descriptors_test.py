@@ -78,6 +78,18 @@ def test_shuffle_has_sixteen_required_lanes_from_both_inputs():
         assert not immediate.flags
 
 
+def test_i32_eqz_descriptor_uses_the_native_scalar_encoding():
+    descriptor = next(
+        descriptor
+        for descriptor in WASM_CORE_SIMD128_DESCRIPTOR_SET.descriptors
+        if descriptor.key == "wasm.i32.eqz"
+    )
+    assert descriptor.encoding_id == 0x45
+    assert descriptor.semantic_tag == "integer.cmp.eqz.i32"
+    assert [operand.field_name for operand in descriptor.operands] == ["dst", "input"]
+    assert not descriptor.immediates
+
+
 def test_swizzle_has_dynamic_byte_indices():
     descriptor = next(
         descriptor

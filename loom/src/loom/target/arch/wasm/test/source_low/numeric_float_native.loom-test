@@ -235,6 +235,55 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @vector_f32_comparison
 
 // ====
 
+// These predicates cover every strict scalar composition shape. F32 and F64
+// share the same table; nnan selects the direct native relation when valid.
+func.def @scalar_strict_float_comparisons(%f32_lhs: f32, %f32_rhs: f32, %f64_lhs: f64, %f64_rhs: f64) -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1) {
+  %f32_one = scalar.cmpf one, %f32_lhs, %f32_rhs : f32
+  %f32_ord = scalar.cmpf ord, %f32_lhs, %f32_rhs : f32
+  %f32_ueq = scalar.cmpf ueq, %f32_lhs, %f32_rhs : f32
+  %f32_ugt = scalar.cmpf ugt, %f32_lhs, %f32_rhs : f32
+  %f32_uno = scalar.cmpf uno, %f32_lhs, %f32_rhs : f32
+  %f32_ueq_no_nan = scalar.cmpf<nnan> ueq, %f32_lhs, %f32_rhs : f32
+  %f64_one = scalar.cmpf one, %f64_lhs, %f64_rhs : f64
+  %f64_ord = scalar.cmpf ord, %f64_lhs, %f64_rhs : f64
+  %f64_ueq = scalar.cmpf ueq, %f64_lhs, %f64_rhs : f64
+  %f64_ugt = scalar.cmpf ugt, %f64_lhs, %f64_rhs : f64
+  %f64_uno = scalar.cmpf uno, %f64_lhs, %f64_rhs : f64
+  func.return %f32_one, %f32_ord, %f32_ueq, %f32_ugt, %f32_uno, %f32_ueq_no_nan, %f64_one, %f64_ord, %f64_ueq, %f64_ugt, %f64_uno : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @scalar_strict_float_comparisons(%f32_lhs: reg<wasm.f32>, %f32_rhs: reg<wasm.f32>, %f64_lhs: reg<wasm.f64>, %f64_rhs: reg<wasm.f64>) -> (reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>) asm {
+  %41 = f32.lt %f32_lhs, %f32_rhs
+  %42 = f32.gt %f32_lhs, %f32_rhs
+  %f32_one = i32.or %41, %42
+  %44 = f32.eq %f32_lhs, %f32_lhs
+  %45 = f32.eq %f32_rhs, %f32_rhs
+  %f32_ord = i32.and %44, %45
+  %f32_ueq = i32.eqz %f32_one
+  %51 = f32.le %f32_lhs, %f32_rhs
+  %f32_ugt = i32.eqz %51
+  %53 = f32.ne %f32_lhs, %f32_lhs
+  %54 = f32.ne %f32_rhs, %f32_rhs
+  %f32_uno = i32.or %53, %54
+  %f32_ueq_no_nan = f32.eq %f32_lhs, %f32_rhs
+  %57 = f64.lt %f64_lhs, %f64_rhs
+  %58 = f64.gt %f64_lhs, %f64_rhs
+  %f64_one = i32.or %57, %58
+  %60 = f64.eq %f64_lhs, %f64_lhs
+  %61 = f64.eq %f64_rhs, %f64_rhs
+  %f64_ord = i32.and %60, %61
+  %f64_ueq = i32.eqz %f64_one
+  %67 = f64.le %f64_lhs, %f64_rhs
+  %f64_ugt = i32.eqz %67
+  %69 = f64.ne %f64_lhs, %f64_lhs
+  %70 = f64.ne %f64_rhs, %f64_rhs
+  %f64_uno = i32.or %69, %70
+  return %f32_one, %f32_ord, %f32_ueq, %f32_ugt, %f32_uno, %f32_ueq_no_nan, %f64_one, %f64_ord, %f64_ueq, %f64_ugt, %f64_uno
+}
+
+// ====
+
 func.def @f64_native(%lhs: f64, %rhs: f64) -> (f64, f64, i1) {
   %sum = scalar.addf %lhs, %rhs : f64
   %rounded = scalar.roundevenf %sum : f64

@@ -234,40 +234,42 @@ func.def target(@target) @scalar_f32_clamp_fallbacks(%value: f32, %lower: f32, %
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @scalar_f32_clamp_fallbacks(%value: reg<amdgpu.vgpr>, %lower: reg<amdgpu.vgpr>, %upper: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm {
-  %52 = v_cmp_lt_f32 %value, %lower
-  %53 = v_cndmask_b32 %value, %lower, %52
-  %54 = v_cmp_gt_f32 %53, %upper
-  %ordered = v_cndmask_b32 %53, %upper, %54
-  %56 = v_max_f32 %value, %lower
-  %relaxed_number = v_min_f32 %56, %upper
-  %58 = v_and_b32 %value, %lower
-  %59 = v_cmp_gt_f32 %value, %lower
-  %60 = v_cmp_gt_f32 %lower, %value
-  %61 = v_cndmask_b32 %58, %lower, %60
-  %62 = v_cndmask_b32 %61, %value, %59
-  %63 = v_cmp_neq_f32 %value, %value
-  %64 = v_cmp_neq_f32 %lower, %lower
-  %65 = v_cndmask_b32 %62, %value, %64
-  %66 = v_cndmask_b32 %65, %lower, %63
-  %67 = v_or_b32 %66, %upper
-  %68 = v_cmp_lt_f32 %66, %upper
-  %69 = v_cmp_lt_f32 %upper, %66
-  %70 = v_cndmask_b32 %67, %upper, %69
-  %71 = v_cndmask_b32 %70, %66, %68
-  %72 = v_cmp_neq_f32 %66, %66
-  %73 = v_cmp_neq_f32 %upper, %upper
-  %74 = v_cndmask_b32 %71, %66, %73
-  %number = v_cndmask_b32 %74, %upper, %72
-  %76 = v_max_f32 %value, %value
-  %77 = v_max_f32 %lower, %lower
-  %78 = v_max_f32 %76, %77
-  %79 = v_cmp_u_f32 %value, %lower
-  %81 = v_cndmask_b32_src1_lit %78, %79, 2143289344
-  %82 = v_max_f32 %81, %81
-  %83 = v_max_f32 %upper, %upper
-  %84 = v_min_f32 %82, %83
-  %85 = v_cmp_u_f32 %81, %upper
-  %ieee = v_cndmask_b32_src1_lit %84, %85, 2143289344
+  %56 = v_cmp_lt_f32 %value, %lower
+  %57 = v_cndmask_b32 %value, %lower, %56
+  %58 = v_cmp_gt_f32 %57, %upper
+  %ordered = v_cndmask_b32 %57, %upper, %58
+  %60 = v_max_f32 %value, %lower
+  %relaxed_number = v_min_f32 %60, %upper
+  %62 = v_and_b32 %value, %lower
+  %63 = v_cmp_gt_f32 %value, %lower
+  %64 = v_cmp_gt_f32 %lower, %value
+  %65 = v_cndmask_b32 %62, %lower, %64
+  %66 = v_cndmask_b32 %65, %value, %63
+  %67 = v_cmp_neq_f32 %value, %value
+  %68 = v_cmp_neq_f32 %lower, %lower
+  %70 = v_cndmask_b32_src1_lit %lower, %68, 2143289344
+  %71 = v_cndmask_b32 %66, %value, %68
+  %72 = v_cndmask_b32 %71, %70, %67
+  %73 = v_or_b32 %72, %upper
+  %74 = v_cmp_lt_f32 %72, %upper
+  %75 = v_cmp_lt_f32 %upper, %72
+  %76 = v_cndmask_b32 %73, %upper, %75
+  %77 = v_cndmask_b32 %76, %72, %74
+  %78 = v_cmp_neq_f32 %72, %72
+  %79 = v_cmp_neq_f32 %upper, %upper
+  %80 = v_cndmask_b32_src1_lit %upper, %79, 2143289344
+  %81 = v_cndmask_b32 %77, %72, %79
+  %number = v_cndmask_b32 %81, %80, %78
+  %83 = v_max_f32 %value, %value
+  %84 = v_max_f32 %lower, %lower
+  %85 = v_max_f32 %83, %84
+  %86 = v_cmp_u_f32 %value, %lower
+  %87 = v_cndmask_b32_src1_lit %85, %86, 2143289344
+  %88 = v_max_f32 %87, %87
+  %89 = v_max_f32 %upper, %upper
+  %90 = v_min_f32 %88, %89
+  %91 = v_cmp_u_f32 %87, %upper
+  %ieee = v_cndmask_b32_src1_lit %90, %91, 2143289344
   return %ordered, %relaxed_number, %number, %ieee
 }
 

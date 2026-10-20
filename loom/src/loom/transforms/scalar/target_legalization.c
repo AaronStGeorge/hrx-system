@@ -1363,7 +1363,7 @@ enum loom_scalar_float_extremum_kind_e {
 // Ordered comparisons select unequal numeric operands. Equal finite operands
 // have identical bits, except for opposing signed zeros: OR selects -0 for
 // minimum and AND selects +0 for maximum. The final selects choose the numeric
-// peer when exactly one operand is NaN.
+// peer when exactly one operand is NaN and a quiet NaN when both are NaN.
 static iree_status_t loom_scalar_legalize_build_number_extremum(
     loom_builder_t* builder, loom_location_id_t location,
     loom_scalar_float_extremum_kind_t kind, uint8_t fastmath,
@@ -1427,13 +1427,20 @@ static iree_status_t loom_scalar_legalize_build_number_extremum(
   IREE_RETURN_IF_ERROR(loom_scalar_cmpf_build(builder, fastmath,
                                               LOOM_SCALAR_CMPF_PREDICATE_UNE,
                                               rhs, rhs, location, &rhs_nan_op));
+  loom_op_t* quiet_nan_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_constant_build(
+      builder, loom_attr_f64(NAN), type, location, &quiet_nan_op));
+  loom_value_id_t lhs_nan_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_select(
+      builder, location, type, loom_scalar_cmpf_result(rhs_nan_op),
+      loom_scalar_constant_result(quiet_nan_op), rhs, &lhs_nan_result));
   loom_value_id_t rhs_checked = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_select(
       builder, location, type, loom_scalar_cmpf_result(rhs_nan_op), lhs,
       numeric, &rhs_checked));
-  return loom_scalar_legalize_build_select(builder, location, type,
-                                           loom_scalar_cmpf_result(lhs_nan_op),
-                                           rhs, rhs_checked, out_result);
+  return loom_scalar_legalize_build_select(
+      builder, location, type, loom_scalar_cmpf_result(lhs_nan_op),
+      lhs_nan_result, rhs_checked, out_result);
 }
 
 iree_status_t loom_scalar_legalize_number_extremum(

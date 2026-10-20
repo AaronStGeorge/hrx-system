@@ -237,6 +237,7 @@ _OP_I32_CONST = 0x41
 _OP_I64_CONST = 0x42
 _OP_F32_CONST = 0x43
 _OP_F64_CONST = 0x44
+_OP_I32_EQZ = 0x45
 _OP_I32_EQ = 0x46
 _OP_I32_NE = 0x47
 _OP_I32_LT_S = 0x48
@@ -1255,6 +1256,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_CONST,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
+        _scalar_unary_descriptor("i32", "eqz", "cmp.eqz", _OP_I32_EQZ),
         *(
             _scalar_binary_descriptor(
                 "i32", operation, f"integer.{semantic}.i32", encoding
