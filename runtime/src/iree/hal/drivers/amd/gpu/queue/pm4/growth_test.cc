@@ -453,9 +453,18 @@ class ProgramGrowthTest : public GrowthTest {
                            AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
           profile->supported_flags =
               AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_HOST_COHERENT;
+          profile->host_mapping.supported_access =
+              AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
           profile->allocation.minimum_alignment = 256;
           profile->allocation.byte_length_granularity = 256;
           profile->allocation.maximum_byte_length = UINT32_MAX;
+          return AMDF_STATUS_OK;
+        };
+    api_.memory_scope_query_pair_info =
+        [](amdf_memory_scope_t*, const amdf_memory_profile_pair_query_t*,
+           amdf_memory_pair_info_t* pair) {
+          pair->release.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
+          pair->acquire.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
           return AMDF_STATUS_OK;
         };
     api_.host_mapping_cache_control = [](amdf_host_mapping_t*,

@@ -134,11 +134,21 @@ INSTANTIATE_TEST_SUITE_P(
                        ::testing::Bool(), ::testing::Bool(), ::testing::Bool(),
                        ::testing::Bool()));
 
-// The native memory dependency supplies mapped system storage and optionally
-// unmapped local storage. Program placement, publication, leases, trim, and
-// cleanup all use the production implementation.
-class ProgramLifetimeTest : public ::testing::TestWithParam<bool> {
+enum class LocalHostView {
+  kUnavailable,
+  kPublishable,
+  kUnpublishable,
+};
+
+// The native memory dependency supplies mapped system storage and distinct
+// local mapping/publication capabilities. Program placement, publication,
+// leases, trim, and cleanup all use the production implementation.
+class ProgramLifetimeTest : public ::testing::TestWithParam<LocalHostView> {
  protected:
+  bool PublishesLocalWrites() const {
+    return GetParam() == LocalHostView::kPublishable;
+  }
+
   struct Scope {
     // Fixture owning this native scope.
     ProgramLifetimeTest* owner;
@@ -168,15 +178,37 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<bool> {
            const amdf_memory_device_access_t*, amdf_memory_profile_t* profile,
            amdf_memory_access_capabilities_t*) {
           auto* scope = reinterpret_cast<Scope*>(handle);
-          const bool mapped = !scope->local || scope->owner->GetParam();
+          const bool mapped = !scope->local || scope->owner->GetParam() !=
+                                                   LocalHostView::kUnavailable;
           profile->roles = AMDF_MEMORY_PROFILE_ROLE_CREATE |
                            (mapped ? AMDF_MEMORY_PROFILE_ROLE_HOST_MAP : 0);
           profile->supported_flags =
               (scope->local ? AMDF_MEMORY_FLAG_DEVICE_LOCAL : 0) |
               (mapped ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0);
+          profile->host_mapping.supported_access =
+              mapped ? AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE
+                     : 0;
           profile->allocation.minimum_alignment = 256;
           profile->allocation.byte_length_granularity = 256;
           profile->allocation.maximum_byte_length = UINT32_MAX;
+          return AMDF_STATUS_OK;
+        };
+    api_.memory_scope_query_pair_info =
+        [](amdf_memory_scope_t* handle,
+           const amdf_memory_profile_pair_query_t* query,
+           amdf_memory_pair_info_t* pair) {
+          auto* scope = reinterpret_cast<Scope*>(handle);
+          EXPECT_EQ(query->producer.kind, AMDF_MEMORY_SITE_KIND_HOST);
+          EXPECT_EQ(query->producer.value.host_access,
+                    AMDF_MEMORY_MAP_FLAG_WRITE);
+          EXPECT_EQ(query->consumer.kind, AMDF_MEMORY_SITE_KIND_DEVICE);
+          EXPECT_EQ(query->consumer.value.device.queue_family_ordinal, 0u);
+          EXPECT_NE(query->required_flags & AMDF_MEMORY_FLAG_HOST_VISIBLE, 0u);
+          if (scope->local && !scope->owner->PublishesLocalWrites()) {
+            return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+          }
+          pair->release.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
+          pair->acquire.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
           return AMDF_STATUS_OK;
         };
     api_.memory_create = [](amdf_memory_scope_t* handle,
@@ -240,6 +272,8 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<bool> {
       auto* memory = reinterpret_cast<Memory*>(handle);
       EXPECT_LE(offset + length, memory->bytes.size());
       EXPECT_EQ(operation, AMDF_HOST_CACHE_OPERATION_FLUSH);
+      EXPECT_TRUE(!memory->scope->local ||
+                  memory->scope->owner->PublishesLocalWrites());
       memory->scope->owner->publication_thread_ = std::this_thread::get_id();
       return AMDF_STATUS_OK;
     };
@@ -431,7 +465,9 @@ TEST_P(ProgramLifetimeTest, LastReleaseReturnsBeforeHeldNativeFree) {
   ASSERT_NO_FATAL_FAILURE(Record(program));
   EXPECT_NE(allocation_thread_, std::this_thread::get_id());
   EXPECT_EQ(publication_thread_, std::this_thread::get_id());
-  EXPECT_EQ(program->upload != nullptr, !GetParam());
+  EXPECT_EQ(program->upload != nullptr, !PublishesLocalWrites());
+  EXPECT_EQ(pool_.resident.scope, local_handle_);
+  EXPECT_EQ(pool_.resident.host_access != 0, PublishesLocalWrites());
   EXPECT_EQ(pool_.head, program);
   std::binary_semaphore entered{0}, resume{0};
   free_entered_ = &entered;
@@ -440,7 +476,7 @@ TEST_P(ProgramLifetimeTest, LastReleaseReturnsBeforeHeldNativeFree) {
   delete program;
   EXPECT_EQ(pool_.head, nullptr);
   entered.acquire();
-  EXPECT_EQ(live_count_, GetParam() ? 2u : 3u);
+  EXPECT_EQ(live_count_, PublishesLocalWrites() ? 2u : 3u);
   resume.release();
   iree_hal_amd_gpu_context_join_memory(&context_);
   EXPECT_EQ(live_count_, 1u);
@@ -534,7 +570,7 @@ TEST_P(ProgramLifetimeTest, TrimReclaimsOnlyIdleClonesAndCompletedUpload) {
   iree_hal_amd_gpu_pm4_program_publish(&program, clone, 1, 1);
   iree_hal_amd_gpu_pm4_program_pool_trim(&pool_);
   EXPECT_EQ(program.instances[clone->ordinal], clone);
-  EXPECT_EQ(program.upload != nullptr, !GetParam());
+  EXPECT_EQ(program.upload != nullptr, !PublishesLocalWrites());
   iree_hal_amd_gpu_pm4_program_release(&program, initial);
   iree_hal_amd_gpu_pm4_program_release(&program, clone);
   const auto clone_ordinal = clone->ordinal;
@@ -548,7 +584,7 @@ TEST_P(ProgramLifetimeTest, TrimReclaimsOnlyIdleClonesAndCompletedUpload) {
 }
 
 TEST_P(ProgramLifetimeTest, PartialConstructionReleasesItsAcquiredOwners) {
-  const uint32_t acquisition_count = GetParam() ? 1 : 2;
+  const uint32_t acquisition_count = PublishesLocalWrites() ? 1 : 2;
   for (uint32_t failure = 1; failure <= acquisition_count; ++failure) {
     SCOPED_TRACE(failure);
     fail_allocate_ = allocate_count_ + failure;
@@ -705,6 +741,9 @@ TEST_P(ProgramLifetimeTest, CancelledBorrowCanRequireMoreInstancesThanQueues) {
   iree_hal_amd_gpu_pm4_program_deinitialize(&program);
 }
 
-INSTANTIATE_TEST_SUITE_P(LocalHostView, ProgramLifetimeTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(LocalHostView, ProgramLifetimeTest,
+                         ::testing::Values(LocalHostView::kUnavailable,
+                                           LocalHostView::kPublishable,
+                                           LocalHostView::kUnpublishable));
 
 }  // namespace
