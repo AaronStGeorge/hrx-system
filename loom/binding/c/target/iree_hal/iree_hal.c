@@ -16,6 +16,8 @@
 loomc_status_t loomc_iree_hal_module_query_runtime_features(
     const loomc_module_t* module,
     const loomc_sanitizer_options_t* sanitizer_options,
+    const loomc_string_view_t* root_symbols,
+    loomc_host_size_t root_symbol_count,
     iree_hal_device_runtime_feature_flags_t* out_runtime_features) {
   if (out_runtime_features == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
@@ -26,16 +28,42 @@ loomc_status_t loomc_iree_hal_module_query_runtime_features(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "module must not be NULL");
   }
-
+  if (root_symbol_count != 0 && root_symbols == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "root_symbol_count is non-zero but root_symbols "
+                             "is NULL");
+  }
   loom_sanitizer_options_t resolved_sanitizer_options = {0};
   LOOMC_RETURN_IF_ERROR(loomc_sanitizer_options_resolve(
       sanitizer_options, &resolved_sanitizer_options));
   loom_sanitizer_runtime_requirements_t requirements =
       LOOM_SANITIZER_RUNTIME_REQUIREMENT_NONE;
-  LOOMC_RETURN_IF_ERROR(
-      loomc_status_from_iree(loom_sanitizer_runtime_requirements_query(
-          loomc_module_const_loom_module(module), &resolved_sanitizer_options,
-          &requirements)));
+  const loom_module_t* native_module = loomc_module_const_loom_module(module);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(native_module->arena.block_pool, &arena);
+  iree_string_view_t* roots = NULL;
+  iree_status_t status = iree_ok_status();
+  if (root_symbol_count != 0) {
+    status = iree_arena_allocate_array(&arena, root_symbol_count,
+                                       sizeof(*roots), (void**)&roots);
+  }
+  for (loomc_host_size_t i = 0;
+       iree_status_is_ok(status) && i < root_symbol_count; ++i) {
+    if (root_symbols[i].data == NULL && root_symbols[i].size != 0) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "root symbol has length but no data");
+    } else {
+      roots[i] = iree_string_view_from_loomc(root_symbols[i]);
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_sanitizer_runtime_requirements_query(
+        native_module,
+        (iree_string_view_list_t){.count = root_symbol_count, .values = roots},
+        &resolved_sanitizer_options, &requirements);
+  }
+  iree_arena_deinitialize(&arena);
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(status));
 
   iree_hal_device_runtime_feature_flags_t runtime_features =
       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;

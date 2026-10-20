@@ -46,9 +46,19 @@ _SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_IREE_RUN_LOOM_EXECUTE_COPTS = _AMDGPU_EXECUTE_COPTS + _SPIRV_VULKAN_EXECUTE_COPTS
+_TASK_EXECUTE_COPTS = iree_select({
+    "//loom/config/execute:task_hal": ["-DIREE_RUN_LOOM_HAVE_TASK=1"],
+    "//conditions:default": [],
+})
 
-_IREE_RUN_LOOM_EXECUTE_DEPS = _AMDGPU_EXECUTE_DEPS + _SPIRV_VULKAN_EXECUTE_DEPS
+_TASK_EXECUTE_DEPS = iree_select({
+    "//loom/config/execute:task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
+    "//conditions:default": [],
+})
+
+_IREE_RUN_LOOM_EXECUTE_COPTS = _AMDGPU_EXECUTE_COPTS + _SPIRV_VULKAN_EXECUTE_COPTS + _TASK_EXECUTE_COPTS
+
+_IREE_RUN_LOOM_EXECUTE_DEPS = _AMDGPU_EXECUTE_DEPS + _SPIRV_VULKAN_EXECUTE_DEPS + _TASK_EXECUTE_DEPS
 
 loom_cc_library(
     name = "main",

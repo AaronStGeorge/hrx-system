@@ -250,24 +250,20 @@ TEST_F(HalTestbenchActualTest, RequiresExplicitDevice) {
 }
 
 TEST_F(HalTestbenchActualTest,
-       AddsAuthoredSanitizerRequirementsBeforeRuntimeInitialization) {
-  static constexpr char kSource[] = R"(
-kernel.def @entry() {
-  %unit = index.constant 1 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch(%condition: i1) {
-  kernel.assert %condition : i1
-  kernel.return
-}
-)";
-  loomc_module_t* module = ParsePublicModule(IREE_SV(kSource));
+       AddsSanitizerRequirementsBeforeRuntimeInitialization) {
+  loomc_module_t* module = ParsePublicModule(iree_string_view_empty());
+  const loomc_sanitizer_options_t options = {
+      .type = LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      .structure_size = sizeof(options),
+      .checks = LOOMC_SANITIZER_CHECK_VALUE,
+  };
 
   loom_run_hal_testbench_context_t context = {};
   loom_run_hal_testbench_context_initialize(
       /*target_environment=*/nullptr, /*target_routes=*/nullptr,
       /*target_route_count=*/0, iree_allocator_system(), &context);
   IREE_ASSERT_OK(loom_run_hal_testbench_context_add_module_runtime_requirements(
-      &context, module, /*sanitizer_options=*/nullptr));
+      &context, module, &options, nullptr, 0));
   EXPECT_EQ(context.runtime_features,
             IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK);
 
@@ -277,16 +273,12 @@ kernel.def @entry() {
 
 TEST_F(HalTestbenchActualTest,
        RejectsNewSanitizerRequirementsAfterRuntimeInitialization) {
-  static constexpr char kSource[] = R"(
-kernel.def @entry() {
-  %unit = index.constant 1 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch(%condition: i1) {
-  kernel.assert %condition : i1
-  kernel.return
-}
-)";
-  loomc_module_t* module = ParsePublicModule(IREE_SV(kSource));
+  loomc_module_t* module = ParsePublicModule(iree_string_view_empty());
+  const loomc_sanitizer_options_t options = {
+      .type = LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      .structure_size = sizeof(options),
+      .checks = LOOMC_SANITIZER_CHECK_VALUE,
+  };
 
   loom_run_hal_testbench_context_t context = {};
   loom_run_hal_testbench_context_initialize(
@@ -297,7 +289,7 @@ kernel.def @entry() {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
       loom_run_hal_testbench_context_add_module_runtime_requirements(
-          &context, module, /*sanitizer_options=*/nullptr));
+          &context, module, &options, nullptr, 0));
 
   loom_run_hal_testbench_context_deinitialize(&context);
   loomc_module_release(module);

@@ -50,15 +50,20 @@ typedef struct loomc_iree_hal_target_provider_t
 /// the HAL device that will execute it. `sanitizer_options` must be the same
 /// descriptor, if any, supplied to compilation. The query accounts for both
 /// authored sanitizer operations and sanitizer instrumentation requested by
-/// the caller.
+/// the caller. Nonempty roots restrict the query to their dependency closure.
+/// Reachable template families conservatively include all available providers
+/// before target/value specialization. The query does not compile or mutate IR.
 ///
 /// @param module Source module that will be compiled and executed.
 /// @param sanitizer_options Sanitizer compilation options, or `NULL` when no
 /// instrumentation is requested.
+/// @param root_symbols Executable root names, optionally prefixed with '@'.
+/// Borrowed for this call. An empty list queries every function in the module.
+/// @param root_symbol_count Number of entries in `root_symbols`.
 /// @param out_runtime_features Receives the required HAL runtime feature bits.
 /// Receives `IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE` on failure.
 /// @return OK when the requirements were queried. Non-OK statuses represent
-/// API misuse or allocation failures.
+/// API misuse, missing roots, or allocation failures.
 ///
 /// @thread_safety
 /// The query holds no mutable process-global state. It may run concurrently
@@ -66,6 +71,8 @@ typedef struct loomc_iree_hal_target_provider_t
 LOOMC_API_EXPORT loomc_status_t loomc_iree_hal_module_query_runtime_features(
     const loomc_module_t* module,
     const loomc_sanitizer_options_t* sanitizer_options,
+    const loomc_string_view_t* root_symbols,
+    loomc_host_size_t root_symbol_count,
     iree_hal_device_runtime_feature_flags_t* out_runtime_features);
 
 /// One compiler-and-loader target selected from an IREE HAL device.

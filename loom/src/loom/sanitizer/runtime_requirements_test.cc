@@ -49,13 +49,29 @@ class SanitizerRuntimeRequirementsTest
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, /*source_resolver=*/NULL,
                                         iree_allocator_system(), &module_));
+    BeginFunction(IREE_SV("entry"));
+  }
 
+  void TearDown() override {
+    loom_module_free(module_);
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  template <typename VtableFn>
+  void RegisterDialect(uint8_t dialect, VtableFn vtable_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = vtable_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect, vtables,
+                                                 (uint16_t)count));
+  }
+
+  void BeginFunction(iree_string_view_t name) {
     loom_builder_t module_builder;
     loom_builder_initialize(module_, &module_->arena,
                             loom_module_block(module_), &module_builder);
     loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-    IREE_ASSERT_OK(loom_builder_intern_string(&module_builder, IREE_SV("entry"),
-                                              &name_id));
+    IREE_ASSERT_OK(loom_builder_intern_string(&module_builder, name, &name_id));
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
     loom_op_t* function = NULL;
@@ -72,18 +88,11 @@ class SanitizerRuntimeRequirementsTest
     builder_.ip.parent_op = function;
   }
 
-  void TearDown() override {
-    loom_module_free(module_);
-    loom_context_deinitialize(&context_);
-    iree_arena_block_pool_deinitialize(&block_pool_);
-  }
-
-  template <typename VtableFn>
-  void RegisterDialect(uint8_t dialect, VtableFn vtable_fn) {
-    iree_host_size_t count = 0;
-    const loom_op_vtable_t* const* vtables = vtable_fn(&count);
-    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect, vtables,
-                                                 (uint16_t)count));
+  void EndFunction() {
+    loom_op_t* op = NULL;
+    IREE_ASSERT_OK(loom_test_yield_build(&builder_, /*values=*/NULL,
+                                         /*values_count=*/0,
+                                         LOOM_LOCATION_UNKNOWN, &op));
   }
 
   loom_value_id_t BuildConstant(int64_t value, loom_scalar_type_t type) {
@@ -200,22 +209,22 @@ class SanitizerRuntimeRequirementsTest
         break;
     }
     ASSERT_NE(op, nullptr);
-    IREE_ASSERT_OK(loom_test_yield_build(&builder_, /*values=*/NULL,
-                                         /*values_count=*/0,
-                                         LOOM_LOCATION_UNKNOWN, &op));
+    EndFunction();
   }
 
   loom_sanitizer_runtime_requirements_t Query(
-      loom_sanitizer_reporting_mode_t reporting_mode) {
+      loom_sanitizer_reporting_mode_t reporting_mode,
+      iree_string_view_list_t roots = iree_string_view_list_empty(),
+      loom_sanitizer_checks_t checks = 0) {
     const loom_sanitizer_options_t options = {
-        .checks = 0,
+        .checks = checks,
         .flags = 0,
         .reporting_mode = reporting_mode,
     };
     loom_sanitizer_runtime_requirements_t requirements =
         LOOM_SANITIZER_RUNTIME_REQUIREMENT_NONE;
-    IREE_EXPECT_OK(loom_sanitizer_runtime_requirements_query(module_, &options,
-                                                             &requirements));
+    IREE_EXPECT_OK(loom_sanitizer_runtime_requirements_query(
+        module_, roots, &options, &requirements));
     return requirements;
   }
 
@@ -262,6 +271,62 @@ TEST_P(SanitizerRuntimeRequirementsTest, DerivesRequirementsFromAuthoredSite) {
   EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY),
             test_case.default_requirements);
   EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP),
+            test_case.trap_requirements);
+}
+
+TEST_P(SanitizerRuntimeRequirementsTest,
+       SelectedRootsRetainAuthoredRequirements) {
+  const SiteRequirementCase& test_case = GetParam();
+  BuildSite(test_case.kind);
+  const iree_string_view_t roots[] = {IREE_SV("entry"), IREE_SV(" @entry ")};
+  const iree_string_view_list_t root_list = {IREE_ARRAYSIZE(roots), roots};
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_DEFAULT, root_list),
+            test_case.default_requirements);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY, root_list),
+            test_case.default_requirements);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP, root_list),
+            test_case.trap_requirements);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_DEFAULT, root_list,
+                  LOOM_SANITIZER_CHECK_VALUE),
+            test_case.default_requirements |
+                LOOM_SANITIZER_RUNTIME_REQUIREMENT_FEEDBACK);
+}
+
+TEST_P(SanitizerRuntimeRequirementsTest, ExcludesUnselectedSites) {
+  BuildSite(GetParam().kind);
+  BeginFunction(IREE_SV("clean"));
+  EndFunction();
+  const iree_string_view_t roots[] = {IREE_SV("clean")};
+  const iree_string_view_list_t root_list = {IREE_ARRAYSIZE(roots), roots};
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_DEFAULT, root_list),
+            LOOM_SANITIZER_RUNTIME_REQUIREMENT_NONE);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP, root_list),
+            LOOM_SANITIZER_RUNTIME_REQUIREMENT_NONE);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_DEFAULT, root_list,
+                  LOOM_SANITIZER_CHECK_VALUE),
+            LOOM_SANITIZER_RUNTIME_REQUIREMENT_FEEDBACK);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP, root_list,
+                  LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_RACE),
+            LOOM_SANITIZER_RUNTIME_REQUIREMENT_ACCESS_SHADOW |
+                LOOM_SANITIZER_RUNTIME_REQUIREMENT_RACE_SHADOW);
+}
+
+TEST_P(SanitizerRuntimeRequirementsTest, IncludesSelectedCalleeSites) {
+  const SiteRequirementCase& test_case = GetParam();
+  const loom_symbol_ref_t callee = loom_test_func_callee(builder_.ip.parent_op);
+  BuildSite(test_case.kind);
+  BeginFunction(IREE_SV("caller"));
+  loom_op_t* call = NULL;
+  IREE_ASSERT_OK(loom_test_low_call_build(
+      &builder_, callee, /*operands=*/NULL, /*operands_count=*/0,
+      /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, LOOM_LOCATION_UNKNOWN, &call));
+  EndFunction();
+  const iree_string_view_t roots[] = {IREE_SV("caller")};
+  const iree_string_view_list_t root_list = {IREE_ARRAYSIZE(roots), roots};
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_DEFAULT, root_list),
+            test_case.default_requirements);
+  EXPECT_EQ(Query(LOOM_SANITIZER_REPORTING_MODE_TRAP, root_list),
             test_case.trap_requirements);
 }
 

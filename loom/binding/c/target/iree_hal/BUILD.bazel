@@ -20,6 +20,7 @@ loom_cc_library(
     deps = [
         "//loom/binding/c:loomc",
         "//loom/src/loom/sanitizer:runtime_requirements",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal",
     ],
     alwayslink = True,

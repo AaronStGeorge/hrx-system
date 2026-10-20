@@ -9,6 +9,94 @@
 #include <string.h>
 
 #include "loom/ops/check/ops.h"
+#include "loomc/iree.h"
+
+iree_status_t iree_benchmark_loom_add_runtime_requirements(
+    loom_run_hal_testbench_context_t* hal_context, const loomc_module_t* module,
+    const loomc_sanitizer_options_t* sanitizer_options,
+    const loom_testbench_module_plan_t* module_plan,
+    const iree_benchmark_loom_work_plan_t* work_plan,
+    iree_arena_block_pool_t* block_pool) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(block_pool, &arena);
+  const iree_host_size_t record_count =
+      module_plan->case_count + module_plan->scenario_count;
+  uint8_t* selected_records = NULL;
+  iree_status_t status =
+      iree_arena_allocate_array(&arena, record_count, sizeof(*selected_records),
+                                (void**)&selected_records);
+  if (iree_status_is_ok(status)) {
+    memset(selected_records, 0, record_count);
+  }
+  iree_host_size_t capacity = 0;
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < work_plan->selected_benchmark_count;
+       ++i) {
+    const iree_benchmark_loom_selected_benchmark_t* selected =
+        &work_plan->selected_benchmarks[i];
+    const iree_host_size_t record_index =
+        selected->case_plan != NULL
+            ? selected->benchmark_plan->case_index
+            : module_plan->case_count +
+                  selected->benchmark_plan->scenario_index;
+    if (selected_records[record_index]) {
+      continue;
+    }
+    selected_records[record_index] = 1;
+    capacity += selected->case_plan != NULL
+                    ? selected->case_plan->invocation_count
+                    : selected->scenario_plan->trial_count;
+  }
+  loomc_string_view_t* roots = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_arena_allocate_array(&arena, capacity, sizeof(*roots),
+                                       (void**)&roots);
+  }
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < work_plan->selected_benchmark_count;
+       ++i) {
+    const iree_benchmark_loom_selected_benchmark_t* selected =
+        &work_plan->selected_benchmarks[i];
+    const iree_host_size_t record_index =
+        selected->case_plan != NULL
+            ? selected->benchmark_plan->case_index
+            : module_plan->case_count +
+                  selected->benchmark_plan->scenario_index;
+    if (!selected_records[record_index]) {
+      continue;
+    }
+    selected_records[record_index] = 0;
+    const loom_testbench_case_plan_t* case_plan = selected->case_plan;
+    const loom_testbench_scenario_plan_t* scenario = selected->scenario_plan;
+    for (iree_host_size_t j = 0;
+         j < (case_plan != NULL ? case_plan->invocation_count
+                                : scenario->trial_count);
+         ++j) {
+      const loom_testbench_invocation_plan_t* invocation =
+          case_plan != NULL ? &case_plan->invocations[j]
+                            : &scenario->trials[j].action.target;
+      // Legacy function calls and oracle calls run through host providers.
+      if (case_plan != NULL &&
+          invocation->kind != LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH &&
+          invocation->kind != LOOM_TESTBENCH_INVOCATION_PIPELINE &&
+          invocation->kind != LOOM_TESTBENCH_INVOCATION_COMMAND_PROGRAM) {
+        continue;
+      }
+      const loom_symbol_t* symbol =
+          &invocation->module->symbols
+               .entries[invocation->callee_ref.symbol_id];
+      roots[count++] = loomc_string_view_from_iree(
+          loom_string_table_get(&invocation->module->strings, symbol->name_id));
+    }
+  }
+  if (iree_status_is_ok(status) && count != 0) {
+    status = loom_run_hal_testbench_context_add_module_runtime_requirements(
+        hal_context, module, sanitizer_options, roots, count);
+  }
+  iree_arena_deinitialize(&arena);
+  return status;
+}
 
 enum {
   IREE_BENCHMARK_LOOM_MAX_REQUIREMENT_PROVIDERS = 8,

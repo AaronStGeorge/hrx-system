@@ -105,12 +105,15 @@ void loom_run_hal_testbench_context_set_device_event_sink(
 
 iree_status_t loom_run_hal_testbench_context_add_module_runtime_requirements(
     loom_run_hal_testbench_context_t* context, const loomc_module_t* module,
-    const loomc_sanitizer_options_t* sanitizer_options) {
+    const loomc_sanitizer_options_t* sanitizer_options,
+    const loomc_string_view_t* root_symbols,
+    iree_host_size_t root_symbol_count) {
   iree_hal_device_runtime_feature_flags_t runtime_features =
       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
   IREE_RETURN_IF_ERROR(
       iree_status_from_loomc(loomc_iree_hal_module_query_runtime_features(
-          module, sanitizer_options, &runtime_features)));
+          module, sanitizer_options, root_symbols, root_symbol_count,
+          &runtime_features)));
   const iree_hal_device_runtime_feature_flags_t missing_features =
       runtime_features & ~context->runtime_features;
   if (context->runtime_initialized && missing_features != 0) {
@@ -582,10 +585,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
         IREE_STATUS_UNIMPLEMENTED,
         "HAL pipeline specialization arguments are not implemented");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_run_hal_testbench_context_add_module_runtime_requirements(
-          provider->context, provider->module, provider->sanitizer));
-
   iree_string_view_t entry_symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_run_hal_testbench_module_symbol_name_from_ref(
       provider->native_module, provider->invocation->callee_ref,

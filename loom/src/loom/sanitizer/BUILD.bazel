@@ -29,12 +29,16 @@ loom_cc_library(
     hdrs = ["runtime_requirements.h"],
     deps = [
         ":options",
+        "//loom/src/loom/analysis:symbol_liveness",
+        "//loom/src/loom/analysis:symbol_references",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:symbol_map",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/ops/sanitizer",
         "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

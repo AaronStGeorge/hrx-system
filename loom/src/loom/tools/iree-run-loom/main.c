@@ -807,11 +807,12 @@ int iree_run_loom_main(int argc, char** argv,
   }
   iree_hal_device_runtime_feature_flags_t runtime_features =
       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
+  const loomc_string_view_t compile_root = loomc_string_view_from_iree(root);
   if (iree_status_is_ok(status) && exit_code == 0) {
     status =
         iree_status_from_loomc(loomc_iree_hal_module_query_runtime_features(
             module, sanitizer_enabled ? &sanitizer_options : NULL,
-            &runtime_features));
+            &compile_root, 1, &runtime_features));
   }
   if (iree_status_is_ok(status) && exit_code == 0) {
     loom_run_hal_runtime_options_t runtime_options;
@@ -863,7 +864,6 @@ int iree_run_loom_main(int argc, char** argv,
       .next = report_enabled ? (const void*)&report_options : NULL,
       .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_PRIMARY,
   };
-  const loomc_string_view_t compile_root = loomc_string_view_from_iree(root);
   const loomc_compile_artifact_options_t compile_options = {
       .type = LOOMC_STRUCTURE_TYPE_COMPILE_ARTIFACT_OPTIONS,
       .structure_size = sizeof(compile_options),

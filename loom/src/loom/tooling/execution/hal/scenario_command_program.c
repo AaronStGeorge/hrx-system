@@ -575,11 +575,6 @@ static iree_status_t loom_run_hal_command_scenario_compile_request(
   }
   iree_allocator_free(product->host_allocator, roots);
   roots = NULL;
-  if (iree_status_is_ok(status)) {
-    status = loom_run_hal_testbench_context_add_module_runtime_requirements(
-        provider_options->context, module, provider_options->sanitizer);
-  }
-
   loomc_artifact_manifest_options_t artifact_manifest =
       provider_options->artifact_manifest;
   const void* emit_option_chain = NULL;
@@ -1252,10 +1247,6 @@ static iree_status_t loom_run_hal_command_scenario_select_target(
     loom_run_hal_command_scenario_product_t* product) {
   const loom_run_hal_testbench_actual_provider_options_t* provider_options =
       &product->profile->provider_options;
-  IREE_RETURN_IF_ERROR(
-      loom_run_hal_testbench_context_add_module_runtime_requirements(
-          provider_options->context, product->adapted_module,
-          provider_options->sanitizer));
   loomc_iree_hal_target_selection_t selection = {0};
   loomc_result_t* result = NULL;
   iree_status_t status = loom_run_hal_testbench_context_select_target(
