@@ -113,6 +113,16 @@ check.benchmark<@mlp> @full {rows = 3584}
   EXPECT_EQ(work_plan.hal_compile_item_count, 1u);
   EXPECT_EQ(work_plan.work_item_count, 2u);
 
+  EXPECT_EQ(work_plan.selected_benchmarks[0].benchmark_index, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].end_benchmark_sample, 2u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].benchmark_index, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].end_benchmark_sample, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[2].benchmark_index, 2u);
+  EXPECT_EQ(work_plan.selected_benchmarks[2].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[2].end_benchmark_sample, 1u);
+
   EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[0].case_sample_ordinal, 0u);
   EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
@@ -212,6 +222,13 @@ check.benchmark<@sampled> @all_b
   EXPECT_EQ(work_plan.hal_compile_item_count, 1u);
   EXPECT_EQ(work_plan.work_item_count, 1u);
 
+  EXPECT_EQ(work_plan.selected_benchmarks[0].benchmark_index, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].begin_benchmark_sample, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].end_benchmark_sample, 2u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].benchmark_index, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].begin_benchmark_sample, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].end_benchmark_sample, 2u);
+
   EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[0].begin_benchmark_sample, 1u);
   EXPECT_EQ(work_plan.logical_samples[0].end_benchmark_sample, 2u);
@@ -244,7 +261,7 @@ check.benchmark<@mlp> @decode_b {rows = 2}
   iree_benchmark_loom_options_t options = {};
   iree_benchmark_loom_options_initialize(&options);
   options.measure = IREE_SV("dispatch_complete");
-  options.compare = IREE_SV("@decode_a,@decode_b");
+  options.compare = IREE_SV("@decode_b,@decode_a");
 
   iree_benchmark_loom_work_plan_t work_plan = {};
   IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
@@ -254,6 +271,12 @@ check.benchmark<@mlp> @decode_b {rows = 2}
   EXPECT_EQ(work_plan.logical_sample_count, 2u);
   EXPECT_EQ(work_plan.hal_compile_item_count, 1u);
   EXPECT_EQ(work_plan.work_item_count, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].benchmark_index, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].end_benchmark_sample, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].benchmark_index, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].end_benchmark_sample, 1u);
   EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[1].selection_index, 1u);
@@ -329,9 +352,15 @@ check.benchmark<@scenario> @second
       &module_plan, &options, iree_allocator_system(), &work_plan));
 
   ASSERT_EQ(work_plan.selected_benchmark_count, 2u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].benchmark_index, 0u);
   EXPECT_EQ(work_plan.selected_benchmarks[0].case_plan, nullptr);
   EXPECT_EQ(work_plan.selected_benchmarks[0].scenario_plan,
             &module_plan.scenarios[0]);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].begin_benchmark_sample, 4u);
+  EXPECT_EQ(work_plan.selected_benchmarks[0].end_benchmark_sample, 5u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].benchmark_index, 1u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].begin_benchmark_sample, 4u);
+  EXPECT_EQ(work_plan.selected_benchmarks[1].end_benchmark_sample, 5u);
   EXPECT_EQ(work_plan.selected_benchmarks[0].policy.measure_kind,
             IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE);
   EXPECT_TRUE(

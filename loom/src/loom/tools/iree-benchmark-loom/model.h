@@ -84,10 +84,16 @@ typedef struct iree_benchmark_loom_selected_benchmark_t {
   char candidate_id_storage[32];
   // Borrowed benchmark plan selected from the module plan.
   const loom_testbench_benchmark_plan_t* benchmark_plan;
+  // Source-order ordinal of |benchmark_plan| in its module plan.
+  iree_host_size_t benchmark_index;
   // Borrowed case plan referenced by |benchmark_plan|.
   const loom_testbench_case_plan_t* case_plan;
   // Borrowed scenario plan referenced by |benchmark_plan|.
   const loom_testbench_scenario_plan_t* scenario_plan;
+  // First selected benchmark-local sample ordinal.
+  iree_host_size_t begin_benchmark_sample;
+  // One-past-end selected benchmark-local sample ordinal.
+  iree_host_size_t end_benchmark_sample;
   // True when the subject's requirements exclude execution. Populated once
   // before invocation binding; dry-run planning leaves this false.
   bool skipped;

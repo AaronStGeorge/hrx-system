@@ -166,12 +166,15 @@ static iree_host_size_t iree_benchmark_loom_compare_token_count(
 
 static iree_status_t iree_benchmark_loom_find_benchmark_by_name(
     const loom_testbench_module_plan_t* module_plan, iree_string_view_t name,
+    iree_host_size_t* out_benchmark_index,
     const loom_testbench_benchmark_plan_t** out_benchmark) {
+  *out_benchmark_index = IREE_HOST_SIZE_MAX;
   *out_benchmark = NULL;
   for (iree_host_size_t i = 0; i < module_plan->benchmark_count; ++i) {
     const loom_testbench_benchmark_plan_t* benchmark =
         &module_plan->benchmarks[i];
     if (iree_string_view_equal(benchmark->name, name)) {
+      *out_benchmark_index = i;
       *out_benchmark = benchmark;
       return iree_ok_status();
     }
@@ -181,11 +184,15 @@ static iree_status_t iree_benchmark_loom_find_benchmark_by_name(
                           (int)name.size, name.data);
 }
 
+static iree_status_t iree_benchmark_loom_sample_window(
+    const iree_benchmark_loom_options_t* options, iree_host_size_t sample_count,
+    iree_host_size_t* out_begin_sample, iree_host_size_t* out_end_sample);
+
 static iree_status_t iree_benchmark_loom_selected_benchmark_initialize(
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const iree_benchmark_loom_options_t* options,
-    iree_host_size_t candidate_index,
+    iree_host_size_t benchmark_index, iree_host_size_t candidate_index,
     iree_benchmark_loom_selected_benchmark_t* out_selection) {
   const bool is_case = benchmark_plan->case_index < module_plan->case_count;
   const bool is_scenario =
@@ -223,13 +230,18 @@ static iree_status_t iree_benchmark_loom_selected_benchmark_initialize(
       .candidate_index = candidate_index,
   };
   out_selection->benchmark_plan = benchmark_plan;
+  out_selection->benchmark_index = benchmark_index;
   out_selection->case_plan =
       is_case ? &module_plan->cases[benchmark_plan->case_index] : NULL;
   out_selection->scenario_plan =
       is_scenario ? &module_plan->scenarios[benchmark_plan->scenario_index]
                   : NULL;
-  return iree_benchmark_loom_policy_from_benchmark(
-      module_plan, benchmark_plan, options, &out_selection->policy);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_policy_from_benchmark(
+      module_plan, benchmark_plan, options, &out_selection->policy));
+  return iree_benchmark_loom_sample_window(
+      options, benchmark_plan->sample_count,
+      &out_selection->begin_benchmark_sample,
+      &out_selection->end_benchmark_sample);
 }
 
 static iree_status_t iree_benchmark_loom_sample_window(
@@ -466,7 +478,6 @@ static void iree_benchmark_loom_append_logical_sample(
 
 static iree_status_t iree_benchmark_loom_count_logical_samples(
     const iree_benchmark_loom_selected_benchmark_t* selection,
-    const iree_benchmark_loom_options_t* options,
     iree_host_size_t* inout_logical_sample_count) {
   if (selection->policy.measure_kind ==
       IREE_BENCHMARK_LOOM_MEASURE_CASE_END_TO_END) {
@@ -474,12 +485,8 @@ static iree_status_t iree_benchmark_loom_count_logical_samples(
     return iree_ok_status();
   }
 
-  iree_host_size_t begin_sample = 0;
-  iree_host_size_t end_sample = 0;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_sample_window(
-      options, selection->benchmark_plan->sample_count, &begin_sample,
-      &end_sample));
-  const iree_host_size_t sample_count = end_sample - begin_sample;
+  const iree_host_size_t sample_count =
+      selection->end_benchmark_sample - selection->begin_benchmark_sample;
   if (sample_count > IREE_HOST_SIZE_MAX - *inout_logical_sample_count) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "selected benchmark sample count exceeds host "
@@ -490,15 +497,11 @@ static iree_status_t iree_benchmark_loom_count_logical_samples(
 }
 
 static iree_status_t iree_benchmark_loom_append_case_end_to_end_work(
-    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index,
-    const iree_benchmark_loom_options_t* options) {
+    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index) {
   const iree_benchmark_loom_selected_benchmark_t* selection =
       &plan->selected_benchmarks[selection_index];
-  iree_host_size_t begin_sample = 0;
-  iree_host_size_t end_sample = 0;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_sample_window(
-      options, selection->benchmark_plan->sample_count, &begin_sample,
-      &end_sample));
+  const iree_host_size_t begin_sample = selection->begin_benchmark_sample;
+  const iree_host_size_t end_sample = selection->end_benchmark_sample;
   bool has_case_sample_ordinal = false;
   iree_host_size_t case_sample_ordinal = 0;
   if (end_sample == begin_sample + 1) {
@@ -571,17 +574,11 @@ static void iree_benchmark_loom_append_scenario_trial_work(
 }
 
 static iree_status_t iree_benchmark_loom_append_scenario_work(
-    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index,
-    const iree_benchmark_loom_options_t* options) {
+    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index) {
   const iree_benchmark_loom_selected_benchmark_t* selection =
       &plan->selected_benchmarks[selection_index];
-  iree_host_size_t begin_sample = 0;
-  iree_host_size_t end_sample = 0;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_sample_window(
-      options, selection->benchmark_plan->sample_count, &begin_sample,
-      &end_sample));
-  for (iree_host_size_t sample_ordinal = begin_sample;
-       sample_ordinal < end_sample; ++sample_ordinal) {
+  for (iree_host_size_t sample_ordinal = selection->begin_benchmark_sample;
+       sample_ordinal < selection->end_benchmark_sample; ++sample_ordinal) {
     iree_benchmark_loom_append_scenario_trial_work(plan, selection_index,
                                                    sample_ordinal);
   }
@@ -589,21 +586,14 @@ static iree_status_t iree_benchmark_loom_append_scenario_work(
 }
 
 static iree_status_t iree_benchmark_loom_append_dispatch_work(
-    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index,
-    const iree_benchmark_loom_options_t* options) {
+    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index) {
   const iree_benchmark_loom_selected_benchmark_t* selection =
       &plan->selected_benchmarks[selection_index];
   if (selection->scenario_plan != NULL) {
-    return iree_benchmark_loom_append_scenario_work(plan, selection_index,
-                                                    options);
+    return iree_benchmark_loom_append_scenario_work(plan, selection_index);
   }
-  iree_host_size_t begin_sample = 0;
-  iree_host_size_t end_sample = 0;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_sample_window(
-      options, selection->benchmark_plan->sample_count, &begin_sample,
-      &end_sample));
-  for (iree_host_size_t sample_ordinal = begin_sample;
-       sample_ordinal < end_sample; ++sample_ordinal) {
+  for (iree_host_size_t sample_ordinal = selection->begin_benchmark_sample;
+       sample_ordinal < selection->end_benchmark_sample; ++sample_ordinal) {
     iree_benchmark_loom_append_dispatch_sample_work(plan, selection_index,
                                                     sample_ordinal);
   }
@@ -611,17 +601,14 @@ static iree_status_t iree_benchmark_loom_append_dispatch_work(
 }
 
 static iree_status_t iree_benchmark_loom_append_selection_work(
-    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index,
-    const iree_benchmark_loom_options_t* options) {
+    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index) {
   const iree_benchmark_loom_selected_benchmark_t* selection =
       &plan->selected_benchmarks[selection_index];
   if (selection->policy.measure_kind ==
       IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE) {
-    return iree_benchmark_loom_append_dispatch_work(plan, selection_index,
-                                                    options);
+    return iree_benchmark_loom_append_dispatch_work(plan, selection_index);
   }
-  return iree_benchmark_loom_append_case_end_to_end_work(plan, selection_index,
-                                                         options);
+  return iree_benchmark_loom_append_case_end_to_end_work(plan, selection_index);
 }
 
 static iree_status_t iree_benchmark_loom_allocate_array(
@@ -666,12 +653,13 @@ static iree_status_t iree_benchmark_loom_select_compare_benchmarks(
                                 "--compare contains an empty benchmark name");
       break;
     }
+    iree_host_size_t benchmark_index = IREE_HOST_SIZE_MAX;
     const loom_testbench_benchmark_plan_t* benchmark = NULL;
-    status = iree_benchmark_loom_find_benchmark_by_name(module_plan, token,
-                                                        &benchmark);
+    status = iree_benchmark_loom_find_benchmark_by_name(
+        module_plan, token, &benchmark_index, &benchmark);
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_selected_benchmark_initialize(
-          module_plan, benchmark, options, selection_index,
+          module_plan, benchmark, options, benchmark_index, selection_index,
           &plan->selected_benchmarks[selection_index]);
     }
     ++selection_index;
@@ -762,7 +750,7 @@ static iree_status_t iree_benchmark_loom_select_matching_benchmarks(
       continue;
     }
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_selected_benchmark_initialize(
-        module_plan, benchmark_plan, options, selection_index,
+        module_plan, benchmark_plan, options, i, selection_index,
         &plan->selected_benchmarks[selection_index]));
     ++selection_index;
   }
@@ -795,7 +783,7 @@ iree_status_t iree_benchmark_loom_work_plan_initialize(
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < plan.selected_benchmark_count; ++i) {
     status = iree_benchmark_loom_count_logical_samples(
-        &plan.selected_benchmarks[i], options, &logical_sample_capacity);
+        &plan.selected_benchmarks[i], &logical_sample_capacity);
   }
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_allocate_array(
@@ -814,7 +802,7 @@ iree_status_t iree_benchmark_loom_work_plan_initialize(
   }
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < plan.selected_benchmark_count; ++i) {
-    status = iree_benchmark_loom_append_selection_work(&plan, i, options);
+    status = iree_benchmark_loom_append_selection_work(&plan, i);
   }
 
   if (iree_status_is_ok(status)) {
