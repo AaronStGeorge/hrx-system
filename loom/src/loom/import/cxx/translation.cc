@@ -3756,6 +3756,15 @@ class Translator final : private Initialization::Evaluation {
     return result(cast);
   }
 
+  loom_value_id_t signed_index(loom_value_id_t value,
+                               loom_location_id_t source) {
+    loom_op_t* cast;
+    check(loom_index_cast_build(&builder_, value, value_type(value),
+                                loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                source, &cast));
+    return result(cast);
+  }
+
   void counted_loop(cxx::ForStatementAST* loop, const CountedLoop& counted,
                     const LoopSchedule& schedule) {
     auto source = locations_.get(loop);
@@ -3776,6 +3785,18 @@ class Translator final : private Initialization::Evaluation {
                     .ssa();
       upper = unsigned_offset(bound, source);
       step = scalars_.integer(range->step, LOOM_SCALAR_TYPE_OFFSET, source);
+    } else if (auto* range =
+                   std::get_if<CountedLoop::SignedRange>(&counted.range)) {
+      lower = signed_index(values_.at(induction).ssa(), source);
+      auto* constant_upper = std::get_if<std::int32_t>(&range->upper);
+      auto bound =
+          constant_upper
+              ? scalars_.integer(*constant_upper, LOOM_SCALAR_TYPE_I32, source)
+              : expression(
+                    std::get<CountedLoop::Bound>(range->upper).expression)
+                    .ssa();
+      upper = signed_index(bound, source);
+      step = scalars_.integer(range->step, LOOM_SCALAR_TYPE_INDEX, source);
     } else {
       const auto& address_range =
           std::get<CountedLoop::AddressRange>(counted.range);

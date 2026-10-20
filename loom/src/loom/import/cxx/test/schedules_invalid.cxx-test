@@ -243,6 +243,14 @@ unsigned entry(unsigned count) {
 
 // ====
 // RUN: verify
+// A non-unit signed step must leave room for the final source increment.
+void entry() {
+  // ERROR@+1: LOWERING/059 "loop scheduling requires a nonwrapping counted for loop"
+  [[loom::unroll]] for (int i = 0; i < 2147483645; i += 4) {}
+}
+
+// ====
+// RUN: verify
 // An omitted condition has ordinary infinite-loop semantics but supplies no
 // finite interval for explicit scheduling.
 void entry() {

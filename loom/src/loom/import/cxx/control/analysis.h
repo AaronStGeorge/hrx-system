@@ -11,6 +11,7 @@
 #include <cxx/cxx_fwd.h>
 #include <cxx/symbols_fwd.h>
 
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <unordered_map>
@@ -90,6 +91,12 @@ struct CountedLoop {
     // Positive constant step in the source's unsigned-int width.
     unsigned step;
   };
+  struct SignedRange {
+    // Proven constant or stable runtime bound evaluated once by translation.
+    std::variant<std::int32_t, Bound> upper;
+    // Positive constant step in the source's signed-int width.
+    unsigned step;
+  };
   enum class AddressDomain {
     Index,
     Offset,
@@ -105,7 +112,7 @@ struct CountedLoop {
   // Fixed-width C++ arithmetic or a target-selected native address interval.
   // Native address ranges have an implicit unit step: larger steps can wrap
   // after overshooting a bound whose target carrier width is not yet known.
-  std::variant<UnsignedRange, AddressRange> range;
+  std::variant<UnsignedRange, SignedRange, AddressRange> range;
 };
 
 // Syntactic paths through a statement that take a particular exit. Other
@@ -230,6 +237,9 @@ class ControlFlow final : private cxx::ASTVisitor {
   cxx::Symbol* object_owner(cxx::ExpressionAST* expression) const;
   std::optional<CountedLoop> classify(cxx::ForStatementAST* loop);
   std::optional<CountedLoop> classify_unsigned(
+      cxx::ForStatementAST* loop, cxx::Symbol* induction,
+      cxx::BinaryExpressionAST* condition);
+  std::optional<CountedLoop> classify_signed(
       cxx::ForStatementAST* loop, cxx::Symbol* induction,
       cxx::BinaryExpressionAST* condition);
   std::optional<CountedLoop> classify_address(
