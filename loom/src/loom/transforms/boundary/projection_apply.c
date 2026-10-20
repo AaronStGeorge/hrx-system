@@ -149,7 +149,7 @@ static iree_status_t loom_boundary_projection_reconstruct_block_candidate(
 static iree_status_t loom_boundary_projection_eliminate_block_candidate(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    loom_boundary_projection_slot_t* candidate, loom_type_t logical_type) {
+    loom_boundary_projection_slot_t* candidate) {
   IREE_ASSERT(candidate->role == LOOM_BOUNDARY_PROJECTION_SLOT_BLOCK_ARGUMENT);
   const loom_boundary_projection_schema_t* schema = &candidate->schema;
   IREE_ASSERT(schema->destination_mode ==
@@ -167,9 +167,11 @@ static iree_status_t loom_boundary_projection_eliminate_block_candidate(
   }
 
   IREE_ASSERT(candidate->realization_anchor != NULL);
+  loom_boundary_projection_elimination_t elimination = {0};
   IREE_RETURN_IF_ERROR(schema->rule->transport.eliminate(
-      schema->rule, plan, function, candidate, logical_type,
-      candidate->realization_anchor->location));
+      schema->rule, plan, function, candidate, &elimination));
+  IREE_RETURN_IF_ERROR(loom_rewriter_erase_closed_set(
+      &plan->rewriter, elimination.operations, elimination.count));
   IREE_ASSERT(!loom_module_value_has_uses(plan->module, candidate->value_id));
   const uint16_t current_index = loom_value_def_index(
       loom_module_value(plan->module, candidate->value_id));
@@ -206,7 +208,7 @@ static iree_status_t loom_boundary_projection_realize_block_candidates(
           &remap, candidate->value_id, candidate->replacement_value_id));
     } else {
       IREE_RETURN_IF_ERROR(loom_boundary_projection_eliminate_block_candidate(
-          plan, function, candidate, logical_type));
+          plan, function, candidate));
     }
   }
   return iree_ok_status();
@@ -1142,6 +1144,57 @@ static iree_status_t loom_boundary_projection_replace_functions(
   return iree_ok_status();
 }
 
+// Logical structured definitions outlive source-edge reconstruction. A loop
+// may feed a branch, or a branch may feed a loop, independently of nesting.
+// All incoming recipes consume physical identities before retained semantic
+// uses are eliminated and the empty original shells are retired.
+static iree_status_t loom_boundary_projection_retire_structured_definitions(
+    loom_boundary_projection_plan_t* plan,
+    loom_boundary_projection_function_t* function) {
+  loom_op_t** operations = NULL;
+  iree_host_size_t count = 0;
+  iree_host_size_t capacity = 0;
+  const iree_host_size_t owner_capacity =
+      function->loop_count + function->branch_count;
+  if (owner_capacity != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(plan->arena, 0, owner_capacity,
+                                               sizeof(*operations), &capacity,
+                                               (void**)&operations));
+  }
+  for (iree_host_size_t i = 0; i < function->loop_count; ++i) {
+    if (function->loops[i].selected) {
+      operations[count++] = function->loops[i].loop.op;
+    }
+  }
+  for (iree_host_size_t i = 0; i < function->branch_count; ++i) {
+    if (function->branches[i].selected) {
+      operations[count++] = function->branches[i].branch.op;
+    }
+  }
+  for (iree_host_size_t i = 0; i < function->candidate_count; ++i) {
+    loom_boundary_projection_slot_t* slot = &function->candidates[i];
+    if (!slot->selected ||
+        (slot->role != LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE &&
+         slot->role != LOOM_BOUNDARY_PROJECTION_SLOT_BRANCH_RESULT) ||
+        slot->schema.destination_mode !=
+            LOOM_BOUNDARY_PROJECTION_DESTINATION_ELIMINATE) {
+      continue;
+    }
+    loom_boundary_projection_elimination_t elimination = {0};
+    IREE_RETURN_IF_ERROR(slot->schema.rule->transport.eliminate(
+        slot->schema.rule, plan, function, slot, &elimination));
+    if (elimination.count != 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+          plan->arena, count, count + elimination.count, sizeof(*operations),
+          &capacity, (void**)&operations));
+      memcpy(operations + count, elimination.operations,
+             elimination.count * sizeof(*operations));
+      count += elimination.count;
+    }
+  }
+  return loom_rewriter_erase_closed_set(&plan->rewriter, operations, count);
+}
+
 iree_status_t loom_boundary_projection_apply(
     loom_boundary_projection_plan_t* plan) {
   // Capture the original value domain before application creates any values.
@@ -1183,6 +1236,8 @@ iree_status_t loom_boundary_projection_apply(
         loom_boundary_projection_apply_loops(plan, &plan->functions[i]));
     IREE_RETURN_IF_ERROR(
         loom_boundary_projection_apply_branches(plan, &plan->functions[i]));
+    IREE_RETURN_IF_ERROR(loom_boundary_projection_retire_structured_definitions(
+        plan, &plan->functions[i]));
   }
   for (iree_host_size_t i = 0; i < plan->function_count; ++i) {
     if (!plan->functions[i].selected) {

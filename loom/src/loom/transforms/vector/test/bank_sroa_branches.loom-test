@@ -1,0 +1,307 @@
+// RUN: pass pipeline-scf-for,unroll-scf-for,canonicalize,cse,sroa-vector-banks,canonicalize,cse
+
+// Read-ahead creates a runtime serial/steady/drain branch. The accumulator
+// remains one logical bank while all of its boundary edges use row components.
+func.def @runtime_read_ahead(%input: view<8x4xf32>, %end: index) -> (vector<4xf32>, vector<4xf32>) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %depth = index.constant 2 : index
+  %initial = vector.constant 0.0 : vector<2x4xf32>
+  %result = scf.for %i = [%begin to %end step %step](%bank = %initial : vector<2x4xf32>) -> (vector<2x4xf32>) pipeline(%depth) {
+    %value = vector.load %input[%i, 0] : view<8x4xf32> -> vector<4xf32>
+    %extent = index.constant 2 : index
+    %next = scf.for %slot = [%begin to %extent step %step](%partial = %bank : vector<2x4xf32>) -> (vector<2x4xf32>) unroll schedule(linear) {
+      %old = vector.extract %partial[%slot] : vector<2x4xf32> -> vector<4xf32>
+      %updated = vector.addf %old, %value : vector<4xf32>
+      %inserted = vector.insert %updated into %partial[%slot] : vector<4xf32>, vector<2x4xf32>
+      scf.yield %inserted : vector<2x4xf32>
+    }
+    scf.yield %next : vector<2x4xf32>
+  }
+  %first = vector.extract %result[0] : vector<2x4xf32> -> vector<4xf32>
+  %second = vector.extract %result[1] : vector<2x4xf32> -> vector<4xf32>
+  func.return %first, %second : vector<4xf32>, vector<4xf32>
+}
+
+// ----
+func.def @runtime_read_ahead(%input: view<8x4xf32>, %end: index) -> (vector<4xf32>, vector<4xf32>) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %22 = index.cmp slt, %step, %end : index
+  %first, %second = scf.if %22 -> (vector<4xf32>, vector<4xf32>) {
+    %80 = index.assume %end [gt(%end, 1)] : index
+    %value = vector.load %input[%begin, 0] : view<8x4xf32> -> vector<4xf32>
+    %initial_slot_0 = vector.constant 0.0 : vector<4xf32>
+    %old, %old_1, %103 = scf.for %104 = [%step to %80 step %step](%old = %initial_slot_0 : vector<4xf32>, %old_1 = %initial_slot_0 : vector<4xf32>, %107 = %value : vector<4xf32>) -> (vector<4xf32>, vector<4xf32>, vector<4xf32>) {
+      %value = vector.load %input[%104, 0] : view<8x4xf32> -> vector<4xf32>
+      %updated = vector.addf %old, %107 : vector<4xf32>
+      %updated_1 = vector.addf %old_1, %107 : vector<4xf32>
+      scf.yield %updated, %updated_1, %value : vector<4xf32>, vector<4xf32>, vector<4xf32>
+    }
+    %updated = vector.addf %old, %103 : vector<4xf32>
+    %updated_1 = vector.addf %old_1, %103 : vector<4xf32>
+    scf.yield %updated, %updated_1 : vector<4xf32>, vector<4xf32>
+  } else {
+    %81 = index.assume %end [le(%end, 1)] : index
+    %initial_slot_0 = vector.constant 0.0 : vector<4xf32>
+    %110, %111 = scf.for %112 = [%begin to %81 step %step](%old = %initial_slot_0 : vector<4xf32>, %old_1 = %initial_slot_0 : vector<4xf32>) -> (vector<4xf32>, vector<4xf32>) {
+      %value = vector.load %input[%112, 0] : view<8x4xf32> -> vector<4xf32>
+      %updated = vector.addf %old, %value : vector<4xf32>
+      %updated_1 = vector.addf %old_1, %value : vector<4xf32>
+      scf.yield %updated, %updated_1 : vector<4xf32>, vector<4xf32>
+    }
+    scf.yield %110, %111 : vector<4xf32>, vector<4xf32>
+  }
+  func.return %first, %second : vector<4xf32>, vector<4xf32>
+}
+
+// ====
+// RUN: pass sroa-vector-banks
+
+// A branch may update a captured recurrence partially, or forward it untouched.
+// The independent whole-vector sibling keeps its original representation.
+func.def @branch_inside_loop(%initial: vector<2x2xi32>, %whole: vector<2xi32>, %increment: vector<2xi32>, %condition: i1, %end: index) -> (vector<2xi32>, vector<2xi32>) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %result, %other = scf.for %i = [%begin to %end step %step](%bank = %initial : vector<2x2xi32>, %peer = %whole : vector<2xi32>) -> (vector<2x2xi32>, vector<2xi32>) {
+    %next = scf.if %condition -> (vector<2x2xi32>) {
+      %old = vector.extract %bank[1] : vector<2x2xi32> -> vector<2xi32>
+      %updated = vector.addi %old, %increment : vector<2xi32>
+      %inserted = vector.insert %updated into %bank[1] : vector<2xi32>, vector<2x2xi32>
+      scf.yield %inserted : vector<2x2xi32>
+    } else {
+      scf.yield %bank : vector<2x2xi32>
+    }
+    %next_peer = vector.addi %peer, %increment : vector<2xi32>
+    scf.yield %next, %next_peer : vector<2x2xi32>, vector<2xi32>
+  }
+  %value = vector.extract %result[1] : vector<2x2xi32> -> vector<2xi32>
+  func.return %value, %other : vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @branch_inside_loop(%initial: vector<2x2xi32>, %whole: vector<2xi32>, %increment: vector<2xi32>, %condition: i1, %end: index) -> (vector<2xi32>, vector<2xi32>) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %initial_slot_0 = vector.extract %initial[0] : vector<2x2xi32> -> vector<2xi32>
+  %initial_slot_1 = vector.extract %initial[1] : vector<2x2xi32> -> vector<2xi32>
+  %result_slot_0, %result_slot_1, %other = scf.for %i = [%begin to %end step %step](%bank_slot_0 = %initial_slot_0 : vector<2xi32>, %bank_slot_1 = %initial_slot_1 : vector<2xi32>, %peer = %whole : vector<2xi32>) -> (vector<2xi32>, vector<2xi32>, vector<2xi32>) {
+    %20, %21 = scf.if %condition -> (vector<2xi32>, vector<2xi32>) {
+      %updated = vector.addi %bank_slot_1, %increment : vector<2xi32>
+      scf.yield %bank_slot_0, %updated : vector<2xi32>, vector<2xi32>
+    } else {
+      scf.yield %bank_slot_0, %bank_slot_1 : vector<2xi32>, vector<2xi32>
+    }
+    %next_peer = vector.addi %peer, %increment : vector<2xi32>
+    scf.yield %20, %21, %next_peer : vector<2xi32>, vector<2xi32>, vector<2xi32>
+  }
+  func.return %result_slot_1, %other : vector<2xi32>, vector<2xi32>
+}
+
+// ====
+// RUN: pass sroa-vector-banks
+// Pure forwarding joins inherit the partition established by a later access.
+// Sequential loops require every consumer edge to be rebuilt before retirement.
+func.def @forwarding_chain(%left: vector<2xi32>, %right: vector<2xi32>, %condition: i1, %end: index, %increment: i32) -> (i32, i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %choice = scf.if %condition -> (vector<2xi32>) {
+    %nested = scf.if %condition -> (vector<2xi32>) {
+      scf.yield %left : vector<2xi32>
+    } else {
+      scf.yield %right : vector<2xi32>
+    }
+    scf.yield %nested : vector<2xi32>
+  } else {
+    scf.yield %right : vector<2xi32>
+  }
+  %seed = vector.extract %choice[0] : vector<2xi32> -> i32
+  %prepared = vector.insert %seed into %choice[1] : i32, vector<2xi32>
+  %first = scf.for %i = [%begin to %end step %step](%forward = %prepared : vector<2xi32>) -> (vector<2xi32>) {
+    scf.yield %forward : vector<2xi32>
+  }
+  %second = scf.for %i = [%begin to %end step %step](%bank = %first : vector<2xi32>) -> (vector<2xi32>) {
+    %old = vector.extract %bank[1] : vector<2xi32> -> i32
+    %next = scalar.addi %old, %increment : i32
+    %updated = vector.insert %next into %bank[1] : i32, vector<2xi32>
+    scf.yield %updated : vector<2xi32>
+  }
+  %a = vector.extract %second[0] : vector<2xi32> -> i32
+  %b = vector.extract %second[1] : vector<2xi32> -> i32
+  func.return %a, %b : i32, i32
+}
+
+// ----
+func.def @forwarding_chain(%left: vector<2xi32>, %right: vector<2xi32>, %condition: i1, %end: index, %increment: i32) -> (i32, i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %seed, %25 = scf.if %condition -> (i32, i32) {
+    %26, %27 = scf.if %condition -> (i32, i32) {
+      %40 = vector.extract %left[0] : vector<2xi32> -> i32
+      %41 = vector.extract %left[1] : vector<2xi32> -> i32
+      scf.yield %40, %41 : i32, i32
+    } else {
+      %42 = vector.extract %right[0] : vector<2xi32> -> i32
+      %43 = vector.extract %right[1] : vector<2xi32> -> i32
+      scf.yield %42, %43 : i32, i32
+    }
+    scf.yield %26, %27 : i32, i32
+  } else {
+    %38 = vector.extract %right[0] : vector<2xi32> -> i32
+    %39 = vector.extract %right[1] : vector<2xi32> -> i32
+    scf.yield %38, %39 : i32, i32
+  }
+  %first_slot_0, %first_slot_1 = scf.for %i = [%begin to %end step %step](%forward_slot_0 = %seed : i32, %forward_slot_1 = %seed : i32) -> (i32, i32) {
+    scf.yield %forward_slot_0, %forward_slot_1 : i32, i32
+  }
+  %second_slot_0, %second_slot_1 = scf.for %i = [%begin to %end step %step](%bank_slot_0 = %first_slot_0 : i32, %bank_slot_1 = %first_slot_1 : i32) -> (i32, i32) {
+    %next = scalar.addi %bank_slot_1, %increment : i32
+    scf.yield %bank_slot_0, %next : i32, i32
+  }
+  func.return %second_slot_0, %second_slot_1 : i32, i32
+}
+
+// ====
+// RUN: pass sroa-vector-banks
+// An observed whole value keeps the connected recurrence and join intact.
+func.def @whole_branch_result(%initial: vector<2xi32>, %increment: i32, %condition: i1, %end: index) -> (vector<2xi32>) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %result = scf.for %i = [%begin to %end step %step](%bank = %initial : vector<2xi32>) -> (vector<2xi32>) {
+    %old = vector.extract %bank[0] : vector<2xi32> -> i32
+    %next = scalar.addi %old, %increment : i32
+    %updated = vector.insert %next into %bank[0] : i32, vector<2xi32>
+    scf.yield %updated : vector<2xi32>
+  }
+  %choice = scf.if %condition -> (vector<2xi32>) {
+    scf.yield %result : vector<2xi32>
+  } else {
+    scf.yield %initial : vector<2xi32>
+  }
+  func.return %choice : vector<2xi32>
+}
+
+// ----
+func.def @whole_branch_result(%initial: vector<2xi32>, %increment: i32, %condition: i1, %end: index) -> (vector<2xi32>) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %result = scf.for %i = [%begin to %end step %step](%bank = %initial : vector<2xi32>) -> (vector<2xi32>) {
+    %old = vector.extract %bank[0] : vector<2xi32> -> i32
+    %next = scalar.addi %old, %increment : i32
+    %updated = vector.insert %next into %bank[0] : i32, vector<2xi32>
+    scf.yield %updated : vector<2xi32>
+  }
+  %choice = scf.if %condition -> (vector<2xi32>) {
+    scf.yield %result : vector<2xi32>
+  } else {
+    scf.yield %initial : vector<2xi32>
+  }
+  func.return %choice : vector<2xi32>
+}
+
+// ====
+// RUN: pass sroa-vector-banks
+// Each side is statically addressed, but their scalar/row partitions disagree.
+func.def @incompatible_partitions(%initial: vector<2x2xi32>, %condition: i1, %end: index) -> (vector<2xi32>, i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %result = scf.for %i = [%begin to %end step %step](%bank = %initial : vector<2x2xi32>) -> (vector<2x2xi32>) {
+    %row = vector.extract %bank[0] : vector<2x2xi32> -> vector<2xi32>
+    test.use %row : vector<2xi32>
+    scf.yield %bank : vector<2x2xi32>
+  }
+  %choice = scf.if %condition -> (vector<2x2xi32>) {
+    scf.yield %result : vector<2x2xi32>
+  } else {
+    scf.yield %initial : vector<2x2xi32>
+  }
+  %row = vector.extract %result[0] : vector<2x2xi32> -> vector<2xi32>
+  %scalar = vector.extract %choice[0, 1] : vector<2x2xi32> -> i32
+  func.return %row, %scalar : vector<2xi32>, i32
+}
+
+// ----
+func.def @incompatible_partitions(%initial: vector<2x2xi32>, %condition: i1, %end: index) -> (vector<2xi32>, i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %result = scf.for %i = [%begin to %end step %step](%bank = %initial : vector<2x2xi32>) -> (vector<2x2xi32>) {
+    %row = vector.extract %bank[0] : vector<2x2xi32> -> vector<2xi32>
+    test.use %row : vector<2xi32>
+    scf.yield %bank : vector<2x2xi32>
+  }
+  %choice = scf.if %condition -> (vector<2x2xi32>) {
+    scf.yield %result : vector<2x2xi32>
+  } else {
+    scf.yield %initial : vector<2x2xi32>
+  }
+  %row = vector.extract %result[0] : vector<2x2xi32> -> vector<2xi32>
+  %scalar = vector.extract %choice[0, 1] : vector<2x2xi32> -> i32
+  func.return %row, %scalar : vector<2xi32>, i32
+}
+
+// ====
+// RUN: pass sroa-vector-banks
+
+// A multiway join inside the condition region feeds a differently shaped
+// body/result signature. The bank header is independent of the scalar counter.
+func.def @switch_in_condition(%initial: vector<2xi32>, %limit: index, %selector: index) -> (i32, i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %result, %terminal, %entered = scf.while(%before = %initial : vector<2xi32>, %position = %begin : index) -> (vector<2xi32>, index, i1) {
+    %chosen = scf.switch %selector -> (vector<2xi32>) {
+      case 3 {
+        %head = vector.extract %before[0] : vector<2xi32> -> i32
+        %updated = vector.insert %head into %before[1] : i32, vector<2xi32>
+        scf.yield %updated : vector<2xi32>
+      }
+      case 9 {
+        %tail = vector.extract %before[1] : vector<2xi32> -> i32
+        %updated = vector.insert %tail into %before[0] : i32, vector<2xi32>
+        scf.yield %updated : vector<2xi32>
+      }
+      default {
+        scf.yield %before : vector<2xi32>
+      }
+    }
+    %keep_going = index.cmp slt, %position, %limit : index
+    scf.condition %keep_going, %chosen, %position, %keep_going : i1, vector<2xi32>, index, i1
+  } do(%body: vector<2xi32>, %iteration: index, %active: i1) {
+    %head = vector.extract %body[0] : vector<2xi32> -> i32
+    %tail = vector.extract %body[1] : vector<2xi32> -> i32
+    %sum = scalar.addi %head, %tail : i32
+    %updated = vector.insert %sum into %body[0] : i32, vector<2xi32>
+    %next_position = index.add %iteration, %step : index
+    scf.yield %updated, %next_position : vector<2xi32>, index
+  }
+  %first = vector.extract %result[0] : vector<2xi32> -> i32
+  %second = vector.extract %result[1] : vector<2xi32> -> i32
+  func.return %first, %second : i32, i32
+}
+
+// ----
+func.def @switch_in_condition(%initial: vector<2xi32>, %limit: index, %selector: index) -> (i32, i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %initial_slot_0 = vector.extract %initial[0] : vector<2xi32> -> i32
+  %initial_slot_1 = vector.extract %initial[1] : vector<2xi32> -> i32
+  %result_slot_0, %result_slot_1, %terminal, %entered = scf.while(%before_slot_0 = %initial_slot_0 : i32, %before_slot_1 = %initial_slot_1 : i32, %position = %begin : index) -> (i32, i32, index, i1) {
+    %28, %29 = scf.switch %selector -> (i32, i32) {
+      case 3 {
+        scf.yield %before_slot_0, %before_slot_0 : i32, i32
+      }
+      case 9 {
+        scf.yield %before_slot_1, %before_slot_1 : i32, i32
+      }
+      default {
+        scf.yield %before_slot_0, %before_slot_1 : i32, i32
+      }
+    }
+    %keep_going = index.cmp slt, %position, %limit : index
+    scf.condition %keep_going, %28, %29, %position, %keep_going : i1, i32, i32, index, i1
+  } do(%body_slot_0: i32, %body_slot_1: i32, %iteration: index, %active: i1) {
+    %sum = scalar.addi %body_slot_0, %body_slot_1 : i32
+    %next_position = index.add %iteration, %step : index
+    scf.yield %sum, %body_slot_1, %next_position : i32, i32, index
+  }
+  func.return %result_slot_0, %result_slot_1 : i32, i32
+}

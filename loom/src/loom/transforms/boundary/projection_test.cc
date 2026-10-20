@@ -220,11 +220,10 @@ static iree_status_t EliminateIdentitySlot(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    loom_boundary_projection_slot_t* slot, loom_type_t logical_type,
-    loom_location_id_t location) {
+    loom_boundary_projection_slot_t* slot,
+    loom_boundary_projection_elimination_t* out_elimination) {
+  (void)out_elimination;
   (void)function;
-  (void)logical_type;
-  (void)location;
   IREE_ASSERT(slot->schema.rule == rule);
   IREE_ASSERT_EQ(slot->schema.component_count, 1);
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(

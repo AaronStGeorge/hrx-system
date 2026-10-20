@@ -640,3 +640,78 @@ func.def @ordered_runtime_interval_oracle(%input: buffer, %output: buffer, %inte
   func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
   func.return
 }
+
+// The runtime count creates startup/steady/drain branches around an eight-row
+// accumulator bank. Row-specific offsets make every carried component distinct.
+kernel.def @bank_read_ahead() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %count_input: index) {
+  %count = index.assume %count_input [range(%count_input, 0, 8)] : index
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %extent = index.constant 8 : index
+  %depth = index.constant 2 : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8x8xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<8x8xi32>
+  %initial = vector.constant 0 : vector<8x8xi32>
+  %result = scf.for %i = [%begin to %count step %step](%bank = %initial : vector<8x8xi32>) -> (vector<8x8xi32>) pipeline(%depth) {
+    %value = vector.load %source[%i, 0] : view<8x8xi32> -> vector<8xi32>
+    %next = scf.for %slot = [%begin to %extent step %step](%partial = %bank : vector<8x8xi32>) -> (vector<8x8xi32>) unroll schedule(linear) {
+      %slot_value = index.cast %slot : index to i32
+      %bias = vector.splat %slot_value : vector<8xi32>
+      %increment = vector.addi %value, %bias : vector<8xi32>
+      %old = vector.extract %partial[%slot] : vector<8x8xi32> -> vector<8xi32>
+      %updated = vector.addi %old, %increment : vector<8xi32>
+      %inserted = vector.insert %updated into %partial[%slot] : vector<8xi32>, vector<8x8xi32>
+      scf.yield %inserted : vector<8x8xi32>
+    }
+    scf.yield %next : vector<8x8xi32>
+  }
+  scf.for %slot = [%begin to %extent step %step] unroll schedule(linear) {
+    %value = vector.extract %result[%slot] : vector<8x8xi32> -> vector<8xi32>
+    vector.store %value, %destination[%slot, 0] : vector<8xi32>, view<8x8xi32>
+  }
+  kernel.return
+}
+
+// The oracle sums each scalar output independently, without vector state or
+// read-ahead. Arithmetic wraps in i32 for the full input range.
+func.def @bank_read_ahead_oracle(%input: buffer, %output: buffer, %count_input: index) {
+  %count = index.assume %count_input [range(%count_input, 0, 8)] : index
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %extent = index.constant 8 : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8x8xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<8x8xi32>
+  %initial = scalar.constant 0 : i32
+  scf.for %row = [%begin to %extent step %step] {
+    %bias = index.cast %row : index to i32
+    scf.for %column = [%begin to %extent step %step] {
+      %result = scf.for %i = [%begin to %count step %step](%sum = %initial : i32) -> (i32) {
+        %value = view.load %source[%i, %column] : view<8x8xi32> -> i32
+        %increment = scalar.addi %value, %bias : i32
+        %next = scalar.addi %sum, %increment : i32
+        scf.yield %next : i32
+      }
+      view.store %result, %destination[%row, %column] : i32, view<8x8xi32>
+    }
+  }
+  func.return
+}
+
+check.scenario @bank_read_ahead_values {
+  check.trial[9](%count: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%count] : check.entropy -> i64
+    %input = check.generate.random.uniform seed(%seed) range(-2147483648 to 2147483647) : tensor<8x8xi32>
+    %storage = check.generate.fill value(-123) : tensor<72xi32>
+    %output = check.tensor.view %storage offset(16) : tensor<72xi32> -> tensor<8x8xi32>
+    check.compare<@bank_read_ahead, @bank_read_ahead_oracle>(%input, %output, %count) : (tensor<8x8xi32>, tensor<8x8xi32>, index) -> () {
+      check.expect.bitwise actual(%input) expected(%input) : tensor<8x8xi32>
+      check.expect.bitwise actual(%storage) expected(%storage) : tensor<72xi32>
+    }
+  }
+  check.return
+}

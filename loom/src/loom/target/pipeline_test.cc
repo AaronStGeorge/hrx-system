@@ -362,9 +362,9 @@ TEST_F(TargetPipelineTest, ZeroChecksStillMaterializesAuthoredAssertions) {
   EXPECT_EQ(counts.sink_single_use_reads, 1);
   EXPECT_GT(counts.scf_to_cfg, 0);
   EXPECT_LT(counts.source_loop_unrolling_ordinal,
-            counts.first_complete_target_legalization_ordinal);
-  EXPECT_LT(counts.first_complete_target_legalization_ordinal,
             counts.vector_bank_sroa_ordinal);
+  EXPECT_LT(counts.vector_bank_sroa_ordinal,
+            counts.first_complete_target_legalization_ordinal);
   EXPECT_LT(counts.vector_bank_sroa_ordinal,
             counts.sink_single_use_reads_ordinal);
   EXPECT_LT(counts.sink_single_use_reads_ordinal,
@@ -401,7 +401,10 @@ TEST_F(TargetPipelineTest, StructuredControlFlowExpandsSourceLoopPolicies) {
 
   const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
   EXPECT_EQ(counts.source_loop_unrolling, 1);
+  EXPECT_EQ(counts.vector_bank_sroa, 1);
   EXPECT_LT(counts.source_loop_unrolling_ordinal,
+            counts.vector_bank_sroa_ordinal);
+  EXPECT_LT(counts.vector_bank_sroa_ordinal,
             counts.first_complete_target_legalization_ordinal);
   EXPECT_LT(counts.first_complete_target_legalization_ordinal,
             counts.boundary_projection_ordinal);

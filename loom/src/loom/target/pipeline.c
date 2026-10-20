@@ -758,6 +758,15 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
       builder, IREE_SV("source"),
       loom_target_pipeline_build_source_loop_unrolling, user_data, &for_op));
+  // Banks cross structured loops and branches independently of the target's
+  // control-flow representation. Project their static slots before final
+  // legalization decomposes tail-vector accesses into target-native packets.
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_run(builder, IREE_SV("sroa-vector-banks")));
+  loom_op_t* bank_sroa_changed_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_ir_build_if_changed(
+      builder, loom_target_pipeline_build_cleanup_target_functions, NULL,
+      &bank_sroa_changed_op));
   // Finish reference rewrites after source expansion exposes static lanes and
   // before CFG finalization. Source-to-low owns the final legality check.
   IREE_RETURN_IF_ERROR(
@@ -769,12 +778,6 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       builder, loom_target_pipeline_build_cleanup_target_functions, NULL,
       &if_changed_op));
   if (control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG) {
-    IREE_RETURN_IF_ERROR(
-        loom_target_pipeline_build_run(builder, IREE_SV("sroa-vector-banks")));
-    loom_op_t* bank_sroa_changed_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_pass_ir_build_if_changed(
-        builder, loom_target_pipeline_build_cleanup_target_functions, NULL,
-        &bank_sroa_changed_op));
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
         builder, IREE_SV("project-loop-boundary-representations")));
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(

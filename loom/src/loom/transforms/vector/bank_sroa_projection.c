@@ -14,6 +14,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/target/reporting/report.h"
+#include "loom/transforms/boundary/projection_branch.h"
 #include "loom/transforms/boundary/projection_loop.h"
 
 typedef struct loom_vector_bank_sroa_bank_plan_t
@@ -21,15 +22,17 @@ typedef struct loom_vector_bank_sroa_bank_plan_t
 typedef struct loom_vector_bank_sroa_endpoint_plan_t
     loom_vector_bank_sroa_endpoint_plan_t;
 
-// Which independently typed LoopLike state domain owns a bank.
+// Which independently typed structured boundary owns a bank.
 typedef enum loom_vector_bank_sroa_bank_domain_e {
   // Body arguments and operation results.
   LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_RESULT = 0,
   // Condition-region arguments and the initial/backedge tuple.
   LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_HEADER = 1,
+  // RegionBranch results and their incoming yields.
+  LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_BRANCH = 2,
 } loom_vector_bank_sroa_bank_domain_t;
 
-// Why a vector recurrence could not use one homogeneous component schema.
+// Why a structured vector bank could not use one component schema.
 // The numeric order is the diagnostic priority when several blockers are
 // discovered on the same recurrence.
 typedef enum loom_vector_bank_sroa_blocker_e {
@@ -71,14 +74,6 @@ struct loom_vector_bank_sroa_endpoint_plan_t {
   loom_value_id_t value_id;
   // Generic projection candidate for value_id.
   iree_host_size_t candidate;
-  // Block containing admitted insert chains, or NULL for the loop result.
-  loom_block_t* block;
-  // Boundary terminator consuming forwarded state, or NULL for a result.
-  loom_op_t* boundary_terminator;
-  // First boundary payload operand accepted from this endpoint.
-  uint16_t boundary_operand_offset;
-  // Number of boundary payload operands accepted from this endpoint.
-  uint16_t boundary_operand_count;
   // Exact admitted extracts reachable from this endpoint.
   loom_vector_bank_sroa_extract_use_t* extracts;
   // Number of entries in extracts.
@@ -101,19 +96,18 @@ struct loom_vector_bank_sroa_endpoint_plan_t {
   bool uses_supported;
 };
 
-typedef struct loom_vector_bank_sroa_loop_plan_t {
-  // Generic recurrence topology owned by the boundary engine.
-  loom_boundary_projection_loop_t* loop;
-  // One potential bank per recurrence column.
-  loom_vector_bank_sroa_bank_plan_t* banks;
-  // Number of entries in banks.
-  uint32_t bank_count;
-} loom_vector_bank_sroa_loop_plan_t;
-
 struct loom_vector_bank_sroa_bank_plan_t {
-  // Loop containing this recurrence column.
-  loom_vector_bank_sroa_loop_plan_t* loop;
-  // Result/body or condition-header endpoint plans.
+  // Original structured operation defining this logical column.
+  loom_op_t* owner;
+  // Boundary ordinal within its structured operation family.
+  uint32_t operation_ordinal;
+  // Union root for the component schema shared across direct bank transfers.
+  loom_vector_bank_sroa_bank_plan_t* schema_parent;
+  // Union rank bounds schema-constraint resolution across forwarding joins.
+  uint8_t schema_rank;
+  // Whether connected accesses require incompatible component partitions.
+  bool schema_conflict;
+  // Result/body, condition-header, or branch-result endpoint plans.
   loom_vector_bank_sroa_endpoint_plan_t endpoints[2];
   // Number of initialized entries in endpoints.
   uint8_t endpoint_count;
@@ -129,7 +123,7 @@ struct loom_vector_bank_sroa_bank_plan_t {
   uint8_t prefix_rank;
   // Number of physical payload components.
   uint16_t component_count;
-  // Independently typed LoopLike state domain owning this bank.
+  // Independently typed structured boundary owning this bank.
   loom_vector_bank_sroa_bank_domain_t domain;
   // Recurrence column ordinal within domain.
   uint16_t state_ordinal;
@@ -144,10 +138,10 @@ typedef struct loom_vector_bank_sroa_function_state_t {
   loom_vector_bank_sroa_state_node_t** nodes_by_ordinal;
   // Number of entries in nodes_by_ordinal.
   loom_value_ordinal_t value_count;
-  // One retained plan per generic loop plan.
-  loom_vector_bank_sroa_loop_plan_t* loops;
-  // Number of entries in loops.
-  iree_host_size_t loop_count;
+  // Logical columns of retained loops and branches, in family/source order.
+  loom_vector_bank_sroa_bank_plan_t* banks;
+  // Number of entries in banks.
+  iree_host_size_t bank_count;
 } loom_vector_bank_sroa_function_state_t;
 
 typedef enum loom_vector_bank_sroa_source_component_kind_e {
@@ -197,11 +191,6 @@ loom_vector_bank_sroa_function_state(
     const loom_boundary_projection_function_t* function) {
   return (loom_vector_bank_sroa_function_state_t*)
       loom_boundary_projection_function_rule_state(plan, function, rule);
-}
-
-static loom_op_t* loom_vector_bank_sroa_loop_op(
-    const loom_vector_bank_sroa_bank_plan_t* bank) {
-  return bank->loop->loop->loop.op;
 }
 
 static void loom_vector_bank_sroa_record_blocker(
@@ -343,13 +332,108 @@ static bool loom_vector_bank_sroa_static_access_component(
   return true;
 }
 
+static loom_vector_bank_sroa_bank_plan_t* loom_vector_bank_sroa_schema_root(
+    loom_vector_bank_sroa_bank_plan_t* bank) {
+  loom_vector_bank_sroa_bank_plan_t* root = bank;
+  while (root->schema_parent != root) {
+    root = root->schema_parent;
+  }
+  while (bank->schema_parent != bank) {
+    loom_vector_bank_sroa_bank_plan_t* parent = bank->schema_parent;
+    bank->schema_parent = root;
+    bank = parent;
+  }
+  return root;
+}
+
+static void loom_vector_bank_sroa_copy_partition(
+    const loom_vector_bank_sroa_bank_plan_t* source,
+    loom_vector_bank_sroa_bank_plan_t* target) {
+  target->payload_type = source->payload_type;
+  target->prefix_rank = source->prefix_rank;
+  target->component_count = source->component_count;
+  target->active = source->active;
+}
+
+static void loom_vector_bank_sroa_join_partitions(
+    loom_vector_bank_sroa_bank_plan_t* left,
+    loom_vector_bank_sroa_bank_plan_t* right) {
+  left = loom_vector_bank_sroa_schema_root(left);
+  right = loom_vector_bank_sroa_schema_root(right);
+  if (left == right) {
+    return;
+  }
+  if (left->schema_rank < right->schema_rank) {
+    loom_vector_bank_sroa_bank_plan_t* temporary = left;
+    left = right;
+    right = temporary;
+  }
+  left->schema_conflict |=
+      right->schema_conflict ||
+      (left->active && right->active &&
+       (left->prefix_rank != right->prefix_rank ||
+        !loom_type_equal(left->payload_type, right->payload_type)));
+  if (!left->active) {
+    loom_vector_bank_sroa_copy_partition(right, left);
+  }
+  right->schema_parent = left;
+  if (left->schema_rank == right->schema_rank) {
+    ++left->schema_rank;
+  }
+}
+
+// Resolves one direct structured transport through its verified interface.
+// This bounded operand query neither walks regions nor follows value producers.
+static loom_value_id_t loom_vector_bank_sroa_transfer_destination(
+    loom_module_t* module, loom_op_t* user, uint16_t operand_index) {
+  loom_loop_like_t loop = loom_loop_like_cast(module, user);
+  if (loom_loop_like_isa(loop)) {
+    const loom_value_slice_t initial = loom_loop_like_iter_args(loop);
+    if (initial.count == 0) {
+      return LOOM_VALUE_ID_INVALID;
+    }
+    const uint16_t offset = (uint16_t)(initial.values - loom_op_operands(user));
+    if (operand_index < offset || operand_index - offset >= initial.count) {
+      return LOOM_VALUE_ID_INVALID;
+    }
+    const uint16_t column = (uint16_t)(operand_index - offset);
+    loom_region_t* condition = loom_loop_like_condition_region(loop);
+    return condition
+               ? loom_block_arg_id(loom_region_entry_block(condition), column)
+               : loom_op_const_results(user)[column];
+  }
+  if (!iree_any_bit_set(user->traits, LOOM_TRAIT_TERMINATOR)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  loom_op_t* owner = user->parent_op;
+  const loom_region_branch_t branch = loom_region_branch_cast(module, owner);
+  if (loom_region_branch_isa(branch)) {
+    return loom_op_const_results(owner)[operand_index];
+  }
+  loop = loom_loop_like_cast(module, owner);
+  if (!loom_loop_like_isa(loop)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  loom_region_t* condition = loom_loop_like_condition_region(loop);
+  if (!condition) {
+    return loom_op_const_results(owner)[operand_index];
+  }
+  if (user->parent_block->parent_region == condition) {
+    return operand_index == 0 ? LOOM_VALUE_ID_INVALID
+                              : loom_op_const_results(owner)[operand_index - 1];
+  }
+  return loom_block_arg_id(loom_region_entry_block(condition), operand_index);
+}
+
 static iree_status_t loom_vector_bank_sroa_prepare_access(
     loom_boundary_projection_plan_t* plan,
     loom_vector_bank_sroa_bank_plan_t* bank, loom_attribute_t static_indices,
     loom_value_slice_t dynamic_indices, loom_type_t payload_type,
-    bool allow_activation, uint16_t* out_component, bool* out_supported) {
+    uint16_t* out_component, bool* out_supported) {
   *out_component = 0;
   *out_supported = false;
+  loom_vector_bank_sroa_bank_plan_t* partition =
+      loom_vector_bank_sroa_schema_root(bank);
   const uint8_t bank_rank = loom_type_rank(bank->bank_type);
   if (!loom_type_is_all_static(bank->bank_type) ||
       static_indices.kind != LOOM_ATTR_I64_ARRAY || static_indices.count == 0 ||
@@ -371,15 +455,13 @@ static iree_status_t loom_vector_bank_sroa_prepare_access(
     }
   }
 
-  if (!bank->active) {
-    if (!allow_activation) {
-      return iree_ok_status();
-    }
-    bank->prefix_rank = (uint8_t)static_indices.count;
+  if (!partition->active) {
+    partition->prefix_rank = (uint8_t)static_indices.count;
     IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_payload_type(
-        plan->module, bank->bank_type, bank->prefix_rank, &bank->payload_type));
+        plan->module, bank->bank_type, partition->prefix_rank,
+        &partition->payload_type));
     uint32_t component_count = 1;
-    for (uint8_t axis = 0; axis < bank->prefix_rank; ++axis) {
+    for (uint8_t axis = 0; axis < partition->prefix_rank; ++axis) {
       const int64_t extent =
           loom_type_dim_static_size_at(bank->bank_type, axis);
       if (extent <= 0 ||
@@ -390,12 +472,12 @@ static iree_status_t loom_vector_bank_sroa_prepare_access(
       }
       component_count *= (uint32_t)extent;
     }
-    bank->component_count = (uint16_t)component_count;
-    bank->active = true;
+    partition->component_count = (uint16_t)component_count;
+    partition->active = true;
   }
 
   *out_supported = loom_vector_bank_sroa_static_access_component(
-      bank, static_indices, dynamic_indices, payload_type, out_component);
+      partition, static_indices, dynamic_indices, payload_type, out_component);
   if (!*out_supported) {
     loom_vector_bank_sroa_record_blocker(
         plan, bank,
@@ -410,16 +492,10 @@ static iree_status_t loom_vector_bank_sroa_initialize_endpoint(
     loom_vector_bank_sroa_function_state_t* function_state,
     loom_vector_bank_sroa_bank_plan_t* bank,
     loom_vector_bank_sroa_endpoint_plan_t* endpoint, loom_value_id_t value_id,
-    iree_host_size_t candidate, loom_block_t* block,
-    loom_op_t* boundary_terminator, uint16_t boundary_operand_offset,
-    uint16_t boundary_operand_count) {
+    iree_host_size_t candidate) {
   *endpoint = (loom_vector_bank_sroa_endpoint_plan_t){
       .value_id = value_id,
       .candidate = candidate,
-      .block = block,
-      .boundary_terminator = boundary_terminator,
-      .boundary_operand_offset = boundary_operand_offset,
-      .boundary_operand_count = boundary_operand_count,
       .uses_supported = true,
   };
   loom_vector_bank_sroa_state_node_t* root = NULL;
@@ -439,9 +515,7 @@ static iree_status_t loom_vector_bank_sroa_scan_endpoint(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
     loom_vector_bank_sroa_function_state_t* function_state,
-    loom_vector_bank_sroa_endpoint_plan_t* endpoint, bool allow_activation,
-    bool* out_invalid_access) {
-  *out_invalid_access = false;
+    loom_vector_bank_sroa_endpoint_plan_t* endpoint) {
   loom_vector_bank_sroa_bank_plan_t* bank = endpoint->nodes[0]->bank;
   for (iree_host_size_t node_index = 0; node_index < endpoint->node_count;
        ++node_index) {
@@ -457,15 +531,7 @@ static iree_status_t loom_vector_bank_sroa_scan_endpoint(
     loom_value_for_each_use(value, use) {
       loom_op_t* user = loom_use_user_op(*use);
       const uint16_t operand_index = loom_use_operand_index(*use);
-      if (user == endpoint->boundary_terminator &&
-          operand_index >= endpoint->boundary_operand_offset &&
-          operand_index < endpoint->boundary_operand_offset +
-                              endpoint->boundary_operand_count) {
-        continue;
-      }
-
-      if (loom_vector_extract_isa(user) && operand_index == 0 &&
-          (!endpoint->block || user->parent_block == endpoint->block)) {
+      if (loom_vector_extract_isa(user) && operand_index == 0) {
         uint16_t component = 0;
         bool supported = false;
         IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_prepare_access(
@@ -473,10 +539,9 @@ static iree_status_t loom_vector_bank_sroa_scan_endpoint(
             loom_vector_extract_indices(user),
             loom_module_value_type(plan->module,
                                    loom_vector_extract_result(user)),
-            allow_activation, &component, &supported));
+            &component, &supported));
         if (!supported) {
           endpoint->uses_supported = false;
-          *out_invalid_access = true;
           return iree_ok_status();
         }
         IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_append_extract(
@@ -484,8 +549,7 @@ static iree_status_t loom_vector_bank_sroa_scan_endpoint(
         continue;
       }
 
-      if (endpoint->block && loom_vector_insert_isa(user) &&
-          operand_index == 1 && user->parent_block == endpoint->block) {
+      if (loom_vector_insert_isa(user) && operand_index == 1) {
         uint16_t component = 0;
         bool supported = false;
         IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_prepare_access(
@@ -493,10 +557,9 @@ static iree_status_t loom_vector_bank_sroa_scan_endpoint(
             loom_vector_insert_indices(user),
             loom_module_value_type(plan->module,
                                    loom_vector_insert_value(user)),
-            allow_activation, &component, &supported));
+            &component, &supported));
         if (!supported) {
           endpoint->uses_supported = false;
-          *out_invalid_access = true;
           return iree_ok_status();
         }
         loom_vector_bank_sroa_state_node_t* child = NULL;
@@ -519,6 +582,27 @@ static iree_status_t loom_vector_bank_sroa_scan_endpoint(
         continue;
       }
 
+      const loom_value_id_t destination_value =
+          loom_vector_bank_sroa_transfer_destination(plan->module, user,
+                                                     operand_index);
+      loom_vector_bank_sroa_state_node_t* destination =
+          destination_value == LOOM_VALUE_ID_INVALID
+              ? NULL
+              : loom_vector_bank_sroa_lookup_node(function, function_state,
+                                                  destination_value);
+      if (destination &&
+          loom_type_equal(bank->bank_type, destination->bank->bank_type)) {
+        loom_vector_bank_sroa_join_partitions(bank, destination->bank);
+        const iree_host_size_t target = destination->endpoint->candidate;
+        if (endpoint->candidate != target) {
+          // Removing this source requires its outgoing destination to project.
+          // The source recipe adds the converse edge when it forwards slots.
+          IREE_RETURN_IF_ERROR(loom_boundary_projection_add_dependency(
+              plan, function, target, endpoint->candidate,
+              /*orders_realization=*/false));
+        }
+        continue;
+      }
       endpoint->uses_supported = false;
     }
   }
@@ -552,108 +636,26 @@ static iree_status_t loom_vector_bank_sroa_prepare_bank_schema(
   return iree_ok_status();
 }
 
-// An eliminative source bank can remain selected only when every loop edge
-// consuming one of its aggregate states also projects the destination. The
-// ordinary source planner adds the converse dependency when it chooses direct
-// component forwarding, making the two banks one availability component only
-// when both sides are selected.
-static iree_status_t loom_vector_bank_sroa_require_projected_destination(
+static iree_status_t loom_vector_bank_sroa_initialize_loop(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
     loom_vector_bank_sroa_function_state_t* function_state,
-    loom_value_id_t source_value_id, iree_host_size_t destination_candidate) {
-  loom_vector_bank_sroa_state_node_t* source_node =
-      loom_vector_bank_sroa_lookup_node(function, function_state,
-                                        source_value_id);
-  if (!source_node) {
-    return iree_ok_status();
-  }
-  if (destination_candidate == IREE_HOST_SIZE_MAX) {
-    source_node->endpoint->uses_supported = false;
-    return iree_ok_status();
-  }
-  const iree_host_size_t source_candidate = source_node->endpoint->candidate;
-  if (source_candidate == destination_candidate) {
-    return iree_ok_status();
-  }
-  return loom_boundary_projection_add_dependency(
-      plan, function, destination_candidate, source_candidate,
-      /*orders_realization=*/false);
-}
-
-static iree_status_t loom_vector_bank_sroa_plan_loop_edge_dependencies(
-    loom_boundary_projection_plan_t* plan,
-    loom_boundary_projection_function_t* function,
-    loom_vector_bank_sroa_function_state_t* function_state,
-    loom_vector_bank_sroa_loop_plan_t* loop_plan) {
-  const loom_boundary_projection_loop_t* loop = loop_plan->loop;
+    loom_boundary_projection_loop_t* loop, uint32_t operation_ordinal) {
   const loom_value_slice_t initial_values =
       loom_loop_like_iter_args(loop->loop);
-  if (loop->condition_terminator) {
-    const loom_value_id_t* condition_values =
-        loom_op_const_operands(loop->condition_terminator) + 1;
-    for (uint16_t i = 0; i < loop->result_count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_require_projected_destination(
-          plan, function, function_state, condition_values[i],
-          loop->result_states[i].body_candidate));
-    }
-    const loom_value_id_t* backedge_values =
-        loom_op_const_operands(loop->body_terminator);
-    for (uint16_t i = 0; i < loop->header_count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_require_projected_destination(
-          plan, function, function_state, initial_values.values[i],
-          loop->header_states[i].candidate));
-      IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_require_projected_destination(
-          plan, function, function_state, backedge_values[i],
-          loop->header_states[i].candidate));
-    }
-    return iree_ok_status();
-  }
-
-  const loom_value_id_t* backedge_values =
-      loom_op_const_operands(loop->body_terminator);
   for (uint16_t i = 0; i < loop->result_count; ++i) {
-    const iree_host_size_t destination_candidate =
-        loop->result_states[i].body_candidate;
-    IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_require_projected_destination(
-        plan, function, function_state, initial_values.values[i],
-        destination_candidate));
-    IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_require_projected_destination(
-        plan, function, function_state, backedge_values[i],
-        destination_candidate));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_bank_sroa_prepare_loop(
-    loom_boundary_projection_plan_t* plan,
-    loom_boundary_projection_function_t* function,
-    loom_vector_bank_sroa_function_state_t* function_state,
-    loom_vector_bank_sroa_loop_plan_t* loop_plan) {
-  loom_boundary_projection_loop_t* loop = loop_plan->loop;
-  loop_plan->bank_count =
-      (uint32_t)loop->result_count +
-      (loop->condition_terminator ? (uint32_t)loop->header_count : 0u);
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      plan->arena, loop_plan->bank_count, sizeof(*loop_plan->banks),
-      (void**)&loop_plan->banks));
-  memset(loop_plan->banks, 0,
-         loop_plan->bank_count * sizeof(*loop_plan->banks));
-
-  const loom_value_slice_t initial_values =
-      loom_loop_like_iter_args(loop->loop);
-  const uint16_t body_boundary_count =
-      loop->condition_terminator ? loop->header_count : loop->result_count;
-  for (uint16_t i = 0; i < loop->result_count; ++i) {
-    loom_vector_bank_sroa_bank_plan_t* bank = &loop_plan->banks[i];
-    bank->loop = loop_plan;
-    bank->domain = LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_RESULT;
-    bank->state_ordinal = i;
     const loom_boundary_projection_loop_result_state_t* state =
         &loop->result_states[i];
     if (state->result_candidate == IREE_HOST_SIZE_MAX) {
       continue;
     }
+    loom_vector_bank_sroa_bank_plan_t* bank =
+        &function_state->banks[function_state->bank_count++];
+    bank->schema_parent = bank;
+    bank->owner = loop->loop.op;
+    bank->operation_ordinal = operation_ordinal;
+    bank->domain = LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_RESULT;
+    bank->state_ordinal = i;
     bank->bank_type =
         loom_module_value_type(plan->module, state->result_value_id);
     if (!loom_type_is_vector(bank->bank_type) ||
@@ -670,30 +672,27 @@ static iree_status_t loom_vector_bank_sroa_prepare_loop(
 
     IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_initialize_endpoint(
         plan, function, function_state, bank, &bank->endpoints[0],
-        state->result_value_id, state->result_candidate,
-        /*block=*/NULL, /*boundary_terminator=*/NULL,
-        /*boundary_operand_offset=*/0, /*boundary_operand_count=*/0));
+        state->result_value_id, state->result_candidate));
     IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_initialize_endpoint(
         plan, function, function_state, bank, &bank->endpoints[1],
-        state->body_value_id, state->body_candidate,
-        loom_region_entry_block(loom_loop_like_body(loop->loop)),
-        loop->body_terminator, /*boundary_operand_offset=*/0,
-        body_boundary_count));
+        state->body_value_id, state->body_candidate));
     bank->endpoint_count = 2;
   }
 
   if (loop->condition_terminator) {
     for (uint16_t i = 0; i < loop->header_count; ++i) {
-      loom_vector_bank_sroa_bank_plan_t* bank =
-          &loop_plan->banks[loop->result_count + i];
-      bank->loop = loop_plan;
-      bank->domain = LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_HEADER;
-      bank->state_ordinal = i;
       const loom_boundary_projection_loop_header_state_t* state =
           &loop->header_states[i];
       if (state->candidate == IREE_HOST_SIZE_MAX) {
         continue;
       }
+      loom_vector_bank_sroa_bank_plan_t* bank =
+          &function_state->banks[function_state->bank_count++];
+      bank->schema_parent = bank;
+      bank->owner = loop->loop.op;
+      bank->operation_ordinal = operation_ordinal;
+      bank->domain = LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_HEADER;
+      bank->state_ordinal = i;
       bank->bank_type = loom_module_value_type(plan->module, state->value_id);
       if (!loom_type_is_vector(bank->bank_type) ||
           loom_type_rank(bank->bank_type) == 0) {
@@ -701,52 +700,11 @@ static iree_status_t loom_vector_bank_sroa_prepare_loop(
       }
       IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_initialize_endpoint(
           plan, function, function_state, bank, &bank->endpoints[0],
-          state->value_id, state->candidate,
-          loom_region_entry_block(loom_loop_like_condition_region(loop->loop)),
-          loop->condition_terminator, /*boundary_operand_offset=*/1,
-          loop->result_count));
+          state->value_id, state->candidate));
       bank->endpoint_count = 1;
     }
   }
 
-  for (uint32_t bank_index = 0; bank_index < loop_plan->bank_count;
-       ++bank_index) {
-    loom_vector_bank_sroa_bank_plan_t* bank = &loop_plan->banks[bank_index];
-    if (bank->endpoint_count == 0) {
-      continue;
-    }
-    bool invalid_access = false;
-    const uint8_t activation_endpoint =
-        bank->domain == LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_RESULT ? 1 : 0;
-    for (uint8_t endpoint_index = activation_endpoint;
-         endpoint_index < bank->endpoint_count; ++endpoint_index) {
-      IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_scan_endpoint(
-          plan, function, function_state, &bank->endpoints[endpoint_index],
-          /*allow_activation=*/true, &invalid_access));
-      if (invalid_access) {
-        break;
-      }
-    }
-    if (invalid_access || !bank->active || activation_endpoint == 0) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_scan_endpoint(
-        plan, function, function_state, &bank->endpoints[0],
-        /*allow_activation=*/false, &invalid_access));
-  }
-  IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_plan_loop_edge_dependencies(
-      plan, function, function_state, loop_plan));
-  // Leave independent unsupported or target-native recurrence columns intact.
-  // The shared projection plan propagates rejection only across actual SSA
-  // dependencies between columns.
-  for (uint32_t bank_index = 0; bank_index < loop_plan->bank_count;
-       ++bank_index) {
-    loom_vector_bank_sroa_bank_plan_t* bank = &loop_plan->banks[bank_index];
-    if (bank->active && loom_vector_bank_sroa_bank_uses_supported(bank)) {
-      IREE_RETURN_IF_ERROR(
-          loom_vector_bank_sroa_prepare_bank_schema(plan, bank));
-    }
-  }
   return iree_ok_status();
 }
 
@@ -772,7 +730,8 @@ static bool loom_vector_bank_sroa_slot_matches(
   (void)function;
   (void)block;
   const loom_type_t type = loom_module_value_type(plan->module, value_id);
-  return role == LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE &&
+  return (role == LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE ||
+          role == LOOM_BOUNDARY_PROJECTION_SLOT_BRANCH_RESULT) &&
          loom_type_is_vector(type) && loom_type_rank(type) != 0;
 }
 
@@ -785,8 +744,25 @@ static iree_status_t loom_vector_bank_sroa_prepare_function(
       iree_arena_allocate(plan->arena, sizeof(*state), (void**)&state));
   *state = (loom_vector_bank_sroa_function_state_t){
       .value_count = function->domain.value_count,
-      .loop_count = function->loop_count,
   };
+  iree_host_size_t bank_count = 0;
+  for (iree_host_size_t i = 0; i < function->loop_count; ++i) {
+    const loom_boundary_projection_loop_t* loop = &function->loops[i];
+    for (uint16_t column = 0; column < loop->result_count; ++column) {
+      bank_count +=
+          loop->result_states[column].result_candidate != IREE_HOST_SIZE_MAX;
+    }
+    for (uint16_t column = 0; column < loop->header_count; ++column) {
+      bank_count += loop->header_states[column].candidate != IREE_HOST_SIZE_MAX;
+    }
+  }
+  for (iree_host_size_t i = 0; i < function->branch_count; ++i) {
+    const loom_boundary_projection_branch_t* branch = &function->branches[i];
+    for (uint16_t column = 0; column < branch->branch.op->result_count;
+         ++column) {
+      bank_count += branch->candidates[column] != IREE_HOST_SIZE_MAX;
+    }
+  }
   if (state->value_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         plan->arena, state->value_count, sizeof(*state->nodes_by_ordinal),
@@ -794,18 +770,68 @@ static iree_status_t loom_vector_bank_sroa_prepare_function(
     memset(state->nodes_by_ordinal, 0,
            state->value_count * sizeof(*state->nodes_by_ordinal));
   }
-  if (state->loop_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        plan->arena, state->loop_count, sizeof(*state->loops),
-        (void**)&state->loops));
-    memset(state->loops, 0, state->loop_count * sizeof(*state->loops));
-  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      plan->arena, bank_count, sizeof(*state->banks), (void**)&state->banks));
+  memset(state->banks, 0, bank_count * sizeof(*state->banks));
   loom_boundary_projection_set_function_rule_state(plan, function, rule, state);
 
-  for (iree_host_size_t i = 0; i < state->loop_count; ++i) {
-    state->loops[i].loop = &function->loops[i];
-    IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_prepare_loop(
-        plan, function, state, &state->loops[i]));
+  for (iree_host_size_t i = 0; i < function->loop_count; ++i) {
+    loom_boundary_projection_loop_t* loop = &function->loops[i];
+    IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_initialize_loop(
+        plan, function, state, loop, (uint32_t)i));
+  }
+  for (iree_host_size_t i = 0; i < function->branch_count; ++i) {
+    const loom_boundary_projection_branch_t* branch = &function->branches[i];
+    loom_op_t* owner = branch->branch.op;
+    for (uint16_t column = 0; column < owner->result_count; ++column) {
+      if (branch->candidates[column] == IREE_HOST_SIZE_MAX) {
+        continue;
+      }
+      loom_vector_bank_sroa_bank_plan_t* bank =
+          &state->banks[state->bank_count++];
+      bank->schema_parent = bank;
+      bank->owner = owner;
+      bank->operation_ordinal = (uint32_t)i;
+      bank->domain = LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_BRANCH;
+      bank->state_ordinal = column;
+      const loom_value_id_t value = loom_op_const_results(owner)[column];
+      bank->bank_type = loom_module_value_type(plan->module, value);
+      IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_initialize_endpoint(
+          plan, function, state, bank, &bank->endpoints[0], value,
+          branch->candidates[column]));
+      bank->endpoint_count = 1;
+    }
+  }
+  // Every destination identity exists before uses connect their partition
+  // constraints. Forwarding-only joins inherit accesses from either side.
+  for (iree_host_size_t i = 0; i < state->bank_count; ++i) {
+    loom_vector_bank_sroa_bank_plan_t* bank = &state->banks[i];
+    for (uint8_t e = bank->endpoint_count; e > 0; --e) {
+      IREE_RETURN_IF_ERROR(loom_vector_bank_sroa_scan_endpoint(
+          plan, function, state, &bank->endpoints[e - 1]));
+    }
+  }
+  for (iree_host_size_t i = 0; i < state->bank_count; ++i) {
+    loom_vector_bank_sroa_bank_plan_t* bank = &state->banks[i];
+    loom_vector_bank_sroa_bank_plan_t* root =
+        loom_vector_bank_sroa_schema_root(bank);
+    loom_vector_bank_sroa_copy_partition(root, bank);
+    if (root->schema_conflict) {
+      for (uint8_t e = 0; e < bank->endpoint_count; ++e) {
+        bank->endpoints[e].uses_supported = false;
+      }
+      loom_vector_bank_sroa_record_blocker(
+          plan, bank,
+          LOOM_VECTOR_BANK_SROA_BLOCKER_INCONSISTENT_COMPONENT_ACCESS);
+    }
+    if (bank->active && loom_vector_bank_sroa_bank_uses_supported(bank)) {
+      if (!root->component_types) {
+        IREE_RETURN_IF_ERROR(
+            loom_vector_bank_sroa_prepare_bank_schema(plan, root));
+      }
+      bank->component_types = root->component_types;
+      bank->component_name_suffixes = root->component_name_suffixes;
+    }
   }
   return iree_ok_status();
 }
@@ -820,7 +846,8 @@ static iree_status_t loom_vector_bank_sroa_plan_slot(
   (void)block;
   *out_schema = (loom_boundary_projection_schema_t){0};
   *out_claimed = false;
-  if (role != LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE) {
+  if (role != LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE &&
+      role != LOOM_BOUNDARY_PROJECTION_SLOT_BRANCH_RESULT) {
     return iree_ok_status();
   }
   const loom_vector_bank_sroa_function_state_t* state =
@@ -882,8 +909,7 @@ static iree_status_t loom_vector_bank_sroa_plan_source(
                                            (void**)&source_plan));
   source_plan->bank = destination_bank;
   source_plan->component_count = schema->component_count;
-  source_plan->name_components =
-      boundary_op == loom_vector_bank_sroa_loop_op(destination_bank);
+  source_plan->name_components = boundary_op == destination_bank->owner;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       plan->arena, source_plan->component_count,
       sizeof(*source_plan->components), (void**)&source_plan->components));
@@ -1034,10 +1060,8 @@ static iree_status_t loom_vector_bank_sroa_eliminate(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    loom_boundary_projection_slot_t* slot, loom_type_t logical_type,
-    loom_location_id_t location) {
-  (void)logical_type;
-  (void)location;
+    loom_boundary_projection_slot_t* slot,
+    loom_boundary_projection_elimination_t* out_elimination) {
   IREE_ASSERT(slot->schema.rule == rule);
   loom_vector_bank_sroa_bank_plan_t* bank =
       (loom_vector_bank_sroa_bank_plan_t*)slot->schema.rule_plan;
@@ -1055,8 +1079,9 @@ static iree_status_t loom_vector_bank_sroa_eliminate(
 
   for (iree_host_size_t i = 0; i < endpoint->extract_count; ++i) {
     const loom_vector_bank_sroa_extract_use_t* extract = &endpoint->extracts[i];
-    const loom_value_id_t replacement = loom_vector_bank_sroa_resolve_component(
-        slot, extract->source, extract->component);
+    const loom_value_id_t replacement = loom_boundary_projection_resolve_value(
+        function, loom_vector_bank_sroa_resolve_component(slot, extract->source,
+                                                          extract->component));
     IREE_RETURN_IF_ERROR(loom_boundary_projection_record_value_replacement(
         function, loom_vector_extract_result(extract->op), replacement));
     IREE_RETURN_IF_ERROR(loom_rewriter_copy_value_name(
@@ -1064,10 +1089,10 @@ static iree_status_t loom_vector_bank_sroa_eliminate(
     IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
         &plan->rewriter, extract->op, &replacement, 1));
   }
-  for (iree_host_size_t i = endpoint->insert_count; i > 0; --i) {
-    IREE_RETURN_IF_ERROR(
-        loom_rewriter_erase(&plan->rewriter, endpoint->inserts[i - 1]));
-  }
+  *out_elimination = (loom_boundary_projection_elimination_t){
+      .operations = endpoint->inserts,
+      .count = endpoint->insert_count,
+  };
 
   loom_boundary_projection_record_destination_uses(
       plan, rule, (int64_t)endpoint->extract_count);
@@ -1188,50 +1213,46 @@ iree_status_t loom_vector_bank_sroa_record_projection_plan(
     }
     const iree_string_view_t function_name =
         loom_vector_bank_sroa_function_name(plan, function);
-    for (iree_host_size_t loop_index = 0; loop_index < state->loop_count;
-         ++loop_index) {
-      const loom_vector_bank_sroa_loop_plan_t* loop = &state->loops[loop_index];
-      const loom_op_t* loop_op = loop->loop->loop.op;
-      for (uint32_t bank_index = 0; bank_index < loop->bank_count;
-           ++bank_index) {
-        const loom_vector_bank_sroa_bank_plan_t* bank =
-            &loop->banks[bank_index];
-        if (bank->endpoint_count == 0) {
-          continue;
-        }
-        iree_string_view_t outcome = iree_string_view_empty();
-        iree_string_view_t reason = iree_string_view_empty();
-        loom_vector_bank_sroa_report_decision(function, bank, &outcome,
-                                              &reason);
-        loom_target_compile_report_source_boundary_projection_row_t row = {
-            .function_name = function_name,
-            .source_op_name = loom_op_name(plan->module, loop_op),
-            .source_op_kind = loop_op->kind,
-            .projection_key = rule->name,
-            .boundary_key =
-                bank->domain == LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_HEADER
-                    ? IREE_SV("loop_header_state")
-                    : IREE_SV("loop_state"),
-            .outcome = outcome,
-            .reason = reason,
-            .operation_ordinal = (uint32_t)loop_index,
-            .source_value_ordinal = bank->state_ordinal,
-            .source_type_kind = loom_type_kind(bank->bank_type),
-            .source_element_type = loom_type_element_type(bank->bank_type),
-            .source_rank = loom_type_rank(bank->bank_type),
-            .projected_prefix_rank = bank->active ? bank->prefix_rank : 0,
-            .component_count = bank->active ? bank->component_count : 0,
-        };
-        for (uint8_t axis = 0; axis < row.source_rank; ++axis) {
-          row.source_dimensions[axis] =
-              loom_type_dim_is_dynamic_at(bank->bank_type, axis)
-                  ? LOOM_TARGET_COMPILE_REPORT_DIMENSION_DYNAMIC
-                  : loom_type_dim_static_size_at(bank->bank_type, axis);
-        }
-        IREE_RETURN_IF_ERROR(
-            loom_target_compile_report_record_source_boundary_projection_row(
-                report, &row));
+    for (iree_host_size_t bank_index = 0; bank_index < state->bank_count;
+         ++bank_index) {
+      const loom_vector_bank_sroa_bank_plan_t* bank = &state->banks[bank_index];
+      const loom_op_t* owner = bank->owner;
+      if (bank->endpoint_count == 0) {
+        continue;
       }
+      iree_string_view_t outcome = iree_string_view_empty();
+      iree_string_view_t reason = iree_string_view_empty();
+      loom_vector_bank_sroa_report_decision(function, bank, &outcome, &reason);
+      loom_target_compile_report_source_boundary_projection_row_t row = {
+          .function_name = function_name,
+          .source_op_name = loom_op_name(plan->module, owner),
+          .source_op_kind = owner->kind,
+          .projection_key = rule->name,
+          .boundary_key =
+              bank->domain == LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_HEADER
+                  ? IREE_SV("loop_header_state")
+              : bank->domain == LOOM_VECTOR_BANK_SROA_BANK_DOMAIN_BRANCH
+                  ? IREE_SV("branch_result")
+                  : IREE_SV("loop_state"),
+          .outcome = outcome,
+          .reason = reason,
+          .operation_ordinal = bank->operation_ordinal,
+          .source_value_ordinal = bank->state_ordinal,
+          .source_type_kind = loom_type_kind(bank->bank_type),
+          .source_element_type = loom_type_element_type(bank->bank_type),
+          .source_rank = loom_type_rank(bank->bank_type),
+          .projected_prefix_rank = bank->active ? bank->prefix_rank : 0,
+          .component_count = bank->active ? bank->component_count : 0,
+      };
+      for (uint8_t axis = 0; axis < row.source_rank; ++axis) {
+        row.source_dimensions[axis] =
+            loom_type_dim_is_dynamic_at(bank->bank_type, axis)
+                ? LOOM_TARGET_COMPILE_REPORT_DIMENSION_DYNAMIC
+                : loom_type_dim_static_size_at(bank->bank_type, axis);
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_target_compile_report_record_source_boundary_projection_row(
+              report, &row));
     }
   }
   return iree_ok_status();
@@ -1241,7 +1262,9 @@ static const loom_boundary_projection_rule_t kVectorBankSroaRule = {
     .name = IREE_SVL("loop-vector-bank"),
     .type_kind_bits = LOOM_BOUNDARY_PROJECTION_TYPE_KIND_BIT(LOOM_TYPE_VECTOR),
     .slot_role_bits = LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
-        LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE),
+                          LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE) |
+                      LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
+                          LOOM_BOUNDARY_PROJECTION_SLOT_BRANCH_RESULT),
     .function_applies = loom_vector_bank_sroa_function_applies,
     .slot_matches = loom_vector_bank_sroa_slot_matches,
     .prepare_function = loom_vector_bank_sroa_prepare_function,
