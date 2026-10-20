@@ -29,7 +29,12 @@ using ::iree::hal::cts::Ref;
 
 enum Engine { kCpu, kNpu, kGpu, kEngineCount };
 
-enum class SubmissionMode { kDefaults, kExplicit, kRecordedIndirect };
+enum class SubmissionMode {
+  kDefaults,
+  kExplicit,
+  kRecordedIndirect,
+  kRemappedDefaults,
+};
 
 struct Boundary {
   // Combined queue-local execution and visibility actions.
@@ -155,6 +160,7 @@ class ExecutionTest
 
   void TearDown() override {
     start_.reset();
+    mapping_pool_.reset();
     pool_.reset();
     group_.reset();
     for (auto& participant : participants_) {
@@ -186,21 +192,68 @@ class ExecutionTest
     const iree_hal_buffer_interface_t interfaces[] = {
         IREE_HAL_BUFFER_INTERFACE_HOST, IREE_HAL_BUFFER_INTERFACE_XDNA_SHIM_DMA,
         IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS};
-    std::array<iree_hal_pool_family_access_t, kEngineCount> families = {};
-    for (size_t i = 0; i < families.size(); ++i) {
-      families[i].family = iree_hal_queue_family(participants_[i].queue);
-      families[i].usage =
+    for (size_t i = 0; i < families_.size(); ++i) {
+      families_[i].family = iree_hal_queue_family(participants_[i].queue);
+      families_[i].usage =
           IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER;
-      families[i].interfaces = UINT64_C(1) << interfaces[i];
+      families_[i].interfaces = UINT64_C(1) << interfaces[i];
     }
     iree_hal_pool_scope_t scope = {
-        .family_count = families.size(),
-        .families = families.data(),
+        .family_count = families_.size(),
+        .families = families_.data(),
     };
     iree_hal_slab_pool_options_t options;
     iree_hal_slab_pool_options_initialize(&options);
     IREE_ASSERT_OK(iree_hal_slab_pool_create(
         group_, scope, &options, iree_allocator_system(), pool_.out()));
+  }
+
+  void CreateVirtualStorage(iree_hal_buffer_t** out_root,
+                            std::array<Ref<iree_hal_buffer_t>, 2>* backings,
+                            iree_device_size_t* out_unit) {
+    iree_hal_pool_scope_t scope = {
+        .family_count = families_.size(),
+        .families = families_.data(),
+        .host = {IREE_HAL_MEMORY_ACCESS_READ, IREE_HAL_MAPPING_MODE_PERSISTENT,
+                 IREE_HAL_HOST_CACHEABILITY_UNKNOWN},
+    };
+    iree_hal_virtual_buffer_capabilities_t capabilities;
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+        group_, scope, iree_allocator_system(), &capabilities));
+    if (!capabilities.max_byte_length) {
+      GTEST_SKIP() << "Native topology does not support joint CPU/NPU/GPU "
+                      "address reservations";
+    }
+    auto source_families = families_;
+    for (auto& family : source_families) {
+      family.interfaces = UINT64_C(1)
+                          << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+    }
+    auto source_scope = scope;
+    source_scope.families = source_families.data();
+    source_scope.host.access = IREE_HAL_MEMORY_ACCESS_ALL;
+    iree_hal_slab_pool_options_t pool_options;
+    iree_hal_slab_pool_options_initialize(&pool_options);
+    IREE_ASSERT_OK(iree_hal_slab_pool_create(
+        group_, source_scope, &pool_options, iree_allocator_system(),
+        mapping_pool_.out()));
+    const auto source = iree_hal_pool_query_mapping_requirements(mapping_pool_);
+    const auto unit = iree_max(source.minimum_granularity,
+                               iree_max(capabilities.mapping_granularity,
+                                        capabilities.reservation_granularity));
+    ASSERT_GE(unit, sizeof(Payload));
+    for (auto& backing : *backings) {
+      IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+          mapping_pool_, iree_hal_make_pool_reservation_request(unit, unit),
+          iree_infinite_timeout(), backing.out()));
+    }
+    const iree_hal_virtual_buffer_options_t options = {
+        .byte_length = unit,
+        .mapping_granularity = unit,
+    };
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+        group_, scope, &options, iree_allocator_system(), out_root));
+    *out_unit = unit;
   }
 
   void Load(Engine engine, iree_const_byte_span_t bytes,
@@ -268,7 +321,7 @@ class ExecutionTest
   void AddTransition(Engine producer, Engine consumer,
                      iree_hal_memory_transition_action_t action,
                      iree_hal_buffer_ref_t reference, Boundary* boundary) {
-    auto table = iree_hal_pool_transition_table(pool_);
+    auto table = transition_table_;
     iree_hal_memory_scope_t scopes[2];
     const Engine engines[] = {producer, consumer};
     for (size_t i = 0; i < IREE_ARRAYSIZE(engines); ++i) {
@@ -343,8 +396,10 @@ class ExecutionTest
         participant.queue, {1, &wait, &wait_value}, {1, &signal, &signal_value},
         participant.executable, participant.function, Config(engine), constants,
         bindings,
-        std::get<1>(GetParam()) == SubmissionMode::kDefaults ? nullptr
-                                                             : &barriers,
+        (std::get<1>(GetParam()) == SubmissionMode::kDefaults ||
+         std::get<1>(GetParam()) == SubmissionMode::kRemappedDefaults)
+            ? nullptr
+            : &barriers,
         IREE_HAL_DISPATCH_FLAG_NONE));
   }
 
@@ -364,15 +419,45 @@ class ExecutionTest
   Ref<iree_hal_device_group_t> group_;
   // One allocation source qualified for all three execution interfaces.
   Ref<iree_hal_pool_t> pool_;
+  // Mapping sources borrow this pool until checked removal and buffer release.
+  Ref<iree_hal_pool_t> mapping_pool_;
+  // Same complete access set used for physical and stable-address storage.
+  std::array<iree_hal_pool_family_access_t, kEngineCount> families_ = {};
+  // Borrows the current test buffer's contract through its final submission.
+  iree_hal_memory_transition_table_t transition_table_ = {};
   // Host-controlled gate keeping every consumer pending until capture finishes.
   Ref<iree_hal_semaphore_t> start_;
 };
 
 TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
+  const bool npu_first = std::get<0>(GetParam());
+  const auto mode = std::get<1>(GetParam());
+  const bool remapped = mode == SubmissionMode::kRemappedDefaults;
+  const bool recorded = mode == SubmissionMode::kRecordedIndirect;
+  const bool defaults = mode == SubmissionMode::kDefaults || remapped;
+  std::array<Ref<iree_hal_buffer_t>, 2> backings;
+  std::array<Payload, 2> expected_backings = {};
+  iree_device_size_t mapping_unit = 0;
   Ref<iree_hal_buffer_t> root;
-  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      pool_, iree_hal_make_pool_reservation_request(sizeof(Payload), 64),
-      iree_infinite_timeout(), root.out()));
+  if (remapped) {
+    ASSERT_NO_FATAL_FAILURE(
+        CreateVirtualStorage(root.out(), &backings, &mapping_unit));
+    if (IsSkipped()) {
+      return;
+    }
+  } else {
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool_, iree_hal_make_pool_reservation_request(sizeof(Payload), 64),
+        iree_infinite_timeout(), root.out()));
+  }
+  transition_table_ = iree_hal_buffer_transition_table(root);
+  Ref<iree_hal_semaphore_t> memory_ready;
+  IREE_ASSERT_OK(iree_hal_semaphore_create(participants_[kCpu].device,
+                                           IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY,
+                                           0, 0, memory_ready.out()));
+  auto* memory_timeline = memory_ready.get();
+  const iree_hal_memory_scope_t all_scopes = {
+      iree_hal_device_group_memory_domain(group_), IREE_HAL_MEMORY_SCOPE_ANY};
   std::array<Ref<iree_hal_buffer_t>, 3> views;
   std::array<iree_hal_buffer_ref_t, 3> bindings;
   for (size_t i = 0; i < views.size(); ++i) {
@@ -381,9 +466,6 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
                                            views[i].out()));
     bindings[i] = iree_hal_make_buffer_ref(views[i], 0, kBytes);
   }
-  const bool npu_first = std::get<0>(GetParam());
-  const auto mode = std::get<1>(GetParam());
-  const bool recorded = mode == SubmissionMode::kRecordedIndirect;
   const Engine first = npu_first ? kNpu : kGpu;
   const Engine second = npu_first ? kGpu : kNpu;
   const auto* gpu_binding = &bindings[npu_first ? 2 : 0];
@@ -401,7 +483,7 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
   const auto recorded_root_ref =
       recorded ? iree_hal_make_indirect_buffer_ref(3, 0, sizeof(Payload))
                : root_ref;
-  if (mode != SubmissionMode::kDefaults) {
+  if (!defaults) {
     // Upload also produces the unchanged RHS that the NPU reads in either
     // engine order, independently of the producer's later LHS update.
     for (Engine engine : {kNpu, kGpu}) {
@@ -494,7 +576,7 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     IREE_ASSERT_OK(iree_hal_queue_transfer(
         participants_[kCpu].queue, {1, &cpu_timeline, &consumed},
         {1, &cpu_timeline, &downloaded}, 1, &download,
-        mode == SubmissionMode::kDefaults ? nullptr : &download_barriers));
+        defaults ? nullptr : &download_barriers));
     ASSERT_NO_FATAL_FAILURE(Dispatch(kCpu, participants_[second].timeline, gate,
                                      consumed, {1, &bindings[2]}, 100, consumer,
                                      binding_table));
@@ -523,9 +605,30 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     upload.update.target_buffer = root;
     upload.update.length = sizeof(initial);
     IREE_ASSERT_OK(iree_hal_queue_transfer(
-        participants_[kCpu].queue, {1, &start, &gate},
+        participants_[kCpu].queue,
+        {1, remapped ? &memory_timeline : &start, &gate},
         {1, &cpu_timeline, &initialized}, 1, &upload,
-        mode == SubmissionMode::kDefaults ? nullptr : &upload_barriers));
+        defaults ? nullptr : &upload_barriers));
+    if (remapped) {
+      const iree_hal_memory_mapping_t mapping = {
+          .target = root,
+          .scope = all_scopes,
+          .target_range = {0, mapping_unit},
+          .source = backings[replay % backings.size()],
+          .access = IREE_HAL_MEMORY_ACCESS_ALL,
+          .operation = replay ? IREE_HAL_MEMORY_MAPPING_OPERATION_REPLACE
+                              : IREE_HAL_MEMORY_MAPPING_OPERATION_BIND,
+      };
+      uint64_t previous_reader = replay * 4;
+      iree_hal_semaphore_t* waits[] = {start, cpu_timeline};
+      uint64_t values[] = {gate, previous_reader};
+      // Every participant can submit the same typed batch. Address replacement
+      // waits for the final CPU reader, not merely the earlier native producer.
+      IREE_ASSERT_OK(iree_hal_queue_map(
+          participants_[replay % kEngineCount].queue,
+          {replay ? 2u : 1u, waits, values}, {1, &memory_timeline, &gate}, 1,
+          &mapping, IREE_HAL_QUEUE_MAP_FLAG_NONE));
+    }
     IREE_ASSERT_OK(iree_hal_semaphore_signal(start, gate, nullptr));
     IREE_ASSERT_OK(iree_hal_semaphore_wait(cpu_timeline, downloaded,
                                            iree_infinite_timeout(), 0));
@@ -543,6 +646,36 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
       expected[3 * kElementCount + i] = value + 100;
     }
     EXPECT_EQ(result, expected);
+    if (remapped) {
+      expected_backings[replay % backings.size()] = expected;
+      for (size_t i = 0; i < iree_min(replay + 1, backings.size()); ++i) {
+        iree_hal_buffer_mapping_t mapping;
+        IREE_ASSERT_OK(iree_hal_buffer_map_range(
+            backings[i], IREE_HAL_MAPPING_MODE_PERSISTENT,
+            IREE_HAL_MEMORY_ACCESS_READ, IREE_HAL_BUFFER_MAP_FLAG_NONE, 0,
+            sizeof(Payload), &mapping));
+        EXPECT_EQ(memcmp(mapping.contents.data, expected_backings[i].data(),
+                         sizeof(Payload)),
+                  0)
+            << "backing=" << i;
+        IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
+      }
+    }
+  }
+  if (remapped) {
+    uint64_t final_reader = 12, detached = 4;
+    const iree_hal_memory_mapping_t mapping = {
+        .target = root,
+        .scope = all_scopes,
+        .target_range = {0, mapping_unit},
+        .operation = IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND,
+    };
+    IREE_ASSERT_OK(iree_hal_queue_map(participants_[kGpu].queue,
+                                      {1, &cpu_timeline, &final_reader},
+                                      {1, &memory_timeline, &detached}, 1,
+                                      &mapping, IREE_HAL_QUEUE_MAP_FLAG_NONE));
+    IREE_ASSERT_OK(iree_hal_semaphore_wait(memory_timeline, detached,
+                                           iree_infinite_timeout(), 0));
   }
 }
 
@@ -551,7 +684,8 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::Bool(),
                        ::testing::Values(SubmissionMode::kDefaults,
                                          SubmissionMode::kExplicit,
-                                         SubmissionMode::kRecordedIndirect)),
+                                         SubmissionMode::kRecordedIndirect,
+                                         SubmissionMode::kRemappedDefaults)),
     [](const ::testing::TestParamInfo<ExecutionTest::ParamType>& info) {
       std::string name =
           std::get<0>(info.param) ? "CpuNpuGpuCpu" : "CpuGpuNpuCpu";
@@ -562,6 +696,8 @@ INSTANTIATE_TEST_SUITE_P(
           return name + "Explicit";
         case SubmissionMode::kRecordedIndirect:
           return name + "RecordedIndirect";
+        case SubmissionMode::kRemappedDefaults:
+          return name + "RemappedDefaults";
       }
       return name;
     });
