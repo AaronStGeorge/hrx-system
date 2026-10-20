@@ -311,7 +311,7 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
       .maintenance_alignment = options->maintenance_alignment,
   };
   iree_status_t status = iree_hal_memory_trace_initialize_domain(
-      options->trace_domain ? options->trace_domain : "libamdf",
+      options->trace_domain ? options->trace_domain : "amd",
       options->trace_domain ? options->trace_ordinal : UINT32_MAX,
       &provider->trace);
   if (iree_status_is_ok(status)) {

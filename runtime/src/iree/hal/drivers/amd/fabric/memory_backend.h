@@ -68,7 +68,7 @@ typedef struct iree_hal_amd_fabric_memory_storage_t {
 // one construction domain independently of its available storage scopes.
 typedef struct iree_hal_amd_fabric_memory_backend_options_t {
   // Static allocation-domain prefix for endpoint-local physical storage,
-  // such as "libamdf-rdna", "libamdf-cdna", or "libamdf-xdna".
+  // such as "amd-rdna", "amd-cdna", or "amd-xdna".
   const char* trace_device_domain;
   // Physical endpoint ordinal within that family, independent of HAL groups.
   uint32_t trace_device_ordinal;

@@ -62,7 +62,7 @@ iree_status_t iree_hal_amd_gpu_publication_initialize(
       .word_count = (source_count + 63) / 64,
   };
   const iree_thread_create_params_t params = {
-      .name = IREE_SV("hal-gpu-submit"),
+      .name = IREE_SV("amd-gpu-submit"),
       .create_suspended = true,
       .initial_affinity = affinity,
   };

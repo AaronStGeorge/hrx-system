@@ -99,7 +99,6 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::queue::sdma::queue
     iree::hal::drivers::amd::status
-    iree::hal::memory::tracing
   PUBLIC
 )
 endif()

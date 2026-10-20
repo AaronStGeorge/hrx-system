@@ -10,7 +10,6 @@
 #include "iree/async/proactor.h"
 #include "iree/hal/drivers/amd/fabric/memory_transition.h"
 #include "iree/hal/drivers/amd/status.h"
-#include "iree/hal/memory/tracing.h"
 
 typedef struct iree_hal_amd_gpu_file_staging_block_t
     iree_hal_amd_gpu_file_staging_block_t;
@@ -132,8 +131,6 @@ struct iree_hal_amd_gpu_file_staging_block_t {
   // Release initiated during ordinary use retains the device through
   // completion.
   bool release_owns_device;
-  // Physical tracing began after successful native acquisition.
-  bool traced;
   // An idle trim also returns acquisition already accepted by the native owner.
   bool retire_on_publish;
   struct {
@@ -227,8 +224,6 @@ struct iree_hal_amd_gpu_file_staging_t {
   amdf_memory_device_access_t access;
   // Captured native placement, geometry, and canonical preparation proactor.
   iree_hal_amd_fabric_memory_options_t memory;
-  // System physical-memory stream shared with native slab providers.
-  iree_hal_memory_trace_t trace;
 };
 
 static void iree_hal_amd_gpu_file_staging_progress(
@@ -913,9 +908,6 @@ static void iree_hal_amd_gpu_file_staging_released(
 
 static void iree_hal_amd_gpu_file_staging_native_released(void* user_data) {
   iree_hal_amd_gpu_file_staging_block_t* block = user_data;
-  if (block->traced) {
-    iree_hal_memory_trace_free(&block->staging->trace, block);
-  }
   block->publication.base = (iree_async_operation_t){
       .type = IREE_ASYNC_OPERATION_TYPE_NOP,
       .completion_fn = iree_hal_amd_gpu_file_staging_released,
@@ -1037,10 +1029,6 @@ static void iree_hal_amd_gpu_file_staging_published(
   status = iree_status_join(block->status, status);
   block->status = iree_ok_status();
   if (iree_status_is_ok(status)) {
-    block->traced = true;
-    iree_hal_memory_trace_alloc(
-        &staging->trace, block,
-        block->memory.info.native_allocation_byte_length);
     block->preparation = block->memory.registrations.head;
     status = IREE_HAL_AMD_STATUS_FROM_AMDF(
         staging->context->api->memory_query_address(
@@ -1524,7 +1512,6 @@ bool iree_hal_amd_gpu_file_staging_free(
     iree_async_proactor_release(bucket->proactor);
     iree_allocator_free(staging->host_allocator, bucket);
   }
-  iree_hal_memory_trace_deinitialize(&staging->trace);
   iree_status_free(staging->failure);
   iree_notification_deinitialize(&staging->notification);
   iree_slim_mutex_deinitialize(&staging->mutex);
@@ -1648,12 +1635,6 @@ iree_status_t iree_hal_amd_gpu_file_staging_allocate(
     staging->memory.io.proactor_count = 1;
     staging->memory.io.proactors = &staging->proactor;
   }
-  iree_status_t status = iree_hal_memory_trace_initialize_domain(
-      "libamdf-numa", numa_node, &staging->trace);
-  if (iree_status_is_ok(status)) {
-    *out_staging = staging;
-  } else {
-    iree_hal_amd_gpu_file_staging_free(staging);
-  }
-  return status;
+  *out_staging = staging;
+  return iree_ok_status();
 }

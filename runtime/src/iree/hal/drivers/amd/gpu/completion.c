@@ -125,7 +125,7 @@ iree_status_t iree_hal_amd_gpu_completion_initialize(
   out_completion->spin_ns = spin_ns;
   out_completion->exit_callback = exit_callback;
   const iree_thread_create_params_t params = {
-      .name = IREE_SV("hal-gpu-retire"),
+      .name = IREE_SV("amd-gpu-retire"),
       .create_suspended = true,
       .priority_class = IREE_THREAD_PRIORITY_CLASS_HIGH,
       .initial_affinity = affinity,

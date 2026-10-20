@@ -711,8 +711,8 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
       .trace_domain =
           profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM
               ? (native_placement.kind == AMDF_MEMORY_PLACEMENT_KIND_HOST_NUMA
-                     ? "libamdf-numa"
-                     : "libamdf-system")
+                     ? "amd-numa"
+                     : "amd-system")
               : owner->native.trace_device_domain,
       .trace_ordinal =
           profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM

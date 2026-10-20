@@ -1546,7 +1546,7 @@ iree_status_t iree_hal_amd_xdna_queue_create(
         .abandon = iree_hal_amd_xdna_service_abandon,
     };
     status = iree_hal_amd_xdna_queue_service_initialize(
-        IREE_SV("xdna-publish"), proactor, publisher_callbacks, queue,
+        IREE_SV("amd-xdna-publish"), proactor, publisher_callbacks, queue,
         host_allocator, &queue->publisher);
   }
   if (iree_status_is_ok(status)) {
@@ -1556,8 +1556,8 @@ iree_status_t iree_hal_amd_xdna_queue_create(
         .abandon = iree_hal_amd_xdna_service_abandon,
     };
     status = iree_hal_amd_xdna_queue_service_initialize(
-        IREE_SV("xdna-host"), proactor, host_callbacks, queue, host_allocator,
-        &queue->host_worker);
+        IREE_SV("amd-xdna-host"), proactor, host_callbacks, queue,
+        host_allocator, &queue->host_worker);
   }
   if (iree_status_is_ok(status)) {
     queue->observer_state = IREE_HAL_AMD_XDNA_OBSERVER_STATE_REGISTERING;
