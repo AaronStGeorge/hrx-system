@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 
 from loom.gen.target.arch.amdgpu import amdgpu_target_info
 from loom.target.arch.amdgpu import target_info as amdgpu_target_info_data
@@ -427,6 +428,15 @@ def test_hsaco_emission_support_requires_kernel_descriptor_profile() -> None:
 
     with _raises_value_error("HSACO emission support but no kernel descriptor profile"):
         amdgpu_target_info._validate_processors((processor,), (_descriptor_set_info(),))
+
+
+def test_hsaco_emission_requires_representable_wave_scratch_limit() -> None:
+    processor = amdgpu_target_info_data.amdgpu_processor_info_by_name("gfx90a")
+    assert processor is not None
+    for limit in (0, -1, 1 << 32):
+        invalid = replace(processor, wavefront=replace(processor.wavefront, max_scratch_bytes=limit))
+        with _raises_value_error("requires a positive u32 wave scratch limit"):
+            amdgpu_target_info._validate_processors((invalid,), amdgpu_target_info_data.sorted_descriptor_set_infos())
 
 
 def test_exact_processor_rejects_generic_elf_version() -> None:

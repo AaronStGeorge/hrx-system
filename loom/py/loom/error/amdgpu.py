@@ -1167,6 +1167,27 @@ ERR_AMDGPU_052 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_053: final private storage exceeds the hardware scratch limit.
+ERR_AMDGPU_053 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=53,
+    severity=Severity.ERROR,
+    summary="AMDGPU private segment exceeds the hardware scratch limit.",
+    message=(
+        "AMDGPU kernel '@{function_name}' requires {private_bytes} private "
+        "bytes per workitem, but processor '{processor}' supports at most "
+        "{limit_bytes} bytes per workitem in wave{wave_size} mode"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("processor", ParamKind.STRING),
+        ErrorParam("wave_size", ParamKind.U32),
+        ErrorParam("private_bytes", ParamKind.U64),
+        ErrorParam("limit_bytes", ParamKind.U32),
+    ),
+    fix_hint="Reduce private arrays or register spills, or split the kernel",
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_006,
@@ -1216,4 +1237,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_050,
     ERR_AMDGPU_051,
     ERR_AMDGPU_052,
+    ERR_AMDGPU_053,
 )

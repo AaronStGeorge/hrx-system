@@ -1,0 +1,650 @@
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx90a> @target
+
+// The final private segment includes source storage and compiler spill storage.
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_too_large", processor="gfx90a", wave_size="64", private_bytes="186000", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_segment_too_large() asm {
+  %storage = storage {byte_alignment = 16, byte_length = 186000} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx90a> @target {subgroup_size = 64}
+
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_segment_at_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131056} : low.storage<private>
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx90a"
+.amdhsa_code_object_version 6
+
+.protected private_segment_at_limit
+.globl private_segment_at_limit
+.p2align 8
+.type private_segment_at_limit,@function
+private_segment_at_limit:
+  s_add_u32 flat_scratch_lo, s0, s2
+  s_addc_u32 flat_scratch_hi, s1, 0
+  s_endpgm
+.Lfunc_end0:
+.size private_segment_at_limit, .Lfunc_end0-private_segment_at_limit
+
+.rodata
+.p2align 6
+.amdhsa_kernel private_segment_at_limit
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 131056
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 2
+  .amdhsa_user_sgpr_private_segment_buffer 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 0
+  .amdhsa_user_sgpr_dispatch_id 0
+  .amdhsa_user_sgpr_flat_scratch_init 1
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_system_sgpr_private_segment_wavefront_offset 1
+  .amdhsa_system_sgpr_workgroup_id_x 0
+  .amdhsa_system_sgpr_workgroup_id_y 0
+  .amdhsa_system_sgpr_workgroup_id_z 0
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 0
+  .amdhsa_next_free_sgpr 3
+  .amdhsa_accum_offset 4
+  .amdhsa_reserve_vcc 0
+  .amdhsa_reserve_flat_scratch 1
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_dx10_clamp 1
+  .amdhsa_ieee_mode 1
+  .amdhsa_fp16_overflow 0
+  .amdhsa_tg_split 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx90a'
+  amdhsa.kernels:
+    - .name: 'private_segment_at_limit'
+      .symbol: 'private_segment_at_limit.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 131056
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .sgpr_count: 3
+      .vgpr_count: 0
+      .max_flat_workgroup_size: 64
+      .agpr_count: 0
+      .reqd_workgroup_size:
+        - 64
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx90a> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx90a", wave_size="64", private_bytes="131057", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131057} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1100> @target {subgroup_size = 32}
+
+low.kernel.def target<amdgpu.rdna3.core>(@target) workgroup_size(32, 1, 1) @private_segment_at_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 262136} : low.storage<private>
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1100"
+.amdhsa_code_object_version 6
+
+.protected private_segment_at_limit
+.globl private_segment_at_limit
+.p2align 8
+.type private_segment_at_limit,@function
+private_segment_at_limit:
+  s_endpgm
+.Lfunc_end0:
+.size private_segment_at_limit, .Lfunc_end0-private_segment_at_limit
+
+.rodata
+.p2align 6
+.amdhsa_kernel private_segment_at_limit
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 262136
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 0
+  .amdhsa_user_sgpr_dispatch_id 0
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_wavefront_size32 1
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_enable_private_segment 1
+  .amdhsa_system_sgpr_workgroup_id_x 0
+  .amdhsa_system_sgpr_workgroup_id_y 0
+  .amdhsa_system_sgpr_workgroup_id_z 0
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 0
+  .amdhsa_next_free_sgpr 0
+  .amdhsa_reserve_vcc 0
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_dx10_clamp 1
+  .amdhsa_ieee_mode 1
+  .amdhsa_fp16_overflow 0
+  .amdhsa_workgroup_processor_mode 1
+  .amdhsa_memory_ordered 1
+  .amdhsa_forward_progress 1
+  .amdhsa_shared_vgpr_count 0
+  .amdhsa_inst_pref_size 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx1100'
+  amdhsa.kernels:
+    - .name: 'private_segment_at_limit'
+      .symbol: 'private_segment_at_limit.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 262136
+      .kernarg_segment_align: 8
+      .wavefront_size: 32
+      .sgpr_count: 0
+      .vgpr_count: 0
+      .max_flat_workgroup_size: 32
+      .reqd_workgroup_size:
+        - 32
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1100> @target {subgroup_size = 32}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx1100", wave_size="32", private_bytes="262137", limit_bytes="262136"}
+low.kernel.def target<amdgpu.rdna3.core>(@target) workgroup_size(32, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 262137} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+low.kernel.def target<amdgpu.rdna3_5.core>(@target) workgroup_size(64, 1, 1) @private_segment_at_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131068} : low.storage<private>
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1151"
+.amdhsa_code_object_version 6
+
+.protected private_segment_at_limit
+.globl private_segment_at_limit
+.p2align 8
+.type private_segment_at_limit,@function
+private_segment_at_limit:
+  s_endpgm
+.Lfunc_end0:
+.size private_segment_at_limit, .Lfunc_end0-private_segment_at_limit
+
+.rodata
+.p2align 6
+.amdhsa_kernel private_segment_at_limit
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 131068
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 0
+  .amdhsa_user_sgpr_dispatch_id 0
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_wavefront_size32 0
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_enable_private_segment 1
+  .amdhsa_system_sgpr_workgroup_id_x 0
+  .amdhsa_system_sgpr_workgroup_id_y 0
+  .amdhsa_system_sgpr_workgroup_id_z 0
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 0
+  .amdhsa_next_free_sgpr 0
+  .amdhsa_reserve_vcc 0
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_dx10_clamp 1
+  .amdhsa_ieee_mode 1
+  .amdhsa_fp16_overflow 0
+  .amdhsa_workgroup_processor_mode 1
+  .amdhsa_memory_ordered 1
+  .amdhsa_forward_progress 1
+  .amdhsa_shared_vgpr_count 0
+  .amdhsa_inst_pref_size 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx1151'
+  amdhsa.kernels:
+    - .name: 'private_segment_at_limit'
+      .symbol: 'private_segment_at_limit.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 131068
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .sgpr_count: 0
+      .vgpr_count: 0
+      .max_flat_workgroup_size: 64
+      .reqd_workgroup_size:
+        - 64
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx1151", wave_size="64", private_bytes="131069", limit_bytes="131068"}
+low.kernel.def target<amdgpu.rdna3_5.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131069} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1201> @target {subgroup_size = 32}
+
+low.kernel.def target<amdgpu.rdna4.core>(@target) workgroup_size(32, 1, 1) @private_segment_at_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 2097144} : low.storage<private>
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1201"
+.amdhsa_code_object_version 6
+
+.protected private_segment_at_limit
+.globl private_segment_at_limit
+.p2align 8
+.type private_segment_at_limit,@function
+private_segment_at_limit:
+  s_endpgm
+.Lfunc_end0:
+.size private_segment_at_limit, .Lfunc_end0-private_segment_at_limit
+
+.rodata
+.p2align 6
+.amdhsa_kernel private_segment_at_limit
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 2097144
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 0
+  .amdhsa_user_sgpr_dispatch_id 0
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_wavefront_size32 1
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_enable_private_segment 1
+  .amdhsa_system_sgpr_workgroup_id_x 0
+  .amdhsa_system_sgpr_workgroup_id_y 0
+  .amdhsa_system_sgpr_workgroup_id_z 0
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 0
+  .amdhsa_next_free_sgpr 0
+  .amdhsa_reserve_vcc 0
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_fp16_overflow 0
+  .amdhsa_workgroup_processor_mode 1
+  .amdhsa_memory_ordered 1
+  .amdhsa_forward_progress 1
+  .amdhsa_inst_pref_size 0
+  .amdhsa_round_robin_scheduling 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx1201'
+  amdhsa.kernels:
+    - .name: 'private_segment_at_limit'
+      .symbol: 'private_segment_at_limit.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 2097144
+      .kernarg_segment_align: 8
+      .wavefront_size: 32
+      .sgpr_count: 0
+      .vgpr_count: 0
+      .max_flat_workgroup_size: 32
+      .reqd_workgroup_size:
+        - 32
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1201> @target {subgroup_size = 32}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx1201", wave_size="32", private_bytes="2097145", limit_bytes="2097144"}
+low.kernel.def target<amdgpu.rdna4.core>(@target) workgroup_size(32, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 2097145} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1201> @target {subgroup_size = 64}
+
+low.kernel.def target<amdgpu.rdna4.core>(@target) workgroup_size(64, 1, 1) @private_segment_at_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 1048572} : low.storage<private>
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1201"
+.amdhsa_code_object_version 6
+
+.protected private_segment_at_limit
+.globl private_segment_at_limit
+.p2align 8
+.type private_segment_at_limit,@function
+private_segment_at_limit:
+  s_endpgm
+.Lfunc_end0:
+.size private_segment_at_limit, .Lfunc_end0-private_segment_at_limit
+
+.rodata
+.p2align 6
+.amdhsa_kernel private_segment_at_limit
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 1048572
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 0
+  .amdhsa_user_sgpr_dispatch_id 0
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_wavefront_size32 0
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_enable_private_segment 1
+  .amdhsa_system_sgpr_workgroup_id_x 0
+  .amdhsa_system_sgpr_workgroup_id_y 0
+  .amdhsa_system_sgpr_workgroup_id_z 0
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 0
+  .amdhsa_next_free_sgpr 0
+  .amdhsa_reserve_vcc 0
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_fp16_overflow 0
+  .amdhsa_workgroup_processor_mode 1
+  .amdhsa_memory_ordered 1
+  .amdhsa_forward_progress 1
+  .amdhsa_inst_pref_size 0
+  .amdhsa_round_robin_scheduling 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx1201'
+  amdhsa.kernels:
+    - .name: 'private_segment_at_limit'
+      .symbol: 'private_segment_at_limit.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 1048572
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .sgpr_count: 0
+      .vgpr_count: 0
+      .max_flat_workgroup_size: 64
+      .reqd_workgroup_size:
+        - 64
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1201> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx1201", wave_size="64", private_bytes="1048573", limit_bytes="1048572"}
+low.kernel.def target<amdgpu.rdna4.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 1048573} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx90a> @target
+
+// ERROR@+1: AMDGPU/053 {function_name="private_and_spill_storage", processor="gfx90a", wave_size="64", private_bytes="131057", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_and_spill_storage() asm {
+  %private = storage {byte_alignment = 1, byte_length = 60000} : low.storage<private>
+  %spill = storage {byte_alignment = 1, byte_length = 71057} : low.storage<scratch>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx90a> @target
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_alignment", processor="gfx90a", wave_size="64", private_bytes="131057", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_segment_alignment() asm {
+  %private = storage {byte_alignment = 1, byte_length = 131049} : low.storage<private>
+  %spill = storage {byte_alignment = 16, byte_length = 1} : low.storage<scratch>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx90a> @target
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_wide_extent", processor="gfx90a", wave_size="64", private_bytes="4294967296", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_segment_wide_extent() asm {
+  %private = storage {byte_alignment = 1, byte_length = 4294967296} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx942> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx942", wave_size="64", private_bytes="131057", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna3.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131057} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx950> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx950", wave_size="64", private_bytes="131057", limit_bytes="131056"}
+low.kernel.def target<amdgpu.cdna4.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131057} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx9-4-generic> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx9-4-generic", wave_size="64", private_bytes="131057", limit_bytes="131056"}
+low.kernel.def target<amdgpu.gfx9_4.generic.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131057} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1170> @target {subgroup_size = 32}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx1170", wave_size="32", private_bytes="262137", limit_bytes="262136"}
+low.kernel.def target<amdgpu.rdna4m.core>(@target) workgroup_size(32, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 262137} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx11-generic> @target {subgroup_size = 64}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx11-generic", wave_size="64", private_bytes="131069", limit_bytes="131068"}
+low.kernel.def target<amdgpu.gfx11.generic.core>(@target) workgroup_size(64, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 131069} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx1250> @target {subgroup_size = 32}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx1250", wave_size="32", private_bytes="2097145", limit_bytes="2097144"}
+low.kernel.def target<amdgpu.rdna4.gfx125x.core>(@target) workgroup_size(32, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 2097145} : low.storage<private>
+  return
+}
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+amdgpu.target<gfx12-5-generic> @target {subgroup_size = 32}
+
+// ERROR@+1: AMDGPU/053 {function_name="private_segment_over_limit", processor="gfx12-5-generic", wave_size="32", private_bytes="2097145", limit_bytes="2097144"}
+low.kernel.def target<amdgpu.gfx12_5.generic.core>(@target) workgroup_size(32, 1, 1) @private_segment_over_limit() asm {
+  %storage = storage {byte_alignment = 1, byte_length = 2097145} : low.storage<private>
+  return
+}

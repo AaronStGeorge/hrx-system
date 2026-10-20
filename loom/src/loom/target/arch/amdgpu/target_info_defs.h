@@ -639,6 +639,9 @@ typedef struct loom_amdgpu_processor_wavefront_info_t {
   uint32_t default_size;
   // Wavefront-size modes supported by the processor kernel descriptor ABI.
   loom_amdgpu_wavefront_size_flags_t supported_sizes;
+  // Maximum scratch bytes for one wave, encoded by COMPUTE_TMPRING_SIZE.
+  // Zero for processors without native kernel emission support.
+  uint32_t max_scratch_bytes;
 } loom_amdgpu_processor_wavefront_info_t;
 
 typedef struct loom_amdgpu_kernel_descriptor_vgpr_granules_t {

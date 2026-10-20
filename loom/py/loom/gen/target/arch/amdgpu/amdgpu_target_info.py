@@ -1181,6 +1181,8 @@ def _validate_processors(
                 raise ValueError(f"AMDGPU processor {info.processor} has HSACO emission support but no kernel descriptor profile")
             if info.elf.machine_flags == 0:
                 raise ValueError(f"AMDGPU processor {info.processor} has HSACO emission support but no ELF machine flags")
+            if not 0 < info.wavefront.max_scratch_bytes <= 0xFFFFFFFF:
+                raise ValueError(f"AMDGPU processor {info.processor} requires a positive u32 wave scratch limit")
         if info.features.scheduling < 0 or info.features.scheduling > 0xFFFFFFFF:
             raise ValueError(f"AMDGPU scheduling bits for {info.processor} must fit u32")
         _processor_scheduling_bits_expr(info.features.scheduling)
@@ -1523,6 +1525,7 @@ def _emit_processor_rows(
                 "      .wavefront = {",
                 f"        .default_size = {info.wavefront.default_size},",
                 f"        .supported_sizes = {_wavefront_size_flags_expr(_supported_wavefront_sizes(info))},",
+                f"        .max_scratch_bytes = UINT32_C({info.wavefront.max_scratch_bytes}),",
                 "      },",
                 "      .kernel_descriptor = {",
                 f"        .profile = {_kernel_descriptor_profile_expr(kernel_descriptor.profile)},",
