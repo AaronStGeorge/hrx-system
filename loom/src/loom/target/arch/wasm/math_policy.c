@@ -12,9 +12,11 @@
   _(ELEMENT_NATIVE_FLOAT, element_native_float, "math.element.native_float") \
   _(OP_NATIVE_FLOAT, op_native_float, "math.op.native_float")                \
   _(OP_SUPPORTED, op_supported, "math.op.supported")                         \
+  _(RECIPE_ROUND_AWAY, recipe_round_away, "math.recipe.round_away")          \
+  _(RECIPE_RSQRT_SQRT_DIV, recipe_rsqrt_sqrt_div,                            \
+    "math.recipe.rsqrt_sqrt_div")                                            \
   _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                          \
-    "math.recipe.widen_f32_round")                                           \
-  _(RECIPE_RSQRT_SQRT_DIV, recipe_rsqrt_sqrt_div, "math.recipe.rsqrt_sqrt_div")
+    "math.recipe.widen_f32_round")
 
 enum loom_wasm_math_constraint_e {
   LOOM_WASM_MATH_CONSTRAINT_NONE = 0,
@@ -50,49 +52,77 @@ static const loom_string_ref_t
 
 #undef LOOM_WASM_MATH_CONSTRAINTS
 
-#define LOOM_WASM_MATH_DIRECT_RULE(element_types_, recipe_, constraint_) \
+#define LOOM_WASM_MATH_DIRECT_RULE(element_types_, recipe_, evaluation_, \
+                                   constraint_)                          \
   LOOM_TARGET_MATH_POLICY_DIRECT_RULE(                                   \
       element_types_, LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,              \
       LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, recipe_,                      \
       LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,                               \
-      LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, 0, constraint_,               \
+      LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, evaluation_, constraint_,     \
       LOOM_WASM_MATH_CONSTRAINT_NONE)
 
 #define LOOM_WASM_NATIVE_FLOAT_TYPES \
   (LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64)
 
+enum loom_wasm_math_evaluation_e {
+  LOOM_WASM_MATH_EVALUATION_NONE = 0,
+  LOOM_WASM_MATH_EVALUATION_WIDENED_F32 = 1,
+};
+
+static const loom_target_math_evaluation_t kWasmMathEvaluations[] = {
+    [LOOM_WASM_MATH_EVALUATION_WIDENED_F32 - 1] =
+        {
+            .kind = LOOM_TARGET_MATH_EVALUATION_WIDENED,
+            .accumulator_element_type = LOOM_SCALAR_TYPE_F32,
+        },
+};
+
 static const loom_target_math_policy_direct_rule_t
     kWasmMathDirectRules[LOOM_TARGET_MATH_OP_COUNT] = {
         [LOOM_TARGET_MATH_OP_ADDF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_SUBF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_MULF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_DIVF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_CEILF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_FLOORF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_ROUNDEVENF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
+        [LOOM_TARGET_MATH_OP_ROUNDF] = LOOM_WASM_MATH_DIRECT_RULE(
+            LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_ROUND_AWAY,
+            LOOM_WASM_MATH_EVALUATION_NONE,
+            LOOM_WASM_MATH_CONSTRAINT_RECIPE_ROUND_AWAY),
         [LOOM_TARGET_MATH_OP_TRUNCF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_SQRTF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES, LOOM_TARGET_MATH_RECIPE_UNKNOWN,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_OP_NATIVE_FLOAT),
         [LOOM_TARGET_MATH_OP_RSQRTF] = LOOM_WASM_MATH_DIRECT_RULE(
             LOOM_WASM_NATIVE_FLOAT_TYPES,
             LOOM_TARGET_MATH_RECIPE_RSQRT_SQRT_DIV,
+            LOOM_WASM_MATH_EVALUATION_NONE,
             LOOM_WASM_MATH_CONSTRAINT_RECIPE_RSQRT_SQRT_DIV),
 };
 
@@ -107,18 +137,27 @@ static const loom_target_math_policy_direct_rule_t
   }
 
 enum loom_wasm_math_rule_e {
-  LOOM_WASM_MATH_RULE_ARITHMETIC_NARROW = 0,
+  LOOM_WASM_MATH_RULE_WIDEN_F32_NARROW = 0,
+  LOOM_WASM_MATH_RULE_ROUND_AWAY_NARROW,
   LOOM_WASM_MATH_RULE_COUNT_,
 };
 
 static const loom_target_math_policy_rule_t
     kWasmMathRules[LOOM_WASM_MATH_RULE_COUNT_] = {
-        [LOOM_WASM_MATH_RULE_ARITHMETIC_NARROW] =
+        [LOOM_WASM_MATH_RULE_WIDEN_F32_NARROW] =
             {
                 .match = LOOM_WASM_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16),
                 .recipe = LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND,
                 .decision_constraint =
                     LOOM_WASM_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
+            },
+        [LOOM_WASM_MATH_RULE_ROUND_AWAY_NARROW] =
+            {
+                .match = LOOM_WASM_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16),
+                .recipe = LOOM_TARGET_MATH_RECIPE_ROUND_AWAY,
+                .evaluation = LOOM_WASM_MATH_EVALUATION_WIDENED_F32,
+                .decision_constraint =
+                    LOOM_WASM_MATH_CONSTRAINT_RECIPE_ROUND_AWAY,
             },
 };
 
@@ -131,8 +170,12 @@ static const loom_target_math_policy_rule_t
       .fallback_constraint = (fallback_),              \
   }
 
-#define LOOM_WASM_MATH_ARITHMETIC_SPAN                          \
-  LOOM_WASM_MATH_SPAN(LOOM_WASM_MATH_RULE_ARITHMETIC_NARROW, 1, \
+#define LOOM_WASM_MATH_WIDEN_F32_SPAN                          \
+  LOOM_WASM_MATH_SPAN(LOOM_WASM_MATH_RULE_WIDEN_F32_NARROW, 1, \
+                      LOOM_WASM_MATH_CONSTRAINT_ELEMENT_NATIVE_FLOAT)
+
+#define LOOM_WASM_MATH_ROUND_AWAY_SPAN                          \
+  LOOM_WASM_MATH_SPAN(LOOM_WASM_MATH_RULE_ROUND_AWAY_NARROW, 1, \
                       LOOM_WASM_MATH_CONSTRAINT_ELEMENT_NATIVE_FLOAT)
 
 #define LOOM_WASM_MATH_NATIVE_FLOAT_SPAN \
@@ -140,19 +183,21 @@ static const loom_target_math_policy_rule_t
 
 static const loom_target_math_policy_rule_span_t
     kWasmMathOperationSpans[LOOM_TARGET_MATH_OP_COUNT] = {
-        [LOOM_TARGET_MATH_OP_ADDF] = LOOM_WASM_MATH_ARITHMETIC_SPAN,
-        [LOOM_TARGET_MATH_OP_SUBF] = LOOM_WASM_MATH_ARITHMETIC_SPAN,
-        [LOOM_TARGET_MATH_OP_MULF] = LOOM_WASM_MATH_ARITHMETIC_SPAN,
-        [LOOM_TARGET_MATH_OP_DIVF] = LOOM_WASM_MATH_ARITHMETIC_SPAN,
-        [LOOM_TARGET_MATH_OP_CEILF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
-        [LOOM_TARGET_MATH_OP_FLOORF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
-        [LOOM_TARGET_MATH_OP_ROUNDEVENF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
-        [LOOM_TARGET_MATH_OP_TRUNCF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
+        [LOOM_TARGET_MATH_OP_ADDF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_SUBF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_MULF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_DIVF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_CEILF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_FLOORF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_ROUNDEVENF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
+        [LOOM_TARGET_MATH_OP_ROUNDF] = LOOM_WASM_MATH_ROUND_AWAY_SPAN,
+        [LOOM_TARGET_MATH_OP_TRUNCF] = LOOM_WASM_MATH_WIDEN_F32_SPAN,
         [LOOM_TARGET_MATH_OP_SQRTF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
         [LOOM_TARGET_MATH_OP_RSQRTF] = LOOM_WASM_MATH_NATIVE_FLOAT_SPAN,
 };
 
-#undef LOOM_WASM_MATH_ARITHMETIC_SPAN
+#undef LOOM_WASM_MATH_WIDEN_F32_SPAN
+#undef LOOM_WASM_MATH_ROUND_AWAY_SPAN
 #undef LOOM_WASM_MATH_NATIVE_FLOAT_SPAN
 #undef LOOM_WASM_MATH_SPAN
 #undef LOOM_WASM_NATIVE_FLOAT_TYPES
@@ -160,6 +205,7 @@ static const loom_target_math_policy_rule_span_t
 static const loom_target_math_policy_table_t kWasmMathPolicyTable = {
     .operation_spans = kWasmMathOperationSpans,
     .rules = kWasmMathRules,
+    .evaluations = kWasmMathEvaluations,
     .default_constraint = LOOM_WASM_MATH_CONSTRAINT_OP_SUPPORTED,
     .constraints = kWasmMathConstraints,
     .constraint_strings =

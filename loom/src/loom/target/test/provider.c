@@ -73,28 +73,25 @@ static const loom_string_ref_t
 
 static const loom_target_math_policy_direct_rule_t
     kTestWidenMathDirectRules[LOOM_TARGET_MATH_OP_COUNT] = {
-        [LOOM_TARGET_MATH_OP_MULF] = LOOM_TARGET_MATH_POLICY_DIRECT_RULE(
-            LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,
-            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
-            LOOM_TARGET_MATH_RECIPE_UNKNOWN,
-            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
-            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, 0,
-            LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
-            LOOM_TEST_MATH_CONSTRAINT_NONE),
-        [LOOM_TARGET_MATH_OP_DIVF] = LOOM_TARGET_MATH_POLICY_DIRECT_RULE(
-            LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,
-            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
-            LOOM_TARGET_MATH_RECIPE_UNKNOWN,
-            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
-            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, 0,
-            LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
-            LOOM_TEST_MATH_CONSTRAINT_NONE),
+#define LOOM_TEST_WIDEN_NATIVE_RULE(op_)                                    \
+  [LOOM_TARGET_MATH_OP_##op_] = LOOM_TARGET_MATH_POLICY_DIRECT_RULE(        \
+      LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_LANE_DOMAIN_SET_ALL,       \
+      LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, LOOM_TARGET_MATH_RECIPE_UNKNOWN, \
+      LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,                                  \
+      LOOM_TARGET_MATH_FASTMATH_FLAG_NONE, 0,                               \
+      LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE, LOOM_TEST_MATH_CONSTRAINT_NONE)
+        LOOM_TEST_WIDEN_NATIVE_RULE(MULF),
+        LOOM_TEST_WIDEN_NATIVE_RULE(DIVF),
+        LOOM_TEST_WIDEN_NATIVE_RULE(CEILF),
+        LOOM_TEST_WIDEN_NATIVE_RULE(FLOORF),
+        LOOM_TEST_WIDEN_NATIVE_RULE(ROUNDEVENF),
+        LOOM_TEST_WIDEN_NATIVE_RULE(TRUNCF),
+#undef LOOM_TEST_WIDEN_NATIVE_RULE
 };
 
 static const loom_target_math_policy_rule_t kTestWidenMathRules[] = {
     {
-        .match = LOOM_TEST_MATH_MATCH(LOOM_SCALAR_TYPE_SET_F16 |
-                                      LOOM_SCALAR_TYPE_SET_BF16),
+        .match = LOOM_TEST_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16),
         .recipe = LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND,
         .decision_constraint = LOOM_TEST_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
     },
@@ -102,16 +99,15 @@ static const loom_target_math_policy_rule_t kTestWidenMathRules[] = {
 
 static const loom_target_math_policy_rule_span_t
     kTestWidenMathOperationSpans[LOOM_TARGET_MATH_OP_COUNT] = {
-        [LOOM_TARGET_MATH_OP_MULF] =
-            {
-                .rule_count = IREE_ARRAYSIZE(kTestWidenMathRules),
-                .fallback_constraint = LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
-            },
-        [LOOM_TARGET_MATH_OP_DIVF] =
-            {
-                .rule_count = IREE_ARRAYSIZE(kTestWidenMathRules),
-                .fallback_constraint = LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE,
-            },
+#define LOOM_TEST_WIDEN_SPAN(op_)                                     \
+  [LOOM_TARGET_MATH_OP_##op_] = {                                     \
+      .rule_count = IREE_ARRAYSIZE(kTestWidenMathRules),              \
+      .fallback_constraint = LOOM_TEST_MATH_CONSTRAINT_WIDEN_FIXTURE, \
+  }
+        LOOM_TEST_WIDEN_SPAN(MULF),       LOOM_TEST_WIDEN_SPAN(DIVF),
+        LOOM_TEST_WIDEN_SPAN(CEILF),      LOOM_TEST_WIDEN_SPAN(FLOORF),
+        LOOM_TEST_WIDEN_SPAN(ROUNDEVENF), LOOM_TEST_WIDEN_SPAN(TRUNCF),
+#undef LOOM_TEST_WIDEN_SPAN
 };
 
 static const loom_target_math_policy_table_t kTestWidenMathPolicyTable = {
