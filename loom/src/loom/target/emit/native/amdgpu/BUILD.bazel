@@ -264,10 +264,26 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "spill_recipe",
+    srcs = ["spill_recipe.c"],
+    hdrs = ["spill_recipe.h"],
+    deps = [
+        ":storage_layout",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "spill_lowering",
     srcs = ["spill_lowering.c"],
     hdrs = ["spill_lowering.h"],
     deps = [
+        ":spill_recipe",
         ":storage_layout",
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:descriptors",

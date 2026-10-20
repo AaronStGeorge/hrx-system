@@ -283,12 +283,33 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
+    spill_recipe
+  HDRS
+    "spill_recipe.h"
+  SRCS
+    "spill_recipe.c"
+  DEPS
+    ::storage_layout
+    iree::base
+    iree::base::internal::arena
+    loom::codegen::low::descriptors
+    loom::ir
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
     spill_lowering
   HDRS
     "spill_lowering.h"
   SRCS
     "spill_lowering.c"
   DEPS
+    ::spill_recipe
     ::storage_layout
     iree::base
     iree::base::internal::arena
