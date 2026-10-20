@@ -53,7 +53,7 @@ func.def public @entry(%tokens$0: i32, %capacity$1: i32, %hidden$2: i32) -> (i32
 // Unsupported conjuncts reject the complete assumption.
 [[loom::assume]] void assume(bool);
 unsigned side();
-// ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+// ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
 void entry(unsigned value) { assume(value < 256u && value < (side(), 16u)); }
 
 // ====
@@ -204,6 +204,26 @@ func.def public @relation_family(%value$0: i32, %equal$1: i32, %lower$2: i32, %u
   %18 = scalar.addi %17, %lower$11 : i32
   %19 = scalar.addi %18, %upper$15 : i32
   func.return %19 : i32
+}
+
+// ====
+// RUN: pass combine,cse,dce
+// A derived assumption retains the computed SSA identity. Repeating the same
+// expression consumes the assumed result instead of rebuilding the arithmetic.
+[[loom::assume]] void assume(bool);
+unsigned derived_identity(unsigned pair_index) {
+  const unsigned index = 1u + 2u * pair_index;
+  assume(index + 1u < 15u);
+  return index + 1u;
+}
+// ----
+func.def public @derived_identity(%pair_index: i32) -> (i32) {
+  %15 = scalar.constant 1 : i32
+  %16 = scalar.shli %pair_index, %15 : i32
+  %13 = scalar.constant 2 : i32
+  %14 = scalar.addi %16, %13 : i32
+  %8 = scalar.assume %14 [range(%14, 0, 14)] : i32
+  func.return %8 : i32
 }
 
 // ====

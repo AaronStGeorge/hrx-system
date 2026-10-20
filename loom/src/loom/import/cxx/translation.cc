@@ -3923,6 +3923,21 @@ class Translator final : private Initialization::Evaluation {
         for (const auto& predicate : predicates) {
           for (size_t i = 0; i < predicate.value_count; ++i) {
             const auto& source_value = predicate.values[i];
+            if (source_value.origin == PredicateValueOrigin::Expression) {
+              for (const auto& dependency : source_value.dependencies) {
+                if (locals_.contains(dependency.binding)) {
+                  fail(dependency.source,
+                       "assume expressions cannot read an addressable binding "
+                       "whose storage may change through an alias");
+                }
+                if (!values_.contains(dependency.binding)) {
+                  fail(dependency.source,
+                       "assume expressions can read only owned automatic "
+                       "scalar bindings");
+                }
+              }
+              continue;
+            }
             if (source_value.origin != PredicateValueOrigin::Binding ||
                 !source_value.members.empty()) {
               fail(source_value.source,
@@ -3977,6 +3992,9 @@ class Translator final : private Initialization::Evaluation {
           }
           for (size_t i = 0; i < admitted.value_count; ++i) {
             const auto& source_value = admitted.values[i];
+            if (source_value.origin == PredicateValueOrigin::Expression) {
+              continue;
+            }
             auto result = loom_op_results(op)[i];
             auto refined =
                 index_domain

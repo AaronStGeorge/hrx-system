@@ -125,9 +125,11 @@ static iree_status_t loom_canonicalizer_run_pass(
     loom_pass_t* pass, loom_module_t* module, loom_func_like_t function,
     const loom_cleanup_pass_capability_t* cleanup_capability,
     loom_canonicalizer_pattern_registries_t patterns,
+    bool preserve_cse_fact_identities,
     loom_canonicalizer_post_run_fn_t post_run) {
   loom_canonicalizer_options_t run_options = {
       .patterns = patterns,
+      .preserve_cse_fact_identities = preserve_cse_fact_identities,
   };
   if (pass->state) {
     run_options.max_iterations =
@@ -202,7 +204,9 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
   const loom_canonicalizer_pattern_registries_t patterns =
       loom_canonicalizer_pattern_registries_from_cleanup_registry(registry);
   return loom_canonicalizer_run_pass(pass, module, function, cleanup_capability,
-                                     patterns, /*post_run=*/NULL);
+                                     patterns,
+                                     /*preserve_cse_fact_identities=*/false,
+                                     /*post_run=*/NULL);
 }
 
 iree_status_t loom_combine_run(loom_pass_t* pass, loom_module_t* module,
@@ -216,6 +220,7 @@ iree_status_t loom_combine_run(loom_pass_t* pass, loom_module_t* module,
   loom_canonicalizer_pattern_registries_t patterns =
       loom_canonicalizer_pattern_registries_from_cleanup_registry(registry);
   patterns.post_canonicalization = registry->source_combine;
-  return loom_canonicalizer_run_pass(pass, module, function, cleanup_capability,
-                                     patterns, loom_combine_integer_division);
+  return loom_canonicalizer_run_pass(
+      pass, module, function, cleanup_capability, patterns,
+      /*preserve_cse_fact_identities=*/true, loom_combine_integer_division);
 }

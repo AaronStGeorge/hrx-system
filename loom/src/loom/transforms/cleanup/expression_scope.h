@@ -126,6 +126,20 @@ loom_expression_entry_t* loom_expression_scope_find(
 void loom_expression_scope_insert(const loom_expression_cursor_t* cursor,
                                   loom_expression_entry_t entry);
 
+// Records the current FactIdentity operation as the preferred representative
+// of each corresponding operand within the current dominance scope. Storage is
+// allocated lazily on the first recorded identity; walks without fact
+// identities retain only a null state pointer. Nested refinements chain to the
+// original value and are restored when their dominance scope exits.
+iree_status_t loom_expression_scope_record_fact_identity(
+    const loom_expression_cursor_t* cursor);
+
+// Returns the strongest recorded fact identity for |value_id| visible from the
+// current cursor, or |value_id| when no type-compatible refinement is active.
+// Results with ownership-sensitive uses are not shared.
+loom_value_id_t loom_expression_scope_preferred_value(
+    const loom_expression_cursor_t* cursor, loom_value_id_t value_id);
+
 // Advances shared effect epochs and returns a conservative minimum reuse epoch.
 // PURE excludes memory-write barriers but retains convergence barriers for
 // machine materializations with implicit execution state. Source-only callers
@@ -137,7 +151,9 @@ uint32_t loom_expression_observe_barriers(
 
 // Tests semantic eligibility: deterministic, regionless, no observable writes,
 // convergence, unique identity, or linear ownership transfer/consumption.
-bool loom_expression_is_reusable(const loom_expression_cursor_t* cursor);
+bool loom_expression_op_is_reusable(const loom_module_t* module,
+                                    const loom_op_t* op,
+                                    loom_trait_flags_t traits);
 
 // Tests whether sharing results preserves ownership: the op neither transfers
 // operand ownership into results nor produces results consumed by a later move
@@ -146,9 +162,12 @@ bool loom_expression_is_reusable(const loom_expression_cursor_t* cursor);
 bool loom_expression_can_share_result_ownership(const loom_module_t* module,
                                                 const loom_op_t* op);
 
-// Replaces all corresponding result uses and erases the redundant operation.
-iree_status_t loom_expression_replace(loom_module_t* module, loom_op_t* op,
-                                      loom_op_t* existing);
+// Replaces corresponding result uses and erases the redundant operation.
+// Ordinary operand consumers use the strongest dominating same-typed fact
+// identity. FactIdentity consumers and embedded SSA references use the
+// canonical producer so repeated identity refinements remain CSE-equivalent.
+iree_status_t loom_expression_replace(const loom_expression_cursor_t* cursor,
+                                      loom_op_t* op, loom_op_t* existing);
 
 #ifdef __cplusplus
 }  // extern "C"

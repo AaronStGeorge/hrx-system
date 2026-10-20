@@ -582,6 +582,65 @@ TEST_F(CanonicalizerTest, EmptyFunctionNoOps) {
   EXPECT_EQ(count_live_ops(), 0);
 }
 
+TEST_F(CanonicalizerTest, RetainsUnusedFactIdentityWhenRequestedForCSE) {
+  const loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &lhs));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &rhs));
+  loom_op_t* add = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, lhs, rhs, i32,
+                                      LOOM_LOCATION_UNKNOWN, &add));
+  const loom_value_id_t value = loom_test_addi_result(add);
+  const loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_RANGE,
+      .arg_count = 3,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                   LOOM_PRED_ARG_CONST},
+      .reserved = {},
+      .args = {value, 0, 15},
+  };
+  loom_op_t* assume = NULL;
+  IREE_ASSERT_OK(loom_scalar_assume_build(&builder_, &value, 1, &predicate, 1,
+                                          &i32, 1, LOOM_LOCATION_UNKNOWN,
+                                          &assume));
+
+  const loom_canonicalizer_options_t options = {
+      .preserve_cse_fact_identities = true,
+  };
+  IREE_ASSERT_OK(run_canonicalize(func_like_, &options));
+  EXPECT_FALSE(iree_any_bit_set(assume->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_EQ(count_live_ops(), 2);
+}
+
+TEST_F(CanonicalizerTest, ErasesUnusedFactIdentityOnBlockArgument) {
+  const loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t value = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &value));
+  const loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_RANGE,
+      .arg_count = 3,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                   LOOM_PRED_ARG_CONST},
+      .reserved = {},
+      .args = {value, 0, 15},
+  };
+  loom_op_t* assume = NULL;
+  IREE_ASSERT_OK(loom_scalar_assume_build(&builder_, &value, 1, &predicate, 1,
+                                          &i32, 1, LOOM_LOCATION_UNKNOWN,
+                                          &assume));
+
+  const loom_canonicalizer_options_t options = {
+      .preserve_cse_fact_identities = true,
+  };
+  IREE_ASSERT_OK(run_canonicalize(func_like_, &options));
+  EXPECT_TRUE(iree_any_bit_set(assume->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_EQ(count_live_ops(), 0);
+}
+
 TEST_F(CanonicalizerTest, WorklistDedupPreventsRedundantWork) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 

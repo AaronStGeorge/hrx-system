@@ -116,13 +116,16 @@ class ImportTest : public ::testing::Test {
   std::map<std::string, int> source_requests_;
 };
 
-TEST_F(ImportTest, RejectedAssumptionsPublishNoPartialModule) {
+TEST_F(ImportTest, DerivedAssumptionsPublishExpressionFacts) {
   IREE_ASSERT_OK(
       Import(IREE_SV("[[loom::assume]] void assume(bool); "
                      "void entry(unsigned value, unsigned limit) { "
                      "assume(value < 256u && value < limit + 1u); }")));
-  EXPECT_EQ(module_, nullptr);
-  EXPECT_EQ(diagnostic_count_, 1);
+  ASSERT_NE(module_, nullptr);
+  const auto text = Print();
+  EXPECT_NE(text.find("scalar.addi"), std::string::npos);
+  EXPECT_NE(text.find("scalar.assume"), std::string::npos);
+  EXPECT_EQ(diagnostic_count_, 0);
 }
 
 TEST_F(ImportTest, FunctionsAndRootsOutliveSource) {

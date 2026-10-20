@@ -165,6 +165,34 @@ typedef struct loom_expression_binding_t {
   uint32_t probe_distance;
 } loom_expression_binding_t;
 
+// One value-keyed entry in the sparse fact-identity index. A slot for an
+// original value tracks its active refinement; a slot for an identity result
+// points back to the record that names its original value. Result slots remain
+// allocated after scope exit so open-addressing lookup never needs tombstones.
+typedef struct loom_expression_refinement_slot_t {
+  loom_value_id_t value_id;
+  uint32_t refinement;
+} loom_expression_refinement_slot_t;
+
+// One active dominance-scoped fact identity. Records form a stack, and each
+// original value separately links its nested refinements through |previous|.
+typedef struct loom_expression_refinement_t {
+  loom_value_id_t root;
+  loom_value_id_t result;
+  uint32_t previous;
+  loom_expression_scope_t* scope;
+} loom_expression_refinement_t;
+
+// Lazily allocated state used only by walks that encounter fact identities.
+typedef struct loom_expression_refinement_state_t {
+  loom_expression_refinement_slot_t* slots;
+  iree_host_size_t slot_count;
+  iree_host_size_t slot_capacity;
+  loom_expression_refinement_t* refinements;
+  iree_host_size_t refinement_count;
+  iree_host_size_t refinement_capacity;
+} loom_expression_refinement_state_t;
+
 struct loom_expression_walk_t {
   // Module containing all visited operations.
   loom_module_t* module;
@@ -190,6 +218,9 @@ struct loom_expression_walk_t {
   // Each counted op owns a distinct value-table entry, so the u32 value-ID
   // domain bounds this counter even when arbitrarily many writes intervene.
   uint32_t epoch;
+  // Sparse dominance-scoped FactIdentity representatives, allocated on first
+  // use so ordinary expression walks retain their existing storage shape.
+  loom_expression_refinement_state_t* refinement_state;
 };
 
 static iree_host_size_t loom_expression_scope_slot(
@@ -248,6 +279,213 @@ void loom_expression_scope_insert(const loom_expression_cursor_t* cursor,
   walk->bucket_heads[slot] = index;
 }
 
+//===----------------------------------------------------------------------===//
+// Dominance-scoped fact identities
+//===----------------------------------------------------------------------===//
+
+static uint32_t loom_expression_refinement_hash(loom_value_id_t value_id) {
+  uint32_t hash = loom_structural_hash_initialize();
+  hash = loom_structural_hash_mix_u32(hash, value_id);
+  return loom_structural_hash_finalize(hash);
+}
+
+static iree_host_size_t loom_expression_refinement_slot_index(
+    const loom_expression_refinement_state_t* state, loom_value_id_t value_id) {
+  const iree_host_size_t mask = state->slot_capacity - 1;
+  iree_host_size_t slot = loom_expression_refinement_hash(value_id) & mask;
+  while (state->slots[slot].value_id != LOOM_VALUE_ID_INVALID &&
+         state->slots[slot].value_id != value_id) {
+    slot = (slot + 1) & mask;
+  }
+  return slot;
+}
+
+static loom_expression_refinement_slot_t* loom_expression_refinement_find_slot(
+    loom_expression_refinement_state_t* state, loom_value_id_t value_id) {
+  if (!state || state->slot_capacity == 0) {
+    return NULL;
+  }
+  loom_expression_refinement_slot_t* slot =
+      &state->slots[loom_expression_refinement_slot_index(state, value_id)];
+  return slot->value_id == value_id ? slot : NULL;
+}
+
+static iree_status_t loom_expression_refinement_reserve_slots(
+    loom_expression_walk_t* walk, iree_host_size_t additional_count) {
+  loom_expression_refinement_state_t* state = walk->refinement_state;
+  iree_host_size_t required_count = 0;
+  if (!iree_host_size_checked_add(state->slot_count, additional_count,
+                                  &required_count)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "fact identity index capacity overflow");
+  }
+  if (required_count <= state->slot_capacity / 2) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t new_capacity =
+      state->slot_capacity ? state->slot_capacity : 8;
+  while (required_count > new_capacity / 2) {
+    if (!iree_host_size_checked_mul(new_capacity, 2, &new_capacity)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "fact identity index capacity overflow");
+    }
+  }
+  loom_expression_refinement_slot_t* new_slots = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      loom_expression_walk_dominance_info(walk)->arena, new_capacity,
+      sizeof(*new_slots), (void**)&new_slots));
+  memset(new_slots, 0xFF, new_capacity * sizeof(*new_slots));
+
+  loom_expression_refinement_slot_t* old_slots = state->slots;
+  const iree_host_size_t old_capacity = state->slot_capacity;
+  state->slots = new_slots;
+  state->slot_capacity = new_capacity;
+  for (iree_host_size_t i = 0; i < old_capacity; ++i) {
+    if (old_slots[i].value_id == LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
+    const iree_host_size_t slot =
+        loom_expression_refinement_slot_index(state, old_slots[i].value_id);
+    new_slots[slot] = old_slots[i];
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_expression_refinement_reserve_record(
+    loom_expression_walk_t* walk) {
+  loom_expression_refinement_state_t* state = walk->refinement_state;
+  if (state->refinement_count < state->refinement_capacity) {
+    return iree_ok_status();
+  }
+  const iree_host_size_t minimum_capacity =
+      iree_max(state->refinement_count + 1, 8);
+  return iree_arena_grow_array(
+      loom_expression_walk_dominance_info(walk)->arena, state->refinement_count,
+      minimum_capacity, sizeof(*state->refinements),
+      &state->refinement_capacity, (void**)&state->refinements);
+}
+
+static loom_value_id_t loom_expression_refinement_root(
+    loom_expression_refinement_state_t* state, loom_value_id_t value_id) {
+  loom_expression_refinement_slot_t* slot =
+      loom_expression_refinement_find_slot(state, value_id);
+  if (!slot || slot->refinement == UINT32_MAX) {
+    return value_id;
+  }
+  return state->refinements[slot->refinement].root;
+}
+
+iree_status_t loom_expression_scope_record_fact_identity(
+    const loom_expression_cursor_t* cursor) {
+  loom_expression_walk_t* walk = cursor->walk;
+  if (!walk->refinement_state) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        loom_expression_walk_dominance_info(walk)->arena,
+        sizeof(*walk->refinement_state), (void**)&walk->refinement_state));
+    memset(walk->refinement_state, 0, sizeof(*walk->refinement_state));
+  }
+  loom_expression_refinement_state_t* state = walk->refinement_state;
+  const loom_value_id_t* operands = loom_op_const_operands(cursor->op);
+  const loom_value_id_t* results = loom_op_const_results(cursor->op);
+  for (uint16_t i = 0; i < cursor->op->result_count; ++i) {
+    const loom_value_id_t root =
+        loom_expression_refinement_root(state, operands[i]);
+    const loom_value_id_t result = results[i];
+    loom_expression_refinement_slot_t* root_slot =
+        loom_expression_refinement_find_slot(state, root);
+    loom_expression_refinement_slot_t* result_slot =
+        loom_expression_refinement_find_slot(state, result);
+    const iree_host_size_t additional_count =
+        (root_slot ? 0 : 1) + (result_slot ? 0 : 1);
+    IREE_RETURN_IF_ERROR(
+        loom_expression_refinement_reserve_slots(walk, additional_count));
+    IREE_RETURN_IF_ERROR(loom_expression_refinement_reserve_record(walk));
+
+    root_slot = loom_expression_refinement_find_slot(state, root);
+    if (!root_slot) {
+      const iree_host_size_t slot =
+          loom_expression_refinement_slot_index(state, root);
+      root_slot = &state->slots[slot];
+      *root_slot = (loom_expression_refinement_slot_t){
+          .value_id = root,
+          .refinement = UINT32_MAX,
+      };
+      ++state->slot_count;
+    }
+    result_slot = loom_expression_refinement_find_slot(state, result);
+    if (!result_slot) {
+      const iree_host_size_t slot =
+          loom_expression_refinement_slot_index(state, result);
+      result_slot = &state->slots[slot];
+      *result_slot = (loom_expression_refinement_slot_t){
+          .value_id = result,
+          .refinement = UINT32_MAX,
+      };
+      ++state->slot_count;
+    }
+
+    const uint32_t refinement = (uint32_t)state->refinement_count++;
+    state->refinements[refinement] = (loom_expression_refinement_t){
+        .root = root,
+        .result = result,
+        .previous = root_slot->refinement,
+        .scope = cursor->scope,
+    };
+    root_slot->refinement = refinement;
+    result_slot->refinement = refinement;
+  }
+  return iree_ok_status();
+}
+
+loom_value_id_t loom_expression_scope_preferred_value(
+    const loom_expression_cursor_t* cursor, loom_value_id_t value_id) {
+  loom_expression_refinement_state_t* state = cursor->walk->refinement_state;
+  if (!state) {
+    return value_id;
+  }
+  const loom_value_id_t root = loom_expression_refinement_root(state, value_id);
+  loom_expression_refinement_slot_t* root_slot =
+      loom_expression_refinement_find_slot(state, root);
+  if (!root_slot || root_slot->refinement == UINT32_MAX) {
+    return value_id;
+  }
+  const loom_value_id_t preferred =
+      state->refinements[root_slot->refinement].result;
+  if (!loom_type_equal(loom_module_value_type(cursor->module, value_id),
+                       loom_module_value_type(cursor->module, preferred))) {
+    return value_id;
+  }
+  return loom_value_ownership_use_count(
+             loom_module_value(cursor->module, preferred)) == 0
+             ? preferred
+             : value_id;
+}
+
+static void loom_expression_scope_leave_refinements(
+    loom_expression_walk_t* walk) {
+  loom_expression_refinement_state_t* state = walk->refinement_state;
+  if (!state) {
+    return;
+  }
+  while (state->refinement_count > 0) {
+    const loom_expression_refinement_t* refinement =
+        &state->refinements[state->refinement_count - 1];
+    if (refinement->scope != walk->active_scope) {
+      break;
+    }
+    loom_expression_refinement_slot_t* root_slot =
+        loom_expression_refinement_find_slot(state, refinement->root);
+    loom_expression_refinement_slot_t* result_slot =
+        loom_expression_refinement_find_slot(state, refinement->result);
+    IREE_ASSERT(root_slot != NULL);
+    IREE_ASSERT(result_slot != NULL);
+    root_slot->refinement = refinement->previous;
+    result_slot->refinement = UINT32_MAX;
+    --state->refinement_count;
+  }
+}
+
 // Establishes one rollback checkpoint when the shared dominance walk enters a
 // block. Visibility cutoffs make isolation and mutable-state barriers constant
 // time without changing structural-expression lookup policy.
@@ -292,6 +530,7 @@ static iree_status_t loom_expression_walk_enter_scope(
 // a new key are removed before that key's slot is cleared.
 static void loom_expression_walk_leave_scope(void* user_data) {
   loom_expression_walk_t* walk = (loom_expression_walk_t*)user_data;
+  loom_expression_scope_leave_refinements(walk);
   const uint32_t checkpoint = walk->active_scope->entry_start;
   while (walk->binding_count > checkpoint) {
     const loom_expression_binding_t* binding =
@@ -515,23 +754,46 @@ bool loom_expression_can_share_result_ownership(const loom_module_t* module,
          !loom_expression_result_has_sensitive_ownership(module, op);
 }
 
-bool loom_expression_is_reusable(const loom_expression_cursor_t* cursor) {
-  return cursor->op->result_count != 0 && cursor->op->region_count == 0 &&
-         !loom_traits_has_side_effects(cursor->traits) &&
-         !loom_traits_has_unique_identity(cursor->traits) &&
-         loom_expression_can_share_result_ownership(cursor->module, cursor->op);
+bool loom_expression_op_is_reusable(const loom_module_t* module,
+                                    const loom_op_t* op,
+                                    loom_trait_flags_t traits) {
+  return op->result_count != 0 && op->region_count == 0 &&
+         !loom_traits_has_side_effects(traits) &&
+         !loom_traits_has_unique_identity(traits) &&
+         loom_expression_can_share_result_ownership(module, op);
 }
 
-iree_status_t loom_expression_replace(loom_module_t* module, loom_op_t* op,
-                                      loom_op_t* existing) {
+static bool loom_expression_user_is_not_fact_identity(const loom_op_t* user_op,
+                                                      void* user_data) {
+  (void)user_data;
+  return !loom_traits_are_fact_identity(user_op->traits);
+}
+
+iree_status_t loom_expression_replace(const loom_expression_cursor_t* cursor,
+                                      loom_op_t* op, loom_op_t* existing) {
+  loom_module_t* module = cursor->module;
   loom_value_id_t* results = loom_op_results(op);
   const loom_value_id_t* existing_results = loom_op_results(existing);
   iree_status_t status = iree_ok_status();
   for (uint16_t i = 0; i < op->result_count && iree_status_is_ok(status); ++i) {
     if (results[i] != LOOM_VALUE_ID_INVALID &&
         existing_results[i] != LOOM_VALUE_ID_INVALID) {
-      status = loom_value_replace_all_uses_with(module, results[i],
-                                                existing_results[i]);
+      const loom_value_id_t preferred =
+          loom_expression_scope_preferred_value(cursor, existing_results[i]);
+      if (preferred != existing_results[i]) {
+        // Ordinary consumers benefit from the strongest dominating identity,
+        // while a following FactIdentity must see the canonical producer. The
+        // latter also leaves the old value's embedded type/attribute uses for
+        // the full replacement below, allowing an equivalent identity's
+        // predicates to become structurally identical and CSE away.
+        status = loom_value_replace_uses_if(
+            module, results[i], preferred,
+            loom_expression_user_is_not_fact_identity, NULL);
+      }
+      if (iree_status_is_ok(status)) {
+        status = loom_value_replace_all_uses_with(module, results[i],
+                                                  existing_results[i]);
+      }
     }
   }
   if (iree_status_is_ok(status)) {

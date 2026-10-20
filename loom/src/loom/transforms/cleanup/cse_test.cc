@@ -12,7 +12,9 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/rewrite/rewriter.h"
 
 namespace loom {
@@ -30,6 +32,17 @@ static iree_status_t InitializePassStatistics(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+static loom_predicate_t RangePredicate(loom_value_id_t value, int64_t upper) {
+  return loom_predicate_t{
+      .kind = LOOM_PREDICATE_RANGE,
+      .arg_count = 3,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                   LOOM_PRED_ARG_CONST},
+      .reserved = {},
+      .args = {value, 0, upper},
+  };
+}
+
 class CSETest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -41,6 +54,12 @@ class CSETest : public ::testing::Test {
         loom_test_dialect_vtables(&vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_TEST, vtables, (uint16_t)vtable_count));
+    vtables = loom_scalar_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_SCALAR, vtables, (uint16_t)vtable_count));
+    vtables = loom_vector_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_VECTOR, vtables, (uint16_t)vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,
@@ -1199,6 +1218,216 @@ TEST_F(CSETest, SameResultTypesCSEd) {
   EXPECT_EQ(count_live_ops(), 3);
   IREE_ASSERT_OK(run_cse());
   EXPECT_EQ(count_live_ops(), 2);  // One cast eliminated.
+}
+
+//===----------------------------------------------------------------------===//
+// Fact identity representatives
+//===----------------------------------------------------------------------===//
+
+TEST_F(CSETest, DuplicateUsesDominatingFactIdentity) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &lhs));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &rhs));
+
+  loom_op_t* original = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, lhs, rhs, i32,
+                                      LOOM_LOCATION_UNKNOWN, &original));
+  loom_value_id_t assumed_value = loom_test_addi_result(original);
+  const loom_predicate_t predicate = RangePredicate(assumed_value, 15);
+  loom_op_t* assume = NULL;
+  IREE_ASSERT_OK(loom_scalar_assume_build(&builder_, &assumed_value, 1,
+                                          &predicate, 1, &i32, 1,
+                                          LOOM_LOCATION_UNKNOWN, &assume));
+  assumed_value = loom_scalar_assume_results(assume).values[0];
+
+  loom_op_t* duplicate = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, lhs, rhs, i32,
+                                      LOOM_LOCATION_UNKNOWN, &duplicate));
+  loom_value_id_t observed = loom_test_addi_result(duplicate);
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &observed, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_TRUE(iree_any_bit_set(duplicate->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_EQ(loom_test_use_values(use).values[0], assumed_value);
+}
+
+TEST_F(CSETest, DuplicateFactIdentityCollapsesToDominatingIdentity) {
+  const loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &lhs));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &rhs));
+
+  loom_op_t* original = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, lhs, rhs, i32,
+                                      LOOM_LOCATION_UNKNOWN, &original));
+  const loom_value_id_t original_value = loom_test_addi_result(original);
+  const loom_predicate_t original_predicate =
+      RangePredicate(original_value, 15);
+  loom_op_t* original_assume = NULL;
+  IREE_ASSERT_OK(loom_scalar_assume_build(
+      &builder_, &original_value, 1, &original_predicate, 1, &i32, 1,
+      LOOM_LOCATION_UNKNOWN, &original_assume));
+  const loom_value_id_t assumed_value =
+      loom_scalar_assume_results(original_assume).values[0];
+
+  loom_op_t* duplicate = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, lhs, rhs, i32,
+                                      LOOM_LOCATION_UNKNOWN, &duplicate));
+  const loom_value_id_t duplicate_value = loom_test_addi_result(duplicate);
+  loom_op_t* direct_use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &duplicate_value, 1,
+                                     LOOM_LOCATION_UNKNOWN, &direct_use));
+  const loom_predicate_t duplicate_predicate =
+      RangePredicate(duplicate_value, 15);
+  loom_op_t* duplicate_assume = NULL;
+  IREE_ASSERT_OK(loom_scalar_assume_build(
+      &builder_, &duplicate_value, 1, &duplicate_predicate, 1, &i32, 1,
+      LOOM_LOCATION_UNKNOWN, &duplicate_assume));
+  const loom_value_id_t duplicate_assumed_value =
+      loom_scalar_assume_results(duplicate_assume).values[0];
+  loom_op_t* assumed_use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &duplicate_assumed_value, 1,
+                                     LOOM_LOCATION_UNKNOWN, &assumed_use));
+
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_TRUE(iree_any_bit_set(duplicate->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_TRUE(iree_any_bit_set(duplicate_assume->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_EQ(loom_test_use_values(direct_use).values[0], assumed_value);
+  EXPECT_EQ(loom_test_use_values(assumed_use).values[0], assumed_value);
+}
+
+TEST_F(CSETest, VariadicFactIdentityRefinesMultiResultProducer) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* original = NULL;
+  IREE_ASSERT_OK(loom_test_result_pair_build(&builder_, i32, i32,
+                                             LOOM_LOCATION_UNKNOWN, &original));
+  loom_value_id_t values[] = {
+      loom_test_result_pair_first(original),
+      loom_test_result_pair_second(original),
+  };
+  loom_type_t result_types[] = {i32, i32};
+  const loom_predicate_t predicate = RangePredicate(values[0], 15);
+  loom_op_t* assume = NULL;
+  IREE_ASSERT_OK(loom_scalar_assume_build(
+      &builder_, values, IREE_ARRAYSIZE(values), &predicate, 1, result_types,
+      IREE_ARRAYSIZE(result_types), LOOM_LOCATION_UNKNOWN, &assume));
+  const loom_value_slice_t assumed = loom_scalar_assume_results(assume);
+
+  loom_op_t* duplicate = NULL;
+  IREE_ASSERT_OK(loom_test_result_pair_build(
+      &builder_, i32, i32, LOOM_LOCATION_UNKNOWN, &duplicate));
+  loom_value_id_t observed[] = {
+      loom_test_result_pair_first(duplicate),
+      loom_test_result_pair_second(duplicate),
+  };
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, observed,
+                                     IREE_ARRAYSIZE(observed),
+                                     LOOM_LOCATION_UNKNOWN, &use));
+
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_TRUE(iree_any_bit_set(duplicate->flags, LOOM_OP_FLAG_DEAD));
+  const loom_value_slice_t used = loom_test_use_values(use);
+  ASSERT_EQ(used.count, 2u);
+  EXPECT_EQ(used.values[0], assumed.values[0]);
+  EXPECT_EQ(used.values[1], assumed.values[1]);
+}
+
+TEST_F(CSETest, NestedFactIdentityRollsBackAtScopeExit) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t map_input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &map_input));
+
+  loom_op_t* original = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(42), i32,
+                                          LOOM_LOCATION_UNKNOWN, &original));
+  loom_value_id_t outer_value = loom_test_constant_result(original);
+  const loom_predicate_t outer_predicate = RangePredicate(outer_value, 63);
+  loom_op_t* outer_assume = NULL;
+  IREE_ASSERT_OK(
+      loom_scalar_assume_build(&builder_, &outer_value, 1, &outer_predicate, 1,
+                               &i32, 1, LOOM_LOCATION_UNKNOWN, &outer_assume));
+  outer_value = loom_scalar_assume_results(outer_assume).values[0];
+
+  loom_op_t* map = NULL;
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, &map_input, 1, i32, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &map));
+  loom_builder_ip_t saved =
+      loom_builder_enter_region(&builder_, map, loom_test_map_body(map));
+  loom_value_id_t inner_value = outer_value;
+  const loom_predicate_t inner_predicate = RangePredicate(inner_value, 47);
+  loom_op_t* inner_assume = NULL;
+  IREE_ASSERT_OK(
+      loom_scalar_assume_build(&builder_, &inner_value, 1, &inner_predicate, 1,
+                               &i32, 1, LOOM_LOCATION_UNKNOWN, &inner_assume));
+  inner_value = loom_scalar_assume_results(inner_assume).values[0];
+  loom_op_t* inner_duplicate = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(42), i32,
+                                          LOOM_LOCATION_UNKNOWN,
+                                          &inner_duplicate));
+  loom_value_id_t inner_observed = loom_test_constant_result(inner_duplicate);
+  loom_op_t* inner_use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &inner_observed, 1,
+                                     LOOM_LOCATION_UNKNOWN, &inner_use));
+  loom_builder_restore(&builder_, saved);
+
+  loom_op_t* outer_duplicate = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(42), i32,
+                                          LOOM_LOCATION_UNKNOWN,
+                                          &outer_duplicate));
+  loom_value_id_t outer_observed = loom_test_constant_result(outer_duplicate);
+  loom_op_t* outer_use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &outer_observed, 1,
+                                     LOOM_LOCATION_UNKNOWN, &outer_use));
+
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_EQ(loom_test_use_values(inner_use).values[0], inner_value);
+  EXPECT_EQ(loom_test_use_values(outer_use).values[0], outer_value);
+}
+
+TEST_F(CSETest, FactIdentityWithRefinedTypeDoesNotReplaceOriginalType) {
+  const loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  const loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t width = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), index_type, &width));
+  const loom_type_t dynamic_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_dynamic(width), 0);
+  const loom_type_t static_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+
+  loom_op_t* original = NULL;
+  IREE_ASSERT_OK(loom_test_result_pair_build(&builder_, dynamic_vector, i32,
+                                             LOOM_LOCATION_UNKNOWN, &original));
+  const loom_value_id_t original_value = loom_test_result_pair_first(original);
+  loom_op_t* refine = NULL;
+  IREE_ASSERT_OK(loom_vector_refine_build(&builder_, original_value,
+                                          static_vector, LOOM_LOCATION_UNKNOWN,
+                                          &refine));
+  const loom_value_id_t refined_value = loom_vector_refine_result(refine);
+
+  loom_op_t* duplicate = NULL;
+  IREE_ASSERT_OK(loom_test_result_pair_build(
+      &builder_, dynamic_vector, i32, LOOM_LOCATION_UNKNOWN, &duplicate));
+  loom_value_id_t observed = loom_test_result_pair_first(duplicate);
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &observed, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_TRUE(iree_any_bit_set(duplicate->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_EQ(loom_test_use_values(use).values[0], original_value);
+  EXPECT_NE(loom_test_use_values(use).values[0], refined_value);
 }
 
 //===----------------------------------------------------------------------===//

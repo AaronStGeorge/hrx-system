@@ -163,6 +163,7 @@ loom_cc_library(
         "//loom/src/loom/transforms/symbol:__pkg__",
     ],
     deps = [
+        ":expression_scope",
         ":fact_refinement",
         ":fact_refinement_policy",
         ":patterns",
@@ -244,7 +245,9 @@ loom_cc_test(
         ":cse",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/vector",
         "//loom/src/loom/pass:types",
         "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base/internal:arena",

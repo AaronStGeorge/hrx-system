@@ -175,6 +175,7 @@ loom_cc_library(
   SRCS
     "canonicalizer.c"
   DEPS
+    ::expression_scope
     ::fact_refinement
     ::fact_refinement_policy
     ::patterns
@@ -267,7 +268,9 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
     loom::ops::op_defs
+    loom::ops::scalar
     loom::ops::test
+    loom::ops::vector
     loom::pass::types
     loom::rewrite::rewriter
 )

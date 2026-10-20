@@ -55,6 +55,12 @@ typedef struct loom_canonicalizer_options_t {
   // Maximum number of fixed-point iterations. Zero selects the default.
   uint32_t max_iterations;
 
+  // Retains otherwise-dead same-typed fact identities on reusable expressions
+  // for an immediately following CSE phase. Source-combine pipelines use this
+  // to carry authored facts into equivalent expressions; ordinary universal
+  // canonicalization leaves this false and performs normal mini-DCE.
+  bool preserve_cse_fact_identities;
+
   // Optional phase-specific patterns sharing the ordinary fixed-point driver.
   loom_canonicalizer_pattern_registries_t patterns;
 

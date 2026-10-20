@@ -152,6 +152,10 @@ void FunctionContracts::declaration(
         value.converted_type = projected_value.converted->type;
         value.source = projected_value.source;
         switch (projected_value.origin) {
+          case PredicateValueOrigin::Expression:
+            IREE_ASSERT_UNREACHABLE(
+                "function predicate projection admitted a derived value");
+            break;
           case PredicateValueOrigin::Binding: {
             auto parameter = std::find(parameters.begin(), parameters.end(),
                                        projected_value.binding);

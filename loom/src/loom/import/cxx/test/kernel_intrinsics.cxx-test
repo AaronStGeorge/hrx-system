@@ -208,9 +208,8 @@ kernel.def @topology_identity() {
   %22 = scalar.assume %21 [range(%21, 0, 3)] : i64
   %23 = index.cast %22 : i64 to index
   view.store %lane, %values_view[%23] : i32, view<4xi32>
-  %25 = index.cast %workitem_id_x : index to i32
   %33 = view.load %values_view[%23] : view<4xi32> -> i32
-  %58 = scalar.addi %25, %33 : i32
+  %58 = scalar.addi %lane, %33 : i32
   %55 = scalar.constant 2 : i32
   %56 = scalar.shli %lane, %55 : i32
   %57 = scalar.extui %56 : i32 to i64

@@ -184,21 +184,21 @@ func.def @i32_configured_width_sum(%input: buffer) -> (i32) {
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @i32_configured_width_sum() -> (reg<aie2p.er>) asm {
   %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %17 = lda %input_view, 0
-  %18 = lda %input_view, 4
-  %19 = lda %input_view, 8
-  %20 = lda %input_view, 12
-  %21 = vbcst.32 %20
-  %22 = vpush.lo.32 %19, %21
-  %23 = vpush.lo.32 %18, %22
-  %loaded = vpush.lo.32 %17, %23
-  %25 = mova.i32 7
-  %26 = vshuffle %loaded, %loaded, %25
-  %27 = vadd.32 %loaded, %26
-  %28 = mova.i32 5
-  %29 = vshuffle %27, %27, %28
-  %30 = vadd.32 %27, %29
-  %sum = vextract.32.imm %30, 0
+  %18 = lda %input_view, 0
+  %19 = lda %input_view, 4
+  %20 = lda %input_view, 8
+  %21 = lda %input_view, 12
+  %22 = vbcst.32 %21
+  %23 = vpush.lo.32 %20, %22
+  %24 = vpush.lo.32 %19, %23
+  %loaded = vpush.lo.32 %18, %24
+  %26 = mova.i32 7
+  %27 = vshuffle %loaded, %loaded, %26
+  %28 = vadd.32 %loaded, %27
+  %29 = mova.i32 5
+  %30 = vshuffle %28, %28, %29
+  %31 = vadd.32 %28, %30
+  %sum = vextract.32.imm %31, 0
   return %sum
 }
 

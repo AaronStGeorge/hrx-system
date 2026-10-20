@@ -11,6 +11,7 @@
 #include <cxx/symbols.h>
 
 #include "iree/testing/gtest.h"
+#include "loom/import/cxx/source/error.h"
 
 namespace loom::cxx_import {
 namespace {
@@ -23,9 +24,13 @@ cxx::CallExpressionAST* source_call(Source& source) {
       auto* body = cxx::ast_cast<cxx::CompoundStatementFunctionBodyAST>(
                        function->functionBody)
                        ->statement;
-      auto* statement = cxx::ast_cast<cxx::ExpressionStatementAST>(
-          body->statementList->value);
-      return cxx::ast_cast<cxx::CallExpressionAST>(statement->expression);
+      for (auto* statement : cxx::ListView{body->statementList}) {
+        auto* expression =
+            cxx::ast_cast<cxx::ExpressionStatementAST>(statement);
+        if (expression) {
+          return cxx::ast_cast<cxx::CallExpressionAST>(expression->expression);
+        }
+      }
     }
   }
   return nullptr;
@@ -62,6 +67,12 @@ TEST(AssumptionsTest, ConjunctionRetainsBindingsPromotionsAndConstantBounds) {
   EXPECT_EQ(second.predicate.args[2], 255);
   EXPECT_EQ(third.predicate.args[2], 255);
   EXPECT_EQ(fourth.predicate.args[2], 15);
+  EXPECT_EQ(first.values[0].origin, PredicateValueOrigin::Binding);
+  EXPECT_EQ(second.values[0].origin, PredicateValueOrigin::Binding);
+  EXPECT_EQ(third.values[0].origin, PredicateValueOrigin::Binding);
+  EXPECT_EQ(fourth.values[0].origin, PredicateValueOrigin::Binding);
+  ASSERT_NE(first.values[0].binding, nullptr);
+  ASSERT_NE(second.values[0].binding, nullptr);
   EXPECT_EQ(cxx::to_string(first.values[0].binding->name()), "count");
   EXPECT_EQ(cxx::to_string(second.values[0].binding->name()), "byte");
   EXPECT_EQ(first.values[0].binding, third.values[0].binding);
@@ -198,6 +209,75 @@ TEST(AssumptionsTest, UsesUsualArithmeticConversionsForOrdering) {
     EXPECT_TRUE(representation->isSigned);
     EXPECT_EQ(representation->bits, 32);
   }
+}
+
+TEST(AssumptionsTest, RetainsSpeculatableDerivedScalarExpressions) {
+  loom_cxx_import_options_t options;
+  loom_cxx_import_options_initialize(&options);
+  Source source(IREE_SV(R"cpp(
+                  [[loom::assume]] void assume(bool);
+                  void entry(unsigned pair_index, unsigned limit, float value,
+                             float divisor, float expected) {
+                    const unsigned index = 1u + 2u * pair_index;
+                    assume(index + 1u < limit && (index - 1u) * 2u < limit &&
+                           (index & 15u) != (limit ^ 3u) &&
+                           value / divisor == expected && !(index & 1u));
+                  }
+                )cpp"),
+                IREE_SV("derived.cxx"), options);
+  auto* call = source_call(source);
+  ASSERT_NE(call, nullptr);
+  auto predicates =
+      assumption_predicates(source.unit(), source.diagnostics(), call);
+  ASSERT_EQ(predicates.size(), 5u);
+
+  size_t expression_count = 0;
+  size_t binding_count = 0;
+  for (const auto& predicate : predicates) {
+    ASSERT_GT(predicate.value_count, 0u);
+    for (size_t i = 0; i < predicate.value_count; ++i) {
+      const auto& value = predicate.values[i];
+      if (value.origin == PredicateValueOrigin::Expression) {
+        ++expression_count;
+        EXPECT_FALSE(value.dependencies.empty());
+      } else {
+        ++binding_count;
+        EXPECT_EQ(value.origin, PredicateValueOrigin::Binding);
+      }
+    }
+  }
+  EXPECT_EQ(expression_count, 6u);
+  EXPECT_EQ(binding_count, 3u);
+  EXPECT_EQ(predicates[0].predicate.kind, LOOM_PREDICATE_ULT);
+  EXPECT_EQ(
+      cxx::to_string(predicates[0].values[0].dependencies[0].binding->name()),
+      "index");
+  EXPECT_EQ(predicates[1].predicate.kind, LOOM_PREDICATE_ULT);
+  EXPECT_EQ(predicates[2].predicate.kind, LOOM_PREDICATE_NE);
+  EXPECT_EQ(predicates[3].predicate.kind, LOOM_PREDICATE_EQ);
+  EXPECT_EQ(predicates[4].predicate.kind, LOOM_PREDICATE_EQ);
+}
+
+TEST(AssumptionsTest, RejectsPartialDerivedScalarExpressions) {
+  loom_cxx_import_options_t options;
+  loom_cxx_import_options_initialize(&options);
+  Source division(IREE_SV(R"cpp(
+                    [[loom::assume]] void assume(bool);
+                    void entry(unsigned value, unsigned divisor) { assume(value / divisor < 16u); }
+                  )cpp"),
+                  IREE_SV("division.cxx"), options);
+  EXPECT_THROW(assumption_predicates(division.unit(), division.diagnostics(),
+                                     source_call(division)),
+               SourceRejected);
+
+  Source shift(IREE_SV(R"cpp(
+                 [[loom::assume]] void assume(bool);
+                 void entry(unsigned value, unsigned amount) { assume((value << amount) < 16u); }
+               )cpp"),
+               IREE_SV("shift.cxx"), options);
+  EXPECT_THROW(assumption_predicates(shift.unit(), shift.diagnostics(),
+                                     source_call(shift)),
+               SourceRejected);
 }
 
 }  // namespace

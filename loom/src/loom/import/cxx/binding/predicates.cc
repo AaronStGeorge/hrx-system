@@ -162,9 +162,211 @@ bool is_result_call(cxx::CallExpressionAST* call) {
   return annotation(direct_callee(call), "predicate_result");
 }
 
-std::optional<PredicateValue> predicate_value(cxx::TranslationUnit& unit,
-                                              Diagnostics& diagnostics,
-                                              cxx::ExpressionAST* expression) {
+bool is_numeric_source_type(cxx::TranslationUnit& unit, const cxx::Type* type) {
+  const auto traits = unit.typeTraits();
+  return traits.is_arithmetic(type) || traits.is_enum(type);
+}
+
+// Admits exactly the scalar expression forms whose translated Loom operations
+// are unconditionally safe to speculate. An assumption condition is not
+// evaluated by C++, so partial operations such as integer division and shifts
+// cannot be introduced merely to retain their results as facts.
+class SpeculatablePredicateExpression {
+ public:
+  SpeculatablePredicateExpression(cxx::TranslationUnit& unit,
+                                  Diagnostics& diagnostics)
+      : unit_(unit), diagnostics_(diagnostics) {}
+
+  std::optional<PredicateValue> project(cxx::ExpressionAST* expression) {
+    if (!admit(expression)) {
+      return std::nullopt;
+    }
+    PredicateValue value = {};
+    value.origin = PredicateValueOrigin::Expression;
+    value.dependencies = std::move(dependencies_);
+    value.source = unwrap_expression(expression);
+    value.converted = expression;
+    value.root_type = value.source->type;
+    return value;
+  }
+
+ private:
+  bool admit_implicit_cast(cxx::ImplicitCastExpressionAST* cast) {
+    if (cast->conversionFunction || !cast->expression ||
+        !is_numeric_source_type(unit_, cast->type) ||
+        !is_numeric_source_type(unit_, cast->expression->type)) {
+      return false;
+    }
+    switch (cast->castKind) {
+      case cxx::ImplicitCastKind::kIdentity:
+      case cxx::ImplicitCastKind::kLValueToRValueConversion:
+      case cxx::ImplicitCastKind::kIntegralPromotion:
+      case cxx::ImplicitCastKind::kFloatingPointPromotion:
+      case cxx::ImplicitCastKind::kIntegralConversion:
+      case cxx::ImplicitCastKind::kFloatingPointConversion:
+      case cxx::ImplicitCastKind::kBooleanConversion:
+      case cxx::ImplicitCastKind::kQualificationConversion:
+        return admit(cast->expression);
+      case cxx::ImplicitCastKind::kFloatingIntegralConversion:
+        // Integer-to-float conversion is total. Float-to-integer conversion
+        // is partial for NaNs and out-of-range values.
+        return unit_.typeTraits().is_integral_or_enum(cast->expression->type) &&
+               unit_.typeTraits().is_floating_point(cast->type) &&
+               admit(cast->expression);
+      default:
+        return false;
+    }
+  }
+
+  bool admit_binary(cxx::BinaryExpressionAST* binary) {
+    if (binary->symbol || !binary->leftExpression || !binary->rightExpression) {
+      return false;
+    }
+    const auto traits = unit_.typeTraits();
+    const bool left_numeric =
+        is_numeric_source_type(unit_, binary->leftExpression->type);
+    const bool right_numeric =
+        is_numeric_source_type(unit_, binary->rightExpression->type);
+    const bool integral =
+        traits.is_integral_or_enum(binary->leftExpression->type) &&
+        traits.is_integral_or_enum(binary->rightExpression->type);
+    const bool floating =
+        traits.is_floating_point(binary->leftExpression->type) &&
+        traits.is_floating_point(binary->rightExpression->type);
+    bool total = false;
+    switch (binary->op) {
+      case cxx::TokenKind::T_PLUS:
+      case cxx::TokenKind::T_MINUS:
+      case cxx::TokenKind::T_STAR:
+      case cxx::TokenKind::T_EQUAL_EQUAL:
+      case cxx::TokenKind::T_EXCLAIM_EQUAL:
+      case cxx::TokenKind::T_LESS:
+      case cxx::TokenKind::T_LESS_EQUAL:
+      case cxx::TokenKind::T_GREATER:
+      case cxx::TokenKind::T_GREATER_EQUAL:
+        total = left_numeric && right_numeric;
+        break;
+      case cxx::TokenKind::T_SLASH:
+        total = floating;
+        break;
+      case cxx::TokenKind::T_AMP:
+      case cxx::TokenKind::T_BAR:
+      case cxx::TokenKind::T_CARET:
+        total = integral;
+        break;
+      default:
+        break;
+    }
+    return total && admit(binary->leftExpression) &&
+           admit(binary->rightExpression);
+  }
+
+  bool admit_unary(cxx::UnaryExpressionAST* unary) {
+    if (unary->symbol || !unary->expression) {
+      return false;
+    }
+    const auto traits = unit_.typeTraits();
+    switch (unary->op) {
+      case cxx::TokenKind::T_PLUS:
+      case cxx::TokenKind::T_MINUS:
+        return is_numeric_source_type(unit_, unary->expression->type) &&
+               admit(unary->expression);
+      case cxx::TokenKind::T_TILDE:
+        return traits.is_integral_or_enum(unary->expression->type) &&
+               admit(unary->expression);
+      case cxx::TokenKind::T_EXCLAIM:
+        return is_numeric_source_type(unit_, unary->expression->type) &&
+               admit(unary->expression);
+      default:
+        return false;
+    }
+  }
+
+  bool admit(cxx::ExpressionAST* expression) {
+    if (!expression) {
+      return false;
+    }
+    if (unit_.typeTraits().is_volatile(expression->type)) {
+      diagnostics_.reject(
+          unit_, expression,
+          "predicate expressions cannot read volatile values because no "
+          "runtime comparison is emitted");
+    }
+    if (auto* cast =
+            cxx::ast_cast<cxx::ImplicitCastExpressionAST>(expression)) {
+      return admit_implicit_cast(cast);
+    }
+    if (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(expression)) {
+      return admit(nested->expression);
+    }
+    if (auto* initializer =
+            cxx::ast_cast<cxx::DefaultInitializerExpressionAST>(expression)) {
+      return admit(initializer->expression);
+    }
+    if (auto* initializer =
+            cxx::ast_cast<cxx::EqualInitializerAST>(expression)) {
+      return admit(initializer->expression);
+    }
+    if (auto* constant = cxx::ast_cast<cxx::ConstExpressionAST>(expression)) {
+      return constant->constValue &&
+             is_numeric_source_type(unit_, constant->type);
+    }
+    if (auto* id = cxx::ast_cast<cxx::IdExpressionAST>(expression)) {
+      if (!id->symbol) {
+        return false;
+      }
+      if (cxx::symbol_cast<cxx::EnumeratorSymbol>(id->symbol)) {
+        return true;
+      }
+      if (auto* variable = cxx::symbol_cast<cxx::VariableSymbol>(id->symbol);
+          variable && variable->constValue() &&
+          (variable->isConstexpr() ||
+           unit_.typeTraits().is_const(variable->type()))) {
+        return true;
+      }
+      dependencies_.push_back({id->symbol, id});
+      return true;
+    }
+    if (auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(expression)) {
+      auto* field = cxx::symbol_cast<cxx::FieldSymbol>(member->symbol);
+      return field && !field->isStatic() &&
+             member->accessOp == cxx::TokenKind::T_DOT &&
+             admit(member->baseExpression);
+    }
+    if (auto* unary = cxx::ast_cast<cxx::UnaryExpressionAST>(expression)) {
+      return admit_unary(unary);
+    }
+    if (auto* binary = cxx::ast_cast<cxx::BinaryExpressionAST>(expression)) {
+      return admit_binary(binary);
+    }
+    if (auto* literal =
+            cxx::ast_cast<cxx::IntLiteralExpressionAST>(expression)) {
+      return !literal->literalOperatorCall;
+    }
+    if (auto* literal =
+            cxx::ast_cast<cxx::FloatLiteralExpressionAST>(expression)) {
+      return !literal->literalOperatorCall;
+    }
+    if (auto* literal =
+            cxx::ast_cast<cxx::CharLiteralExpressionAST>(expression)) {
+      return !literal->literalOperatorCall;
+    }
+    return cxx::ast_cast<cxx::BoolLiteralExpressionAST>(expression) ||
+           cxx::ast_cast<cxx::SizeofExpressionAST>(expression) ||
+           cxx::ast_cast<cxx::SizeofTypeExpressionAST>(expression) ||
+           cxx::ast_cast<cxx::AlignofTypeExpressionAST>(expression) ||
+           cxx::ast_cast<cxx::BuiltinOffsetofExpressionAST>(expression);
+  }
+
+  cxx::TranslationUnit& unit_;
+  Diagnostics& diagnostics_;
+  std::vector<PredicateDependency> dependencies_;
+};
+
+std::optional<PredicateValue> predicate_value(
+    cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+    cxx::ExpressionAST* expression,
+    PredicateExpressionPolicy expression_policy) {
   auto* identity = unwrap_expression(expression);
   std::vector<cxx::FieldSymbol*> members;
   while (auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(identity)) {
@@ -196,7 +398,10 @@ std::optional<PredicateValue> predicate_value(cxx::TranslationUnit& unit,
     }
     value.origin = PredicateValueOrigin::Result;
   } else {
-    return std::nullopt;
+    return expression_policy == PredicateExpressionPolicy::SpeculatableValues
+               ? SpeculatablePredicateExpression(unit, diagnostics)
+                     .project(expression)
+               : std::nullopt;
   }
 
   if (unit.typeTraits().is_volatile(value.source->type)) {
@@ -205,28 +410,52 @@ std::optional<PredicateValue> predicate_value(cxx::TranslationUnit& unit,
         "predicate expressions cannot read volatile values because no "
         "runtime comparison is emitted");
   }
+  if (expression_policy == PredicateExpressionPolicy::SpeculatableValues &&
+      value.origin == PredicateValueOrigin::Binding && !value.members.empty()) {
+    return SpeculatablePredicateExpression(unit, diagnostics)
+        .project(expression);
+  }
   return value;
 }
 
-PredicateOperand predicate_operand(cxx::TranslationUnit& unit,
-                                   Diagnostics& diagnostics,
-                                   cxx::ExpressionAST* expression,
-                                   const cxx::Type* carrier_type) {
+PredicateOperand predicate_operand(
+    cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+    cxx::ExpressionAST* expression, const cxx::Type* carrier_type,
+    PredicateExpressionPolicy expression_policy) {
   if (auto constant = predicate_constant(unit, expression, carrier_type)) {
     return *constant;
   }
-  if (auto value = predicate_value(unit, diagnostics, expression)) {
+  if (auto value =
+          predicate_value(unit, diagnostics, expression, expression_policy)) {
     return std::move(*value);
   }
   diagnostics.reject(
       unit, expression,
-      "predicate operands must be retained scalar values or pure constants "
-      "without calls, mutation, or value-changing casts");
+      "predicate operands must be retained scalar values, compile-time "
+      "constants, or scalar expressions safe to evaluate unconditionally");
 }
 
 bool same_value(const PredicateValue& left, const PredicateValue& right) {
+  if (left.origin == PredicateValueOrigin::Expression ||
+      right.origin == PredicateValueOrigin::Expression) {
+    return left.origin == right.origin && left.source == right.source;
+  }
   return left.origin == right.origin && left.binding == right.binding &&
          left.members == right.members;
+}
+
+bool is_relation_operator(cxx::TokenKind op) {
+  switch (op) {
+    case cxx::TokenKind::T_EQUAL_EQUAL:
+    case cxx::TokenKind::T_EXCLAIM_EQUAL:
+    case cxx::TokenKind::T_LESS:
+    case cxx::TokenKind::T_LESS_EQUAL:
+    case cxx::TokenKind::T_GREATER:
+    case cxx::TokenKind::T_GREATER_EQUAL:
+      return true;
+    default:
+      return false;
+  }
 }
 
 void reject_false(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
@@ -431,6 +660,7 @@ void append_helper_predicate(cxx::TranslationUnit& unit,
                              cxx::CallExpressionAST* call,
                              loom_predicate_kind_t kind,
                              PredicateSubject subject,
+                             PredicateExpressionPolicy expression_policy,
                              std::vector<ProjectedPredicate>& output) {
   const uint8_t expected_count = loom_predicate_kind_argument_count(kind);
   size_t source_count = 0;
@@ -466,8 +696,8 @@ void append_helper_predicate(cxx::TranslationUnit& unit,
     if (!carrier_type) {
       carrier_type = expression->type;
     }
-    auto operand =
-        predicate_operand(unit, diagnostics, expression, carrier_type);
+    auto operand = predicate_operand(unit, diagnostics, expression,
+                                     carrier_type, expression_policy);
     projected.argument_types[argument_index] = expression->type;
     if (auto* value = std::get_if<PredicateValue>(&operand)) {
       if (argument_index > 0 &&
@@ -515,15 +745,16 @@ void append_helper_predicate(cxx::TranslationUnit& unit,
 void collect_predicates(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
                         cxx::ExpressionAST* expression,
                         PredicateSubject subject,
+                        PredicateExpressionPolicy expression_policy,
                         std::vector<ProjectedPredicate>& predicates) {
   auto* condition =
       cxx::ast_cast<cxx::BinaryExpressionAST>(unwrap_expression(expression));
   if (condition && !condition->symbol &&
       condition->op == cxx::TokenKind::T_AMP_AMP) {
     collect_predicates(unit, diagnostics, condition->leftExpression, subject,
-                       predicates);
+                       expression_policy, predicates);
     collect_predicates(unit, diagnostics, condition->rightExpression, subject,
-                       predicates);
+                       expression_policy, predicates);
     return;
   }
   if (auto truth = constant_truth(unit, expression)) {
@@ -537,24 +768,30 @@ void collect_predicates(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
           unwrap_expression(expression))) {
     if (auto kind = helper_kind(unit, diagnostics, call)) {
       append_helper_predicate(unit, diagnostics, call, *kind, subject,
-                              predicates);
+                              expression_policy, predicates);
       return;
     }
   }
 
   const auto traits = unit.typeTraits();
-  if (auto value = predicate_value(unit, diagnostics, expression);
-      value && traits.is_integral(value->source->type)) {
-    append_constant_predicate(LOOM_PREDICATE_NE, std::move(*value), 0,
-                              predicates);
-    return;
-  }
-  if (auto* unary =
-          cxx::ast_cast<cxx::UnaryExpressionAST>(unwrap_expression(expression));
-      unary && !unary->symbol && unary->op == cxx::TokenKind::T_EXCLAIM) {
-    if (auto value = predicate_value(unit, diagnostics, unary->expression);
+  const bool relation =
+      condition && !condition->symbol && is_relation_operator(condition->op);
+  if (!relation) {
+    if (auto* unary = cxx::ast_cast<cxx::UnaryExpressionAST>(
+            unwrap_expression(expression));
+        unary && !unary->symbol && unary->op == cxx::TokenKind::T_EXCLAIM) {
+      if (auto value = predicate_value(unit, diagnostics, unary->expression,
+                                       expression_policy);
+          value && traits.is_integral(value->source->type)) {
+        append_constant_predicate(LOOM_PREDICATE_EQ, std::move(*value), 0,
+                                  predicates);
+        return;
+      }
+    }
+    if (auto value =
+            predicate_value(unit, diagnostics, expression, expression_policy);
         value && traits.is_integral(value->source->type)) {
-      append_constant_predicate(LOOM_PREDICATE_EQ, std::move(*value), 0,
+      append_constant_predicate(LOOM_PREDICATE_NE, std::move(*value), 0,
                                 predicates);
       return;
     }
@@ -589,10 +826,12 @@ void collect_predicates(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
     diagnostics.reject(unit, condition,
                        "predicate integer carriers must be at most 64 bits");
   }
-  auto left = predicate_operand(unit, diagnostics, condition->leftExpression,
-                                condition->leftExpression->type);
-  auto right = predicate_operand(unit, diagnostics, condition->rightExpression,
-                                 condition->leftExpression->type);
+  auto left =
+      predicate_operand(unit, diagnostics, condition->leftExpression,
+                        condition->leftExpression->type, expression_policy);
+  auto right =
+      predicate_operand(unit, diagnostics, condition->rightExpression,
+                        condition->leftExpression->type, expression_policy);
   if (std::holds_alternative<PredicateConstant>(left) &&
       std::holds_alternative<PredicateValue>(right)) {
     std::swap(left, right);
@@ -658,9 +897,11 @@ bool predicate_accepts_source_type(cxx::TranslationUnit& unit,
 
 std::vector<ProjectedPredicate> project_predicates(
     cxx::TranslationUnit& unit, Diagnostics& diagnostics,
-    cxx::ExpressionAST* expression, PredicateSubject subject) {
+    cxx::ExpressionAST* expression, PredicateSubject subject,
+    PredicateExpressionPolicy expression_policy) {
   std::vector<ProjectedPredicate> predicates;
-  collect_predicates(unit, diagnostics, expression, subject, predicates);
+  collect_predicates(unit, diagnostics, expression, subject, expression_policy,
+                     predicates);
   return predicates;
 }
 
