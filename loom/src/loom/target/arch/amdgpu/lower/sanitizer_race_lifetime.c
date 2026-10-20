@@ -527,26 +527,15 @@ static iree_status_t loom_amdgpu_sanitizer_race_lifetime_build_expected_tags(
         history_layout->format_tag, sgpr_type, out_format_tag));
   }
 
-  loom_named_attr_t shift_attr = {0};
-  iree_host_size_t shift_attr_count = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
-      context, IREE_SV("shift"), history_layout->generation.bit_count,
-      &shift_attr,
-      /*attr_capacity=*/1, &shift_attr_count));
-  loom_op_t* shift_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_LSHR_B64_RHS_INLINE,
-      &dispatch_id, /*operand_count=*/1,
-      loom_make_named_attr_slice(&shift_attr, shift_attr_count), &sgpr_x2_type,
-      /*result_count=*/1, &shift_op));
-  const loom_value_id_t generation_window =
-      loom_value_slice_get(loom_low_op_results(shift_op), 0);
+  // Different dispatch layouts can overwrite a record's bitmap while leaving
+  // its header intact in unused history padding. Chunk readiness therefore
+  // belongs to one dispatch, even when the compact generation has not wrapped.
   loom_value_id_t one = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_emit_sgpr64_constant_u64(context, source_op, 1u, &one));
   return loom_amdgpu_emit_sgpr64_binary_carry(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_CO_U32,
-      LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32, generation_window, one,
+      LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32, dispatch_id, one,
       out_generation_tag);
 }
 
