@@ -125,3 +125,26 @@ func.def public @small() -> (i8) {
   %byte = scalar.constant -1 : i8
   func.return %byte : i8
 }
+
+// ====
+// RUN: roundtrip
+double post_increment(double* value) { return (*value)++; }
+_Float16 pre_decrement(_Float16 value) { return --value; }
+
+// ----
+func.def public @post_increment(%value: buffer, %value_byte_offset: offset) -> (f64) {
+  %3 = buffer.view %value[%value_byte_offset] : buffer -> view<1xf64>
+  %4 = view.load %3[0] : view<1xf64> -> f64
+  %5 = scalar.constant 1 : i32
+  %6 = scalar.sitofp %5 : i32 to f64
+  %7 = scalar.addf %4, %6 : f64
+  view.store %7, %3[0] : f64, view<1xf64>
+  func.return %4 : f64
+}
+
+func.def public @pre_decrement(%value$8: f16) -> (f16) {
+  %10 = scalar.constant 1 : i32
+  %11 = scalar.sitofp %10 : i32 to f16
+  %value$12 = scalar.subf %value$8, %11 : f16
+  func.return %value$12 : f16
+}

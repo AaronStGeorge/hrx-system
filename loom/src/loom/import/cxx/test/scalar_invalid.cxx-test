@@ -8,11 +8,6 @@ unsigned entry() {
 
 // ====
 // Increment rejects unprojected lvalues and source types.
-// ERROR@+1: LOWERING/059 "increment requires an integer or pointer binding"
-float entry(float value) { return value++; }
-
-// ====
-// Increment rejects unprojected lvalues and source types.
 extern unsigned value;
 // ERROR@+1: LOWERING/059 "mutation requires an owned automatic source binding"
 unsigned entry() { return ++value; }

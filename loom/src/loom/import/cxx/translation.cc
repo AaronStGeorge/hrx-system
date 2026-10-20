@@ -34,6 +34,7 @@
 #include "loom/import/cxx/binding/assumptions.h"
 #include "loom/import/cxx/binding/config.h"
 #include "loom/import/cxx/binding/constexpr.h"
+#include "loom/import/cxx/binding/exponent.h"
 #include "loom/import/cxx/binding/fastmath.h"
 #include "loom/import/cxx/binding/function_contracts.h"
 #include "loom/import/cxx/binding/intrinsics.h"
@@ -2192,11 +2193,17 @@ class Translator final : private Initialization::Evaluation {
               .advance(pointer_projection(previous, pointer, owner), one,
                        pointer, unit_.control()->getIntType(), operation, owner)
               .pointer;
+    } else if (types_.is_float(destination->type)) {
+      auto one = scalars_.convert(
+          scalars_.integer(1, LOOM_SCALAR_TYPE_I32, source),
+          unit_.control()->getIntType(), destination->type, owner);
+      updated = scalars_.binary(operation, previous.ssa(), one,
+                                destination->type, destination->type, owner);
     } else {
       if (!unit_.typeTraits().is_integral(destination->type) ||
           types_.unqualified(destination->type)->kind() ==
               cxx::TypeKind::kBool) {
-        fail(owner, "increment requires an integer or pointer binding");
+        fail(owner, "increment requires an arithmetic or pointer binding");
       }
       // Builtin ++/-- performs promoted arithmetic before converting back to
       // the lvalue type, just like compound assignment with an integer one.
@@ -2485,8 +2492,7 @@ class Translator final : private Initialization::Evaluation {
         });
   }
 
-  std::optional<IntrinsicCallResult> atomic_builtin(
-      cxx::CallExpressionAST* call) {
+  std::optional<IntrinsicCallResult> builtin(cxx::CallExpressionAST* call) {
     if (auto atomic =
             AtomicBuiltin::resolve(unit_, diagnostics_, types_, call)) {
       std::array<Value, 4> arguments;
@@ -2505,6 +2511,16 @@ class Translator final : private Initialization::Evaluation {
             FenceIntrinsic::resolve_builtin(unit_, diagnostics_, call)) {
       fence->call(&builder_, locations_.get(call));
       return IntrinsicCallResult{std::nullopt};
+    }
+    if (auto exponent = ExponentBuiltin::resolve(types_, call)) {
+      std::array<Value, 2> arguments;
+      auto* argument = call->expressionList;
+      for (auto& value : arguments) {
+        value = expression(argument->value);
+        argument = argument->next;
+      }
+      return IntrinsicCallResult{exponent->call(
+          arguments, storage_, call, &builder_, locations_.get(call))};
     }
     return std::nullopt;
   }
@@ -3034,7 +3050,7 @@ class Translator final : private Initialization::Evaluation {
       if (auto constant = fold_constant_reference_call(ast, call)) {
         return *constant;
       }
-      if (auto called = atomic_builtin(call)) {
+      if (auto called = builtin(call)) {
         return *called->value;
       }
       auto* function = direct_callee(call);
@@ -3914,7 +3930,7 @@ class Translator final : private Initialization::Evaluation {
       }
     }
     if (auto* call = cxx::ast_cast<cxx::CallExpressionAST>(ast)) {
-      if (atomic_builtin(call)) {
+      if (builtin(call)) {
         return;
       }
       auto* id = cxx::ast_cast<cxx::IdExpressionAST>(call->baseExpression);

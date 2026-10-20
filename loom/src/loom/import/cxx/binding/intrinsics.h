@@ -79,9 +79,12 @@ class Intrinsics {
     ScalarOperation operation;
     // Source-selected scalar representation within the admitted category.
     loom_type_t type;
+    // Retained source result shape, including nominal record identity.
+    const Partition* result;
 
     bool equivalent(const ScalarBinding& other) const {
-      return operation == other.operation && loom_type_equal(type, other.type);
+      return operation == other.operation &&
+             loom_type_equal(type, other.type) && result == other.result;
     }
   };
   using Binding =

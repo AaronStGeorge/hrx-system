@@ -13,21 +13,26 @@
 extern "C" {
 #endif
 
-// Source scalar category admitted by a homogeneous operation binding.
-typedef enum loom_cxx_scalar_category_e {
+// Source category shared by the operation's variable-type fields.
+typedef uint8_t loom_cxx_scalar_category_t;
+enum loom_cxx_scalar_category_e {
   LOOM_CXX_SCALAR_CATEGORY_FLOAT,
   LOOM_CXX_SCALAR_CATEGORY_INTEGER,
-} loom_cxx_scalar_category_t;
+};
 
-// One generated homogeneous scalar projection. All operands and the result
-// share a supported C++ type in the declared category, checked at admission.
+// One generated scalar projection. Variable-type fields share a supported C++
+// type; fixed fields use signed i32. Multiple results form a source record.
 typedef struct loom_cxx_scalar_binding_t {
   // Canonical dialect-qualified operation name.
   const char* name;
-  // Source category of the operation's operands and result.
+  // Source category of the operation's variable-type fields.
   loom_cxx_scalar_category_t category;
   // Fixed number of scalar operands.
   uint8_t operand_count;
+  // Fixed number of scalar results, in source record member order.
+  uint8_t result_count;
+  // Fixed signed-i32 fields, with operands followed by results.
+  uint8_t fixed_i32_mask;
   // Whether the operation carries canonical scalar fast-math flags.
   bool has_fastmath;
   // Positive zero-sign preservation flag, or zero when unsupported by the op.

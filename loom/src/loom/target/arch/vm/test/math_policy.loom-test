@@ -159,3 +159,40 @@ func.def target(@vm) @wide_log(%value: f64) -> (f64) {
   %result = scalar.logf<afn> %value : f64
   func.return %result : f64
 }
+
+// ====
+// All narrow formats use the same widening and single-rounding arithmetic.
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_arithmetic(%a: f8E4M3, %b: f8E4M3, %c: f8E5M2, %d: f8E5M2) -> (f8E4M3, f8E4M3, f8E4M3, f8E5M2, f8E5M2, f8E5M2) {
+  %sum = scalar.addf %a, %b : f8E4M3
+  %difference = scalar.subf %a, %b : f8E4M3
+  %product = scalar.mulf %a, %b : f8E4M3
+  %sums = scalar.addf %c, %d : f8E5M2
+  %differences = scalar.subf %c, %d : f8E5M2
+  %products = scalar.mulf %c, %d : f8E5M2
+  func.return %sum, %difference, %product, %sums, %differences, %products : f8E4M3, f8E4M3, f8E4M3, f8E5M2, f8E5M2, f8E5M2
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_arithmetic(%a: reg<vm.value : f8E4M3>, %b: reg<vm.value : f8E4M3>, %c: reg<vm.value : f8E5M2>, %d: reg<vm.value : f8E5M2>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E4M3>, reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f8E5M2>, reg<vm.value : f8E5M2>) asm {
+  %10 = conversion.float.extend %a, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %11 = conversion.float.extend %b, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %12 = float.add.f32 %10, %11
+  %sum = conversion.float.truncate %12, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %14 = float.sub.f32 %10, %11
+  %difference = conversion.float.truncate %14, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %16 = float.mul.f32 %10, %11
+  %product = conversion.float.truncate %16, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %18 = conversion.float.extend %c, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %19 = conversion.float.extend %d, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %20 = float.add.f32 %18, %19
+  %sums = conversion.float.truncate %20, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %22 = float.sub.f32 %18, %19
+  %differences = conversion.float.truncate %22, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %24 = float.mul.f32 %18, %19
+  %products = conversion.float.truncate %24, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  return %sum, %difference, %product, %sums, %differences, %products
+}

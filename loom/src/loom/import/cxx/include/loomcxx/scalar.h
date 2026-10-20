@@ -126,6 +126,28 @@ template <class Float> requires (__is_floating_point(Float))
 template <class Float> requires (__is_floating_point(Float))
 [[loom::op("scalar.fmaf")]] Float fmaf(Float a, Float b, Float c);
 
+// Decompose input exactly into a fraction and a signed i32 exponent such that
+// input = fraction * 2^exponent. For finite nonzero inputs, the fraction has
+// the input's sign and magnitude in [0.5, 1). Signed zero, infinity, and NaN
+// inputs retain their floating-point value with exponent zero. Subnormal
+// inputs are normalized.
+template <class Float> struct frexpf_result {
+  // Signed fraction, with magnitude in [0.5, 1) for finite nonzero inputs.
+  Float fraction;
+  // Binary exponent; zero for zero, infinity, and NaN inputs.
+  int exponent;
+};
+template <class Float> requires (__is_floating_point(Float))
+[[loom::op("scalar.frexpf")]] frexpf_result<Float> frexpf(Float input);
+
+// Scale input by two raised to the signed i32 exponent, rounding once to the
+// result format with round-to-nearest, ties-to-even. Signed zeros and
+// infinities are preserved, NaNs propagate, and subnormal inputs and results
+// are supported. Overflow follows the result format's floating-point
+// conversion semantics.
+template <class Float> requires (__is_floating_point(Float))
+[[loom::op("scalar.ldexpf")]] Float ldexpf(Float input, int exponent);
+
 // Base-10 logarithm.
 template <class Float> requires (__is_floating_point(Float))
 [[loom::op("scalar.log10f")]] Float log10f(Float input);

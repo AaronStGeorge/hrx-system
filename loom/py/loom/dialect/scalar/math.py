@@ -85,7 +85,10 @@ scalar_frexpf = Op(
         "value with exponent zero. Subnormal inputs are normalized."
     ),
     operands=[Operand("input", FLOAT)],
-    results=[Result("fraction", FLOAT), Result("exponent", I32)],
+    results=[
+        Result("fraction", FLOAT, doc="Signed fraction, with magnitude in [0.5, 1) for finite nonzero inputs."),
+        Result("exponent", I32, doc="Binary exponent; zero for zero, infinity, and NaN inputs."),
+    ],
     constraints=[SameType("input", "fraction")],
     traits=[PURE, SAFE_TO_SPECULATE],
     format=[

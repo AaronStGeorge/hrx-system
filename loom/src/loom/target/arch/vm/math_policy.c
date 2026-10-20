@@ -178,9 +178,9 @@ static const loom_target_math_policy_rule_t
     kVmMathRules[LOOM_VM_MATH_RULE_COUNT_] = {
         [LOOM_VM_MATH_RULE_ARITHMETIC_NARROW] =
             {
-                .match = LOOM_VM_MATH_MATCH(
-                    LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_BF16,
-                    LOOM_TARGET_MATH_FASTMATH_FLAG_NONE),
+                .match =
+                    LOOM_VM_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+                                       LOOM_TARGET_MATH_FASTMATH_FLAG_NONE),
                 .recipe = LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND,
                 .decision_constraint =
                     LOOM_VM_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
