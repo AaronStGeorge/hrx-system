@@ -230,7 +230,7 @@ TEST_P(CommandBufferCopyBufferTest, RemainingRanges) {
     IREE_ASSERT_OK(iree_hal_command_buffer_end(reusable_command_buffer));
   }
 
-  for (iree_device_size_t length : {0, 13, 65536 + 13, 2 * 65536 + 13}) {
+  for (uint32_t length : {0, 13, 65536 + 13, 2 * 65536 + 13}) {
     SCOPED_TRACE(length);
     const iree_device_size_t table_offset = indirect ? length % 8 : 0;
     const iree_device_size_t source_offset = table_offset + 7;
