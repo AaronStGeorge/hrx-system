@@ -441,12 +441,12 @@ static iree_status_t iree_benchmark_loom_write_kernel_launch_plan_json(
 
   iree_string_view_t kernel_entry = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_module_symbol_name_from_ref(
-      module, case_plan->first_kernel_launch->callee_ref, &kernel_entry));
+      module, case_plan->kernel_launches[0]->callee_ref, &kernel_entry));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       object, IREE_SV("kernel_entry"), kernel_entry));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       object, IREE_SV("kernel_argument_count"),
-      case_plan->first_kernel_launch->input_count));
+      case_plan->kernel_launches[0]->input_count));
   return iree_ok_status();
 }
 

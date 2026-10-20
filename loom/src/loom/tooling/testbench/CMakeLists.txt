@@ -52,6 +52,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    case_command_program
+  HDRS
+    "case_command_program.h"
+  SRCS
+    "case_command_program.c"
+  DEPS
+    ::api
+    ::testbench
+    iree::base
+    iree::base::internal::arena
+    loom::ir
+    loom::ops::buffer
+    loom::ops::command
+    loom::ops::index
+    loom::ops::kernel
+    loom::ops::op_defs
+    loom::ops::scalar
+    loom::rewrite::remap
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     source_report
   HDRS
     "source_report.h"
@@ -243,6 +266,28 @@ loom_cc_test(
     loom::ops::kernel
     loom::ops::pipeline
     loom::ops::test
+)
+
+loom_cc_test(
+  NAME
+    case_command_program_test
+  SRCS
+    "case_command_program_test.cc"
+  DEPS
+    ::case_command_program
+    ::testbench
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::buffer
+    loom::ops::check
+    loom::ops::command
+    loom::ops::index
+    loom::ops::kernel
+    loom::ops::scalar
+    loom::ops::test
+    loom::verify
 )
 
 loom_cc_test(

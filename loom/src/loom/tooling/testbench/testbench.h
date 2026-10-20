@@ -314,6 +314,33 @@ typedef struct loom_testbench_file_write_plan_t {
   loom_check_file_write_npy_mode_t mode;
 } loom_testbench_file_write_plan_t;
 
+// Canonical authored storage identity for a shaped SSA value.
+typedef struct loom_testbench_storage_identity_t {
+  // Ultimate allocation value, or INVALID when no storage is represented.
+  loom_value_id_t root_value_id;
+  // Cumulative byte offset from |root_value_id|.
+  iree_device_size_t byte_offset;
+} loom_testbench_storage_identity_t;
+
+typedef enum loom_testbench_launch_schedule_event_kind_e {
+  // A kernel launch entry from the case's ordered launch list.
+  LOOM_TESTBENCH_LAUNCH_SCHEDULE_EVENT_LAUNCH = 0,
+  // Beginning of a serial launch schedule region.
+  LOOM_TESTBENCH_LAUNCH_SCHEDULE_EVENT_SERIAL_BEGIN = 1,
+  // Beginning of a concurrent launch schedule region.
+  LOOM_TESTBENCH_LAUNCH_SCHEDULE_EVENT_CONCURRENT_BEGIN = 2,
+  // End of the innermost launch schedule region.
+  LOOM_TESTBENCH_LAUNCH_SCHEDULE_EVENT_END = 3,
+} loom_testbench_launch_schedule_event_kind_t;
+
+// One event in a flat, balanced representation of authored launch structure.
+typedef struct loom_testbench_launch_schedule_event_t {
+  // Event discriminator.
+  loom_testbench_launch_schedule_event_kind_t kind;
+  // Location of the source launch or schedule operation.
+  loom_location_id_t location;
+} loom_testbench_launch_schedule_event_t;
+
 typedef struct loom_testbench_invocation_plan_t {
   // Invocation kind and provider discriminator.
   loom_testbench_invocation_kind_t kind;
@@ -533,10 +560,14 @@ typedef struct loom_testbench_case_plan_t {
   const loom_testbench_invocation_plan_t* invocations;
   // Number of entries in |invocations|.
   iree_host_size_t invocation_count;
-  // First kernel launch in |invocations|, or NULL when none are present.
-  const loom_testbench_invocation_plan_t* first_kernel_launch;
-  // Number of kernel launch entries in |invocations|.
+  // Kernel launch plans in source order, referencing entries in |invocations|.
+  const loom_testbench_invocation_plan_t* const* kernel_launches;
+  // Number of entries in |kernel_launches|.
   iree_host_size_t kernel_launch_count;
+  // Balanced launch/schedule events preserving authored execution structure.
+  const loom_testbench_launch_schedule_event_t* launch_schedule_events;
+  // Number of entries in |launch_schedule_events|.
+  iree_host_size_t launch_schedule_event_count;
   // Expectation plans in source order.
   const loom_testbench_expectation_plan_t* expectations;
   // Number of entries in |expectations|.
@@ -588,6 +619,11 @@ typedef struct loom_testbench_benchmark_plan_t {
 typedef struct loom_testbench_module_plan_t {
   // Module this plan was derived from.
   const loom_module_t* module;
+  // Dense storage identities indexed by module value ID. Values outside
+  // planned check.case bodies have INVALID roots.
+  const loom_testbench_storage_identity_t* value_storage_identities;
+  // Number of entries in |value_storage_identities|.
+  iree_host_size_t value_storage_identity_count;
   // Discovered check.case records.
   const loom_testbench_case_plan_t* cases;
   // Number of entries in |cases|.
