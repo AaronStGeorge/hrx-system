@@ -929,7 +929,7 @@ def amdgpu_windows_steps(
             targets or ci_config.AMDGPU_WINDOWS_BAZEL_TARGETS,
             config=config,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
-            bazel_options=options + ("--test_arg=--gtest_fail_fast=1",),
+            bazel_options=options + ("--test_env=GTEST_FAIL_FAST=1",),
         )
     )
     steps.append(
