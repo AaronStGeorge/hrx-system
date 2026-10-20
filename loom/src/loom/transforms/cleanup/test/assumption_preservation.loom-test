@@ -1,14 +1,10 @@
 // RUN: pass combine
 
-// Cast composition must keep the value carrying the authored index bounds.
-func.def @signed_extension(%input: i16) -> (i64) {
-  %wide = scalar.extsi %input : i16 to i32
-  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
-  %result = scalar.extsi %bounded : i32 to i64
-  func.return %result : i64
-}
+// These are preservation tests: combine and canonicalize must not compose
+// through a value carrying assumptions. Cases without explicit expectations
+// assert unchanged IR; the storage cases additionally require a bounds proof.
 
-// ----
+// Cast composition must keep the value carrying the authored index bounds.
 func.def @signed_extension(%input: i16) -> (i64) {
   %wide = scalar.extsi %input : i16 to i32
   %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
@@ -19,14 +15,6 @@ func.def @signed_extension(%input: i16) -> (i64) {
 // ====
 
 // The same contract applies to cancellation of an exact round trip.
-func.def @unsigned_roundtrip(%input: i16) -> (i16) {
-  %wide = scalar.extui %input : i16 to i32
-  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
-  %result = scalar.trunci %bounded : i32 to i16
-  func.return %result : i16
-}
-
-// ----
 func.def @unsigned_roundtrip(%input: i16) -> (i16) {
   %wide = scalar.extui %input : i16 to i32
   %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
@@ -45,25 +33,8 @@ func.def @double_negation(%input: i32) -> (i32) {
   func.return %result : i32
 }
 
-// ----
-func.def @double_negation(%input: i32) -> (i32) {
-  %negative = scalar.negi %input : i32
-  %bounded = scalar.assume %negative [range(%negative, -6, -1)] : i32
-  %result = scalar.negi %bounded : i32
-  func.return %result : i32
-}
-
 // ====
 
-func.def @shift_chain(%input: i32) -> (i32) {
-  %shift = scalar.constant 1 : i32
-  %inner = scalar.shrui %input, %shift : i32
-  %bounded = scalar.assume %inner [range(%inner, 0, 10)] : i32
-  %result = scalar.shrui %bounded, %shift : i32
-  func.return %result : i32
-}
-
-// ----
 func.def @shift_chain(%input: i32) -> (i32) {
   %shift = scalar.constant 1 : i32
   %inner = scalar.shrui %input, %shift : i32
@@ -75,14 +46,6 @@ func.def @shift_chain(%input: i32) -> (i32) {
 // ====
 
 // Symbolic predicates cannot be reduced to a comparison of numeric intervals.
-func.def @symbolic_bound(%input: i16, %limit: i32) -> (i64) {
-  %wide = scalar.extsi %input : i16 to i32
-  %bounded = scalar.assume %wide [ge(%wide, 0), lt(%wide, %limit)] : i32
-  %result = scalar.extsi %bounded : i32 to i64
-  func.return %result : i64
-}
-
-// ----
 func.def @symbolic_bound(%input: i16, %limit: i32) -> (i64) {
   %wide = scalar.extsi %input : i16 to i32
   %bounded = scalar.assume %wide [ge(%wide, 0), lt(%wide, %limit)] : i32

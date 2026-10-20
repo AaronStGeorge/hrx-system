@@ -13,19 +13,6 @@ func.def @shift_identity_tuple(%value: i32) -> (i32, i32, i32) {
   %z = scalar.shrsi %c, %c3 : i32
   func.return %x, %y, %z : i32, i32, i32
 }
-// ----
-func.def @shift_identity_tuple(%value: i32) -> (i32, i32, i32) {
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %left = scalar.shli %value, %c2 : i32
-  %unsigned = scalar.shrui %value, %c2 : i32
-  %signed = scalar.shrsi %value, %c2 : i32
-  %a, %b, %c = scalar.assume %left, %unsigned, %signed [ne(%left, 0), ne(%unsigned, 0), ne(%signed, 0)] : i32, i32, i32
-  %x = scalar.shli %a, %c3 : i32
-  %y = scalar.shrui %b, %c3 : i32
-  %z = scalar.shrsi %c, %c3 : i32
-  func.return %x, %y, %z : i32, i32, i32
-}
 
 // ====
 
@@ -56,28 +43,9 @@ func.def @integer_cast_identity(%signed: i8, %unsigned: i16) -> (i8, i16) {
   %y = scalar.trunci %b : i32 to i16
   func.return %x, %y : i8, i16
 }
-// ----
-func.def @integer_cast_identity(%signed: i8, %unsigned: i16) -> (i8, i16) {
-  %signed_wide = scalar.extsi %signed : i8 to i64
-  %unsigned_wide = scalar.extui %unsigned : i16 to i32
-  %a, %b = scalar.assume %signed_wide, %unsigned_wide [ne(%signed_wide, 0), ne(%unsigned_wide, 0)] : i64, i32
-  %x = scalar.trunci %a : i64 to i8
-  %y = scalar.trunci %b : i32 to i16
-  func.return %x, %y : i8, i16
-}
 
 // ====
 
-func.def @float_cast_identity(%value: f32) -> (f32, f32) {
-  %wide = scalar.extf %value : f32 to f64
-  %assumed = scalar.assume %wide [finite(%wide)] : f64
-  %roundtrip = scalar.fptrunc %assumed : f64 to f32
-  %negated = scalar.negf %value : f32
-  %finite = scalar.assume %negated [finite(%negated)] : f32
-  %positive = scalar.negf %finite : f32
-  func.return %roundtrip, %positive : f32, f32
-}
-// ----
 func.def @float_cast_identity(%value: f32) -> (f32, f32) {
   %wide = scalar.extf %value : f32 to f64
   %assumed = scalar.assume %wide [finite(%wide)] : f64
@@ -91,13 +59,6 @@ func.def @float_cast_identity(%value: f32) -> (f32, f32) {
 // ====
 
 // Reinterpreting bits is distinct from the numeric facts on the identity.
-func.def @bitcast_identity(%value: f32) -> (f32) {
-  %bits = scalar.bitcast %value : f32 to i32
-  %assumed = scalar.assume %bits [ne(%bits, 0)] : i32
-  %result = scalar.bitcast %assumed : i32 to f32
-  func.return %result : f32
-}
-// ----
 func.def @bitcast_identity(%value: f32) -> (f32) {
   %bits = scalar.bitcast %value : f32 to i32
   %assumed = scalar.assume %bits [ne(%bits, 0)] : i32
@@ -224,28 +185,10 @@ func.def @vector_cast_identity(%input: vector<4xi8>) -> (vector<4xi8>) {
   %result = vector.trunci %fragment : vector<4xi32> to vector<4xi8>
   func.return %result : vector<4xi8>
 }
-// ----
-func.def @vector_cast_identity(%input: vector<4xi8>) -> (vector<4xi8>) {
-  %rows = index.constant 2 : index
-  %columns = index.constant 2 : index
-  %wide = vector.extui %input : vector<4xi8> to vector<4xi32>
-  %fragment = vector.fragment<lhs> %wide shape [%rows, %columns] : vector<4xi32>
-  %result = vector.trunci %fragment : vector<4xi32> to vector<4xi8>
-  func.return %result : vector<4xi8>
-}
 
 // ====
 
 // Extracting a lane also retains the fragment's interpretation boundary.
-func.def @vector_extract_identity(%input: f32) -> (f32) {
-  %rows = index.constant 2 : index
-  %columns = index.constant 2 : index
-  %wide = vector.splat %input : vector<4xf32>
-  %fragment = vector.fragment<lhs> %wide shape [%rows, %columns] : vector<4xf32>
-  %result = vector.extract %fragment[2] : vector<4xf32> -> f32
-  func.return %result : f32
-}
-// ----
 func.def @vector_extract_identity(%input: f32) -> (f32) {
   %rows = index.constant 2 : index
   %columns = index.constant 2 : index
@@ -322,22 +265,6 @@ func.def @shared_shift_alias(%value: i32) -> (i32, i32) {
 // ====
 
 // Index shifts preserve assumptions under the target's carrier width.
-test.target<quirky> @target32
-
-func.def target(@target32) @index_shift_identity(%value: index) -> (index, index, index) {
-  %c2 = index.constant 2 : index
-  %c3 = index.constant 3 : index
-  %left = index.shli %value, %c2 : index
-  %logical = index.shrui %value, %c2 : index
-  %arithmetic = index.shrsi %value, %c2 : index
-  %a, %b, %c = index.assume %left, %logical, %arithmetic [ne(%left, 0), ne(%logical, 0), ne(%arithmetic, 0)] : index, index, index
-  %x = index.shli %a, %c3 : index
-  %y = index.shrui %b, %c3 : index
-  %z = index.shrsi %c, %c3 : index
-  func.return %x, %y, %z : index, index, index
-}
-
-// ----
 test.target<quirky> @target32
 
 func.def target(@target32) @index_shift_identity(%value: index) -> (index, index, index) {

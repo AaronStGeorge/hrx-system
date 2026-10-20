@@ -226,24 +226,8 @@ func.def @uniform_elements(%value: f64) -> (vector<2xf64>) {
   func.return %result : vector<2xf64>
 }
 
-// ----
-func.def @uniform_elements(%value: f64) -> (vector<2xf64>) {
-  %refined = scalar.assume %value [not_inf(%value)] : f64
-  %result = vector.from_elements %value, %refined : vector<2xf64>
-  func.return %result : vector<2xf64>
-}
-
 // ====
 
-func.def @insert_roundtrip(%value: vector<4xi8>) -> (vector<4xi8>) {
-  %extent = index.constant 2 : index
-  %fragment = vector.fragment<lhs> %value shape [%extent, %extent] : vector<4xi8>
-  %element = vector.extract %fragment[1] : vector<4xi8> -> i8
-  %result = vector.insert %element into %value[1] : i8, vector<4xi8>
-  func.return %result : vector<4xi8>
-}
-
-// ----
 func.def @insert_roundtrip(%value: vector<4xi8>) -> (vector<4xi8>) {
   %extent = index.constant 2 : index
   %fragment = vector.fragment<lhs> %value shape [%extent, %extent] : vector<4xi8>
