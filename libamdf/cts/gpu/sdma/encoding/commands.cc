@@ -26,6 +26,12 @@ void SdmaCommandWriter::ReleaseToSystem() {
 
 void SdmaCommandWriter::Noop() { words_[word_count_++] = 0; }
 
+void SdmaCommandWriter::PadToEightWords() {
+  while (word_count_ % 8 != 0) {
+    Noop();
+  }
+}
+
 void SdmaCommandWriter::CopyLinear(uint64_t source, uint64_t target,
                                    uint32_t byte_length) {
   const bool scoped =

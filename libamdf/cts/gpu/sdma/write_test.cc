@@ -43,8 +43,9 @@ TEST_F(SdmaWriteTest, InlineDataFeedsDependentCopiesAcrossEpochs) {
   constexpr size_t kInlineWordCount = 1 + 3 + 8 + 257;
   const bool user_gcr =
       (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-  const size_t words_per_epoch =
-      kSpans.size() * (4 + 7) + kInlineWordCount + 1 + 4 + (user_gcr ? 10 : 0);
+  const size_t words_per_epoch = (kSpans.size() * (4 + 7) + kInlineWordCount +
+                                  1 + 4 + (user_gcr ? 10 : 0) + 7) &
+                                 ~size_t{7};
 
   GpuMemory* target = nullptr;
   GpuMemory* output = nullptr;
@@ -138,6 +139,7 @@ TEST_F(SdmaWriteTest, InlineDataFeedsDependentCopiesAcrossEpochs) {
       commands.ReleaseToSystem();
     }
     commands.Fence32(completion->device_address + kCompletionOffset, marker);
+    commands.PadToEightWords();
     ASSERT_EQ(commands.word_count(), (epoch + 1) * words_per_epoch);
     ASSERT_NO_FATAL_FAILURE(
         queue->Publish(api_, gpu_api_, commands.word_count()));

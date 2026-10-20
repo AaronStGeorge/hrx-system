@@ -561,6 +561,8 @@ typedef struct amdf_gpu_kernel_command_t {
   /// Reserved for compatible growth; always zero.
   uint32_t reserved;
   /// Dword-aligned byte offset from the attachment's stable device base.
+  /// The resulting command address must be 32-byte aligned for SDMA indirect
+  /// buffers and dword aligned for PM4 command buffers.
   uint64_t byte_offset;
   /// Nonzero dword-aligned command length.
   uint64_t byte_length;

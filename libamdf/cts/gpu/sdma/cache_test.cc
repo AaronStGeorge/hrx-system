@@ -33,7 +33,7 @@ TEST_F(SdmaCacheTest, UserGcrBracketsCopiesAcrossEpochs) {
   constexpr size_t kTargetWord = 64;
   constexpr size_t kCompletionWord = 16;
   constexpr size_t kCopyWordCount = 1027;
-  constexpr size_t kWordsPerEpoch = 21;
+  constexpr size_t kWordsPerEpoch = 24;
   constexpr std::array<uint32_t, 2> kSeeds = {0x176da309, 0xc8542bef};
   constexpr size_t kCommandWordCount = kSeeds.size() * kWordsPerEpoch;
   GpuMemory* source = nullptr;
@@ -63,6 +63,7 @@ TEST_F(SdmaCacheTest, UserGcrBracketsCopiesAcrossEpochs) {
     commands.Fence32(
         completion->device_address + kCompletionWord * sizeof(uint32_t),
         marker);
+    commands.PadToEightWords();
   }
   ASSERT_EQ(commands.word_count(), kCommandWordCount);
   queue->words()[kCommandWordCount] = 0x692bde45;

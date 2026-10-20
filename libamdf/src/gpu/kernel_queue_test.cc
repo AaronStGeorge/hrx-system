@@ -189,6 +189,27 @@ class GpuKernelQueueTest
   amdf_memory_reservation_access_state_t target = {};
 };
 
+TEST_P(GpuKernelQueueTest, CommandAlignmentIsCheckedBeforeNativeAdmission) {
+  const uint64_t alignment =
+      GetParam() == AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA ? 32 : 4;
+  for (uint64_t offset = 0; offset <= 64; ++offset) {
+    SCOPED_TRACE(offset);
+    command.byte_offset = offset;
+    const uint64_t prior_submission = device.native.queue.submitted;
+    uint64_t submission = UINT64_MAX;
+    if (offset % alignment == 0) {
+      ASSERT_EQ(Submit(&submission), AMDF_STATUS_OK);
+      EXPECT_GT(submission, prior_submission);
+      device.native.queue.progress = submission;
+    } else {
+      EXPECT_EQ(Submit(&submission),
+                amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+      EXPECT_EQ(submission, UINT64_MAX);
+      EXPECT_EQ(device.native.queue.submitted, prior_submission);
+    }
+  }
+}
+
 TEST_P(GpuKernelQueueTest, MappingAndCommandsShareProgressAndCapacity) {
   ASSERT_EQ(CreateQueue(2), AMDF_STATUS_OK);
   uint64_t command_point = 0;

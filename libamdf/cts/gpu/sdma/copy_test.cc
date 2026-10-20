@@ -250,7 +250,7 @@ TEST_F(SdmaDependencyTest, NopOrdersDependentCopiesAcrossEpochs) {
   constexpr uint32_t kCompletionOffset = 64;
   const bool user_gcr =
       (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-  const size_t words_per_epoch = 19 + (user_gcr ? 10 : 0);
+  const size_t words_per_epoch = user_gcr ? 32 : 24;
   constexpr std::array<uint32_t, 2> kSeeds = {0x13579bdfu, 0xa5c31f27u};
   GpuMemory* source = nullptr;
   GpuMemory* intermediate = nullptr;
@@ -357,6 +357,7 @@ TEST_F(SdmaDependencyTest, NopOrdersDependentCopiesAcrossEpochs) {
       commands.ReleaseToSystem();
     }
     commands.Fence32(completion->device_address + kCompletionOffset, marker);
+    commands.PadToEightWords();
     ASSERT_EQ(commands.word_count(), (epoch + 1) * words_per_epoch);
     ASSERT_NO_FATAL_FAILURE(
         queue->Publish(api_, gpu_api_, commands.word_count()));

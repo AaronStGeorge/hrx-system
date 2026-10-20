@@ -93,13 +93,13 @@ class SdmaWaitTest : public GpuCommandTest,
     constexpr size_t kOperandWord = 16;
     constexpr size_t kArrivalWord = 32;
     constexpr size_t kCompletionWord = 48;
-    constexpr size_t kMaximumWordsPerEpoch = 31;
+    constexpr size_t kMaximumWordsPerEpoch = 32;
     constexpr size_t kCommandWordCapacity =
         kEpochCount * kMaximumWordsPerEpoch + 1;
     const WaitCase& parameters = GetParam();
     const bool user_gcr =
         (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-    const size_t words_per_epoch = user_gcr ? 31 : 21;
+    const size_t words_per_epoch = user_gcr ? 32 : 24;
 
     GpuMemory* source = nullptr;
     GpuMemory* target = nullptr;
@@ -139,6 +139,7 @@ class SdmaWaitTest : public GpuCommandTest,
       }
       commands.Fence32(
           control->device_address + kCompletionWord * sizeof(uint32_t), marker);
+      commands.PadToEightWords();
     }
     ASSERT_EQ(commands.word_count(), kEpochCount * words_per_epoch);
     std::memcpy(expected_commands.data(), queue->words().data(),

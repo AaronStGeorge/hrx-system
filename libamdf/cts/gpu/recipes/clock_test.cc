@@ -120,6 +120,7 @@ TEST_P(QueueClockRecipeTest, NominalDurationsAndHostBounds) {
         commands.ReleaseToSystem();
       }
       commands.Fence32(observations->device_address + 256, 1);
+      commands.PadToEightWords();
       published_words += commands.word_count();
     }
     amdf_observation_clock_sample_t native_before = {};
