@@ -83,6 +83,11 @@ typedef struct iree_benchmark_loom_work_item_t {
 typedef struct iree_benchmark_loom_work_plan_t {
   // Host allocator used for arrays owned by this plan.
   iree_allocator_t host_allocator;
+  // Original selected issues borrowed from the module plan, in module issue
+  // order. Nonempty diagnostics exclude all executable selections and work.
+  const loom_testbench_issue_t** planning_issues;
+  // Number of entries in |planning_issues|, each present once across aliases.
+  iree_host_size_t planning_issue_count;
   // Selected benchmark records in execution/report order.
   iree_benchmark_loom_selected_benchmark_t* selected_benchmarks;
   // Number of populated selected benchmark records.
@@ -104,6 +109,9 @@ typedef struct iree_benchmark_loom_work_plan_t {
 // Builds a selected benchmark and deduplicated physical work plan.
 // Logical samples retain selection order. Shared work and compile products use
 // the first selected representative, preserving its execution order.
+// Authored planning errors return OK with |planning_issues| and no executable
+// work. CLI selection/policy errors and allocation failures return a status.
+// The module plan must outlive this plan.
 iree_status_t iree_benchmark_loom_work_plan_initialize(
     const loom_testbench_module_plan_t* module_plan,
     const iree_benchmark_loom_options_t* options, iree_allocator_t allocator,

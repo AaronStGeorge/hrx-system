@@ -6,6 +6,7 @@
 
 #include "loom/tools/iree-benchmark-loom/run.h"
 
+#include <cstdlib>
 #include <fstream>
 #include <string>
 
@@ -13,6 +14,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "iree/testing/temp_file.h"
+#include "loom/ir/module.h"
 
 namespace loom {
 namespace {
@@ -194,6 +196,75 @@ check.benchmark<@sampled_choice> @sampled_choice_value7 {value = 7}
   iree_string_view_t benchmark_state =
       LookupObject(benchmark_result, IREE_SV("state"));
   EXPECT_TRUE(iree_string_view_equal(benchmark_state, IREE_SV("ok")));
+}
+
+TEST(BenchmarkRunTest, ForwardsOriginalScenarioIssueOnceAcrossAliases) {
+  const char* source = std::getenv("LOOM_BENCHMARK_PLANNING_SOURCE");
+  ASSERT_NE(source, nullptr);
+  for (const char* compare : {"", " @alias, @first, @alias "}) {
+    SCOPED_TRACE(compare);
+    iree_benchmark_loom_options_t options = {};
+    iree_benchmark_loom_options_initialize(&options);
+    options.dry_run = true;
+    options.compare = iree_make_cstring_view(compare);
+    event_collector_t collector = {};
+    const iree_benchmark_loom_event_sink_t sink = {
+        .emit = [](void* user_data,
+                   const iree_benchmark_loom_event_t* event) -> iree_status_t {
+          if (event->kind == IREE_BENCHMARK_LOOM_EVENT_FAILURE) {
+            const auto& failure = event->failure;
+            EXPECT_TRUE(iree_string_view_equal(failure.stage, IREE_SV("plan")));
+            EXPECT_TRUE(iree_string_view_equal(failure.kind,
+                                               IREE_SV("testbench_planning")));
+            EXPECT_EQ(failure.planning_issue_count, 1u);
+            EXPECT_NE(failure.testbench_plan, nullptr);
+            if (failure.planning_issue_count == 1 && failure.testbench_plan) {
+              EXPECT_EQ(failure.planning_issues,
+                        failure.testbench_plan->issues);
+              const auto& issue = failure.planning_issues[0];
+              EXPECT_EQ(issue.kind,
+                        LOOM_TESTBENCH_ISSUE_UNSUPPORTED_TRIAL_BODY_OP);
+              EXPECT_EQ(issue.scenario_index, 0u);
+              EXPECT_NE(issue.op, nullptr);
+              if (issue.op) {
+                const auto* module = failure.testbench_plan->module;
+                const auto* location = loom_location_table_const_entry(
+                    &module->locations, issue.op->location);
+                EXPECT_EQ(location->kind, LOOM_LOCATION_FILE);
+                EXPECT_EQ(location->file.start_line, 9u);
+                EXPECT_EQ(location->file.start_col, 5u);
+                EXPECT_EQ(location->file.end_line, 9u);
+                EXPECT_EQ(location->file.end_col, 38u);
+                EXPECT_TRUE(iree_string_view_equal(
+                    module->sources.entries[location->file.source_id],
+                    event->failure.run->source));
+              }
+            }
+          }
+          return collect_event(user_data, event);
+        },
+        .user_data = &collector,
+    };
+    const iree_benchmark_loom_configuration_t configuration = {
+        .tool_name = "iree-benchmark-loom-test",
+    };
+    const iree_benchmark_loom_file_run_options_t run_options = {
+        .configuration = &configuration,
+        .benchmark_options = &options,
+        .input_path = iree_make_cstring_view(source),
+        .event_sink = &sink,
+        .host_allocator = iree_allocator_system(),
+    };
+    iree_benchmark_loom_run_result_t result = {};
+    IREE_ASSERT_OK(iree_benchmark_loom_run_file(&run_options, &result));
+    EXPECT_EQ(result.exit_code, 1);
+    ASSERT_EQ(collector.event_count, 3u);
+    EXPECT_EQ(collector.events[0].kind, IREE_BENCHMARK_LOOM_EVENT_RUN);
+    EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_FAILURE);
+    EXPECT_EQ(collector.events[2].kind, IREE_BENCHMARK_LOOM_EVENT_SUMMARY);
+    EXPECT_EQ(collector.events[2].summary.failure_count, 1u);
+    EXPECT_EQ(collector.events[2].summary.work_item_count, 0u);
+  }
 }
 
 }  // namespace

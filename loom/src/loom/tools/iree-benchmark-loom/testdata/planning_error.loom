@@ -1,0 +1,17 @@
+// scalar.constant is valid IR but is not an executable check.trial recipe.
+// Aliases must report its original planning issue once, before sample expansion.
+func.def @identity(%input: i32) -> (i32) {
+  func.return %input : i32
+}
+
+check.scenario @subject {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = scalar.constant 42 : i32
+    check.invoke<@identity>(%input) : (i32) -> (i32)
+  }
+  check.return
+}
+
+check.benchmark<@subject> @first
+
+check.benchmark<@subject> @alias

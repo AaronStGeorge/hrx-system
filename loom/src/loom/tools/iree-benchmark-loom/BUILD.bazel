@@ -328,8 +328,13 @@ loom_cc_test(
 loom_cc_test(
     name = "run_test",
     srcs = ["run_test.cc"],
+    data = ["testdata/planning_error.loom"],
+    env = {
+        "LOOM_BENCHMARK_PLANNING_SOURCE": "$(rootpath testdata/planning_error.loom)",
+    },
     deps = [
         ":main",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:json",
         "//runtime/src/iree/testing:gtest",

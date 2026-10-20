@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <initializer_list>
 #include <map>
 #include <string>
 #include <vector>
@@ -61,6 +62,189 @@ TEST(BenchmarkWorkPlanApiTest, EmptyModuleNeedsNoSelectionStorage) {
   EXPECT_EQ(plan.hal_compile_item_count, 0u);
   ExpectAliasChains(plan);
   iree_benchmark_loom_work_plan_deinitialize(&plan);
+}
+
+TEST(BenchmarkWorkPlanApiTest, PlanningIssuesFollowSelectedOwnership) {
+  constexpr auto invalid = IREE_HOST_SIZE_MAX;
+  const loom_testbench_issue_t issues[] = {
+      {
+          .kind = LOOM_TESTBENCH_ISSUE_UNSUPPORTED_CASE_BODY_OP,
+          .case_index = 0,
+          .scenario_index = invalid,
+          .benchmark_index = invalid,
+      },
+      {
+          .kind = LOOM_TESTBENCH_ISSUE_UNSUPPORTED_SCENARIO_BODY_OP,
+          .case_index = invalid,
+          .scenario_index = 0,
+          .benchmark_index = invalid,
+      },
+      {
+          .kind = LOOM_TESTBENCH_ISSUE_UNSUPPORTED_TRIAL_BODY_OP,
+          .case_index = invalid,
+          .scenario_index = 0,
+          .benchmark_index = invalid,
+      },
+      {
+          .kind = LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT,
+          .case_index = 1,
+          .scenario_index = invalid,
+          .benchmark_index = 6,
+      },
+      {
+          .kind = LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT,
+          .case_index = invalid,
+          .scenario_index = 1,
+          .benchmark_index = 7,
+      },
+      {
+          .kind = LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_RECORD,
+          .case_index = invalid,
+          .scenario_index = invalid,
+          .benchmark_index = 8,
+      },
+  };
+  const loom_testbench_case_plan_t cases[] = {
+      {.name = IREE_SV("invalid_case"), .issues = issues, .issue_count = 1},
+      {
+          .name = IREE_SV("valid_case"),
+          .cartesian_sample_count = 1,
+          .sample_count = 1,
+      },
+  };
+  const loom_testbench_trial_plan_t trial = {
+      .trial_count = 1,
+      .action = {.kind = LOOM_TESTBENCH_SCENARIO_ACTION_INVOKE},
+  };
+  const loom_testbench_scenario_plan_t scenarios[] = {
+      {
+          .name = IREE_SV("invalid_scenario"),
+          .issues = &issues[1],
+          .issue_count = 2,
+      },
+      {
+          .name = IREE_SV("valid_scenario"),
+          .configuration_count = 1,
+          .trials = &trial,
+          .trial_count = 1,
+      },
+  };
+  const loom_testbench_benchmark_plan_t benchmarks[] = {
+      {.name = IREE_SV("case_bad"), .case_index = 0, .scenario_index = invalid},
+      {
+          .name = IREE_SV("case_alias"),
+          .case_index = 0,
+          .scenario_index = invalid,
+      },
+      {
+          .name = IREE_SV("scenario_bad"),
+          .case_index = invalid,
+          .scenario_index = 0,
+      },
+      {
+          .name = IREE_SV("scenario_alias"),
+          .case_index = invalid,
+          .scenario_index = 0,
+      },
+      {
+          .name = IREE_SV("case_good"),
+          .case_index = 1,
+          .scenario_index = invalid,
+          .cartesian_sample_count = 1,
+          .sample_count = 1,
+      },
+      {
+          .name = IREE_SV("scenario_good"),
+          .case_index = invalid,
+          .scenario_index = 1,
+          .cartesian_sample_count = 1,
+          .sample_count = 1,
+      },
+      {
+          .name = IREE_SV("case_assignment"),
+          .case_index = 1,
+          .scenario_index = invalid,
+      },
+      {
+          .name = IREE_SV("scenario_assignment"),
+          .case_index = invalid,
+          .scenario_index = 1,
+      },
+      {
+          .name = IREE_SV("missing_record"),
+          .case_index = invalid,
+          .scenario_index = invalid,
+      },
+  };
+  const loom_testbench_module_plan_t module_plan = {
+      .cases = cases,
+      .case_count = IREE_ARRAYSIZE(cases),
+      .scenarios = scenarios,
+      .scenario_count = IREE_ARRAYSIZE(scenarios),
+      .benchmarks = benchmarks,
+      .benchmark_count = IREE_ARRAYSIZE(benchmarks),
+      .issues = issues,
+      .issue_count = IREE_ARRAYSIZE(issues),
+  };
+  auto expect_issues = [&](const char* benchmark, const char* record,
+                           const char* compare,
+                           std::initializer_list<size_t> expected) {
+    SCOPED_TRACE(benchmark);
+    SCOPED_TRACE(record);
+    SCOPED_TRACE(compare);
+    iree_benchmark_loom_options_t options = {};
+    iree_benchmark_loom_options_initialize(&options);
+    options.selected_benchmark = iree_make_cstring_view(benchmark);
+    options.selected_case = iree_make_cstring_view(record);
+    options.compare = iree_make_cstring_view(compare);
+    if (expected.size() != 0) {
+      // Authored issues must precede policy and sample-domain validation.
+      options.measure = IREE_SV("unsupported");
+      options.sample_ordinal = 123;
+    }
+    iree_benchmark_loom_work_plan_t plan = {};
+    IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+        &module_plan, &options, iree_allocator_system(), &plan));
+    EXPECT_EQ(plan.planning_issue_count, expected.size());
+    size_t index = 0;
+    for (size_t ordinal : expected) {
+      // Pointer identity preserves the original op, source, and record
+      // evidence.
+      ASSERT_LT(index, plan.planning_issue_count);
+      EXPECT_EQ(plan.planning_issues[index++], &issues[ordinal]);
+    }
+    if (expected.size() != 0) {
+      EXPECT_EQ(plan.selected_benchmark_count, 0u);
+      EXPECT_EQ(plan.selected_benchmarks, nullptr);
+      EXPECT_EQ(plan.logical_sample_count, 0u);
+      EXPECT_EQ(plan.logical_samples, nullptr);
+      EXPECT_EQ(plan.work_item_count, 0u);
+      EXPECT_EQ(plan.work_items, nullptr);
+      EXPECT_EQ(plan.hal_compile_item_count, 0u);
+      EXPECT_EQ(plan.hal_compile_items, nullptr);
+    } else {
+      EXPECT_EQ(plan.planning_issues, nullptr);
+      EXPECT_EQ(plan.selected_benchmark_count, 1u);
+      EXPECT_EQ(plan.work_item_count, 1u);
+    }
+    iree_benchmark_loom_work_plan_deinitialize(&plan);
+  };
+  expect_issues("", "", "", {0, 1, 2, 3, 4, 5});
+  expect_issues("case_bad", "", "", {0});
+  expect_issues("scenario_bad", "", "", {1, 2});
+  expect_issues("", "invalid_case", "", {0});
+  expect_issues("", "invalid_scenario", "", {1, 2});
+  expect_issues("", "", " @case_alias , @case_bad, @case_alias ", {0});
+  expect_issues("", "", "@scenario_alias,@scenario_bad,@scenario_alias",
+                {1, 2});
+  expect_issues("case_assignment", "", "", {3});
+  expect_issues("scenario_assignment", "", "", {4});
+  expect_issues("missing_record", "", "", {5});
+  expect_issues("", "", "@missing_record,@missing_record", {5});
+  expect_issues("", "valid_case", "", {3});
+  expect_issues("", "valid_scenario", "", {4});
+  expect_issues("case_good", "valid_case", "", {});
+  expect_issues("scenario_good", "valid_scenario", "", {});
 }
 
 TEST(BenchmarkWorkPlanApiTest, ExecutionSlotsCoverOnlySelectedPhysicalWork) {
@@ -261,6 +445,35 @@ TEST(BenchmarkWorkPlanApiTest, CompareLookupPreservesRequestsAndDiagnostics) {
       EXPECT_EQ(plan.selected_benchmarks, nullptr);
       EXPECT_EQ(plan.selected_benchmark_count, 0u);
     }
+
+    // Direct and indexed compare lookup feed the same issue selection. All
+    // aliases retain one original issue, regardless of request multiplicity.
+    const loom_testbench_issue_t issue = {
+        .kind = LOOM_TESTBENCH_ISSUE_UNSUPPORTED_TRIAL_BODY_OP,
+        .case_index = LOOM_TESTBENCH_CASE_INDEX_INVALID,
+        .scenario_index = 0,
+        .benchmark_index = LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID,
+    };
+    auto invalid_scenario = scenario;
+    invalid_scenario.issues = &issue;
+    invalid_scenario.issue_count = 1;
+    auto invalid_benchmarks = benchmarks;
+    for (auto& benchmark : invalid_benchmarks) {
+      benchmark.sample_count = 0;
+    }
+    auto invalid_module = module_plan;
+    invalid_module.scenarios = &invalid_scenario;
+    invalid_module.benchmarks = invalid_benchmarks.data();
+    invalid_module.issues = &issue;
+    invalid_module.issue_count = 1;
+    options.compare = iree_make_cstring_view(compare.c_str());
+    IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+        &invalid_module, &options, iree_allocator_system(), &plan));
+    ASSERT_EQ(plan.planning_issue_count, 1u);
+    EXPECT_EQ(plan.planning_issues[0], &issue);
+    EXPECT_EQ(plan.selected_benchmarks, nullptr);
+    EXPECT_EQ(plan.work_items, nullptr);
+    iree_benchmark_loom_work_plan_deinitialize(&plan);
   }
 }
 
@@ -588,17 +801,12 @@ class BenchmarkWorkPlanTest : public ::testing::Test {
     return module;
   }
 
-  loom_testbench_module_plan_t PlanModuleAllowingIssues(const char* source) {
+  loom_testbench_module_plan_t PlanModule(const char* source) {
     loom_module_t* module = ParseModule(source);
     owned_modules_.push_back(module);
     loom_testbench_module_plan_t module_plan = {};
     IREE_EXPECT_OK(loom_testbench_plan_module(module, nullptr, &plan_arena_,
                                               &module_plan));
-    return module_plan;
-  }
-
-  loom_testbench_module_plan_t PlanModule(const char* source) {
-    loom_testbench_module_plan_t module_plan = PlanModuleAllowingIssues(source);
     EXPECT_EQ(module_plan.issue_count, 0u);
     return module_plan;
   }
@@ -916,17 +1124,19 @@ check.benchmark<@scenario> @scenario_latency
               HasSubstr("requires measure = \"dispatch_complete\""));
 }
 
-TEST_F(BenchmarkWorkPlanTest, RejectsSelectedBenchmarkWithZeroSamples) {
-  const loom_testbench_module_plan_t module_plan = PlanModuleAllowingIssues(R"(
-check.case @sampled {
-  %value = check.param.choice values([5, 7]) name("value") : i32
-  check.return
-}
-
-check.benchmark<@sampled> @missing_value {value = 9}
-)");
-  ASSERT_EQ(module_plan.benchmark_count, 1u);
-  ASSERT_EQ(module_plan.benchmarks[0].sample_count, 0u);
+TEST(BenchmarkWorkPlanApiTest, RejectsEmptyDomainWithoutPlanningIssues) {
+  const loom_testbench_case_plan_t case_plan = {.name = IREE_SV("empty")};
+  const loom_testbench_benchmark_plan_t benchmark = {
+      .name = IREE_SV("empty_latency"),
+      .case_index = 0,
+      .scenario_index = LOOM_TESTBENCH_SCENARIO_INDEX_INVALID,
+  };
+  const loom_testbench_module_plan_t module_plan = {
+      .cases = &case_plan,
+      .case_count = 1,
+      .benchmarks = &benchmark,
+      .benchmark_count = 1,
+  };
 
   iree_benchmark_loom_options_t options = {};
   iree_benchmark_loom_options_initialize(&options);
@@ -938,8 +1148,8 @@ check.benchmark<@sampled> @missing_value {value = 9}
 
   EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
   EXPECT_THAT(status.ToString(), HasSubstr("zero executable samples"));
-  EXPECT_THAT(status.ToString(), HasSubstr("missing_value"));
-  EXPECT_THAT(status.ToString(), HasSubstr("sampled"));
+  EXPECT_THAT(status.ToString(), HasSubstr("empty_latency"));
+  EXPECT_THAT(status.ToString(), HasSubstr("empty"));
 }
 
 TEST_F(BenchmarkWorkPlanTest, AcceptsModuleWithoutBenchmarks) {
