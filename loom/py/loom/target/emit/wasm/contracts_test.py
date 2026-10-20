@@ -7,12 +7,13 @@
 import pytest
 
 from loom.dialect.index import defs as index
-from loom.dialect.scalar import bitwise, conversion
+from loom.dialect.scalar import arithmetic, bitwise, comparison, conversion, math
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
 from loom.ir import ScalarType
 from loom.scalar_type import ScalarTypeKind, scalar_type_name
 from loom.target.contracts import (
+    DescriptorEmitForm,
     DescriptorRule,
     GuardKind,
     UnsupportedRule,
@@ -472,6 +473,132 @@ def _numeric_vector_ranges(rule, field):
                 for element in pattern.elements
                 if element != "i1"
             )
+
+
+def _type_guard(rule: DescriptorRule, field: str):
+    return next(
+        guard.type_pattern
+        for guard in rule.guards
+        if guard.kind is GuardKind.VALUE_TYPE and guard.field == field
+    )
+
+
+def test_native_scalar_float_contracts_cover_both_widths() -> None:
+    operations = {
+        arithmetic.scalar_addf: "add",
+        arithmetic.scalar_subf: "sub",
+        arithmetic.scalar_mulf: "mul",
+        arithmetic.scalar_divf: "div",
+        arithmetic.scalar_minimumf: "min",
+        arithmetic.scalar_maximumf: "max",
+        arithmetic.scalar_copysignf: "copysign",
+        arithmetic.scalar_absf: "abs",
+        arithmetic.scalar_negf: "neg",
+        math.scalar_ceilf: "ceil",
+        math.scalar_floorf: "floor",
+        math.scalar_truncf: "trunc",
+        math.scalar_roundevenf: "nearest",
+        math.scalar_sqrtf: "sqrt",
+    }
+    actual = {
+        (rule.source_op, _type_guard(rule, "result").elements[0]): rule.descriptor.key
+        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
+        if isinstance(rule, DescriptorRule)
+        and rule.source_op in operations
+        and _type_guard(rule, "result").elements[0] in ("f32", "f64")
+    }
+    assert actual == {
+        (source_op, type_name): f"wasm.{type_name}.{operation}"
+        for source_op, operation in operations.items()
+        for type_name in ("f32", "f64")
+    }
+
+    direct_predicates = {
+        "oeq": "eq",
+        "ogt": "gt",
+        "oge": "ge",
+        "olt": "lt",
+        "ole": "le",
+        "une": "ne",
+    }
+    no_nan_predicates = {
+        "one": "ne",
+        "ueq": "eq",
+        "ugt": "gt",
+        "uge": "ge",
+        "ult": "lt",
+        "ule": "le",
+    }
+    actual_comparisons = set()
+    for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
+        if (
+            not isinstance(rule, DescriptorRule)
+            or rule.source_op is not comparison.scalar_cmpf
+        ):
+            continue
+        operand_type = _type_guard(rule, "lhs")
+        if operand_type.elements[0] not in ("f32", "f64"):
+            continue
+        predicate = next(
+            guard.enum_keyword
+            for guard in rule.guards
+            if guard.kind is GuardKind.ENUM_ATTR_EQUALS and guard.field == "predicate"
+        )
+        no_nan = any(
+            guard.kind is GuardKind.INSTANCE_FLAGS_HAS_ALL and guard.field == "fastmath"
+            for guard in rule.guards
+        )
+        actual_comparisons.add(
+            (operand_type.elements[0], predicate, no_nan, rule.descriptor.key)
+        )
+    assert actual_comparisons == {
+        (type_name, predicate, no_nan, f"wasm.{type_name}.{operation}")
+        for type_name in ("f32", "f64")
+        for no_nan, predicates in (
+            (False, direct_predicates),
+            (True, no_nan_predicates),
+        )
+        for predicate, operation in predicates.items()
+    }
+
+
+def test_native_vector_float_contracts_cover_every_carrier_lane() -> None:
+    operations = {
+        vector.vector_addf: "add",
+        vector.vector_subf: "sub",
+        vector.vector_mulf: "mul",
+        vector.vector_divf: "div",
+        vector.vector_minimumf: "min",
+        vector.vector_maximumf: "max",
+        vector.vector_absf: "abs",
+        vector.vector_negf: "neg",
+        vector.vector_ceilf: "ceil",
+        vector.vector_floorf: "floor",
+        vector.vector_truncf: "trunc",
+        vector.vector_roundevenf: "nearest",
+        vector.vector_sqrtf: "sqrt",
+    }
+    actual = {
+        (rule.source_op, element, minimum, maximum): (
+            rule.descriptor.key,
+            rule.emit[0].form,
+        )
+        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
+        if isinstance(rule, DescriptorRule) and rule.source_op in operations
+        for element, minimum, maximum in _numeric_vector_ranges(rule, "result")
+        if element in ("f32", "f64")
+    }
+    assert actual == {
+        (source_op, element, 1, lane_count): (
+            f"wasm.{shape}.{operation}",
+            DescriptorEmitForm.OP,
+        )
+        for source_op, operation in operations.items()
+        for element, lane_count, shape in (
+            ("f32", 4, "f32x4"),
+            ("f64", 2, "f64x2"),
+        )
+    }
 
 
 def _integer_vector_ranges(rule, field):

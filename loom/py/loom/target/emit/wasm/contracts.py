@@ -121,6 +121,10 @@ _V128_LANE_TYPES = (
     (_I64, _V2I64, "i64x2", ""),
     (_F64, _V2F64, "f64x2", ""),
 )
+_NATIVE_FLOAT_LANE_TYPES = (
+    (Vector("f32", minimum_lanes=1, maximum_lanes=4), "f32x4"),
+    (Vector("f64", minimum_lanes=1, maximum_lanes=2), "f64x2"),
+)
 
 # Transient integer values smaller than one physical SIMD register retain their
 # source lane count while occupying the low lanes of a v128 carrier. Callable
@@ -441,6 +445,7 @@ def _unary_rule(
                 descriptor=descriptor,
                 operands={"input": ValueRef.operand("input")},
                 results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
             ),
         ),
     )
@@ -1549,7 +1554,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             )
         ),
         *(
-            _binary_rule(source_op, _F32, f"wasm.f32.{operation}")
+            _binary_rule(source_op, value_type, f"wasm.{type_name}.{operation}")
+            for value_type, type_name in ((_F32, "f32"), (_F64, "f64"))
             for source_op, operation in (
                 (scalar_arithmetic.scalar_addf, "add"),
                 (scalar_arithmetic.scalar_subf, "sub"),
@@ -1561,7 +1567,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             )
         ),
         *(
-            _unary_rule(source_op, _F32, f"wasm.f32.{operation}")
+            _unary_rule(source_op, value_type, f"wasm.{type_name}.{operation}")
+            for value_type, type_name in ((_F32, "f32"), (_F64, "f64"))
             for source_op, operation in (
                 (scalar_arithmetic.scalar_absf, "abs"),
                 (scalar_arithmetic.scalar_negf, "neg"),
@@ -1576,9 +1583,10 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             _scalar_compare_rule(
                 scalar_comparison.scalar_cmpf,
                 predicate,
-                _F32,
-                f"wasm.f32.{operation}",
+                value_type,
+                f"wasm.{type_name}.{operation}",
             )
+            for value_type, type_name in ((_F32, "f32"), (_F64, "f64"))
             for predicate, operation in (
                 ("oeq", "eq"),
                 ("ogt", "gt"),
@@ -1592,10 +1600,11 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             _scalar_compare_rule(
                 scalar_comparison.scalar_cmpf,
                 predicate,
-                _F32,
-                f"wasm.f32.{operation}",
+                value_type,
+                f"wasm.{type_name}.{operation}",
                 guards=(Guard.instance_flags_has_all("fastmath", "nnan"),),
             )
+            for value_type, type_name in ((_F32, "f32"), (_F64, "f64"))
             for predicate, operation in (
                 ("one", "ne"),
                 ("ueq", "eq"),
@@ -1927,7 +1936,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             for _, vector_type, _, _, _ in _PARTIAL_INTEGER_LANE_TYPES
         ),
         *(
-            _binary_rule(source_op, _V4F32, f"wasm.f32x4.{operation}")
+            _binary_rule(source_op, value_type, f"wasm.{shape_name}.{operation}")
+            for value_type, shape_name in _NATIVE_FLOAT_LANE_TYPES
             for source_op, operation in (
                 (vector.vector_addf, "add"),
                 (vector.vector_subf, "sub"),
@@ -1938,7 +1948,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             )
         ),
         *(
-            _unary_rule(source_op, _V4F32, f"wasm.f32x4.{operation}")
+            _unary_rule(source_op, value_type, f"wasm.{shape_name}.{operation}")
+            for value_type, shape_name in _NATIVE_FLOAT_LANE_TYPES
             for source_op, operation in (
                 (vector.vector_absf, "abs"),
                 (vector.vector_negf, "neg"),
