@@ -8,9 +8,11 @@
 
 #include <array>
 #include <atomic>
+#include <memory>
 #include <vector>
 
 #include "iree/hal/memory/fixed_block_pool.h"
+#include "iree/hal/memory/tlsf_pool.h"
 #include "iree/hal/testing/deferred_pool.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -473,6 +475,123 @@ TEST_F(MemoryTest, DetachedSlabsServeTwoModelsThenReturnToOriginalAddresses) {
   IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
                         loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+}
+
+TEST_F(MemoryTest, VirtualCommandPoolReusesRetainedSlabsAcrossTrimAndRegrowth) {
+  ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
+  const auto geometry = loom_serve_device_weight_geometry(device);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, geometry, 2 * kSlabSize, 256, &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, geometry, 2 * kSlabSize, 256, &statistics[1], &second));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, geometry, kSlabSize, 256, &statistics[2], &third));
+  auto* const scratch_address = loom_serve_virtual_buffer_handle(second);
+
+  // Logical command allocation retains the virtual range, not its physical
+  // slabs. The same TLSF instance survives every physical detach below.
+  const iree_hal_tlsf_pool_options_t options = {
+      .tlsf_options = {.alignment = 256},
+  };
+  iree_hal_pool_t* logical_handle = nullptr;
+  IREE_ASSERT_OK(iree_hal_tlsf_pool_create_from_buffer(
+      scratch_address, 0, IREE_HAL_WHOLE_BUFFER, &options,
+      iree_allocator_system(), &logical_handle));
+  const std::unique_ptr<iree_hal_pool_t, decltype(&iree_hal_pool_release)>
+      logical(logical_handle, iree_hal_pool_release);
+
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 2 * kSlabSize));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(third, 0, kSlabSize));
+  ASSERT_NO_FATAL_FAILURE(
+      RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678));
+  ASSERT_NO_FATAL_FAILURE(
+      RoundTrip(loom_serve_virtual_buffer_handle(third), 0, 0x87654321));
+  iree_hal_pool_stats_t baseline;
+  iree_hal_pool_query_stats(deferred_backing, &baseline);
+
+  // Live retained data occupies the entire physical budget. Preparing scratch
+  // cannot take its backing or impair the independently usable warm range.
+  const loom_serve_memory_range_t scratch = {second, 0, 2 * kSlabSize};
+  bool admitted = true;
+  IREE_ASSERT_OK(
+      loom_serve_memory_pool_try_commit(pool, 1, &scratch, &admitted));
+  ASSERT_FALSE(admitted);
+  ASSERT_NO_FATAL_FAILURE(
+      CheckRetained(loom_serve_virtual_buffer_handle(third), 0, 0x87654321));
+  loom_serve_virtual_buffer_begin_trim(first);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+
+  // Repeat actual queue allocation, device writes, downloads and deallocation
+  // with differently sized command workspaces. Source slabs are prepared once;
+  // neither warm execution nor cross-role reuse acquires another native slab.
+  auto execute = [&] {
+    const iree_hal_pool_reservation_request_t requests[] = {
+        iree_hal_make_pool_reservation_request(3 * kSlabSize / 2, 256),
+        iree_hal_make_pool_reservation_request(kSlabSize / 4, 256),
+    };
+    iree_hal_buffer_t* buffers[IREE_ARRAYSIZE(requests)] = {};
+    IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(
+        execution, logical.get(), IREE_ARRAYSIZE(requests), requests, buffers));
+    std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)>
+        first_buffer(buffers[0], iree_hal_buffer_release);
+    std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)>
+        second_buffer(buffers[1], iree_hal_buffer_release);
+    ASSERT_NO_FATAL_FAILURE(RoundTrip(buffers[0], kSlabSize - 128, 0xabcdef01));
+    ASSERT_NO_FATAL_FAILURE(RoundTrip(buffers[1], 0, 0x10203040));
+    uint64_t completion = 0;
+    for (auto* buffer : buffers) {
+      IREE_ASSERT_OK(
+          loom_serve_execution_dealloca(execution, buffer, &completion));
+    }
+    first_buffer.reset();
+    second_buffer.reset();
+    IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+    // Collect retired queue roots after joining their device uses.
+    loom_serve_workspace_statistics(loom_serve_device_workspace(device));
+  };
+  for (int cycle = 0; cycle < 2; ++cycle) {
+    IREE_ASSERT_OK(
+        loom_serve_memory_pool_try_commit(pool, 1, &scratch, &admitted));
+    ASSERT_TRUE(admitted);
+    EXPECT_EQ(loom_serve_virtual_buffer_handle(second), scratch_address);
+    ASSERT_NO_FATAL_FAILURE(execute());
+    ASSERT_NO_FATAL_FAILURE(execute());
+    auto memory = loom_serve_memory_pool_statistics(pool);
+    EXPECT_EQ(memory.committed_bytes, 3 * kSlabSize);
+    EXPECT_EQ(memory.peak_bytes, 3 * kSlabSize);
+
+    loom_serve_virtual_buffer_begin_trim(second);
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(second));
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 2 * kSlabSize));
+    ASSERT_NO_FATAL_FAILURE(RoundTrip(loom_serve_virtual_buffer_handle(first),
+                                      kSlabSize, 0x11223344));
+    ASSERT_NO_FATAL_FAILURE(
+        CheckRetained(loom_serve_virtual_buffer_handle(third), 0, 0x87654321));
+    loom_serve_virtual_buffer_begin_trim(first);
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+    iree_hal_pool_stats_t reused;
+    iree_hal_pool_query_stats(deferred_backing, &reused);
+    EXPECT_EQ(reused.reserve_count, baseline.reserve_count);
+  }
+
+  // A true physical trim does not invalidate virtual addresses or TLSF reuse
+  // history. Regrowth acquires only the two slabs the next invocation needs.
+  loom_serve_virtual_buffer_begin_trim(third);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(third));
+  loom_serve_memory_pool_trim(pool, 0);
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, 0u);
+  IREE_ASSERT_OK(
+      loom_serve_memory_pool_try_commit(pool, 1, &scratch, &admitted));
+  ASSERT_TRUE(admitted);
+  EXPECT_EQ(loom_serve_virtual_buffer_handle(second), scratch_address);
+  ASSERT_NO_FATAL_FAILURE(execute());
+  iree_hal_pool_stats_t regrown;
+  iree_hal_pool_query_stats(deferred_backing, &regrown);
+  EXPECT_EQ(regrown.reserve_count, baseline.reserve_count + 2);
 }
 
 TEST_F(MemoryTest, WeightTailReusesStateClassAcrossTwoCompleteSwaps) {

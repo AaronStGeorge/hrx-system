@@ -120,6 +120,7 @@ loom_cc_library(
     iree::base
     iree::hal
     iree::hal::memory::fixed_block_pool
+    iree::hal::memory::tlsf_pool
     iree::hal::testing::deferred_pool
     iree::testing::gtest
     loom::serve::runtime::device
