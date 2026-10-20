@@ -334,6 +334,29 @@ def amdgpu_bazel_options(target_selector: str) -> tuple[str, ...]:
     )
 
 
+def rdna_device_compiler_options() -> tuple[str, ...]:
+    # The native HAL consumes HIP code objects without loading ROCr. Its CTS
+    # still compiles real HIP inputs with the installed ROCm device toolchain.
+    options = ("--repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",)
+    if rocm_root := os.environ.get("HRX_ROCM_ROOT"):
+        options += (f"--repo_env=IREE_ROCM_PATH={rocm_root}",)
+    return options
+
+
+def rdna_windows_weights_step(options: tuple[str, ...], config: str | None) -> CiStep:
+    return bazel_test_step(
+        "Test RDNA weight streaming",
+        (ci_config.RDNA_WEIGHTS_TARGET,),
+        config=config,
+        available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+        bazel_options=options
+        + (
+            "--test_arg=--weight_device_uri=rdna",
+            "--test_filter=Streaming/*",
+        ),
+    )
+
+
 def bazel_configure_step(
     enabled_drivers: tuple[str, ...] = (),
     *,
@@ -772,11 +795,20 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
     default_targets = ci_config.AMD_CLIENT_BAZEL_TARGETS
     resources = ci_config.XDNA_RESOURCES
     test_tag_filters = ci_config.XDNA_BAZEL_TEST_TAG_FILTERS
+    native_options = ()
     if sys.platform == "win32":
         options = ci_config.AMD_CLIENT_WINDOWS_BAZEL_OPTIONS
         default_targets = ci_config.AMD_CLIENT_WINDOWS_BAZEL_TARGETS
         resources = ci_config.AMD_CLIENT_WINDOWS_RESOURCES
-        test_tag_filters += ci_config.VULKAN_BAZEL_TEST_TAG_FILTERS
+        test_tag_filters += ci_config.VULKAN_BAZEL_TEST_TAG_FILTERS + (
+            ci_config.RDNA_RUN_REQUIREMENT_TAG,
+        )
+        native_options = ci_config.RDNA_BAZEL_OPTIONS + rdna_device_compiler_options()
+    additional_steps = []
+    if sys.platform == "win32" and not targets:
+        additional_steps.append(
+            rdna_windows_weights_step(options + native_options, config)
+        )
     targets = targets or default_targets
     return [
         bazel_configure_step(extra_options=options),
@@ -785,7 +817,7 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
                 f"Build IREE / AMD RDNA+XDNA{config_name}",
                 targets,
                 config=config,
-                bazel_options=options,
+                bazel_options=options + native_options,
             )
         ),
         bazel_test_step(
@@ -794,8 +826,9 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
             config=config,
             test_tag_filters=test_tag_filters,
             available_resources=resources,
-            bazel_options=options,
+            bazel_options=options + native_options,
         ),
+        *additional_steps,
     ]
 
 
@@ -810,6 +843,10 @@ def amdgpu_test_steps(
     bazel_options = (
         amdgpu_bazel_options(target_selector) + ci_config.AMDGPU_BAZEL_OPTIONS
     )
+    if target_selector.startswith(("gfx11", "gfx12")):
+        bazel_options += ci_config.RDNA_BAZEL_OPTIONS + (
+            "--//runtime/config/hal:drivers=task,amdgpu,amd",
+        )
     host_sanitizer_tag_filters = (
         (f"-{ci_config.HOST_TSAN_INCOMPATIBLE_TEST_LABEL}",) if config == "tsan" else ()
     )
@@ -839,7 +876,11 @@ def amdgpu_test_steps(
 def amdgpu_windows_steps(
     targets: tuple[str, ...], target_selector: str, config: str | None
 ) -> list[CiStep]:
-    options = ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
+    options = (
+        ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
+        + ci_config.RDNA_BAZEL_OPTIONS
+        + rdna_device_compiler_options()
+    )
     config_name = f" / {config.upper()}" if config is not None else ""
     # A required finite PM4 copy establishes the exact GPU and usable native
     # transport. SDMA remains capability-admitted; its skip is not a proof.
@@ -849,7 +890,7 @@ def amdgpu_windows_steps(
         "--test_arg=--gtest_fail_fast=1",
     )
     steps = [
-        bazel_configure_step(extra_options=options),
+        bazel_configure_step(extra_options=ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS),
         bazel_test_step(
             "Query Windows GPU native queue capabilities",
             ("//libamdf/src/gpu/umd/wddm/wkmi:adapter_info_system_test",),
@@ -901,6 +942,8 @@ def amdgpu_windows_steps(
             + ("--test_arg=--amdf_native_lifetime=instance",),
         )
     )
+    if not targets:
+        steps.append(rdna_windows_weights_step(options, config))
     return steps
 
 

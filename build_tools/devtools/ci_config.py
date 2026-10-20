@@ -149,6 +149,7 @@ CPU_RESOURCE_TAG_EXCLUDES = run_requirements.bazel_exclusions(())
 # jobs retain their separate device requirement.
 XDNA_RESOURCES = ("libamdf.resource.xdna",)
 AMDGPU_RESOURCES = ("runtime.resource.amd_gpu", "libamdf.resource.amd_gpu")
+RDNA_RUN_REQUIREMENT_TAG = "iree-run-requirement=libamdf.resource.amd_gpu"
 VULKAN_RESOURCES = ("vulkan.resource.device",)
 # Each command resets explicit API requests from machine-local Bazel settings.
 # Job options follow these defaults and can select either API independently.
@@ -205,11 +206,29 @@ AMD_CLIENT_WINDOWS_BAZEL_OPTIONS = AMD_CLIENT_BAZEL_OPTIONS + (
     "--//build_tools/d3d12/config:enabled=true",
     "--//runtime/config/hal:drivers=task,vulkan,amd",
     "--//loom/config/target:enable=amdgpu,spirv,vm,xdna,x86",
+    "--//loom/config/emit:enable=amdgpu,spirv,xdna",
 )
-AMD_CLIENT_WINDOWS_BAZEL_TARGETS = AMD_CLIENT_BAZEL_TARGETS + (
-    "//runtime/src/iree/hal/drivers/vulkan/...",
-    "//loom/binding/c/test/target/spirv/...",
-    "//loom/src/loom/tooling/target/spirv/...",
+RDNA_BAZEL_TARGETS = (
+    "//runtime/src/iree/hal/drivers/amd/...",
+    "//loom/src/loom/tooling/target/amdgpu/serve/...",
+    "//loom/src/loom/tooling/target/amdgpu/test:rdna_hal_tests_execute_rdna_hardware_test",
+)
+RDNA_WEIGHTS_TARGET = "//loom/src/loom/tooling/target/amdgpu/serve:rdna_weights_test"
+# The complete weights suite exercises shader assertions. Windows runs its
+# streaming cases separately without requesting the unavailable feedback service.
+RDNA_WINDOWS_BAZEL_TARGETS = RDNA_BAZEL_TARGETS + ("-" + RDNA_WEIGHTS_TARGET,)
+RDNA_BAZEL_OPTIONS = (
+    "--//runtime/src/iree/hal/drivers/amd/gpu:targets=gfx11-generic,gfx12-generic",
+    "--//loom/config/target/amdgpu:targets=gfx110X-all,gfx115X-all,gfx120X-all,gfx11-generic,gfx12-generic",
+)
+AMD_CLIENT_WINDOWS_BAZEL_TARGETS = (
+    AMD_CLIENT_BAZEL_TARGETS
+    + (
+        "//runtime/src/iree/hal/drivers/vulkan/...",
+        "//loom/binding/c/test/target/spirv/...",
+        "//loom/src/loom/tooling/target/spirv/...",
+    )
+    + RDNA_WINDOWS_BAZEL_TARGETS
 )
 AMD_CLIENT_WINDOWS_RESOURCES = (
     XDNA_RESOURCES
@@ -233,9 +252,9 @@ AMDGPU_BAZEL_OPTIONS = (
 AMDGPU_WINDOWS_BAZEL_OPTIONS = (
     "--//libamdf/config:enabled=true",
     "--//libamdf/config:families=rdna",
-    "--//runtime/config/hal:drivers=task",
+    "--//runtime/config/hal:drivers=task,amd",
     "--//loom/config/target:enable=amdgpu,vm,x86",
-    "--//loom/config/execute:enable=",
+    "--//loom/config/execute:enable=iree_hal",
     "--//loom/config/import:enable=",
     "--//loom/config/emit:enable=amdgpu",
 )
@@ -246,7 +265,8 @@ AMDGPU_WINDOWS_BAZEL_TARGETS = (
     "//libamdf/cts/gpu:gpu_extension_dynamic",
     "//libamdf/cts/gpu:kernel_queue_dynamic",
     "//libamdf/cts/gpu:native_lifetime",
-)
+) + RDNA_WINDOWS_BAZEL_TARGETS
+
 AMDGPU_WINDOWS_QUEUE_TARGET = "//libamdf/cts/gpu:kernel_queue_dynamic"
 AMDGPU_WINDOWS_COPY_FILTER = (
     "Pm4KernelQueueTest.ExecutesMaterializedCopyData:"
@@ -259,6 +279,7 @@ AMDGPU_BAZEL_TEST_TAG_FILTERS = (
     AMDGPU_BUILD_REQUIREMENT_TAG,
     AMDGPU_RUN_REQUIREMENT_TAG,
     AMDF_BUILD_REQUIREMENT_TAG,
+    RDNA_RUN_REQUIREMENT_TAG,
 )
 AMDGPU_BAZEL_TARGET_EXCLUDES = (
     "-//runtime/src/iree/hal/drivers/vulkan/...",

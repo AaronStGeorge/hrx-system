@@ -348,8 +348,12 @@ jobs:
           if [[ -n "${{ matrix.loom_importer }}" ]]; then
             importer_args=(--loom-importer "${{ matrix.loom_importer }}")
           fi
+          result_args=()
+          if [[ "${{ matrix.kind }}" == amdgpu ]]; then
+            result_args=(--bazel-test-results-dir "${RUNNER_TEMP}/native-test-results-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}")
+          fi
           python3 build_tools/devtools/ci.py ${{ matrix.command }} \
-            "${target_args[@]}" "${importer_args[@]}" "${scope_args[@]}" \
+            "${target_args[@]}" "${importer_args[@]}" "${scope_args[@]}" "${result_args[@]}" \
             --bazel-profile-dir "${RUNNER_TEMP}/bazel-profiles" --keep-going
 
       - name: Build and test the AMD client
@@ -384,10 +388,10 @@ jobs:
           retention-days: 7
 
       - name: Upload native test results
-        if: ${{ always() && steps.client_ci.outcome != 'skipped' }}
+        if: ${{ always() && (steps.client_ci.outcome != 'skipped' || (matrix.kind == 'amdgpu' && steps.iree_bazel_ci.outcome != 'skipped')) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: native-test-results-amd-client-linux-attempt-${{ github.run_attempt }}
+          name: native-test-results-${{ matrix.command }}-${{ matrix.target_selector || 'amd-client' }}-linux-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/native-test-results-${{ github.run_id }}-${{ github.run_attempt }}/**/bazel-testlogs/**
           if-no-files-found: warn
           retention-days: 7
