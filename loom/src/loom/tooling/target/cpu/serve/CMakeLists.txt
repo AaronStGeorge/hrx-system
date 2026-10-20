@@ -121,6 +121,21 @@ endif()
 if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
+    memory_test
+  DEPS
+    ::test_device
+    iree::testing::gtest_main
+    loom::serve::runtime::storage::memory_tests
+  ARGS
+    "--gtest_filter=-DedicatedNativeWorkerMemoryTest.*"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
     execution_queues_test
   DEPS
     ::test_device
@@ -740,6 +755,160 @@ loom_cc_test(
     loom::serve::service::text::source_reconfiguration_tests
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    device_group_test
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/device/device_group_test.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::host
+    loom::serve::runtime::storage::memory
+    loom::serve::testing::device
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    retirement_test
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/execution/retirement_test.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::runtime::device
+    loom::serve::runtime::execution::retirement
+    loom::serve::runtime::storage::memory
+    loom::serve::testing::device
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    relocation_test
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/storage/relocation_test.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::execution::retirement
+    loom::serve::runtime::storage::memory
+    loom::serve::runtime::storage::relocation
+    loom::serve::testing::device
+    loom::serve::testing::native_allocator
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    snapshot_test
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/storage/snapshot_test.cc"
+  DEPS
+    ::test_device
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    iree::hal
+    iree::task
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::execution::retirement
+    loom::serve::runtime::storage::memory
+    loom::serve::runtime::storage::snapshot
+    loom::serve::testing::device
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    weights_test
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/bank_test.cc"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_packing_test.cc"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_streaming_test.cc"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test.cc"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test_base.h"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/executables_test.cc"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/boundaries.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/packing.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/packing_policy.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/policy.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/streaming_policy.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/testdata/executables/prepare.loom"
+  DEPS
+    ::test_compiler
+    ::test_device
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::tooling::flags
+    iree::hal
+    iree::hal::testing::deferred_pool
+    iree::module::hal::types
+    iree::task
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+    iree::vm
+    loom::binding::c::loomc
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::parameter::activation
+    loom::serve::runtime::parameter::bank
+    loom::serve::runtime::parameter::residency
+    loom::serve::runtime::parameter::weights
+    loom::serve::runtime::program
+    loom::serve::runtime::program::jit
+    loom::serve::runtime::program::module
+    loom::serve::runtime::program::preparation
+    loom::serve::runtime::program::stage_table
+    loom::serve::runtime::storage::memory
+    loom::serve::service::executables
+    loom::serve::testing::compiler
+    loom::serve::testing::device
+    loom::serve::testing::native_allocator
+  ARGS
+    "--weight_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom}}"
+    "--gtest_filter=Streaming/*"
+    "--executable_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/testdata/executables/prepare.loom}}"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

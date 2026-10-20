@@ -16,6 +16,10 @@ from urllib.parse import urlsplit
 
 from loom_serve_testing.http_harness import control, running_server, wait_status
 
+# The fixture owns a native page of parameters and an 8 KiB state reservation.
+# Limits express one or two complete models, without coarse-slab tail padding.
+MODEL_BYTES = 12 * 1024
+
 
 def completion(address, model, messages, session=None, *, checkpoint=None):
     connection = http.client.HTTPConnection(address.hostname, address.port)
@@ -126,7 +130,8 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         str(server),
         f"--device={device}",
         "--pool_backing=elastic",
-        "--slab_bytes=2097152",
+        "--weight_slab_bytes=4096",
+        "--state_slab_bytes=8192",
         f"--memory_bytes={memory_bytes}",
         f"--workers={workers}",
         f"--flagfile={configuration}",
@@ -191,7 +196,7 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         }
         print(json.dumps(result), flush=True)
         assert memory_after["peak_bytes"] <= memory_bytes, result
-        expected = 503 if retention != "none" and memory_bytes == 4194304 else 200
+        expected = 503 if retention != "none" and memory_bytes == MODEL_BYTES else 200
         assert second_status == expected, second
         beta = next(item["loom"] for item in after["data"] if item["id"] == "beta")
         admission = beta["parameters"]["primary"]["admission"]
@@ -254,7 +259,7 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
             )
             # Weight pinning is not a session pin: capacity pressure can discard
             # all idle histories while the parameters remain resident.
-            assert bool(sessions["data"]) == (memory_bytes == 8388608), sessions
+            assert bool(sessions["data"]) == (memory_bytes == 2 * MODEL_BYTES), sessions
             for _ in range(2):
                 unpinned = control(
                     address,
@@ -298,9 +303,9 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
             )
             assert resumed_status == 200, resumed
             assert output(resumed) == oracle("abxa" + output(first) + "#b"), resumed
-            assert cached_tokens(resumed) == (0 if memory_bytes == 4194304 else 5), (
-                resumed
-            )
+            assert cached_tokens(resumed) == (
+                0 if memory_bytes == MODEL_BYTES else 5
+            ), resumed
         # Removal owns pinned state as well as the service. A peer submitted
         # immediately after accepted unregister must complete without waiting
         # for a client-side polling loop to observe final model destruction.
@@ -334,8 +339,8 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         status, response = completion(address, "beta", messages, "replacement")
         assert status == 200, response
         assert output(response) == oracle("abxa"), response
-        # Joined removal retires cache callbacks as well as physical storage.
-        # The shared server and its pool remain available afterward.
+        # Joined removal returns backing to the shared cache. Explicit trim
+        # returns that idle physical storage while keeping the server usable.
         control(
             address,
             "POST",
@@ -347,11 +352,25 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         while True:
             final = control(address, "GET", "/v1/status", 200)
             memory = final["server"]["resources"]["devices"][0]["memory"]["retained"]
-            # Logical model retirement precedes native freeing. Join both
-            # observable ownership boundaries before checking the final budget.
-            if not final["data"] and not memory["committed_bytes"]:
+            if (
+                not final["data"]
+                and memory["committed_bytes"] == memory["cached_bytes"]
+                and not memory["releasing_bytes"]
+            ):
                 break
             assert all(not model["loom"].get("error") for model in final["data"]), final
+        assert memory["reserved_bytes"] == memory["pending_bytes"] == 0, memory
+        control(
+            address,
+            "POST",
+            "/v1/devices/trim",
+            200,
+            body=json.dumps({"device": 0, "target_bytes": 0}),
+            headers={"Content-Type": "application/json"},
+        )
+        while memory["committed_bytes"]:
+            final = control(address, "GET", "/v1/status", 200)
+            memory = final["server"]["resources"]["devices"][0]["memory"]["retained"]
         assert memory["reserved_bytes"] == memory["committed_bytes"] == 0, memory
         assert memory["peak_bytes"] <= memory_bytes, memory
         assert control(address, "GET", "/readyz", 200) == {"status": "ready"}
@@ -389,12 +408,12 @@ def run_from_command_line(cases):
 # state policy. The manual pressure_stress_test target retains the complete
 # Cartesian product for explicit stress qualification.
 _CASES = (
-    (1, 8 * 1024 * 1024, "none"),
-    (1, 4 * 1024 * 1024, "checkpoint"),
-    (1, 8 * 1024 * 1024, "parameters"),
-    (4, 4 * 1024 * 1024, "none"),
-    (4, 8 * 1024 * 1024, "checkpoint"),
-    (4, 4 * 1024 * 1024, "parameters"),
+    (1, 2 * MODEL_BYTES, "none"),
+    (1, MODEL_BYTES, "checkpoint"),
+    (1, 2 * MODEL_BYTES, "parameters"),
+    (4, MODEL_BYTES, "none"),
+    (4, 2 * MODEL_BYTES, "checkpoint"),
+    (4, MODEL_BYTES, "parameters"),
 )
 
 

@@ -349,6 +349,8 @@ typedef struct loom_amdgpu_subgroup_active_mask_plan_t {
   uint32_t mask_bit_count;
   // Exact subgroup width selected by the active target bundle.
   uint32_t wavefront_size;
+  // Per-lane storage preserves observations across divergent loop exits.
+  bool result_in_vgpr;
 } loom_amdgpu_subgroup_active_mask_plan_t;
 
 typedef struct loom_amdgpu_subgroup_predicate_mask_descriptors_t {
@@ -369,6 +371,8 @@ typedef struct loom_amdgpu_subgroup_ballot_plan_t {
   uint32_t mask_bit_count;
   // Exact subgroup width selected by the active target bundle.
   uint32_t wavefront_size;
+  // Per-lane storage preserves observations across divergent loop exits.
+  bool result_in_vgpr;
 } loom_amdgpu_subgroup_ballot_plan_t;
 
 typedef struct loom_amdgpu_subgroup_vote_any_plan_t {

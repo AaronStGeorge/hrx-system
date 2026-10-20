@@ -591,7 +591,7 @@ iree_status_t loom_serve_executables_query_status(
       cursor = &checkpoint->next;
       continue;
     }
-    const loom_serve_weights_t* weights =
+    loom_serve_weights_t* weights =
         checkpoint->bank
             ? loom_serve_parameter_bank_weights(checkpoint->bank, 0)
             : NULL;
@@ -657,7 +657,7 @@ loom_serve_residency_snapshot_t loom_serve_executables_parameters(
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(lists); ++i) {
     for (const loom_serve_checkpoint_t* entry = lists[i]; entry;
          entry = entry->next) {
-      const loom_serve_weights_t* weights =
+      loom_serve_weights_t* weights =
           entry->bank ? loom_serve_parameter_bank_weights(entry->bank, 0)
                       : NULL;
       if (!weights) {

@@ -184,7 +184,9 @@ TEST_P(ParameterBankTest, SelectedDomainReusesBaseAtChangedBindingOrdinal) {
   ASSERT_EQ(loom_serve_parameter_bank_count(adapter_bank_), 1u);
   const auto after = loom_serve_device_memory_statistics(device_owner_);
   EXPECT_EQ(after.retained.reserved_bytes - before.retained.reserved_bytes,
-            GetParam() ? kSlabBytes : 0u);
+            GetParam()
+                ? loom_serve_device_weight_geometry(device_owner_).minimum_size
+                : 0u);
   IREE_ASSERT_OK(PrepareBank(adapter_bank_, 0, adapter_path_.path().c_str()));
   loom_serve_jit_stage_free(compiled_[1]);
   compiled_[1] = nullptr;

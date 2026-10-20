@@ -122,7 +122,14 @@ TEST_F(TextHeartbeatTest, TimerReadinessPublishesCopiedCounters) {
   heartbeat_.snapshot.session_cache = {24, 17};
   counters_.input_tokens = 42;
   heartbeat_.snapshot.weight_activity = {2, 1, 64, 32, 4};
-  heartbeat_.snapshot.state_memory = {100, 60, 20, 10, 80, 40};
+  heartbeat_.snapshot.state_memory = {
+      .reserved_bytes = 100,
+      .committed_bytes = 60,
+      .pending_bytes = 20,
+      .releasing_bytes = 10,
+      .peak_bytes = 80,
+      .released_bytes = 40,
+  };
   heartbeat_.snapshot.weight_memory = {200, 90, 30, 15, 50};
   heartbeat_.snapshot.device_memory.workspace.bytes_committed = 1234;
   const uint32_t previous_count = wake_count_.load(std::memory_order_acquire);

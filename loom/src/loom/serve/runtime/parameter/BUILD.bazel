@@ -20,9 +20,11 @@ exports_files(
         "testdata/weights/packing.loom",
         "testdata/weights/packing_policy.loom",
         "testdata/weights/stages.loom",
+        "testdata/weights/streaming_policy.loom",
         "weights_test.cc",
         "weights_test_base.h",
         "weights_packing_test.cc",
+        "weights_streaming_test.cc",
     ],
     visibility = ["//loom/src/loom/serve:implementation"],
 )

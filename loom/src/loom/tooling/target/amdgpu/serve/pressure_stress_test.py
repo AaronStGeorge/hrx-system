@@ -8,12 +8,12 @@
 
 import itertools
 
-from loom.src.loom.serve.server.pressure_test import run_from_command_line
+from loom.src.loom.serve.server.pressure_test import MODEL_BYTES, run_from_command_line
 
 _CASES = tuple(
     itertools.product(
         (1, 4),
-        (8 * 1024 * 1024, 4 * 1024 * 1024),
+        (2 * MODEL_BYTES, MODEL_BYTES),
         ("none", "checkpoint", "parameters"),
     )
 )

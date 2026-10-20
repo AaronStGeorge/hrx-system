@@ -27,6 +27,10 @@ struct loom_serve_device_t {
   loom_serve_workspace_t* workspace;
   // Owned physical domain shared by all model reservations; NULL when fixed.
   loom_serve_memory_pool_t* memory_pool;
+  // Qualified bulk parameter geometry, independent of file read windows.
+  loom_serve_memory_geometry_t weight_geometry;
+  // Qualified sparse mutable-state geometry.
+  loom_serve_memory_geometry_t state_geometry;
   // Parameter admission and eviction policy borrowing shared memory.
   loom_serve_residency_cache_t* residency_cache;
 };
@@ -172,9 +176,26 @@ static iree_status_t loom_serve_device_initialize(
         iree_hal_slab_pool_create(group->handle, source_scope, &source_options,
                                   group->host_allocator, &source_pool),
         "creating serving elastic mapping-source pool");
-    iree_status_t status = loom_serve_memory_pool_allocate(
-        group->handle, scope, source_pool, device->transfer, options->slab_size,
-        options->memory_limit, group->host_allocator, &device->memory_pool);
+    iree_hal_virtual_buffer_capabilities_t capabilities;
+    iree_status_t status = iree_hal_virtual_buffer_query_capabilities(
+        group->handle, scope, group->host_allocator, &capabilities);
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_memory_pool_query_geometry(&capabilities, source_pool,
+                                                     options->weight_slab_size,
+                                                     &device->weight_geometry);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_memory_pool_query_geometry(&capabilities, source_pool,
+                                                     options->state_slab_size,
+                                                     &device->state_geometry);
+    }
+    if (iree_status_is_ok(status)) {
+      const loom_serve_memory_geometry_t geometries[] = {
+          device->weight_geometry, device->state_geometry};
+      status = loom_serve_memory_pool_allocate(
+          group->handle, scope, source_pool, device->transfer, geometries,
+          options->memory_limit, group->host_allocator, &device->memory_pool);
+    }
     iree_hal_pool_release(source_pool);
     IREE_RETURN_IF_ERROR(status);
   }
@@ -302,8 +323,12 @@ iree_status_t loom_serve_device_trim(loom_serve_device_t* device,
   const uint64_t workspace_bytes = loom_serve_workspace_trim(device->workspace);
   const uint64_t retained_target =
       workspace_bytes < target_bytes ? target_bytes - workspace_bytes : 0;
-  return loom_serve_residency_cache_trim(device->residency_cache,
-                                         retained_target);
+  IREE_RETURN_IF_ERROR(loom_serve_residency_cache_trim(device->residency_cache,
+                                                       retained_target));
+  if (device->memory_pool) {
+    loom_serve_memory_pool_trim(device->memory_pool, retained_target);
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_serve_device_trim_idle(
@@ -366,6 +391,16 @@ iree_status_t loom_serve_device_create_execution(
 loom_serve_memory_pool_t* loom_serve_device_memory_pool(
     const loom_serve_device_t* device) {
   return device->memory_pool;
+}
+
+loom_serve_memory_geometry_t loom_serve_device_weight_geometry(
+    const loom_serve_device_t* device) {
+  return device->weight_geometry;
+}
+
+loom_serve_memory_geometry_t loom_serve_device_state_geometry(
+    const loom_serve_device_t* device) {
+  return device->state_geometry;
 }
 
 loom_serve_residency_cache_t* loom_serve_device_residency_cache(

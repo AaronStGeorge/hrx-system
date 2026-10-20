@@ -57,6 +57,26 @@ endif()
 if(IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
+    memory_test
+  DEPS
+    ::test_device
+    iree::testing::gtest_main
+    loom::serve::runtime::storage::memory_tests
+  ARGS
+    "--vulkan_dedicated_compute_queue=false"
+  LABELS
+    "iree-run-requirement=vulkan.resource.device"
+    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.target.arch.spirv"
+    "iree-build-requirement=loom.emit.spirv"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+loom_cc_test(
+  NAME
     execution_queues_test
   DEPS
     ::test_device

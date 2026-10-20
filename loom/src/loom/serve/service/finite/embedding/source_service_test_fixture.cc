@@ -150,8 +150,10 @@ void SourceEmbeddingServiceTest::SetUp() {
   auto application_options = loom_serve_test_application_options_default();
   application_options.device_count = DeviceCount();
   if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
-    application_options.slab_size = 2 * 1024 * 1024;
-    application_options.memory_limit = 2 * 1024 * 1024;
+    // One scalar checkpoint fills the one-page budget. A peer must reuse it
+    // after deactivation instead of acquiring another native allocation.
+    application_options.slab_size = 4096;
+    application_options.memory_limit = 4096;
   }
   loom_serve_test_application_t* application = nullptr;
   IREE_ASSERT_OK(loom_serve_test_application_acquire(

@@ -68,11 +68,11 @@ class NativeAllocator {
     std::lock_guard<std::mutex> lock(mutex_);
     command_ = command;
     armed_ = true;
-    entered_ = released_ = retired_ = false;
+    ++generation_;
   }
   void WaitEntered() {
     std::unique_lock<std::mutex> lock(mutex_);
-    condition_.wait(lock, [&] { return entered_; });
+    condition_.wait(lock, [&] { return entered_generation_ == generation_; });
   }
   void FailNextAllocation(iree_allocator_command_t command,
                           bool native_only = false) {
@@ -84,9 +84,24 @@ class NativeAllocator {
   void Release() {
     std::unique_lock<std::mutex> lock(mutex_);
     armed_ = false;
-    released_ = true;
+    released_generation_ = generation_;
     condition_.notify_all();
-    condition_.wait(lock, [&] { return !entered_ || retired_; });
+    condition_.wait(lock, [&] {
+      return entered_generation_ < generation_ ||
+             retired_generation_ == generation_;
+    });
+  }
+  // Releases the entered call and selects the next dependency atomically. The
+  // native worker cannot run through the second boundary between two holds.
+  void ReleaseAndArm(iree_allocator_command_t command) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    const uint64_t previous = generation_;
+    released_generation_ = previous;
+    command_ = command;
+    armed_ = true;
+    ++generation_;
+    condition_.notify_all();
+    condition_.wait(lock, [&] { return retired_generation_ == previous; });
   }
 
  private:
@@ -119,10 +134,12 @@ class NativeAllocator {
       }
       if (self->armed_ && command == self->command_ && native) {
         self->armed_ = false;
-        self->entered_ = true;
+        const uint64_t generation = self->generation_;
+        self->entered_generation_ = generation;
         self->condition_.notify_all();
-        self->condition_.wait(lock, [&] { return self->released_; });
-        self->retired_ = true;
+        self->condition_.wait(
+            lock, [&] { return self->released_generation_ >= generation; });
+        self->retired_generation_ = generation;
         self->condition_.notify_all();
       }
     }
@@ -174,12 +191,14 @@ class NativeAllocator {
     // Restricts matching to previously observed native allocation workers.
     bool native_only = false;
   } failure_;
-  // The selected dependency is currently held.
-  bool entered_ = false;
-  // The outer test owner permits the selected dependency to continue.
-  bool released_ = false;
-  // The held dependency observed release before another hold can be armed.
-  bool retired_ = false;
+  // Monotonic identity of the selected dependency, including a handoff.
+  uint64_t generation_ = 0;
+  // Most recent selected dependency that entered the hold.
+  uint64_t entered_generation_ = 0;
+  // The outer test owner permits dependencies through this identity to resume.
+  uint64_t released_generation_ = 0;
+  // Most recent held dependency that observed its release.
+  uint64_t retired_generation_ = 0;
 };
 
 class ScopedNativeHold {
@@ -194,6 +213,9 @@ class ScopedNativeHold {
       : ScopedNativeHold(NativeAllocator::ForDevice(device), command) {}
   ~ScopedNativeHold() { allocator_.Release(); }
   void Release() { allocator_.Release(); }
+  void ReleaseAndArm(iree_allocator_command_t command) {
+    allocator_.ReleaseAndArm(command);
+  }
   void WaitEntered() { allocator_.WaitEntered(); }
 
  private:

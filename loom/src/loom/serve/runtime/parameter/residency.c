@@ -377,7 +377,7 @@ static uint64_t loom_serve_residency_cache_projected_bytes(
     loom_serve_residency_cache_t* cache) {
   const loom_serve_memory_statistics_t memory =
       loom_serve_memory_pool_statistics(cache->pool);
-  return memory.committed_bytes - memory.releasing_bytes;
+  return memory.committed_bytes - memory.releasing_bytes - memory.cached_bytes;
 }
 
 iree_status_t loom_serve_residency_cache_trim_idle(
@@ -644,20 +644,23 @@ static iree_status_t loom_serve_residency_acquire_parameters(
     ++residency->entries[i].group->pin_count;
   }
   if (!active && residency->cache->pool) {
-    uint64_t missing_bytes = 0;
+    loom_serve_memory_demand_t demand = {0};
     for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
       const loom_serve_residency_group_t* group = residency->entries[i].group;
       if (!group->active) {
-        const loom_serve_memory_usage_t memory =
-            loom_serve_residency_group_statistics(group);
-        missing_bytes += memory.reserved_bytes - memory.committed_bytes -
-                         memory.pending_bytes;
+        for (iree_host_size_t j = 0; j < group->weight_count; ++j) {
+          loom_serve_memory_demand_add(
+              &demand, loom_serve_weights_missing_demand(group->weights[j]));
+        }
       }
     }
     loom_serve_memory_admission_t admission;
-    IREE_RETURN_IF_ERROR(loom_serve_memory_pool_prepare(
-        residency->cache->pool, missing_bytes, &admission));
-    if (admission != LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
+    iree_status_t status = loom_serve_memory_pool_prepare(
+        residency->cache->pool, demand, &admission);
+    if (!iree_status_is_ok(status) ||
+        admission != LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
+      // No activation was accepted. Undo this attempt's protection even when
+      // native cleanup loss or the reclaimer explains the admission failure.
       --residency->pin_count;
       for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
         --residency->entries[i].group->pin_count;
@@ -665,7 +668,7 @@ static iree_status_t loom_serve_residency_acquire_parameters(
       if (admission == LOOM_SERVE_MEMORY_ADMISSION_DEFERRED) {
         *out_admission = LOOM_SERVE_RESIDENCY_ADMISSION_DEFERRED;
       }
-      return iree_ok_status();
+      return status;
     }
   }
   iree_status_t status = iree_ok_status();

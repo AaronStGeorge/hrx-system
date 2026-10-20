@@ -145,7 +145,10 @@ def check_parameter_residency(client, backing, workers):
                 assert memory_cold["reserved_bytes"] == memory_before["reserved_bytes"]
                 released = before["parameters"]["primary"]["committed_bytes"]
                 assert (
-                    memory_before["committed_bytes"] - memory_cold["committed_bytes"]
+                    memory_before["committed_bytes"] == memory_cold["committed_bytes"]
+                )
+                assert (
+                    memory_cold["cached_bytes"] - memory_before["cached_bytes"]
                     == released
                 ), (memory_before, memory_cold)
                 assert (
@@ -156,7 +159,7 @@ def check_parameter_residency(client, backing, workers):
                     before["parameters"]["primary"]["deactivations"] + 1
                 ), cold
                 # Repeating the operation cannot discard retained state or
-                # count another physical release of already-inactive weights.
+                # count another detach of already-inactive weights.
                 client.request("/v1/models/deactivate", selector, status=202)
                 while snapshot()["parameter_operation"] != "idle":
                     pass
@@ -184,6 +187,7 @@ def check_parameter_residency(client, backing, workers):
                 assert (
                     memory_warmed["committed_bytes"] == memory_before["committed_bytes"]
                 ), (memory_before, memory_warmed)
+                assert memory_warmed["cached_bytes"] == memory_before["cached_bytes"]
                 assert (
                     warmed["parameters"]["primary"]["committed_bytes"]
                     == (before["parameters"]["primary"]["committed_bytes"])
@@ -433,6 +437,15 @@ def check_device_trim(client, backing, workers):
         assert "error" not in state, state
         return state
 
+    def settled_device():
+        # Trim accepts asynchronous native returns. Compare the two completed
+        # trims so the first return cannot be attributed to the second.
+        while True:
+            device = client.request("/v1/status")["server"]["resources"]["devices"][0]
+            retained = device["memory"]["retained"]
+            if retained is None or not retained["releasing_bytes"]:
+                return device
+
     before = snapshot()
     workspace_before = client.idle()["server"]["resources"]["devices"][0]["memory"][
         "workspace"
@@ -469,6 +482,7 @@ def check_device_trim(client, backing, workers):
                 **before["parameters"]["primary"],
                 "pinned": True,
             }
+            memory_pinned = settled_device()["memory"]["retained"]
             unpinned = client.request("/v1/models/unpin", selector)["loom"]
             assert (
                 unpinned["parameters"]["primary"] == before["parameters"]["primary"]
@@ -476,21 +490,13 @@ def check_device_trim(client, backing, workers):
             trimmed = client.request(
                 "/v1/devices/trim", {"device": 0, "target_bytes": 0}
             )
-            # Trim accepts native release work; physical capacity returns only
-            # after those releases have retired.
-            while True:
-                device = client.request("/v1/status")["server"]["resources"]["devices"][
-                    0
-                ]
-                memory_cold = device["memory"]["retained"]
-                if memory_cold is None or memory_cold["releasing_bytes"] == 0:
-                    break
+            device = settled_device()
+            memory_cold = device["memory"]["retained"]
             cold = snapshot()
             assert cold["incarnation"] == before["incarnation"], cold
             assert cold["compilation"] == before["compilation"], cold
             assert cold["status"]["admission"] == "drained", cold
             assert cold["status"]["held_requests"] == 1, cold
-            memory_pinned = pinned["device"]["memory"]["retained"]
             workspace_cold = device["memory"]["workspace"]
             # Counter ownership is the device, not a trim generation or model.
             for name in counter_names:
@@ -505,8 +511,11 @@ def check_device_trim(client, backing, workers):
                 assert not cold["parameters"]["primary"]["active"], cold
                 assert cold["parameters"]["primary"]["committed_bytes"] == 0, cold
                 assert memory_pinned["reserved_bytes"] == memory_cold["reserved_bytes"]
+                assert memory_cold["cached_bytes"] == 0, memory_cold
                 assert (
-                    memory_pinned["committed_bytes"] - memory_cold["committed_bytes"]
+                    memory_pinned["committed_bytes"]
+                    - memory_pinned["cached_bytes"]
+                    - memory_cold["committed_bytes"]
                     == released
                 ), (memory_pinned, memory_cold)
                 assert (
@@ -725,6 +734,8 @@ def check_empty_server(server_command, directory, device, backing):
                     "limit_bytes": memory_limit or None,
                     "reserved_bytes": 0,
                     "committed_bytes": 0,
+                    "abandoned_bytes": 0,
+                    "cached_bytes": 0,
                     "pending_bytes": 0,
                     "releasing_bytes": 0,
                     "peak_bytes": 0,
@@ -1430,7 +1441,11 @@ def check_dynamic_catalog(
         for device in retired_status["resources"]["devices"]:
             retained = device["memory"]["retained"]
             if retained is not None:
-                assert retained["reserved_bytes"] == retained["committed_bytes"] == 0
+                assert retained["reserved_bytes"] == 0, retained
+                assert retained["committed_bytes"] == retained["cached_bytes"], retained
+                assert retained["pending_bytes"] == retained["releasing_bytes"] == 0, (
+                    retained
+                )
         # Reloads reuse the provisioned inventory. Its completion threads and
         # the shared application workers survive model churn with no new IDs.
         final_threads = thread_snapshot(process)
@@ -1637,6 +1652,9 @@ def run_from_command_line(*, stress=False):
         str(arguments.server.absolute()),
         f"--device={arguments.device}",
         f"--pool_backing={arguments.pool_backing}",
+        # The scalar checkpoint occupies one native page. Match the retained
+        # physical class so deactivation exercises reuse, not tail disposal.
+        "--weight_slab_bytes=4096",
     ]
     with tempfile.TemporaryDirectory(prefix="loom catalog ") as temporary:
         directory = Path(temporary)

@@ -15,6 +15,17 @@ using loom_serve::testing::text::SourceTextServiceTest;
 
 class ElasticTextServiceTest : public SourceTextServiceTest {
  protected:
+  // Four private rows and ten recurrent slots precede the KV plane.
+  static constexpr size_t kPrivateBytes = 4 * 768 + 10 * 256;
+
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
+    // Cold-allocation holds must not depend on a previous test's cached slabs.
+    auto* pool = loom_serve_device_memory_pool(device_);
+    loom_serve_memory_pool_trim(pool, 0);
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
+
   static bool HasPendingBacking(const std::string& status) {
     const std::string key = "\"pending_bytes\":";
     size_t position = 0;
@@ -44,10 +55,9 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
     // The fixture places four 768-byte private rows and ten 256-byte recurrent
     // slots before its four-byte-per-token KV plane. Fill exactly one slab;
     // a new COW tail must acquire native backing, not reuse an existing page.
-    const size_t private_bytes = 4 * 768 + 10 * 256;
     const size_t extents[] = {
         4, options.context_capacity,
-        (slab_size - private_bytes) / 4 - 4 - options.context_capacity};
+        (slab_size - kPrivateBytes) / 4 - 4 - options.context_capacity};
     for (size_t i = 0; i < IREE_ARRAYSIZE(extents); ++i) {
       bool admitted = false;
       IREE_ASSERT_OK(loom_serve_text_row_try_reserve(
@@ -234,13 +244,11 @@ TEST_F(RegisteredElasticTextServiceTest,
   ASSERT_NO_FATAL_FAILURE(WaitModel("fixture-text", R"("phase":"idle")"));
   ASSERT_NO_FATAL_FAILURE(WaitModel("warm", R"("phase":"idle")"));
   {
-    loom_serve::testing::ScopedNativeHold gate(device_,
-                                               IREE_ALLOCATOR_COMMAND_FREE);
     ASSERT_EQ(Read(Send(R"({"model":"fixture-text"})", "", "/v1/models/unpin"))
                   .find("HTTP/1.1 200"),
               0u);
-    // This poll does not keep parameters hot. Expiry schedules native release
-    // without closing admission or blocking the sole serving task worker.
+    // This poll does not keep parameters hot. Expiry returns backing to the
+    // shared cache without closing admission or losing retained history.
     const auto expired = WaitModel(
         "fixture-text",
         R"("primary":{"phase":"ready","pinned":false,"active":false)");
@@ -279,10 +287,11 @@ TEST_F(ElasticTextServiceTest,
   const iree_device_size_t slab_size =
       loom_serve_test_application_options_default().slab_size;
   auto options = ModelOptions();
-  // Four full reservations cover two slabs of KV plus the private prefix.
-  // Only three tokens in the upper half survive; no long prompt is executed.
+  // Reserve exactly three physical slabs. Four full row reservations touch all
+  // three, but only three tokens in the upper half survive. Both trim phases
+  // must return full reusable slabs; no long prompt is executed.
   options.context_capacity = slab_size / 8;
-  options.pool_capacity = 4 * options.context_capacity;
+  options.pool_capacity = (3 * slab_size - kPrivateBytes) / 4;
   loom_serve_text_model_t* sparse = nullptr;
   IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
                                                 host_allocator_, &sparse));
@@ -334,13 +343,15 @@ TEST_F(ElasticTextServiceTest,
          frontier.values},
         iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
   };
+  auto* pool = loom_serve_device_memory_pool(device_);
+  IREE_ASSERT_OK(loom_serve_text_model_submit_trim(sparse, &result, &frontier));
+  ASSERT_NO_FATAL_FAILURE(wait_frontier());
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   {
     loom_serve::testing::ScopedNativeHold gate(device_,
                                                IREE_ALLOCATOR_COMMAND_FREE);
-    IREE_ASSERT_OK(
-        loom_serve_text_model_submit_trim(sparse, &result, &frontier));
+    loom_serve_memory_pool_trim(pool, 0);
     gate.WaitEntered();
-    ASSERT_NO_FATAL_FAILURE(wait_frontier());
     const auto physical = loom_serve_memory_pool_statistics(
         loom_serve_device_memory_pool(device_));
     const auto returned = loom_serve_text_model_memory_statistics(sparse);
@@ -349,7 +360,7 @@ TEST_F(ElasticTextServiceTest,
     EXPECT_GE(physical.releasing_bytes, slab_size);
     ASSERT_NO_FATAL_FAILURE(advance_warm());
   }
-  ASSERT_NO_FATAL_FAILURE(wait_frontier());
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   bool complete = true;
   IREE_ASSERT_OK(loom_serve_text_model_complete_trim(sparse, &result, &complete,
                                                      &frontier));
@@ -357,14 +368,16 @@ TEST_F(ElasticTextServiceTest,
   EXPECT_EQ(result.moved_blocks, 1u);
   EXPECT_EQ(result.copied_bytes, 16u);
   ASSERT_NO_FATAL_FAILURE(wait_frontier());
+  IREE_ASSERT_OK(loom_serve_text_model_complete_trim(sparse, &result, &complete,
+                                                     &frontier));
+  ASSERT_FALSE(complete);
+  ASSERT_NO_FATAL_FAILURE(wait_frontier());
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   {
     loom_serve::testing::ScopedNativeHold gate(device_,
                                                IREE_ALLOCATOR_COMMAND_FREE);
-    IREE_ASSERT_OK(loom_serve_text_model_complete_trim(sparse, &result,
-                                                       &complete, &frontier));
-    ASSERT_FALSE(complete);
+    loom_serve_memory_pool_trim(pool, 0);
     gate.WaitEntered();
-    ASSERT_NO_FATAL_FAILURE(wait_frontier());
     const auto physical = loom_serve_memory_pool_statistics(
         loom_serve_device_memory_pool(device_));
     const auto returned = loom_serve_text_model_memory_statistics(sparse);
@@ -373,7 +386,7 @@ TEST_F(ElasticTextServiceTest,
     EXPECT_GE(physical.releasing_bytes, slab_size);
     ASSERT_NO_FATAL_FAILURE(advance_warm());
   }
-  ASSERT_NO_FATAL_FAILURE(wait_frontier());
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   IREE_ASSERT_OK(loom_serve_text_model_complete_trim(sparse, &result, &complete,
                                                      &frontier));
   ASSERT_TRUE(complete);
@@ -403,6 +416,10 @@ TEST_F(ElasticTextServiceTest,
 TEST_F(ElasticTextServiceTest,
        RetirementJoinsStateTrimWithoutWaitingForNativeFree) {
   auto options = ModelOptions();
+  // The reservation spans a full physical class so its first page enters the
+  // retained cache. Native disposal then occurs at explicit pool trim.
+  options.pool_capacity =
+      loom_serve_test_application_options_default().slab_size / 4;
   loom_serve_text_model_t* retiring = nullptr;
   IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
                                                 host_allocator_, &retiring));
@@ -423,11 +440,18 @@ TEST_F(ElasticTextServiceTest,
   loom_serve_execution_frontier_t frontier;
   iree_notification_t notification;
   iree_notification_initialize(&notification);
+  IREE_ASSERT_OK(
+      loom_serve_text_model_submit_trim(retiring, &result, &frontier));
+  IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
+      {IREE_ARRAYSIZE(frontier.semaphores), frontier.semaphores,
+       frontier.values},
+      iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+  auto* pool = loom_serve_device_memory_pool(device_);
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   {
     loom_serve::testing::ScopedNativeHold gate(device_,
                                                IREE_ALLOCATOR_COMMAND_FREE);
-    IREE_ASSERT_OK(
-        loom_serve_text_model_submit_trim(retiring, &result, &frontier));
+    loom_serve_memory_pool_trim(pool, 0);
     gate.WaitEntered();
     loom_serve_text_model_retire(
         retiring,
@@ -495,25 +519,16 @@ TEST_F(ElasticTextServiceTest, RetirementOwnsAcceptedCheckpointCapture) {
             static_cast<loom_serve_text_model_t*>(payload));
       },
       model_, iree_infinite_timeout()));
-  {
-    // Consumers have retired, but returning their backing does not wait for
-    // native FREE. Hold that boundary so accounting cannot race the release.
-    loom_serve::testing::ScopedNativeHold gate(device_,
-                                               IREE_ALLOCATOR_COMMAND_FREE);
-    IREE_ASSERT_OK(loom_serve_text_model_free_retired(model_));
-    model_ = nullptr;
-    iree_notification_deinitialize(&notification);
-    gate.WaitEntered();
-    const auto memory = loom_serve_device_memory_statistics(device_);
-    EXPECT_EQ(memory.retained.reserved_bytes, 0u);
-    EXPECT_EQ(memory.retained.pending_bytes, 0u);
-    EXPECT_GT(memory.retained.releasing_bytes, 0u);
-    EXPECT_EQ(memory.retained.committed_bytes, memory.retained.releasing_bytes);
-  }
+  IREE_ASSERT_OK(loom_serve_text_model_free_retired(model_));
+  model_ = nullptr;
+  iree_notification_deinitialize(&notification);
+  auto* pool = loom_serve_device_memory_pool(device_);
   // Physical capacity returns at the outer pool join, not model retirement.
-  IREE_ASSERT_OK(
-      loom_serve_memory_pool_await(loom_serve_device_memory_pool(device_)));
+  loom_serve_memory_pool_trim(pool, 0);
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   const auto memory = loom_serve_device_memory_statistics(device_);
+  EXPECT_EQ(memory.retained.reserved_bytes, 0u);
+  EXPECT_EQ(memory.retained.pending_bytes, 0u);
   EXPECT_EQ(memory.retained.committed_bytes, 0u);
   EXPECT_EQ(memory.retained.releasing_bytes, 0u);
 

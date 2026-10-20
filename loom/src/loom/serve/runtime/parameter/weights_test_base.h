@@ -6,6 +6,7 @@
 #ifndef LOOM_SERVE_RUNTIME_PARAMETER_WEIGHTS_TEST_BASE_H_
 #define LOOM_SERVE_RUNTIME_PARAMETER_WEIGHTS_TEST_BASE_H_
 
+#include <algorithm>
 #include <array>
 #include <condition_variable>
 #include <cstring>
@@ -16,6 +17,7 @@
 #include <vector>
 
 #include "iree/async/operations/semaphore.h"
+#include "iree/hal/testing/deferred_pool.h"
 #include "iree/task/executor.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -33,6 +35,8 @@ namespace loom_serve::testing {
 
 // Source catalog selected by the owning hardware test target.
 const char* WeightSourcePath();
+// Optional URI including feedback requirements selected by the test target.
+const char* WeightDeviceUri();
 
 // Models the loader's owner turn: submit private policy/index/JIT preparation
 // and return so that the same sole worker can execute the accepted work.
@@ -277,22 +281,28 @@ struct loom_serve_test_weight_activation_wake_t {
 
 class WeightsTest : public ::testing::TestWithParam<bool> {
  protected:
-  static void SetUpTestSuite() {
+  static void SetUpTestSuite() { AllocateDeviceGroups(kSlabBytes); }
+
+  static void AllocateDeviceGroups(uint64_t slab_size,
+                                   uint64_t memory_limit = 0) {
     const iree_allocator_t host_allocator = iree_allocator_system();
     loom_serve_host_t* host = nullptr;
     IREE_ASSERT_OK(loom_serve_test_host_create(1, host_allocator, &host));
     iree_hal_driver_t* driver = nullptr;
-    IREE_ASSERT_OK(
-        loom_serve_test_driver_create(host, host_allocator, &driver));
+    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host, &driver));
     for (size_t i = 0; i < IREE_ARRAYSIZE(groups_); ++i) {
       const bool elastic = i != 0;
       const loom_serve_device_options_t options = {
           .driver = driver,
-          .uri = IREE_SV("amdgpu:?feedback"),
+          .uri = WeightDeviceUri()[0]
+                     ? iree_make_cstring_view(WeightDeviceUri())
+                     : loom_serve_test_device()->device_uri,
           .backing = elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
                              : LOOM_SERVE_DEVICE_BACKING_FIXED,
-          .slab_size = kSlabBytes,
-          .memory_limit = elastic ? 2 * kSlabBytes : 0,
+          .weight_slab_size = slab_size,
+          .state_slab_size = kSlabBytes,
+          .memory_limit =
+              elastic ? (memory_limit ? memory_limit : 2 * slab_size) : 0,
       };
       IREE_ASSERT_OK(loom_serve_device_group_allocate(
           host, 1, &options, native_allocators_[i].allocator(), &groups_[i]));
@@ -371,6 +381,9 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   void TearDown() override {
+    if (deferred_backing_) {
+      deferred_backing_->CompleteReturns();
+    }
     iree_hal_buffer_release(workspace_);
     if (consumer_gate_) {
       IREE_EXPECT_OK(iree_hal_semaphore_signal(consumer_gate_, 2, nullptr));
@@ -405,6 +418,18 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
       IREE_EXPECT_OK(loom_serve_weights_free(plan));
     }
     IREE_EXPECT_OK(loom_serve_virtual_buffer_free(state_));
+    if (owned_pool_) {
+      loom_serve_memory_pool_trim(owned_pool_, 0);
+      IREE_EXPECT_OK(loom_serve_memory_pool_await(owned_pool_));
+      EXPECT_EQ(loom_serve_memory_pool_statistics(owned_pool_).reserved_bytes,
+                0u);
+      EXPECT_EQ(loom_serve_memory_pool_statistics(owned_pool_).committed_bytes,
+                0u);
+      loom_serve_residency_cache_free(owned_cache_);
+      loom_serve_memory_pool_free(owned_pool_);
+      pool_ = nullptr;
+    }
+    iree_hal_pool_release(deferred_backing_);
     iree_hal_buffer_release(output_buffer_);
     loom_serve_jit_release(jit_);
     loom_serve_execution_release(shared_execution_);
@@ -424,6 +449,56 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     }
   }
 
+  void UseDeferredBacking() {
+    if (!pool_) {
+      return;
+    }
+    const auto* dispatch = iree_hal_queue_family(dispatch_);
+    const auto* transfer = iree_hal_queue_family(transfer_);
+    iree_hal_pool_family_access_t families[] = {
+        {.family = dispatch,
+         .usage =
+             IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER,
+         .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE},
+        {.family = transfer,
+         .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+         .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE},
+    };
+    const iree_hal_pool_scope_t scope = {
+        .family_count = dispatch == transfer ? 1u : 2u, .families = families};
+    auto* group = loom_serve_device_group(device_owner_);
+    iree_hal_slab_pool_options_t options;
+    iree_hal_slab_pool_options_initialize(&options);
+    iree_hal_pool_t* backing = nullptr;
+    IREE_ASSERT_OK(iree_hal_slab_pool_create(group, scope, &options,
+                                             host_allocator_, &backing));
+    auto status = iree::hal::testing::DeferredBackingPool::Create(
+        backing, &deferred_backing_);
+    iree_hal_pool_release(backing);
+    IREE_ASSERT_OK(status);
+    for (auto& family : families) {
+      family.interfaces = 0;
+    }
+    iree_hal_virtual_buffer_capabilities_t capabilities;
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+        group, scope, host_allocator_, &capabilities));
+    loom_serve_memory_geometry_t geometry;
+    IREE_ASSERT_OK(loom_serve_memory_pool_query_geometry(
+        &capabilities, deferred_backing_, kSlabBytes, &geometry));
+    const loom_serve_memory_geometry_t geometries[] = {geometry, geometry};
+    IREE_ASSERT_OK(loom_serve_memory_pool_allocate(
+        group, scope, deferred_backing_, transfer_, geometries, 2 * kSlabBytes,
+        host_allocator_, &owned_pool_));
+    pool_ = owned_pool_;
+    IREE_ASSERT_OK(loom_serve_residency_cache_allocate(pool_, host_allocator_,
+                                                       &owned_cache_));
+  }
+
+  loom_serve_residency_cache_t* ResidencyCache() {
+    return owned_cache_ ? owned_cache_
+                        : loom_serve_device_residency_cache(device_owner_);
+  }
+
   iree_status_t Compile(iree_host_size_t index, const char* root) {
     const loomc_config_options_t config = {
         nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
@@ -432,11 +507,16 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   loom_serve_weight_root_t Root(iree_host_size_t stage_index,
-                                uint32_t root_index) {
+                                uint32_t root_index,
+                                uint64_t minimum_byte_length = kSlabBytes) {
     const loom_cmd_program_t* program =
         loom_serve_jit_stage_program(compiled_[stage_index]);
-    const loom_cmd_program_parameter_root_t root =
+    loom_cmd_program_parameter_root_t root =
         loom_cmd_program_parameter_root_at(program, root_index);
+    // Pressure cases request the full root extent they intend to consume.
+    // Small roots otherwise commit only their native-aligned physical extent.
+    root.required_byte_length =
+        std::max(root.required_byte_length, minimum_byte_length);
     return {program, root, &buffers_[stage_index][root.fixed_buffer_index]};
   }
 
@@ -449,6 +529,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     IREE_RETURN_IF_ERROR(loom_serve_weights_allocate(
         device_, transfer_, dispatch_,
         loom_serve_device_storage_pool(device_owner_), pool_,
+        loom_serve_device_weight_geometry(device_owner_),
         loom_serve_device_workspace(device_owner_), shared_count, root_count,
         roots, host_allocator_, plan));
     return PrepareSources(*plan, sources, policy_name);
@@ -514,7 +595,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
 
   iree_status_t Register(iree_host_size_t index, iree_host_size_t first_plan,
                          iree_host_size_t plan_count) {
-    auto* cache = loom_serve_device_residency_cache(device_owner_);
+    auto* cache = ResidencyCache();
     IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
         cache, plan_count, plans_.data() + first_plan, host_allocator_,
         &parameter_groups_[index]));
@@ -541,24 +622,16 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   void AdmitAfterRelease(iree_host_size_t index) {
-    loom_serve_residency_admission_t admission;
-    {
-      loom_serve::testing::ScopedNativeHold gate(device_owner_,
-                                                 IREE_ALLOCATOR_COMMAND_FREE);
-      IREE_ASSERT_OK(
-          loom_serve_residency_try_admit(residencies_[index], &admission));
-      ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_DEFERRED);
-      EXPECT_TRUE(loom_serve_residency_cache_is_reclaiming(
-          loom_serve_device_residency_cache(device_owner_)));
-    }
-    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool_));
-    IREE_ASSERT_OK(
-        loom_serve_residency_try_admit(residencies_[index], &admission));
-    ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+    IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residencies_[index]));
   }
 
   void DrainNativeReturns() {
-    IREE_ASSERT_OK(
+    if (pool_) {
+      IREE_ASSERT_STATUS_IS(retirement_code_,
+                            loom_serve_memory_pool_await(pool_));
+    }
+    IREE_ASSERT_STATUS_IS(
+        retirement_code_,
         loom_serve_test_device_trim_and_drain(device_owner_, UINT64_MAX));
   }
 
@@ -632,8 +705,16 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree_hal_semaphore_t* consumer_gate_ = nullptr;
   // Explicitly elastic backing or NULL for the fixed comparison arm.
   loom_serve_memory_pool_t* pool_ = nullptr;
+  // Terminal pool result expected while all accepted native work is drained.
+  iree_status_code_t retirement_code_ = IREE_STATUS_OK;
+  // Optional real pool whose parent reservations can outlive logical return.
+  loom_serve_memory_pool_t* owned_pool_ = nullptr;
+  // Admission policy attached to the same optional pool as its weight plans.
+  loom_serve_residency_cache_t* owned_cache_ = nullptr;
+  // Retains real native backing without blocking unmapping or queue work.
+  iree::hal::testing::DeferredBackingPool* deferred_backing_ = nullptr;
   // Physical slab size; the shared budget holds two unique roots.
-  static constexpr uint64_t kSlabBytes = 2 * 1024 * 1024;
+  static constexpr uint64_t kSlabBytes = 4096;
   // Suite-owned fixed and elastic devices, each constructed exactly once.
   inline static loom_serve_device_group_t* groups_[2] = {};
   // Native allocator dependencies outliving their device groups.

@@ -310,8 +310,11 @@ TEST(QueryTimestampDomainTest, RejectsADevicePublishingNoFacts) {
 //===----------------------------------------------------------------------===//
 
 struct FailingSnapshotAllocator {
+  // Handles commands other than the selected allocation failures.
   iree_allocator_t delegate = iree_allocator_system();
+  // Enables snapshot allocation failure after stream setup completes.
   std::atomic<bool> fail_allocations = false;
+  // Notifies the fixture when synchronization reaches snapshot construction.
   std::atomic<int> allocation_attempt_count = 0;
 
   static iree_status_t Control(void* self, iree_allocator_command_t command,
@@ -322,6 +325,7 @@ struct FailingSnapshotAllocator {
         command == IREE_ALLOCATOR_COMMAND_REALLOC) {
       allocator->allocation_attempt_count.fetch_add(1,
                                                     std::memory_order_acq_rel);
+      allocator->allocation_attempt_count.notify_all();
       if (allocator->fail_allocations.load(std::memory_order_acquire)) {
         return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                 "injected stream snapshot allocation failure");
@@ -710,14 +714,15 @@ TEST_F(CpuStreamingContextTest,
   iree_hal_semaphore_t* second_gate = nullptr;
   std::thread synchronize_thread;
   FailingSnapshotAllocator allocator;
+  std::atomic<bool> synchronize_returned = false;
+  std::atomic<iree_status_code_t> synchronize_status_code = IREE_STATUS_UNKNOWN;
   const iree_allocator_t original_allocator = context_->host_allocator;
   ScopeExit cleanup([&] {
-    allocator.fail_allocations.store(false, std::memory_order_release);
-    context_->host_allocator = original_allocator;
     IREE_EXPECT_OK(ReleaseAllGates());
     if (synchronize_thread.joinable()) {
       synchronize_thread.join();
     }
+    context_->host_allocator = original_allocator;
     iree_hal_streaming_stream_release(second_stream);
     iree_hal_streaming_stream_release(first_stream);
   });
@@ -745,8 +750,6 @@ TEST_F(CpuStreamingContextTest,
 
   context_->host_allocator = allocator.AsAllocator();
   allocator.fail_allocations.store(true, std::memory_order_release);
-  std::atomic<bool> synchronize_returned = false;
-  std::atomic<iree_status_code_t> synchronize_status_code = IREE_STATUS_UNKNOWN;
   synchronize_thread = std::thread([&] {
     iree_status_t status = iree_hal_streaming_context_synchronize(context_);
     synchronize_status_code.store(iree_status_code(status),
@@ -755,27 +758,11 @@ TEST_F(CpuStreamingContextTest,
     synchronize_returned.store(true, std::memory_order_release);
   });
 
-  bool observed_snapshot_failure = false;
-  for (int i = 0; i < 1000000; ++i) {
-    if (allocator.allocation_attempt_count.load(std::memory_order_acquire) >
-        0) {
-      observed_snapshot_failure = true;
-      break;
-    }
-    std::this_thread::yield();
-  }
-  if (!observed_snapshot_failure) {
-    FAIL() << "context synchronization did not attempt a stream snapshot";
-    return;
-  }
+  allocator.allocation_attempt_count.wait(0, std::memory_order_acquire);
   EXPECT_FALSE(synchronize_returned.load(std::memory_order_acquire));
 
   IREE_EXPECT_OK(SignalGate(first_gate, first_gate_value));
-  for (int i = 0;
-       i < 100000 && !synchronize_returned.load(std::memory_order_acquire);
-       ++i) {
-    std::this_thread::yield();
-  }
+  IREE_ASSERT_OK(iree_hal_streaming_stream_synchronize_flushed(first_stream));
   EXPECT_FALSE(synchronize_returned.load(std::memory_order_acquire));
 
   IREE_EXPECT_OK(SignalGate(second_gate, second_gate_value));
