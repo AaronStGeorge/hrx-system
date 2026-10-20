@@ -1,5 +1,21 @@
 // RUN: verify
 
+func.def @exponent_width(%input: f64, %power: i64) {
+  // ERROR@+1: TYPE/003
+  %scaled = scalar.ldexpf %input, %power : f64, i64
+  func.return
+}
+
+// ====
+
+func.def @decomposition_exponent_width(%input: f16) {
+  // ERROR@+1: TYPE/004
+  %fraction, %exponent = scalar.frexpf %input : f16, i16
+  func.return
+}
+
+// ====
+
 // Dead poison computations are valid until their value reaches an observation
 // boundary.
 func.def @dead_poison_not_observed(%x: i32) {

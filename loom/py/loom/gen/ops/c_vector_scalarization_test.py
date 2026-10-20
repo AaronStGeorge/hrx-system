@@ -6,13 +6,19 @@
 
 """Family-completeness tests for vector scalarization metadata."""
 
+from dataclasses import replace
+
+import pytest
+
+from loom.dialect.scalar.math import scalar_frexpf
 from loom.dialect.vector import ALL_VECTOR_OPS
-from loom.dialect.vector.defs import VECTOR_CAST_OPS
+from loom.dialect.vector.defs import VECTOR_CAST_OPS, vector_frexpf
 from loom.gen.ops.c_traits import (
     _is_shape_preserving_elementwise_vector_decomposable,
 )
 from loom.gen.ops.c_vector_scalarization import (
     _EXPLICIT_VECTOR_LANE_PROGRAMS,
+    _validate_pair,
     collect_vector_scalarization_rows,
 )
 
@@ -47,3 +53,13 @@ def test_multi_result_vector_ops_share_scalar_semantics() -> None:
     unsigned = rows["vector.divremui"]
     assert unsigned.scalar_op.name == "scalar.divremui"
     assert unsigned.seed_operand_index == 0xFF
+
+    decomposition = rows["vector.frexpf"]
+    assert decomposition.scalar_op is scalar_frexpf
+    assert decomposition.seed_operand_index == 0xFF
+
+
+def test_multi_result_scalarization_requires_matching_lane_shapes() -> None:
+    unrelated_shapes = replace(vector_frexpf, constraints=[constraint for constraint in vector_frexpf.constraints if constraint.name != "SameShape"])
+    with pytest.raises(ValueError, match="same-shaped operands and results"):
+        _validate_pair(unrelated_shapes, scalar_frexpf)

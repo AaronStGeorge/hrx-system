@@ -48,6 +48,7 @@ loom_check_test_suite(
         "to_scalar.loom-test",
         "to_scalar_divrem.loom-test",
         "to_scalar_e8m0.loom-test",
+        "to_scalar_exponent.loom-test",
         "to_scalar_float_formats.loom-test",
     ],
 )

@@ -3260,6 +3260,58 @@ vector_expf = _lanewise_unary(
     eager_execution_cost=0,
 )
 
+vector_ldexpf = Op(
+    "vector.ldexpf",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Elementwise binary exponent scaling with scalar.ldexpf semantics. The input and signed i32 exponent vectors have the same shape."),
+    operands=[Operand("input", VECTOR), Operand("exponent", VECTOR)],
+    results=[Result("result", VECTOR)],
+    constraints=[
+        HasFloatElement("input"),
+        HasI32Element("exponent"),
+        SameType("input", "result"),
+        SameShape("input", "exponent", "result"),
+    ],
+    traits=[PURE, ELEMENTWISE, SAFE_TO_SPECULATE],
+    format=[
+        Ref("input"),
+        COMMA,
+        Ref("exponent"),
+        COLON,
+        TypeOf("result"),
+        COMMA,
+        TypeOf("exponent"),
+    ],
+    examples=["%scaled = vector.ldexpf %input, %exponent : vector<4xf64>, vector<4xi32>"],
+    eager_execution_cost=0,
+)
+
+vector_frexpf = Op(
+    "vector.frexpf",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Elementwise exact decomposition with scalar.frexpf semantics. The fraction preserves the input type and the signed i32 exponent vector preserves its shape."),
+    operands=[Operand("input", VECTOR)],
+    results=[Result("fraction", VECTOR), Result("exponent", VECTOR)],
+    constraints=[
+        HasFloatElement("input"),
+        HasI32Element("exponent"),
+        SameType("input", "fraction"),
+        SameShape("input", "fraction", "exponent"),
+    ],
+    traits=[PURE, ELEMENTWISE, SAFE_TO_SPECULATE],
+    format=[
+        Ref("input"),
+        COLON,
+        TypeOf("fraction"),
+        COMMA,
+        TypeOf("exponent"),
+    ],
+    examples=["%fraction, %exponent = vector.frexpf %input : vector<4xf64>, vector<4xi32>"],
+    eager_execution_cost=0,
+)
+
 vector_exp2f = _lanewise_unary(
     "vector.exp2f",
     result_constraint=FLOAT_ELEMENT,
@@ -4698,6 +4750,8 @@ VECTOR_INTEGER_ARITHMETIC_OPS: tuple[Op, ...] = (
 )
 
 VECTOR_MATH_OPS: tuple[Op, ...] = (
+    vector_ldexpf,
+    vector_frexpf,
     vector_expf,
     vector_exp2f,
     vector_expm1f,

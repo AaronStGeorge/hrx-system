@@ -10,6 +10,27 @@ from loom.builder import TiedResultSpec, ValueRef
 from loom.ir import Type
 
 class ScalarMathMixin:
+    def ldexpf(
+        self,
+        *,
+        input: ValueRef,
+        exponent: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def frexpf(
+        self,
+        *,
+        input: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> list[ValueRef]: ...
     def expf(
         self,
         *,

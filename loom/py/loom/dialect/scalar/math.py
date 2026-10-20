@@ -21,6 +21,7 @@ from loom.dsl import (
     ATTR_TYPE_F64,
     ATTR_TYPE_FLAGS,
     FLOAT,
+    I32,
     IDEMPOTENT,
     PURE,
     SAFE_TO_SPECULATE,
@@ -39,6 +40,64 @@ __all__ = ["ALL_MATH_OPS"]
 # All math ops are FLOAT and PURE with optional FastMathFlags unless noted.
 _FM = ("fastmath", FastMathFlags)
 _TRIG_MATH = ("math", TrigonometryMathFlags)
+
+# ============================================================================
+# Binary exponent decomposition and scaling
+# ============================================================================
+
+scalar_ldexpf = Op(
+    "scalar.ldexpf",
+    group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Scale input by two raised to the signed i32 exponent, rounding once "
+        "to the result format with round-to-nearest, ties-to-even. Signed "
+        "zeros and infinities are preserved, NaNs propagate, and subnormal "
+        "inputs and results are supported. Overflow follows the result "
+        "format's floating-point conversion semantics."
+    ),
+    operands=[Operand("input", FLOAT), Operand("exponent", I32)],
+    results=[Result("result", FLOAT)],
+    constraints=[SameType("input", "result")],
+    traits=[PURE, SAFE_TO_SPECULATE],
+    format=[
+        Ref("input"),
+        COMMA,
+        Ref("exponent"),
+        COLON,
+        TypeOf("result"),
+        COMMA,
+        TypeOf("exponent"),
+    ],
+    examples=["%scaled = scalar.ldexpf %input, %exponent : f64, i32"],
+    eager_execution_cost=0,
+)
+
+scalar_frexpf = Op(
+    "scalar.frexpf",
+    group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Decompose input exactly into a fraction and a signed i32 exponent "
+        "such that input = fraction * 2^exponent. For finite nonzero inputs, "
+        "the fraction has the input's sign and magnitude in [0.5, 1). "
+        "Signed zero, infinity, and NaN inputs retain their floating-point "
+        "value with exponent zero. Subnormal inputs are normalized."
+    ),
+    operands=[Operand("input", FLOAT)],
+    results=[Result("fraction", FLOAT), Result("exponent", I32)],
+    constraints=[SameType("input", "fraction")],
+    traits=[PURE, SAFE_TO_SPECULATE],
+    format=[
+        Ref("input"),
+        COLON,
+        TypeOf("fraction"),
+        COMMA,
+        TypeOf("exponent"),
+    ],
+    examples=["%fraction, %exponent = scalar.frexpf %input : f64, i32"],
+    eager_execution_cost=0,
+)
 
 # ============================================================================
 # Exponential / logarithm
@@ -585,6 +644,8 @@ scalar_truncf = unary_op(
 # ============================================================================
 
 ALL_MATH_OPS: tuple[Op, ...] = (
+    scalar_ldexpf,
+    scalar_frexpf,
     scalar_expf,
     scalar_exp2f,
     scalar_expm1f,

@@ -1,5 +1,14 @@
 // RUN: roundtrip
 
+// The exponent stays signed i32 independently of the floating representation.
+func.def @exponent_fields(%input: f64, %power: i32) -> (f64, i32, f64) {
+  %fraction, %exponent = scalar.frexpf %input : f64, i32
+  %scaled = scalar.ldexpf %input, %power : f64, i32
+  func.return %fraction, %exponent, %scaled : f64, i32, f64
+}
+
+// ====
+
 // Floating conversions expose independent source and result subnormal policy.
 func.def @float_conversion_policy(%half: f16, %single: f32) -> (f32, bf16) {
   %wide = scalar.extf<daz> %half : f16 to f32

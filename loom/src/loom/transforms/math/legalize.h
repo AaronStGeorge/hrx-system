@@ -16,9 +16,9 @@
 extern "C" {
 #endif
 
-// Returns the shared reference provider for narrow basic arithmetic created
-// during target legalization. It reuses the selected target's math policy and
-// recipes after native contract rejection, without another function traversal.
+// Returns the shared reference provider for exact exponent/sign operations and
+// narrow arithmetic created during target legalization. It reuses the selected
+// target's contracts and math policy without another function traversal.
 const loom_target_legalizer_provider_t* loom_math_target_legalizer_provider(
     void);
 

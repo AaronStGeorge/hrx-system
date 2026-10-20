@@ -20,6 +20,7 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector.defs import VECTOR_CAST_OPS
 from loom.dsl import ATTR_TYPE_FLAGS, Op
 from loom.gen.ops.c_names import c_enum_name
+from loom.gen.ops.c_traits import _same_shape_constraint_covers
 from loom.gen.support.files import write_text_file
 from loom.gen.support.generated_file import line_comment_header
 
@@ -144,13 +145,8 @@ def _validate_pair(vector_op: Op, scalar_op: Op) -> None:
     scalar_result_names = tuple(result.name for result in scalar_op.results)
     if vector_result_names != scalar_result_names:
         raise ValueError(f"{vector_op.name}: vector results {vector_result_names} do not match {scalar_op.name} results {scalar_result_names}")
-    if len(vector_result_names) > 1:
-        vector_same_type_fields = _same_type_field_names(vector_op, vector_result_names[0])
-        scalar_same_type_fields = _same_type_field_names(scalar_op, scalar_result_names[0])
-        if any(name not in vector_same_type_fields for name in vector_result_names):
-            raise ValueError(f"{vector_op.name}: mechanical multi-result scalarization requires same-typed vector results")
-        if any(name not in scalar_same_type_fields for name in scalar_result_names):
-            raise ValueError(f"{scalar_op.name}: mechanical multi-result scalarization requires same-typed scalar results")
+    if len(vector_result_names) > 1 and not _same_shape_constraint_covers(vector_op, {*vector_operand_names, *vector_result_names}):
+        raise ValueError(f"{vector_op.name}: mechanical multi-result scalarization requires same-shaped operands and results")
     vector_attrs = _non_flag_attr_signature(vector_op)
     scalar_attrs = _non_flag_attr_signature(scalar_op)
     if vector_attrs != scalar_attrs:

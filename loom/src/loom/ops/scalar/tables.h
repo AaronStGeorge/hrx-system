@@ -52,6 +52,8 @@ extern const loom_op_vtable_t loom_scalar_minnumf_vtable;
 extern const loom_op_vtable_t loom_scalar_maxnumf_vtable;
 extern const loom_op_vtable_t loom_scalar_clampf_vtable;
 extern const loom_op_vtable_t loom_scalar_copysignf_vtable;
+extern const loom_op_vtable_t loom_scalar_ldexpf_vtable;
+extern const loom_op_vtable_t loom_scalar_frexpf_vtable;
 extern const loom_op_vtable_t loom_scalar_expf_vtable;
 extern const loom_op_vtable_t loom_scalar_exp2f_vtable;
 extern const loom_op_vtable_t loom_scalar_expm1f_vtable;
