@@ -68,6 +68,20 @@ kernel.def @asan_global_store_redzone() {
   kernel.return
 }
 
+// The first two vector elements are live; only the third reaches the redzone.
+// A logical vector extent must check each strided element before publication.
+kernel.def @asan_strided_store_redzone() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%output: buffer) {
+  %base = index.constant 0 : offset
+  %layout = encoding.layout.strided [4] : encoding<layout>
+  %view = buffer.view %output[%base] : buffer -> view<3xbf16, %layout>
+  %values = vector.constant 7.0 : vector<3xbf16>
+  vector.store %values, %view[0] : vector<3xbf16>, view<3xbf16, %layout>
+  kernel.return
+}
+
 config.decl @asan_launch_bound.tile_capacity : %value: index where [range(%value, 1, 65535)]
 
 // A checked relational bound supplies the target-legal byte-offset range used
@@ -174,6 +188,17 @@ check.scenario @asan_global_store_redzone_scenario {
     check.compare<@asan_global_store_redzone, @asan_global_store_redzone_oracle>(%output) : (tensor<1xi32>) -> () {
       check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
       check.expect.event<device> {asan = {access = "write", access_length = 4}, count = 1, severity = "error", type = "asan_report"}
+    }
+  }
+  check.return
+}
+
+check.scenario @asan_strided_store_redzone_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(-17.0) : tensor<8xbf16>
+    check.compare<@asan_strided_store_redzone, @asan_global_store_redzone_oracle>(%output) : (tensor<8xbf16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8xbf16>
+      check.expect.event<device> {asan = {access = "write", access_length = 2}, count = 1, severity = "error", type = "asan_report"}
     }
   }
   check.return

@@ -278,11 +278,105 @@ func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>,
 
 // ----
 func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>, %input: view<64x4xi32, %layout>, %output: view<64x4xi32, %layout>, %row: index) {
-  sanitizer.assert.access<read> %input[%row, 0] {static_extents = [1, 4]} : view<64x4xi32, %layout>
+  sanitizer.assert.access<read> %input[%row, 0] : view<64x4xi32, %layout>
+  sanitizer.assert.access<read> %input[%row, 1] : view<64x4xi32, %layout>
+  sanitizer.assert.access<read> %input[%row, 2] : view<64x4xi32, %layout>
+  sanitizer.assert.access<read> %input[%row, 3] : view<64x4xi32, %layout>
   %value = vector.load %input[%row, 0] : view<64x4xi32, %layout> -> vector<4xi32>
-  sanitizer.assert.access<write> %output[%row, 0] {static_extents = [1, 4]} : view<64x4xi32, %layout>
+  sanitizer.assert.access<write> %output[%row, 0] : view<64x4xi32, %layout>
+  sanitizer.assert.access<write> %output[%row, 1] : view<64x4xi32, %layout>
+  sanitizer.assert.access<write> %output[%row, 2] : view<64x4xi32, %layout>
+  sanitizer.assert.access<write> %output[%row, 3] : view<64x4xi32, %layout>
   vector.store %value, %output[%row, 0] : vector<4xi32>, view<64x4xi32, %layout>
   func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+// Carrier size does not change logical repetition. A one-element vector still
+// checks exactly one element, regardless of the surrounding layout stride.
+func.def @access_strided_vector_carriers(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %layout = encoding.layout.strided [3] : encoding<layout>
+  %bytes = buffer.view %input[%origin] : buffer -> view<4xi8, %layout>
+  %halves = buffer.view %input[%origin] : buffer -> view<4xbf16, %layout>
+  %words = buffer.view %output[%origin] : buffer -> view<4xi32, %layout>
+  %doubles = buffer.view %output[%origin] : buffer -> view<4xf64, %layout>
+  %byte_values = vector.load %bytes[0] : view<4xi8, %layout> -> vector<3xi8>
+  %half_values = vector.load %halves[0] : view<4xbf16, %layout> -> vector<3xbf16>
+  %word_values = vector.constant 7 : vector<3xi32>
+  %double_value = vector.constant 3.0 : vector<1xf64>
+  vector.store %word_values, %words[0] : vector<3xi32>, view<4xi32, %layout>
+  vector.store %double_value, %doubles[0] : vector<1xf64>, view<4xf64, %layout>
+  func.return
+}
+
+// ----
+func.def @access_strided_vector_carriers(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %layout = encoding.layout.strided [3] : encoding<layout>
+  %bytes = buffer.view %input[%origin] : buffer -> view<4xi8, %layout>
+  %halves = buffer.view %input[%origin] : buffer -> view<4xbf16, %layout>
+  %words = buffer.view %output[%origin] : buffer -> view<4xi32, %layout>
+  %doubles = buffer.view %output[%origin] : buffer -> view<4xf64, %layout>
+  sanitizer.assert.accesses<read> %bytes[0] {static_count = 3, static_extents = [1], static_strides = [1]} : view<4xi8, %layout>
+  %byte_values = vector.load %bytes[0] : view<4xi8, %layout> -> vector<3xi8>
+  sanitizer.assert.accesses<read> %halves[0] {static_count = 3, static_extents = [1], static_strides = [1]} : view<4xbf16, %layout>
+  %half_values = vector.load %halves[0] : view<4xbf16, %layout> -> vector<3xbf16>
+  %word_values = vector.constant 7 : vector<3xi32>
+  %double_value = vector.constant 3.0 : vector<1xf64>
+  sanitizer.assert.accesses<write> %words[0] {static_count = 3, static_extents = [1], static_strides = [1]} : view<4xi32, %layout>
+  vector.store %word_values, %words[0] : vector<3xi32>, view<4xi32, %layout>
+  sanitizer.assert.accesses<write> %doubles[0] {static_count = 1, static_extents = [1], static_strides = [1]} : view<4xf64, %layout>
+  vector.store %double_value, %doubles[0] : vector<1xf64>, view<4xf64, %layout>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+// Retained facts establish a concrete non-unit stride even when the encoding
+// contains an SSA operand.
+func.def @access_fact_bound_vector_stride(%input: buffer, %step: index, %row: index) -> (vector<4xf16>) {
+  %stride = index.assume %step [range(%step, 2, 2)] : index
+  %layout = encoding.layout.strided [64, %stride] : encoding<layout>
+  %origin = index.constant 0 : offset
+  %view = buffer.view %input[%origin] : buffer -> view<8x8xf16, %layout>
+  %values = vector.load %view[%row, 0] : view<8x8xf16, %layout> -> vector<4xf16>
+  func.return %values : vector<4xf16>
+}
+
+// ----
+func.def @access_fact_bound_vector_stride(%input: buffer, %step: index, %row: index) -> (vector<4xf16>) {
+  %stride = index.assume %step [range(%step, 2, 2)] : index
+  %layout = encoding.layout.strided [64, %stride] : encoding<layout>
+  %origin = index.constant 0 : offset
+  %view = buffer.view %input[%origin] : buffer -> view<8x8xf16, %layout>
+  sanitizer.assert.accesses<read> %view[%row, 0] {static_count = 4, static_extents = [1, 1], static_strides = [0, 1]} : view<8x8xf16, %layout>
+  %values = vector.load %view[%row, 0] : view<8x8xf16, %layout> -> vector<4xf16>
+  func.return %values : vector<4xf16>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_contiguous_vector_keeps_one_range(%input: buffer, %row: index) -> (vector<4xi32>) {
+  %layout = encoding.layout.strided [16, 1] : encoding<layout>
+  %origin = index.constant 0 : offset
+  %view = buffer.view %input[%origin] : buffer -> view<8x4xi32, %layout>
+  %values = vector.load %view[%row, 0] : view<8x4xi32, %layout> -> vector<4xi32>
+  func.return %values : vector<4xi32>
+}
+
+// ----
+func.def @access_contiguous_vector_keeps_one_range(%input: buffer, %row: index) -> (vector<4xi32>) {
+  %layout = encoding.layout.strided [16, 1] : encoding<layout>
+  %origin = index.constant 0 : offset
+  %view = buffer.view %input[%origin] : buffer -> view<8x4xi32, %layout>
+  sanitizer.assert.access<read> %view[%row, 0] {static_extents = [1, 4]} : view<8x4xi32, %layout>
+  %values = vector.load %view[%row, 0] : view<8x4xi32, %layout> -> vector<4xi32>
+  func.return %values : vector<4xi32>
 }
 
 // ====
@@ -332,30 +426,30 @@ func.def @access_only_instruments_strided_fragment_memory(%buffer: buffer, %row:
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
-func.def @access_only_instruments_non_contiguous_fragment_memory(%buffer: buffer, %row: index, %column: index, %value: vector<8xf32>) {
+func.def @access_only_instruments_non_contiguous_fragment_memory(%buffer: buffer, %batch: index, %row: index, %column: index, %value: vector<8xf32>) {
   %fragment_extent = index.constant 2 : index
   %row_stride = index.constant 64 : index
-  %layout = encoding.layout.strided [2, %row_stride] : encoding<layout>
+  %layout = encoding.layout.strided [4096, 2, %row_stride] : encoding<layout>
   %base = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %buffer : buffer
-  %output = buffer.view %global[%base] : buffer -> view<64x64xf32, %layout>
-  vector.fragment.store<result> %value, %output[%row, %column] shape [%fragment_extent, %fragment_extent] : vector<8xf32>, view<64x64xf32, %layout>
+  %output = buffer.view %global[%base] : buffer -> view<8x64x64xf32, %layout>
+  vector.fragment.store<result> %value, %output[%batch, %row, %column] shape [%fragment_extent, %fragment_extent] : vector<8xf32>, view<8x64x64xf32, %layout>
   func.return
 }
 
 // ----
-func.def @access_only_instruments_non_contiguous_fragment_memory(%buffer: buffer, %row: index, %column: index, %value: vector<8xf32>) {
+func.def @access_only_instruments_non_contiguous_fragment_memory(%buffer: buffer, %batch: index, %row: index, %column: index, %value: vector<8xf32>) {
   %fragment_extent = index.constant 2 : index
   %row_stride = index.constant 64 : index
-  %layout = encoding.layout.strided [2, %row_stride] : encoding<layout>
+  %layout = encoding.layout.strided [4096, 2, %row_stride] : encoding<layout>
   %base = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %buffer : buffer
-  %output = buffer.view %global[%base] : buffer -> view<64x64xf32, %layout>
-  sanitizer.assert.accesses<write> %output[%row, %column] {static_count = 2, static_extents = [1, 1], static_strides = [1, 0]} : view<64x64xf32, %layout>
-  %10 = index.constant 1 : index
-  %11 = index.add %column, %10 : index
-  sanitizer.assert.accesses<write> %output[%row, %11] {static_count = 2, static_extents = [1, 1], static_strides = [1, 0]} : view<64x64xf32, %layout>
-  vector.fragment.store<result> %value, %output[%row, %column] shape [%fragment_extent, %fragment_extent] : vector<8xf32>, view<64x64xf32, %layout>
+  %output = buffer.view %global[%base] : buffer -> view<8x64x64xf32, %layout>
+  sanitizer.assert.accesses<write> %output[%batch, %row, %column] {static_count = 2, static_extents = [1, 1, 1], static_strides = [0, 1, 0]} : view<8x64x64xf32, %layout>
+  %11 = index.constant 1 : index
+  %12 = index.add %column, %11 : index
+  sanitizer.assert.accesses<write> %output[%batch, %row, %12] {static_count = 2, static_extents = [1, 1, 1], static_strides = [0, 1, 0]} : view<8x64x64xf32, %layout>
+  vector.fragment.store<result> %value, %output[%batch, %row, %column] shape [%fragment_extent, %fragment_extent] : vector<8xf32>, view<8x64x64xf32, %layout>
   func.return
 }
 
