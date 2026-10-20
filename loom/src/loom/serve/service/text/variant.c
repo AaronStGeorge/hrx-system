@@ -155,7 +155,7 @@ static void loom_serve_text_variant_release(loomc_task_t* task) {
   iree_status_t status = job->status;
   if (iree_status_is_ok(status)) {
     status = loom_serve_stage_set_compile_catalog_async(
-        job->jit, job->preparation, loom_serve_text_variant_compiled, job,
+        job->jit, job->preparation, NULL, loom_serve_text_variant_compiled, job,
         job->variant->host_allocator);
   }
   if (!iree_status_is_ok(status)) {

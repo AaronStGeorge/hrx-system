@@ -1220,7 +1220,7 @@ static iree_status_t loom_serve_choice_begin(
       choice->code->users = 1;
       job->pending = true;
       status = loom_serve_stage_set_compile_catalog_async(
-          choice->generation->jit, choice->preparation,
+          choice->generation->jit, choice->preparation, NULL,
           loom_serve_choice_compiled, job, executables->host_allocator);
     }
   }
@@ -1347,7 +1347,7 @@ static void loom_serve_generation_indexed(loomc_task_t* task) {
   iree_status_t status = job->status;
   if (iree_status_is_ok(status)) {
     status = loom_serve_stage_set_compile_catalog_async(
-        job->generation->jit, job->executables->options.preparation,
+        job->generation->jit, job->executables->options.preparation, NULL,
         loom_serve_generation_compiled, job, job->generation->host_allocator);
   }
   if (!iree_status_is_ok(status)) {

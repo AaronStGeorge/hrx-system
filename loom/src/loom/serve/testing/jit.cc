@@ -98,17 +98,23 @@ iree_status_t loom_serve_test_compilation_t::Drain(
   auto* self = static_cast<loom_serve_test_compilation_t*>(process->user_data);
   loom_serve_execution_release(self->retired_execution);
   self->retired_execution = nullptr;
-  auto status = self->direct_dispatch
-                    ? loom_serve_jit_compile_dispatch_async(
-                          self->jit, self->root, self->config, Complete, self)
-                    : loom_serve_jit_compile_async(
-                          self->jit, self->root, self->config, Complete, self);
+  auto status =
+      self->direct_dispatch
+          ? loom_serve_jit_compile_dispatch_async(self->jit, self->root,
+                                                  self->config, Complete, self)
+          : loom_serve_jit_compile_async(self->jit, self->root, self->config,
+                                         Layout, Complete, self);
   if (!iree_status_is_ok(status)) {
     Complete(self, status, nullptr);
   }
   result->completed = true;
   result->did_work = true;
   return iree_ok_status();
+}
+
+void loom_serve_test_compilation_t::Layout(void* user_data,
+                                           const loom_cmd_program_t* program) {
+  static_cast<loom_serve_test_compilation_t*>(user_data)->layout = program;
 }
 
 void loom_serve_test_compilation_t::Complete(void* user_data,

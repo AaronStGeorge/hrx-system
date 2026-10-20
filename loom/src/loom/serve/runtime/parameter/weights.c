@@ -283,8 +283,12 @@ typedef struct loom_serve_weight_preparation_t {
   loomc_task_t task;
   // Exclusively borrowed unactivated plan through terminal completion.
   loom_serve_weights_t* weights;
-  // Exclusively borrowed source catalog through terminal completion.
+  // Borrowed source catalog through terminal completion; other jobs may
+  // overlap.
   loom_serve_jit_t* jit;
+  // Private policy compilation evidence merged before native preparation
+  // starts.
+  loom_serve_compilation_report_t report;
   // Recording policy applied to each source-selected preparation command.
   iree_hal_command_buffer_mode_t command_mode;
   // Borrowed checkpoint sources and policy, retained through completion.
@@ -399,7 +403,7 @@ static iree_status_t loom_serve_weight_prepare_policy(
         loom_serve_jit_target_environment(job->jit), environment, &job->sources,
         job->parameter->policy, IREE_ARRAYSIZE(roots), roots,
         (iree_vm_module_span_t){libraries, IREE_ARRAYSIZE(libraries)},
-        loom_serve_jit_report(job->jit), host_allocator, &program);
+        &job->report, host_allocator, &program);
   }
   iree_vm_ref_types_t types = {0};
   if (iree_status_is_ok(status)) {
@@ -516,7 +520,7 @@ static void loom_serve_weight_preparation_next(
   const loom_serve_preparation_stage_t* stage = loom_serve_preparation_stage(
       job->preparers[job->preparer_index].declaration, 0);
   iree_status_t status =
-      loom_serve_jit_compile_async(job->jit, stage->root, &stage->config,
+      loom_serve_jit_compile_async(job->jit, stage->root, &stage->config, NULL,
                                    loom_serve_weight_preparation_compiled, job);
   // An accepted completion may already have destroyed job. Rejection owes no
   // callback and returns the still-exclusive job to this terminal path.
@@ -579,6 +583,7 @@ static void loom_serve_weight_preparation_execute(
 
 static void loom_serve_weight_preparation_destroy(loomc_task_t* task) {
   loom_serve_weight_preparation_t* job = (loom_serve_weight_preparation_t*)task;
+  loom_serve_jit_report_merge(job->jit, &job->report);
   if (iree_status_is_ok(job->status)) {
     loom_serve_weight_preparation_next(job);
   } else {
