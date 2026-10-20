@@ -58,7 +58,9 @@ typedef uint64_t amdf_memory_flags_t;
 enum amdf_memory_flag_bits_e {
   /// The allocation can be explicitly mapped for host access.
   AMDF_MEMORY_FLAG_HOST_VISIBLE = UINT64_C(1) << 0,
-  /// The physical placement is local to the attached device.
+  /// The physical placement is local to the attached device. Unified SYSTEM
+  /// storage may also provide this property; it does not require a separate
+  /// device-only heap. Host visibility and cache policy remain independent.
   AMDF_MEMORY_FLAG_DEVICE_LOCAL = UINT64_C(1) << 1,
   /// The physical backing can be exported and attached to another device.
   AMDF_MEMORY_FLAG_SHAREABLE = UINT64_C(1) << 2,

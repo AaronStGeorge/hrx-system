@@ -237,6 +237,12 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.supported_flags = profile.guaranteed_flags |
                               AMDF_MEMORY_FLAG_MAPPING_SOURCE |
                               AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+    // Unified backing can be local to both CPU and GPU. Keep its SYSTEM
+    // acquisition and write-back host mapping; GPU-cached payload storage
+    // satisfies device-local requests without inventing a separate heap.
+    if (topology->integrated && !control_system) {
+      profile.supported_flags |= AMDF_MEMORY_FLAG_DEVICE_LOCAL;
+    }
     if (control_system) {
       profile.supported_flags |= AMDF_MEMORY_FLAG_QUEUE_STORAGE;
     }
