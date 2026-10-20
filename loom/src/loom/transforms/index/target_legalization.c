@@ -70,7 +70,7 @@ static iree_status_t loom_index_legalize_divrem(
   loom_value_id_t replacements[2] = {loom_index_div_result(quotient),
                                      loom_index_sub_result(remainder)};
   if (context->fact_table) {
-    loom_predicate_t predicates[2];
+    loom_predicate_t predicates[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY];
     const uint16_t predicate_count =
         loom_value_facts_export_integer_refinements(
             replacements[1],

@@ -31,9 +31,10 @@ uint16_t loom_value_facts_export_integer_refinements(
   }
 
   uint16_t count = 0;
-  if (loom_value_facts_is_float(inferred_facts) ||
-      proven_facts.range_lo > inferred_facts.range_lo ||
-      proven_facts.range_hi < inferred_facts.range_hi) {
+  const bool exports_range = loom_value_facts_is_float(inferred_facts) ||
+                             proven_facts.range_lo > inferred_facts.range_lo ||
+                             proven_facts.range_hi < inferred_facts.range_hi;
+  if (exports_range) {
     if (loom_value_facts_is_exact(proven_facts)) {
       predicates[count++] = (loom_predicate_t){
           .kind = LOOM_PREDICATE_EQ,
@@ -53,8 +54,13 @@ uint16_t loom_value_facts_export_integer_refinements(
     }
   }
 
+  // Equality carries the complete integer value and therefore implies every
+  // other representable refinement.
+  if (loom_value_facts_is_exact(proven_facts)) {
+    return count;
+  }
+
   if (count < capacity && proven_facts.known_divisor > 1 &&
-      !loom_value_facts_is_exact(proven_facts) &&
       (loom_value_facts_is_float(inferred_facts) ||
        inferred_facts.known_divisor % proven_facts.known_divisor != 0)) {
     predicates[count++] = (loom_predicate_t){
@@ -63,6 +69,29 @@ uint16_t loom_value_facts_export_integer_refinements(
         .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
                      LOOM_PRED_ARG_NONE},
         .args = {value, proven_facts.known_divisor, 0},
+    };
+  }
+
+  if (count < capacity && loom_value_facts_is_power_of_two(proven_facts) &&
+      !loom_value_facts_is_power_of_two(inferred_facts)) {
+    predicates[count++] = (loom_predicate_t){
+        .kind = LOOM_PREDICATE_POWER_OF_TWO,
+        .arg_count = 1,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_NONE,
+                     LOOM_PRED_ARG_NONE},
+        .args = {value, 0, 0},
+    };
+  } else if (count < capacity && loom_value_facts_is_non_zero(proven_facts) &&
+             !loom_value_facts_is_non_zero(inferred_facts) &&
+             !loom_value_facts_is_power_of_two(inferred_facts) &&
+             !(exports_range &&
+               (proven_facts.range_hi < 0 || proven_facts.range_lo > 0))) {
+    predicates[count++] = (loom_predicate_t){
+        .kind = LOOM_PREDICATE_NE,
+        .arg_count = 2,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                     LOOM_PRED_ARG_NONE},
+        .args = {value, 0, 0},
     };
   }
   return count;

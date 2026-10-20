@@ -1093,6 +1093,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
     }
 
     case LOOM_PREDICATE_POWER_OF_TWO:
+      facts->range_lo = iree_max(facts->range_lo, INT64_C(1));
       facts->flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
       break;
 

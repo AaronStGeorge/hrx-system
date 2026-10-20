@@ -19,6 +19,7 @@
 #include "loom/ops/index/carrier.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/materialize.h"
@@ -515,14 +516,241 @@ static iree_status_t loom_scf_to_cfg_lower_if(
 // scf.for
 //===----------------------------------------------------------------------===//
 
-#define LOOM_SCF_TO_CFG_FOR_IV_PREDICATE_CAPACITY 4
+typedef struct loom_scf_to_cfg_integer_fact_scratch_t {
+  // Lowered values collected for the next variadic assumption.
+  loom_value_id_t* values;
+  // Result types corresponding to values.
+  loom_type_t* types;
+  // Original positions corresponding to values.
+  uint16_t* positions;
+  // Flat predicates constraining the collected values.
+  loom_predicate_t* predicates;
+  // Number of collected values.
+  uint16_t value_count;
+  // Number of collected predicates.
+  uint16_t predicate_count;
+} loom_scf_to_cfg_integer_fact_scratch_t;
 
-static bool loom_scf_to_cfg_for_iv_facts_are_materializable(
-    loom_value_facts_t facts) {
-  loom_predicate_t predicates[LOOM_SCF_TO_CFG_FOR_IV_PREDICATE_CAPACITY];
-  return loom_value_facts_export_integer_refinements(
-             (loom_value_id_t)0, loom_value_facts_unknown(), facts, predicates,
-             IREE_ARRAYSIZE(predicates)) > 0;
+static bool loom_scf_to_cfg_integer_assume_kind(loom_type_t type,
+                                                bool* out_uses_index) {
+  if (!loom_type_is_scalar(type)) {
+    return false;
+  }
+  const loom_scalar_type_t scalar_type = loom_type_element_type(type);
+  if (scalar_type == LOOM_SCALAR_TYPE_INDEX ||
+      scalar_type == LOOM_SCALAR_TYPE_OFFSET) {
+    *out_uses_index = true;
+    return true;
+  }
+  if (loom_scalar_type_is_integer(scalar_type)) {
+    *out_uses_index = false;
+    return true;
+  }
+  return false;
+}
+
+static loom_value_facts_t loom_scf_to_cfg_integer_carrier_facts(
+    const loom_scf_to_cfg_state_t* state, loom_type_t type) {
+  const loom_scalar_type_t scalar_type = loom_type_element_type(type);
+  const int32_t carrier_bitwidth = loom_index_target_carrier_bitwidth(
+      &state->fact_table->context, scalar_type);
+  if (carrier_bitwidth > 0 && scalar_type == LOOM_SCALAR_TYPE_INDEX) {
+    return loom_value_facts_make_signed_bit_count_range(carrier_bitwidth);
+  }
+  if (carrier_bitwidth > 0 && carrier_bitwidth < 64 &&
+      scalar_type == LOOM_SCALAR_TYPE_OFFSET) {
+    return loom_value_facts_make_unsigned_bit_count_range(carrier_bitwidth);
+  }
+  int64_t range_lo = 0;
+  int64_t range_hi = 0;
+  if (loom_value_facts_scalar_type_domain(scalar_type, &range_lo, &range_hi)) {
+    return loom_value_facts_make(range_lo, range_hi, 1);
+  }
+  return loom_value_facts_unknown();
+}
+
+static uint16_t loom_scf_to_cfg_integer_refinement_count(
+    const loom_scf_to_cfg_state_t* state, loom_value_id_t structured_value,
+    loom_value_id_t lowered_value, loom_type_t type, uint16_t position,
+    bool uses_index_assume, uint16_t extra_position,
+    uint16_t extra_predicate_count) {
+  loom_predicate_t refinements[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY];
+  uint16_t count = loom_value_facts_export_integer_refinements(
+      lowered_value, loom_scf_to_cfg_integer_carrier_facts(state, type),
+      loom_value_fact_table_lookup(state->fact_table, structured_value),
+      refinements, IREE_ARRAYSIZE(refinements));
+  if (uses_index_assume && position == extra_position) {
+    count += extra_predicate_count;
+  }
+  return count;
+}
+
+static iree_status_t loom_scf_to_cfg_build_integer_fact_group(
+    loom_scf_to_cfg_state_t* state, loom_block_t* block, loom_op_t* parent_op,
+    const loom_value_id_t* structured_values, bool uses_index_assume,
+    loom_location_id_t location,
+    loom_scf_to_cfg_integer_fact_scratch_t* scratch,
+    loom_value_id_t* out_values) {
+  if (scratch->value_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_predicate_t* predicates = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&state->module->arena, scratch->predicate_count,
+                                sizeof(*predicates), (void**)&predicates));
+  memcpy(predicates, scratch->predicates,
+         scratch->predicate_count * sizeof(*predicates));
+
+  loom_builder_ip_t saved_ip =
+      loom_scf_to_cfg_set_block_end(state, block, parent_op);
+  loom_op_t* assume_op = NULL;
+  iree_status_t status =
+      uses_index_assume
+          ? loom_index_assume_build(&state->rewriter->builder, scratch->values,
+                                    scratch->value_count, predicates,
+                                    scratch->predicate_count, scratch->types,
+                                    scratch->value_count, location, &assume_op)
+          : loom_scalar_assume_build(
+                &state->rewriter->builder, scratch->values,
+                scratch->value_count, predicates, scratch->predicate_count,
+                scratch->types, scratch->value_count, location, &assume_op);
+  loom_builder_restore(&state->rewriter->builder, saved_ip);
+  IREE_RETURN_IF_ERROR(status);
+
+  const loom_value_slice_t results =
+      uses_index_assume ? loom_index_assume_results(assume_op)
+                        : loom_scalar_assume_results(assume_op);
+  for (uint16_t i = 0; i < scratch->value_count; ++i) {
+    const uint16_t position = scratch->positions[i];
+    const loom_string_id_t name_id =
+        loom_module_value(state->module, structured_values[position])->name_id;
+    loom_value_t* input_value =
+        loom_module_value(state->module, scratch->values[i]);
+    if (name_id != LOOM_STRING_ID_INVALID && input_value->name_id == name_id &&
+        loom_value_is_block_arg(input_value)) {
+      IREE_RETURN_IF_ERROR(
+          loom_module_clear_value_name(state->module, scratch->values[i]));
+    }
+    out_values[position] = results.values[i];
+    if (name_id != LOOM_STRING_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(loom_module_set_value_name(
+          state->module, out_values[position], name_id));
+    }
+  }
+  scratch->value_count = 0;
+  scratch->predicate_count = 0;
+  return iree_ok_status();
+}
+
+// Materializes integer facts proven on structured values as semantic identity
+// operations on their lowered CFG counterparts. Facts are grouped by dialect;
+// extremely large groups split only at the IR's 16-bit segment limit.
+static iree_status_t loom_scf_to_cfg_materialize_integer_facts(
+    loom_scf_to_cfg_state_t* state, loom_block_t* block, loom_op_t* parent_op,
+    const loom_value_id_t* structured_values,
+    const loom_value_id_t* lowered_values, uint16_t value_count,
+    uint16_t extra_position, const loom_predicate_t* extra_predicates,
+    uint16_t extra_predicate_count, loom_location_id_t location,
+    const loom_value_id_t** out_values) {
+  *out_values = lowered_values;
+  if (value_count == 0) {
+    return iree_ok_status();
+  }
+
+  uint16_t refined_value_count = 0;
+  iree_host_size_t refined_predicate_count = 0;
+  for (uint16_t i = 0; i < value_count; ++i) {
+    bool uses_index_assume = false;
+    const loom_type_t type =
+        loom_module_value_type(state->module, lowered_values[i]);
+    if (!loom_scf_to_cfg_integer_assume_kind(type, &uses_index_assume)) {
+      continue;
+    }
+    const uint16_t refinement_count = loom_scf_to_cfg_integer_refinement_count(
+        state, structured_values[i], lowered_values[i], type, i,
+        uses_index_assume, extra_position, extra_predicate_count);
+    if (refinement_count != 0) {
+      ++refined_value_count;
+      refined_predicate_count += refinement_count;
+    }
+  }
+  if (refined_value_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t* materialized_values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->lowering_arena, value_count, sizeof(*materialized_values),
+      (void**)&materialized_values));
+  memcpy(materialized_values, lowered_values,
+         value_count * sizeof(*materialized_values));
+  *out_values = materialized_values;
+
+  const iree_host_size_t predicate_capacity =
+      iree_min((iree_host_size_t)UINT16_MAX, refined_predicate_count);
+  loom_scf_to_cfg_integer_fact_scratch_t scratch = {0};
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->lowering_arena, refined_value_count, sizeof(*scratch.values),
+      (void**)&scratch.values));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->lowering_arena, refined_value_count, sizeof(*scratch.types),
+      (void**)&scratch.types));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->lowering_arena, refined_value_count, sizeof(*scratch.positions),
+      (void**)&scratch.positions));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->lowering_arena, predicate_capacity, sizeof(*scratch.predicates),
+      (void**)&scratch.predicates));
+
+  for (uint8_t group = 0; group < 2; ++group) {
+    const bool uses_index_assume = group == 0;
+    for (uint16_t i = 0; i < value_count; ++i) {
+      const loom_type_t type =
+          loom_module_value_type(state->module, lowered_values[i]);
+      bool candidate_uses_index = false;
+      if (!loom_scf_to_cfg_integer_assume_kind(type, &candidate_uses_index) ||
+          candidate_uses_index != uses_index_assume) {
+        continue;
+      }
+
+      loom_predicate_t refinements[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY];
+      uint16_t refinement_count = loom_value_facts_export_integer_refinements(
+          lowered_values[i], loom_scf_to_cfg_integer_carrier_facts(state, type),
+          loom_value_fact_table_lookup(state->fact_table, structured_values[i]),
+          refinements, IREE_ARRAYSIZE(refinements));
+      const uint16_t value_extra_predicate_count =
+          i == extra_position && uses_index_assume ? extra_predicate_count : 0;
+      const uint16_t total_refinement_count =
+          refinement_count + value_extra_predicate_count;
+      if (total_refinement_count == 0) {
+        continue;
+      }
+
+      if (scratch.value_count == UINT16_MAX ||
+          total_refinement_count > UINT16_MAX - scratch.predicate_count) {
+        IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_integer_fact_group(
+            state, block, parent_op, structured_values, uses_index_assume,
+            location, &scratch, materialized_values));
+      }
+      scratch.values[scratch.value_count] = lowered_values[i];
+      scratch.types[scratch.value_count] = type;
+      scratch.positions[scratch.value_count] = i;
+      ++scratch.value_count;
+      memcpy(scratch.predicates + scratch.predicate_count, refinements,
+             refinement_count * sizeof(*refinements));
+      scratch.predicate_count += refinement_count;
+      if (value_extra_predicate_count != 0) {
+        memcpy(scratch.predicates + scratch.predicate_count, extra_predicates,
+               value_extra_predicate_count * sizeof(*extra_predicates));
+        scratch.predicate_count += value_extra_predicate_count;
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_integer_fact_group(
+        state, block, parent_op, structured_values, uses_index_assume, location,
+        &scratch, materialized_values));
+  }
+  return iree_ok_status();
 }
 
 static bool loom_scf_to_cfg_value_has_exact_integer_facts(
@@ -539,21 +767,6 @@ static bool loom_scf_to_cfg_for_iv_bound_predicate_is_needed(
     loom_value_fact_table_t* fact_table, loom_value_id_t bound) {
   return bound != LOOM_VALUE_ID_INVALID &&
          !loom_scf_to_cfg_value_has_exact_integer_facts(fact_table, bound);
-}
-
-static uint16_t loom_scf_to_cfg_for_iv_bound_predicate_count(
-    loom_value_fact_table_t* fact_table, loom_value_id_t lower_bound,
-    loom_value_id_t upper_bound) {
-  uint16_t count = 0;
-  if (loom_scf_to_cfg_for_iv_bound_predicate_is_needed(fact_table,
-                                                       lower_bound)) {
-    ++count;
-  }
-  if (loom_scf_to_cfg_for_iv_bound_predicate_is_needed(fact_table,
-                                                       upper_bound)) {
-    ++count;
-  }
-  return count;
 }
 
 static uint16_t loom_scf_to_cfg_for_iv_bound_predicates(
@@ -587,26 +800,15 @@ static uint16_t loom_scf_to_cfg_for_iv_bound_predicates(
   return count;
 }
 
-static bool loom_scf_to_cfg_for_iv_assume_is_materializable(
-    loom_value_fact_table_t* fact_table, loom_op_t* op,
-    loom_value_facts_t facts) {
-  if (loom_scf_to_cfg_for_iv_facts_are_materializable(facts)) {
-    return true;
-  }
-  return loom_scf_to_cfg_for_iv_bound_predicate_count(
-             fact_table, loom_scf_for_lower_bound(op),
-             loom_scf_for_upper_bound(op)) > 0;
-}
-
 static iree_status_t loom_scf_to_cfg_define_for_header_args(
     loom_scf_to_cfg_state_t* state, loom_op_t* op, loom_block_t* header_block,
-    loom_block_t* body_source_block, bool reserve_iv_name_for_assume,
-    loom_value_id_t* out_iv_arg, loom_value_id_t** out_iter_args) {
+    loom_block_t* body_source_block, loom_value_id_t* out_iv_arg,
+    loom_value_id_t** out_iter_args) {
   *out_iv_arg = LOOM_VALUE_ID_INVALID;
   *out_iter_args = NULL;
 
   loom_string_id_t iv_name_id =
-      !reserve_iv_name_for_assume && body_source_block->arg_count > 0
+      body_source_block->arg_count > 0
           ? loom_module_value(state->module, body_source_block->arg_ids[0])
                 ->name_id
           : LOOM_STRING_ID_INVALID;
@@ -622,51 +824,6 @@ static iree_status_t loom_scf_to_cfg_define_for_header_args(
   }
   return loom_scf_to_cfg_define_remapped_block_args(
       state, header_block, iter_arg_names, results.count, out_iter_args);
-}
-
-static iree_status_t loom_scf_to_cfg_build_for_iv_assume(
-    loom_scf_to_cfg_state_t* state, loom_op_t* op, loom_block_t* body_block,
-    loom_value_id_t header_iv, loom_value_facts_t original_iv_facts,
-    loom_string_id_t result_name_id, loom_value_id_t* out_iv) {
-  *out_iv = header_iv;
-
-  loom_predicate_t predicate_storage[LOOM_SCF_TO_CFG_FOR_IV_PREDICATE_CAPACITY];
-  // The structured domain disappears here. Its facts must survive on the
-  // lowered induction value, including when a bound was dynamic.
-  uint16_t predicate_count = loom_value_facts_export_integer_refinements(
-      header_iv, loom_value_facts_unknown(), original_iv_facts,
-      predicate_storage, LOOM_SCF_TO_CFG_FOR_IV_PREDICATE_CAPACITY);
-  predicate_count += loom_scf_to_cfg_for_iv_bound_predicates(
-      state->fact_table, header_iv, loom_scf_for_lower_bound(op),
-      loom_scf_for_upper_bound(op), predicate_storage + predicate_count);
-  if (predicate_count == 0) {
-    return iree_ok_status();
-  }
-
-  loom_predicate_t* predicates = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(&state->module->arena, predicate_count,
-                                sizeof(*predicates), (void**)&predicates));
-  memcpy(predicates, predicate_storage, predicate_count * sizeof(*predicates));
-
-  loom_type_t result_type =
-      loom_module_value_type(state->module, loom_scf_for_lower_bound(op));
-  const loom_value_id_t value = header_iv;
-  loom_builder_ip_t saved_ip =
-      loom_scf_to_cfg_set_block_end(state, body_block, op->parent_op);
-  loom_op_t* assume_op = NULL;
-  iree_status_t status = loom_index_assume_build(
-      &state->rewriter->builder, &value, 1, predicates, predicate_count,
-      &result_type, 1, op->location, &assume_op);
-  loom_builder_restore(&state->rewriter->builder, saved_ip);
-  IREE_RETURN_IF_ERROR(status);
-
-  *out_iv = loom_index_assume_results(assume_op).values[0];
-  if (result_name_id != LOOM_STRING_ID_INVALID) {
-    IREE_RETURN_IF_ERROR(
-        loom_module_set_value_name(state->module, *out_iv, result_name_id));
-  }
-  return iree_ok_status();
 }
 
 // Consumes the structured IV range before moving the body. A unit stride or
@@ -754,20 +911,11 @@ static iree_status_t loom_scf_to_cfg_lower_for(
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
   loom_value_slice_t iter_args = loom_scf_for_iter_args(op);
-  loom_string_id_t original_iv_name_id =
-      body_source_block->arg_count > 0
-          ? loom_module_value(state->module, body_source_block->arg_ids[0])
-                ->name_id
-          : LOOM_STRING_ID_INVALID;
   loom_value_facts_t original_iv_facts =
       body_source_block->arg_count > 0
           ? loom_value_fact_table_lookup(state->fact_table,
                                          body_source_block->arg_ids[0])
           : loom_value_facts_unknown();
-  bool reserve_iv_name_for_assume =
-      original_iv_name_id != LOOM_STRING_ID_INVALID &&
-      loom_scf_to_cfg_for_iv_assume_is_materializable(state->fact_table, op,
-                                                      original_iv_facts);
   const bool guard_increment = !loom_scf_to_cfg_for_increment_is_nonwrapping(
       state, op, original_iv_facts, step_facts);
 
@@ -799,32 +947,50 @@ static iree_status_t loom_scf_to_cfg_lower_for(
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
-  IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
   loom_value_id_t* join_args = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_remapped_block_args(
       state, join_block, loom_op_const_results(op), op->result_count,
       &join_args));
+  const loom_value_id_t* exit_values = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_materialize_integer_facts(
+      state, join_block, op->parent_op, loom_op_const_results(op), join_args,
+      op->result_count, UINT16_MAX, NULL, 0, op->location, &exit_values));
+  IREE_RETURN_IF_ERROR(
+      loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
   loom_value_id_t header_iv = LOOM_VALUE_ID_INVALID;
   loom_value_id_t* header_iter_args = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_for_header_args(
-      state, op, header_block, body_source_block, reserve_iv_name_for_assume,
-      &header_iv, &header_iter_args));
+      state, op, header_block, body_source_block, &header_iv,
+      &header_iter_args));
 
-  loom_value_id_t body_iv = header_iv;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_for_iv_assume(
-      state, op, body_block, header_iv, original_iv_facts, original_iv_name_id,
-      &body_iv));
+  const uint16_t body_value_count = body_source_block->arg_count;
+  loom_value_id_t* body_inputs = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(state->lowering_arena, body_value_count,
+                                sizeof(*body_inputs), (void**)&body_inputs));
+  body_inputs[0] = header_iv;
+  for (uint16_t i = 0; i < iter_args.count; ++i) {
+    body_inputs[i + 1] = header_iter_args[i];
+  }
+  loom_predicate_t iv_bound_predicates[2];
+  const uint16_t iv_bound_predicate_count =
+      loom_scf_to_cfg_for_iv_bound_predicates(
+          state->fact_table, header_iv, loom_scf_for_lower_bound(op),
+          loom_scf_for_upper_bound(op), iv_bound_predicates);
+  const loom_value_id_t* body_values = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_materialize_integer_facts(
+      state, body_block, op->parent_op, body_source_block->arg_ids, body_inputs,
+      body_value_count, 0, iv_bound_predicates, iv_bound_predicate_count,
+      op->location, &body_values));
+  const loom_value_id_t body_iv = body_values[0];
 
   loom_ir_remap_t body_remap = {0};
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_initialize_remap(state, &body_remap));
-  IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
-      &body_remap, body_source_block->arg_ids[0], body_iv));
-  for (uint16_t i = 0; i < iter_args.count; ++i) {
+  for (uint16_t i = 0; i < body_value_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
-        &body_remap, body_source_block->arg_ids[i + 1], header_iter_args[i]));
+        &body_remap, body_source_block->arg_ids[i], body_values[i]));
   }
 
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_move_block_body_to_end(
@@ -936,7 +1102,7 @@ static iree_status_t loom_scf_to_cfg_lower_for(
       state, advance_block, op->parent_op, header_block, backedge_values,
       (uint16_t)(1 + iter_args.count), yield_op->location));
 
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, exit_values));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
   ++state->statistics->fors_lowered;
   *out_block_insertion = insertion;
@@ -984,24 +1150,33 @@ static iree_status_t loom_scf_to_cfg_lower_while(
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
-  IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
   loom_value_id_t* join_args = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_remapped_block_args(
       state, join_block, loom_op_const_results(op), op->result_count,
       &join_args));
+  const loom_value_id_t* exit_values = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_materialize_integer_facts(
+      state, join_block, op->parent_op, loom_op_const_results(op), join_args,
+      op->result_count, UINT16_MAX, NULL, 0, op->location, &exit_values));
+  IREE_RETURN_IF_ERROR(
+      loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
   loom_value_id_t* before_args = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_remapped_block_args(
       state, before_block, before_source_block->arg_ids, iter_args.count,
       &before_args));
+  const loom_value_id_t* before_values = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_materialize_integer_facts(
+      state, before_block, op->parent_op, before_source_block->arg_ids,
+      before_args, iter_args.count, UINT16_MAX, NULL, 0, op->location,
+      &before_values));
 
   loom_ir_remap_t before_remap = {0};
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_initialize_remap(state, &before_remap));
   for (uint16_t i = 0; i < iter_args.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
-        &before_remap, before_source_block->arg_ids[i], before_args[i]));
+        &before_remap, before_source_block->arg_ids[i], before_values[i]));
   }
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_move_block_body_to_end(
       state, before_source_block, condition_op, before_block, op->parent_op,
@@ -1022,9 +1197,14 @@ static iree_status_t loom_scf_to_cfg_lower_while(
 
   loom_ir_remap_t after_remap = {0};
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_initialize_remap(state, &after_remap));
+  const loom_value_id_t* after_values = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_materialize_integer_facts(
+      state, after_block, op->parent_op, after_source_block->arg_ids,
+      forwarded_values, forwarded.count, UINT16_MAX, NULL, 0, op->location,
+      &after_values));
   for (uint16_t i = 0; i < forwarded.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
-        &after_remap, after_source_block->arg_ids[i], forwarded_values[i]));
+        &after_remap, after_source_block->arg_ids[i], after_values[i]));
   }
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_move_block_body_to_end(
       state, after_source_block, yield_op, after_block, op->parent_op,
@@ -1055,7 +1235,7 @@ static iree_status_t loom_scf_to_cfg_lower_while(
       state, after_block, op->parent_op, before_block, yielded_values,
       yield_op->operand_count, yield_op->location));
 
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, exit_values));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
   ++state->statistics->whiles_lowered;
   *out_block_insertion = insertion;

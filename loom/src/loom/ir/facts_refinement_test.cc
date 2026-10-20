@@ -363,6 +363,9 @@ TEST(FactsApplyPredicate, PowerOfTwo) {
   loom_predicate_t pred = make_predicate_power_of_two();
   loom_value_facts_apply_predicate(&f, &pred);
   EXPECT_TRUE(loom_value_facts_is_power_of_two(f));
+  EXPECT_TRUE(loom_value_facts_is_positive(f));
+  EXPECT_TRUE(loom_value_facts_is_non_zero(f));
+  EXPECT_EQ(f.range_lo, 1);
 }
 
 TEST(FactsApplyPredicate, NotNan) {

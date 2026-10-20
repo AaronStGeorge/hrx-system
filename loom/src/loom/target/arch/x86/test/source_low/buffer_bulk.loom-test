@@ -189,28 +189,28 @@ func.def target(@target) @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffe
 
 // ----
 low.func.def target<x86.scalar.core>(@target) abi(object_function) @compare(%lhs: reg<x86.gpr64>, %lhs_offset: reg<x86.gpr64>, %rhs: reg<x86.gpr64>, %rhs_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) -> (reg<x86.gpr32>) asm {
-  %42 = mov.imm64 0
-  %43 = mov.imm32 0
-  %44 = mov.imm32 -1
-  %45 = mov.imm32 1
-  low.br ^_bb1(%42: reg<x86.gpr64>, %43: reg<x86.gpr32>)
-^_bb1(%40: reg<x86.gpr64>, %41: reg<x86.gpr32>):
-  %46 = cmp.gpr64 %40, %byte_length, "ult"
-  %47 = cmp.imm.gpr32 %41, 0, "eq"
-  %48 = copy %46 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %49 = and.gpr32 %48, %47
-  low.cond_br %49, ^_bb2, ^_bb3 : reg<x86.gpr32>
+  %46 = mov.imm64 0
+  %47 = mov.imm32 0
+  %48 = mov.imm32 -1
+  %49 = mov.imm32 1
+  low.br ^_bb1(%46: reg<x86.gpr64>, %47: reg<x86.gpr32>)
+^_bb1(%44: reg<x86.gpr64>, %45: reg<x86.gpr32>):
+  %50 = cmp.gpr64 %44, %byte_length, "ult"
+  %51 = cmp.imm.gpr32 %45, 0, "eq"
+  %52 = copy %50 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %53 = and.gpr32 %52, %51
+  low.cond_br %53, ^_bb2, ^_bb3 : reg<x86.gpr32>
 ^_bb2:
-  %50 = lea %lhs_offset, %40
-  %51 = movzx.load.indexed.u8.gpr32 %lhs, %50 {disp32 = 0, scale = 1}
-  %52 = lea %rhs_offset, %40
-  %53 = movzx.load.indexed.u8.gpr32 %rhs, %52 {disp32 = 0, scale = 1}
-  %54 = copy %45 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %55 = cmp.select.gpr32.gpr32 %51, %53, %44, %54, "ult"
-  %56 = copy %55 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %57 = cmp.select.gpr32.gpr32 %51, %53, %43, %56, "eq"
-  %58 = lea.disp %40 {disp32 = 1}
-  low.br ^_bb1(%58: reg<x86.gpr64>, %57: reg<x86.gpr32>)
+  %54 = lea %lhs_offset, %44
+  %55 = movzx.load.indexed.u8.gpr32 %lhs, %54 {disp32 = 0, scale = 1}
+  %56 = lea %rhs_offset, %44
+  %57 = movzx.load.indexed.u8.gpr32 %rhs, %56 {disp32 = 0, scale = 1}
+  %58 = copy %49 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %59 = cmp.select.gpr32.gpr32 %55, %57, %48, %58, "ult"
+  %60 = copy %59 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %61 = cmp.select.gpr32.gpr32 %55, %57, %47, %60, "eq"
+  %62 = lea.disp %44 {disp32 = 1}
+  low.br ^_bb1(%62: reg<x86.gpr64>, %61: reg<x86.gpr32>)
 ^_bb3:
-  return %41
+  return %45
 }

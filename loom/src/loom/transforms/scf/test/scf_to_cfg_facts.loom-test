@@ -205,11 +205,11 @@ CHECK-NOT: *scf.*
 
 // ====
 
-// RUN: pass unroll-scf-for,scf-to-cfg,canonicalize,dce
+// RUN: with-checks pass unroll-scf-for,scf-to-cfg,canonicalize,dce
 
 // Pair unrolling makes each backedge a two-add chain. Lowering preserves the
-// original byte-stream bounds without carrying structured-loop analysis state
-// in the IR; CFG header envelopes include the final yielded offsets.
+// distinct body and exit observations proven by the structured loop: body
+// ranges exclude the terminal update, and exact-count exits remain exact.
 test.target<low_core> @narrow {index_bitwidth = 32, offset_bitwidth = 32}
 
 func.def target(@narrow) @paired_byte_stream_facts_survive_lowering() {
@@ -241,49 +241,184 @@ func.def target(@narrow) @paired_byte_stream_facts_survive_lowering() {
 }
 
 // ----
-test.target<low_core> @narrow {index_bitwidth = 32, offset_bitwidth = 32}
+CHECK: func.def target(@narrow) @paired_byte_stream_facts_survive_lowering*
+CHECK: * = index.assume *[range(*, 0, 6), multiple_of(*, 2), range(*, 0, 768), multiple_of(*, 256), range(*, 0, 1536), multiple_of(*, 512)] : index, offset, offset
+CHECK: %a_hi = scalar.constant 768 : i64
+CHECK: %a_divisor = scalar.constant 256 : i64
+CHECK: %b_hi = scalar.constant 1536 : i64
+CHECK: %b_divisor = scalar.constant 512 : i64
+CHECK: %a_hi_1 = scalar.constant 896 : i64
+CHECK: %a_divisor_1 = scalar.constant 128 : i64
+CHECK: %b_hi_1 = scalar.constant 1792 : i64
+CHECK: %b_divisor_1 = scalar.constant 256 : i64
+CHECK: %a_end_lo = scalar.constant 1024 : i64
+CHECK: %a_end_hi = scalar.constant 1024 : i64
+CHECK: %b_end_lo = scalar.constant 2048 : i64
+CHECK: %b_end_hi = scalar.constant 2048 : i64
+CHECK-NOT: *test.fact_*
+CHECK-NOT: *scf.*
 
-func.def target(@narrow) @paired_byte_stream_facts_survive_lowering() {
+// ====
+
+// RUN: with-checks pass scf-to-cfg
+
+// Every fixed-width integer carrier uses one shared scalar fact identity.
+// Floating-point and reference state remain outside the integer fact family.
+func.def @for_integer_carrier_family(%floating_seed: f32, %view_seed: view<1xi32>) {
   %begin = index.constant 0 : index
-  %end = index.constant 8 : index
-  %origin = index.constant 0 : offset
-  %24 = index.constant 2 : index
-  cfg.br ^_bb1(%begin: index, %origin: offset, %origin: offset)
-^_bb1(%48: index, %a: offset, %b: offset):
-  %52 = index.cmp slt, %48, %end : index
-  cfg.cond_br %52, ^_bb2, ^_bb3
-^_bb2:
-  %tile = index.assume %48 [range(%48, 0, 6), multiple_of(%48, 2)] : index
-  %a_lo = scalar.constant 0 : i64
-  %a_hi = scalar.constant 1024 : i64
-  %a_divisor = scalar.constant 256 : i64
-  %b_lo = scalar.constant 0 : i64
-  %b_hi = scalar.constant 2048 : i64
-  %b_divisor = scalar.constant 512 : i64
-  test.use %a_lo, %a_hi, %a_divisor, %b_lo, %b_hi, %b_divisor : i64, i64, i64, i64, i64, i64
-  %a_lo_1 = scalar.constant 128 : i64
-  %a_hi_1 = scalar.constant 1152 : i64
-  %a_divisor_1 = scalar.constant 128 : i64
-  %b_lo_1 = scalar.constant 256 : i64
-  %b_hi_1 = scalar.constant 2304 : i64
-  %b_divisor_1 = scalar.constant 256 : i64
-  test.use %a_lo_1, %a_hi_1, %a_divisor_1, %b_lo_1, %b_hi_1, %b_divisor_1 : i64, i64, i64, i64, i64, i64
-  %60 = index.constant 256 : offset
-  %a_next_1 = index.add %a, %60 : offset
-  %58 = index.constant 512 : offset
-  %b_next_1 = index.add %b, %58 : offset
-  %53 = index.add %tile, %24 : index
-  cfg.br ^_bb1(%53: index, %a_next_1: offset, %b_next_1: offset)
-^_bb3:
-  cfg.br ^_bb4(%a: offset, %b: offset)
-^_bb4(%a_end: offset, %b_end: offset):
-  %a_end_lo = scalar.constant 0 : i64
-  %a_end_hi = scalar.constant 1024 : i64
-  %b_end_lo = scalar.constant 0 : i64
-  %b_end_hi = scalar.constant 2048 : i64
-  test.use %a_end_lo, %a_end_hi, %b_end_lo, %b_end_hi : i64, i64, i64, i64
+  %end = index.constant 2 : index
+  %step = index.constant 1 : index
+  %flag_seed = scalar.constant true : i1
+  %byte_seed = scalar.constant 2 : i8
+  %half_seed = scalar.constant 4 : i16
+  %word_seed = scalar.constant 8 : i32
+  %wide_seed = scalar.constant 16 : i64
+  %flag_end, %byte_end, %half_end, %word_end, %wide_end, %floating_end, %view_end = scf.for %position = [%begin to %end step %step](%flag = %flag_seed : i1, %byte = %byte_seed : i8, %half = %half_seed : i16, %word = %word_seed : i32, %wide = %wide_seed : i64, %floating = %floating_seed : f32, %view = %view_seed : view<1xi32>) -> (i1, i8, i16, i32, i64, f32, view<1xi32>) {
+    test.use %position, %flag, %byte, %half, %word, %wide, %floating, %view : index, i1, i8, i16, i32, i64, f32, view<1xi32>
+    scf.yield %flag, %byte, %half, %word, %wide, %floating, %view : i1, i8, i16, i32, i64, f32, view<1xi32>
+  }
+  test.use %flag_end, %byte_end, %half_end, %word_end, %wide_end, %floating_end, %view_end : i1, i8, i16, i32, i64, f32, view<1xi32>
   func.return
 }
+
+// ----
+CHECK: func.def @for_integer_carrier_family*
+CHECK: * = scalar.assume * : i1, i8, i16, i32, i64
+CHECK-NOT: *scalar.assume* : f32*
+CHECK-NOT: *scf.*
+
+// ====
+
+// RUN: with-checks pass scf-to-cfg,canonicalize,dce
+
+// Floating-point format/class and view-reference facts are reconstructed from
+// CFG value semantics without integer assumption predicates.
+func.def @noninteger_facts_survive_lowering(%count: index, %input: i8) {
+  %begin = index.constant 0 : index
+  %bounded_count = index.assume %count [range(%count, 1, 4)] : index
+  %step = index.constant 1 : index
+  %base = index.constant 0 : offset
+  %second = index.constant 128 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca<workgroup> align(64) %bytes : buffer
+  %first = buffer.view %scratch[%base] : buffer -> view<32xi32>
+  %next = buffer.view %scratch[%second] : buffer -> view<32xi32>
+  %initial = scalar.sitofp %input : i8 to f32
+  %final_float, %last, %spare = scf.for %record = [%begin to %bounded_count step %step](%carried = %initial : f32, %current = %first : view<32xi32>, %following = %next : view<32xi32>) -> (f32, view<32xi32>, view<32xi32>) {
+    %body_types = test.fact_exact_float_types %carried : f32 -> i64
+    %body_not_subnormal = test.fact_not_subnormal %carried : f32 -> i1
+    %body_space = test.fact_view_memory_space %current : view<32xi32> -> i64
+    %body_length = test.fact_view_byte_length_hi %current : view<32xi32> -> i64
+    test.use %body_types, %body_not_subnormal, %body_space, %body_length : i64, i1, i64, i64
+    %next_float = scalar.negf %carried : f32
+    scf.yield %next_float, %following, %current : f32, view<32xi32>, view<32xi32>
+  }
+  %final_types = test.fact_exact_float_types %final_float : f32 -> i64
+  %final_not_subnormal = test.fact_not_subnormal %final_float : f32 -> i1
+  %final_space = test.fact_view_memory_space %last : view<32xi32> -> i64
+  %final_length = test.fact_view_byte_length_hi %last : view<32xi32> -> i64
+  test.use %final_types, %final_not_subnormal, %final_space, %final_length, %spare : i64, i1, i64, i64, view<32xi32>
+  func.return
+}
+
+// ----
+CHECK: func.def @noninteger_facts_survive_lowering*
+CHECK: %body_types = scalar.constant 15360 : i64
+CHECK: %body_not_subnormal = scalar.constant true : i1
+CHECK: %body_space = scalar.constant 2 : i64
+CHECK: %body_length = scalar.constant 128 : i64
+CHECK: %final_types = scalar.constant 15360 : i64
+CHECK: %final_not_subnormal = scalar.constant true : i1
+CHECK: %final_space = scalar.constant 2 : i64
+CHECK: %final_length = scalar.constant 128 : i64
+CHECK-NOT: *test.fact_*
+CHECK-NOT: *scf.*
+
+// ====
+
+// RUN: with-checks pass scf-to-cfg,canonicalize,dce
+
+// CFG joins recover execution-scope facts on lowered loop arguments.
+target.generic<reference> @device {abi = hal_kernel, subgroup_size = 64}
+
+kernel.def target(@device) @distribution_facts_survive_lowering() {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %size = index.constant 128 : index
+  kernel.launch.config workgroups(%c4, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
+} launch(%variant: index) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %selector = kernel.subgroup.lane.id : index
+  %injected = index.add %selector, %step : index
+  %result = scf.for %iteration = [%begin to %selector step %step](%carried = %begin : index) -> (index) {
+    %body_uniform = test.fact_subgroup_uniform %carried : index -> i1
+    %body_varying = test.fact_lane_varying %carried : index -> i1
+    test.use %body_uniform, %body_varying : i1, i1
+    scf.yield %injected : index
+  }
+  %result_uniform = test.fact_subgroup_uniform %result : index -> i1
+  %result_varying = test.fact_lane_varying %result : index -> i1
+  test.use %result_uniform, %result_varying : i1, i1
+  kernel.return
+}
+
+// ----
+CHECK: kernel.def target(@device) @distribution_facts_survive_lowering*
+CHECK: %body_uniform = scalar.constant false : i1
+CHECK: %body_varying = scalar.constant true : i1
+CHECK: %result_uniform = scalar.constant false : i1
+CHECK: %result_varying = scalar.constant true : i1
+CHECK-NOT: *test.fact_*
+CHECK-NOT: *scf.*
+
+// ====
+
+// RUN: with-checks pass scf-to-cfg,canonicalize,dce
+
+// scf.while transports independently proven body and exit observations across
+// reordered address and scalar state.
+func.def @while_body_and_exit_facts_survive_lowering() {
+  %begin = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  %origin = index.constant 0 : offset
+  %half_tile_bytes = index.constant 64 : offset
+  %descending_seed = scalar.constant 48 : i32
+  %descending_step = scalar.constant 8 : i32
+  %descending_end, %cursor_end, %iteration_end = scf.while(%header_cursor = %origin : offset, %header_iteration = %begin : index, %header_descending = %descending_seed : i32) -> (i32, offset, index) {
+    %more = index.cmp slt, %header_iteration, %end : index
+    scf.condition %more, %header_descending, %header_cursor, %header_iteration : i1, i32, offset, index
+  } do(%descending: i32, %cursor: offset, %iteration: index) {
+    %cursor_hi = test.fact_range_hi %cursor : offset -> i64
+    %cursor_divisor = test.fact_divisor %cursor : offset -> i64
+    %descending_lo = test.fact_range_lo %descending : i32 -> i64
+    test.use %cursor_hi, %cursor_divisor, %descending_lo : i64, i64, i64
+    %cursor_middle = index.add %cursor, %half_tile_bytes : offset
+    %cursor_next = index.add %cursor_middle, %half_tile_bytes : offset
+    %iteration_next = index.add %iteration, %step : index
+    %descending_next = scalar.subi %descending, %descending_step : i32
+    scf.yield %cursor_next, %iteration_next, %descending_next : offset, index, i32
+  }
+  %cursor_end_lo = test.fact_range_lo %cursor_end : offset -> i64
+  %cursor_end_hi = test.fact_range_hi %cursor_end : offset -> i64
+  %descending_end_lo = test.fact_range_lo %descending_end : i32 -> i64
+  %descending_end_hi = test.fact_range_hi %descending_end : i32 -> i64
+  test.use %cursor_end_lo, %cursor_end_hi, %descending_end_lo, %descending_end_hi, %iteration_end : i64, i64, i64, i64, index
+  func.return
+}
+
+// ----
+CHECK: func.def @while_body_and_exit_facts_survive_lowering*
+CHECK: %cursor_hi = scalar.constant 384 : i64
+CHECK: %cursor_divisor = scalar.constant 128 : i64
+CHECK: %descending_lo = scalar.constant 24 : i64
+CHECK: %cursor_end_lo = scalar.constant 512 : i64
+CHECK: %cursor_end_hi = scalar.constant 512 : i64
+CHECK: %descending_end_lo = scalar.constant 16 : i64
+CHECK: %descending_end_hi = scalar.constant 16 : i64
+CHECK-NOT: *test.fact_*
+CHECK-NOT: *scf.*
 
 // ====
 

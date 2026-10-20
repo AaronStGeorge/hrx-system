@@ -162,7 +162,7 @@ func.def @lowered_counted_position(%output: buffer) {
 // ----
 CHECK: func.def @lowered_counted_position*
 CHECK: cfg.cond_br %more, *
-CHECK: view.store %value, %output_view[%before] : i32, view<4xi32>
+CHECK: view.store %value, %output_view[%position] : i32, view<4xi32>
 CHECK-NOT: scf.while *
 
 // ====

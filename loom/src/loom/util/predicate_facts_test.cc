@@ -35,7 +35,7 @@ class PredicateFactsTest : public ::testing::Test {
 
 TEST(PredicateFactsExportTest, ExportsRangeAndDivisibility) {
   constexpr loom_value_id_t kValue = 7;
-  loom_predicate_t predicates[2] = {};
+  loom_predicate_t predicates[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY] = {};
   const uint16_t count = loom_value_facts_export_integer_refinements(
       kValue, loom_value_facts_unknown(), loom_value_facts_make(-12, 24, 4),
       predicates, IREE_ARRAYSIZE(predicates));
@@ -48,6 +48,50 @@ TEST(PredicateFactsExportTest, ExportsRangeAndDivisibility) {
   EXPECT_EQ(predicates[1].kind, LOOM_PREDICATE_MULTIPLE_OF);
   EXPECT_EQ(predicates[1].args[0], kValue);
   EXPECT_EQ(predicates[1].args[1], 4);
+}
+
+TEST(PredicateFactsExportTest, ExportsPredicateOnlyIntegerFacts) {
+  constexpr loom_value_id_t kValue = 11;
+  loom_value_facts_t proven = loom_value_facts_make(0, 1024, 8);
+  proven.flags |= LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_NON_ZERO;
+  loom_predicate_t predicates[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY] = {};
+  uint16_t count = loom_value_facts_export_integer_refinements(
+      kValue, loom_value_facts_unknown(), proven, predicates,
+      IREE_ARRAYSIZE(predicates));
+
+  ASSERT_EQ(count, 3);
+  EXPECT_EQ(predicates[0].kind, LOOM_PREDICATE_RANGE);
+  EXPECT_EQ(predicates[1].kind, LOOM_PREDICATE_MULTIPLE_OF);
+  EXPECT_EQ(predicates[2].kind, LOOM_PREDICATE_POWER_OF_TWO);
+  EXPECT_EQ(predicates[2].args[0], kValue);
+
+  proven.flags &= ~LOOM_VALUE_FACT_POWER_OF_TWO;
+  count = loom_value_facts_export_integer_refinements(
+      kValue, loom_value_facts_make(0, 1024, 8), proven, predicates,
+      IREE_ARRAYSIZE(predicates));
+  ASSERT_EQ(count, 1);
+  EXPECT_EQ(predicates[0].kind, LOOM_PREDICATE_NE);
+  EXPECT_EQ(predicates[0].args[0], kValue);
+  EXPECT_EQ(predicates[0].args[1], 0);
+}
+
+TEST(PredicateFactsExportTest, OmitsFactsImpliedByExactOrRange) {
+  constexpr loom_value_id_t kValue = 13;
+  loom_predicate_t predicates[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY] = {};
+  loom_value_facts_t exact = loom_value_facts_exact_i64(16);
+  EXPECT_EQ(loom_value_facts_export_integer_refinements(
+                kValue, loom_value_facts_unknown(), exact, predicates,
+                IREE_ARRAYSIZE(predicates)),
+            1);
+  EXPECT_EQ(predicates[0].kind, LOOM_PREDICATE_EQ);
+
+  loom_value_facts_t positive = loom_value_facts_make(1, 64, 1);
+  positive.flags |= LOOM_VALUE_FACT_NON_ZERO;
+  EXPECT_EQ(loom_value_facts_export_integer_refinements(
+                kValue, loom_value_facts_unknown(), positive, predicates,
+                IREE_ARRAYSIZE(predicates)),
+            1);
+  EXPECT_EQ(predicates[0].kind, LOOM_PREDICATE_RANGE);
 }
 
 TEST(PredicateFactsExportTest, ExactAndUnknownStayMinimal) {
