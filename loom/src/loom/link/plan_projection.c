@@ -8,8 +8,6 @@
 
 #include <stdlib.h>
 
-#include "iree/base/assert.h"
-
 static int loom_link_plan_projection_compare_symbols(const void* lhs_ptr,
                                                      const void* rhs_ptr) {
   const loom_link_plan_module_symbol_t* lhs =

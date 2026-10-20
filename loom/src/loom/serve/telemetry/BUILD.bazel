@@ -13,6 +13,28 @@ package(
 )
 
 loom_cc_library(
+    name = "tracing",
+    srcs = ["tracing.c"],
+    hdrs = ["tracing.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_test(
+    name = "tracing_test",
+    srcs = ["tracing_test.cc"],
+    target_compatible_with = select({
+        "//runtime/config/base/tracing:provider_console": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":tracing",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "record",
     srcs = ["record.c"],
     hdrs = ["record.h"],

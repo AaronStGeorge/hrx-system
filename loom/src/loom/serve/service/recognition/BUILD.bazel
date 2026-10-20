@@ -174,6 +174,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/host:wake",
         "//loom/src/loom/serve/runtime/parameter:residency",
         "//loom/src/loom/serve/telemetry:record",
+        "//loom/src/loom/serve/telemetry:tracing",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",

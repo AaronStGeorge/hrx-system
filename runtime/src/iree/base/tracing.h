@@ -134,6 +134,11 @@
 // Tracing implementation
 //===----------------------------------------------------------------------===//
 
+// Process-wide identity for an independently overlapping elapsed-time section.
+// Zero denotes an inactive section. Unlike zones, sections have no thread
+// stack.
+typedef uint32_t iree_section_id_t;
+
 // Include the actual tracing implementation used when a tracing mode is set.
 // This will either come from build options like IREE_TRACING_PROVIDER or can
 // be overridden during compilation with
@@ -295,6 +300,32 @@ enum {
 #define IREE_TRACE_FRAME_MARK_BEGIN_NAMED(name_literal)
 // Ends a discontinuous frame in a named frame group.
 #define IREE_TRACE_FRAME_MARK_END_NAMED(name_literal)
+
+// Enters a coarse elapsed-time section and returns its ID. Sections may overlap
+// without nesting and may leave on another thread after application-established
+// synchronization. Each nonzero ID is left exactly once. Sections describe wall
+// time, including waits, rather than CPU execution or measured device time.
+// Category IDs are application-assigned uint16_t values; zero is uncategorized.
+#define IREE_TRACE_SECTION_ENTER(category, name_literal) ((iree_section_id_t)0)
+// The name is copied/consumed during entry and need not be NUL-terminated.
+// Names are shorter than 65535 bytes. Arguments are not evaluated without
+// tracing.
+#define IREE_TRACE_SECTION_ENTER_DYNAMIC(category, name, name_length) \
+  ((iree_section_id_t)0)
+// Enters with the display label "name_literal:tag". The tag is copied during
+// entry without requiring the caller to allocate a concatenated label. The
+// combined label has the same length bound as a dynamic name.
+#define IREE_TRACE_SECTION_ENTER_TAGGED(category, name_literal, tag, \
+                                        tag_length)                  \
+  ((iree_section_id_t)0)
+// Leaves the identified section, independently of other sections. Zero is a
+// no-op; leaving does not reset the caller's stored ID.
+#define IREE_TRACE_SECTION_LEAVE(section_id)
+// Describes an application's category for display and filtering. Categories
+// share a process-wide namespace and retain the last supplied label.
+#define IREE_TRACE_SECTION_SETUP(category, name_literal)
+// The category label has the same lifetime and length rules as section names.
+#define IREE_TRACE_SECTION_SETUP_DYNAMIC(category, name, name_length)
 
 // Logs a message at the given logging level to the trace.
 // The message text must be a compile-time string literal.

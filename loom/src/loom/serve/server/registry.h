@@ -199,6 +199,13 @@ typedef struct loom_serve_registered_model_t {
   uint64_t incarnation;
   // Wall-clock Unix seconds at registration, fixed until deployment retirement.
   int64_t registered_unix_seconds;
+  // Elapsed operations follow the serialized owner across worker handoffs.
+  IREE_TRACE(struct {
+    // Preparation or retirement, ending at its terminal result.
+    iree_section_id_t lifecycle;
+    // Explicit warmup or deactivation, including admission and readiness waits.
+    iree_section_id_t parameters;
+  } trace;)
 } loom_serve_registered_model_t;
 
 typedef struct loom_serve_registry_t loom_serve_registry_t;

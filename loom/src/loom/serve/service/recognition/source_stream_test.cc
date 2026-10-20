@@ -154,6 +154,7 @@ class SourceRecognitionStreamTest : public ::testing::Test {
     };
     observed.weight_activity = nullptr;
     const loom_serve_recognition_stream_service_options_t service_options = {
+        .name = IREE_SV("recognition"),
         .request_limit = 1024,
         .document_limit = 4096,
     };

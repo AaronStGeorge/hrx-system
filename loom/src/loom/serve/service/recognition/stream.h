@@ -36,6 +36,8 @@ typedef struct loom_serve_recognition_completion_t {
 } loom_serve_recognition_completion_t;
 
 typedef struct loom_serve_recognition_stream_service_options_t {
+  // Optional deployment identity, borrowed through service destruction.
+  iree_string_view_t name;
   // Maximum copied language and prompt bytes per request.
   iree_host_size_t request_limit;
   // Maximum retained transcript bytes per request, including metadata/index.

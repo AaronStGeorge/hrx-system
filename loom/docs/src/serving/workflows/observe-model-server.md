@@ -366,6 +366,32 @@ not a second live connection for the graphical profiler.
 
 ### Read the serving timeline
 
+The **Sections** view shows independently overlapping ranges with the
+deployment name in each label, such as `model-prepare:scout` and
+`model-execute:researcher`:
+
+- `model-prepare` spans source preparation, compilation, tokenizer creation,
+  and publication of the prepared service.
+- `model-warmup` spans an explicit activation request, including preparation
+  when needed, capacity waiting, and parameter readiness.
+- `model-deactivate` spans an explicit deactivation request through completion,
+  cancellation, or failure, including any wait for admitted work to retire.
+- `model-retire` spans resource retirement after service borrowers finish.
+  A failed release ends its range; an explicit retry starts another.
+- `model-execute` spans one accepted text epoch, finite batch, image stage,
+  speech batch, or recognition batch through observed device completion and
+  feedback readiness.
+  CPU input preparation, output encoding, and client backpressure are outside
+  this range.
+
+These ranges overlap independently across models and may cross worker threads.
+They measure elapsed operation time, including queue waits and completion
+delivery, not CPU utilization or timestamped device execution.
+`model-warmup` describes `/v1/models/activate`; inference-triggered loading is
+visible in the parameter and I/O zones rather than a synthetic warmup range.
+Select a section to focus analysis on that part of the capture, then inspect
+the ordinary zones inside it for the actual work and waits.
+
 Serving zones distinguish scheduler turns, source compilation, input preparation,
 output processing, queue submission, and completion handling. Image output has
 separate PNG and JSON encoding zones. Model turns carry the deployment name and

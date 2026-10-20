@@ -119,6 +119,13 @@ IREE_MUST_USE_RESULT iree_zone_id_t iree_tracing_zone_begin_external_impl(
     size_t name_length);
 void iree_tracing_zone_end(iree_zone_id_t zone_id);
 
+IREE_MUST_USE_RESULT iree_section_id_t iree_tracing_section_enter(
+    uint16_t category, const char* prefix, size_t prefix_length,
+    const char* name, size_t name_length);
+void iree_tracing_section_leave(iree_section_id_t section_id);
+void iree_tracing_section_setup(uint16_t category, const char* name,
+                                size_t name_length);
+
 void iree_tracing_set_plot_type_impl(const char* name_literal,
                                      uint8_t plot_type, bool step, bool fill,
                                      uint32_t color);
@@ -242,6 +249,22 @@ void* iree_tracing_obscure_ptr(void* ptr);
   ___tracy_emit_frame_mark_start(name_literal)
 #define IREE_TRACE_FRAME_MARK_END_NAMED(name_literal) \
   ___tracy_emit_frame_mark_end(name_literal)
+
+#define IREE_TRACE_SECTION_ENTER(category, name_literal)      \
+  iree_tracing_section_enter(category, NULL, 0, name_literal, \
+                             sizeof(name_literal) - 1)
+#define IREE_TRACE_SECTION_ENTER_DYNAMIC(category, name, name_length) \
+  iree_tracing_section_enter(category, NULL, 0, name, name_length)
+#define IREE_TRACE_SECTION_ENTER_TAGGED(category, name_literal, tag,           \
+                                        tag_length)                            \
+  iree_tracing_section_enter(category, name_literal ":", sizeof(name_literal), \
+                             tag, tag_length)
+#define IREE_TRACE_SECTION_LEAVE(section_id) \
+  iree_tracing_section_leave(section_id)
+#define IREE_TRACE_SECTION_SETUP(category, name_literal) \
+  iree_tracing_section_setup(category, name_literal, sizeof(name_literal) - 1)
+#define IREE_TRACE_SECTION_SETUP_DYNAMIC(category, name, name_length) \
+  iree_tracing_section_setup(category, name, name_length)
 
 #define IREE_TRACING_TRACY_SEVERITY_ERROR TracyMessageSeverityError
 #define IREE_TRACING_TRACY_SEVERITY_WARNING TracyMessageSeverityWarning

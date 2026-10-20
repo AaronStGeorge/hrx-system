@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/alignment.h"
+#include "iree/base/internal/atomics.h"
 #include "iree/base/internal/time.h"
 #include "iree/base/tracing.h"
 
@@ -40,6 +41,51 @@
 #if IREE_TRACING_FEATURES
 
 void iree_tracing_console_flush(void) { fflush(IREE_TRACING_CONSOLE_FILE); }
+
+// Independent sections share IDs across threads without retaining live records.
+static iree_atomic_int32_t iree_tracing_next_section_id =
+    IREE_ATOMIC_VAR_INIT(1);
+
+iree_section_id_t iree_tracing_section_enter(uint16_t category,
+                                             const char* prefix,
+                                             size_t prefix_length,
+                                             const char* name,
+                                             size_t name_length) {
+  const uint64_t timestamp_ns = iree_platform_time_now();
+  const iree_section_id_t section_id = (iree_section_id_t)iree_atomic_fetch_add(
+      &iree_tracing_next_section_id, 1, iree_memory_order_relaxed);
+  fprintf(IREE_TRACING_CONSOLE_FILE,
+          "[%08" PRIX64 "] section %" PRIu32 " enter category=%u t=%" PRIu64
+          "ns %.*s%.*s\n",
+          iree_thread_id(), section_id, (unsigned)category, timestamp_ns,
+          (int)prefix_length, prefix_length ? prefix : "", (int)name_length,
+          name_length ? name : "");
+#if IREE_TRACING_CONSOLE_FLUSH
+  fflush(IREE_TRACING_CONSOLE_FILE);
+#endif  // IREE_TRACING_CONSOLE_FLUSH
+  return section_id;
+}
+
+void iree_tracing_section_leave(iree_section_id_t section_id) {
+  if (!section_id) {
+    return;
+  }
+  fprintf(IREE_TRACING_CONSOLE_FILE,
+          "[%08" PRIX64 "] section %" PRIu32 " leave t=%" PRIu64 "ns\n",
+          iree_thread_id(), section_id, (uint64_t)iree_platform_time_now());
+#if IREE_TRACING_CONSOLE_FLUSH
+  fflush(IREE_TRACING_CONSOLE_FILE);
+#endif  // IREE_TRACING_CONSOLE_FLUSH
+}
+
+void iree_tracing_section_setup(uint16_t category, const char* name,
+                                size_t name_length) {
+  fprintf(IREE_TRACING_CONSOLE_FILE, "section category=%u %.*s\n",
+          (unsigned)category, (int)name_length, name_length ? name : "");
+#if IREE_TRACING_CONSOLE_FLUSH
+  fflush(IREE_TRACING_CONSOLE_FILE);
+#endif  // IREE_TRACING_CONSOLE_FLUSH
+}
 
 #define IREE_TRACING_MAX_THREAD_LENGTH 16
 

@@ -85,6 +85,7 @@ loom_cc_library(
         "//loom/src/loom/serve/service:kind",
         "//loom/src/loom/serve/telemetry:latency",
         "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/telemetry:tracing",
         "//loom/src/loom/serve/transport/http:request",
         "//loom/src/loom/serve/transport/http:server",
         "//loom/src/loom/util:json",

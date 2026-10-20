@@ -17,6 +17,21 @@ iree_runtime_cc_library(
     name = "disabled",
 )
 
+iree_runtime_cc_test(
+    name = "disabled_test",
+    srcs = ["disabled_test.cc"],
+    target_compatible_with = select({
+        "//runtime/config/base/tracing:provider_console": ["@platforms//:incompatible"],
+        "//runtime/config/base/tracing:provider_tracy": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//runtime/src/iree/base:core_headers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 alias(
     name = "provider",
     actual = select({
@@ -40,6 +55,7 @@ iree_runtime_cc_library(
     ],
     deps = [
         "//runtime/src/iree/base:core_headers",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:time",
     ],
 )

@@ -21,7 +21,7 @@ class CaptureTest : public ::testing::Test {
     iree_vm_buffer_release(plan_);
   }
 
-  iree_status_t CreatePlan(size_t length = sizeof(words_)) {
+  iree_status_t CreatePlan(size_t length) {
     iree_vm_buffer_release(std::exchange(plan_, nullptr));
     IREE_RETURN_IF_ERROR(
         iree_vm_buffer_create(length, 8, iree_allocator_system(), &plan_));
@@ -42,7 +42,7 @@ class CaptureTest : public ::testing::Test {
 };
 
 TEST_F(CaptureTest, SourceReusePreservesConcatenatedSpanMetadata) {
-  IREE_ASSERT_OK(CreatePlan());
+  IREE_ASSERT_OK(CreatePlan(sizeof(words_)));
   IREE_ASSERT_OK(loom_serve_text_capture_create(
       plan_, 2, 32, iree_allocator_system(), &capture_));
   iree_byte_span_t bytes;
@@ -72,7 +72,7 @@ TEST_F(CaptureTest, RejectsMalformedRangesBeforePublication) {
     SCOPED_TRACE(word);
     words_ = valid;
     words_[word] = value;
-    IREE_ASSERT_OK(CreatePlan());
+    IREE_ASSERT_OK(CreatePlan(sizeof(words_)));
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
         loom_serve_text_capture_create(plan_, 2, 32, iree_allocator_system(),
@@ -91,7 +91,7 @@ TEST_F(CaptureTest, RejectsMalformedRangesBeforePublication) {
 }
 
 TEST_F(CaptureTest, AllocationFailureDoesNotPublishMetadata) {
-  IREE_ASSERT_OK(CreatePlan());
+  IREE_ASSERT_OK(CreatePlan(sizeof(words_)));
   const iree_allocator_t failing_allocator = {
       nullptr, [](void* user_data, iree_allocator_command_t command,
                   const void* parameters, void** inout_pointer) {

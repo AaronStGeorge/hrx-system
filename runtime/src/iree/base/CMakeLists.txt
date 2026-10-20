@@ -11,6 +11,7 @@ iree_cc_library(
     core_headers
   HDRS
     "alignment.h"
+    "assert.h"
     "attributes.h"
     "config.h"
     "target_platform.h"
@@ -57,7 +58,6 @@ iree_cc_library(
   SRCS
     "allocator.c"
     "allocator.h"
-    "assert.h"
     "bitfield.c"
     "bitfield.h"
     "bitmap.c"

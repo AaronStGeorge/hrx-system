@@ -1018,6 +1018,7 @@ loom_cc_library(
         "//loom/src/loom/serve/service/finite:component",
         "//loom/src/loom/serve/telemetry:record",
         "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/telemetry:tracing",
         "//loom/src/loom/serve/transport/http:request",
         "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/async",

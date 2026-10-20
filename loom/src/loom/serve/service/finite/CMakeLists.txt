@@ -100,6 +100,7 @@ loom_cc_library(
     loom::serve::service::kind
     loom::serve::telemetry::latency
     loom::serve::telemetry::stream
+    loom::serve::telemetry::tracing
     loom::serve::transport::http::request
     loom::serve::transport::http::server
     loom::util::json

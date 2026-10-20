@@ -12,6 +12,7 @@
 #include "iree/async/operations/semaphore.h"
 #include "iree/base/internal/unicode.h"
 #include "iree/base/threading/mutex.h"
+#include "loom/serve/telemetry/tracing.h"
 
 typedef enum loom_serve_recognition_row_phase_e {
   RECOGNITION_ROW_QUEUED = 0,
@@ -95,7 +96,7 @@ struct loom_serve_recognition_stream_service_t {
   iree_allocator_t host_allocator;
   // Borrowed source model, owning all PCM that escapes CPU offers.
   loom_serve_recognition_generator_t generator;
-  // Copied per-request host retention bounds.
+  // Copied host retention bounds and borrowed deployment identity.
   loom_serve_recognition_stream_service_options_t options;
   // Shared finite-task executor; no service task blocks on device work.
   iree_task_executor_t* executor;
@@ -161,6 +162,8 @@ struct loom_serve_recognition_stream_service_t {
     loom_serve_execution_frontier_t frontier;
     // Toll-free semaphore interfaces borrowed from the frontier.
     iree_async_semaphore_t* semaphores[2];
+    // Accepted numerical batch through readiness; zero for admission/release.
+    IREE_TRACE(iree_section_id_t section;)
   } device;
 };
 
@@ -294,6 +297,12 @@ static iree_status_t loom_serve_recognition_wait(
   IREE_RETURN_IF_ERROR(
       iree_async_proactor_submit_one(service->proactor, &wait->base));
   service->phase = phase;
+  IREE_TRACE({
+    if (phase == RECOGNITION_PHASE_EXECUTING) {
+      service->device.section = loom_serve_trace_section_enter(
+          LOOM_SERVE_TRACE_SECTION_EXECUTE, service->options.name);
+    }
+  });
   return iree_ok_status();
 }
 
@@ -485,6 +494,8 @@ static iree_status_t loom_serve_recognition_collect(
   *progress = true;
   const loom_serve_recognition_phase_t phase = service->phase;
   service->phase = RECOGNITION_PHASE_IDLE;
+  IREE_TRACE_SECTION_LEAVE(service->device.section);
+  IREE_TRACE(service->device.section = 0);
   if (phase == RECOGNITION_PHASE_PREPARING &&
       iree_status_is_invalid_argument(cpu_status) &&
       iree_status_is_ok(status)) {

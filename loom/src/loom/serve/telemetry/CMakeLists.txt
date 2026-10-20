@@ -12,6 +12,36 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    tracing
+  HDRS
+    "tracing.h"
+  SRCS
+    "tracing.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM AND IREE_ENABLE_RUNTIME_TRACING AND IREE_TRACING_MODE GREATER 0 AND IREE_TRACING_PROVIDER STREQUAL "console")
+loom_cc_test(
+  NAME
+    tracing_test
+  SRCS
+    "tracing_test.cc"
+  DEPS
+    ::tracing
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     record
   HDRS
     "record.h"
