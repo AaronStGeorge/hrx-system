@@ -3,6 +3,8 @@
 // Licensed under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <memory>
+
 #include "iree/base/tooling/flags.h"
 #include "loom/serve/runtime/parameter/weights_test_base.h"
 
@@ -13,6 +15,112 @@ namespace loom_serve::testing {
 
 const char* WeightSourcePath() { return FLAG_weight_sources; }
 const char* WeightDeviceUri() { return FLAG_weight_device_uri; }
+
+namespace {
+
+struct WeightDeviceGroup {
+  // Immutable physical backing policy.
+  bool elastic;
+  // Requested slab bytes, zero for fixed backing.
+  uint64_t slab_size;
+  // Committed-byte budget, zero for fixed backing.
+  uint64_t memory_limit;
+  // Native allocator dependency outliving all resources allocated through it.
+  NativeAllocator allocator;
+  // Process-owned device group, shared across suites with matching options.
+  loom_serve_device_group_t* group = nullptr;
+  // Retained initialization result; a failed creation is never retried.
+  iree_status_t status = iree_ok_status();
+};
+
+class WeightDeviceEnvironment : public ::testing::Environment {
+ public:
+  iree_status_t Acquire(bool elastic, uint64_t slab_size, uint64_t memory_limit,
+                        loom_serve_device_group_t** out_group) {
+    *out_group = nullptr;
+    if (!elastic) {
+      slab_size = 0;
+      memory_limit = 0;
+    }
+    for (auto& entry : groups_) {
+      if (entry->elastic == elastic && entry->slab_size == slab_size &&
+          entry->memory_limit == memory_limit) {
+        if (iree_status_is_ok(entry->status)) {
+          *out_group = entry->group;
+        }
+        return iree_status_clone(entry->status);
+      }
+    }
+
+    auto& entry = groups_.emplace_back(std::make_unique<WeightDeviceGroup>());
+    entry->elastic = elastic;
+    entry->slab_size = slab_size;
+    entry->memory_limit = memory_limit;
+    auto& status = entry->status;
+    if (!host_) {
+      status = loom_serve_test_host_create(1, iree_allocator_system(), &host_);
+    }
+    if (iree_status_is_ok(status) && !driver_) {
+      status = loom_serve_test_driver_acquire(host_, &driver_);
+    }
+    if (iree_status_is_ok(status)) {
+      const loom_serve_device_options_t options = {
+          .driver = driver_,
+          .uri = WeightDeviceUri()[0]
+                     ? iree_make_cstring_view(WeightDeviceUri())
+                     : loom_serve_test_device()->device_uri,
+          .backing = elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
+                             : LOOM_SERVE_DEVICE_BACKING_FIXED,
+          .weight_slab_size = slab_size,
+          .state_slab_size = slab_size,
+          .memory_limit = memory_limit,
+      };
+      status = loom_serve_device_group_allocate(
+          host_, 1, &options, entry->allocator.allocator(), &entry->group);
+    }
+    if (iree_status_is_ok(status)) {
+      status =
+          entry->allocator.Observe(loom_serve_device_group_at(entry->group, 0));
+    }
+    if (iree_status_is_ok(status)) {
+      *out_group = entry->group;
+    }
+    return iree_status_clone(status);
+  }
+
+  void TearDown() override {
+    for (auto& entry : groups_) {
+      IREE_EXPECT_OK(loom_serve_device_group_free(entry->group));
+      entry->allocator.AwaitReleased();
+      iree_status_free(entry->status);
+    }
+    groups_.clear();
+    iree_hal_driver_release(driver_);
+    driver_ = nullptr;
+    loom_serve_host_release(host_);
+    host_ = nullptr;
+  }
+
+ private:
+  // Shared host services retained through every native device's final release.
+  loom_serve_host_t* host_ = nullptr;
+  // Retained driver supplying every immutable fixture configuration.
+  iree_hal_driver_t* driver_ = nullptr;
+  // Stable allocator storage for process-owned configurations.
+  std::vector<std::unique_ptr<WeightDeviceGroup>> groups_;
+};
+
+auto* const weight_device_environment = static_cast<WeightDeviceEnvironment*>(
+    ::testing::AddGlobalTestEnvironment(new WeightDeviceEnvironment));
+
+}  // namespace
+
+iree_status_t AcquireWeightDeviceGroup(bool elastic, uint64_t slab_size,
+                                       uint64_t memory_limit,
+                                       loom_serve_device_group_t** out_group) {
+  return weight_device_environment->Acquire(elastic, slab_size, memory_limit,
+                                            out_group);
+}
 
 TEST_P(WeightsTest, ConfiguredPreparersAndSharedRootsPrepareEachTensorOnce) {
   IREE_ASSERT_OK(Compile(0, "target"));
@@ -1432,7 +1540,9 @@ TEST_P(WeightsTest,
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
   const auto before = loom_serve_device_memory_statistics(device_owner_);
   EXPECT_EQ(before.retained.committed_bytes, GetParam() ? 2 * kSlabBytes : 0);
-  EXPECT_EQ(before.workspace.bytes_committed, kSlabBytes);
+  // The shared workspace keeps its registered slab geometry after a trim.
+  // Earlier streaming cases may have registered a larger geometry.
+  EXPECT_GE(before.workspace.bytes_committed, kSlabBytes);
   IREE_ASSERT_OK(
       loom_serve_device_trim(device_owner_, before.retained.committed_bytes));
   const auto idle = loom_serve_device_memory_statistics(device_owner_);
@@ -1451,7 +1561,7 @@ TEST_P(WeightsTest,
   IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, kSlabBytes - 1));
   DrainNativeReturns();
   const auto pinned = loom_serve_device_memory_statistics(device_owner_);
-  EXPECT_EQ(pinned.workspace.bytes_committed, kSlabBytes);
+  EXPECT_EQ(pinned.workspace.bytes_committed, before.workspace.bytes_committed);
   EXPECT_EQ(pinned.workspace.reservation_count, 1u);
   EXPECT_EQ(pinned.retained.committed_bytes, GetParam() ? kSlabBytes : 0);
   if (GetParam()) {
@@ -1477,7 +1587,7 @@ TEST_P(WeightsTest,
 
 class SmallRootWeightsTest : public WeightsTest {
  protected:
-  static void SetUpTestSuite() { AllocateDeviceGroups(2 * 1024 * 1024); }
+  uint64_t SlabSize() const override { return 2 * 1024 * 1024; }
 };
 
 TEST_P(SmallRootWeightsTest, SmallRootCommitsOnlyItsNativeExtent) {
@@ -1504,11 +1614,11 @@ INSTANTIATE_TEST_SUITE_P(Backing, SmallRootWeightsTest,
 
 INSTANTIATE_TEST_SUITE_P(Backing, WeightsTest, ::testing::Values(false, true));
 
-// This suite owns its device lifetime: a failed reclaimer remains terminal for
-// that pool and must not contaminate the ordinary shared-device cases above.
+// The failed reclaimer belongs to a private pool; native devices remain shared.
 class RejectedAdmissionWeightsTest : public WeightsTest {};
 
 TEST_P(RejectedAdmissionWeightsTest, PreflightFailureReleasesAllPins) {
+  ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
   IREE_ASSERT_OK(Compile(0, "raw"));
   const auto root = Root(0, 0);
   IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));

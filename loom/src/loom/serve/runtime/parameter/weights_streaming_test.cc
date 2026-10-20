@@ -9,7 +9,7 @@ namespace loom_serve::testing {
 
 class WindowedWeightsTest : public WeightsTest {
  protected:
-  static void SetUpTestSuite() { AllocateDeviceGroups(2 * 1024 * 1024); }
+  uint64_t SlabSize() const override { return 2 * 1024 * 1024; }
   void WriteWindowedCheckpoint(const std::string& path, int32_t offset = 0) {
     constexpr size_t kElements = 524296;
     const std::string header =
@@ -132,7 +132,7 @@ class CoarseWindowWeightsTest : public WindowedWeightsTest {
  protected:
   // Two populated 64 MiB read windows share one exact physical tail.
   static constexpr uint64_t kCoarseSlabBytes = 128 * 1024 * 1024;
-  static void SetUpTestSuite() { AllocateDeviceGroups(kCoarseSlabBytes); }
+  uint64_t SlabSize() const override { return kCoarseSlabBytes; }
 };
 
 TEST_P(CoarseWindowWeightsTest, ReadWindowsShareOnePendingSlabAndReload) {

@@ -21,6 +21,51 @@
 
 namespace {
 
+constexpr uint64_t kMemoryTestSlabSize = 2 * 1024 * 1024;
+
+class MemoryTestEnvironment : public ::testing::Environment {
+ public:
+  void SetUp() override {
+    loom_serve_host_t* host = nullptr;
+    iree_hal_driver_t* driver = nullptr;
+    auto status =
+        loom_serve_host_create(1, nullptr, iree_allocator_system(), &host);
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_test_driver_acquire(host, &driver);
+    }
+    if (iree_status_is_ok(status)) {
+      const loom_serve_device_options_t options = {
+          .driver = driver,
+          .uri = loom_serve_test_device()->device_uri,
+          .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+          .weight_slab_size = kMemoryTestSlabSize,
+          .state_slab_size = kMemoryTestSlabSize / 4,
+          .memory_limit = 3 * kMemoryTestSlabSize,
+      };
+      status = loom_serve_device_group_allocate(host, 1, &options,
+                                                native.allocator(), &group);
+    }
+    iree_hal_driver_release(driver);
+    loom_serve_host_release(host);
+    IREE_ASSERT_OK(status);
+    IREE_ASSERT_OK(native.Observe(loom_serve_device_group_at(group, 0)));
+  }
+
+  void TearDown() override {
+    IREE_EXPECT_OK(loom_serve_device_group_free(group));
+    group = nullptr;
+    native.AwaitReleased();
+  }
+
+  // Allocator dependency retained through all asynchronous device cleanup.
+  loom_serve::testing::NativeAllocator native;
+  // One native device shared by all cases; pools and reservations are per case.
+  loom_serve_device_group_t* group = nullptr;
+};
+
+auto* const memory_test_environment = static_cast<MemoryTestEnvironment*>(
+    ::testing::AddGlobalTestEnvironment(new MemoryTestEnvironment));
+
 // Exercises mapping rejection after real queue allocation has been accepted.
 // The storage owner uses only allocation, deallocation, and mapping operations.
 class MappingQueue : public iree_hal_queue_t {
@@ -95,29 +140,13 @@ class MappingQueue : public iree_hal_queue_t {
 class MemoryTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    loom_serve_host_t* host = nullptr;
-    IREE_ASSERT_OK(
-        loom_serve_host_create(1, nullptr, iree_allocator_system(), &host));
-    iree_hal_driver_t* driver = nullptr;
-    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host, &driver));
-    const loom_serve_device_options_t options = {
-        .driver = driver,
-        .uri = loom_serve_test_device()->device_uri,
-        .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-        .weight_slab_size = kSlabSize,
-        .state_slab_size = kSlabSize / 4,
-        .memory_limit = 3 * kSlabSize,
-    };
-    auto status = loom_serve_device_group_allocate(host, 1, &options,
-                                                   native.allocator(), &group);
-    iree_hal_driver_release(driver);
-    loom_serve_host_release(host);
-    IREE_ASSERT_OK(status);
+    group = memory_test_environment->group;
     device = loom_serve_device_group_at(group, 0);
-    pool = loom_serve_device_memory_pool(device);
+    ASSERT_NO_FATAL_FAILURE(SetUpPool());
     IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution));
-    IREE_ASSERT_OK(native.Observe(device));
   }
+
+  virtual void SetUpPool() { UseBacking(false, 3 * kSlabSize, nullptr); }
 
   void TearDown() override {
     if (deferred_backing) {
@@ -144,12 +173,21 @@ class MemoryTest : public ::testing::Test {
     iree_hal_pool_release(deferred_backing);
     mapping_queue.Reset();
     loom_serve_execution_release(execution);
-    IREE_EXPECT_OK(loom_serve_device_group_free(group));
+    IREE_EXPECT_OK(loom_serve_test_device_trim_and_drain(device, 0));
   }
 
   void UseDeferredBacking(uint64_t limit_bytes = 3 * kSlabSize,
                           iree_hal_queue_t* queue = nullptr) {
-    const auto host_allocator = iree_allocator_system();
+    UseBacking(true, limit_bytes, queue);
+  }
+
+  void UseBacking(bool deferred, uint64_t limit_bytes,
+                  iree_hal_queue_t* queue) {
+    // Selection happens before this case allocates any reservations.
+    loom_serve_memory_pool_free(owned_pool);
+    owned_pool = nullptr;
+    pool = nullptr;
+    const auto host_allocator = native.allocator();
     const auto* dispatch =
         iree_hal_queue_family(loom_serve_device_dispatch_queue(device));
     if (!queue) {
@@ -179,25 +217,39 @@ class MemoryTest : public ::testing::Test {
     iree_hal_pool_t* backing = nullptr;
     iree_hal_slab_pool_options_t options;
     iree_hal_slab_pool_options_initialize(&options);
-    IREE_ASSERT_OK(iree_hal_slab_pool_create(
-        hal_group, scope, &options, iree_allocator_system(), &backing));
-    auto status = iree::hal::testing::DeferredBackingPool::Create(
-        backing, &deferred_backing);
-    iree_hal_pool_release(backing);
-    IREE_ASSERT_OK(status);
+    IREE_ASSERT_OK(iree_hal_slab_pool_create(hal_group, scope, &options,
+                                             host_allocator, &backing));
+    if (deferred) {
+      auto status = iree::hal::testing::DeferredBackingPool::Create(
+          backing, &deferred_backing);
+      iree_hal_pool_release(backing);
+      IREE_ASSERT_OK(status);
+      backing = deferred_backing;
+      iree_hal_pool_retain(backing);
+    }
     for (auto& family : families) {
       family.interfaces = 0;
     }
     iree_hal_virtual_buffer_capabilities_t capabilities;
-    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        hal_group, scope, host_allocator, &capabilities));
-    loom_serve_memory_geometry_t geometry;
-    IREE_ASSERT_OK(loom_serve_memory_pool_query_geometry(
-        &capabilities, deferred_backing, kSlabSize, &geometry));
-    const loom_serve_memory_geometry_t geometries[] = {geometry, geometry};
-    IREE_ASSERT_OK(loom_serve_memory_pool_allocate(
-        hal_group, scope, deferred_backing, queue, geometries, limit_bytes,
-        host_allocator, &owned_pool));
+    auto status = iree_hal_virtual_buffer_query_capabilities(
+        hal_group, scope, host_allocator, &capabilities);
+    loom_serve_memory_geometry_t geometries[2] = {};
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_memory_pool_query_geometry(&capabilities, backing,
+                                                     kSlabSize, &geometries[0]);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_memory_pool_query_geometry(
+          &capabilities, backing, deferred ? kSlabSize : kSlabSize / 4,
+          &geometries[1]);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_memory_pool_allocate(hal_group, scope, backing, queue,
+                                               geometries, limit_bytes,
+                                               host_allocator, &owned_pool);
+    }
+    iree_hal_pool_release(backing);
+    IREE_ASSERT_OK(status);
     pool = owned_pool;
   }
 
@@ -259,19 +311,20 @@ class MemoryTest : public ::testing::Test {
     }
   }
 
-  // Device allocator dependency outliving native cleanup and the group.
-  loom_serve::testing::NativeAllocator native;
+  // Process-owned allocator dependency shared by the native device and pools.
+  loom_serve::testing::NativeAllocator& native =
+      memory_test_environment->native;
   // Optional mapping dependency outliving the private pool's native cleanup.
   MappingQueue mapping_queue;
-  // Optional independent subject using explicitly deferred backing returns.
+  // Per-case physical owner, isolating statistics and terminal pool failures.
   loom_serve_memory_pool_t* owned_pool = nullptr;
   // Optional adapter retaining real parent tokens beyond logical completion.
   iree::hal::testing::DeferredBackingPool* deferred_backing = nullptr;
   // Coarse physical slabs, independent of logical KV block size.
-  static constexpr uint64_t kSlabSize = 2 * 1024 * 1024;
+  static constexpr uint64_t kSlabSize = kMemoryTestSlabSize;
   // Offset deliberately crossing the 32-bit byte-address boundary.
   static constexpr uint64_t kHighOffset = (uint64_t{1} << 32) + 512;
-  // Application group enclosing all device resources.
+  // Borrowed process-owned group enclosing all native device resources.
   loom_serve_device_group_t* group = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device = nullptr;
@@ -295,6 +348,13 @@ class MemoryTest : public ::testing::Test {
 // Task devices share that worker with execution, so their composition excludes
 // this fixture instead of blocking the sole CPU worker needed for progress.
 using DedicatedNativeWorkerMemoryTest = MemoryTest;
+
+// Device-wide trim and group ownership use the real device-owned pool. Other
+// cases isolate their statistics and intentional failures in private pools.
+class DeviceMemoryTest : public MemoryTest {
+ protected:
+  void SetUpPool() override { pool = loom_serve_device_memory_pool(device); }
+};
 
 TEST_F(MemoryTest, GeometryRespectsFiniteBackingCapacity) {
   iree_hal_pool_family_access_t family = {
@@ -910,7 +970,8 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
   loom_serve_memory_operation_free(operation);
 }
 
-TEST_F(MemoryTest, SparseGrowthTrimRegrowthAndSharedAdmission) {
+TEST_F(DeviceMemoryTest, SparseGrowthTrimRegrowthAndSharedAdmission) {
+  const auto before = loom_serve_memory_pool_statistics(pool);
   const auto* dispatch =
       iree_hal_queue_family(loom_serve_device_dispatch_queue(device));
   const auto* transfer =
@@ -964,7 +1025,8 @@ TEST_F(MemoryTest, SparseGrowthTrimRegrowthAndSharedAdmission) {
   loom_serve_virtual_buffer_begin_trim(first);
   loom_serve_virtual_buffer_keep(first, kHighOffset, 256);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
-  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).released_bytes, kSlabSize);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).released_bytes,
+            before.released_bytes + kSlabSize);
   EXPECT_EQ(loom_serve_virtual_buffer_handle(first), identity);
   CheckRetained(identity, kHighOffset, 0x12345678);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, kSlabSize, 256));
@@ -1153,7 +1215,7 @@ TEST_F(MemoryTest, FailedReclamationRetainsSharedFailureAndRemainingOwnership) {
   // and releases the remaining ownership through the ordinary native path.
 }
 
-TEST_F(MemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
+TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
       pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
       &statistics[0], &first));

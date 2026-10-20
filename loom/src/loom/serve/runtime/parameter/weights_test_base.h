@@ -38,6 +38,13 @@ const char* WeightSourcePath();
 // Optional URI including feedback requirements selected by the test target.
 const char* WeightDeviceUri();
 
+// Borrows a process-owned group for one immutable backing configuration.
+// Suites with matching options share native devices through environment
+// teardown.
+iree_status_t AcquireWeightDeviceGroup(bool elastic, uint64_t slab_size,
+                                       uint64_t memory_limit,
+                                       loom_serve_device_group_t** out_group);
+
 // Models the loader's owner turn: submit private policy/index/JIT preparation
 // and return so that the same sole worker can execute the accepted work.
 struct loom_serve_test_weight_preparation_t {
@@ -281,50 +288,11 @@ struct loom_serve_test_weight_activation_wake_t {
 
 class WeightsTest : public ::testing::TestWithParam<bool> {
  protected:
-  static void SetUpTestSuite() { AllocateDeviceGroups(kSlabBytes); }
+  virtual uint64_t SlabSize() const { return kSlabBytes; }
 
-  static void AllocateDeviceGroups(uint64_t slab_size,
-                                   uint64_t memory_limit = 0) {
-    const iree_allocator_t host_allocator = iree_allocator_system();
-    loom_serve_host_t* host = nullptr;
-    iree_hal_driver_t* driver = nullptr;
-    iree_status_t status =
-        loom_serve_test_host_create(1, host_allocator, &host);
-    if (iree_status_is_ok(status)) {
-      status = loom_serve_test_driver_acquire(host, &driver);
-    }
-    for (size_t i = 0; i < IREE_ARRAYSIZE(groups_) && iree_status_is_ok(status);
-         ++i) {
-      const bool elastic = i != 0;
-      const loom_serve_device_options_t options = {
-          .driver = driver,
-          .uri = WeightDeviceUri()[0]
-                     ? iree_make_cstring_view(WeightDeviceUri())
-                     : loom_serve_test_device()->device_uri,
-          .backing = elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
-                             : LOOM_SERVE_DEVICE_BACKING_FIXED,
-          .weight_slab_size = slab_size,
-          .state_slab_size = slab_size,
-          .memory_limit =
-              elastic ? (memory_limit ? memory_limit : 2 * slab_size) : 0,
-      };
-      status = loom_serve_device_group_allocate(
-          host, 1, &options, native_allocators_[i].allocator(), &groups_[i]);
-      if (iree_status_is_ok(status)) {
-        status = native_allocators_[i].Observe(
-            loom_serve_device_group_at(groups_[i], 0));
-      }
-    }
-    iree_hal_driver_release(driver);
-    loom_serve_host_release(host);
-    IREE_ASSERT_OK(status);
-  }
-
-  static void TearDownTestSuite() {
-    for (auto*& group : groups_) {
-      IREE_EXPECT_OK(loom_serve_device_group_free(group));
-      group = nullptr;
-    }
+  virtual void SetUpDevice() {
+    IREE_ASSERT_OK(AcquireWeightDeviceGroup(GetParam(), SlabSize(),
+                                            2 * SlabSize(), &group_));
   }
 
   void WriteCheckpoint(const std::string& path, int32_t offset,
@@ -360,7 +328,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   void SetUp() override {
-    group_ = groups_[GetParam() ? 1 : 0];
+    ASSERT_NO_FATAL_FAILURE(SetUpDevice());
     device_owner_ = loom_serve_device_group_at(group_, 0);
     device_ = loom_serve_device_handle(device_owner_);
     dispatch_ = loom_serve_device_dispatch_queue(device_owner_);
@@ -388,6 +356,9 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   void TearDown() override {
+    if (!device_owner_) {
+      return;
+    }
     if (deferred_backing_) {
       deferred_backing_->CompleteReturns();
     }
@@ -427,7 +398,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     IREE_EXPECT_OK(loom_serve_virtual_buffer_free(state_));
     if (owned_pool_) {
       loom_serve_memory_pool_trim(owned_pool_, 0);
-      IREE_EXPECT_OK(loom_serve_memory_pool_await(owned_pool_));
+      IREE_EXPECT_STATUS_IS(retirement_code_,
+                            loom_serve_memory_pool_await(owned_pool_));
       EXPECT_EQ(loom_serve_memory_pool_statistics(owned_pool_).reserved_bytes,
                 0u);
       EXPECT_EQ(loom_serve_memory_pool_statistics(owned_pool_).committed_bytes,
@@ -637,8 +609,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
       IREE_ASSERT_STATUS_IS(retirement_code_,
                             loom_serve_memory_pool_await(pool_));
     }
-    IREE_ASSERT_STATUS_IS(
-        retirement_code_,
+    IREE_ASSERT_OK(
         loom_serve_test_device_trim_and_drain(device_owner_, UINT64_MAX));
   }
 
@@ -694,7 +665,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree_allocator_t host_allocator_ = iree_allocator_system();
   // Copied compiler evidence retained beyond individual results.
   loom_serve_compilation_report_t compilation_ = {};
-  // Borrowed suite group outliving all compiler, VM and I/O resources.
+  // Borrowed process-owned group outliving all compiler, VM and I/O resources.
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device_owner_ = nullptr;
@@ -722,10 +693,6 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree::hal::testing::DeferredBackingPool* deferred_backing_ = nullptr;
   // Physical slab size; the shared budget holds two unique roots.
   static constexpr uint64_t kSlabBytes = 4096;
-  // Suite-owned fixed and elastic devices, each constructed exactly once.
-  inline static loom_serve_device_group_t* groups_[2] = {};
-  // Native allocator dependencies outliving their device groups.
-  inline static loom_serve::testing::NativeAllocator native_allocators_[2];
   // Owned checkpoint plans, including partially failed construction.
   std::array<loom_serve_weights_t*, 3> plans_ = {};
   // Unique physical groups, outliving all working sets that borrow them.

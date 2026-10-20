@@ -21,19 +21,23 @@ namespace loom_serve::testing {
 
 class ExecutablesTest : public WeightsTest {
  protected:
-  static void SetUpTestSuite() {
-    // Native geometry is known after device construction. Recreate the fixture
-    // with room for exactly two small roots, including on devices with larger
-    // minimum allocation extents. Neither group has loaded a checkpoint yet.
-    ASSERT_NO_FATAL_FAILURE(AllocateDeviceGroups(kSlabBytes));
-    const uint64_t root_bytes = loom_serve_device_weight_geometry(
-                                    loom_serve_device_group_at(groups_[1], 0))
-                                    .minimum_size;
-    TearDownTestSuite();
-    ASSERT_NO_FATAL_FAILURE(AllocateDeviceGroups(kSlabBytes, 2 * root_bytes));
+  void SetUpDevice() override {
+    // Native geometry is known after device construction. Select a budget for
+    // two small roots, reusing the process-owned configurations throughout.
+    ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpDevice());
+    if (GetParam()) {
+      const uint64_t root_bytes = loom_serve_device_weight_geometry(
+                                      loom_serve_device_group_at(group_, 0))
+                                      .minimum_size;
+      IREE_ASSERT_OK(
+          AcquireWeightDeviceGroup(true, kSlabBytes, 2 * root_bytes, &group_));
+    }
   }
 
   void TearDown() override {
+    if (!device_owner_) {
+      return;
+    }
     if (execution_) {
       IREE_EXPECT_OK(loom_serve_execution_drain(execution_));
     }
