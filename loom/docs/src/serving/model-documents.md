@@ -47,8 +47,8 @@ activation can prepare a model while its admission stays closed.
 ## Programs and dependencies
 
 Every definition contains `kind`, `prepare`, `control` and a nonempty `sources`
-array. Kinds are `text`, `image`, `embedding`, `decision`, `speech`, `recognition`,
-and `activity`.
+array. Kinds are `text`, `sequence`, `image`, `embedding`, `decision`, `speech`,
+`recognition`, and `activity`.
 
 | Field | Role |
 | --- | --- |
@@ -56,8 +56,8 @@ and `activity`.
 | `control` | Warm VM program implementing the modality's request and execution contract. |
 | `sources` | Shared VM functions, native commands, kernels, configuration and motif providers. |
 | `options` | JSON object passed to source preparation unchanged; defaults to `{}`. |
-| `pending_requests` | Request credit, default `32`; positive integer. Text/image/speech/recognition/activity count queued requests, while embedding/decision also count the active cohort. |
-| `variant_capacity` | Text/image/embedding/decision retained native executable choices, default `16`, including the original, pending compilations and failed attempts; zero disables native reconfiguration. |
+| `pending_requests` | Request credit, default `32`; positive integer. Text/sequence/image/speech/recognition/activity count queued requests, while embedding/decision also count the active cohort. |
+| `variant_capacity` | Text/sequence/image/embedding/decision retained native executable choices, default `16`, including the original, pending compilations and failed attempts; zero disables native reconfiguration. |
 
 Programs accept text or portable Loom bytecode (`.loom` or `.loombc`), detected
 from contents. Providers may mix formats. Bytecode is serialized IR, not a
@@ -129,6 +129,27 @@ The text source must also declare image limits and implement ordered media
 framing and mixed input. A declaration alone does not give a text program
 vision capability. See [image-conditioned text](model-programs.md#image-conditioned-text)
 for the source boundaries.
+
+## Known-token sequence definitions
+
+`kind:"sequence"` advances retained model state using exact caller-supplied token
+IDs and returns source-defined opaque bytes. It requires `weights` but no
+tokenizer, chat template, vocabulary head, or token sampler. This supports a
+stateful stage inside a larger inference pipeline without making it imitate a
+chat model.
+
+Sequence definitions share text's `rows`, `context_capacity`, `pool_capacity`,
+`prefill_capacity`, `checkpoint_capacity`, `session_cache_capacity`, and
+`admission_overtakes` fields and defaults. Admission reserves only the supplied
+known positions, rounded to cache blocks; it does not reserve generated tokens.
+Execution uses packed epochs and the same row/cache/checkpoint ownership.
+
+`tokenizer`, `max_tokens`, `draft_depth`, `continuation_epochs`,
+`prefix_cache_capacity`, and `image` are not sequence fields. Reuse is explicit
+through a retained sequence handle or a named checkpoint, not automatic chat
+prefix matching. Source-defined request policy belongs in `options`.
+See the [sequence HTTP profile](http-profiles.md#known-token-sequences) and
+[source contract](model-programs.md#known-token-stages).
 
 ## Image and finite-vector definitions
 

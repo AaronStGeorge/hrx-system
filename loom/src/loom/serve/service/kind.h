@@ -23,6 +23,7 @@ typedef enum loom_serve_model_kind_e {
   LOOM_SERVE_MODEL_KIND_SPEECH = 5,
   LOOM_SERVE_MODEL_KIND_RECOGNITION = 6,
   LOOM_SERVE_MODEL_KIND_ACTIVITY = 7,
+  LOOM_SERVE_MODEL_KIND_SEQUENCE = 8,
 } loom_serve_model_kind_t;
 
 // Parses an exact deployment spelling. Failure leaves out_kind unchanged.

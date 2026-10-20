@@ -250,7 +250,10 @@ iree_status_t loom_serve_registry_try_open_text_checkpoint(
   *out_control = NULL;
   loom_serve_service_t* service = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_registry_find_admission(
-      registry, name, 1u << LOOM_SERVE_MODEL_KIND_TEXT, "text",
+      registry, name,
+      (1u << LOOM_SERVE_MODEL_KIND_TEXT) |
+          (1u << LOOM_SERVE_MODEL_KIND_SEQUENCE),
+      "retained sequence",
       request->action == LOOM_SERVE_TEXT_CHECKPOINT_ACTION_RELEASE, &service));
   if (!service) {
     return iree_ok_status();

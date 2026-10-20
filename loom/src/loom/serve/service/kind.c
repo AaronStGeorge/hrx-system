@@ -22,6 +22,7 @@ static const loom_serve_model_kind_descriptor_t loom_serve_model_kinds[] = {
     [LOOM_SERVE_MODEL_KIND_RECOGNITION] = {"recognition",
                                            "/v1/audio/transcriptions"},
     [LOOM_SERVE_MODEL_KIND_ACTIVITY] = {"activity", NULL},
+    [LOOM_SERVE_MODEL_KIND_SEQUENCE] = {"sequence", "/v1/sequences"},
 };
 
 bool loom_serve_model_kind_parse(iree_string_view_t value,

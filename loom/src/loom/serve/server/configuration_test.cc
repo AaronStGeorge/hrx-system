@@ -96,6 +96,32 @@ TEST_F(ConfigurationTest, SpeechOwnsAssetsAndSourceOptions) {
                         Parse(Document("speech")));
 }
 
+TEST_F(ConfigurationTest, SequenceRequiresWeightsButNoTokenizerOrSampler) {
+  IREE_ASSERT_OK(Parse(Document(
+      "sequence",
+      R"(,"weights":"model.irpa","rows":4,"context_capacity":96,"pool_capacity":256,"prefill_capacity":32,"checkpoint_capacity":4,"session_cache_capacity":1)")));
+  EXPECT_EQ(model_.kind, LOOM_SERVE_MODEL_KIND_SEQUENCE);
+  EXPECT_EQ(String(model_.text.weights), "model.irpa");
+  EXPECT_EQ(model_.text.tokenizer.size, 0u);
+  EXPECT_EQ(model_.text.max_tokens, 0u);
+  EXPECT_EQ(model_.text.rows, 4u);
+  EXPECT_EQ(model_.text.session_cache_capacity, 1u);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse(Document("sequence")));
+  for (const char* field :
+       {R"(,"tokenizer":"tokenizer.json")", R"(,"max_tokens":1)",
+        R"(,"draft_depth":0)", R"(,"continuation_epochs":1)",
+        R"(,"prefix_cache_capacity":1)",
+        R"(,"image":{"prepare":"vision.loom","control":"vision.loom"})"}) {
+    SCOPED_TRACE(field);
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        Parse(Document("sequence",
+                       std::string(R"(,"weights":"model.irpa")") + field)));
+    EXPECT_EQ(model_.name.data, nullptr);
+  }
+}
+
 TEST_F(ConfigurationTest, ContinuingRecognitionOwnsAssetsAndSourceOptions) {
   for (const char* kind : {"recognition", "activity"}) {
     SCOPED_TRACE(kind);

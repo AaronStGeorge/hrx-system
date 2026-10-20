@@ -1,10 +1,16 @@
-# Packed autoregressive serving
+# Packed retained-token serving
 
 This package executes source-defined text models with retained sessions.
 Model programs supply numerical stages, parameter preparation, storage geometry,
 tokenizer framing and chat policy. Native code supplies execution ownership,
 admission, packing, cache lifetime, and HTTP or native output; it contains no
 learned model or model catalog.
+
+The `sequence` deployment profile reuses this ownership for known-token stages.
+It has no tokenizer/chat dependency and never implicitly selects or feeds back a
+token. [Sequence protocol](sequence.h) owns its envelope and exact frontier;
+[captures](capture.h) own source-defined output independently of reusable model
+residuals, native rows, and weights. Its HTTP route is `/v1/sequences`.
 
 ## Ownership
 

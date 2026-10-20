@@ -74,6 +74,11 @@ static iree_status_t loom_serve_device_group_initialize(
     status = iree_hal_driver_create_device_by_uri(
         options[i].driver, options[i].uri, &params, group->host_allocator,
         &group->devices[i].handle);
+    if (!iree_status_is_ok(status)) {
+      status = iree_status_annotate_f(
+          status, "creating serving device %" PRIhsz " (%.*s)", i,
+          (int)options[i].uri.size, options[i].uri.data);
+    }
   }
   IREE_RETURN_IF_ERROR(status);
   IREE_RETURN_IF_ERROR(iree_async_frontier_tracker_create(
@@ -141,7 +146,8 @@ static iree_status_t loom_serve_device_initialize(
   };
   IREE_RETURN_IF_ERROR(
       iree_hal_slab_pool_create(group->handle, scope, &storage_options,
-                                group->host_allocator, &device->storage_pool));
+                                group->host_allocator, &device->storage_pool),
+      "creating serving storage pool");
   iree_hal_asan_pool_options_t asan_options = {0};
   if (iree_any_bit_set(sanitizer->flags, IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN)) {
     asan_options = sanitizer->asan.pool_options;
@@ -164,7 +170,8 @@ static iree_status_t loom_serve_device_initialize(
     iree_hal_pool_t* source_pool = NULL;
     IREE_RETURN_IF_ERROR(
         iree_hal_slab_pool_create(group->handle, source_scope, &source_options,
-                                  group->host_allocator, &source_pool));
+                                  group->host_allocator, &source_pool),
+        "creating serving elastic mapping-source pool");
     iree_status_t status = loom_serve_memory_pool_allocate(
         group->handle, scope, source_pool, device->transfer, options->slab_size,
         options->memory_limit, group->host_allocator, &device->memory_pool);
@@ -212,6 +219,11 @@ iree_status_t loom_serve_device_group_allocate(
   for (iree_host_size_t i = 0; i < device_count && iree_status_is_ok(status);
        ++i) {
     status = loom_serve_device_initialize(&group->devices[i], &options[i]);
+    if (!iree_status_is_ok(status)) {
+      status = iree_status_annotate_f(
+          status, "initializing serving device %" PRIhsz " (%.*s)", i,
+          (int)options[i].uri.size, options[i].uri.data);
+    }
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_begin_device_group_profiling_from_flags(

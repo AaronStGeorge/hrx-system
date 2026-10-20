@@ -123,6 +123,7 @@ loom_cc_library(
     srcs = [
         "component_service_test.cc",
         "input_count_test.cc",
+        "sequence_service_test.cc",
         "source_lifecycle_test.cc",
     ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
@@ -130,9 +131,11 @@ loom_cc_library(
     deps = [
         ":input_count",
         ":source_service_fixture",
+        ":stream",
         ":telemetry",
         "//loom/src/loom/serve/service/finite:component",
         "//loom/src/loom/serve/telemetry:latency",
+        "//runtime/src/iree/base/internal:base64",
     ],
     alwayslink = True,
 )
@@ -226,10 +229,16 @@ loom_cc_library(
 loom_cc_library(
     name = "source_execution_tests",
     testonly = True,
-    srcs = ["source_execution_test.cc"],
+    srcs = [
+        "capture_execution_test.cc",
+        "source_execution_test.cc",
+    ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     visibility = ["//loom/src/loom/serve:implementation"],
-    deps = [":source_service_fixture"],
+    deps = [
+        ":capture",
+        ":source_service_fixture",
+    ],
     alwayslink = True,
 )
 
@@ -427,8 +436,33 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "capture",
+    srcs = ["capture.c"],
+    hdrs = ["capture.h"],
+    deps = [
+        "//loom/src/loom/serve/runtime/execution",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "capture_test",
+    srcs = ["capture_test.cc"],
+    deps = [
+        ":capture",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
     name = "model",
     srcs = [
+        "control.c",
         "epoch_plan.c",
         "media_epoch.c",
         "model.c",
@@ -438,6 +472,7 @@ loom_cc_library(
         "variant.c",
     ],
     hdrs = [
+        "control.h",
         "epoch_plan.h",
         "media_epoch.h",
         "media_input.h",
@@ -448,6 +483,7 @@ loom_cc_library(
         "variant.h",
     ],
     deps = [
+        ":capture",
         ":chat",
         ":packing",
         ":storage",
@@ -606,11 +642,27 @@ loom_cc_library(
         ":consumer",
         ":media_projector",
         ":model",
+        ":sequence",
         "//loom/src/loom/serve/runtime/host:clock",
         "//loom/src/loom/serve/service:inspection",
         "//loom/src/loom/serve/telemetry:record",
         "//runtime/src/iree/base",
         "//runtime/src/iree/tokenizer",
+    ],
+)
+
+loom_cc_library(
+    name = "sequence",
+    srcs = ["sequence.c"],
+    hdrs = ["sequence.h"],
+    deps = [
+        ":input",
+        ":model",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:base64",
+        "//runtime/src/iree/base/internal:csprng",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/vm",
     ],
 )
 
@@ -726,6 +778,7 @@ loom_cc_library(
     deps = [
         ":chat",
         ":consumer",
+        ":sequence",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:record",
         "//loom/src/loom/serve/transport/http:server",
@@ -872,6 +925,7 @@ loom_cc_library(
         ":media_projector",
         ":model",
         ":schedule",
+        ":sequence",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:stream",
         "//runtime/src/iree/base",
@@ -888,10 +942,12 @@ loom_cc_library(
         ":chat",
         ":checkpoint_registry",
         ":consumer",
+        ":input",
         ":media_projector",
         ":model",
         ":pending_request",
         ":prefix_cache",
+        ":sequence",
         ":session",
         ":session_cache",
         ":telemetry",
@@ -923,6 +979,7 @@ loom_cc_library(
     hdrs = ["service.h"],
     deps = [
         ":admission",
+        ":capture",
         ":chat",
         ":checkpoint_control",
         ":checkpoint_http",
@@ -943,6 +1000,7 @@ loom_cc_library(
         ":readiness",
         ":reconfiguration",
         ":schedule",
+        ":sequence",
         ":session",
         ":session_cache",
         ":stream",

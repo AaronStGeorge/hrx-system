@@ -223,8 +223,8 @@ TEST_F(MediaExecutionTest, RaggedCohortConditionsPackedAndIsolatedTextChunks) {
                                     &continuation);
       do {
         loom_serve_execution_frontier_t ready;
-        IREE_ASSERT_OK(loom_serve_text_epoch_submit(model_, mode, &epoch,
-                                                    &continuation, &ready));
+        IREE_ASSERT_OK(loom_serve_text_epoch_submit(
+            model_, mode, &epoch, &continuation, nullptr, &ready));
         if (mode == LOOM_SERVE_TEXT_SCHEDULE_MATCHED && chunk == 1 &&
             epoch.cursor == 1) {
           // Both image requests have submitted their last readers. Their

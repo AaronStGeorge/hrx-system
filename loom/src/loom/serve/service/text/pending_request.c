@@ -15,6 +15,23 @@ iree_status_t loom_serve_text_pending_request_prepare(
     iree_allocator_t host_allocator) {
   const iree_host_size_t capacity =
       loom_serve_text_model_context_capacity(model);
+  if (loom_serve_text_model_mode(model) == LOOM_SERVE_TEXT_MODE_ENCODE) {
+    IREE_RETURN_IF_ERROR(loom_serve_text_sequence_prepare(
+        &request->sequence, model, request->body, request->receipt.serial,
+        prefix, request->checkpoint != NULL, scratch, host_allocator,
+        &request->input));
+    const iree_host_size_t extent =
+        request->input.retained_count + request->input.count;
+    const iree_host_size_t reservation =
+        ((extent + geometry->block_size - 1) / geometry->block_size) *
+        geometry->block_size;
+    if (geometry->capacity && reservation > geometry->capacity) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "known sequence exceeds shared KV capacity");
+    }
+    request->reservation = reservation;
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_serve_text_input_prepare(
       &request->chat, prefix, request->checkpoint != NULL, capacity, scratch,
       &request->input, host_allocator));
@@ -44,6 +61,7 @@ static iree_status_t loom_serve_text_pending_request_release(
   loom_serve_text_media_request_free(request->media);
   request->media = NULL;
   loom_serve_text_chat_deinitialize(&request->chat);
+  loom_serve_text_sequence_deinitialize(&request->sequence);
   loom_serve_text_input_deinitialize(&request->input, host_allocator);
   return status;
 }

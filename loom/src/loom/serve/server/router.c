@@ -1413,7 +1413,8 @@ static iree_status_t loom_serve_router_accept(
             IREE_SV("model has no HTTP inference endpoint"), output);
       }
       if (checkpoint && !post &&
-          state->service.kind == LOOM_SERVE_MODEL_KIND_TEXT) {
+          (state->service.kind == LOOM_SERVE_MODEL_KIND_TEXT ||
+           state->service.kind == LOOM_SERVE_MODEL_KIND_SEQUENCE)) {
         // Deletion releases retained state without opening inference. The
         // text adapter validates the command before occupying its control slot.
         if (state->phase != LOOM_SERVE_REGISTRATION_READY) {

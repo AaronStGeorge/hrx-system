@@ -89,6 +89,7 @@ void loom_serve_text_pending_queue_push(
     loom_serve_text_pending_queue_t* queue, loom_serve_text_consumer_t consumer,
     iree_string_view_t body, iree_string_view_t name,
     loom_serve_text_checkpoint_entry_t* checkpoint,
+    const loom_serve_text_sequence_t* sequence,
     loom_serve_text_receipt_t receipt);
 
 // Resolves the selected request's exact completed frontier without acquiring
@@ -106,6 +107,15 @@ iree_status_t loom_serve_text_pending_queue_prepare(
     iree_host_size_t default_max_tokens, iree_host_size_t row_count,
     loom_serve_text_session_t* sessions,
     const loom_serve_text_pool_usage_t* geometry);
+
+// Transfers the prepared request and any cached logical history into its row
+// after successful native reservation. CPU/device/media loans have retired;
+// the scheduler settles cancellation and prefix recency before this call.
+// Removes the stable queue slot and begins the row's consumer output.
+iree_status_t loom_serve_text_pending_queue_admit(
+    loom_serve_text_pending_queue_t* queue,
+    loom_serve_text_session_cache_t* cache, loom_serve_text_session_t* sessions,
+    iree_string_view_t model_name);
 
 // The caller has released or transferred request payloads and the consumer.
 // Returns the stable slot to the free suffix, releases checkpoint accounting,

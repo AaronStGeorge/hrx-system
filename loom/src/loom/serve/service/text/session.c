@@ -53,32 +53,47 @@ loom_serve_text_session_t* loom_serve_text_session_select(
   return continuation ? continuation : oldest;
 }
 
+bool loom_serve_text_session_has_history(
+    const loom_serve_text_session_t* session) {
+  return session->mode == LOOM_SERVE_TEXT_MODE_ENCODE
+             ? session->lifetime.id != 0 && session->lifetime.position != 0
+             : session->completion.reusable;
+}
+
 iree_status_t loom_serve_text_session_initialize(
-    loom_serve_text_row_t* row, const iree_tokenizer_t* tokenizer,
-    iree_host_size_t context_capacity, iree_allocator_t host_allocator,
-    loom_serve_text_session_t* out_session) {
+    loom_serve_text_row_t* row, loom_serve_text_mode_t mode,
+    const iree_tokenizer_t* tokenizer, iree_host_size_t context_capacity,
+    iree_allocator_t host_allocator, loom_serve_text_session_t* out_session) {
   *out_session = (loom_serve_text_session_t){
       .host_allocator = host_allocator,
       .row = row,
+      .mode = mode,
   };
   iree_string_builder_initialize(host_allocator, &out_session->response);
   iree_host_size_t decoder_size = 0;
-  IREE_RETURN_IF_ERROR(
-      iree_tokenizer_decode_state_calculate_size(tokenizer, &decoder_size));
+  if (mode == LOOM_SERVE_TEXT_MODE_GENERATE) {
+    IREE_RETURN_IF_ERROR(
+        iree_tokenizer_decode_state_calculate_size(tokenizer, &decoder_size));
+  }
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
       host_allocator, context_capacity, sizeof(*out_session->tokens),
       (void**)&out_session->tokens));
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(host_allocator, decoder_size,
-                            (void**)&out_session->decoder_storage.data));
-  out_session->decoder_storage.data_length = decoder_size;
-  return iree_string_builder_reserve(&out_session->response, 65536);
+  if (mode == LOOM_SERVE_TEXT_MODE_GENERATE) {
+    IREE_RETURN_IF_ERROR(
+        iree_allocator_malloc(host_allocator, decoder_size,
+                              (void**)&out_session->decoder_storage.data));
+    out_session->decoder_storage.data_length = decoder_size;
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_reserve(&out_session->response, 65536));
+  }
+  return iree_ok_status();
 }
 
 void loom_serve_text_session_release_request(
     loom_serve_text_session_t* session) {
   loom_serve_text_media_request_free(session->request.media);
   loom_serve_text_chat_deinitialize(&session->request.chat);
+  loom_serve_text_sequence_deinitialize(&session->request.sequence);
   iree_tokenizer_decode_state_deinitialize(session->decoder);
   session->decoder = NULL;
   memset(&session->request, 0, sizeof(session->request));
@@ -126,6 +141,12 @@ iree_status_t loom_serve_text_session_begin(loom_serve_text_session_t* session,
   session->request.created_unix_seconds = loom_serve_clock_now_unix_seconds();
   iree_string_builder_reset(&session->response);
   loom_serve_text_chat_completion_deinitialize(&session->completion);
+  if (session->mode == LOOM_SERVE_TEXT_MODE_ENCODE) {
+    return session->request.consumer.vtable->begin_sequence(
+        session->request.consumer.self,
+        iree_make_cstring_view(session->lifetime.name),
+        session->request.retained_count);
+  }
   IREE_RETURN_IF_ERROR(iree_tokenizer_decode_state_initialize(
       tokenizer, IREE_TOKENIZER_DECODE_FLAG_SKIP_SPECIAL_TOKENS,
       session->decoder_storage, &session->decoder));

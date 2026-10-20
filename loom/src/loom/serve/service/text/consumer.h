@@ -42,6 +42,19 @@ typedef struct loom_serve_text_consumer_vtable_t {
                             loom_serve_text_tool_calls_t* calls,
                             iree_string_view_t finish_reason,
                             iree_string_builder_t* scratch);
+  // Starts a known-token sequence on the owner. These two sequence operations
+  // replace begin/append/complete for an encoding deployment; chat-only
+  // consumers leave them null and cannot admit that deployment's requests.
+  iree_status_t (*begin_sequence)(void* self, iree_string_view_t handle,
+                                  iree_host_size_t position);
+  // Encodes exact consumed IDs and opaque output on the finite CPU loan. No
+  // view escapes the call. final closes this request, not the retained
+  // sequence.
+  iree_status_t (*append_sequence)(void* self, iree_string_view_t handle,
+                                   iree_host_size_t position,
+                                   iree_host_size_t count,
+                                   const int32_t* tokens,
+                                   iree_const_byte_span_t bytes, bool final);
   // Consumes translation failure on the CPU loan, discarding partial staged
   // output and retaining a terminal result. Only encoding allocation can fail.
   iree_status_t (*fail)(void* self, loom_serve_text_chat_flags_t flags,

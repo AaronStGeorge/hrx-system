@@ -215,18 +215,20 @@ typedef enum loom_serve_model_definition_field_e {
 } loom_serve_model_definition_field_t;
 
 static iree_status_t loom_serve_model_configuration_text(
-    const loom_serve_model_configuration_field_t* fields,
+    const loom_serve_model_configuration_field_t* fields, bool encodes,
     loom_serve_text_configuration_t* text, iree_allocator_t host_allocator) {
   *text = (loom_serve_text_configuration_t){.rows = 4,
                                             .context_capacity = 16384,
                                             .pool_capacity = 65536,
                                             .prefill_capacity = 512,
-                                            .max_tokens = 512,
+                                            .max_tokens = encodes ? 0 : 512,
                                             .continuation_epochs = 1};
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
       &fields[DEFINITION_WEIGHTS], host_allocator, &text->weights));
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[DEFINITION_TOKENIZER], host_allocator, &text->tokenizer));
+  if (!encodes) {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[DEFINITION_TOKENIZER], host_allocator, &text->tokenizer));
+  }
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[DEFINITION_ROWS], 1, 16, &text->rows));
   text->admission_overtakes = text->rows;
@@ -311,31 +313,30 @@ static iree_status_t loom_serve_model_configuration_image(
 static iree_status_t loom_serve_model_configuration_definition_parse(
     iree_string_view_t value, loom_serve_model_configuration_t* model,
     iree_allocator_t host_allocator) {
+  const uint32_t retained_kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT) |
+                                  (1u << LOOM_SERVE_MODEL_KIND_SEQUENCE);
   loom_serve_model_configuration_field_t fields[] = {
       [DEFINITION_KIND] = {"kind", IREE_JSON_VALUE_TYPE_STRING},
       [DEFINITION_PREPARE] = {"prepare", IREE_JSON_VALUE_TYPE_STRING},
       [DEFINITION_CONTROL] = {"control", IREE_JSON_VALUE_TYPE_STRING},
       [DEFINITION_WEIGHTS] = {"weights", IREE_JSON_VALUE_TYPE_STRING,
-                              .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+                              .kinds = retained_kinds},
       [DEFINITION_TOKENIZER] = {"tokenizer", IREE_JSON_VALUE_TYPE_STRING,
                                 .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
       [DEFINITION_ROWS] = {"rows", IREE_JSON_VALUE_TYPE_NUMBER,
-                           .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+                           .kinds = retained_kinds},
       [DEFINITION_CONTEXT_CAPACITY] = {"context_capacity",
                                        IREE_JSON_VALUE_TYPE_NUMBER,
-                                       .kinds =
-                                           (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+                                       .kinds = retained_kinds},
       [DEFINITION_POOL_CAPACITY] = {"pool_capacity",
                                     IREE_JSON_VALUE_TYPE_NUMBER,
-                                    .kinds =
-                                        (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+                                    .kinds = retained_kinds},
       [DEFINITION_PREFILL_CAPACITY] = {"prefill_capacity",
                                        IREE_JSON_VALUE_TYPE_NUMBER,
-                                       .kinds =
-                                           (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
-      [DEFINITION_CHECKPOINT_CAPACITY] =
-          {"checkpoint_capacity", IREE_JSON_VALUE_TYPE_NUMBER,
-           .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+                                       .kinds = retained_kinds},
+      [DEFINITION_CHECKPOINT_CAPACITY] = {"checkpoint_capacity",
+                                          IREE_JSON_VALUE_TYPE_NUMBER,
+                                          .kinds = retained_kinds},
       [DEFINITION_PENDING_REQUESTS] = {"pending_requests",
                                        IREE_JSON_VALUE_TYPE_NUMBER},
       [DEFINITION_MAX_TOKENS] = {"max_tokens", IREE_JSON_VALUE_TYPE_NUMBER,
@@ -364,12 +365,12 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                                  (1u << LOOM_SERVE_MODEL_KIND_ACTIVITY)},
       [DEFINITION_OPTIONS] = {"options", IREE_JSON_VALUE_TYPE_OBJECT},
       [DEFINITION_SOURCES] = {"sources", IREE_JSON_VALUE_TYPE_ARRAY},
-      [DEFINITION_SESSION_CACHE_CAPACITY] =
-          {"session_cache_capacity", IREE_JSON_VALUE_TYPE_NUMBER,
-           .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
-      [DEFINITION_ADMISSION_OVERTAKES] =
-          {"admission_overtakes", IREE_JSON_VALUE_TYPE_NUMBER,
-           .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+      [DEFINITION_SESSION_CACHE_CAPACITY] = {"session_cache_capacity",
+                                             IREE_JSON_VALUE_TYPE_NUMBER,
+                                             .kinds = retained_kinds},
+      [DEFINITION_ADMISSION_OVERTAKES] = {"admission_overtakes",
+                                          IREE_JSON_VALUE_TYPE_NUMBER,
+                                          .kinds = retained_kinds},
       [DEFINITION_PREFIX_CACHE_CAPACITY] =
           {"prefix_cache_capacity", IREE_JSON_VALUE_TYPE_NUMBER,
            .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
@@ -379,8 +380,7 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                                           (1u << LOOM_SERVE_MODEL_KIND_IMAGE)},
       [DEFINITION_VARIANT_CAPACITY] =
           {"variant_capacity", IREE_JSON_VALUE_TYPE_NUMBER,
-           .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT) |
-                    (1u << LOOM_SERVE_MODEL_KIND_IMAGE) |
+           .kinds = retained_kinds | (1u << LOOM_SERVE_MODEL_KIND_IMAGE) |
                     (1u << LOOM_SERVE_MODEL_KIND_EMBEDDING) |
                     (1u << LOOM_SERVE_MODEL_KIND_DECISION)},
       [DEFINITION_IMAGE] = {"image", IREE_JSON_VALUE_TYPE_OBJECT,
@@ -438,9 +438,11 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
       &model->variant_capacity));
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_options(
       &fields[DEFINITION_OPTIONS], host_allocator, &model->options));
-  if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT) {
-    return loom_serve_model_configuration_text(fields, &model->text,
-                                               host_allocator);
+  if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT ||
+      model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE) {
+    return loom_serve_model_configuration_text(
+        fields, model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE, &model->text,
+        host_allocator);
   }
   if (model->kind == LOOM_SERVE_MODEL_KIND_IMAGE ||
       model->kind == LOOM_SERVE_MODEL_KIND_EMBEDDING ||
@@ -472,7 +474,8 @@ void loom_serve_model_configuration_deinitialize(
   }
   iree_allocator_free(host_allocator, (void*)model->sources.values);
   iree_allocator_free(host_allocator, (void*)model->options.data);
-  if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT) {
+  if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT ||
+      model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE) {
     iree_allocator_free(host_allocator, (void*)model->text.weights.data);
     iree_allocator_free(host_allocator, (void*)model->text.tokenizer.data);
     iree_allocator_free(host_allocator, (void*)model->text.image.prepare.data);
@@ -553,12 +556,14 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   if (out_model->sources.base_directory.size) {
     return iree_ok_status();
   }
+  const bool retained = out_model->kind == LOOM_SERVE_MODEL_KIND_TEXT ||
+                        out_model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE;
   if (package) {
     // The package resolves program and metadata locators. Only explicit
     // checkpoint files need a local base here; source-declared parameter paths
     // are checked when their preparation declarations are consumed.
     const iree_string_view_t checkpoint =
-        out_model->kind == LOOM_SERVE_MODEL_KIND_TEXT ? out_model->text.weights
+        retained ? out_model->text.weights
         : out_model->kind == LOOM_SERVE_MODEL_KIND_IMAGE
             ? out_model->image.adapter
             : iree_string_view_empty();
@@ -574,7 +579,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   const iree_string_view_t paths[] = {
       out_model->sources.prepare,
       out_model->sources.control,
-      out_model->kind == LOOM_SERVE_MODEL_KIND_TEXT ? out_model->text.weights
+      retained ? out_model->text.weights
       : out_model->kind == LOOM_SERVE_MODEL_KIND_IMAGE
           ? out_model->image.checkpoint
           : out_model->assets,

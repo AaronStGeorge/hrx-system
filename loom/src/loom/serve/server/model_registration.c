@@ -960,6 +960,9 @@ static iree_status_t loom_serve_text_registration_create(
   const iree_host_size_t shape_count = loom_serve_text_default_shapes(
       text->rows, text->prefill_capacity, registration->shapes);
   const loom_serve_text_options_t model_options = {
+      .mode = configuration->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE
+                  ? LOOM_SERVE_TEXT_MODE_ENCODE
+                  : LOOM_SERVE_TEXT_MODE_GENERATE,
       .sources = configuration->sources,
       .prefill_capacity = text->prefill_capacity,
       .context_capacity = text->context_capacity,
@@ -1021,6 +1024,7 @@ static iree_status_t loom_serve_model_registration_create(
       loom_serve_wake_callback_t, loom_serve_telemetry_stream_t*,
       iree_allocator_t, loom_serve_registration_t*) = {
       [LOOM_SERVE_MODEL_KIND_TEXT] = loom_serve_text_registration_create,
+      [LOOM_SERVE_MODEL_KIND_SEQUENCE] = loom_serve_text_registration_create,
       [LOOM_SERVE_MODEL_KIND_IMAGE] = loom_serve_image_registration_create,
       [LOOM_SERVE_MODEL_KIND_EMBEDDING] = loom_serve_finite_registration_create,
       [LOOM_SERVE_MODEL_KIND_DECISION] = loom_serve_finite_registration_create,
@@ -1058,6 +1062,7 @@ loom_serve_registration_factory_t loom_serve_model_registration_factory(
                (1u << LOOM_SERVE_MODEL_KIND_SPEECH) |
                (1u << LOOM_SERVE_MODEL_KIND_RECOGNITION) |
                (1u << LOOM_SERVE_MODEL_KIND_ACTIVITY) |
+               (1u << LOOM_SERVE_MODEL_KIND_SEQUENCE) |
                (1u << LOOM_SERVE_MODEL_KIND_TEXT),
       .device_count = loom_serve_device_group_count(options->device_group),
       .create = loom_serve_model_registration_create,

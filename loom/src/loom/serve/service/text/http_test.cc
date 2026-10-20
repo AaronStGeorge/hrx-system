@@ -44,7 +44,8 @@ class TextHttpTest : public ::testing::TestWithParam<bool> {
     IREE_ASSERT_OK(http_.TakeRequest(client_.get(), &connection, &request));
     const auto receipt = loom_serve_text_telemetry_begin(&telemetry_);
     auto status = loom_serve_text_http_consumer_allocate(
-        connection, &telemetry_, receipt, iree_allocator_system(), &consumer_);
+        connection, &telemetry_, receipt, false, iree_allocator_system(),
+        &consumer_);
     if (!iree_status_is_ok(status)) {
       loom_serve_http_connection_abort(connection);
     }

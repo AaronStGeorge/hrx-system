@@ -97,8 +97,8 @@ iree_status_t loom_serve_text_checkpoint_request_submit(
           iree_make_status(IREE_STATUS_NOT_FOUND, "session is not retained"),
           scratch);
     }
-    if (source.busy ||
-        (source.session && !source.session->completion.reusable)) {
+    if (source.busy || (source.session &&
+                        !loom_serve_text_session_has_history(source.session))) {
       return loom_serve_text_checkpoint_reject(
           control, telemetry,
           iree_make_status(
