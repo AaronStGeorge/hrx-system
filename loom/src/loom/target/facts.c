@@ -56,6 +56,8 @@ bool loom_target_facts_are_equivalent(const loom_target_facts_t* lhs,
   }
   if (lhs->fact_type != rhs->fact_type ||
       lhs->explicit_fields != rhs->explicit_fields ||
+      !iree_string_view_equal(lhs->storage.config.schedule_model_key,
+                              rhs->storage.config.schedule_model_key) ||
       !loom_target_facts_satisfy_specialization_requirement(lhs, rhs) ||
       !loom_target_facts_satisfy_specialization_requirement(rhs, lhs)) {
     return false;

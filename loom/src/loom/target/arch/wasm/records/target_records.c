@@ -35,6 +35,7 @@ static const loom_target_export_plan_t kWasmCoreSimd128ExportPlan = {
 
 static const loom_target_config_t kWasmCoreSimd128Config = {
     .name = IREE_SVL("wasm.core.simd128"),
+    .schedule_model_key = IREE_SVL("wasm.core.simd128"),
     .contract_set_key = IREE_SVL("wasm.core.simd128"),
 };
 

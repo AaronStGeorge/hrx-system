@@ -299,6 +299,7 @@ loom_cc_test(
     loom::target::function_contract
     loom::target::test::alt_descriptors
     loom::target::test::descriptors
+    loom::target::test::target_record_table
     loom::testing::module_ptr
 )
 
@@ -343,6 +344,7 @@ loom_cc_library(
     "function_model.c"
   DEPS
     ::descriptors
+    ::diagnostics
     ::function
     ::function_requirements
     ::storage_identity

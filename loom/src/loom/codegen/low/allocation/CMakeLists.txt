@@ -1327,7 +1327,9 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::low
+    loom::target::facts_builder
     loom::target::test::low_registry
+    loom::target::test::target_record_table
     loom::testing::module_ptr
 )
 

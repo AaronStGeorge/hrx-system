@@ -346,6 +346,11 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
   return context->descriptor_set;
 }
 
+const loom_low_schedule_model_t* loom_low_lower_context_schedule_model(
+    const loom_low_lower_context_t* context) {
+  return context->schedule_model;
+}
+
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context) {
   IREE_ASSERT(context->low_func_op == NULL);

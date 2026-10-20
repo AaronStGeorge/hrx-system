@@ -42,6 +42,8 @@ typedef struct loom_low_resolved_target_t {
   uint64_t feature_bits;
   // Descriptor set found in the caller-provided registry.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected once while binding the function target.
+  const loom_low_schedule_model_t* schedule_model;
 } loom_low_resolved_target_t;
 
 // Returns the common target bundle projected into |target->target_facts|.

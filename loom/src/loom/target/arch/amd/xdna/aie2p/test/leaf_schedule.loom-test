@@ -2,7 +2,9 @@
 // operands. Both loads initially name port A.
 // RUN: emit low-schedule-query @vector_add strategy=resource-stall order=* issue=*
 
-low.func.def target<amd.xdna.aie2p.core> @vector_add(%lhs_ptr: reg<aie2p.ep>, %rhs_ptr: reg<aie2p.ep>, %out_ptr: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @vector_add(%lhs_ptr: reg<aie2p.ep>, %rhs_ptr: reg<aie2p.ep>, %out_ptr: reg<aie2p.ep>) asm {
   %lhs = vlda.512.i32x16 %lhs_ptr, 0
   %rhs = vlda.512.i32x16 %rhs_ptr, 0
   %sum = vadd.32 %rhs, %lhs
@@ -23,7 +25,9 @@ node 4 issue-cycle: 10
 // Lock acquires and the following load observe four-cycle memory separation.
 // RUN: emit low-schedule-query @lock_then_load strategy=source order=* issue=*
 
-low.func.def target<amd.xdna.aie2p.core> @lock_then_load(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @lock_then_load(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>) asm {
   acq %lock_value, 5
   acq %lock_value, 37
   %value = vlda.acc %source, 0
@@ -42,7 +46,9 @@ node 3 issue-cycle: 9
 // An acquire drains before the successor memory operation.
 // RUN: emit low-schedule-query @lock_then_load_edge strategy=source order=* issue=*
 
-low.func.def target<amd.xdna.aie2p.core> @lock_then_load_edge(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @lock_then_load_edge(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>) asm {
   acq %lock_value, 5
   low.br ^consume
 ^consume:
@@ -63,7 +69,9 @@ node 3 issue-cycle: 1
 // A load drains before the successor lock operation.
 // RUN: emit low-schedule-query @load_then_lock_edge strategy=source order=* issue=*
 
-low.func.def target<amd.xdna.aie2p.core> @load_then_lock_edge(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @load_then_lock_edge(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>) asm {
   %value = vlda.acc %source, 0
   low.br ^consume
 ^consume:
@@ -84,7 +92,9 @@ node 3 issue-cycle: 1
 // Lock timing is preserved across the control-flow boundary.
 // RUN: emit low-schedule-query @lock_then_lock_edge strategy=source order=* issue=*
 
-low.func.def target<amd.xdna.aie2p.core> @lock_then_lock_edge(%lock_value: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @lock_then_lock_edge(%lock_value: reg<aie2p.er>) asm {
   acq %lock_value, 5
   low.br ^consume
 ^consume:
@@ -106,7 +116,9 @@ node 3 issue-cycle: 1
 // crosses it to fill the load's latency.
 // RUN: emit low-schedule-query @release_exposes_independent_work strategy=resource-stall order=* issue=* kind=effect consumer=* edge=effect:0:1,effect:1:3
 
-low.func.def target<amd.xdna.aie2p.core> @release_exposes_independent_work(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>, %output: reg<aie2p.ep>, %seed: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @release_exposes_independent_work(%lock_value: reg<aie2p.er>, %source: reg<aie2p.ep>, %output: reg<aie2p.ep>, %seed: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %value = vlda.512.i32x16 %source, 0
   rel %lock_value, 5
   %next = add %seed, 1
@@ -133,7 +145,9 @@ edge effect 1 -> 3: separation=4 source=event-pair quality=exact producer-event=
 // its selection still needs earlier selections using the same register.
 // RUN: emit low-schedule-query @multiply_special_values strategy=resource-stall scheduled-pressure=aie2p.mr27_select
 
-low.func.def target<amd.xdna.aie2p.core> @multiply_special_values(%left_magnitude: reg<aie2p.er>, %infinity: reg<aie2p.er>, %right_magnitude: reg<aie2p.er>, %right_is_zero: reg<aie2p.er>, %quiet_nan: reg<aie2p.er>, %signed_infinity: reg<aie2p.er>, %left_is_zero: reg<aie2p.er>, %finite_product: reg<aie2p.er>, %left_bits: reg<aie2p.er>, %quiet_bit: reg<aie2p.er>, %right_bits: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @multiply_special_values(%left_magnitude: reg<aie2p.er>, %infinity: reg<aie2p.er>, %right_magnitude: reg<aie2p.er>, %right_is_zero: reg<aie2p.er>, %quiet_nan: reg<aie2p.er>, %signed_infinity: reg<aie2p.er>, %left_is_zero: reg<aie2p.er>, %finite_product: reg<aie2p.er>, %left_bits: reg<aie2p.er>, %quiet_bit: reg<aie2p.er>, %right_bits: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %left_is_infinite = eq %left_magnitude, %infinity
   %right_is_infinite = eq %right_magnitude, %infinity
   %right_zero_predicate = copy %right_is_zero : reg<aie2p.er> -> reg<aie2p.mr27_select>
@@ -166,7 +180,9 @@ scheduled pressure aie2p.mr27_select: peak-live-units=1 peak-live-values=1
 // consumers without opening all five shift live ranges.
 // RUN: emit low-schedule-query @interleaved_shift_consumers strategy=resource-stall order=1,2,3,4,5,7,8,9,10,11 kind=state consumer=7,8,9,10,11 timing=0:7
 
-low.func.def target<amd.xdna.aie2p.core> @interleaved_shift_consumers(%padding: reg<aie2p.vec256>, %value: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @interleaved_shift_consumers(%padding: reg<aie2p.vec256>, %value: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>, reg<aie2p.vec256>) asm {
   set.srs-mode 0
   %shift0 = mov.shift 24
   %shift1 = mov.shift 20
@@ -200,7 +216,9 @@ timing 0 -> 7: separation=1 source=event-pair quality=exact
 // Opening the independent second encoding first exhausts accumulator storage.
 // RUN: emit aie2p-leaf @pinned_encode_address_prerequisites report=emission
 
-low.func.def target<amd.xdna.aie2p.core> @pinned_encode_address_prerequisites(%source: reg<aie2p.ep>, %reduction_cell: reg<aie2p.er>, %first_lower_bf16: reg<aie2p.vec256 x2>, %second_lower_bf16: reg<aie2p.vec256 x2>, %second_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %other_lhs: reg<aie2p.mexa>, %other_rhs: reg<aie2p.mexa>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @pinned_encode_address_prerequisites(%source: reg<aie2p.ep>, %reduction_cell: reg<aie2p.er>, %first_lower_bf16: reg<aie2p.vec256 x2>, %second_lower_bf16: reg<aie2p.vec256 x2>, %second_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %other_lhs: reg<aie2p.mexa>, %other_rhs: reg<aie2p.mexa>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
   %first_lower = vconv.fp32.bf16 %first_lower_bf16
   %upper_half_offset = mov.static-byte-offset 1088
   %row_stride_bytes = mov.i32 128
@@ -237,7 +255,9 @@ coissued components: 4
 // fragments leave only one DM of scratch, so the second encoding must wait.
 // RUN: emit aie2p-leaf @pinned_encode_state_prerequisite report=code
 
-low.func.def target<amd.xdna.aie2p.core> @pinned_encode_state_prerequisite(%source: reg<aie2p.ep>, %cursor_state: reg<aie2p.ep>, %row_byte_position: reg<aie2p.er>, %first_lower_bf16: reg<aie2p.vec256 x2>, %second_lower_bf16: reg<aie2p.vec256 x2>, %second_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %other_lhs: reg<aie2p.mexa>, %other_rhs: reg<aie2p.mexa>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @pinned_encode_state_prerequisite(%source: reg<aie2p.ep>, %cursor_state: reg<aie2p.ep>, %row_byte_position: reg<aie2p.er>, %first_lower_bf16: reg<aie2p.vec256 x2>, %second_lower_bf16: reg<aie2p.vec256 x2>, %second_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %other_lhs: reg<aie2p.mexa>, %other_rhs: reg<aie2p.mexa>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.er>) asm {
   %first_lower = vconv.fp32.bf16 %first_lower_bf16
   %upper_half_offset = mov.static-byte-offset 1088
   %row_stride_bytes = mov.i32 128
@@ -274,7 +294,9 @@ code: d4 15 03 d8 8e 00 44 80 a8 00 00 00 44 00 21 01 00 00 00 00 00 00 00 00 00
 // Both encoded operands remain live for the four loaded-C matrix updates.
 // RUN: emit aie2p-leaf @bfp_encode_read_ahead_four_accumulators report=emission
 
-low.func.def target<amd.xdna.aie2p.core> @bfp_encode_read_ahead_four_accumulators(%first_row: reg<aie2p.vec256 x2>, %second_row: reg<aie2p.vec256 x2>, %ready_lower_bf16: reg<aie2p.vec256 x2>, %ready_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @bfp_encode_read_ahead_four_accumulators(%first_row: reg<aie2p.vec256 x2>, %second_row: reg<aie2p.vec256 x2>, %ready_lower_bf16: reg<aie2p.vec256 x2>, %ready_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
   %transpose_lower_mode = mova.i32 52
   %shuffled_lower_bf16 = vshuffle %first_row, %second_row, %transpose_lower_mode
   %transpose_upper_mode = mova.i32 53
@@ -309,7 +331,9 @@ coissued components: 7
 // the same unread sticky updates without requiring scratch-bank reuse.
 // RUN: emit aie2p-leaf @bfp_encode_read_ahead_three_accumulators report=emission
 
-low.func.def target<amd.xdna.aie2p.core> @bfp_encode_read_ahead_three_accumulators(%first_row: reg<aie2p.vec256 x2>, %second_row: reg<aie2p.vec256 x2>, %ready_lower_bf16: reg<aie2p.vec256 x2>, %ready_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @bfp_encode_read_ahead_three_accumulators(%first_row: reg<aie2p.vec256 x2>, %second_row: reg<aie2p.vec256 x2>, %ready_lower_bf16: reg<aie2p.vec256 x2>, %ready_upper_bf16: reg<aie2p.vec256 x2>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
   %transpose_lower_mode = mova.i32 52
   %shuffled_lower_bf16 = vshuffle %first_row, %second_row, %transpose_lower_mode
   %transpose_upper_mode = mova.i32 53
@@ -343,7 +367,9 @@ coissued components: 7
 // storage exit. Encoding scratch must complete within the one remaining DM.
 // RUN: emit aie2p-leaf @fused_forwarded_loop report=emission
 
-low.func.def target<amd.xdna.aie2p.core> @fused_forwarded_loop(%first_row: reg<aie2p.ep>, %second_row: reg<aie2p.ep>, %columns: reg<aie2p.ep>, %reduction_cell_count: reg<aie2p.er>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @fused_forwarded_loop(%first_row: reg<aie2p.ep>, %second_row: reg<aie2p.ep>, %columns: reg<aie2p.ep>, %reduction_cell_count: reg<aie2p.er>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
   %begin = mov.short 0
   %cells_per_iteration = mov.short 2
   low.br ^loop(%begin: reg<aie2p.er>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %first_row: reg<aie2p.ep>, %second_row: reg<aie2p.ep>, %columns: reg<aie2p.ep>)
@@ -436,7 +462,9 @@ coissued components: 35
 // through the native Low function results.
 // RUN: emit aie2p-leaf @shared_x_packing report=code
 
-low.func.def target<amd.xdna.aie2p.core> @shared_x_packing(%first_lower_bf16: reg<aie2p.vec256 x2>, %first_upper_bf16: reg<aie2p.vec256 x2>, %second_lower_bf16: reg<aie2p.vec256 x2>, %second_upper_bf16: reg<aie2p.vec256 x2>, %third_lower_bf16: reg<aie2p.vec256 x2>, %third_upper_bf16: reg<aie2p.vec256 x2>, %first_lhs: reg<aie2p.mexa>, %first_rhs: reg<aie2p.mexa>, %second_lhs: reg<aie2p.mexa>, %second_rhs: reg<aie2p.mexa>, %third_lhs: reg<aie2p.mexa>, %third_rhs: reg<aie2p.mexa>) -> (reg<aie2p.mexa>, reg<aie2p.mexa>, reg<aie2p.mexa>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @shared_x_packing(%first_lower_bf16: reg<aie2p.vec256 x2>, %first_upper_bf16: reg<aie2p.vec256 x2>, %second_lower_bf16: reg<aie2p.vec256 x2>, %second_upper_bf16: reg<aie2p.vec256 x2>, %third_lower_bf16: reg<aie2p.vec256 x2>, %third_upper_bf16: reg<aie2p.vec256 x2>, %first_lhs: reg<aie2p.mexa>, %first_rhs: reg<aie2p.mexa>, %second_lhs: reg<aie2p.mexa>, %second_rhs: reg<aie2p.mexa>, %third_lhs: reg<aie2p.mexa>, %third_rhs: reg<aie2p.mexa>) -> (reg<aie2p.mexa>, reg<aie2p.mexa>, reg<aie2p.mexa>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
   %transpose_lower_mode = mova.i32 52
   %transpose_upper_mode = mova.i32 53
   set.rounding 12
@@ -475,7 +503,9 @@ code: 54 31 60 0f 80 61 62 29 e0 00 04 00 81 06 4a 69 e4 01 62 84 22 00 a2 06 f8
 // architectural eight-register EDJ bank while four accumulators stay live.
 // RUN: emit low-schedule-query @effect_blocked_store_indices strategy=resource-stall scheduled-pressure-limit=aie2p.edj:8
 
-low.func.def target<amd.xdna.aie2p.core> @effect_blocked_store_indices(%source: reg<aie2p.ep>, %destination: reg<aie2p.ep>, %cell: reg<aie2p.er>, %position0: reg<aie2p.er>, %position1: reg<aie2p.er>, %position2: reg<aie2p.er>, %position3: reg<aie2p.er>, %position4: reg<aie2p.er>, %position5: reg<aie2p.er>, %position6: reg<aie2p.er>, %position7: reg<aie2p.er>, %position8: reg<aie2p.er>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %resident_piece: reg<aie2p.mbms>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @effect_blocked_store_indices(%source: reg<aie2p.ep>, %destination: reg<aie2p.ep>, %cell: reg<aie2p.er>, %position0: reg<aie2p.er>, %position1: reg<aie2p.er>, %position2: reg<aie2p.er>, %position3: reg<aie2p.er>, %position4: reg<aie2p.er>, %position5: reg<aie2p.er>, %position6: reg<aie2p.er>, %position7: reg<aie2p.er>, %position8: reg<aie2p.er>, %accumulator00: reg<aie2p.mbms x4>, %accumulator01: reg<aie2p.mbms x4>, %accumulator10: reg<aie2p.mbms x4>, %accumulator11: reg<aie2p.mbms x4>, %resident_piece: reg<aie2p.mbms>) -> (reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>, reg<aie2p.mbms x4>) asm {
   %cell_offset = mov.static-byte-offset 256
   %cell_stride = mov.i32 256
   %load_position = mac %cell_offset, %cell, %cell_stride
@@ -513,7 +543,9 @@ scheduled pressure aie2p.edj: peak-live-units<=8
 // the architectural eight-register EDJ bank.
 // RUN: emit low-schedule-query @payload_dependent_store_indices strategy=resource-stall scheduled-pressure-limit=aie2p.edj:8
 
-low.func.def target<amd.xdna.aie2p.core> @payload_dependent_store_indices(%source: reg<aie2p.ep>, %destination: reg<aie2p.ep>, %cell: reg<aie2p.er>, %position0: reg<aie2p.er>, %position1: reg<aie2p.er>, %position2: reg<aie2p.er>, %position3: reg<aie2p.er>, %position4: reg<aie2p.er>, %position5: reg<aie2p.er>, %position6: reg<aie2p.er>, %position7: reg<aie2p.er>, %position8: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @payload_dependent_store_indices(%source: reg<aie2p.ep>, %destination: reg<aie2p.ep>, %cell: reg<aie2p.er>, %position0: reg<aie2p.er>, %position1: reg<aie2p.er>, %position2: reg<aie2p.er>, %position3: reg<aie2p.er>, %position4: reg<aie2p.er>, %position5: reg<aie2p.er>, %position6: reg<aie2p.er>, %position7: reg<aie2p.er>, %position8: reg<aie2p.er>) asm {
   %cell_offset = mov.static-byte-offset 256
   %cell_stride = mov.i32 256
   %load_position = mac %cell_offset, %cell, %cell_stride
@@ -549,8 +581,10 @@ scheduled pressure aie2p.edj: peak-live-units<=8
 // them: allocation-generated setup moves need native ordering guarantees too.
 // RUN: emit aie2p-leaf @phase_setup_boundary
 
+aie2p.target<core> @target
+
 // ERROR@+1: BACKEND/047 {op_name="low.func.def", representation="amd.xdna.aie2p.core"}
-low.func.def schedule(phased) target<amd.xdna.aie2p.core> @phase_setup_boundary(%input: reg<aie2p.ep>, %ready_half: reg<aie2p.vec256>) -> (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) asm {
+low.func.def schedule(phased) target<amd.xdna.aie2p.core>(@target) @phase_setup_boundary(%input: reg<aie2p.ep>, %ready_half: reg<aie2p.vec256>) -> (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) asm {
   %loaded = vlda.512.i32x16 %input, 0
   %doubled = vadd.32 %loaded, %loaded
   low.schedule.phase
@@ -564,7 +598,9 @@ low.func.def schedule(phased) target<amd.xdna.aie2p.core> @phase_setup_boundary(
 // Materializing the private scalar last keeps it out of that work's live set.
 // RUN: emit low-schedule-query @private_lock_operand strategy=resource-stall per-user-placement-values=%lock_value order=* issue=*
 
-low.func.def target<amd.xdna.aie2p.core> @private_lock_operand(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @private_lock_operand(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %lock_value = mov.short -1
   %sum = add.rr %lhs, %rhs
   %result = add.rr %sum, %rhs

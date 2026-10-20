@@ -61,6 +61,7 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
 #define LOOM_AMDGPU_LOW_CONFIG(symbol, key) \
   static const loom_target_config_t symbol = { \
       .name = IREE_SVL(key), \
+      .schedule_model_key = IREE_SVL("amdgpu.generic"), \
       .contract_set_key = IREE_SVL(key), \
   }
 

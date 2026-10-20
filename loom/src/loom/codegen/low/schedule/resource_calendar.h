@@ -33,8 +33,8 @@ typedef struct loom_low_schedule_resource_calendar_slot_t {
 } loom_low_schedule_resource_calendar_slot_t;
 
 typedef struct loom_low_schedule_resource_calendar_t {
-  // Descriptor set owning all resource and issue-use rows.
-  const loom_low_descriptor_set_t* descriptor_set;
+  // Machine model owning all resource and issue-use rows.
+  const loom_low_schedule_model_t* schedule_model;
   // Fixed occupancy storage indexed by generated resource calendar layouts.
   // Only slots touched by an issued class are updated; advancing time neither
   // moves retained occupancy nor visits unrelated resources.
@@ -56,7 +56,7 @@ typedef struct loom_low_schedule_resource_calendar_t {
 // overwrite occupancy outside the retained interval. No allocations occur
 // after initialization.
 iree_status_t loom_low_schedule_resource_calendar_initialize(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     iree_arena_allocator_t* arena,
     loom_low_schedule_resource_calendar_t* out_calendar);
 
@@ -68,7 +68,7 @@ void loom_low_schedule_resource_calendar_reset(
 // Single descriptor classes already satisfy this during generation. Native
 // packet formation uses this query before admitting a multi-instruction group.
 bool loom_low_schedule_resource_group_fits(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_schedule_class_t* const* schedule_classes,
     uint16_t schedule_class_count);
 

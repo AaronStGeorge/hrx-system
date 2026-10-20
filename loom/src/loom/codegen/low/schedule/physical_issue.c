@@ -22,9 +22,11 @@ iree_status_t loom_low_physical_issue_initialize(
          schedule->node_count * sizeof(*out_issue->node_ready_cycles));
   const loom_low_descriptor_set_t* descriptor_set =
       schedule->target.descriptor_set;
+  const loom_low_schedule_model_t* schedule_model =
+      schedule->target.schedule_model;
   IREE_RETURN_IF_ERROR(loom_low_schedule_event_frontier_initialize(
-      descriptor_set, arena, &out_issue->events));
-  return loom_low_schedule_resource_calendar_initialize(descriptor_set, arena,
+      descriptor_set, schedule_model, arena, &out_issue->events));
+  return loom_low_schedule_resource_calendar_initialize(schedule_model, arena,
                                                         &out_issue->resources);
 }
 
@@ -82,9 +84,9 @@ void loom_low_physical_issue_commit_source(loom_low_physical_issue_t* issue,
 }
 
 static const loom_low_schedule_class_t* loom_low_physical_instruction_class(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_physical_instruction_t* instruction) {
-  return &descriptor_set->schedule_classes[instruction->schedule_class_row_id];
+  return &schedule_model->schedule_classes[instruction->schedule_class_row_id];
 }
 
 static bool loom_low_physical_registers_overlap(
@@ -113,22 +115,23 @@ static bool loom_low_physical_registers_overlap(
 }
 
 static bool loom_low_physical_events_require_separation(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t producer,
+    const loom_low_schedule_model_t* schedule_model, uint16_t producer,
     uint16_t consumer) {
   const loom_low_event_separation_t* separation =
-      loom_low_descriptor_set_lookup_event_separation(descriptor_set, producer,
+      loom_low_schedule_model_lookup_event_separation(schedule_model, producer,
                                                       consumer);
   return separation != NULL && separation->minimum_issue_separation_cycles > 0;
 }
 
 bool loom_low_physical_issue_group_fits(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_physical_instruction_t* instructions, uint16_t count) {
   const loom_low_schedule_class_t** classes =
       (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
   for (uint16_t i = 0; i < count; ++i) {
     classes[i] =
-        loom_low_physical_instruction_class(descriptor_set, &instructions[i]);
+        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
     const loom_low_descriptor_t* consumer =
         &descriptor_set->descriptors[instructions[i].descriptor_ordinal];
     for (uint16_t j = 0; j < i; ++j) {
@@ -141,11 +144,11 @@ bool loom_low_physical_issue_group_fits(
           const loom_low_operand_t* rhs =
               loom_low_descriptor_operand(descriptor_set, consumer, c);
           if (!loom_low_physical_events_require_separation(
-                  descriptor_set, lhs->read_event_id, rhs->write_event_id) &&
+                  schedule_model, lhs->read_event_id, rhs->write_event_id) &&
               !loom_low_physical_events_require_separation(
-                  descriptor_set, lhs->write_event_id, rhs->read_event_id) &&
+                  schedule_model, lhs->write_event_id, rhs->read_event_id) &&
               !loom_low_physical_events_require_separation(
-                  descriptor_set, lhs->write_event_id, rhs->write_event_id)) {
+                  schedule_model, lhs->write_event_id, rhs->write_event_id)) {
             continue;
           }
           if (loom_low_physical_registers_overlap(
@@ -157,7 +160,7 @@ bool loom_low_physical_issue_group_fits(
       }
     }
   }
-  return loom_low_schedule_resource_group_fits(descriptor_set, classes, count);
+  return loom_low_schedule_resource_group_fits(schedule_model, classes, count);
 }
 
 uint32_t loom_low_physical_issue_register_ready_cycle(
@@ -188,13 +191,13 @@ uint32_t loom_low_physical_issue_find_earliest_issue_cycle(
     const loom_low_physical_issue_t* issue,
     const loom_low_physical_instruction_t* instructions, uint16_t count,
     uint32_t proposed_cycle) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      issue->events.descriptor_set;
+  const loom_low_schedule_model_t* schedule_model =
+      issue->events.schedule_model;
   const loom_low_schedule_class_t** classes =
       (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
   for (uint16_t i = 0; i < count; ++i) {
     classes[i] =
-        loom_low_physical_instruction_class(descriptor_set, &instructions[i]);
+        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
   }
   const uint32_t cycle = iree_max(
       proposed_cycle,
@@ -210,11 +213,13 @@ iree_status_t loom_low_physical_issue_commit(
     uint32_t issue_cycle) {
   const loom_low_descriptor_set_t* descriptor_set =
       issue->events.descriptor_set;
+  const loom_low_schedule_model_t* schedule_model =
+      issue->events.schedule_model;
   const loom_low_schedule_class_t** classes =
       (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
   for (uint16_t i = 0; i < count; ++i) {
     classes[i] =
-        loom_low_physical_instruction_class(descriptor_set, &instructions[i]);
+        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
   }
   IREE_RETURN_IF_ERROR(loom_low_schedule_resource_calendar_commit(
       &issue->resources, classes, count, issue_cycle));
@@ -247,7 +252,7 @@ iree_status_t loom_low_physical_issue_commit(
         continue;
       }
       const uint32_t separation =
-          descriptor_set->timing_events[effect->producer_event_id]
+          schedule_model->timing_events[effect->producer_event_id]
               .maximum_issue_separation_cycles;
       if (issue_cycle > UINT32_MAX - separation) {
         status =

@@ -1136,6 +1136,7 @@ def compile_descriptor_set(
     allow_ambiguous_asm_mnemonics: bool = False,
     required_schedule_class_names: Sequence[str] = (),
     required_resource_names: Sequence[str] = (),
+    required_timing_event_names: Sequence[str] = (),
 ) -> CompiledDescriptorSet:
     if spec.generator_version == 0:
         raise ValueError(f"descriptor set '{spec.key}' has zero generator version")
@@ -1226,13 +1227,17 @@ def compile_descriptor_set(
     used_register_part_names: set[str] = set()
     used_resource_names = set(required_resource_names)
     used_schedule_names = set(required_schedule_class_names)
-    used_timing_event_names: set[str] = set()
+    used_timing_event_names = set(required_timing_event_names)
     unknown_required_resource_names = sorted(used_resource_names - resource_inputs.keys())
     if unknown_required_resource_names:
         raise ValueError(f"descriptor set '{spec.key}' requires unknown resources: {', '.join(unknown_required_resource_names)}")
     unknown_required_schedule_names = sorted(used_schedule_names - schedule_inputs.keys())
     if unknown_required_schedule_names:
         raise ValueError(f"descriptor set '{spec.key}' requires unknown schedule classes: {', '.join(unknown_required_schedule_names)}")
+    timing_event_inputs = {event.name for event in spec.timing_events}
+    unknown_required_timing_event_names = sorted(used_timing_event_names - timing_event_inputs)
+    if unknown_required_timing_event_names:
+        raise ValueError(f"descriptor set '{spec.key}' requires unknown timing events: " + ", ".join(unknown_required_timing_event_names))
     used_enum_domain_names: set[str] = set()
     for descriptor in selected_descriptors:
         result_count = operand_layouts_by_descriptor[descriptor.key].result_count

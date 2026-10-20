@@ -3,7 +3,9 @@
 // RUN: emit aie2p-leaf @identical_next report=code
 
 // Both dynamic outcomes reach the adjacent block after an observable store.
-low.func.def target<amd.xdna.aie2p.core> @identical_next(%condition: reg<aie2p.er>, %value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @identical_next(%condition: reg<aie2p.er>, %value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
   %before = add %value, 1
   st %before, %output, 0
   low.cond_br %condition, ^next, ^next : reg<aie2p.er>
@@ -21,7 +23,9 @@ code: 18 07 00 10 98 11 04 08 00 00 00 00 00 00 18 07 00 10 5c 00 50 30 82 02 00
 // RUN: emit aie2p-leaf @identical_nonnext report=code
 
 // Both outcomes return to the current resident worker, not a following block.
-low.func.def target<amd.xdna.aie2p.core> @identical_nonnext(%condition: reg<aie2p.er>, %value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @identical_nonnext(%condition: reg<aie2p.er>, %value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
   low.br ^worker
 ^worker:
   st %value, %output, 0
@@ -37,7 +41,9 @@ fixup: section=0 offset=0 kind=1 symbol=0 addend=0
 // RUN: emit aie2p-leaf @neither_next report=code
 
 // Both distinct store arms follow the shared return in physical source order.
-low.func.def target<amd.xdna.aie2p.core> @neither_next(%condition: reg<aie2p.er>, %left_value: reg<aie2p.er>, %right_value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @neither_next(%condition: reg<aie2p.er>, %left_value: reg<aie2p.er>, %right_value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
   low.cond_br %condition, ^left, ^right : reg<aie2p.er>
 ^join:
   return
@@ -62,7 +68,9 @@ fixup: section=0 offset=68 kind=1 symbol=0 addend=32
 
 // The taken destination and its adjacent successor have no edge arguments or
 // descriptor work. Their labels must alias the eventual store address.
-low.func.def target<amd.xdna.aie2p.core> @targeted_empty_chain(%condition: reg<aie2p.er>, %value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @targeted_empty_chain(%condition: reg<aie2p.er>, %value: reg<aie2p.er>, %output: reg<aie2p.ep>) asm {
   low.cond_br %condition, ^target, ^exit : reg<aie2p.er>
 ^exit:
   return
@@ -86,7 +94,9 @@ fixup: section=0 offset=32 kind=1 symbol=0 addend=16
 // cycles before the fallthrough backedge jump. The exit shares its NOP tail.
 // RUN: emit aie2p-leaf @countdown_store report=code
 
-low.func.def target<amd.xdna.aie2p.core> @countdown_store(%output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @countdown_store(%output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
   low.br ^loop(%count: reg<aie2p.er>)
 ^loop(%remaining: reg<aie2p.er>):
   %next = add %remaining, -1
@@ -109,7 +119,9 @@ fixup: section=0 offset=24 kind=1 symbol=0 addend=0
 // Both paths observe the preceding vector store after its effects retire.
 // RUN: emit aie2p-leaf @shared_tail report=code
 
-low.func.def target<amd.xdna.aie2p.core> @shared_tail(%condition: reg<aie2p.er>, %input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @shared_tail(%condition: reg<aie2p.er>, %input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
   %loaded = vlda.512.i32x16 %input, 0
   %doubled = vadd.32 %loaded, %loaded
   vst.512.i32x16 %doubled, %output, 0
@@ -134,7 +146,9 @@ fixup: section=0 offset=20 kind=1 symbol=0 addend=64
 // are otherwise free. The condition register remains part of the bundle.
 // RUN: emit aie2p-leaf @loaded_condition report=code
 
-low.func.def target<amd.xdna.aie2p.core> @loaded_condition(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @loaded_condition(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
   %zero = mov.i32 0
   %index = mov.address-index %zero
   %condition = lda.i32.index %input, %index
@@ -161,7 +175,9 @@ fixup: section=0 offset=28 kind=1 symbol=0 addend=64
 // The forward exit can share the explicit delay tail of the backedge branch.
 // RUN: emit aie2p-leaf @loop_entry_prefix report=code
 
-low.func.def target<amd.xdna.aie2p.core> @loop_entry_prefix(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @loop_entry_prefix(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
   st %count, %output, 4
   %loaded = vlda.512.i32x16 %input, 0
   low.br ^loop(%count: reg<aie2p.er>)
@@ -186,7 +202,9 @@ fixup: section=0 offset=54 kind=1 symbol=0 addend=32
 // skips the vector store, while fallthrough still waits for it to retire.
 // RUN: emit aie2p-leaf @forward_store_prefix report=code
 
-low.func.def target<amd.xdna.aie2p.core> @forward_store_prefix(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %condition: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @forward_store_prefix(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %condition: reg<aie2p.er>) asm {
   st %condition, %output, 4
   st %condition, %output, 8
   st %condition, %output, 12

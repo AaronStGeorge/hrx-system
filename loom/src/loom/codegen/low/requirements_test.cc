@@ -62,10 +62,16 @@ struct RequirementTables {
   loom_low_reg_class_alt_t reg_class_alts[1];
   // Schedule class rows referenced by the test descriptor.
   loom_low_schedule_class_t schedule_classes[1];
+  // Stable semantic names indexed by schedule class ID.
+  loom_string_ref_t schedule_class_names[1];
   // Issue-use rows referenced by the test schedule class.
   loom_low_issue_use_t issue_uses[1];
   // Resource rows referenced by the test issue-use rows.
   loom_low_resource_t resources[1];
+  // Schedule model assembled from the rows above.
+  loom_low_schedule_model_t schedule_model;
+  // Explicit catalog entry naming the schedule model above.
+  loom_low_schedule_model_entry_t schedule_models[1];
   // Descriptor set assembled from the rows above.
   loom_low_descriptor_set_t set;
 };
@@ -112,8 +118,7 @@ void InitializeRequirementTables(RequirementTables* tables) {
   tables->issue_uses[0].cycles = 1;
   tables->issue_uses[0].units = 1;
 
-  tables->schedule_classes[0].name_string_ref =
-      REQUIREMENT_STRING_REF(schedule_alu);
+  tables->schedule_class_names[0] = REQUIREMENT_STRING_REF(schedule_alu);
   tables->schedule_classes[0].latency_cycles = 1;
   tables->schedule_classes[0].latency_kind = LOOM_LOW_LATENCY_KIND_EXACT;
   tables->schedule_classes[0].issue_use_start = 0;
@@ -170,14 +175,22 @@ void InitializeRequirementTables(RequirementTables* tables) {
   tables->set.reg_class_count = IREE_ARRAYSIZE(tables->reg_classes);
   tables->set.reg_class_alts = tables->reg_class_alts;
   tables->set.reg_class_alt_count = IREE_ARRAYSIZE(tables->reg_class_alts);
-  tables->set.schedule_classes = tables->schedule_classes;
-  tables->set.schedule_class_count = IREE_ARRAYSIZE(tables->schedule_classes);
-  tables->set.schedule_class_row_count =
+  tables->schedule_model.schedule_classes = tables->schedule_classes;
+  tables->schedule_model.schedule_class_row_count =
       IREE_ARRAYSIZE(tables->schedule_classes);
-  tables->set.issue_uses = tables->issue_uses;
-  tables->set.issue_use_count = IREE_ARRAYSIZE(tables->issue_uses);
-  tables->set.resources = tables->resources;
-  tables->set.resource_count = IREE_ARRAYSIZE(tables->resources);
+  tables->schedule_model.issue_uses = tables->issue_uses;
+  tables->schedule_model.issue_use_count = IREE_ARRAYSIZE(tables->issue_uses);
+  tables->schedule_model.resources = tables->resources;
+  tables->schedule_model.resource_count = IREE_ARRAYSIZE(tables->resources);
+  tables->schedule_models[0] = {
+      .stable_id =
+          loom_low_descriptor_stable_id_from_key(IREE_SV("test.model")),
+      .model = &tables->schedule_model,
+  };
+  tables->set.schedule_class_name_string_refs = tables->schedule_class_names;
+  tables->set.schedule_models = tables->schedule_models;
+  tables->set.schedule_model_count = IREE_ARRAYSIZE(tables->schedule_models);
+  tables->set.schedule_class_count = IREE_ARRAYSIZE(tables->schedule_classes);
 }
 
 TEST(LowDescriptorRequirementsTest, VerifiesTargetLowFoundation) {
@@ -252,7 +265,7 @@ TEST(LowDescriptorRequirementsTest,
   InitializeRequirementTables(&tables);
   tables.schedule_classes[0].latency_cycles = 0;
   tables.schedule_classes[0].issue_use_count = 0;
-  tables.set.issue_use_count = 0;
+  tables.schedule_model.issue_use_count = 0;
 
   IREE_ASSERT_OK(loom_low_descriptor_set_verify_requirements(
       &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
@@ -263,7 +276,28 @@ TEST(LowDescriptorRequirementsTest,
   RequirementTables tables;
   InitializeRequirementTables(&tables);
   tables.schedule_classes[0].issue_use_count = 0;
-  tables.set.issue_use_count = 0;
+  tables.schedule_model.issue_use_count = 0;
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_descriptor_set_verify_requirements(
+          &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
+}
+
+TEST(LowDescriptorRequirementsTest, VerifiesEveryScheduleModel) {
+  RequirementTables tables;
+  InitializeRequirementTables(&tables);
+  loom_low_schedule_model_t incomplete_model = tables.schedule_model;
+  incomplete_model.resource_count = 0;
+  const loom_low_schedule_model_entry_t schedule_models[] = {
+      tables.schedule_models[0],
+      {
+          .stable_id = UINT64_MAX,
+          .model = &incomplete_model,
+      },
+  };
+  tables.set.schedule_models = schedule_models;
+  tables.set.schedule_model_count = IREE_ARRAYSIZE(schedule_models);
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,

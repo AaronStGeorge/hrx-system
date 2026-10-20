@@ -31,8 +31,11 @@ from loom.target.arch.x86.target_info import (
     X86_REG_CLASS_YMM,
     X86_REG_CLASS_ZMM,
     X86_TARGET_PROFILE_INFOS,
+    X86_TARGET_TUNE_INFOS,
     X86DescriptorSetInfo,
+    X86ProcessorMatchInfo,
     X86TargetProfileInfo,
+    X86TargetTuneInfo,
     sorted_descriptor_set_infos,
     sorted_target_profile_infos,
     validate_x86_target_info_tables,
@@ -191,6 +194,19 @@ def test_target_profile_lookup_records_planned_scalar_and_packed_dot_rows() -> N
 def test_target_profiles_are_profile_key_sorted() -> None:
     profile_keys = [info.profile_key for info in sorted_target_profile_infos()]
     assert profile_keys == sorted(profile_keys)
+
+
+def test_target_tune_validation_rejects_overlapping_processor_ranges() -> None:
+    overlapping_tune = X86TargetTuneInfo(
+        spelling="overlap",
+        stable_value=3,
+        schedule_model_key="x86.overlap",
+        processor_matches=(X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0x70, 0x70),),
+    )
+    with _raises_value_error("matches both 'znver5' and 'overlap'"):
+        validate_x86_target_info_tables(
+            target_tunes=(*X86_TARGET_TUNE_INFOS, overlapping_tune)
+        )
 
 
 def test_native_selector_profiles_are_backed_by_native_bundles() -> None:

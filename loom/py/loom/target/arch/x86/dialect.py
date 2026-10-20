@@ -9,6 +9,7 @@
 from loom.assembly import AttrDict, SymbolRef, TemplateParam
 from loom.dialect.target import target_record_attrs
 from loom.dsl import (
+    ATTR_TYPE_ENUM,
     ATTR_TYPE_SIGNED_ENUM_SET,
     SYMBOL_DEFINE,
     AttrDef,
@@ -21,6 +22,7 @@ from loom.dsl import (
     TargetLikeInterface,
 )
 from loom.target.arch.x86.feature_catalog import X86_FEATURE_INFOS
+from loom.target.arch.x86.target_info import X86_TARGET_TUNE_INFOS
 
 x86_ops = Dialect(
     "x86",
@@ -56,6 +58,15 @@ X86TargetFeature = EnumDef(
     doc="Optional x86 instruction-set feature.",
 )
 
+X86TargetTune = EnumDef(
+    "X86TargetTune",
+    [EnumCase(info.spelling, info.stable_value) for info in X86_TARGET_TUNE_INFOS],
+    doc="x86 processor scheduling model.",
+    c_type="loom_x86_target_tune_t",
+    c_const_prefix="LOOM_X86_TARGET_TUNE",
+    c_include="loom/target/arch/x86/records/target_records.h",
+)
+
 x86_target = Op(
     "x86.target",
     group=x86_ops,
@@ -83,6 +94,13 @@ x86_target = Op(
     attrs=[
         *target_record_attrs(X86TargetKind),
         AttrDef(
+            "tune",
+            ATTR_TYPE_ENUM,
+            enum_def=X86TargetTune,
+            optional=True,
+            doc="Explicit processor scheduling-model requirement.",
+        ),
+        AttrDef(
             "features",
             ATTR_TYPE_SIGNED_ENUM_SET,
             enum_def=X86TargetFeature,
@@ -104,6 +122,7 @@ x86_target = Op(
         "x86.target<avx2> @host",
         "x86.target<avx512> @host",
         "x86.target<packed_dot> @host",
+        "x86.target<avx2> @host {tune = znver5}",
         "x86.target<avx512> @host {features = [avx512bf16, -avx512vl]}",
     ],
 )

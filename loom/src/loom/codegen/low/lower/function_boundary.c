@@ -705,11 +705,10 @@ iree_status_t loom_low_lower_plan_declaration(
       .low_func_ref = loom_symbol_ref_null(),
   };
 
-  const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_descriptor_set_select_for_source_lowering(
-          options->descriptor_registry,
-          loom_target_facts_bundle(options->target_facts), &descriptor_set));
+  loom_target_low_source_binding_t binding = {0};
+  IREE_RETURN_IF_ERROR(loom_target_low_source_binding_select(
+      options->descriptor_registry,
+      loom_target_facts_bundle(options->target_facts), &binding));
 
   loom_low_lowering_frame_t frame = {0};
   iree_arena_allocator_t function_arena;
@@ -721,10 +720,11 @@ iree_status_t loom_low_lower_plan_declaration(
       .source_function = source_declaration,
       .options = options,
       .policy = options->policy,
-      .descriptor_set = descriptor_set,
+      .descriptor_set = binding.descriptor_set,
+      .schedule_model = binding.schedule_model,
       .result = out_result,
   };
-  out_result->descriptor_set = descriptor_set;
+  out_result->descriptor_set = binding.descriptor_set;
   iree_arena_initialize(module->arena.block_pool, &context.analysis_arena);
   loom_condition_query_initialize(module, /*value_domain=*/NULL,
                                   &context.analysis_arena,
@@ -741,7 +741,7 @@ iree_status_t loom_low_lower_plan_declaration(
     if (iree_status_is_ok(status)) {
       *plan = (loom_low_lower_declaration_plan_t){
           .source_declaration = source_declaration,
-          .descriptor_set = descriptor_set,
+          .descriptor_set = binding.descriptor_set,
           .target_ref = options->target_ref,
           .import_kind = options->policy->import_decl_kind,
           .boundary = context.lowering->boundary,

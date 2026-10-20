@@ -44,6 +44,10 @@ class LowEmissionFrameTest : public ::testing::Test {
         &context_, LOOM_DIALECT_LOW, vtables, (uint16_t)vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
+    loom_target_facts_builder_initialize(
+        &loom_test_target_fact_type,
+        loom_test_target_bundles.values[LOOM_TEST_TARGET_KIND_LOW_CORE],
+        &target_facts_);
     iree_arena_initialize(&block_pool_, &arena_);
   }
 
@@ -88,6 +92,7 @@ low.func.def target<test.low.core> @structural_model() -> (reg<test.i32 x4>) asm
     IREE_ASSERT_EQ(module_block->op_count, 1);
     loom_low_emission_frame_options_t options = {
         .descriptor_registry = &registry_.registry,
+        .function_target_facts = &target_facts_,
         .schedule_structural_models = structural_models,
         .schedule_strategy = schedule_strategy,
         .schedule_flags = schedule_flags,
@@ -117,8 +122,37 @@ low.func.def target<test.low.core> @structural_model() -> (reg<test.i32 x4>) asm
   iree_arena_block_pool_t block_pool_ = {};
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t registry_ = {};
+  loom_target_facts_t target_facts_ = {};
   iree_arena_allocator_t arena_ = {};
 };
+
+TEST_F(LowEmissionFrameTest, RejectsTargetlessFunctionBeforeScheduling) {
+  ModulePtr module = ParseModule();
+  uint32_t diagnostic_count = 0;
+  loom_low_emission_frame_options_t options = {
+      .descriptor_registry = &registry_.registry,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
+  };
+  options.emitter.fn = [](void* user_data,
+                          const loom_diagnostic_emission_t* emission) {
+    EXPECT_EQ(emission->error, LOOM_ERR_TARGET_026);
+    ++*static_cast<uint32_t*>(user_data);
+    return iree_ok_status();
+  };
+  options.emitter.user_data = &diagnostic_count;
+
+  loom_low_emission_frame_t frame = {};
+  bool accepted = true;
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module.get(), loom_block_op(loom_module_block(module.get()), 0), &options,
+      &arena_, &frame, &accepted));
+
+  EXPECT_FALSE(accepted);
+  EXPECT_NE(frame.target.descriptor_set, nullptr);
+  EXPECT_EQ(frame.target.schedule_model, nullptr);
+  EXPECT_EQ(frame.schedule.node_count, 0u);
+  EXPECT_EQ(diagnostic_count, 1u);
+}
 
 constexpr const char kLoopPlacementSource[] = R"(
 low.func.def target<test.low.core> @loop_placement(%source: reg<test.i32>) asm {
@@ -201,6 +235,7 @@ TEST_F(LowEmissionFrameTest, LoopPlacementConsumesRetainedHeaderCount) {
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .loop_execution = loop_execution,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = &budget,
@@ -261,6 +296,7 @@ TEST_F(LowEmissionFrameTest, LoopPlacementMultipliesCrossedLoopCounts) {
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = &budget,
       .allocation_budget_count = 1,
@@ -331,6 +367,7 @@ TEST_F(LowEmissionFrameTest, LoopPlacementRestoresRejectedTrial) {
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .loop_execution = loop_execution,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = &budget,
@@ -367,13 +404,9 @@ TEST_F(LowEmissionFrameTest, LoopPlacementRestoresRejectedTrial) {
 TEST_F(LowEmissionFrameTest, ResidencyQueryConsumesRetainedFunctionFacts) {
   ModulePtr module = ParseModule();
   static const loom_target_residency_model_t model = {.best_tier = 4};
-  loom_target_facts_t target_facts = {};
-  loom_target_facts_builder_initialize(&loom_test_target_fact_type,
-                                       loom_test_target_bundles.values[1],
-                                       &target_facts);
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
-      .function_target_facts = &target_facts,
+      .function_target_facts = &target_facts_,
       .residency_query =
           [](const loom_low_resolved_target_t* target,
              const loom_low_storage_layout_space_sizes_t* storage_sizes) {
@@ -414,6 +447,7 @@ TEST_F(LowEmissionFrameTest, StorageLeaseFrameRetainsValueProducers) {
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .storage_lease_provider = &storage_lease_provider,
   };
@@ -476,6 +510,7 @@ low.func.def target<test.low.core> @caller(%value: reg<test.pressure.alias32>) -
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
   };
   options.call_contracts.query = [](void* user_data, loom_symbol_ref_t callee) {
@@ -532,6 +567,7 @@ low.func.def target<test.low.core> @pair(%first: reg<test.pressure.alias32>, %se
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
@@ -598,6 +634,7 @@ low.func.def target<test.low.core> @caller(%value: reg<test.pressure.alias32>) -
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
   };
   options.call_contracts.query =
@@ -647,6 +684,7 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = strategy,
       .schedule_flags = LOOM_LOW_SCHEDULE_FLAG_RETAIN_DEPENDENCY_INDEX,
       .allocation_fixed_values = fixed_values,
@@ -682,7 +720,8 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
     }
     const loom_low_physical_instruction_t instruction =
         loom_low_physical_instruction_make(
-            frame.target.descriptor_set, packet.descriptor_ordinal, registers);
+            frame.target.descriptor_set, frame.target.schedule_model,
+            packet.descriptor_ordinal, registers);
     const uint32_t proposed_cycle =
         iree_max(iree_max(next_cycle, packet.node->issue_cycle),
                  loom_low_physical_issue_source_ready_cycle(&issue, i));
@@ -701,18 +740,18 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
   const uint16_t read_registers[] = {0};
   uint16_t write_registers[] = {0, 1};
   const loom_low_physical_instruction_t pair[] = {
-      loom_low_physical_instruction_make(frame.target.descriptor_set,
-                                         read_packet.descriptor_ordinal,
-                                         read_registers),
-      loom_low_physical_instruction_make(frame.target.descriptor_set,
-                                         write_packet.descriptor_ordinal,
-                                         write_registers),
+      loom_low_physical_instruction_make(
+          frame.target.descriptor_set, frame.target.schedule_model,
+          read_packet.descriptor_ordinal, read_registers),
+      loom_low_physical_instruction_make(
+          frame.target.descriptor_set, frame.target.schedule_model,
+          write_packet.descriptor_ordinal, write_registers),
   };
-  EXPECT_FALSE(
-      loom_low_physical_issue_group_fits(frame.target.descriptor_set, pair, 2));
+  EXPECT_FALSE(loom_low_physical_issue_group_fits(
+      frame.target.descriptor_set, frame.target.schedule_model, pair, 2));
   write_registers[0] = 1;
-  EXPECT_TRUE(
-      loom_low_physical_issue_group_fits(frame.target.descriptor_set, pair, 2));
+  EXPECT_TRUE(loom_low_physical_issue_group_fits(
+      frame.target.descriptor_set, frame.target.schedule_model, pair, 2));
 
   // A negative hardware RAW permits early native issue, but semantic source
   // edges retain producer-before-consumer issue order in this admission model.
@@ -782,6 +821,7 @@ low.func.def target<test.low.core> @constant_pair(%input: reg<test.i32>) -> (reg
     };
     loom_low_emission_frame_options_t options = {
         .descriptor_registry = &registry_.registry,
+        .function_target_facts = &target_facts_,
         .schedule_pair_affinities = {&affinity, 1},
         .schedule_strategy = strategy,
     };
@@ -823,6 +863,7 @@ low.func.def target<test.low.core> @bounded_pair(%address: reg<test.ptr>, %value
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_pair_affinities = {&affinity, 1},
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .allocation_budgets = &budget,
@@ -853,6 +894,7 @@ low.func.def target<test.low.core> @spills(%first: reg<test.i32>, %second: reg<t
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = &budget,
       .allocation_budget_count = 1,
@@ -920,6 +962,7 @@ low.func.def target<test.low.core> @feedback(%lhs: reg<test.i32>, %rhs: reg<test
   loom_low_planning_statistics_t statistics = {};
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .schedule_diagnostic_flags =
           LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS |
@@ -1014,6 +1057,7 @@ low.func.def target<test.low.core> @too_wide(%wide: reg<test.special x2>) -> (re
   loom_low_planning_statistics_t statistics = {};
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = &budget,
       .allocation_budget_count = 1,
@@ -1058,6 +1102,7 @@ TEST_F(LowEmissionFrameTest, FinalValidatorRejectsWithoutDiagnosticSink) {
   ModulePtr module = ParseModule();
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
   };
   loom_low_emission_frame_spill_free_options_t spill_free_options = {};
@@ -1102,6 +1147,7 @@ low.func.def target<test.low.core> @invalid_budget(%value: reg<test.i32>) -> (re
   loom_low_planning_statistics_t statistics = {};
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = budgets,
       .allocation_budget_count = IREE_ARRAYSIZE(budgets),
@@ -1201,6 +1247,7 @@ low.func.def target<test.low.core> @fixed_loop(%initial: reg<test.fixed.r0>, %co
 
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .allocation_flags =
           LOOM_LOW_ALLOCATION_FLAG_RETAIN_COALESCED_INCOMING_INDEX,
@@ -1286,6 +1333,7 @@ low.func.def target<test.low.core> @dependency_cycle(%lhs: reg<test.schedule_sta
   uint32_t diagnostic_count = 0;
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
   };
   options.emitter.fn = [](void* user_data,
@@ -1334,6 +1382,7 @@ low.func.def target<test.low.core> @guarded_store(%base: reg<test.ptr>, %origin:
   loom_low_planning_statistics_t statistics = {};
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .statistics = &statistics,
   };
@@ -1366,7 +1415,7 @@ low.func.def target<test.low.core> @guarded_store(%base: reg<test.ptr>, %origin:
   const auto& hazard_use = frame.schedule.hazard_uses[0];
   EXPECT_EQ(frame.schedule.nodes[hazard_use.node_index].op, load);
   const auto& hazard =
-      frame.schedule.target.descriptor_set->hazards[hazard_use.hazard_index];
+      frame.schedule.target.schedule_model->hazards[hazard_use.hazard_index];
   EXPECT_EQ(hazard.kind, LOOM_LOW_HAZARD_KIND_WAIT_COUNTER);
   EXPECT_EQ(hazard.reference_id, 0u);
 }
@@ -1389,6 +1438,7 @@ low.func.def target<test.low.core> @guarded_tail(%base: reg<test.ptr>, %origin: 
   loom_low_planning_statistics_t statistics = {};
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .statistics = &statistics,
   };
@@ -1626,8 +1676,12 @@ TEST_F(LowEmissionFrameTest, StructuralModelCarriesNativePacketTiming) {
           descriptor_set, TEST_LOW_CORE_DESCRIPTOR_REF_TEST_ADD_I32);
   const uint16_t expected_schedule_class_id =
       schedule_descriptor_view->schedule_class_id;
+  const loom_low_schedule_model_t* schedule_model =
+      loom_low_descriptor_set_lookup_schedule_model(descriptor_set,
+                                                    IREE_SV("test.low.core"));
+  ASSERT_NE(schedule_model, nullptr);
   const loom_low_schedule_class_t* expected_schedule_class =
-      loom_low_descriptor_set_schedule_class(descriptor_set,
+      loom_low_schedule_model_schedule_class(schedule_model,
                                              schedule_descriptor_view);
   ASSERT_EQ(expected_schedule_class->latency_cycles, 1u);
   ASSERT_EQ(expected_schedule_class->minimum_issue_separation_cycles, 1);
@@ -1660,7 +1714,8 @@ TEST_F(LowEmissionFrameTest, StructuralModelCarriesNativePacketTiming) {
   EXPECT_EQ(model_summary->use_count, 1u);
 
   const loom_low_issue_use_t* issue_use =
-      &descriptor_set->issue_uses[expected_schedule_class->issue_use_start];
+      &frame.schedule.target.schedule_model
+           ->issue_uses[expected_schedule_class->issue_use_start];
   const loom_low_schedule_resource_summary_t* resource_summary = nullptr;
   for (iree_host_size_t i = 0; i < frame.schedule.resource_summary_count; ++i) {
     if (frame.schedule.resource_summaries[i].resource_id ==

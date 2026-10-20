@@ -1226,6 +1226,8 @@ struct loom_low_lower_function_plan_t {
   } emission;
   // Selected instruction descriptors shared by planning and emission.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Selected machine schedule model shared by planning and emission.
+  const loom_low_schedule_model_t* schedule_model;
   // Retained selected decisions, source ordinals, and emission bindings.
   loom_low_lowering_frame_t frame;
   // Caller-owned arena backing this plan and every retained target payload.
@@ -1331,10 +1333,14 @@ static iree_status_t loom_low_lower_function_plan_build(
 
   loom_target_contract_query_environment_t legality_environment = {0};
   if (iree_status_is_ok(status)) {
-    status = loom_target_low_descriptor_set_select_for_source_lowering(
+    loom_target_low_source_binding_t binding = {0};
+    status = loom_target_low_source_binding_select(
         options->descriptor_registry,
-        loom_target_facts_bundle(options->target_facts),
-        &context->descriptor_set);
+        loom_target_facts_bundle(options->target_facts), &binding);
+    if (iree_status_is_ok(status)) {
+      context->descriptor_set = binding.descriptor_set;
+      context->schedule_model = binding.schedule_model;
+    }
   }
   if (iree_status_is_ok(status)) {
     status = loom_low_lower_source_query_environment_initialize(
@@ -1462,6 +1468,7 @@ iree_status_t loom_low_lower_plan_function(
   iree_arena_deinitialize(&context.analysis_arena);
   if (iree_status_is_ok(status) && out_result->error_count == 0) {
     plan->descriptor_set = context.descriptor_set;
+    plan->schedule_model = context.schedule_model;
     *out_plan = plan;
   }
   return status;
@@ -1540,6 +1547,7 @@ iree_status_t loom_low_lower_emit_function(loom_low_lower_function_plan_t* plan,
       .options = &options,
       .policy = options.policy,
       .descriptor_set = plan->descriptor_set,
+      .schedule_model = plan->schedule_model,
       .result = result,
       .function_arena = plan->arena,
       .module_state = options.module_state,

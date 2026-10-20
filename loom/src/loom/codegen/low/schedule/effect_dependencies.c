@@ -411,8 +411,8 @@ static iree_status_t loom_low_schedule_add_boundary_event_requirement(
     loom_low_schedule_dependency_endpoint_t producer_endpoint,
     uint32_t terminator_node, uint16_t consumer_event_id) {
   const loom_low_event_separation_t* separation =
-      loom_low_descriptor_set_lookup_event_separation(
-          state->target.descriptor_set, producer_endpoint.timing_event_id,
+      loom_low_schedule_model_lookup_event_separation(
+          state->target.schedule_model, producer_endpoint.timing_event_id,
           consumer_event_id);
   if (separation == NULL || separation->minimum_issue_separation_cycles <= 0) {
     return iree_ok_status();
@@ -622,8 +622,8 @@ iree_status_t loom_low_schedule_build_effect_dependencies(
   // timing and block-local effect ordering need no successor traversal.
   const bool has_boundary_timing =
       iree_any_bit_set(
-          state->target.descriptor_set->flags,
-          LOOM_LOW_DESCRIPTOR_SET_FLAG_POSITIVE_EFFECT_SEPARATIONS) &&
+          state->target.schedule_model->flags,
+          LOOM_LOW_SCHEDULE_MODEL_FLAG_POSITIVE_EFFECT_SEPARATIONS) &&
       state->cfg_graph->edge_count != 0;
   if (has_boundary_timing) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(

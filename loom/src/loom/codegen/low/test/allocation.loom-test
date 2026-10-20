@@ -1385,16 +1385,6 @@ value %next1: test.i32 -> target_id[4:1]
 
 // ====
 
-// RUN: emit low-allocation-query @contract_only_capacity_error fixed=%value:physical_register:40:1
-
-// A representation contract is sufficient for Low allocation. Export/config
-// context is absent when the optional target-symbol witness is omitted.
-// ERROR@+1: BACKEND/022 {target_key="<empty>", export_name="<empty>", config_key="<empty>", function_name="contract_only_capacity_error", request_kind="fixed_value", register_class="test.phys", location_base="40", allocation_capacity="32"}
-low.func.def target<test.low.core> @contract_only_capacity_error(%value: reg<test.phys>) -> (reg<test.phys>) asm {
-  return %value
-}
-// ====
-
 // RUN: emit low-allocation-query @explicit_physical_noncanonical_slice values=%wide,%high
 
 test.target<low_core> @test_target

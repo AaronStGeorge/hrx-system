@@ -46,11 +46,11 @@ iree_status_t loom_target_low_descriptor_registry_append_to_tables(
   return iree_ok_status();
 }
 
-iree_status_t loom_target_low_descriptor_set_select_for_source_lowering(
+iree_status_t loom_target_low_source_binding_select(
     const loom_low_descriptor_registry_t* registry,
     const loom_target_bundle_t* bundle,
-    const loom_low_descriptor_set_t** out_descriptor_set) {
-  *out_descriptor_set = NULL;
+    loom_target_low_source_binding_t* out_binding) {
+  *out_binding = (loom_target_low_source_binding_t){0};
   iree_string_view_t descriptor_set_key =
       iree_string_view_trim(bundle->config->contract_set_key);
 
@@ -64,6 +64,23 @@ iree_status_t loom_target_low_descriptor_set_select_for_source_lowering(
         (int)bundle->name.size, bundle->name.data, (int)descriptor_set_key.size,
         descriptor_set_key.data);
   }
-  *out_descriptor_set = descriptor_set;
+  const iree_string_view_t schedule_model_key =
+      bundle->config->schedule_model_key;
+  const loom_low_schedule_model_t* schedule_model =
+      loom_low_descriptor_set_lookup_schedule_model(descriptor_set,
+                                                    schedule_model_key);
+  if (schedule_model == NULL) {
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "target bundle '%.*s' selected schedule model '%.*s' that is not "
+        "available in low descriptor set '%.*s'",
+        (int)bundle->name.size, bundle->name.data, (int)schedule_model_key.size,
+        schedule_model_key.data, (int)descriptor_set_key.size,
+        descriptor_set_key.data);
+  }
+  *out_binding = (loom_target_low_source_binding_t){
+      .descriptor_set = descriptor_set,
+      .schedule_model = schedule_model,
+  };
   return iree_ok_status();
 }

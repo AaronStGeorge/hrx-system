@@ -287,6 +287,10 @@ typedef struct loom_target_export_plan_t {
 typedef struct loom_target_config_t {
   // Stable config name for diagnostics and tests.
   iree_string_view_t name;
+  // Exact schedule-model catalog key selected for concrete Low compilation.
+  // Target-family facts establish or rebind this before Low binding; Low never
+  // substitutes a model. Empty is valid only for configs that cannot bind Low.
+  iree_string_view_t schedule_model_key;
   // Provider-defined target-contract selection key, or empty for default
   // policy.
   iree_string_view_t contract_set_key;

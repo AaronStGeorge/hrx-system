@@ -1,7 +1,9 @@
 // Register and signed-byte additions retain their DJ destination encoding.
 // RUN: emit aie2p-leaf @address_indices report=code
 
-low.func.def target<amd.xdna.aie2p.core> @address_indices(%pointer: reg<aie2p.ep>, %origin: reg<aie2p.er>, %bias: reg<aie2p.er>, %value: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @address_indices(%pointer: reg<aie2p.ep>, %origin: reg<aie2p.er>, %bias: reg<aie2p.er>, %value: reg<aie2p.er>) asm {
   %lower = add.address-index.immediate %origin, -128
   %upper = add.address-index.immediate %origin, 127
   %dynamic = add.address-index %origin, %bias
@@ -19,7 +21,9 @@ code: 18 40 80 18 14 7f 00 e1 08 00 58 05 80 19 00 00 00 00 00 00 00 00 00 00 18
 // Distinct control fields must retain their binding through native encoding.
 // RUN: emit aie2p-leaf @control report=code
 
-low.func.def target<amd.xdna.aie2p.core> @control(%address: reg<aie2p.em>, %id: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @control(%address: reg<aie2p.em>, %id: reg<aie2p.er>) asm {
   mov.cph %address, %id, 2, 1
   return
 }
@@ -32,7 +36,9 @@ code: 5c 00 50 40 02 04 00 00 00 00 00 00 00 00 00 00
 // Different field values must produce different instruction bits.
 // RUN: emit aie2p-leaf @control report=code
 
-low.func.def target<amd.xdna.aie2p.core> @control(%address: reg<aie2p.em>, %id: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @control(%address: reg<aie2p.em>, %id: reg<aie2p.er>) asm {
   mov.cph %address, %id, 1, 2
   return
 }

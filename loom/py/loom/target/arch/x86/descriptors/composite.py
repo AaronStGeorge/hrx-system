@@ -115,6 +115,7 @@ def _composite_descriptor_set(
         resources = tuple(resources_by_name[resource.name] for resource in resources)
     return DescriptorSet(
         key=key,
+        inline_schedule_model_key="x86.generic",
         target_key="x86",
         feature_key=feature_key,
         c_header_path=Path(

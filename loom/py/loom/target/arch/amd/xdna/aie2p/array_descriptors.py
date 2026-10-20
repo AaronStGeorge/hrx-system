@@ -446,6 +446,7 @@ _DESCRIPTORS = (
 
 AIE2P_ARRAY_DESCRIPTOR_SET = DescriptorSet(
     key=_DESCRIPTOR_SET_KEY,
+    inline_schedule_model_key=_DESCRIPTOR_SET_KEY,
     target_key=_TARGET_KEY,
     feature_key=f"{_DESCRIPTOR_SET_KEY}.v3",
     c_header_path=Path(

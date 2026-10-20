@@ -368,6 +368,7 @@ TEST_F(TargetFunctionContractTest,
   };
   const loom_target_config_t module_config = {
       .name = IREE_SVL("spirv.logical.core"),
+      .schedule_model_key = IREE_SVL("spirv.logical.core"),
       .contract_set_key = IREE_SVL("spirv.logical.core"),
       .contract_feature_bits = 1,
   };
@@ -416,6 +417,7 @@ TEST_F(TargetFunctionContractTest, BundleCompatibilityRejectsContractShape) {
   };
   loom_target_config_t module_config = {
       .name = IREE_SVL("spirv.logical.core"),
+      .schedule_model_key = IREE_SVL("spirv.logical.core"),
       .contract_set_key = IREE_SVL("spirv.logical.core"),
   };
   const loom_target_bundle_t module_bundle = {

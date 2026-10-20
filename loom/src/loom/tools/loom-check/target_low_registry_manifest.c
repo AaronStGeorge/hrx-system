@@ -64,14 +64,8 @@ loom_check_target_low_manifest_write_descriptor_set_summary(
       &table_counts, IREE_SV("schedule_classes"),
       descriptor_set->schedule_class_count));
   IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-      &table_counts, IREE_SV("issue_uses"), descriptor_set->issue_use_count));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-      &table_counts, IREE_SV("resources"), descriptor_set->resource_count));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-      &table_counts, IREE_SV("hazards"), descriptor_set->hazard_count));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-      &table_counts, IREE_SV("pressure_deltas"),
-      descriptor_set->pressure_delta_count));
+      &table_counts, IREE_SV("schedule_models"),
+      descriptor_set->schedule_model_count));
   IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
       &table_counts, IREE_SV("feature_mask_words"),
       descriptor_set->feature_mask_word_count));

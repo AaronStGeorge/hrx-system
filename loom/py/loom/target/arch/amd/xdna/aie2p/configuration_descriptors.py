@@ -208,6 +208,7 @@ _DESCRIPTORS = (
 
 AIE2P_CONFIGURATION_DESCRIPTOR_SET = DescriptorSet(
     key=_KEY,
+    inline_schedule_model_key=_KEY,
     target_key="amd.xdna.aie2p",
     feature_key=f"{_KEY}.v1",
     c_header_path=Path(

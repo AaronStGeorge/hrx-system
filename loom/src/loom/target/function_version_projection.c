@@ -284,6 +284,7 @@ static iree_status_t loom_target_function_version_clone_facts(
       &facts->storage.export_plan.name,
       &facts->storage.export_plan.export_symbol,
       &facts->storage.config.name,
+      &facts->storage.config.schedule_model_key,
       &facts->storage.config.contract_set_key,
       &facts->storage.bundle.name,
   };

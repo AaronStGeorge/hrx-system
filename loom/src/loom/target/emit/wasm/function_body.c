@@ -659,7 +659,8 @@ static iree_status_t loom_wasm_record_descriptor_flags(
         schedule_class_id);
   }
   const loom_low_schedule_class_t* schedule_class =
-      loom_low_descriptor_set_schedule_class(descriptor_set, descriptor_view);
+      loom_low_schedule_model_schedule_class(state->function->schedule_model,
+                                             descriptor_view);
   const loom_low_schedule_class_flags_t memory_flags =
       LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
       LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;

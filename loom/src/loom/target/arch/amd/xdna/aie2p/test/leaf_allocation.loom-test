@@ -1,7 +1,9 @@
 // A pointer fixed to p1 selects the matching lf1/r25 FIFO tuple.
 // RUN: emit aie2p-leaf @fixed_fifo_tuple fixed=%pointer:physical_register:201:1 registers=p0,p1,lf0,lf1,r24,r25
 
-low.func.def target<amd.xdna.aie2p.core> @fixed_fifo_tuple(%pointer: reg<aie2p.eps>, %initial_fifo: reg<aie2p.eldfiforeg>) -> (reg<aie2p.vec256 x2>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @fixed_fifo_tuple(%pointer: reg<aie2p.eps>, %initial_fifo: reg<aie2p.eldfiforeg>) -> (reg<aie2p.vec256 x2>) asm {
   %position = mova.fifo.position 0
   %filled_pointer, %filled_fifo, %filled_position = vldb.fill.512 %pointer, %initial_fifo, %position
   %data, %final_pointer, %final_fifo, %final_position = vldb.pop.512.i8x64 %filled_pointer, %filled_fifo, %filled_position
@@ -21,7 +23,9 @@ r25: written
 // A constraint on a pointer identity reaches its already assigned p1 owner.
 // RUN: emit aie2p-leaf @identity_fifo_tuple fixed=%pointer:physical_register:201:1 registers=p0,p1,lf0,lf1,r24,r25
 
-low.func.def target<amd.xdna.aie2p.core> @identity_fifo_tuple(%pointer: reg<aie2p.eps>, %initial_fifo: reg<aie2p.eldfiforeg>) -> (reg<aie2p.vec256 x2>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @identity_fifo_tuple(%pointer: reg<aie2p.eps>, %initial_fifo: reg<aie2p.eldfiforeg>) -> (reg<aie2p.vec256 x2>) asm {
   %pointer_identity = low.assume %pointer [range(%pointer, 0, 1024)] : reg<aie2p.eps>
   %position = mova.fifo.position 0
   %filled_pointer, %filled_fifo, %filled_position = vldb.fill.512 %pointer_identity, %initial_fifo, %position
@@ -43,7 +47,9 @@ r25: written
 // selects tuple ordinal 1 before either interval has an assignment.
 // RUN: emit aie2p-leaf @fifo_before_fixed_pointer fixed=%pointer:physical_register:201:1 registers=p0,p1,lf0,lf1,r24,r25
 
-low.func.def target<amd.xdna.aie2p.core> @fifo_before_fixed_pointer(%initial_fifo: reg<aie2p.eldfiforeg>, %pointer: reg<aie2p.eps>) -> (reg<aie2p.vec256 x2>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @fifo_before_fixed_pointer(%initial_fifo: reg<aie2p.eldfiforeg>, %pointer: reg<aie2p.eps>) -> (reg<aie2p.vec256 x2>) asm {
   %position = mova.fifo.position 0
   %filled_pointer, %filled_fifo, %filled_position = vldb.fill.512 %pointer, %initial_fifo, %position
   %data, %final_pointer, %final_fifo, %final_position = vldb.pop.512.i8x64 %filled_pointer, %filled_fifo, %filled_position
@@ -64,7 +70,9 @@ r25: written
 // initial placement, using the FIFO's resolved lf1 binding.
 // RUN: emit aie2p-leaf @identity_before_fixed_fifo fixed=%initial_fifo:physical_register:184:1 registers=p0,p1,lf0,lf1,r24,r25
 
-low.func.def target<amd.xdna.aie2p.core> @identity_before_fixed_fifo(%pointer: reg<aie2p.eps>, %initial_fifo: reg<aie2p.eldfiforeg>) -> (reg<aie2p.vec256 x2>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @identity_before_fixed_fifo(%pointer: reg<aie2p.eps>, %initial_fifo: reg<aie2p.eldfiforeg>) -> (reg<aie2p.vec256 x2>) asm {
   %pointer_identity = low.assume %pointer [range(%pointer, 0, 1024)] : reg<aie2p.eps>
   %position = mova.fifo.position 0
   %filled_pointer, %filled_fifo, %filled_position = vldb.fill.512 %pointer_identity, %initial_fifo, %position
@@ -245,7 +253,9 @@ CHECK: copies: coalesced=0 materialized=1
 // without rematerializing the literals inside the loop.
 // RUN: emit aie2p-leaf @static_offset_loop diagnostics=predicted-spills
 
-low.func.def target<amd.xdna.aie2p.core> @static_offset_loop(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @static_offset_loop(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
   %zero = mov.short 0
   %one = mov.short 1
   %offset0 = mov.static-byte-offset 64
@@ -357,7 +367,9 @@ low.func.def target<amd.xdna.aie2p.core> @static_offset_loop(%input: reg<aie2p.e
 // tree fits when its live branches can retire incrementally.
 // RUN: emit low-schedule-query @selection_tree strategy=resource-stall scheduled-pressure-limit=aie2p.vec256:24
 
-low.func.def target<amd.xdna.aie2p.core> @selection_tree(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @selection_tree(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
   %table = vlda.512.i8x64 %input, 0
   %codes = vlda.512.i8x64 %input, 64
   %zero = mov.short 0
@@ -424,8 +436,10 @@ scheduled pressure aie2p.vec256: peak-live-units<=24
 // RUN: emit aie2p-leaf @index_repair_ordering diagnostics=predicted-spills
 
 // Both live address results are repaired together before rebuilding allocation.
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="index_repair_ordering", trigger_kind="allocation-failure", repaired_value_count="2", cloned_packet_count="4", rewritten_operand_count="4", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @index_repair_ordering(%source: reg<aie2p.ep>, %destination: reg<aie2p.ep>, %address0: reg<aie2p.edj>, %address1: reg<aie2p.edj>, %address2: reg<aie2p.edj>, %address3: reg<aie2p.edj>, %address4: reg<aie2p.edj>, %address5: reg<aie2p.edj>, %address6: reg<aie2p.edj>, %position1: reg<aie2p.er>, %position2: reg<aie2p.er>, %position3: reg<aie2p.er>, %position4: reg<aie2p.er>, %position5: reg<aie2p.er>, %position6: reg<aie2p.er>, %position7: reg<aie2p.er>, %position8: reg<aie2p.er>, %position9: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @index_repair_ordering(%source: reg<aie2p.ep>, %destination: reg<aie2p.ep>, %address0: reg<aie2p.edj>, %address1: reg<aie2p.edj>, %address2: reg<aie2p.edj>, %address3: reg<aie2p.edj>, %address4: reg<aie2p.edj>, %address5: reg<aie2p.edj>, %address6: reg<aie2p.edj>, %position1: reg<aie2p.er>, %position2: reg<aie2p.er>, %position3: reg<aie2p.er>, %position4: reg<aie2p.er>, %position5: reg<aie2p.er>, %position6: reg<aie2p.er>, %position7: reg<aie2p.er>, %position8: reg<aie2p.er>, %position9: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
   %offset7 = mov.static-byte-offset 119
   %address7 = mov.address-index %offset7
   %offset8 = mov.static-byte-offset 120
@@ -487,8 +501,10 @@ low.func.def target<amd.xdna.aie2p.core> @index_repair_ordering(%source: reg<aie
 // an arbitrary attempt count below the amount of useful progress available.
 // RUN: emit aie2p-leaf @index_repair_population diagnostics=predicted-spills
 
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="index_repair_population", trigger_kind="allocation-failure", repaired_value_count="9", cloned_packet_count="9", rewritten_operand_count="9", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @index_repair_population(%output: reg<aie2p.ep>, %count: reg<aie2p.er>, %block0: reg<aie2p.edj>, %block1: reg<aie2p.edj>, %block2: reg<aie2p.edj>, %block3: reg<aie2p.edj>, %block4: reg<aie2p.edj>, %block5: reg<aie2p.edj>, %block6: reg<aie2p.edj>) -> (reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @index_repair_population(%output: reg<aie2p.ep>, %count: reg<aie2p.er>, %block0: reg<aie2p.edj>, %block1: reg<aie2p.edj>, %block2: reg<aie2p.edj>, %block3: reg<aie2p.edj>, %block4: reg<aie2p.edj>, %block5: reg<aie2p.edj>, %block6: reg<aie2p.edj>) -> (reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>) asm {
   %value = mov.short 1
   %offset = mov.static-byte-offset 0
   %index0 = mov.address-index %offset
@@ -569,8 +585,10 @@ CHECK: spills: 0
 // one original value per repair requires more than eight successful repairs.
 // RUN: emit aie2p-leaf @many_indexed_fields diagnostics=predicted-spills
 
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="many_indexed_fields", trigger_kind="allocation-failure", repaired_value_count="20", cloned_packet_count="20", rewritten_operand_count="20", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @many_indexed_fields(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @many_indexed_fields(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>, %count: reg<aie2p.er>) asm {
   %zero = mov.short 0
   %one = mov.short 1
   %offset0 = mov.static-byte-offset 64
@@ -673,7 +691,9 @@ low.func.def target<amd.xdna.aie2p.core> @many_indexed_fields(%input: reg<aie2p.
 // original index once cannot make this fit in eight address-index registers.
 // RUN: emit aie2p-leaf @simultaneous_indices
 
-low.func.def target<amd.xdna.aie2p.core> @simultaneous_indices() -> (reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @simultaneous_indices() -> (reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>, reg<aie2p.edj>) asm {
   %offset0 = mov.static-byte-offset 64
   %index0 = mov.address-index %offset0
   %offset1 = mov.static-byte-offset 128
@@ -701,8 +721,10 @@ low.func.def target<amd.xdna.aie2p.core> @simultaneous_indices() -> (reg<aie2p.e
 // Leaf compilation cannot synthesize over a retained authored assignment.
 // RUN: emit aie2p-leaf @assigned_input
 
+aie2p.target<core> @target
+
 // ERROR@+1: BACKEND/051 {function_name="assigned_input", allocation_mode="assigned"}
-low.func.def allocation(assigned) target<amd.xdna.aie2p.core> @assigned_input() asm {
+low.func.def allocation(assigned) target<amd.xdna.aie2p.core>(@target) @assigned_input() asm {
   return
 }
 
@@ -710,8 +732,10 @@ low.func.def allocation(assigned) target<amd.xdna.aie2p.core> @assigned_input() 
 
 // RUN: emit aie2p-leaf @fixed_input
 
+aie2p.target<core> @target
+
 // ERROR@+1: BACKEND/051 {function_name="fixed_input", allocation_mode="fixed"}
-low.func.def allocation(fixed) target<amd.xdna.aie2p.core> @fixed_input() asm {
+low.func.def allocation(fixed) target<amd.xdna.aie2p.core>(@target) @fixed_input() asm {
   return
 }
 
@@ -721,7 +745,9 @@ low.func.def allocation(fixed) target<amd.xdna.aie2p.core> @fixed_input() asm {
 // assigned after the FIFO. The tuple uses p1, lf1, and r25 together.
 // RUN: emit aie2p-leaf @future_pointer report=code fixed=%live:physical_register:200:1
 
-low.func.def target<amd.xdna.aie2p.core> @future_pointer(%live: reg<aie2p.ep>, %fifo: reg<aie2p.eldfiforeg>, %base: reg<aie2p.ep>) -> (reg<aie2p.vec256 x2>, reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @future_pointer(%live: reg<aie2p.ep>, %fifo: reg<aie2p.eldfiforeg>, %base: reg<aie2p.ep>) -> (reg<aie2p.vec256 x2>, reg<aie2p.ep>) asm {
   %pointer = copy %base : reg<aie2p.ep> -> reg<aie2p.eps>
   %position = mova.fifo.position 0
   %filled_pointer, %filled_fifo, %filled_position = vldb.fill.512 %pointer, %fifo, %position
@@ -737,7 +763,9 @@ code: 18 c8 00 00 18 14 14 3d 18 14 00 39 00 00 18 00 28 10 00 00 00 00 00 00 00
 // A live scalar in r24 excludes tuple zero before the position is defined.
 // RUN: emit aie2p-leaf @future_position report=code fixed=%live:physical_register:270:1
 
-low.func.def target<amd.xdna.aie2p.core> @future_position(%live: reg<aie2p.er>, %fifo: reg<aie2p.eldfiforeg>, %pointer: reg<aie2p.eps>) -> (reg<aie2p.vec256 x2>, reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @future_position(%live: reg<aie2p.er>, %fifo: reg<aie2p.eldfiforeg>, %pointer: reg<aie2p.eps>) -> (reg<aie2p.vec256 x2>, reg<aie2p.er>) asm {
   %position = mova.fifo.position 0
   %filled_pointer, %filled_fifo, %filled_position = vldb.fill.512 %pointer, %fifo, %position
   %data, %final_pointer, %final_fifo, %final_position = vldb.pop.512.i8x64 %filled_pointer, %filled_fifo, %filled_position
@@ -753,7 +781,9 @@ code: 18 c8 00 00 18 14 14 3d 18 14 00 39 00 00 18 00 28 10 00 00 00 00 00 00 00
 // are loaded. The pointer and position must reserve tuple one.
 // RUN: emit aie2p-leaf @future_fifo report=code fixed=%live:physical_register:183:1
 
-low.func.def target<amd.xdna.aie2p.core> @future_fifo(%live: reg<aie2p.eldfiforeg>, %pointer: reg<aie2p.eps>, %address: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>, reg<aie2p.eldfiforeg>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @future_fifo(%live: reg<aie2p.eldfiforeg>, %pointer: reg<aie2p.eps>, %address: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>, reg<aie2p.eldfiforeg>) asm {
   %base = mov.scalar-to-address %address
   %low = vlda.load-fifo.low512 %base, 0
   %fifo = vlda.load-fifo.high512 %base, %low, 64

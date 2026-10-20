@@ -59,6 +59,7 @@ static const loom_target_export_plan_t kSpirvVulkan13ExportPlan = {
 
 static const loom_target_config_t kSpirvVulkan13Config = {
     .name = IREE_SVL("spirv.logical.core"),
+    .schedule_model_key = IREE_SVL("spirv.logical.core"),
     .contract_set_key = IREE_SVL("spirv.logical.core"),
     .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA,
 };
@@ -72,6 +73,7 @@ const loom_target_bundle_t loom_spirv_low_target_bundle_vulkan1_3 = {
 
 static const loom_target_config_t kSpirvExtendedTypesConfig = {
     .name = IREE_SVL("spirv.logical.core"),
+    .schedule_model_key = IREE_SVL("spirv.logical.core"),
     .contract_set_key = IREE_SVL("spirv.logical.core"),
     .contract_feature_bits =
         LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA | LOOM_SPIRV_FEATURE_FLOAT16 |
@@ -105,6 +107,7 @@ const loom_target_bundle_t loom_spirv_low_target_bundle_hal_kernel = {
 
 static const loom_target_config_t kSpirvSubgroup32BallotConfig = {
     .name = IREE_SVL("spirv.logical.core.subgroup32.ballot"),
+    .schedule_model_key = IREE_SVL("spirv.logical.core"),
     .contract_set_key = IREE_SVL("spirv.logical.core"),
     .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |
                              LOOM_SPIRV_FEATURE_GROUP_NON_UNIFORM_BALLOT,
@@ -120,6 +123,7 @@ const loom_target_bundle_t loom_spirv_low_target_bundle_subgroup32_ballot_hal =
 
 static const loom_target_config_t kSpirvSubgroup32PredicateConfig = {
     .name = IREE_SVL("spirv.logical.core.subgroup32.predicates"),
+    .schedule_model_key = IREE_SVL("spirv.logical.core"),
     .contract_set_key = IREE_SVL("spirv.logical.core"),
     .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |
                              LOOM_SPIRV_FEATURE_GROUP_NON_UNIFORM_BALLOT |
@@ -136,6 +140,7 @@ const loom_target_bundle_t
 
 static const loom_target_config_t kSpirvSubgroup32ReductionConfig = {
     .name = IREE_SVL("spirv.logical.core.subgroup32.reductions"),
+    .schedule_model_key = IREE_SVL("spirv.logical.core"),
     .contract_set_key = IREE_SVL("spirv.logical.core"),
     .contract_feature_bits =
         LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |

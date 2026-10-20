@@ -146,8 +146,8 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
       loom_low_descriptor_set_descriptor_view_at(state->target.descriptor_set,
                                                  packet.descriptor_ordinal);
   node->schedule_class_id = descriptor_view->schedule_class_id;
-  node->schedule_class = loom_low_descriptor_set_schedule_class(
-      state->target.descriptor_set, descriptor_view);
+  node->schedule_class = loom_low_schedule_model_schedule_class(
+      state->target.schedule_model, descriptor_view);
   *out_descriptor = packet.descriptor;
   return iree_ok_status();
 }
@@ -226,8 +226,8 @@ static iree_status_t loom_low_schedule_apply_structural_model(
           state->target.descriptor_set,
           selected_model->schedule_descriptor_ordinal);
   node->schedule_class_id = descriptor_view->schedule_class_id;
-  node->schedule_class = loom_low_descriptor_set_schedule_class(
-      state->target.descriptor_set, descriptor_view);
+  node->schedule_class = loom_low_schedule_model_schedule_class(
+      state->target.schedule_model, descriptor_view);
   return iree_ok_status();
 }
 
@@ -267,8 +267,8 @@ loom_low_schedule_resolve_dependency_timing(
     };
   }
   const loom_low_event_separation_t* event_separation =
-      loom_low_descriptor_set_lookup_event_separation(
-          state->target.descriptor_set, producer_endpoint.timing_event_id,
+      loom_low_schedule_model_lookup_event_separation(
+          state->target.schedule_model, producer_endpoint.timing_event_id,
           consumer_endpoint.timing_event_id);
   if (event_separation != NULL) {
     return (loom_low_schedule_dependency_timing_t){

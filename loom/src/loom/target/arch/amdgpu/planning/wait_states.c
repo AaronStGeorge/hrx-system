@@ -172,6 +172,8 @@ typedef struct loom_amdgpu_wait_state_builder_t {
   const loom_amdgpu_vopd_pair_t* vopd_pairs;
   // Descriptor set selected by the scheduled target.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected by the scheduled target.
+  const loom_low_schedule_model_t* schedule_model;
   // Arena that owns output tables retained by the completed plan.
   iree_arena_allocator_t* arena;
   // Arena that owns builder state discarded after plan construction.
@@ -504,7 +506,8 @@ static uint16_t loom_amdgpu_wait_state_descriptor_latency_cycles(
     return 0;
   }
   const loom_low_schedule_class_t* schedule_class =
-      loom_low_descriptor_set_schedule_class(descriptor_set, descriptor_view);
+      loom_low_schedule_model_schedule_class(builder->schedule_model,
+                                             descriptor_view);
   return schedule_class->latency_cycles;
 }
 
@@ -1988,6 +1991,7 @@ iree_status_t loom_amdgpu_wait_state_plan_build(
       .vopd_packets = has_vopd_pairs ? vopd_plan->packets : NULL,
       .vopd_pairs = has_vopd_pairs ? vopd_plan->pairs : NULL,
       .descriptor_set = schedule->target.descriptor_set,
+      .schedule_model = schedule->target.schedule_model,
       .arena = arena,
       .transient_arena = transient_arena,
       .matrix_coexecution = matrix_coexecution,

@@ -16,6 +16,7 @@
 #include "loom/ir/ir.h"
 #include "loom/target/emit/wasm/module_binary.h"
 #include "loom/target/emit/wasm/program.h"
+#include "loom/target/function_version.h"
 #include "loom/target/provider.h"
 
 #ifdef __cplusplus
@@ -28,6 +29,7 @@ extern "C" {
 // failures return a status and also leave the plan empty.
 iree_status_t loom_wasm_program_plan_build(
     loom_module_t* module,
+    const loom_function_version_list_t* function_versions,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
     bool* out_accepted, loom_wasm_program_plan_t* out_plan);
@@ -36,6 +38,7 @@ iree_status_t loom_wasm_program_plan_build(
 // Semantic rejection returns OK with |out_emitted| false and no binary.
 iree_status_t loom_wasm_compile_module_binary(
     loom_module_t* module,
+    const loom_function_version_list_t* function_versions,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
     iree_allocator_t allocator, bool* out_emitted,

@@ -1591,6 +1591,7 @@ X86_SCALAR_DESCRIPTORS = (
 
 X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(
     key="x86.scalar.core",
+    inline_schedule_model_key="x86.generic",
     target_key="x86",
     feature_key="x86.scalar.v1",
     c_header_path=Path(

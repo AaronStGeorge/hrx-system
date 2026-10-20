@@ -34,14 +34,15 @@ typedef struct loom_low_physical_instruction_t {
 static inline loom_low_physical_instruction_t
 loom_low_physical_instruction_make(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     uint32_t descriptor_ordinal, const uint16_t* physical_registers) {
   const loom_low_descriptor_view_t* descriptor_view =
       loom_low_descriptor_set_descriptor_view_at(descriptor_set,
                                                  descriptor_ordinal);
   return (loom_low_physical_instruction_t){
       .descriptor_ordinal = descriptor_ordinal,
-      .schedule_class_row_id = loom_low_descriptor_set_schedule_class_row_id(
-          descriptor_set, descriptor_view->schedule_class_id),
+      .schedule_class_row_id = loom_low_schedule_model_schedule_class_row_id(
+          schedule_model, descriptor_view->schedule_class_id),
       .physical_registers = physical_registers,
   };
 }
@@ -98,6 +99,7 @@ void loom_low_physical_issue_commit_source(loom_low_physical_issue_t* issue,
 // semantic order when zero-distance dependencies share one issue cycle.
 bool loom_low_physical_issue_group_fits(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_physical_instruction_t* instructions, uint16_t count);
 
 // Returns the register-event lower bound for a candidate group. Querying all

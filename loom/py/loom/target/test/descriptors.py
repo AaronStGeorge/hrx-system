@@ -2206,6 +2206,7 @@ TEST_LOW_ALT_NEG_I32_DESCRIPTOR = Descriptor(
 
 TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="test.low.core",
+    inline_schedule_model_key="test.low.core",
     target_key="test.low",
     feature_key="test.low.v1",
     c_header_path=Path("loom/src/loom/target/test/descriptors.h"),
@@ -2839,6 +2840,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
 
 TEST_LOW_ALT_DESCRIPTOR_SET = DescriptorSet(
     key="test.low.alt",
+    inline_schedule_model_key="test.low.core",
     target_key="test.low",
     feature_key="test.low.v1.alt",
     c_header_path=Path("loom/src/loom/target/test/alt_descriptors.h"),

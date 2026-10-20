@@ -462,10 +462,10 @@ loom_cc_test(
     loom::ops::low
     loom::ops::op_defs
     loom::ops::op_registry
-    loom::ops::target
     loom::target::arch::amdgpu::abi::feedback
     loom::target::arch::amdgpu::abi::signal
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
@@ -608,10 +608,10 @@ loom_cc_test(
     loom::ops::low
     loom::ops::op_defs
     loom::ops::op_registry
-    loom::ops::target
     loom::target::arch::amdgpu::abi::asan
     loom::target::arch::amdgpu::abi::feedback
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
@@ -639,10 +639,10 @@ loom_cc_test(
     loom::ops::low
     loom::ops::op_defs
     loom::ops::op_registry
-    loom::ops::target
     loom::target::arch::amdgpu::abi::feedback
     loom::target::arch::amdgpu::abi::ubsan
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
@@ -701,10 +701,10 @@ loom_cc_test(
     loom::ops::low
     loom::ops::op_defs
     loom::ops::op_registry
-    loom::ops::target
     loom::target::arch::amdgpu::abi::feedback
     loom::target::arch::amdgpu::abi::tsan
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify

@@ -373,6 +373,7 @@ def _reference_reg_class(name: str) -> RegClass:
 
 CMD_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="cmd.core",
+    inline_schedule_model_key="cmd.core",
     target_key="cmd",
     feature_key="cmd.v1",
     c_header_path=Path("loom/src/loom/target/arch/cmd/descriptors.h"),

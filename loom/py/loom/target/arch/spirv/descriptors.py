@@ -1827,6 +1827,7 @@ def _ptr_workgroup_reg_classes() -> tuple[RegClass, ...]:
 
 SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="spirv.logical.core",
+    inline_schedule_model_key="spirv.logical.core",
     requires_structured_control_flow=True,
     target_key="spirv",
     feature_key="spirv.logical.v1",

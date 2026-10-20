@@ -11,13 +11,19 @@
 
 static void loom_x86_target_facts_project(
     const loom_target_record_view_t* record, loom_target_facts_t* base_facts) {
+  loom_x86_target_facts_t* facts = (loom_x86_target_facts_t*)base_facts;
+  const loom_attribute_t tune_attr = loom_x86_target_tune_from_record(record);
+  if (!loom_attr_is_absent(tune_attr)) {
+    facts->tune = (loom_x86_target_tune_t)loom_attr_as_enum(tune_attr);
+    facts->tune_is_explicit = true;
+  }
+
   const loom_attribute_t features_attr =
       loom_x86_target_features_from_record(record);
   if (loom_attr_is_absent(features_attr)) {
     return;
   }
 
-  loom_x86_target_facts_t* facts = (loom_x86_target_facts_t*)base_facts;
   const loom_signed_enum_set_t features =
       loom_attr_as_signed_enum_set(features_attr);
   if (features.word_count > 0) {

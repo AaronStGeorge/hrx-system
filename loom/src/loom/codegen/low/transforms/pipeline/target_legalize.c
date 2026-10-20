@@ -1678,11 +1678,11 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_target_legalize_function(
       .legality_provider_list = legality_provider_list,
       .compile_report = loom_low_pass_capability_compile_report(low_capability),
   };
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_descriptor_set_select_for_source_lowering(
-          descriptor_registry,
-          loom_low_source_selection_target_bundle(selection),
-          &state.descriptor_set));
+  loom_target_low_source_binding_t source_binding = {0};
+  IREE_RETURN_IF_ERROR(loom_target_low_source_binding_select(
+      descriptor_registry, loom_low_source_selection_target_bundle(selection),
+      &source_binding));
+  state.descriptor_set = source_binding.descriptor_set;
   loom_low_target_legalize_preflight_initialize(
       module, selection->func,
       loom_low_source_selection_target_bundle(selection),

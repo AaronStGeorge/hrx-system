@@ -1042,6 +1042,7 @@ def _lane_descriptors(
 
 WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
     key="wasm.core.simd128",
+    inline_schedule_model_key="wasm.core.simd128",
     requires_structured_control_flow=True,
     target_key="wasm",
     feature_key="wasm.simd128.v1",

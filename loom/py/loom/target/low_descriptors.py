@@ -26,6 +26,11 @@ def descriptor_stable_id(key: str) -> int:
     return stable_id_from_string(key)
 
 
+def schedule_model_stable_id(key: str) -> int:
+    """Returns the durable identity for a named machine schedule model."""
+    return stable_id_from_string(key)
+
+
 def _validate_metadata_key(kind: str, key: str) -> None:
     if not key:
         raise ValueError(f"{kind} key must not be empty")
@@ -753,6 +758,17 @@ class ScheduleClass:
 
 
 @dataclass(frozen=True, slots=True)
+class ScheduleModel:
+    """Named machine scheduling behavior over one descriptor-set view."""
+
+    key: str
+    resources: tuple[Resource, ...]
+    schedule_classes: tuple[ScheduleClass, ...]
+    timing_events: tuple[TimingEvent, ...] = ()
+    event_separations: tuple[EventSeparation, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Descriptor:
     key: str
     mnemonic: str | None
@@ -781,6 +797,10 @@ class Descriptor:
 @dataclass(frozen=True, slots=True)
 class DescriptorSet:
     key: str
+    # Catalog identity for the model stored in the inline resource and
+    # schedule-class fields. Inline storage grants no selection priority;
+    # target configs select every model by its exact catalog key.
+    inline_schedule_model_key: str
     target_key: str | None
     feature_key: str | None
     c_header_path: Path
@@ -807,6 +827,7 @@ class DescriptorSet:
     register_parts: tuple[RegisterPart, ...] = ()
     timing_events: tuple[TimingEvent, ...] = ()
     event_separations: tuple[EventSeparation, ...] = ()
+    schedule_models: tuple[ScheduleModel, ...] = ()
     enum_domains: tuple[EnumDomain, ...] = ()
     categories: tuple[DescriptorCategory, ...] = ()
     default_category: DescriptorCategory | None = None
@@ -858,6 +879,30 @@ class DescriptorSet:
                     f"'{target_contract_key}' has a colliding stable ID"
                 )
             supported_target_contract_stable_ids.add(target_contract_stable_id)
+        _validate_metadata_key("schedule model", self.inline_schedule_model_key)
+        schedule_model_keys = tuple(model.key for model in self.schedule_models)
+        if schedule_model_keys != tuple(sorted(set(schedule_model_keys))):
+            raise ValueError(
+                f"DescriptorSet '{self.key}': schedule model keys must be "
+                "sorted and unique"
+            )
+        if len(self.schedule_models) >= (2**16) - 1:
+            raise ValueError(
+                f"DescriptorSet '{self.key}': schedule model catalog does not "
+                "fit the generated u16 table field"
+            )
+        schedule_model_stable_ids = {
+            schedule_model_stable_id(self.inline_schedule_model_key)
+        }
+        for model in self.schedule_models:
+            _validate_metadata_key("schedule model", model.key)
+            stable_id = schedule_model_stable_id(model.key)
+            if stable_id in schedule_model_stable_ids:
+                raise ValueError(
+                    f"DescriptorSet '{self.key}': schedule model '{model.key}' "
+                    "duplicates or collides with another catalog key"
+                )
+            schedule_model_stable_ids.add(stable_id)
         if (
             self.default_category is not None
             and self.default_category not in self.categories

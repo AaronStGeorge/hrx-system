@@ -16,6 +16,7 @@
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/target/registers.h"
 
 typedef struct loom_low_representation_projection_t {
@@ -499,18 +500,11 @@ iree_status_t loom_low_plan_function_representation(
         IREE_STATUS_FAILED_PRECONDITION,
         "low function target facts have no target configuration");
   }
+  loom_target_low_source_binding_t target_binding = {0};
+  IREE_RETURN_IF_ERROR(loom_target_low_source_binding_select(
+      descriptor_registry, bundle, &target_binding));
   const loom_low_descriptor_set_t* target_descriptor_set =
-      loom_low_descriptor_registry_lookup(descriptor_registry,
-                                          bundle->config->contract_set_key);
-  if (target_descriptor_set == NULL) {
-    return iree_make_status(
-        IREE_STATUS_NOT_FOUND,
-        "target bundle '%.*s' selected low descriptor set '%.*s' that is not "
-        "linked",
-        (int)bundle->name.size, bundle->name.data,
-        (int)bundle->config->contract_set_key.size,
-        bundle->config->contract_set_key.data);
-  }
+      target_binding.descriptor_set;
 
   const loom_low_representation_projection_t projection = {
       .source_descriptor_set = source_target.descriptor_set,

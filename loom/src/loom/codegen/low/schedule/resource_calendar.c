@@ -10,13 +10,13 @@
 #include <string.h>
 
 iree_status_t loom_low_schedule_resource_calendar_initialize(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     iree_arena_allocator_t* arena,
     loom_low_schedule_resource_calendar_t* out_calendar) {
   *out_calendar = (loom_low_schedule_resource_calendar_t){
-      .descriptor_set = descriptor_set,
+      .schedule_model = schedule_model,
   };
-  const uint32_t slot_count = descriptor_set->resource_calendar_slot_count;
+  const uint32_t slot_count = schedule_model->resource_calendar_slot_count;
   if (slot_count == 0) {
     return iree_ok_status();
   }
@@ -33,7 +33,7 @@ void loom_low_schedule_resource_calendar_reset(
   calendar->issue_cycle_high_water = 0;
   calendar->minimum_issue_cycle = 0;
   const uint32_t slot_count =
-      calendar->descriptor_set->resource_calendar_slot_count;
+      calendar->schedule_model->resource_calendar_slot_count;
   if (slot_count != 0) {
     memset(calendar->slots, 0, slot_count * sizeof(*calendar->slots));
   }
@@ -63,9 +63,9 @@ loom_low_schedule_resource_calendar_candidate_occupancy(
     }
     for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
       const loom_low_issue_use_t* issue_use =
-          &calendar->descriptor_set
+          &calendar->schedule_model
                ->issue_uses[schedule_class->issue_use_start + i];
-      if (calendar->descriptor_set->resources[issue_use->resource_id]
+      if (calendar->schedule_model->resources[issue_use->resource_id]
                   .calendar.slot_start != resource->calendar.slot_start ||
           relative_cycle < issue_use->stage ||
           relative_cycle >= (uint32_t)issue_use->stage + issue_use->cycles) {
@@ -99,10 +99,10 @@ static bool loom_low_schedule_resource_calendar_issue_fits(
     }
     for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
       const loom_low_issue_use_t* issue_use =
-          &calendar->descriptor_set
+          &calendar->schedule_model
                ->issue_uses[schedule_class->issue_use_start + i];
       const loom_low_resource_t* resource =
-          &calendar->descriptor_set->resources[issue_use->resource_id];
+          &calendar->schedule_model->resources[issue_use->resource_id];
       const uint32_t relative_end =
           (uint32_t)issue_use->stage + issue_use->cycles;
       for (uint32_t relative_cycle = issue_use->stage;
@@ -158,11 +158,11 @@ static bool loom_low_schedule_resource_calendar_issue_fits(
 }
 
 bool loom_low_schedule_resource_group_fits(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_schedule_class_t* const* schedule_classes,
     uint16_t schedule_class_count) {
   const loom_low_schedule_resource_calendar_t empty_calendar = {
-      .descriptor_set = descriptor_set,
+      .schedule_model = schedule_model,
   };
   uint16_t bottleneck_resource_id = LOOM_LOW_RESOURCE_NONE;
   return loom_low_schedule_resource_calendar_issue_fits(
@@ -177,7 +177,7 @@ uint32_t loom_low_schedule_resource_calendar_find_earliest_issue_cycle(
     uint16_t* out_bottleneck_resource_id) {
   *out_bottleneck_resource_id = LOOM_LOW_RESOURCE_NONE;
   const uint32_t lookback_cycles =
-      calendar->descriptor_set->resource_calendar_lookback_cycles;
+      calendar->schedule_model->resource_calendar_lookback_cycles;
   const uint32_t retained_issue_cycle =
       calendar->issue_cycle_high_water > lookback_cycles
           ? calendar->issue_cycle_high_water - lookback_cycles
@@ -240,7 +240,7 @@ iree_status_t loom_low_schedule_resource_calendar_commit(
     }
     for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
       const loom_low_issue_use_t* use =
-          &calendar->descriptor_set
+          &calendar->schedule_model
                ->issue_uses[schedule_class->issue_use_start + i];
       maximum_end = iree_max(maximum_end, (uint32_t)use->stage + use->cycles);
     }
@@ -264,10 +264,10 @@ iree_status_t loom_low_schedule_resource_calendar_commit(
     }
     for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
       const loom_low_issue_use_t* issue_use =
-          &calendar->descriptor_set
+          &calendar->schedule_model
                ->issue_uses[schedule_class->issue_use_start + i];
       const loom_low_resource_t* resource =
-          &calendar->descriptor_set->resources[issue_use->resource_id];
+          &calendar->schedule_model->resources[issue_use->resource_id];
       const uint32_t use_start = issue_use->stage;
       const uint32_t use_end = use_start + issue_use->cycles;
       for (uint32_t cycle = use_start; cycle < use_end; ++cycle) {

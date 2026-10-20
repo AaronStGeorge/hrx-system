@@ -1949,6 +1949,7 @@ _SCHEDULE_CLASS_NAMES, _SCHEDULE_CLASSES = _schedule_classes()
 
 AIE2P_CORE_DESCRIPTOR_SET = DescriptorSet(
     key=f"{descriptor_specs._TARGET_KEY}.core",
+    inline_schedule_model_key=f"{descriptor_specs._TARGET_KEY}.core",
     target_key=descriptor_specs._TARGET_KEY,
     feature_key=f"{descriptor_specs._TARGET_KEY}.core.v1",
     c_header_path=Path(

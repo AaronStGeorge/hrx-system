@@ -27,6 +27,9 @@ extern "C" {
 enum loom_low_function_model_flag_bits_e {
   // Includes values defined in recursively nested function regions.
   LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE = 1u << 0,
+  // Requires a concrete machine schedule model for downstream scheduling.
+  // Targetless Low remains valid for representation-only analysis.
+  LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL = 1u << 1,
 };
 typedef uint16_t loom_low_function_model_flags_t;
 

@@ -126,6 +126,8 @@ struct loom_low_lower_context_t {
   const loom_low_lower_policy_t* policy;
   // Descriptor set selected by source legality.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected with |descriptor_set|.
+  const loom_low_schedule_model_t* schedule_model;
   // Result object receiving counters and emitted low function metadata.
   loom_low_lower_result_t* result;
   // Stable owner of retained function plans and target payloads.

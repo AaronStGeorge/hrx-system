@@ -1363,6 +1363,7 @@ X86_AVX2_DESCRIPTORS = (
 
 X86_AVX2_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx2.core",
+    inline_schedule_model_key="x86.generic",
     target_key="x86",
     feature_key="x86.avx2.v1",
     c_header_path=Path("loom/src/loom/target/arch/x86/descriptors/avx2_descriptors.h"),

@@ -85,6 +85,7 @@ def _descriptor_set(
 ) -> DescriptorSet:
     return DescriptorSet(
         key="amdgpu.test.core",
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu",
         feature_key=None,
         c_header_path=Path("test.h"),

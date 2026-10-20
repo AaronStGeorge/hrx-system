@@ -132,6 +132,9 @@ void loom_target_facts_project_record(const loom_target_record_view_t* record,
   if (descriptor->fact_projector != NULL) {
     descriptor->fact_projector->project(record, out_facts);
   }
+  if (fact_type->rebind != NULL) {
+    fact_type->rebind(out_facts);
+  }
 }
 
 static iree_string_view_t loom_target_symbol_fact_string(

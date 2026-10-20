@@ -81,15 +81,20 @@ static void RunAccessBenchmark(benchmark::State& state,
                                Accessor accessor) {
   DescriptorAccessFixture fixture(descriptor_set_key, working_descriptor_count);
   const loom_low_descriptor_set_t* descriptor_set = fixture.descriptor_set();
+  const loom_low_schedule_model_t* schedule_model =
+      loom_low_descriptor_set_lookup_schedule_model(descriptor_set,
+                                                    IREE_SV("amdgpu.generic"));
+  IREE_ASSERT(schedule_model != NULL);
   const std::vector<uint32_t>& ordinals = fixture.ordinals();
   benchmark::DoNotOptimize(descriptor_set);
+  benchmark::DoNotOptimize(schedule_model);
   for (auto _ : state) {
     uint64_t sums[4] = {};
     for (iree_host_size_t i = 0; i < ordinals.size(); i += 4) {
-      sums[0] += accessor(descriptor_set, ordinals[i + 0]);
-      sums[1] += accessor(descriptor_set, ordinals[i + 1]);
-      sums[2] += accessor(descriptor_set, ordinals[i + 2]);
-      sums[3] += accessor(descriptor_set, ordinals[i + 3]);
+      sums[0] += accessor(descriptor_set, schedule_model, ordinals[i + 0]);
+      sums[1] += accessor(descriptor_set, schedule_model, ordinals[i + 1]);
+      sums[2] += accessor(descriptor_set, schedule_model, ordinals[i + 2]);
+      sums[3] += accessor(descriptor_set, schedule_model, ordinals[i + 3]);
     }
     benchmark::DoNotOptimize(sums);
   }
@@ -101,7 +106,8 @@ static void BM_OrdinalTrace(benchmark::State& state,
                             uint32_t working_descriptor_count) {
   RunAccessBenchmark(
       state, descriptor_set_key, working_descriptor_count,
-      [](const loom_low_descriptor_set_t*, uint32_t descriptor_ordinal) {
+      [](const loom_low_descriptor_set_t*, const loom_low_schedule_model_t*,
+         uint32_t descriptor_ordinal) {
         return static_cast<uint64_t>(descriptor_ordinal);
       });
 }
@@ -109,18 +115,18 @@ static void BM_OrdinalTrace(benchmark::State& state,
 static void BM_StructuralFacts(benchmark::State& state,
                                const char* descriptor_set_key,
                                uint32_t working_descriptor_count) {
-  RunAccessBenchmark(state, descriptor_set_key, working_descriptor_count,
-                     [](const loom_low_descriptor_set_t* descriptor_set,
-                        uint32_t descriptor_ordinal) {
-                       const loom_low_descriptor_t* descriptor =
-                           &descriptor_set->descriptors[descriptor_ordinal];
-                       const auto* layout = loom_low_descriptor_layout(
-                           descriptor_set, descriptor);
-                       return descriptor->stable_id +
-                              descriptor->operand_start +
-                              layout->immediate_start + layout->effect_start +
-                              descriptor->flags;
-                     });
+  RunAccessBenchmark(
+      state, descriptor_set_key, working_descriptor_count,
+      [](const loom_low_descriptor_set_t* descriptor_set,
+         const loom_low_schedule_model_t*, uint32_t descriptor_ordinal) {
+        const loom_low_descriptor_t* descriptor =
+            &descriptor_set->descriptors[descriptor_ordinal];
+        const auto* layout =
+            loom_low_descriptor_layout(descriptor_set, descriptor);
+        return descriptor->stable_id + descriptor->operand_start +
+               layout->immediate_start + layout->effect_start +
+               descriptor->flags;
+      });
 }
 
 static void BM_ScheduleFacts(benchmark::State& state,
@@ -129,11 +135,12 @@ static void BM_ScheduleFacts(benchmark::State& state,
   RunAccessBenchmark(
       state, descriptor_set_key, working_descriptor_count,
       [](const loom_low_descriptor_set_t* descriptor_set,
+         const loom_low_schedule_model_t* schedule_model,
          uint32_t descriptor_ordinal) {
         const loom_low_descriptor_view_t* descriptor_view =
             &descriptor_set->descriptor_views[descriptor_ordinal];
         const loom_low_schedule_class_t* schedule_class =
-            loom_low_descriptor_set_schedule_class(descriptor_set,
+            loom_low_schedule_model_schedule_class(schedule_model,
                                                    descriptor_view);
         return static_cast<uint64_t>(descriptor_view->instruction_class_flags) +
                schedule_class->latency_cycles +
@@ -150,7 +157,7 @@ static void BM_AssemblyFacts(benchmark::State& state,
   RunAccessBenchmark(
       state, descriptor_set_key, working_descriptor_count,
       [](const loom_low_descriptor_set_t* descriptor_set,
-         uint32_t descriptor_ordinal) {
+         const loom_low_schedule_model_t*, uint32_t descriptor_ordinal) {
         const loom_low_descriptor_view_t* descriptor_view =
             &descriptor_set->descriptor_views[descriptor_ordinal];
         const uint32_t asm_form_ordinal =
@@ -174,13 +181,14 @@ static void BM_MixedFacts(benchmark::State& state,
   RunAccessBenchmark(
       state, descriptor_set_key, working_descriptor_count,
       [](const loom_low_descriptor_set_t* descriptor_set,
+         const loom_low_schedule_model_t* schedule_model,
          uint32_t descriptor_ordinal) {
         const loom_low_descriptor_t* descriptor =
             &descriptor_set->descriptors[descriptor_ordinal];
         const loom_low_descriptor_view_t* descriptor_view =
             &descriptor_set->descriptor_views[descriptor_ordinal];
         const loom_low_schedule_class_t* schedule_class =
-            loom_low_descriptor_set_schedule_class(descriptor_set,
+            loom_low_schedule_model_schedule_class(schedule_model,
                                                    descriptor_view);
         uint64_t result = descriptor->stable_id + descriptor->operand_start +
                           loom_low_descriptor_layout(descriptor_set, descriptor)

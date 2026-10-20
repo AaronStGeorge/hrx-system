@@ -57,6 +57,7 @@ static const loom_target_export_plan_t kTestLowExportPlan = {
 
 static const loom_target_config_t kTestLowConfig = {
     .name = IREE_SVL("test.low.core"),
+    .schedule_model_key = IREE_SVL("test.low.core"),
     .contract_set_key = IREE_SVL("test.low.core"),
 };
 
@@ -82,6 +83,7 @@ static const loom_target_export_plan_t kTestDeviceExportPlan = {
 
 static const loom_target_config_t kTestDeviceConfig = {
     .name = IREE_SVL("test.device"),
+    .schedule_model_key = IREE_SVL("test.low.core"),
     .contract_set_key = IREE_SVL("test.device"),
 };
 

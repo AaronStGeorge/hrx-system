@@ -143,7 +143,7 @@ loom_amdgpu_wait_classification_classify_hazards(
     loom_amdgpu_wait_classification_t* classification) {
   const loom_low_schedule_hazard_use_t* hazard_uses = schedule->hazard_uses;
   const iree_host_size_t hazard_use_count = schedule->hazard_use_count;
-  const loom_low_hazard_t* hazards = schedule->target.descriptor_set->hazards;
+  const loom_low_hazard_t* hazards = schedule->target.schedule_model->hazards;
   for (iree_host_size_t i = 0; i < hazard_use_count; ++i) {
     const loom_low_schedule_hazard_use_t* hazard_use = &hazard_uses[i];
     const loom_low_hazard_t* hazard = &hazards[hazard_use->hazard_index];

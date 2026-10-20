@@ -30,6 +30,11 @@ from loom.target.test.descriptors import (
 )
 
 
+def _emitted_initializer(source: str, declaration: str) -> str:
+    start = source.index(declaration)
+    return source[start : source.index("\n};", start)]
+
+
 def test_descriptor_layout_pool_preserves_all_compiled_spans() -> None:
     compiled = compiler.compile_descriptor_set(TEST_LOW_CORE_DESCRIPTOR_SET)
     layouts = []
@@ -259,14 +264,24 @@ def test_effect_timing_summary_uses_selected_effect_endpoints(descriptor_keys: t
     storage = replace(TEST_LOW_CORE_DESCRIPTOR_SET, supports_native_scheduling=supports_native_scheduling)
     selected = tuple(descriptor for descriptor in storage.descriptors if descriptor.key in descriptor_keys)
     view = replace(storage, descriptors=selected)
-    expected_flags = ["LOOM_LOW_DESCRIPTOR_SET_FLAG_NATIVE_SCHEDULING"] if supports_native_scheduling else []
-    if expected:
-        expected_flags.append("LOOM_LOW_DESCRIPTOR_SET_FLAG_POSITIVE_EFFECT_SEPARATIONS")
-    expected_field = f".flags = {' | '.join(expected_flags) or '0'},"
+    expected_descriptor_flags = "LOOM_LOW_DESCRIPTOR_SET_FLAG_NATIVE_SCHEDULING" if supports_native_scheduling else "0"
+    expected_model_flags = "LOOM_LOW_SCHEDULE_MODEL_FLAG_POSITIVE_EFFECT_SEPARATIONS" if expected else "0"
     # A family view retains shared event tables even when its selected
     # descriptors do not use the positive effect pairs in those tables.
-    assert expected_field in generate_descriptor_set_family(storage, (view,)).source
-    assert expected_field in generate_descriptor_set(storage, DescriptorAllowlist(keys=descriptor_keys)).source
+    for source in (
+        generate_descriptor_set_family(storage, (view,)).source,
+        generate_descriptor_set(storage, DescriptorAllowlist(keys=descriptor_keys)).source,
+    ):
+        descriptor_set = _emitted_initializer(
+            source,
+            "static const loom_low_descriptor_set_t kTestLowCoreSet = {",
+        )
+        schedule_model = _emitted_initializer(
+            source,
+            "static const loom_low_schedule_model_t kTestLowCoreScheduleModel[] = {",
+        )
+        assert f".flags = {expected_descriptor_flags}," in descriptor_set
+        assert f".flags = {expected_model_flags}," in schedule_model
 
 
 @pytest.mark.parametrize("separation_cycles", [-2, 0, 3])
@@ -284,7 +299,9 @@ def test_effect_timing_summary_distinguishes_positive_separations(
     view = replace(storage, descriptors=(write,))
     expected = separation_cycles > 0
     source = generate_descriptor_set_family(storage, (view,)).source
-    expected_flags = "LOOM_LOW_DESCRIPTOR_SET_FLAG_NATIVE_SCHEDULING"
-    if expected:
-        expected_flags += " | LOOM_LOW_DESCRIPTOR_SET_FLAG_POSITIVE_EFFECT_SEPARATIONS"
-    assert f".flags = {expected_flags}," in source
+    expected_flags = "LOOM_LOW_SCHEDULE_MODEL_FLAG_POSITIVE_EFFECT_SEPARATIONS" if expected else "0"
+    schedule_model = _emitted_initializer(
+        source,
+        "static const loom_low_schedule_model_t kTestLowCoreScheduleModel[] = {",
+    )
+    assert f".flags = {expected_flags}," in schedule_model

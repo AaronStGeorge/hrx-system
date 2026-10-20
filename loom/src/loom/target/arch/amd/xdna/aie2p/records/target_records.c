@@ -35,6 +35,7 @@ static const loom_target_export_plan_t kAie2pCoreExportPlan = {
 
 static const loom_target_config_t kAie2pCoreConfig = {
     .name = IREE_SVL("amd.xdna.aie2p.core"),
+    .schedule_model_key = IREE_SVL("amd.xdna.aie2p.core"),
     .contract_set_key = IREE_SVL("amd.xdna.aie2p.core"),
     .contract_feature_bits = 0,
 };
@@ -73,6 +74,7 @@ static const loom_target_export_plan_t kAie2pArrayExportPlan = {
 
 static const loom_target_config_t kAie2pArrayConfig = {
     .name = IREE_SVL("amd.xdna.aie2p.array"),
+    .schedule_model_key = IREE_SVL("amd.xdna.aie2p.array"),
     .contract_set_key = IREE_SVL("amd.xdna.aie2p.array"),
     .contract_feature_bits = 0,
 };
@@ -86,6 +88,7 @@ const loom_target_bundle_t loom_aie2p_array_target_bundle = {
 
 static const loom_target_config_t kAie2pConfigurationConfig = {
     .name = IREE_SVL("amd.xdna.aie2p.configuration"),
+    .schedule_model_key = IREE_SVL("amd.xdna.aie2p.configuration"),
     .contract_set_key = IREE_SVL("amd.xdna.aie2p.configuration"),
 };
 

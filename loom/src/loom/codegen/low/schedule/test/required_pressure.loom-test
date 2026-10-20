@@ -89,7 +89,9 @@ scheduled pressure test.i32: peak-live-units=8 peak-live-values=2
 // the result. Release the independent GPR before starting that sequence.
 // RUN: emit low-schedule-query @required_late_read strategy=resource-stall x86.gpr32=2 required-register-values=%held,%source,%result order=* scheduled-pressure=x86.gpr32
 
-low.func.def target<x86.avx2.core> @required_late_read(%held: reg<x86.gpr32>, %source: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.xmm>) asm {
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @required_late_read(%held: reg<x86.gpr32>, %source: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.xmm>) asm {
   %result = sub.if_uge.imm.gpr32 %source, 17
   %released = copy %held : reg<x86.gpr32> -> reg<x86.xmm>
   return %result, %released

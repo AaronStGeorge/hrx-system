@@ -1034,7 +1034,7 @@ static void loom_low_schedule_score_candidate_hazards(
   }
   for (uint16_t i = 0; i < schedule_class->hazard_count; ++i) {
     const loom_low_hazard_t* hazard =
-        &state->target.descriptor_set
+        &state->target.schedule_model
              ->hazards[schedule_class->hazard_start + i];
     if (hazard->kind != LOOM_LOW_HAZARD_KIND_MIN_DISTANCE) {
       continue;
@@ -1127,7 +1127,7 @@ static void loom_low_schedule_select_candidate_schedule_class(
         loom_low_descriptor_set_descriptor_view_at(
             descriptor_set, alternative->alternative_descriptor_ordinal);
     const loom_low_schedule_class_t* alternative_schedule_class =
-        loom_low_descriptor_set_schedule_class(descriptor_set,
+        loom_low_schedule_model_schedule_class(state->target.schedule_model,
                                                alternative_descriptor_view);
     loom_low_schedule_candidate_score_t alternative_score = *score;
     loom_low_schedule_score_candidate_schedule_class(

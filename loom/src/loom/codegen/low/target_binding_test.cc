@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/target_binding.h"
 
+#include <utility>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -22,6 +24,7 @@
 #include "loom/target/function_contract.h"
 #include "loom/target/test/alt_descriptors.h"
 #include "loom/target/test/descriptors.h"
+#include "loom/target/test/target_records.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -37,6 +40,25 @@ static const loom_low_descriptor_set_provider_t kDescriptorSetProviders[] = {
 struct DiagnosticCapture {
   const loom_error_def_t* error = nullptr;
 };
+
+static loom_target_facts_t MakeScheduleModelFacts(
+    iree_string_view_t schedule_model_key) {
+  const loom_target_bundle_t* bundle = loom_target_bundle_table_lookup(
+      &loom_test_target_bundles, LOOM_TEST_TARGET_KIND_LOW_CORE);
+  loom_target_facts_t facts = {
+      .fact_type = &loom_test_target_fact_type,
+      .selector = LOOM_TEST_TARGET_KIND_LOW_CORE,
+      .storage =
+          {
+              .snapshot = *bundle->snapshot,
+              .export_plan = *bundle->export_plan,
+              .config = *bundle->config,
+              .bundle = *bundle,
+          },
+  };
+  facts.storage.config.schedule_model_key = schedule_model_key;
+  return facts;
+}
 
 static iree_status_t CaptureDiagnostic(
     void* user_data, const loom_diagnostic_emission_t* emission) {
@@ -183,6 +205,9 @@ low.func.def target<test.low.core>(@target) @kernel() {
   EXPECT_TRUE(iree_string_view_equal(target.target_name, IREE_SV("target")));
   EXPECT_EQ(target.feature_bits, 7u);
   ASSERT_NE(target.descriptor_set, nullptr);
+  EXPECT_EQ(target.schedule_model,
+            loom_low_descriptor_set_lookup_schedule_model(
+                target.descriptor_set, IREE_SV("test.low.core")));
   EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
                                      IREE_SV("test.low.core")));
 
@@ -196,6 +221,60 @@ low.func.def target<test.low.core>(@target) @kernel() {
   const loom_low_resolved_target_t copied_target = target;
   EXPECT_EQ(copied_target.target_facts, target.target_facts);
   EXPECT_EQ(loom_low_resolved_target_bundle(&copied_target), bundle);
+}
+
+TEST_F(LowTargetBindingTest, SelectsExactScheduleModelAtLowBinding) {
+  ModulePtr module = ParseModule(R"(
+low.func.def target<test.low.core> @kernel() {
+  low.return
+}
+)");
+
+  const loom_low_descriptor_set_t* base_set =
+      loom_test_low_core_descriptor_set();
+  ASSERT_EQ(base_set->schedule_model_count, 1);
+  loom_low_schedule_model_t named_model = *base_set->schedule_models[0].model;
+  const uint64_t named_model_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.cpu.named"));
+  loom_low_schedule_model_entry_t model_entries[] = {
+      base_set->schedule_models[0],
+      {
+          .stable_id = named_model_id,
+          .model = &named_model,
+      },
+  };
+  if (model_entries[1].stable_id < model_entries[0].stable_id) {
+    std::swap(model_entries[0], model_entries[1]);
+  }
+  loom_low_descriptor_set_t descriptor_set = *base_set;
+  descriptor_set.schedule_models = model_entries;
+  descriptor_set.schedule_model_count = IREE_ARRAYSIZE(model_entries);
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&descriptor_set};
+  const loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  loom_target_facts_t facts = MakeScheduleModelFacts(IREE_SV("test.cpu.named"));
+  loom_target_bundle_storage_rebind(&facts.storage);
+  loom_low_resolved_target_t target = {};
+  IREE_ASSERT_OK(loom_low_resolve_function_target(
+      module.get(), &symbol_facts_,
+      LookupFunctionOp(module.get(), IREE_SV("kernel")), &facts, &registry,
+      iree_diagnostic_emitter_t{}, &target));
+  EXPECT_EQ(target.descriptor_set, &descriptor_set);
+  EXPECT_EQ(target.schedule_model, &named_model);
+
+  facts.storage.config.schedule_model_key = IREE_SV("test.cpu.unmodeled");
+  DiagnosticCapture capture;
+  target = {};
+  IREE_ASSERT_OK(loom_low_resolve_function_target(
+      module.get(), &symbol_facts_,
+      LookupFunctionOp(module.get(), IREE_SV("kernel")), &facts, &registry,
+      {.fn = CaptureDiagnostic, .user_data = &capture}, &target));
+  EXPECT_EQ(capture.error, LOOM_ERR_TARGET_095);
+  EXPECT_EQ(target.descriptor_set, nullptr);
+  EXPECT_EQ(target.schedule_model, nullptr);
 }
 
 TEST_F(LowTargetBindingTest, FunctionTargetFactsOverrideAuthoredTarget) {
@@ -326,6 +405,7 @@ low.kernel.def target<test.low.core>(@target) workgroup_size(128, 1, 1) @too_lar
     } else {
       EXPECT_EQ(capture.error, LOOM_ERR_TARGET_025);
       EXPECT_EQ(resolved.descriptor_set, nullptr);
+      EXPECT_EQ(resolved.schedule_model, nullptr);
     }
   }
 }
@@ -348,6 +428,7 @@ low.func.def target<test.low.core> @portable() {
   EXPECT_TRUE(iree_string_view_is_empty(target.target_name));
   EXPECT_EQ(target.feature_bits, 0u);
   ASSERT_NE(target.descriptor_set, nullptr);
+  EXPECT_EQ(target.schedule_model, nullptr);
   EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
                                      IREE_SV("test.low.core")));
 }
@@ -376,6 +457,7 @@ low.func.def target<test.low.core>(@target) @kernel() {
   EXPECT_EQ(capture.error, LOOM_ERR_TARGET_044);
   EXPECT_EQ(target.target_facts, nullptr);
   EXPECT_EQ(target.descriptor_set, nullptr);
+  EXPECT_EQ(target.schedule_model, nullptr);
 }
 
 TEST_F(LowTargetBindingTest,

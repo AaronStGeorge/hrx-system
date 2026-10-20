@@ -1063,6 +1063,7 @@ TEST_F(LowLowerPassTest,
   };
   const loom_target_config_t target_config = {
       .name = IREE_SVL("test.low.alt"),
+      .schedule_model_key = IREE_SVL("test.low.core"),
       .contract_set_key = IREE_SVL("test.low.alt"),
   };
   const loom_target_bundle_t target_bundle = {

@@ -602,6 +602,9 @@ func.def public target(@exact) @entry() {
                                      IREE_SV("exact")));
   EXPECT_EQ(cloned_version->function_target_facts->selector,
             LOOM_TEST_TARGET_KIND_LOW_CORE);
+  EXPECT_TRUE(iree_string_view_equal(
+      cloned_version->function_target_facts->storage.config.schedule_model_key,
+      IREE_SV("test.low.core")));
   EXPECT_TRUE(cloned_version->authored_target_is_exact);
   EXPECT_EQ(projected->symbols.count, source_symbol_count);
   EXPECT_EQ(CountTestTargets(projected.get()), 1u);

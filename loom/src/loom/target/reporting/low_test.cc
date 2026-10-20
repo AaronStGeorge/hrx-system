@@ -276,6 +276,20 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       },
   };
   const loom_low_schedule_class_t schedule_classes[5] = {};
+  const loom_string_ref_t schedule_class_names[5] = {
+      kRegisterCopyTag, kRegisterCopyTag, kRegisterCopyTag,
+      kRegisterCopyTag, kRegisterCopyTag,
+  };
+  const loom_low_schedule_model_t schedule_model = {
+      .schedule_classes = schedule_classes,
+      .schedule_class_row_count = IREE_ARRAYSIZE(schedule_classes),
+  };
+  const loom_low_schedule_model_entry_t schedule_models[] = {
+      {
+          .stable_id = UINT64_C(1),
+          .model = &schedule_model,
+      },
+  };
   const loom_low_reg_class_t reg_classes[] = {
       {
           .name_string_ref = kRegisterClassGpr,
@@ -316,9 +330,10 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       .effect_count = IREE_ARRAYSIZE(effects),
       .reg_classes = reg_classes,
       .reg_class_count = IREE_ARRAYSIZE(reg_classes),
-      .schedule_classes = schedule_classes,
+      .schedule_class_name_string_refs = schedule_class_names,
+      .schedule_models = schedule_models,
       .schedule_class_count = IREE_ARRAYSIZE(schedule_classes),
-      .schedule_class_row_count = IREE_ARRAYSIZE(schedule_classes),
+      .schedule_model_count = IREE_ARRAYSIZE(schedule_models),
       .string_pool = {{kDescriptorStringPool},
                       {sizeof(kDescriptorStringPool) - 1}},
   };
@@ -648,8 +663,8 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   };
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(descriptors); ++i) {
     schedule_nodes[i].descriptor = &descriptors[i];
-    schedule_nodes[i].schedule_class = loom_low_descriptor_set_schedule_class(
-        &descriptor_set, &descriptor_views[i]);
+    schedule_nodes[i].schedule_class = loom_low_schedule_model_schedule_class(
+        &schedule_model, &descriptor_views[i]);
     schedule_nodes[i].source_ordinal = i;
     schedule_nodes[i].scheduled_ordinal = i;
     schedule_nodes[i].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
@@ -687,6 +702,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                           ? target_bundle->config->contract_feature_bits
                           : 0,
       .descriptor_set = &descriptor_set,
+      .schedule_model = &schedule_model,
   };
   loom_low_schedule_table_t schedule = {
       .module = module,

@@ -86,6 +86,46 @@ class X86TargetProfileInfo:
     automatic_priority: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class X86ProcessorMatchInfo:
+    vendor: str
+    family: int
+    first_model: int
+    last_model: int
+
+
+@dataclass(frozen=True, slots=True)
+class X86TargetTuneInfo:
+    spelling: str
+    stable_value: int
+    schedule_model_key: str
+    processor_matches: tuple[X86ProcessorMatchInfo, ...]
+
+
+X86_TARGET_TUNE_INFOS: tuple[X86TargetTuneInfo, ...] = (
+    X86TargetTuneInfo(
+        spelling="znver5",
+        stable_value=1,
+        schedule_model_key="x86.znver5",
+        processor_matches=(
+            X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0x00, 0x4F),
+            X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0x60, 0x77),
+            X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0xD0, 0xD7),
+        ),
+    ),
+    X86TargetTuneInfo(
+        spelling="znver6",
+        stable_value=2,
+        schedule_model_key="x86.znver6",
+        processor_matches=(
+            X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0x50, 0x5F),
+            X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0x80, 0xCF),
+            X86ProcessorMatchInfo("AuthenticAMD", 0x1A, 0xD8, 0xE7),
+        ),
+    ),
+)
+
+
 def _with_base_registers(*register_classes: str) -> tuple[str, ...]:
     return (X86_REG_CLASS_GPR32, X86_REG_CLASS_GPR64, *register_classes)
 
@@ -392,6 +432,7 @@ def _validate_unique(values: Iterable[str], description: str) -> None:
 def validate_x86_target_info_tables(
     descriptor_sets: tuple[X86DescriptorSetInfo, ...] = X86_DESCRIPTOR_SET_INFOS,
     target_profiles: tuple[X86TargetProfileInfo, ...] = X86_TARGET_PROFILE_INFOS,
+    target_tunes: tuple[X86TargetTuneInfo, ...] = X86_TARGET_TUNE_INFOS,
 ) -> None:
     _validate_unique(
         (info.generator_target for info in descriptor_sets),
@@ -399,6 +440,11 @@ def validate_x86_target_info_tables(
     )
     _validate_unique((info.key for info in descriptor_sets), "descriptor set key")
     _validate_unique((info.profile_key for info in target_profiles), "profile key")
+    _validate_unique((info.spelling for info in target_tunes), "target tune")
+    _validate_unique(
+        (info.schedule_model_key for info in target_tunes),
+        "schedule model key",
+    )
     _validate_unique(
         (
             info.native_bundle_key
@@ -492,6 +538,36 @@ def validate_x86_target_info_tables(
                 "unsupported features"
             )
 
+    stable_values = tuple(info.stable_value for info in target_tunes)
+    if stable_values != tuple(range(1, len(target_tunes) + 1)):
+        raise ValueError("x86 target tune values must be dense and start at one")
+    processor_matches: dict[tuple[str, int, int], str] = {}
+    for tune in target_tunes:
+        for match in tune.processor_matches:
+            if len(match.vendor.encode("ascii")) != 12:
+                raise ValueError(
+                    f"x86 processor vendor '{match.vendor}' must be 12 ASCII bytes"
+                )
+            if not (0 <= match.family <= 0x10E):
+                raise ValueError(
+                    f"x86 processor family 0x{match.family:x} is out of range"
+                )
+            if not (0 <= match.first_model <= match.last_model <= 0xFF):
+                raise ValueError(
+                    f"x86 processor model range 0x{match.first_model:x}-"
+                    f"0x{match.last_model:x} is invalid"
+                )
+            for model in range(match.first_model, match.last_model + 1):
+                key = (match.vendor, match.family, model)
+                prior_tune = processor_matches.get(key)
+                if prior_tune is not None:
+                    raise ValueError(
+                        f"x86 processor {match.vendor} family 0x{match.family:x} "
+                        f"model 0x{model:x} matches both '{prior_tune}' and "
+                        f"'{tune.spelling}'"
+                    )
+                processor_matches[key] = tune.spelling
+
 
 def sorted_descriptor_set_infos() -> tuple[X86DescriptorSetInfo, ...]:
     return tuple(sorted(X86_DESCRIPTOR_SET_INFOS, key=lambda info: info.key))
@@ -567,6 +643,13 @@ def x86_target_profile_info_by_key(profile_key: str) -> X86TargetProfileInfo:
         if info.profile_key == profile_key:
             return info
     raise ValueError(f"unknown x86 target profile '{profile_key}'")
+
+
+def x86_target_tune_info_by_spelling(spelling: str) -> X86TargetTuneInfo:
+    for info in X86_TARGET_TUNE_INFOS:
+        if info.spelling == spelling:
+            return info
+    raise ValueError(f"unknown x86 target tune '{spelling}'")
 
 
 validate_x86_target_info_tables()

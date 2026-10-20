@@ -22,13 +22,15 @@ from loom.gen.support.string_pool import CStringBank
 from loom.gen.target.low import c_emit, compiler, validation, views
 from loom.gen.target.low.compiled import (
     CompiledDescriptorSet,
+    CompiledNamedScheduleModel,
     CompiledScheduleClassTable,
+    CompiledScheduleModel,
     DescriptorAllowlist,
     DescriptorSetView,
     GeneratedDescriptorSet,
     GeneratedDescriptorSetFamily,
 )
-from loom.target.low_descriptors import DescriptorSet
+from loom.target.low_descriptors import DescriptorSet, ScheduleClass
 
 
 def _pool_family_schedule_classes(
@@ -38,21 +40,44 @@ def _pool_family_schedule_classes(
     """Pools canonical rows and view variants without duplicating full tables."""
 
     canonical_count = len(compiled.schedule_classes)
-    pooled_classes = list(compiled.schedule_classes)
-    pooled_rows = list(compiled.schedule_rows)
-    pooled_row_ids = {(schedule_class, tuple(sorted(row.items()))): schedule_class_row_id for schedule_class_row_id, (schedule_class, row) in enumerate(zip(pooled_classes, pooled_rows, strict=True))}
-    pooled_views = []
-    for view in descriptor_set_views:
-        model = view.schedule_model
+    pooled_classes = []
+    pooled_rows = []
+    pooled_row_ids = {}
+    pooled_models: dict[int, tuple[int, ...]] = {}
+
+    def physical_row_key(
+        schedule_class: ScheduleClass,
+        row: dict[str, int],
+    ) -> tuple[object, ...]:
+        # Canonical names and source-only instruction classifications remain in
+        # the descriptor-set namespace. Physical rows contain only these
+        # scheduling fields and model-local subordinate-table spans.
+        return (
+            schedule_class.latency_cycles,
+            schedule_class.schedule_distance_cycles,
+            schedule_class.minimum_issue_separation_cycles,
+            schedule_class.flags,
+            schedule_class.latency_kind,
+            schedule_class.model_quality,
+            tuple(sorted(row.items())),
+        )
+
+    def pool_model(
+        model: CompiledScheduleModel,
+        description: str,
+    ) -> tuple[int, ...]:
+        cached_row_ids = pooled_models.get(id(model))
+        if cached_row_ids is not None:
+            return cached_row_ids
         if len(model.schedule_classes) != canonical_count:
-            raise ValueError(f"descriptor set view '{view.spec.key}' has {len(model.schedule_classes)} schedule classes in a {canonical_count}-class family namespace")
+            raise ValueError(f"{description} has {len(model.schedule_classes)} schedule classes in a {canonical_count}-class family namespace")
         schedule_class_row_ids = []
         for schedule_class, row in zip(
             model.schedule_classes,
             model.schedule_rows,
             strict=True,
         ):
-            key = (schedule_class, tuple(sorted(row.items())))
+            key = physical_row_key(schedule_class, row)
             schedule_class_row_id = pooled_row_ids.get(key)
             if schedule_class_row_id is None:
                 schedule_class_row_id = len(pooled_classes)
@@ -61,12 +86,32 @@ def _pool_family_schedule_classes(
                 pooled_rows.append(dict(row))
             schedule_class_row_ids.append(schedule_class_row_id)
         row_ids = tuple(schedule_class_row_ids)
-        if row_ids == tuple(range(canonical_count)):
-            row_ids = ()
+        row_ids = () if row_ids == tuple(range(canonical_count)) else row_ids
+        pooled_models[id(model)] = row_ids
+        return row_ids
+
+    pooled_views = []
+    for view in descriptor_set_views:
+        row_ids = pool_model(
+            view.schedule_model,
+            f"descriptor set view '{view.spec.key}'",
+        )
+        named_models = tuple(
+            CompiledNamedScheduleModel(
+                key=entry.key,
+                schedule_model=entry.schedule_model,
+                schedule_class_row_ids=pool_model(
+                    entry.schedule_model,
+                    f"descriptor set view '{view.spec.key}' schedule model '{entry.key}'",
+                ),
+            )
+            for entry in view.schedule_models
+        )
         pooled_views.append(
             replace(
                 view,
                 schedule_class_row_ids=row_ids,
+                schedule_models=named_models,
             )
         )
 
@@ -87,13 +132,56 @@ def _pool_family_schedule_classes(
     )
 
 
+def _schedule_model_vocabulary(
+    specs: Sequence[DescriptorSet],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    schedule_class_names: set[str] = set()
+    resource_names: set[str] = set()
+    timing_event_names: set[str] = set()
+    for spec in specs:
+        for model in spec.schedule_models:
+            schedule_class_names.update(schedule_class.name for schedule_class in model.schedule_classes)
+            resource_names.update(resource.name for resource in model.resources)
+            timing_event_names.update(event.name for event in model.timing_events)
+    return (
+        tuple(sorted(schedule_class_names)),
+        tuple(sorted(resource_names)),
+        tuple(sorted(timing_event_names)),
+    )
+
+
 def generate_descriptor_set(
     spec: DescriptorSet,
     allowlist: DescriptorAllowlist | None = None,
     *,
     shared_strings: CStringBank | None = None,
 ) -> GeneratedDescriptorSet:
-    compiled = compiler.compile_descriptor_set(spec, allowlist)
+    (
+        required_schedule_class_names,
+        required_resource_names,
+        required_timing_event_names,
+    ) = _schedule_model_vocabulary((spec,))
+    compiled = compiler.compile_descriptor_set(
+        spec,
+        allowlist,
+        required_schedule_class_names=required_schedule_class_names,
+        required_resource_names=required_resource_names,
+        required_timing_event_names=required_timing_event_names,
+    )
+    if spec.schedule_models:
+        view_spec = replace(spec, descriptors=tuple(compiled.descriptors))
+        compiled, (view,) = _pool_family_schedule_classes(
+            compiled,
+            (views.descriptor_set_view_for_spec(compiled, view_spec),),
+        )
+        return GeneratedDescriptorSet(
+            header=c_emit.emit_header(compiled),
+            source=c_emit.emit_source_for_views(
+                compiled,
+                views=(view,),
+                shared_strings=shared_strings,
+            ),
+        )
     return GeneratedDescriptorSet(
         header=c_emit.emit_header(compiled),
         source=c_emit.emit_source(compiled, shared_strings),
@@ -109,16 +197,25 @@ def compile_descriptor_set_family(
     Each view selects descriptors from |storage_spec| by stable key. Supporting
     tables are shared as a storage superset. Register classes retain storage
     indices but expose each view's authored capacities and absent slots.
-    Scheduling models are compiled per view in canonical family namespaces.
-    Identical class rows share one family table, while views with distinct rows
-    map canonical descriptor IDs directly into that pool. Descriptor,
-    operand-form, and asm-form tables are reused only when the selected view
-    surface matches the storage rows. A view may provide its own asm forms for
-    the same descriptor keys; those forms are compiled and validated against
-    the shared storage vocabulary during generation.
+    The scheduling model stored inline in each descriptor-set view is compiled
+    per view, while each additional processor model is compiled once in the
+    complete canonical family namespace. Every emitted model has an explicit
+    catalog key. Identical class rows share one family table, while views with
+    distinct rows map canonical descriptor IDs directly into that pool.
+    Descriptor, operand-form, and asm-form tables are reused only when the
+    selected view surface matches the storage rows. A view may provide its own
+    asm forms for the same descriptor keys; those forms are compiled and
+    validated against the shared storage vocabulary during generation.
     """
-    required_schedule_class_name_set = {descriptor.schedule_class for view_spec in view_specs for descriptor in view_spec.descriptors if descriptor.schedule_class is not None}
-    required_resource_name_set: set[str] = set()
+    (
+        model_schedule_class_names,
+        model_resource_names,
+        required_timing_event_names,
+    ) = _schedule_model_vocabulary(view_specs)
+    required_schedule_class_name_set = set(model_schedule_class_names)
+    for view_spec in view_specs:
+        required_schedule_class_name_set.update(descriptor.schedule_class for descriptor in view_spec.descriptors if descriptor.schedule_class is not None)
+    required_resource_name_set = set(model_resource_names)
     for view_spec in view_specs:
         selected_schedule_class_names = {descriptor.schedule_class for descriptor in view_spec.descriptors}
         for schedule_class in view_spec.schedule_classes:
@@ -134,10 +231,11 @@ def compile_descriptor_set_family(
         allow_ambiguous_asm_mnemonics=True,
         required_schedule_class_names=required_schedule_class_names,
         required_resource_names=required_resource_names,
+        required_timing_event_names=required_timing_event_names,
     )
     compiled, descriptor_set_views = _pool_family_schedule_classes(
         compiled,
-        tuple(views.descriptor_set_view_for_spec(compiled, view_spec) for view_spec in view_specs),
+        views.descriptor_set_views_for_specs(compiled, view_specs),
     )
     return compiled, descriptor_set_views
 

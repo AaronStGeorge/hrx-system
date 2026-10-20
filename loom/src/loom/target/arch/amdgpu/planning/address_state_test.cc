@@ -28,6 +28,9 @@ class AmdgpuAddressStateTest : public ::testing::Test {
     descriptor_set_ = loom_low_descriptor_registry_lookup(
         &low_registry_.registry, IREE_SV("amdgpu.rdna4.gfx125x.core"));
     ASSERT_NE(descriptor_set_, nullptr);
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
+        descriptor_set_, IREE_SV("amdgpu.generic"));
+    ASSERT_NE(schedule_model_, nullptr);
     descriptor_ = loom_amdgpu_descriptor_ref_descriptor(
         descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32);
     ASSERT_NE(descriptor_, nullptr);
@@ -74,8 +77,8 @@ class AmdgpuAddressStateTest : public ::testing::Test {
     node.descriptor = descriptor_;
     const loom_low_descriptor_view_t* descriptor_view =
         loom_low_descriptor_set_descriptor_view(descriptor_set_, descriptor_);
-    node.schedule_class = loom_low_descriptor_set_schedule_class(
-        descriptor_set_, descriptor_view);
+    node.schedule_class = loom_low_schedule_model_schedule_class(
+        schedule_model_, descriptor_view);
     node.block_index = 0;
     node.source_ordinal = node_index;
     node.scheduled_ordinal = node_index;
@@ -125,6 +128,7 @@ class AmdgpuAddressStateTest : public ::testing::Test {
     schedule_.module = &module_;
     schedule_.function_op = &function_op_;
     schedule_.target.descriptor_set = descriptor_set_;
+    schedule_.target.schedule_model = schedule_model_;
     schedule_.blocks = &block_;
     schedule_.block_count = 1;
     schedule_.nodes = nodes_;
@@ -172,6 +176,8 @@ class AmdgpuAddressStateTest : public ::testing::Test {
   iree_arena_allocator_t arena_;
   loom_target_low_descriptor_registry_t low_registry_ = {};
   const loom_low_descriptor_set_t* descriptor_set_ = nullptr;
+  // Explicit baseline schedule model selected for this target fixture.
+  const loom_low_schedule_model_t* schedule_model_ = nullptr;
   const loom_low_descriptor_t* descriptor_ = nullptr;
   loom_module_t module_ = {};
   loom_op_t function_op_ = {};

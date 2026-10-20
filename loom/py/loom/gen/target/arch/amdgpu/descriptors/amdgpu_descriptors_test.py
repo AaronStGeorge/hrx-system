@@ -39,6 +39,7 @@ def _descriptor(index: int) -> Descriptor:
 def _descriptor_set(target: str, descriptor_count: int) -> DescriptorSet:
     return DescriptorSet(
         key=f"amdgpu.{target.replace('_', '.')}.core",
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu",
         feature_key=f"amdgpu.{target}.v1",
         c_header_path=Path(f"{target}_descriptors.h"),

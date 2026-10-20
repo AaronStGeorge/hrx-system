@@ -24,8 +24,11 @@ class ScheduleResourceCalendarTest : public ::testing::Test {
                                      &block_pool_);
     iree_arena_initialize(&block_pool_, &arena_);
     descriptor_set_ = loom_test_low_core_descriptor_set();
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
+        descriptor_set_, IREE_SV("test.low.core"));
+    ASSERT_NE(schedule_model_, nullptr);
     IREE_ASSERT_OK(loom_low_schedule_resource_calendar_initialize(
-        descriptor_set_, &arena_, &calendar_));
+        schedule_model_, &arena_, &calendar_));
   }
 
   void TearDown() override {
@@ -37,7 +40,7 @@ class ScheduleResourceCalendarTest : public ::testing::Test {
     const loom_low_descriptor_view_t* descriptor_view =
         loom_low_descriptor_set_descriptor_view_at(descriptor_set_,
                                                    descriptor_ref);
-    return loom_low_descriptor_set_schedule_class(descriptor_set_,
+    return loom_low_schedule_model_schedule_class(schedule_model_,
                                                   descriptor_view);
   }
 
@@ -64,6 +67,7 @@ class ScheduleResourceCalendarTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t arena_;
   const loom_low_descriptor_set_t* descriptor_set_ = nullptr;
+  const loom_low_schedule_model_t* schedule_model_ = nullptr;
   loom_low_schedule_resource_calendar_t calendar_ = {};
 };
 
@@ -140,18 +144,17 @@ TEST_F(ScheduleResourceCalendarTest,
   for (auto& schedule_class : classes) {
     schedule_class.flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_DISJOINT_ISSUE_USES;
   }
-  loom_low_descriptor_set_t descriptor_set = {
+  loom_low_schedule_model_t schedule_model = {
       .schedule_classes = classes,
-      .schedule_class_count = IREE_ARRAYSIZE(classes),
-      .schedule_class_row_count = IREE_ARRAYSIZE(classes),
       .issue_uses = uses,
-      .issue_use_count = IREE_ARRAYSIZE(uses),
       .resources = &resource,
+      .issue_use_count = IREE_ARRAYSIZE(uses),
       .resource_count = 1,
       .resource_calendar_slot_count = 4,
+      .schedule_class_row_count = IREE_ARRAYSIZE(classes),
   };
   IREE_ASSERT_OK(loom_low_schedule_resource_calendar_initialize(
-      &descriptor_set, &arena_, &calendar_));
+      &schedule_model, &arena_, &calendar_));
   Commit(&classes[0], 0);
   EXPECT_EQ(calendar_.minimum_issue_cycle, 0u);
   Commit(&classes[1], 0);
@@ -224,8 +227,9 @@ TEST_F(ScheduleResourceCalendarTest, OccupancyMayIncludeTheFinalCycle) {
   Commit(required, UINT32_MAX);
   // The all-ones cycle is real occupancy, not an uninitialized-slot sentinel.
   Commit(required, UINT32_MAX);
-  const auto& use = descriptor_set_->issue_uses[required->issue_use_start];
-  const auto& resource = descriptor_set_->resources[use.resource_id];
+  const auto* schedule_model = schedule_model_;
+  const auto& use = schedule_model->issue_uses[required->issue_use_start];
+  const auto& resource = schedule_model->resources[use.resource_id];
   const auto& slot =
       calendar_.slots[resource.calendar.slot_start +
                       (UINT32_MAX & resource.calendar.slot_mask)];
@@ -256,19 +260,18 @@ TEST_F(ScheduleResourceCalendarTest, HistoryRetainsStageOccupancyAcrossWraps) {
     classes[i].issue_use_count = 1;
     classes[i].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_DISJOINT_ISSUE_USES;
   }
-  loom_low_descriptor_set_t descriptors = {
+  loom_low_schedule_model_t schedule_model = {
       .schedule_classes = classes,
-      .schedule_class_count = IREE_ARRAYSIZE(classes),
-      .schedule_class_row_count = IREE_ARRAYSIZE(classes),
       .issue_uses = uses,
-      .issue_use_count = IREE_ARRAYSIZE(uses),
       .resources = resources,
+      .issue_use_count = IREE_ARRAYSIZE(uses),
       .resource_count = IREE_ARRAYSIZE(resources),
       .resource_calendar_slot_count = 8,
       .resource_calendar_lookback_cycles = 3,
+      .schedule_class_row_count = IREE_ARRAYSIZE(classes),
   };
   IREE_ASSERT_OK(loom_low_schedule_resource_calendar_initialize(
-      &descriptors, &arena_, &calendar_));
+      &schedule_model, &arena_, &calendar_));
   const auto* slots = calendar_.slots;
   const auto used_bytes = arena_.used_allocation_size;
   Commit(&classes[0], 10);  // Occupies cycles thirteen and fourteen.
@@ -303,22 +306,21 @@ TEST_F(ScheduleResourceCalendarTest, ForwardIssueFloorDoesNotExcludeHistory) {
                                     /*units=*/1, /*stage=*/0,
                                     /*kind=*/LOOM_LOW_ISSUE_USE_KIND_REQUIRED};
   loom_low_schedule_class_t schedule_class = {
-      .issue_use_count = 1,
       .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_DISJOINT_ISSUE_USES,
-  };
-  loom_low_descriptor_set_t descriptors = {
-      .schedule_classes = &schedule_class,
-      .schedule_class_count = 1,
-      .schedule_class_row_count = 1,
-      .issue_uses = &use,
       .issue_use_count = 1,
+  };
+  loom_low_schedule_model_t schedule_model = {
+      .schedule_classes = &schedule_class,
+      .issue_uses = &use,
       .resources = &resource,
+      .issue_use_count = 1,
       .resource_count = 1,
       .resource_calendar_slot_count = 4,
       .resource_calendar_lookback_cycles = 3,
+      .schedule_class_row_count = 1,
   };
   IREE_ASSERT_OK(loom_low_schedule_resource_calendar_initialize(
-      &descriptors, &arena_, &calendar_));
+      &schedule_model, &arena_, &calendar_));
   Commit(&schedule_class, 10);
   EXPECT_EQ(calendar_.minimum_issue_cycle, 11u);
   EXPECT_EQ(FindEarliest(&schedule_class, 0), 7u);
@@ -344,14 +346,14 @@ TEST_F(ScheduleResourceCalendarTest, AdmitsCollectiveInstructionDemand) {
       required->flags, LOOM_LOW_SCHEDULE_CLASS_FLAG_DISJOINT_ISSUE_USES));
   // Each instruction alone fills the resource. Delaying the pair cannot make
   // their simultaneous demand legal, so packet formation must split them.
-  EXPECT_TRUE(loom_low_schedule_resource_group_fits(descriptor_set_, pair, 1));
-  EXPECT_FALSE(loom_low_schedule_resource_group_fits(descriptor_set_, pair, 2));
+  EXPECT_TRUE(loom_low_schedule_resource_group_fits(schedule_model_, pair, 1));
+  EXPECT_FALSE(loom_low_schedule_resource_group_fits(schedule_model_, pair, 2));
   const auto* fast =
       ScheduleClass(TEST_LOW_CORE_DESCRIPTOR_REF_TEST_EVENT_FAST_I32);
   const auto* slow =
       ScheduleClass(TEST_LOW_CORE_DESCRIPTOR_REF_TEST_EVENT_SLOW_I32);
   const loom_low_schedule_class_t* group[] = {fast, slow};
-  ASSERT_TRUE(loom_low_schedule_resource_group_fits(descriptor_set_, group, 2));
+  ASSERT_TRUE(loom_low_schedule_resource_group_fits(schedule_model_, group, 2));
   uint16_t bottleneck = LOOM_LOW_RESOURCE_NONE;
   const uint32_t cycle =
       loom_low_schedule_resource_calendar_find_earliest_issue_cycle(
@@ -377,7 +379,8 @@ TEST_F(ScheduleResourceCalendarTest,
       TEST_LOW_CORE_DESCRIPTOR_REF_TEST_ADD_I32,
   };
   using Occupancy = loom_low_schedule_resource_occupancy_t;
-  const uint32_t resource_count = descriptor_set_->resource_count;
+  const auto* schedule_model = schedule_model_;
+  const uint32_t resource_count = schedule_model->resource_count;
   std::vector<Occupancy> occupied(resource_count * kCycleCount);
   std::vector<Occupancy> candidate(resource_count * kCycleCount);
   const auto accumulate = [](Occupancy& target, const Occupancy& use) {
@@ -388,7 +391,7 @@ TEST_F(ScheduleResourceCalendarTest,
   const iree_host_size_t owned_bytes = arena_.total_allocation_size;
   uint32_t issue_cycle_high_water = 0;
   const uint32_t lookback_cycles =
-      descriptor_set_->resource_calendar_lookback_cycles;
+      schedule_model->resource_calendar_lookback_cycles;
   ASSERT_GT(lookback_cycles, 0u);
   uint32_t historical_commit_count = 0;
   uint32_t random = 42;
@@ -400,15 +403,15 @@ TEST_F(ScheduleResourceCalendarTest,
     uint32_t duration = 0;
     for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
       const auto& use =
-          descriptor_set_->issue_uses[schedule_class->issue_use_start + i];
-      const auto& resource = descriptor_set_->resources[use.resource_id];
+          schedule_model->issue_uses[schedule_class->issue_use_start + i];
+      const auto& resource = schedule_model->resources[use.resource_id];
       const uint32_t end = use.stage + use.cycles;
       duration = std::max(duration, end);
       for (uint32_t resource_id = 0; resource_id < resource_count;
            ++resource_id) {
         if (resource_id != use.resource_id &&
             (resource.contention_group_id == 0 ||
-             descriptor_set_->resources[resource_id].contention_group_id !=
+             schedule_model->resources[resource_id].contention_group_id !=
                  resource.contention_group_id)) {
           continue;
         }
@@ -447,7 +450,7 @@ TEST_F(ScheduleResourceCalendarTest,
           accumulate(combined, candidate[resource_id * kCycleCount + cycle]);
           fits &= static_cast<uint32_t>(combined.required_units) +
                       combined.reserved_units <=
-                  descriptor_set_->resources[resource_id].capacity_per_cycle;
+                  schedule_model->resources[resource_id].capacity_per_cycle;
         }
       }
       if (fits) {

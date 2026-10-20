@@ -178,8 +178,39 @@ static iree_status_t loom_low_verify_stable_id_field(uint64_t actual_id,
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_schedule_model_tables_present(
+    const loom_low_schedule_model_t* schedule_model) {
+  if (schedule_model == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low schedule model is required");
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      schedule_model->schedule_classes,
+      schedule_model->schedule_class_row_count, "schedule_classes"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      schedule_model->timing_events, schedule_model->timing_event_count,
+      "timing_events"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      schedule_model->event_separations, schedule_model->event_separation_count,
+      "event_separations"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      schedule_model->issue_uses, schedule_model->issue_use_count,
+      "issue_uses"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      schedule_model->resources, schedule_model->resource_count, "resources"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      schedule_model->hazards, schedule_model->hazard_count, "hazards"));
+  return loom_low_verify_pointer_for_count(schedule_model->pressure_deltas,
+                                           schedule_model->pressure_delta_count,
+                                           "pressure_deltas");
+}
+
 static iree_status_t loom_low_verify_tables_present(
     const loom_low_descriptor_set_t* descriptor_set) {
+  if (descriptor_set->schedule_model_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor set has no schedule models");
+  }
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->descriptors, descriptor_set->descriptor_ordinal_count,
       "descriptors"));
@@ -266,18 +297,11 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->reg_class_alts, descriptor_set->reg_class_alt_count,
       "reg_class_alts"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
-      descriptor_set->schedule_classes,
-      descriptor_set->schedule_class_row_count, "schedule_classes"));
+      descriptor_set->schedule_class_name_string_refs,
+      descriptor_set->schedule_class_count, "schedule_class_names"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
-      descriptor_set->issue_uses, descriptor_set->issue_use_count,
-      "issue_uses"));
-  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
-      descriptor_set->resources, descriptor_set->resource_count, "resources"));
-  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
-      descriptor_set->hazards, descriptor_set->hazard_count, "hazards"));
-  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
-      descriptor_set->pressure_deltas, descriptor_set->pressure_delta_count,
-      "pressure_deltas"));
+      descriptor_set->schedule_models, descriptor_set->schedule_model_count,
+      "schedule_models"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->feature_mask_words,
       descriptor_set->feature_mask_word_count, "feature_mask_words"));
@@ -1862,6 +1886,7 @@ static iree_status_t loom_low_verify_descriptor_operand_encoding_fields(
 
 static iree_status_t loom_low_verify_descriptor_effect_contract(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
   const loom_low_descriptor_view_t* descriptor_view =
       &descriptor_set->descriptor_views[descriptor_index];
@@ -1939,7 +1964,7 @@ static iree_status_t loom_low_verify_descriptor_effect_contract(
   if (descriptor_view->schedule_class_id != LOOM_LOW_SCHEDULE_CLASS_NONE &&
       required_schedule_flags != 0) {
     const loom_low_schedule_class_t* schedule_class =
-        loom_low_descriptor_set_schedule_class(descriptor_set, descriptor_view);
+        loom_low_schedule_model_schedule_class(schedule_model, descriptor_view);
     const loom_low_schedule_class_flags_t missing_flags =
         required_schedule_flags & ~schedule_class->flags;
     if (missing_flags != 0) {
@@ -2400,6 +2425,7 @@ static iree_status_t loom_low_verify_storage_lease(
 
 static iree_status_t loom_low_verify_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     uint32_t descriptor_index) {
   const loom_low_descriptor_t* descriptor =
       &descriptor_set->descriptors[descriptor_index];
@@ -2490,15 +2516,15 @@ static iree_status_t loom_low_verify_descriptor(
         descriptor_set->schedule_class_count);
   }
   if (descriptor_view->schedule_class_id != LOOM_LOW_SCHEDULE_CLASS_NONE &&
-      loom_low_descriptor_set_schedule_class_row_id(
-          descriptor_set, descriptor_view->schedule_class_id) >=
-          descriptor_set->schedule_class_row_count) {
+      loom_low_schedule_model_schedule_class_row_id(
+          schedule_model, descriptor_view->schedule_class_id) >=
+          schedule_model->schedule_class_row_count) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "low descriptor %" PRIu32 " maps schedule class %" PRIu16
         " outside %" PRIu16 " rows",
         descriptor_index, descriptor_view->schedule_class_id,
-        descriptor_set->schedule_class_row_count);
+        schedule_model->schedule_class_row_count);
   }
   if (descriptor_view->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -2516,7 +2542,7 @@ static iree_status_t loom_low_verify_descriptor(
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_encoding_contract(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
-      descriptor_set, descriptor, descriptor_index));
+      descriptor_set, schedule_model, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_descriptor_constraints(descriptor_set, descriptor));
   for (uint16_t i = 0; i < descriptor_layout->storage_lease_count; ++i) {
@@ -3331,10 +3357,10 @@ static iree_status_t loom_low_verify_reg_class_alt(
 }
 
 static iree_status_t loom_low_verify_schedule_class(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     uint32_t schedule_class_index) {
   const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[schedule_class_index];
+      &schedule_model->schedule_classes[schedule_class_index];
   IREE_RETURN_IF_ERROR(loom_low_verify_known_flags(
       schedule_class->flags,
       LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
@@ -3343,8 +3369,6 @@ static iree_status_t loom_low_verify_schedule_class(
           LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL |
           LOOM_LOW_SCHEDULE_CLASS_FLAG_DISJOINT_ISSUE_USES,
       "schedule class", schedule_class_index));
-  IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
-      descriptor_set, schedule_class->name_string_ref, "schedule_class.name"));
   if (schedule_class->latency_kind == LOOM_LOW_LATENCY_KIND_UNKNOWN) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low schedule class %" PRIu32
@@ -3385,28 +3409,28 @@ static iree_status_t loom_low_verify_schedule_class(
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       schedule_class->issue_use_start, schedule_class->issue_use_count,
-      descriptor_set->issue_use_count, "issue_uses"));
+      schedule_model->issue_use_count, "issue_uses"));
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       schedule_class->hazard_start, schedule_class->hazard_count,
-      descriptor_set->hazard_count, "hazards"));
+      schedule_model->hazard_count, "hazards"));
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       schedule_class->pressure_delta_start,
       schedule_class->pressure_delta_count,
-      descriptor_set->pressure_delta_count, "pressure_deltas"));
+      schedule_model->pressure_delta_count, "pressure_deltas"));
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_issue_use(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t issue_use_index) {
+    const loom_low_schedule_model_t* schedule_model, uint32_t issue_use_index) {
   const loom_low_issue_use_t* issue_use =
-      &descriptor_set->issue_uses[issue_use_index];
-  if (issue_use->resource_id >= descriptor_set->resource_count) {
+      &schedule_model->issue_uses[issue_use_index];
+  if (issue_use->resource_id >= schedule_model->resource_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "low issue-use %" PRIu32
                             " references resource %" PRIu16 " but only %" PRIu32
                             " resources exist",
                             issue_use_index, issue_use->resource_id,
-                            descriptor_set->resource_count);
+                            (uint32_t)schedule_model->resource_count);
   }
   if (issue_use->cycles == 0) {
     return iree_make_status(
@@ -3429,11 +3453,11 @@ static iree_status_t loom_low_verify_issue_use(
 }
 
 static iree_status_t loom_low_verify_issue_use_capacity(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t issue_use_index) {
+    const loom_low_schedule_model_t* schedule_model, uint32_t issue_use_index) {
   const loom_low_issue_use_t* issue_use =
-      &descriptor_set->issue_uses[issue_use_index];
+      &schedule_model->issue_uses[issue_use_index];
   const loom_low_resource_t* resource =
-      &descriptor_set->resources[issue_use->resource_id];
+      &schedule_model->resources[issue_use->resource_id];
   if (issue_use->units > resource->capacity_per_cycle) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -3446,9 +3470,10 @@ static iree_status_t loom_low_verify_issue_use_capacity(
 }
 
 static iree_status_t loom_low_verify_resource(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t resource_index) {
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model, uint32_t resource_index) {
   const loom_low_resource_t* resource =
-      &descriptor_set->resources[resource_index];
+      &schedule_model->resources[resource_index];
   IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
       descriptor_set, resource->name_string_ref, "resource.name"));
   if (resource->kind == LOOM_LOW_RESOURCE_KIND_UNKNOWN) {
@@ -3470,35 +3495,35 @@ static iree_status_t loom_low_verify_resource(
 }
 
 static bool loom_low_resources_share_capacity(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t lhs_resource_id,
+    const loom_low_schedule_model_t* schedule_model, uint16_t lhs_resource_id,
     uint16_t rhs_resource_id) {
   const uint16_t lhs_group =
-      descriptor_set->resources[lhs_resource_id].contention_group_id;
+      schedule_model->resources[lhs_resource_id].contention_group_id;
   const uint16_t rhs_group =
-      descriptor_set->resources[rhs_resource_id].contention_group_id;
+      schedule_model->resources[rhs_resource_id].contention_group_id;
   return lhs_resource_id == rhs_resource_id ||
          (lhs_group != 0 && lhs_group == rhs_group);
 }
 
 static iree_status_t loom_low_verify_schedule_class_minimum_issue_cycles(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     uint32_t schedule_class_index) {
   const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[schedule_class_index];
+      &schedule_model->schedule_classes[schedule_class_index];
   uint64_t expected_minimum_issue_cycles = 0;
   for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
     const uint32_t issue_use_index = schedule_class->issue_use_start + i;
     const loom_low_issue_use_t* issue_use =
-        &descriptor_set->issue_uses[issue_use_index];
+        &schedule_model->issue_uses[issue_use_index];
     if (issue_use->kind != LOOM_LOW_ISSUE_USE_KIND_REQUIRED) {
       continue;
     }
     bool is_first_required_use_of_resource = true;
     for (uint16_t j = 0; j < i; ++j) {
       const loom_low_issue_use_t* previous_issue_use =
-          &descriptor_set->issue_uses[schedule_class->issue_use_start + j];
+          &schedule_model->issue_uses[schedule_class->issue_use_start + j];
       if (previous_issue_use->kind == LOOM_LOW_ISSUE_USE_KIND_REQUIRED &&
-          loom_low_resources_share_capacity(descriptor_set,
+          loom_low_resources_share_capacity(schedule_model,
                                             previous_issue_use->resource_id,
                                             issue_use->resource_id)) {
         is_first_required_use_of_resource = false;
@@ -3512,9 +3537,9 @@ static iree_status_t loom_low_verify_schedule_class_minimum_issue_cycles(
     uint64_t resource_unit_cycles = 0;
     for (uint16_t j = i; j < schedule_class->issue_use_count; ++j) {
       const loom_low_issue_use_t* matching_issue_use =
-          &descriptor_set->issue_uses[schedule_class->issue_use_start + j];
+          &schedule_model->issue_uses[schedule_class->issue_use_start + j];
       if (matching_issue_use->kind == LOOM_LOW_ISSUE_USE_KIND_REQUIRED &&
-          loom_low_resources_share_capacity(descriptor_set,
+          loom_low_resources_share_capacity(schedule_model,
                                             matching_issue_use->resource_id,
                                             issue_use->resource_id)) {
         resource_unit_cycles +=
@@ -3522,7 +3547,7 @@ static iree_status_t loom_low_verify_schedule_class_minimum_issue_cycles(
       }
     }
     const uint16_t capacity =
-        descriptor_set->resources[issue_use->resource_id].capacity_per_cycle;
+        schedule_model->resources[issue_use->resource_id].capacity_per_cycle;
     const uint64_t resource_cycles = 1 + (resource_unit_cycles - 1) / capacity;
     if (resource_cycles > expected_minimum_issue_cycles) {
       expected_minimum_issue_cycles = resource_cycles;
@@ -3542,21 +3567,22 @@ static iree_status_t loom_low_verify_schedule_class_minimum_issue_cycles(
 
 static iree_status_t loom_low_verify_descriptor_schedule_model(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     uint32_t descriptor_index) {
   const loom_low_descriptor_view_t* descriptor_view =
       &descriptor_set->descriptor_views[descriptor_index];
   const uint16_t schedule_class_id = descriptor_view->schedule_class_id;
   const uint16_t schedule_class_row_id =
-      loom_low_descriptor_set_schedule_class_row_id(descriptor_set,
+      loom_low_schedule_model_schedule_class_row_id(schedule_model,
                                                     schedule_class_id);
   const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[schedule_class_row_id];
+      &schedule_model->schedule_classes[schedule_class_row_id];
   for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_issue_use_capacity(
-        descriptor_set, schedule_class->issue_use_start + i));
+        schedule_model, schedule_class->issue_use_start + i));
   }
   return loom_low_verify_schedule_class_minimum_issue_cycles(
-      descriptor_set, schedule_class_row_id);
+      schedule_model, schedule_class_row_id);
 }
 
 static iree_status_t loom_low_verify_effect(uint32_t effect_index,
@@ -3600,8 +3626,8 @@ static iree_status_t loom_low_verify_constraint(
 }
 
 static iree_status_t loom_low_verify_hazard(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t hazard_index) {
-  const loom_low_hazard_t* hazard = &descriptor_set->hazards[hazard_index];
+    const loom_low_schedule_model_t* schedule_model, uint32_t hazard_index) {
+  const loom_low_hazard_t* hazard = &schedule_model->hazards[hazard_index];
   if (hazard->kind == LOOM_LOW_HAZARD_KIND_UNKNOWN) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low hazard %" PRIu32 " has unknown kind",
@@ -3624,21 +3650,23 @@ static iree_status_t loom_low_verify_hazard(
                             hazard_index, (unsigned)hazard->reference_kind);
   }
   if (hazard->reference_kind == LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE &&
-      hazard->reference_id >= descriptor_set->resource_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "low hazard %" PRIu32 " references resource %" PRIu16
-        " but only %" PRIu32 " resources exist",
-        hazard_index, hazard->reference_id, descriptor_set->resource_count);
+      hazard->reference_id >= schedule_model->resource_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low hazard %" PRIu32
+                            " references resource %" PRIu16 " but only %" PRIu32
+                            " resources exist",
+                            hazard_index, hazard->reference_id,
+                            (uint32_t)schedule_model->resource_count);
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_pressure_delta(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     uint32_t pressure_delta_index) {
   const loom_low_pressure_delta_t* pressure_delta =
-      &descriptor_set->pressure_deltas[pressure_delta_index];
+      &schedule_model->pressure_deltas[pressure_delta_index];
   if (pressure_delta->reg_class_id >= descriptor_set->reg_class_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "low pressure delta %" PRIu32
@@ -3646,6 +3674,50 @@ static iree_status_t loom_low_verify_pressure_delta(
                             " but only %" PRIu32 " classes exist",
                             pressure_delta_index, pressure_delta->reg_class_id,
                             descriptor_set->reg_class_count);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_schedule_model(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_schedule_model_tables_present(schedule_model));
+  for (uint16_t i = 0; i < descriptor_set->schedule_class_count; ++i) {
+    const uint16_t schedule_class_row_id =
+        loom_low_schedule_model_schedule_class_row_id(schedule_model, i);
+    if (schedule_class_row_id >= schedule_model->schedule_class_row_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low schedule model maps canonical class %" PRIu16 " to row %" PRIu16
+          " but only %" PRIu16 " rows exist",
+          i, schedule_class_row_id, schedule_model->schedule_class_row_count);
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_schedule_class(schedule_model, schedule_class_row_id));
+  }
+  for (uint32_t i = 0; i < schedule_model->issue_use_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_issue_use(schedule_model, i));
+  }
+  for (uint32_t i = 0; i < schedule_model->resource_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_resource(descriptor_set, schedule_model, i));
+  }
+  for (uint32_t i = 0; i < descriptor_set->descriptor_ordinal_count; ++i) {
+    if (!loom_low_descriptor_set_has_descriptor(descriptor_set, i)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_descriptor(descriptor_set, schedule_model, i));
+    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_schedule_model(
+        descriptor_set, schedule_model, i));
+  }
+  for (uint32_t i = 0; i < schedule_model->hazard_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_hazard(schedule_model, i));
+  }
+  for (uint32_t i = 0; i < schedule_model->pressure_delta_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_pressure_delta(descriptor_set, schedule_model, i));
   }
   return iree_ok_status();
 }
@@ -3708,12 +3780,6 @@ iree_status_t loom_low_descriptor_set_verify(
           i, descriptor_set->operand_indices[i], descriptor_set->operand_count);
     }
   }
-  for (uint32_t i = 0; i < descriptor_set->descriptor_ordinal_count; ++i) {
-    if (!loom_low_descriptor_set_has_descriptor(descriptor_set, i)) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor(descriptor_set, i));
-  }
   for (uint32_t i = 0; i < descriptor_set->operand_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_operand(descriptor_set, i));
   }
@@ -3750,27 +3816,31 @@ iree_status_t loom_low_descriptor_set_verify(
   for (uint32_t i = 0; i < descriptor_set->reg_class_alt_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_reg_class_alt(descriptor_set, i));
   }
-  for (uint32_t i = 0; i < descriptor_set->schedule_class_row_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_schedule_class(descriptor_set, i));
+  for (uint32_t i = 0; i < descriptor_set->schedule_class_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
+        descriptor_set, descriptor_set->schedule_class_name_string_refs[i],
+        "schedule_class.name"));
   }
-  for (uint32_t i = 0; i < descriptor_set->issue_use_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_issue_use(descriptor_set, i));
-  }
-  for (uint32_t i = 0; i < descriptor_set->resource_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_resource(descriptor_set, i));
-  }
-  for (uint32_t i = 0; i < descriptor_set->descriptor_ordinal_count; ++i) {
-    if (!loom_low_descriptor_set_has_descriptor(descriptor_set, i)) {
-      continue;
+  uint64_t previous_schedule_model_id = LOOM_LOW_STABLE_ID_NONE;
+  for (uint16_t i = 0; i < descriptor_set->schedule_model_count; ++i) {
+    const loom_low_schedule_model_entry_t* entry =
+        &descriptor_set->schedule_models[i];
+    if (entry->stable_id == LOOM_LOW_STABLE_ID_NONE ||
+        entry->stable_id <= previous_schedule_model_id) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low schedule model entry %" PRIu16
+          " has absent, duplicate, or unordered stable ID 0x%016" PRIx64,
+          i, entry->stable_id);
     }
+    if (entry->model == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low schedule model entry %" PRIu16 " has no model", i);
+    }
+    previous_schedule_model_id = entry->stable_id;
     IREE_RETURN_IF_ERROR(
-        loom_low_verify_descriptor_schedule_model(descriptor_set, i));
-  }
-  for (uint32_t i = 0; i < descriptor_set->hazard_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_hazard(descriptor_set, i));
-  }
-  for (uint32_t i = 0; i < descriptor_set->pressure_delta_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_pressure_delta(descriptor_set, i));
+        loom_low_verify_schedule_model(descriptor_set, entry->model));
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_asm_forms(descriptor_set));
   return loom_low_verify_descriptor_refs(descriptor_set);

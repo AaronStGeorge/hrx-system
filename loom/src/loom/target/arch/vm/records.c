@@ -22,6 +22,7 @@ static const loom_target_export_plan_t kCoreExportPlan = {
 
 static const loom_target_config_t kCoreConfig = {
     .name = IREE_SVL("vm.core"),
+    .schedule_model_key = IREE_SVL("vm.core"),
     .contract_set_key = IREE_SVL("vm.core"),
 };
 

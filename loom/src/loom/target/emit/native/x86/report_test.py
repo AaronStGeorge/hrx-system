@@ -91,7 +91,26 @@ class NativeReportTest(unittest.TestCase):
             "mix",
         )
 
+    def test_selected_processor_model_controls_object_schedule(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            artifact = Path(temporary) / "schedule.o"
+            subprocess.run(
+                [
+                    compiler,
+                    schedule_model_source,
+                    "--pipeline=none",
+                    "--format=x86-elf",
+                    "--output=" + str(artifact),
+                ],
+                check=True,
+            )
+            contents = artifact.read_bytes()
+            interleaved_roots = bytes.fromhex("c5fc51c0 c5fc51c9 c5fc51c0 c5fc51c9")
+            source_order_roots = bytes.fromhex("c5fc51c0 c5fc51c0 c5fc51c9 c5fc51c9")
+            self.assertIn(interleaved_roots, contents)
+            self.assertNotIn(source_order_roots, contents)
+
 
 if __name__ == "__main__":
-    compiler, callable_source, task_source = sys.argv[1:]
+    compiler, callable_source, task_source, schedule_model_source = sys.argv[1:]
     unittest.main(argv=[sys.argv[0]])

@@ -32,6 +32,8 @@ typedef struct loom_x86_target_profile_t {
   uint8_t selector;
   // Complete device CPU facts retained by an owned profile, or NULL.
   const iree_cpu_data_t* cpu_data;
+  // Processor scheduling model derived from |cpu_data|, or NONE.
+  loom_x86_target_tune_t tune;
 } loom_x86_target_profile_t;
 
 typedef struct loom_x86_owned_target_profile_t {
@@ -59,6 +61,7 @@ static iree_status_t loom_x86_profile_project_facts(
   facts->base.selector = profile->selector;
   if (profile->cpu_data != NULL) {
     facts->cpu_data = *profile->cpu_data;
+    facts->tune = profile->tune;
     const loom_x86_target_policy_t* policy =
         loom_x86_target_policy_lookup(profile->selector);
     facts->positive_feature_assertions =
@@ -84,7 +87,8 @@ static const loom_x86_target_profile_t kProfiles[] = {
   {{&kProfileType, &kX86LowTargetBundle##symbol_suffix, 0},                 \
    IREE_SVL(selector_name),                                                 \
    target_kind,                                                             \
-   NULL},
+   NULL,                                                                    \
+   LOOM_X86_TARGET_TUNE_NONE},
 #include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 };
@@ -134,6 +138,7 @@ static bool loom_x86_owned_target_profile_satisfies_requirement(
               .storage = owned->bundle_storage,
           },
       .cpu_data = owned->cpu_data,
+      .tune = owned->profile.tune,
   };
   const loom_x86_target_policy_t* policy =
       loom_x86_target_policy_lookup(owned->profile.selector);
@@ -175,6 +180,9 @@ static iree_status_t loom_x86_create_owned_cpu_profile(
       loom_x86_target_policy_project_cpu_features(policy, cpu_data->fields[0]);
 
   owned->cpu_data = *cpu_data;
+  const loom_x86_target_tune_t tune = loom_x86_target_tune_select_cpu(cpu_data);
+  owned->bundle_storage.config.schedule_model_key =
+      loom_x86_target_tune_info_lookup(tune)->schedule_model_key;
   loom_target_fact_field_set_t explicit_fields = 0;
   loom_target_fact_field_set_insert(&explicit_fields,
                                     LOOM_TARGET_FACT_FIELD_CONTRACT_SET_KEY);
@@ -188,6 +196,7 @@ static iree_status_t loom_x86_create_owned_cpu_profile(
       .name = core_profile->name,
       .selector = core_profile->selector,
       .cpu_data = &owned->cpu_data,
+      .tune = tune,
   };
   if (!loom_x86_owned_target_profile_satisfies_requirement(owned,
                                                            requirement)) {

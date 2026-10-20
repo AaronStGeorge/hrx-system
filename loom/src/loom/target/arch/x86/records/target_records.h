@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include "iree/base/cpu_data.h"
 #include "loom/target/arch/x86/feature_bits.h"
 #include "loom/target/types.h"
 
@@ -20,6 +21,36 @@ extern "C" {
 
 // Stable target-family identity for x86 low descriptor sets.
 #define LOOM_X86_TARGET_STABLE_ID UINT64_C(0x3f1e78197f70e441)
+
+// Explicit baseline model used without a calibrated processor tune.
+#define LOOM_X86_GENERIC_SCHEDULE_MODEL_KEY "x86.generic"
+
+// Stable processor scheduling-model identity.
+typedef uint8_t loom_x86_target_tune_t;
+enum loom_x86_target_tune_e {
+  LOOM_X86_TARGET_TUNE_NONE = 0,
+#define LOOM_X86_TARGET_TUNE(enum_suffix, stable_value, tune_spelling, \
+                             schedule_model_key)                       \
+  LOOM_X86_TARGET_TUNE_##enum_suffix = stable_value,
+#include "loom/target/arch/x86/records/target_profiles.inl"
+#undef LOOM_X86_TARGET_TUNE
+  LOOM_X86_TARGET_TUNE_COUNT_,
+};
+
+// Schedule-model catalog identity for one processor tune.
+typedef struct loom_x86_target_tune_info_t {
+  // Stable descriptor schedule-model key.
+  iree_string_view_t schedule_model_key;
+} loom_x86_target_tune_info_t;
+
+// Returns the generated metadata for a verified |tune|, including NONE.
+const loom_x86_target_tune_info_t* loom_x86_target_tune_info_lookup(
+    loom_x86_target_tune_t tune);
+
+// Selects a known processor tune from exact architectural CPU identity.
+// Unknown vendors, families, and models select NONE.
+loom_x86_target_tune_t loom_x86_target_tune_select_cpu(
+    const iree_cpu_data_t* cpu_data);
 
 // Native bundle constants shared by authored records and named profiles.
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \

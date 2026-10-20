@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/function_model.h"
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/storage_identity.h"
 
@@ -33,6 +34,14 @@ iree_status_t loom_low_function_context_initialize(
         descriptor_registry, emitter, &out_context->target));
   }
   if (out_context->target.descriptor_set == NULL) {
+    out_context->error_count = 1;
+    return iree_ok_status();
+  }
+  if (iree_any_bit_set(flags,
+                       LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL) &&
+      out_context->target.schedule_model == NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_diagnostic_emit_missing_target(module, low_func_op, emitter));
     out_context->error_count = 1;
     return iree_ok_status();
   }

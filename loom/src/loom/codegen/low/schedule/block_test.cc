@@ -22,6 +22,9 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&pool, &arena);
   const auto* descriptors = loom_test_low_core_descriptor_set();
+  const auto* schedule_model = loom_low_descriptor_set_lookup_schedule_model(
+      descriptors, IREE_SV("test.low.core"));
+  ASSERT_NE(schedule_model, nullptr);
   loom_low_schedule_options_t options = {
       .strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
   };
@@ -56,8 +59,8 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
       const loom_low_descriptor_view_t* descriptor_view =
           loom_low_descriptor_set_descriptor_view_at(descriptors, ordinal);
       node.schedule_class_id = descriptor_view->schedule_class_id;
-      node.schedule_class =
-          loom_low_descriptor_set_schedule_class(descriptors, descriptor_view);
+      node.schedule_class = loom_low_schedule_model_schedule_class(
+          schedule_model, descriptor_view);
     }
   }
   previous_nodes[3].issue_cycle = 8;
@@ -106,16 +109,17 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
   std::vector<loom_low_schedule_model_summary_t> models(
       descriptors->schedule_class_count);
   std::vector<loom_low_schedule_resource_summary_t> resources(
-      descriptors->resource_count);
-  for (uint16_t i = 0; i < descriptors->resource_count; ++i) {
+      schedule_model->resource_count);
+  for (uint16_t i = 0; i < schedule_model->resource_count; ++i) {
     resources[i].capacity_per_cycle =
-        descriptors->resources[i].capacity_per_cycle;
+        schedule_model->resources[i].capacity_per_cycle;
   }
   loom_low_schedule_build_state_t state = {
       .options = &options,
       .arena = &arena,
   };
   state.target.descriptor_set = descriptors;
+  state.target.schedule_model = schedule_model;
   state.blocks = blocks;
   state.nodes = nodes;
   state.scheduled_node_indices = order;
@@ -136,7 +140,7 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
   state.model_summaries = models.data();
   state.resource_summaries = resources.data();
   IREE_ASSERT_OK(loom_low_schedule_resource_calendar_initialize(
-      descriptors, &arena, &state.resource_calendar));
+      schedule_model, &arena, &state.resource_calendar));
   loom_low_schedule_pressure_state_t pressure = {};
   loom_low_schedule_block_begin(&state, 1);
   IREE_ASSERT_OK(loom_low_schedule_block_retain(&state, &pressure, &previous));
@@ -180,7 +184,7 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
   EXPECT_EQ(hazard_node.op, &operations[0]);
   EXPECT_EQ(hazard_node.block_index, 1u);
   EXPECT_EQ(hazard_node.scheduled_ordinal, 1u);
-  EXPECT_EQ(descriptors->hazards[hazards[0].hazard_index].kind,
+  EXPECT_EQ(schedule_model->hazards[hazards[0].hazard_index].kind,
             LOOM_LOW_HAZARD_KIND_MIN_DISTANCE);
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&pool);

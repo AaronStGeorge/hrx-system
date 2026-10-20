@@ -19,8 +19,11 @@ class ScheduleEventFrontierTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
     iree_arena_initialize(&pool_, &arena_);
     descriptors_ = loom_test_low_core_descriptor_set();
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
+        descriptors_, IREE_SV("test.low.core"));
+    ASSERT_NE(schedule_model_, nullptr);
     IREE_ASSERT_OK(loom_low_schedule_event_frontier_initialize(
-        descriptors_, &arena_, &frontier_));
+        descriptors_, schedule_model_, &arena_, &frontier_));
   }
 
   void TearDown() override {
@@ -47,13 +50,14 @@ class ScheduleEventFrontierTest : public ::testing::Test {
   }
 
   uint16_t Event(const char* name) {
-    return NamedIndex(descriptors_->timing_events,
-                      descriptors_->timing_event_count, name);
+    return NamedIndex(schedule_model_->timing_events,
+                      schedule_model_->timing_event_count, name);
   }
 
   iree_arena_block_pool_t pool_ = {};
   iree_arena_allocator_t arena_ = {};
   const loom_low_descriptor_set_t* descriptors_ = nullptr;
+  const loom_low_schedule_model_t* schedule_model_ = nullptr;
   loom_low_schedule_event_frontier_t frontier_ = {};
 };
 
@@ -160,13 +164,13 @@ TEST_F(ScheduleEventFrontierTest, DelayedOverwriteKeepsOldAndNewValueReads) {
   events[kImmediateWrite].separation_start = 5;
   events[kImmediateWrite].separation_count = 3;
   events[kImmediateWrite].maximum_issue_separation_cycles = 1;
-  loom_low_descriptor_set_t descriptors = *descriptors_;
-  descriptors.timing_events = events;
-  descriptors.timing_event_count = IREE_ARRAYSIZE(events);
-  descriptors.event_separations = separations;
-  descriptors.event_separation_count = IREE_ARRAYSIZE(separations);
+  loom_low_schedule_model_t schedule_model = *schedule_model_;
+  schedule_model.timing_events = events;
+  schedule_model.timing_event_count = IREE_ARRAYSIZE(events);
+  schedule_model.event_separations = separations;
+  schedule_model.event_separation_count = IREE_ARRAYSIZE(separations);
   IREE_ASSERT_OK(loom_low_schedule_event_frontier_initialize(
-      &descriptors, &arena_, &frontier_));
+      descriptors_, &schedule_model, &arena_, &frontier_));
   const auto physical = Register("test.r0");
   IREE_ASSERT_OK(loom_low_schedule_event_frontier_commit(&frontier_, physical,
                                                          kDelayedWrite, 0));
@@ -214,13 +218,13 @@ TEST_F(ScheduleEventFrontierTest, ForwardedOverwriteRetainsEveryAliasedReader) {
   events[kForwardedRead].separation_count = 1;
   events[kStorageRead].separation_start = 4;
   events[kStorageRead].separation_count = 1;
-  loom_low_descriptor_set_t descriptors = *descriptors_;
-  descriptors.timing_events = events;
-  descriptors.timing_event_count = IREE_ARRAYSIZE(events);
-  descriptors.event_separations = separations;
-  descriptors.event_separation_count = IREE_ARRAYSIZE(separations);
+  loom_low_schedule_model_t schedule_model = *schedule_model_;
+  schedule_model.timing_events = events;
+  schedule_model.timing_event_count = IREE_ARRAYSIZE(events);
+  schedule_model.event_separations = separations;
+  schedule_model.event_separation_count = IREE_ARRAYSIZE(separations);
   IREE_ASSERT_OK(loom_low_schedule_event_frontier_initialize(
-      &descriptors, &arena_, &frontier_));
+      descriptors_, &schedule_model, &arena_, &frontier_));
   const auto wide = Register("test.l0");
   const auto low = Register("test.r0");
   const auto high = Register("test.r2");

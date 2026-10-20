@@ -72,6 +72,8 @@ typedef uint8_t loom_amdgpu_fragment_publication_source_flags_t;
 typedef struct loom_amdgpu_fragment_memory_publication_query_t {
   // Descriptor capabilities available on the selected target.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected by the target configuration.
+  const loom_low_schedule_model_t* schedule_model;
   // Exact native fragment layout being published.
   const loom_amdgpu_matrix_fragment_layout_t* layout;
   // Compiled lane/register address coefficients for the exact layout.

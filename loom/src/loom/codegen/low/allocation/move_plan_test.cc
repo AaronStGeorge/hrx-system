@@ -14,7 +14,9 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/facts_builder.h"
 #include "loom/target/test/low_registry.h"
+#include "loom/target/test/target_records.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -35,6 +37,10 @@ class LowAllocationMovePlanTest : public ::testing::Test {
                                                  vtables, (uint16_t)count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
+    loom_target_facts_builder_initialize(
+        &loom_test_target_fact_type,
+        loom_test_target_bundles.values[LOOM_TEST_TARGET_KIND_LOW_CORE],
+        &target_facts_);
   }
 
   void TearDown() override {
@@ -96,6 +102,7 @@ class LowAllocationMovePlanTest : public ::testing::Test {
   iree_arena_allocator_t scratch_ = {};
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t registry_ = {};
+  loom_target_facts_t target_facts_ = {};
 };
 
 TEST_F(LowAllocationMovePlanTest,
@@ -122,6 +129,7 @@ low.func.def target<test.low.core> @subtrees(%condition: reg<test.i32>, %lhs: re
 )");
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
   };
   loom_low_emission_frame_t frame = {};
@@ -169,6 +177,7 @@ low.func.def target<test.low.core> @reordered(%lhs: reg<test.i32>, %rhs: reg<tes
 )");
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
   };
   loom_low_emission_frame_t frame = {};
@@ -216,6 +225,7 @@ low.func.def target<test.low.core> @swap(%lhs: reg<test.phys>, %rhs: reg<test.ph
   };
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
