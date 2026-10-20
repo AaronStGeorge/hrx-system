@@ -889,7 +889,14 @@ class Translator final : private Initialization::Evaluation {
       return;
     }
     if (!initializer) {
-      fail(owner, "locals require initializers");
+      const auto& partition = types_.partition(variable->type(), owner);
+      if (partition.kind != ValueKind::SSA) {
+        fail(owner,
+             "uninitialized locals require scalar or native vector object "
+             "storage");
+      }
+      allocate_local(variable, variable->explicitAlignment(), owner);
+      return;
     }
     types_.partition(variable->type(), owner);
     if (types_.address_domain(types_.unqualified(variable->type()), owner) ==
