@@ -9,9 +9,9 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/encoding.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
-#include "loom/ops/kernel/collective.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
@@ -235,6 +235,42 @@ static iree_status_t loom_scf_body_append_memory(
   return iree_ok_status();
 }
 
+// Captures the participant scope used by the scheduling proof. NONE retains
+// unscoped convergence; memory space and ordering are separate body effects.
+static loom_value_fact_uniform_scope_t loom_scf_body_convergence_scope(
+    const loom_op_t* op) {
+  switch (op->kind) {
+    case LOOM_OP_KERNEL_SUBGROUP_SHUFFLE:
+    case LOOM_OP_KERNEL_SUBGROUP_BROADCAST:
+    case LOOM_OP_KERNEL_SUBGROUP_BROADCAST_FIRST:
+    case LOOM_OP_KERNEL_SUBGROUP_REDUCE:
+    case LOOM_OP_KERNEL_SUBGROUP_SCAN:
+    case LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY:
+    case LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL:
+    case LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT:
+    case LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK:
+    case LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY:
+    case LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL:
+      return LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP;
+    case LOOM_OP_KERNEL_WORKGROUP_REDUCE:
+    case LOOM_OP_KERNEL_WORKGROUP_SCAN:
+    case LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY:
+    case LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL:
+    case LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT:
+      return LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP;
+    case LOOM_OP_KERNEL_BARRIER:
+      return loom_kernel_barrier_scope(op) == LOOM_ATOMIC_SCOPE_SUBGROUP
+                 ? LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP
+                 : LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP;
+    case LOOM_OP_KERNEL_BARRIER_ARRIVE:
+      return loom_kernel_barrier_arrive_scope(op) == LOOM_ATOMIC_SCOPE_SUBGROUP
+                 ? LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP
+                 : LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP;
+    default:
+      return LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE;
+  }
+}
+
 static iree_status_t loom_scf_body_capture_operation(
     void* user_data, loom_op_t* op, const loom_walk_context_t* context,
     loom_walk_result_t* out_result) {
@@ -304,7 +340,7 @@ static iree_status_t loom_scf_body_capture_operation(
         loom_scf_body_operation_effects(builder->module, op);
     const uint8_t scope =
         iree_any_bit_set(effects, LOOM_SCF_BODY_EFFECT_CONVERGENT)
-            ? loom_kernel_collective_scope(op)
+            ? loom_scf_body_convergence_scope(op)
             : LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE;
     loom_scf_body_operation_add_effects(builder->operation, effects, scope);
     if (builder->spaces) {

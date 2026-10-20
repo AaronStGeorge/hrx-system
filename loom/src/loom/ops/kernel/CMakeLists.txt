@@ -31,7 +31,6 @@ loom_generated_cc_library(
     loom::py::loom::gen::ops::c_tables_kernel_generator
   SRCS
     "canonicalize.c"
-    "collective.c"
     "facts.c"
     "launch_config.c"
     "launch_config_callable_summary.c"
@@ -46,7 +45,6 @@ loom_generated_cc_library(
     "builders.c"
     "tables.c"
   HDRS
-    "collective.h"
     "launch_config.h"
     "launch_config_callable_summary.h"
     "launch_config_contract.h"
