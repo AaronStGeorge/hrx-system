@@ -132,14 +132,18 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
   provider->options.access_devices = access_devices;
   amdf_memory_device_access_t* accesses =
       (amdf_memory_device_access_t*)((uint8_t*)provider + accesses_offset);
-  memcpy(accesses, options->memory.accesses,
-         options->memory.access_count * sizeof(*accesses));
+  if (options->memory.access_count) {
+    memcpy(accesses, options->memory.accesses,
+           options->memory.access_count * sizeof(*accesses));
+  }
   provider->options.memory.accesses = accesses;
   iree_hal_amd_fabric_binding_request_t* bindings =
       (iree_hal_amd_fabric_binding_request_t*)((uint8_t*)provider +
                                                bindings_offset);
-  memcpy(bindings, options->bindings,
-         options->binding_count * sizeof(*bindings));
+  if (options->binding_count) {
+    memcpy(bindings, options->bindings,
+           options->binding_count * sizeof(*bindings));
+  }
   provider->options.bindings = bindings;
   for (uint32_t i = 0; i < options->binding_count; ++i) {
     provider->has_mapping_source |=
