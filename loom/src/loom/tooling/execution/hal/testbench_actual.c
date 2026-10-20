@@ -271,7 +271,9 @@ static iree_status_t loom_run_hal_testbench_validate_kernel_launch(
 iree_status_t loom_run_hal_testbench_select_kernel_launch(
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_invocation_plan_t** out_kernel_launch) {
-  *out_kernel_launch = case_plan->first_kernel_launch;
+  *out_kernel_launch = case_plan->kernel_launch_count != 0
+                           ? case_plan->kernel_launches[0]
+                           : NULL;
   if (case_plan->kernel_launch_count != 1) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
@@ -288,12 +290,9 @@ iree_status_t loom_run_hal_testbench_count_kernel_launches(
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t* out_kernel_launch_count) {
   *out_kernel_launch_count = case_plan->kernel_launch_count;
-  for (iree_host_size_t i = 0; i < case_plan->invocation_count; ++i) {
+  for (iree_host_size_t i = 0; i < case_plan->kernel_launch_count; ++i) {
     const loom_testbench_invocation_plan_t* invocation =
-        &case_plan->invocations[i];
-    if (invocation->kind != LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH) {
-      continue;
-    }
+        case_plan->kernel_launches[i];
     IREE_RETURN_IF_ERROR(
         loom_run_hal_testbench_validate_kernel_launch(case_plan, invocation));
   }
@@ -1375,27 +1374,23 @@ iree_status_t loom_run_hal_testbench_actual_sequence_execution_allocate(
   }
 
   iree_host_size_t provider_index = 0;
-  for (iree_host_size_t invocation_index = 0;
-       iree_status_is_ok(status) &&
-       invocation_index < case_plan->invocation_count;) {
-    if (case_plan->invocations[invocation_index].kind !=
-        LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH) {
-      ++invocation_index;
-      continue;
-    }
-    const iree_host_size_t first_invocation_index = invocation_index;
+  while (iree_status_is_ok(status) && provider_index < provider_count) {
+    const loom_testbench_invocation_plan_t* invocation =
+        case_plan->kernel_launches[provider_index];
+    const iree_host_size_t first_invocation_index =
+        (iree_host_size_t)(invocation - case_plan->invocations);
+    iree_host_size_t invocation_index = first_invocation_index;
     do {
-      IREE_ASSERT(provider_index < provider_count);
       loom_run_hal_testbench_actual_provider_t* provider =
           providers[provider_index++];
       IREE_ASSERT(provider != NULL);
-      IREE_ASSERT(provider->invocation ==
-                  &case_plan->invocations[invocation_index]);
+      IREE_ASSERT(provider->invocation == invocation);
       execution->invocations[invocation_index].provider = provider;
       ++invocation_index;
-    } while (invocation_index < case_plan->invocation_count &&
-             case_plan->invocations[invocation_index].kind ==
-                 LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH);
+      invocation = provider_index < provider_count
+                       ? case_plan->kernel_launches[provider_index]
+                       : NULL;
+    } while (invocation == &case_plan->invocations[invocation_index]);
     loom_run_hal_testbench_actual_sequence_span_t* span =
         &execution->spans[execution->span_count++];
     status = loom_run_hal_testbench_actual_sequence_span_initialize(
@@ -1687,13 +1682,10 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
 
   iree_host_size_t provider_index = 0;
   for (iree_host_size_t i = 0;
-       iree_status_is_ok(status) && i < options->case_plan->invocation_count;
+       iree_status_is_ok(status) && i < options->case_plan->kernel_launch_count;
        ++i) {
     const loom_testbench_invocation_plan_t* invocation =
-        &options->case_plan->invocations[i];
-    if (invocation->kind != LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH) {
-      continue;
-    }
+        options->case_plan->kernel_launches[i];
     const loom_run_hal_testbench_actual_provider_options_t provider_options = {
         .context = options->context,
         .compilation = options->compilation,

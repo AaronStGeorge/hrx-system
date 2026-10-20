@@ -341,6 +341,8 @@ iree_status_t iree_benchmark_loom_append_run_row(
       iree_benchmark_loom_write_run_id_field_json(run, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("tool"), IREE_SV("iree-benchmark-loom")));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      &object, IREE_SV("mode"), run->mode));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("source"), run->source));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
@@ -441,12 +443,12 @@ static iree_status_t iree_benchmark_loom_write_kernel_launch_plan_json(
 
   iree_string_view_t kernel_entry = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_module_symbol_name_from_ref(
-      module, case_plan->first_kernel_launch->callee_ref, &kernel_entry));
+      module, case_plan->kernel_launches[0]->callee_ref, &kernel_entry));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       object, IREE_SV("kernel_entry"), kernel_entry));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       object, IREE_SV("kernel_argument_count"),
-      case_plan->first_kernel_launch->input_count));
+      case_plan->kernel_launches[0]->input_count));
   return iree_ok_status();
 }
 
@@ -2194,7 +2196,8 @@ iree_status_t iree_benchmark_loom_write_summary_counts_json(
 
   if (counts->artifact_bundle_enabled || counts->fixture_read_count != 0 ||
       counts->file_output_count != 0 || counts->profile_count != 0 ||
-      counts->compile_report_count != 0 ||
+      counts->compile_report_count != 0 || counts->compile_request_count != 0 ||
+      counts->compile_request_manifest_count != 0 ||
       counts->artifact_manifest_count != 0 ||
       counts->target_artifact_count != 0 || counts->target_listing_count != 0 ||
       counts->hal_executable_count != 0) {
@@ -2214,6 +2217,12 @@ iree_status_t iree_benchmark_loom_write_summary_counts_json(
     IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
         &artifacts, IREE_SV("compile_report_count"),
         counts->compile_report_count));
+    IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+        &artifacts, IREE_SV("compile_request_count"),
+        counts->compile_request_count));
+    IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+        &artifacts, IREE_SV("compile_request_manifest_count"),
+        counts->compile_request_manifest_count));
     IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
         &artifacts, IREE_SV("artifact_manifest_count"),
         counts->artifact_manifest_count));
@@ -2630,6 +2639,11 @@ iree_status_t iree_benchmark_loom_append_summary_row(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_PROFILE),
       .compile_report_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REPORT),
+      .compile_request_count = iree_benchmark_loom_artifact_bundle_file_count(
+          bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST),
+      .compile_request_manifest_count =
+          iree_benchmark_loom_artifact_bundle_file_count(
+              bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST_MANIFEST),
       .artifact_manifest_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST),
       .target_artifact_count = iree_benchmark_loom_artifact_bundle_file_count(

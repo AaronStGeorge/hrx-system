@@ -88,6 +88,7 @@ iree_py_test(
 iree_execution_test_suite(
     name = "loom_compile_execution_test",
     data = [
+        "compile_requests.loom",
         "feature_distinct_code_objects.loom",
         "loom_opt_f32_arith.loom",
         "selected_root_amdgpu.loom",
@@ -96,6 +97,7 @@ iree_execution_test_suite(
     tags = ["hostonly"],
     target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
     tools = {
+        "iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom",
         "loom-compile": "//loom/src/loom/tools/loom-compile",
         "loom-compile-report": "//loom/py/loom/tools:loom-compile-report",
         "loom-format": "//loom/src/loom/tools/loom-format",

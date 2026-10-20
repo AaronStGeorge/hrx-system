@@ -126,12 +126,9 @@ iree_status_t iree_benchmark_loom_hal_actual_sequence_initialize(
 
   iree_host_size_t provider_index = 0;
   for (iree_host_size_t i = 0;
-       iree_status_is_ok(status) && i < case_plan->invocation_count; ++i) {
+       iree_status_is_ok(status) && i < case_plan->kernel_launch_count; ++i) {
     const loom_testbench_invocation_plan_t* invocation =
-        &case_plan->invocations[i];
-    if (invocation->kind != LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH) {
-      continue;
-    }
+        case_plan->kernel_launches[i];
     iree_string_view_t artifact_path_suffix = iree_string_view_empty();
     if (kernel_launch_count > 1) {
       status = iree_benchmark_loom_module_symbol_name_from_ref(

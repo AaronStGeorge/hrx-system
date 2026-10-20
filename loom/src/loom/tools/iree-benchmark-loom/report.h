@@ -50,6 +50,10 @@ typedef struct iree_benchmark_loom_summary_counts_t {
   iree_host_size_t profile_count;
   // Number of compile-report artifact files observed.
   iree_host_size_t compile_report_count;
+  // Number of canonical compile-request source files observed.
+  iree_host_size_t compile_request_count;
+  // Number of canonical compile-request manifest files observed.
+  iree_host_size_t compile_request_manifest_count;
   // Number of artifact-manifest files observed.
   iree_host_size_t artifact_manifest_count;
   // Number of target artifact files observed.

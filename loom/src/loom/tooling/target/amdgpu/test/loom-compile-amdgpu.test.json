@@ -209,6 +209,73 @@
           "non_empty": true
         }
       ]
+    },
+    {
+      "name": "captures selected benchmark samples as portable compile requests",
+      "steps": [
+        {
+          "name": "capture",
+          "run": {
+            "tool": "iree-benchmark-loom",
+            "args": [
+              "{srcdir}/compile_requests.loom",
+              "--compile-only",
+              "--target=amdgpu:gfx1100",
+              "--config=compile_requests.alpha=4",
+              "--config=compile_requests.beta=8",
+              "--artifact-bundle-dir={tmp}/compile-request-bundle"
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/compile-request-bundle/compile_requests/manifest.json",
+              "contains": [
+                "\"target\":\"amdgpu:gfx1100\"",
+                "\"config\":[{\"key\":\"compile_requests.alpha\",\"value\":\"4\"},{\"key\":\"compile_requests.beta\",\"value\":\"8\"}]",
+                "\"parameters\":{\"width\":4}",
+                "\"parameters\":{\"width\":8}",
+                "\"symbol\":\"sample_kernel\"",
+                "\"selection_count\":2,\"selected_sample_count\":3,\"capture_count\":2,\"request_count\":2,\"failure_count\":0,\"failed_selection_count\":0"
+              ]
+            },
+            {
+              "path": "{tmp}/compile-request-bundle/results.json",
+              "contains": [
+                "\"mode\":\"compile_only\"",
+                "\"compile_request_count\":2",
+                "\"compile_request_manifest_count\":1"
+              ]
+            },
+            {
+              "path": "{tmp}/compile-request-bundle/compile_requests/c0000-s0000-r0000.loombc",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/compile-request-bundle/compile_requests/c0000-s0001-r0000.loombc",
+              "non_empty": true
+            }
+          ]
+        },
+        {
+          "name": "compile-captured-request",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/compile-request-bundle/compile_requests/c0000-s0001-r0000.loombc",
+              "--root=@sample_kernel",
+              "--target=amdgpu:gfx1100",
+              "--format=amdgpu-hsaco",
+              "--output={tmp}/sample.hsaco"
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/sample.hsaco",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

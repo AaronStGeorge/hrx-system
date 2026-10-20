@@ -207,6 +207,16 @@ static iree_status_t iree_benchmark_loom_write_manifest_files_json(
       bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REPORT, allocator,
       object.stream));
   IREE_RETURN_IF_ERROR(
+      loom_json_object_begin_field(&object, IREE_SV("compile_requests")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_manifest_file_array_json(
+      bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST, allocator,
+      object.stream));
+  IREE_RETURN_IF_ERROR(loom_json_object_begin_field(
+      &object, IREE_SV("compile_request_manifests")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_manifest_file_array_json(
+      bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST_MANIFEST,
+      allocator, object.stream));
+  IREE_RETURN_IF_ERROR(
       loom_json_object_begin_field(&object, IREE_SV("artifact_manifests")));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_manifest_file_array_json(
       bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST, allocator,
@@ -243,6 +253,8 @@ static iree_status_t iree_benchmark_loom_append_artifact_bundle_manifest_json(
       &object, IREE_SV("tool"), IREE_SV("iree-benchmark-loom")));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("run_id"), run->run_id));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      &object, IREE_SV("mode"), run->mode));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("source"), run->source));
   IREE_RETURN_IF_ERROR(
@@ -273,6 +285,8 @@ static iree_status_t iree_benchmark_loom_append_artifact_bundle_manifest_json(
       &paths_object, IREE_SV("manifest"), bundle->manifest_path));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &paths_object, IREE_SV("file_outputs"), run->file_output_dir));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+      &paths_object, IREE_SV("compile_requests"), bundle->compile_request_dir));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
       &paths_object, IREE_SV("profiles"), run->profile_artifacts_dir));
   if (iree_benchmark_loom_artifact_bundle_wants_compile_reports(bundle)) {

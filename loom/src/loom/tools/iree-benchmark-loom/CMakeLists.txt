@@ -14,7 +14,9 @@ loom_cc_library(
     main
   HDRS
     "case_execution.h"
+    "case_request.h"
     "comparison_execution.h"
+    "compile_requests.h"
     "configuration.h"
     "context.h"
     "device_spec_report.h"
@@ -44,7 +46,9 @@ loom_cc_library(
     "work_plan.h"
   SRCS
     "case_execution.c"
+    "case_request.c"
     "comparison_execution.c"
+    "compile_requests.c"
     "context.c"
     "device_spec_report.c"
     "diagnostics.c"
@@ -78,16 +82,19 @@ loom_cc_library(
     iree::base::tooling::flags
     iree::hal
     iree::io::stream
+    iree::tooling::device_flags
     iree::tooling::device_util
     iree::tooling::profile::counter
     iree::tooling::profile::summary
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::binding::c::target::cmd
     loom::binding::c::target::iree_hal
     loom::config::text_binding
     loom::error::diagnostic
     loom::error::json_sink
     loom::error::renderer
+    loom::format::text::printer
     loom::ir
     loom::ir::facts
     loom::ops::check
@@ -111,6 +118,7 @@ loom_cc_library(
     loom::tooling::io::file
     loom::tooling::testbench
     loom::tooling::testbench::api
+    loom::tooling::testbench::case_command_program
     loom::tooling::testbench::compiled_provider
     loom::tooling::testbench::device_event
     loom::tooling::testbench::executor
@@ -121,6 +129,7 @@ loom_cc_library(
     loom::tooling::testbench::scenario::entropy
     loom::tooling::testbench::scenario::executor
     loom::tooling::testbench::scenario::values
+    loom::tooling::testbench::source_report
     loom::tooling::testbench::value_materializer
     loom::util::json
     loom::util::stream
@@ -143,6 +152,20 @@ loom_cc_test(
     loom::ops::check
     loom::tooling::testbench
     loom::tooling::testbench::executor
+)
+
+loom_cc_test(
+  NAME
+    case_request_test
+  SRCS
+    "case_request_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+    loom::binding::c::target::cmd
 )
 
 loom_cc_test(
