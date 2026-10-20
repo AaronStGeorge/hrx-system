@@ -15,8 +15,10 @@ from loom_serve_testing.chat import request
 
 
 @contextlib.contextmanager
-def endpoint(payload, status=200):
+def endpoint(payload, status=200, *, after_body=None):
     requests = []
+    content_length = len(payload) if isinstance(payload, bytes) else None
+    chunks = (payload,) if content_length is not None else payload
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
@@ -31,9 +33,14 @@ def endpoint(payload, status=200):
             )
             self.send_response(status)
             self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Content-Length", str(len(payload)))
+            if content_length is not None:
+                self.send_header("Content-Length", str(content_length))
             self.end_headers()
-            self.wfile.write(payload)
+            for chunk in chunks:
+                self.wfile.write(chunk)
+                self.wfile.flush()
+            if after_body is not None:
+                after_body(self.rfile)
 
         def log_message(self, *_):
             pass
@@ -123,6 +130,82 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(len(result["output_chunk_ms"]), 3)
         self.assertTrue(requests[0]["body"]["enable_thinking"])
 
+    def test_content_observer_delivers_live_deltas_with_receipt_times(self):
+        observed = []
+        first_observed = threading.Event()
+
+        def payload():
+            yield stream(
+                event({"role": "assistant"}),
+                event({"reasoning_content": "Check the answer."}),
+                event({"content": "héllo "}),
+                done=False,
+            )
+            first_observed.wait()
+            yield stream(
+                event({"content": "world"}, "stop", usage={"completion_tokens": 9})
+            )
+
+        def observe(text, received):
+            observed.append((text, received))
+            first_observed.set()
+
+        with endpoint(payload()) as (address, _):
+            try:
+                result = request(
+                    address, "agent", [], 32, model="reviewer", on_content=observe
+                )
+            finally:
+                first_observed.set()
+        self.assertEqual([text for text, _ in observed], ["héllo ", "world"])
+        self.assertEqual(result["text"], "héllo world")
+        self.assertLessEqual(result["started_ns"], observed[0][1])
+        self.assertLessEqual(observed[0][1], observed[1][1])
+        self.assertLessEqual(observed[1][1], result["completed_ns"])
+        self.assertEqual(
+            result["first_text_ms"],
+            (observed[0][1] - result["started_ns"]) / 1e6,
+        )
+        self.assertEqual(
+            result["output_chunk_ms"][1:],
+            [(received - result["started_ns"]) / 1e6 for _, received in observed],
+        )
+
+    def test_content_observer_failure_aborts_the_sample(self):
+        observed = []
+        peer_finished = threading.Event()
+        peer_input = []
+
+        def reject(text, received):
+            observed.append(text)
+            raise ValueError("downstream consumer stopped")
+
+        def observe_disconnect(reader):
+            try:
+                peer_input.append(reader.read(1))
+            except ConnectionResetError:
+                peer_input.append(b"")
+            finally:
+                peer_finished.set()
+
+        payload = stream(
+            event({"content": "partial"}),
+            event({"content": "tail"}, "stop", usage={"completion_tokens": 2}),
+        )
+        with endpoint(payload, after_body=observe_disconnect) as (address, _):
+            with self.assertRaisesRegex(ValueError, "downstream consumer stopped"):
+                try:
+                    request(
+                        address, "agent", [], 32, model="reviewer", on_content=reject
+                    )
+                except ValueError:
+                    # Keep the exception traceback alive while the peer observes
+                    # closure: garbage collection must not own the disconnect.
+                    peer_finished.wait()
+                    raise
+        self.assertEqual(observed, ["partial"])
+        self.assertEqual(peer_input, [b""])
+
     def test_tool_fragments_are_joined_without_inventing_text_latency(self):
         tools = [{"type": "function", "function": {"name": "read"}}]
         usage = {"prompt_tokens": 12, "completion_tokens": 9}
@@ -152,7 +235,17 @@ class ChatTest(unittest.TestCase):
             event(reason="tool_calls", usage=usage),
         )
         with endpoint(payload) as (address, requests):
-            result = request(address, "agent", [], 32, model="reviewer", tools=tools)
+            result = request(
+                address,
+                "agent",
+                [],
+                32,
+                model="reviewer",
+                tools=tools,
+                on_content=lambda *_: self.fail(
+                    "tool fragment reached answer observer"
+                ),
+            )
         self.assertEqual(result["text"], "")
         self.assertIsNone(result["first_text_ms"])
         self.assertEqual(len(result["output_chunk_ms"]), 2)
