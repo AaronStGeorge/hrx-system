@@ -11,6 +11,7 @@
 #include "loom/ir/encoding.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/ops/kernel/collective.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
@@ -173,6 +174,23 @@ loom_scf_body_effect_flags_t loom_scf_body_operation_effects(
   return flags;
 }
 
+void loom_scf_body_operation_add_effects(loom_scf_body_operation_t* operation,
+                                         loom_scf_body_effect_flags_t effects,
+                                         uint8_t convergence_scope) {
+  if (iree_any_bit_set(effects, LOOM_SCF_BODY_EFFECT_CONVERGENT)) {
+    if (!iree_any_bit_set(operation->effects,
+                          LOOM_SCF_BODY_EFFECT_CONVERGENT) ||
+        convergence_scope == LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE) {
+      operation->convergence_scope = convergence_scope;
+    } else if (operation->convergence_scope !=
+               LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE) {
+      operation->convergence_scope =
+          iree_max(operation->convergence_scope, convergence_scope);
+    }
+  }
+  operation->effects |= effects;
+}
+
 static iree_status_t loom_scf_body_capture_payload(
     loom_scf_body_builder_t* builder, const loom_op_t* op) {
   builder->op = op;
@@ -284,7 +302,11 @@ static iree_status_t loom_scf_body_capture_operation(
   if (!structured && !loom_scf_yield_isa(op)) {
     loom_scf_body_effect_flags_t effects =
         loom_scf_body_operation_effects(builder->module, op);
-    builder->operation->effects |= effects;
+    const uint8_t scope =
+        iree_any_bit_set(effects, LOOM_SCF_BODY_EFFECT_CONVERGENT)
+            ? loom_kernel_collective_scope(op)
+            : LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE;
+    loom_scf_body_operation_add_effects(builder->operation, effects, scope);
     if (builder->spaces) {
       loom_memory_access_t access =
           loom_memory_access_cast(builder->module, op);

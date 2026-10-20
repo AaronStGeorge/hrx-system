@@ -6,11 +6,19 @@
 
 #include "loom/transforms/scf/scf_pipeline_plan.h"
 
+#include "loom/ir/facts.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/types.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
+
+static bool loom_scf_pipeline_preserves_participation(
+    loom_scf_pipeline_participation_t participation, uint8_t scope) {
+  return participation.exact_bounds ||
+         (scope != LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE &&
+          participation.uniform_scope >= scope);
+}
 
 static bool loom_scf_pipeline_reference_depends_on_carried(
     const loom_local_value_domain_t* domain, const bool* depends_on_carried,
@@ -185,8 +193,8 @@ static void loom_scf_pipeline_clear_branch_owners(
 static iree_status_t loom_scf_pipeline_try_build_guarded_partition(
     loom_module_t* module, const loom_block_t* block, const loom_op_t* op,
     const loom_scf_memory_t* spaces, const loom_local_value_domain_t* domain,
-    bool has_static_bounds, bool* depends_on_carried, uint32_t* branch_owners,
-    iree_arena_allocator_t* arena,
+    loom_scf_pipeline_participation_t participation, bool* depends_on_carried,
+    uint32_t* branch_owners, iree_arena_allocator_t* arena,
     loom_scf_pipeline_guarded_partition_t** out_partition) {
   *out_partition = NULL;
   if (!loom_scf_if_isa(op) || !loom_scf_if_else_region(op)) {
@@ -224,7 +232,9 @@ static iree_status_t loom_scf_pipeline_try_build_guarded_partition(
   for (uint32_t i = 0; i < producer_body->count; ++i) {
     const loom_scf_body_effect_flags_t effects =
         producer_body->operations[i].effects;
-    if (effects == LOOM_SCF_BODY_EFFECT_CONVERGENT && has_static_bounds) {
+    if (effects == LOOM_SCF_BODY_EFFECT_CONVERGENT &&
+        loom_scf_pipeline_preserves_participation(
+            participation, producer_body->operations[i].convergence_scope)) {
       continue;
     }
     if (effects != 0 && effects != LOOM_SCF_BODY_EFFECT_READ) {
@@ -235,7 +245,9 @@ static iree_status_t loom_scf_pipeline_try_build_guarded_partition(
     const loom_scf_body_effect_flags_t effects =
         other_body->operations[i].effects;
     if (effects != 0 &&
-        (effects != LOOM_SCF_BODY_EFFECT_CONVERGENT || !has_static_bounds)) {
+        (effects != LOOM_SCF_BODY_EFFECT_CONVERGENT ||
+         !loom_scf_pipeline_preserves_participation(
+             participation, other_body->operations[i].convergence_scope))) {
       return iree_ok_status();
     }
   }
@@ -345,7 +357,9 @@ static iree_status_t loom_scf_pipeline_try_build_guarded_partition(
     IREE_RETURN_IF_ERROR(loom_scf_pipeline_guarded_append_operation_references(
         arena, partition, &reference_count, &reference_capacity, producer_body,
         &producer_body->operations[i]));
-    partition->consumer.effects |= producer_body->operations[i].effects;
+    loom_scf_body_operation_add_effects(
+        &partition->consumer, producer_body->operations[i].effects,
+        producer_body->operations[i].convergence_scope);
   }
   IREE_RETURN_IF_ERROR(loom_scf_pipeline_guarded_append_operation_references(
       arena, partition, &reference_count, &reference_capacity, producer_body,
@@ -354,7 +368,9 @@ static iree_status_t loom_scf_pipeline_try_build_guarded_partition(
     IREE_RETURN_IF_ERROR(loom_scf_pipeline_guarded_append_operation_references(
         arena, partition, &reference_count, &reference_capacity, other_body,
         &other_body->operations[i]));
-    partition->consumer.effects |= other_body->operations[i].effects;
+    loom_scf_body_operation_add_effects(
+        &partition->consumer, other_body->operations[i].effects,
+        other_body->operations[i].convergence_scope);
   }
   IREE_RETURN_IF_ERROR(loom_scf_pipeline_guarded_append_operation_references(
       arena, partition, &reference_count, &reference_capacity, other_body,
@@ -438,12 +454,31 @@ static bool loom_scf_pipeline_has_guarded_candidate(
 static iree_status_t loom_scf_pipeline_plan_partition(
     loom_module_t* module, const loom_block_t* block,
     const loom_local_value_domain_t* domain, const loom_scf_memory_t* spaces,
-    bool has_static_bounds, bool has_guarded_candidate,
+    loom_scf_pipeline_participation_t participation, bool has_guarded_candidate,
     iree_arena_allocator_t* arena, loom_scf_pipeline_plan_t* plan,
     loom_scf_pipeline_rejection_t* rejection) {
   bool ordered_memory = false;
   for (uint32_t i = 0; i < plan->body.count; ++i) {
     const loom_scf_body_operation_t* operation = &plan->body.operations[i];
+    if (iree_any_bit_set(operation->effects, LOOM_SCF_BODY_EFFECT_CONVERGENT) &&
+        !loom_scf_pipeline_preserves_participation(
+            participation, operation->convergence_scope)) {
+      static const iree_string_view_t constraints[] = {
+          IREE_SVL("compile-time exact loop bounds to preserve unscoped "
+                   "convergent consumer participation"),
+          IREE_SVL("subgroup-uniform loop bounds to preserve convergent "
+                   "consumer participation"),
+          IREE_SVL("workgroup-uniform loop bounds to preserve convergent "
+                   "consumer participation"),
+          IREE_SVL("cluster-uniform loop bounds to preserve convergent "
+                   "consumer participation"),
+      };
+      *rejection = (loom_scf_pipeline_rejection_t){
+          .op = operation->op,
+          .constraint = constraints[operation->convergence_scope],
+      };
+      return iree_ok_status();
+    }
     if (!iree_any_bit_set(
             operation->effects,
             LOOM_SCF_BODY_EFFECT_WRITE | LOOM_SCF_BODY_EFFECT_ORDERED)) {
@@ -459,10 +494,11 @@ static iree_status_t loom_scf_pipeline_plan_partition(
       };
       return iree_ok_status();
     }
-    if (!has_static_bounds) {
+    if (!loom_scf_pipeline_preserves_participation(
+            participation, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP)) {
       *rejection = (loom_scf_pipeline_rejection_t){
           .op = operation->op,
-          .constraint = IREE_SV("compile-time exact loop bounds to preserve "
+          .constraint = IREE_SV("workgroup-uniform loop bounds to preserve "
                                 "ordered consumer participation"),
       };
       return iree_ok_status();
@@ -512,7 +548,7 @@ static iree_status_t loom_scf_pipeline_plan_partition(
         continue;
       }
       IREE_RETURN_IF_ERROR(loom_scf_pipeline_try_build_guarded_partition(
-          module, block, operation->op, spaces, domain, has_static_bounds,
+          module, block, operation->op, spaces, domain, participation,
           depends_on_carried, branch_owners, arena,
           &plan->guarded_partitions[i]));
       plan->guarded_partition_count += plan->guarded_partitions[i] != NULL;
@@ -556,15 +592,6 @@ static iree_status_t loom_scf_pipeline_plan_partition(
     }
     if (operation->effects == 0) {
       continue;
-    }
-    if (iree_any_bit_set(operation->effects, LOOM_SCF_BODY_EFFECT_CONVERGENT) &&
-        !has_static_bounds) {
-      *rejection = (loom_scf_pipeline_rejection_t){
-          .op = operation->op,
-          .constraint = IREE_SV("compile-time exact loop bounds to preserve "
-                                "convergent consumer participation"),
-      };
-      return iree_ok_status();
     }
     if (operation->effects == LOOM_SCF_BODY_EFFECT_CONVERGENT) {
       continue;
@@ -863,7 +890,8 @@ static iree_status_t loom_scf_pipeline_plan_partition(
 }
 
 iree_status_t loom_scf_pipeline_plan_build(
-    loom_module_t* module, const loom_block_t* block, bool has_static_bounds,
+    loom_module_t* module, const loom_block_t* block,
+    loom_scf_pipeline_participation_t participation,
     const loom_scf_memory_t* spaces, iree_arena_allocator_t* arena,
     loom_scf_pipeline_plan_t* out_plan,
     loom_scf_pipeline_rejection_t* out_rejection) {
@@ -892,7 +920,7 @@ iree_status_t loom_scf_pipeline_plan_build(
                            : loom_local_value_domain_acquire_for_region(
                                  module, block->parent_region, arena, &domain));
   iree_status_t status = loom_scf_pipeline_plan_partition(
-      module, block, &domain, spaces, has_static_bounds, has_guarded_candidate,
+      module, block, &domain, spaces, participation, has_guarded_candidate,
       arena, out_plan, out_rejection);
   loom_local_value_domain_release(&domain);
   return status;

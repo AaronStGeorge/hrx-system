@@ -1,9 +1,9 @@
 // Each tile publishes two stripes through one workgroup allocation. Mirrored
 // reads cross subgroup boundaries, and the same storage is reused next tile.
 // The full inner unroll exposes global loads without moving the ordered stores.
-template.decl @ordered_read_ahead_rows(%input: buffer, %output: buffer, %end: index, %depth: index, %factor: index)
+template.decl @ordered_read_ahead_rows(%input: buffer, %output: buffer, %begin: index, %end: index, %depth: index, %factor: index)
 
-template.def<@ordered_read_ahead_rows> @ordered_read_ahead_rows_impl(%input: buffer, %output: buffer, %end: index, %depth: index, %factor: index) {
+template.def<@ordered_read_ahead_rows> @ordered_read_ahead_rows_impl(%input: buffer, %output: buffer, %begin: index, %end: index, %depth: index, %factor: index) {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
@@ -20,7 +20,7 @@ template.def<@ordered_read_ahead_rows> @ordered_read_ahead_rows_impl(%input: buf
   %published = buffer.view %scratch[%origin] : buffer -> view<256xi32>
   %consumed = buffer.view %scratch[%origin] : buffer -> view<256xi32>
   %identity = scalar.constant 0 : i32
-  %result = scf.for %row = [%c0 to %end step %c1](%sum = %identity : i32) -> (i32) pipeline(%depth) unroll(%factor) {
+  %result = scf.for %row = [%begin to %end step %c1](%sum = %identity : i32) -> (i32) pipeline(%depth) unroll(%factor) {
     scf.for %stripe = [%c0 to %c2 step %c1] unroll {
       %slot = index.madd %stripe, %width, %lane : index
       %address = index.madd %row, %tile, %slot : index
@@ -42,7 +42,8 @@ template.def<@ordered_read_ahead_rows> @ordered_read_ahead_rows_impl(%input: buf
 
 // Reconstructs each lane's mirrored stripe reads in serial row order without
 // shared storage, barriers, pipelining, or unrolling.
-func.def @ordered_read_ahead_rows_oracle(%input: buffer, %output: buffer, %end: index) {
+func.def @ordered_read_ahead_rows_oracle(%input: buffer, %output: buffer, %begin: index, %end: index) {
+  %bounded_begin = index.assume %begin [range(%begin, 0, 4)] : index
   %bounded_end = index.assume %end [range(%end, 0, 4)] : index
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
@@ -56,7 +57,7 @@ func.def @ordered_read_ahead_rows_oracle(%input: buffer, %output: buffer, %end: 
   scf.for %lane = [%c0 to %width step %c1] {
     %peer = index.sub %last, %lane : index
     %second_peer = index.add %peer, %width : index
-    %result = scf.for %row = [%c0 to %bounded_end step %c1](%sum = %identity : i32) -> (i32) {
+    %result = scf.for %row = [%bounded_begin to %bounded_end step %c1](%sum = %identity : i32) -> (i32) {
       %row_base = index.mul %row, %tile : index
       %first_address = index.add %row_base, %peer : index
       %second_address = index.add %row_base, %second_peer : index
@@ -73,31 +74,36 @@ func.def @ordered_read_ahead_rows_oracle(%input: buffer, %output: buffer, %end: 
 
 func.def @ordered_rows_0_oracle(%input: buffer, %output: buffer) {
   %end = index.constant 0 : index
-  func.call @ordered_read_ahead_rows_oracle(%input, %output, %end) : (buffer, buffer, index)
+  %begin = index.constant 0 : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
   func.return
 }
 
 func.def @ordered_rows_1_oracle(%input: buffer, %output: buffer) {
   %end = index.constant 1 : index
-  func.call @ordered_read_ahead_rows_oracle(%input, %output, %end) : (buffer, buffer, index)
+  %begin = index.constant 0 : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
   func.return
 }
 
 func.def @ordered_rows_2_oracle(%input: buffer, %output: buffer) {
   %end = index.constant 2 : index
-  func.call @ordered_read_ahead_rows_oracle(%input, %output, %end) : (buffer, buffer, index)
+  %begin = index.constant 0 : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
   func.return
 }
 
 func.def @ordered_rows_3_oracle(%input: buffer, %output: buffer) {
   %end = index.constant 3 : index
-  func.call @ordered_read_ahead_rows_oracle(%input, %output, %end) : (buffer, buffer, index)
+  %begin = index.constant 0 : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
   func.return
 }
 
 func.def @ordered_rows_4_oracle(%input: buffer, %output: buffer) {
   %end = index.constant 4 : index
-  func.call @ordered_read_ahead_rows_oracle(%input, %output, %end) : (buffer, buffer, index)
+  %begin = index.constant 0 : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
   func.return
 }
 
@@ -109,7 +115,8 @@ kernel.def @ordered_rows_0_depth_2() {
   %end = index.constant 0 : index
   %depth = index.constant 2 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -380,7 +387,8 @@ kernel.def @ordered_rows_1_depth_3() {
   %end = index.constant 1 : index
   %depth = index.constant 3 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -406,7 +414,8 @@ kernel.def @ordered_rows_2_depth_2() {
   %end = index.constant 2 : index
   %depth = index.constant 2 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -432,7 +441,8 @@ kernel.def @ordered_rows_2_depth_3() {
   %end = index.constant 2 : index
   %depth = index.constant 3 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -458,7 +468,8 @@ kernel.def @ordered_rows_3_depth_3() {
   %end = index.constant 3 : index
   %depth = index.constant 3 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -484,7 +495,8 @@ kernel.def @ordered_rows_4_depth_1() {
   %end = index.constant 4 : index
   %depth = index.constant 1 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -510,7 +522,8 @@ kernel.def @ordered_rows_4_depth_2() {
   %end = index.constant 4 : index
   %depth = index.constant 2 : index
   %factor = index.constant 1 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -536,7 +549,8 @@ kernel.def @ordered_rows_4_depth_3_unroll_2() {
   %end = index.constant 4 : index
   %depth = index.constant 3 : index
   %factor = index.constant 2 : index
-  template.apply<@ordered_read_ahead_rows>(%input, %output, %end, %depth, %factor) : (buffer, buffer, index, index, index)
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
   kernel.return
 }
 
@@ -552,4 +566,77 @@ check.scenario @ordered_rows_4_depth_3_unroll_2_values {
     }
   }
   check.return
+}
+
+// Runtime bounds remain uniform without specializing their generated values.
+// Each depth covers empty, short, exact-depth, and steady-state domains.
+kernel.def @ordered_runtime_rows_depth_2() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %interval_arg: index) {
+  %interval = index.assume %interval_arg [range(%interval_arg, 0, 24)] : index
+  %choices = index.constant 5 : index
+  %begin = index.div %interval, %choices : index
+  %end = index.rem %interval, %choices : index
+  %depth = index.constant 2 : index
+  %factor = index.constant 1 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
+  kernel.return
+}
+
+check.scenario @ordered_runtime_rows_depth_2_values {
+  check.trial[25](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input = check.generate.random.uniform seed(%seed) range(-2147483648 to 2147483647) : tensor<1024xi32>
+    %output_storage = check.generate.fill value(-123) : tensor<136xi32>
+    %output = check.tensor.view %output_storage offset(16) : tensor<136xi32> -> tensor<128xi32>
+    check.compare<@ordered_runtime_rows_depth_2, @ordered_runtime_interval_oracle>(%input, %output, %trial) : (tensor<1024xi32>, tensor<128xi32>, index) -> () {
+      check.expect.bitwise actual(%input) expected(%input) : tensor<1024xi32>
+      check.expect.bitwise actual(%output_storage) expected(%output_storage) : tensor<136xi32>
+    }
+  }
+  check.return
+}
+
+kernel.def @ordered_runtime_rows_depth_3() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %end_input: index) {
+  %end = index.assume %end_input [range(%end_input, 0, 4)] : index
+  %depth = index.constant 3 : index
+  %factor = index.constant 1 : index
+  %begin = index.constant 0 : index
+  template.apply<@ordered_read_ahead_rows>(%input, %output, %begin, %end, %depth, %factor) : (buffer, buffer, index, index, index, index)
+  kernel.return
+}
+
+check.scenario @ordered_runtime_rows_depth_3_values {
+  check.trial[5](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input = check.generate.random.uniform seed(%seed) range(-2147483648 to 2147483647) : tensor<1024xi32>
+    %output_storage = check.generate.fill value(-123) : tensor<136xi32>
+    %output = check.tensor.view %output_storage offset(16) : tensor<136xi32> -> tensor<128xi32>
+    check.compare<@ordered_runtime_rows_depth_3, @ordered_runtime_rows_zero_begin_oracle>(%input, %output, %trial) : (tensor<1024xi32>, tensor<128xi32>, index) -> () {
+      check.expect.bitwise actual(%input) expected(%input) : tensor<1024xi32>
+      check.expect.bitwise actual(%output_storage) expected(%output_storage) : tensor<136xi32>
+    }
+  }
+  check.return
+}
+
+func.def @ordered_runtime_rows_zero_begin_oracle(%input: buffer, %output: buffer, %end: index) {
+  %begin = index.constant 0 : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
+  func.return
+}
+
+func.def @ordered_runtime_interval_oracle(%input: buffer, %output: buffer, %interval_arg: index) {
+  %interval = index.assume %interval_arg [range(%interval_arg, 0, 24)] : index
+  %choices = index.constant 5 : index
+  %begin = index.div %interval, %choices : index
+  %end = index.rem %interval, %choices : index
+  func.call @ordered_read_ahead_rows_oracle(%input, %output, %begin, %end) : (buffer, buffer, index, index)
+  func.return
 }

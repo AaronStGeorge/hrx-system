@@ -91,6 +91,7 @@ loom_cc_library(
     ::scf_body
     iree::base
     loom::ir
+    loom::ir::facts
     loom::ops::index
     loom::ops::op_defs
     loom::ops::scf

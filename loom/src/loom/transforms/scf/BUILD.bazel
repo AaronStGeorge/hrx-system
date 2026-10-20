@@ -78,6 +78,7 @@ loom_cc_library(
     deps = [
         ":scf_body",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scf",

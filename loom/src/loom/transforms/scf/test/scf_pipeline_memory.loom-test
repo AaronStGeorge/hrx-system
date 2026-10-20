@@ -277,13 +277,72 @@ kernel.def @dynamic_ordered_participants() {
   %result = scf.for %row = [%c0 to %end step %c1](%sum = %identity : i32) -> (i32) pipeline(%c2) {
     %address = index.madd %row, %width, %lane : index
     %value = view.load %source[%address] : view<256xi32> -> i32
-    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve ordered consumer participation"}
     view.store %value, %published[%lane] : i32, view<64xi32>
     kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
     %observed = view.load %consumed[%peer] : view<64xi32> -> i32
     %next = scalar.addi %sum, %observed : i32
     kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
     scf.yield %next : i32
+  }
+  view.store %result, %destination[%lane] : i32, view<64xi32>
+  kernel.return
+}
+
+// ----
+kernel.def @dynamic_ordered_participants() {
+  %unit = index.constant 1 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %end: index) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  %width = index.constant 64 : index
+  %last = index.constant 63 : index
+  %origin = index.constant 0 : offset
+  %stage_bytes = index.constant 256 : offset
+  %lane = kernel.workitem.id<x> : index
+  %peer = index.sub %last, %lane : index
+  %source = buffer.view %input[%origin] : buffer -> view<256xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<64xi32>
+  %scratch = buffer.alloca<workgroup> align(4) %stage_bytes : buffer
+  %published = buffer.view %scratch[%origin] : buffer -> view<64xi32>
+  %consumed = buffer.view %scratch[%origin] : buffer -> view<64xi32>
+  %identity = scalar.constant 0 : i32
+  %28 = index.constant 1 : index
+  %29 = index.cmp slt, %28, %end : index
+  %result = scf.if %29 -> (i32) {
+    %address = index.madd %c0, %width, %lane : index
+    %value = view.load %source[%address] : view<256xi32> -> i32
+    %36, %37 = scf.for %33 = [%28 to %end step %c1](%34 = %identity : i32, %35 = %value : i32) -> (i32, i32) {
+      %address = index.madd %33, %width, %lane : index
+      %value = view.load %source[%address] : view<256xi32> -> i32
+      view.store %35, %published[%lane] : i32, view<64xi32>
+      kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+      %observed = view.load %consumed[%peer] : view<64xi32> -> i32
+      %next = scalar.addi %34, %observed : i32
+      kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+      scf.yield %next, %value : i32, i32
+    }
+    view.store %37, %published[%lane] : i32, view<64xi32>
+    kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+    %observed = view.load %consumed[%peer] : view<64xi32> -> i32
+    %next = scalar.addi %36, %observed : i32
+    kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+    scf.yield %next : i32
+  } else {
+    %46 = scf.for %44 = [%c0 to %end step %c1](%45 = %identity : i32) -> (i32) {
+      %address = index.madd %44, %width, %lane : index
+      %value = view.load %source[%address] : view<256xi32> -> i32
+      view.store %value, %published[%lane] : i32, view<64xi32>
+      kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+      %observed = view.load %consumed[%peer] : view<64xi32> -> i32
+      %next = scalar.addi %45, %observed : i32
+      kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+      scf.yield %next : i32
+    }
+    scf.yield %46 : i32
   }
   view.store %result, %destination[%lane] : i32, view<64xi32>
   kernel.return

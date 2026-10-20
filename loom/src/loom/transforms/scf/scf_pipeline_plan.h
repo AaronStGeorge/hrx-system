@@ -76,6 +76,15 @@ typedef struct loom_scf_pipeline_rejection_t {
   iree_string_view_t constraint;
 } loom_scf_pipeline_rejection_t;
 
+// Retained lower/upper-bound facts from the owning value analysis. The exact
+// positive induction step is independently required by the materializer.
+typedef struct loom_scf_pipeline_participation_t {
+  // Both bounds are exact, including outside a kernel execution context.
+  bool exact_bounds;
+  // Largest execution scope over which both bounds have identical values.
+  uint8_t uniform_scope;
+} loom_scf_pipeline_participation_t;
+
 // Builds the two-stage read-ahead schedule of a verified loop body.
 // Ordinary reads and their transitive payload prerequisites form the producer.
 // When the body has ordered memory effects, only proven read-ahead loads from
@@ -86,7 +95,9 @@ typedef struct loom_scf_pipeline_rejection_t {
 // borrowing its invalidated fact table. Nested scf.if/scf.for operations remain
 // intact within their assigned stage unless a guarded read is split from its
 // carried consumer. Convergent units and workgroup memory effects stay in the
-// consumer when |has_static_bounds| proves exact lower and upper bounds.
+// consumer when |participation| proves equal lower and upper bounds throughout
+// the required execution scope. Workgroup memory requires workgroup uniformity;
+// unscoped convergence requires exact bounds.
 // Along with the caller's exact positive step, this preserves participants
 // across the serial/main/drain split. The plan owns the complete cut, including
 // values referenced only by types or attributes. Materializers and reports
@@ -103,7 +114,8 @@ typedef struct loom_scf_pipeline_rejection_t {
 // status failures identify allocation or representation limits. Plan storage
 // belongs to |arena| and borrows the source IR until reconstruction completes.
 iree_status_t loom_scf_pipeline_plan_build(
-    loom_module_t* module, const loom_block_t* block, bool has_static_bounds,
+    loom_module_t* module, const loom_block_t* block,
+    loom_scf_pipeline_participation_t participation,
     const loom_scf_memory_t* spaces, iree_arena_allocator_t* arena,
     loom_scf_pipeline_plan_t* out_plan,
     loom_scf_pipeline_rejection_t* out_rejection);
