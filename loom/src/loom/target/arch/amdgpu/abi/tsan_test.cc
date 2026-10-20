@@ -133,14 +133,6 @@ TEST(AmdgpuTsanAbiTest, ShadowConstantsMatchHalTsanAbi) {
       static_cast<uint32_t>(
           IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT));
   EXPECT_EQ(
-      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT),
-      static_cast<uint32_t>(
-          IREE_HAL_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT));
-  EXPECT_EQ(
-      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_CAPACITY),
-      static_cast<uint32_t>(
-          IREE_HAL_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_CAPACITY));
-  EXPECT_EQ(
       static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_ENTRY_SITE_SHIFT),
       static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SITE_SHIFT));
   EXPECT_EQ(

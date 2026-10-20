@@ -531,3 +531,119 @@ check.scenario @tsan_workgroup_barrier_epoch_wrap_safe_write_scenario {
   }
   check.return
 }
+
+// Distinct padded tiles can map one queue's shadow arena differently. A record
+// header can survive in another tile's unused history padding even while that
+// tile overwrites the record's chunk bitmap. Every dispatch owns a fresh lifetime.
+func.def inline @tsan_padded_tile_body(%rows: index, %columns: index, %pitch: index, %padding: offset, %active: index, %output: buffer) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %origin = index.constant 0 : offset
+  %element_bytes = index.constant 2 : offset
+  %threads = index.constant 256 : index
+  %storage_elements = index.mul %rows, %pitch : index
+  %storage_bytes = index.scale %storage_elements, %element_bytes : index, offset -> offset
+  %bytes = index.add %storage_bytes, %padding : offset
+  %elements = index.mul %rows, %columns : index
+  %group = kernel.workgroup.id<x> : index
+  %lane = kernel.workitem.id<x> : index
+  %live = index.cmp ne, %active, %c0 : index
+  %storage = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %shared = buffer.view %storage[%origin] : buffer -> view<[%rows]x[%pitch]xi16>
+  %global = buffer.assume.memory_space<global> %output : buffer
+  %results = buffer.view %global[%origin] : buffer -> view<5xi16>
+  scf.if %live {
+    %value = scalar.constant 7 : i16
+    scf.for %element = [%lane to %elements step %threads] {
+      %row = index.div %element, %columns : index
+      %column = index.rem %element, %columns : index
+      view.store %value, %shared[%row, %column] : i16, view<[%rows]x[%pitch]xi16>
+    }
+    kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+    %leader = index.cmp eq, %lane, %c0 : index
+    scf.if %leader {
+      %value = view.load %shared[%c0, %c1] : view<[%rows]x[%pitch]xi16> -> i16
+      view.store %value, %results[%group] : i16, view<5xi16>
+    }
+  }
+  func.return
+}
+
+kernel.def @tsan_large_padded_tile() {
+  %c1 = index.constant 1 : index
+  %groups = index.constant 5 : index
+  %threads = index.constant 256 : index
+  kernel.launch.config workgroups(%groups, %c1, %c1) workgroup_size(%threads, %c1, %c1) : index
+} launch(%active: index, %output: buffer) {
+  %rows = index.constant 192 : index
+  %columns = index.constant 64 : index
+  %pitch = index.constant 72 : index
+  %padding = index.constant 0 : offset
+  func.call @tsan_padded_tile_body(%rows, %columns, %pitch, %padding, %active, %output) : (index, index, index, offset, index, buffer)
+  kernel.return
+}
+
+kernel.def @tsan_small_padded_tile() {
+  %c1 = index.constant 1 : index
+  %groups = index.constant 5 : index
+  %threads = index.constant 256 : index
+  kernel.launch.config workgroups(%groups, %c1, %c1) workgroup_size(%threads, %c1, %c1) : index
+} launch(%active: index, %output: buffer) {
+  %rows = index.constant 256 : index
+  %columns = index.constant 32 : index
+  %pitch = index.constant 40 : index
+  %padding = index.constant 512 : offset
+  func.call @tsan_padded_tile_body(%rows, %columns, %pitch, %padding, %active, %output) : (index, index, index, offset, index, buffer)
+  kernel.return
+}
+
+func.def @tsan_expected_padded_tile(%active: index, %output: buffer) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %count = index.constant 5 : index
+  %origin = index.constant 0 : offset
+  %live = index.cmp ne, %active, %c0 : index
+  scf.if %live {
+    %value = scalar.constant 7 : i16
+    %view = buffer.view %output[%origin] : buffer -> view<5xi16>
+    scf.for %element = [%c0 to %count step %c1] {
+      view.store %value, %view[%element] : i16, view<5xi16>
+    }
+  }
+  func.return
+}
+
+check.scenario @tsan_padded_layout_reuse {
+  // Establish both layouts without accessing LDS, then reuse them for live
+  // transfers. All trials retain the prepared queue and its shadow arena.
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %active = check.literal value(0) : index
+    %output = check.generate.fill value(0) : tensor<5xi16>
+    check.compare<@tsan_large_padded_tile, @tsan_expected_padded_tile>(%active, %output) : (index, tensor<5xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<5xi16>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %active = check.literal value(0) : index
+    %output = check.generate.fill value(0) : tensor<5xi16>
+    check.compare<@tsan_small_padded_tile, @tsan_expected_padded_tile>(%active, %output) : (index, tensor<5xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<5xi16>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %active = check.literal value(1) : index
+    %output = check.generate.fill value(0) : tensor<5xi16>
+    check.compare<@tsan_large_padded_tile, @tsan_expected_padded_tile>(%active, %output) : (index, tensor<5xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<5xi16>
+    }
+  }
+  // Repeat the final layout to cover both changed-layout and same-layout reuse.
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %active = check.literal value(1) : index
+    %output = check.generate.fill value(0) : tensor<5xi16>
+    check.compare<@tsan_small_padded_tile, @tsan_expected_padded_tile>(%active, %output) : (index, tensor<5xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<5xi16>
+    }
+  }
+  check.return
+}

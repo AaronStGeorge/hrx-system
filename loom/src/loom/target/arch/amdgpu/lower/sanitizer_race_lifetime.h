@@ -21,7 +21,7 @@ typedef struct loom_amdgpu_sanitizer_race_config_values_t
 extern "C" {
 #endif
 
-// Establishes the current dispatch generation and shadow layout as the owner
+// Establishes the current full dispatch ID and shadow layout as the owner
 // of one workgroup record. A stale record's chunk-state bitmap is cooperatively
 // cleared before the function leaves the builder at its continuation block.
 iree_status_t loom_amdgpu_sanitizer_race_establish_workgroup_lifetime(

@@ -59,7 +59,8 @@ enum loom_amdgpu_tsan_shadow_layout_e {
   // Offset of the marked shadow-record stride used to identify the layout
   // that initialized this workgroup record.
   LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_LAYOUT_TAG_OFFSET = 8u,
-  // Offset of the full dispatch-generation window tag that owns this record.
+  // Offset of the full dispatch ID plus one that owns this record. Zero is
+  // uninitialized; chunk readiness never survives into another dispatch.
   LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_GENERATION_TAG_OFFSET = 16u,
   // Offset of the reserved zero word that distinguishes headers displaced by
   // one 16-byte shadow cell.
@@ -107,13 +108,6 @@ enum loom_amdgpu_tsan_shadow_layout_e {
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT = 23u,
   // Bit count of the encoded dispatch generation low bits.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT = 20u,
-  // Dispatch-ID shift selecting the full generation window stored in the
-  // workgroup header. The stored tag adds one so zero means uninitialized.
-  LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT =
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT,
-  // Number of dispatch IDs distinguished by compact history generation bits.
-  LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_CAPACITY =
-      1u << LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT,
   // Dispatch generation bits encoded in the low shadow entry word.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_LOW_GENERATION_BIT_COUNT =
       32u - LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT,

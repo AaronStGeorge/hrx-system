@@ -301,19 +301,18 @@ kernel.def target(@target) @lifetime_sync() {
     return !OpsForDescriptorRefInBlock(block, descriptor_ref).empty();
   }
 
-  loom_op_t* FindDispatchGenerationShift() const {
-    for (loom_op_t* op : OpsForDescriptorRef(
-             LOOM_AMDGPU_DESCRIPTOR_REF_S_LSHR_B64_RHS_INLINE)) {
-      int64_t shift = 0;
-      if (!TryGetAttrI64(loom_low_op_attrs(op), IREE_SV("shift"), &shift) ||
-          shift != LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT) {
+  loom_op_t* FindDispatchLifetimeAdd() const {
+    for (loom_op_t* op :
+         OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_CO_U32)) {
+      const loom_op_t* slice =
+          ValueDefiningOp(loom_low_op_operands(op).values[0]);
+      if (!slice || !loom_low_slice_isa(slice) ||
+          loom_low_slice_offset(slice) != 0) {
         continue;
       }
-      const loom_value_id_t input = loom_low_op_operands(op).values[0];
-      const loom_op_t* input_op =
-          loom_value_def_op(loom_module_value(module_, input));
-      if (loom_low_live_in_isa(input_op) &&
-          iree_string_view_equal(String(loom_low_live_in_source(input_op)),
+      const loom_op_t* input = ValueDefiningOp(loom_low_slice_source(slice));
+      if (input && loom_low_live_in_isa(input) &&
+          iree_string_view_equal(String(loom_low_live_in_source(input)),
                                  IREE_SV("amdgpu.dispatch_id"))) {
         return op;
       }
@@ -365,7 +364,7 @@ kernel.def target(@target) @lifetime_sync() {
 };
 
 TEST_F(AmdgpuSanitizerRaceLifetimeTest,
-       SourceToLowPublishesClearedGenerationBeforeUse) {
+       SourceToLowPublishesClearedDispatchBeforeUse) {
   const std::string source = SourceForTarget("gfx11-generic");
   ModulePtr module = Parse(iree_make_cstring_view(source.c_str()));
   IREE_ASSERT_OK(RunSourceToLow(module.get()));
@@ -374,21 +373,7 @@ TEST_F(AmdgpuSanitizerRaceLifetimeTest,
   ASSERT_TRUE(loom_low_kernel_def_isa(kernel));
   BindKernel(module.get(), kernel);
   ASSERT_NE(descriptor_set_, nullptr);
-
-  loom_op_t* generation_shift_op = FindDispatchGenerationShift();
-  ASSERT_NE(generation_shift_op, nullptr);
-  int64_t generation_shift = 0;
-  ASSERT_TRUE(TryGetAttrI64(loom_low_op_attrs(generation_shift_op),
-                            IREE_SV("shift"), &generation_shift));
-  EXPECT_EQ(generation_shift, LOOM_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT);
-  const loom_value_id_t dispatch_id =
-      loom_low_op_operands(generation_shift_op).values[0];
-  const loom_op_t* dispatch_id_op =
-      loom_value_def_op(loom_module_value(module_, dispatch_id));
-  ASSERT_TRUE(loom_low_live_in_isa(dispatch_id_op));
-  EXPECT_TRUE(
-      iree_string_view_equal(String(loom_low_live_in_source(dispatch_id_op)),
-                             IREE_SV("amdgpu.dispatch_id")));
+  EXPECT_NE(FindDispatchLifetimeAdd(), nullptr);
 
   const auto b128_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B128_SADDR);
@@ -894,7 +879,7 @@ TEST_F(AmdgpuSanitizerRaceLifetimeTest,
     BindKernel(module.get(), kernel);
     ASSERT_NE(descriptor_set_, nullptr);
 
-    EXPECT_NE(FindDispatchGenerationShift(), nullptr);
+    EXPECT_NE(FindDispatchLifetimeAdd(), nullptr);
     EXPECT_EQ(OpsForDescriptorRef(
                   LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_OR_B32_RTN_SADDR)
                   .size(),

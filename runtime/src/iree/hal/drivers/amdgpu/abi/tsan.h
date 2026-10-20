@@ -131,7 +131,8 @@ enum iree_hal_amdgpu_tsan_shadow_entry_layout_t {
   // Offset of the marked shadow-record stride used to identify the layout
   // that initialized this workgroup record.
   IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_LAYOUT_TAG_OFFSET = 8u,
-  // Offset of the full dispatch-generation window tag that owns this record.
+  // Offset of the full dispatch ID plus one that owns this record. Zero is
+  // uninitialized; chunk readiness never survives into another dispatch.
   IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_GENERATION_TAG_OFFSET = 16u,
   // Offset of the reserved zero word that distinguishes headers displaced by
   // one 16-byte shadow cell.
@@ -176,13 +177,6 @@ enum iree_hal_amdgpu_tsan_shadow_entry_layout_t {
   IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT = 23u,
   // Bit count of the encoded dispatch generation low bits.
   IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT = 20u,
-  // Dispatch-ID shift selecting the full generation window stored in the
-  // workgroup header. The stored tag adds one so zero means uninitialized.
-  IREE_HAL_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT =
-      IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT,
-  // Number of dispatch IDs distinguished by compact history generation bits.
-  IREE_HAL_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_CAPACITY =
-      1u << IREE_HAL_AMDGPU_TSAN_SHADOW_GENERATION_WINDOW_SHIFT,
   // Bit offset of the encoded instrumentation site low bits.
   IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SITE_SHIFT = 43u,
   // Bit count of the encoded instrumentation site low bits.
