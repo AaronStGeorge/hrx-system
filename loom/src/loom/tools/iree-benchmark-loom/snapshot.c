@@ -237,6 +237,14 @@ static iree_status_t iree_benchmark_loom_snapshot_append_summary(
       iree_benchmark_loom_artifact_bundle_file_count(
           event->artifact_bundle,
           IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REPORT);
+  state->summary.compile_request_count =
+      iree_benchmark_loom_artifact_bundle_file_count(
+          event->artifact_bundle,
+          IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST);
+  state->summary.compile_request_manifest_count =
+      iree_benchmark_loom_artifact_bundle_file_count(
+          event->artifact_bundle,
+          IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST_MANIFEST);
   state->summary.artifact_manifest_count =
       iree_benchmark_loom_artifact_bundle_file_count(
           event->artifact_bundle,

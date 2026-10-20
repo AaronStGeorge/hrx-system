@@ -56,6 +56,8 @@ typedef enum iree_benchmark_loom_bundle_file_kind_e {
   IREE_BENCHMARK_LOOM_BUNDLE_FILE_HAL_EXECUTABLE = 5,
   IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_LISTING = 6,
   IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST = 7,
+  IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST = 8,
+  IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REQUEST_MANIFEST = 9,
 } iree_benchmark_loom_bundle_file_kind_t;
 
 typedef struct iree_benchmark_loom_bundle_file_entry_t {
@@ -96,6 +98,10 @@ typedef struct iree_benchmark_loom_artifact_bundle_t {
   iree_string_view_t compile_report_dir;
   // Owned debug compile-report directory inside |dir|.
   char* compile_report_dir_storage;
+  // Borrowed view into |compile_request_dir_storage|.
+  iree_string_view_t compile_request_dir;
+  // Owned canonical compile-request directory inside |dir|.
+  char* compile_request_dir_storage;
   // Borrowed view into |artifact_manifest_dir_storage|.
   iree_string_view_t artifact_manifest_dir;
   // Owned debug artifact-manifest directory inside |dir|.
