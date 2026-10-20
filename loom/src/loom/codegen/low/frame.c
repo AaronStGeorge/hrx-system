@@ -947,6 +947,16 @@ static iree_status_t loom_low_emission_frame_apply_materialization_summary(
   return iree_ok_status();
 }
 
+// Publishes a completed local frame and repairs retained pointers to fields
+// within the frame itself. The schedule builder binds the loop nest to its CFG;
+// a by-value frame copy must rebind that relationship to the destination.
+static void loom_low_emission_frame_publish(
+    const loom_low_emission_frame_t* source,
+    loom_low_emission_frame_t* destination) {
+  *destination = *source;
+  destination->schedule.loop_nest.graph = &destination->schedule.cfg_graph;
+}
+
 static iree_status_t loom_low_emission_frame_build_spill_free_impl(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* frame_options,
@@ -1047,7 +1057,7 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
       }
       IREE_RETURN_IF_ERROR(
           loom_low_emission_frame_emit_diagnostics(frame_options, &frame));
-      *out_frame = frame;
+      loom_low_emission_frame_publish(&frame, out_frame);
       return iree_ok_status();
     }
     if (frame.allocation.error_count != 0) {
@@ -1074,7 +1084,7 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
       }
       IREE_RETURN_IF_ERROR(
           loom_low_emission_frame_emit_diagnostics(frame_options, &frame));
-      *out_frame = frame;
+      loom_low_emission_frame_publish(&frame, out_frame);
       return iree_ok_status();
     }
 
@@ -1146,7 +1156,7 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
       IREE_RETURN_IF_ERROR(
           loom_low_emission_frame_apply_materialization_summary(
               &materialization_summary, arena, &frame));
-      *out_frame = frame;
+      loom_low_emission_frame_publish(&frame, out_frame);
       *out_accepted = true;
       return iree_ok_status();
     }

@@ -19,6 +19,7 @@
 #include "loom/ir/local_value_domain.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/cfg_loop.h"
+#include "loom/util/cfg_loop_nest.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,8 @@ typedef struct loom_low_function_model_t {
   loom_liveness_dataflow_t liveness_dataflow;
   // Canonical loop intervals preserved from |cfg_graph|.
   loom_cfg_loop_forest_t loop_forest;
+  // Semantic natural loops preserved independently of source block layout.
+  loom_cfg_loop_nest_t loop_nest;
 } loom_low_function_model_t;
 
 // Resolves one verified target-low function and its required storage identities

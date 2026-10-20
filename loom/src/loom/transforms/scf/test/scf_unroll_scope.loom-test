@@ -271,3 +271,46 @@ func.def public @fresh_roots() {
   vector.store %vec1, %right_view_1[0] : vector<4xi32>, view<4xi32, %layout>
   func.return
 }
+
+// ====
+
+// Regional movement analysis retains a captured reinterpretation's source
+// view while scheduling the loop's memory effects.
+func.def @captured_bitcast(%buffer: buffer, %initial: vector<4xi32>) -> (vector<4xi32>) {
+  %base = index.constant 0 : offset
+  %bytes = buffer.view %buffer[%base] : buffer -> view<32xi8>
+  %words = view.bitcast %bytes : view<32xi8> -> view<8xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 4 : index
+  %factor = index.constant 2 : index
+  %result = scf.for %position = [%begin to %end step %step](%sum = %initial : vector<4xi32>) -> (vector<4xi32>) unroll(%factor) schedule(recurrence) {
+    %value = vector.load %words[%position] : view<8xi32> -> vector<4xi32>
+    vector.store %value, %words[%position] : vector<4xi32>, view<8xi32>
+    %next = vector.addi %sum, %value : vector<4xi32>
+    scf.yield %next : vector<4xi32>
+  }
+  func.return %result : vector<4xi32>
+}
+
+// ----
+func.def @captured_bitcast(%buffer: buffer, %initial: vector<4xi32>) -> (vector<4xi32>) {
+  %base = index.constant 0 : offset
+  %bytes = buffer.view %buffer[%base] : buffer -> view<32xi8>
+  %words = view.bitcast %bytes : view<32xi8> -> view<8xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 4 : index
+  %factor = index.constant 2 : index
+  %position_0 = index.constant 0 : index
+  %position_4 = index.constant 4 : index
+  %value = vector.load %words[%position_0] : view<8xi32> -> vector<4xi32>
+  vector.store %value, %words[%position_0] : vector<4xi32>, view<8xi32>
+  %value_1 = vector.load %words[%position_4] : view<8xi32> -> vector<4xi32>
+  vector.store %value_1, %words[%position_4] : vector<4xi32>, view<8xi32>
+  scf.schedule.fence
+  %next = vector.addi %initial, %value : vector<4xi32>
+  scf.schedule.fence
+  %next_1 = vector.addi %next, %value_1 : vector<4xi32>
+  func.return %next_1 : vector<4xi32>
+}
