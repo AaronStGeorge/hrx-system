@@ -1325,16 +1325,25 @@ TEST_P(AsyncFileTest, TruncatedFileFailsItsConsumer) {
       file.native_path(), iree_make_const_byte_span(contents.data(), 7),
       iree_allocator_system()));
   SemaphoreList empty;
+  SemaphoreList producer(device_, {0}, {1});
   SemaphoreList read_done(device_, {0}, {1});
   SemaphoreList consumer(device_, {0}, {1});
+  // Admit the consumer before the read can fail. An already-failed dependency
+  // can reject admission instead of failing an accepted consumer
+  // asynchronously.
   IREE_ASSERT_OK(iree_hal_queue_read(
-      transfer_queue_, empty, read_done, file.get(), 0, buffer.get(), 0,
+      transfer_queue_, producer, read_done, file.get(), 0, buffer.get(), 0,
       contents.size(), nullptr, IREE_HAL_READ_FLAG_NONE));
-  IREE_ASSERT_OK(iree_hal_queue_barrier(transfer_queue_, read_done, consumer,
-                                        nullptr,
-                                        IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
+  iree_status_t status =
+      iree_hal_queue_barrier(transfer_queue_, read_done, consumer, nullptr,
+                             IREE_HAL_QUEUE_BARRIER_FLAG_NONE);
+  if (!iree_status_is_ok(status)) {
+    iree_hal_semaphore_fail(producer.semaphores[0], iree_status_clone(status));
+  }
+  IREE_ASSERT_OK(status);
   file.ReleaseHandles();
   buffer.reset();
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(producer.semaphores[0], 1, nullptr));
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_OUT_OF_RANGE,
       iree_hal_semaphore_list_wait(consumer, iree_infinite_timeout(),
