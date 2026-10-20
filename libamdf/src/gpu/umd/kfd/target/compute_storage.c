@@ -51,20 +51,36 @@ bool amdf_gpu_kfd_compute_storage_plan(
   }
   uint64_t control_stack_byte_length = topology->control_stack_byte_length;
   uint64_t context_byte_length = topology->context_save_restore_byte_length;
-  if (cdna && context_byte_length == 0 && control_stack_byte_length == 0) {
-    control_stack_byte_length = (sizeof(struct kfd_context_save_area_header) +
-                                 saved_wave_count * 8 + 8 + page_size - 1) &
-                                ~(uint64_t)(page_size - 1);
+  if (context_byte_length == 0 && control_stack_byte_length == 0) {
+    // Older KFD versions omit both size properties. Match the thunk's save
+    // layout on those kernels; newer kernels' explicit sizes remain
+    // authoritative, including ASIC-specific register-file differences.
+    if (expanded_save_area) {
+      return false;
+    }
+    if (!cdna) {
+      if (properties->compute.maximum_wave_count_per_compute_unit == 0) {
+        return false;
+      }
+      saved_wave_count =
+          (uint64_t)compute_units_per_xcc *
+          properties->compute.maximum_wave_count_per_compute_unit;
+    }
+    control_stack_byte_length =
+        (sizeof(struct kfd_context_save_area_header) +
+         saved_wave_count * (cdna ? 8 : 12) + 8 + page_size - 1) &
+        ~(uint64_t)(page_size - 1);
     // CDNA3 saves 64 KiB LDS/CU; CDNA4 uses the topology's enlarged LDS.
     const uint64_t lds_byte_length =
-        properties->gfx_ip.minor == 5
+        !cdna || properties->gfx_ip.minor == 5
             ? properties->compute.local_data_share_byte_length
             : UINT64_C(0x10000);
     if (lds_byte_length == 0 || lds_byte_length > UINT32_MAX) {
       return false;
     }
     const uint64_t compute_unit_byte_length =
-        UINT64_C(0x80000) + 0x4000 + lds_byte_length + 0x1000;
+        (cdna ? UINT64_C(0x80000) : UINT64_C(0x60000)) + 0x4000 +
+        lds_byte_length + 0x1000;
     if (compute_unit_byte_length > UINT32_MAX / compute_units_per_xcc) {
       return false;
     }
