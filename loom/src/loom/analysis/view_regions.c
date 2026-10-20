@@ -31,6 +31,25 @@ enum loom_view_region_value_state_e {
   LOOM_VIEW_REGION_VALUE_READY = 2,
 };
 
+static loom_value_id_t loom_view_region_source_value(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  if (loom_view_subview_isa(defining_op)) {
+    return loom_view_subview_source(defining_op);
+  }
+  if (loom_view_refine_isa(defining_op) || loom_view_bitcast_isa(defining_op)) {
+    return loom_op_const_operands(defining_op)[0];
+  }
+  return LOOM_VALUE_ID_INVALID;
+}
+
 static iree_status_t loom_view_region_table_append_region(
     loom_view_region_table_t* table, const loom_view_region_t* region,
     loom_view_region_t** out_region) {
@@ -58,12 +77,20 @@ iree_status_t loom_view_region_table_initialize(
   memset(out_table, 0, sizeof(*out_table));
   out_table->expression_context = expression_context;
   out_table->value_domain = value_domain;
-  // Captured views can name backing roots absent from the source operands.
-  // Retain those fact-owned identities before allocating ordinal-keyed tables
-  // so read/write aggregation covers the captured storage as well as its views.
+  // Captured views can name projection sources and backing roots absent from
+  // the analyzed region's operands. Retain that transparent storage chain
+  // before allocating ordinal-keyed tables so region construction and
+  // read/write aggregation use the same complete domain.
   const loom_value_fact_table_t* fact_table = expression_context->fact_table;
   for (loom_value_ordinal_t i = 0; i < value_domain->value_count; ++i) {
     const loom_value_id_t value_id = value_domain->value_ids[i];
+    const loom_value_id_t source =
+        loom_view_region_source_value(value_domain->module, value_id);
+    if (source != LOOM_VALUE_ID_INVALID) {
+      loom_value_ordinal_t source_ordinal;
+      IREE_RETURN_IF_ERROR(loom_local_value_domain_register_value(
+          value_domain, source, &source_ordinal));
+    }
     const loom_value_facts_t facts =
         loom_value_fact_table_lookup(fact_table, value_id);
     loom_value_id_t root = LOOM_VALUE_ID_INVALID;
