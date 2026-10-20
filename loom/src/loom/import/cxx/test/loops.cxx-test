@@ -379,6 +379,80 @@ func.def public @entry(%count: i32, %stop: i32) -> (i32) {
 
 // ====
 // RUN: roundtrip
+// An omitted for condition is true. Continue still executes the source step,
+// while break suppresses it; an unbroken form remains an explicit infinite
+// structured loop.
+unsigned staged(unsigned tail) {
+  unsigned total = 0;
+  for (unsigned stage = 0;; ++stage) {
+    if (stage < 2u) {
+      total += stage;
+      continue;
+    }
+    total += tail;
+    break;
+  }
+  return total;
+}
+void spin(volatile unsigned* value) {
+  for (;;) ++*value;
+}
+// ----
+func.def public @staged(%tail: i32) -> (i32) {
+  %total$2 = scalar.constant 0 : i32
+  %stage$3 = scalar.constant 0 : i32
+  %4 = scalar.constant 1 : i1
+  %stage$10, %total$11 = scf.while(%stage$5 = %stage$3 : i32, %total$6 = %total$2 : i32, %7 = %4 : i1) -> (i32, i32) {
+    %12, %stage$13, %total$14 = scf.if %7 -> (i1, i32, i32) {
+      %15 = scalar.constant 1 : i1
+      scf.yield %15, %stage$5, %total$6 : i1, i32, i32
+    } else {
+      %16 = scalar.constant 0 : i1
+      scf.yield %16, %stage$5, %total$6 : i1, i32, i32
+    }
+    scf.condition %12, %stage$13, %total$14 : i1, i32, i32
+  } do(%stage$8: i32, %total$9: i32) {
+    %17 = scalar.constant 2 : i32
+    %18 = scalar.cmpi ult, %stage$8, %17 : i32
+    %19, %20, %total$21 = scf.if %18 -> (i1, i1, i32) {
+      %total = scalar.addi %total$9, %stage$8 : i32
+      %23 = scalar.constant 0 : i1
+      %24 = scalar.constant 1 : i1
+      scf.yield %23, %24, %total : i1, i1, i32
+    } else {
+      %total = scalar.addi %total$9, %tail : i32
+      %26 = scalar.constant 0 : i1
+      scf.yield %26, %26, %total : i1, i1, i32
+    }
+    %stage$27, %total$28 = scf.if %20 -> (i32, i32) {
+      %29 = scalar.constant 1 : i32
+      %stage = scalar.addi %stage$8, %29 : i32
+      scf.yield %stage, %total$21 : i32, i32
+    } else {
+      scf.yield %stage$8, %total$21 : i32, i32
+    }
+    scf.yield %stage$27, %total$28, %20 : i32, i32, i1
+  }
+  func.return %total$11 : i32
+}
+
+func.def public @spin(%value: buffer, %value_byte_offset: offset) {
+  scf.while {
+    %33 = scalar.constant 1 : i1
+    scf.condition %33 : i1
+  } do {
+    %34 = buffer.view %value[%value_byte_offset] : buffer -> view<1xi32>
+    %35 = view.load<volatile> %34[0] : view<1xi32> -> i32
+    %36 = scalar.constant 1 : i32
+    %37 = scalar.addi %35, %36 : i32
+    view.store<volatile> %37, %34[0] : i32, view<1xi32>
+    scf.yield
+  }
+  func.return
+}
+
+// ====
+// RUN: roundtrip
 // A do break suppresses its trailing condition while continue evaluates it.
 unsigned entry(unsigned count, unsigned stop) {
   unsigned value = 0;

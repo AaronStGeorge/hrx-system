@@ -243,6 +243,15 @@ unsigned entry(unsigned count) {
 
 // ====
 // RUN: verify
+// An omitted condition has ordinary infinite-loop semantics but supplies no
+// finite interval for explicit scheduling.
+void entry() {
+  // ERROR@+1: LOWERING/059 "loop scheduling requires a nonwrapping counted for loop"
+  [[loom::unroll]] for (;;) {}
+}
+
+// ====
+// RUN: verify
 // Invalid loop schedules are not silently discarded.
 unsigned entry(unsigned count) {
   // ERROR@+1: LOWERING/059 "loop scheduling requires a nonwrapping counted for loop"

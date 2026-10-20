@@ -3458,9 +3458,6 @@ class Translator final : private Initialization::Evaluation {
     }
     if (auto* loop = cxx::ast_cast<cxx::ForStatementAST>(ast)) {
       LoopSchedule schedule(unit_, diagnostics_, types_, loop->attributeList);
-      if (!loop->condition) {
-        fail(ast, "for loops require a condition");
-      }
       if (loop->initializer) {
         statement(loop->initializer);
       }
@@ -3613,6 +3610,11 @@ class Translator final : private Initialization::Evaluation {
     auto initial = current(written);
     auto outer_values = values_;
     auto source = locations_.get(ast);
+    auto evaluate_condition = [&] {
+      return condition_expression
+                 ? expression(condition_expression).ssa()
+                 : scalars_.integer(true, LOOM_SCALAR_TYPE_I1, source);
+    };
 
     if (control_->breaks(body) != ExitFlow::None) {
       loom_op_t* op;
@@ -3637,9 +3639,8 @@ class Translator final : private Initialization::Evaluation {
         bind(written, before);
         auto header_active =
             loom_region_entry_arg_id(before, header_initial.size() - 1u);
-        auto condition = guarded_condition(ast, header_active, [&] {
-          return expression(condition_expression).ssa();
-        });
+        auto condition =
+            guarded_condition(ast, header_active, evaluate_condition);
         auto forwarded = current(written);
         loom_op_t* terminator;
         check(loom_scf_condition_build(&builder_, condition, forwarded.data(),
@@ -3674,9 +3675,8 @@ class Translator final : private Initialization::Evaluation {
         auto saved = loom_builder_enter_region(&builder_, op, before);
         bind(written, before);
         auto flow = loop_body(body, /*tracks_break=*/true);
-        auto condition = guarded_condition(ast, flow.reaches_latch, [&] {
-          return expression(condition_expression).ssa();
-        });
+        auto condition =
+            guarded_condition(ast, flow.reaches_latch, evaluate_condition);
         auto forwarded = current(written);
         loom_op_t* terminator;
         check(loom_scf_condition_build(&builder_, condition, forwarded.data(),
@@ -3714,7 +3714,7 @@ class Translator final : private Initialization::Evaluation {
     if (test == LoopTest::AfterBody) {
       loop_body(body);
     }
-    auto condition = expression(condition_expression).ssa();
+    auto condition = evaluate_condition();
     auto forwarded = current(written);
     loom_op_t* terminator;
     check(loom_scf_condition_build(&builder_, condition, forwarded.data(),
