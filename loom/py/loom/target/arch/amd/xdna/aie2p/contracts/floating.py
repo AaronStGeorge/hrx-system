@@ -24,8 +24,9 @@ from loom.target.arch.amd.xdna.aie2p.contracts.data_path import (
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.f32 import emit_f32_multiply
 from loom.target.arch.amd.xdna.aie2p.contracts.f32_accumulator import (
+    F32AccumulatorProgram,
+    emit_f32_planned_accumulator_binary,
     emit_f32_scalar_accumulator_binary,
-    emit_f32_vector_accumulator_binary,
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.scalar_program import ScalarProgram
 from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
@@ -38,6 +39,7 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     EmitRegisterConcat,
+    EmitRegisterCopy,
     EmitRegisterSlice,
     Guard,
     ResultTypeBinding,
@@ -66,6 +68,7 @@ _F32X16_VECTOR = Vector("f32", lanes=16)
 _F32X32_VECTOR = Vector("f32", lanes=32)
 _I16X32_VECTOR = Vector("i16", lanes=32)
 _F32X64_ACCUMULATOR = Vector("f32", lanes=64)
+_I1_VECTOR = Vector("i1", minimum_static_elements=1, maximum_static_elements=64)
 
 _BF16_ELEMENTWISE_MULTIPLY_CONTROL = vector_data_path_control(
     sign_x=False,
@@ -851,6 +854,8 @@ def _vector_dot2f_bf16_rule(
     result_type: TypePattern,
     *,
     initial_accumulator: Literal["source", "zero"],
+    accumulator_in_accumulator: bool,
+    result_in_accumulator: bool,
     report_key: str,
     rhs_form: Literal["packed", "interleaved"] = "packed",
 ) -> DescriptorRule:
@@ -914,6 +919,14 @@ def _vector_dot2f_bf16_rule(
         Guard.value_type("rhs", input_type),
         Guard.value_type("acc", result_type),
         Guard.value_type("result", result_type),
+        Guard.low_value_register_class(
+            "acc",
+            "aie2p.ebmll" if accumulator_in_accumulator else "aie2p.vec256",
+        ),
+        Guard.low_value_register_class(
+            "result",
+            "aie2p.ebmll" if result_in_accumulator else "aie2p.vec256",
+        ),
     )
     if initial_accumulator == "zero":
         # Exact floating facts distinguish positive zero from negative zero.
@@ -926,14 +939,17 @@ def _vector_dot2f_bf16_rule(
             )
         )
     else:
-        emits.append(
-            _op_emit(
-                move_to_accumulator,
-                operands={"src": ValueRef.operand("acc")},
-                results={"dst": accumulator},
-                result_types={"dst": DescriptorResultType()},
+        if accumulator_in_accumulator:
+            accumulator = ValueRef.operand("acc")
+        else:
+            emits.append(
+                _op_emit(
+                    move_to_accumulator,
+                    operands={"src": ValueRef.operand("acc")},
+                    results={"dst": accumulator},
+                    result_types={"dst": DescriptorResultType()},
+                )
             )
-        )
     emits.extend(
         (
             _constant_emit(
@@ -963,18 +979,31 @@ def _vector_dot2f_bf16_rule(
                 results={"dst": ValueRef.temporary("result_accumulator")},
                 result_types={"dst": DescriptorResultType()},
             ),
-            EmitRegisterSlice(
-                source=ValueRef.temporary("result_accumulator"),
-                result=ValueRef.temporary("result_accumulator_unit"),
-                unit_count=1,
-            ),
-            _op_emit(
-                move_from_accumulator,
-                operands={"src": ValueRef.temporary("result_accumulator_unit")},
-                results={"dst": ValueRef.result("result")},
-            ),
         )
     )
+    result_accumulator_unit = ValueRef.temporary("result_accumulator_unit")
+    emits.append(
+        EmitRegisterSlice(
+            source=ValueRef.temporary("result_accumulator"),
+            result=result_accumulator_unit,
+            unit_count=1,
+        )
+    )
+    if result_in_accumulator:
+        emits.append(
+            EmitRegisterCopy(
+                source=result_accumulator_unit,
+                result=ValueRef.result("result"),
+            )
+        )
+    else:
+        emits.append(
+            _op_emit(
+                move_from_accumulator,
+                operands={"src": result_accumulator_unit},
+                results={"dst": ValueRef.result("result")},
+            )
+        )
     return DescriptorRule(
         source_op=vector.vector_dot2f,
         descriptor=accumulate,
@@ -1242,6 +1271,32 @@ def _float_matrix_accumulator_zero_rule() -> DescriptorRule:
     )
 
 
+def _float_packet_accumulator_zero_rule() -> DescriptorRule:
+    descriptor = _descriptor("amd.xdna.aie2p.accumulator.clear.f32x64")
+    cleared = ValueRef.temporary("cleared")
+    return DescriptorRule(
+        source_op=vector.vector_constant,
+        descriptor=descriptor,
+        guards=(
+            Guard.attr_kind("value", "f64"),
+            Guard.value_type("result", _F32X16_VECTOR),
+            Guard.value_float_equals("result", 0.0),
+            Guard.low_value_register_class("result", "aie2p.ebmll"),
+        ),
+        emit=(
+            _op_emit(
+                descriptor,
+                results={"dst": cleared},
+                result_types={"dst": DescriptorResultType()},
+            ),
+            EmitRegisterSlice(
+                source=cleared,
+                result=ValueRef.result("result"),
+            ),
+        ),
+    )
+
+
 def _float_matrix_accumulator_add_rule() -> DescriptorRule:
     config_constant = _descriptor("amd.xdna.aie2p.constant.i32.mova")
     add = _descriptor("amd.xdna.aie2p.add.f32x64.configured")
@@ -1271,19 +1326,164 @@ def _float_matrix_accumulator_add_rule() -> DescriptorRule:
 def _float_vector_accumulator_binary_rule(
     source_op: Op,
     operation_descriptor_key: str,
+    *,
+    lhs_in_accumulator: bool,
+    rhs_in_accumulator: bool,
+    result_in_accumulator: bool,
 ) -> DescriptorRule:
     operation = _descriptor(operation_descriptor_key)
+    accumulator_class = "aie2p.ebmll"
+    vector_class = "aie2p.vec256"
     return DescriptorRule(
         source_op=source_op,
         descriptor=operation,
-        guards=_typed_guards(("lhs", "rhs", "result"), _F32_VECTOR),
-        emit=emit_f32_vector_accumulator_binary(
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), _F32_VECTOR),
+            Guard.low_value_register_class(
+                "lhs", accumulator_class if lhs_in_accumulator else vector_class
+            ),
+            Guard.low_value_register_class(
+                "rhs", accumulator_class if rhs_in_accumulator else vector_class
+            ),
+            Guard.low_value_register_class(
+                "result",
+                accumulator_class if result_in_accumulator else vector_class,
+            ),
+        ),
+        emit=emit_f32_planned_accumulator_binary(
             ValueRef.operand("lhs"),
             ValueRef.operand("rhs"),
             ValueRef.result("result"),
             operation_descriptor_key,
-            extract_scalar_result=False,
+            lhs_in_accumulator=lhs_in_accumulator,
+            rhs_in_accumulator=rhs_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
         ),
+    )
+
+
+def _float_packet_select_rule(
+    *,
+    true_value_in_accumulator: bool,
+    false_value_in_accumulator: bool,
+    result_in_accumulator: bool,
+    rematerialized_zero: Literal["true_value", "false_value"] | None = None,
+) -> DescriptorRule:
+    descriptor = _descriptor("amd.xdna.aie2p.select.i32x16.mask64")
+    move_from_accumulator = _descriptor(
+        "amd.xdna.aie2p.move.accumulator512.low.to.vector512"
+    )
+    zero_constant = _descriptor("amd.xdna.aie2p.constant.i32.short")
+    zero_splat = _descriptor("amd.xdna.aie2p.splat.i32x16")
+    program = F32AccumulatorProgram("select_")
+
+    def materialize_vector(
+        name: str, value: ValueRef, in_accumulator: bool
+    ) -> ValueRef:
+        if name == rematerialized_zero:
+            zero_scalar = program.temporary(f"{name}_zero_scalar")
+            zero_vector = program.temporary(f"{name}_zero_vector")
+            program.emits.extend(
+                (
+                    _constant_emit(zero_constant, zero_scalar, 0),
+                    _op_emit(
+                        zero_splat,
+                        operands={"src": zero_scalar},
+                        results={"dst": zero_vector},
+                        result_types={"dst": DescriptorResultType()},
+                    ),
+                )
+            )
+            return zero_vector
+        if not in_accumulator:
+            return value
+        vector_value = program.temporary(f"{name}_vector")
+        program.emits.append(
+            _op_emit(
+                move_from_accumulator,
+                operands={"src": value},
+                results={"dst": vector_value},
+                result_types={"dst": DescriptorResultType()},
+            )
+        )
+        return vector_value
+
+    true_value = materialize_vector(
+        "true_value",
+        ValueRef.operand("true_value"),
+        true_value_in_accumulator,
+    )
+    false_value = materialize_vector(
+        "false_value",
+        ValueRef.operand("false_value"),
+        false_value_in_accumulator,
+    )
+    selected_vector = (
+        program.temporary("result_vector")
+        if result_in_accumulator
+        else ValueRef.result("result")
+    )
+    program.emits.append(
+        _op_emit(
+            descriptor,
+            operands={
+                # AIE2P VSEL chooses s1 for a zero mask bit and s2 for a
+                # one bit. Loom vector.select uses one for true.
+                "s1": false_value,
+                "s2": true_value,
+                "sel": ValueRef.operand("condition"),
+            },
+            results={"d": selected_vector},
+            result_types=(
+                {"d": DescriptorResultType()} if result_in_accumulator else None
+            ),
+        )
+    )
+    if result_in_accumulator:
+        result_accumulator = program.vector_to_accumulator("result", selected_vector)
+        result_unit = program.temporary("result_unit")
+        program.emits.extend(
+            (
+                EmitRegisterSlice(
+                    source=result_accumulator,
+                    result=result_unit,
+                    unit_count=1,
+                ),
+                EmitRegisterCopy(
+                    source=result_unit,
+                    result=ValueRef.result("result"),
+                ),
+            )
+        )
+
+    accumulator_class = "aie2p.ebmll"
+    vector_class = "aie2p.vec256"
+    return DescriptorRule(
+        source_op=vector.vector_select,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("condition", _I1_VECTOR),
+            *_typed_guards(("true_value", "false_value", "result"), _F32X16_VECTOR),
+            Guard.low_value_register_class(
+                "true_value",
+                accumulator_class if true_value_in_accumulator else vector_class,
+            ),
+            Guard.low_value_register_class(
+                "false_value",
+                accumulator_class if false_value_in_accumulator else vector_class,
+            ),
+            Guard.low_value_register_class(
+                "result",
+                accumulator_class if result_in_accumulator else vector_class,
+            ),
+            *(
+                (Guard.value_float_equals(rematerialized_zero, 0.0),)
+                if rematerialized_zero is not None
+                else ()
+            ),
+        ),
+        emit=tuple(program.emits),
+        priority=1 if rematerialized_zero is not None else 0,
     )
 
 
@@ -1339,14 +1539,46 @@ AIE2P_FLOATING_RULES = (
             (scalar_arithmetic.scalar_maximumf, "maximum"),
         )
     ),
+    _float_packet_accumulator_zero_rule(),
     _float_matrix_accumulator_zero_rule(),
     _float_matrix_accumulator_add_rule(),
     *(
-        _float_vector_accumulator_binary_rule(source_op, descriptor_key)
+        _float_vector_accumulator_binary_rule(
+            source_op,
+            descriptor_key,
+            lhs_in_accumulator=lhs_in_accumulator,
+            rhs_in_accumulator=rhs_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+        )
         for source_op, descriptor_key in (
             (vector.vector_addf, "amd.xdna.aie2p.add.f32x16.configured"),
             (vector.vector_subf, "amd.xdna.aie2p.sub.f32x16.configured"),
         )
+        for lhs_in_accumulator in (True, False)
+        for rhs_in_accumulator in (True, False)
+        for result_in_accumulator in (True, False)
+    ),
+    *(
+        _float_packet_select_rule(
+            true_value_in_accumulator=true_value_in_accumulator,
+            false_value_in_accumulator=false_value_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+            rematerialized_zero=rematerialized_zero,
+        )
+        for rematerialized_zero in ("true_value", "false_value")
+        for true_value_in_accumulator in (False, True)
+        for false_value_in_accumulator in (False, True)
+        for result_in_accumulator in (False, True)
+    ),
+    *(
+        _float_packet_select_rule(
+            true_value_in_accumulator=true_value_in_accumulator,
+            false_value_in_accumulator=false_value_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+        )
+        for true_value_in_accumulator in (False, True)
+        for false_value_in_accumulator in (False, True)
+        for result_in_accumulator in (False, True)
     ),
     *(
         _float_scalar_accumulator_binary_rule(source_op, descriptor_key)
@@ -1361,30 +1593,54 @@ AIE2P_FLOATING_RULES = (
             ),
         )
     ),
-    _vector_dot2f_bf16_rule(
-        _BF16X32_VECTOR,
-        _F32X16_VECTOR,
-        initial_accumulator="zero",
-        rhs_form="interleaved",
-        report_key="bf16_dot2_interleaved_rhs_zero",
+    *(
+        _vector_dot2f_bf16_rule(
+            _BF16X32_VECTOR,
+            _F32X16_VECTOR,
+            initial_accumulator="zero",
+            accumulator_in_accumulator=accumulator_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+            rhs_form="interleaved",
+            report_key="bf16_dot2_interleaved_rhs_zero",
+        )
+        for accumulator_in_accumulator in (False, True)
+        for result_in_accumulator in (False, True)
     ),
-    _vector_dot2f_bf16_rule(
-        _BF16X32_VECTOR,
-        _F32X16_VECTOR,
-        initial_accumulator="source",
-        rhs_form="interleaved",
-        report_key="bf16_dot2_interleaved_rhs",
+    *(
+        _vector_dot2f_bf16_rule(
+            _BF16X32_VECTOR,
+            _F32X16_VECTOR,
+            initial_accumulator="source",
+            accumulator_in_accumulator=accumulator_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+            rhs_form="interleaved",
+            report_key="bf16_dot2_interleaved_rhs",
+        )
+        for accumulator_in_accumulator in (False, True)
+        for result_in_accumulator in (False, True)
     ),
-    _vector_dot2f_bf16_rule(
-        _BF16_DOT2_VECTOR,
-        _F32_VECTOR,
-        initial_accumulator="zero",
-        report_key="bf16_dot2_zero",
+    *(
+        _vector_dot2f_bf16_rule(
+            _BF16_DOT2_VECTOR,
+            _F32_VECTOR,
+            initial_accumulator="zero",
+            accumulator_in_accumulator=accumulator_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+            report_key="bf16_dot2_zero",
+        )
+        for accumulator_in_accumulator in (False, True)
+        for result_in_accumulator in (False, True)
     ),
-    _vector_dot2f_bf16_rule(
-        _BF16_DOT2_VECTOR,
-        _F32_VECTOR,
-        initial_accumulator="source",
-        report_key="bf16_dot2",
+    *(
+        _vector_dot2f_bf16_rule(
+            _BF16_DOT2_VECTOR,
+            _F32_VECTOR,
+            initial_accumulator="source",
+            accumulator_in_accumulator=accumulator_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+            report_key="bf16_dot2",
+        )
+        for accumulator_in_accumulator in (False, True)
+        for result_in_accumulator in (False, True)
     ),
 )

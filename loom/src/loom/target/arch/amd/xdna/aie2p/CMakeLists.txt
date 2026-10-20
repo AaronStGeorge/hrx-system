@@ -477,6 +477,7 @@ loom_cc_library(
   NAME
     lower
   HDRS
+    "lower/f32_representation.h"
     "lower/gather.h"
     "lower/interleave.h"
     "lower/lower.h"
@@ -489,6 +490,7 @@ loom_cc_library(
   TEXTUAL_HDRS
     "${IREE_BINARY_DIR}/loom/src/loom/target/arch/amd/xdna/aie2p/contracts/core_index.inl"
   SRCS
+    "lower/f32_representation.c"
     "lower/gather.c"
     "lower/interleave.c"
     "lower/matrix.c"
@@ -505,6 +507,7 @@ loom_cc_library(
     iree::base
     loom::analysis::contract_vector
     loom::codegen::low::lower
+    loom::codegen::low::lower::representation_observer
     loom::error::error_defs
     loom::ir
     loom::ir::facts
@@ -1024,6 +1027,8 @@ loom_check_test_suite(
     "test/source_low/carried_counter_store.loom-test"
     "test/source_low/component_packetization.loom-test"
     "test/source_low/component_packetization_report.loom-test"
+    "test/source_low/exact_bf16_accumulator_conversion.loom-test"
+    "test/source_low/f32_representation.loom-test"
     "test/source_low/function_storage.loom-test"
     "test/source_low/fused_packet_memory.loom-test"
     "test/source_low/immutable_gather.loom-test"

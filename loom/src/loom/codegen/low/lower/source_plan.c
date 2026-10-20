@@ -2091,6 +2091,7 @@ static iree_status_t loom_low_lower_plan_region(
       }
       if (plan_structural &&
           context->lowering->source_plan.representation_plan != NULL &&
+          context->lowering->source_plan.representation_plan->node_count != 0 &&
           is_callable_exit) {
         IREE_RETURN_IF_ERROR(
             loom_low_lower_function_boundary_observe_exit(context, op));

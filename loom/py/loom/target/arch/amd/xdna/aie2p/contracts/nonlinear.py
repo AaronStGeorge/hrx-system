@@ -36,6 +36,7 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     EmitRegisterConcat,
+    EmitRegisterCopy,
     EmitRegisterSlice,
     Guard,
     ResultTypeBinding,
@@ -85,6 +86,7 @@ def _emit(
     results: Mapping[str, ValueRef] | None = None,
     result_types: Mapping[str, ResultTypeBinding] | None = None,
     immediates: Mapping[str, int] | None = None,
+    copy_operands: tuple[str, ...] = (),
 ) -> EmitDescriptorOp:
     return EmitDescriptorOp(
         descriptor=descriptor_by_key(AIE2P_CORE_DESCRIPTOR_SET, descriptor_key),
@@ -93,6 +95,7 @@ def _emit(
         result_types=result_types,
         immediates={} if immediates is None else immediates,
         form=DescriptorEmitForm.OP,
+        copy_operands=copy_operands,
     )
 
 
@@ -101,12 +104,14 @@ def _inferred_emit(
     *,
     operands: Mapping[str, ValueRef],
     result: ValueRef,
+    copy_operands: tuple[str, ...] = (),
 ) -> EmitDescriptorOp:
     return _emit(
         descriptor_key,
         operands=operands,
         results={"dst": result},
         result_types={"dst": DescriptorResultType()},
+        copy_operands=copy_operands,
     )
 
 
@@ -548,28 +553,48 @@ def _native_nonlinear_emits(
     native_descriptor_key: str,
     *,
     scalar: bool,
+    input_in_accumulator: bool = False,
+    result_in_accumulator: bool = False,
 ) -> tuple[ContractEmit, ...]:
     emits, input_vector = _input_vector_emits(scalar=scalar)
-    emits.extend(
-        (
+    input_accumulator = (
+        ValueRef.operand("input")
+        if input_in_accumulator
+        else ValueRef.temporary("input_accumulator")
+    )
+    if not input_in_accumulator:
+        emits.append(
             _inferred_emit(
                 "amd.xdna.aie2p.move.vector512.to.accumulator512",
                 operands={"src": input_vector},
-                result=ValueRef.temporary("input_accumulator"),
-            ),
+                result=input_accumulator,
+            )
+        )
+    result_accumulator = ValueRef.temporary("result_accumulator")
+    emits.extend(
+        (
             _inferred_emit(
                 native_descriptor_key,
-                operands={"src": ValueRef.temporary("input_accumulator")},
+                operands={"src": input_accumulator},
                 result=ValueRef.temporary("bf16_result"),
+                copy_operands=("src",) if input_in_accumulator else (),
             ),
             _inferred_emit(
                 "amd.xdna.aie2p.convert.bf16x16.to.f32x16",
                 operands={"src": ValueRef.temporary("bf16_result")},
-                result=ValueRef.temporary("result_accumulator"),
+                result=result_accumulator,
             ),
-            *_result_emits(scalar=scalar),
         )
     )
+    if result_in_accumulator:
+        emits.append(
+            EmitRegisterCopy(
+                source=result_accumulator,
+                result=ValueRef.result("result"),
+            )
+        )
+    else:
+        emits.extend(_result_emits(scalar=scalar))
     return tuple(emits)
 
 
@@ -653,7 +678,21 @@ def _native_nonlinear_rule(
     report_key: str,
     *,
     scalar: bool,
+    input_in_accumulator: bool = False,
+    result_in_accumulator: bool = False,
 ) -> DescriptorRule:
+    representation_guards = ()
+    if not scalar:
+        representation_guards = (
+            Guard.low_value_register_class(
+                "input",
+                "aie2p.ebmll" if input_in_accumulator else "aie2p.vec256",
+            ),
+            Guard.low_value_register_class(
+                "result",
+                "aie2p.ebmll" if result_in_accumulator else "aie2p.vec256",
+            ),
+        )
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor_by_key(AIE2P_CORE_DESCRIPTOR_SET, native_descriptor_key),
@@ -661,8 +700,14 @@ def _native_nonlinear_rule(
             Guard.value_type("input", type_pattern),
             Guard.value_type("result", type_pattern),
             Guard.instance_flags_has_all("fastmath", "afn"),
+            *representation_guards,
         ),
-        emit=_native_nonlinear_emits(native_descriptor_key, scalar=scalar),
+        emit=_native_nonlinear_emits(
+            native_descriptor_key,
+            scalar=scalar,
+            input_in_accumulator=input_in_accumulator,
+            result_in_accumulator=result_in_accumulator,
+        ),
         report_key=report_key,
     )
 
@@ -689,7 +734,7 @@ def _native_exp_rule(
     )
 
 
-_VECTOR_NONLINEAR_RULES = tuple(
+_SCALAR_NATIVE_NONLINEAR_RULES = tuple(
     _native_nonlinear_rule(
         source_op,
         type_pattern,
@@ -706,27 +751,39 @@ _VECTOR_NONLINEAR_RULES = tuple(
             True,
         ),
         (
-            vector.vector_exp2f,
-            _F32_VECTOR,
-            "amd.xdna.aie2p.exp2.f32x16.to.bf16x16",
-            "native_bf16_exp2_vector_f32",
-            False,
-        ),
-        (
             scalar_math.scalar_tanhf,
             _F32,
             "amd.xdna.aie2p.tanh.f32x16.to.bf16x16",
             "native_bf16_tanh_scalar_f32",
             True,
         ),
+    )
+)
+
+_VECTOR_NATIVE_NONLINEAR_RULES = tuple(
+    _native_nonlinear_rule(
+        source_op,
+        _F32_VECTOR,
+        native_descriptor_key,
+        report_key,
+        scalar=False,
+        input_in_accumulator=input_in_accumulator,
+        result_in_accumulator=result_in_accumulator,
+    )
+    for source_op, native_descriptor_key, report_key in (
+        (
+            vector.vector_exp2f,
+            "amd.xdna.aie2p.exp2.f32x16.to.bf16x16",
+            "native_bf16_exp2_vector_f32",
+        ),
         (
             vector.vector_tanhf,
-            _F32_VECTOR,
             "amd.xdna.aie2p.tanh.f32x16.to.bf16x16",
             "native_bf16_tanh_vector_f32",
-            False,
         ),
     )
+    for input_in_accumulator in (False, True)
+    for result_in_accumulator in (False, True)
 )
 
 _SCALAR_NONLINEAR_RULES = tuple(
@@ -768,6 +825,7 @@ AIE2P_NONLINEAR_RULES = (
     _trig_rule(scalar_math.scalar_costurnsf, _TrigOperation.COS_TURNS),
     _native_exp_rule(scalar_math.scalar_expf, _F32, scalar=True),
     _native_exp_rule(vector.vector_expf, _F32_VECTOR, scalar=False),
-    *_VECTOR_NONLINEAR_RULES,
+    *_SCALAR_NATIVE_NONLINEAR_RULES,
+    *_VECTOR_NATIVE_NONLINEAR_RULES,
     *_SCALAR_NONLINEAR_RULES,
 )

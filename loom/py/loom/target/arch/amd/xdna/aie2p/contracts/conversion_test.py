@@ -1098,8 +1098,14 @@ def _rule(report_key: str, source_op: Op | None = None) -> DescriptorRule:
 
 
 def _typed_rule(
-    report_key: str, input_type: Vector, result_type: Vector
+    report_key: str,
+    input_type: Vector,
+    result_type: Vector,
+    *,
+    register_class_field: str | None = None,
+    register_class: str | None = None,
 ) -> DescriptorRule:
+    assert (register_class_field is None) == (register_class is None)
     matches = [
         rule
         for rule in AIE2P_CONVERSION_RULES
@@ -1107,6 +1113,11 @@ def _typed_rule(
         and rule.report_key == report_key
         and Guard.value_type("input", input_type) in rule.guards
         and Guard.value_type("result", result_type) in rule.guards
+        and (
+            register_class_field is None
+            or Guard.low_value_register_class(register_class_field, register_class)
+            in rule.guards
+        )
     ]
     assert len(matches) == 1
     return matches[0]
@@ -1345,22 +1356,65 @@ def test_native_bfloat16_packet_conversions_publish_subnormal_policy() -> None:
         bf16_type = Vector(
             "bf16", minimum_lanes=minimum_lanes, maximum_lanes=maximum_lanes
         )
-        narrow = _rule(f"native_binary32x{lane_range}_to_bfloat16x{lane_range}")
-        assert narrow.guards == (
+        narrow_rules = [
+            rule
+            for rule in AIE2P_CONVERSION_RULES
+            if isinstance(rule, DescriptorRule)
+            and rule.report_key
+            == f"native_binary32x{lane_range}_to_bfloat16x{lane_range}"
+        ]
+        widen_rules = [
+            rule
+            for rule in AIE2P_CONVERSION_RULES
+            if isinstance(rule, DescriptorRule)
+            and rule.report_key
+            == f"native_bfloat16x{lane_range}_to_binary32x{lane_range}"
+        ]
+        narrow_base_guards = (
             Guard.value_type("input", f32_type),
             Guard.value_type("result", bf16_type),
             Guard.value_not_subnormal_or_instance_flags_has_all(
                 "input", "subnormal", "daz"
             ),
         )
-        widen = _rule(f"native_bfloat16x{lane_range}_to_binary32x{lane_range}")
-        assert widen.guards == (
+        widen_base_guards = (
             Guard.value_type("input", bf16_type),
             Guard.value_type("result", f32_type),
             Guard.value_not_subnormal_or_instance_flags_has_all(
                 "input", "subnormal", "daz"
             ),
         )
+        if lane_range == "16":
+            assert {rule.guards for rule in narrow_rules} == {
+                (
+                    *narrow_base_guards,
+                    Guard.low_value_register_class("input", register_class),
+                )
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+            }
+            assert {rule.guards for rule in widen_rules} == {
+                (
+                    *widen_base_guards,
+                    Guard.low_value_register_class("result", register_class),
+                )
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+            }
+        elif lane_range == "1-15":
+            assert [rule.guards for rule in narrow_rules] == [
+                (
+                    *narrow_base_guards,
+                    Guard.low_value_register_class("input", "aie2p.vec256"),
+                )
+            ]
+            assert [rule.guards for rule in widen_rules] == [
+                (
+                    *widen_base_guards,
+                    Guard.low_value_register_class("result", "aie2p.vec256"),
+                )
+            ]
+        else:
+            assert [rule.guards for rule in narrow_rules] == [narrow_base_guards]
+            assert [rule.guards for rule in widen_rules] == [widen_base_guards]
 
     narrow = _rule("native_binary32x32_to_bfloat16x32")
     assert [emit.descriptor.key for emit in narrow.emit] == [
@@ -1471,6 +1525,74 @@ def test_native_bfloat16_packet_conversions_publish_subnormal_policy() -> None:
         0,
         1,
     ]
+
+
+def test_exact_bfloat16_packet_conversions_cover_f32_carriers() -> None:
+    f32_type = Vector("f32", minimum_lanes=1, maximum_lanes=16)
+    bf16_type = Vector("bf16", minimum_lanes=1, maximum_lanes=16)
+    narrow_rules = [
+        rule
+        for rule in AIE2P_CONVERSION_RULES
+        if isinstance(rule, DescriptorRule)
+        and rule.report_key == "exact_binary32_to_bfloat16_packet"
+        and Guard.value_type("input", f32_type) in rule.guards
+    ]
+    widen_rules = [
+        rule
+        for rule in AIE2P_CONVERSION_RULES
+        if isinstance(rule, DescriptorRule)
+        and rule.report_key == "exact_bfloat16_to_binary32_packet"
+        and Guard.value_type("input", bf16_type) in rule.guards
+    ]
+    assert {rule.guards for rule in narrow_rules} == {
+        (
+            Guard.value_type("input", f32_type),
+            Guard.value_type("result", bf16_type),
+            Guard.low_value_register_class("input", register_class),
+        )
+        for register_class in ("aie2p.vec256", "aie2p.ebmll")
+    }
+    assert {rule.guards for rule in widen_rules} == {
+        (
+            Guard.value_type("input", bf16_type),
+            Guard.value_type("result", f32_type),
+            Guard.low_value_register_class("result", register_class),
+        )
+        for register_class in ("aie2p.vec256", "aie2p.ebmll")
+    }
+
+    accumulator_narrow = next(
+        rule
+        for rule in narrow_rules
+        if Guard.low_value_register_class("input", "aie2p.ebmll") in rule.guards
+    )
+    source_move = accumulator_narrow.emit[0]
+    assert isinstance(source_move, EmitDescriptorOp)
+    assert source_move.descriptor.key == (
+        "amd.xdna.aie2p.move.accumulator512.to.vector512"
+    )
+    assert source_move.operands == {"src": ValueRef.operand("input")}
+    assert source_move.copy_operands == ("src",)
+    assert all(
+        ValueRef.operand("input") not in emit.operands.values()
+        for emit in accumulator_narrow.emit[1:]
+        if isinstance(emit, EmitDescriptorOp)
+    )
+
+    accumulator_widen = next(
+        rule
+        for rule in widen_rules
+        if Guard.low_value_register_class("result", "aie2p.ebmll") in rule.guards
+    )
+    result_copy = accumulator_widen.emit[-1]
+    assert isinstance(result_copy, EmitDescriptorOp)
+    assert result_copy.descriptor.key == (
+        "amd.xdna.aie2p.move.vector512.to.accumulator512.low"
+    )
+    assert result_copy.operands == {
+        "src": ValueRef.temporary("bf16_exact_widen_result_vector")
+    }
+    assert result_copy.results == {"dst": ValueRef.result("result")}
 
 
 def test_float8_packet_widening_covers_every_native_logical_width() -> None:
@@ -1803,20 +1925,47 @@ def test_exact_float16_packet_conversion_covers_every_logical_width() -> None:
                 f"exact_{report_name}_to_binary32_packet",
                 float16_type,
                 f32_type,
+                **(
+                    {
+                        "register_class_field": "result",
+                        "register_class": "aie2p.vec256",
+                    }
+                    if element == "bf16" and maximum_lanes == 16
+                    else {}
+                ),
             )
             narrow = _typed_rule(
                 f"exact_binary32_to_{report_name}_packet",
                 f32_type,
                 float16_type,
+                **(
+                    {
+                        "register_class_field": "input",
+                        "register_class": "aie2p.vec256",
+                    }
+                    if element == "bf16" and maximum_lanes == 16
+                    else {}
+                ),
             )
-            assert widen.guards == (
+            expected_widen_guards = (
                 Guard.value_type("input", float16_type),
                 Guard.value_type("result", f32_type),
             )
-            assert narrow.guards == (
+            expected_narrow_guards = (
                 Guard.value_type("input", f32_type),
                 Guard.value_type("result", float16_type),
             )
+            if element == "bf16" and maximum_lanes == 16:
+                expected_widen_guards = (
+                    *expected_widen_guards,
+                    Guard.low_value_register_class("result", "aie2p.vec256"),
+                )
+                expected_narrow_guards = (
+                    *expected_narrow_guards,
+                    Guard.low_value_register_class("input", "aie2p.vec256"),
+                )
+            assert widen.guards == expected_widen_guards
+            assert narrow.guards == expected_narrow_guards
 
 
 def _assert_float16_packet_widening_matches_oracle(
@@ -1826,6 +1975,14 @@ def _assert_float16_packet_widening_matches_oracle(
         f"exact_{float16_format.report_name}_to_binary32_packet",
         Vector(float16_format.element, minimum_lanes=1, maximum_lanes=16),
         Vector("f32", minimum_lanes=1, maximum_lanes=16),
+        **(
+            {
+                "register_class_field": "result",
+                "register_class": "aie2p.vec256",
+            }
+            if float16_format.element == "bf16"
+            else {}
+        ),
     )
     for bits in values:
         expected = (
@@ -1867,6 +2024,14 @@ def test_float16_packet_narrowing_matches_rounding_boundaries() -> None:
             f"exact_binary32_to_{report_name}_packet",
             Vector("f32", minimum_lanes=1, maximum_lanes=16),
             Vector(result_element, minimum_lanes=1, maximum_lanes=16),
+            **(
+                {
+                    "register_class_field": "input",
+                    "register_class": "aie2p.vec256",
+                }
+                if result_element == "bf16"
+                else {}
+            ),
         )
         for bits in boundaries:
             assert _evaluate_packet_lane(rule, bits) == reference(bits), hex(bits)

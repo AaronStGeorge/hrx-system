@@ -797,62 +797,93 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
         if Guard.enum_attr_equals("kind", "addf") in rule.guards
         and Guard.value_type("input", Vector("f32", lanes=16)) in rule.guards
     ]
-    assert len(f32_reductions) == 1
-    f32_reduction = f32_reductions[0]
-    assert f32_reduction.descriptor.key == "amd.xdna.aie2p.add.f32x64.configured"
-    assert f32_reduction.report_key == "f32x16_accumulator_tree"
-    assert Guard.value_float_equals("init", 0.0) in f32_reduction.guards
+    assert len(f32_reductions) == 2
     assert {
-        Guard.instance_flags_has_all("fastmath", flag)
-        for flag in ("reassoc", "nnan", "ninf", "nsz")
-    } <= set(f32_reduction.guards)
-    assert [
-        emit.immediates["i"]
-        for emit in f32_reduction.emit
-        if not isinstance(
-            emit,
-            (
-                EmitRegisterConcat,
-                EmitRegisterCopy,
-                EmitRegisterMove,
-                EmitRegisterSlice,
-            ),
+        register_class
+        for rule in f32_reductions
+        for register_class in ("aie2p.vec256", "aie2p.ebmll")
+        if Guard.low_value_register_class("input", register_class) in rule.guards
+    } == {"aie2p.vec256", "aie2p.ebmll"}
+    for f32_reduction in f32_reductions:
+        input_in_accumulator = (
+            Guard.low_value_register_class("input", "aie2p.ebmll")
+            in f32_reduction.guards
         )
-        and emit.descriptor.key == "amd.xdna.aie2p.constant.i32.mova"
-    ] == [F32_ACCUMULATOR_ADD_CONTROL, *_F32X16_REDUCTION_CONTROLS]
-    assert [
-        emit.descriptor.key
-        for emit in f32_reduction.emit
-        if not isinstance(
-            emit,
-            (
-                EmitRegisterConcat,
-                EmitRegisterCopy,
-                EmitRegisterMove,
-                EmitRegisterSlice,
-            ),
-        )
-    ] == [
-        "amd.xdna.aie2p.accumulator.clear.f32x64",
-        "amd.xdna.aie2p.accumulator.clear.f32x64",
-        "amd.xdna.aie2p.move.vector512.to.accumulator512",
-        "amd.xdna.aie2p.constant.i32.mova",
-        *(
-            key
-            for _ in _F32X16_REDUCTION_CONTROLS
-            for key in (
-                "amd.xdna.aie2p.constant.i32.mova",
-                "amd.xdna.aie2p.shuffle.x.to.accumulator512.configured",
-                "amd.xdna.aie2p.add.f32x64.configured",
-                "amd.xdna.aie2p.move.accumulator512.to.vector512",
+        assert (
+            Guard.low_value_register_class(
+                "input",
+                "aie2p.ebmll" if input_in_accumulator else "aie2p.vec256",
             )
-        ),
-        "amd.xdna.aie2p.extract.i32.immediate",
-    ]
-    assert sum(isinstance(emit, EmitRegisterConcat) for emit in f32_reduction.emit) == 5
-    assert sum(isinstance(emit, EmitRegisterCopy) for emit in f32_reduction.emit) == 4
-    assert sum(isinstance(emit, EmitRegisterMove) for emit in f32_reduction.emit) == 2
-    assert sum(isinstance(emit, EmitRegisterSlice) for emit in f32_reduction.emit) == 10
+            in f32_reduction.guards
+        )
+        assert f32_reduction.descriptor.key == ("amd.xdna.aie2p.add.f32x64.configured")
+        assert f32_reduction.report_key == "f32x16_accumulator_tree"
+        assert Guard.value_float_equals("init", 0.0) in f32_reduction.guards
+        assert {
+            Guard.instance_flags_has_all("fastmath", flag)
+            for flag in ("reassoc", "nnan", "ninf", "nsz")
+        } <= set(f32_reduction.guards)
+        assert [
+            emit.immediates["i"]
+            for emit in f32_reduction.emit
+            if not isinstance(
+                emit,
+                (
+                    EmitRegisterConcat,
+                    EmitRegisterCopy,
+                    EmitRegisterMove,
+                    EmitRegisterSlice,
+                ),
+            )
+            and emit.descriptor.key == "amd.xdna.aie2p.constant.i32.mova"
+        ] == [F32_ACCUMULATOR_ADD_CONTROL, *_F32X16_REDUCTION_CONTROLS]
+        assert [
+            emit.descriptor.key
+            for emit in f32_reduction.emit
+            if not isinstance(
+                emit,
+                (
+                    EmitRegisterConcat,
+                    EmitRegisterCopy,
+                    EmitRegisterMove,
+                    EmitRegisterSlice,
+                ),
+            )
+        ] == [
+            "amd.xdna.aie2p.accumulator.clear.f32x64",
+            "amd.xdna.aie2p.accumulator.clear.f32x64",
+            (
+                "amd.xdna.aie2p.move.accumulator512.to.vector512"
+                if input_in_accumulator
+                else "amd.xdna.aie2p.move.vector512.to.accumulator512"
+            ),
+            "amd.xdna.aie2p.constant.i32.mova",
+            *(
+                key
+                for _ in _F32X16_REDUCTION_CONTROLS
+                for key in (
+                    "amd.xdna.aie2p.constant.i32.mova",
+                    "amd.xdna.aie2p.shuffle.x.to.accumulator512.configured",
+                    "amd.xdna.aie2p.add.f32x64.configured",
+                    "amd.xdna.aie2p.move.accumulator512.to.vector512",
+                )
+            ),
+            "amd.xdna.aie2p.extract.i32.immediate",
+        ]
+        assert (
+            sum(isinstance(emit, EmitRegisterConcat) for emit in f32_reduction.emit)
+            == 5
+        )
+        assert sum(
+            isinstance(emit, EmitRegisterCopy) for emit in f32_reduction.emit
+        ) == (5 if input_in_accumulator else 4)
+        assert (
+            sum(isinstance(emit, EmitRegisterMove) for emit in f32_reduction.emit) == 2
+        )
+        assert (
+            sum(isinstance(emit, EmitRegisterSlice) for emit in f32_reduction.emit)
+            == 10
+        )
 
     for lane_count, controls in _I32_REDUCTION_CONTROLS:
         lane_rules = [
@@ -943,12 +974,41 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
         for rule in rules
         if rule.source_op is vector.vector_dot2f and not rule.source_nodes
     ]
-    assert len(bf16_dot2_rules) == 2
-    bf16_dot2_zero, bf16_dot2 = bf16_dot2_rules
-    assert bf16_dot2_zero.guards == (
-        *bf16_dot2.guards,
-        Guard.value_float_equals("acc", 0.0),
-    )
+    assert len(bf16_dot2_rules) == 8
+    rules_by_representation = {
+        (
+            rule.report_key,
+            next(
+                register_class
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+                if Guard.low_value_register_class("acc", register_class) in rule.guards
+            ),
+            next(
+                register_class
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+                if Guard.low_value_register_class("result", register_class)
+                in rule.guards
+            ),
+        ): rule
+        for rule in bf16_dot2_rules
+    }
+    assert len(rules_by_representation) == 8
+    for accumulator_class in ("aie2p.vec256", "aie2p.ebmll"):
+        for result_class in ("aie2p.vec256", "aie2p.ebmll"):
+            zero_rule = rules_by_representation[
+                ("bf16_dot2_zero", accumulator_class, result_class)
+            ]
+            source_rule = rules_by_representation[
+                ("bf16_dot2", accumulator_class, result_class)
+            ]
+            assert zero_rule.guards == (
+                *source_rule.guards,
+                Guard.value_float_equals("acc", 0.0),
+            )
+    bf16_dot2_zero = rules_by_representation[
+        ("bf16_dot2_zero", "aie2p.vec256", "aie2p.vec256")
+    ]
+    bf16_dot2 = rules_by_representation[("bf16_dot2", "aie2p.vec256", "aie2p.vec256")]
     assert not any(isinstance(emit, EmitRegisterConcat) for emit in bf16_dot2_zero.emit)
     accumulates = [
         emit
@@ -994,6 +1054,25 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
     assert Guard.value_type("rhs", bf16_dot2_input) in bf16_dot2.guards
     assert Guard.value_type("acc", bf16_dot2_result) in bf16_dot2.guards
     assert Guard.value_type("result", bf16_dot2_result) in bf16_dot2.guards
+    for accumulator_class in ("aie2p.vec256", "aie2p.ebmll"):
+        for result_class in ("aie2p.vec256", "aie2p.ebmll"):
+            rule = rules_by_representation[
+                ("bf16_dot2", accumulator_class, result_class)
+            ]
+            descriptor_keys = [
+                emit.descriptor.key
+                for emit in rule.emit
+                if not isinstance(
+                    emit,
+                    (EmitRegisterConcat, EmitRegisterCopy, EmitRegisterSlice),
+                )
+            ]
+            assert (
+                "amd.xdna.aie2p.move.vector512.to.accumulator512.low" in descriptor_keys
+            ) == (accumulator_class == "aie2p.vec256")
+            assert (
+                "amd.xdna.aie2p.move.accumulator512.to.vector512" in descriptor_keys
+            ) == (result_class == "aie2p.vec256")
 
     bf16_outer_product_rules = [
         rule
@@ -1037,41 +1116,75 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
     }
 
     f32_add_rules = [rule for rule in rules if rule.source_op is vector.vector_addf]
-    assert len(f32_add_rules) == 2
-    f32_add = f32_add_rules[0]
-    assert f32_add.descriptor.key == "amd.xdna.aie2p.add.f32x64.configured"
-    assert [emit.descriptor.key for emit in f32_add.emit] == [
+    assert len(f32_add_rules) == 9
+    f32_matrix_add = next(
+        rule
+        for rule in f32_add_rules
+        if rule.descriptor.key == "amd.xdna.aie2p.add.f32x64.configured"
+    )
+    assert [emit.descriptor.key for emit in f32_matrix_add.emit] == [
         "amd.xdna.aie2p.constant.i32.mova",
         "amd.xdna.aie2p.add.f32x64.configured",
     ]
     assert F32_ACCUMULATOR_ADD_CONTROL == 0x3C
-    assert f32_add.emit[0].immediates == {"i": F32_ACCUMULATOR_ADD_CONTROL}
+    assert f32_matrix_add.emit[0].immediates == {"i": F32_ACCUMULATOR_ADD_CONTROL}
 
-    f32_vector_carrier_rules = (
-        f32_add_rules[1],
-        next(rule for rule in rules if rule.source_op is vector.vector_subf),
-    )
-    for rule, arithmetic_key in zip(
-        f32_vector_carrier_rules,
-        (
-            "amd.xdna.aie2p.add.f32x16.configured",
-            "amd.xdna.aie2p.sub.f32x16.configured",
-        ),
-        strict=True,
+    for source_op, arithmetic_key in (
+        (vector.vector_addf, "amd.xdna.aie2p.add.f32x16.configured"),
+        (vector.vector_subf, "amd.xdna.aie2p.sub.f32x16.configured"),
     ):
-        assert [
-            emit.descriptor.key
-            for emit in rule.emit
-            if not isinstance(emit, (EmitRegisterConcat, EmitRegisterSlice))
-        ] == [
-            "amd.xdna.aie2p.move.vector512.to.accumulator512.low",
-            "amd.xdna.aie2p.move.vector512.to.accumulator512.low",
-            "amd.xdna.aie2p.constant.i32.mova",
-            arithmetic_key,
-            "amd.xdna.aie2p.move.accumulator512.to.vector512",
+        packet_rules = [
+            rule
+            for rule in rules
+            if rule.source_op is source_op and rule.descriptor.key == arithmetic_key
         ]
-        assert not any(isinstance(emit, EmitRegisterConcat) for emit in rule.emit)
-        assert sum(isinstance(emit, EmitRegisterSlice) for emit in rule.emit) == 1
+        rules_by_representation = {
+            tuple(
+                next(
+                    register_class
+                    for register_class in ("aie2p.vec256", "aie2p.ebmll")
+                    if Guard.low_value_register_class(field, register_class)
+                    in rule.guards
+                )
+                for field in ("lhs", "rhs", "result")
+            ): rule
+            for rule in packet_rules
+        }
+        assert len(rules_by_representation) == 8
+        for representation, rule in rules_by_representation.items():
+            lhs_class, rhs_class, result_class = representation
+            descriptor_keys = [
+                emit.descriptor.key
+                for emit in rule.emit
+                if not isinstance(
+                    emit,
+                    (EmitRegisterConcat, EmitRegisterCopy, EmitRegisterSlice),
+                )
+            ]
+            assert descriptor_keys == [
+                *(
+                    ("amd.xdna.aie2p.move.vector512.to.accumulator512.low",)
+                    if lhs_class == "aie2p.vec256"
+                    else ()
+                ),
+                *(
+                    ("amd.xdna.aie2p.move.vector512.to.accumulator512.low",)
+                    if rhs_class == "aie2p.vec256"
+                    else ()
+                ),
+                "amd.xdna.aie2p.constant.i32.mova",
+                arithmetic_key,
+                *(
+                    ("amd.xdna.aie2p.move.accumulator512.to.vector512",)
+                    if result_class == "aie2p.vec256"
+                    else ()
+                ),
+            ]
+            assert not any(isinstance(emit, EmitRegisterConcat) for emit in rule.emit)
+            assert sum(isinstance(emit, EmitRegisterSlice) for emit in rule.emit) == 1
+            assert sum(isinstance(emit, EmitRegisterCopy) for emit in rule.emit) == (
+                1 if result_class == "aie2p.ebmll" else 0
+            )
 
     f32_scalar_carrier_rules = (
         next(rule for rule in rules if rule.source_op is scalar_arithmetic.scalar_addf),
@@ -1205,10 +1318,16 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
         if rule.source_op is vector.vector_select
         and rule.guards[1].type_pattern.element != "i1"
     ]
+    packet_f32_select_rules = [
+        rule
+        for rule in payload_select_rules
+        if any(guard.register_class is not None for guard in rule.guards)
+    ]
     native_payload_select_rules = [
         rule
         for rule in payload_select_rules
         if rule.descriptor.key != "amd.xdna.aie2p.select.i32x16"
+        and rule not in packet_f32_select_rules
     ]
     assert [rule.descriptor.key for rule in native_payload_select_rules] == [
         "amd.xdna.aie2p.select.i8x64",
@@ -1227,6 +1346,77 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
         for rule in payload_select_rules
         if rule.descriptor.key == "amd.xdna.aie2p.select.i32x16"
     ]
+    packet_rules_by_representation = {}
+    for rule in packet_f32_select_rules:
+        representation = tuple(
+            next(
+                register_class
+                for register_class in ("aie2p.vec256", "aie2p.ebmll")
+                if Guard.low_value_register_class(field, register_class) in rule.guards
+            )
+            for field in ("true_value", "false_value", "result")
+        )
+        rematerialized_zero = next(
+            (
+                field
+                for field in ("true_value", "false_value")
+                if Guard.value_float_equals(field, 0.0) in rule.guards
+            ),
+            None,
+        )
+        key = (rematerialized_zero, *representation)
+        assert key not in packet_rules_by_representation
+        packet_rules_by_representation[key] = rule
+    assert set(packet_rules_by_representation) == {
+        (rematerialized_zero, true_class, false_class, result_class)
+        for rematerialized_zero in (None, "true_value", "false_value")
+        for true_class in ("aie2p.vec256", "aie2p.ebmll")
+        for false_class in ("aie2p.vec256", "aie2p.ebmll")
+        for result_class in ("aie2p.vec256", "aie2p.ebmll")
+    }
+    for representation, rule in packet_rules_by_representation.items():
+        rematerialized_zero, true_class, false_class, result_class = representation
+        descriptor_keys = [
+            emit.descriptor.key
+            for emit in rule.emit
+            if not isinstance(
+                emit,
+                (EmitRegisterConcat, EmitRegisterCopy, EmitRegisterSlice),
+            )
+        ]
+        assert descriptor_keys.count(
+            "amd.xdna.aie2p.move.accumulator512.low.to.vector512"
+        ) == sum(
+            register_class == "aie2p.ebmll" and field != rematerialized_zero
+            for field, register_class in (
+                ("true_value", true_class),
+                ("false_value", false_class),
+            )
+        )
+        assert descriptor_keys.count("amd.xdna.aie2p.constant.i32.short") == (
+            1 if rematerialized_zero is not None else 0
+        )
+        assert descriptor_keys.count("amd.xdna.aie2p.splat.i32x16") == (
+            1 if rematerialized_zero is not None else 0
+        )
+        assert descriptor_keys.count(
+            "amd.xdna.aie2p.move.vector512.to.accumulator512.low"
+        ) == (1 if result_class == "aie2p.ebmll" else 0)
+        assert sum(isinstance(emit, EmitRegisterCopy) for emit in rule.emit) == (
+            1 if result_class == "aie2p.ebmll" else 0
+        )
+        select = next(
+            emit
+            for emit in rule.emit
+            if not isinstance(
+                emit,
+                (EmitRegisterConcat, EmitRegisterCopy, EmitRegisterSlice),
+            )
+            and emit.descriptor is rule.descriptor
+        )
+        assert "false_value" in select.operands["s1"].field
+        assert "true_value" in select.operands["s2"].field
+        assert select.operands["sel"].field == "condition"
     assert [
         (
             rule.guards[1].type_pattern.element,
@@ -1244,7 +1434,10 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
             (5, 8),
         )
     ]
-    for rule in payload_select_rules:
+    ordinary_payload_select_rules = [
+        rule for rule in payload_select_rules if rule not in packet_f32_select_rules
+    ]
+    for rule in ordinary_payload_select_rules:
         select = rule.emit[-1]
         assert select.operands["s1"].field == "false_value"
         assert select.operands["s2"].field == "true_value"

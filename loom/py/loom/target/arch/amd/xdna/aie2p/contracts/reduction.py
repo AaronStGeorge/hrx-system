@@ -200,7 +200,7 @@ def _reduce_add_i32_rule(
     )
 
 
-def _reduce_add_f32x16_rule() -> DescriptorRule:
+def _reduce_add_f32x16_rule(*, input_in_accumulator: bool) -> DescriptorRule:
     clear = _descriptor("amd.xdna.aie2p.accumulator.clear.f32x64")
     move_to_accumulator = _descriptor("amd.xdna.aie2p.move.vector512.to.accumulator512")
     move_from_accumulator = _descriptor(
@@ -238,17 +238,39 @@ def _reduce_add_f32x16_rule() -> DescriptorRule:
             for unit in range(1, 4)
         )
 
-    emits.extend(
-        (
+    current_unit = ValueRef.temporary("current_unit")
+    if input_in_accumulator:
+        current_vector = ValueRef.temporary("current_vector")
+        emits.extend(
+            (
+                EmitRegisterCopy(
+                    source=ValueRef.operand("input"),
+                    result=current_unit,
+                    result_type=ValueRef.temporary("current_padding_unit_1"),
+                ),
+                _op_emit(
+                    move_from_accumulator,
+                    operands={"src": current_unit},
+                    results={"dst": current_vector},
+                    descriptor_result_type=True,
+                ),
+            )
+        )
+    else:
+        current_vector = ValueRef.operand("input")
+        emits.append(
             _op_emit(
                 move_to_accumulator,
                 operands={"src": ValueRef.operand("input")},
-                results={"dst": ValueRef.temporary("current_unit")},
+                results={"dst": current_unit},
                 descriptor_result_type=True,
-            ),
+            )
+        )
+    emits.extend(
+        (
             EmitRegisterConcat(
                 sources=(
-                    ValueRef.temporary("current_unit"),
+                    current_unit,
                     *(
                         ValueRef.temporary(f"current_padding_unit_{unit}")
                         for unit in range(1, 4)
@@ -263,7 +285,6 @@ def _reduce_add_f32x16_rule() -> DescriptorRule:
         )
     )
 
-    current_vector = ValueRef.operand("input")
     current_accumulator = ValueRef.temporary("current_accumulator")
     for stage, control in enumerate(_F32X16_REDUCTION_CONTROLS):
         shuffle_control = ValueRef.temporary(f"shuffle_control_{stage}")
@@ -343,6 +364,10 @@ def _reduce_add_f32x16_rule() -> DescriptorRule:
         guards=(
             Guard.enum_attr_equals("kind", "addf"),
             Guard.value_type("input", _F32X16_VECTOR),
+            Guard.low_value_register_class(
+                "input",
+                "aie2p.ebmll" if input_in_accumulator else "aie2p.vec256",
+            ),
             Guard.value_type("init", _F32),
             Guard.value_type("result", _F32),
             Guard.value_float_equals("init", 0.0),
@@ -1025,7 +1050,10 @@ def _reduce_i1_rule(
 
 
 AIE2P_REDUCTION_RULES = (
-    _reduce_add_f32x16_rule(),
+    *(
+        _reduce_add_f32x16_rule(input_in_accumulator=input_in_accumulator)
+        for input_in_accumulator in (False, True)
+    ),
     *(
         _reduce_extremum_f32x16_rule(kind, operation)
         for kind, operation in (

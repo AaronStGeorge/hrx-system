@@ -42,6 +42,7 @@ from loom.target.contracts import (
     DescriptorResultType,
     DescriptorRule,
     EmitDescriptorOp,
+    EmitRegisterCopy,
     Guard,
     SourceMemoryConstraint,
     SourceMemoryOperation,
@@ -61,6 +62,7 @@ def _fused_memory_access_emits(
     operands: dict[str, ValueRef],
     *,
     access_preamble: tuple[ContractEmit, ...] = (),
+    copy_operands: tuple[str, ...] = (),
     results: dict[str, ValueRef] | None = None,
     result_types: dict[str, DescriptorResultType] | None = None,
     additional_static_byte_offset: int = 0,
@@ -96,6 +98,7 @@ def _fused_memory_access_emits(
             immediates=immediates,
             source_memory=source_memory,
             form=DescriptorEmitForm.OP,
+            copy_operands=copy_operands,
         ),
     )
 
@@ -206,6 +209,7 @@ def _fused_float_load_rule(
     root_kind: SourceMemoryRootKind,
     memory_spaces: tuple[str, ...],
     lane_count: int,
+    result_in_accumulator: bool,
     volatile: bool,
 ) -> DescriptorRule:
     source_type = Vector("bf16", lanes=lane_count)
@@ -239,13 +243,22 @@ def _fused_float_load_rule(
         native_result = ValueRef.temporary("converted_accumulator")
         result_types = {"op": DescriptorResultType()}
         output_emits = (
-            EmitDescriptorOp(
-                descriptor=_descriptor(
-                    "amd.xdna.aie2p.move.accumulator512.to.vector512"
-                ),
-                operands={"src": native_result},
-                results={"dst": converted_result},
-                form=DescriptorEmitForm.OP,
+            (
+                EmitRegisterCopy(
+                    source=native_result,
+                    result=converted_result,
+                )
+            )
+            if result_in_accumulator
+            else (
+                EmitDescriptorOp(
+                    descriptor=_descriptor(
+                        "amd.xdna.aie2p.move.accumulator512.to.vector512"
+                    ),
+                    operands={"src": native_result},
+                    results={"dst": converted_result},
+                    form=DescriptorEmitForm.OP,
+                )
             ),
         )
     return DescriptorRule(
@@ -262,6 +275,20 @@ def _fused_float_load_rule(
                     Guard.value_type("result", result_type),
                     Guard.value_not_subnormal_or_instance_flags_has_all(
                         "input", "subnormal", "daz"
+                    ),
+                    *(
+                        (
+                            Guard.low_value_register_class(
+                                "result",
+                                (
+                                    "aie2p.ebmll"
+                                    if result_in_accumulator
+                                    else "aie2p.vec256"
+                                ),
+                            ),
+                        )
+                        if lane_count == 16
+                        else ()
                     ),
                 ),
             ),
@@ -462,6 +489,7 @@ def _fused_float_store_rule(
     root_kind: SourceMemoryRootKind,
     memory_spaces: tuple[str, ...],
     lane_count: int,
+    input_in_accumulator: bool,
     volatile: bool,
 ) -> DescriptorRule:
     source_type = Vector("f32", lanes=lane_count)
@@ -489,7 +517,7 @@ def _fused_float_store_rule(
     )
     native_source = ValueRef.operand("input", source_node="convert")
     access_preamble: list[ContractEmit] = []
-    if lane_count == 16:
+    if lane_count == 16 and not input_in_accumulator:
         accumulator_source = ValueRef.temporary("converted_accumulator")
         access_preamble.append(
             EmitDescriptorOp(
@@ -525,6 +553,20 @@ def _fused_float_store_rule(
                     Guard.value_not_subnormal_or_instance_flags_has_all(
                         "input", "subnormal", "daz"
                     ),
+                    *(
+                        (
+                            Guard.low_value_register_class(
+                                "input",
+                                (
+                                    "aie2p.ebmll"
+                                    if input_in_accumulator
+                                    else "aie2p.vec256"
+                                ),
+                            ),
+                        )
+                        if lane_count == 16
+                        else ()
+                    ),
                 ),
             ),
         ),
@@ -545,6 +587,7 @@ def _fused_float_store_rule(
                 "ptr": ValueRef.operand("view"),
             },
             access_preamble=tuple(access_preamble),
+            copy_operands=("src",) if input_in_accumulator else (),
         ),
         priority=1,
         report_key=f"native_memory_store_{source_shape}_to_{result_shape}",
@@ -665,10 +708,14 @@ def _fused_memory_rules(*, volatile: bool) -> tuple[DescriptorRule, ...]:
                 root_kind=root_kind,
                 memory_spaces=memory_spaces,
                 lane_count=lane_count,
+                result_in_accumulator=result_in_accumulator,
                 volatile=volatile,
             )
             for root_kind, memory_spaces in _memory_roots(SourceMemoryOperation.LOAD)
             for lane_count in FLOAT_PACKET_LANE_COUNTS
+            for result_in_accumulator in (
+                (False, True) if lane_count == 16 else (False,)
+            )
             for address_form in _MemoryAddressForm
         ),
         *(
@@ -705,10 +752,14 @@ def _fused_memory_rules(*, volatile: bool) -> tuple[DescriptorRule, ...]:
                 root_kind=root_kind,
                 memory_spaces=memory_spaces,
                 lane_count=lane_count,
+                input_in_accumulator=input_in_accumulator,
                 volatile=volatile,
             )
             for root_kind, memory_spaces in _memory_roots(SourceMemoryOperation.STORE)
             for lane_count in FLOAT_PACKET_LANE_COUNTS
+            for input_in_accumulator in (
+                (False, True) if lane_count == 16 else (False,)
+            )
             for address_form in _MemoryAddressForm
         ),
         *(
