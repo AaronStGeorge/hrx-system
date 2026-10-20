@@ -1,0 +1,17 @@
+kernel.def @sample_kernel(%width: index) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%width, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%storage: buffer) {
+  kernel.return
+}
+
+check.case @sampled {
+  %width = check.param.choice values([4, 8]) name("width") : index
+  %storage = check.generate.fill value(1) : tensor<8xi32>
+  kernel.launch @sample_kernel[%width](%storage) : [index](tensor<8xi32>)
+  check.return
+}
+
+check.benchmark<@sampled> @all
+
+check.benchmark<@sampled> @wide {width = 8}

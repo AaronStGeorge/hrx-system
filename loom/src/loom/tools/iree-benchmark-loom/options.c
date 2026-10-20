@@ -86,6 +86,11 @@ IREE_FLAG_NAMED(
     bool, dry_run, "dry-run", false,
     "Reports selected logical benchmarks and deduplicated physical work items "
     "without running correctness, compilation, or measurement.");
+IREE_FLAG_NAMED(
+    bool, compile_only, "compile-only", false,
+    "Captures and compiles selected check.case samples as canonical requests "
+    "without initializing a HAL device. Requires --target and "
+    "--artifact-bundle-dir.");
 IREE_FLAG(bool, agents_md, false,
           "Prints a compact Markdown snippet suitable for AGENTS.md and "
           "exits.");
@@ -277,6 +282,7 @@ iree_status_t iree_benchmark_loom_options_from_flags(
   out_options->artifact_bundle_dir =
       iree_string_view_trim(iree_make_cstring_view(FLAG_artifact_bundle_dir));
   out_options->dry_run = FLAG_dry_run;
+  out_options->compile_only = FLAG_compile_only;
   out_options->measure =
       iree_string_view_trim(iree_make_cstring_view(FLAG_measure));
   out_options->compile_report = iree_make_cstring_view(FLAG_compile_report);

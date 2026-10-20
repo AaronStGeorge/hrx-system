@@ -253,6 +253,8 @@ static iree_status_t iree_benchmark_loom_append_artifact_bundle_manifest_json(
       &object, IREE_SV("tool"), IREE_SV("iree-benchmark-loom")));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("run_id"), run->run_id));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      &object, IREE_SV("mode"), run->mode));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("source"), run->source));
   IREE_RETURN_IF_ERROR(

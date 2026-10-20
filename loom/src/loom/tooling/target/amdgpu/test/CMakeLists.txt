@@ -61,11 +61,13 @@ iree_execution_test_suite(
   MANIFESTS
     "loom-compile-amdgpu.test.json"
   TOOLS
+    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
     "loom-compile=loom::tools::loom-compile"
     "loom-compile-report=loom::py::loom::tools::loom-compile-report"
     "loom-format=loom::tools::loom-format"
     "loom-opt=loom::tools::loom-opt"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/compile_requests.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/feature_distinct_code_objects.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/loom_opt_f32_arith.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/selected_root_amdgpu.loom"

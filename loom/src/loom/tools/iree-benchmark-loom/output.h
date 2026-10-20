@@ -22,6 +22,8 @@ extern "C" {
 typedef struct iree_benchmark_loom_run_identity_t {
   // Process-local run identifier copied into result output records.
   iree_string_view_t run_id;
+  // Execution mode: benchmark, plan, or compile_only.
+  iree_string_view_t mode;
   // User-provided source path, or "<stdin>" when reading standard input.
   iree_string_view_t source;
   // Effective result output path, or "-" when writing to stdout.

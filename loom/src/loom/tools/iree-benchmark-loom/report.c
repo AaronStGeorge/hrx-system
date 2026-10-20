@@ -341,6 +341,8 @@ iree_status_t iree_benchmark_loom_append_run_row(
       iree_benchmark_loom_write_run_id_field_json(run, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("tool"), IREE_SV("iree-benchmark-loom")));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      &object, IREE_SV("mode"), run->mode));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("source"), run->source));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(

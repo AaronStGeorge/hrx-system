@@ -16,6 +16,7 @@ loom_cc_library(
     "case_execution.h"
     "case_request.h"
     "comparison_execution.h"
+    "compile_requests.h"
     "configuration.h"
     "context.h"
     "device_spec_report.h"
@@ -47,6 +48,7 @@ loom_cc_library(
     "case_execution.c"
     "case_request.c"
     "comparison_execution.c"
+    "compile_requests.c"
     "context.c"
     "device_spec_report.c"
     "diagnostics.c"
@@ -80,6 +82,7 @@ loom_cc_library(
     iree::base::tooling::flags
     iree::hal
     iree::io::stream
+    iree::tooling::device_flags
     iree::tooling::device_util
     iree::tooling::profile::counter
     iree::tooling::profile::summary
@@ -91,6 +94,7 @@ loom_cc_library(
     loom::error::diagnostic
     loom::error::json_sink
     loom::error::renderer
+    loom::format::text::printer
     loom::ir
     loom::ir::facts
     loom::ops::check
@@ -125,6 +129,7 @@ loom_cc_library(
     loom::tooling::testbench::scenario::entropy
     loom::tooling::testbench::scenario::executor
     loom::tooling::testbench::scenario::values
+    loom::tooling::testbench::source_report
     loom::tooling::testbench::value_materializer
     loom::util::json
     loom::util::stream

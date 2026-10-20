@@ -30,6 +30,10 @@ typedef struct iree_benchmark_loom_snapshot_state_t {
   char* run_id_storage;
   // Copied run identifier.
   iree_string_view_t run_id;
+  // Owned storage backing |mode|.
+  char* mode_storage;
+  // Copied execution mode.
+  iree_string_view_t mode;
   // Owned storage backing |source|.
   char* source_storage;
   // Copied input source path.
@@ -181,6 +185,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_run(
   state->sanitizer = event->sanitizer;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_copy_string(
       state, event->run->run_id, &state->run_id_storage, &state->run_id));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_copy_string(
+      state, event->run->mode, &state->mode_storage, &state->mode));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_copy_string(
       state, event->run->source, &state->source_storage, &state->source));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_copy_string(
@@ -770,6 +776,7 @@ void iree_benchmark_loom_snapshot_sink_deinitialize(
   iree_allocator_free(state->host_allocator, state->file_output_dir_storage);
   iree_allocator_free(state->host_allocator, state->results_path_storage);
   iree_allocator_free(state->host_allocator, state->source_storage);
+  iree_allocator_free(state->host_allocator, state->mode_storage);
   iree_allocator_free(state->host_allocator, state->run_id_storage);
   iree_allocator_t host_allocator = state->host_allocator;
   iree_allocator_free(host_allocator, state);
@@ -794,6 +801,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_run_json(
       object, IREE_SV("tool"), IREE_SV("iree-benchmark-loom")));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       object, IREE_SV("run_id"), state->run_id));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      object, IREE_SV("mode"), state->mode));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       object, IREE_SV("source"), state->source));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
