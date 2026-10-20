@@ -14,6 +14,7 @@ from pathlib import Path
 from loom.target.arch.x86 import native_vector as native
 from loom.target.arch.x86.feature_bits import FEATURE_BMI2
 from loom.target.arch.x86.scalar_families import (
+    X86_SCALAR_MEMORY_EXTENSION_FAMILIES,
     X86_SCALAR_READ_MEMORY_FAMILIES,
     X86_SCALAR_VARIABLE_SHIFT_FAMILIES,
 )
@@ -102,7 +103,11 @@ from .integer_bits import (
     X86_SCALAR_NATIVE_COUNT_DESCRIPTORS,
 )
 from .integer_rotation import X86_SCALAR_ROTATION_DESCRIPTORS
-from .memory import memory_descriptors, read_memory_binary_descriptors
+from .memory import (
+    memory_descriptors,
+    memory_load_descriptors,
+    read_memory_binary_descriptors,
+)
 
 _NON_TRAPPING_SCALAR_FORMS = frozenset(
     (
@@ -1363,6 +1368,41 @@ _X86_SCALAR_SUFFIX_DESCRIPTORS = (
                 encoding(0x88, flags=Flag.BYTE)
                 if width_bits == 8
                 else encoding(0x89, flags=Flag.OPERAND_16),
+            ),
+        )
+    ),
+    *(
+        descriptor
+        for family in X86_SCALAR_MEMORY_EXTENSION_FAMILIES
+        if family.signed or family.carrier_bit_count == 64
+        for descriptor in memory_load_descriptors(
+            key_prefix="x86.scalar",
+            load_mnemonic=family.mnemonic,
+            register_class=(
+                _REG_GPR64 if family.carrier_bit_count == 64 else _REG_GPR32
+            ),
+            register_suffix=(
+                f"{'i' if family.signed else 'u'}{family.source_bit_count}."
+                f"gpr{family.carrier_bit_count}"
+            ),
+            semantic_type=f"i{family.source_bit_count}",
+            width_bits=family.source_bit_count,
+            load_schedule_class=(
+                _SCHEDULE_MEMORY_LOAD_GPR64
+                if family.carrier_bit_count == 64
+                else _SCHEDULE_MEMORY_LOAD_GPR32
+            ),
+            assembly_suffix=(
+                f".{'i' if family.signed else 'u'}{family.source_bit_count}."
+                f"gpr{family.carrier_bit_count}"
+            ),
+            encoding_id=encoding(
+                family.opcode,
+                flags=(
+                    Flag.REX_W
+                    if family.signed and family.carrier_bit_count == 64
+                    else 0
+                ),
             ),
         )
     ),

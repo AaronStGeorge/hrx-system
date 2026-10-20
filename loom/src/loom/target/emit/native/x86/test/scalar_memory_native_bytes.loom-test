@@ -1,0 +1,25 @@
+// RUN: emit x86-native-bytes @narrow_extensions
+x86.target<scalar> @target
+
+low.func.def target<x86.scalar.core>(@target) @narrow_extensions(%base: reg<x86.gpr64>, %index: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm {
+  %u8 = movzx.load.u8.gpr64 %base {disp32 = 1}
+  %u16 = movzx.load.u16.gpr64 %base {disp32 = 2}
+  %s8_word = movsx.load.i8.gpr32 %base {disp32 = 3}
+  %s16_word = movsx.load.i16.gpr32 %base {disp32 = 4}
+  %s8_wide = movsx.load.i8.gpr64 %base {disp32 = 5}
+  %s16_wide = movsx.load.i16.gpr64 %base {disp32 = 6}
+  %u32_wide = mov.load.u32.gpr64 %base {disp32 = 7}
+  %s32_wide = movsxd.load.i32.gpr64 %base {disp32 = 8}
+  %indexed_u8 = movzx.load.indexed.u8.gpr64 %base, %index {disp32 = 7, scale = 1}
+  %indexed_u16 = movzx.load.indexed.u16.gpr64 %base, %index {disp32 = 8, scale = 2}
+  %indexed_s8_word = movsx.load.indexed.i8.gpr32 %base, %index {disp32 = 9, scale = 1}
+  %indexed_s16_word = movsx.load.indexed.i16.gpr32 %base, %index {disp32 = 10, scale = 2}
+  %indexed_s8_wide = movsx.load.indexed.i8.gpr64 %base, %index {disp32 = 11, scale = 1}
+  %indexed_s16_wide = movsx.load.indexed.i16.gpr64 %base, %index {disp32 = 12, scale = 2}
+  %indexed_u32_wide = mov.load.indexed.u32.gpr64 %base, %index {disp32 = 13, scale = 4}
+  %indexed_s32_wide = movsxd.load.indexed.i32.gpr64 %base, %index {disp32 = 14, scale = 4}
+  return %indexed_s32_wide
+}
+
+// ----
+code: 0f b6 47 01 0f b7 47 02 0f be 47 03 0f bf 47 04 48 0f be 47 05 48 0f bf 47 06 8b 47 07 48 63 47 08 0f b6 44 37 07 0f b7 44 77 08 0f be 44 37 09 0f bf 44 77 0a 48 0f be 44 37 0b 48 0f bf 44 77 0c 8b 44 b7 0d 48 63 44 b7 0e c3

@@ -24,8 +24,10 @@ from loom.target.arch.x86.descriptors import (
     X86_AVX2_DESCRIPTOR_SET,
     X86_AVX512_CORE_DESCRIPTOR_SET,
     X86_INTEGER_CONDITION_CODES,
+    X86_SCALAR_DESCRIPTOR_SET,
 )
 from loom.target.arch.x86.scalar_families import (
+    X86_SCALAR_MEMORY_EXTENSION_FAMILIES,
     X86_SCALAR_READ_MEMORY_FAMILIES,
 )
 from loom.target.arch.x86.vector_families import (
@@ -719,6 +721,63 @@ def test_scalar_integer_read_memory_rules_cover_native_carriers() -> None:
             accumulator_operand = "rhs" if loaded_operand == "lhs" else "lhs"
             assert memory_emit.operands["lhs"] == ValueRef.operand(
                 accumulator_operand, source_node="consumer"
+            )
+
+
+def test_scalar_memory_extensions_fuse_every_narrow_widening() -> None:
+    assert {
+        (family.signed, family.source_bit_count, result_bit_count)
+        for family in X86_SCALAR_MEMORY_EXTENSION_FAMILIES
+        for result_bit_count in family.result_bit_counts
+    } == {
+        (signed, source_bit_count, result_bit_count)
+        for signed in (False, True)
+        for source_bit_count in (8, 16, 32)
+        for result_bit_count in (16, 32, 64)
+        if source_bit_count < result_bit_count
+    }
+    rules_by_report = {}
+    for rule in X86_SCALAR_READ_MEMORY_CONTRACT_FRAGMENT.cases:
+        if isinstance(rule, DescriptorRule) and rule.report_key.startswith(
+            "native_memory_extension_"
+        ):
+            rules_by_report.setdefault(rule.report_key, []).append(rule)
+
+    expected_reports = {
+        (
+            f"native_memory_extension_{'extsi' if family.signed else 'extui'}_"
+            f"i{family.source_bit_count}_"
+            + "_".join(f"i{bit_count}" for bit_count in family.result_bit_counts)
+        ): family
+        for family in X86_SCALAR_MEMORY_EXTENSION_FAMILIES
+    }
+    assert set(rules_by_report) == set(expected_reports)
+    for report, family in expected_reports.items():
+        rules = rules_by_report[report]
+        assert len(rules) == 9
+        for rule in rules:
+            rule.validate(X86_SCALAR_DESCRIPTOR_SET)
+            assert rule.source_op is view.view_load
+            assert rule.priority == 1
+            assert len(rule.source_nodes) == 1
+            extension = rule.source_nodes[0]
+            assert extension.relation is SourceNodeRelation.EXCLUSIVE_USER
+            assert extension.source_op is (
+                scalar_conversion.scalar_extsi
+                if family.signed
+                else scalar_conversion.scalar_extui
+            )
+            assert _source_node_value_type_guard(extension, "input") == Scalar(
+                f"i{family.source_bit_count}"
+            )
+            assert _source_node_value_type_guard(extension, "result") == Scalar(
+                tuple(f"i{bit_count}" for bit_count in family.result_bit_counts)
+            )
+            source_prefix = "i" if family.signed else "u"
+            assert rule.descriptor.key.startswith(f"x86.scalar.{family.mnemonic}.load")
+            assert rule.descriptor.key.endswith(
+                f".{source_prefix}{family.source_bit_count}."
+                f"gpr{family.carrier_bit_count}"
             )
 
 

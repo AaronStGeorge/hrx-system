@@ -61,6 +61,94 @@ def _store_effect(width_bits: int) -> Effect:
     )
 
 
+def _memory_transfer_descriptors(
+    *,
+    key_prefix: str,
+    operation: str,
+    mnemonic: str,
+    register_class: str,
+    register_suffix: str,
+    semantic_type: str,
+    width_bits: int,
+    schedule_class: str,
+    assembly_suffix: str,
+    encoding_id: int | None,
+) -> tuple[Descriptor, ...]:
+    """Declares static and indexed forms for one memory transfer direction."""
+    register_alternatives = (RegClassAlt(register_class),)
+    if operation == "load":
+        value = Operand("dst", OperandRole.RESULT, register_alternatives)
+        effect = _load_effect(width_bits)
+        encoding_format_id = Form.LOAD
+    elif operation == "store":
+        value = Operand("value", OperandRole.OPERAND, register_alternatives)
+        effect = _store_effect(width_bits)
+        encoding_format_id = Form.STORE
+    else:
+        raise ValueError(f"unsupported memory transfer operation '{operation}'")
+
+    results = (value.field_name,) if value.role == OperandRole.RESULT else ()
+    value_fields = () if results else (value.field_name,)
+    return tuple(
+        Descriptor(
+            key=(
+                f"{key_prefix}.{mnemonic}.{operation}{address_suffix}.{register_suffix}"
+            ),
+            mnemonic=mnemonic,
+            encoding_format_id=encoding_format_id if encoding_id is not None else 0,
+            encoding_id=(
+                encoding_id | (Flag.INDEXED if address_suffix else 0)
+                if encoding_id is not None
+                else 0
+            ),
+            semantic_tag=f"memory.{operation}{address_suffix}.{semantic_type}",
+            operands=(
+                value,
+                *(_gpr64_resource(field_name) for field_name in address_fields),
+            ),
+            immediates=immediates,
+            asm_forms=_asm(
+                mnemonic=(f"{mnemonic}.{operation}{address_suffix}{assembly_suffix}"),
+                results=results,
+                operands=(*value_fields, *address_fields),
+                immediates=tuple(item.field_name for item in immediates),
+                named_immediates=True,
+            ),
+            effects=(effect,),
+            schedule_class=schedule_class,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        )
+        for address_suffix, address_fields, immediates in _MEMORY_ADDRESS_FORMS
+    )
+
+
+def memory_load_descriptors(
+    *,
+    key_prefix: str,
+    load_mnemonic: str,
+    register_class: str,
+    register_suffix: str,
+    semantic_type: str,
+    width_bits: int,
+    load_schedule_class: str,
+    assembly_suffix: str,
+    encoding_id: int,
+) -> tuple[Descriptor, ...]:
+    """Declares static and indexed loads without an artificial store family."""
+    return _memory_transfer_descriptors(
+        key_prefix=key_prefix,
+        operation="load",
+        mnemonic=load_mnemonic,
+        register_class=register_class,
+        register_suffix=register_suffix,
+        semantic_type=semantic_type,
+        width_bits=width_bits,
+        schedule_class=load_schedule_class,
+        assembly_suffix=assembly_suffix,
+        encoding_id=encoding_id,
+    )
+
+
 def memory_descriptors(
     *,
     key_prefix: str,
@@ -79,61 +167,32 @@ def memory_descriptors(
     | None = None,
 ) -> tuple[Descriptor, ...]:
     """Declares static/indexed loads followed by static/indexed stores."""
-    register_alternatives = (RegClassAlt(register_class),)
-    descriptors = []
-    for operation, mnemonic, value, effect, schedule_class in (
-        (
-            "load",
-            load_mnemonic,
-            Operand("dst", OperandRole.RESULT, register_alternatives),
-            _load_effect(width_bits),
-            load_schedule_class,
+    descriptors = [
+        *_memory_transfer_descriptors(
+            key_prefix=key_prefix,
+            operation="load",
+            mnemonic=load_mnemonic,
+            register_class=register_class,
+            register_suffix=register_suffix,
+            semantic_type=semantic_type,
+            width_bits=width_bits,
+            schedule_class=load_schedule_class,
+            assembly_suffix=assembly_suffix,
+            encoding_id=encoding_ids[0] if encoding_ids is not None else None,
         ),
-        (
-            "store",
-            store_mnemonic,
-            Operand("value", OperandRole.OPERAND, register_alternatives),
-            _store_effect(width_bits),
-            store_schedule_class,
+        *_memory_transfer_descriptors(
+            key_prefix=key_prefix,
+            operation="store",
+            mnemonic=store_mnemonic,
+            register_class=register_class,
+            register_suffix=register_suffix,
+            semantic_type=semantic_type,
+            width_bits=width_bits,
+            schedule_class=store_schedule_class,
+            assembly_suffix=assembly_suffix,
+            encoding_id=encoding_ids[1] if encoding_ids is not None else None,
         ),
-    ):
-        results = (value.field_name,) if value.role == OperandRole.RESULT else ()
-        value_fields = () if results else (value.field_name,)
-        for address_suffix, address_fields, immediates in _MEMORY_ADDRESS_FORMS:
-            operation_name = f"{operation}{address_suffix}"
-            descriptors.append(
-                Descriptor(
-                    key=f"{key_prefix}.{mnemonic}.{operation_name}.{register_suffix}",
-                    mnemonic=mnemonic,
-                    encoding_format_id=(
-                        Form.LOAD if operation == "load" else Form.STORE
-                    )
-                    if encoding_ids
-                    else 0,
-                    encoding_id=(
-                        encoding_ids[0 if operation == "load" else 1]
-                        | (Flag.INDEXED if address_suffix else 0)
-                    )
-                    if encoding_ids
-                    else 0,
-                    semantic_tag=f"memory.{operation_name}.{semantic_type}",
-                    operands=(
-                        value,
-                        *(_gpr64_resource(field_name) for field_name in address_fields),
-                    ),
-                    immediates=immediates,
-                    asm_forms=_asm(
-                        mnemonic=f"{mnemonic}.{operation_name}{assembly_suffix}",
-                        results=results,
-                        operands=(*value_fields, *address_fields),
-                        immediates=tuple(item.field_name for item in immediates),
-                        named_immediates=True,
-                    ),
-                    effects=(effect,),
-                    schedule_class=schedule_class,
-                    flags=(DescriptorFlag.SIDE_EFFECTING,),
-                )
-            )
+    ]
     if vector_instructions is None:
         if vector_binder is not None:
             raise ValueError("vector binder requires native instruction facts")
