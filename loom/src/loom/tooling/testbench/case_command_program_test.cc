@@ -171,6 +171,16 @@ TEST_F(CaseCommandProgramTest,
   const loom_builder_ip_t module_ip = loom_builder_enter_region(
       &module_builder_, case_op, loom_check_case_body(case_op));
 
+  // The selected size is beyond a host-sized Cartesian index. These prefix
+  // parameters are not launch operands and need no generated constants.
+  constexpr int64_t seed_count = int64_t{1} << (sizeof(iree_host_size_t) * 4);
+  for (int i = 0; i < 2; ++i) {
+    loom_op_t* seed = nullptr;
+    IREE_ASSERT_OK(loom_check_param_seed_build(
+        &module_builder_, /*build_flags=*/0, /*base=*/0, seed_count,
+        LOOM_STRING_ID_INVALID, loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+        LOOM_LOCATION_UNKNOWN, &seed));
+  }
   const int64_t size_choices[] = {4, 8};
   loom_op_t* size_parameter = nullptr;
   IREE_ASSERT_OK(loom_check_param_choice_build(
@@ -255,7 +265,7 @@ TEST_F(CaseCommandProgramTest,
   ASSERT_EQ(module_plan.case_count, 1u);
   ASSERT_EQ(module_plan.issue_count, 0u);
   const loom_testbench_case_plan_t& case_plan = module_plan.cases[0];
-  ASSERT_EQ(case_plan.cartesian_sample_count, 2u);
+  ASSERT_EQ(case_plan.cartesian_sample_count, IREE_HOST_SIZE_MAX);
   ASSERT_EQ(module_plan.value_storage_identity_count, module_->values.count);
   const loom_testbench_storage_identity_t root_storage =
       module_plan.value_storage_identities[launch_arguments[0]];
@@ -271,10 +281,11 @@ TEST_F(CaseCommandProgramTest,
   EXPECT_EQ(tied_storage.byte_offset, 8u);
 
   loom_testbench_case_command_program_t program = {};
+  const iree_host_size_t assignments[] = {0, 0, 1};
   IREE_ASSERT_OK(loom_testbench_case_command_program_build(
-      module_, &module_plan, &case_plan, /*sample_ordinal=*/1, &program));
+      module_, &module_plan, &case_plan, {.assignments = assignments},
+      &program));
   ASSERT_TRUE(loom_symbol_ref_is_valid(program.root_ref));
-  EXPECT_EQ(program.sample_ordinal, 1u);
   ASSERT_EQ(program.binding_count, 1u);
   ASSERT_NE(program.binding_value_ids, nullptr);
   EXPECT_EQ(program.binding_value_ids[0], launch_arguments[0]);
@@ -439,7 +450,7 @@ TEST_F(CaseCommandProgramTest, RejectsRuntimeScalarWithoutMutatingTheModule) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_testbench_case_command_program_build(
                             module_, &module_plan, &module_plan.cases[0],
-                            /*sample_ordinal=*/0, &program));
+                            {.ordinal = 0}, &program));
   EXPECT_FALSE(loom_symbol_ref_is_valid(program.root_ref));
   EXPECT_EQ(module_->symbols.count, symbol_count);
   EXPECT_EQ(module_->values.count, value_count);

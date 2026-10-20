@@ -34,8 +34,10 @@ typedef struct loom_testbench_prepared_invocation_t
 
 // Executes a contiguous source-order sequence against one materialized sample.
 // The callback owns input lookup and result assignment for the sequence.
+// |execution_index| identifies a dense caller-owned prepared-execution slot,
+// not a position in the Cartesian parameter domain.
 typedef iree_status_t(IREE_API_PTR* loom_testbench_invocation_sequence_fn_t)(
-    void* user_data, iree_host_size_t sample_ordinal,
+    void* user_data, iree_host_size_t execution_index,
     iree_host_size_t invocation_count,
     const loom_testbench_prepared_invocation_t* invocations,
     loom_testbench_value_table_t* table);
@@ -223,7 +225,7 @@ iree_status_t loom_testbench_run_prepared_invocation(
 // Executes all prepared invocations in source order against one sample.
 iree_status_t loom_testbench_run_case_invocations(
     loom_testbench_invocation_executor_t* executor,
-    iree_host_size_t sample_ordinal, loom_testbench_value_table_t* table);
+    iree_host_size_t execution_index, loom_testbench_value_table_t* table);
 
 #ifdef __cplusplus
 }  // extern "C"

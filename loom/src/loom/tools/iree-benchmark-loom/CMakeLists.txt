@@ -131,6 +131,7 @@ loom_cc_library(
     loom::tooling::testbench::scenario::values
     loom::tooling::testbench::source_report
     loom::tooling::testbench::value_materializer
+    loom::util::adaptive_sort
     loom::util::json
     loom::util::stream
   PUBLIC

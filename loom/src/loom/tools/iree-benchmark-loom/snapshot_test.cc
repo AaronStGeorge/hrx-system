@@ -204,8 +204,8 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   iree_benchmark_loom_benchmark_result_t result = {
       .executed = true,
       .passed = true,
-      .has_sample_ordinal = true,
-      .sample_ordinal = 0,
+      .has_benchmark_sample_ordinal = true,
+      .benchmark_sample_ordinal = 0,
       .samples_per_iteration = 1,
   };
   result.timing.count = 3;
@@ -220,7 +220,7 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
       {.type = LOOM_SCALAR_TYPE_I32, .value = 513},
   };
   iree_benchmark_loom_launch_record_t launch_record = {
-      .case_sample_ordinal = 0,
+      .sample = {},
       .sequence_step_ordinal = 0,
       .entry = IREE_SV("kernel_entry"),
       .workload_values = workload_values,
@@ -239,6 +239,7 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   };
   iree_benchmark_loom_launch_evidence_t launch_evidence = {
       .host_allocator = {},
+      .case_plan = &case_plan,
       .records = &launch_record,
       .record_count = 1,
       .workload_values = workload_values,
@@ -809,14 +810,10 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedWorkAliases) {
   logical_samples[0].selection_index = 0;
   logical_samples[0].begin_benchmark_sample = 0;
   logical_samples[0].end_benchmark_sample = 1;
-  logical_samples[0].has_case_sample_ordinal = true;
-  logical_samples[0].case_sample_ordinal = 0;
   logical_samples[0].work_item_index = 7;
   logical_samples[1].selection_index = 1;
   logical_samples[1].begin_benchmark_sample = 0;
   logical_samples[1].end_benchmark_sample = 1;
-  logical_samples[1].has_case_sample_ordinal = true;
-  logical_samples[1].case_sample_ordinal = 0;
   logical_samples[1].work_item_index = 7;
   iree_benchmark_loom_work_item_t work_item = {
       .kind = IREE_BENCHMARK_LOOM_WORK_ITEM_DISPATCH_SAMPLE,
@@ -825,8 +822,6 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedWorkAliases) {
       .hal_compile_item_index = 0,
       .begin_benchmark_sample = 0,
       .end_benchmark_sample = 1,
-      .has_case_sample_ordinal = true,
-      .case_sample_ordinal = 0,
   };
   iree_benchmark_loom_work_plan_t work_plan = {
       .selected_benchmarks = selections,

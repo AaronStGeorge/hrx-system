@@ -6,7 +6,10 @@
 
 #include "loom/tooling/testbench/scenario/executor.h"
 
+#include <algorithm>
+#include <array>
 #include <string>
+#include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/hal/api.h"
@@ -420,6 +423,224 @@ check.scenario public @expected_device_event {
   loom_context_t context_;
   iree_hal_pool_t* pool_ = nullptr;
 };
+
+// Records the external profile's ownership callbacks; preparation and reuse
+// themselves run through the production executor.
+struct PreparationTrace {
+  struct Product {
+    // Profile trace that outlives the prepared configuration.
+    PreparationTrace* trace;
+    // Invocation supplied to the owning preparation callback.
+    const loom_testbench_invocation_plan_t* invocation;
+  };
+
+  explicit PreparationTrace(size_t capacity) : products(capacity) {}
+
+  static iree_status_t Execute(void*, const loom_testbench_invocation_plan_t*,
+                               iree_host_size_t,
+                               loom_testbench_product_call_t*) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "preparation-only test profile");
+  }
+
+  static void Destroy(void* user_data) {
+    auto* product = static_cast<Product*>(user_data);
+    product->trace->destroyed.push_back(product->invocation);
+  }
+
+  static iree_status_t Prepare(
+      void* user_data, const loom_testbench_invocation_plan_t* invocation,
+      const loom_testbench_value_table_t*, iree_allocator_t,
+      loom_testbench_prepared_product_t* out_product) {
+    auto* trace = static_cast<PreparationTrace*>(user_data);
+    Product* product = &trace->products[trace->prepared.size()];
+    *product = {.trace = trace, .invocation = invocation};
+    trace->prepared.push_back(invocation);
+    static const loom_testbench_product_vtable_t vtable = {.execute = Execute};
+    *out_product = {
+        .vtable = &vtable,
+        .destroy = Destroy,
+        .user_data = product,
+    };
+    // Return a partially created product to exercise cleanup of the failing
+    // callback as well as all previously prepared owners.
+    if (trace->prepared.size() == trace->fail_at) {
+      return iree_make_status(IREE_STATUS_ABORTED,
+                              "injected product preparation failure");
+    }
+    return iree_ok_status();
+  }
+
+  // Stable product storage owned by the profile, not by a borrowed trial.
+  std::vector<Product> products;
+  // Preparation callback order, including a failing callback.
+  std::vector<const loom_testbench_invocation_plan_t*> prepared;
+  // Destruction callback order.
+  std::vector<const loom_testbench_invocation_plan_t*> destroyed;
+  // One-based failing preparation ordinal, or zero for success.
+  size_t fail_at = 0;
+};
+
+TEST_F(ScenarioExecutorTest,
+       IndexesCompleteProductKeysWithoutChangingOwnership) {
+  loom_module_t* first_module = nullptr;
+  loom_module_t* second_module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("first"), &block_pool_,
+                                      nullptr, host_allocator_, &first_module));
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("second"),
+                                      &block_pool_, nullptr, host_allocator_,
+                                      &second_module));
+  const loom_value_id_t value_ids[][2] = {{0, 1}, {2, 3}};
+  std::array<loom_testbench_invocation_plan_t, 128> keys = {};
+  for (size_t i = 0; i < keys.size(); ++i) {
+    keys[i] = {
+        .kind = LOOM_TESTBENCH_INVOCATION_FUNCTION_CALL,
+        .module = first_module,
+        .callee_ref = {.module_id = 0, .symbol_id = 1},
+        .workload_value_ids = value_ids[0],
+        .input_value_ids = value_ids[0],
+        .input_count = 1,
+        .result_value_ids = value_ids[0],
+        .result_count = 1,
+    };
+    if (i >= 8) {
+      keys[i].callee_ref.symbol_id = static_cast<uint16_t>(i + 1);
+    }
+  }
+  keys[1].module = second_module;
+  keys[2].kind = LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH;
+  keys[3].callee_ref.symbol_id = 3;
+  keys[4].callee_ref.symbol_id = 2;
+  keys[5].workload_count = 1;
+  keys[6].input_count = 2;
+  keys[7].result_count = 2;
+
+  for (size_t unique_count : {1u, 8u, 16u, 128u}) {
+    std::vector<loom_testbench_trial_plan_t> trials(unique_count * 3);
+    for (size_t i = 0; i < trials.size(); ++i) {
+      auto& trial = trials[i];
+      trial.trial_count = 1;
+      trial.action.kind = i % 3 == 0 ? LOOM_TESTBENCH_SCENARIO_ACTION_INVOKE
+                                     : LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE;
+      trial.action.target = keys[unique_count - 1 - i % unique_count];
+      // Trial-local value identities do not enter the preparation key.
+      trial.action.target.input_value_ids = value_ids[i % 2];
+      trial.action.target.result_value_ids = value_ids[(i + 1) % 2];
+      trial.action.oracle = trial.action.target;
+    }
+    const loom_testbench_scenario_plan_t scenario = {
+        .name = IREE_SV("product_owners"),
+        .configuration_count = 2,
+        .trials = trials.data(),
+        .trial_count = trials.size(),
+    };
+    loom_testbench_scenario_configuration_values_t configuration = {
+        .scenario_plan = &scenario,
+        .flags = LOOM_TESTBENCH_SCENARIO_VALUE_FLAG_MATERIALIZED,
+    };
+    for (bool prepare_oracles : {false, true}) {
+      for (size_t configuration_ordinal = 0; configuration_ordinal < 2;
+           ++configuration_ordinal) {
+        SCOPED_TRACE(::testing::Message()
+                     << "unique=" << unique_count
+                     << " oracles=" << prepare_oracles
+                     << " configuration=" << configuration_ordinal);
+        configuration.configuration_ordinal = configuration_ordinal;
+        PreparationTrace trace(trials.size() * 2);
+        loom_testbench_scenario_execution_options_t options = {};
+        loom_testbench_scenario_execution_options_initialize(&options);
+        options.prepare_oracles = prepare_oracles;
+        options.target = {IREE_SV("target"), PreparationTrace::Prepare, &trace};
+        options.oracle = {IREE_SV("oracle"), PreparationTrace::Prepare, &trace};
+        loom_testbench_prepared_scenario_configuration_t prepared = {};
+        IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
+            &options, &configuration, &prepared));
+
+        std::array<size_t, 128> target_owners;
+        std::array<size_t, 128> oracle_owners;
+        target_owners.fill(IREE_HOST_SIZE_MAX);
+        oracle_owners.fill(IREE_HOST_SIZE_MAX);
+        std::vector<const loom_testbench_invocation_plan_t*> expected;
+        for (size_t i = 0; i < trials.size(); ++i) {
+          const size_t key = i % unique_count;
+          if (target_owners[key] == IREE_HOST_SIZE_MAX) {
+            target_owners[key] = i;
+            expected.push_back(&trials[i].action.target);
+          }
+          const auto& target = prepared.trials[i].target;
+          EXPECT_EQ(target.invocation,
+                    &trials[target_owners[key]].action.target);
+          EXPECT_EQ(target.user_data,
+                    prepared.trials[target_owners[key]].target.user_data);
+          EXPECT_EQ(target.destroy != nullptr, target_owners[key] == i);
+          if (prepare_oracles &&
+              trials[i].action.kind == LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE) {
+            if (oracle_owners[key] == IREE_HOST_SIZE_MAX) {
+              oracle_owners[key] = i;
+              expected.push_back(&trials[i].action.oracle);
+            }
+            const auto& oracle = prepared.trials[i].oracle;
+            EXPECT_EQ(oracle.invocation,
+                      &trials[oracle_owners[key]].action.oracle);
+            EXPECT_EQ(oracle.user_data,
+                      prepared.trials[oracle_owners[key]].oracle.user_data);
+            EXPECT_NE(oracle.user_data, target.user_data);
+            EXPECT_EQ(oracle.destroy != nullptr, oracle_owners[key] == i);
+          } else {
+            EXPECT_EQ(prepared.trials[i].oracle.invocation, nullptr);
+          }
+        }
+        EXPECT_EQ(trace.prepared, expected);
+        EXPECT_TRUE(trace.destroyed.empty());
+        loom_testbench_prepared_scenario_configuration_deinitialize(&prepared);
+        std::reverse(expected.begin(), expected.end());
+        EXPECT_EQ(trace.destroyed, expected);
+      }
+    }
+  }
+  loom_module_free(second_module);
+  loom_module_free(first_module);
+}
+
+TEST_F(ScenarioExecutorTest, CleansFailedPreparationAndEarlierSharedOwners) {
+  std::array<loom_testbench_trial_plan_t, 4> trials = {};
+  for (size_t i = 0; i < trials.size(); ++i) {
+    trials[i].trial_count = 1;
+    trials[i].action.kind = LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE;
+    trials[i].action.target.kind = LOOM_TESTBENCH_INVOCATION_FUNCTION_CALL;
+    trials[i].action.target.callee_ref.symbol_id = i < 2 ? 2 : 1;
+    trials[i].action.oracle = trials[i].action.target;
+  }
+  const loom_testbench_scenario_plan_t scenario = {
+      .name = IREE_SV("failed_product"),
+      .configuration_count = 1,
+      .trials = trials.data(),
+      .trial_count = trials.size(),
+  };
+  const loom_testbench_scenario_configuration_values_t configuration = {
+      .scenario_plan = &scenario,
+      .flags = LOOM_TESTBENCH_SCENARIO_VALUE_FLAG_MATERIALIZED,
+  };
+  for (size_t fail_at = 1; fail_at <= 4; ++fail_at) {
+    SCOPED_TRACE(fail_at);
+    PreparationTrace trace(trials.size() * 2);
+    trace.fail_at = fail_at;
+    loom_testbench_scenario_execution_options_t options = {};
+    loom_testbench_scenario_execution_options_initialize(&options);
+    options.target = {IREE_SV("target"), PreparationTrace::Prepare, &trace};
+    options.oracle = {IREE_SV("oracle"), PreparationTrace::Prepare, &trace};
+    loom_testbench_prepared_scenario_configuration_t prepared = {};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
+                          loom_testbench_prepare_scenario_configuration(
+                              &options, &configuration, &prepared));
+    EXPECT_EQ(prepared.trials, nullptr);
+    EXPECT_EQ(prepared.trial_count, 0u);
+    EXPECT_EQ(trace.prepared.size(), fail_at);
+    auto expected_destroyed = trace.prepared;
+    std::reverse(expected_destroyed.begin(), expected_destroyed.end());
+    EXPECT_EQ(trace.destroyed, expected_destroyed);
+  }
+}
 
 TEST_F(ScenarioExecutorTest, PreparesBeforeMaterializationAndExecutesBatches) {
   loom_module_t* module = ParseModule();

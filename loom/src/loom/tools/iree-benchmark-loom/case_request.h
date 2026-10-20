@@ -30,8 +30,8 @@ typedef struct iree_benchmark_loom_case_request_options_t {
   loomc_module_t* module;
   // Source-order case ordinal established by benchmark planning.
   iree_host_size_t case_index;
-  // Concrete cartesian case sample ordinal established by benchmark planning.
-  iree_host_size_t case_sample_ordinal;
+  // Concrete selection, borrowing benchmark assignments for this call.
+  loom_testbench_case_sample_t case_sample;
   // Resolved invocation configuration consumed by product materialization.
   const loomc_config_options_t* config;
   // Optional exact kernel target profile selected without a HAL device.
@@ -55,8 +55,6 @@ typedef struct iree_benchmark_loom_case_request_capture_t {
   iree_host_size_t binding_count;
   // Source-order case ordinal represented by this capture.
   iree_host_size_t case_index;
-  // Concrete cartesian case sample ordinal represented by this capture.
-  iree_host_size_t case_sample_ordinal;
   // Generated command root borrowed from |root_symbol_storage|.
   iree_string_view_t root_symbol;
   // Owned NUL-terminated storage backing |root_symbol|.
@@ -66,11 +64,12 @@ typedef struct iree_benchmark_loom_case_request_capture_t {
 // Publishes the canonical kernel requests for one concrete case sample.
 //
 // The source module remains unchanged. The operation clones and replans it,
-// indexes the clone-local plan with the exact case and sample ordinals already
-// established by benchmark planning, appends one private command root, and
-// delegates provider classification and request materialization to the ordinary
-// command product builder. Published requests own their bytecode source closure
-// and remain valid after the temporary clone is released.
+// indexes the clone-local plan with the case ordinal and applies the exact
+// parameter selection established by benchmark planning, appends one private
+// command root, and delegates provider classification and request
+// materialization to the ordinary command product builder. Published requests
+// own their bytecode source closure and remain valid after the temporary clone
+// is released.
 //
 // An OK status means product construction ran to |out_result|. The capture is
 // populated only when that result succeeded. The caller releases |out_result|

@@ -270,11 +270,11 @@
               ]
             },
             {
-              "path": "{tmp}/compile-request-bundle/compile_requests/c0000-s0000-r0000.loombc",
+              "path": "{tmp}/compile-request-bundle/compile_requests/capture0000-r0000.loombc",
               "non_empty": true
             },
             {
-              "path": "{tmp}/compile-request-bundle/compile_requests/c0000-s0001-r0000.loombc",
+              "path": "{tmp}/compile-request-bundle/compile_requests/capture0001-r0000.loombc",
               "non_empty": true
             }
           ]
@@ -284,7 +284,7 @@
           "run": {
             "tool": "loom-compile",
             "args": [
-              "{tmp}/compile-request-bundle/compile_requests/c0000-s0001-r0000.loombc",
+              "{tmp}/compile-request-bundle/compile_requests/capture0001-r0000.loombc",
               "--root=@sample_kernel",
               "--target=amdgpu:gfx1100",
               "--format=amdgpu-hsaco",

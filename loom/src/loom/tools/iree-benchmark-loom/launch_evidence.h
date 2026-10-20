@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/tooling/testbench/testbench.h"
 #include "loom/util/json.h"
 #include "loomc/launch_config.h"
 
@@ -29,8 +30,8 @@ typedef struct iree_benchmark_loom_workload_value_t {
 } iree_benchmark_loom_workload_value_t;
 
 typedef struct iree_benchmark_loom_launch_record_t {
-  // Concrete check.case sample ordinal that produced this launch.
-  iree_host_size_t case_sample_ordinal;
+  // Concrete sample, borrowing assignments from the benchmark plan.
+  loom_testbench_case_sample_t sample;
   // Source-order kernel launch ordinal within the case sample.
   iree_host_size_t sequence_step_ordinal;
   // Borrowed executable entry symbol submitted for this launch.
@@ -46,6 +47,8 @@ typedef struct iree_benchmark_loom_launch_record_t {
 typedef struct iree_benchmark_loom_launch_evidence_t {
   // Host allocator owning records and contiguous workload value storage.
   iree_allocator_t host_allocator;
+  // Borrowed case whose parameter domain describes every recorded sample.
+  const loom_testbench_case_plan_t* case_plan;
   // Owned launch records in sample and source invocation order.
   iree_benchmark_loom_launch_record_t* records;
   // Number of entries in |records|.
@@ -59,8 +62,8 @@ typedef struct iree_benchmark_loom_launch_evidence_t {
 // Allocates zero-initialized launch records and workload value storage for one
 // benchmark work item.
 iree_status_t iree_benchmark_loom_launch_evidence_initialize(
-    iree_host_size_t record_count, iree_host_size_t workload_value_count,
-    iree_allocator_t host_allocator,
+    const loom_testbench_case_plan_t* case_plan, iree_host_size_t record_count,
+    iree_host_size_t workload_value_count, iree_allocator_t host_allocator,
     iree_benchmark_loom_launch_evidence_t* out_evidence);
 
 // Releases launch records and exact workload values owned by |evidence|.
@@ -71,9 +74,8 @@ void iree_benchmark_loom_launch_evidence_deinitialize(
 // configuration into the preallocated record and workload ranges.
 void iree_benchmark_loom_launch_evidence_capture(
     const loom_run_hal_testbench_actual_provider_t* provider,
-    iree_host_size_t case_sample_ordinal,
-    iree_host_size_t sequence_step_ordinal, iree_host_size_t record_ordinal,
-    iree_host_size_t workload_value_ordinal,
+    loom_testbench_case_sample_t sample, iree_host_size_t sequence_step_ordinal,
+    iree_host_size_t record_ordinal, iree_host_size_t workload_value_ordinal,
     iree_benchmark_loom_launch_evidence_t* evidence);
 
 // Writes launch records as a JSON array without a surrounding field name.

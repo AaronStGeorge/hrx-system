@@ -11,14 +11,6 @@
 
 #include "loom/tools/iree-benchmark-loom/timing.h"
 
-iree_host_size_t iree_benchmark_loom_case_sample_from_benchmark_sample(
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t benchmark_sample_ordinal) {
-  return loom_testbench_benchmark_sample_case_ordinal(case_plan, benchmark_plan,
-                                                      benchmark_sample_ordinal);
-}
-
 static iree_status_t iree_benchmark_loom_prepare_case_executor(
     const loom_testbench_module_plan_t* module_plan,
     iree_host_size_t case_index,
@@ -38,16 +30,19 @@ static iree_status_t iree_benchmark_loom_prepare_case_executor(
 static iree_status_t iree_benchmark_loom_run_case_iteration(
     loom_testbench_case_executor_t* executor,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
-    const loom_testbench_case_plan_t* case_plan, iree_host_size_t begin_sample,
-    iree_host_size_t end_sample, iree_host_size_t* inout_failed_sample_count) {
+    iree_host_size_t begin_sample, iree_host_size_t end_sample,
+    iree_host_size_t execution_sample_base,
+    iree_host_size_t* inout_failed_sample_count) {
   for (iree_host_size_t benchmark_sample_ordinal = begin_sample;
        benchmark_sample_ordinal < end_sample; ++benchmark_sample_ordinal) {
-    const iree_host_size_t case_sample_ordinal =
-        iree_benchmark_loom_case_sample_from_benchmark_sample(
-            benchmark_plan, case_plan, benchmark_sample_ordinal);
+    const loom_testbench_case_sample_t sample =
+        loom_testbench_benchmark_case_sample(benchmark_plan,
+                                             benchmark_sample_ordinal);
     loom_testbench_case_sample_result_t sample_result = {0};
     IREE_RETURN_IF_ERROR(loom_testbench_run_case_sample(
-        executor, case_sample_ordinal, &sample_result));
+        executor, sample,
+        execution_sample_base + benchmark_sample_ordinal - begin_sample,
+        &sample_result));
     if (!sample_result.passed) {
       ++*inout_failed_sample_count;
     }
@@ -61,18 +56,15 @@ static iree_status_t iree_benchmark_loom_run_benchmark_iterations(
     const loom_testbench_case_execution_options_t* execution_options,
     const iree_benchmark_loom_benchmark_policy_t* policy,
     iree_host_size_t begin_sample, iree_host_size_t end_sample,
-    iree_arena_allocator_t* arena, iree_allocator_t host_allocator,
+    iree_host_size_t execution_sample_base, iree_arena_allocator_t* arena,
+    iree_allocator_t host_allocator,
     iree_benchmark_loom_benchmark_result_t* out_result) {
   memset(out_result, 0, sizeof(*out_result));
 
-  const loom_testbench_case_plan_t* case_plan =
-      &module_plan->cases[benchmark_plan->case_index];
   out_result->samples_per_iteration = end_sample - begin_sample;
   if (end_sample == begin_sample + 1) {
-    out_result->has_sample_ordinal = true;
-    out_result->sample_ordinal =
-        iree_benchmark_loom_case_sample_from_benchmark_sample(
-            benchmark_plan, case_plan, begin_sample);
+    out_result->has_benchmark_sample_ordinal = true;
+    out_result->benchmark_sample_ordinal = begin_sample;
   }
 
   iree_duration_t* durations = NULL;
@@ -91,15 +83,15 @@ static iree_status_t iree_benchmark_loom_run_benchmark_iterations(
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < policy->warmup_iterations; ++i) {
     status = iree_benchmark_loom_run_case_iteration(
-        &executor, benchmark_plan, case_plan, begin_sample, end_sample,
-        &out_result->failed_sample_count);
+        &executor, benchmark_plan, begin_sample, end_sample,
+        execution_sample_base, &out_result->failed_sample_count);
   }
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < policy->iterations; ++i) {
     const iree_time_t start_time_ns = iree_time_now();
     status = iree_benchmark_loom_run_case_iteration(
-        &executor, benchmark_plan, case_plan, begin_sample, end_sample,
-        &out_result->failed_sample_count);
+        &executor, benchmark_plan, begin_sample, end_sample,
+        execution_sample_base, &out_result->failed_sample_count);
     const iree_time_t end_time_ns = iree_time_now();
     durations[i] =
         end_time_ns >= start_time_ns ? end_time_ns - start_time_ns : 0;
@@ -117,60 +109,6 @@ static iree_status_t iree_benchmark_loom_run_benchmark_iterations(
   }
   iree_arena_reset(arena);
   iree_allocator_free(host_allocator, durations);
-  return status;
-}
-
-iree_status_t iree_benchmark_loom_run_case_correctness_range(
-    const iree_benchmark_loom_run_identity_t* run,
-    const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_testbench_module_plan_t* module_plan,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    iree_host_size_t case_index,
-    const loom_testbench_case_execution_options_t* execution_options,
-    iree_host_size_t begin_sample, iree_host_size_t end_sample,
-    iree_arena_allocator_t* arena,
-    const iree_benchmark_loom_event_sink_t* event_sink,
-    iree_host_size_t* out_sample_count,
-    iree_host_size_t* out_failed_sample_count) {
-  *out_sample_count = 0;
-  *out_failed_sample_count = 0;
-
-  const loom_testbench_case_plan_t* case_plan = &module_plan->cases[case_index];
-  iree_status_t status = iree_ok_status();
-  loom_testbench_prepared_case_t prepared_case = {0};
-  loom_testbench_case_executor_t executor = {0};
-  bool executor_initialized = false;
-  status = iree_benchmark_loom_prepare_case_executor(
-      module_plan, case_index, execution_options, arena, &prepared_case,
-      &executor, &executor_initialized);
-
-  for (iree_host_size_t benchmark_sample_ordinal = begin_sample;
-       iree_status_is_ok(status) && benchmark_sample_ordinal < end_sample;
-       ++benchmark_sample_ordinal) {
-    const iree_host_size_t case_sample_ordinal =
-        iree_benchmark_loom_case_sample_from_benchmark_sample(
-            benchmark_plan, case_plan, benchmark_sample_ordinal);
-    loom_testbench_case_sample_result_t sample_result = {0};
-    status = loom_testbench_run_case_sample(&executor, case_sample_ordinal,
-                                            &sample_result);
-    if (iree_status_is_ok(status)) {
-      status = iree_benchmark_loom_event_sink_emit_sample(
-          event_sink, run, candidate, IREE_BENCHMARK_LOOM_INDEX_INVALID,
-          module_plan->module, benchmark_plan, case_plan,
-          benchmark_sample_ordinal, case_sample_ordinal, &sample_result);
-    }
-    if (iree_status_is_ok(status)) {
-      ++*out_sample_count;
-      if (!sample_result.passed) {
-        ++*out_failed_sample_count;
-      }
-    }
-  }
-
-  if (executor_initialized) {
-    loom_testbench_case_executor_deinitialize(&executor);
-  }
-  iree_arena_reset(arena);
   return status;
 }
 
@@ -197,24 +135,10 @@ static iree_status_t iree_benchmark_loom_emit_work_item_sample_aliases(
     if (benchmark_sample_ordinal >= logical_sample->end_benchmark_sample) {
       continue;
     }
-    const iree_host_size_t case_sample_ordinal =
-        iree_benchmark_loom_case_sample_from_benchmark_sample(
-            selection->benchmark_plan, selection->case_plan,
-            benchmark_sample_ordinal);
-    if (case_sample_ordinal != sample_result->sample_ordinal) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "benchmark work item alias for `%.*s` mapped benchmark sample "
-          "%" PRIhsz " to case sample %" PRIhsz
-          " but physical work item produced case sample %" PRIhsz,
-          (int)selection->benchmark_plan->name.size,
-          selection->benchmark_plan->name.data, benchmark_sample_ordinal,
-          case_sample_ordinal, sample_result->sample_ordinal);
-    }
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_event_sink_emit_sample(
         event_sink, run, &selection->identity, work_item->work_item_index,
         module_plan->module, selection->benchmark_plan, selection->case_plan,
-        benchmark_sample_ordinal, case_sample_ordinal, sample_result));
+        benchmark_sample_ordinal, sample_result));
   }
   return iree_ok_status();
 }
@@ -254,10 +178,7 @@ iree_status_t iree_benchmark_loom_emit_work_item_result_aliases(
       alias_result.benchmark_sample_ordinal =
           logical_sample->begin_benchmark_sample;
     }
-    if (logical_sample->has_case_sample_ordinal) {
-      alias_result.has_sample_ordinal = true;
-      alias_result.sample_ordinal = logical_sample->case_sample_ordinal;
-    } else if (selection->scenario_plan != NULL) {
+    if (selection->scenario_plan != NULL) {
       alias_result.has_scenario_coordinate = true;
       alias_result.scenario_coordinate = logical_sample->scenario_coordinate;
     }
@@ -300,7 +221,6 @@ iree_status_t iree_benchmark_loom_run_work_item_correctness_range(
            ->selected_benchmarks[work_item->representative_selection_index];
   const loom_testbench_benchmark_plan_t* benchmark_plan =
       selection->benchmark_plan;
-  const loom_testbench_case_plan_t* case_plan = selection->case_plan;
 
   loom_testbench_prepared_case_t prepared_case = {0};
   loom_testbench_case_executor_t executor = {0};
@@ -316,14 +236,15 @@ iree_status_t iree_benchmark_loom_run_work_item_correctness_range(
        ++benchmark_sample_ordinal) {
     const iree_host_size_t sample_offset =
         benchmark_sample_ordinal - work_item->begin_benchmark_sample;
-    const iree_host_size_t case_sample_ordinal =
-        iree_benchmark_loom_case_sample_from_benchmark_sample(
-            benchmark_plan, case_plan, benchmark_sample_ordinal);
+    const loom_testbench_case_sample_t sample =
+        loom_testbench_benchmark_case_sample(benchmark_plan,
+                                             benchmark_sample_ordinal);
     loom_testbench_case_sample_result_t sample_result = {0};
-    status = loom_testbench_run_case_sample(&executor, case_sample_ordinal,
-                                            &sample_result);
+    status = loom_testbench_run_case_sample(
+        &executor, sample, work_item->execution_sample_base + sample_offset,
+        &sample_result);
     if (iree_status_is_ok(status) && sample_observer.fn != NULL) {
-      sample_observer.fn(sample_observer.user_data, case_sample_ordinal);
+      sample_observer.fn(sample_observer.user_data, sample);
     }
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_emit_work_item_sample_aliases(
@@ -358,7 +279,8 @@ iree_status_t iree_benchmark_loom_measure_case_end_to_end_work_item(
   return iree_benchmark_loom_run_benchmark_iterations(
       module_plan, selection->benchmark_plan, execution_options,
       &selection->policy, work_item->begin_benchmark_sample,
-      work_item->end_benchmark_sample, execution_arena, allocator, out_result);
+      work_item->end_benchmark_sample, work_item->execution_sample_base,
+      execution_arena, allocator, out_result);
 }
 
 iree_status_t iree_benchmark_loom_run_case_end_to_end_work_item(
@@ -399,10 +321,6 @@ iree_status_t iree_benchmark_loom_run_case_end_to_end_work_item(
         .samples_per_iteration = correctness_sample_count,
         .failed_sample_count = correctness_failed_sample_count,
     };
-    if (work_item->has_case_sample_ordinal) {
-      benchmark_result.has_sample_ordinal = true;
-      benchmark_result.sample_ordinal = work_item->case_sample_ordinal;
-    }
   }
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_emit_work_item_result_aliases(

@@ -43,7 +43,7 @@ typedef struct loom_testbench_case_command_program_build_t {
   // Planned case being projected.
   const loom_testbench_case_plan_t* case_plan;
   // Concrete case sample being projected.
-  iree_host_size_t sample_ordinal;
+  loom_testbench_case_sample_t sample;
   // Transient storage returned before this build completes.
   iree_arena_allocator_t* scratch_arena;
   // Concrete host-known scalar recipes.
@@ -88,8 +88,7 @@ static bool loom_testbench_case_is_buffer_value(loom_type_t type) {
 static iree_status_t loom_testbench_case_command_program_validate_plan(
     const loom_module_t* module,
     const loom_testbench_module_plan_t* module_plan,
-    const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal) {
+    const loom_testbench_case_plan_t* case_plan) {
   IREE_ASSERT(module_plan->module == module &&
               module_plan->value_storage_identity_count ==
                   module->values.count);
@@ -102,13 +101,6 @@ static iree_status_t loom_testbench_case_command_program_validate_plan(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "case '@%.*s' has planning issues",
                             (int)case_plan->name.size, case_plan->name.data);
-  }
-  if (sample_ordinal >= case_plan->cartesian_sample_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "case '@%.*s' sample ordinal %" PRIhsz
-                            " exceeds its %" PRIhsz "-sample domain",
-                            (int)case_plan->name.size, case_plan->name.data,
-                            sample_ordinal, case_plan->cartesian_sample_count);
   }
   if (case_plan->kernel_launch_count == 0) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -140,12 +132,12 @@ static iree_status_t loom_testbench_case_command_program_initialize_tables(
 
 static iree_status_t loom_testbench_case_command_program_collect_scalars(
     loom_testbench_case_command_program_build_t* build) {
+  loom_testbench_case_sample_t remaining = build->sample;
   for (iree_host_size_t i = 0; i < build->case_plan->parameter_count; ++i) {
     const loom_testbench_parameter_plan_t* parameter =
         &build->case_plan->parameters[i];
     const iree_host_size_t parameter_sample_ordinal =
-        loom_testbench_case_sample_parameter_ordinal(build->case_plan,
-                                                     build->sample_ordinal, i);
+        loom_testbench_case_sample_next(&remaining, parameter->sample_count);
     loom_testbench_case_scalar_t* scalar =
         &build->scalars[build->scalar_count++];
     scalar->value_id = parameter->value_id;
@@ -185,10 +177,10 @@ static iree_status_t loom_testbench_case_command_program_require_scalar(
   }
   return iree_make_status(
       IREE_STATUS_FAILED_PRECONDITION,
-      "case '@%.*s' sample %" PRIhsz " kernel launch %" PRIhsz " %.*s %" PRIhsz
-      " value %u is not known without execution",
+      "case '@%.*s' selected sweep sample %" PRIhsz " kernel launch %" PRIhsz
+      " %.*s %" PRIhsz " value %u is not known without execution",
       (int)build->case_plan->name.size, build->case_plan->name.data,
-      build->sample_ordinal, launch_index, (int)group_name.size,
+      build->sample.ordinal, launch_index, (int)group_name.size,
       group_name.data, operand_index, (unsigned)value_id);
 }
 
@@ -213,11 +205,11 @@ static iree_status_t loom_testbench_case_command_program_add_binding(
     iree_host_size_t launch_index, iree_host_size_t argument_index) {
   if (storage_identity->root_value_id == LOOM_VALUE_ID_INVALID) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "case '@%.*s' sample %" PRIhsz
+                            "case '@%.*s' selected sweep sample %" PRIhsz
                             " kernel launch %" PRIhsz " argument %" PRIhsz
                             " value %u has no storage provenance",
                             (int)build->case_plan->name.size,
-                            build->case_plan->name.data, build->sample_ordinal,
+                            build->case_plan->name.data, build->sample.ordinal,
                             launch_index, argument_index, (unsigned)value_id);
   }
   for (iree_host_size_t i = 0; i < build->binding_count; ++i) {
@@ -439,10 +431,10 @@ static iree_status_t loom_testbench_case_command_program_materialize_buffer(
   if (!iree_status_is_ok(status)) {
     return iree_status_annotate_f(
         status,
-        "case '@%.*s' sample %" PRIhsz
+        "case '@%.*s' selected sweep sample %" PRIhsz
         " cannot resolve the type of shaped value %u",
         (int)build->case_plan->name.size, build->case_plan->name.data,
-        build->sample_ordinal, (unsigned)source_value);
+        build->sample.ordinal, (unsigned)source_value);
   }
   const uint8_t alignment = loom_type_is_view(source_type)
                                 ? loom_type_view_alignment_override(source_type)
@@ -504,10 +496,11 @@ static iree_status_t loom_testbench_case_command_program_resolve_operands(
                                         &(*out_values)[i])) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
-          "case '@%.*s' sample %" PRIhsz " kernel launch %" PRIhsz
-          " %.*s %" PRIhsz " value %u is not known without execution",
+          "case '@%.*s' selected sweep sample %" PRIhsz
+          " kernel launch %" PRIhsz " %.*s %" PRIhsz
+          " value %u is not known without execution",
           (int)build->case_plan->name.size, build->case_plan->name.data,
-          build->sample_ordinal, launch_index, (int)group_name.size,
+          build->sample.ordinal, launch_index, (int)group_name.size,
           group_name.data, i, (unsigned)source_values[i]);
     }
   }
@@ -589,8 +582,7 @@ static iree_status_t loom_testbench_case_command_program_build_impl(
     loom_testbench_case_command_program_build_t* build,
     loom_testbench_case_command_program_t* out_program) {
   IREE_RETURN_IF_ERROR(loom_testbench_case_command_program_validate_plan(
-      build->module, build->module_plan, build->case_plan,
-      build->sample_ordinal));
+      build->module, build->module_plan, build->case_plan));
   IREE_RETURN_IF_ERROR(
       loom_testbench_case_command_program_initialize_tables(build));
   IREE_RETURN_IF_ERROR(
@@ -650,7 +642,6 @@ static iree_status_t loom_testbench_case_command_program_build_impl(
   }
   *out_program = (loom_testbench_case_command_program_t){
       .root_ref = root_ref,
-      .sample_ordinal = build->sample_ordinal,
       .binding_value_ids = retained_binding_value_ids,
       .binding_count = build->binding_count,
   };
@@ -660,7 +651,7 @@ static iree_status_t loom_testbench_case_command_program_build_impl(
 iree_status_t loom_testbench_case_command_program_build(
     loom_module_t* module, const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal,
+    loom_testbench_case_sample_t sample,
     loom_testbench_case_command_program_t* out_program) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(module_plan);
@@ -676,7 +667,7 @@ iree_status_t loom_testbench_case_command_program_build(
       .module = module,
       .module_plan = module_plan,
       .case_plan = case_plan,
-      .sample_ordinal = sample_ordinal,
+      .sample = sample,
       .scratch_arena = &scratch_arena,
   };
   const iree_status_t status =

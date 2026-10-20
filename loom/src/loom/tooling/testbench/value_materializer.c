@@ -1902,20 +1902,13 @@ iree_status_t loom_testbench_materialize_value_sources(
 iree_status_t loom_testbench_materialize_case_sample(
     const loom_testbench_value_materializer_options_t* options,
     const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal, loom_testbench_value_table_t* table) {
-  if (sample_ordinal >= case_plan->cartesian_sample_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "sample ordinal %zu exceeds case cartesian sample "
-                            "count %zu",
-                            sample_ordinal, case_plan->cartesian_sample_count);
-  }
+    loom_testbench_case_sample_t sample, loom_testbench_value_table_t* table) {
   for (iree_host_size_t parameter_index = 0;
        parameter_index < case_plan->parameter_count; ++parameter_index) {
     const loom_testbench_parameter_plan_t* parameter =
         &case_plan->parameters[parameter_index];
     iree_host_size_t parameter_sample_ordinal =
-        loom_testbench_case_sample_parameter_ordinal(case_plan, sample_ordinal,
-                                                     parameter_index);
+        loom_testbench_case_sample_next(&sample, parameter->sample_count);
     loom_attribute_t attr = {0};
     IREE_RETURN_IF_ERROR(loom_testbench_parameter_sample_value(
         parameter, parameter_sample_ordinal, &attr));

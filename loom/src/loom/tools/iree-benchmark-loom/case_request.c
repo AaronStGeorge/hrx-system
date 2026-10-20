@@ -106,15 +106,13 @@ static iree_status_t iree_benchmark_loom_case_request_build(
                               "case index exceeds the cloned module plan");
   } else if (iree_status_is_ok(status)) {
     capture->case_index = options->case_index;
-    capture->case_sample_ordinal = options->case_sample_ordinal;
     case_plan = &module_plan.cases[capture->case_index];
   }
 
   loom_testbench_case_command_program_t program = {0};
   if (iree_status_is_ok(status)) {
     status = loom_testbench_case_command_program_build(
-        view.module, &module_plan, case_plan, capture->case_sample_ordinal,
-        &program);
+        view.module, &module_plan, case_plan, options->case_sample, &program);
   }
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_case_request_copy_program_metadata(

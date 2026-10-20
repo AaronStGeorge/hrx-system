@@ -698,7 +698,7 @@ TEST(BenchmarkReportTest, WritesExactWorkloadAndResolvedLaunchConfig) {
       },
   };
   iree_benchmark_loom_launch_record_t launch_record = {
-      .case_sample_ordinal = 3,
+      .sample = {.ordinal = 3},
       .sequence_step_ordinal = 0,
       .entry = IREE_SV("dynamic_kernel"),
       .workload_values = workload_values,
@@ -717,6 +717,7 @@ TEST(BenchmarkReportTest, WritesExactWorkloadAndResolvedLaunchConfig) {
   };
   iree_benchmark_loom_launch_evidence_t launch_evidence = {
       .host_allocator = {},
+      .case_plan = &case_plan,
       .records = &launch_record,
       .record_count = 1,
       .workload_values = workload_values,

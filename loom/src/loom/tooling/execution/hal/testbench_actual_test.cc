@@ -817,7 +817,8 @@ func.def public pure @device_dynamic(%workgroup_count: index) -> (index, index, 
        ++sample_ordinal) {
     loom_testbench_value_table_reset(&value_table);
     IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-        &materializer_options, case_plan, sample_ordinal, &value_table));
+        &materializer_options, case_plan, {.ordinal = sample_ordinal},
+        &value_table));
     loom_run_hal_invocation_options_t invocation_options = {};
     loom_run_hal_binding_list_t bindings = {};
     IREE_ASSERT_OK(loom_run_hal_testbench_materialize_invocation_from_table(

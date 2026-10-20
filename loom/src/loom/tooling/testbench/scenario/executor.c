@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/tooling/testbench/source_report.h"
+#include "loom/util/adaptive_sort.h"
 #include "loom/util/json.h"
 
 static void loom_testbench_prepared_product_deinitialize(
@@ -65,20 +66,162 @@ static iree_status_t loom_testbench_prepare_scenario_product(
   return iree_ok_status();
 }
 
+static int loom_testbench_compare_product_ordinal(iree_host_size_t lhs,
+                                                  iree_host_size_t rhs) {
+  return (lhs > rhs) - (lhs < rhs);
+}
+
 // Product preparation is rooted at the callee under one concrete scenario
 // configuration. Workload and ordinary values remain runtime call data; their
 // IDs, storage extents, source locations, and expectations are trial-local.
 // Arity is retained because prepared providers size their call transport from
 // the representative invocation.
-static bool loom_testbench_scenario_invocations_share_product(
+static int loom_testbench_compare_product_invocations(
     const loom_testbench_invocation_plan_t* lhs,
     const loom_testbench_invocation_plan_t* rhs) {
-  return lhs->module == rhs->module && lhs->kind == rhs->kind &&
-         lhs->callee_ref.module_id == rhs->callee_ref.module_id &&
-         lhs->callee_ref.symbol_id == rhs->callee_ref.symbol_id &&
-         lhs->workload_count == rhs->workload_count &&
-         lhs->input_count == rhs->input_count &&
-         lhs->result_count == rhs->result_count;
+  int order = loom_testbench_compare_product_ordinal((uintptr_t)lhs->module,
+                                                     (uintptr_t)rhs->module);
+  if (order != 0) {
+    return order;
+  }
+  order = loom_testbench_compare_product_ordinal(lhs->kind, rhs->kind);
+  if (order != 0) {
+    return order;
+  }
+  order = loom_testbench_compare_product_ordinal(lhs->callee_ref.module_id,
+                                                 rhs->callee_ref.module_id);
+  if (order != 0) {
+    return order;
+  }
+  order = loom_testbench_compare_product_ordinal(lhs->callee_ref.symbol_id,
+                                                 rhs->callee_ref.symbol_id);
+  if (order != 0) {
+    return order;
+  }
+  order = loom_testbench_compare_product_ordinal(lhs->workload_count,
+                                                 rhs->workload_count);
+  if (order != 0) {
+    return order;
+  }
+  order = loom_testbench_compare_product_ordinal(lhs->input_count,
+                                                 rhs->input_count);
+  if (order != 0) {
+    return order;
+  }
+  return loom_testbench_compare_product_ordinal(lhs->result_count,
+                                                rhs->result_count);
+}
+
+typedef struct loom_testbench_product_reuse_t {
+  // Earliest trial owning an equivalent target product.
+  iree_host_size_t target_owner;
+  // Earliest comparison trial owning an equivalent oracle product.
+  iree_host_size_t oracle_owner;
+  // Temporary sort ordinal, reused for the target and oracle indices.
+  iree_host_size_t sort_index;
+} loom_testbench_product_reuse_t;
+
+typedef struct loom_testbench_product_order_t {
+  // Immutable invocation plans whose product identities are being grouped.
+  const loom_testbench_scenario_plan_t* scenario;
+  // Selects the independent oracle profile instead of the target profile.
+  bool use_oracle;
+} loom_testbench_product_order_t;
+
+static const loom_testbench_invocation_plan_t*
+loom_testbench_product_order_invocation(loom_testbench_product_order_t order,
+                                        iree_host_size_t trial_index) {
+  const loom_testbench_scenario_action_plan_t* action =
+      &order.scenario->trials[trial_index].action;
+  return order.use_oracle ? &action->oracle : &action->target;
+}
+
+static bool loom_testbench_product_order_less(
+    loom_testbench_product_order_t order, const iree_host_size_t* lhs,
+    const iree_host_size_t* rhs) {
+  const int comparison = loom_testbench_compare_product_invocations(
+      loom_testbench_product_order_invocation(order, *lhs),
+      loom_testbench_product_order_invocation(order, *rhs));
+  return comparison != 0 ? comparison < 0 : *lhs < *rhs;
+}
+
+static iree_host_size_t* loom_testbench_product_sort_index(
+    loom_testbench_product_reuse_t* reuse, iree_host_size_t index) {
+  return &reuse[index].sort_index;
+}
+
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_ACCESSOR(loom_testbench_sort_product_indices,
+                                        iree_host_size_t,
+                                        loom_testbench_product_reuse_t*,
+                                        loom_testbench_product_sort_index,
+                                        loom_testbench_product_order_t,
+                                        loom_testbench_product_order_less)
+
+static void loom_testbench_index_product_owners(
+    loom_testbench_product_order_t order,
+    loom_testbench_product_reuse_t* reuse) {
+  // Most scenarios revisit a small number of subjects. Bound this search by
+  // distinct owners, not prior trials, so aliases stay linear. Larger sets
+  // restart with the bounded sort below; partial owner entries are overwritten.
+  const iree_host_size_t inline_owner_capacity = 64;
+  iree_host_size_t inline_owner_count = 0;
+  iree_host_size_t trial_index = 0;
+  for (; trial_index < order.scenario->trial_count; ++trial_index) {
+    if (order.use_oracle && order.scenario->trials[trial_index].action.kind !=
+                                LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE) {
+      continue;
+    }
+    iree_host_size_t owner = trial_index;
+    iree_host_size_t index = 0;
+    for (; index < inline_owner_count; ++index) {
+      const iree_host_size_t candidate = reuse[index].sort_index;
+      if (loom_testbench_compare_product_invocations(
+              loom_testbench_product_order_invocation(order, candidate),
+              loom_testbench_product_order_invocation(order, trial_index)) ==
+          0) {
+        owner = candidate;
+        break;
+      }
+    }
+    if (index == inline_owner_count) {
+      if (inline_owner_count == inline_owner_capacity) {
+        break;
+      }
+      reuse[inline_owner_count++].sort_index = trial_index;
+    }
+    if (order.use_oracle) {
+      reuse[trial_index].oracle_owner = owner;
+    } else {
+      reuse[trial_index].target_owner = owner;
+    }
+  }
+  if (trial_index == order.scenario->trial_count) {
+    return;
+  }
+
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < order.scenario->trial_count; ++i) {
+    if (!order.use_oracle || order.scenario->trials[i].action.kind ==
+                                 LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE) {
+      reuse[count++].sort_index = i;
+    }
+  }
+  loom_testbench_sort_product_indices(order, reuse, count);
+  iree_host_size_t owner = 0;
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    const iree_host_size_t trial_index = reuse[i].sort_index;
+    if (i == 0 ||
+        loom_testbench_compare_product_invocations(
+            loom_testbench_product_order_invocation(order, owner),
+            loom_testbench_product_order_invocation(order, trial_index)) != 0) {
+      owner = trial_index;
+    }
+    if (order.use_oracle) {
+      reuse[trial_index].oracle_owner = owner;
+    } else {
+      reuse[trial_index].target_owner = owner;
+    }
+  }
 }
 
 static iree_status_t loom_testbench_prepare_or_reuse_scenario_product(
@@ -86,22 +229,15 @@ static iree_status_t loom_testbench_prepare_or_reuse_scenario_product(
     const loom_testbench_invocation_plan_t* invocation,
     const loom_testbench_value_table_t* configuration,
     iree_allocator_t host_allocator,
-    const loom_testbench_prepared_scenario_trial_t* previous_trials,
-    iree_host_size_t previous_trial_count, bool use_oracle,
+    const loom_testbench_prepared_product_t* owner,
     loom_testbench_prepared_product_t* out_product) {
-  for (iree_host_size_t i = 0; i < previous_trial_count; ++i) {
-    const loom_testbench_prepared_product_t* product =
-        use_oracle ? &previous_trials[i].oracle : &previous_trials[i].target;
-    if (product->invocation != NULL &&
-        loom_testbench_scenario_invocations_share_product(product->invocation,
-                                                          invocation)) {
-      // Reused products borrow the earliest matching product's state. Trials
-      // are released in reverse order, so the sole owning handle outlives every
-      // borrower and performs teardown exactly once.
-      *out_product = *product;
-      out_product->destroy = NULL;
-      return iree_ok_status();
-    }
+  if (owner != out_product) {
+    // Reused products borrow the earliest matching product's state. Trials
+    // are released in reverse order, so the sole owning handle outlives every
+    // borrower and performs teardown exactly once.
+    *out_product = *owner;
+    out_product->destroy = NULL;
+    return iree_ok_status();
   }
 
   return loom_testbench_prepare_scenario_product(
@@ -136,14 +272,28 @@ iree_status_t loom_testbench_prepare_scenario_configuration(
       .host_allocator = host_allocator,
   };
   iree_status_t status = iree_ok_status();
+  loom_testbench_product_reuse_t* reuse = NULL;
   if (scenario->trial_count != 0) {
     status = iree_allocator_malloc_array(host_allocator, scenario->trial_count,
                                          sizeof(*out_prepared->trials),
                                          (void**)&out_prepared->trials);
     if (iree_status_is_ok(status)) {
-      memset(out_prepared->trials, 0,
-             scenario->trial_count * sizeof(*out_prepared->trials));
       out_prepared->trial_count = scenario->trial_count;
+      status = iree_allocator_malloc_array_uninitialized(
+          host_allocator, scenario->trial_count, sizeof(*reuse),
+          (void**)&reuse);
+    }
+    if (iree_status_is_ok(status)) {
+      loom_testbench_index_product_owners(
+          (loom_testbench_product_order_t){.scenario = scenario}, reuse);
+      if (options->prepare_oracles) {
+        loom_testbench_index_product_owners(
+            (loom_testbench_product_order_t){
+                .scenario = scenario,
+                .use_oracle = true,
+            },
+            reuse);
+      }
     }
   }
 
@@ -164,16 +314,19 @@ iree_status_t loom_testbench_prepare_scenario_configuration(
     }
     status = loom_testbench_prepare_or_reuse_scenario_product(
         &options->target, &trial->action.target, &configuration->values,
-        host_allocator, out_prepared->trials, trial_index,
-        /*use_oracle=*/false, &prepared_trial->target);
+        host_allocator,
+        &out_prepared->trials[reuse[trial_index].target_owner].target,
+        &prepared_trial->target);
     if (iree_status_is_ok(status) && options->prepare_oracles &&
         trial->action.kind == LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE) {
       status = loom_testbench_prepare_or_reuse_scenario_product(
           &options->oracle, &trial->action.oracle, &configuration->values,
-          host_allocator, out_prepared->trials, trial_index,
-          /*use_oracle=*/true, &prepared_trial->oracle);
+          host_allocator,
+          &out_prepared->trials[reuse[trial_index].oracle_owner].oracle,
+          &prepared_trial->oracle);
     }
   }
+  iree_allocator_free(host_allocator, reuse);
   if (!iree_status_is_ok(status)) {
     loom_testbench_prepared_scenario_configuration_deinitialize(out_prepared);
   }

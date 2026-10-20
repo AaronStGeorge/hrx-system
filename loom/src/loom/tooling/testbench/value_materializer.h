@@ -257,11 +257,11 @@ iree_status_t loom_testbench_materialize_value_sources(
     const loom_testbench_value_source_plan_t* sources,
     iree_host_size_t source_count, loom_testbench_value_table_t* table);
 
-// Materializes parameters and source values for one concrete case sample.
+// Materializes parameters and source values for one planned concrete sample.
 iree_status_t loom_testbench_materialize_case_sample(
     const loom_testbench_value_materializer_options_t* options,
     const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal, loom_testbench_value_table_t* table);
+    loom_testbench_case_sample_t sample, loom_testbench_value_table_t* table);
 
 // Writes planned case file outputs. ON_FAILURE outputs are written only when
 // |case_failed| is true; ALWAYS outputs are written in both states.

@@ -18,41 +18,74 @@
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
 #include "loom/tools/iree-benchmark-loom/report.h"
+#include "loom/util/adaptive_sort.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loomc/interop.h"
 #include "loomc/iree.h"
 
 typedef struct iree_benchmark_loom_compile_sample_ref_t {
+  // Selected benchmark retaining the case and parameter assignments.
   iree_host_size_t selection_index;
+  // Sample within that benchmark's reduced parameter sweep.
   iree_host_size_t benchmark_sample_ordinal;
-  iree_host_size_t case_index;
-  iree_host_size_t case_sample_ordinal;
+  // Saturated Cartesian ordinal used only for grouping. Equal HOST_SIZE_MAX
+  // keys are compared by their full parameter coordinates.
+  iree_host_size_t sample_key;
+  // Deduplicated capture satisfying this logical sample.
   iree_host_size_t capture_index;
+  // Original report order, restored after grouping equal samples.
   iree_host_size_t order_index;
 } iree_benchmark_loom_compile_sample_ref_t;
 
 typedef struct iree_benchmark_loom_compile_capture_t {
-  iree_host_size_t case_index;
-  iree_host_size_t case_sample_ordinal;
+  // Representative selected benchmark retaining case and assignments.
+  iree_host_size_t selection_index;
+  // Representative sample within the selected benchmark.
+  iree_host_size_t benchmark_sample_ordinal;
+  // True when capture or any published request fails compilation.
   bool failed;
 } iree_benchmark_loom_compile_capture_t;
 
-static int iree_benchmark_loom_compare_sample_ref_key(const void* lhs_ptr,
-                                                      const void* rhs_ptr) {
-  const iree_benchmark_loom_compile_sample_ref_t* lhs = lhs_ptr;
-  const iree_benchmark_loom_compile_sample_ref_t* rhs = rhs_ptr;
-  if (lhs->case_index != rhs->case_index) {
-    return lhs->case_index < rhs->case_index ? -1 : 1;
+static int iree_benchmark_loom_compare_sample_ref_key(
+    const iree_benchmark_loom_work_plan_t* plan,
+    const iree_benchmark_loom_compile_sample_ref_t* lhs,
+    const iree_benchmark_loom_compile_sample_ref_t* rhs) {
+  const iree_benchmark_loom_selected_benchmark_t* lhs_selection =
+      &plan->selected_benchmarks[lhs->selection_index];
+  const iree_benchmark_loom_selected_benchmark_t* rhs_selection =
+      &plan->selected_benchmarks[rhs->selection_index];
+  const iree_host_size_t lhs_case = lhs_selection->benchmark_plan->case_index;
+  const iree_host_size_t rhs_case = rhs_selection->benchmark_plan->case_index;
+  if (lhs_case != rhs_case) {
+    return lhs_case < rhs_case ? -1 : 1;
   }
-  if (lhs->case_sample_ordinal != rhs->case_sample_ordinal) {
-    return lhs->case_sample_ordinal < rhs->case_sample_ordinal ? -1 : 1;
+  if (lhs->sample_key != rhs->sample_key) {
+    return lhs->sample_key < rhs->sample_key ? -1 : 1;
   }
-  if (lhs->order_index != rhs->order_index) {
-    return lhs->order_index < rhs->order_index ? -1 : 1;
+  if (lhs->sample_key != IREE_HOST_SIZE_MAX) {
+    return 0;
   }
-  return 0;
+  return loom_testbench_case_sample_compare(
+      lhs_selection->case_plan,
+      loom_testbench_benchmark_case_sample(lhs_selection->benchmark_plan,
+                                           lhs->benchmark_sample_ordinal),
+      loom_testbench_benchmark_case_sample(rhs_selection->benchmark_plan,
+                                           rhs->benchmark_sample_ordinal));
 }
+
+static bool iree_benchmark_loom_sample_ref_less(
+    const iree_benchmark_loom_work_plan_t* plan,
+    const iree_benchmark_loom_compile_sample_ref_t* lhs,
+    const iree_benchmark_loom_compile_sample_ref_t* rhs) {
+  const int order = iree_benchmark_loom_compare_sample_ref_key(plan, lhs, rhs);
+  return order != 0 ? order < 0 : lhs->order_index < rhs->order_index;
+}
+
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT(iree_benchmark_loom_sort_sample_refs,
+                                       iree_benchmark_loom_compile_sample_ref_t,
+                                       const iree_benchmark_loom_work_plan_t*,
+                                       iree_benchmark_loom_sample_ref_less)
 
 static int iree_benchmark_loom_compare_sample_ref_order(const void* lhs_ptr,
                                                         const void* rhs_ptr) {
@@ -127,31 +160,33 @@ static iree_status_t iree_benchmark_loom_index_compile_samples(
           (iree_benchmark_loom_compile_sample_ref_t){
               .selection_index = selection_index,
               .benchmark_sample_ordinal = benchmark_sample_ordinal,
-              .case_index = selection->benchmark_plan->case_index,
-              .case_sample_ordinal =
-                  loom_testbench_benchmark_sample_case_ordinal(
-                      selection->case_plan, selection->benchmark_plan,
-                      benchmark_sample_ordinal),
               .order_index = sample_ref_index,
           };
+      if (!loom_testbench_case_sample_flatten(
+              selection->case_plan,
+              loom_testbench_benchmark_case_sample(selection->benchmark_plan,
+                                                   benchmark_sample_ordinal),
+              &sample_refs[sample_ref_index].sample_key)) {
+        sample_refs[sample_ref_index].sample_key = IREE_HOST_SIZE_MAX;
+      }
       ++sample_ref_index;
     }
   }
 
   if (sample_ref_count > 1) {
-    qsort(sample_refs, sample_ref_count, sizeof(*sample_refs),
-          iree_benchmark_loom_compare_sample_ref_key);
+    iree_benchmark_loom_sort_sample_refs(options->work_plan, sample_refs,
+                                         sample_ref_count);
   }
   iree_host_size_t capture_count = 0;
   for (iree_host_size_t i = 0; i < sample_ref_count; ++i) {
     const bool begins_capture =
-        i == 0 || sample_refs[i].case_index != sample_refs[i - 1].case_index ||
-        sample_refs[i].case_sample_ordinal !=
-            sample_refs[i - 1].case_sample_ordinal;
+        i == 0 ||
+        iree_benchmark_loom_compare_sample_ref_key(
+            options->work_plan, &sample_refs[i - 1], &sample_refs[i]) != 0;
     if (begins_capture) {
       captures[capture_count] = (iree_benchmark_loom_compile_capture_t){
-          .case_index = sample_refs[i].case_index,
-          .case_sample_ordinal = sample_refs[i].case_sample_ordinal,
+          .selection_index = sample_refs[i].selection_index,
+          .benchmark_sample_ordinal = sample_refs[i].benchmark_sample_ordinal,
       };
       ++capture_count;
     }
@@ -381,12 +416,11 @@ static iree_status_t iree_benchmark_loom_write_request_bindings_json(
 
 static iree_status_t iree_benchmark_loom_write_request_file(
     const iree_benchmark_loom_compile_request_export_options_t* options,
-    iree_host_size_t case_index, iree_host_size_t case_sample_ordinal,
-    iree_host_size_t request_index, loomc_byte_span_t contents,
-    iree_string_builder_t* leaf) {
+    iree_host_size_t capture_index, iree_host_size_t request_index,
+    loomc_byte_span_t contents, iree_string_builder_t* leaf) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      leaf, "c%04" PRIhsz "-s%04" PRIhsz "-r%04" PRIhsz ".loombc", case_index,
-      case_sample_ordinal, request_index));
+      leaf, "capture%04" PRIhsz "-r%04" PRIhsz ".loombc", capture_index,
+      request_index));
   char* path_storage = NULL;
   iree_status_t status = loom_tooling_file_path_join(
       options->artifact_bundle->compile_request_dir,
@@ -414,17 +448,19 @@ static iree_status_t iree_benchmark_loom_write_request_file(
 static iree_status_t iree_benchmark_loom_write_request_json(
     const iree_benchmark_loom_compile_request_export_options_t* options,
     const iree_benchmark_loom_compile_capture_t* capture_record,
-    const loomc_request_t* request, iree_host_size_t request_index,
-    loom_output_stream_t* stream, bool* out_failed) {
+    iree_host_size_t capture_index, const loomc_request_t* request,
+    iree_host_size_t request_index, loom_output_stream_t* stream,
+    bool* out_failed) {
   *out_failed = false;
+  const iree_benchmark_loom_selected_benchmark_t* selection =
+      &options->work_plan->selected_benchmarks[capture_record->selection_index];
   const loomc_source_t* source = loomc_request_source(request);
   const loomc_byte_span_t contents = loomc_source_contents(source);
 
   iree_string_builder_t leaf;
   iree_string_builder_initialize(options->host_allocator, &leaf);
   iree_status_t status = iree_benchmark_loom_write_request_file(
-      options, capture_record->case_index, capture_record->case_sample_ordinal,
-      request_index, contents, &leaf);
+      options, capture_index, request_index, contents, &leaf);
 
   loomc_string_view_t* root_names = NULL;
   loomc_module_t* request_module = NULL;
@@ -536,13 +572,11 @@ static iree_status_t iree_benchmark_loom_write_request_json(
         iree_string_builder_initialize(options->host_allocator, &message);
         status = iree_string_builder_append_format(
             &message,
-            "canonical request %" PRIhsz
-            " for check.case `%.*s` sample %" PRIhsz " failed compilation",
-            request_index,
-            (int)options->module_plan->cases[capture_record->case_index]
-                .name.size,
-            options->module_plan->cases[capture_record->case_index].name.data,
-            capture_record->case_sample_ordinal);
+            "canonical request %" PRIhsz " for benchmark `%.*s` sample %" PRIhsz
+            " failed compilation",
+            request_index, (int)selection->benchmark_plan->name.size,
+            selection->benchmark_plan->name.data,
+            capture_record->benchmark_sample_ordinal);
         if (iree_status_is_ok(status)) {
           status = iree_benchmark_loom_emit_compile_request_failure(
               options, IREE_SV("request_compile"),
@@ -570,25 +604,28 @@ static iree_status_t iree_benchmark_loom_write_capture_json(
     iree_benchmark_loom_compile_capture_t* capture_record,
     loom_output_stream_t* stream,
     iree_benchmark_loom_compile_request_export_result_t* export_result) {
-  const loom_testbench_case_plan_t* case_plan =
-      &options->module_plan->cases[capture_record->case_index];
+  const iree_benchmark_loom_selected_benchmark_t* selection =
+      &options->work_plan->selected_benchmarks[capture_record->selection_index];
+  const loom_testbench_case_plan_t* case_plan = selection->case_plan;
+  const loom_testbench_case_sample_t sample =
+      loom_testbench_benchmark_case_sample(
+          selection->benchmark_plan, capture_record->benchmark_sample_ordinal);
   loom_json_object_writer_t object;
   IREE_RETURN_IF_ERROR(loom_json_object_begin(stream, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       &object, IREE_SV("capture_index"), capture_index));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
-      &object, IREE_SV("case_index"), capture_record->case_index));
+      &object, IREE_SV("case_index"), selection->benchmark_plan->case_index));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("case"), case_plan->name));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
-      options->native_module, case_plan, capture_record->case_sample_ordinal,
-      &object));
+      options->native_module, case_plan, sample, &object));
 
   const iree_benchmark_loom_case_request_options_t capture_options = {
       .workspace = options->workspace,
       .module = options->module,
-      .case_index = capture_record->case_index,
-      .case_sample_ordinal = capture_record->case_sample_ordinal,
+      .case_index = selection->benchmark_plan->case_index,
+      .case_sample = sample,
       .config = options->config,
       .target_profile = options->target_profile,
   };
@@ -616,10 +653,11 @@ static iree_status_t iree_benchmark_loom_write_capture_json(
     if (iree_status_is_ok(status)) {
       status = iree_string_builder_append_format(
           &message,
-          "check.case `%.*s` sample %" PRIhsz
+          "benchmark `%.*s` sample %" PRIhsz
           " failed canonical request capture",
-          (int)case_plan->name.size, case_plan->name.data,
-          capture_record->case_sample_ordinal);
+          (int)selection->benchmark_plan->name.size,
+          selection->benchmark_plan->name.data,
+          capture_record->benchmark_sample_ordinal);
     }
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_emit_compile_request_failure(
@@ -651,8 +689,8 @@ static iree_status_t iree_benchmark_loom_write_capture_json(
       bool request_failed = false;
       if (iree_status_is_ok(status)) {
         status = iree_benchmark_loom_write_request_json(
-            options, capture_record, capture.requests[i], i, stream,
-            &request_failed);
+            options, capture_record, capture_index, capture.requests[i], i,
+            stream, &request_failed);
       }
       if (iree_status_is_ok(status)) {
         ++export_result->request_count;
@@ -720,9 +758,16 @@ static iree_status_t iree_benchmark_loom_write_selections_json(
       IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
           &sample, IREE_SV("benchmark_sample_ordinal"),
           sample_ref->benchmark_sample_ordinal));
-      IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
-          &sample, IREE_SV("case_sample_ordinal"),
-          sample_ref->case_sample_ordinal));
+      iree_host_size_t case_sample_ordinal = 0;
+      if (loom_testbench_case_sample_flatten(
+              selection->case_plan,
+              loom_testbench_benchmark_case_sample(
+                  selection->benchmark_plan,
+                  sample_ref->benchmark_sample_ordinal),
+              &case_sample_ordinal)) {
+        IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+            &sample, IREE_SV("case_sample_ordinal"), case_sample_ordinal));
+      }
       IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
           &sample, IREE_SV("capture_index"), sample_ref->capture_index));
       IREE_RETURN_IF_ERROR(loom_json_object_end(&sample));

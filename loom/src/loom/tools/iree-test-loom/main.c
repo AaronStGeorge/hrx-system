@@ -628,8 +628,9 @@ static iree_status_t iree_test_loom_run_case_samples(
        iree_status_is_ok(status) && sample_ordinal < end_sample;
        ++sample_ordinal) {
     loom_testbench_case_sample_result_t sample_result = {0};
-    status = loom_testbench_run_case_sample(&executor, sample_ordinal,
-                                            &sample_result);
+    status = loom_testbench_run_case_sample(
+        &executor, (loom_testbench_case_sample_t){.ordinal = sample_ordinal},
+        sample_ordinal, &sample_result);
     if (iree_status_is_ok(status)) {
       iree_test_loom_capture_expectation_report(
           diagnostic_capture, sample_result.expectation_report);

@@ -70,14 +70,12 @@ static iree_status_t iree_benchmark_loom_validate_comparison_sample_parameters(
       baseline->selection->benchmark_plan->name;
   const iree_string_view_t candidate_name =
       candidate->selection->benchmark_plan->name;
-  const iree_host_size_t baseline_case_sample =
-      iree_benchmark_loom_case_sample_from_benchmark_sample(
-          baseline->selection->benchmark_plan, baseline_case,
-          baseline->begin_sample);
-  const iree_host_size_t candidate_case_sample =
-      iree_benchmark_loom_case_sample_from_benchmark_sample(
-          candidate->selection->benchmark_plan, candidate_case,
-          candidate->begin_sample);
+  loom_testbench_case_sample_t baseline_case_sample =
+      loom_testbench_benchmark_case_sample(baseline->selection->benchmark_plan,
+                                           baseline->begin_sample);
+  loom_testbench_case_sample_t candidate_case_sample =
+      loom_testbench_benchmark_case_sample(candidate->selection->benchmark_plan,
+                                           candidate->begin_sample);
   if (baseline_case->parameter_count != candidate_case->parameter_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -127,11 +125,11 @@ static iree_status_t iree_benchmark_loom_validate_comparison_sample_parameters(
     }
 
     const iree_host_size_t baseline_parameter_sample =
-        loom_testbench_case_sample_parameter_ordinal(
-            baseline_case, baseline_case_sample, parameter_index);
+        loom_testbench_case_sample_next(&baseline_case_sample,
+                                        baseline_parameter->sample_count);
     const iree_host_size_t candidate_parameter_sample =
-        loom_testbench_case_sample_parameter_ordinal(
-            candidate_case, candidate_case_sample, parameter_index);
+        loom_testbench_case_sample_next(&candidate_case_sample,
+                                        candidate_parameter->sample_count);
     loom_attribute_t baseline_value = loom_attr_absent();
     IREE_RETURN_IF_ERROR(loom_testbench_parameter_sample_value(
         baseline_parameter, baseline_parameter_sample, &baseline_value));

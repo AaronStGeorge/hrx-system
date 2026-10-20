@@ -131,7 +131,7 @@ can dominate the run. `--scenario-correctness=false` explicitly restores the
 default for benchmark suites. `iree-test-loom` remains the dedicated correctness
 tool.
 
-This flag applies to `check.scenario`, not legacy `check.case`. Case benchmarks
+This flag applies to `check.scenario`, not `check.case`. Case benchmarks
 retain their correctness preflight; `case_end_to_end` also includes reference
 calls and checks in the authored program being timed. Scenario subjects provide
 the separation needed for target-only model benchmarking.
@@ -160,6 +160,14 @@ iree-benchmark-loom program.loom \
   --sample=1 \
   --dry-run
 ```
+
+`--sample` indexes the benchmark's sweep after applying its assignments, with
+the first unassigned case parameter varying fastest. Pins do not consume a
+sweep dimension, and the sample cap limits selected work without restricting
+where those samples lie in the full case domain. Reports retain the exact
+parameter values and benchmark-local replay index even when that full
+Cartesian position exceeds the host's integer range; the optional global case
+index is then omitted.
 
 Concrete parameter values appear in the structured result, so reports can be
 joined by values rather than filename conventions. Executed HAL results also

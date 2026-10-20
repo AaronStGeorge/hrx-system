@@ -19,8 +19,6 @@ extern "C" {
 typedef struct loom_testbench_case_command_program_t {
   // Generated private command.program.def symbol.
   loom_symbol_ref_t root_ref;
-  // Authored case sample represented by the generated program.
-  iree_host_size_t sample_ordinal;
   // Case value IDs providing storage for command bindings in signature order.
   // Tensor aliases are represented by their ultimate authored storage root.
   // Storage is owned by the mutated module and remains valid until module free.
@@ -45,7 +43,7 @@ typedef struct loom_testbench_case_command_program_t {
 iree_status_t loom_testbench_case_command_program_build(
     loom_module_t* module, const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal,
+    loom_testbench_case_sample_t sample,
     loom_testbench_case_command_program_t* out_program);
 
 #ifdef __cplusplus

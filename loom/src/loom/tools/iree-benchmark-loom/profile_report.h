@@ -20,8 +20,8 @@ extern "C" {
 typedef struct iree_benchmark_loom_profile_replay_identity_t {
   // True when |scenario_coordinate| identifies the profiled work item.
   bool has_scenario_coordinate;
-  // Case sample ordinal used when |has_scenario_coordinate| is false.
-  iree_host_size_t case_sample_ordinal;
+  // Benchmark-local replay ordinal when |has_scenario_coordinate| is false.
+  iree_host_size_t benchmark_sample_ordinal;
   // Concrete scenario trial used when |has_scenario_coordinate| is true.
   loom_testbench_scenario_sample_coordinate_t scenario_coordinate;
 } iree_benchmark_loom_profile_replay_identity_t;

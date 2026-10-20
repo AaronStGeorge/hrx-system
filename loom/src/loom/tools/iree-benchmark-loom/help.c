@@ -69,7 +69,7 @@ void iree_benchmark_loom_print_agents_md(FILE* file) {
       "expectations or unhandled device errors then suppress its score.\n"
       "Use this opt-in for occasional validation or release gates; realistic\n"
       "model oracles can cost far more than the measured workload.\n"
-      "The flag does not change legacy `check.case` preflight or the full\n"
+      "The flag does not change `check.case` preflight or the full\n"
       "authored program timed by `case_end_to_end`.\n"
       "JSONL sample rows carry scenario observations in `trial_result`; "
       "snapshots\n"

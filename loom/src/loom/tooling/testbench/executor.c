@@ -104,7 +104,8 @@ void loom_testbench_case_executor_deinitialize(
 }
 
 iree_status_t loom_testbench_run_case_sample(
-    loom_testbench_case_executor_t* executor, iree_host_size_t sample_ordinal,
+    loom_testbench_case_executor_t* executor,
+    loom_testbench_case_sample_t sample, iree_host_size_t execution_index,
     loom_testbench_case_sample_result_t* out_result) {
   memset(out_result, 0, sizeof(*out_result));
 
@@ -119,11 +120,12 @@ iree_status_t loom_testbench_run_case_sample(
   }
 
   iree_status_t status = loom_testbench_materialize_case_sample(
-      &executor->materializer_options, case_plan, sample_ordinal,
+      &executor->materializer_options, case_plan, sample,
       &executor->value_table);
   if (iree_status_is_ok(status)) {
-    status = loom_testbench_run_case_invocations(
-        &executor->invocation_executor, sample_ordinal, &executor->value_table);
+    status = loom_testbench_run_case_invocations(&executor->invocation_executor,
+                                                 execution_index,
+                                                 &executor->value_table);
   }
   const bool has_sample_issues = iree_status_is_ok(status) &&
                                  executor->invocation_executor.issue_count != 0;
@@ -166,12 +168,12 @@ iree_status_t loom_testbench_run_case_sample(
   }
   if (!iree_status_is_ok(status)) {
     return iree_status_annotate_f(
-        status, "executing check.case '@%.*s' sample %" PRIhsz,
-        (int)case_plan->name.size, case_plan->name.data, sample_ordinal);
+        status, "executing check.case '@%.*s' selected sweep sample %" PRIhsz,
+        (int)case_plan->name.size, case_plan->name.data, sample.ordinal);
   }
 
   out_result->case_plan = case_plan;
-  out_result->sample_ordinal = sample_ordinal;
+  out_result->sample = sample;
   out_result->issues = executor->invocation_executor.issues;
   out_result->issue_count = executor->invocation_executor.issue_count;
   out_result->passed = !case_failed;
@@ -247,8 +249,12 @@ iree_status_t loom_testbench_case_sample_result_write_json(
   IREE_RETURN_IF_ERROR(loom_json_object_begin(stream, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("case"), result->case_plan->name));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
-      &object, IREE_SV("sample_ordinal"), result->sample_ordinal));
+  iree_host_size_t sample_ordinal = 0;
+  if (loom_testbench_case_sample_flatten(result->case_plan, result->sample,
+                                         &sample_ordinal)) {
+    IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+        &object, IREE_SV("sample_ordinal"), sample_ordinal));
+  }
   IREE_RETURN_IF_ERROR(loom_json_object_write_bool_field(
       &object, IREE_SV("passed"), result->passed));
   IREE_RETURN_IF_ERROR(
