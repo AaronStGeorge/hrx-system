@@ -170,20 +170,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_kernel_record_build_storage_layout(
-    const loom_low_storage_layout_t* source_layout,
-    iree_arena_allocator_t* arena, loom_amdgpu_storage_layout_t* out_layout) {
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_storage_layout_build(source_layout, arena, out_layout));
-  if (out_layout->segment_sizes.group_segment_fixed_size > UINT32_MAX ||
-      out_layout->segment_sizes.private_segment_fixed_size > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU kernel emission fixed segment sizes exceed metadata limits");
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
     const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_hal_kernel_abi_verify_result_t* abi_verify,
@@ -358,6 +344,7 @@ static iree_status_t loom_amdgpu_kernel_record_max_flat_workgroup_size(
 iree_status_t loom_amdgpu_kernel_record_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
+    const loom_amdgpu_storage_layout_t* storage_layout,
     const loom_amdgpu_kernel_record_options_t* options,
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena) {
@@ -405,10 +392,6 @@ iree_status_t loom_amdgpu_kernel_record_build(
     abi_layout = &derived_abi_layout;
   }
 
-  loom_amdgpu_storage_layout_t storage_layout = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build_storage_layout(
-      &schedule->requirements.storage_layout, scratch_arena, &storage_layout));
-
   const loom_target_bundle_t* bundle =
       loom_low_resolved_target_bundle(&schedule->target);
   const loom_target_hal_kernel_abi_t* hal_kernel =
@@ -444,7 +427,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
           descriptor_flags, &system_vgpr_workitem_id));
 
   const uint32_t private_segment_size =
-      (uint32_t)storage_layout.segment_sizes.private_segment_fixed_size;
+      (uint32_t)storage_layout->segment_sizes.private_segment_fixed_size;
   if (private_segment_size != 0) {
     descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT;
   }
@@ -511,7 +494,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
       .target_identity = target_facts->identity,
       .processor = processor,
       .entry_envelope = entry_envelope,
-      .storage_layout = storage_layout,
+      .storage_layout = *storage_layout,
       .metadata =
           {
               .name = symbol,
@@ -520,11 +503,12 @@ iree_status_t loom_amdgpu_kernel_record_build(
               .kernarg_segment_alignment =
                   abi_layout->kernarg_segment_alignment,
               .wavefront_size = wavefront_size,
-              .group_segment_fixed_size = (uint32_t)storage_layout.segment_sizes
-                                              .group_segment_fixed_size,
+              .group_segment_fixed_size =
+                  (uint32_t)
+                      storage_layout->segment_sizes.group_segment_fixed_size,
               .private_segment_fixed_size =
                   (uint32_t)
-                      storage_layout.segment_sizes.private_segment_fixed_size,
+                      storage_layout->segment_sizes.private_segment_fixed_size,
               .sgpr_count = next_free_sgpr,
               .vgpr_count = total_vgpr_count,
               .agpr_count = preflight->next_free_agpr,

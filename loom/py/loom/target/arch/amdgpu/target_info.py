@@ -54,6 +54,12 @@ AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125 = "gfx125"
 AMDGPU_KERNEL_ENTRY_PROFILE_NONE = "none"
 AMDGPU_KERNEL_ENTRY_PROFILE_INITIAL_VMEM_REPLAY = "initial_vmem_replay"
 
+# COMPUTE_TMPRING_SIZE.WAVESIZE field width and byte granularity. These limits
+# apply to the whole wave; per-workitem admission uses the selected wave size.
+AMDGPU_GFX9_MAX_WAVE_SCRATCH_BYTES = ((1 << 13) - 1) * 1024
+AMDGPU_GFX11_MAX_WAVE_SCRATCH_BYTES = ((1 << 15) - 1) * 256
+AMDGPU_GFX12_MAX_WAVE_SCRATCH_BYTES = ((1 << 18) - 1) * 256
+
 AMDGPU_MATRIX_FEATURE_PROFILE_NONE = "none"
 AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908 = "mfma_gfx908"
 AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A = "mfma_gfx90a"
@@ -612,6 +618,7 @@ class AmdgpuTargetSemantics:
 @dataclass(frozen=True, slots=True)
 class AmdgpuProcessorWavefrontInfo:
     default_size: int = 64
+    max_scratch_bytes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1107,6 +1114,7 @@ def processor_info(
     elf_feature_flags: int = 0,
     elf_generic_version: int = 0,
     default_wavefront_size: int = 64,
+    max_wave_scratch_bytes: int = 0,
     descriptor_set_key: str = "",
     kernel_descriptor: AmdgpuProcessorKernelDescriptorInfo = (
         AMDGPU_KERNEL_DESCRIPTOR_INFO_NONE
@@ -1139,7 +1147,10 @@ def processor_info(
             generic_version=elf_generic_version,
         ),
         target_id=amdgpu_processor_target_id_info(processor),
-        wavefront=AmdgpuProcessorWavefrontInfo(default_size=default_wavefront_size),
+        wavefront=AmdgpuProcessorWavefrontInfo(
+            default_size=default_wavefront_size,
+            max_scratch_bytes=max_wave_scratch_bytes,
+        ),
         kernel_descriptor=kernel_descriptor,
         kernel_entry=kernel_entry,
         instructions=instructions,
@@ -1200,6 +1211,7 @@ def rdna3_processor_info(
         elf_generic_version=elf_generic_version,
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA3_GFX11,
+        max_wave_scratch_bytes=AMDGPU_GFX11_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
         scheduling_bits=(
             scheduling_bits
@@ -1228,6 +1240,7 @@ def cdna3_processor_info(
         descriptor_set_key="amdgpu.cdna3.core",
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA_GFX9,
+        max_wave_scratch_bytes=AMDGPU_GFX9_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=matrix_feature_profile,
         scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
         max_workgroup_storage_bytes=AMDGPU_DEFAULT_MAX_WORKGROUP_STORAGE_BYTES,
@@ -1250,6 +1263,7 @@ def gfx115x_processor_info(
         elf_machine_flags=elf_machine_flags,
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA3_GFX11,
+        max_wave_scratch_bytes=AMDGPU_GFX11_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
         scheduling_bits=(
             AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR
@@ -1274,6 +1288,7 @@ def rdna4m_processor_info(
         elf_machine_flags=elf_machine_flags,
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA3_GFX11,
+        max_wave_scratch_bytes=AMDGPU_GFX11_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
         scheduling_bits=(
             AMDGPU_PROCESSOR_SCHEDULING_VALU_MASK_WRITE_DEPCTR
@@ -1304,6 +1319,7 @@ def rdna4_processor_info(
         elf_generic_version=elf_generic_version,
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX12,
+        max_wave_scratch_bytes=AMDGPU_GFX12_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
         scheduling_bits=(
             AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR
@@ -1342,6 +1358,7 @@ def gfx125x_processor_info(
         elf_generic_version=elf_generic_version,
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX125,
+        max_wave_scratch_bytes=AMDGPU_GFX12_MAX_WAVE_SCRATCH_BYTES,
         kernel_entry=AMDGPU_KERNEL_ENTRY_INFO_INITIAL_VMEM_REPLAY,
         instructions=instructions,
         matrix_feature_profile=matrix_feature_profile,
@@ -1630,6 +1647,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA2,
+        max_wave_scratch_bytes=AMDGPU_GFX9_MAX_WAVE_SCRATCH_BYTES,
         scheduling_bits=(
             AMDGPU_PROCESSOR_SCHEDULING_FIXED_DATA_WAIT_STATES
             | AMDGPU_PROCESSOR_SCHEDULING_VMEM_RESULT_WRITES_IN_ORDER
@@ -1653,6 +1671,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         descriptor_set_key="amdgpu.cdna4.core",
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA_GFX9,
+        max_wave_scratch_bytes=AMDGPU_GFX9_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
         scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
         max_workgroup_storage_bytes=AMDGPU_CDNA4_MAX_WORKGROUP_STORAGE_BYTES,
@@ -1792,6 +1811,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         elf_generic_version=generic_code_object_current_version("gfx9-4-generic"),
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA_GFX9,
+        max_wave_scratch_bytes=AMDGPU_GFX9_MAX_WAVE_SCRATCH_BYTES,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX9_4_GENERIC,
         scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
         max_workgroup_storage_bytes=AMDGPU_DEFAULT_MAX_WORKGROUP_STORAGE_BYTES,
@@ -2819,11 +2839,12 @@ def validate_amdgpu_generic_contracts(
                 "feature flags do not match the member intersection"
             )
         if any(
-            member.wavefront != generic_processor.wavefront for member in exact_members
+            member.wavefront.default_size != generic_processor.wavefront.default_size
+            for member in exact_members
         ):
             raise ValueError(
                 f"AMDGPU generic processor {generic_processor.processor} "
-                "wavefront facts do not match every member"
+                "default wavefront size does not match every member"
             )
         if any(
             member.kernel_descriptor != generic_processor.kernel_descriptor
@@ -2940,6 +2961,13 @@ def validate_amdgpu_generic_contracts(
             raise ValueError(
                 f"AMDGPU generic processor {generic_processor.processor} "
                 "workgroup storage does not match the portable minimum"
+            )
+        if generic_processor.wavefront.max_scratch_bytes != min(
+            member.wavefront.max_scratch_bytes for member in exact_members
+        ):
+            raise ValueError(
+                f"AMDGPU generic processor {generic_processor.processor} "
+                "wave scratch limit does not match the portable minimum"
             )
 
         for wave_size in (32, 64):

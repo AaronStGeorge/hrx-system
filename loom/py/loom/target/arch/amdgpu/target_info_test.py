@@ -47,6 +47,7 @@ from loom.target.arch.amdgpu.target_info import (
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
     AMDGPU_MATRIX_FEATURES_BY_PROFILE,
     AMDGPU_MEMORY_ORDERING_MODEL_GFX12,
+    AMDGPU_PROCESSOR_INFO_FLAG_HSACO_EMISSION,
     AMDGPU_PROCESSOR_INFOS,
     AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
     AMDGPU_PROCESSOR_SCHEDULING_TENSOR_ISSUE_DRAIN,
@@ -224,6 +225,21 @@ def test_descriptor_set_isa_xml_validation_rejects_mismatched_architecture() -> 
         validate_amdgpu_descriptor_set_isa_xml(
             amdgpu_descriptor_set_info_by_generator_target("rdna3"), spec
         )
+
+
+def test_native_processors_match_hardware_wave_scratch_limits() -> None:
+    # COMPUTE_TMPRING_SIZE encodings, also used by LLVM's
+    # GCNSubtarget::getMaxWaveScratchSize. GFX11.7 retains the GFX11 limit.
+    limits = {"gfx9": 8191 * 1024, "gfx11": 32767 * 256, "gfx12": 262143 * 256}
+    for info in AMDGPU_PROCESSOR_INFOS:
+        if not info.flags & AMDGPU_PROCESSOR_INFO_FLAG_HSACO_EMISSION:
+            continue
+        expected = next(
+            value
+            for prefix, value in limits.items()
+            if info.processor.startswith(prefix)
+        )
+        assert info.wavefront.max_scratch_bytes == expected, info.processor
 
 
 def test_rdna4m_processors_publish_gfx12_matrix_contracts() -> None:
@@ -476,6 +492,22 @@ def test_generic_contracts_are_portable_member_intersections() -> None:
     validate_amdgpu_generic_contracts(
         AMDGPU_PROCESSOR_INFOS, AMDGPU_DESCRIPTOR_SET_INFOS
     )
+
+
+def test_generic_contracts_reject_nonportable_wave_scratch_limit() -> None:
+    processors = tuple(
+        replace(
+            info,
+            wavefront=replace(
+                info.wavefront, max_scratch_bytes=info.wavefront.max_scratch_bytes + 256
+            ),
+        )
+        if info.processor == "gfx11-generic"
+        else info
+        for info in AMDGPU_PROCESSOR_INFOS
+    )
+    with _raises_value_error("wave scratch limit does not match the portable minimum"):
+        validate_amdgpu_generic_contracts(processors, AMDGPU_DESCRIPTOR_SET_INFOS)
 
 
 def test_generic_contracts_reject_nonportable_descriptor_flags() -> None:

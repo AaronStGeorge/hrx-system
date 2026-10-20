@@ -187,6 +187,7 @@ loom_check_test_suite(
     "test/packet.loom-test"
     "test/packet_json.loom-test"
     "test/permlane_swap.loom-test"
+    "test/private_segment_limit.loom-test"
     "test/register_banks.loom-test"
     "test/register_numbering.loom-test"
     "test/replay_clauses.loom-test"
@@ -513,6 +514,7 @@ loom_cc_library(
     ::kernel_record_build
     ::kernel_report
     ::preflight
+    ::storage_layout
     iree::base
     iree::base::internal::arena
     loom::codegen::low::diagnostics
@@ -521,6 +523,7 @@ loom_cc_library(
     loom::error::parameter
     loom::ir
     loom::target::arch::amdgpu::error_defs
+    loom::target::arch::amdgpu::facts
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::planning::occupancy
     loom::target::arch::amdgpu::refs::target_refs
