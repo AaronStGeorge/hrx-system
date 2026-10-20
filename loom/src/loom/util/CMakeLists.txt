@@ -293,6 +293,7 @@ loom_cc_library(
     "fact_extensions.h"
     "fact_identity.h"
     "fact_layout.h"
+    "fact_select_dependencies.h"
     "fact_table.h"
   DEPS
     ::numeric_format
@@ -330,6 +331,7 @@ loom_cc_library(
     "fact_loop.h"
     "fact_recurrence.h"
     "fact_relation.h"
+    "fact_select_dependencies.h"
     "fact_table.h"
     "fact_vector_partition.h"
     "reference_transfer.h"
@@ -342,6 +344,7 @@ loom_cc_library(
     "fact_loop.c"
     "fact_recurrence.c"
     "fact_relation.c"
+    "fact_select_dependencies.c"
     "fact_table.c"
     "fact_table_compute.c"
     "fact_vector_partition.c"
@@ -453,6 +456,21 @@ loom_cc_test(
     loom::ir
     loom::ops::index
     loom::ops::scalar
+)
+
+loom_cc_test(
+  NAME
+    fact_select_dependencies_test
+  SRCS
+    "fact_select_dependencies_test.cc"
+  DEPS
+    ::fact_table
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::index
+    loom::ops::scf
 )
 
 loom_cc_test(

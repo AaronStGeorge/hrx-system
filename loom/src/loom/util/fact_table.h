@@ -43,6 +43,7 @@
 #include "loom/util/fact_extensions.h"
 #include "loom/util/fact_identity.h"
 #include "loom/util/fact_layout.h"
+#include "loom/util/fact_select_dependencies.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -786,23 +787,6 @@ void loom_value_fact_table_pending_exact_relations(
 // pointer storage remains available for later incremental observations.
 void loom_value_fact_table_clear_pending_exact_relations(
     loom_value_fact_table_t* table);
-
-// Begins increasing-order iteration over select conditions transitively
-// controlling |value_id|. Returns the canonical set identity, or zero when
-// empty; identities may be compared within one fact-table scope. The cursor
-// and its results remain valid until the scope is cleared.
-loom_value_set_id_t loom_value_fact_table_select_dependencies_begin(
-    const loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_set_cursor_t* out_cursor);
-
-// Publishes the transitive select-condition summary for each result of |op|.
-// Operand summaries, scalar Boolean selector roles, and predicate-list value
-// references on fact identities contribute to the canonical result set.
-// Summary changes set |inout_changed| when non-NULL without clearing an
-// existing change.
-iree_status_t loom_value_fact_table_propagate_select_dependencies(
-    loom_value_fact_table_t* table, const loom_module_t* module,
-    const loom_op_t* op, const loom_op_vtable_t* vtable, bool* inout_changed);
 
 // Borrowed subset of a fact table. The table and value IDs must remain valid
 // while the view is consumed. Value IDs are unique and may name unset entries.
