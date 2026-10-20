@@ -513,6 +513,12 @@ static iree_status_t iree_hal_amd_gpu_allocation_allocate(
       .phase = phase,
       .count = count,
   };
+  if (phase == IREE_HAL_AMD_GPU_ALLOCATION_RELEASE) {
+    // The default acquire member has padding after its 32-bit result where
+    // release has the upper half of this count. Initialize the selected member
+    // before any fallible capture can invoke rollback.
+    operation->release.marked_count = 0;
+  }
   iree_hal_device_retain(operation->device);
   const iree_allocator_t allocator = iree_arena_allocator(&operation->arena);
   status = iree_hal_semaphore_list_clone(&waits, allocator, &operation->waits);
