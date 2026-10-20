@@ -12,6 +12,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/type_registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/provider.h"
 #include "loom/util/call_graph.h"
 #include "loom/util/reference_transfer.h"
 #include "loom/util/walk.h"
@@ -22,6 +23,9 @@ typedef struct loom_low_source_invocation_collect_t {
 
   // Complete call graph used to reject recursive callee boundaries.
   const loom_call_graph_t* call_graph;
+
+  // Exact target context deciding which semantic calls remain direct.
+  const loom_resolved_target_t* resolved_target;
 
   // Caller-local facts consumed while visiting call operands.
   const loom_value_fact_table_t* caller_facts;
@@ -113,6 +117,16 @@ static iree_status_t loom_low_source_invocation_collect_call(
   loom_func_like_t callee_function = {0};
   if (!loom_low_source_invocation_can_refine_callee(
           collect, loom_call_like_callee(call), &callee_function)) {
+    return iree_ok_status();
+  }
+  if (collect->resolved_target == NULL ||
+      loom_call_like_inline_policy(call) == LOOM_INLINE_POLICY_INLINE ||
+      loom_func_like_inline_policy(callee_function) !=
+          LOOM_INLINE_POLICY_NOINLINE ||
+      loom_target_provider_select_call_policy(
+          collect->resolved_target, collect->module,
+          LOOM_CALL_LIKE_KIND_SEMANTIC, call,
+          callee_function) != LOOM_TARGET_CALL_POLICY_DIRECT) {
     return iree_ok_status();
   }
 
@@ -210,6 +224,10 @@ iree_status_t loom_low_source_invocation_facts_compute(
       const loom_low_source_selection_t* selection =
           loom_low_source_invocation_find_selection(
               selections_by_symbol, module->symbols.count, node->symbol_id);
+      const loom_target_function_version_t* target_version =
+          selection ? loom_target_function_version_const_cast(
+                          selection->version_handle)
+                    : NULL;
       const loom_target_facts_t* target_facts =
           selection ? selection->target_facts : NULL;
       loom_pass_value_fact_scope_t scope =
@@ -234,6 +252,8 @@ iree_status_t loom_low_source_invocation_facts_compute(
         loom_low_source_invocation_collect_t collect = {
             .module = module,
             .call_graph = &call_graph,
+            .resolved_target =
+                target_version ? &target_version->resolved_target : NULL,
             .caller_facts = caller_facts,
             .outgoing_facts = &outgoing_facts,
         };
@@ -267,6 +287,10 @@ loom_value_fact_table_view_t loom_low_source_invocation_facts_for_function(
   uint16_t argument_count = 0;
   const loom_value_id_t* arguments =
       loom_func_like_arg_ids(function, &argument_count);
+  if (argument_count == 0 ||
+      !loom_value_fact_table_has_entry(&facts->arguments, arguments[0])) {
+    return (loom_value_fact_table_view_t){0};
+  }
   return (loom_value_fact_table_view_t){
       .table = &facts->arguments,
       .value_ids = arguments,

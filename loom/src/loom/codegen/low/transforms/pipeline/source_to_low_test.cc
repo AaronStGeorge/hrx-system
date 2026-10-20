@@ -19,6 +19,7 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/transforms/allocation.h"
 #include "loom/codegen/low/transforms/dce.h"
+#include "loom/codegen/low/transforms/pipeline/source_invocation_facts.h"
 #include "loom/codegen/pass_environment.h"
 #include "loom/error/error_catalog.h"
 #include "loom/format/text/parser.h"
@@ -384,11 +385,111 @@ class LowLowerPassTest : public ::testing::Test {
     return loom_module_find_symbol(module, name_id) != LOOM_SYMBOL_ID_INVALID;
   }
 
+  void CheckSourceInvocationArgumentFacts(
+      iree_string_view_t source,
+      loom_target_select_call_policy_fn_t select_call_policy,
+      bool expect_argument_facts) {
+    ModulePtr module = Parse(source);
+    const loom_symbol_ref_t caller_ref =
+        FindSymbolRef(module.get(), IREE_SV("caller"));
+    const loom_symbol_ref_t helper_ref =
+        FindSymbolRef(module.get(), IREE_SV("helper"));
+    const loom_func_like_t caller = loom_func_like_cast(
+        module.get(),
+        module->symbols.entries[caller_ref.symbol_id].defining_op);
+    const loom_func_like_t helper = loom_func_like_cast(
+        module.get(),
+        module->symbols.entries[helper_ref.symbol_id].defining_op);
+
+    const loom_target_provider_t provider = {
+        .select_call_policy = select_call_policy,
+    };
+    const loom_target_facts_t resolved_facts = {};
+    loom_target_function_version_t caller_version = {};
+    caller_version.base.type = &loom_target_function_version_type;
+    caller_version.base.function = caller;
+    caller_version.resolved_target = {
+        .provider = &provider,
+        .facts = &resolved_facts,
+    };
+    loom_low_source_selection_t selection = {
+        .kind = LOOM_LOW_SOURCE_SELECTION_FUNCTION,
+        .func = caller,
+        .version_handle = &caller_version.base,
+    };
+    const loom_low_source_selection_list_t selections = {
+        .values = &selection,
+        .count = 1,
+    };
+
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+    loom_pass_t pass = {
+        .value_facts = &value_facts,
+    };
+    loom_low_source_invocation_facts_t invocation_facts = {};
+    IREE_ASSERT_OK(loom_low_source_invocation_facts_compute(
+        &pass, module.get(), &selections, &arena, &invocation_facts));
+
+    const loom_value_fact_table_view_t helper_facts =
+        loom_low_source_invocation_facts_for_function(&invocation_facts,
+                                                      helper);
+    EXPECT_EQ(helper_facts.value_count, expect_argument_facts ? 1u : 0u);
+    if (expect_argument_facts) {
+      uint16_t argument_count = 0;
+      const loom_value_id_t* arguments =
+          loom_func_like_arg_ids(helper, &argument_count);
+      ASSERT_EQ(argument_count, 1u);
+      const loom_value_facts_t facts =
+          loom_value_fact_table_lookup(helper_facts.table, arguments[0]);
+      EXPECT_EQ(facts.range_lo, 7);
+      EXPECT_EQ(facts.range_hi, 7);
+    }
+
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
+    iree_arena_deinitialize(&arena);
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
   loom_low_lower_policy_registry_t policy_registry_ = {};
 };
+
+TEST_F(LowLowerPassTest, InvocationFactsRequireExplicitDirectHelper) {
+  CheckSourceInvocationArgumentFacts(
+      IREE_SV("func.def noinline @helper(%value: i32) {\n"
+              "  func.return\n"
+              "}\n"
+              "func.def @caller() {\n"
+              "  %value = scalar.constant 7 : i32\n"
+              "  func.call @helper(%value) : (i32)\n"
+              "  func.return\n"
+              "}\n"),
+      loom_target_select_call_policy_direct, true);
+  CheckSourceInvocationArgumentFacts(
+      IREE_SV("func.def @helper(%value: i32) {\n"
+              "  func.return\n"
+              "}\n"
+              "func.def @caller() {\n"
+              "  %value = scalar.constant 7 : i32\n"
+              "  func.call @helper(%value) : (i32)\n"
+              "  func.return\n"
+              "}\n"),
+      loom_target_select_call_policy_direct, false);
+  CheckSourceInvocationArgumentFacts(
+      IREE_SV("func.def noinline @helper(%value: i32) {\n"
+              "  func.return\n"
+              "}\n"
+              "func.def @caller() {\n"
+              "  %value = scalar.constant 7 : i32\n"
+              "  func.call @helper(%value) : (i32)\n"
+              "  func.return\n"
+              "}\n"),
+      RequireInlineSemanticCalls, false);
+}
 
 TEST_F(LowLowerPassTest, SourceSelectionUsesPerFunctionTargetFacts) {
   ModulePtr module = Parse(IREE_SV(

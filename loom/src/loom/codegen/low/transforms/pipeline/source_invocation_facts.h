@@ -29,10 +29,12 @@ typedef struct loom_low_source_invocation_facts_t {
 // Modules without semantic calls return an empty summary without allocating or
 // walking IR; the module maintains that inventory as operations mutate.
 //
-// Every semantic caller participates in each callee argument meet. Exported
-// and recursive callees retain their declared argument domains. Selected
-// functions use their exact target facts while computing caller-local facts;
-// unselected callers use target-independent inference.
+// Every retained direct semantic caller of an explicit noinline helper
+// participates in each callee argument meet. Ordinary callees retain their
+// authored argument domains; target-required inline edges consume caller facts
+// after inlining. Exported and recursive callees also retain their declared
+// argument domains. Selected functions use their exact target facts while
+// computing caller-local facts.
 iree_status_t loom_low_source_invocation_facts_compute(
     loom_pass_t* pass, loom_module_t* module,
     const loom_low_source_selection_list_t* selections,

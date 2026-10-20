@@ -25,6 +25,7 @@ loom_cc_library(
     loom::ops::type_registry
     loom::pass::types
     loom::pass::value_facts
+    loom::target::provider
     loom::util::call_graph
     loom::util::fact_table
     loom::util::walk
@@ -116,6 +117,7 @@ loom_cc_test(
   SRCS
     "source_to_low_test.cc"
   DEPS
+    ::source_invocation_facts
     ::source_to_low
     iree::base::internal::arena
     iree::testing::gtest

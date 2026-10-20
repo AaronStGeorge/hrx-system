@@ -27,6 +27,7 @@ loom_cc_library(
         "//loom/src/loom/ops:type_registry",
         "//loom/src/loom/pass:types",
         "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/util:call_graph",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:walk",
@@ -116,6 +117,7 @@ loom_cc_test(
     name = "source_to_low_test",
     srcs = ["source_to_low_test.cc"],
     deps = [
+        ":source_invocation_facts",
         ":source_to_low",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen:pass_environment",
