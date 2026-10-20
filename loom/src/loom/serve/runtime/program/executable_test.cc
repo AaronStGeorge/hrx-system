@@ -162,23 +162,25 @@ TEST_P(ExecutableTest, FailedImageLoadsAreNotRetainedAndCanRetireCache) {
     IREE_ASSERT_OK(iree_allocator_clone(
         host_allocator_, iree_make_const_byte_span(invalid, sizeof(invalid)),
         &data));
-    loom_serve_executable_request_t request = {};
-    request.image = iree_make_const_byte_span(data, sizeof(invalid));
-    request.user_data = &completion;
-    request.completion = [](void* user_data, iree_status_t status,
-                            loom_serve_executable_t* executable) {
-      auto* completion = static_cast<Completion*>(user_data);
-      EXPECT_FALSE(iree_status_is_ok(status));
-      iree_status_ignore(status);
-      EXPECT_EQ(executable, nullptr);
-      loom_serve_executable_release(executable);
-      EXPECT_EQ(loom_serve_executable_cache_storage(completion->cache).count,
-                0u);
-      if (completion->retire) {
-        loom_serve_executable_cache_free(completion->cache);
-        completion->cache = nullptr;
-      }
-      completion->completed = true;
+    loom_serve_executable_request_t request = {
+        .image = iree_make_const_byte_span(data, sizeof(invalid)),
+        .completion =
+            [](void* user_data, iree_status_t status,
+               loom_serve_executable_t* executable) {
+              auto* completion = static_cast<Completion*>(user_data);
+              IREE_EXPECT_NOT_OK(status);
+              EXPECT_EQ(executable, nullptr);
+              loom_serve_executable_release(executable);
+              EXPECT_EQ(
+                  loom_serve_executable_cache_storage(completion->cache).count,
+                  0u);
+              if (completion->retire) {
+                loom_serve_executable_cache_free(completion->cache);
+                completion->cache = nullptr;
+              }
+              completion->completed = true;
+            },
+        .user_data = &completion,
     };
     loom_serve_executable_cache_load(completion.cache, &request);
     EXPECT_TRUE(completion.completed);
