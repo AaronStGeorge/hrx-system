@@ -108,7 +108,7 @@ TEST(BpeReference, CompleteMergeOrderFamily) {
                         ""};
   std::vector<std::string> inputs;
   for (size_t length = 1; length <= 7; ++length) {
-    for (size_t pattern = 0; pattern < (1u << length); ++pattern) {
+    for (size_t pattern = 0; pattern < (size_t{1} << length); ++pattern) {
       std::string text(length, 'a');
       for (size_t i = 0; i < length; ++i) {
         text[i] += (pattern >> i) & 1;
