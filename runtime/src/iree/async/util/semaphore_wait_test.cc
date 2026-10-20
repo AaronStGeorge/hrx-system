@@ -111,13 +111,16 @@ class SemaphoreWaitTest : public ::testing::Test {
   Wait MakeWait(iree_host_size_t count, iree_async_semaphore_t** semaphores,
                 uint64_t* values,
                 iree_async_wait_mode_t mode = IREE_ASYNC_WAIT_MODE_ALL) {
-    Wait wait;
-    wait.context = &context_;
-    wait.operation.count = count;
-    wait.operation.semaphores = semaphores;
-    wait.operation.values = values;
-    wait.operation.mode = mode;
-    return wait;
+    return Wait{
+        .context = &context_,
+        .operation =
+            {
+                .semaphores = semaphores,
+                .values = values,
+                .count = count,
+                .mode = mode,
+            },
+    };
   }
 
   // Platform service required by real semaphores; no polling thread is started.
@@ -272,8 +275,8 @@ TEST_F(SemaphoreWaitTest, CompletionCanFreeEnclosingOperation) {
 TEST_F(SemaphoreWaitTest, ConcurrentSignalAndCancellationJoinAllBorrowers) {
   std::array semaphores = {Semaphore(), Semaphore()};
   std::barrier<> start(3);
-  Wait wait;
-  std::array<uint64_t, 2> values;
+  std::array<uint64_t, 2> values = {};
+  auto wait = MakeWait(values.size(), semaphores.data(), values.data());
   constexpr uint64_t kIterations = 256;
   std::thread producer([&] {
     for (uint64_t i = 1; i <= kIterations; ++i) {
@@ -293,11 +296,10 @@ TEST_F(SemaphoreWaitTest, ConcurrentSignalAndCancellationJoinAllBorrowers) {
   });
   for (uint64_t i = 1; i <= kIterations; ++i) {
     values = {i, i};
-    wait = MakeWait(values.size(), semaphores.data(), values.data());
     IREE_CHECK_OK(wait.Begin());
     start.arrive_and_wait();
     start.arrive_and_wait();
-    EXPECT_EQ(wait.completions, 1u);
+    EXPECT_EQ(wait.completions, i);
     EXPECT_TRUE(wait.code == IREE_STATUS_OK ||
                 wait.code == IREE_STATUS_CANCELLED);
     EXPECT_EQ(wait.tracker, nullptr);
