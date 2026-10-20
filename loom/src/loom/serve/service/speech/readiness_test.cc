@@ -136,7 +136,12 @@ class SpeechReadinessTest : public ::testing::Test {
               *frontier = loom_serve_execution_frontier(test->execution_);
               return iree_ok_status();
             },
-        .complete_admit = [](void*, void*) { return true; },
+        .complete_admit =
+            [](void* self, void*) {
+              auto* test = static_cast<SpeechReadinessTest*>(self);
+              ++test->admission_completions_;
+              return test->state_admission_;
+            },
         .prepare_work =
             [](void*, void*, loom_serve_speech_work_t* out) {
               *out = {.units = 1, .tag = 0};
@@ -509,6 +514,11 @@ class SpeechReadinessTest : public ::testing::Test {
   uint64_t held_block_ = 0;
   // Minimum cohort size importing the held dependency.
   size_t held_members_ = 1;
+  // Dependency result changed only between manually driven owner turns.
+  loom_serve_memory_admission_t state_admission_ =
+      LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
+  // Owner-only completion count, including unchanged readiness frontiers.
+  size_t admission_completions_ = 0;
   // Model-owned rows; terminal failures leave them here for actual teardown.
   std::array<std::unique_ptr<loom_serve_test_speech_invocation_t>, 4>
       invocations_;
@@ -631,6 +641,35 @@ TEST_P(SpeechOutputFailureTest, FailureBeforeFirstAudioReturnsJson) {
 
 INSTANTIATE_TEST_SUITE_P(SourceAndEncoding, SpeechOutputFailureTest,
                          ::testing::Bool());
+
+TEST_F(SpeechReadinessTest,
+       DeferredStateAdmissionRetainsRequestUntilCapacityReturns) {
+  ASSERT_NO_FATAL_FAILURE(Initialize(3, 1, UINT64_MAX, 1, 1, false));
+  state_admission_ = LOOM_SERVE_MEMORY_ADMISSION_DEFERRED;
+  loom_serve::testing::HttpClient client;
+  IREE_ASSERT_OK(Send(&client));
+  loom_serve_http_connection_t* connection = nullptr;
+  const loom_serve_http_request_t* request = nullptr;
+  IREE_ASSERT_OK(http_.TakeRequest(client.get(), &connection, &request));
+  IREE_ASSERT_OK(actual_.accept(actual_.self, connection, request, 0));
+
+  // Consume the initial frontier, then retry with an unchanged frontier. A
+  // completed native release may have no pending work left to query, but the
+  // original DEFERRED result still preserves this request for its owner turn.
+  ASSERT_NO_FATAL_FAILURE(
+      AdvanceUntil([&] { return admission_completions_ >= 2; }));
+  ASSERT_EQ(actual_.telemetry.counters->rejected, 0u);
+  EXPECT_EQ(actual_.telemetry.counters->completed, 0u);
+  EXPECT_EQ(submitted_.load(), 0u);
+
+  state_admission_ = LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] { return released_.load() == 1; }));
+  std::string response;
+  IREE_ASSERT_OK(http_.Read(client.release(), false, &response));
+  CheckPcm(response, 3);
+  EXPECT_EQ(actual_.telemetry.counters->completed, 1u);
+  EXPECT_EQ(actual_.telemetry.counters->rejected, 0u);
+}
 
 TEST_F(SpeechReadinessTest, NativePressureMovesOnlyAcceptedInput) {
   ASSERT_NO_FATAL_FAILURE(Initialize(3, 1, 0, 1, 1, false));

@@ -121,6 +121,8 @@ struct loom_serve_text_row_t {
   loom_serve_text_state_row_t* state;
   // Whether the latest completed work selected a token at the current position.
   bool has_prediction;
+  // State admission observed by submit_reserve, retained through its frontier.
+  loom_serve_memory_admission_t reservation_admission;
   // Completed stage counts and end-to-end host durations.
   loom_serve_text_metrics_t metrics;
   // Single-row publication facts, owned until successful complete_step.
@@ -1058,11 +1060,10 @@ iree_status_t loom_serve_text_row_submit_reserve(
   }
   // Even state-capacity denial retains the activation pin until completion.
   // Cancellation likewise leaves this operation intact until it retires.
-  bool reserved = false;
   IREE_RETURN_IF_ERROR(loom_serve_text_state_row_submit_reserve(
       row->state, mode, checkpoint ? checkpoint->state : NULL, extent,
-      &reserved));
-  if (reserved) {
+      &row->reservation_admission));
+  if (row->reservation_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
     if (mode == LOOM_SERVE_TEXT_RESERVE_FRESH) {
       row->has_prediction = false;
       memset(&row->transfer, 0, sizeof(row->transfer));
@@ -1081,16 +1082,17 @@ iree_status_t loom_serve_text_row_submit_reserve(
   return iree_ok_status();
 }
 
-bool loom_serve_text_row_complete_reserve(loom_serve_text_row_t* row) {
-  const bool admitted = loom_serve_text_state_row_complete_reserve(row->state);
-  if (admitted) {
+loom_serve_memory_admission_t loom_serve_text_row_complete_reserve(
+    loom_serve_text_row_t* row) {
+  loom_serve_text_state_row_complete_reserve(row->state);
+  if (row->reservation_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
     loom_serve_residency_cancel_admission(row->model->residency);
   } else {
     // Activation retired, but this request still owns its FIFO turn while
     // waiting for mutable backing. A younger model must not steal that turn.
     loom_serve_residency_release(row->model->residency);
   }
-  return admitted;
+  return row->reservation_admission;
 }
 
 iree_status_t loom_serve_text_row_try_reserve(
@@ -1108,7 +1110,8 @@ iree_status_t loom_serve_text_row_try_reserve(
                             loom_serve_execution_drain(row->model->execution));
   if (iree_status_is_ok(status) &&
       admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
-    *out_admitted = loom_serve_text_row_complete_reserve(row);
+    *out_admitted = loom_serve_text_row_complete_reserve(row) ==
+                    LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   }
   return status;
 }

@@ -134,10 +134,11 @@ TEST_F(RelocationTest, RepeatedPlanesCrossBatchAndAddressBoundaries) {
   loom_serve_memory_operation_t* commitment = nullptr;
   {
     loom_serve::testing::ScopedNativeHold gate(device);
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, ranges.size(), ranges.data(), ready, 1, &admitted, &commitment));
-    ASSERT_TRUE(admitted);
+        pool, ranges.size(), ranges.data(), ready, 1, &commit_admission,
+        &commitment));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     ASSERT_NE(commitment, nullptr);
     gate.WaitEntered();
     uint64_t value = 1;

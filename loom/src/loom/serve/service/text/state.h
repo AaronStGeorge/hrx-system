@@ -279,16 +279,16 @@ iree_status_t loom_serve_text_state_row_try_restore(
 // before any initialization or restore. All maps and backing survive until
 // completion, including the native borrower after failed queue readiness.
 // CONTINUE may replace an active reservation while retaining its exact
-// frontier. out_reserved distinguishes admission from an unchanged earlier
-// reservation.
+// frontier. AVAILABLE distinguishes admission from an unchanged earlier
+// reservation. DEFERRED preserves observed physical progress independently of
+// later collection; logical page exhaustion reports CAPACITY.
 iree_status_t loom_serve_text_state_row_submit_reserve(
     loom_serve_text_state_row_t* row, loom_serve_text_reserve_mode_t mode,
     loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
-    bool* out_reserved);
+    loom_serve_memory_admission_t* out_admission);
 // After successful readiness, releases the copied tail source. The recurrent
-// reader survives until the first epoch or cancellation. False denotes state
-// capacity denial, not a transfer failure.
-bool loom_serve_text_state_row_complete_reserve(
+// reader survives until the first epoch or cancellation.
+void loom_serve_text_state_row_complete_reserve(
     loom_serve_text_state_row_t* row);
 // Returns unused page credit at a retired boundary, preserving the consumed
 // frontier even when a reserved fork was never advanced.

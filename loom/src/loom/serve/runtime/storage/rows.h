@@ -78,12 +78,13 @@ iree_hal_buffer_t* loom_serve_rows_buffer(const loom_serve_rows_t* state,
 
 // At a retired model cut, admits one unowned row and the conditioning bank in
 // one physical commitment transaction. Parameter pins already protect needed
-// weights. A false result owns no row and commits no new destination backing.
+// weights. CAPACITY/DEFERRED own no row and commit no new destination backing;
+// DEFERRED preserves observed native progress through later readiness queries.
 // Mapping readiness precedes initialization on the model execution timeline.
 // Actual platform failures retain any partial backing for terminal teardown.
-iree_status_t loom_serve_rows_try_reserve(loom_serve_rows_t* state,
-                                          iree_host_size_t row_index,
-                                          bool* out_reserved);
+iree_status_t loom_serve_rows_try_reserve(
+    loom_serve_rows_t* state, iree_host_size_t row_index,
+    loom_serve_memory_admission_t* out_admission);
 
 // Joins a native backing change after successful model readiness, or a no-op.
 void loom_serve_rows_complete_backing(loom_serve_rows_t* state);

@@ -71,11 +71,12 @@ iree_hal_buffer_t* loom_serve_rows_buffer(const loom_serve_rows_t* state,
   return state->buffers[index];
 }
 
-iree_status_t loom_serve_rows_try_reserve(loom_serve_rows_t* state,
-                                          iree_host_size_t row_index,
-                                          bool* out_reserved) {
-  *out_reserved = false;
-  bool reserved = true;
+iree_status_t loom_serve_rows_try_reserve(
+    loom_serve_rows_t* state, iree_host_size_t row_index,
+    loom_serve_memory_admission_t* out_admission) {
+  *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
+  loom_serve_memory_admission_t admission =
+      LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   if (state->pool) {
     loom_serve_memory_range_t ranges[LOOM_SERVE_ROWS_BUFFER_COUNT];
     for (iree_host_size_t i = 0; i < LOOM_SERVE_ROWS_BUFFER_COUNT; ++i) {
@@ -90,15 +91,15 @@ iree_status_t loom_serve_rows_try_reserve(loom_serve_rows_t* state,
     IREE_ASSERT(!state->backing.operation);
     IREE_RETURN_IF_ERROR(loom_serve_memory_pool_commit_async(
         state->pool, IREE_ARRAYSIZE(ranges), ranges, state->backing.semaphore,
-        state->backing.value + 1, &reserved, &state->backing.operation));
-    if (reserved) {
+        state->backing.value + 1, &admission, &state->backing.operation));
+    if (admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       ++state->backing.value;
     }
   }
-  if (reserved) {
+  if (admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
     state->rows[row_index] = true;
   }
-  *out_reserved = reserved;
+  *out_admission = admission;
   if (state->backing.operation) {
     return loom_serve_execution_barrier(
         state->execution,

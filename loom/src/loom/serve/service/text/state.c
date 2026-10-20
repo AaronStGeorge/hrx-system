@@ -147,12 +147,13 @@ iree_status_t loom_serve_text_state_allocate(
     }
   }
   if (iree_status_is_ok(status) && commitment_count) {
-    bool admitted = false;
+    loom_serve_memory_admission_t admission;
     status = loom_serve_memory_pool_commit_async(
         state->memory.pool, commitment_count, commitments,
         state->memory.backing.semaphore, state->memory.backing.value + 1,
-        &admitted, &state->memory.backing.operation);
-    if (iree_status_is_ok(status) && !admitted) {
+        &admission, &state->memory.backing.operation);
+    if (iree_status_is_ok(status) &&
+        admission != LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                 "physical pool cannot back private text state");
     }
@@ -492,10 +493,12 @@ static iree_status_t loom_serve_text_try_back_compaction(
           ranges[i].length};
     }
     IREE_ASSERT(!state->memory.backing.operation);
+    loom_serve_memory_admission_t admission;
     status = loom_serve_memory_pool_commit_async(
         state->memory.pool, range_count, commitments,
         state->memory.backing.semaphore, state->memory.backing.value + 1,
-        out_admitted, &state->memory.backing.operation);
+        &admission, &state->memory.backing.operation);
+    *out_admitted = admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
     if (*out_admitted) {
       ++state->memory.backing.value;
     }
@@ -996,13 +999,15 @@ iree_status_t loom_serve_text_state_row_submit_pin(
   // Sharing a reserved writer cannot defer COW admission to the next epoch.
   // The normal reservation planner preserves its unused private pages and
   // either backs the complete continuation or leaves the original row intact.
-  bool reserved = true;
+  loom_serve_memory_admission_t admission =
+      LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   iree_status_t status = iree_ok_status();
   if (row->reserved_extent) {
     status = loom_serve_text_state_row_submit_reserve(
         row, LOOM_SERVE_TEXT_RESERVE_CONTINUE, NULL, row->reserved_extent,
-        &reserved);
+        &admission);
   }
+  const bool reserved = admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   if (iree_status_is_ok(status) && !reserved) {
     loom_serve_text_state_checkpoint_release(checkpoint);
   } else if (iree_status_is_ok(status)) {
@@ -1367,8 +1372,8 @@ static void loom_serve_text_release_reverse(loom_serve_block_pool_t* pool,
 iree_status_t loom_serve_text_state_row_submit_reserve(
     loom_serve_text_state_row_t* row, loom_serve_text_reserve_mode_t mode,
     loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
-    bool* out_reserved) {
-  *out_reserved = false;
+    loom_serve_memory_admission_t* out_admission) {
+  *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
   loom_serve_text_state_t* state = row->owner;
   loom_serve_text_complete_backing(state);
   const iree_host_size_t index = (iree_host_size_t)(row - state->rows);
@@ -1496,7 +1501,8 @@ iree_status_t loom_serve_text_state_row_submit_reserve(
         state->host_allocator, range_count + restore_count,
         sizeof(*commitments), (void**)&commitments);
   }
-  bool admitted = !state->memory.pool;
+  loom_serve_memory_admission_t admission =
+      LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   if (iree_status_is_ok(status) && state->memory.pool) {
     iree_host_size_t commitment_count = 0;
     for (iree_host_size_t i = 0; i < range_count + restore_count; ++i) {
@@ -1513,15 +1519,16 @@ iree_status_t loom_serve_text_state_row_submit_reserve(
     status = loom_serve_memory_pool_commit_async(
         state->memory.pool, commitment_count, commitments,
         state->memory.backing.semaphore, state->memory.backing.value + 1,
-        &admitted, &state->memory.backing.operation);
-    if (admitted) {
+        &admission, &state->memory.backing.operation);
+    if (admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       ++state->memory.backing.value;
     }
   }
   // From here ordinary denial is impossible. Transfer/platform failure is
   // terminal and the installed owners retain every accepted-work resource.
   bool installed = false;
-  if (iree_status_is_ok(status) && admitted) {
+  if (iree_status_is_ok(status) &&
+      admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
     loom_serve_text_state_row_reset(row);
     if (cold) {
       checkpoint->recurrent_slot = restored.recurrent_slot;
@@ -1622,11 +1629,13 @@ iree_status_t loom_serve_text_state_row_submit_reserve(
   iree_allocator_free(state->host_allocator, restore_ranges);
   iree_allocator_free(state->host_allocator, ranges);
   iree_allocator_free(state->host_allocator, blocks);
-  *out_reserved = installed;
+  if (iree_status_is_ok(status)) {
+    *out_admission = admission;
+  }
   return status;
 }
 
-bool loom_serve_text_state_row_complete_reserve(
+void loom_serve_text_state_row_complete_reserve(
     loom_serve_text_state_row_t* row) {
   loom_serve_text_state_t* state = row->owner;
   loom_serve_text_complete_backing(state);
@@ -1635,7 +1644,6 @@ bool loom_serve_text_state_row_complete_reserve(
                                   &row->retiring_tail);
     row->retiring_tail = UINT32_MAX;
   }
-  return row->reserved_extent != 0;
 }
 
 // The whole epoch has passed its capacity check. Publish only newly assigned

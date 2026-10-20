@@ -11,6 +11,7 @@ import http.client
 import json
 import struct
 import tempfile
+import traceback
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -399,8 +400,10 @@ def run_from_command_line(cases):
                     memory_bytes,
                     retention,
                 )
-            except AssertionError as error:
-                failures.append((workers, memory_bytes, retention, str(error)))
+            except AssertionError:
+                failures.append(
+                    (workers, memory_bytes, retention, traceback.format_exc())
+                )
     assert not failures, failures
 
 

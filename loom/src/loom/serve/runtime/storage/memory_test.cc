@@ -506,10 +506,10 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     loom_serve::testing::ScopedNativeHold hold(native,
                                                IREE_ALLOCATOR_COMMAND_CALLOC);
     const loom_serve_memory_range_t range = {second, 0, kSlabSize};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &range, nullptr, 0, &admitted, &operation));
-    ASSERT_TRUE(admitted);
+        pool, 1, &range, nullptr, 0, &commit_admission, &operation));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     hold.WaitEntered();
     // No consumers remain on first. Its checked detach returns a regular
     // slab while the independent cold acquisition still owns pending capacity.
@@ -587,15 +587,15 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     loom_serve::testing::ScopedNativeHold hold(native,
                                                IREE_ALLOCATOR_COMMAND_CALLOC);
     const loom_serve_memory_range_t failed = {first, 0, failed_bytes};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &failed, nullptr, 0, &admitted, &operations[0]));
-    ASSERT_TRUE(admitted);
+        pool, 1, &failed, nullptr, 0, &commit_admission, &operations[0]));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     hold.WaitEntered();
     const loom_serve_memory_range_t growth = {second, 0, bulk.slab_size};
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &growth, nullptr, 0, &admitted, &operations[1]));
-    ASSERT_TRUE(admitted);
+        pool, 1, &growth, nullptr, 0, &commit_admission, &operations[1]));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
 
     // A complete cohort is admitted before its separate read windows commit
     // backing. Both unrelated operations still own accepted capacity here.
@@ -622,8 +622,9 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     };
     for (size_t i = 0; i < IREE_ARRAYSIZE(windows); ++i) {
       IREE_EXPECT_OK(loom_serve_memory_pool_commit_async(
-          pool, 1, windows + i, nullptr, 0, &admitted, &operations[i + 2]));
-      EXPECT_TRUE(admitted);
+          pool, 1, windows + i, nullptr, 0, &commit_admission,
+          &operations[i + 2]));
+      EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     }
     IREE_ASSERT_OK(loom_serve_memory_pool_prepare(
         pool, loom_serve_virtual_buffer_missing_demand(first), &admission));
@@ -670,10 +671,10 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     loom_serve::testing::ScopedNativeHold hold(native,
                                                IREE_ALLOCATOR_COMMAND_CALLOC);
     const loom_serve_memory_range_t growth = {second, 0, state.slab_size};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &growth, nullptr, 0, &admitted, &operation));
-    ASSERT_TRUE(admitted);
+        pool, 1, &growth, nullptr, 0, &commit_admission, &operation));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     hold.WaitEntered();
     loom_serve_memory_pool_trim(pool, 0);
     // The cohort would fit, but its promise must not depend on cached backing
@@ -722,11 +723,12 @@ TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
       {first, bulk.slab_size, tail_bytes - 1},
   };
   deferred_backing->defer = true;
-  bool admitted = false;
+  loom_serve_memory_admission_t commit_admission;
   loom_serve_memory_operation_t* operation = nullptr;
   IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-      pool, IREE_ARRAYSIZE(ranges), ranges, nullptr, 0, &admitted, &operation));
-  ASSERT_TRUE(admitted);
+      pool, IREE_ARRAYSIZE(ranges), ranges, nullptr, 0, &commit_admission,
+      &operation));
+  ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
   deferred_backing->WaitForAcquisition();
   EXPECT_EQ(statistics[0].pending_bytes, first_bytes);
   EXPECT_EQ(statistics[1].pending_bytes, state.slab_size);
@@ -745,8 +747,10 @@ TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
   RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x87654321);
 
   const loom_serve_memory_range_t extra = {second, state.slab_size, 4};
-  IREE_ASSERT_OK(loom_serve_memory_pool_try_commit(pool, 1, &extra, &admitted));
-  EXPECT_FALSE(admitted);
+  IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+      pool, 1, &extra, nullptr, 0, &commit_admission, &operation));
+  EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_CAPACITY);
+  EXPECT_EQ(operation, nullptr);
 
   // Return a full bulk slab and a state slab in one batch, retaining the tail.
   // Native return, not the logical trim, makes their capacity available again.
@@ -767,14 +771,21 @@ TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
   EXPECT_EQ(retiring.committed_bytes, committed_bytes);
   EXPECT_EQ(retiring.releasing_bytes, bulk.slab_size + state.slab_size);
   EXPECT_EQ(deferred_backing->PendingReturnCount(), 2u);
-  IREE_ASSERT_OK(loom_serve_memory_pool_try_commit(pool, 1, &extra, &admitted));
-  EXPECT_FALSE(admitted);
+  IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+      pool, 1, &extra, nullptr, 0, &commit_admission, &operation));
+  EXPECT_EQ(operation, nullptr);
   CheckRetained(loom_serve_virtual_buffer_handle(first), bulk.slab_size,
                 0x12345678);
+  // Retirement can finish before a caller handles the denied commitment. Its
+  // original result must still request another admission turn: a fresh pending
+  // query no longer distinguishes progress from permanent capacity exhaustion.
   deferred_backing->CompleteReturns();
   IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  EXPECT_FALSE(loom_serve_memory_pool_is_pending(pool));
+  EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_DEFERRED);
   EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes,
             tail_bytes);
+  bool admitted = false;
   IREE_ASSERT_OK(loom_serve_memory_pool_try_commit(pool, 1, &extra, &admitted));
   ASSERT_TRUE(admitted);
   RoundTrip(loom_serve_virtual_buffer_handle(second), state.slab_size,
@@ -883,10 +894,10 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     loom_serve::testing::ScopedNativeHold gate(native,
                                                IREE_ALLOCATOR_COMMAND_CALLOC);
     const loom_serve_memory_range_t range = {first, 0, kSlabSize};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &range, nullptr, 0, &admitted, &operation));
-    ASSERT_TRUE(admitted);
+        pool, 1, &range, nullptr, 0, &commit_admission, &operation));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     gate.WaitEntered();
     loom_serve_memory_pool_set_observer(pool, nullptr, nullptr);
   }
@@ -1203,10 +1214,10 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     loom_serve::testing::ScopedNativeHold gate(native,
                                                IREE_ALLOCATOR_COMMAND_FREE);
     const loom_serve_memory_range_t first_range = {first, 0, kSlabSize};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &first_range, nullptr, 0, &admitted, &operations[0]));
-    ASSERT_TRUE(admitted);
+        pool, 1, &first_range, nullptr, 0, &commit_admission, &operations[0]));
+    ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     gate.WaitEntered();
     EXPECT_FALSE(loom_serve_memory_operation_is_complete(operations[0]));
     const auto pending = loom_serve_memory_pool_statistics(pool);
@@ -1220,8 +1231,8 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
     EXPECT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     const loom_serve_memory_range_t second_range = {second, 0, 2 * kSlabSize};
     IREE_EXPECT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &second_range, nullptr, 0, &admitted, &operations[1]));
-    EXPECT_TRUE(admitted);
+        pool, 1, &second_range, nullptr, 0, &commit_admission, &operations[1]));
+    EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     EXPECT_NE(operations[1], nullptr);
     EXPECT_EQ(loom_serve_memory_pool_statistics(pool).pending_bytes,
               3 * kSlabSize);
@@ -1261,10 +1272,11 @@ TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
         {first, kSlabSize, 2 * kSlabSize},
         {first, kSlabSize + 256, kSlabSize},
     };
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_EXPECT_OK(loom_serve_memory_pool_commit_async(
-        pool, IREE_ARRAYSIZE(ranges), ranges, ready, 1, &admitted, &operation));
-    EXPECT_TRUE(admitted);
+        pool, IREE_ARRAYSIZE(ranges), ranges, ready, 1, &commit_admission,
+        &operation));
+    EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     deferred_backing->WaitForAcquisition();
     EXPECT_FALSE(loom_serve_memory_operation_is_complete(operation));
     const auto pending = loom_serve_memory_pool_statistics(pool);
@@ -1272,6 +1284,7 @@ TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
     EXPECT_EQ(pending.pending_bytes, 2 * kSlabSize);
     EXPECT_EQ(statistics[0].pending_bytes, 2 * kSlabSize);
     const loom_serve_memory_range_t other = {second, 0, kSlabSize};
+    bool admitted = false;
     IREE_EXPECT_OK(
         loom_serve_memory_pool_try_commit(pool, 1, &other, &admitted));
     EXPECT_FALSE(admitted);
@@ -1295,10 +1308,10 @@ TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
   {
     deferred_backing->defer = true;
     const loom_serve_memory_range_t range = {first, kSlabSize, kSlabSize};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_EXPECT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &range, ready, 2, &admitted, &operation));
-    EXPECT_TRUE(admitted);
+        pool, 1, &range, ready, 2, &commit_admission, &operation));
+    EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     EXPECT_EQ(operation, nullptr);
     uint64_t value = 0;
     IREE_EXPECT_OK(iree_hal_semaphore_query(ready, &value));
@@ -1327,10 +1340,10 @@ TEST_F(MemoryTest, FailedReadinessDoesNotReleaseNativeOperationOwnership) {
   {
     deferred_backing->defer = true;
     const loom_serve_memory_range_t range = {first, 0, kSlabSize};
-    bool admitted = false;
+    loom_serve_memory_admission_t commit_admission;
     IREE_EXPECT_OK(loom_serve_memory_pool_commit_async(
-        pool, 1, &range, ready, 1, &admitted, &operation));
-    EXPECT_TRUE(admitted);
+        pool, 1, &range, ready, 1, &commit_admission, &operation));
+    EXPECT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     deferred_backing->WaitForAcquisition();
     // A failed timeline can be observed before an accepted native producer has
     // even started. It is not permission to destroy its reservation or job.
@@ -1405,11 +1418,11 @@ TEST_F(MemoryTest, FailedMappingKeepsSourcesUntilCheckedDetach) {
   deferred_backing->defer = true;
   mapping_queue.fail_next_map = true;
   const loom_serve_memory_range_t range = {first, 0, kMappingBytes};
-  bool admitted = false;
+  loom_serve_memory_admission_t commit_admission;
   loom_serve_memory_operation_t* operation = nullptr;
-  IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(pool, 1, &range, nullptr,
-                                                     0, &admitted, &operation));
-  ASSERT_TRUE(admitted);
+  IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+      pool, 1, &range, nullptr, 0, &commit_admission, &operation));
+  ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
   deferred_backing->WaitForAcquisition();
   EXPECT_FALSE(mapping_queue.fail_next_map);
   EXPECT_FALSE(loom_serve_memory_operation_is_complete(operation));

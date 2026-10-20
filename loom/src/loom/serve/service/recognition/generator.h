@@ -10,6 +10,7 @@
 #include "iree/tokenizer/tokenizer.h"
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/parameter/residency.h"
+#include "loom/serve/runtime/storage/memory.h"
 #include "loom/serve/service/recognition/events.h"
 #include "loom/serve/service/recognition/input.h"
 #include "loom/serve/service/recognition/request.h"
@@ -67,8 +68,10 @@ typedef struct loom_serve_recognition_generator_t {
   iree_status_t (*try_admit)(void* self, void* invocation,
                              loom_serve_residency_admission_t* out_admission,
                              loom_serve_execution_frontier_t* out_frontier);
-  // Consumes successful admission readiness. False releases its activation pin.
-  bool (*complete_admit)(void* self, void* invocation);
+  // Consumes successful admission readiness. AVAILABLE retains the row and pin;
+  // CAPACITY/DEFERRED release the activation pin. DEFERRED preserves observed
+  // native progress even if it completed before this result is consumed.
+  loom_serve_memory_admission_t (*complete_admit)(void* self, void* invocation);
   // CPU-only offer over a captured input snapshot. Neither source progress nor
   // the input clock advances. Snapshot bytes are borrowed only through this
   // call; source owns any PCM needed by subsequent preparation or execution.

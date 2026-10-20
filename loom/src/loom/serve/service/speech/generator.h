@@ -10,6 +10,7 @@
 #include "iree/tokenizer/tokenizer.h"
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/parameter/residency.h"
+#include "loom/serve/runtime/storage/memory.h"
 #include "loom/serve/service/speech/request.h"
 
 #ifdef __cplusplus
@@ -80,9 +81,10 @@ typedef struct loom_serve_speech_generator_t {
   iree_status_t (*try_admit)(void* self, void* invocation,
                              loom_serve_residency_admission_t* out_admission,
                              loom_serve_execution_frontier_t* out_frontier);
-  // Consumes successful admission readiness. True retains the row and pin;
-  // false releases the activation pin and leaves an unadmitted request.
-  bool (*complete_admit)(void* self, void* invocation);
+  // Consumes successful admission readiness. AVAILABLE retains the row and pin;
+  // CAPACITY/DEFERRED release the activation pin. DEFERRED preserves observed
+  // native progress even if it completed before this result is consumed.
+  loom_serve_memory_admission_t (*complete_admit)(void* self, void* invocation);
   // CPU-only next-work preparation at a retired model cut. Does not advance
   // the request or submit work. Retained source bytes belong to the handle.
   // Requery after another batch completes; conditioning facts may have changed.
