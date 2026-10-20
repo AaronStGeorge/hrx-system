@@ -29,6 +29,20 @@ iree_native_test(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_X86 AND LOOM_TARGET_ARCH_VM AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND IREE_ARCH STREQUAL "x86_64")
+iree_execution_test_suite(
+  NAME
+    benchmark_scenario_correctness_test
+  MANIFESTS
+    "test/benchmark_scenario_correctness.test.json"
+  TOOLS
+    "benchmark=loom::tools::iree-benchmark-loom"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/benchmark_scenarios.loom"
+)
+endif()
+
 if(LOOM_IMPORT_CXX AND IREE_ARCH STREQUAL "x86_64")
 if(LOOM_TARGET_ARCH_X86 AND LOOM_TARGET_ARCH_VM AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF)
 loom_execution_test(

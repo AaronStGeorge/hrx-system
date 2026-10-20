@@ -118,6 +118,10 @@ typedef struct loom_testbench_scenario_execution_options_t {
   loom_testbench_execution_profile_t target;
   // Profile used to produce comparison results and state.
   loom_testbench_execution_profile_t oracle;
+  // Prepare comparison oracle products. False supports target-only
+  // benchmarking; correctness executors require this to be true. Defaults to
+  // true.
+  bool prepare_oracles;
   // Provider used to execute authored check.generate functions.
   loom_testbench_invocation_provider_t function_call;
   // Shared capture receiving device events during correctness runs.
@@ -136,7 +140,7 @@ typedef struct loom_testbench_prepared_scenario_trial_t {
   const loom_testbench_trial_plan_t* trial_plan;
   // Prepared target product.
   loom_testbench_prepared_product_t target;
-  // Prepared oracle product, empty for check.invoke.
+  // Prepared oracle product, empty for check.invoke or target-only preparation.
   loom_testbench_prepared_product_t oracle;
 } loom_testbench_prepared_scenario_trial_t;
 
@@ -144,8 +148,6 @@ typedef struct loom_testbench_prepared_scenario_trial_t {
 typedef struct loom_testbench_prepared_scenario_configuration_t {
   // Materialized configuration visible during product preparation.
   const loom_testbench_scenario_configuration_values_t* configuration;
-  // Execution semantics selected while preparing every product.
-  loom_testbench_scenario_execution_mode_t mode;
   // Provider used to execute authored check.generate functions.
   loom_testbench_invocation_provider_t function_call;
   // Shared device-event capture for correctness execution.
@@ -158,12 +160,12 @@ typedef struct loom_testbench_prepared_scenario_configuration_t {
   iree_host_size_t trial_count;
 } loom_testbench_prepared_scenario_configuration_t;
 
-// Prepares target and oracle products for one materialized configuration.
+// Prepares target products and, when requested, oracle products for one
+// materialized configuration.
 // All products are prepared before any trial executor can materialize inputs.
 iree_status_t loom_testbench_prepare_scenario_configuration(
     const loom_testbench_scenario_execution_options_t* options,
     const loom_testbench_scenario_configuration_values_t* configuration,
-    loom_testbench_scenario_execution_mode_t mode,
     loom_testbench_prepared_scenario_configuration_t* out_prepared);
 
 // Releases all products and bookkeeping owned by |prepared|.
@@ -203,7 +205,7 @@ typedef struct loom_testbench_scenario_trial_executor_t {
   const loom_testbench_prepared_scenario_trial_t* prepared_trial;
   // Materialized configuration shared into each trial recipe.
   const loom_testbench_scenario_configuration_values_t* configuration;
-  // Execution semantics inherited from the prepared configuration.
+  // Execution semantics selecting correctness graphs or target-only replicas.
   loom_testbench_scenario_execution_mode_t mode;
   // Runtime dependencies used while materializing trial values.
   loom_testbench_value_materializer_options_t materializer_options;
@@ -251,10 +253,13 @@ typedef struct loom_testbench_scenario_trial_executor_t {
   iree_host_size_t initialized_slot_count;
 } loom_testbench_scenario_trial_executor_t;
 
-// Initializes reusable storage after every product has been prepared.
+// Initializes reusable storage after every product has been prepared. Execution
+// mode controls value ownership, not product preparation: correctness and
+// benchmark executors may reuse the same prepared configuration. Correctness
+// requires oracle preparation; target-only configurations support benchmarking.
 iree_status_t loom_testbench_scenario_trial_executor_initialize(
     const loom_testbench_prepared_scenario_configuration_t* prepared,
-    iree_host_size_t trial_index,
+    iree_host_size_t trial_index, loom_testbench_scenario_execution_mode_t mode,
     const loom_testbench_value_materializer_options_t* materializer_options,
     iree_host_size_t batch_capacity,
     loom_testbench_scenario_trial_executor_t* out_executor);

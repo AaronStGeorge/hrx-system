@@ -211,6 +211,29 @@
       ]
     },
     {
+      "name": "rejects correctness execution during compile-only capture",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/compile_requests.loom",
+          "--compile-only",
+          "--scenario-correctness=true",
+          "--target=amdgpu:gfx1100",
+          "--artifact-bundle-dir={tmp}/compile-request-bundle"
+        ]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {
+        "contains": ["--scenario-correctness is unavailable with --compile-only"]
+      },
+      "files": [
+        {
+          "path": "{tmp}/compile-request-bundle/compile_requests/manifest.json",
+          "exists": false
+        }
+      ]
+    },
+    {
       "name": "captures selected benchmark samples as portable compile requests",
       "steps": [
         {

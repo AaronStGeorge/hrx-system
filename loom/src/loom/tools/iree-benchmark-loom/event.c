@@ -367,6 +367,24 @@ iree_status_t iree_benchmark_loom_event_sink_emit_comparison(
             });
 }
 
+static iree_status_t iree_benchmark_loom_append_scenario_sample_row(
+    const iree_benchmark_loom_scenario_sample_event_t* event,
+    iree_string_builder_t* output) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(output, &stream);
+  loom_json_object_writer_t object;
+  IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &object));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+      &object, IREE_SV("row"), IREE_SV("sample")));
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_run_id_field_json(event->run, &object));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_scenario_sample_fields_json(
+      event->selection, event->work_item_index, event->benchmark_sample_ordinal,
+      event->result, &object));
+  IREE_RETURN_IF_ERROR(loom_json_object_end(&object));
+  return loom_output_stream_write_char(&stream, '\n');
+}
+
 static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
     void* user_data, const iree_benchmark_loom_event_t* event) {
   iree_benchmark_loom_jsonl_event_sink_t* adapter =
@@ -424,6 +442,11 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
               event->sample.benchmark_sample_ordinal,
               event->sample.case_sample_ordinal, event->sample.sample_result,
               iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
+    case IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE:
+      return iree_benchmark_loom_jsonl_sink_end(
+          jsonl_sink, iree_benchmark_loom_append_scenario_sample_row(
+                          &event->scenario_sample,
+                          iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT:
       return iree_benchmark_loom_jsonl_sink_end(
           jsonl_sink,

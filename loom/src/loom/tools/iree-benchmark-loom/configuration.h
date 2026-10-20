@@ -57,6 +57,8 @@ typedef struct iree_benchmark_loom_configuration_t {
   iree_host_size_t hal_target_route_count;
   // Binds ordinary function calls once for all cases in the parsed module.
   loom_testbench_function_call_provider_callback_t function_call_provider;
+  // Binds the independent oracle for check.compare scenario actions.
+  loom_testbench_bind_scenario_profile_callback_t scenario_oracle_profile;
   // Appends target-specific requirement providers linked into this runner.
   iree_benchmark_loom_populate_requirement_providers_callback_t
       populate_requirement_providers;

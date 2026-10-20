@@ -102,6 +102,8 @@ typedef struct iree_benchmark_loom_options_t {
   bool dry_run;
   // True when selected case samples are captured as canonical compile requests.
   bool compile_only;
+  // Check each selected scenario trial before timing; false skips oracle work.
+  bool scenario_correctness;
   // Requested measurement mode, including automatic subject-based selection.
   iree_string_view_t measure;
   // Structured compile-report request.

@@ -244,10 +244,10 @@ static iree_status_t InitializeDeviceEventScenarioRun(
   execution_options.oracle.user_data = &out_run->oracle_state;
   execution_options.device_event_capture = &out_run->capture;
   IREE_RETURN_IF_ERROR(loom_testbench_prepare_scenario_configuration(
-      &execution_options, &out_run->configuration,
-      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &out_run->prepared));
+      &execution_options, &out_run->configuration, &out_run->prepared));
   IREE_RETURN_IF_ERROR(loom_testbench_scenario_trial_executor_initialize(
-      &out_run->prepared, /*trial_index=*/0, materializer,
+      &out_run->prepared, /*trial_index=*/0,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, materializer,
       scenario->trials[0].trial_count, &out_run->executor));
   return loom_testbench_run_scenario_trial_batch(
       &out_run->executor, /*first_trial_ordinal=*/0,
@@ -456,8 +456,7 @@ TEST_F(ScenarioExecutorTest, PreparesBeforeMaterializationAndExecutesBatches) {
 
   loom_testbench_prepared_scenario_configuration_t prepared = {};
   IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
-      &execution_options, &configuration,
-      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &prepared));
+      &execution_options, &configuration, &prepared));
   EXPECT_EQ(target_state.prepare_count, 2u);
   EXPECT_EQ(oracle_state.prepare_count, 1u);
   EXPECT_EQ(prepared.trials[1].target.invocation,
@@ -473,8 +472,9 @@ TEST_F(ScenarioExecutorTest, PreparesBeforeMaterializationAndExecutesBatches) {
 
   loom_testbench_scenario_trial_executor_t compare_executor = {};
   IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
-      &prepared, /*trial_index=*/0, &materializer, /*batch_capacity=*/3,
-      &compare_executor));
+      &prepared, /*trial_index=*/0,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &materializer,
+      /*batch_capacity=*/3, &compare_executor));
   loom_testbench_scenario_trial_result_list_t compare_results = {};
   IREE_ASSERT_OK(loom_testbench_run_scenario_trial_batch(
       &compare_executor, /*first_trial_ordinal=*/0, /*trial_count=*/3,
@@ -515,8 +515,9 @@ TEST_F(ScenarioExecutorTest, PreparesBeforeMaterializationAndExecutesBatches) {
 
   loom_testbench_scenario_trial_executor_t invoke_executor = {};
   IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
-      &prepared, /*trial_index=*/2, &materializer, /*batch_capacity=*/2,
-      &invoke_executor));
+      &prepared, /*trial_index=*/2,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &materializer,
+      /*batch_capacity=*/2, &invoke_executor));
   loom_testbench_scenario_trial_result_list_t invoke_results = {};
   IREE_ASSERT_OK(loom_testbench_run_scenario_trial_batch(
       &invoke_executor, /*first_trial_ordinal=*/0, /*trial_count=*/2,
@@ -534,8 +535,9 @@ TEST_F(ScenarioExecutorTest, PreparesBeforeMaterializationAndExecutesBatches) {
 
   loom_testbench_scenario_trial_executor_t repeated_executor = {};
   IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
-      &prepared, /*trial_index=*/1, &materializer, /*batch_capacity=*/1,
-      &repeated_executor));
+      &prepared, /*trial_index=*/1,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &materializer,
+      /*batch_capacity=*/1, &repeated_executor));
   loom_testbench_scenario_trial_result_list_t repeated_results = {};
   IREE_ASSERT_OK(loom_testbench_run_scenario_trial_batch(
       &repeated_executor, /*first_trial_ordinal=*/0, /*trial_count=*/1,
@@ -589,17 +591,163 @@ TEST_F(ScenarioExecutorTest, ReleasesOwnedProductsAfterPreparationFailure) {
   execution_options.oracle.user_data = &oracle_state;
 
   loom_testbench_prepared_scenario_configuration_t prepared = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_ABORTED,
-      loom_testbench_prepare_scenario_configuration(
-          &execution_options, &configuration,
-          LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &prepared));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
+                        loom_testbench_prepare_scenario_configuration(
+                            &execution_options, &configuration, &prepared));
   EXPECT_EQ(target_state.prepare_count, 2u);
   EXPECT_EQ(target_state.destroy_count, 1u);
   EXPECT_EQ(oracle_state.prepare_count, 1u);
   EXPECT_EQ(oracle_state.destroy_count, 1u);
   EXPECT_EQ(prepared.trials, nullptr);
 
+  loom_testbench_scenario_configuration_values_deinitialize(&configuration);
+  loom_module_free(module);
+}
+
+TEST_F(ScenarioExecutorTest, ReusesProductsAcrossCorrectnessAndBenchmarkModes) {
+  // Only value identities and a typed invocation plan are needed to exercise
+  // executor ownership. Compilation is the injected profile's responsibility.
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("products"),
+                                      &block_pool_, nullptr, host_allocator_,
+                                      &module));
+  loom_string_id_t entropy_name;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("check.entropy"),
+                                           &entropy_name));
+  loom_testbench_trial_plan_t trial = {.trial_count = 3};
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                               &trial.ordinal_value_id));
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_dialect_opaque(entropy_name), &trial.entropy_value_id));
+  loom_value_id_t actual_result, expected_result;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &actual_result));
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &expected_result));
+  trial.action.kind = LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE;
+  trial.action.target.module = module;
+  trial.action.target.kind = LOOM_TESTBENCH_INVOCATION_FUNCTION_CALL;
+  trial.action.target.input_value_ids = &trial.ordinal_value_id;
+  trial.action.target.input_count = 1;
+  trial.action.target.result_value_ids = &actual_result;
+  trial.action.target.result_count = 1;
+  trial.action.oracle = trial.action.target;
+  trial.action.oracle.result_value_ids = &expected_result;
+  loom_testbench_scenario_plan_t scenario = {
+      .name = IREE_SV("products"),
+      .configuration_count = 1,
+      .trials = &trial,
+      .trial_count = 1,
+  };
+  loom_testbench_scenario_configuration_values_t configuration = {};
+  IREE_ASSERT_OK(loom_testbench_scenario_configuration_values_initialize(
+      module, &scenario, host_allocator_, &configuration));
+  auto materializer = MaterializerOptions();
+  IREE_ASSERT_OK(loom_testbench_scenario_configuration_values_materialize(
+      &materializer, loom_testbench_entropy_root(17), 0, &configuration));
+  ExecutionTimeline timeline = {};
+  TestProfileState target_state = {.timeline = &timeline};
+  TestProfileState oracle_state = {.timeline = &timeline};
+  loom_testbench_scenario_execution_options_t options = {};
+  loom_testbench_scenario_execution_options_initialize(&options);
+  options.target = {IREE_SV("target"), PrepareTestProduct, &target_state};
+  options.oracle = {IREE_SV("oracle"), PrepareTestProduct, &oracle_state};
+  loom_testbench_prepared_scenario_configuration_t prepared = {};
+  IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
+      &options, &configuration, &prepared));
+
+  loom_testbench_scenario_trial_executor_t checker = {};
+  IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
+      &prepared, 0, LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS,
+      &materializer, 1, &checker));
+  ASSERT_NE(checker.oracle_calls, nullptr);
+  loom_testbench_scenario_trial_result_list_t results = {};
+  IREE_ASSERT_OK(
+      loom_testbench_run_scenario_trial_batch(&checker, 2, 1, &results));
+  ASSERT_EQ(results.count, 1u);
+  EXPECT_TRUE(results.values[0].passed);
+  EXPECT_EQ(results.values[0].identity.trial_ordinal, 2u);
+  EXPECT_EQ(target_state.execute_count, 1u);
+  EXPECT_EQ(oracle_state.execute_count, 1u);
+  loom_testbench_scenario_trial_executor_deinitialize(&checker);
+  EXPECT_EQ(target_state.destroy_count, 0u);
+  EXPECT_EQ(oracle_state.destroy_count, 0u);
+
+  loom_testbench_scenario_trial_executor_t benchmark = {};
+  IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
+      &prepared, 0, LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK,
+      &materializer, 3, &benchmark));
+  EXPECT_EQ(benchmark.oracle_calls, nullptr);
+  EXPECT_EQ(benchmark.results, nullptr);
+  EXPECT_EQ(benchmark.expectation_reports, nullptr);
+  loom_run_benchmark_options_t benchmark_options = {};
+  loom_run_benchmark_options_initialize(&benchmark_options);
+  benchmark_options.batch_size = 3;
+  loom_run_benchmark_result_t benchmark_result = {};
+  IREE_ASSERT_OK(loom_testbench_benchmark_scenario_trial(
+      &benchmark, 2, &benchmark_options, &benchmark_result));
+  EXPECT_EQ(target_state.benchmark_count, 1u);
+  EXPECT_EQ(target_state.last_benchmark_call_count, 3u);
+  EXPECT_EQ(oracle_state.benchmark_count, 0u);
+  EXPECT_EQ(target_state.execute_count, 1u);
+  EXPECT_EQ(oracle_state.execute_count, 1u);
+  EXPECT_EQ(target_state.prepare_count, 1u);
+  EXPECT_EQ(oracle_state.prepare_count, 1u);
+  for (iree_host_size_t i = 0; i < benchmark.batch_capacity; ++i) {
+    EXPECT_EQ(benchmark.trial_values[i].oracle.slot_count, 0u);
+    EXPECT_EQ(benchmark.trial_values[i].identity.trial_ordinal, 2u);
+    EXPECT_EQ(Lookup(&benchmark.trial_values[i].target, trial.ordinal_value_id)
+                  ->scalar.storage.i64,
+              2);
+  }
+  loom_testbench_scenario_trial_executor_deinitialize(&benchmark);
+  loom_testbench_prepared_scenario_configuration_deinitialize(&prepared);
+  EXPECT_EQ(target_state.destroy_count, 1u);
+  EXPECT_EQ(oracle_state.destroy_count, 1u);
+
+  // An absent oracle is an explicit preparation failure, never a request to
+  // compile the target again under its native profile.
+  options.oracle = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
+                        loom_testbench_prepare_scenario_configuration(
+                            &options, &configuration, &prepared));
+  EXPECT_EQ(prepared.trials, nullptr);
+  EXPECT_EQ(target_state.destroy_count, 2u);
+  EXPECT_EQ(oracle_state.prepare_count, 1u);
+
+  // Target-only preparation neither requires nor calls an oracle profile.
+  // Supplying a profile must not accidentally enable its compilation.
+  options.prepare_oracles = false;
+  for (bool bind_oracle : {false, true}) {
+    SCOPED_TRACE(bind_oracle);
+    if (bind_oracle) {
+      options.oracle = {IREE_SV("oracle"), PrepareTestProduct, &oracle_state};
+    }
+    IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
+        &options, &configuration, &prepared));
+    EXPECT_EQ(prepared.trials[0].oracle.vtable, nullptr);
+    IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
+        &prepared, 0, LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK,
+        &materializer, 3, &benchmark));
+    IREE_ASSERT_OK(loom_testbench_benchmark_scenario_trial(
+        &benchmark, 2, &benchmark_options, &benchmark_result));
+    EXPECT_EQ(benchmark.oracle_calls, nullptr);
+    EXPECT_EQ(benchmark.results, nullptr);
+    EXPECT_EQ(benchmark.expectation_reports, nullptr);
+    for (iree_host_size_t i = 0; i < benchmark.batch_capacity; ++i) {
+      EXPECT_EQ(benchmark.trial_values[i].oracle.slot_count, 0u);
+    }
+    loom_testbench_scenario_trial_executor_deinitialize(&benchmark);
+    loom_testbench_prepared_scenario_configuration_deinitialize(&prepared);
+    EXPECT_EQ(oracle_state.prepare_count, 1u);
+    EXPECT_EQ(oracle_state.execute_count, 1u);
+    EXPECT_EQ(oracle_state.destroy_count, 1u);
+  }
+  EXPECT_EQ(target_state.prepare_count, 4u);
+  EXPECT_EQ(target_state.destroy_count, 4u);
+  EXPECT_EQ(target_state.execute_count, 1u);
+  EXPECT_EQ(target_state.benchmark_count, 3u);
   loom_testbench_scenario_configuration_values_deinitialize(&configuration);
   loom_module_free(module);
 }
@@ -639,18 +787,17 @@ TEST_F(ScenarioExecutorTest, BenchmarksIndependentTargetOnlyReplicas) {
 
   loom_testbench_prepared_scenario_configuration_t prepared = {};
   IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
-      &execution_options, &configuration,
-      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK, &prepared));
-  EXPECT_EQ(prepared.mode, LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK);
+      &execution_options, &configuration, &prepared));
   EXPECT_EQ(target_state.prepare_count, 2u);
-  EXPECT_EQ(oracle_state.prepare_count, 0u);
+  EXPECT_EQ(oracle_state.prepare_count, 1u);
   EXPECT_EQ(target_state.execute_count, 0u);
   EXPECT_EQ(oracle_state.execute_count, 0u);
 
   loom_testbench_scenario_trial_executor_t executor = {};
   IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
-      &prepared, /*trial_index=*/0, &materializer, /*batch_capacity=*/3,
-      &executor));
+      &prepared, /*trial_index=*/0,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK, &materializer,
+      /*batch_capacity=*/3, &executor));
   EXPECT_EQ(executor.results, nullptr);
   EXPECT_EQ(executor.expectation_reports, nullptr);
   EXPECT_EQ(executor.oracle_calls, nullptr);
@@ -705,7 +852,7 @@ TEST_F(ScenarioExecutorTest, BenchmarksIndependentTargetOnlyReplicas) {
   loom_testbench_scenario_trial_executor_deinitialize(&executor);
   loom_testbench_prepared_scenario_configuration_deinitialize(&prepared);
   EXPECT_EQ(target_state.destroy_count, 2u);
-  EXPECT_EQ(oracle_state.destroy_count, 0u);
+  EXPECT_EQ(oracle_state.destroy_count, 1u);
   loom_testbench_scenario_configuration_values_deinitialize(&configuration);
   loom_module_free(module);
 }
@@ -745,12 +892,12 @@ TEST_F(ScenarioExecutorTest, ReportsAuthoredExpectationAndReplayIdentity) {
   execution_options.oracle.user_data = &oracle_state;
   loom_testbench_prepared_scenario_configuration_t prepared = {};
   IREE_ASSERT_OK(loom_testbench_prepare_scenario_configuration(
-      &execution_options, &configuration,
-      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &prepared));
+      &execution_options, &configuration, &prepared));
   loom_testbench_scenario_trial_executor_t executor = {};
   IREE_ASSERT_OK(loom_testbench_scenario_trial_executor_initialize(
-      &prepared, /*trial_index=*/0, &materializer, /*batch_capacity=*/3,
-      &executor));
+      &prepared, /*trial_index=*/0,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &materializer,
+      /*batch_capacity=*/3, &executor));
 
   loom_testbench_scenario_trial_result_list_t results = {};
   IREE_ASSERT_OK(loom_testbench_run_scenario_trial_batch(

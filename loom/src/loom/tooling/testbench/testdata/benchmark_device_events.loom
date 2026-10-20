@@ -1,0 +1,20 @@
+// Requires device feedback; the unhandled event must prevent benchmarking.
+kernel.def @assert_nonzero() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%input: i32) {
+  %c0 = scalar.constant 0 : i32
+  %condition = scalar.cmpi ne, %input, %c0 : i32
+  kernel.assert %condition "input must be nonzero" : i1
+  kernel.return
+}
+
+check.scenario @unexpected_event {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(0) : i32
+    check.invoke<@assert_nonzero>(%input) : (i32) -> ()
+  }
+  check.return
+}
+
+check.benchmark<@unexpected_event> @unexpected_event_latency

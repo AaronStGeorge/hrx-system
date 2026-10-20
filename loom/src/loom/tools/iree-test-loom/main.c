@@ -619,8 +619,7 @@ static iree_status_t iree_test_loom_run_scenario(
     loom_testbench_prepared_scenario_configuration_t prepared = {0};
     if (iree_status_is_ok(status)) {
       status = loom_testbench_prepare_scenario_configuration(
-          execution_options, &configuration,
-          LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, &prepared);
+          execution_options, &configuration, &prepared);
     }
     for (iree_host_size_t trial_index = 0;
          iree_status_is_ok(status) && trial_index < scenario->trial_count;
@@ -634,8 +633,9 @@ static iree_status_t iree_test_loom_run_scenario(
       }
       loom_testbench_scenario_trial_executor_t executor = {0};
       status = loom_testbench_scenario_trial_executor_initialize(
-          &prepared, trial_index, materializer_options, batch_capacity,
-          &executor);
+          &prepared, trial_index,
+          LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS,
+          materializer_options, batch_capacity, &executor);
       for (iree_host_size_t first_trial_ordinal = 0;
            iree_status_is_ok(status) &&
            first_trial_ordinal < trial->trial_count;

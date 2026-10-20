@@ -73,6 +73,27 @@ typedef struct loom_testbench_function_call_provider_callback_t {
   void* user_data;
 } loom_testbench_function_call_provider_callback_t;
 
+typedef struct loom_testbench_execution_profile_t
+    loom_testbench_execution_profile_t;
+typedef struct loom_source_table_resolver_t loom_source_table_resolver_t;
+typedef struct loom_diagnostic_sink_t loom_diagnostic_sink_t;
+
+// Binds one externally selected scenario execution profile to compiler inputs.
+// The caller owns profile state through the last prepared product's teardown.
+typedef loom_testbench_execution_profile_t (
+    *loom_testbench_bind_scenario_profile_fn_t)(
+    void* user_data, const loom_testbench_compilation_t* compilation,
+    const loom_source_table_resolver_t* sources,
+    loom_diagnostic_sink_t diagnostic_sink,
+    loom_testbench_compile_result_callback_t result_callback);
+
+typedef struct loom_testbench_bind_scenario_profile_callback_t {
+  // Profile binding callback, or NULL when the profile is unavailable.
+  loom_testbench_bind_scenario_profile_fn_t fn;
+  // Caller-owned profile state passed to |fn|.
+  void* user_data;
+} loom_testbench_bind_scenario_profile_callback_t;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

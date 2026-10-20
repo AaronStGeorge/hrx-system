@@ -198,7 +198,9 @@ iree_status_t iree_benchmark_loom_run_work_plan(
         }
         if (iree_status_is_ok(status)) {
           status = iree_benchmark_loom_run_scenario_work_item(
-              scenario_execution, work_item, inout_failed_benchmark_count);
+              scenario_execution, work_item, inout_correctness_sample_count,
+              inout_correctness_failed_sample_count,
+              inout_failed_benchmark_count);
         }
         break;
       }

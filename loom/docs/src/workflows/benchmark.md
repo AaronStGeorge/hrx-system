@@ -82,7 +82,7 @@ iree-benchmark-loom program.loom \
 ```
 
 `dispatch_complete` compiles the selected candidate, materializes inputs from
-the check program, proves correctness, records a reusable dispatch batch, and
+the check program, records a reusable dispatch batch, and
 measures host submission through queue completion. The primary score is
 normalized per logical operation. Result fields also state the number of
 physical dispatches per logical operation, making fused and multi-dispatch
@@ -99,6 +99,43 @@ is benchmarked as a target-only invocation: the oracle, output comparison, and
 readback do not execute in the measured path. The exact configuration, trial,
 and ordinal remain in the result so the corresponding correctness trial can be
 replayed.
+
+### Opt in to scenario correctness
+
+Scenario benchmarks default to target-only preparation and execution. They do
+not compile or run the oracle, allocate its value graphs, compare outputs, or
+read results back for correctness. Results report `correctness.state` as
+`unchecked`; successful timing is not evidence of numerical correctness.
+
+For occasional validation or a release gate, enable the authored checks:
+
+```shell
+iree-benchmark-loom program.loom \
+  --benchmark=@decode_4096 \
+  --device=amdgpu \
+  --scenario-correctness=true \
+  --output=checked-results.json
+```
+
+The runner checks each selected configuration/trial coordinate once, before
+timing. Aliases share that check, and interleaved comparisons check each
+candidate once, not once per timing window. Failed expectations or unhandled
+device errors suppress that candidate's score. Both individual kernels and
+complete `command.program.def` subjects use this policy. Target compilation is
+shared between checking and timing, and oracle storage is never replicated
+across the timing ring.
+
+Oracle preparation and execution add to total tool latency even though they are
+outside the measured window. On realistic model shapes, a serial CPU/VM oracle
+can dominate the run. `--scenario-correctness=false` explicitly restores the
+default for benchmark suites. `iree-test-loom` remains the dedicated correctness
+tool.
+
+This flag applies to `check.scenario`, not legacy `check.case`. Case benchmarks
+retain their correctness preflight; `case_end_to_end` also includes reference
+calls and checks in the authored program being timed. Scenario subjects provide
+the separation needed for target-only model benchmarking.
+`--compile-only` never executes checks and rejects `--scenario-correctness=true`.
 
 ## Understand benchmark assignments
 

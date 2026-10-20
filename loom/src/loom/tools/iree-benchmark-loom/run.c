@@ -121,6 +121,11 @@ static iree_status_t iree_benchmark_loom_validate_compile_only_options(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "--compile-only conflicts with --dry-run");
   }
+  if (options->scenario_correctness) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--scenario-correctness is unavailable with --compile-only");
+  }
   if (iree_string_view_is_empty(iree_string_view_trim(options->target))) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "--compile-only requires --target");
@@ -749,6 +754,18 @@ iree_status_t iree_benchmark_loom_run_file(
       }
     }
 
+    loom_testbench_execution_profile_t scenario_oracle_profile = {0};
+    if (iree_status_is_ok(status) && !benchmark_options->dry_run &&
+        benchmark_options->scenario_correctness &&
+        options->configuration->scenario_oracle_profile.fn != NULL) {
+      const loom_testbench_bind_scenario_profile_callback_t binding =
+          options->configuration->scenario_oracle_profile;
+      scenario_oracle_profile = binding.fn(
+          binding.user_data, &compilation, source_table,
+          (loom_diagnostic_sink_t){.fn = loom_diagnostic_stderr_sink},
+          compile_result_callback);
+    }
+
     if (iree_status_is_ok(status) && failure_count == 0 && compare_requested) {
       const iree_benchmark_loom_selected_benchmark_t* selections =
           work_plan.selected_benchmarks;
@@ -786,6 +803,7 @@ iree_status_t iree_benchmark_loom_run_file(
                 .hal_context = &hal_context,
                 .compilation = &hal_compilation,
                 .case_execution_options = &execution_options,
+                .scenario_oracle_profile = scenario_oracle_profile,
                 .execution_arena = &execution_arena,
                 .host_allocator = allocator,
                 .event_sink = event_sink,
@@ -860,6 +878,7 @@ iree_status_t iree_benchmark_loom_run_file(
               .hal_context = &hal_context,
               .compilation = &hal_compilation,
               .case_execution_options = &execution_options,
+              .scenario_oracle_profile = scenario_oracle_profile,
               .execution_arena = &execution_arena,
               .host_allocator = allocator,
               .event_sink = event_sink,

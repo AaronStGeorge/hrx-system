@@ -16,7 +16,11 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-exports_files(["testdata/requirements.loom"])
+exports_files([
+    "testdata/benchmark_device_events.loom",
+    "testdata/benchmark_scenarios.loom",
+    "testdata/requirements.loom",
+])
 
 loom_cc_library(
     name = "api",

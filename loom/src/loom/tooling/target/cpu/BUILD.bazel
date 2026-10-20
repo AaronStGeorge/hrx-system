@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_config_compatible_with",
@@ -67,6 +68,22 @@ iree_executable_test(
         "//runtime/config/hal:executable_loader_embedded_elf",
         "//loom/config/execute:task_hal",
     ]) + ["@platforms//cpu:x86_64"],
+)
+
+iree_execution_test_suite(
+    name = "benchmark_scenario_correctness_test",
+    data = [
+        "//loom/src/loom/tooling/execution/hal:testdata/command_scenario_dependent_stages.loom",
+        "//loom/src/loom/tooling/testbench:testdata/benchmark_scenarios.loom",
+    ],
+    manifests = ["test/benchmark_scenario_correctness.test.json"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//loom/config/target/arch:vm",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+        "//loom/config/execute:task_hal",
+    ]) + ["@platforms//cpu:x86_64"],
+    tools = {"benchmark": "//loom/src/loom/tools/iree-benchmark-loom"},
 )
 
 # Addressable C++ locals preserve independent storage across native calls.

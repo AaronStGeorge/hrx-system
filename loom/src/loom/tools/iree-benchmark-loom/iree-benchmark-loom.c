@@ -181,6 +181,11 @@ int main(int argc, char** argv) {
           .fn = loom_vm_testbench_invocation_provider,
           .user_data = &vm_testbench,
       };
+  configuration.scenario_oracle_profile =
+      (loom_testbench_bind_scenario_profile_callback_t){
+          .fn = loom_vm_testbench_execution_profile,
+          .user_data = &vm_testbench,
+      };
 #endif  // IREE_BENCHMARK_LOOM_HAVE_VM
   int exit_code = iree_benchmark_loom_main(argc, argv, &configuration);
 #if IREE_BENCHMARK_LOOM_HAVE_VM
