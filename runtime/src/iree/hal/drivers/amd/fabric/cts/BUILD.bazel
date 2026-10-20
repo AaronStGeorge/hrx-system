@@ -13,8 +13,8 @@ package(
     licenses = ["notice"],
 )
 
-# Shared native GPU fixture; the XDNA extension adds a real HAL execution device
-# to the same sealed group and uses these exact GPU submission resources.
+# Native memory conformance fixture. The AMD composition suite adds XDNA to the
+# same group and qualifies shared addresses using these native GPU resources.
 iree_runtime_cc_library(
     name = "virtual_buffer_test_base",
     testonly = True,
@@ -23,7 +23,7 @@ iree_runtime_cc_library(
         "//runtime/config/hal:driver_task": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    visibility = ["//runtime/src/iree/hal/drivers/amd/fabric/cts/xdna:__pkg__"],
+    visibility = ["//runtime/src/iree/hal/drivers/amd/cts:__pkg__"],
     deps = [
         "//libamdf:amdf_static",
         "//libamdf:headers",

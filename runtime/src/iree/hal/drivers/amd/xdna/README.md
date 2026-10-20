@@ -298,13 +298,15 @@ Disabled profiling performs no clock reads or profile allocation.
 
 ## Verification
 
-Native correctness suites declare an XDNA hardware requirement:
+Native correctness suites declare their required hardware. The shared backing
+replacement suite also requires a GPU:
 
 ```sh
 iree-bazel-test --config=asan \
   --//runtime/config/hal:drivers=task,amd \
   //runtime/src/iree/hal/drivers/amd/xdna/cts:native_test \
-  //runtime/src/iree/hal/drivers/amd/fabric/cts/xdna:virtual_buffer_test \
+  //runtime/src/iree/hal/drivers/amd/cts:cpu_xdna_test \
+  //runtime/src/iree/hal/drivers/amd/cts:virtual_buffer_test \
   //loom/src/loom/tooling/target/amd/xdna:hal_execution_test
 ```
 
@@ -313,9 +315,11 @@ consumer-before-producer dependencies, direct transfers, file I/O, failure
 propagation, first-device-writer visibility and allocation properties. Its
 reservation case builds a pool from queried source requirements, replaces
 retained backing at stable NPU addresses, dispatches immediately after the
-mapping dependency and checks final detach. The fabric suite exercises composed
-CPU/GPU/NPU replacement through independently queried mapping groups. Each uses
-the source routes and queue capabilities advertised by the selected devices.
+mapping dependency and checks final detach. The AMD composition suites exercise
+CPU/XDNA HAL handoffs and CPU/GPU/NPU replacement through independently queried
+mapping groups. The replacement suite uses native GPU SDMA alongside Task and
+XDNA HAL execution. Each uses the source routes and queue capabilities advertised
+by the selected devices.
 The Loom suite exercises the public tool, compiler, HAL, physical execution,
 readback, and numerical oracle together.
 

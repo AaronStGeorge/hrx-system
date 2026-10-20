@@ -12,10 +12,14 @@
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32.h"
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32_npu4.h"
 
-namespace iree::hal::amd::fabric::cts {
+namespace iree::hal::amd::cts {
+
+using fabric::cts::FabricVirtualBufferTest;
 
 enum class HostProjection { kBackingOnly, kStableReservation };
 
+// Compose Task and XDNA HAL execution with native GPU SDMA. This suite checks
+// shared backing and stable addresses independently of GPU HAL queue execution.
 class FabricXdnaVirtualBufferTest : public FabricVirtualBufferTest {
  protected:
   void AddDevices(iree_hal_device_group_builder_t* builder) override {
@@ -380,4 +384,4 @@ INSTANTIATE_TEST_SUITE_P(
                                                         : "Instance";
     });
 
-}  // namespace iree::hal::amd::fabric::cts
+}  // namespace iree::hal::amd::cts
