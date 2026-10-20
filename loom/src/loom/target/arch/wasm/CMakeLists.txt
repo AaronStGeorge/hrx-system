@@ -144,6 +144,7 @@ loom_check_test_suite(
     "test/source_low/numeric_bit_operations.loom-test"
     "test/source_low/numeric_f32_narrowing.loom-test"
     "test/source_low/numeric_float_extensions.loom-test"
+    "test/source_low/numeric_float_narrow_arithmetic.loom-test"
     "test/source_low/numeric_float_native.loom-test"
     "test/source_low/numeric_float_ordering_reference.loom-test"
     "test/source_low/numeric_float_to_integer.loom-test"
