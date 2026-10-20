@@ -15,6 +15,8 @@
 #include <cxx/types.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <string_view>
 
 #include "loom/import/cxx/source/attributes.h"
@@ -100,6 +102,44 @@ bool is_address_unit(cxx::TranslationUnit& unit,
   return traits.is_same(traits.remove_cv(expression->type),
                         address.source->type()) &&
          value && *value == 1;
+}
+
+struct IntegerIncrement {
+  cxx::IdExpressionAST* induction;
+  unsigned step;
+};
+
+std::optional<IntegerIncrement> classify_integer_increment(
+    cxx::TranslationUnit& unit, cxx::ExpressionAST* expression,
+    std::uintmax_t maximum_step) {
+  expression = unwrap_expression(expression);
+  if (auto* prefix = cxx::ast_cast<cxx::UnaryExpressionAST>(expression);
+      prefix && !prefix->symbol && prefix->op == cxx::TokenKind::T_PLUS_PLUS) {
+    return IntegerIncrement{cxx::ast_cast<cxx::IdExpressionAST>(
+                                unwrap_expression(prefix->expression)),
+                            1};
+  }
+  if (auto* postfix = cxx::ast_cast<cxx::PostIncrExpressionAST>(expression);
+      postfix && !postfix->symbol &&
+      postfix->op == cxx::TokenKind::T_PLUS_PLUS) {
+    return IntegerIncrement{cxx::ast_cast<cxx::IdExpressionAST>(
+                                unwrap_expression(postfix->baseExpression)),
+                            1};
+  }
+  auto* compound =
+      cxx::ast_cast<cxx::CompoundAssignmentExpressionAST>(expression);
+  if (!compound || compound->symbol ||
+      compound->op != cxx::TokenKind::T_PLUS_EQUAL) {
+    return std::nullopt;
+  }
+  auto amount = integer_constant(unit, compound->rightExpression);
+  if (!amount || *amount <= 0 ||
+      static_cast<std::uintmax_t>(*amount) > maximum_step) {
+    return std::nullopt;
+  }
+  return IntegerIncrement{cxx::ast_cast<cxx::IdExpressionAST>(
+                              unwrap_expression(compound->targetExpression)),
+                          static_cast<unsigned>(*amount)};
 }
 
 }  // namespace
@@ -198,6 +238,9 @@ const CountedLoop* ControlFlow::counted(cxx::ForStatementAST* loop) const {
   const CountedLoop::Bound* bound = nullptr;
   if (auto* range =
           std::get_if<CountedLoop::UnsignedRange>(&found->second.range)) {
+    bound = std::get_if<CountedLoop::Bound>(&range->upper);
+  } else if (auto* range =
+                 std::get_if<CountedLoop::SignedRange>(&found->second.range)) {
     bound = std::get_if<CountedLoop::Bound>(&range->upper);
   } else {
     bound = &std::get<CountedLoop::AddressRange>(found->second.range).upper;
@@ -1021,9 +1064,12 @@ std::optional<CountedLoop> ControlFlow::classify(cxx::ForStatementAST* loop) {
   if (!induction || traits.is_volatile(induction->type())) {
     return std::nullopt;
   }
-  if (cxx::unaligned_type(traits.remove_cv(induction->type()))->kind() ==
-      cxx::TypeKind::kUnsignedInt) {
+  auto kind = cxx::unaligned_type(traits.remove_cv(induction->type()))->kind();
+  if (kind == cxx::TypeKind::kUnsignedInt) {
     return classify_unsigned(loop, induction, condition);
+  }
+  if (kind == cxx::TypeKind::kInt) {
+    return classify_signed(loop, induction, condition);
   }
   return traits.is_class(induction->type())
              ? classify_address(loop, induction, condition)
@@ -1047,36 +1093,20 @@ std::optional<CountedLoop> ControlFlow::classify_unsigned(
     return std::nullopt;
   }
 
-  unsigned step_value = 1;
-  auto* increment_expression = unwrap_expression(loop->expression);
-  auto* step = cxx::ast_cast<cxx::UnaryExpressionAST>(increment_expression);
-  auto* post = cxx::ast_cast<cxx::PostIncrExpressionAST>(increment_expression);
-  auto* compound =
-      cxx::ast_cast<cxx::CompoundAssignmentExpressionAST>(increment_expression);
-  cxx::IdExpressionAST* increment = nullptr;
-  if (step && !step->symbol && step->op == cxx::TokenKind::T_PLUS_PLUS) {
-    increment = cxx::ast_cast<cxx::IdExpressionAST>(
-        unwrap_expression(step->expression));
-  } else if (post && !post->symbol && post->op == cxx::TokenKind::T_PLUS_PLUS) {
-    increment = cxx::ast_cast<cxx::IdExpressionAST>(
-        unwrap_expression(post->baseExpression));
-  } else if (compound && !compound->symbol &&
-             compound->op == cxx::TokenKind::T_PLUS_EQUAL) {
-    auto amount = integer_constant(unit_, compound->rightExpression);
-    if (amount && *amount > 0 && *amount <= UINT32_MAX) {
-      step_value = static_cast<unsigned>(*amount);
-      increment = cxx::ast_cast<cxx::IdExpressionAST>(
-          unwrap_expression(compound->targetExpression));
-    }
-  }
+  auto increment = classify_integer_increment(
+      unit_, loop->expression, std::numeric_limits<std::uint32_t>::max());
   const auto& body_writes = written(loop->statement);
-  if (!increment || increment->symbol != induction ||
+  if (!increment || !increment->induction ||
+      increment->induction->symbol != induction ||
       std::ranges::find(body_writes, induction) != body_writes.end()) {
     return std::nullopt;
   }
+  auto step_value = increment->step;
 
   if (auto upper = integer_constant(unit_, condition->rightExpression)) {
-    if (*upper >= 0 && *upper <= UINT32_MAX - step_value + 1) {
+    if (*upper >= 0 &&
+        static_cast<std::uintmax_t>(*upper) <=
+            std::numeric_limits<std::uint32_t>::max() - step_value + 1) {
       return CountedLoop{
           induction, CountedLoop::UnsignedRange{static_cast<unsigned>(*upper),
                                                 step_value}};
@@ -1094,6 +1124,70 @@ std::optional<CountedLoop> ControlFlow::classify_unsigned(
   return CountedLoop{
       induction,
       CountedLoop::UnsignedRange{
+          CountedLoop::Bound{bound->symbol, condition->rightExpression},
+          step_value}};
+}
+
+// A strict signed-int interval cannot overflow with a unit step: an executed
+// induction is at most upper-1, including when upper is INT32_MAX. Larger
+// steps require a constant upper bound that leaves room for the final source
+// increment. Wider signed types retain general-loop semantics because a
+// target-selected index carrier is permitted to be only 32 bits.
+std::optional<CountedLoop> ControlFlow::classify_signed(
+    cxx::ForStatementAST* loop, cxx::Symbol* induction,
+    cxx::BinaryExpressionAST* condition) {
+  auto traits = unit_.typeTraits();
+  auto* left = cxx::ast_cast<cxx::IdExpressionAST>(
+      unwrap_expression(condition->leftExpression));
+  if (condition->symbol || !left || left->symbol != induction ||
+      cxx::unaligned_type(traits.remove_cv(condition->leftExpression->type))
+              ->kind() != cxx::TypeKind::kInt ||
+      cxx::unaligned_type(traits.remove_cv(condition->rightExpression->type))
+              ->kind() != cxx::TypeKind::kInt) {
+    return std::nullopt;
+  }
+
+  if (auto* compound = cxx::ast_cast<cxx::CompoundAssignmentExpressionAST>(
+          unwrap_expression(loop->expression));
+      compound &&
+      cxx::unaligned_type(traits.remove_cv(compound->rightExpression->type))
+              ->kind() != cxx::TypeKind::kInt) {
+    return std::nullopt;
+  }
+
+  auto increment = classify_integer_increment(
+      unit_, loop->expression,
+      static_cast<std::uintmax_t>(std::numeric_limits<std::int32_t>::max()));
+  const auto& body_writes = written(loop->statement);
+  if (!increment || !increment->induction ||
+      increment->induction->symbol != induction ||
+      std::ranges::find(body_writes, induction) != body_writes.end()) {
+    return std::nullopt;
+  }
+  auto step_value = increment->step;
+
+  if (auto upper = integer_constant(unit_, condition->rightExpression)) {
+    auto maximum_upper = std::numeric_limits<std::int32_t>::max() -
+                         static_cast<std::intmax_t>(step_value) + 1;
+    if (*upper >= std::numeric_limits<std::int32_t>::min() &&
+        *upper <= maximum_upper) {
+      return CountedLoop{
+          induction, CountedLoop::SignedRange{static_cast<std::int32_t>(*upper),
+                                              step_value}};
+    }
+    return std::nullopt;
+  }
+  auto* bound = cxx::ast_cast<cxx::IdExpressionAST>(
+      unwrap_expression(condition->rightExpression));
+  const auto& loop_writes = written(loop);
+  if (step_value != 1 || !bound || !traits.is_integral_or_enum(bound->type) ||
+      traits.is_volatile(bound->type) ||
+      std::ranges::find(loop_writes, bound->symbol) != loop_writes.end()) {
+    return std::nullopt;
+  }
+  return CountedLoop{
+      induction,
+      CountedLoop::SignedRange{
           CountedLoop::Bound{bound->symbol, condition->rightExpression},
           step_value}};
 }

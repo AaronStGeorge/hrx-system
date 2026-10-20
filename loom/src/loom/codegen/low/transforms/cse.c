@@ -185,7 +185,7 @@ static iree_status_t loom_low_cse_region(
         descriptor_set, &cursor, &packet, is_assignment, assignment_boundary,
         state_classes);
     if (identity.assignment) {
-      status = loom_expression_replace(module, cursor.op, identity.assignment);
+      status = loom_expression_replace(&cursor, cursor.op, identity.assignment);
       if (iree_status_is_ok(status)) {
         loom_pass_mark_changed(pass);
         ++statistics->expressions_eliminated;
@@ -197,7 +197,7 @@ static iree_status_t loom_low_cse_region(
                  loom_expression_observe_barriers(&cursor, &barriers));
     if (iree_any_bit_set(identity.flags,
                          LOOM_LOW_CSE_PACKET_FLAG_WRITES_STATE) ||
-        !loom_expression_is_reusable(&cursor)) {
+        !loom_expression_op_is_reusable(module, cursor.op, cursor.traits)) {
       continue;
     }
 
@@ -215,7 +215,7 @@ static iree_status_t loom_low_cse_region(
     loom_expression_entry_t* existing =
         loom_expression_scope_find(&cursor, candidate.hash, flags);
     if (existing && existing->metadata >= minimum_epoch) {
-      status = loom_expression_replace(module, cursor.op, existing->op);
+      status = loom_expression_replace(&cursor, cursor.op, existing->op);
       if (iree_status_is_ok(status)) {
         loom_pass_mark_changed(pass);
         ++statistics->expressions_eliminated;

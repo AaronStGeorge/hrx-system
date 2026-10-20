@@ -2262,7 +2262,8 @@ and disjunction produce source diagnostics. Source conditions generate no
 runtime comparisons or branches. The program must satisfy every declared
 predicate.
 
-Counted unsigned `for` loops accept explicit scheduling attributes:
+Counted `int` and `unsigned int` `for` loops accept explicit scheduling
+attributes:
 
 ```cpp
 [[loom::unroll(3), loom::pipeline(2), loom::schedule("linear")]]
@@ -2313,12 +2314,16 @@ Constant evaluation preserves source widths and defined unsigned wrapping;
 unevaluated operands such as `sizeof(++value)` have no runtime effects.
 Prefix and postfix increments have the same counted-loop behavior.
 
-The induction and comparison use the same unsigned-int width. Unit steps may
-use a stable runtime scalar bound; larger steps require a constant bound that
-leaves room for the final increment without wrapping. Runtime starts preserve
-zero-trip and partial-tail behavior. Mutable bounds, effectful expressions,
-widened comparisons and potentially wrapping increments keep general-loop
-semantics, and explicit scheduling on those loops is diagnosed.
+The induction and comparison use the same `int` or `unsigned int` width. Signed
+loops use Loom's signed `index` domain; unsigned loops use the physical
+`offset` domain. Unit steps may use a stable runtime scalar bound; larger steps
+require a constant bound that leaves room for the final increment without
+wrapping. Runtime starts preserve zero-trip and partial-tail behavior. Narrow
+induction types governed by integer promotion and signed types wider than a
+possibly 32-bit target index retain general-loop semantics. Mutable bounds,
+effectful expressions, widened comparisons, and potentially wrapping
+increments also retain general-loop semantics, and explicit scheduling on
+those loops is diagnosed.
 
 Dynamic offset loops currently compile with linear body ordering. The core
 interleaved/recurrence tail construction uses index-only division and

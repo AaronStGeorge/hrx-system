@@ -210,6 +210,17 @@ int* local(int* input) {
 }
 
 // ====
+// RUN: verify
+// An indeterminate pointer object still needs a memory representation before
+// a later source assignment can initialize it.
+int* deferred(int* input) {
+  // ERROR@+1: LOWERING/059 "uninitialized locals require scalar or native vector object storage"
+  int* result;
+  result = input;
+  return result;
+}
+
+// ====
 // RUN: roundtrip
 // Pointer increment results preserve the source ABI.
 int* next(int* p) { return ++p; }

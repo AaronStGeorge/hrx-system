@@ -925,6 +925,7 @@ loom_cc_test(
     iree::testing::gtest_main
     iree::third_party::cxx_parser
     loom::import::cxx::source
+    loom::import::cxx::source::error
   LABELS
     "iree-build-requirement=loom.import.cxx"
 )

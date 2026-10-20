@@ -23,6 +23,25 @@ func.def public @entry() {
 
 // ====
 // RUN: roundtrip
+// Signed-int counted loops use the signed native index domain.
+void entry(int begin, int end) {
+  [[loom::unroll(2)]] for (int index = begin; index < end; ++index) {}
+}
+// ----
+func.def public @entry(%begin: i32, %end: i32) {
+  %2 = index.cast %begin : i32 to index
+  %3 = index.cast %end : i32 to index
+  %4 = index.constant 1 : index
+  %5 = scalar.constant 2 : i32
+  %6 = index.cast %5 : i32 to index
+  scf.for %index = [%2 to %3 step %4] unroll(%6) {
+    %8 = index.cast %index : index to i32
+  }
+  func.return
+}
+
+// ====
+// RUN: roundtrip
 // Unsigned operands widen to i64 before entering the signed index domain.
 void entry(unsigned factor, unsigned char depth) {
   [[loom::unroll(factor), loom::pipeline(depth)]]

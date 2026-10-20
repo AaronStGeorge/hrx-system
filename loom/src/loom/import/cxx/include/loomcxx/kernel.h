@@ -20,7 +20,7 @@
 // explicit scalar or storage workload arguments and immutable target
 // properties. Configuration bodies may read workload storage but cannot write
 // it or use loaded data to select workgroup or cluster sizes.
-// Counted unsigned for loops accept loom::unroll(factor),
+// Counted int and unsigned int for loops accept loom::unroll(factor),
 // loom::pipeline(depth), and
 // loom::schedule("linear"|"interleaved"|"recurrence"). Factors and depths are
 // pure integer expressions read after the for initializer. They become SSA

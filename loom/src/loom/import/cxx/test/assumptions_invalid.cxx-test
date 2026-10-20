@@ -30,7 +30,7 @@ void entry(unsigned value, unsigned other) {
 [[loom::assume]] void assume(bool);
 unsigned opaque();
 void entry(unsigned value, unsigned other) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && value < opaque());
 }
 
@@ -40,7 +40,7 @@ void entry(unsigned value, unsigned other) {
 [[loom::assume]] void assume(bool);
 unsigned opaque();
 void entry(unsigned value, unsigned other) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && value < (opaque(), 16u));
 }
 
@@ -49,7 +49,7 @@ void entry(unsigned value, unsigned other) {
 // Mutating the constrained operand cannot produce an identity refinement.
 [[loom::assume]] void assume(bool);
 void entry(unsigned value, unsigned other) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && value++ < 16u);
 }
 
@@ -58,17 +58,27 @@ void entry(unsigned value, unsigned other) {
 // Mutation in the other operand is equally outside the metadata contract.
 [[loom::assume]] void assume(bool);
 void entry(unsigned value, unsigned other) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && value < (other = 16u));
 }
 
 // ====
 // RUN: verify
-// Derived runtime expressions have no source binding to rebind.
+// Integer division is partial and cannot be materialized from an unevaluated
+// assumption condition.
 [[loom::assume]] void assume(bool);
-void entry(int value, int limit) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
-  assume(value + 1 < limit);
+void entry(unsigned value, unsigned divisor) {
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
+  assume(value / divisor < 16u);
+}
+
+// ====
+// RUN: verify
+// A runtime shift count is partial for values outside the source width.
+[[loom::assume]] void assume(bool);
+void entry(unsigned value, unsigned amount) {
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
+  assume((value << amount) < 16u);
 }
 
 // ====
@@ -85,7 +95,7 @@ void entry(unsigned value, unsigned other) {
 // A value-changing cast does not constrain the original binding.
 [[loom::assume]] void assume(bool);
 void entry(unsigned value, unsigned other) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && (unsigned char)value < 16u);
 }
 
@@ -95,7 +105,7 @@ void entry(unsigned value, unsigned other) {
 [[loom::assume]] void assume(bool);
 unsigned opaque();
 void entry(unsigned value, unsigned other) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && value < (false ? opaque() : 16u));
 }
 
@@ -122,12 +132,35 @@ int entry(int value) {
 
 // ====
 // RUN: verify
+// Derived facts cannot read addressable storage either: materializing the
+// expression would snapshot a value that an alias can subsequently change.
+[[loom::assume]] void assume(bool);
+int entry(int value) {
+  int* address = &value;
+  // ERROR@+1: LOWERING/059 "assume expressions cannot read an addressable binding whose storage may change through an alias"
+  assume(value + 1 > 0);
+  return *address;
+}
+
+// ====
+// RUN: verify
 // Non-automatic bindings have no current SSA identity to refine.
 [[loom::assume]] void assume(bool);
 extern int global_value;
 void entry(int value) {
   // ERROR@+1: LOWERING/059 "assume can retain facts only for an owned automatic scalar binding"
   assume(value > 0 && global_value > 0);
+}
+
+// ====
+// RUN: verify
+// Derived facts likewise require every runtime dependency to have an owned
+// automatic SSA identity.
+[[loom::assume]] void assume(bool);
+extern int global_value;
+void entry(int value) {
+  // ERROR@+1: LOWERING/059 "assume expressions can read only owned automatic scalar bindings"
+  assume(value + global_value > 0);
 }
 
 // ====
@@ -150,7 +183,7 @@ struct Bound {};
 unsigned operator+(Bound, unsigned);
 extern Bound bound;
 void entry(unsigned value) {
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(value < (bound + 1u));
 }
 
@@ -160,7 +193,7 @@ void entry(unsigned value) {
 [[loom::assume]] void assume(bool);
 void entry(unsigned value, unsigned other) {
   // WARNING@+2: PARSE/036 "invalid binary expression"
-  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values or pure constants without calls, mutation, or value-changing casts"
+  // ERROR@+1: LOWERING/059 "predicate operands must be retained scalar values, compile-time constants, or scalar expressions safe to evaluate unconditionally"
   assume(other < 32u && value < (1u / 0u));
 }
 

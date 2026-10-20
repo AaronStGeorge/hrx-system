@@ -55,12 +55,12 @@ unsigned schedule_narrow(unsigned count) {
   return total;
 }
 
-unsigned schedule_signed(unsigned count) {
+unsigned schedule_signed(int count) {
   signed char factor = -1;
   factor += 4;
   unsigned total = 0;
   [[loom::unroll(factor)]]
-  for (unsigned index = 0; index < count; ++index) {
+  for (int index = 0; index < count; ++index) {
     total += index;
   }
   return total;

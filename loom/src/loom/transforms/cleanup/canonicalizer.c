@@ -19,6 +19,7 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/rewrite/type_propagation.h"
 #include "loom/target/facts.h"
+#include "loom/transforms/cleanup/expression_scope.h"
 #include "loom/transforms/cleanup/fact_refinement.h"
 #include "loom/transforms/cleanup/patterns.h"
 #include "loom/util/predicate_facts.h"
@@ -27,6 +28,39 @@
 //===----------------------------------------------------------------------===//
 // Implementation
 //===----------------------------------------------------------------------===//
+
+// Whether a dead fact identity can preserve stronger facts for a later CSE of
+// one of its operand producers. This is deliberately local: it inspects only
+// the identity's ordinal definition edges and uses the same eligibility policy
+// as CSE. Direct argument facts and type-changing refinements cannot replace a
+// structurally equivalent producer result and retain ordinary mini-DCE.
+static bool loom_canonicalize_fact_identity_refines_cse_expression(
+    const loom_module_t* module, const loom_op_t* op) {
+  if (!loom_traits_are_fact_identity(op->traits)) {
+    return false;
+  }
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  const loom_value_id_t* results = loom_op_const_results(op);
+  const uint16_t pair_count = iree_min(op->operand_count, op->result_count);
+  for (uint16_t i = 0; i < pair_count; ++i) {
+    if (!loom_type_equal(loom_module_value_type(module, operands[i]),
+                         loom_module_value_type(module, results[i]))) {
+      continue;
+    }
+    const loom_value_t* operand = loom_module_value(module, operands[i]);
+    if (loom_value_is_block_arg(operand)) {
+      continue;
+    }
+    const loom_op_t* definition = loom_value_def_op(operand);
+    const loom_trait_flags_t traits =
+        loom_op_effective_traits(module, definition);
+    if (loom_expression_op_is_reusable(module, definition, traits) &&
+        !loom_op_requires_source_context(module, definition)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 loom_canonicalizer_pattern_registries_t
 loom_canonicalizer_pattern_registries_from_cleanup_registry(
@@ -468,6 +502,9 @@ typedef struct loom_canonicalize_rewrite_state_t {
   // Optional phase-specific pattern registries sharing this rewrite session.
   loom_canonicalizer_pattern_registries_t patterns;
 
+  // Whether mini-DCE retains reusable fact identities for a following CSE.
+  bool preserve_cse_fact_identities;
+
   // Invocation-local context shared by indexed cleanup patterns.
   loom_cleanup_pattern_context_t pattern_context;
 
@@ -623,10 +660,20 @@ static iree_status_t loom_canonicalize_rewrite_op(
       (loom_canonicalize_rewrite_state_t*)user_data;
   loom_rewriter_t* rewriter = &driver->rewriter;
 
-  // Mini-DCE: erase trivially dead ops before fold/canonicalize.
+  // Mini-DCE: erase trivially dead ops before fold/canonicalize. Source combine
+  // may retain a same-typed fact identity on a reusable producer for its
+  // adjacent CSE phase: an equivalent later expression can make the refined
+  // result live even when no source use names it directly. Ordinary universal
+  // canonicalization retains its eager dead-code contract.
   bool erased = false;
   rewriter->flags = 0;
-  IREE_RETURN_IF_ERROR(loom_rewriter_erase_if_dead(rewriter, op, &erased));
+  if (loom_rewriter_is_trivially_dead(rewriter, op) &&
+      (!state->preserve_cse_fact_identities ||
+       !loom_canonicalize_fact_identity_refines_cse_expression(rewriter->module,
+                                                               op))) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));
+    erased = true;
+  }
   if (erased) {
     loom_greedy_rewrite_result_record_change(
         result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_NONE);
@@ -775,6 +822,8 @@ static iree_status_t loom_canonicalizer_run_precomputed_region(
       .fact_refinement_policy = canonicalizer->fact_refinement_policy,
       .patterns = options ? options->patterns
                           : (loom_canonicalizer_pattern_registries_t){0},
+      .preserve_cse_fact_identities =
+          options ? options->preserve_cse_fact_identities : false,
       .refine_boundary = options
                              ? options->refine_boundary
                              : (loom_type_propagator_boundary_callback_t){0},

@@ -16,7 +16,9 @@ std::vector<ProjectedPredicate> assumption_predicates(
   if (!call->expressionList || call->expressionList->next) {
     diagnostics.reject(unit, call, "assume requires exactly one condition");
   }
-  return project_predicates(unit, diagnostics, call->expressionList->value);
+  return project_predicates(unit, diagnostics, call->expressionList->value,
+                            PredicateSubject::Explicit,
+                            PredicateExpressionPolicy::SpeculatableValues);
 }
 
 }  // namespace loom::cxx_import

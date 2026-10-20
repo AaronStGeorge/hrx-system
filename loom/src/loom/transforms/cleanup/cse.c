@@ -66,29 +66,34 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
       if (iree_any_bit_set(cursor.traits, LOOM_TRAIT_PURE)) {
         minimum_epoch = 0;
       }
-      if (!loom_expression_is_reusable(&cursor) ||
-          loom_op_requires_source_context(module, cursor.op)) {
-        continue;
-      }
-      const uint32_t hash = loom_expression_hash(module, cursor.op);
-      const loom_expression_lookup_flags_t flags =
-          iree_any_bit_set(cursor.traits, LOOM_TRAIT_PURE)
-              ? 0
-              : LOOM_EXPRESSION_LOOKUP_FLAG_STATEFUL;
-      loom_expression_entry_t* existing =
-          loom_expression_scope_find(&cursor, hash, flags);
-      if (existing && existing->metadata >= minimum_epoch) {
-        status = loom_expression_replace(module, cursor.op, existing->op);
-        if (iree_status_is_ok(status)) {
-          loom_pass_mark_changed(pass);
-          ++statistics->expressions_eliminated;
+      bool eliminated = false;
+      if (loom_expression_op_is_reusable(module, cursor.op, cursor.traits) &&
+          !loom_op_requires_source_context(module, cursor.op)) {
+        const uint32_t hash = loom_expression_hash(module, cursor.op);
+        const loom_expression_lookup_flags_t flags =
+            iree_any_bit_set(cursor.traits, LOOM_TRAIT_PURE)
+                ? 0
+                : LOOM_EXPRESSION_LOOKUP_FLAG_STATEFUL;
+        loom_expression_entry_t* existing =
+            loom_expression_scope_find(&cursor, hash, flags);
+        if (existing && existing->metadata >= minimum_epoch) {
+          status = loom_expression_replace(&cursor, cursor.op, existing->op);
+          if (iree_status_is_ok(status)) {
+            eliminated = true;
+            loom_pass_mark_changed(pass);
+            ++statistics->expressions_eliminated;
+          }
+        } else {
+          loom_expression_scope_insert(&cursor, (loom_expression_entry_t){
+                                                    .op = cursor.op,
+                                                    .hash = hash,
+                                                    .metadata = cursor.epoch,
+                                                });
         }
-      } else {
-        loom_expression_scope_insert(&cursor, (loom_expression_entry_t){
-                                                  .op = cursor.op,
-                                                  .hash = hash,
-                                                  .metadata = cursor.epoch,
-                                              });
+      }
+      if (!eliminated && iree_status_is_ok(status) &&
+          loom_traits_are_fact_identity(cursor.traits)) {
+        status = loom_expression_scope_record_fact_identity(&cursor);
       }
     }
   }

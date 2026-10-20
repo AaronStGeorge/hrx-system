@@ -45,9 +45,9 @@ pipeline.def<kernel> public retain target(@npu) @reordered_publication() run(%ou
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %second_payload = mov.local-address 393216
-  %241 = mov.short -1
-  acq %241, 32
-  acq %241, 32
+  %243 = mov.short -1
+  acq %243, 32
+  acq %243, 32
   %later_value = mov.short 22
   st %later_value, %second_payload, 4
   %earlier_value = mov.short 11
@@ -63,61 +63,61 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 }
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
-  %240 = mov.short -1
-  acq %240, 49
-  %235 = mov.short 0
-  %236 = mov.short 1
+  %242 = mov.short -1
+  acq %242, 49
+  %237 = mov.short 0
+  %238 = mov.short 1
   %81 = mov.local-address 458760
   %82 = lda %81, 0
   %83 = lda %81, 4
-  %84 = add.rr %82, %235
+  %84 = add.rr %82, %237
   %85 = ltu %84, %82
   %86 = add.rr %83, %85
   %87 = mov.i32 -2147483648
   %88 = mov.i32 -2147364864
   mov.ms %87
   mov.ms %88
-  mov.ms.last %236
+  mov.ms.last %238
   %90 = mov.i32 -2146316284
-  mov.ms %236
+  mov.ms %238
   mov.ms %90
   mov.ms %84
   mov.ms.last %86
   %94 = mov.i32 -2147364348
-  mov.ms %236
+  mov.ms %238
   mov.ms %94
   mov.ms.last %87
   %96 = mov.i32 122388
   mov.ms %87
   mov.ms %96
-  mov.ms.last %235
+  mov.ms.last %237
   %97 = mov.ss
-  rel %236, 48
-  acq %240, 49
-  %237 = mov.short 4
-  %238 = mov.i32 16385
+  rel %238, 48
+  acq %242, 49
+  %239 = mov.short 4
+  %240 = mov.i32 16385
   %114 = mov.local-address 458768
   %115 = lda %114, 0
   %116 = lda %114, 4
-  %117 = add.rr %115, %237
+  %117 = add.rr %115, %239
   %118 = ltu %117, %115
   %119 = add.rr %116, %118
   mov.ms %87
   mov.ms %88
-  mov.ms.last %238
-  mov.ms %236
+  mov.ms.last %240
+  mov.ms %238
   mov.ms %90
   mov.ms %117
   mov.ms.last %119
-  mov.ms %236
+  mov.ms %238
   mov.ms %94
   mov.ms.last %87
   mov.ms %87
   mov.ms %96
-  mov.ms.last %235
+  mov.ms.last %237
   %130 = mov.ss
-  rel %236, 48
-  rel %236, 50
+  rel %238, 48
+  rel %238, 50
   low.br ^_bb1
 ^_bb1:
   %78 = mov.ss
@@ -284,28 +284,28 @@ pipeline.def<kernel> public retain target(@npu) @reordered_retirement() run(%out
 
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
-  %187 = mov.short 0
+  %188 = mov.short 0
   %payload = mov.local-address 393216
   %count = mov.short 3
   %step = mov.short 1
-  low.br ^_bb1(%187: reg<aie2p.er>, %187: reg<aie2p.er>)
+  low.br ^_bb1(%188: reg<aie2p.er>, %188: reg<aie2p.er>)
 ^_bb1(%value: reg<aie2p.er>, %write: reg<aie2p.er>):
-  %192 = lt %value, %count
-  low.cond_br %192, ^_bb2, ^_bb3 : reg<aie2p.er>
+  %193 = lt %value, %count
+  low.cond_br %193, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
   %63 = mov.short -1
   acq %63, 32
-  %193 = mov.short 4
-  %194 = mov.short 8
-  %195 = add.rr %write, %193
-  %196 = eq %195, %194
-  %197 = copy %196 : reg<aie2p.er> -> reg<aie2p.mr27_select>
-  %198 = sel.nez %187, %195, %197
-  %199 = mov.address-index %write
-  st.i32.index %value, %payload, %199
+  %194 = mov.short 4
+  %195 = mov.short 8
+  %196 = add.rr %write, %194
+  %197 = eq %196, %195
+  %198 = copy %197 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %199 = sel.nez %188, %196, %198
+  %200 = mov.address-index %write
+  st.i32.index %value, %payload, %200
   rel %step, 33
-  %200 = add.rr %value, %step
-  low.br ^_bb1(%200: reg<aie2p.er>, %198: reg<aie2p.er>)
+  %201 = add.rr %value, %step
+  low.br ^_bb1(%201: reg<aie2p.er>, %199: reg<aie2p.er>)
 ^_bb3:
   rel %step, 48
   low.br ^_bb4
@@ -315,18 +315,18 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 }
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
-  %203 = mov.short -1
-  acq %203, 49
-  acq %203, 49
-  %201 = mov.short 1
+  %204 = mov.short -1
+  acq %204, 49
+  acq %204, 49
+  %202 = mov.short 1
   %78 = mov.i32 -2147483648
   %79 = mov.i32 -2147364864
   mov.ms %78
   mov.ms %79
-  mov.ms.last %201
+  mov.ms.last %202
   %80 = mov.short 0
   %83 = mov.i32 -2147364348
-  mov.ms %201
+  mov.ms %202
   mov.ms %83
   mov.ms.last %78
   %85 = mov.i32 122388
@@ -336,9 +336,9 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %86 = mov.ss
   %116 = mov.short 2
   rel %116, 48
-  acq %203, 49
-  rel %201, 48
-  rel %201, 50
+  acq %204, 49
+  rel %202, 48
+  rel %202, 50
   low.br ^_bb1
 ^_bb1:
   %76 = mov.ss

@@ -22,10 +22,22 @@ namespace loom::cxx_import {
 enum class PredicateValueOrigin {
   // A resolved source binding, optionally followed by record members.
   Binding,
+  // A speculatable scalar expression retained as its resulting SSA value.
+  Expression,
   // The typed result placeholder of an enclosing callable contract.
   Result,
   // The implicit value defined by an enclosing config declaration.
   Subject,
+};
+
+// One automatic source binding read by a retained scalar expression. Both
+// references borrow the owning Source and allow the body translator to verify
+// that the binding still has an owned SSA identity at the assumption site.
+struct PredicateDependency {
+  // Resolved source binding read by the expression.
+  cxx::Symbol* binding;
+  // Direct source reference owning any binding-lifetime diagnostic.
+  cxx::ExpressionAST* source;
 };
 
 // One source value referenced by a projected predicate. AST and symbol
@@ -38,6 +50,8 @@ struct PredicateValue {
   cxx::Symbol* binding;
   // Direct semantic field selections from the root to the scalar leaf.
   std::vector<cxx::FieldSymbol*> members;
+  // Runtime bindings read by Expression values, in source traversal order.
+  std::vector<PredicateDependency> dependencies;
   // Unconverted source identity owning diagnostics and its declared type.
   cxx::ExpressionAST* source;
   // Complete operand after frontend-selected implicit conversions.
@@ -68,6 +82,15 @@ enum class PredicateSubject {
   Implicit,
 };
 
+// Selects whether predicate operands must name retained values directly or may
+// also form total scalar expressions that are safe to materialize. Function
+// and config contracts use direct identities; body-local assumptions can retain
+// derived SSA identities within their dominance scope.
+enum class PredicateExpressionPolicy {
+  RetainedValues,
+  SpeculatableValues,
+};
+
 // Returns whether |kind| accepts a scalar value with the resolved source type.
 // Consumers with implicit subjects validate that subject through this query.
 bool predicate_accepts_source_type(cxx::TranslationUnit& unit,
@@ -81,7 +104,9 @@ bool predicate_accepts_source_type(cxx::TranslationUnit& unit,
 std::vector<ProjectedPredicate> project_predicates(
     cxx::TranslationUnit& unit, Diagnostics& diagnostics,
     cxx::ExpressionAST* expression,
-    PredicateSubject subject = PredicateSubject::Explicit);
+    PredicateSubject subject = PredicateSubject::Explicit,
+    PredicateExpressionPolicy expression_policy =
+        PredicateExpressionPolicy::RetainedValues);
 
 }  // namespace loom::cxx_import
 
