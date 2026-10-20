@@ -125,17 +125,21 @@ class MemoryTest : public ::testing::Test {
       deferred_backing->CompleteReturns();
     }
     iree_hal_buffer_release(workspace);
-    IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+    if (execution) {
+      IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+    }
     IREE_ASSERT_OK(loom_serve_virtual_buffer_free(first));
     IREE_ASSERT_OK(loom_serve_virtual_buffer_free(second));
     IREE_ASSERT_OK(loom_serve_virtual_buffer_free(third));
-    loom_serve_memory_pool_trim(pool, 0);
-    // Intentional failure cases retain their original status while native
-    // disposal still reaches its physical capacity boundary.
-    iree_status_ignore(loom_serve_memory_pool_await(pool));
-    const auto statistics = loom_serve_memory_pool_statistics(pool);
-    EXPECT_EQ(statistics.committed_bytes, 0u);
-    EXPECT_EQ(statistics.reserved_bytes, 0u);
+    if (pool) {
+      loom_serve_memory_pool_trim(pool, 0);
+      // Intentional failure cases retain their original status while native
+      // disposal still reaches its physical capacity boundary.
+      iree_status_ignore(loom_serve_memory_pool_await(pool));
+      const auto statistics = loom_serve_memory_pool_statistics(pool);
+      EXPECT_EQ(statistics.committed_bytes, 0u);
+      EXPECT_EQ(statistics.reserved_bytes, 0u);
+    }
     loom_serve_memory_pool_free(owned_pool);
     iree_hal_pool_release(deferred_backing);
     mapping_queue.Reset();
