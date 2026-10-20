@@ -289,7 +289,8 @@ class SourceSpeechServiceTest : public ::testing::TestWithParam<bool> {
                                               &admission, &frontier));
     EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
     IREE_RETURN_IF_ERROR(Wait(frontier));
-    EXPECT_TRUE(generator_.complete_admit(generator_.self, invocation));
+    EXPECT_EQ(generator_.complete_admit(generator_.self, invocation),
+              LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     return iree_ok_status();
   }
 
@@ -471,7 +472,8 @@ TEST_P(SourceSpeechServiceTest,
     ASSERT_EQ(warm_samples.size(), 6u);
   }
   IREE_ASSERT_OK(Wait(frontier));
-  ASSERT_TRUE(cold.complete_admit(cold.self, invocation));
+  ASSERT_EQ(cold.complete_admit(cold.self, invocation),
+            LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
   std::vector<float> cold_samples;
   bool complete = false;
   while (!complete) {

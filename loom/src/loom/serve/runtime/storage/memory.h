@@ -262,8 +262,9 @@ iree_status_t loom_serve_memory_pool_try_commit(
 // results and wakes the owner; it never invokes the pressure policy. On
 // success, readiness reaches value only after mappings are usable; failure
 // fails readiness and preserves partial ownership for teardown. Existing ready
-// ranges need no operation and signal immediately. Capacity denial returns
-// admitted=false and no operation or readiness signal.
+// ranges need no operation and signal immediately. Capacity denial returns no
+// operation or readiness signal. DEFERRED preserves this attempt's observation
+// of native progress even if it completes before the caller handles the result.
 //
 // The caller keeps every reservation and its accounting alive until the
 // returned operation retires, independently of readiness success/failure. No
@@ -274,7 +275,7 @@ iree_status_t loom_serve_memory_pool_try_commit(
 iree_status_t loom_serve_memory_pool_commit_async(
     loom_serve_memory_pool_t* pool, iree_host_size_t range_count,
     const loom_serve_memory_range_t* ranges, iree_hal_semaphore_t* readiness,
-    uint64_t value, bool* out_admitted,
+    uint64_t value, loom_serve_memory_admission_t* out_admission,
     loom_serve_memory_operation_t** out_operation);
 
 // Copies the unkept physical slab set of these distinct reservations and queues

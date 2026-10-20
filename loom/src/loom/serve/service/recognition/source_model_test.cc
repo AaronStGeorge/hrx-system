@@ -115,7 +115,8 @@ class SourceRecognitionModelTest : public ::testing::Test {
                                         &admission, &frontier));
     ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
     IREE_ASSERT_OK(Wait(frontier));
-    ASSERT_TRUE(generator_.complete_admit(generator_.self, row.invocation));
+    ASSERT_EQ(generator_.complete_admit(generator_.self, row.invocation),
+              LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
   }
 
   void Release(size_t index) {

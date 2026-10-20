@@ -982,12 +982,13 @@ static iree_status_t loom_serve_weight_stream(loom_serve_weights_t* weights) {
           weights->device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
           IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &group->mapped);
       if (iree_status_is_ok(status)) {
-        bool admitted = false;
+        loom_serve_memory_admission_t admission;
         status = loom_serve_memory_pool_commit_async(
-            weights->pool, 1, &group->backing, group->mapped, 1, &admitted,
+            weights->pool, 1, &group->backing, group->mapped, 1, &admission,
             &weights->activation.backing[weights->activation.backing_count]);
         ++weights->activation.backing_count;
-        if (iree_status_is_ok(status) && !admitted) {
+        if (iree_status_is_ok(status) &&
+            admission != LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
           status =
               iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                "physical pool cannot back model parameters");

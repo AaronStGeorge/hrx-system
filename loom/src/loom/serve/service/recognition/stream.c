@@ -450,8 +450,13 @@ static iree_status_t loom_serve_recognition_admit(
       *progress = true;
       return loom_serve_recognition_wait(service, RECOGNITION_PHASE_RESERVING);
     }
-    if (service->generator.complete_admit(service->generator.self,
-                                          row->invocation)) {
+    const loom_serve_memory_admission_t state_admission =
+        service->generator.complete_admit(service->generator.self,
+                                          row->invocation);
+    if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_DEFERRED) {
+      return iree_ok_status();
+    }
+    if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       row->phase = RECOGNITION_ROW_READY;
       service->admission = NULL;
       *progress = true;
@@ -518,7 +523,8 @@ static iree_status_t loom_serve_recognition_collect(
   } else if (phase == RECOGNITION_PHASE_RESERVING) {
     loom_serve_recognition_stream_t* row = service->admission;
     if (service->generator.complete_admit(service->generator.self,
-                                          row->invocation)) {
+                                          row->invocation) ==
+        LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       row->phase = RECOGNITION_ROW_READY;
       service->admission = NULL;
     }

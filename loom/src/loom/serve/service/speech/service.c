@@ -529,12 +529,19 @@ static void loom_serve_speech_prepared(loom_serve_speech_service_t* service,
     if (!complete) {
       service->device.frontier = frontier;
       service->status = loom_serve_speech_wait(service, SPEECH_PHASE_RESERVING);
-    } else if (service->generator.complete_admit(service->generator.self,
-                                                 row->invocation)) {
-      row->phase = SPEECH_ROW_READY;
-      service->admission = NULL;
     } else {
-      admission = LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY;
+      const loom_serve_memory_admission_t state_admission =
+          service->generator.complete_admit(service->generator.self,
+                                            row->invocation);
+      if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_DEFERRED) {
+        return;
+      }
+      if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
+        row->phase = SPEECH_ROW_READY;
+        service->admission = NULL;
+      } else {
+        admission = LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY;
+      }
     }
   }
   if (iree_status_is_ok(service->status) &&
@@ -606,7 +613,8 @@ static void loom_serve_speech_collect(loom_serve_speech_service_t* service,
   } else if (phase == SPEECH_PHASE_RESERVING) {
     loom_serve_speech_row_t* row = service->admission;
     if (service->generator.complete_admit(service->generator.self,
-                                          row->invocation)) {
+                                          row->invocation) ==
+        LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       row->phase = SPEECH_ROW_READY;
       service->admission = NULL;
     }

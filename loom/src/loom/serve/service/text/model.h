@@ -247,7 +247,7 @@ typedef enum loom_serve_text_reserve_mode_e {
 // model frontier. No model-completion or native backing wait occurs. Only one
 // reservation may own a row.
 //
-// CAPACITY/DEFERRED mean parameter admission is pending without a pin or state
+// Parameter CAPACITY/DEFERRED mean admission is pending without a pin or state
 // change; abandoning the request cancels its residency admission interest.
 // ACQUIRED owns a parameter pin through successful ALL
 // readiness on the borrowed frontier and complete_reserve, even if subsequent
@@ -263,13 +263,16 @@ iree_status_t loom_serve_text_row_submit_reserve(
     loom_serve_residency_admission_t* out_admission,
     loom_serve_execution_frontier_t* out_frontier);
 
-// Consumes a submitted reservation after successful ALL readiness. True owns
-// the parameter pin and exact target/draft pages, private views and recurrent
-// writer until release_reservation. False releases the activation-only pin and
-// preserves both selected row and checkpoint. Idle owners may be reclaimed
-// before retrying. No allocation or wait occurs. An already-cancelled request
-// completes normally, then releases any admitted reservation.
-bool loom_serve_text_row_complete_reserve(loom_serve_text_row_t* row);
+// Consumes a submitted reservation after successful ALL readiness. AVAILABLE
+// owns the parameter pin and exact target/draft pages, private views and
+// recurrent writer until release_reservation. CAPACITY/DEFERRED release the
+// activation-only pin and preserve both selected row and checkpoint. DEFERRED
+// preserves the observed native progress even if it has since retired. Idle
+// owners may be reclaimed before retrying. No allocation or wait occurs. An
+// already-cancelled request completes normally, then releases any admitted
+// reservation.
+loom_serve_memory_admission_t loom_serve_text_row_complete_reserve(
+    loom_serve_text_row_t* row);
 
 // Copies source-validated request options into source-owned row state before
 // its next epoch. The caller excludes outstanding model work and other model

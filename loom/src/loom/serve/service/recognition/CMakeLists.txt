@@ -251,6 +251,7 @@ loom_cc_library(
     iree::tokenizer
     loom::serve::runtime::execution
     loom::serve::runtime::parameter::residency
+    loom::serve::runtime::storage::memory
   PUBLIC
 )
 endif()

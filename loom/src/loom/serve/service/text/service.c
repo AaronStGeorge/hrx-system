@@ -456,7 +456,7 @@ typedef enum loom_serve_text_admission_result_e {
   TEXT_ADMISSION_CAPACITY = 0,
   // Request-specific logical/physical state cannot fit; another request may.
   TEXT_ADMISSION_STATE_CAPACITY,
-  // An older weight-pressure waiter must receive its next owner turn.
+  // Native retirement or an older admission owner can make progress.
   TEXT_ADMISSION_QUEUED,
   // Parameter activation and state reservation have both completed.
   TEXT_ADMISSION_READY,
@@ -508,8 +508,15 @@ static iree_status_t loom_serve_text_reclaim_idle(
                             previous.values[1] == frontier.values[1];
       service->completion.frontier = frontier;
       if (complete) {
-        if (loom_serve_text_row_complete_reserve(selected->row)) {
+        const loom_serve_memory_admission_t state_admission =
+            loom_serve_text_row_complete_reserve(selected->row);
+        if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
           *out_result = TEXT_ADMISSION_READY;
+        } else if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_DEFERRED) {
+          // Native release may finish before a pending-work query observes it.
+          // Preserve the reservation's wake instead of rejecting that progress.
+          *out_result = TEXT_ADMISSION_QUEUED;
+          break;
         } else {
           *out_result = TEXT_ADMISSION_STATE_CAPACITY;
         }
@@ -768,7 +775,8 @@ static iree_status_t loom_serve_text_admit_request(
 static iree_status_t loom_serve_text_complete_reservation(
     loom_serve_text_service_t* service, loom_serve_service_flags_t flags) {
   if (loom_serve_text_row_complete_reserve(
-          service->pending.prepared.session->row)) {
+          service->pending.prepared.session->row) ==
+      LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
     return loom_serve_text_admit_request(service, flags);
   }
   if (iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING) ||
