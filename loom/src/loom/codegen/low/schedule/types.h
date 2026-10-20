@@ -90,6 +90,8 @@ enum loom_low_schedule_node_flag_bits_e {
   LOOM_LOW_SCHEDULE_NODE_FLAG_STRUCTURAL_MATERIALIZATION = 1u << 10,
   // At least one SSA operand is produced inside this block.
   LOOM_LOW_SCHEDULE_NODE_FLAG_LOCAL_SSA_INPUT = 1u << 11,
+  // Descriptor is an at-most-two-cycle register move with an SSA input.
+  LOOM_LOW_SCHEDULE_NODE_FLAG_SHORT_REGISTER_MOVE = 1u << 12,
 };
 typedef uint16_t loom_low_schedule_node_flags_t;
 
@@ -188,6 +190,10 @@ enum loom_low_schedule_flag_bits_e {
   LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP = 1u << 7,
   // Retains every raw dependency row for complete schedule inspection.
   LOOM_LOW_SCHEDULE_FLAG_RETAIN_DEPENDENCIES = 1u << 8,
+  // Indicates that allocation repair has materialized spill traffic in the
+  // scheduled function. Retained private placements remain demand driven once
+  // mandatory spill helpers can intervene before their consumers.
+  LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC = 1u << 9,
 };
 typedef uint32_t loom_low_schedule_flags_t;
 

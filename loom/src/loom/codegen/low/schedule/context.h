@@ -176,6 +176,8 @@ enum loom_low_schedule_value_flag_bits_e {
   LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER = 1u << 8,
   // Definition creates independent storage before its input reads complete.
   LOOM_LOW_SCHEDULE_VALUE_FLAG_EARLY_WRITE = 1u << 9,
+  // A short register move can recreate this result across register banks.
+  LOOM_LOW_SCHEDULE_VALUE_FLAG_REPLAYABLE_REGISTER_MOVE_RESULT = 1u << 10,
 };
 typedef uint16_t loom_low_schedule_value_flags_t;
 

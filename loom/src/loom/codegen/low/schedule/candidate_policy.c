@@ -119,9 +119,28 @@ static bool loom_low_schedule_candidate_advances_pinned_completion(
                  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY);
 }
 
+// Before spill materialization, allocation repair can retain a private value
+// needed to reach an unspillable consumer. Advance that placement while its
+// bounded downstream demand remains outside the near-cliff region. Once spill
+// traffic exists the scorer withholds the retained-placement flag because
+// mandatory helpers can still intervene.
+static bool loom_low_schedule_candidate_advances_retained_unspillable_value(
+    const loom_low_schedule_candidate_score_t* score) {
+  const uint16_t retained_unspillable_flags =
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION |
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_RETAINS_PRE_SPILL_PLACEMENT;
+  return score->pressure_risk == LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE &&
+         score->pressure_cliff_penalty == 0 &&
+         iree_all_bits_set(score->flags, retained_unspillable_flags) &&
+         !iree_any_bit_set(
+             score->flags,
+             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF);
+}
+
 // Returns true when |score| establishes a new live storage value without
 // reducing live units, exposing a storage step or descriptor, advancing a
-// feasible pinned completion, or releasing inputs along another completion.
+// retained unspillable value while it still fits, advancing a feasible pinned
+// completion, or releasing inputs along another completion.
 // Scheduling such setup early only transfers or grows liveness in its
 // destination register class and can hold scarce physical locations across
 // unrelated work. Alias establishment and storage compaction produce no value
@@ -135,6 +154,8 @@ static bool loom_low_schedule_candidate_defers_storage_setup(
   const uint16_t actionable_flags =
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR |
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE;
+  const bool advances_retained_unspillable_value =
+      loom_low_schedule_candidate_advances_retained_unspillable_value(score);
   const bool advances_completion =
       (iree_any_bit_set(
            score->flags,
@@ -147,7 +168,7 @@ static bool loom_low_schedule_candidate_defers_storage_setup(
   return score->produced_live_value_count != 0 &&
          score->killed_live_units <= score->produced_live_units &&
          !iree_any_bit_set(score->flags, actionable_flags) &&
-         !advances_completion;
+         !advances_retained_unspillable_value && !advances_completion;
 }
 
 // A pinned completion can require several leaves before its consumer is ready.
@@ -180,7 +201,23 @@ static bool loom_low_schedule_candidate_defers_rematerializable_leaf(
          !iree_any_bit_set(score->flags, actionable_flags);
 }
 
-static bool loom_low_schedule_candidate_defers_materialization(
+// A short, replayable register move can use an otherwise idle issue cycle, but
+// it has no latency to hide while its sole consumer remains blocked. Prefer
+// ready work that keeps the destination register lifetime closed.
+static bool loom_low_schedule_candidate_defers_replayable_register_move(
+    const loom_low_schedule_candidate_score_t* score) {
+  const uint16_t actionable_flags =
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR |
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE;
+  return score->produced_live_value_count != 0 &&
+         iree_any_bit_set(
+             score->flags,
+             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_SHORT_REPLAYABLE_REGISTER_MOVE) &&
+         !iree_any_bit_set(score->flags, actionable_flags);
+}
+
+IREE_ATTRIBUTE_ALWAYS_INLINE static inline bool
+loom_low_schedule_candidate_defers_materialization(
     loom_low_schedule_candidate_compare_mode_t compare_mode,
     const loom_low_schedule_candidate_score_t* score) {
   return loom_low_schedule_candidate_defers_storage_setup(score) ||
@@ -351,6 +388,31 @@ static bool loom_low_schedule_candidate_score_less(
   // register across earlier uses required to make the consumer ready.
   if (lhs_defers_materialization != rhs_defers_materialization) {
     return !lhs_defers_materialization;
+  }
+  if (iree_any_bit_set(
+          lhs->flags | rhs->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_SHORT_REPLAYABLE_REGISTER_MOVE)) {
+    const bool lhs_defers_register_move =
+        loom_low_schedule_candidate_defers_replayable_register_move(lhs);
+    const bool rhs_defers_register_move =
+        loom_low_schedule_candidate_defers_replayable_register_move(rhs);
+    if (lhs_defers_register_move != rhs_defers_register_move) {
+      const loom_low_schedule_candidate_score_t* deferred =
+          lhs_defers_register_move ? lhs : rhs;
+      const loom_low_schedule_candidate_score_t* alternative =
+          lhs_defers_register_move ? rhs : lhs;
+      // Keep the move available to fill a real issue gap. When another
+      // candidate can issue no later without opening more aggregate register
+      // state, opening the move destination buys no latency and only lengthens
+      // its lifetime.
+      if (alternative->effective_stall_cycles <=
+              deferred->effective_stall_cycles &&
+          alternative->projected_live_units <= deferred->projected_live_units &&
+          alternative->pressure_cliff_penalty <=
+              deferred->pressure_cliff_penalty) {
+        return !lhs_defers_register_move;
+      }
+    }
   }
   // Once hard-capacity feasibility ties, advance the tighter full bank's
   // pending completion. Waiting until both candidates exceed capacity lets

@@ -618,6 +618,7 @@ TEST_LOW_REMATERIALIZE_SPILLABLE_EXPLICIT32_DESCRIPTOR = Descriptor(
     asm_forms=_asm(results=("dst",), operands=("src",)),
     schedule_class=_SCHEDULE_SCALAR_ALU,
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    instruction_classes=(InstructionClass.REGISTER_MOVE,),
 )
 
 TEST_LOW_REMATERIALIZE_EXPLICIT32_DESCRIPTOR = Descriptor(
