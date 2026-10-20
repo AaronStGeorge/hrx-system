@@ -58,6 +58,15 @@ struct loom_serve_test_registration_dependency_t {
   // Preparation failure scope, configured under mutex before factory creation.
   loom_serve_test_registration_preparation_failure_t preparation_failure =
       loom_serve_test_registration_preparation_failure_t::kNone;
+  // Independently held compiler/tokenizer dependency, guarded by mutex.
+  struct {
+    // Preparation can publish its service after this dependency completes.
+    bool ready = true;
+    // Owner observations, used to join an explicit test wake without polling.
+    uint64_t advances = 0;
+    // Most recent preparation policy supplied by the production registry.
+    loom_serve_registration_prepare_flags_t flags = 0;
+  } preparation;
   // Parameter state belongs to the model dependency and changes on owner turns.
   loom_serve_residency_snapshot_t parameters = {
       .active = true,
@@ -97,17 +106,25 @@ struct loom_serve_test_registration_dependency_t {
     loom_serve_test_registration_dependency_t* dependency;
   };
 
-  static iree_status_t Prepare(void* self, bool cancel, bool* complete,
-                               loom_serve_service_t* service,
+  static iree_status_t Prepare(void* self,
+                               loom_serve_registration_prepare_flags_t flags,
+                               bool* complete, loom_serve_service_t* service,
                                loom_serve_compilation_report_t* out_report) {
     auto* dependency =
         static_cast<loom_serve_test_registration_operation_t*>(self)
             ->dependency;
+    std::lock_guard<std::mutex> lock(dependency->mutex);
+    dependency->preparation.flags = flags;
+    ++dependency->preparation.advances;
+    dependency->condition.notify_all();
     *complete = true;
-    if (cancel) {
+    if (iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)) {
       return iree_make_status(IREE_STATUS_CANCELLED, "preparation cancelled");
     }
-    std::lock_guard<std::mutex> lock(dependency->mutex);
+    if (!dependency->preparation.ready) {
+      *complete = false;
+      return iree_ok_status();
+    }
     if (dependency->preparation_failure !=
         loom_serve_test_registration_preparation_failure_t::kNone) {
       return iree_make_status(IREE_STATUS_UNAVAILABLE, "model prepare failed");
@@ -266,6 +283,20 @@ struct loom_serve_test_registration_dependency_t {
   void WaitRetiring() {
     std::unique_lock<std::mutex> lock(mutex);
     condition.wait(lock, [this] { return retiring; });
+  }
+  loom_serve_registration_prepare_flags_t ObservePreparation() {
+    std::unique_lock<std::mutex> lock(mutex);
+    condition.wait(lock, [this] { return preparation.advances != 0; });
+    const auto previous = preparation.advances;
+    observer.wake(observer.user_data);
+    condition.wait(
+        lock, [this, previous] { return preparation.advances != previous; });
+    return preparation.flags;
+  }
+  void ReleasePreparation() {
+    std::lock_guard<std::mutex> lock(mutex);
+    preparation.ready = true;
+    observer.wake(observer.user_data);
   }
   void WaitActivating() {
     std::unique_lock<std::mutex> lock(mutex);
@@ -537,6 +568,70 @@ TEST_P(HttpRouterRegistrationTest, PinningDoesNotPrepareOrActivateAModel) {
   EXPECT_TRUE(managed_.pinned.load());
   EXPECT_EQ(Control("drain", "dynamic").find("HTTP/1.1 200"), 0u);
   EXPECT_EQ(Control("deactivate", "dynamic").find("HTTP/1.1 409"), 0u);
+  Remove();
+}
+
+TEST_P(HttpRouterRegistrationTest,
+       PreparationDemandTracksInferenceRatherThanHeldUtilities) {
+  // Observe held claims without the ordinary WaitHeld helper's drain action:
+  // this test's preparation remains open behind an unresolved dependency.
+  const auto wait_held = [this](size_t count) {
+    const std::string expected =
+        "\"held_requests\":" + std::to_string(count) + ",";
+    while (Read(Send("GET", "/v1/status")).find(expected) ==
+           std::string::npos) {
+    }
+  };
+  {
+    std::lock_guard<std::mutex> lock(managed_.mutex);
+    managed_.preparation.ready = false;
+  }
+  Declare();
+  EXPECT_EQ(Control("pin", "dynamic").find("HTTP/1.1 200"), 0u);
+  EXPECT_EQ(Control("undrain", "dynamic").find("HTTP/1.1 200"), 0u);
+  EXPECT_EQ(managed_.ObservePreparation(), 0u);
+  const int utility = Send("POST", "/tokenize", R"({"model":"dynamic"})");
+  wait_held(1);
+  EXPECT_EQ(managed_.ObservePreparation(), 0u);
+
+  const int inference =
+      Send("POST", "/v1/embeddings", R"({"model":"dynamic"})");
+  wait_held(2);
+  EXPECT_EQ(managed_.ObservePreparation(),
+            LOOM_SERVE_REGISTRATION_PREPARE_FLAG_DEMAND);
+  EXPECT_EQ(Control("drain", "dynamic").find("HTTP/1.1 200"), 0u);
+  EXPECT_EQ(managed_.ObservePreparation(), 0u);
+  EXPECT_EQ(Control("undrain", "dynamic").find("HTTP/1.1 200"), 0u);
+  EXPECT_EQ(managed_.ObservePreparation(),
+            LOOM_SERVE_REGISTRATION_PREPARE_FLAG_DEMAND);
+
+  const linger reset = {1, 0};
+  ASSERT_EQ(setsockopt(inference, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset)),
+            0);
+  ASSERT_EQ(close(inference), 0);
+  wait_held(1);
+  EXPECT_EQ(managed_.ObservePreparation(), 0u);
+  // Cancel the outstanding dependency through real removal. Utilities never
+  // turn this cancellation into permission to activate parameters.
+  Remove();
+  EXPECT_EQ(Read(utility).find("HTTP/1.1 410"), 0u);
+  EXPECT_EQ(managed_.preparation.flags,
+            LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL);
+}
+
+TEST_P(HttpRouterRegistrationTest, ExplicitWarmupSuppliesPreparationDemand) {
+  {
+    std::lock_guard<std::mutex> lock(managed_.mutex);
+    managed_.preparation.ready = false;
+  }
+  Declare();
+  EXPECT_EQ(Control("activate", "dynamic").find("HTTP/1.1 202"), 0u);
+  EXPECT_EQ(managed_.ObservePreparation(),
+            LOOM_SERVE_REGISTRATION_PREPARE_FLAG_DEMAND);
+  managed_.ReleasePreparation();
+  managed_.WaitActivating();
+  managed_.ReleaseActivation();
+  WaitParameterOperation("idle");
   Remove();
 }
 

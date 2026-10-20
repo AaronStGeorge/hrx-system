@@ -491,6 +491,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/runtime/execution:retirement",
+        "//loom/src/loom/serve/runtime/parameter:activation",
         "//loom/src/loom/serve/runtime/parameter:residency",
         "//loom/src/loom/serve/runtime/parameter:weights",
         "//loom/src/loom/serve/runtime/program",

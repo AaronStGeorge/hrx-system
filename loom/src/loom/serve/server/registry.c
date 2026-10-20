@@ -574,11 +574,21 @@ iree_status_t loom_serve_registry_advance(loom_serve_registry_t* registry,
     progress = true;
   }
   if (model->phase == LOOM_SERVE_REGISTRATION_PREPARING) {
+    loom_serve_registration_prepare_flags_t flags = 0;
+    if (model->removal) {
+      flags = LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL;
+    } else if ((!model->closed && model->parameter_demand_count) ||
+               (model->parameter_operation ==
+                    LOOM_SERVE_PARAMETER_OPERATION_WAITING &&
+                model->parameter_component ==
+                    LOOM_SERVE_MODEL_COMPONENT_PRIMARY)) {
+      flags = LOOM_SERVE_REGISTRATION_PREPARE_FLAG_DEMAND;
+    }
     bool complete = false;
     loom_serve_service_t service = {0};
-    model->status = model->registration.prepare(
-        model->registration.self, model->removal != LOOM_SERVE_REMOVAL_NONE,
-        &complete, &service, &model->compilation);
+    model->status =
+        model->registration.prepare(model->registration.self, flags, &complete,
+                                    &service, &model->compilation);
     if (complete) {
       if (iree_status_is_ok(model->status) && model->pinned_components &&
           !model->registration.set_pinned) {

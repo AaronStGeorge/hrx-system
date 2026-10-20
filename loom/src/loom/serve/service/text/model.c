@@ -17,6 +17,7 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/execution.h"
+#include "loom/serve/runtime/parameter/activation.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/jit.h"
 #include "loom/serve/runtime/program/module.h"
@@ -165,6 +166,7 @@ typedef enum loom_serve_text_load_phase_e {
   TEXT_LOAD_STAGES,
   TEXT_LOAD_BIND,
   TEXT_LOAD_WEIGHTS,
+  TEXT_LOAD_ACTIVATE,
   TEXT_LOAD_LINK,
   TEXT_LOAD_READY,
   TEXT_LOAD_COMPLETE,
@@ -189,6 +191,8 @@ struct loom_serve_text_load_t {
   iree_status_t task_status;
   // Independent tokenizer construction, joined before linking or retirement.
   loom_serve_tokenizer_load_t* tokenizer_load;
+  // Optional demanded warmup, joined before model publication or retirement.
+  loom_serve_activation_t* activation;
   // Terminal model outcome retained while tokenizer work is still retiring.
   iree_status_t terminal_status;
   // Joins worker/proactor final publication with the owner's next advance.
@@ -307,22 +311,48 @@ static void loom_serve_text_load_ready(void* user_data,
 static iree_status_t loom_serve_text_load_bind(loom_serve_text_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(model->device_owner,
                                                           &model->execution));
-  return loom_serve_text_stages_bind(
+  IREE_RETURN_IF_ERROR(loom_serve_text_stages_bind(
       model->device_owner, model->source.preparation,
       model->source.shared_stage_count, model->stage_count, model->stages,
-      &model->parameters, model->host_allocator);
+      &model->parameters, model->host_allocator));
+  IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
+      loom_serve_device_residency_cache(model->device_owner),
+      model->parameters.count, model->parameters.plans, model->host_allocator,
+      &model->parameter_group));
+  return loom_serve_residency_allocate(
+      loom_serve_device_residency_cache(model->device_owner), model->execution,
+      1, &model->parameter_group, model->host_allocator, &model->residency);
+}
+
+static iree_status_t loom_serve_text_load_activate(
+    loom_serve_text_load_t* load) {
+  loom_serve_host_t* host = loom_serve_device_host(load->model->device_owner);
+  IREE_RETURN_IF_ERROR(loom_serve_activation_allocate(
+      load->model->residency, loom_serve_host_proactor_pool(host),
+      load->event.wake, load->event.user_data, load->host_allocator,
+      &load->activation));
+  loom_serve_activation_phase_t phase;
+  iree_status_t status =
+      loom_serve_activation_advance(load->activation, 0, &phase);
+  if (phase == LOOM_SERVE_ACTIVATION_WAITING) {
+    // This startup opportunity cannot delay tokenizer/control publication or
+    // hold capacity priority before the service can consume it. Ordinary
+    // request admission owns subsequent capacity waiting.
+    status = iree_status_join(
+        status,
+        loom_serve_activation_advance(
+            load->activation, LOOM_SERVE_ACTIVATION_FLAG_CANCEL, &phase));
+  }
+  if (phase == LOOM_SERVE_ACTIVATION_COMPLETE) {
+    loom_serve_activation_free(load->activation);
+    load->activation = NULL;
+  }
+  return status;
 }
 
 static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
   loom_serve_text_model_t* model = load->model;
   iree_status_t status = iree_ok_status();
-  IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
-      loom_serve_device_residency_cache(model->device_owner),
-      model->parameters.count, model->parameters.plans, model->host_allocator,
-      &model->parameter_group));
-  IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(model->device_owner), model->execution,
-      1, &model->parameter_group, model->host_allocator, &model->residency));
   for (iree_host_size_t i = 0;
        i < model->stage_count && iree_status_is_ok(status); ++i) {
     loom_serve_text_stage_t* stage = &model->stages[i];
@@ -517,8 +547,14 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
               loom_serve_text_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
-          load->phase = TEXT_LOAD_LINK;
+          load->phase = TEXT_LOAD_ACTIVATE;
         }
+        break;
+      case TEXT_LOAD_ACTIVATE:
+        if (iree_any_bit_set(flags, LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND)) {
+          status = loom_serve_text_load_activate(load);
+        }
+        load->phase = TEXT_LOAD_LINK;
         break;
       case TEXT_LOAD_LINK:
         if (!loom_serve_tokenizer_load_take(&load->tokenizer_load, &status,
@@ -557,6 +593,19 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
       load->terminal_status = status;
       return iree_ok_status();
     }
+  }
+  if (!submitted && load->activation) {
+    loom_serve_activation_phase_t phase;
+    status = iree_status_join(
+        status,
+        loom_serve_activation_advance(
+            load->activation, LOOM_SERVE_ACTIVATION_FLAG_CANCEL, &phase));
+    if (phase != LOOM_SERVE_ACTIVATION_COMPLETE) {
+      load->terminal_status = status;
+      return iree_ok_status();
+    }
+    loom_serve_activation_free(load->activation);
+    load->activation = NULL;
   }
   if (!iree_status_is_ok(status)) {
     // Binding may already have queued backing allocation. Failure of a later
