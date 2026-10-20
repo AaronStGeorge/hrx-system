@@ -244,9 +244,11 @@ class ExecutionTest
                                iree_max(capabilities.mapping_granularity,
                                         capabilities.reservation_granularity));
     ASSERT_GE(unit, sizeof(Payload));
+    // Whole slabs start at source offset zero. The mapping unit constrains
+    // source ranges and reserved addresses, not the backing's own addresses.
     for (auto& backing : *backings) {
       IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-          mapping_pool_, iree_hal_make_pool_reservation_request(unit, unit),
+          mapping_pool_, iree_hal_make_pool_reservation_request(unit, 0),
           iree_infinite_timeout(), backing.out()));
     }
     const iree_hal_virtual_buffer_options_t options = {

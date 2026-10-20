@@ -252,7 +252,7 @@ class GpuNativeFileTest : public GpuNativeTest,
           is_mixed() && (offset / chunk) % 2 ? device_pool_.get() : pool_.get();
       IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
           source_pool,
-          iree_hal_make_pool_reservation_request(chunk + 2 * unit, unit),
+          iree_hal_make_pool_reservation_request(chunk + 2 * unit, 0),
           iree_infinite_timeout(), sources_.back().out()));
       iree_hal_buffer_native_binding_slot_t slot;
       IREE_ASSERT_OK(iree_hal_pool_resolve_binding(

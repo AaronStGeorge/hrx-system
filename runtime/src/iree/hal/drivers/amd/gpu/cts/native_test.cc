@@ -1507,7 +1507,7 @@ TEST_F(GpuNativeMemoryProgressTest,
       group_, scope, &reservation_options, iree_allocator_system(),
       reservation.out()));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      mapping_pool, iree_hal_make_pool_reservation_request(unit, unit),
+      mapping_pool, iree_hal_make_pool_reservation_request(unit, 0),
       iree_infinite_timeout(), backing.out()));
   iree_hal_memory_scope_t program_scope;
   IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
@@ -1616,7 +1616,7 @@ TEST_F(GpuNativeTest, BatchedMappingsReplaceProtectAndReleaseNativeBacking) {
   std::array<Ref<iree_hal_buffer_t>, 2> backing;
   for (auto& buffer : backing) {
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-        pool, iree_hal_make_pool_reservation_request(5 * unit, unit),
+        pool, iree_hal_make_pool_reservation_request(5 * unit, 0),
         iree_infinite_timeout(), buffer.out()));
   }
   Ref<iree_hal_semaphore_t> progress;

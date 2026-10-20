@@ -838,7 +838,7 @@ TEST_F(GpuNativeProfileTest, MappingBatchIsOnePublicEvent) {
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
       group_, scope, &options, iree_allocator_system(), reservation.out()));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      pool_, iree_hal_make_pool_reservation_request(2 * unit, unit),
+      pool_, iree_hal_make_pool_reservation_request(2 * unit, 0),
       iree_infinite_timeout(), backing.out()));
   iree_hal_memory_scope_t program_scope;
   IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
