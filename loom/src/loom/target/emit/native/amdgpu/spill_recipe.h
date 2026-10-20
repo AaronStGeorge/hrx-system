@@ -67,6 +67,75 @@ typedef struct loom_amdgpu_spill_recipe_t {
   uint32_t chunk_count;
 } loom_amdgpu_spill_recipe_t;
 
+// Logical register value produced while realizing one spill recipe. Recipe
+// values are dense and local to one visit; the source value of a store uses a
+// distinguished sentinel instead of consuming a recipe value index.
+typedef uint32_t loom_amdgpu_spill_recipe_value_index_t;
+
+#define LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE UINT32_MAX
+#define LOOM_AMDGPU_SPILL_RECIPE_VALUE_SOURCE (UINT32_MAX - 1u)
+
+typedef enum loom_amdgpu_spill_recipe_step_kind_e {
+  // Reads the current EXEC mask into an SGPR pair.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_READ = 0,
+  // Writes an all-active mask to EXEC.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_FULL = 1,
+  // Projects one consecutive source-register chunk.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_SLICE = 2,
+  // Copies one SGPR unit into a VGPR transport value.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_SGPR_TO_VGPR = 3,
+  // Materializes a VGPR scratch address.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_STORAGE_ADDRESS = 4,
+  // Stores one register chunk through the selected scratch packet.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_STORE = 5,
+  // Loads one register chunk through the selected scratch packet.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_LOAD = 6,
+  // Copies the first lane of a VGPR transport value into one SGPR unit.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_VGPR_TO_SGPR = 7,
+  // Restores EXEC from the saved SGPR pair.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_RESTORE = 8,
+  // Concatenates every completed reload chunk in transfer order.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_CONCAT = 9,
+} loom_amdgpu_spill_recipe_step_kind_t;
+
+typedef uint8_t loom_amdgpu_spill_recipe_step_result_flags_t;
+enum {
+  // The result is defined while EXEC is widened beyond the semantic domain.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPANDED_EXECUTION = 1u << 0,
+  // The result is private setup for its one recipe-local consumer.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_PRIVATE_TO_CONSUMER = 1u << 1,
+  // The result is one completed reload chunk retained through concatenation.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_RELOAD_CHUNK = 1u << 2,
+  // The result replaces the generic low.reload result after the recipe.
+  LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPORTED = 1u << 3,
+};
+
+// One operation in the exact target recipe expansion. Steps borrow their
+// chunk from the compact recipe and are valid only for the duration of the
+// visitor callback. CONCAT consumes all prior RELOAD_CHUNK results in transfer
+// order; other register operands are listed explicitly.
+typedef struct loom_amdgpu_spill_recipe_step_t {
+  // Operation selected by the recipe.
+  loom_amdgpu_spill_recipe_step_kind_t kind;
+  // Facts attached to |result|, or zero for a resultless step.
+  loom_amdgpu_spill_recipe_step_result_flags_t result_flags;
+  // Number of initialized entries in |operands|.
+  uint8_t operand_count;
+  // Exact descriptor selected for a descriptor-backed step, or NONE for a
+  // structural slice, storage address, or concat.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Dense recipe-local result index, or VALUE_NONE for a resultless step.
+  loom_amdgpu_spill_recipe_value_index_t result;
+  // Recipe-local register operands or VALUE_SOURCE for the store source.
+  loom_amdgpu_spill_recipe_value_index_t operands[2];
+  // Chunk described by this step, or NULL for whole-recipe steps.
+  const loom_amdgpu_spill_recipe_chunk_t* chunk;
+} loom_amdgpu_spill_recipe_step_t;
+
+// Fallible sink invoked once for every recipe step in emission order.
+typedef iree_status_t (*loom_amdgpu_spill_recipe_step_fn_t)(
+    void* user_data, const loom_amdgpu_spill_recipe_step_t* step);
+
 // Classifies one register type for AMDGPU spill lowering.
 loom_amdgpu_spill_register_kind_t loom_amdgpu_spill_recipe_register_kind(
     const loom_low_descriptor_set_t* descriptor_set, loom_type_t type);
@@ -81,6 +150,15 @@ iree_status_t loom_amdgpu_spill_recipe_build(
     const loom_amdgpu_storage_layout_reference_t* storage_reference,
     int64_t operation_byte_offset, iree_arena_allocator_t* arena,
     loom_amdgpu_spill_recipe_t* out_recipe);
+
+// Visits the exact operation graph selected by |recipe|. The compact chunk
+// rows remain the source of truth, and consumers derive the same deterministic
+// expansion instead of retaining a second step table. Every produced register
+// value receives one dense result index, including structural slice and concat
+// results.
+iree_status_t loom_amdgpu_spill_recipe_visit(
+    const loom_amdgpu_spill_recipe_t* recipe,
+    loom_amdgpu_spill_recipe_step_fn_t visit_step, void* user_data);
 
 #ifdef __cplusplus
 }  // extern "C"

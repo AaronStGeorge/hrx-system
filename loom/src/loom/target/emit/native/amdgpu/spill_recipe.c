@@ -259,3 +259,237 @@ iree_status_t loom_amdgpu_spill_recipe_build(
   out_recipe->chunk_count = chunk_count;
   return iree_ok_status();
 }
+
+typedef struct loom_amdgpu_spill_recipe_visitor_t {
+  // Compact recipe being expanded.
+  const loom_amdgpu_spill_recipe_t* recipe;
+  // Consumer invoked for each expanded step.
+  loom_amdgpu_spill_recipe_step_fn_t visit_step;
+  // Opaque state forwarded to |visit_step|.
+  void* user_data;
+  // Next dense recipe-local register value index.
+  loom_amdgpu_spill_recipe_value_index_t next_value;
+  // Saved EXEC result consumed by the terminal restore step.
+  loom_amdgpu_spill_recipe_value_index_t saved_exec;
+} loom_amdgpu_spill_recipe_visitor_t;
+
+static loom_amdgpu_spill_recipe_value_index_t
+loom_amdgpu_spill_recipe_visitor_next_value(
+    loom_amdgpu_spill_recipe_visitor_t* visitor) {
+  IREE_ASSERT_LT(visitor->next_value, LOOM_AMDGPU_SPILL_RECIPE_VALUE_SOURCE);
+  return visitor->next_value++;
+}
+
+static iree_status_t loom_amdgpu_spill_recipe_visitor_step(
+    loom_amdgpu_spill_recipe_visitor_t* visitor,
+    loom_amdgpu_spill_recipe_step_kind_t kind,
+    loom_amdgpu_spill_recipe_step_result_flags_t result_flags,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_amdgpu_spill_recipe_value_index_t result,
+    loom_amdgpu_spill_recipe_value_index_t operand0,
+    loom_amdgpu_spill_recipe_value_index_t operand1, uint8_t operand_count,
+    const loom_amdgpu_spill_recipe_chunk_t* chunk) {
+  const loom_amdgpu_spill_recipe_step_t step = {
+      .kind = kind,
+      .result_flags = result_flags,
+      .operand_count = operand_count,
+      .descriptor_ref = descriptor_ref,
+      .result = result,
+      .operands = {operand0, operand1},
+      .chunk = chunk,
+  };
+  return visitor->visit_step(visitor->user_data, &step);
+}
+
+static iree_status_t loom_amdgpu_spill_recipe_visit_exec_enter(
+    loom_amdgpu_spill_recipe_visitor_t* visitor) {
+  visitor->saved_exec = loom_amdgpu_spill_recipe_visitor_next_value(visitor);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+      visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_READ,
+      /*result_flags=*/0, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
+      visitor->saved_exec, LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+      LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+      /*operand_count=*/0,
+      /*chunk=*/NULL));
+  return loom_amdgpu_spill_recipe_visitor_step(
+      visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_FULL,
+      /*result_flags=*/0, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_FULL,
+      LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+      LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, /*operand_count=*/0,
+      /*chunk=*/NULL);
+}
+
+static iree_status_t loom_amdgpu_spill_recipe_visit_exec_restore(
+    loom_amdgpu_spill_recipe_visitor_t* visitor) {
+  return loom_amdgpu_spill_recipe_visitor_step(
+      visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_RESTORE,
+      /*result_flags=*/0, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
+      LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, visitor->saved_exec,
+      LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, /*operand_count=*/1,
+      /*chunk=*/NULL);
+}
+
+static iree_status_t loom_amdgpu_spill_recipe_visit_address(
+    loom_amdgpu_spill_recipe_visitor_t* visitor,
+    const loom_amdgpu_spill_recipe_chunk_t* chunk,
+    loom_amdgpu_spill_recipe_step_result_flags_t result_flags,
+    loom_amdgpu_spill_recipe_value_index_t* out_address) {
+  *out_address = LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE;
+  if (!iree_all_bits_set(chunk->flags,
+                         LOOM_AMDGPU_SPILL_RECIPE_CHUNK_FLAG_STORAGE_ADDRESS)) {
+    return iree_ok_status();
+  }
+  *out_address = loom_amdgpu_spill_recipe_visitor_next_value(visitor);
+  return loom_amdgpu_spill_recipe_visitor_step(
+      visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_STORAGE_ADDRESS, result_flags,
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE, *out_address,
+      LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+      /*operand_count=*/0, chunk);
+}
+
+static iree_status_t loom_amdgpu_spill_recipe_visit_store(
+    loom_amdgpu_spill_recipe_visitor_t* visitor) {
+  const loom_amdgpu_spill_recipe_t* recipe = visitor->recipe;
+  const uint32_t source_units =
+      loom_low_register_type_unit_count(recipe->value_type);
+  for (uint32_t i = 0; i < recipe->chunk_count; ++i) {
+    const loom_amdgpu_spill_recipe_chunk_t* chunk = &recipe->chunks[i];
+    loom_amdgpu_spill_recipe_value_index_t value =
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_SOURCE;
+    if (source_units != chunk->unit_count) {
+      const loom_amdgpu_spill_recipe_value_index_t slice =
+          loom_amdgpu_spill_recipe_visitor_next_value(visitor);
+      IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+          visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_SLICE,
+          /*result_flags=*/0, LOOM_AMDGPU_DESCRIPTOR_REF_NONE, slice, value,
+          LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, /*operand_count=*/1, chunk));
+      value = slice;
+    }
+    if (recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR) {
+      const loom_amdgpu_spill_recipe_value_index_t transport =
+          loom_amdgpu_spill_recipe_visitor_next_value(visitor);
+      IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+          visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_SGPR_TO_VGPR,
+          LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPANDED_EXECUTION,
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_COPY, transport, value,
+          LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, /*operand_count=*/1, chunk));
+      value = transport;
+    }
+    loom_amdgpu_spill_recipe_value_index_t address =
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE;
+    const loom_amdgpu_spill_recipe_step_result_flags_t address_flags =
+        recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR
+            ? LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPANDED_EXECUTION
+            : 0;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visit_address(
+        visitor, chunk, address_flags, &address));
+    const bool has_address = address != LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+        visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_STORE,
+        /*result_flags=*/0, chunk->descriptor_ref,
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, has_address ? address : value,
+        has_address ? value : LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+        has_address ? 2 : 1, chunk));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_spill_recipe_visit_reload(
+    loom_amdgpu_spill_recipe_visitor_t* visitor) {
+  const loom_amdgpu_spill_recipe_t* recipe = visitor->recipe;
+  for (uint32_t i = 0; i < recipe->chunk_count; ++i) {
+    const loom_amdgpu_spill_recipe_chunk_t* chunk = &recipe->chunks[i];
+    loom_amdgpu_spill_recipe_value_index_t address =
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE;
+    loom_amdgpu_spill_recipe_step_result_flags_t address_flags =
+        LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_PRIVATE_TO_CONSUMER;
+    if (recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR) {
+      address_flags |=
+          LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPANDED_EXECUTION;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visit_address(
+        visitor, chunk, address_flags, &address));
+
+    loom_amdgpu_spill_recipe_step_result_flags_t load_flags = 0;
+    if (recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR) {
+      load_flags |=
+          LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPANDED_EXECUTION |
+          LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_PRIVATE_TO_CONSUMER;
+    } else {
+      load_flags |= LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_RELOAD_CHUNK;
+      if (recipe->chunk_count == 1) {
+        load_flags |= LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPORTED;
+      } else {
+        load_flags |=
+            LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_PRIVATE_TO_CONSUMER;
+      }
+    }
+    const loom_amdgpu_spill_recipe_value_index_t loaded =
+        loom_amdgpu_spill_recipe_visitor_next_value(visitor);
+    const bool has_address = address != LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+        visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_LOAD, load_flags,
+        chunk->descriptor_ref, loaded,
+        has_address ? address : LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, has_address ? 1 : 0, chunk));
+
+    if (recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR) {
+      loom_amdgpu_spill_recipe_step_result_flags_t convert_flags =
+          LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_RELOAD_CHUNK;
+      if (recipe->chunk_count == 1) {
+        convert_flags |= LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPORTED;
+      } else {
+        convert_flags |=
+            LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_PRIVATE_TO_CONSUMER;
+      }
+      const loom_amdgpu_spill_recipe_value_index_t converted =
+          loom_amdgpu_spill_recipe_visitor_next_value(visitor);
+      IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+          visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_VGPR_TO_SGPR, convert_flags,
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32, converted, loaded,
+          LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, /*operand_count=*/1, chunk));
+    }
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_spill_recipe_visit(
+    const loom_amdgpu_spill_recipe_t* recipe,
+    loom_amdgpu_spill_recipe_step_fn_t visit_step, void* user_data) {
+  IREE_ASSERT(recipe != NULL);
+  IREE_ASSERT(visit_step != NULL);
+  IREE_ASSERT_NE(recipe->register_kind,
+                 LOOM_AMDGPU_SPILL_REGISTER_KIND_UNSUPPORTED);
+  loom_amdgpu_spill_recipe_visitor_t visitor = {
+      .recipe = recipe,
+      .visit_step = visit_step,
+      .user_data = user_data,
+      .saved_exec = LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+  };
+  const bool requires_full_exec =
+      recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR;
+  if (requires_full_exec) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visit_exec_enter(&visitor));
+  }
+  if (recipe->kind == LOOM_AMDGPU_SPILL_RECIPE_KIND_STORE) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visit_store(&visitor));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visit_reload(&visitor));
+  }
+  if (requires_full_exec) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visit_exec_restore(&visitor));
+  }
+  if (recipe->kind == LOOM_AMDGPU_SPILL_RECIPE_KIND_RELOAD &&
+      recipe->chunk_count > 1) {
+    const loom_amdgpu_spill_recipe_value_index_t result =
+        loom_amdgpu_spill_recipe_visitor_next_value(&visitor);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_spill_recipe_visitor_step(
+        &visitor, LOOM_AMDGPU_SPILL_RECIPE_STEP_CONCAT,
+        LOOM_AMDGPU_SPILL_RECIPE_STEP_RESULT_FLAG_EXPORTED,
+        LOOM_AMDGPU_DESCRIPTOR_REF_NONE, result,
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE,
+        LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE, /*operand_count=*/0,
+        /*chunk=*/NULL));
+  }
+  return iree_ok_status();
+}
