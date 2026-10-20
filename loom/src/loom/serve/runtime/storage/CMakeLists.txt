@@ -148,6 +148,8 @@ loom_cc_library(
     iree::testing::gtest
     loom::serve::runtime::device
     loom::serve::runtime::execution
+    loom::serve::runtime::execution::queues
+    loom::serve::runtime::execution::workspace
     loom::serve::testing::device
     loom::serve::testing::native_allocator
   TESTONLY

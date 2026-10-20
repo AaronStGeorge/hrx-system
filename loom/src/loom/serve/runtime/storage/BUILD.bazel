@@ -112,6 +112,8 @@ loom_cc_library(
         ":virtual_pool",
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",
+        "//loom/src/loom/serve/runtime/execution:queues",
+        "//loom/src/loom/serve/runtime/execution:workspace",
         "//loom/src/loom/serve/testing:device",
         "//loom/src/loom/serve/testing:native_allocator",
         "//runtime/src/iree/async",

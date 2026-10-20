@@ -1458,11 +1458,15 @@ iree_status_t loom_serve_weights_import_readiness(
 }
 
 iree_status_t loom_serve_weights_await(loom_serve_weights_t* weights) {
-  iree_status_t status = iree_hal_semaphore_list_wait(
-      (iree_hal_semaphore_list_t){weights->activation.count,
-                                  weights->activation.semaphores,
-                                  weights->activation.values},
-      iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE);
+  iree_status_t status = iree_ok_status();
+  // Every accepted lane must retire even if another lane fails. The outer
+  // owner also services cold staging requests from those queues.
+  for (iree_host_size_t i = 0; i < weights->activation.count; ++i) {
+    status = iree_status_join(
+        status, loom_serve_workspace_wait(weights->workspace,
+                                          weights->activation.semaphores[i],
+                                          weights->activation.values[i]));
+  }
   loom_serve_retirement_await(&weights->activation.retirement);
   loom_serve_weights_await_backing(weights);
   return iree_status_join(

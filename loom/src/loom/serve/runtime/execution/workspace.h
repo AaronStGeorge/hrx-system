@@ -9,15 +9,17 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "loom/serve/runtime/storage/virtual_pool.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Shared backing for private command allocations, independent of model
-// ordering. HAL pools own suballocation and dependency-frontier reuse. This
-// owner only registers slab geometry and preserves older pools while roots
-// still use them.
+// ordering. HAL pools own suballocation and dependency-frontier reuse.
+// Elastic backing preserves one logical allocator across every model lifetime;
+// oversized requests use dedicated virtual ranges from the same source. Fixed
+// backing retains exact native geometry caches until their raw roots retire.
 typedef struct loom_serve_workspace_t loom_serve_workspace_t;
 
 // Retains the sealed group and an already qualified backing pool. The caller
@@ -31,6 +33,15 @@ iree_status_t loom_serve_workspace_create(
     const iree_hal_asan_pool_options_t* asan_options,
     iree_allocator_t host_allocator, loom_serve_workspace_t** out_workspace);
 
+// Uses a serialized physical owner instead of an ordinary native slab cache.
+// The borrowed virtual_pool outlives this workspace. range selects the
+// preferred TLSF size/alignment, independently of model requirements;
+// larger requests use dedicated virtual ranges with the same physical slabs.
+iree_status_t loom_serve_workspace_create_from_virtual(
+    iree_hal_device_group_t* group, loom_serve_virtual_pool_t* virtual_pool,
+    iree_hal_pool_reservation_request_t range, iree_allocator_t host_allocator,
+    loom_serve_workspace_t** out_workspace);
+
 // Retains the shared workspace. NULL is accepted.
 void loom_serve_workspace_retain(loom_serve_workspace_t* workspace);
 
@@ -40,8 +51,9 @@ void loom_serve_workspace_retain(loom_serve_workspace_t* workspace);
 void loom_serve_workspace_release(loom_serve_workspace_t* workspace);
 
 // Registers a reflected command requirement without waiting for device work or
-// committing memory. Larger requirements affect subsequent pool acquisitions;
-// previously returned pools remain valid through their retained ownership.
+// committing memory. Fixed storage uses larger requirements to select a new
+// native geometry without invalidating earlier users. Virtual backing uses
+// TLSF's dedicated-range path and never replaces the shared logical pool.
 iree_status_t loom_serve_workspace_reserve(loom_serve_workspace_t* workspace,
                                            iree_device_size_t length,
                                            iree_device_size_t alignment);
@@ -49,8 +61,8 @@ iree_status_t loom_serve_workspace_reserve(loom_serve_workspace_t* workspace,
 // Returns a retained pool satisfying all registered requirements. The caller
 // keeps it through final queue/caller retirement of every root allocated from
 // it, including failed submissions: transient roots borrow their source pool.
-// Stable geometry reuses the same pool; allocation and frontier policy are
-// HAL's.
+// Virtual backing always returns the same pool; allocation and frontier policy
+// are HAL's.
 iree_status_t loom_serve_workspace_acquire_pool(
     loom_serve_workspace_t* workspace, iree_hal_pool_t** out_pool);
 
@@ -88,14 +100,14 @@ void loom_serve_workspace_scope_capture(loom_serve_workspace_scope_t* scope,
 // NULL is accepted.
 void loom_serve_workspace_scope_retire(loom_serve_workspace_scope_t* scope);
 
-// Combined retained backing and logical reservation counters across
+// Retained backing and logical reservation counters, including older fixed
 // generations. Backing includes idle cached slabs, but excludes detached native
 // returns. Device-side counters are observations, not an atomic whole-device
 // snapshot.
 iree_hal_pool_stats_t loom_serve_workspace_statistics(
     loom_serve_workspace_t* workspace);
 
-// Returns idle backing and retired pool generations without waiting on device
+// Returns idle backing without waiting on device
 // work. Logical returns propagate directly through the backing cache; native
 // freeing follows the source driver's allocation mechanism. Live roots and
 // their source pools remain protected. Returns the bytes still retained by the
@@ -112,6 +124,20 @@ iree_device_size_t loom_serve_workspace_trim(loom_serve_workspace_t* workspace);
 // Native trim is queued without waiting for physical release.
 bool loom_serve_workspace_trim_idle(loom_serve_workspace_t* workspace,
                                     iree_time_t now, iree_duration_t timeout);
+
+// Physical-owner progress, serialized with model residency operations. Fixed
+// backing has no serving-owned cold work. Queue callbacks only publish to this
+// owner and wake it; they never commit or reclaim physical slabs.
+void loom_serve_workspace_set_observer(loom_serve_workspace_t* workspace,
+                                       loom_serve_wake_callback_t observer);
+iree_status_t loom_serve_workspace_advance(loom_serve_workspace_t* workspace);
+bool loom_serve_workspace_is_pending(loom_serve_workspace_t* workspace);
+
+// Outer blocking caller equivalent to scheduler progress plus a timeline wait.
+// The caller owns physical residency and excludes other owner operations.
+iree_status_t loom_serve_workspace_wait(loom_serve_workspace_t* workspace,
+                                        iree_hal_semaphore_t* semaphore,
+                                        uint64_t value);
 
 #ifdef __cplusplus
 }  // extern "C"

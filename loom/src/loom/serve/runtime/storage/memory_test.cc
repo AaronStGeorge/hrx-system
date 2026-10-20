@@ -21,6 +21,8 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/execution.h"
+#include "loom/serve/runtime/execution/queues.h"
+#include "loom/serve/runtime/execution/workspace.h"
 #include "loom/serve/runtime/storage/virtual_pool.h"
 #include "loom/serve/testing/device.h"
 #include "loom/serve/testing/native_allocator.h"
@@ -171,6 +173,12 @@ class MemoryTest : public ::testing::Test {
     if (execution) {
       IREE_ASSERT_OK(loom_serve_execution_drain(execution));
     }
+    if (virtual_workspace) {
+      loom_serve_execution_release(execution);
+      execution = nullptr;
+      loom_serve_workspace_release(virtual_workspace);
+      virtual_workspace = nullptr;
+    }
     if (logical_pool) {
       // Raw queue captures can retire after timeline readiness.
       while (iree_atomic_ref_count_load(&logical_pool->resource.ref_count) >
@@ -307,7 +315,7 @@ class MemoryTest : public ::testing::Test {
         loom_serve_execution_transfer(execution, 1, operations, &completion));
     IREE_ASSERT_OK(loom_serve_execution_transfer(execution, 1, operations + 1,
                                                  &completion));
-    if (virtual_pool) {
+    if (virtual_pool && !virtual_workspace) {
       const auto frontier = loom_serve_execution_frontier(execution);
       IREE_ASSERT_OK(loom_serve_virtual_pool_wait(
           virtual_pool, frontier.semaphores[0], completion));
@@ -319,10 +327,30 @@ class MemoryTest : public ::testing::Test {
     }
   }
 
-  void CreateVirtualPool() {
+  void CreateVirtualPool(bool with_workspace = false) {
     IREE_ASSERT_OK(loom_serve_virtual_pool_allocate(
         pool, loom_serve_device_weight_geometry(device),
         iree_allocator_system(), &virtual_pool));
+    if (with_workspace) {
+      const auto range = iree_hal_make_pool_reservation_request(kSlabSize, 256);
+      IREE_ASSERT_OK(loom_serve_workspace_create_from_virtual(
+          loom_serve_device_group(device), virtual_pool, range,
+          iree_allocator_system(), &virtual_workspace));
+      loom_serve_execution_queues_t* queues = nullptr;
+      IREE_ASSERT_OK(loom_serve_execution_queues_create(
+          iree_hal_queue_family(loom_serve_device_dispatch_queue(device)),
+          iree_hal_queue_family(loom_serve_device_transfer_queue(device)),
+          iree_allocator_system(), &queues));
+      loom_serve_execution_release(execution);
+      execution = nullptr;
+      auto status = loom_serve_execution_create(
+          queues, virtual_workspace, iree_allocator_system(), &execution);
+      loom_serve_execution_queues_release(queues);
+      IREE_ASSERT_OK(status);
+      IREE_ASSERT_OK(
+          loom_serve_workspace_acquire_pool(virtual_workspace, &logical_pool));
+      return;
+    }
     const iree_hal_tlsf_pool_options_t options = {
         .tlsf_options = {.range_length = kSlabSize, .alignment = 256},
     };
@@ -390,6 +418,8 @@ class MemoryTest : public ::testing::Test {
   loom_serve_memory_pool_t* owned_pool = nullptr;
   // Optional adapter retaining real parent tokens beyond logical completion.
   iree::hal::testing::DeferredBackingPool* deferred_backing = nullptr;
+  // Shared production workspace, outliving its execution's raw root captures.
+  loom_serve_workspace_t* virtual_workspace = nullptr;
   // Coarse physical slabs, independent of logical KV block size.
   static constexpr uint64_t kSlabSize = kMemoryTestSlabSize;
   // Offset deliberately crossing the 32-bit byte-address boundary.
@@ -678,7 +708,7 @@ TEST_F(MemoryTest, QueueDrivenVirtualBackingReusesRetainedSlabs) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
   iree_hal_pool_stats_t baseline;
   iree_hal_pool_query_stats(deferred_backing, &baseline);
-  ASSERT_NO_FATAL_FAILURE(CreateVirtualPool());
+  ASSERT_NO_FATAL_FAILURE(CreateVirtualPool(true));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_serve_virtual_pool_free(virtual_pool));
   const iree_hal_buffer_backing_facts_t* address_owner = nullptr;
@@ -687,8 +717,8 @@ TEST_F(MemoryTest, QueueDrivenVirtualBackingReusesRetainedSlabs) {
     const auto request =
         iree_hal_make_pool_reservation_request(3 * kSlabSize / 2, 256);
     iree_hal_buffer_t* buffer = nullptr;
-    IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(
-        execution, logical_pool, 1, &request, &buffer));
+    IREE_ASSERT_OK(
+        loom_serve_execution_alloca(execution, 1, &request, &buffer));
     std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)>
         allocation(buffer, iree_hal_buffer_release);
     ASSERT_NO_FATAL_FAILURE(RoundTrip(buffer, kSlabSize - 128, 0xabcdef01));
@@ -701,12 +731,10 @@ TEST_F(MemoryTest, QueueDrivenVirtualBackingReusesRetainedSlabs) {
     IREE_ASSERT_OK(
         loom_serve_execution_dealloca(execution, buffer, &completion));
     allocation.reset();
-    const auto frontier = loom_serve_execution_frontier(execution);
-    IREE_ASSERT_OK(loom_serve_virtual_pool_wait(
-        virtual_pool, frontier.semaphores[0], completion));
+    IREE_ASSERT_OK(loom_serve_execution_wait(execution, completion));
     IREE_ASSERT_OK(loom_serve_execution_drain(execution));
     while (true) {
-      loom_serve_workspace_statistics(loom_serve_device_workspace(device));
+      loom_serve_workspace_statistics(virtual_workspace);
       iree_hal_pool_stats_t logical;
       iree_hal_pool_query_stats(logical_pool, &logical);
       if (!logical.reservation_count) {
@@ -716,6 +744,13 @@ TEST_F(MemoryTest, QueueDrivenVirtualBackingReusesRetainedSlabs) {
     }
   };
   ASSERT_NO_FATAL_FAILURE(execute());
+  IREE_ASSERT_OK(
+      loom_serve_workspace_reserve(virtual_workspace, 8 * kSlabSize, 4096));
+  iree_hal_pool_t* same_pool = nullptr;
+  IREE_ASSERT_OK(
+      loom_serve_workspace_acquire_pool(virtual_workspace, &same_pool));
+  EXPECT_EQ(same_pool, logical_pool);
+  iree_hal_pool_release(same_pool);
   ASSERT_NO_FATAL_FAILURE(execute());
   iree_hal_pool_stats_t reused;
   iree_hal_pool_query_stats(deferred_backing, &reused);
