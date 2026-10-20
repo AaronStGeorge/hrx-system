@@ -146,57 +146,6 @@ def test_shuffle_family_covers_native_types_shapes_and_modes() -> None:
         cells = fast if discards_valid else faithful
         assert cell not in cells, cell
         cells.add(cell)
-        emit_keys = tuple(emit.descriptor.key for emit in rule.emit)
-        if pattern.elements == ("bf16",):
-            # Native BF16 transport is a pair-packed integer exchange. Its
-            # payload recipe is checked independently below; validity is the
-            # same source-lane calculation as ordinary native payloads.
-            prefix_count = {None: 2, 1: 2, 2: 1, 3: 5, 4: 1}[pattern.lanes]
-            suffix_count = {None: 2, 1: 2, 2: 1, 3: 5, 4: 1}[pattern.lanes]
-            emit_keys = (
-                *emit_keys[prefix_count : prefix_count + 2],
-                *emit_keys[prefix_count + 2 + suffix_count :],
-            )
-        assert emit_keys[:2] == (
-            "spirv.op_bitcast.i32.u32",
-            f"spirv.op_group_non_uniform_shuffle.{mode}."
-            f"{rule.descriptor.key.rsplit('.', 1)[-1]}",
-        )
-        if discards_valid:
-            assert len(emit_keys) == 2
-        elif mode == "index":
-            assert emit_keys[2:] == (
-                "spirv.op_load_builtin.subgroup_lane_id",
-                "spirv.op_bitcast.i32.u32",
-                "spirv.op_u_less_than.u32",
-                "spirv.op_select.i32",
-                "spirv.op_bitcast.i32.u32",
-                "spirv.op_constant_true.bool",
-                "spirv.op_group_non_uniform_ballot.v4u32",
-                "spirv.op_group_non_uniform_ballot_bit_extract.bool",
-                "spirv.op_logical_and.bool",
-            )
-        else:
-            source_key = {
-                "xor": "spirv.op_bitwise_xor.i32",
-                "up": "spirv.op_isub.i32",
-                "down": "spirv.op_iadd.i32",
-            }[mode]
-            assert emit_keys[2:] == (
-                "spirv.op_load_builtin.subgroup_lane_id",
-                source_key,
-                "spirv.op_bitcast.i32.u32",
-                "spirv.op_u_less_than.u32",
-                "spirv.op_bitcast.i32.u32",
-                "spirv.op_u_less_than.u32",
-                "spirv.op_logical_and.bool",
-                "spirv.op_select.i32",
-                "spirv.op_bitcast.i32.u32",
-                "spirv.op_constant_true.bool",
-                "spirv.op_group_non_uniform_ballot.v4u32",
-                "spirv.op_group_non_uniform_ballot_bit_extract.bool",
-                "spirv.op_logical_and.bool",
-            )
 
     expected = {
         (

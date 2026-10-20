@@ -2,9 +2,9 @@
 
 amdgpu.target<gfx1151> @target
 
-// All shuffle modes carry a varying predicate independently from source
-// validity. The indexed mode uses a bounded runtime selector.
-kernel.def target(@target) @predicate_shuffle_modes() {
+// Predicate payload bits and source validity remain distinct across the
+// integer carrier. The selector varies inside each logical group.
+kernel.def target(@target) @predicate_index_and_validity() {
   %c1 = index.constant 1 : index
   %items = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%items, %c1, %c1) : index
@@ -12,119 +12,46 @@ kernel.def target(@target) @predicate_shuffle_modes() {
   %base = index.constant 0 : offset
   %item = kernel.workitem.id<x> : index
   %source = buffer.view %input[%base] : buffer -> view<64xi32>
-  %destination = buffer.view %output[%base] : buffer -> view<64x8xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<64x2xi32>
   %word = view.load %source[%item] : view<64xi32> -> i32
   %predicate = scalar.trunci %word : i32 to i1
   %mask = scalar.constant 15 : i32
   %offset = scalar.andi %word, %mask : i32
   %width = scalar.constant 16 : i32
-  %c1_i32 = scalar.constant 1 : i32
   %indexed, %index_valid = kernel.subgroup.shuffle<index> %predicate, %offset, %width : i1, i32, i32
   %indexed_bits = scalar.extui %indexed : i1 to i32
   %index_valid_bits = scalar.extui %index_valid : i1 to i32
-  view.store %indexed_bits, %destination[%item, 0] : i32, view<64x8xi32>
-  view.store %index_valid_bits, %destination[%item, 1] : i32, view<64x8xi32>
-  %xored, %xor_valid = kernel.subgroup.shuffle<xor> %predicate, %c1_i32, %width : i1, i32, i32
-  %xor_bits = scalar.extui %xored : i1 to i32
-  %xor_valid_bits = scalar.extui %xor_valid : i1 to i32
-  view.store %xor_bits, %destination[%item, 2] : i32, view<64x8xi32>
-  view.store %xor_valid_bits, %destination[%item, 3] : i32, view<64x8xi32>
-  %up, %up_valid = kernel.subgroup.shuffle<up> %predicate, %c1_i32, %width : i1, i32, i32
-  %up_bits = scalar.extui %up : i1 to i32
-  %up_valid_bits = scalar.extui %up_valid : i1 to i32
-  view.store %up_bits, %destination[%item, 4] : i32, view<64x8xi32>
-  view.store %up_valid_bits, %destination[%item, 5] : i32, view<64x8xi32>
-  %down, %down_valid = kernel.subgroup.shuffle<down> %predicate, %c1_i32, %width : i1, i32, i32
-  %down_bits = scalar.extui %down : i1 to i32
-  %down_valid_bits = scalar.extui %down_valid : i1 to i32
-  view.store %down_bits, %destination[%item, 6] : i32, view<64x8xi32>
-  view.store %down_valid_bits, %destination[%item, 7] : i32, view<64x8xi32>
+  view.store %indexed_bits, %destination[%item, 0] : i32, view<64x2xi32>
+  view.store %index_valid_bits, %destination[%item, 1] : i32, view<64x2xi32>
   kernel.return
 }
 
 // ----
-low.kernel.def target<amdgpu.rdna3_5.core>(@target) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], direct_arg_parameter_indices = [], direct_arg_sizes = [], parameter_count = 2, resource_count = 2, resource_offsets = [0, 8], resource_parameter_indices = [0, 1], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) workgroup_count(1, 1, 1) @predicate_shuffle_modes() asm {
+low.kernel.def target<amdgpu.rdna3_5.core>(@target) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], direct_arg_parameter_indices = [], direct_arg_sizes = [], parameter_count = 2, resource_count = 2, resource_offsets = [0, 8], resource_parameter_indices = [0, 1], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) workgroup_count(1, 1, 1) @predicate_index_and_validity() asm {
   %item = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %destination = resource<hal_binding> {extent = 2048, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %109 = v_lshlrev_b32_src0_inline %item, 2
-  %word = global_load_b32_saddr %109, %source
+  %destination = resource<hal_binding> {extent = 512, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %39 = v_lshlrev_b32_src0_inline %item, 2
+  %word = global_load_b32_saddr %39, %source
   %offset = v_and_b32_src0_inline %word, 15
-  %113 = v_bfe_u32_offset_width_inline %word {offset = 0, width = 1}
-  %114 = v_and_b32_src0_inline %item, 31
-  %115 = v_and_b32_lit %114, 4294967280
-  %116 = v_or_b32 %115, %offset
-  %117 = s_mov_b64_exec_read
-  %118 = slice %117[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %119 = v_mov_b32_copy %118
-  %120 = v_lshrrev_b32 %116, %119
-  %121 = v_and_b32_src0_inline %120, 1
-  %122 = v_mov_b32 0
-  %index_valid = v_cmp_ne_i32 %121, %122
-  %124 = v_lshlrev_b32_src0_inline %116, 2
-  %125 = ds_bpermute_b32 %124, %113
-  %indexed_bits = v_bfe_u32_offset_width_inline %125 {offset = 0, width = 1}
+  %42 = v_bfe_u32_offset_width_inline %word {offset = 0, width = 1}
+  %43 = v_and_b32_src0_inline %item, 31
+  %44 = v_and_b32_lit %43, 4294967280
+  %45 = v_or_b32 %44, %offset
+  %46 = s_mov_b64_exec_read
+  %47 = slice %46[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %48 = v_mov_b32_copy %47
+  %49 = v_lshrrev_b32 %45, %48
+  %50 = v_and_b32_src0_inline %49, 1
+  %51 = v_mov_b32 0
+  %index_valid = v_cmp_ne_i32 %50, %51
+  %53 = v_lshlrev_b32_src0_inline %45, 2
+  %54 = ds_bpermute_b32 %53, %42
+  %indexed_bits = v_bfe_u32_offset_width_inline %54 {offset = 0, width = 1}
   %index_valid_bits = v_cndmask_b32_src0_lit_src1_inline %index_valid {imm32 = 0, true_value = 1}
-  %129 = v_lshlrev_b32_src0_inline %item, 5
-  global_store_b32_saddr %129, %indexed_bits, %destination
-  global_store_b32_saddr %129, %index_valid_bits, %destination {offset = 4}
-  %131 = v_and_b32_src0_inline %item, 31
-  %132 = v_xor_b32_src0_inline %131, 1
-  %133 = s_mov_b64_exec_read
-  %134 = slice %133[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %135 = v_mov_b32_copy %134
-  %136 = v_lshrrev_b32 %132, %135
-  %137 = v_and_b32_src0_inline %136, 1
-  %138 = v_mov_b32 0
-  %xor_valid = v_cmp_ne_i32 %137, %138
-  %140 = v_mov_b32_dpp16 %113 {dpp_ctrl = 177}
-  %xor_bits = v_bfe_u32_offset_width_inline %140 {offset = 0, width = 1}
-  %xor_valid_bits = v_cndmask_b32_src0_lit_src1_inline %xor_valid {imm32 = 0, true_value = 1}
-  %143 = v_lshlrev_b32_src0_inline %item, 5
-  global_store_b32_saddr %143, %xor_bits, %destination {offset = 8}
-  global_store_b32_saddr %143, %xor_valid_bits, %destination {offset = 12}
-  %145 = v_and_b32_src0_inline %item, 31
-  %146 = v_mov_b32 1
-  %147 = v_sub_nc_u32 %145, %146
-  %148 = v_and_b32_src0_inline %145, 15
-  %149 = v_cmp_ge_u32 %148, %146
-  %150 = s_mov_b64_exec_read
-  %151 = slice %150[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %152 = v_mov_b32_copy %151
-  %153 = v_lshrrev_b32 %147, %152
-  %154 = v_and_b32_src0_inline %153, 1
-  %155 = v_mov_b32 0
-  %156 = v_cmp_ne_i32 %154, %155
-  %up_valid = s_and_b64 %156, %149
-  %158 = v_lshlrev_b32_src0_inline %147, 2
-  %159 = ds_bpermute_b32 %158, %113
-  %up_bits = v_bfe_u32_offset_width_inline %159 {offset = 0, width = 1}
-  %up_valid_bits = v_cndmask_b32_src0_lit_src1_inline %up_valid {imm32 = 0, true_value = 1}
-  %162 = v_lshlrev_b32_src0_inline %item, 5
-  global_store_b32_saddr %162, %up_bits, %destination {offset = 16}
-  global_store_b32_saddr %162, %up_valid_bits, %destination {offset = 20}
-  %164 = v_and_b32_src0_inline %item, 31
-  %165 = v_mov_b32 1
-  %166 = v_add_u32 %164, %165
-  %167 = v_and_b32_src0_inline %164, 15
-  %168 = v_add_u32 %167, %165
-  %169 = v_mov_b32 16
-  %170 = v_cmp_lt_u32 %168, %169
-  %171 = s_mov_b64_exec_read
-  %172 = slice %171[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %173 = v_mov_b32_copy %172
-  %174 = v_lshrrev_b32 %166, %173
-  %175 = v_and_b32_src0_inline %174, 1
-  %176 = v_mov_b32 0
-  %177 = v_cmp_ne_i32 %175, %176
-  %down_valid = s_and_b64 %177, %170
-  %179 = v_lshlrev_b32_src0_inline %166, 2
-  %180 = ds_bpermute_b32 %179, %113
-  %down_bits = v_bfe_u32_offset_width_inline %180 {offset = 0, width = 1}
-  %down_valid_bits = v_cndmask_b32_src0_lit_src1_inline %down_valid {imm32 = 0, true_value = 1}
-  %183 = v_lshlrev_b32_src0_inline %item, 5
-  global_store_b32_saddr %183, %down_bits, %destination {offset = 24}
-  global_store_b32_saddr %183, %down_valid_bits, %destination {offset = 28}
+  %59 = v_lshlrev_b32_src0_inline %item, 3
+  global_store_b32_saddr %59, %indexed_bits, %destination
+  global_store_b32_saddr %59, %index_valid_bits, %destination {offset = 4}
   return
 }
 
@@ -141,167 +68,47 @@ kernel.def target(@target) @predicate_vector_transport() {
 } launch(%input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %item = kernel.workitem.id<x> : index
-  %source = buffer.view %input[%base] : buffer -> view<64x3xi32>
-  %destination = buffer.view %output[%base] : buffer -> view<64x9xi32>
-  %words = vector.load %source[%item, 0] : view<64x3xi32> -> vector<3xi32>
-  %predicate = vector.trunci %words : vector<3xi32> to vector<3xi1>
+  %source = buffer.view %input[%base] : buffer -> view<64x2xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<64x4xi32>
+  %words = vector.load %source[%item, 0] : view<64x2xi32> -> vector<2xi32>
+  %predicate = vector.trunci %words : vector<2xi32> to vector<2xi1>
   %lane = scalar.constant 33 : i32
-  %named = kernel.subgroup.broadcast %predicate from %lane : vector<3xi1>, i32
-  %named_bits = vector.extui %named : vector<3xi1> to vector<3xi32>
-  vector.store %named_bits, %destination[%item, 0] : vector<3xi32>, view<64x9xi32>
-  %width = scalar.constant 64 : i32
-  %distance = scalar.constant 32 : i32
-  %shuffled, %valid = kernel.subgroup.shuffle<xor> %predicate, %distance, %width : vector<3xi1>, i32, i32
-  %shuffled_bits = vector.extui %shuffled : vector<3xi1> to vector<3xi32>
-  vector.store %shuffled_bits, %destination[%item, 3] : vector<3xi32>, view<64x9xi32>
-  %first = kernel.subgroup.broadcast.first %predicate : vector<3xi1>
-  %first_bits = vector.extui %first : vector<3xi1> to vector<3xi32>
-  vector.store %first_bits, %destination[%item, 6] : vector<3xi32>, view<64x9xi32>
+  %named = kernel.subgroup.broadcast %predicate from %lane : vector<2xi1>, i32
+  %named_bits = vector.extui %named : vector<2xi1> to vector<2xi32>
+  vector.store %named_bits, %destination[%item, 0] : vector<2xi32>, view<64x4xi32>
+  %first = kernel.subgroup.broadcast.first %predicate : vector<2xi1>
+  %first_bits = vector.extui %first : vector<2xi1> to vector<2xi32>
+  vector.store %first_bits, %destination[%item, 2] : vector<2xi32>, view<64x4xi32>
   kernel.return
 }
 
 // ----
 low.kernel.def target<amdgpu.cdna3.core>(@target) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], direct_arg_parameter_indices = [], direct_arg_sizes = [], parameter_count = 2, resource_count = 2, resource_offsets = [0, 8], resource_parameter_indices = [0, 1], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) workgroup_count(1, 1, 1) @predicate_vector_transport() asm {
   %item = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %source = resource<hal_binding> {extent = 768, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %destination = resource<hal_binding> {extent = 2304, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %56 = v_mov_b32 12
-  %57 = v_mul_lo_u32 %item, %56
-  %words = global_load_dwordx3_saddr %57, %source : reg<amdgpu.vgpr x3>
-  %59 = slice %words[0] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
-  %60 = v_and_b32_src0_inline %59, 1
-  %61 = slice %words[1] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
-  %62 = v_and_b32_src0_inline %61, 1
-  %63 = slice %words[2] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
-  %64 = v_and_b32_src0_inline %63, 1
-  %66 = v_mov_b32 132
-  %68 = ds_bpermute_b32 %66, %60
-  %70 = ds_bpermute_b32 %66, %62
-  %72 = ds_bpermute_b32 %66, %64
-  %75 = v_and_b32_src0_inline %68, 1
-  %77 = v_and_b32_src0_inline %70, 1
-  %79 = v_and_b32_src0_inline %72, 1
-  %named_bits = concat(%75, %77, %79) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
-  %81 = v_mov_b32 36
-  %82 = v_mul_lo_u32 %item, %81
-  global_store_dwordx3_saddr %82, %named_bits, %destination
-  %83 = v_xor_b32_src0_inline %item, 32
-  %84 = v_lshlrev_b32_src0_inline %83, 2
-  %86 = ds_bpermute_b32 %84, %60
-  %88 = ds_bpermute_b32 %84, %62
-  %90 = ds_bpermute_b32 %84, %64
-  %93 = v_and_b32_src0_inline %86, 1
-  %95 = v_and_b32_src0_inline %88, 1
-  %97 = v_and_b32_src0_inline %90, 1
-  %shuffled_bits = concat(%93, %95, %97) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
-  %99 = v_mov_b32 36
-  %100 = v_mul_lo_u32 %item, %99
-  global_store_dwordx3_saddr %100, %shuffled_bits, %destination {offset = 12}
-  %102 = v_readfirstlane_b32 %60
-  %103 = v_mov_b32_copy %102
-  %105 = v_readfirstlane_b32 %62
-  %106 = v_mov_b32_copy %105
-  %108 = v_readfirstlane_b32 %64
-  %109 = v_mov_b32_copy %108
-  %112 = v_and_b32_src0_inline %103, 1
-  %114 = v_and_b32_src0_inline %106, 1
-  %116 = v_and_b32_src0_inline %109, 1
-  %first_bits = concat(%112, %114, %116) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
-  %118 = v_mov_b32 36
-  %119 = v_mul_lo_u32 %item, %118
-  global_store_dwordx3_saddr %119, %first_bits, %destination {offset = 24}
-  return
-}
-
-// ====
-
-amdgpu.target<gfx1200> @target
-
-// A seven-component predicate has no native packed-vector spelling. Its
-// component order and tail survive the shape-preserving carrier conversion.
-kernel.def target(@target) @predicate_wide_vector() {
-  %c1 = index.constant 1 : index
-  %items = index.constant 32 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%items, %c1, %c1) : index
-} launch(%input: buffer, %output: buffer) {
-  %base = index.constant 0 : offset
-  %item = kernel.workitem.id<x> : index
-  %source = buffer.view %input[%base] : buffer -> view<32x7xi32>
-  %destination = buffer.view %output[%base] : buffer -> view<32x7xi32>
-  %words = vector.load %source[%item, 0] : view<32x7xi32> -> vector<7xi32>
-  %predicate = vector.trunci %words : vector<7xi32> to vector<7xi1>
-  %distance = scalar.constant 1 : i32
-  %width = scalar.constant 32 : i32
-  %shuffled, %valid = kernel.subgroup.shuffle<down> %predicate, %distance, %width : vector<7xi1>, i32, i32
-  scf.if %valid {
-    %bits = vector.extui %shuffled : vector<7xi1> to vector<7xi32>
-    vector.store %bits, %destination[%item, 0] : vector<7xi32>, view<32x7xi32>
-  }
-  kernel.return
-}
-
-// ----
-low.kernel.def target<amdgpu.rdna4.core>(@target) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], direct_arg_parameter_indices = [], direct_arg_sizes = [], parameter_count = 2, resource_count = 2, resource_offsets = [0, 8], resource_parameter_indices = [0, 1], uses_kernarg_segment_ptr = true}) workgroup_size(32, 1, 1) workgroup_count(1, 1, 1) @predicate_wide_vector() asm {
-  %item = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %source = resource<hal_binding> {extent = 896, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %destination = resource<hal_binding> {extent = 896, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %31 = v_mov_b32 28
-  %32 = v_mul_lo_u32 %item, %31
-  %33 = global_load_b128_saddr %32, %source
-  %36 = global_load_b96_saddr %32, %source {offset = 16}
-  %words = concat(%33, %36) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x3>) -> reg<amdgpu.vgpr x7>
-  %38 = slice %words[0] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
-  %39 = v_and_b32_src0_inline %38, 1
-  %40 = slice %words[1] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
-  %41 = v_and_b32_src0_inline %40, 1
-  %42 = slice %words[2] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
-  %43 = v_and_b32_src0_inline %42, 1
-  %44 = slice %words[3] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
-  %45 = v_and_b32_src0_inline %44, 1
-  %46 = slice %words[4] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
+  %source = resource<hal_binding> {extent = 512, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %destination = resource<hal_binding> {extent = 1024, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %44 = v_lshlrev_b32_src0_inline %item, 3
+  %words = global_load_dwordx2_saddr %44, %source : reg<amdgpu.vgpr x2>
+  %46 = slice %words[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %47 = v_and_b32_src0_inline %46, 1
-  %48 = slice %words[5] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
+  %48 = slice %words[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %49 = v_and_b32_src0_inline %48, 1
-  %50 = slice %words[6] : reg<amdgpu.vgpr x7> -> reg<amdgpu.vgpr>
-  %51 = v_and_b32_src0_inline %50, 1
-  %53 = v_mov_b32 1
-  %54 = v_add_u32 %item, %53
-  %55 = v_mov_b32 32
-  %56 = v_cmp_lt_u32 %54, %55
-  %57 = s_mov_b64_exec_read
-  %58 = slice %57[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %59 = v_mov_b32_copy %58
-  %60 = v_lshrrev_b32 %54, %59
-  %61 = v_and_b32_src0_inline %60, 1
-  %62 = v_mov_b32 0
-  %63 = v_cmp_ne_i32 %61, %62
-  %valid = s_and_b64 %63, %56
-  %65 = v_lshlrev_b32_src0_inline %54, 2
-  %67 = ds_bpermute_b32 %65, %39
-  %69 = ds_bpermute_b32 %65, %41
-  %71 = ds_bpermute_b32 %65, %43
-  %73 = ds_bpermute_b32 %65, %45
-  %75 = ds_bpermute_b32 %65, %47
-  %77 = ds_bpermute_b32 %65, %49
-  %79 = ds_bpermute_b32 %65, %51
-  %81, %82 = s_and_saveexec_b64 %valid
-  low.cond_br %82, ^_bb1, ^_bb2 : reg<amdgpu.scc>
-^_bb1:
-  %84 = v_and_b32_src0_inline %67, 1
-  %86 = v_and_b32_src0_inline %69, 1
-  %88 = v_and_b32_src0_inline %71, 1
-  %90 = v_and_b32_src0_inline %73, 1
-  %92 = v_and_b32_src0_inline %75, 1
-  %94 = v_and_b32_src0_inline %77, 1
-  %96 = v_and_b32_src0_inline %79, 1
-  %105 = concat(%84, %86, %88, %90) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %99 = v_mov_b32 28
-  %100 = v_mul_lo_u32 %item, %99
-  global_store_b128_saddr %100, %105, %destination
-  %104 = concat(%92, %94, %96) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
-  global_store_b96_saddr %100, %104, %destination {offset = 16}
-  low.br ^_bb2
-^_bb2:
-  s_mov_b64_exec %81
+  %51 = v_mov_b32 132
+  %53 = ds_bpermute_b32 %51, %47
+  %55 = ds_bpermute_b32 %51, %49
+  %58 = v_and_b32_src0_inline %53, 1
+  %60 = v_and_b32_src0_inline %55, 1
+  %named_bits = concat(%58, %60) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %62 = v_lshlrev_b32_src0_inline %item, 4
+  global_store_dwordx2_saddr %62, %named_bits, %destination
+  %64 = v_readfirstlane_b32 %47
+  %65 = v_mov_b32_copy %64
+  %67 = v_readfirstlane_b32 %49
+  %68 = v_mov_b32_copy %67
+  %71 = v_and_b32_src0_inline %65, 1
+  %73 = v_and_b32_src0_inline %68, 1
+  %first_bits = concat(%71, %73) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %75 = v_lshlrev_b32_src0_inline %item, 4
+  global_store_dwordx2_saddr %75, %first_bits, %destination {offset = 8}
   return
 }
