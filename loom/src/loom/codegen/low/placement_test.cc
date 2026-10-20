@@ -11,6 +11,47 @@
 namespace loom {
 namespace {
 
+TEST(LowPlacementTest, CombinesDescriptorOperandConstraints) {
+  const loom_low_reg_class_alt_t alternatives[] = {
+      {.reg_class_id = 3, .unit_alignment_log2 = 1},
+      {.reg_class_id = 7, .unit_alignment_log2 = 6},
+      {.reg_class_id = 3, .unit_alignment_log2 = 4},
+  };
+  const loom_low_descriptor_set_t descriptor_set = {
+      .reg_class_alts = alternatives,
+      .reg_class_alt_count = IREE_ARRAYSIZE(alternatives),
+  };
+  loom_low_operand_t low_operand = {
+      .reg_class_alt_count = IREE_ARRAYSIZE(alternatives),
+      .address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET,
+      .addressable_unit_count = 32,
+  };
+  const loom_low_placement_operand_constraints_t low_constraints =
+      loom_low_placement_operand_constraints_for_descriptor_operand(
+          &descriptor_set, &low_operand, 3);
+  EXPECT_EQ(low_constraints.unit_alignment_log2, 4);
+  EXPECT_EQ(low_constraints.addressable_unit_count, 32);
+  EXPECT_FALSE(low_constraints.has_target_address_state);
+
+  low_operand.address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE;
+  const loom_low_placement_operand_constraints_t state_constraints =
+      loom_low_placement_operand_constraints_for_descriptor_operand(
+          &descriptor_set, &low_operand, 7);
+  EXPECT_EQ(state_constraints.unit_alignment_log2, 6);
+  EXPECT_EQ(state_constraints.addressable_unit_count, 0);
+  EXPECT_TRUE(state_constraints.has_target_address_state);
+
+  loom_low_placement_operand_constraints_t combined = {
+      .addressable_unit_count = 16,
+      .unit_alignment_log2 = 5,
+  };
+  loom_low_placement_operand_constraints_merge(&combined, &low_constraints);
+  loom_low_placement_operand_constraints_merge(&combined, &state_constraints);
+  EXPECT_EQ(combined.unit_alignment_log2, 6);
+  EXPECT_EQ(combined.addressable_unit_count, 16);
+  EXPECT_TRUE(combined.has_target_address_state);
+}
+
 TEST(LowPlacementTest, ClassifiesEdgeCauses) {
   EXPECT_FALSE(
       loom_low_placement_cause_is_edge(LOOM_LOW_PLACEMENT_CAUSE_UNKNOWN));

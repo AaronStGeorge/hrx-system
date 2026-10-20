@@ -803,24 +803,12 @@ static iree_status_t loom_low_placement_collect_operand_constraints(
     return iree_ok_status();
   }
   const uint16_t reg_class_id = interval->value_class.register_class_id;
-  uint8_t unit_alignment_log2 = 0;
-  for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
-    const loom_low_reg_class_alt_t* alternative =
-        &state->descriptor_set
-             ->reg_class_alts[operand->reg_class_alt_start + i];
-    if (alternative->reg_class_id == reg_class_id) {
-      unit_alignment_log2 =
-          iree_max(unit_alignment_log2, alternative->unit_alignment_log2);
-    }
-  }
-  const uint16_t addressable_unit_count =
-      operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET
-          ? operand->addressable_unit_count
-          : 0;
-  const bool has_target_address_state =
-      operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE;
-  if (unit_alignment_log2 == 0 && addressable_unit_count == 0 &&
-      !has_target_address_state) {
+  const loom_low_placement_operand_constraints_t operand_constraints =
+      loom_low_placement_operand_constraints_for_descriptor_operand(
+          state->descriptor_set, operand, reg_class_id);
+  if (operand_constraints.unit_alignment_log2 == 0 &&
+      operand_constraints.addressable_unit_count == 0 &&
+      !operand_constraints.has_target_address_state) {
     return iree_ok_status();
   }
   if (state->operand_constraints_by_interval == NULL) {
@@ -835,14 +823,8 @@ static iree_status_t loom_low_placement_collect_operand_constraints(
   loom_low_placement_operand_constraints_t* constraints =
       &state->operand_constraints_by_interval[interval -
                                               state->liveness->intervals];
-  constraints->unit_alignment_log2 =
-      iree_max(constraints->unit_alignment_log2, unit_alignment_log2);
-  if (addressable_unit_count != 0 &&
-      (constraints->addressable_unit_count == 0 ||
-       addressable_unit_count < constraints->addressable_unit_count)) {
-    constraints->addressable_unit_count = addressable_unit_count;
-  }
-  constraints->has_target_address_state |= has_target_address_state;
+  loom_low_placement_operand_constraints_merge(constraints,
+                                               &operand_constraints);
   return iree_ok_status();
 }
 
@@ -1707,14 +1689,7 @@ static iree_status_t loom_low_placement_build(
           &state->operand_constraints_by_interval[origin_index];
       const loom_low_placement_operand_constraints_t* member =
           &state->operand_constraints_by_interval[interval_index];
-      origin->unit_alignment_log2 =
-          iree_max(origin->unit_alignment_log2, member->unit_alignment_log2);
-      if (member->addressable_unit_count != 0 &&
-          (origin->addressable_unit_count == 0 ||
-           member->addressable_unit_count < origin->addressable_unit_count)) {
-        origin->addressable_unit_count = member->addressable_unit_count;
-      }
-      origin->has_target_address_state |= member->has_target_address_state;
+      loom_low_placement_operand_constraints_merge(origin, member);
     }
     for (loom_value_ordinal_t i = 0; i < value_count; ++i) {
       const uint32_t interval_index = interval_indices[i];

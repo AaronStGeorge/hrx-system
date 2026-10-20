@@ -233,6 +233,22 @@ typedef struct loom_low_placement_operand_constraints_t {
   bool has_target_address_state;
 } loom_low_placement_operand_constraints_t;
 
+// Derives the allocation constraints imposed by one descriptor operand when
+// it is bound to |reg_class_id|. Descriptor verification guarantees that every
+// alternative range is valid; an operand without an alternative for the class
+// contributes only its class-independent address-map constraints.
+loom_low_placement_operand_constraints_t
+loom_low_placement_operand_constraints_for_descriptor_operand(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t* operand, uint16_t reg_class_id);
+
+// Accumulates |source| into |target|. Alignment takes the strongest exponent,
+// bounded addressability takes the smallest nonzero window, and target-owned
+// address state is retained when any endpoint requires it.
+void loom_low_placement_operand_constraints_merge(
+    loom_low_placement_operand_constraints_t* target,
+    const loom_low_placement_operand_constraints_t* source);
+
 enum loom_low_placement_storage_flag_bits_e {
   // Copy, move, slice, or concat relations can optionally share storage.
   LOOM_LOW_PLACEMENT_STORAGE_FLAG_OPTIONAL_ALIASES = 1u << 0,

@@ -8,6 +8,41 @@
 
 #include "iree/base/internal/math.h"
 
+loom_low_placement_operand_constraints_t
+loom_low_placement_operand_constraints_for_descriptor_operand(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t* operand, uint16_t reg_class_id) {
+  loom_low_placement_operand_constraints_t constraints = {0};
+  for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
+    const loom_low_reg_class_alt_t* alternative =
+        &descriptor_set
+             ->reg_class_alts[operand->reg_class_alt_start + (uint32_t)i];
+    if (alternative->reg_class_id == reg_class_id) {
+      constraints.unit_alignment_log2 = iree_max(
+          constraints.unit_alignment_log2, alternative->unit_alignment_log2);
+    }
+  }
+  if (operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET) {
+    constraints.addressable_unit_count = operand->addressable_unit_count;
+  }
+  constraints.has_target_address_state =
+      operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE;
+  return constraints;
+}
+
+void loom_low_placement_operand_constraints_merge(
+    loom_low_placement_operand_constraints_t* target,
+    const loom_low_placement_operand_constraints_t* source) {
+  target->unit_alignment_log2 =
+      iree_max(target->unit_alignment_log2, source->unit_alignment_log2);
+  if (source->addressable_unit_count != 0 &&
+      (target->addressable_unit_count == 0 ||
+       source->addressable_unit_count < target->addressable_unit_count)) {
+    target->addressable_unit_count = source->addressable_unit_count;
+  }
+  target->has_target_address_state |= source->has_target_address_state;
+}
+
 // Composes source -> intermediate and intermediate -> result placement over
 // the units covered by both relations. The returned relation maps the first
 // source directly into the second result while retaining the second
