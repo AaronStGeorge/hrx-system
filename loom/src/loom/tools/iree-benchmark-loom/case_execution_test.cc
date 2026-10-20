@@ -128,12 +128,12 @@ TEST(BenchmarkResultAliasesTest, PreservesLocalIdentityAndFailureAccounting) {
       const auto& selection = plan.selected_benchmarks[candidates[i]];
       EXPECT_EQ(row.candidate, &selection.identity);
       EXPECT_EQ(row.benchmark_plan, selection.benchmark_plan);
-      EXPECT_EQ(row.work_item_index, i < 3 ? 0u : 1u);
+      EXPECT_EQ(row.work_item, &plan.work_items[i < 3 ? 0 : 1]);
       EXPECT_EQ(row.correctness_sample_count, 3u);
       EXPECT_EQ(row.correctness_failed_sample_count, 2u);
       EXPECT_EQ(replay.candidate, row.candidate);
       EXPECT_EQ(replay.benchmark_plan, row.benchmark_plan);
-      EXPECT_EQ(replay.work_item_index, row.work_item_index);
+      EXPECT_EQ(replay.work_item_index, row.work_item->work_item_index);
       for (const auto* payload :
            {row.benchmark_result, replay.benchmark_result}) {
         EXPECT_EQ(payload->executed, result.executed);
@@ -294,7 +294,8 @@ check.benchmark<@sampled> @all_b
   EXPECT_EQ(collector.events[3].sample.candidate->candidate_index, 1u);
   EXPECT_EQ(collector.events[4].kind,
             IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT);
-  EXPECT_EQ(collector.events[4].benchmark_result.work_item_index, 0u);
+  EXPECT_EQ(collector.events[4].benchmark_result.work_item,
+            &work_plan.work_items[0]);
   EXPECT_EQ(collector.events[4].benchmark_result.correctness_sample_count, 2u);
   EXPECT_EQ(collector.events[5].kind, IREE_BENCHMARK_LOOM_EVENT_PROFILE_REPLAY);
   EXPECT_EQ(collector.events[6].kind,

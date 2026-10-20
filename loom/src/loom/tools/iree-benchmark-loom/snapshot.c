@@ -16,7 +16,7 @@
 #include "loom/util/stream.h"
 
 typedef struct iree_benchmark_loom_snapshot_state_t {
-  // Host allocator used for copied strings, builders, and index storage.
+  // Host allocator used for copied strings and builders.
   iree_allocator_t host_allocator;
   // True after the run metadata event has been received.
   bool run_seen;
@@ -76,12 +76,6 @@ typedef struct iree_benchmark_loom_snapshot_state_t {
   loom_json_value_list_t repetitions;
   // JSON array entries for interleaved comparison summaries.
   loom_json_value_list_t comparisons;
-  // Physical work item indexes already emitted into |work_items|.
-  iree_host_size_t* emitted_work_item_indexes;
-  // Number of populated entries in |emitted_work_item_indexes|.
-  iree_host_size_t emitted_work_item_count;
-  // Allocated capacity of |emitted_work_item_indexes|.
-  iree_host_size_t emitted_work_item_capacity;
 } iree_benchmark_loom_snapshot_state_t;
 
 static iree_benchmark_loom_snapshot_state_t* iree_benchmark_loom_snapshot_state(
@@ -143,38 +137,6 @@ static iree_string_view_t iree_benchmark_loom_snapshot_result_state(
     return benchmark_result->passed ? IREE_SV("ok") : IREE_SV("failed");
   }
   return IREE_SV("skipped");
-}
-
-static iree_status_t iree_benchmark_loom_snapshot_work_item_already_emitted(
-    iree_benchmark_loom_snapshot_state_t* state,
-    iree_host_size_t work_item_index, bool* out_already_emitted) {
-  *out_already_emitted = false;
-  if (work_item_index == IREE_BENCHMARK_LOOM_INDEX_INVALID) {
-    return iree_ok_status();
-  }
-  for (iree_host_size_t i = 0; i < state->emitted_work_item_count; ++i) {
-    if (state->emitted_work_item_indexes[i] == work_item_index) {
-      *out_already_emitted = true;
-      return iree_ok_status();
-    }
-  }
-  if (state->emitted_work_item_count == state->emitted_work_item_capacity) {
-    iree_host_size_t new_capacity = 8;
-    if (state->emitted_work_item_capacity != 0 &&
-        !iree_host_size_checked_mul(state->emitted_work_item_capacity, 2,
-                                    &new_capacity)) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "too many benchmark work item indexes");
-    }
-    IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
-        state->host_allocator, new_capacity,
-        sizeof(state->emitted_work_item_indexes[0]),
-        (void**)&state->emitted_work_item_indexes));
-    state->emitted_work_item_capacity = new_capacity;
-  }
-  state->emitted_work_item_indexes[state->emitted_work_item_count++] =
-      work_item_index;
-  return iree_ok_status();
 }
 
 static iree_status_t iree_benchmark_loom_snapshot_append_run(
@@ -344,11 +306,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_scenario_sample(
 static iree_status_t iree_benchmark_loom_snapshot_append_work_item(
     iree_benchmark_loom_snapshot_state_t* state,
     const iree_benchmark_loom_benchmark_result_event_t* event) {
-  bool already_emitted = false;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_work_item_already_emitted(
-      state, event->work_item_index, &already_emitted));
-  if (already_emitted ||
-      event->work_item_index == IREE_BENCHMARK_LOOM_INDEX_INVALID) {
+  if (event->candidate->candidate_index !=
+      event->work_item->representative_selection_index) {
     return iree_ok_status();
   }
   loom_output_stream_t stream;
@@ -357,7 +316,7 @@ static iree_status_t iree_benchmark_loom_snapshot_append_work_item(
   loom_json_object_writer_t object;
   IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
-      &object, IREE_SV("work_item_index"), event->work_item_index));
+      &object, IREE_SV("work_item_index"), event->work_item->work_item_index));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
       event->benchmark_plan, event->case_plan, event->scenario_plan, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
@@ -400,8 +359,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_benchmark(
   IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &object));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_candidate_fields(
       event->candidate, &object));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_work_item_field(
-      event->work_item_index, &object));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+      &object, IREE_SV("work_item_index"), event->work_item->work_item_index));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
       event->benchmark_plan, event->case_plan, event->scenario_plan, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
@@ -429,18 +388,6 @@ static iree_status_t iree_benchmark_loom_snapshot_append_benchmark(
     IREE_RETURN_IF_ERROR(
         iree_benchmark_loom_write_scenario_coordinate_fields_json(
             event->benchmark_result->scenario_coordinate, &object));
-  }
-  if (event->work_item_index == IREE_BENCHMARK_LOOM_INDEX_INVALID) {
-    IREE_RETURN_IF_ERROR(
-        loom_json_object_begin_field(&object, IREE_SV("result")));
-    loom_json_object_writer_t result_object;
-    IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &result_object));
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_write_benchmark_evidence_fields_json(
-            event->policy, event->benchmark_result,
-            event->correctness_sample_count,
-            event->correctness_failed_sample_count, &result_object));
-    IREE_RETURN_IF_ERROR(loom_json_object_end(&result_object));
   }
   return loom_json_object_end(&object);
 }
@@ -806,7 +753,6 @@ void iree_benchmark_loom_snapshot_sink_deinitialize(
   }
   iree_benchmark_loom_snapshot_state_t* state =
       iree_benchmark_loom_snapshot_state(snapshot);
-  iree_allocator_free(state->host_allocator, state->emitted_work_item_indexes);
   loom_json_value_list_deinitialize(&state->comparisons);
   loom_json_value_list_deinitialize(&state->repetitions);
   loom_json_value_list_deinitialize(&state->failures);

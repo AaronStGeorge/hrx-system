@@ -193,7 +193,8 @@ iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_result(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    iree_host_size_t work_item_index, const loom_module_t* module,
+    const iree_benchmark_loom_work_item_t* work_item,
+    const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_scenario_plan_t* scenario_plan,
@@ -215,7 +216,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_result(
                     {
                         .run = run,
                         .candidate = candidate,
-                        .work_item_index = work_item_index,
+                        .work_item = work_item,
                         .module = module,
                         .benchmark_plan = benchmark_plan,
                         .case_plan = case_plan,
@@ -449,7 +450,7 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
           jsonl_sink,
           iree_benchmark_loom_append_benchmark_result(
               event->benchmark_result.run, event->benchmark_result.candidate,
-              event->benchmark_result.work_item_index,
+              event->benchmark_result.work_item->work_item_index,
               event->benchmark_result.module,
               event->benchmark_result.benchmark_plan,
               event->benchmark_result.case_plan,
