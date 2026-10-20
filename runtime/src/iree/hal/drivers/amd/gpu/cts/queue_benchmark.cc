@@ -82,10 +82,16 @@ class NativeQueue {
         api, AMDF_NATIVE_LIFETIME_INSTANCE, iree_allocator_system(), &fabric_));
     for (uint32_t i = 0; i < fabric_->endpoint_count; ++i) {
       if (fabric_->endpoints[i].engine_kind == AMDF_ENGINE_KIND_GPU) {
-        IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_allocate(
+        iree_status_t status = iree_hal_amd_gpu_context_allocate(
             fabric_, &fabric_->endpoints[i].id,
             iree_hal_device_event_sink_stderr(), iree_allocator_system(),
-            &context_));
+            &context_);
+        if (iree_status_is_unimplemented(status) ||
+            iree_status_is_unavailable(status)) {
+          iree_status_ignore(status);
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(status);
         bool supported = false;
         for (uint32_t family = 0;
              family < context_->endpoint_info.queue_family_count; ++family) {
