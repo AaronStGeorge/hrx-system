@@ -50,6 +50,8 @@ typedef struct loom_low_function_requirements_t {
   const loom_low_read_only_data_requirement_t* read_only_data;
   // Number of referenced read-only data records.
   iree_host_size_t read_only_data_count;
+  // Direct Low callees in first-call order, with duplicate calls collapsed.
+  loom_symbol_ref_array_t direct_callees;
   // Read-only data ordinal by module-local symbol ID, or UINT32_MAX.
   const uint32_t* read_only_data_ordinal_by_symbol;
   // Number of entries in read_only_data_ordinal_by_symbol.

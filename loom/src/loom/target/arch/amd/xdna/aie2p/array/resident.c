@@ -24,7 +24,6 @@
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/core_descriptors.h"
 #include "loom/target/arch/amd/xdna/array/facts.h"
 #include "loom/transforms/cfg/block_fusion.h"
-#include "loom/util/call_graph.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/dominance.h"
 
@@ -260,16 +259,20 @@ static iree_status_t loom_aie2p_array_resident_clone_read_only_data(
   return iree_ok_status();
 }
 
+static const loom_aie2p_array_leaf_t*
+loom_aie2p_array_resident_find_source_leaf(const loom_aie2p_array_plan_t* plan,
+                                           loom_symbol_id_t symbol_id) {
+  for (iree_host_size_t i = 0; i < plan->source_leaf_count; ++i) {
+    if (plan->source_leaves[i].entry.symbol_id == symbol_id) {
+      return &plan->source_leaves[i];
+    }
+  }
+  return NULL;
+}
+
 static iree_status_t loom_aie2p_array_resident_clone_helpers(
     loom_aie2p_array_resident_builder_t* builder,
     const loom_aie2p_array_plan_t* plans, iree_host_size_t plan_count) {
-  loom_call_graph_t call_graph;
-  IREE_RETURN_IF_ERROR(loom_call_graph_build(builder->source_module,
-                                             builder->arena, &call_graph));
-  if (call_graph.node_count == 0) {
-    return iree_ok_status();
-  }
-
   const iree_host_size_t symbol_count = builder->source_module->symbols.count;
   bool* helper_symbols = NULL;
   bool* target_symbols = NULL;
@@ -286,26 +289,24 @@ static iree_status_t loom_aie2p_array_resident_clone_helpers(
     const loom_aie2p_array_plan_t* plan = &plans[plan_index];
     for (iree_host_size_t worker_index = 0; worker_index < plan->worker_count;
          ++worker_index) {
-      const loom_op_t* source_function =
-          plan->workers[worker_index].leaf->function_op;
-      const loom_symbol_ref_t source_ref = loom_func_like_callee(
-          loom_func_like_const_cast(builder->source_module, source_function));
-      const loom_call_graph_node_t* source_node =
-          loom_call_graph_node(&call_graph, source_ref.symbol_id);
-      IREE_ASSERT(source_node != NULL);
-      if (loom_call_graph_is_recursive(&call_graph, source_ref.symbol_id)) {
-        return iree_make_status(
-            IREE_STATUS_UNIMPLEMENTED,
-            "AIE2P resident workers cannot use recursive native calls");
-      }
-      for (uint16_t i = 0; i < source_node->callee_count; ++i) {
-        const loom_symbol_id_t helper_id = source_node->callees[i];
-        const loom_call_graph_node_t* helper_node =
-            loom_call_graph_node(&call_graph, helper_id);
+      const loom_aie2p_array_leaf_t* worker_leaf =
+          plan->workers[worker_index].leaf;
+      const loom_symbol_ref_array_t direct_callees =
+          worker_leaf->requirements.direct_callees;
+      for (iree_host_size_t i = 0; i < direct_callees.count; ++i) {
+        const loom_symbol_ref_t helper_ref = direct_callees.values[i];
+        if (helper_ref.module_id != 0 || helper_ref.symbol_id >= symbol_count) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "AIE2P resident native helper has an "
+                                  "invalid module-local symbol");
+        }
+        const loom_symbol_id_t helper_id = helper_ref.symbol_id;
+        const loom_aie2p_array_leaf_t* helper_leaf =
+            loom_aie2p_array_resident_find_source_leaf(plan, helper_id);
         const loom_symbol_t* helper_symbol =
             &builder->source_module->symbols.entries[helper_id];
-        if (helper_node == NULL || helper_node->callee_count != 0 ||
-            loom_call_graph_is_recursive(&call_graph, helper_id) ||
+        if (helper_leaf == NULL ||
+            helper_leaf->requirements.direct_callees.count != 0 ||
             helper_symbol->defining_op == NULL ||
             !loom_low_func_def_isa(helper_symbol->defining_op) ||
             !loom_func_like_is_module_internal(loom_func_like_const_cast(
@@ -2042,6 +2043,19 @@ static iree_status_t loom_aie2p_array_resident_materialize_worker(
   }
   IREE_RETURN_IF_ERROR(loom_aie2p_array_resident_fuse_blocks(
       builder->module, resident_body, builder->arena->block_pool));
+  loom_symbol_ref_t* direct_callees = NULL;
+  const iree_host_size_t direct_callee_count =
+      leaf->requirements.direct_callees.count;
+  if (direct_callee_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        builder->arena, direct_callee_count, sizeof(*direct_callees),
+        (void**)&direct_callees));
+    for (iree_host_size_t i = 0; i < direct_callee_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_aie2p_array_resident_remap_symbol(
+          builder, builder->source_module, builder->module,
+          leaf->requirements.direct_callees.values[i], &direct_callees[i]));
+    }
+  }
   *out_worker = (loom_aie2p_array_resident_worker_t){
       .worker_index = worker_index,
       .entry = resident_ref,
@@ -2049,6 +2063,8 @@ static iree_status_t loom_aie2p_array_resident_materialize_worker(
       .function_target_facts = leaf->function_target_facts,
       .memory_accesses = memory_accesses,
       .loop_execution = loop_execution,
+      .direct_callees =
+          loom_make_symbol_ref_array(direct_callees, direct_callee_count),
   };
   return iree_ok_status();
 }

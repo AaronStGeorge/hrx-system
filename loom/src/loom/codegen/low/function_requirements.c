@@ -66,6 +66,30 @@ uint32_t loom_low_function_requirements_read_only_data_ordinal(
   return requirements->read_only_data_ordinal_by_symbol[symbol.symbol_id];
 }
 
+static iree_status_t loom_low_function_requirements_append_direct_callee(
+    loom_symbol_ref_t callee, iree_arena_allocator_t* arena,
+    loom_symbol_ref_t** inout_callees, iree_host_size_t* inout_capacity,
+    loom_low_function_requirements_t* out_requirements) {
+  for (iree_host_size_t i = 0; i < out_requirements->direct_callees.count;
+       ++i) {
+    const loom_symbol_ref_t existing = (*inout_callees)[i];
+    if (existing.module_id == callee.module_id &&
+        existing.symbol_id == callee.symbol_id) {
+      return iree_ok_status();
+    }
+  }
+  const iree_host_size_t minimum_capacity =
+      out_requirements->direct_callees.count + 1;
+  if (minimum_capacity > *inout_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, out_requirements->direct_callees.count,
+        iree_max(minimum_capacity, 4u), sizeof(**inout_callees), inout_capacity,
+        (void**)inout_callees));
+  }
+  (*inout_callees)[out_requirements->direct_callees.count++] = callee;
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_function_requirements_build(
     const loom_module_t* module, const loom_region_t* body,
     iree_arena_allocator_t* arena,
@@ -75,6 +99,8 @@ iree_status_t loom_low_function_requirements_build(
   iree_host_size_t resource_capacity = 0;
   loom_low_read_only_data_requirement_t* read_only_data = NULL;
   iree_host_size_t read_only_data_capacity = 0;
+  loom_symbol_ref_t* direct_callees = NULL;
+  iree_host_size_t direct_callee_capacity = 0;
   uint32_t* read_only_data_ordinal_by_symbol = NULL;
   out_requirements->symbol_count = module->symbols.count;
   if (out_requirements->symbol_count > 0) {
@@ -93,25 +119,41 @@ iree_status_t loom_low_function_requirements_build(
     out_requirements->node_count += block->op_count;
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      if (loom_low_resource_isa(op)) {
-        out_requirements->entry_preamble_end = op;
-        const iree_host_size_t minimum_capacity =
-            out_requirements->resource_count + 1;
-        if (minimum_capacity > resource_capacity) {
-          IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-              arena, out_requirements->resource_count,
-              iree_max(minimum_capacity, 4u), sizeof(*resources),
-              &resource_capacity, (void**)&resources));
+      switch (op->kind) {
+        case LOOM_OP_LOW_RESOURCE: {
+          out_requirements->entry_preamble_end = op;
+          const iree_host_size_t minimum_capacity =
+              out_requirements->resource_count + 1;
+          if (minimum_capacity > resource_capacity) {
+            IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+                arena, out_requirements->resource_count,
+                iree_max(minimum_capacity, 4u), sizeof(*resources),
+                &resource_capacity, (void**)&resources));
+          }
+          resources[out_requirements->resource_count++] = op;
+          break;
         }
-        resources[out_requirements->resource_count++] = op;
-      } else if (loom_low_live_in_isa(op)) {
-        out_requirements->entry_preamble_end = op;
-      } else if (loom_low_storage_reserve_isa(op) ||
-                 loom_low_storage_view_isa(op)) {
-        IREE_RETURN_IF_ERROR(loom_low_storage_layout_builder_append(
-            module, op, arena, &storage_builder));
-      } else if (loom_low_return_isa(op)) {
-        ++out_requirements->return_count;
+        case LOOM_OP_LOW_LIVE_IN:
+          out_requirements->entry_preamble_end = op;
+          break;
+        case LOOM_OP_LOW_STORAGE_RESERVE:
+        case LOOM_OP_LOW_STORAGE_VIEW: {
+          IREE_RETURN_IF_ERROR(loom_low_storage_layout_builder_append(
+              module, op, arena, &storage_builder));
+          break;
+        }
+        case LOOM_OP_LOW_RETURN:
+          ++out_requirements->return_count;
+          break;
+        case LOOM_OP_LOW_FUNC_CALL: {
+          IREE_RETURN_IF_ERROR(
+              loom_low_function_requirements_append_direct_callee(
+                  loom_low_func_call_callee(op), arena, &direct_callees,
+                  &direct_callee_capacity, out_requirements));
+          break;
+        }
+        default:
+          break;
       }
       const loom_low_descriptor_packet_kind_t packet_kind =
           loom_low_descriptor_packet_kind(op);
@@ -133,6 +175,7 @@ iree_status_t loom_low_function_requirements_build(
   }
   out_requirements->resources = resources;
   out_requirements->read_only_data = read_only_data;
+  out_requirements->direct_callees.values = direct_callees;
   out_requirements->read_only_data_ordinal_by_symbol =
       read_only_data_ordinal_by_symbol;
   return loom_low_storage_layout_builder_finish(

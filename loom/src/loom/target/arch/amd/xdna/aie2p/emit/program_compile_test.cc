@@ -12,6 +12,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/function_requirements.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -311,6 +312,25 @@ class Aie2pProgramCompileTest : public ::testing::Test {
     return nullptr;
   }
 
+  iree_status_t CompileProgram(
+      loom_module_t* module, loom_op_t* entry,
+      const loom_aie2p_leaf_compile_options_t* options, bool* out_compiled,
+      loom_aie2p_leaf_contribution_t* out_contribution) {
+    iree_arena_allocator_t requirements_arena;
+    iree_arena_initialize(&program_block_pool_, &requirements_arena);
+    loom_low_function_requirements_t requirements = {};
+    iree_status_t status = loom_low_function_requirements_build(
+        module, loom_low_func_def_body(entry), &requirements_arena,
+        &requirements);
+    if (iree_status_is_ok(status)) {
+      status = loom_aie2p_program_compile(
+          module, entry, requirements.direct_callees, options, &program_arena_,
+          out_compiled, out_contribution);
+    }
+    iree_arena_deinitialize(&requirements_arena);
+    return status;
+  }
+
   iree_arena_block_pool_t module_block_pool_;
   iree_arena_block_pool_t program_block_pool_;
   iree_arena_allocator_t program_arena_;
@@ -349,9 +369,8 @@ TEST_F(Aie2pProgramCompileTest,
   };
   bool compiled = false;
   loom_aie2p_leaf_contribution_t contribution = {};
-  IREE_ASSERT_OK(loom_aie2p_program_compile(module.get(), entry, &options,
-                                            &program_arena_, &compiled,
-                                            &contribution));
+  IREE_ASSERT_OK(
+      CompileProgram(module.get(), entry, &options, &compiled, &contribution));
   ASSERT_TRUE(compiled);
   ASSERT_EQ(contribution.object.section_count, 2u);
   ASSERT_EQ(contribution.object.fixup_count, 3u);
@@ -538,9 +557,8 @@ TEST_F(Aie2pProgramCompileTest,
   };
   bool compiled = false;
   loom_aie2p_leaf_contribution_t contribution = {};
-  IREE_ASSERT_OK(loom_aie2p_program_compile(module.get(), entry, &options,
-                                            &program_arena_, &compiled,
-                                            &contribution));
+  IREE_ASSERT_OK(
+      CompileProgram(module.get(), entry, &options, &compiled, &contribution));
   ASSERT_TRUE(compiled);
   EXPECT_EQ(contribution.realization.spill.byte_length, 0u);
 
@@ -614,9 +632,8 @@ TEST_F(Aie2pProgramCompileTest, SeparatesReturnedCallFromFollowingBranch) {
   };
   bool compiled = false;
   loom_aie2p_leaf_contribution_t contribution = {};
-  IREE_ASSERT_OK(loom_aie2p_program_compile(module.get(), entry, &options,
-                                            &program_arena_, &compiled,
-                                            &contribution));
+  IREE_ASSERT_OK(
+      CompileProgram(module.get(), entry, &options, &compiled, &contribution));
   ASSERT_TRUE(compiled);
 
   const loom_native_object_symbol_t& entry_symbol =
@@ -682,9 +699,8 @@ TEST_F(Aie2pProgramCompileTest,
   };
   bool compiled = false;
   loom_aie2p_leaf_contribution_t contribution = {};
-  IREE_ASSERT_OK(loom_aie2p_program_compile(module.get(), entry, &options,
-                                            &program_arena_, &compiled,
-                                            &contribution));
+  IREE_ASSERT_OK(
+      CompileProgram(module.get(), entry, &options, &compiled, &contribution));
   ASSERT_TRUE(compiled);
   ASSERT_EQ(contribution.object.section_count, 2u);
   EXPECT_EQ(contribution.realization.spill.byte_length, 0u);

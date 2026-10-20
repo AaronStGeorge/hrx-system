@@ -451,7 +451,6 @@ loom_cc_library(
     loom::rewrite::rewriter
     loom::target::arch::amd::xdna::array_facts
     loom::transforms::cfg::block_fusion
-    loom::util::call_graph
     loom::util::cfg_graph
     loom::util::dominance
   PUBLIC
@@ -1344,7 +1343,6 @@ loom_cc_library(
     loom::ops::low
     loom::ops::op_defs
     loom::target::registers
-    loom::util::call_graph
   PUBLIC
 )
 endif()
@@ -1709,6 +1707,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::codegen::low::function_requirements
     loom::codegen::low::text_asm
     loom::format::text::parser
     loom::ir

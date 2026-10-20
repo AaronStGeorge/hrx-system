@@ -15,7 +15,6 @@
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/core_descriptors.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/program_object.h"
 #include "loom/target/registers.h"
-#include "loom/util/call_graph.h"
 
 typedef struct loom_aie2p_program_callable_t {
   loom_symbol_id_t symbol_id;
@@ -210,25 +209,10 @@ static iree_status_t loom_aie2p_program_prepare_clobbers(
 
 static iree_status_t loom_aie2p_program_compile_impl(
     loom_module_t* module, loom_op_t* entry_function_op,
+    loom_symbol_ref_array_t direct_callees,
     const loom_aie2p_leaf_compile_options_t* entry_options,
     iree_arena_allocator_t* arena, iree_arena_allocator_t* scratch_arena,
     bool* out_compiled, loom_aie2p_leaf_contribution_t* out_contribution) {
-  loom_call_graph_t call_graph;
-  IREE_RETURN_IF_ERROR(
-      loom_call_graph_build(module, scratch_arena, &call_graph));
-  const loom_symbol_ref_t entry_ref =
-      loom_func_like_callee(loom_func_like_cast(module, entry_function_op));
-  const loom_call_graph_node_t* entry_node =
-      loom_call_graph_node(&call_graph, entry_ref.symbol_id);
-  if (entry_node == NULL || entry_node->callee_count == 0) {
-    return loom_aie2p_leaf_compile(module, entry_function_op, entry_options,
-                                   arena, out_compiled, out_contribution);
-  }
-  if (loom_call_graph_is_recursive(&call_graph, entry_ref.symbol_id)) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AIE2P native calls cannot be recursive");
-  }
-
   const loom_low_descriptor_set_t* descriptor_set =
       loom_aie2p_core_descriptor_set();
   // r24 and r25 are the position registers in the two load-FIFO tuples. Keep
@@ -264,38 +248,28 @@ static iree_status_t loom_aie2p_program_compile_impl(
   loom_aie2p_program_callable_t* helpers = NULL;
   loom_aie2p_program_callable_t** bindings_by_symbol = NULL;
   loom_aie2p_leaf_contribution_t* contributions = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(scratch_arena, entry_node->callee_count,
-                                sizeof(*helpers), (void**)&helpers));
-  memset(helpers, 0, entry_node->callee_count * sizeof(*helpers));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      scratch_arena, direct_callees.count, sizeof(*helpers), (void**)&helpers));
+  memset(helpers, 0, direct_callees.count * sizeof(*helpers));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       scratch_arena, module->symbols.count, sizeof(*bindings_by_symbol),
       (void**)&bindings_by_symbol));
   memset(bindings_by_symbol, 0,
          module->symbols.count * sizeof(*bindings_by_symbol));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      scratch_arena, entry_node->callee_count + 1, sizeof(*contributions),
+      scratch_arena, direct_callees.count + 1, sizeof(*contributions),
       (void**)&contributions));
 
-  for (uint16_t i = 0; i < entry_node->callee_count; ++i) {
-    const loom_symbol_id_t symbol_id = entry_node->callees[i];
-    const loom_call_graph_node_t* helper_node =
-        loom_call_graph_node(&call_graph, symbol_id);
-    if (helper_node == NULL || helper_node->callee_count != 0 ||
-        loom_call_graph_is_recursive(&call_graph, symbol_id)) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AIE2P native helpers must be direct, call-free leaves");
-    }
+  for (iree_host_size_t i = 0; i < direct_callees.count; ++i) {
+    const loom_symbol_ref_t helper_ref = direct_callees.values[i];
+    IREE_ASSERT_EQ(helper_ref.module_id, 0u);
+    IREE_ASSERT_LT(helper_ref.symbol_id, module->symbols.count);
+    const loom_symbol_id_t symbol_id = helper_ref.symbol_id;
     loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
-    if (symbol->defining_op == NULL ||
-        !loom_low_func_def_isa(symbol->defining_op) ||
-        !loom_func_like_is_module_internal(
-            loom_func_like_cast(module, symbol->defining_op))) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AIE2P native helper must be a module-internal Low definition");
-    }
+    IREE_ASSERT(symbol->defining_op != NULL);
+    IREE_ASSERT(loom_low_func_def_isa(symbol->defining_op));
+    IREE_ASSERT(loom_func_like_is_module_internal(
+        loom_func_like_cast(module, symbol->defining_op)));
     loom_aie2p_program_callable_t* helper = &helpers[i];
     helper->symbol_id = symbol_id;
     helper->function_op = symbol->defining_op;
@@ -359,17 +333,18 @@ static iree_status_t loom_aie2p_program_compile_impl(
   if (!entry_compiled) {
     return iree_ok_status();
   }
-  for (uint16_t i = 0; i < entry_node->callee_count; ++i) {
+  for (iree_host_size_t i = 0; i < direct_callees.count; ++i) {
     contributions[i + 1] = helpers[i].contribution;
   }
   IREE_RETURN_IF_ERROR(loom_aie2p_program_object_merge(
-      contributions, entry_node->callee_count + 1, arena, out_contribution));
+      contributions, direct_callees.count + 1, arena, out_contribution));
   *out_compiled = true;
   return iree_ok_status();
 }
 
 iree_status_t loom_aie2p_program_compile(
     loom_module_t* module, loom_op_t* entry_function_op,
+    loom_symbol_ref_array_t direct_callees,
     const loom_aie2p_leaf_compile_options_t* entry_options,
     iree_arena_allocator_t* arena, bool* out_compiled,
     loom_aie2p_leaf_contribution_t* out_contribution) {
@@ -381,11 +356,15 @@ iree_status_t loom_aie2p_program_compile(
   IREE_ASSERT_ARGUMENT(out_contribution);
   *out_compiled = false;
   *out_contribution = (loom_aie2p_leaf_contribution_t){0};
+  if (direct_callees.count == 0) {
+    return loom_aie2p_leaf_compile(module, entry_function_op, entry_options,
+                                   arena, out_compiled, out_contribution);
+  }
   iree_arena_allocator_t scratch_arena;
   iree_arena_initialize(arena->block_pool, &scratch_arena);
   const iree_status_t status = loom_aie2p_program_compile_impl(
-      module, entry_function_op, entry_options, arena, &scratch_arena,
-      out_compiled, out_contribution);
+      module, entry_function_op, direct_callees, entry_options, arena,
+      &scratch_arena, out_compiled, out_contribution);
   iree_arena_deinitialize(&scratch_arena);
   return status;
 }

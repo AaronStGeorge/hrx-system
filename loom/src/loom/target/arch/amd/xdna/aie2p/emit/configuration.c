@@ -214,6 +214,39 @@ static iree_status_t loom_aie2p_configuration_compile_worker(
     const loom_target_function_version_t* version =
         loom_target_function_version_snapshot_at(&emitter->versions,
                                                  symbol.symbol_id);
+    loom_low_function_requirements_t requirements = {0};
+    IREE_RETURN_IF_ERROR(loom_low_function_requirements_build(
+        request->module, loom_low_func_def_body(function),
+        request->scratch_arena, &requirements));
+    for (iree_host_size_t i = 0; i < requirements.direct_callees.count; ++i) {
+      const loom_symbol_ref_t helper_ref =
+          requirements.direct_callees.values[i];
+      if (helper_ref.module_id != 0 ||
+          helper_ref.symbol_id >= request->module->symbols.count) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "AIE2P native helper must be a module-internal Low definition");
+      }
+      const loom_symbol_t* helper_symbol =
+          &request->module->symbols.entries[helper_ref.symbol_id];
+      if (helper_symbol->defining_op == NULL ||
+          !loom_low_func_def_isa(helper_symbol->defining_op) ||
+          !loom_func_like_is_module_internal(loom_func_like_const_cast(
+              request->module, helper_symbol->defining_op))) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "AIE2P native helper must be a module-internal Low definition");
+      }
+      loom_low_function_requirements_t helper_requirements = {0};
+      IREE_RETURN_IF_ERROR(loom_low_function_requirements_build(
+          request->module, loom_low_func_def_body(helper_symbol->defining_op),
+          request->scratch_arena, &helper_requirements));
+      if (helper_requirements.direct_callees.count != 0) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "AIE2P native helpers must be direct, call-free leaves");
+      }
+    }
     loom_target_compile_report_t report;
     loom_target_compile_report_t* report_ptr = NULL;
     if (request->compile_report) {
@@ -233,9 +266,9 @@ static iree_status_t loom_aie2p_configuration_compile_worker(
         .compile_report = report_ptr,
     };
     bool compiled = false;
-    iree_status_t status =
-        loom_aie2p_program_compile(request->module, function, &options,
-                                   request->scratch_arena, &compiled, worker);
+    iree_status_t status = loom_aie2p_program_compile(
+        request->module, function, requirements.direct_callees, &options,
+        request->scratch_arena, &compiled, worker);
     if (report_ptr) {
       status = iree_status_join(status,
                                 loom_target_compile_report_record_entry_report(

@@ -466,8 +466,9 @@ static iree_status_t loom_aie2p_xdna_compile_resident_tiles(
     };
     bool program_compiled = false;
     iree_status_t status = loom_aie2p_program_compile(
-        resident_module, resident->function_op, &worker_compile_options,
-        request->scratch_arena, &program_compiled, contribution);
+        resident_module, resident->function_op, resident->direct_callees,
+        &worker_compile_options, request->scratch_arena, &program_compiled,
+        contribution);
     if (worker_report_ptr != NULL) {
       status = iree_status_join(
           status, loom_target_compile_report_record_entry_report(

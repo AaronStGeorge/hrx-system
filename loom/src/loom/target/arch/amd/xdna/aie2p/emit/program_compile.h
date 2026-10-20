@@ -15,12 +15,14 @@
 extern "C" {
 #endif
 
-// Compiles |entry_function_op| and its direct, nonrecursive, module-internal
-// helper callees into one tile contribution. Helpers use scalar and pointer
-// register ABI values, remain spill-free and code-only, and cannot call other
-// functions. Call-free entries retain ordinary leaf compilation behavior.
+// Compiles |entry_function_op| and its producer-retained direct,
+// nonrecursive, module-internal helper callees into one tile contribution.
+// Helpers use scalar and pointer register ABI values, remain spill-free and
+// code-only, and cannot call other functions. Call-free entries retain the
+// exact ordinary leaf compilation path.
 iree_status_t loom_aie2p_program_compile(
     loom_module_t* module, loom_op_t* entry_function_op,
+    loom_symbol_ref_array_t direct_callees,
     const loom_aie2p_leaf_compile_options_t* entry_options,
     iree_arena_allocator_t* arena, bool* out_compiled,
     loom_aie2p_leaf_contribution_t* out_contribution);
