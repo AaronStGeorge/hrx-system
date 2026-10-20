@@ -341,9 +341,20 @@ struct FakeNative {
 
 class SlabProviderTest : public ::testing::Test {
  protected:
+  SlabProviderTest() {
+    static const iree_hal_resource_vtable_t vtable = {
+        .destroy =
+            [](iree_hal_resource_t* resource) {
+              reinterpret_cast<NativeLifetime*>(resource)->released.set_value();
+            },
+    };
+    iree_hal_resource_initialize(&vtable, &native_lifetime_.resource);
+  }
+
   void SetUp() override {
     iree_hal_mock_device_options_t options;
     iree_hal_mock_device_options_initialize(&options);
+    options.lifetime_owner = &native_lifetime_.resource;
     for (auto** device : {&devices_[0], &devices_[1]}) {
       IREE_ASSERT_OK(iree_hal_mock_device_create(
           &options, iree_allocator_system(), device));
@@ -457,9 +468,23 @@ class SlabProviderTest : public ::testing::Test {
     for (auto* device : devices_) {
       iree_hal_device_release(device);
     }
+    // Native callbacks retain the provider and its devices beyond public
+    // pool release. Join those owners before derived fixtures destroy their
+    // proactors or the native dependency's storage leaves scope.
+    iree_hal_resource_release(&native_lifetime_.resource);
+    native_lifetime_.released.get_future().get();
     iree_hal_amd_fabric_allocation_queue_release(allocation_queue_);
   }
 
+  struct NativeLifetime {
+    // Shared native owner retained by both mock devices and the fixture.
+    iree_hal_resource_t resource;
+    // Final device release proves every provider callback has returned.
+    std::promise<void> released;
+  };
+
+  // Mirrors native device ownership without making statistics a teardown fence.
+  NativeLifetime native_lifetime_;
   // Mocked native dependency.
   FakeNative native_;
   // Requested accesses copied by the production provider.
@@ -730,7 +755,6 @@ class SlabPoolTest : public SlabProviderTest {
 
   void TearDown() override {
     for (auto* pool : pools_) {
-      AwaitNativeReturns(pool);
       iree_hal_pool_release(pool);
     }
     SlabProviderTest::TearDown();
@@ -803,6 +827,23 @@ class SlabPoolTest : public SlabProviderTest {
   // Polling thread servicing accepted capacity waits.
   iree_async_proactor_thread_t* thread_ = nullptr;
 };
+
+TEST_F(SlabPoolTest, PublicReleaseDoesNotWaitForNativeCleanup) {
+  iree_hal_pool_reservation_t reservation = {};
+  Acquire(pools_[0], &reservation);
+  native_.hold_destroy = true;
+  std::promise<void> resume;
+  native_.destroy_resume = resume.get_future().share();
+  auto entered = native_.destroy_entered.get_future();
+  Release(pools_[0], &reservation);
+  entered.get();
+
+  // Public pool metadata can go away while the native free is still blocked.
+  // Its private callback state and device owners survive until that free ends.
+  iree_hal_pool_release(pools_[0]);
+  pools_[0] = nullptr;
+  resume.set_value();
+}
 
 TEST_F(SlabPoolTest, ConstructorAndPrefixLossesStayWithOriginatingPool) {
   native_.fail_create_at = 2;
