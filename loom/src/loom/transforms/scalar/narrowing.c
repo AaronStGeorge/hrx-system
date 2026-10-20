@@ -12,15 +12,9 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 
-static loom_op_t* loom_scalar_narrowing_defining_op(
-    const loom_rewriter_t* rewriter, loom_value_id_t value_id) {
-  const loom_value_t* value = loom_module_value(rewriter->module, value_id);
-  return loom_value_is_block_arg(value) ? NULL : loom_value_def_op(value);
-}
-
 static loom_scalar_narrowing_operand_t loom_scalar_narrowing_select_operand(
     const loom_rewriter_t* rewriter, loom_value_id_t input) {
-  loom_op_t* producer = loom_scalar_narrowing_defining_op(rewriter, input);
+  loom_op_t* producer = loom_rewriter_value_defining_op(rewriter, input);
   if (producer && loom_scalar_constant_isa(producer)) {
     // Keep the literal conversion defined even when the low word is negative.
     int64_t constant =

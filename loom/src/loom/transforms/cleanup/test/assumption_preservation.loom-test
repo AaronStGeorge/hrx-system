@@ -1,0 +1,164 @@
+// RUN: pass combine
+
+// These are preservation tests: combine and canonicalize must not compose
+// through a value carrying assumptions. Cases without explicit expectations
+// assert unchanged IR; the storage cases additionally require a bounds proof.
+
+// Cast composition must keep the value carrying the authored index bounds.
+func.def @signed_extension(%input: i16) -> (i64) {
+  %wide = scalar.extsi %input : i16 to i32
+  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
+  %result = scalar.extsi %bounded : i32 to i64
+  func.return %result : i64
+}
+
+// ====
+
+// The same contract applies to cancellation of an exact round trip.
+func.def @unsigned_roundtrip(%input: i16) -> (i16) {
+  %wide = scalar.extui %input : i16 to i32
+  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
+  %result = scalar.trunci %bounded : i32 to i16
+  func.return %result : i16
+}
+
+// ====
+
+// Canonical arithmetic has the same risk when it bypasses its operand.
+// RUN: pass canonicalize
+func.def @double_negation(%input: i32) -> (i32) {
+  %negative = scalar.negi %input : i32
+  %bounded = scalar.assume %negative [range(%negative, -6, -1)] : i32
+  %result = scalar.negi %bounded : i32
+  func.return %result : i32
+}
+
+// ====
+
+func.def @shift_chain(%input: i32) -> (i32) {
+  %shift = scalar.constant 1 : i32
+  %inner = scalar.shrui %input, %shift : i32
+  %bounded = scalar.assume %inner [range(%inner, 0, 10)] : i32
+  %result = scalar.shrui %bounded, %shift : i32
+  func.return %result : i32
+}
+
+// ====
+
+// Symbolic predicates cannot be reduced to a comparison of numeric intervals.
+func.def @symbolic_bound(%input: i16, %limit: i32) -> (i64) {
+  %wide = scalar.extsi %input : i16 to i32
+  %bounded = scalar.assume %wide [ge(%wide, 0), lt(%wide, %limit)] : i32
+  %result = scalar.extsi %bounded : i32 to i64
+  func.return %result : i64
+}
+
+// ====
+
+// Sinking a vector conversion through a splat still preserves the scalar's
+// assumption when the resulting scalar conversion is composed.
+func.def @vector_extension(%input: i16) -> (vector<4xi64>) {
+  %wide = scalar.extsi %input : i16 to i32
+  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
+  %splat = vector.splat %bounded : vector<4xi32>
+  %result = vector.extsi %splat : vector<4xi32> to vector<4xi64>
+  func.return %result : vector<4xi64>
+}
+
+// ----
+func.def @vector_extension(%input: i16) -> (vector<4xi64>) {
+  %wide = scalar.extsi %input : i16 to i32
+  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
+  %6 = scalar.extsi %bounded : i32 to i64
+  %result = vector.splat %6 : vector<4xi64>
+  func.return %result : vector<4xi64>
+}
+
+// ====
+
+// The converted bound must remain available to a separate analysis pass.
+// The logical view exceeds the allocation, so the access needs that bound to
+// prove it fits in the exact storage root.
+// RUN: pass combine,vector-memory-footprint
+func.def @bounded_storage_access(%input: i16) -> (f64) {
+  %wide = scalar.extsi %input : i16 to i32
+  %bounded = scalar.assume %wide [range(%wide, 1, 6)] : i32
+  %extended = scalar.extsi %bounded : i32 to i64
+  %position = index.cast %extended : i64 to index
+  %length = index.constant 56 : offset
+  %base = index.constant 0 : offset
+  %storage = buffer.alloca<private> align(8) %length : buffer
+  %view = buffer.view %storage[%base] : buffer -> view<32768xf64>
+  %loaded = view.load %view[%position] : view<32768xf64> -> f64
+  func.return %loaded : f64
+}
+
+// ====
+
+// Equal bits do not make the operands interchangeable: AND propagates the
+// bounded operand's high zero bits even when the other operand is unbounded.
+// RUN: pass canonicalize,vector-memory-footprint
+func.def @bounded_mask_access(%input: i32) -> (f32) {
+  %bounded = scalar.assume %input [range(%input, 0, 7)] : i32
+  %masked = scalar.andi %input, %bounded : i32
+  %position = index.cast %masked : i32 to index
+  %length = index.constant 32 : offset
+  %base = index.constant 0 : offset
+  %storage = buffer.alloca<private> align(4) %length : buffer
+  %view = buffer.view %storage[%base] : buffer -> view<32768xf32>
+  %loaded = view.load %view[%position] : view<32768xf32> -> f32
+  func.return %loaded : f32
+}
+
+// ====
+
+// The comparison bounds the true arm; the explicit assumption bounds the
+// false arm. Returning the unrefined true operand loses their common bound.
+// RUN: pass canonicalize,vector-memory-footprint
+func.def @bounded_select_access(%input: i32) -> (f32) {
+  %bounded = scalar.assume %input [range(%input, 0, 7)] : i32
+  %limit = scalar.constant 8 : i32
+  %within = scalar.cmpi ult, %input, %limit : i32
+  %selected = scf.select %within, %input, %bounded : i32
+  %position = index.cast %selected : i32 to index
+  %length = index.constant 32 : offset
+  %base = index.constant 0 : offset
+  %storage = buffer.alloca<private> align(4) %length : buffer
+  %view = buffer.view %storage[%base] : buffer -> view<32768xf32>
+  %loaded = view.load %view[%position] : view<32768xf32> -> f32
+  func.return %loaded : f32
+}
+
+// ====
+
+// A lane refinement must survive cleanup before its function is inlined.
+// RUN: pass canonicalize,inline-callables,canonicalize,vector-memory-footprint
+func.def inline @make_values(%input: i32) -> (vector<2xi32>) {
+  %bounded = scalar.assume %input [range(%input, 0, 7)] : i32
+  %values = vector.from_elements %input, %bounded : vector<2xi32>
+  func.return %values : vector<2xi32>
+}
+
+func.def @element_bound(%input: i32) -> (f32) {
+  %values = func.call @make_values(%input) : (i32) -> (vector<2xi32>)
+  %element = vector.extract %values[1] : vector<2xi32> -> i32
+  %position = index.cast %element : i32 to index
+  %length = index.constant 32 : offset
+  %base = index.constant 0 : offset
+  %storage = buffer.alloca<private> align(4) %length : buffer
+  %view = buffer.view %storage[%base] : buffer -> view<32768xf32>
+  %loaded = view.load %view[%position] : view<32768xf32> -> f32
+  func.return %loaded : f32
+}
+
+// ----
+func.def @element_bound(%input: i32) -> (f32) {
+  %bounded = scalar.assume %input [range(%input, 0, 7)] : i32
+  %position = index.cast %bounded : i32 to index
+  %length = index.constant 32 : offset
+  %base = index.constant 0 : offset
+  %storage = buffer.alloca<private> align(4) %length : buffer
+  %view = buffer.view %storage[%base] : buffer -> view<32768xf32>
+  %loaded = view.load %view[%position] : view<32768xf32> -> f32
+  func.return %loaded : f32
+}

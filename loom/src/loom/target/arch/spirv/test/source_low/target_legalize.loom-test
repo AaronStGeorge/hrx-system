@@ -67,6 +67,8 @@ func.def target(@target) @reference_fallback_for_dense_logical_mma(%input: buffe
   %66 = view.load %source[9] : view<12xi32> -> i32
   %67 = view.load %source[10] : view<12xi32> -> i32
   %68 = view.load %source[11] : view<12xi32> -> i32
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
   %63 = scalar.muli %75, %70 : i32
   %64 = scalar.addi %65, %63 : i32
   %61 = scalar.muli %76, %72 : i32
@@ -83,10 +85,16 @@ func.def target(@target) @reference_fallback_for_dense_logical_mma(%input: buffe
   %52 = scalar.addi %68, %51 : i32
   %49 = scalar.muli %78, %73 : i32
   %50 = scalar.addi %52, %49 : i32
-  view.store %62, %destination[0] : i32, view<4xi32>
-  view.store %58, %destination[1] : i32, view<4xi32>
-  view.store %54, %destination[2] : i32, view<4xi32>
-  view.store %50, %destination[3] : i32, view<4xi32>
+  %47 = vector.from_elements %62, %58, %54, %50 : vector<4xi32>
+  %result = vector.fragment<result> %47 shape [%m, %n] : vector<4xi32>
+  %15 = vector.extract %result[0] : vector<4xi32> -> i32
+  %16 = vector.extract %result[1] : vector<4xi32> -> i32
+  %17 = vector.extract %result[2] : vector<4xi32> -> i32
+  %18 = vector.extract %result[3] : vector<4xi32> -> i32
+  view.store %15, %destination[0] : i32, view<4xi32>
+  view.store %16, %destination[1] : i32, view<4xi32>
+  view.store %17, %destination[2] : i32, view<4xi32>
+  view.store %18, %destination[3] : i32, view<4xi32>
   func.return
 }
 

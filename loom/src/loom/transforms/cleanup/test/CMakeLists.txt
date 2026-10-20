@@ -13,6 +13,7 @@ loom_check_test_suite(
   NAME
     test
   SRCS
+    "assumption_preservation.loom-test"
     "callable_types.loom-test"
     "combine_legalize.loom-test"
     "conversion_phases.loom-test"

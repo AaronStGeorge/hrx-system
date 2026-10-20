@@ -128,8 +128,8 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direc
 
 // RUN: emit source-low target=amdgpu:gfx1151 output=low
 
-// A partial final workgroup uses a row guard, while the optimized transfer
-// addresses the contiguous vector group directly after radix reconstruction.
+// A partial final workgroup uses a row guard. Address reconstruction retains
+// the refined row so its bound remains available after source cleanup.
 kernel.def @row_guarded_vector_groups() {
   %unit = index.constant 1 : index
   %threads = index.constant 64 : index
@@ -166,18 +166,21 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 0, direc
   %capacity = s_mov_b32 73
   %linear = v_lshl_add_u32_shift_imm %block, %lane, 6
   %row = v_lshrrev_b32_src0_inline %linear, 5
+  %41 = s_mov_b32 31
+  %group = v_and_b32 %41, %linear
+  %column = v_lshlrev_b32_src0_inline %group, 4
   %inside = v_cmp_lt_u32 %row, %capacity
-  %51, %52 = s_and_saveexec_b64 %inside
-  low.cond_br %52, ^_bb1, ^_bb2 : reg<amdgpu.scc>
+  %45, %46 = s_and_saveexec_b64 %inside
+  low.cond_br %46, ^_bb1, ^_bb2 : reg<amdgpu.scc>
 ^_bb1:
-  %53 = v_lshlrev_b32_src0_inline %linear, 4
-  %54 = v_lshlrev_b32_src0_inline %53, 1
-  %55 = global_load_b128_saddr %54, %inputs
-  %57 = global_load_b128_saddr %54, %inputs {offset = 16}
-  global_store_b128_saddr %54, %55, %outputs
-  global_store_b128_saddr %54, %57, %outputs {offset = 16}
+  %47 = v_lshl_add_u32_shift_imm %row, %column, 9
+  %48 = v_lshlrev_b32_src0_inline %47, 1
+  %49 = global_load_b128_saddr %48, %inputs
+  %51 = global_load_b128_saddr %48, %inputs {offset = 16}
+  global_store_b128_saddr %48, %49, %outputs
+  global_store_b128_saddr %48, %51, %outputs {offset = 16}
   low.br ^_bb2
 ^_bb2:
-  s_mov_b64_exec %51
+  s_mov_b64_exec %45
   return
 }

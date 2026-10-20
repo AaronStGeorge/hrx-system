@@ -416,7 +416,7 @@ iree_status_t loom_scf_select_canonicalize(loom_op_t* op,
                                            loom_rewriter_t* rewriter) {
   loom_value_id_t true_value = loom_scf_select_true_value(op);
   loom_value_id_t false_value = loom_scf_select_false_value(op);
-  if (loom_rewriter_values_equal(rewriter, true_value, false_value)) {
+  if (true_value == false_value) {
     return loom_scf_replace_results_and_erase(op, rewriter, &true_value, 1);
   }
 

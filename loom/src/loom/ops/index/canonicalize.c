@@ -509,7 +509,6 @@ static bool loom_index_match_scaled_term(loom_rewriter_t* rewriter,
                                          loom_value_id_t* out_value,
                                          int64_t* out_scale,
                                          loom_value_id_t* out_scale_value) {
-  term = loom_rewriter_value_identity(rewriter, term);
   *out_value = term;
   *out_scale = 1;
   *out_scale_value = LOOM_VALUE_ID_INVALID;
@@ -568,8 +567,6 @@ static bool loom_index_match_scaled_radix_term(
                                     &out_term->scale_value)) {
     return false;
   }
-  value = loom_rewriter_value_identity(rewriter, value);
-
   loom_op_t* value_def = loom_rewriter_value_defining_op(rewriter, value);
   if (value_def && loom_index_div_isa(value_def)) {
     int64_t divisor = 0;
@@ -1217,7 +1214,7 @@ iree_status_t loom_index_rem_canonicalize(loom_op_t* op,
 static iree_status_t loom_index_minmax_canonicalize(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_index_minmax_kind_t kind) {
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_index_replace_single_result_with_value(op, rewriter, lhs);
   }
 
@@ -1354,7 +1351,7 @@ iree_status_t loom_index_andi_canonicalize(loom_op_t* op,
                                            loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_index_andi_lhs(op);
   loom_value_id_t rhs = loom_index_andi_rhs(op);
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_index_replace_single_result_with_value(op, rewriter, lhs);
   }
   loom_type_t result_type =
@@ -1395,7 +1392,7 @@ iree_status_t loom_index_ori_canonicalize(loom_op_t* op,
                                           loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_index_ori_lhs(op);
   loom_value_id_t rhs = loom_index_ori_rhs(op);
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_index_replace_single_result_with_value(op, rewriter, lhs);
   }
   if (loom_index_value_facts_are_exact_i64(rewriter, lhs, 0)) {
