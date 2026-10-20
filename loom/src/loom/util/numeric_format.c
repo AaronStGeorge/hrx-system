@@ -377,6 +377,9 @@ bool loom_numeric_float_encoding(loom_scalar_type_t type,
 
   const uint64_t magnitude_mask =
       (UINT64_C(1) << (info->storage_bit_count - 1)) - 1;
+  const uint64_t exponent_bias =
+      (UINT64_C(1) << (info->exponent_bit_count - 1)) - 1;
+  const uint64_t one_magnitude = exponent_bias << info->mantissa_bit_count;
   loom_numeric_float_special_layout_t special_layout =
       LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_IEEE;
   uint64_t special_magnitude = 0;
@@ -400,6 +403,7 @@ bool loom_numeric_float_encoding(loom_scalar_type_t type,
       .special_layout = special_layout,
       .magnitude_mask = magnitude_mask,
       .special_magnitude = special_magnitude,
+      .one_magnitude = one_magnitude,
       .quiet_nan_bit = quiet_nan_bit,
   };
   return true;

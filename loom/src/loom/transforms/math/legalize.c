@@ -14,6 +14,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/options.h"
 #include "loom/pass/pipeline.h"
@@ -25,6 +26,7 @@
 #include "loom/target/reporting/report.h"
 #include "loom/transforms/math/exponent.h"
 #include "loom/transforms/math/patterns.h"
+#include "loom/util/numeric_format.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics
@@ -723,9 +725,108 @@ static iree_status_t loom_math_build_integer_constant(
   return iree_ok_status();
 }
 
-// Exact sign operations only change the sign field, preserving zero,
-// infinity, subnormal, and NaN payload encodings. Target contracts are queried
-// before this portable recipe, so native scalar and packed vector forms remain
+// Builds exact signum from the encoded sign and magnitude fields. The unsigned
+// range predicates accept every nonzero value through the format's numeric
+// upper bound, including infinity for IEEE formats. NaNs and both signed zeros
+// therefore select canonical positive zero. Keeping the range test
+// comparison-only also supports vector i64 targets that lack packed integer
+// arithmetic.
+static iree_status_t loom_math_build_float_signum(
+    loom_builder_t* builder, loom_location_id_t location,
+    loom_value_id_t input_bits, loom_type_t integer_type,
+    const loom_math_sign_builders_t* builders,
+    const loom_numeric_float_encoding_t* encoding,
+    loom_value_id_t* out_result) {
+  const bool is_vector = loom_type_is_vector(integer_type);
+  loom_type_t predicate_type = integer_type;
+  predicate_type.header = loom_type_make_header(
+      loom_type_kind(integer_type), LOOM_SCALAR_TYPE_I1,
+      loom_type_rank(integer_type), loom_type_flags(integer_type));
+
+  loom_value_id_t magnitude_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_integer_constant(
+      builders->constant, builder, location, integer_type,
+      (int64_t)encoding->magnitude_mask, &magnitude_mask));
+  loom_value_id_t magnitude = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_binary(
+      builders->bitwise_and, builder, location, input_bits, magnitude_mask,
+      integer_type, &magnitude));
+
+  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_integer_constant(
+      builders->constant, builder, location, integer_type, 0, &zero));
+  const uint64_t maximum_numeric_magnitude =
+      encoding->special_layout == LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_FINITE_NAN
+          ? encoding->special_magnitude - 1
+          : encoding->special_magnitude;
+  loom_value_id_t numeric_bound = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_integer_constant(
+      builders->constant, builder, location, integer_type,
+      (int64_t)maximum_numeric_magnitude, &numeric_bound));
+  loom_op_t* nonzero_op = NULL;
+  loom_op_t* numeric_op = NULL;
+  if (is_vector) {
+    IREE_RETURN_IF_ERROR(loom_vector_cmpi_build(
+        builder, LOOM_VECTOR_CMPI_PREDICATE_UGT, magnitude, zero, integer_type,
+        predicate_type, location, &nonzero_op));
+    IREE_RETURN_IF_ERROR(loom_vector_cmpi_build(
+        builder, LOOM_VECTOR_CMPI_PREDICATE_ULE, magnitude, numeric_bound,
+        integer_type, predicate_type, location, &numeric_op));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_cmpi_build(builder, LOOM_SCALAR_CMPI_PREDICATE_UGT,
+                               magnitude, zero, location, &nonzero_op));
+    IREE_RETURN_IF_ERROR(loom_scalar_cmpi_build(
+        builder, LOOM_SCALAR_CMPI_PREDICATE_ULE, magnitude, numeric_bound,
+        location, &numeric_op));
+  }
+  const int32_t bit_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(integer_type));
+  const int64_t sign_mask =
+      bit_width == 64 ? INT64_MIN : -(INT64_C(1) << (bit_width - 1));
+  loom_value_id_t sign_mask_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_integer_constant(
+      builders->constant, builder, location, integer_type, sign_mask,
+      &sign_mask_value));
+  loom_value_id_t sign = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_math_build_binary(builders->bitwise_and, builder, location,
+                             input_bits, sign_mask_value, integer_type, &sign));
+  loom_value_id_t one_magnitude = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_integer_constant(
+      builders->constant, builder, location, integer_type,
+      (int64_t)encoding->one_magnitude, &one_magnitude));
+  loom_value_id_t signed_one = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_build_binary(builders->bitwise_or, builder,
+                                              location, sign, one_magnitude,
+                                              integer_type, &signed_one));
+  loom_op_t* numeric_select_op = NULL;
+  loom_op_t* nonzero_select_op = NULL;
+  if (is_vector) {
+    IREE_RETURN_IF_ERROR(loom_vector_select_build(
+        builder, loom_op_results(numeric_op)[0], signed_one, zero, integer_type,
+        location, &numeric_select_op));
+    IREE_RETURN_IF_ERROR(
+        loom_vector_select_build(builder, loom_op_results(nonzero_op)[0],
+                                 loom_op_results(numeric_select_op)[0], zero,
+                                 integer_type, location, &nonzero_select_op));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_scf_select_build(
+        builder, loom_op_results(numeric_op)[0], signed_one, zero, integer_type,
+        location, &numeric_select_op));
+    IREE_RETURN_IF_ERROR(
+        loom_scf_select_build(builder, loom_op_results(nonzero_op)[0],
+                              loom_op_results(numeric_select_op)[0], zero,
+                              integer_type, location, &nonzero_select_op));
+  }
+  *out_result = loom_op_results(nonzero_select_op)[0];
+  return iree_ok_status();
+}
+
+// Exact sign-bit operations preserve zero, infinity, subnormal, and NaN payload
+// encodings. Signum instead classifies the encoded magnitude and returns
+// canonical signed one or positive zero. Target contracts are queried before
+// these portable recipes, so native scalar and packed vector forms remain
 // preferred wherever they exist.
 static iree_status_t loom_math_target_legalize_float_sign(
     const loom_target_legalizer_entry_t* entry,
@@ -782,8 +883,18 @@ static iree_status_t loom_math_target_legalize_float_sign(
 
   const bool is_absolute = loom_scalar_absf_isa(op) || loom_vector_absf_isa(op);
   const bool is_negate = loom_scalar_negf_isa(op) || loom_vector_negf_isa(op);
+  const bool is_signum = loom_scalar_signf_isa(op) || loom_vector_signf_isa(op);
   loom_value_id_t result_bits = LOOM_VALUE_ID_INVALID;
-  if (is_absolute || is_negate) {
+  if (is_signum) {
+    loom_numeric_float_encoding_t encoding;
+    const bool has_encoding =
+        loom_numeric_float_encoding(float_element, &encoding);
+    IREE_ASSERT(has_encoding);
+    (void)has_encoding;
+    IREE_RETURN_IF_ERROR(loom_math_build_float_signum(
+        builder, op->location, input_bits, integer_type, &builders, &encoding,
+        &result_bits));
+  } else if (is_absolute || is_negate) {
     loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_math_build_integer_constant(
         builders.constant, builder, op->location, integer_type,
@@ -867,6 +978,11 @@ static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
         .legalize = loom_math_target_legalize_float_sign,
     },
     {
+        .root_kind = LOOM_OP_SCALAR_SIGNF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_math_target_legalize_float_sign,
+    },
+    {
         .root_kind = LOOM_OP_VECTOR_ABSF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_math_target_legalize_float_sign,
@@ -878,6 +994,11 @@ static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
     },
     {
         .root_kind = LOOM_OP_VECTOR_COPYSIGNF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_math_target_legalize_float_sign,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_SIGNF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_math_target_legalize_float_sign,
     },

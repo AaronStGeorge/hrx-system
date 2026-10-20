@@ -55,6 +55,7 @@ loom_cc_library(
     loom::target::pass_environment
     loom::target::reporting::report
     loom::util::fact_table_api
+    loom::util::numeric_format
   PUBLIC
 )
 
