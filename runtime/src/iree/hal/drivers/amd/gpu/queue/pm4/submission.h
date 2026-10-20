@@ -115,6 +115,8 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   // or abandonment. Only the publisher or detached admission owner accesses
   // this bit; native retirement uses its published prefix instead.
   bool has_host_owner;
+  // First failure, retained until all accepted pieces end their host accesses.
+  iree_atomic_int32_t failure_code;
   // Exact initialized extent, computed once by the capture constructor.
   iree_host_size_t capture_size;
   union {
@@ -241,8 +243,15 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create_file(
     iree_hal_amd_gpu_retirement_callback_t callback,
     iree_hal_amd_gpu_pm4_submission_t** out_submission);
 
-// Reports a borrowed failure to the optional file owner without releasing any
-// captured resources. Concurrent reporters deliver only the first failure.
+// Records rejection of an unpublished suffix. Public failure waits
+// for the final capture reference, after all accepted host accesses have ended.
+// Each reporter retains its reference through this call.
+void iree_hal_amd_gpu_pm4_submission_reject(
+    iree_hal_amd_gpu_pm4_submission_t* submission, iree_status_code_t code);
+
+// Records a borrowed terminal failure and notifies the optional file owner
+// immediately without releasing captured resources. Future host accesses must
+// already be stopped. Concurrent reporters deliver only the first failure.
 // Each reporter owns a capture reference through the callback's final access.
 void iree_hal_amd_gpu_pm4_submission_fail(
     iree_hal_amd_gpu_pm4_submission_t* submission, iree_status_t status);

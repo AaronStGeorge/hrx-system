@@ -10,7 +10,7 @@
 typedef struct iree_hal_amd_gpu_pm4_submission_retirement_t {
   // Borrowed file owner, released only by the last capture reference.
   iree_hal_amd_gpu_retirement_callback_t callback;
-  // First failure shared by publication and retirement reporters.
+  // First immediate failure reported to the owner, or OK before notification.
   iree_atomic_int32_t status_code;
   // Written by terminal native retirement and read after the reference join.
   iree_async_single_frontier_t frontier;
@@ -317,19 +317,33 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create_file(
   return status;
 }
 
+void iree_hal_amd_gpu_pm4_submission_reject(
+    iree_hal_amd_gpu_pm4_submission_t* submission, iree_status_code_t code) {
+  int32_t expected = IREE_STATUS_OK;
+  iree_atomic_compare_exchange_strong(&submission->failure_code, &expected,
+                                      code, iree_memory_order_relaxed,
+                                      iree_memory_order_relaxed);
+}
+
 void iree_hal_amd_gpu_pm4_submission_fail(
     iree_hal_amd_gpu_pm4_submission_t* submission, iree_status_t status) {
+  iree_hal_amd_gpu_pm4_submission_reject(submission, iree_status_code(status));
   if (!submission->has_retirement_callback) {
     return;
   }
   iree_hal_amd_gpu_pm4_submission_retirement_t* retirement =
       iree_hal_amd_gpu_pm4_submission_retirement(submission);
+  const iree_status_code_t code = (iree_status_code_t)iree_atomic_load(
+      &submission->failure_code, iree_memory_order_relaxed);
   int32_t expected = IREE_STATUS_OK;
-  if (iree_atomic_compare_exchange_strong(
-          &retirement->status_code, &expected, iree_status_code(status),
-          iree_memory_order_relaxed, iree_memory_order_relaxed)) {
+  if (iree_atomic_compare_exchange_strong(&retirement->status_code, &expected,
+                                          code, iree_memory_order_relaxed,
+                                          iree_memory_order_relaxed)) {
     retirement->callback.fn(retirement->callback.user_data,
-                            iree_status_clone(status), NULL, false);
+                            code == iree_status_code(status)
+                                ? iree_status_clone(status)
+                                : iree_status_from_code(code),
+                            NULL, false);
   }
 }
 
@@ -478,6 +492,12 @@ static void iree_hal_amd_gpu_pm4_submission_destroy(
     iree_hal_amd_gpu_pm4_submission_t* submission) {
   iree_hal_amd_gpu_capture_pool_t* pool = submission->pool;
   iree_hal_amd_gpu_pm4_submission_release_payload(submission);
+  const iree_status_code_t failure_code = (iree_status_code_t)iree_atomic_load(
+      &submission->failure_code, iree_memory_order_relaxed);
+  if (failure_code != IREE_STATUS_OK) {
+    iree_hal_semaphore_list_fail(submission->signals,
+                                 iree_status_from_code(failure_code));
+  }
   for (iree_host_size_t i = 0; i < submission->wait_count; ++i) {
     iree_hal_amd_gpu_pm4_signal_release(submission->waits[i].signal);
     iree_hal_semaphore_release(submission->waits[i].semaphore);
@@ -498,7 +518,7 @@ static void iree_hal_amd_gpu_pm4_submission_retire_file(
       iree_hal_amd_gpu_pm4_submission_retirement(submission);
   const iree_hal_amd_gpu_retirement_callback_t callback = retirement->callback;
   const iree_status_code_t status_code = (iree_status_code_t)iree_atomic_load(
-      &retirement->status_code, iree_memory_order_relaxed);
+      &submission->failure_code, iree_memory_order_relaxed);
   const iree_async_single_frontier_t frontier = retirement->frontier;
   iree_hal_amd_gpu_pm4_submission_destroy(submission);
   // The file owner can release the device and its capture pool in this call.

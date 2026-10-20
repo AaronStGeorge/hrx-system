@@ -284,7 +284,10 @@ static void iree_hal_amd_gpu_pm4_abandon(
   iree_hal_amd_gpu_profile_operation_record(
       queue->profile, iree_hal_amd_gpu_pm4_submission_profile(submission),
       false, 0);
-  iree_hal_amd_gpu_pm4_fail_submission(queue, submission, status);
+  iree_hal_amd_gpu_context_report_status(
+      queue->context, queue->base.queue_family->device, status);
+  iree_hal_amd_gpu_pm4_submission_reject(submission, iree_status_code(status));
+  iree_status_free(status);
   const bool has_host_owner = submission->has_host_owner;
   submission->has_host_owner = false;
   iree_hal_amd_gpu_pm4_submission_release(submission);
@@ -1789,7 +1792,8 @@ static bool iree_hal_amd_gpu_pm4_retire(
     action->scratch = NULL;
     const uint64_t consumed_words = action->consumed_words;
     const uint64_t consumed_arguments = action->consumed_arguments;
-    if (action->download.length) {
+    if (action->download.length && feedback_failure == IREE_STATUS_OK &&
+        completion_code == IREE_STATUS_OK) {
       memcpy(action->download.target, action->download.source,
              action->download.length);
     }

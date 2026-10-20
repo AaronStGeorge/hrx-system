@@ -6,6 +6,7 @@
 
 #include "iree/hal/drivers/amd/gpu/queue/pm4/submission.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <thread>
@@ -779,6 +780,101 @@ TEST_P(SubmissionTest, FileFailureDoesNotRetireAcceptedNativePieces) {
   EXPECT_EQ(owner.retirements, 1u);
   EXPECT_EQ(owner.status_code, IREE_STATUS_ABORTED);
   EXPECT_EQ(owner.frontier.entry_count, 0u);
+}
+
+TEST_P(SubmissionTest, RejectedFileSuffixWaitsForAcceptedHostAccesses) {
+  FileRetirement owner;
+  iree_hal_amd_gpu_pm4_submission_t* capture = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create_file(
+      &pool_, nullptr, nullptr, nullptr, nullptr, owner.callback(), &capture));
+  iree_hal_amd_gpu_pm4_submission_retain(capture);
+  iree_hal_amd_gpu_pm4_submission_retain(capture);
+  iree_hal_amd_gpu_pm4_submission_reject(capture,
+                                         IREE_STATUS_RESOURCE_EXHAUSTED);
+  iree_hal_amd_gpu_pm4_submission_release(capture);
+  EXPECT_EQ(owner.failures, 0u);
+  EXPECT_EQ(owner.retirements, 0u);
+  iree_hal_amd_gpu_pm4_submission_release(capture);
+  EXPECT_EQ(owner.retirements, 0u);
+  // A later reporter cannot replace the rejected suffix's first failure.
+  iree_hal_amd_gpu_pm4_submission_reject(capture, IREE_STATUS_ABORTED);
+  iree_hal_amd_gpu_pm4_submission_release(capture);
+  EXPECT_EQ(owner.failures, 0u);
+  EXPECT_EQ(owner.retirements, 1u);
+  EXPECT_EQ(owner.status_code, IREE_STATUS_RESOURCE_EXHAUSTED);
+}
+
+TEST_P(SubmissionTest, RejectedDownloadSuffixJoinsBeforeFailingPublicSignals) {
+  iree_async_proactor_t* proactor = nullptr;
+  IREE_ASSERT_OK(
+      iree_async_proactor_create_platform(iree_async_proactor_options_default(),
+                                          iree_allocator_system(), &proactor));
+  iree_hal_semaphore_t* semaphore = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_create(
+      proactor, 0, 4, iree_allocator_system(), &semaphore));
+  const uint16_t types[] = {IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS};
+  const iree_hal_buffer_binding_layout_t binding_layout = {
+      sizeof(iree_hal_buffer_native_binding_t), 1, 0, types};
+  iree_hal_memory_contract_t* contract = nullptr;
+  IREE_ASSERT_OK(iree_hal_memory_contract_create(
+      this, 2, &binding_layout, iree_allocator_system(), &contract));
+  contract->scopes[0].interfaces = 1u
+                                   << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
+  contract->scopes[0].bindings[IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS] = 0;
+  contract->scopes[0].usage = IREE_HAL_BUFFER_USAGE_TRANSFER;
+  const iree_hal_queue_family_t family = {
+      .memory = {.domain = this, .queue_scope_id = 0},
+  };
+  const iree_hal_buffer_native_binding_t binding = {.device_address = 0x1000};
+  const iree_hal_buffer_vtable_t vtable = {
+      .destroy = [](iree_hal_buffer_t*) {},
+  };
+  iree_hal_buffer_t buffer = {};
+  iree_hal_buffer_initialize({}, &buffer, 8, 0, 8,
+                             IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+                             IREE_HAL_MEMORY_ACCESS_READ,
+                             IREE_HAL_BUFFER_USAGE_TRANSFER, &vtable, &buffer);
+  buffer.memory = {.contract = contract, .bindings = &binding};
+  std::array<uint8_t, 8> output = {};
+  const iree_hal_transfer_operation_t operation = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      .download =
+          {
+              .source_buffer = &buffer,
+              .target = output.data(),
+              .length = output.size(),
+          },
+  };
+  uint64_t value = 1;
+  iree_hal_amd_gpu_pm4_submission_t* capture = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create_transfer(
+      &pool_, GetParam(), &family, {}, {1, &semaphore, &value}, 1, &operation,
+      &profile_, nullptr, &capture));
+  ASSERT_TRUE(capture->transfer.host_completion_required);
+  iree_hal_amd_gpu_pm4_submission_retain(capture);
+  iree_hal_amd_gpu_pm4_submission_retain(capture);
+  iree_hal_amd_gpu_pm4_submission_reject(capture,
+                                         IREE_STATUS_RESOURCE_EXHAUSTED);
+  iree_hal_amd_gpu_pm4_submission_release(capture);
+  uint64_t observed = UINT64_MAX;
+  IREE_ASSERT_OK(iree_hal_semaphore_query(semaphore, &observed));
+  EXPECT_EQ(observed, 0u);
+  // Accepted pieces keep the borrowed host destination live through their
+  // final copy, even though the unpublished suffix has already been rejected.
+  std::fill_n(output.data(), 4, 0x17);
+  iree_hal_amd_gpu_pm4_submission_release(capture);
+  IREE_ASSERT_OK(iree_hal_semaphore_query(semaphore, &observed));
+  EXPECT_EQ(observed, 0u);
+  std::fill_n(output.data() + 4, 4, 0x29);
+  iree_hal_amd_gpu_pm4_submission_release(capture);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_semaphore_query(semaphore, &observed));
+  EXPECT_EQ(output, (std::array<uint8_t, 8>{0x17, 0x17, 0x17, 0x17, 0x29, 0x29,
+                                            0x29, 0x29}));
+  iree_hal_buffer_release(&buffer);
+  iree_hal_memory_contract_release(contract);
+  iree_hal_semaphore_release(semaphore);
+  iree_async_proactor_release(proactor);
 }
 
 TEST_P(SubmissionTest, FileCallbackMayDestroyCapturePool) {
