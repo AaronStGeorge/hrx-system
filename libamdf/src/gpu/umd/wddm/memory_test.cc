@@ -1128,54 +1128,33 @@ TEST_P(WindowsGpuImportFailureTest, RetainsProgressForOrderedRollback) {
   }
 }
 
-TEST_F(WindowsGpuMemoryTest, SystemSignalsRequireFineGrainAndNativeCpuRoute) {
-  const struct {
-    // Graphics architecture major version.
-    int32_t major;
-    // Graphics architecture minor version.
-    int32_t minor;
-    // Native stepping, including an unknown provider value.
-    int32_t stepping;
-    // The architecture has an admitted SYSTEM signal encoding.
-    bool system_signals;
-  } versions[] = {
-      {9, 0, 6, false},  {10, 3, 0, false}, {11, 0, 0, true},
-      {11, 5, 1, true},  {11, 7, 0, true},  {12, 0, -1, false},
-      {12, 0, 0, true},  {12, 0, 1, true},  {12, 0, 2, false},
-      {12, 1, 0, false}, {12, 5, 0, false},
-  };
-  for (const auto& version : versions) {
-    device_.properties.gfx_ip_major = version.major;
-    device_.properties.gfx_ip_minor = version.minor;
-    device_.properties.gfx_ip_stepping = version.stepping;
-    for (uint32_t discrete : {0u, 1u}) {
-      device_.properties.is_discrete = discrete;
-      for (uint32_t platform_atomics : {0u, 1u}) {
-        device_.properties.supports_platform_atomics = platform_atomics;
-        for (uint32_t coherent : {0u, 1u}) {
-          device_.memory_capabilities.cache_coherent_memory_supported =
-              coherent;
-          for (uint32_t ordinal = 0; ordinal < 4; ++ordinal) {
-            SCOPED_TRACE(::testing::Message()
-                         << "gfx=" << version.major << "." << version.minor
-                         << "." << version.stepping << " discrete=" << discrete
-                         << " platform=" << platform_atomics
-                         << " coherent=" << coherent << " profile=" << ordinal);
-            amdf_memory_native_profile_t profile = {};
-            ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(
-                          &device_, ordinal, &profile),
-                      AMDF_STATUS_OK);
-            const bool supported = ordinal == 0 && version.system_signals &&
-                                   coherent && (!discrete || platform_atomics);
-            const amdf_atomic_operations_t operations =
-                supported
-                    ? AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE
-                    : 0u;
-            EXPECT_EQ(profile.atomic_operations_32, operations);
-            EXPECT_EQ(profile.atomic_operations_64, operations);
-            EXPECT_NE(profile.visibility.describe_site, nullptr);
-          }
-        }
+TEST_F(WindowsGpuMemoryTest,
+       SystemSignalsUseCoherenceAndCpuVisibleUpdateWidth) {
+  for (uint32_t major : {9u, 11u, 12u}) {
+    device_.properties.gfx_ip_major = major;
+    for (uint32_t mask = 0; mask < 16; ++mask) {
+      const bool coherent = (mask & 1u) != 0;
+      const bool atomic_update_64 = (mask & 2u) != 0;
+      device_.memory_capabilities.cache_coherent_memory_supported = coherent;
+      device_.memory_capabilities.atomic_update_64_supported = atomic_update_64;
+      device_.properties.is_discrete = (mask & 4u) != 0;
+      device_.properties.supports_platform_atomics = (mask & 8u) != 0;
+      for (uint32_t ordinal = 0; ordinal < 4; ++ordinal) {
+        SCOPED_TRACE(::testing::Message()
+                     << "major=" << major << " capability_mask=" << mask
+                     << " profile=" << ordinal);
+        amdf_memory_native_profile_t profile = {};
+        ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(&device_, ordinal,
+                                                           &profile),
+                  AMDF_STATUS_OK);
+        const amdf_atomic_operations_t operations =
+            ordinal == 0 && coherent
+                ? AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE
+                : 0u;
+        EXPECT_EQ(profile.atomic_operations_32, operations);
+        EXPECT_EQ(profile.atomic_operations_64,
+                  atomic_update_64 ? operations : 0u);
+        EXPECT_NE(profile.visibility.describe_site, nullptr);
       }
     }
   }

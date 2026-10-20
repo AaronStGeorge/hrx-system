@@ -229,6 +229,16 @@ void Pm4CommandWriter::Release32(uint64_t target_address, uint32_t value) {
   words_[word_count_++] = 0;
 }
 
+void Pm4CommandWriter::Store32(uint64_t target_address, uint32_t value) {
+  word_count_ += pm4::StoreImmediate(words_ + word_count_, target_address,
+                                     value, pm4::CopyDataWidth::k32Bit);
+}
+
+void Pm4CommandWriter::Store64(uint64_t target_address, uint64_t value) {
+  word_count_ += pm4::StoreImmediate(words_ + word_count_, target_address,
+                                     value, pm4::CopyDataWidth::k64Bit);
+}
+
 void Pm4CommandWriter::WaitEndOfPipeAndWriteback(uint64_t fence_address,
                                                  uint32_t value) {
   Release32(fence_address, value);
@@ -291,18 +301,6 @@ void Pm4CommandWriter::DmaFill32(uint64_t target_address, uint32_t pattern,
   words_[word_count_++] = static_cast<uint32_t>(target_address);
   words_[word_count_++] = static_cast<uint32_t>(target_address >> 32);
   words_[word_count_++] = byte_length | (1u << 30);
-}
-
-void Pm4CommandWriter::AtomicStore32(uint64_t target_address, uint32_t value) {
-  word_count_ += pm4::AtomicStore(words_ + word_count_, target_address, value,
-                                  pm4::AtomicStoreWidth::k32Bit,
-                                  profile_.system_atomic_scope_control);
-}
-
-void Pm4CommandWriter::AtomicStore64(uint64_t target_address, uint64_t value) {
-  word_count_ += pm4::AtomicStore(words_ + word_count_, target_address, value,
-                                  pm4::AtomicStoreWidth::k64Bit,
-                                  profile_.system_atomic_scope_control);
 }
 
 void Pm4CommandWriter::WaitDma() {
