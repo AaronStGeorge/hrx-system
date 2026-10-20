@@ -28,6 +28,20 @@ namespace {
 using ::iree::testing::status::StatusIs;
 using ::testing::HasSubstr;
 
+TEST(BenchmarkWorkPlanApiTest, EmptyModuleNeedsNoSelectionStorage) {
+  const loom_testbench_module_plan_t module_plan = {};
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  iree_benchmark_loom_work_plan_t plan = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+      &module_plan, &options, iree_allocator_null(), &plan));
+  EXPECT_EQ(plan.selected_benchmark_count, 0u);
+  EXPECT_EQ(plan.logical_sample_count, 0u);
+  EXPECT_EQ(plan.work_item_count, 0u);
+  EXPECT_EQ(plan.hal_compile_item_count, 0u);
+  iree_benchmark_loom_work_plan_deinitialize(&plan);
+}
+
 TEST(BenchmarkWorkPlanApiTest, ExecutionSlotsCoverOnlySelectedPhysicalWork) {
   const loom_testbench_parameter_plan_t parameter = {.sample_count = 32};
   const loom_testbench_case_plan_t case_plan = {
@@ -67,11 +81,76 @@ TEST(BenchmarkWorkPlanApiTest, ExecutionSlotsCoverOnlySelectedPhysicalWork) {
     ASSERT_EQ(plan.hal_compile_item_count, 1u);
     ASSERT_EQ(plan.work_item_count, 2u);
     EXPECT_EQ(plan.hal_compile_items[0].execution_sample_count, 2u);
-    EXPECT_EQ(plan.work_items[0].case_sample_ordinal, 29u);
     EXPECT_EQ(plan.work_items[0].execution_sample_base, 0u);
-    EXPECT_EQ(plan.work_items[1].case_sample_ordinal, 7u);
     EXPECT_EQ(plan.work_items[1].execution_sample_base, 1u);
     EXPECT_EQ(plan.logical_samples[2].work_item_index, 0u);
+    iree_benchmark_loom_work_plan_deinitialize(&plan);
+  }
+}
+
+TEST(BenchmarkWorkPlanApiTest, DistinguishesSamplesBeyondFlatOrdinalCapacity) {
+  constexpr iree_host_size_t radix = iree_host_size_t{1}
+                                     << (sizeof(iree_host_size_t) * 4);
+  const loom_testbench_parameter_plan_t parameters[] = {
+      {.sample_count = radix}, {.sample_count = radix}, {.sample_count = 2}};
+  const loom_testbench_case_plan_t case_plan = {
+      .parameters = parameters,
+      .parameter_count = IREE_ARRAYSIZE(parameters),
+      .kernel_launch_count = 2,
+      .cartesian_sample_count = IREE_HOST_SIZE_MAX,
+      .sample_count = 2,
+      .sample_count_truncated = true,
+  };
+  constexpr auto all = LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL;
+  const iree_host_size_t assignments[5][3] = {{all, all, 0},
+                                              {all, all, 1},
+                                              {all, all, 1},
+                                              {radix - 1, radix - 1, 0},
+                                              {radix - 1, radix - 1, 1}};
+  loom_testbench_benchmark_plan_t benchmarks[5] = {};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(benchmarks); ++i) {
+    benchmarks[i] = {
+        .case_index = 0,
+        .scenario_index = LOOM_TESTBENCH_SCENARIO_INDEX_INVALID,
+        .parameter_sample_ordinals = assignments[i],
+        .parameter_sample_ordinal_count = 3,
+        .cartesian_sample_count = i < 3 ? IREE_HOST_SIZE_MAX : 1,
+        .sample_count = i < 3 ? 2u : 1u,
+        .sample_count_truncated = i < 3,
+    };
+  }
+  const loom_testbench_module_plan_t module_plan = {
+      .cases = &case_plan,
+      .case_count = 1,
+      .benchmarks = benchmarks,
+      .benchmark_count = IREE_ARRAYSIZE(benchmarks),
+  };
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  for (const char* measure : {"case_end_to_end", "dispatch_complete"}) {
+    SCOPED_TRACE(measure);
+    options.measure = iree_make_cstring_view(measure);
+    const size_t windows =
+        iree_string_view_equal(options.measure, IREE_SV("case_end_to_end")) ? 1
+                                                                            : 2;
+    iree_benchmark_loom_work_plan_t plan = {};
+    IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+        &module_plan, &options, iree_allocator_system(), &plan));
+    ASSERT_EQ(plan.hal_compile_item_count, 1u);
+    EXPECT_EQ(plan.hal_compile_items[0].execution_sample_count, 6u);
+    ASSERT_EQ(plan.work_item_count, 2 * windows + 2);
+    ASSERT_EQ(plan.logical_sample_count, 3 * windows + 2);
+    for (size_t i = 0; i < windows; ++i) {
+      EXPECT_NE(plan.logical_samples[i].work_item_index,
+                plan.logical_samples[windows + i].work_item_index);
+      EXPECT_EQ(plan.logical_samples[windows + i].work_item_index,
+                plan.logical_samples[2 * windows + i].work_item_index);
+    }
+    // A representable HOST_SIZE_MAX position and a larger position share a
+    // saturated sort key but must remain separate physical samples.
+    EXPECT_EQ(plan.logical_samples[3 * windows].work_item_index, 2 * windows);
+    EXPECT_EQ(plan.logical_samples[3 * windows + 1].work_item_index,
+              2 * windows + 1);
     iree_benchmark_loom_work_plan_deinitialize(&plan);
   }
 }
@@ -330,8 +409,12 @@ TEST(BenchmarkWorkPlanApiTest, CasePrefixIdentityMatchesEnumeratedSamples) {
         const size_t end = window < 0 ? benchmark.sample_count : begin + 1;
         std::vector<size_t> sequence = {begin, end};
         for (size_t sample = begin; sample < end; ++sample) {
-          sequence.push_back(loom_testbench_benchmark_sample_case_ordinal(
-              &case_plan, &benchmark, sample));
+          iree_host_size_t ordinal = 0;
+          ASSERT_TRUE(loom_testbench_case_sample_flatten(
+              &case_plan,
+              loom_testbench_benchmark_case_sample(&benchmark, sample),
+              &ordinal));
+          sequence.push_back(ordinal);
         }
         auto [owner, inserted] = owners.emplace(sequence, owners.size());
         ASSERT_LT(owner->second, plan.work_item_count);
@@ -342,7 +425,6 @@ TEST(BenchmarkWorkPlanApiTest, CasePrefixIdentityMatchesEnumeratedSamples) {
         }
         EXPECT_EQ(work.begin_benchmark_sample, begin);
         EXPECT_EQ(work.end_benchmark_sample, end);
-        EXPECT_EQ(work.has_case_sample_ordinal, end == begin + 1);
         EXPECT_EQ(work.hal_compile_item_index, 0u);
       }
       EXPECT_EQ(plan.work_item_count, owners.size());
@@ -417,15 +499,17 @@ TEST(BenchmarkWorkPlanApiTest, PreservesCaseCompileAndDispatchOwnerOrder) {
     const auto& logical = plan.logical_samples[i];
     const size_t selection = logical.selection_index;
     const size_t case_index = case_indices[selection];
-    const auto ordinal = loom_testbench_benchmark_sample_case_ordinal(
-        &cases[case_index], &benchmarks[selection],
-        logical.begin_benchmark_sample);
+    iree_host_size_t ordinal = 0;
+    ASSERT_TRUE(loom_testbench_case_sample_flatten(
+        &cases[case_index],
+        loom_testbench_benchmark_case_sample(&benchmarks[selection],
+                                             logical.begin_benchmark_sample),
+        &ordinal));
     auto [owner, inserted] =
         owners.emplace(std::make_pair(case_index, ordinal), owners.size());
     ASSERT_EQ(logical.work_item_index, owner->second);
     const auto& work = plan.work_items[owner->second];
     EXPECT_EQ(work.hal_compile_item_index, case_compile_indices[case_index]);
-    EXPECT_EQ(work.case_sample_ordinal, ordinal);
     if (inserted) {
       EXPECT_EQ(work.representative_selection_index, selection);
       EXPECT_EQ(work.begin_benchmark_sample, logical.begin_benchmark_sample);
@@ -534,24 +618,18 @@ check.benchmark<@mlp> @full {rows = 3584}
   EXPECT_EQ(work_plan.selected_benchmarks[2].end_benchmark_sample, 1u);
 
   EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
-  EXPECT_EQ(work_plan.logical_samples[0].case_sample_ordinal, 0u);
   EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[1].selection_index, 0u);
-  EXPECT_EQ(work_plan.logical_samples[1].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].work_item_index, 1u);
   EXPECT_EQ(work_plan.logical_samples[2].selection_index, 1u);
-  EXPECT_EQ(work_plan.logical_samples[2].case_sample_ordinal, 0u);
   EXPECT_EQ(work_plan.logical_samples[2].work_item_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[3].selection_index, 2u);
-  EXPECT_EQ(work_plan.logical_samples[3].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[3].work_item_index, 1u);
 
   EXPECT_EQ(work_plan.work_items[0].representative_selection_index, 0u);
   EXPECT_EQ(work_plan.work_items[0].hal_compile_item_index, 0u);
-  EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 0u);
   EXPECT_EQ(work_plan.work_items[1].representative_selection_index, 0u);
   EXPECT_EQ(work_plan.work_items[1].hal_compile_item_index, 0u);
-  EXPECT_EQ(work_plan.work_items[1].case_sample_ordinal, 1u);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
 }
@@ -588,21 +666,16 @@ check.benchmark<@sampled> @value7_b {value = 7}
   EXPECT_EQ(work_plan.logical_samples[1].selection_index, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].work_item_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[2].selection_index, 2u);
-  EXPECT_EQ(work_plan.logical_samples[2].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[2].work_item_index, 1u);
   EXPECT_EQ(work_plan.logical_samples[3].selection_index, 3u);
-  EXPECT_EQ(work_plan.logical_samples[3].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[3].work_item_index, 1u);
 
   EXPECT_EQ(work_plan.work_items[0].representative_selection_index, 0u);
   EXPECT_EQ(work_plan.work_items[0].begin_benchmark_sample, 0u);
   EXPECT_EQ(work_plan.work_items[0].end_benchmark_sample, 2u);
-  EXPECT_FALSE(work_plan.work_items[0].has_case_sample_ordinal);
   EXPECT_EQ(work_plan.work_items[1].representative_selection_index, 2u);
   EXPECT_EQ(work_plan.work_items[1].begin_benchmark_sample, 0u);
   EXPECT_EQ(work_plan.work_items[1].end_benchmark_sample, 1u);
-  EXPECT_TRUE(work_plan.work_items[1].has_case_sample_ordinal);
-  EXPECT_EQ(work_plan.work_items[1].case_sample_ordinal, 1u);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
 }
@@ -642,17 +715,14 @@ check.benchmark<@sampled> @all_b
   EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[0].begin_benchmark_sample, 1u);
   EXPECT_EQ(work_plan.logical_samples[0].end_benchmark_sample, 2u);
-  EXPECT_EQ(work_plan.logical_samples[0].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[1].selection_index, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].begin_benchmark_sample, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].end_benchmark_sample, 2u);
-  EXPECT_EQ(work_plan.logical_samples[1].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].work_item_index, 0u);
 
   EXPECT_EQ(work_plan.work_items[0].begin_benchmark_sample, 1u);
   EXPECT_EQ(work_plan.work_items[0].end_benchmark_sample, 2u);
-  EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 1u);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
 }
@@ -691,7 +761,6 @@ check.benchmark<@mlp> @decode_b {rows = 2}
   EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
   EXPECT_EQ(work_plan.logical_samples[1].selection_index, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].work_item_index, 0u);
-  EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 0u);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
 }
@@ -722,10 +791,7 @@ check.benchmark<@sampled> @all_b
   EXPECT_EQ(work_plan.hal_compile_item_count, 1u);
   EXPECT_EQ(work_plan.work_item_count, 1u);
   EXPECT_EQ(work_plan.logical_samples[0].begin_benchmark_sample, 1u);
-  EXPECT_EQ(work_plan.logical_samples[0].case_sample_ordinal, 1u);
   EXPECT_EQ(work_plan.logical_samples[1].begin_benchmark_sample, 1u);
-  EXPECT_EQ(work_plan.logical_samples[1].case_sample_ordinal, 1u);
-  EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 1u);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
 }

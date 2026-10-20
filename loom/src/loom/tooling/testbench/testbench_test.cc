@@ -21,6 +21,117 @@
 namespace loom {
 namespace {
 
+TEST(TestbenchSampleTest, ExhaustivePinnedSweepsMatchCartesianFiltering) {
+  constexpr iree_host_size_t radices[] = {2, 1, 3, 2};
+  loom_testbench_parameter_plan_t parameters[IREE_ARRAYSIZE(radices)] = {};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(radices); ++i) {
+    parameters[i].sample_count = radices[i];
+  }
+  const loom_testbench_case_plan_t case_plan = {
+      .parameters = parameters,
+      .parameter_count = IREE_ARRAYSIZE(parameters),
+      .cartesian_sample_count = 12,
+      .sample_count = 12,
+  };
+  for (size_t code = 0; code < 3 * 2 * 4 * 3; ++code) {
+    SCOPED_TRACE(code);
+    iree_host_size_t assignments[IREE_ARRAYSIZE(radices)] = {};
+    size_t remaining_code = code;
+    for (size_t i = 0; i < IREE_ARRAYSIZE(radices); ++i) {
+      const size_t digit = remaining_code % (radices[i] + 1);
+      remaining_code /= radices[i] + 1;
+      assignments[i] = digit == radices[i]
+                           ? LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL
+                           : digit;
+    }
+    iree_host_size_t selected_index = 0;
+    for (iree_host_size_t full_index = 0; full_index < 12; ++full_index) {
+      iree_host_size_t coordinates[IREE_ARRAYSIZE(radices)] = {};
+      iree_host_size_t quotient = full_index;
+      bool matches = true;
+      for (size_t i = 0; i < IREE_ARRAYSIZE(radices); ++i) {
+        coordinates[i] = quotient % radices[i];
+        quotient /= radices[i];
+        matches &=
+            assignments[i] == LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL ||
+            assignments[i] == coordinates[i];
+      }
+      if (!matches) {
+        continue;
+      }
+      const loom_testbench_case_sample_t sample = {
+          .ordinal = selected_index++,
+          .assignments = assignments,
+      };
+      loom_testbench_case_sample_t remaining = sample;
+      for (size_t i = 0; i < IREE_ARRAYSIZE(radices); ++i) {
+        EXPECT_EQ(loom_testbench_case_sample_next(&remaining, radices[i]),
+                  coordinates[i]);
+      }
+      EXPECT_EQ(remaining.ordinal, 0u);
+      iree_host_size_t flattened = 0;
+      ASSERT_TRUE(
+          loom_testbench_case_sample_flatten(&case_plan, sample, &flattened));
+      EXPECT_EQ(flattened, full_index);
+      EXPECT_EQ(loom_testbench_case_sample_compare(&case_plan, sample,
+                                                   {.ordinal = full_index}),
+                0);
+      if (full_index + 1 < 12) {
+        EXPECT_LT(loom_testbench_case_sample_compare(
+                      &case_plan, sample, {.ordinal = full_index + 1}),
+                  0);
+        EXPECT_GT(loom_testbench_case_sample_compare(
+                      &case_plan, {.ordinal = full_index + 1}, sample),
+                  0);
+      }
+    }
+  }
+}
+
+TEST(TestbenchSampleTest, PreservesCoordinatesBeyondHostSizedCartesianIndices) {
+  constexpr iree_host_size_t radix = iree_host_size_t{1}
+                                     << (sizeof(iree_host_size_t) * 4);
+  const loom_testbench_parameter_plan_t parameters[] = {
+      {.sample_count = radix}, {.sample_count = radix}, {.sample_count = 3}};
+  const loom_testbench_case_plan_t case_plan = {
+      .parameters = parameters,
+      .parameter_count = IREE_ARRAYSIZE(parameters),
+      .cartesian_sample_count = IREE_HOST_SIZE_MAX,
+      .sample_count = 2,
+      .sample_count_truncated = true,
+  };
+  const iree_host_size_t low[] = {radix - 1, radix - 1, 0};
+  const iree_host_size_t high[] = {radix - 1, radix - 1, 1};
+  const iree_host_size_t swept[] = {LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL,
+                                    LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL,
+                                    1};
+  iree_host_size_t flattened = 0;
+  EXPECT_TRUE(loom_testbench_case_sample_flatten(
+      &case_plan, {.assignments = low}, &flattened));
+  EXPECT_EQ(flattened, IREE_HOST_SIZE_MAX);
+  EXPECT_FALSE(loom_testbench_case_sample_flatten(
+      &case_plan, {.assignments = high}, &flattened));
+  EXPECT_EQ(flattened, 0u);
+  EXPECT_EQ(loom_testbench_case_sample_compare(
+                &case_plan, {.assignments = high},
+                {.ordinal = IREE_HOST_SIZE_MAX, .assignments = swept}),
+            0);
+  EXPECT_LT(loom_testbench_case_sample_compare(&case_plan, {.assignments = low},
+                                               {.assignments = high}),
+            0);
+  loom_testbench_case_sample_t remaining = {
+      .ordinal = radix + 7,
+      .assignments = swept,
+  };
+  EXPECT_EQ(loom_testbench_case_sample_next(&remaining, radix), 7u);
+  EXPECT_EQ(loom_testbench_case_sample_next(&remaining, radix), 1u);
+  EXPECT_EQ(loom_testbench_case_sample_next(&remaining, 3), 1u);
+  const iree_host_size_t zero[] = {0, 0, 0};
+  EXPECT_TRUE(loom_testbench_case_sample_flatten(
+      &case_plan, {.assignments = zero}, &flattened));
+  EXPECT_EQ(flattened, 0u);
+}
+
 class TestbenchTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -589,9 +700,10 @@ check.case @sweep {
       iree_string_view_equal(case_plan.parameters[2].name, IREE_SV("seed")));
   EXPECT_EQ(case_plan.parameters[2].sample_count, 4u);
 
-  EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 0), 0u);
-  EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 1), 1u);
-  EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 2), 0u);
+  loom_testbench_case_sample_t remaining = {.ordinal = 5};
+  EXPECT_EQ(loom_testbench_case_sample_next(&remaining, 5), 0u);
+  EXPECT_EQ(loom_testbench_case_sample_next(&remaining, 2), 1u);
+  EXPECT_EQ(loom_testbench_case_sample_next(&remaining, 4), 0u);
 
   loom_attribute_t value = {};
   IREE_ASSERT_OK(loom_testbench_parameter_sample_value(&case_plan.parameters[0],
@@ -642,11 +754,13 @@ check.benchmark<@sweep> @m_and_seed {m = 8, seed = 12}
             LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL);
   EXPECT_EQ(only_m.parameter_sample_ordinals[2],
             LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL);
-  EXPECT_EQ(
-      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &only_m, 0), 3u);
-  EXPECT_EQ(
-      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &only_m, 7),
-      38u);
+  iree_host_size_t ordinal = 0;
+  ASSERT_TRUE(loom_testbench_case_sample_flatten(
+      &case_plan, loom_testbench_benchmark_case_sample(&only_m, 0), &ordinal));
+  EXPECT_EQ(ordinal, 3u);
+  ASSERT_TRUE(loom_testbench_case_sample_flatten(
+      &case_plan, loom_testbench_benchmark_case_sample(&only_m, 7), &ordinal));
+  EXPECT_EQ(ordinal, 38u);
 
   const loom_testbench_benchmark_plan_t& m_and_seed = plan.benchmarks[1];
   EXPECT_EQ(m_and_seed.sample_count, 2u);
@@ -656,12 +770,14 @@ check.benchmark<@sweep> @m_and_seed {m = 8, seed = 12}
   EXPECT_EQ(m_and_seed.parameter_sample_ordinals[1],
             LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL);
   EXPECT_EQ(m_and_seed.parameter_sample_ordinals[2], 2u);
-  EXPECT_EQ(
-      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &m_and_seed, 0),
-      23u);
-  EXPECT_EQ(
-      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &m_and_seed, 1),
-      28u);
+  ASSERT_TRUE(loom_testbench_case_sample_flatten(
+      &case_plan, loom_testbench_benchmark_case_sample(&m_and_seed, 0),
+      &ordinal));
+  EXPECT_EQ(ordinal, 23u);
+  ASSERT_TRUE(loom_testbench_case_sample_flatten(
+      &case_plan, loom_testbench_benchmark_case_sample(&m_and_seed, 1),
+      &ordinal));
+  EXPECT_EQ(ordinal, 28u);
 
   loom_module_free(module);
 }

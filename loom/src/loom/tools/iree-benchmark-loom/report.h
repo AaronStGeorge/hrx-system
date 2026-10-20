@@ -87,7 +87,7 @@ iree_status_t iree_benchmark_loom_write_sanitizer_options_json(
 // Writes fields for one concrete parameterized case sample.
 iree_status_t iree_benchmark_loom_write_sample_fields_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal, loom_json_object_writer_t* object);
+    loom_testbench_case_sample_t sample, loom_json_object_writer_t* object);
 
 // Writes the three fields identifying one concrete scenario trial.
 iree_status_t iree_benchmark_loom_write_scenario_coordinate_fields_json(
@@ -219,7 +219,6 @@ iree_status_t iree_benchmark_loom_append_sample_row(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t benchmark_sample_ordinal,
-    iree_host_size_t case_sample_ordinal,
     const loom_testbench_case_sample_result_t* sample_result,
     iree_string_builder_t* sample_output);
 

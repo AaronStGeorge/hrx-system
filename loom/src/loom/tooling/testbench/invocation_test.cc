@@ -196,7 +196,7 @@ check.case @invoke {
   loom_testbench_value_materializer_options_t materializer_options = {};
   loom_testbench_value_materializer_options_initialize(&materializer_options);
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &materializer_options, &case_plan, /*sample_ordinal=*/0, &table));
+      &materializer_options, &case_plan, {.ordinal = 0}, &table));
 
   DeltaProviderState actual_state = {.delta = 10};
   DeltaProviderState oracle_state = {.delta = 20};
@@ -284,7 +284,7 @@ check.case @invoke {
   loom_testbench_value_materializer_options_t materializer_options = {};
   loom_testbench_value_materializer_options_initialize(&materializer_options);
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &materializer_options, &case_plan, /*sample_ordinal=*/1, &table));
+      &materializer_options, &case_plan, {.ordinal = 1}, &table));
   loom_testbench_invocation_executor_t executor = {};
   IREE_ASSERT_OK(loom_testbench_invocation_executor_initialize(
       &schedule, iree_allocator_system(), &executor));

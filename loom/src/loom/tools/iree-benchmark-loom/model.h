@@ -202,10 +202,6 @@ typedef struct iree_benchmark_loom_benchmark_result_t {
   bool executed;
   // True when no measured or warmup sample failed expectations.
   bool passed;
-  // True when |sample_ordinal| identifies the measured check.case sample.
-  bool has_sample_ordinal;
-  // Concrete case sample ordinal measured by dispatch_complete.
-  iree_host_size_t sample_ordinal;
   // True when |benchmark_sample_ordinal| identifies one selected benchmark
   // sample and can be passed back through --sample.
   bool has_benchmark_sample_ordinal;

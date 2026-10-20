@@ -1812,44 +1812,79 @@ iree_status_t loom_testbench_plan_module(
   return iree_ok_status();
 }
 
-iree_host_size_t loom_testbench_case_sample_parameter_ordinal(
-    const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal, iree_host_size_t parameter_index) {
-  IREE_ASSERT(parameter_index < case_plan->parameter_count);
-  iree_host_size_t ordinal = sample_ordinal;
-  for (iree_host_size_t i = 0; i < parameter_index; ++i) {
-    ordinal /= case_plan->parameters[i].sample_count;
-  }
-  return ordinal % case_plan->parameters[parameter_index].sample_count;
+loom_testbench_case_sample_t loom_testbench_benchmark_case_sample(
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    iree_host_size_t ordinal) {
+  return (loom_testbench_case_sample_t){
+      .ordinal = ordinal,
+      .assignments = benchmark_plan->parameter_sample_ordinals,
+  };
 }
 
-iree_host_size_t loom_testbench_benchmark_sample_case_ordinal(
-    const loom_testbench_case_plan_t* case_plan,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    iree_host_size_t benchmark_sample_ordinal) {
-  IREE_ASSERT(benchmark_sample_ordinal < benchmark_plan->sample_count);
-  iree_host_size_t case_sample_ordinal = 0;
-  iree_host_size_t case_stride = 1;
-  iree_host_size_t benchmark_ordinal = benchmark_sample_ordinal;
-  for (iree_host_size_t parameter_index = 0;
-       parameter_index < case_plan->parameter_count; ++parameter_index) {
-    const loom_testbench_parameter_plan_t* parameter =
-        &case_plan->parameters[parameter_index];
-    iree_host_size_t parameter_sample_ordinal =
-        LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL;
-    if (parameter_index < benchmark_plan->parameter_sample_ordinal_count) {
-      parameter_sample_ordinal =
-          benchmark_plan->parameter_sample_ordinals[parameter_index];
+iree_host_size_t loom_testbench_case_sample_next(
+    loom_testbench_case_sample_t* remaining, iree_host_size_t sample_count) {
+  if (remaining->assignments != NULL) {
+    const iree_host_size_t assignment = *remaining->assignments++;
+    if (assignment != LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL) {
+      return assignment;
     }
-    if (parameter_sample_ordinal ==
-        LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL) {
-      parameter_sample_ordinal = benchmark_ordinal % parameter->sample_count;
-      benchmark_ordinal /= parameter->sample_count;
-    }
-    case_sample_ordinal += parameter_sample_ordinal * case_stride;
-    case_stride *= parameter->sample_count;
   }
-  return case_sample_ordinal;
+  const iree_host_size_t ordinal = remaining->ordinal % sample_count;
+  remaining->ordinal /= sample_count;
+  return ordinal;
+}
+
+int loom_testbench_case_sample_compare(
+    const loom_testbench_case_plan_t* case_plan,
+    loom_testbench_case_sample_t lhs, loom_testbench_case_sample_t rhs) {
+  if (lhs.assignments == rhs.assignments) {
+    return (lhs.ordinal > rhs.ordinal) - (lhs.ordinal < rhs.ordinal);
+  }
+  int order = 0;
+  for (iree_host_size_t i = 0; i < case_plan->parameter_count; ++i) {
+    const iree_host_size_t radix = case_plan->parameters[i].sample_count;
+    const iree_host_size_t lhs_ordinal =
+        loom_testbench_case_sample_next(&lhs, radix);
+    const iree_host_size_t rhs_ordinal =
+        loom_testbench_case_sample_next(&rhs, radix);
+    if (lhs_ordinal != rhs_ordinal) {
+      // Later parameters are more significant, preserving Cartesian order
+      // without requiring its numeric representation.
+      order = lhs_ordinal < rhs_ordinal ? -1 : 1;
+    }
+  }
+  return order;
+}
+
+bool loom_testbench_case_sample_flatten(
+    const loom_testbench_case_plan_t* case_plan,
+    loom_testbench_case_sample_t sample, iree_host_size_t* out_ordinal) {
+  *out_ordinal = 0;
+  if (sample.assignments == NULL) {
+    *out_ordinal = sample.ordinal;
+    return true;
+  }
+  iree_host_size_t ordinal = 0;
+  iree_host_size_t stride = 1;
+  bool stride_fits = true;
+  for (iree_host_size_t i = 0; i < case_plan->parameter_count; ++i) {
+    const iree_host_size_t radix = case_plan->parameters[i].sample_count;
+    const iree_host_size_t coordinate =
+        loom_testbench_case_sample_next(&sample, radix);
+    if (coordinate != 0) {
+      iree_host_size_t offset = 0;
+      if (!stride_fits ||
+          !iree_host_size_checked_mul(coordinate, stride, &offset) ||
+          !iree_host_size_checked_add(ordinal, offset, &ordinal)) {
+        return false;
+      }
+    }
+    if (stride_fits) {
+      stride_fits = iree_host_size_checked_mul(stride, radix, &stride);
+    }
+  }
+  *out_ordinal = ordinal;
+  return true;
 }
 
 loom_testbench_scenario_sample_coordinate_t

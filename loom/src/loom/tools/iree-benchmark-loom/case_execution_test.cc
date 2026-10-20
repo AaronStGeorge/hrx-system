@@ -145,14 +145,14 @@ check.benchmark<@sampled> @all_b
   EXPECT_EQ(failed_benchmark_count, 0u);
   ASSERT_EQ(collector.event_count, 8u);
   EXPECT_EQ(collector.events[0].kind, IREE_BENCHMARK_LOOM_EVENT_SAMPLE);
-  EXPECT_EQ(collector.events[0].sample.case_sample_ordinal, 0u);
+  EXPECT_EQ(collector.events[0].sample.benchmark_sample_ordinal, 0u);
   EXPECT_TRUE(iree_string_view_equal(
       collector.events[0].sample.candidate->candidate_id, IREE_SV("c0")));
   EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_SAMPLE);
   EXPECT_TRUE(iree_string_view_equal(
       collector.events[1].sample.candidate->candidate_id, IREE_SV("c1")));
   EXPECT_EQ(collector.events[2].kind, IREE_BENCHMARK_LOOM_EVENT_SAMPLE);
-  EXPECT_EQ(collector.events[2].sample.case_sample_ordinal, 1u);
+  EXPECT_EQ(collector.events[2].sample.benchmark_sample_ordinal, 1u);
   EXPECT_EQ(collector.events[4].kind,
             IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT);
   EXPECT_EQ(collector.events[4].benchmark_result.work_item_index, 0u);

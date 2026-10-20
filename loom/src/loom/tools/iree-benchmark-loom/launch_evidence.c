@@ -12,11 +12,12 @@
 #include "loom/tooling/execution/hal/testbench_actual.h"
 
 iree_status_t iree_benchmark_loom_launch_evidence_initialize(
-    iree_host_size_t record_count, iree_host_size_t workload_value_count,
-    iree_allocator_t host_allocator,
+    const loom_testbench_case_plan_t* case_plan, iree_host_size_t record_count,
+    iree_host_size_t workload_value_count, iree_allocator_t host_allocator,
     iree_benchmark_loom_launch_evidence_t* out_evidence) {
   *out_evidence = (iree_benchmark_loom_launch_evidence_t){
       .host_allocator = host_allocator,
+      .case_plan = case_plan,
   };
   iree_status_t status = iree_ok_status();
   if (record_count != 0) {
@@ -58,9 +59,8 @@ void iree_benchmark_loom_launch_evidence_deinitialize(
 
 void iree_benchmark_loom_launch_evidence_capture(
     const loom_run_hal_testbench_actual_provider_t* provider,
-    iree_host_size_t case_sample_ordinal,
-    iree_host_size_t sequence_step_ordinal, iree_host_size_t record_ordinal,
-    iree_host_size_t workload_value_ordinal,
+    loom_testbench_case_sample_t sample, iree_host_size_t sequence_step_ordinal,
+    iree_host_size_t record_ordinal, iree_host_size_t workload_value_ordinal,
     iree_benchmark_loom_launch_evidence_t* evidence) {
   IREE_ASSERT(record_ordinal < evidence->record_count);
   iree_benchmark_loom_launch_record_t* record =
@@ -70,7 +70,7 @@ void iree_benchmark_loom_launch_evidence_capture(
   IREE_ASSERT(workload_value_ordinal <= evidence->workload_value_count);
   IREE_ASSERT(invocation->workload_count <=
               evidence->workload_value_count - workload_value_ordinal);
-  record->case_sample_ordinal = case_sample_ordinal;
+  record->sample = sample;
   record->sequence_step_ordinal = sequence_step_ordinal;
   record->entry = provider->invocation_options.function_name;
   iree_benchmark_loom_workload_value_t* workload_values =
@@ -158,12 +158,30 @@ static iree_status_t iree_benchmark_loom_write_launch_config_json(
 }
 
 static iree_status_t iree_benchmark_loom_write_launch_record_json(
+    const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_launch_record_t* record,
     loom_output_stream_t* stream) {
   loom_json_object_writer_t object;
   IREE_RETURN_IF_ERROR(loom_json_object_begin(stream, &object));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
-      &object, IREE_SV("case_sample_index"), record->case_sample_ordinal));
+  iree_host_size_t sample_ordinal = 0;
+  if (loom_testbench_case_sample_flatten(case_plan, record->sample,
+                                         &sample_ordinal)) {
+    IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+        &object, IREE_SV("case_sample_index"), sample_ordinal));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_json_object_begin_field(&object, IREE_SV("parameter_ordinals")));
+    loom_json_array_writer_t coordinates;
+    IREE_RETURN_IF_ERROR(loom_json_array_begin(stream, &coordinates));
+    loom_testbench_case_sample_t remaining = record->sample;
+    for (iree_host_size_t i = 0; i < case_plan->parameter_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_json_array_write_host_size_element(
+          &coordinates,
+          loom_testbench_case_sample_next(
+              &remaining, case_plan->parameters[i].sample_count)));
+    }
+    IREE_RETURN_IF_ERROR(loom_json_array_end(&coordinates));
+  }
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       &object, IREE_SV("sequence_step_index"), record->sequence_step_ordinal));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
@@ -186,7 +204,7 @@ iree_status_t iree_benchmark_loom_write_launch_evidence_json(
   for (iree_host_size_t i = 0; i < evidence->record_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_json_array_begin_element(&array));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_launch_record_json(
-        &evidence->records[i], stream));
+        evidence->case_plan, &evidence->records[i], stream));
   }
   return loom_json_array_end(&array);
 }

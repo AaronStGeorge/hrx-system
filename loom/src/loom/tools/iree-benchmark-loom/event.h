@@ -140,8 +140,6 @@ typedef struct iree_benchmark_loom_sample_event_t {
   const loom_testbench_case_plan_t* case_plan;
   // Zero-based sample ordinal within the benchmark's selected sample space.
   iree_host_size_t benchmark_sample_ordinal;
-  // Zero-based sample ordinal within the check.case cartesian sample space.
-  iree_host_size_t case_sample_ordinal;
   // Borrowed correctness result for this sample.
   const loom_testbench_case_sample_result_t* sample_result;
 } iree_benchmark_loom_sample_event_t;
@@ -380,7 +378,6 @@ iree_status_t iree_benchmark_loom_event_sink_emit_sample(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t benchmark_sample_ordinal,
-    iree_host_size_t case_sample_ordinal,
     const loom_testbench_case_sample_result_t* sample_result);
 
 // Emits one benchmark measurement result.

@@ -22,7 +22,7 @@ extern "C" {
 
 // Invoked immediately after one concrete case sample executes successfully.
 typedef void(IREE_API_PTR* iree_benchmark_loom_case_sample_observer_fn_t)(
-    void* user_data, iree_host_size_t case_sample_ordinal);
+    void* user_data, loom_testbench_case_sample_t sample);
 
 typedef struct iree_benchmark_loom_case_sample_observer_t {
   // Optional observer callback, or NULL when no sample evidence is required.
@@ -30,12 +30,6 @@ typedef struct iree_benchmark_loom_case_sample_observer_t {
   // Caller-owned context passed to |fn|.
   void* user_data;
 } iree_benchmark_loom_case_sample_observer_t;
-
-// Maps a benchmark-local sample ordinal to its underlying case sample ordinal.
-iree_host_size_t iree_benchmark_loom_case_sample_from_benchmark_sample(
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t benchmark_sample_ordinal);
 
 // Emits result/profile-replay events for every logical benchmark alias of
 // |work_item|.

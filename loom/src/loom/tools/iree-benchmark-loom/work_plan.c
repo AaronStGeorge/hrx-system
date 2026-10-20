@@ -376,15 +376,32 @@ static int iree_benchmark_loom_compare_sample_prefixes(
 
 // Policy is fixed by the invocation's options and record kind, so it is not
 // part of the key. Physical identity is the record and its measured sample.
-static IREE_ATTRIBUTE_NOINLINE int iree_benchmark_loom_compare_work_items(
-    const iree_benchmark_loom_work_plan_t* plan, iree_host_size_t lhs_index,
-    iree_host_size_t rhs_index) {
+typedef struct iree_benchmark_loom_work_item_key_t {
+  // Work kind discriminating the record and measured sample domain.
+  iree_benchmark_loom_work_item_kind_t kind;
+  // Case or scenario index within the module, selected by |kind|.
+  iree_host_size_t record_index;
+  // Scenario ordinal or saturated Cartesian case ordinal. Equal saturated case
+  // keys require coordinate comparison. Retained only during deduplication.
+  iree_host_size_t sample_key;
+} iree_benchmark_loom_work_item_key_t;
+
+typedef struct iree_benchmark_loom_work_item_index_t {
+  // Plan retaining selections for exact comparison of windows and large keys.
+  const iree_benchmark_loom_work_plan_t* plan;
+  // Cached keys in original work-item order, alive only during deduplication.
+  const iree_benchmark_loom_work_item_key_t* keys;
+} iree_benchmark_loom_work_item_index_t;
+
+static IREE_ATTRIBUTE_NOINLINE int iree_benchmark_loom_compare_sample_details(
+    const iree_benchmark_loom_work_item_index_t* index,
+    iree_host_size_t lhs_index, iree_host_size_t rhs_index) {
+  const iree_benchmark_loom_work_plan_t* plan = index->plan;
+  const iree_benchmark_loom_work_item_key_t* lhs_key = &index->keys[lhs_index];
+  const iree_benchmark_loom_work_item_key_t* rhs_key = &index->keys[rhs_index];
+  int order = 0;
   const iree_benchmark_loom_work_item_t* lhs = &plan->work_items[lhs_index];
   const iree_benchmark_loom_work_item_t* rhs = &plan->work_items[rhs_index];
-  int order = iree_benchmark_loom_compare_ordinal(lhs->kind, rhs->kind);
-  if (order != 0) {
-    return order;
-  }
   const iree_benchmark_loom_selected_benchmark_t* lhs_selection =
       &plan->selected_benchmarks[lhs->representative_selection_index];
   const iree_benchmark_loom_selected_benchmark_t* rhs_selection =
@@ -393,22 +410,6 @@ static IREE_ATTRIBUTE_NOINLINE int iree_benchmark_loom_compare_work_items(
       lhs_selection->benchmark_plan;
   const loom_testbench_benchmark_plan_t* rhs_benchmark =
       rhs_selection->benchmark_plan;
-  if (lhs->kind == IREE_BENCHMARK_LOOM_WORK_ITEM_SCENARIO_TRIAL) {
-    order = iree_benchmark_loom_compare_ordinal(lhs_benchmark->scenario_index,
-                                                rhs_benchmark->scenario_index);
-    if (order != 0) {
-      return order;
-    }
-    // The flat ordinal is a bijection over this scenario's configurations and
-    // trial domains. Scenario benchmarks cannot pin or cap that domain.
-    return iree_benchmark_loom_compare_ordinal(lhs->begin_benchmark_sample,
-                                               rhs->begin_benchmark_sample);
-  }
-  order = iree_benchmark_loom_compare_ordinal(lhs_benchmark->case_index,
-                                              rhs_benchmark->case_index);
-  if (order != 0) {
-    return order;
-  }
   if (lhs->kind == IREE_BENCHMARK_LOOM_WORK_ITEM_CASE_END_TO_END) {
     order = iree_benchmark_loom_compare_ordinal(lhs->begin_benchmark_sample,
                                                 rhs->begin_benchmark_sample);
@@ -420,37 +421,95 @@ static IREE_ATTRIBUTE_NOINLINE int iree_benchmark_loom_compare_work_items(
     if (order != 0) {
       return order;
     }
-    if (!lhs->has_case_sample_ordinal) {
+    if (lhs->end_benchmark_sample - lhs->begin_benchmark_sample != 1) {
       return iree_benchmark_loom_compare_sample_prefixes(
           lhs_selection->case_plan, lhs_benchmark, rhs_benchmark,
           lhs->end_benchmark_sample);
     }
   }
-  return iree_benchmark_loom_compare_ordinal(lhs->case_sample_ordinal,
-                                             rhs->case_sample_ordinal);
+  order = iree_benchmark_loom_compare_ordinal(lhs_key->sample_key,
+                                              rhs_key->sample_key);
+  if (order != 0 || lhs_key->sample_key != IREE_HOST_SIZE_MAX) {
+    return order;
+  }
+  return loom_testbench_case_sample_compare(
+      lhs_selection->case_plan,
+      loom_testbench_benchmark_case_sample(lhs_benchmark,
+                                           lhs->begin_benchmark_sample),
+      loom_testbench_benchmark_case_sample(rhs_benchmark,
+                                           rhs->begin_benchmark_sample));
+}
+
+static int iree_benchmark_loom_compare_work_items(
+    const iree_benchmark_loom_work_item_index_t* index,
+    iree_host_size_t lhs_index, iree_host_size_t rhs_index) {
+  const iree_benchmark_loom_work_item_key_t* lhs = &index->keys[lhs_index];
+  const iree_benchmark_loom_work_item_key_t* rhs = &index->keys[rhs_index];
+  int order = iree_benchmark_loom_compare_ordinal(lhs->kind, rhs->kind);
+  if (order != 0) {
+    return order;
+  }
+  order =
+      iree_benchmark_loom_compare_ordinal(lhs->record_index, rhs->record_index);
+  if (order != 0) {
+    return order;
+  }
+  if (lhs->kind != IREE_BENCHMARK_LOOM_WORK_ITEM_CASE_END_TO_END &&
+      (lhs->sample_key != IREE_HOST_SIZE_MAX ||
+       rhs->sample_key != IREE_HOST_SIZE_MAX)) {
+    return iree_benchmark_loom_compare_ordinal(lhs->sample_key,
+                                               rhs->sample_key);
+  }
+  return iree_benchmark_loom_compare_sample_details(index, lhs_index,
+                                                    rhs_index);
 }
 
 static bool iree_benchmark_loom_work_item_less(
-    const iree_benchmark_loom_work_plan_t* plan, const iree_host_size_t* lhs,
-    const iree_host_size_t* rhs) {
-  const int order = iree_benchmark_loom_compare_work_items(plan, *lhs, *rhs);
+    const iree_benchmark_loom_work_item_index_t* index,
+    const iree_host_size_t* lhs, const iree_host_size_t* rhs) {
+  const int order = iree_benchmark_loom_compare_work_items(index, *lhs, *rhs);
   return order != 0 ? order < 0 : *lhs < *rhs;
 }
 
-LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT(iree_benchmark_loom_sort_work_items,
-                                       iree_host_size_t,
-                                       const iree_benchmark_loom_work_plan_t*,
-                                       iree_benchmark_loom_work_item_less)
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT(
+    iree_benchmark_loom_sort_work_items, iree_host_size_t,
+    const iree_benchmark_loom_work_item_index_t*,
+    iree_benchmark_loom_work_item_less)
 
 static void iree_benchmark_loom_deduplicate_work_items(
-    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t* order) {
+    iree_benchmark_loom_work_plan_t* plan, iree_host_size_t* order,
+    iree_benchmark_loom_work_item_key_t* keys) {
   for (iree_host_size_t i = 0; i < plan->work_item_count; ++i) {
+    const iree_benchmark_loom_work_item_t* work_item = &plan->work_items[i];
+    const iree_benchmark_loom_selected_benchmark_t* selection =
+        &plan->selected_benchmarks[work_item->representative_selection_index];
     order[i] = i;
+    keys[i] = (iree_benchmark_loom_work_item_key_t){
+        .kind = work_item->kind,
+        .record_index = selection->case_plan != NULL
+                            ? selection->benchmark_plan->case_index
+                            : selection->benchmark_plan->scenario_index,
+        .sample_key = work_item->begin_benchmark_sample,
+    };
+    if (selection->case_plan != NULL &&
+        work_item->end_benchmark_sample - work_item->begin_benchmark_sample ==
+            1 &&
+        !loom_testbench_case_sample_flatten(
+            selection->case_plan,
+            loom_testbench_benchmark_case_sample(
+                selection->benchmark_plan, work_item->begin_benchmark_sample),
+            &keys[i].sample_key)) {
+      keys[i].sample_key = IREE_HOST_SIZE_MAX;
+    }
   }
-  iree_benchmark_loom_sort_work_items(plan, order, plan->work_item_count);
+  const iree_benchmark_loom_work_item_index_t index = {
+      .plan = plan,
+      .keys = keys,
+  };
+  iree_benchmark_loom_sort_work_items(&index, order, plan->work_item_count);
   iree_host_size_t representative = 0;
   for (iree_host_size_t i = 0; i < plan->work_item_count; ++i) {
-    if (i == 0 || iree_benchmark_loom_compare_work_items(plan, representative,
+    if (i == 0 || iree_benchmark_loom_compare_work_items(&index, representative,
                                                          order[i]) != 0) {
       representative = order[i];
     }
@@ -481,7 +540,6 @@ static iree_host_size_t iree_benchmark_loom_append_work_item(
     iree_benchmark_loom_work_plan_t* plan,
     iree_benchmark_loom_work_item_kind_t kind, iree_host_size_t selection_index,
     iree_host_size_t begin_sample, iree_host_size_t end_sample,
-    bool has_case_sample_ordinal, iree_host_size_t case_sample_ordinal,
     loom_testbench_scenario_sample_coordinate_t scenario_coordinate,
     iree_host_size_t hal_compile_item_index) {
   const iree_host_size_t work_item_index = plan->work_item_count++;
@@ -492,8 +550,6 @@ static iree_host_size_t iree_benchmark_loom_append_work_item(
       .hal_compile_item_index = hal_compile_item_index,
       .begin_benchmark_sample = begin_sample,
       .end_benchmark_sample = end_sample,
-      .has_case_sample_ordinal = has_case_sample_ordinal,
-      .case_sample_ordinal = case_sample_ordinal,
       .scenario_coordinate = scenario_coordinate,
   };
   return work_item_index;
@@ -502,7 +558,6 @@ static iree_host_size_t iree_benchmark_loom_append_work_item(
 static void iree_benchmark_loom_append_logical_sample(
     iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index,
     iree_host_size_t begin_sample, iree_host_size_t end_sample,
-    bool has_case_sample_ordinal, iree_host_size_t case_sample_ordinal,
     loom_testbench_scenario_sample_coordinate_t scenario_coordinate,
     iree_host_size_t work_item_index) {
   plan->logical_samples[plan->logical_sample_count++] =
@@ -510,8 +565,6 @@ static void iree_benchmark_loom_append_logical_sample(
           .selection_index = selection_index,
           .begin_benchmark_sample = begin_sample,
           .end_benchmark_sample = end_sample,
-          .has_case_sample_ordinal = has_case_sample_ordinal,
-          .case_sample_ordinal = case_sample_ordinal,
           .scenario_coordinate = scenario_coordinate,
           .work_item_index = work_item_index,
       };
@@ -541,43 +594,27 @@ static void iree_benchmark_loom_append_case_end_to_end_work(
       &plan->selected_benchmarks[selection_index];
   const iree_host_size_t begin_sample = selection->begin_benchmark_sample;
   const iree_host_size_t end_sample = selection->end_benchmark_sample;
-  bool has_case_sample_ordinal = false;
-  iree_host_size_t case_sample_ordinal = 0;
-  if (end_sample == begin_sample + 1) {
-    has_case_sample_ordinal = true;
-    case_sample_ordinal = loom_testbench_benchmark_sample_case_ordinal(
-        selection->case_plan, selection->benchmark_plan, begin_sample);
-  }
   const iree_host_size_t work_item_index = iree_benchmark_loom_append_work_item(
       plan, IREE_BENCHMARK_LOOM_WORK_ITEM_CASE_END_TO_END, selection_index,
-      begin_sample, end_sample, has_case_sample_ordinal, case_sample_ordinal,
+      begin_sample, end_sample,
       (loom_testbench_scenario_sample_coordinate_t){0}, compile_item_index);
   iree_benchmark_loom_append_logical_sample(
-      plan, selection_index, begin_sample, end_sample, has_case_sample_ordinal,
-      case_sample_ordinal, (loom_testbench_scenario_sample_coordinate_t){0},
-      work_item_index);
+      plan, selection_index, begin_sample, end_sample,
+      (loom_testbench_scenario_sample_coordinate_t){0}, work_item_index);
 }
 
 static void iree_benchmark_loom_append_dispatch_sample_work(
     iree_benchmark_loom_work_plan_t* plan, iree_host_size_t selection_index,
     iree_host_size_t benchmark_sample_ordinal,
     iree_host_size_t compile_item_index) {
-  const iree_benchmark_loom_selected_benchmark_t* selection =
-      &plan->selected_benchmarks[selection_index];
-  const iree_host_size_t case_sample_ordinal =
-      loom_testbench_benchmark_sample_case_ordinal(selection->case_plan,
-                                                   selection->benchmark_plan,
-                                                   benchmark_sample_ordinal);
   const iree_host_size_t work_item_index = iree_benchmark_loom_append_work_item(
       plan, IREE_BENCHMARK_LOOM_WORK_ITEM_DISPATCH_SAMPLE, selection_index,
       benchmark_sample_ordinal, benchmark_sample_ordinal + 1,
-      /*has_case_sample_ordinal=*/true, case_sample_ordinal,
       (loom_testbench_scenario_sample_coordinate_t){0}, compile_item_index);
   iree_benchmark_loom_append_logical_sample(
       plan, selection_index, benchmark_sample_ordinal,
-      benchmark_sample_ordinal + 1, /*has_case_sample_ordinal=*/true,
-      case_sample_ordinal, (loom_testbench_scenario_sample_coordinate_t){0},
-      work_item_index);
+      benchmark_sample_ordinal + 1,
+      (loom_testbench_scenario_sample_coordinate_t){0}, work_item_index);
 }
 
 static void iree_benchmark_loom_append_scenario_trial_work(
@@ -586,13 +623,11 @@ static void iree_benchmark_loom_append_scenario_trial_work(
     loom_testbench_scenario_sample_coordinate_t coordinate) {
   const iree_host_size_t work_item_index = iree_benchmark_loom_append_work_item(
       plan, IREE_BENCHMARK_LOOM_WORK_ITEM_SCENARIO_TRIAL, selection_index,
-      benchmark_sample_ordinal, benchmark_sample_ordinal + 1,
-      /*has_case_sample_ordinal=*/false, /*case_sample_ordinal=*/0, coordinate,
+      benchmark_sample_ordinal, benchmark_sample_ordinal + 1, coordinate,
       IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID);
   iree_benchmark_loom_append_logical_sample(
       plan, selection_index, benchmark_sample_ordinal,
-      benchmark_sample_ordinal + 1, /*has_case_sample_ordinal=*/false,
-      /*case_sample_ordinal=*/0, coordinate, work_item_index);
+      benchmark_sample_ordinal + 1, coordinate, work_item_index);
 }
 
 static void iree_benchmark_loom_append_scenario_work(
@@ -857,10 +892,11 @@ iree_status_t iree_benchmark_loom_work_plan_initialize(
   }
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_allocate_array(
-        allocator, logical_sample_capacity, sizeof(*work_item_order),
+        allocator, logical_sample_capacity,
+        sizeof(*work_item_order) + sizeof(iree_benchmark_loom_work_item_key_t),
         (void**)&work_item_order);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && logical_sample_capacity != 0) {
     for (iree_host_size_t i = 0; i < plan.selected_benchmark_count; ++i) {
       const iree_benchmark_loom_selected_benchmark_t* selection =
           &plan.selected_benchmarks[i];
@@ -875,7 +911,12 @@ iree_status_t iree_benchmark_loom_work_plan_initialize(
       }
       iree_benchmark_loom_append_selection_work(&plan, i, compile_item_index);
     }
-    iree_benchmark_loom_deduplicate_work_items(&plan, work_item_order);
+    // The single scratch allocation holds sort indices followed by aligned
+    // keys. Sorting moves indices, not the larger key records.
+    iree_benchmark_loom_deduplicate_work_items(
+        &plan, work_item_order,
+        (iree_benchmark_loom_work_item_key_t*)(work_item_order +
+                                               logical_sample_capacity));
   }
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < plan.work_item_count; ++i) {

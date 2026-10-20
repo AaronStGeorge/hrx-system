@@ -47,10 +47,6 @@ typedef struct iree_benchmark_loom_logical_sample_t {
   iree_host_size_t begin_benchmark_sample;
   // One-past-end benchmark-local sample ordinal covered by this logical sample.
   iree_host_size_t end_benchmark_sample;
-  // True when |case_sample_ordinal| identifies one concrete case sample.
-  bool has_case_sample_ordinal;
-  // Case-local sample ordinal measured by the physical work item.
-  iree_host_size_t case_sample_ordinal;
   // Scenario coordinate selected by this logical sample. Meaningful only when
   // the selected benchmark references a scenario.
   loom_testbench_scenario_sample_coordinate_t scenario_coordinate;
@@ -74,10 +70,6 @@ typedef struct iree_benchmark_loom_work_item_t {
   iree_host_size_t begin_benchmark_sample;
   // One-past-end benchmark-local sample ordinal covered by this work item.
   iree_host_size_t end_benchmark_sample;
-  // True when |case_sample_ordinal| identifies one concrete case sample.
-  bool has_case_sample_ordinal;
-  // Case-local sample ordinal measured by this work item.
-  iree_host_size_t case_sample_ordinal;
   // Scenario coordinate measured by this work item. Meaningful only for
   // SCENARIO_TRIAL work.
   loom_testbench_scenario_sample_coordinate_t scenario_coordinate;

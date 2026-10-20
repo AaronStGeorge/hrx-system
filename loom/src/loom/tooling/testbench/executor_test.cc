@@ -216,8 +216,8 @@ check.case @device_events {
     IREE_EXPECT_OK(loom_testbench_case_executor_initialize(
         &prepared_case, &options, &executor));
     loom_testbench_case_sample_result_t sample_result = {};
-    IREE_EXPECT_OK(
-        loom_testbench_run_case_sample(&executor, 0, 0, &sample_result));
+    IREE_EXPECT_OK(loom_testbench_run_case_sample(&executor, {.ordinal = 0}, 0,
+                                                  &sample_result));
 
     DeviceEventExecutionResult result = {};
     result.passed = sample_result.passed;
@@ -250,16 +250,23 @@ TEST_F(ExecutorTest, SeparatesParameterSelectionFromExecutionStorage) {
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("selected_execution"),
                                       &block_pool_, nullptr,
                                       iree_allocator_system(), &module));
-  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_define_value(
-      module, loom_type_scalar(LOOM_SCALAR_TYPE_I64), &input));
-  const loom_testbench_parameter_plan_t parameter = {
-      .kind = LOOM_TESTBENCH_PARAMETER_SEED,
-      .value_id = input,
-      .type = loom_type_scalar(LOOM_SCALAR_TYPE_I64),
-      .sample_count = 32,
-      .seed = {.base = 0, .count = 32},
-  };
+  constexpr iree_host_size_t radix = iree_host_size_t{1}
+                                     << (sizeof(iree_host_size_t) * 4);
+  loom_testbench_parameter_plan_t parameters[3] = {};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(parameters); ++i) {
+    const iree_host_size_t count = i == 2 ? 32 : radix;
+    loom_value_id_t value = LOOM_VALUE_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_define_value(
+        module, loom_type_scalar(LOOM_SCALAR_TYPE_I64), &value));
+    parameters[i] = {
+        .kind = LOOM_TESTBENCH_PARAMETER_SEED,
+        .value_id = value,
+        .type = loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+        .sample_count = count,
+        .seed = {.base = 0, .count = count},
+    };
+  }
+  const loom_value_id_t input = parameters[2].value_id;
   loom_testbench_invocation_plan_t invocations[2] = {};
   for (auto& invocation : invocations) {
     invocation.kind = LOOM_TESTBENCH_INVOCATION_FUNCTION_CALL;
@@ -268,11 +275,11 @@ TEST_F(ExecutorTest, SeparatesParameterSelectionFromExecutionStorage) {
     invocation.input_count = 1;
   }
   const loom_testbench_case_plan_t case_plan = {
-      .parameters = &parameter,
-      .parameter_count = 1,
+      .parameters = parameters,
+      .parameter_count = IREE_ARRAYSIZE(parameters),
       .invocations = invocations,
       .invocation_count = IREE_ARRAYSIZE(invocations),
-      .cartesian_sample_count = 32,
+      .cartesian_sample_count = IREE_HOST_SIZE_MAX,
       .sample_count = 2,
       .sample_count_truncated = true,
   };
@@ -320,14 +327,17 @@ TEST_F(ExecutorTest, SeparatesParameterSelectionFromExecutionStorage) {
   loom_testbench_case_executor_t executor = {};
   IREE_ASSERT_OK(loom_testbench_case_executor_initialize(&prepared_case,
                                                          &options, &executor));
+  const iree_host_size_t assignments[2][3] = {{0, 0, 29}, {0, 0, 7}};
   for (int repetition = 0; repetition < 3; ++repetition) {
     for (iree_host_size_t slot = 0; slot < 2; ++slot) {
-      const iree_host_size_t sample = slot == 0 ? 29 : 7;
+      const loom_testbench_case_sample_t sample = {
+          .assignments = assignments[slot],
+      };
       loom_testbench_case_sample_result_t result = {};
       IREE_ASSERT_OK(
           loom_testbench_run_case_sample(&executor, sample, slot, &result));
       EXPECT_TRUE(result.passed);
-      EXPECT_EQ(result.sample_ordinal, sample);
+      EXPECT_EQ(result.sample.assignments, assignments[slot]);
     }
   }
   ASSERT_EQ(observations.size(), 6u);
@@ -373,14 +383,16 @@ check.case @sampled {
                                                          &options, &executor));
 
   loom_testbench_case_sample_result_t result = {};
-  IREE_ASSERT_OK(loom_testbench_run_case_sample(&executor, 0, 0, &result));
+  IREE_ASSERT_OK(
+      loom_testbench_run_case_sample(&executor, {.ordinal = 0}, 0, &result));
   EXPECT_TRUE(result.passed);
   EXPECT_EQ(actual_state.last_input, 5);
   EXPECT_EQ(oracle_state.last_input, 5);
   EXPECT_EQ(result.expectation_report->passed_count, 1u);
   EXPECT_EQ(result.expectation_report->failure_count, 0u);
 
-  IREE_ASSERT_OK(loom_testbench_run_case_sample(&executor, 1, 1, &result));
+  IREE_ASSERT_OK(
+      loom_testbench_run_case_sample(&executor, {.ordinal = 1}, 1, &result));
   EXPECT_TRUE(result.passed);
   EXPECT_EQ(actual_state.last_input, 7);
   EXPECT_EQ(oracle_state.last_input, 7);
@@ -431,7 +443,8 @@ check.case @mismatch {
                                                          &options, &executor));
 
   loom_testbench_case_sample_result_t result = {};
-  IREE_ASSERT_OK(loom_testbench_run_case_sample(&executor, 0, 0, &result));
+  IREE_ASSERT_OK(
+      loom_testbench_run_case_sample(&executor, {.ordinal = 0}, 0, &result));
   EXPECT_FALSE(result.passed);
   ASSERT_EQ(result.expectation_report->failure_count, 1u);
 
@@ -574,13 +587,15 @@ check.case @provider_error {
                                                          &options, &executor));
 
   loom_testbench_case_sample_result_t result = {};
-  iree::Status status(loom_testbench_run_case_sample(&executor, 1, 1, &result));
+  iree::Status status(
+      loom_testbench_run_case_sample(&executor, {.ordinal = 1}, 1, &result));
   EXPECT_THAT(status,
               iree::testing::status::StatusIs(iree::StatusCode::kAborted));
   EXPECT_THAT(status.ToString(),
               ::testing::HasSubstr("delta provider invocation failed"));
   EXPECT_THAT(status.ToString(),
-              ::testing::HasSubstr("check.case '@provider_error' sample 1"));
+              ::testing::HasSubstr(
+                  "check.case '@provider_error' selected sweep sample 1"));
   EXPECT_EQ(actual_state.invocation_count, 1u);
   EXPECT_EQ(actual_state.last_input, 7);
   EXPECT_EQ(oracle_state.invocation_count, 0u);

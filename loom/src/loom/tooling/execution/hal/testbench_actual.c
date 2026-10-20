@@ -1799,7 +1799,7 @@ iree_status_t loom_run_hal_testbench_materialize_invocation_for_sample(
     const loom_testbench_value_materializer_options_t* materializer_options,
     const loom_testbench_case_plan_t* case_plan,
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     loom_run_hal_invocation_options_t* out_options,
     loom_run_hal_binding_list_t* out_bindings,
     loom_testbench_buffer_footprint_t* out_input_footprint) {
@@ -1810,8 +1810,8 @@ iree_status_t loom_run_hal_testbench_materialize_invocation_for_sample(
   iree_status_t status = loom_testbench_value_table_initialize_case(
       module, case_plan, allocator, &table);
   if (iree_status_is_ok(status)) {
-    status = loom_testbench_materialize_case_sample(
-        materializer_options, case_plan, sample_ordinal, &table);
+    status = loom_testbench_materialize_case_sample(materializer_options,
+                                                    case_plan, sample, &table);
   }
   if (iree_status_is_ok(status) && out_input_footprint) {
     status = loom_testbench_value_table_resolve_buffer_footprint(
@@ -1831,14 +1831,14 @@ iree_status_t loom_run_hal_testbench_prepare_invocation_plan_for_sample(
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_value_materializer_options_t* materializer_options,
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plan) {
   loom_run_hal_invocation_options_t invocation_options = {0};
   loom_run_hal_binding_list_t bindings = {0};
   iree_status_t status =
       loom_run_hal_testbench_materialize_invocation_for_sample(
           module_plan->module, materializer_options, case_plan, provider,
-          sample_ordinal, allocator, &invocation_options, &bindings,
+          sample, allocator, &invocation_options, &bindings,
           /*out_input_footprint=*/NULL);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_plan_prepare_from_lists(

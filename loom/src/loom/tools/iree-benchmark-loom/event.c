@@ -165,7 +165,6 @@ iree_status_t iree_benchmark_loom_event_sink_emit_sample(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t benchmark_sample_ordinal,
-    iree_host_size_t case_sample_ordinal,
     const loom_testbench_case_sample_result_t* sample_result) {
   IREE_ASSERT_ARGUMENT(run);
   IREE_ASSERT_ARGUMENT(candidate);
@@ -185,7 +184,6 @@ iree_status_t iree_benchmark_loom_event_sink_emit_sample(
                         .benchmark_plan = benchmark_plan,
                         .case_plan = case_plan,
                         .benchmark_sample_ordinal = benchmark_sample_ordinal,
-                        .case_sample_ordinal = case_sample_ordinal,
                         .sample_result = sample_result,
                     },
             });
@@ -434,14 +432,13 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
                           iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_SAMPLE:
       return iree_benchmark_loom_jsonl_sink_end(
-          jsonl_sink,
-          iree_benchmark_loom_append_sample_row(
-              event->sample.run, event->sample.candidate,
-              event->sample.work_item_index, event->sample.module,
-              event->sample.benchmark_plan, event->sample.case_plan,
-              event->sample.benchmark_sample_ordinal,
-              event->sample.case_sample_ordinal, event->sample.sample_result,
-              iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
+          jsonl_sink, iree_benchmark_loom_append_sample_row(
+                          event->sample.run, event->sample.candidate,
+                          event->sample.work_item_index, event->sample.module,
+                          event->sample.benchmark_plan, event->sample.case_plan,
+                          event->sample.benchmark_sample_ordinal,
+                          event->sample.sample_result,
+                          iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE:
       return iree_benchmark_loom_jsonl_sink_end(
           jsonl_sink, iree_benchmark_loom_append_scenario_sample_row(

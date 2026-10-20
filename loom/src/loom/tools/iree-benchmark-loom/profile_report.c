@@ -83,9 +83,9 @@ iree_status_t iree_benchmark_loom_prepare_profile_artifact(
         replay_identity.scenario_coordinate.trial_index,
         replay_identity.scenario_coordinate.trial_ordinal));
   } else {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_format(out_path, "_sample%" PRIhsz ".irpf",
-                                          replay_identity.case_sample_ordinal));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        out_path, "_sample%" PRIhsz ".irpf",
+        replay_identity.benchmark_sample_ordinal));
   }
   IREE_RETURN_IF_ERROR(loom_tooling_create_parent_directory(
       iree_string_builder_view(out_path), allocator));
@@ -146,9 +146,12 @@ static iree_status_t iree_benchmark_loom_write_profile_subject_identity_json(
     IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
         object, IREE_SV("work_item_index"), work_item_index));
   }
-  if (case_plan != NULL && benchmark_result->has_sample_ordinal) {
+  if (case_plan != NULL && benchmark_result->has_benchmark_sample_ordinal) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
-        module, case_plan, benchmark_result->sample_ordinal, object));
+        module, case_plan,
+        loom_testbench_benchmark_case_sample(
+            benchmark_plan, benchmark_result->benchmark_sample_ordinal),
+        object));
   }
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       object, IREE_SV("benchmark"), benchmark_plan->name));

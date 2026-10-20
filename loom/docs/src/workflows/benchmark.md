@@ -161,6 +161,14 @@ iree-benchmark-loom program.loom \
   --dry-run
 ```
 
+`--sample` indexes the benchmark's sweep after applying its assignments, with
+the first unassigned case parameter varying fastest. Pins do not consume a
+sweep dimension, and the sample cap limits selected work without restricting
+where those samples lie in the full case domain. Reports retain the exact
+parameter values and benchmark-local replay index even when that full
+Cartesian position exceeds the host's integer range; the optional global case
+index is then omitted.
+
 Concrete parameter values appear in the structured result, so reports can be
 joined by values rather than filename conventions. Executed HAL results also
 record every launch in case-sample and source order. `workload` is the ordered,

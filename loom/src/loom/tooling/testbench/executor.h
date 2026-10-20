@@ -62,8 +62,8 @@ iree_status_t loom_testbench_prepare_case_execution(
 typedef struct loom_testbench_case_sample_result_t {
   // Static case plan that produced this result.
   const loom_testbench_case_plan_t* case_plan;
-  // Concrete sample ordinal executed for |case_plan|.
-  iree_host_size_t sample_ordinal;
+  // Concrete selection, borrowing assignments from the caller's plan.
+  loom_testbench_case_sample_t sample;
   // Borrowed sample issues owned by the executor until the next run.
   const loom_testbench_sample_issue_t* issues;
   // Number of entries in |issues|.
@@ -120,8 +120,8 @@ void loom_testbench_case_executor_deinitialize(
 // A non-OK status means the sample could not execute. Ordinary expectation
 // mismatches are recorded in |out_result| with |passed| set to false.
 iree_status_t loom_testbench_run_case_sample(
-    loom_testbench_case_executor_t* executor, iree_host_size_t sample_ordinal,
-    iree_host_size_t execution_index,
+    loom_testbench_case_executor_t* executor,
+    loom_testbench_case_sample_t sample, iree_host_size_t execution_index,
     loom_testbench_case_sample_result_t* out_result);
 
 // Writes a deterministic JSON object for |result|. The schema is production

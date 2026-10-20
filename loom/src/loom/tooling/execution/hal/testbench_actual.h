@@ -384,7 +384,7 @@ iree_status_t loom_run_hal_testbench_materialize_invocation_for_sample(
     const loom_testbench_value_materializer_options_t* materializer_options,
     const loom_testbench_case_plan_t* case_plan,
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     loom_run_hal_invocation_options_t* out_options,
     loom_run_hal_binding_list_t* out_bindings,
     loom_testbench_buffer_footprint_t* out_input_footprint);
@@ -395,7 +395,7 @@ iree_status_t loom_run_hal_testbench_prepare_invocation_plan_for_sample(
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_value_materializer_options_t* materializer_options,
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plan);
 
 #ifdef __cplusplus

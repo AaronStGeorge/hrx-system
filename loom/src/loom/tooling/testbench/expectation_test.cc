@@ -260,8 +260,8 @@ check.case @scalar_mismatch {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
-  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,
-                                                        &case_plan, 0, &table));
+  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
+      &materializer_options, &case_plan, {.ordinal = 0}, &table));
 
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
@@ -507,8 +507,8 @@ check.case @buffer_expectations {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
-  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,
-                                                        &case_plan, 0, &table));
+  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
+      &materializer_options, &case_plan, {.ordinal = 0}, &table));
 
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
@@ -545,8 +545,8 @@ check.case @buffer_mismatch {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
-  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,
-                                                        &case_plan, 0, &table));
+  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
+      &materializer_options, &case_plan, {.ordinal = 0}, &table));
 
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(

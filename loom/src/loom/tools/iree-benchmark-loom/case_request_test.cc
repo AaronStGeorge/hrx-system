@@ -129,11 +129,12 @@ check.benchmark<@sampled> @wide {width = 8}
 
   loomc_module_t* module = Parse(kSource);
   ASSERT_NE(module, nullptr);
+  const iree_host_size_t assignments[] = {1};
   const iree_benchmark_loom_case_request_options_t options = {
       .workspace = workspace_,
       .module = module,
       .case_index = 0,
-      .case_sample_ordinal = 1,
+      .case_sample = {.assignments = assignments},
   };
   iree_benchmark_loom_case_request_capture_t capture = {};
   loomc_result_t* result = nullptr;
@@ -142,7 +143,6 @@ check.benchmark<@sampled> @wide {width = 8}
   ExpectSucceeded(result);
 
   EXPECT_EQ(capture.case_index, 0u);
-  EXPECT_EQ(capture.case_sample_ordinal, 1u);
   EXPECT_FALSE(iree_string_view_is_empty(capture.root_symbol));
   ASSERT_EQ(capture.binding_count, 2u);
   EXPECT_NE(capture.binding_value_ids[0], capture.binding_value_ids[1]);
@@ -195,7 +195,7 @@ check.case @only {
       .workspace = workspace_,
       .module = module,
       .case_index = 1,
-      .case_sample_ordinal = 0,
+      .case_sample = {},
   };
   iree_benchmark_loom_case_request_capture_t capture = {};
   loomc_result_t* result = nullptr;

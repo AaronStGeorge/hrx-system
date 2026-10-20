@@ -238,7 +238,7 @@ TEST_F(ValueMaterializerTest, MaterializesNarrowScalarLiterals) {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &options, &case_plan, /*sample_ordinal=*/0, &table));
+      &options, &case_plan, {.ordinal = 0}, &table));
 
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(literals); ++i) {
     ExpectRawU32Scalar(&table, sources[i].value_id, literals[i].expected_bits);
@@ -373,7 +373,7 @@ TEST_F(ValueMaterializerTest, ResolvesBufferFootprint) {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &options, &case_plan, /*sample_ordinal=*/0, &table));
+      &options, &case_plan, {.ordinal = 0}, &table));
 
   const loom_value_id_t values[] = {
       first_disjoint, first_alias, first_alias,
@@ -461,7 +461,7 @@ check.case @generated {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &options, &case_plan, /*sample_ordinal=*/1, &table));
+      &options, &case_plan, {.ordinal = 1}, &table));
 
   ASSERT_EQ(case_plan.parameter_count, 2u);
   ASSERT_EQ(case_plan.value_source_count, 14u);
@@ -606,7 +606,7 @@ check.case @overflow_period {
         module, &plan.cases[i], host_allocator_, &table));
     IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
                           loom_testbench_materialize_case_sample(
-                              &options, &plan.cases[i], 0, &table));
+                              &options, &plan.cases[i], {}, &table));
     loom_testbench_value_table_deinitialize(&table);
   }
   loom_module_free(module);
@@ -642,7 +642,7 @@ check.case @wide_random {
   for (int realization = 0; realization < 2; ++realization) {
     loom_testbench_value_table_reset(&table);
     IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-        &options, &case_plan, /*sample_ordinal=*/0, &table));
+        &options, &case_plan, {.ordinal = 0}, &table));
     for (iree_host_size_t i = 0; i < case_plan.value_source_count; ++i) {
       loom_testbench_value_t value = {};
       iree_hal_buffer_view_t* view =
@@ -695,7 +695,7 @@ check.case @tensor_view {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &options, &case_plan, /*sample_ordinal=*/1, &table));
+      &options, &case_plan, {.ordinal = 1}, &table));
 
   ASSERT_EQ(case_plan.value_source_count, 2u);
   loom_testbench_value_t source = {};
@@ -736,10 +736,9 @@ check.case @tensor_view_out_of_range {
   IREE_ASSERT_OK(loom_testbench_value_table_initialize_case(
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_testbench_materialize_case_sample(&options, &case_plan,
-                                             /*sample_ordinal=*/0, &table));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_testbench_materialize_case_sample(
+                            &options, &case_plan, {.ordinal = 0}, &table));
 
   loom_testbench_value_table_deinitialize(&table);
   loom_module_free(module);
@@ -774,7 +773,7 @@ check.case @sweep {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &options, &case_plan, /*sample_ordinal=*/5, &table));
+      &options, &case_plan, {.ordinal = 5}, &table));
 
   loom_testbench_value_t m = {};
   IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
@@ -815,7 +814,7 @@ check.case @file_io {
       module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t options = MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
-      &options, &case_plan, /*sample_ordinal=*/0, &table));
+      &options, &case_plan, {.ordinal = 0}, &table));
 
   ASSERT_EQ(case_plan.value_source_count, 1u);
   loom_testbench_value_t input = {};

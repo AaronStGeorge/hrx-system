@@ -601,9 +601,9 @@ typedef struct loom_testbench_benchmark_plan_t {
   iree_host_size_t scenario_index;
   // Borrowed benchmark assignment dictionary.
   loom_named_attr_slice_t attrs;
-  // Per-parameter fixed sample ordinals selected by a case benchmark. Empty for
-  // scenario benchmarks. Entries are PARAMETER_SAMPLE_ORDINAL_ALL for
-  // unassigned parameters.
+  // Fixed sample ordinals in case parameter order, covering every parameter.
+  // Empty for scenario benchmarks. Entries are PARAMETER_SAMPLE_ORDINAL_ALL
+  // for unassigned parameters.
   const iree_host_size_t* parameter_sample_ordinals;
   // Number of entries in |parameter_sample_ordinals|.
   iree_host_size_t parameter_sample_ordinal_count;
@@ -667,24 +667,44 @@ bool loom_testbench_plan_expectation(
     const loom_module_t* module, const loom_op_t* op,
     loom_testbench_expectation_plan_t* out_expectation);
 
-// Maps a case sample ordinal to a parameter-local sample ordinal.
-//
-// Parameters use mixed-radix expansion in source order. Parameter 0 varies
-// fastest, then parameter 1, and so on. |sample_ordinal| must be less than the
-// case plan's |cartesian_sample_count|.
-iree_host_size_t loom_testbench_case_sample_parameter_ordinal(
-    const loom_testbench_case_plan_t* case_plan,
-    iree_host_size_t sample_ordinal, iree_host_size_t parameter_index);
+// One concrete sample in a case's parameter domain. The Cartesian product may
+// exceed host limits even when every parameter and the selected sweep fit.
+// Retaining assignments avoids flattening that product into a lossy index.
+typedef struct loom_testbench_case_sample_t {
+  // Position in the reduced sweep of unassigned parameters, first varying
+  // fastest. With no assignments this is the ordinary case sample ordinal.
+  iree_host_size_t ordinal;
+  // Borrowed parameter-local ordinals in case parameter order, or NULL when
+  // every parameter is unassigned. A non-NULL array covers every parameter;
+  // PARAMETER_SAMPLE_ORDINAL_ALL entries vary with |ordinal|.
+  const iree_host_size_t* assignments;
+} loom_testbench_case_sample_t;
 
-// Maps a benchmark-local sample ordinal to the referenced case sample ordinal.
-//
-// Assigned benchmark parameters use their fixed parameter-local ordinals.
-// Unassigned parameters use mixed-radix expansion in source order over the
-// reduced benchmark sample domain.
-iree_host_size_t loom_testbench_benchmark_sample_case_ordinal(
-    const loom_testbench_case_plan_t* case_plan,
+// Selects a sample without allocation. The result borrows the benchmark plan's
+// assignments. |ordinal| must be within the planned benchmark sample count.
+loom_testbench_case_sample_t loom_testbench_benchmark_case_sample(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
-    iree_host_size_t benchmark_sample_ordinal);
+    iree_host_size_t ordinal);
+
+// Consumes one parameter from a copy of a sample, returning its parameter-local
+// ordinal. Call once per parameter in source order with that parameter's
+// nonzero sample count. Decoding the whole sample is linear in parameter count.
+iree_host_size_t loom_testbench_case_sample_next(
+    loom_testbench_case_sample_t* remaining, iree_host_size_t sample_count);
+
+// Compares resolved parameter coordinates within the same case, independent of
+// how a benchmark pins them. Zero means the samples select identical inputs.
+int loom_testbench_case_sample_compare(
+    const loom_testbench_case_plan_t* case_plan,
+    loom_testbench_case_sample_t lhs, loom_testbench_case_sample_t rhs);
+
+// Derives the global Cartesian ordinal for reporting, if it fits in a host
+// word. On false, |out_ordinal| is zero; the sample is still valid and usable.
+// Execution and identity must remain valid when this representation cannot
+// fit; sort accelerators may use it with coordinate comparison on overflow.
+bool loom_testbench_case_sample_flatten(
+    const loom_testbench_case_plan_t* case_plan,
+    loom_testbench_case_sample_t sample, iree_host_size_t* out_ordinal);
 
 // Maps a benchmark-local sample ordinal to its scenario domain coordinate.
 //

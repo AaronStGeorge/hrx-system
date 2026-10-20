@@ -35,7 +35,7 @@ static iree_status_t iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
     const loom_testbench_case_plan_t* case_plan,
     iree_benchmark_loom_hal_actual_provider_t* provider,
     const loom_testbench_value_materializer_options_t* materializer_options,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plan,
     loom_testbench_buffer_footprint_t* out_input_footprint) {
   loom_run_hal_invocation_options_t invocation_options = {0};
@@ -43,7 +43,7 @@ static iree_status_t iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
   iree_status_t status =
       loom_run_hal_testbench_materialize_invocation_for_sample(
           module_plan->module, materializer_options, case_plan,
-          &provider->execution, sample_ordinal, allocator, &invocation_options,
+          &provider->execution, sample, allocator, &invocation_options,
           &bindings, out_input_footprint);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_plan_prepare_from_lists(
@@ -61,7 +61,7 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
     const iree_benchmark_loom_options_t* options,
     iree_benchmark_loom_hal_actual_provider_t* provider,
     const loom_testbench_value_materializer_options_t* materializer_options,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     iree_benchmark_loom_hal_input_ring_t* out_ring) {
   *out_ring = (iree_benchmark_loom_hal_input_ring_t){
       .host_allocator = allocator,
@@ -71,8 +71,8 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
   loom_testbench_buffer_footprint_t first_input_footprint = {0};
   iree_status_t status =
       iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
-          module_plan, case_plan, provider, materializer_options,
-          sample_ordinal, allocator, &first_plan, &first_input_footprint);
+          module_plan, case_plan, provider, materializer_options, sample,
+          allocator, &first_plan, &first_input_footprint);
   uint64_t first_binding_set_bytes = 0;
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_binding_list_total_byte_length(
@@ -131,7 +131,7 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
        ++i) {
     loom_testbench_buffer_footprint_t input_footprint = {0};
     status = iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
-        module_plan, case_plan, provider, materializer_options, sample_ordinal,
+        module_plan, case_plan, provider, materializer_options, sample,
         allocator, &out_ring->plans[i], &input_footprint);
     if (iree_status_is_ok(status) &&
         !loom_run_hal_invocation_options_equal(&out_ring->plans[0].options,
@@ -139,8 +139,8 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "HAL benchmark input ring materialization changed dispatch constants "
-          "or geometry for sample %" PRIhsz,
-          sample_ordinal);
+          "or geometry for selected sweep sample %" PRIhsz,
+          sample.ordinal);
     }
     if (iree_status_is_ok(status) &&
         !loom_testbench_buffer_footprint_equal(&input_footprint,
@@ -148,8 +148,8 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "HAL benchmark input ring materialization changed input buffer "
-          "footprint for sample %" PRIhsz,
-          sample_ordinal);
+          "footprint for selected sweep sample %" PRIhsz,
+          sample.ordinal);
     }
     uint64_t binding_set_bytes = 0;
     if (iree_status_is_ok(status)) {
@@ -295,7 +295,7 @@ static iree_status_t iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
     const loom_testbench_case_plan_t* case_plan,
     iree_benchmark_loom_hal_actual_sequence_t* sequence,
     const loom_testbench_value_materializer_options_t* materializer_options,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plans,
     loom_testbench_buffer_footprint_t* out_input_footprint) {
   *out_input_footprint = (loom_testbench_buffer_footprint_t){0};
@@ -303,8 +303,8 @@ static iree_status_t iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
   iree_status_t status = loom_testbench_value_table_initialize_case(
       module_plan->module, case_plan, allocator, &table);
   if (iree_status_is_ok(status)) {
-    status = loom_testbench_materialize_case_sample(
-        materializer_options, case_plan, sample_ordinal, &table);
+    status = loom_testbench_materialize_case_sample(materializer_options,
+                                                    case_plan, sample, &table);
   }
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < sequence->provider_count; ++i) {
@@ -336,7 +336,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
     const iree_benchmark_loom_options_t* options,
     iree_benchmark_loom_hal_actual_sequence_t* sequence,
     const loom_testbench_value_materializer_options_t* materializer_options,
-    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_testbench_case_sample_t sample, iree_allocator_t allocator,
     iree_benchmark_loom_hal_sequence_input_ring_t* out_ring) {
   *out_ring = (iree_benchmark_loom_hal_sequence_input_ring_t){
       .host_allocator = allocator,
@@ -353,7 +353,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
     memset(first_plans, 0, sequence->provider_count * sizeof(*first_plans));
     first_plan_count = sequence->provider_count;
     status = iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
-        module_plan, case_plan, sequence, materializer_options, sample_ordinal,
+        module_plan, case_plan, sequence, materializer_options, sample,
         allocator, first_plans, &first_input_footprint);
   }
   uint64_t first_binding_set_bytes = 0;
@@ -450,7 +450,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
         &out_ring->plans[ring_index * sequence->provider_count];
     loom_testbench_buffer_footprint_t input_footprint = {0};
     status = iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
-        module_plan, case_plan, sequence, materializer_options, sample_ordinal,
+        module_plan, case_plan, sequence, materializer_options, sample,
         allocator, ring_plans, &input_footprint);
     for (iree_host_size_t step_index = 0;
          iree_status_is_ok(status) && step_index < sequence->provider_count;
@@ -461,9 +461,9 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
         status = iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
             "HAL benchmark sequence input ring materialization changed "
-            "dispatch constants or geometry for sample %" PRIhsz
+            "dispatch constants or geometry for selected sweep sample %" PRIhsz
             " step %" PRIhsz,
-            sample_ordinal, step_index);
+            sample.ordinal, step_index);
       }
     }
     if (iree_status_is_ok(status) &&
@@ -472,8 +472,8 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "HAL benchmark sequence input ring materialization changed input "
-          "buffer footprint for sample %" PRIhsz,
-          sample_ordinal);
+          "buffer footprint for selected sweep sample %" PRIhsz,
+          sample.ordinal);
     }
     uint64_t binding_set_bytes = 0;
     if (iree_status_is_ok(status)) {
@@ -551,12 +551,12 @@ iree_status_t iree_benchmark_loom_run_hal_benchmark_sample(
     const loom_testbench_value_materializer_options_t* materializer_options,
     iree_host_size_t benchmark_sample_ordinal, iree_allocator_t allocator,
     iree_benchmark_loom_benchmark_result_t* out_result) {
-  const iree_host_size_t case_sample_ordinal =
-      iree_benchmark_loom_case_sample_from_benchmark_sample(
-          benchmark_plan, case_plan, benchmark_sample_ordinal);
+  const loom_testbench_case_sample_t sample =
+      loom_testbench_benchmark_case_sample(benchmark_plan,
+                                           benchmark_sample_ordinal);
   memset(out_result, 0, sizeof(*out_result));
-  out_result->has_sample_ordinal = true;
-  out_result->sample_ordinal = case_sample_ordinal;
+  out_result->has_benchmark_sample_ordinal = true;
+  out_result->benchmark_sample_ordinal = benchmark_sample_ordinal;
   out_result->samples_per_iteration = 1;
 
   out_result->compile_report = provider->execution.artifacts.compile_report;
@@ -569,8 +569,8 @@ iree_status_t iree_benchmark_loom_run_hal_benchmark_sample(
   if (provider->execution.compile_rejected) {
     iree_benchmark_loom_benchmark_result_set_compile_rejection(provider,
                                                                out_result);
-    out_result->has_sample_ordinal = true;
-    out_result->sample_ordinal = case_sample_ordinal;
+    out_result->has_benchmark_sample_ordinal = true;
+    out_result->benchmark_sample_ordinal = benchmark_sample_ordinal;
     out_result->samples_per_iteration = 1;
     return iree_ok_status();
   }
@@ -578,7 +578,7 @@ iree_status_t iree_benchmark_loom_run_hal_benchmark_sample(
   iree_benchmark_loom_hal_input_ring_t input_ring = {0};
   iree_status_t status = iree_benchmark_loom_hal_input_ring_initialize(
       module_plan, case_plan, policy, options, provider, materializer_options,
-      case_sample_ordinal, allocator, &input_ring);
+      sample, allocator, &input_ring);
   if (iree_status_is_ok(status)) {
     out_result->has_hal_benchmark = true;
     out_result->data_cache = input_ring.summary;
@@ -587,7 +587,7 @@ iree_status_t iree_benchmark_loom_run_hal_benchmark_sample(
     status = iree_benchmark_loom_prepare_profile_artifact(
         run, candidate, provider->context,
         (iree_benchmark_loom_profile_replay_identity_t){
-            .case_sample_ordinal = case_sample_ordinal,
+            .benchmark_sample_ordinal = benchmark_sample_ordinal,
         },
         allocator, &hal_options, &profile_artifact_path);
     if (iree_status_is_ok(status)) {
@@ -624,12 +624,12 @@ iree_status_t iree_benchmark_loom_run_hal_sequence_benchmark_sample(
     const loom_testbench_value_materializer_options_t* materializer_options,
     iree_host_size_t benchmark_sample_ordinal, iree_allocator_t allocator,
     iree_benchmark_loom_benchmark_result_t* out_result) {
-  const iree_host_size_t case_sample_ordinal =
-      iree_benchmark_loom_case_sample_from_benchmark_sample(
-          benchmark_plan, case_plan, benchmark_sample_ordinal);
+  const loom_testbench_case_sample_t sample =
+      loom_testbench_benchmark_case_sample(benchmark_plan,
+                                           benchmark_sample_ordinal);
   memset(out_result, 0, sizeof(*out_result));
-  out_result->has_sample_ordinal = true;
-  out_result->sample_ordinal = case_sample_ordinal;
+  out_result->has_benchmark_sample_ordinal = true;
+  out_result->benchmark_sample_ordinal = benchmark_sample_ordinal;
   out_result->samples_per_iteration = 1;
 
   const iree_benchmark_loom_hal_actual_provider_t* rejected_provider =
@@ -637,8 +637,8 @@ iree_status_t iree_benchmark_loom_run_hal_sequence_benchmark_sample(
   if (rejected_provider != NULL) {
     iree_benchmark_loom_benchmark_result_set_compile_rejection(
         rejected_provider, out_result);
-    out_result->has_sample_ordinal = true;
-    out_result->sample_ordinal = case_sample_ordinal;
+    out_result->has_benchmark_sample_ordinal = true;
+    out_result->benchmark_sample_ordinal = benchmark_sample_ordinal;
     out_result->samples_per_iteration = 1;
     return iree_ok_status();
   }
@@ -646,7 +646,7 @@ iree_status_t iree_benchmark_loom_run_hal_sequence_benchmark_sample(
   iree_benchmark_loom_hal_sequence_input_ring_t input_ring = {0};
   iree_status_t status = iree_benchmark_loom_hal_sequence_input_ring_initialize(
       module_plan, case_plan, policy, options, sequence, materializer_options,
-      case_sample_ordinal, allocator, &input_ring);
+      sample, allocator, &input_ring);
   if (iree_status_is_ok(status)) {
     out_result->has_hal_benchmark = true;
     out_result->data_cache = input_ring.summary;
@@ -655,7 +655,7 @@ iree_status_t iree_benchmark_loom_run_hal_sequence_benchmark_sample(
     status = iree_benchmark_loom_prepare_profile_artifact(
         run, candidate, hal_context,
         (iree_benchmark_loom_profile_replay_identity_t){
-            .case_sample_ordinal = case_sample_ordinal,
+            .benchmark_sample_ordinal = benchmark_sample_ordinal,
         },
         allocator, &hal_options, &profile_artifact_path);
     if (iree_status_is_ok(status)) {
