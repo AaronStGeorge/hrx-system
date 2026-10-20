@@ -98,14 +98,14 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @rotate_buffer_coo
   %begin = mov.short 0
   %step = mov.short 1
   low.br ^_bb1(%begin: reg<aie2p.er>, %first: reg<aie2p.ep>, %first_origin: reg<aie2p.er>, %second: reg<aie2p.ep>, %second_origin: reg<aie2p.er>)
-^_bb1(%i: reg<aie2p.er>, %current: reg<aie2p.ep>, %current_origin: reg<aie2p.er>, %other: reg<aie2p.ep>, %other_origin: reg<aie2p.er>):
-  %45 = lt %i, %count
-  low.cond_br %45, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb1(%i: reg<aie2p.er>, %current: reg<aie2p.ep>, %origin: reg<aie2p.er>, %other: reg<aie2p.ep>, %unused_origin: reg<aie2p.er>):
+  %49 = lt %i, %count
+  low.cond_br %49, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %46 = add.rr %i, %step
-  low.br ^_bb1(%46: reg<aie2p.er>, %other: reg<aie2p.ep>, %other_origin: reg<aie2p.er>, %current: reg<aie2p.ep>, %current_origin: reg<aie2p.er>)
+  %50 = add.rr %i, %step
+  low.br ^_bb1(%50: reg<aie2p.er>, %other: reg<aie2p.ep>, %unused_origin: reg<aie2p.er>, %current: reg<aie2p.ep>, %origin: reg<aie2p.er>)
 ^_bb3:
-  %47 = mov.address-index %current_origin
-  %value = lda.i8.index %current, %47
+  %51 = mov.address-index %origin
+  %value = lda.i8.index %current, %51
   return %value
 }

@@ -130,48 +130,48 @@ low.kernel.def target<amdgpu.gfx11.generic.core>(@loop_entry_wave64) abi_layout(
   %loop_begin = s_mov_b32 0
   %step = s_mov_b32 1
   %inner_end = v_add_u32 %step, %lane_i32
-  %41 = v_mov_b32_copy %loop_begin
-  low.br ^_bb10(%41: reg<amdgpu.vgpr>)
-^_bb10(%counter$33: reg<amdgpu.vgpr>):
-  %54 = s_mov_b64_exec_read
-  low.br ^outer_header(%counter$33: reg<amdgpu.vgpr>)
-^outer_header(%counter$27: reg<amdgpu.vgpr>):
-  %42 = v_mov_b32_copy %loop_begin
-  %43 = v_mov_b32 0
-  low.br ^_bb8(%42: reg<amdgpu.vgpr>, %43: reg<amdgpu.vgpr>)
-^_bb8(%31: reg<amdgpu.vgpr>, %count$32: reg<amdgpu.vgpr>):
-  %45 = s_mov_b64_exec_read
-  low.br ^_bb2(%31: reg<amdgpu.vgpr>, %count$32: reg<amdgpu.vgpr>)
-^_bb2(%inner: reg<amdgpu.vgpr>, %count$29: reg<amdgpu.vgpr>):
-  %44 = v_cmp_lt_i32 %inner, %inner_end
-  %46, %47 = s_and_saveexec_b64 %44
-  low.cond_br %47, ^_bb3, ^_bb9 : reg<amdgpu.scc>
+  %43 = v_mov_b32_copy %loop_begin
+  low.br ^_bb10(%43: reg<amdgpu.vgpr>)
+^_bb10(%counter$35: reg<amdgpu.vgpr>):
+  %56 = s_mov_b64_exec_read
+  low.br ^outer_header(%counter$35: reg<amdgpu.vgpr>)
+^outer_header(%counter$29: reg<amdgpu.vgpr>):
+  %44 = v_mov_b32_copy %loop_begin
+  %45 = v_mov_b32 0
+  low.br ^_bb8(%44: reg<amdgpu.vgpr>, %45: reg<amdgpu.vgpr>)
+^_bb8(%33: reg<amdgpu.vgpr>, %34: reg<amdgpu.vgpr>):
+  %47 = s_mov_b64_exec_read
+  low.br ^_bb2(%33: reg<amdgpu.vgpr>, %34: reg<amdgpu.vgpr>)
+^_bb2(%inner: reg<amdgpu.vgpr>, %count: reg<amdgpu.vgpr>):
+  %46 = v_cmp_lt_i32 %inner, %inner_end
+  %48, %49 = s_and_saveexec_b64 %46
+  low.cond_br %49, ^_bb3, ^_bb9 : reg<amdgpu.scc>
 ^_bb3:
-  %48 = v_mov_b32 1
-  %next_count = v_add_u32 %count$29, %48
-  %50 = v_add_u32 %step, %inner
-  low.br ^_bb2(%50: reg<amdgpu.vgpr>, %next_count: reg<amdgpu.vgpr>)
+  %50 = v_mov_b32 1
+  %next_count = v_add_u32 %count, %50
+  %52 = v_add_u32 %step, %inner
+  low.br ^_bb2(%52: reg<amdgpu.vgpr>, %next_count: reg<amdgpu.vgpr>)
 ^_bb9:
-  s_mov_b64_exec %45
+  s_mov_b64_exec %47
   low.br ^_bb4
 ^_bb4:
-  low.br ^_bb5(%count$29: reg<amdgpu.vgpr>)
+  low.br ^_bb5(%count: reg<amdgpu.vgpr>)
 ^_bb5(%inner_count: reg<amdgpu.vgpr>):
-  %51 = v_readfirstlane_b32 %lane_i32
-  %observed = v_mov_b32_copy %51
-  %more = v_cmp_lt_u32 %counter$27, %lane_i32
-  %55, %56 = s_and_saveexec_b64 %more
-  low.cond_br %56, ^outer_body, ^_bb11 : reg<amdgpu.scc>
+  %53 = v_readfirstlane_b32 %lane_i32
+  %observed = v_mov_b32_copy %53
+  %more = v_cmp_lt_u32 %counter$29, %lane_i32
+  %57, %58 = s_and_saveexec_b64 %more
+  low.cond_br %58, ^outer_body, ^_bb11 : reg<amdgpu.scc>
 ^outer_body:
-  %next = v_add_u32 %step, %counter$27
+  %next = v_add_u32 %step, %counter$29
   low.br ^outer_header(%next: reg<amdgpu.vgpr>)
 ^_bb11:
-  s_mov_b64_exec %54
+  s_mov_b64_exec %56
   low.br ^exit
 ^exit:
   %result = v_add_u32 %observed, %inner_count
-  %59 = v_lshlrev_b32_src0_inline %lane_i32, 2
-  global_store_b32_saddr %59, %result, %output_view
+  %61 = v_lshlrev_b32_src0_inline %lane_i32, 2
+  global_store_b32_saddr %61, %result, %output_view
   return
 }
 

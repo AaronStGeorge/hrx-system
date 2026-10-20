@@ -149,6 +149,7 @@ loom_cc_library(
     loom::ops::cfg
     loom::ops::index
     loom::ops::op_defs
+    loom::ops::scalar
     loom::ops::scf
     loom::pass::types
     loom::pass::value_facts
