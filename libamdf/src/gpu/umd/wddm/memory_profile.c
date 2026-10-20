@@ -131,13 +131,19 @@ amdf_status_t amdf_gpu_wddm_query_memory_profile(
                               AMDF_MEMORY_FLAG_MAPPING_SOURCE;
     if (capabilities->cache_coherent_memory_supported) {
       profile.supported_flags |= AMDF_MEMORY_FLAG_HOST_COHERENT;
-      // GFX11 fine-grained SYSTEM mappings support native atomic stores and
-      // wait loads. Integrated processors have an internal CPU route;
-      // discrete processors additionally require native platform AtomicOps
-      // support. Wait comparisons remain an independent queue capability.
-      if (properties->gfx_ip_major == 11 &&
-          (properties->is_discrete == 0 ||
-           properties->supports_platform_atomics != 0)) {
+      // GFX11 fine-grained SYSTEM mappings and the GFX12.0 CP route through
+      // MALL support native stores and wait loads. GC12.1 changes the atomic
+      // scope encoding, so GFX12 admission names exact versions.
+      // Integrated processors have an internal CPU route; discrete processors
+      // additionally require native platform AtomicOps support. Wait
+      // comparisons remain an independent queue capability.
+      const bool system_signals =
+          properties->gfx_ip_major == 11 ||
+          (properties->gfx_ip_major == 12 && properties->gfx_ip_minor == 0 &&
+           properties->gfx_ip_stepping >= 0 &&
+           properties->gfx_ip_stepping <= 1);
+      if (system_signals && (properties->is_discrete == 0 ||
+                             properties->supports_platform_atomics != 0)) {
         profile.atomic_operations_32 =
             AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
         profile.atomic_operations_64 =
