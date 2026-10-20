@@ -26,6 +26,8 @@ typedef struct loom_low_source_invocation_facts_t {
 } loom_low_source_invocation_facts_t;
 
 // Computes private, acyclic source-call argument facts before source lowering.
+// Modules without semantic calls return an empty summary without allocating or
+// walking IR; the module maintains that inventory as operations mutate.
 //
 // Every semantic caller participates in each callee argument meet. Exported
 // and recursive callees retain their declared argument domains. Selected

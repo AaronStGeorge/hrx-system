@@ -3737,6 +3737,64 @@ TEST_F(ModuleTest, BlockFindOp) {
   loom_module_free(module);
 }
 
+TEST(ModuleSemanticCallInventoryTest, TracksMutationAndRebuild) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(32 * 1024, iree_allocator_system(),
+                                   &block_pool);
+  loom_context_t context;
+  loom_context_initialize(iree_allocator_system(), &context);
+  iree_host_size_t vtable_count = 0;
+  const loom_op_vtable_t* const* vtables =
+      loom_test_dialect_vtables(&vtable_count);
+  IREE_ASSERT_OK(loom_context_register_dialect(
+      &context, LOOM_DIALECT_TEST, vtables, (uint16_t)vtable_count));
+  IREE_ASSERT_OK(loom_context_finalize(&context));
+
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("test"), &block_pool,
+                                      NULL, iree_allocator_system(), &module));
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("callee"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  const loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_op_t* low_call = NULL;
+  IREE_ASSERT_OK(loom_test_low_call_build(
+      &builder, callee, /*operands=*/NULL, /*operands_count=*/0,
+      /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, LOOM_LOCATION_UNKNOWN, &low_call));
+  EXPECT_FALSE(loom_module_has_semantic_calls(module));
+
+  loom_op_t* first_call = NULL;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &builder, callee, /*operands=*/NULL, /*operands_count=*/0,
+      /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, LOOM_LOCATION_UNKNOWN, &first_call));
+  loom_op_t* second_call = NULL;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &builder, callee, /*operands=*/NULL, /*operands_count=*/0,
+      /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, LOOM_LOCATION_UNKNOWN, &second_call));
+  EXPECT_TRUE(loom_module_has_semantic_calls(module));
+  EXPECT_EQ(module->semantic_call_op_count, 2u);
+
+  IREE_ASSERT_OK(loom_op_erase(module, first_call));
+  EXPECT_EQ(module->semantic_call_op_count, 1u);
+  IREE_ASSERT_OK(loom_module_compute_uses(module));
+  EXPECT_EQ(module->semantic_call_op_count, 1u);
+  IREE_ASSERT_OK(loom_op_erase(module, second_call));
+  EXPECT_FALSE(loom_module_has_semantic_calls(module));
+
+  loom_module_free(module);
+  loom_context_deinitialize(&context);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
 TEST_F(ModuleTest, BlockAppendSupportsMoreThanUint16Ops) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

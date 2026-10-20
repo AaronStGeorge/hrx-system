@@ -156,6 +156,9 @@ iree_status_t loom_low_source_invocation_facts_compute(
     iree_arena_allocator_t* arena,
     loom_low_source_invocation_facts_t* out_facts) {
   memset(out_facts, 0, sizeof(*out_facts));
+  if (!loom_module_has_semantic_calls(module)) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &out_facts->arguments, arena, module->values.count));
   loom_type_registry_configure_fact_context(&out_facts->arguments.context);
@@ -258,6 +261,9 @@ iree_status_t loom_low_source_invocation_facts_compute(
 loom_value_fact_table_view_t loom_low_source_invocation_facts_for_function(
     const loom_low_source_invocation_facts_t* facts,
     loom_func_like_t function) {
+  if (facts->arguments.arena == NULL) {
+    return (loom_value_fact_table_view_t){0};
+  }
   uint16_t argument_count = 0;
   const loom_value_id_t* arguments =
       loom_func_like_arg_ids(function, &argument_count);
