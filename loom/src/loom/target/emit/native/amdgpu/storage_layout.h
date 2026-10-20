@@ -56,6 +56,13 @@ typedef struct loom_amdgpu_storage_layout_t {
   loom_low_storage_layout_index_t index;
 } loom_amdgpu_storage_layout_t;
 
+// Projects one generic reservation into the current AMDGPU segment layout and
+// advances |sizes|. The reservation need not have an SSA storage handle.
+iree_status_t loom_amdgpu_storage_layout_project_reservation(
+    const loom_low_storage_layout_reservation_t* source_reservation,
+    loom_amdgpu_storage_layout_segment_sizes_t* sizes,
+    loom_amdgpu_storage_layout_reservation_t* out_reservation);
+
 // Projects a generic function-local layout into AMDGPU fixed segments in one
 // reservation-record traversal. Records are arena-owned and stay valid for the
 // arena lifetime.

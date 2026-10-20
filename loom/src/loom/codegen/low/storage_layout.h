@@ -101,6 +101,15 @@ typedef struct loom_low_storage_layout_reservation_t {
   uint64_t byte_alignment;
 } loom_low_storage_layout_reservation_t;
 
+// Packs one verified reservation shape into |sizes| and returns its stable
+// generic-space placement. This is the common primitive for authored storage
+// ops and compiler-planned reservations that do not yet have SSA handles.
+// Aggregate byte-size overflow is returned as status.
+iree_status_t loom_low_storage_layout_pack_reservation(
+    loom_storage_space_t space, uint64_t byte_size, uint64_t byte_alignment,
+    loom_low_storage_layout_space_sizes_t* sizes,
+    loom_low_storage_layout_reservation_t* out_reservation);
+
 typedef struct loom_low_storage_layout_record_t {
   // SSA value produced by the low.storage.reserve op.
   loom_value_id_t storage_value_id;
