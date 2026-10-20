@@ -133,20 +133,18 @@ class GrowthTest : public ::testing::Test {
     iree_hal_amd_gpu_publisher_initialize(&publisher_);
     iree_hal_amd_gpu_pm4_signal_pool_initialize(
         {iree_hal_amd_gpu_pm4_growth_signals_available, &growth_}, &signals_);
-    growth_ = {
-        .context = &context_,
-        .memory = &memory_,
-        .scratch_memory = &scratch_memory_,
-        .scratch_profile = &scratch_profile_,
-        .captures = &captures_,
-        .publisher = &publisher_,
-        .publication = &publication_,
-        .queue_ordinal = 0,
-        .queue_count = 3,
-        .signal_capacity = 8,
-        .signal_pool = &signals_,
-        .reuse = {.entry = {.kind = IREE_HAL_AMD_GPU_PM4_ENTRY_REUSE_SIGNALS}},
-    };
+    growth_.context = &context_;
+    growth_.memory = &memory_;
+    growth_.scratch_memory = &scratch_memory_;
+    growth_.scratch_profile = &scratch_profile_;
+    growth_.captures = &captures_;
+    growth_.publisher = &publisher_;
+    growth_.publication = &publication_;
+    growth_.queue_ordinal = 0;
+    growth_.queue_count = 3;
+    growth_.signal_capacity = 8;
+    growth_.signal_pool = &signals_;
+    growth_.reuse.entry.kind = IREE_HAL_AMD_GPU_PM4_ENTRY_REUSE_SIGNALS;
     source_ = {
         .publish =
             [](void* user_data) {
@@ -322,7 +320,7 @@ class GrowthTest : public ::testing::Test {
   void ReuseDuringGrowth(bool fail_growth, bool return_before_enrollment) {
     uint64_t value = 0;
     uint64_t frontier[3] = {};
-    iree_hal_amd_gpu_pm4_signal_t metadata;
+    iree_hal_amd_gpu_pm4_signal_t metadata = {};
     iree_hal_amd_gpu_pm4_signal_block_t block;
     iree_hal_amd_gpu_pm4_signal_block_initialize(
         &signals_, this, &value, 0x1000, &metadata, 1, 3, frontier, &block);
@@ -718,7 +716,7 @@ TEST_F(GrowthTest, EarlyReuseRetainsGrowthThroughLaterAllocationFailure) {
 TEST_F(GrowthTest, CapacityReturnRacesNativeCompletionWithoutDuplicatingWork) {
   uint64_t value = 0;
   uint64_t frontier[3] = {};
-  iree_hal_amd_gpu_pm4_signal_t metadata;
+  iree_hal_amd_gpu_pm4_signal_t metadata = {};
   iree_hal_amd_gpu_pm4_signal_block_t block;
   iree_hal_amd_gpu_pm4_signal_block_initialize(
       &signals_, this, &value, 0x1000, &metadata, 1, 3, frontier, &block);

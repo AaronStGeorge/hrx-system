@@ -20,7 +20,7 @@ iree_status_t iree_hal_amd_gpu_pm4_kmq_storage_allocate(
   iree_hal_amd_gpu_pm4_kmq_storage_t* storage = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
       host_allocator, sizeof(*storage) + submission_capacity * sizeof(uint64_t),
-      iree_alignof(*storage), 0, (void**)&storage));
+      iree_alignof(iree_hal_amd_gpu_pm4_kmq_storage_t), 0, (void**)&storage));
   *out_storage = storage;
   storage->context = context;
   storage->host_allocator = host_allocator;

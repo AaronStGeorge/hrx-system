@@ -37,7 +37,7 @@ struct Storage {
   // CPU RAM standing in for native control cells; no MMIO is timed.
   std::array<uint64_t, 4> values;
   // Native signal metadata, allocated once for the entire benchmark.
-  std::array<iree_hal_amd_gpu_pm4_signal_t, 4> signals;
+  std::array<iree_hal_amd_gpu_pm4_signal_t, 4> signals = {};
   // Finite backing shared by publication and independent readers.
   iree_hal_amd_gpu_pm4_signal_pool_t pool;
   // Attached native extent and its signal metadata.

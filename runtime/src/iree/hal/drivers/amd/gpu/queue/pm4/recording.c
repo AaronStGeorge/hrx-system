@@ -193,7 +193,8 @@ iree_status_t iree_hal_amd_gpu_pm4_recording_fixup(
   iree_hal_amd_gpu_pm4_recording_fixup_t* entries = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_recording_append(
       recording->host_allocator, &recording->fixups, count * sizeof(*entries),
-      iree_alignof(*entries), &offset, (void**)&entries));
+      iree_alignof(iree_hal_amd_gpu_pm4_recording_fixup_t), &offset,
+      (void**)&entries));
   for (uint32_t i = 0; i < count; ++i) {
     entries[i] = (iree_hal_amd_gpu_pm4_recording_fixup_t){
         .value = {.target_offset = target_offset + i * 4,

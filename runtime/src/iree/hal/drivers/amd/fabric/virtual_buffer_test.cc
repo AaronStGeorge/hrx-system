@@ -247,7 +247,7 @@ TEST_F(MemoryBackendTest, FileTransfersQualifySourcesAfterDeviceOnlyPrefix) {
           iree_hal_semaphore_wait(done, value, iree_infinite_timeout(), 0));
       for (auto* file : files) {
         SCOPED_TRACE(iree_hal_file_async_handle(file) ? "platform" : "memory");
-        iree_hal_amd_fabric_file_transfer_t transfer;
+        iree_hal_amd_fabric_file_transfer_t transfer = {};
         IREE_ASSERT_OK(iree_hal_amd_fabric_file_transfer_initialize(
             file, access, 0, target, 0, 16384, allocator_, &transfer));
         iree_hal_memory_effects_t before, after;

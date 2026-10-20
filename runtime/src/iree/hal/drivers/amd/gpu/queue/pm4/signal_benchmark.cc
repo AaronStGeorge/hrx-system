@@ -27,7 +27,7 @@ struct Storage {
   // CPU-only stand-in for native control storage; no MMIO is timed here.
   std::array<uint64_t, 64> values;
   // Metadata owned by this queue's exclusive publisher.
-  std::array<iree_hal_amd_gpu_pm4_signal_t, 64> signals;
+  std::array<iree_hal_amd_gpu_pm4_signal_t, 64> signals = {};
   // Finite pool with one acquiring publisher and concurrent final returns.
   iree_hal_amd_gpu_pm4_signal_pool_t pool;
   // Attached native extent and its signal metadata.
@@ -73,7 +73,7 @@ void BM_Frontier(benchmark::State& state) {
   std::vector<uint64_t> target(queue_count, 0);
   std::vector<uint64_t> snapshot(queue_count);
   uint64_t value = 0;
-  iree_hal_amd_gpu_pm4_signal_t metadata;
+  iree_hal_amd_gpu_pm4_signal_t metadata = {};
   iree_hal_amd_gpu_pm4_signal_pool_t pool;
   // Attached native extent and its signal metadata.
   iree_hal_amd_gpu_pm4_signal_block_t block;

@@ -93,7 +93,7 @@ TEST_P(SubmissionTest, PayloadRetiresBeforePublicCompletion) {
       &profile_, nullptr, 0, &capture));
   uint64_t native_value = 0;
   uint64_t native_frontier = 0;
-  iree_hal_amd_gpu_pm4_signal_t native_signal;
+  iree_hal_amd_gpu_pm4_signal_t native_signal = {};
   iree_hal_amd_gpu_pm4_signal_pool_t signal_pool;
   iree_hal_amd_gpu_pm4_signal_block_t signal_block;
   iree_hal_amd_gpu_pm4_signal_pool_initialize({}, &signal_pool);
@@ -184,7 +184,7 @@ TEST_P(SubmissionTest, RetirementOwnsNativeReadersWithoutCallerInputs) {
   IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_create(
       proactor, 0, 4, iree_allocator_system(), &semaphore));
   uint64_t native_value = 0, native_frontier = 1;
-  iree_hal_amd_gpu_pm4_signal_t native_signal;
+  iree_hal_amd_gpu_pm4_signal_t native_signal = {};
   iree_hal_amd_gpu_pm4_signal_pool_t signal_pool;
   iree_hal_amd_gpu_pm4_signal_block_t signal_block;
   iree_hal_amd_gpu_pm4_signal_pool_initialize({}, &signal_pool);
@@ -408,7 +408,7 @@ TEST_P(SubmissionTest, FailedDependencyStillJoinsOtherProducers) {
   std::array<uint64_t, 2> values = {1, 1};
   std::array<uint64_t, 2> native_values = {};
   std::array<uint64_t, 2> native_frontiers = {};
-  std::array<iree_hal_amd_gpu_pm4_signal_t, 2> native_signals;
+  std::array<iree_hal_amd_gpu_pm4_signal_t, 2> native_signals = {};
   iree_hal_amd_gpu_pm4_signal_pool_t signal_pool;
   iree_hal_amd_gpu_pm4_signal_block_t signal_block;
   iree_hal_amd_gpu_pm4_signal_pool_initialize({}, &signal_pool);

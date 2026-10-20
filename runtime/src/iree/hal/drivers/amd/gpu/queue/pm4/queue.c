@@ -84,11 +84,14 @@ typedef struct iree_hal_amd_gpu_pm4_retirement_slot_t {
   iree_hal_amd_gpu_pm4_retirement_t action;
   // Exclusively held through publication, including KERNEL capacity deferral,
   // and final retirement. The action's alignment also aligns this span.
-  iree_alignas(
-      iree_alignof(iree_hal_amd_gpu_pm4_submission_t)) uint8_t capture[448];
+  uint8_t capture[448];
 } iree_hal_amd_gpu_pm4_retirement_slot_t;
 static_assert(sizeof(iree_hal_amd_gpu_pm4_retirement_slot_t) == 512,
               "retirement slots have a power-of-two stride");
+static_assert(offsetof(iree_hal_amd_gpu_pm4_retirement_slot_t, capture) %
+                      iree_alignof(iree_hal_amd_gpu_pm4_submission_t) ==
+                  0,
+              "retirement actions preserve capture alignment");
 
 struct iree_hal_amd_gpu_pm4_queue_t {
   // Refcounted exact HAL queue; its family/device remain borrowed.
@@ -2441,7 +2444,8 @@ iree_status_t iree_hal_amd_gpu_pm4_queue_create(
   }
   iree_hal_amd_gpu_pm4_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      host_allocator, total_size, iree_alignof(*queue), 0, (void**)&queue));
+      host_allocator, total_size, iree_alignof(iree_hal_amd_gpu_pm4_queue_t), 0,
+      (void**)&queue));
   queue->host_allocator = host_allocator;
   queue->context = context;
   queue->storage.context = context;

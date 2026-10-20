@@ -34,22 +34,21 @@ class QueueTest : public ::testing::Test {
     iree_hal_amd_gpu_sdma_retirement_t retirement =
         IREE_HAL_AMD_GPU_SDMA_UNRETIRED;
 
-    Copy() {
-      operation = {
-          .source = 0x100000,
-          .target = 0x200000,
-          .length = 4096,
-          .notify =
-              [](void* user_data, amdf_status_t status,
-                 iree_hal_amd_gpu_sdma_retirement_t retirement) {
-                auto* self = static_cast<Copy*>(user_data);
-                ++self->notifications;
-                self->status = status;
-                self->retirement = retirement;
-              },
-          .user_data = this,
-      };
-    }
+    Copy()
+        : operation{
+              .source = 0x100000,
+              .target = 0x200000,
+              .length = 4096,
+              .notify =
+                  [](void* user_data, amdf_status_t status,
+                     iree_hal_amd_gpu_sdma_retirement_t retirement) {
+                    auto* self = static_cast<Copy*>(user_data);
+                    ++self->notifications;
+                    self->status = status;
+                    self->retirement = retirement;
+                  },
+              .user_data = this,
+          } {}
   };
 
   void SetUp() override {

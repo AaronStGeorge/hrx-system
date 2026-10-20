@@ -571,7 +571,8 @@ iree_status_t iree_hal_amd_gpu_sdma_queue_allocate(
   *out_queue = NULL;
   iree_hal_amd_gpu_sdma_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      host_allocator, sizeof(*queue), iree_alignof(*queue), 0, (void**)&queue));
+      host_allocator, sizeof(*queue),
+      iree_alignof(iree_hal_amd_gpu_sdma_queue_t), 0, (void**)&queue));
   memset(queue, 0, sizeof(*queue));
   queue->context = context;
   queue->host_allocator = host_allocator;

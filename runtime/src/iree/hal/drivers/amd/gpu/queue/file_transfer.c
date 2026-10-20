@@ -402,9 +402,9 @@ iree_status_t iree_hal_amd_gpu_file_transfer_submit(
                              : 0),
       &total_size,
       IREE_STRUCT_FIELD_ALIGNED(executor->barrier_size, uint8_t,
-                                iree_alignof(iree_max_align_t), &before_offset),
+                                iree_max_align_t, &before_offset),
       IREE_STRUCT_FIELD_ALIGNED(executor->barrier_size, uint8_t,
-                                iree_alignof(iree_max_align_t), &after_offset),
+                                iree_max_align_t, &after_offset),
       IREE_STRUCT_FIELD_ALIGNED(waits.count, uint64_t, iree_alignof(uint64_t),
                                 &wait_values_offset),
       IREE_STRUCT_FIELD_ALIGNED(waits.count, iree_hal_semaphore_t*,
@@ -415,8 +415,7 @@ iree_status_t iree_hal_amd_gpu_file_transfer_submit(
       IREE_STRUCT_FIELD_ALIGNED(signals.count, iree_hal_semaphore_t*,
                                 iree_alignof(iree_hal_semaphore_t*),
                                 &signal_semaphores_offset),
-      IREE_STRUCT_FIELD_ALIGNED(tracker_size, uint8_t,
-                                iree_alignof(iree_max_align_t),
+      IREE_STRUCT_FIELD_ALIGNED(tracker_size, uint8_t, iree_max_align_t,
                                 &tracker_offset)));
   iree_byte_span_t storage = iree_byte_span_empty();
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_capture_pool_acquire(

@@ -307,12 +307,10 @@ class FileTransferTest : public ::testing::TestWithParam<
 
   void PrepareIndependentRequests() {
     ASSERT_NO_FATAL_FAILURE(Initialize());
-    request_region_ = {
-        .proactor = &provider_.proactor,
-        .base_ptr = storage_.contents.data() + kNativeOffset,
-        .length = kLength,
-        .buffer_size = kLength / 2,
-    };
+    request_region_.proactor = &provider_.proactor;
+    request_region_.base_ptr = storage_.contents.data() + kNativeOffset;
+    request_region_.length = kLength;
+    request_region_.buffer_size = kLength / 2;
     for (size_t i = 0; i < requests_.size(); ++i) {
       const size_t offset = i * request_region_.buffer_size;
       IREE_ASSERT_OK(iree_hal_amd_fabric_file_request_prepare(
