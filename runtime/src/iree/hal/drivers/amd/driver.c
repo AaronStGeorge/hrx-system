@@ -52,6 +52,8 @@ typedef struct iree_hal_amd_driver_t {
   uint32_t* endpoint_schemes;
   // Immutable selections captured with the driver, independent for each scheme.
   iree_hal_amd_driver_view_t views[IREE_ARRAYSIZE(iree_hal_amd_driver_schemes)];
+  // Native-order union of endpoints exposed by at least one selected scheme.
+  iree_hal_amd_driver_view_t all_view;
 } iree_hal_amd_driver_t;
 
 static const iree_hal_driver_vtable_t iree_hal_amd_driver_vtable;
@@ -97,7 +99,8 @@ static iree_status_t iree_hal_amd_driver_select_view(
     const iree_hal_amd_driver_t* driver, iree_string_view_t driver_name,
     const iree_hal_amd_driver_view_t** out_view) {
   if (iree_string_view_is_empty(driver_name)) {
-    driver_name = IREE_SV("xdna");
+    *out_view = &driver->all_view;
+    return iree_ok_status();
   }
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(driver->views); ++i) {
     if (iree_string_view_equal(driver_name,
@@ -114,7 +117,8 @@ static iree_status_t iree_hal_amd_driver_select_view(
 // Captures architecture and compute support through query-only handles. This
 // creates no native device, address space, queue, or event.
 static iree_status_t iree_hal_amd_driver_query_endpoint_support(
-    iree_hal_amd_fabric_t* fabric, const amdf_endpoint_summary_t* summary,
+    iree_hal_amd_fabric_t* fabric, const amdf_gpu_api_t* gpu,
+    const amdf_endpoint_summary_t* summary,
     amdf_gpu_architecture_t* out_architecture, bool* out_supported) {
   *out_architecture = AMDF_GPU_ARCHITECTURE_UNKNOWN;
   *out_supported = false;
@@ -122,13 +126,6 @@ static iree_status_t iree_hal_amd_driver_query_endpoint_support(
     *out_supported = summary->engine_kind == AMDF_ENGINE_KIND_XDNA;
     return iree_ok_status();
   }
-  const void* extension = NULL;
-  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      fabric->api->query_extension(
-          AMDF_EXTENSION_GPU, AMDF_GPU_EXTENSION_VERSION_1,
-          AMDF_GPU_EXTENSION_VERSION_LATEST, &extension),
-      "query_extension(GPU)"));
-  const amdf_gpu_api_t* gpu = extension;
   amdf_endpoint_t* endpoint = NULL;
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       fabric->api->endpoint_open(fabric->instance, &summary->id, &endpoint),
@@ -445,7 +442,7 @@ static iree_status_t iree_hal_amd_driver_initialize_views(
     iree_host_size_t size = 0, indices_offset = 0;
     IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
         0, &size, IREE_STRUCT_FIELD_FAM(endpoint_count, uint32_t),
-        IREE_STRUCT_FIELD(endpoint_count * IREE_ARRAYSIZE(driver->views),
+        IREE_STRUCT_FIELD(endpoint_count * (IREE_ARRAYSIZE(driver->views) + 1),
                           uint32_t, &indices_offset)));
     IREE_RETURN_IF_ERROR(iree_allocator_malloc(
         driver->host_allocator, size, (void**)&driver->endpoint_schemes));
@@ -454,15 +451,30 @@ static iree_status_t iree_hal_amd_driver_initialize_views(
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(driver->views); ++i) {
       driver->views[i].indices = indices + endpoint_count * i;
     }
+    driver->all_view.indices =
+        indices + endpoint_count * IREE_ARRAYSIZE(driver->views);
   }
 
   iree_status_t status = iree_ok_status();
+  const amdf_gpu_api_t* gpu = NULL;
+  for (uint32_t i = 0; i < endpoint_count && !gpu; ++i) {
+    if (driver->fabric->endpoints[i].engine_kind != AMDF_ENGINE_KIND_GPU) {
+      continue;
+    }
+    const void* extension = NULL;
+    status = IREE_HAL_AMD_STATUS_FROM_AMDF(
+        driver->fabric->api->query_extension(
+            AMDF_EXTENSION_GPU, AMDF_GPU_EXTENSION_VERSION_1,
+            AMDF_GPU_EXTENSION_VERSION_LATEST, &extension),
+        "query_extension(GPU)");
+    gpu = extension;
+  }
   for (uint32_t i = 0; i < endpoint_count && iree_status_is_ok(status); ++i) {
     const amdf_endpoint_summary_t* endpoint = &driver->fabric->endpoints[i];
     amdf_gpu_architecture_t architecture = AMDF_GPU_ARCHITECTURE_UNKNOWN;
     bool supported = false;
     status = iree_hal_amd_driver_query_endpoint_support(
-        driver->fabric, endpoint, &architecture, &supported);
+        driver->fabric, gpu, endpoint, &architecture, &supported);
     if (!supported) {
       continue;
     }
@@ -483,6 +495,25 @@ static iree_status_t iree_hal_amd_driver_initialize_views(
     status = iree_hal_amd_driver_apply_visibility(
         iree_hal_amd_driver_schemes[i].visibility_variable,
         driver->host_allocator, &driver->views[i]);
+  }
+  if (iree_status_is_ok(status)) {
+    // Mark every endpoint retained by any independent scheme, then compact the
+    // markers in native order. The output prefix never reaches an unread
+    // marker.
+    for (uint32_t i = 0; i < endpoint_count; ++i) {
+      driver->all_view.indices[i] = 0;
+    }
+    for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(driver->views); ++i) {
+      const iree_hal_amd_driver_view_t* view = &driver->views[i];
+      for (uint32_t j = 0; j < view->count; ++j) {
+        driver->all_view.indices[view->indices[j]] = 1;
+      }
+    }
+    for (uint32_t i = 0; i < endpoint_count; ++i) {
+      if (driver->all_view.indices[i]) {
+        driver->all_view.indices[driver->all_view.count++] = i;
+      }
+    }
   }
   return status;
 }

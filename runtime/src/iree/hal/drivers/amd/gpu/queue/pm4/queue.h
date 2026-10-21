@@ -73,6 +73,10 @@ typedef struct iree_hal_amd_gpu_pm4_queue_options_t {
 amdf_queue_publication_modes_t iree_hal_amd_gpu_pm4_queue_publication_modes(
     const amdf_queue_family_info_t* native);
 
+// Returns true when this host can satisfy the PM4 publication memory model.
+// This cold query performs no native calls or allocation.
+bool iree_hal_amd_gpu_pm4_queue_host_is_supported(void);
+
 // Creates one exact refcounted HAL queue. Context, family, and publication are
 // borrowed from its parent device. Cold construction joins typed native backing
 // acquisitions on its caller. The parent registers both publication_source and

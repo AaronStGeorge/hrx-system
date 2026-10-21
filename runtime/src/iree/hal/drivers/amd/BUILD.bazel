@@ -57,6 +57,10 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "driver_test",
     srcs = ["driver_test.cc"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_amd": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":driver",
         "//libamdf:headers",

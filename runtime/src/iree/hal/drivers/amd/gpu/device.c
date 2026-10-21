@@ -162,6 +162,9 @@ iree_status_t iree_hal_amd_gpu_device_query_support(const amdf_api_t* api,
                                                     amdf_endpoint_t* endpoint,
                                                     bool* out_supported) {
   *out_supported = false;
+  if (!iree_hal_amd_gpu_pm4_queue_host_is_supported()) {
+    return iree_ok_status();
+  }
   amdf_endpoint_info_t info = {
       .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
       .structure_size = sizeof(info),

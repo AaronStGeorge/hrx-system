@@ -129,6 +129,8 @@ struct NativeInstance {
   uint32_t open_count = 0;
   // Number of passive opens across discovery and device construction.
   uint32_t query_count = 0;
+  // Number of GPU extension negotiations during passive discovery.
+  uint32_t extension_query_count = 0;
   // Number of instance creations through this fake dependency.
   uint32_t instance_count = 0;
   // Number of explicit device activation attempts.
@@ -243,6 +245,7 @@ amdf_status_t AMDF_CALL CreateGpu(amdf_endpoint_t* endpoint,
 amdf_status_t AMDF_CALL QueryExtension(amdf_extension_id_t extension,
                                        uint32_t minimum, uint32_t maximum,
                                        const void** out_api) {
+  ++NativeInstance::current->extension_query_count;
   EXPECT_EQ(extension, AMDF_EXTENSION_GPU);
   EXPECT_LE(minimum, AMDF_GPU_EXTENSION_VERSION_LATEST);
   EXPECT_GE(maximum, AMDF_GPU_EXTENSION_VERSION_LATEST);
@@ -359,7 +362,10 @@ TEST_F(DriverTest, EnumerationQualifiesComputeBeforeAdvertisingEndpoints) {
   EXPECT_EQ(Enumerate(IREE_SV("amdgpu2")),
             (std::vector<iree_hal_device_id_t>{2, 4}));
   EXPECT_EQ(Enumerate(IREE_SV("xdna")), (std::vector<iree_hal_device_id_t>{5}));
+  EXPECT_EQ(Enumerate(IREE_SV("")),
+            (std::vector<iree_hal_device_id_t>{2, 4, 5}));
   EXPECT_EQ(native_.query_count, query_count);
+  EXPECT_EQ(native_.extension_query_count, 1u);
 }
 
 TEST_F(DriverTest, DefaultOrdinalAndIdentityUseTheSameExecutableSet) {
@@ -420,6 +426,8 @@ TEST_F(DriverTest, SchemeViewsReorderTheirOwnUnmaskedOrdinalsIndependently) {
   EXPECT_EQ(Enumerate(IREE_SV("amdgpu2")),
             (std::vector<iree_hal_device_id_t>{2}));
   EXPECT_EQ(Enumerate(IREE_SV("xdna")), (std::vector<iree_hal_device_id_t>{5}));
+  EXPECT_EQ(Enumerate(IREE_SV("")),
+            (std::vector<iree_hal_device_id_t>{2, 4, 5}));
   CreatePath(IREE_SV(""), IREE_STATUS_RESOURCE_EXHAUSTED, 4);
   CreatePath(IREE_SV("1"), IREE_STATUS_RESOURCE_EXHAUSTED, 2);
   CreatePath(IREE_SV("0"), IREE_STATUS_RESOURCE_EXHAUSTED, 2,
@@ -449,6 +457,7 @@ TEST_F(DriverTest, EmptyVisibilityHidesOnlyItsScheme) {
   EXPECT_TRUE(Enumerate(IREE_SV("xdna")).empty());
   EXPECT_EQ(Enumerate(IREE_SV("amdgpu2")),
             (std::vector<iree_hal_device_id_t>{2, 4}));
+  EXPECT_EQ(Enumerate(IREE_SV("")), (std::vector<iree_hal_device_id_t>{2, 4}));
   CreatePath(IREE_SV(""), IREE_STATUS_NOT_FOUND, 0);
   CreatePath(IREE_SV(""), IREE_STATUS_NOT_FOUND, 0, IREE_SV("xdna"));
   CreatePath(IREE_SV("id/00000000000000040000000000000000"),
@@ -489,6 +498,12 @@ TEST_F(DriverTest, GenericOrdinalCreationUsesTheVisibleSchemeOrder) {
                             iree_allocator_system(), &device));
   EXPECT_EQ(device, nullptr);
   EXPECT_EQ(native_.activated.words[0], 2u);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_driver_create_device_by_ordinal(
+                            driver_, IREE_SV(""), 1, 0, nullptr, &params,
+                            iree_allocator_system(), &device));
+  EXPECT_EQ(device, nullptr);
+  EXPECT_EQ(native_.activated.words[0], 4u);
 }
 
 class InvalidVisibilityTest

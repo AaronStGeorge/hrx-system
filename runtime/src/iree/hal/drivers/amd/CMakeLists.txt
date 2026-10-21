@@ -65,7 +65,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(AMDF_BUILD AND IREE_HAL_DRIVER_AMD)
 iree_cc_test(
   NAME
     driver_test
