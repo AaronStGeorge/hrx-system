@@ -322,8 +322,9 @@ iree_hal_profile_executable_code_object_record_default(void) {
 //
 // Hardware trace decoders use |load_delta|, not the process virtual load base,
 // to translate runtime PCs into code-object virtual addresses. Producers should
-// emit one load record for each physical device where |code_object_id| was
-// loaded.
+// emit one load record for each native placement of |code_object_id|. The same
+// image can have multiple placements on one device, such as queue-private
+// instances of instrumented code.
 typedef struct iree_hal_profile_executable_code_object_load_record_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;

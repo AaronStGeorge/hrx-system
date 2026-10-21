@@ -164,6 +164,10 @@ typedef struct iree_hal_amd_gpu_image_t {
   iree_hal_amd_gpu_target_identity_t target;
   // AMDHSA code-object ABI version, independent of the serialized frontend.
   uint32_t code_object_version;
+  // Original virtual address corresponding to normalized image offset zero.
+  // Runtime PCs translate to artifact addresses by subtracting the load base
+  // and adding this origin, including for nonzero linked virtual addresses.
+  uint64_t virtual_base;
   // Minimum linked virtual extent, including gaps. The native storage owner
   // adds any device-specific speculative instruction-fetch/prefetch padding.
   uint64_t byte_length;

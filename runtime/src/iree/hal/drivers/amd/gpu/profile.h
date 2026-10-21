@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_AMD_GPU_PROFILE_H_
 
 #include "iree/hal/api.h"
+#include "iree/hal/drivers/amd/gpu/image/image.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,14 +20,21 @@ extern "C" {
 // sink.
 typedef struct iree_hal_amd_gpu_profile_t iree_hal_amd_gpu_profile_t;
 
-// Host-only reflection independent of executable code and native allocations.
+// Host-only reflection and original artifact bytes, independent of native
+// executable allocations.
 // Captured events may retain this resource until a later explicit flush without
 // retaining the executable or any of its device memory.
 typedef struct iree_hal_amd_gpu_profile_executable_t
     iree_hal_amd_gpu_profile_executable_t;
 
+// Captures the admitted image and its native placements without retaining the
+// executable. The native executable loader supplies a contiguous image source;
+// metadata shares that host storage and copies the load addresses. All
+// addresses refer to normalized image offset zero on this device.
 iree_status_t iree_hal_amd_gpu_profile_executable_create(
-    iree_hal_executable_t* executable, iree_allocator_t host_allocator,
+    iree_hal_executable_t* executable, const iree_hal_amd_gpu_image_t* image,
+    uint32_t load_count, const uint64_t* load_addresses,
+    iree_allocator_t host_allocator,
     iree_hal_amd_gpu_profile_executable_t** out_metadata);
 void iree_hal_amd_gpu_profile_executable_retain(
     iree_hal_amd_gpu_profile_executable_t* metadata);

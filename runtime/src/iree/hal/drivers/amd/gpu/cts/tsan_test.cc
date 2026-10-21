@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "iree/hal/api.h"
+#include "iree/hal/cts/util/profile_test_util.h"
 #include "iree/hal/drivers/amd/gpu/cts/test_device.h"
 #include "iree/hal/drivers/amd/gpu/cts/tsan_images.h"
 #include "iree/testing/gtest.h"
@@ -243,6 +244,43 @@ TEST_P(GpuTsanTest, SharedRecordingSelectsQueueShadowAndJoinsArenaReuse) {
     ASSERT_EQ(capacity_reports_.load(), 0u);
     ASSERT_EQ(errors_.load(), 0u);
   }
+}
+
+TEST_P(GpuTsanTest, ProfileSharesOriginalImageAcrossQueuePlacements) {
+  ASSERT_NO_FATAL_FAILURE(
+      Load(IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_REPORT_ONLY));
+  iree::hal::cts::TestProfileSink sink;
+  iree::hal::cts::TestProfileSinkInitialize(&sink);
+  iree::hal::cts::DeviceProfilingScope profile(device_);
+  IREE_ASSERT_OK(
+      profile.Begin(IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA,
+                    iree::hal::cts::TestProfileSinkAsBase(&sink)));
+  uint64_t one = 1;
+  for (uint32_t queue = 0; queue < 2; ++queue) {
+    ASSERT_NO_FATAL_FAILURE(Dispatch(queue, safe_, one));
+    IREE_ASSERT_OK(
+        iree_hal_semaphore_wait(done_[queue], one, iree_infinite_timeout(), 0));
+  }
+  iree_hal_executable_release(executable_);
+  executable_ = nullptr;
+  IREE_ASSERT_OK(profile.End());
+  ASSERT_EQ(sink.code_objects.size(), 1u);
+  ASSERT_EQ(sink.code_object_loads.size(), 2u);
+  const auto& artifact = sink.code_objects[0];
+  ASSERT_EQ(artifact.data.size(), artifact_.data_length);
+  EXPECT_EQ(
+      std::memcmp(artifact.data.data(), artifact_.data, artifact.data.size()),
+      0);
+  EXPECT_NE(sink.code_object_loads[0].load_delta,
+            sink.code_object_loads[1].load_delta);
+  for (const auto& load : sink.code_object_loads) {
+    EXPECT_EQ(load.executable_id, artifact.record.executable_id);
+    EXPECT_EQ(load.code_object_id, artifact.record.code_object_id);
+    EXPECT_EQ(load.physical_device_ordinal, 0u);
+    EXPECT_GT(load.load_size, 0u);
+  }
+  EXPECT_EQ(reports_.load(), 0u);
+  EXPECT_EQ(errors_.load(), 0u);
 }
 
 TEST_P(GpuTsanTest, ReportFailurePropagatesWithoutAbandoningNativeRetirement) {

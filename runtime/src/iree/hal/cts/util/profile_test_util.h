@@ -111,6 +111,20 @@ struct TestProfileSink {
   // Executable identifiers copied from EXECUTABLES chunks.
   std::vector<uint64_t> executable_ids;
 
+  struct CodeObject {
+    // Identity and declared payload length copied from the image record.
+    iree_hal_profile_executable_code_object_record_t record;
+    // Exact original artifact bytes, independent of producer lifetime.
+    std::vector<uint8_t> data;
+  };
+
+  // Original artifacts copied from EXECUTABLE_CODE_OBJECTS chunks.
+  std::vector<CodeObject> code_objects;
+
+  // Native placements copied from EXECUTABLE_CODE_OBJECT_LOADS chunks.
+  std::vector<iree_hal_profile_executable_code_object_load_record_t>
+      code_object_loads;
+
   // Executable identifiers referenced by EXECUTABLE_FUNCTIONS chunks.
   std::vector<uint64_t> function_record_executable_ids;
 

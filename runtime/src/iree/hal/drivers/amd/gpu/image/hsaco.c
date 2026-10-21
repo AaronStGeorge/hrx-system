@@ -58,8 +58,6 @@ typedef struct iree_hal_amd_gpu_hsaco_reader_t {
   iree_const_byte_span_t contiguous;
   // Source byte length, including non-loadable diagnostic sections.
   uint64_t source_length;
-  // Aligned original virtual base subtracted from normalized image offsets.
-  uint64_t virtual_base;
   // Program-header count established at the ELF boundary.
   uint32_t program_count;
   // Borrowed or gathered program-header bytes.
@@ -154,20 +152,19 @@ static bool iree_hal_amd_gpu_hsaco_find_segment(
 }
 
 static iree_status_t iree_hal_amd_gpu_hsaco_source_for_address(
-    const iree_hal_amd_gpu_hsaco_reader_t* reader,
     const iree_hal_amd_gpu_image_t* image, uint64_t address, uint64_t length,
     uint64_t* out_offset, uint64_t* out_available) {
   uint32_t ordinal = 0;
-  if (address < reader->virtual_base ||
-      !iree_hal_amd_gpu_hsaco_find_segment(
-          image, address - reader->virtual_base, length, true, &ordinal)) {
+  if (address < image->virtual_base ||
+      !iree_hal_amd_gpu_hsaco_find_segment(image, address - image->virtual_base,
+                                           length, true, &ordinal)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HSACO virtual range [0x%" PRIx64 ", +0x%" PRIx64
                             ") is not file-backed",
                             address, length);
   }
   const iree_hal_amd_gpu_image_segment_t* segment = &image->segments[ordinal];
-  uint64_t local_offset = address - reader->virtual_base - segment->offset;
+  uint64_t local_offset = address - image->virtual_base - segment->offset;
   *out_offset = segment->source_offset + local_offset;
   if (out_available) {
     *out_available = segment->source_length - local_offset;
@@ -181,7 +178,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_read_address_blob(
     iree_const_byte_span_t* out_span, void** out_storage) {
   uint64_t offset = 0;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_hsaco_source_for_address(
-      reader, image, address, length, &offset, NULL));
+      image, address, length, &offset, NULL));
   return iree_hal_amd_gpu_hsaco_read_blob(reader, offset, length, out_span,
                                           out_storage);
 }
@@ -311,8 +308,8 @@ static iree_status_t iree_hal_amd_gpu_hsaco_read_programs(
   }
   qsort(reader->segments, image->segment_count, sizeof(*reader->segments),
         iree_hal_amd_gpu_hsaco_compare_segments);
-  reader->virtual_base = reader->segments[0].offset & ~(image->alignment - 1);
-  uint64_t previous_end = reader->virtual_base;
+  image->virtual_base = reader->segments[0].offset & ~(image->alignment - 1);
+  uint64_t previous_end = image->virtual_base;
   for (iree_host_size_t i = 0; i < image->segment_count; ++i) {
     iree_hal_amd_gpu_image_segment_t* segment = &reader->segments[i];
     if (segment->offset < previous_end) {
@@ -320,9 +317,9 @@ static iree_status_t iree_hal_amd_gpu_hsaco_read_programs(
                               "HSACO load segments overlap in virtual memory");
     }
     previous_end = segment->offset + segment->length;
-    segment->offset -= reader->virtual_base;
+    segment->offset -= image->virtual_base;
   }
-  image->byte_length = previous_end - reader->virtual_base;
+  image->byte_length = previous_end - image->virtual_base;
   return iree_hal_amd_gpu_hsaco_read_blob(
       reader, dynamic_range.offset, dynamic_range.length,
       &reader->dynamic_entries, &reader->dynamic_storage);
@@ -477,7 +474,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_count_gnu_symbols(
   uint64_t source_offset = 0;
   uint64_t available = 0;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_hsaco_source_for_address(
-      reader, image, reader->dynamic.gnu_hash, 16, &source_offset, &available));
+      image, reader->dynamic.gnu_hash, 16, &source_offset, &available));
   uint8_t header[16];
   IREE_RETURN_IF_ERROR(
       iree_byte_sequence_read(reader->source, source_offset,
@@ -538,7 +535,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_read_symbol_tables(
   if (reader->dynamic.hash) {
     uint64_t source_offset = 0;
     IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_hsaco_source_for_address(
-        reader, image, reader->dynamic.hash, 8, &source_offset, NULL));
+        image, reader->dynamic.hash, 8, &source_offset, NULL));
     uint8_t header[8];
     IREE_RETURN_IF_ERROR(
         iree_byte_sequence_read(reader->source, source_offset,
@@ -550,7 +547,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_read_symbol_tables(
                               "HSACO System V hash table is empty");
     }
     IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_hsaco_source_for_address(
-        reader, image, reader->dynamic.hash,
+        image, reader->dynamic.hash,
         8 + ((uint64_t)bucket_count + reader->symbol_count) * 4, &source_offset,
         NULL));
   } else {
@@ -609,7 +606,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_read_reflection(
     iree_hal_amd_gpu_hsaco_reader_t* reader, iree_hal_amd_gpu_image_t* image) {
   uint64_t strings_offset = 0;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_hsaco_source_for_address(
-      reader, image, reader->dynamic.strings, reader->dynamic.string_length,
+      image, reader->dynamic.strings, reader->dynamic.string_length,
       &strings_offset, NULL));
   uint64_t total_length = reader->dynamic.string_length;
   for (uint32_t i = 0; i < reader->program_count; ++i) {
@@ -892,10 +889,9 @@ static iree_status_t iree_hal_amd_gpu_hsaco_decode_symbols(
       address.offset = value;
     } else {
       uint32_t segment_ordinal = 0;
-      if (value < reader->virtual_base ||
-          !iree_hal_amd_gpu_hsaco_find_segment(
-              image, value - reader->virtual_base, length, false,
-              &segment_ordinal)) {
+      if (value < image->virtual_base || !iree_hal_amd_gpu_hsaco_find_segment(
+                                             image, value - image->virtual_base,
+                                             length, false, &segment_ordinal)) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "HSACO symbol `%.*s` exceeds loadable memory",
                                 (int)name.size, name.data);
@@ -907,7 +903,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_decode_symbols(
                                 (int)name.size, name.data);
       }
       address.kind = IREE_HAL_AMD_GPU_IMAGE_ADDRESS_IMAGE;
-      address.offset = value - reader->virtual_base;
+      address.offset = value - image->virtual_base;
       access = image->segments[segment_ordinal].access;
     }
     reader->symbol_addresses[i] = address;
@@ -1009,14 +1005,14 @@ static iree_status_t iree_hal_amd_gpu_hsaco_decode_relocations(
                                 "supported runtime relocation",
                                 type);
     }
-    if (address < reader->virtual_base ||
+    if (address < image->virtual_base ||
         !iree_hal_amd_gpu_hsaco_find_segment(
-            image, address - reader->virtual_base, width, false,
+            image, address - image->virtual_base, width, false,
             &relocation.segment_ordinal)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "HSACO relocation exceeds loadable memory");
     }
-    relocation.offset = address - reader->virtual_base -
+    relocation.offset = address - image->virtual_base -
                         image->segments[relocation.segment_ordinal].offset;
     if (type == 13) {
       if (symbol) {
@@ -1024,7 +1020,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_decode_relocations(
                                 "HSACO relative relocation names a symbol");
       }
       relocation.value.kind = IREE_HAL_AMD_GPU_IMAGE_ADDRESS_IMAGE;
-      relocation.value.offset = addend - reader->virtual_base;
+      relocation.value.offset = addend - image->virtual_base;
     } else {
       if (symbol >= reader->symbol_count) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1215,7 +1211,7 @@ static iree_status_t iree_hal_amd_gpu_hsaco_decode_kernels(
     image->kernels[i].descriptor_offset = symbol->address.offset;
     descriptors[i].ordinal = i;
     status = iree_hal_amd_gpu_hsaco_source_for_address(
-        reader, image, symbol->address.offset + reader->virtual_base,
+        image, symbol->address.offset + image->virtual_base,
         IREE_HAL_AMD_GPU_HSACO_DESCRIPTOR_SIZE, &descriptors[i].source_offset,
         NULL);
   }

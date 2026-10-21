@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -37,6 +38,12 @@ struct ProfileSink {
   std::vector<std::string> functions;
   // Host recording identities retained independently of native IBs.
   std::vector<uint64_t> commands;
+  // Original code-object records and their payloads, copied at the sink.
+  std::vector<iree_hal_profile_executable_code_object_record_t> code_objects;
+  // Image bytes corresponding to code_objects in emission order.
+  std::vector<std::vector<uint8_t>> images;
+  // Every native placement sharing an emitted image.
+  std::vector<iree_hal_profile_executable_code_object_load_record_t> loads;
   // Metadata loss with an unknown number of missing unique executables.
   size_t incomplete_metadata = 0;
   // Optional producer work during a sink write, exercising lock separation.
@@ -51,6 +58,8 @@ struct ProfileSink {
   iree_status_code_t end_status = IREE_STATUS_OK;
   // Dependency failure injected at the sink boundary.
   bool fail_write = false;
+  // Optional content type at which a write fails after earlier chunks succeed.
+  iree_string_view_t fail_content_type = {};
 
   iree_hal_profile_sink_t* base() {
     return reinterpret_cast<iree_hal_profile_sink_t*>(this);
@@ -75,7 +84,8 @@ struct ProfileSink {
                              iree_host_size_t count,
                              const iree_const_byte_span_t* spans) {
     auto& sink = *reinterpret_cast<ProfileSink*>(base);
-    if (sink.fail_write) {
+    if (sink.fail_write || iree_string_view_equal(metadata->content_type,
+                                                  sink.fail_content_type)) {
       return iree_status_from_code(IREE_STATUS_DATA_LOSS);
     }
     if (sink.during_write) {
@@ -83,6 +93,17 @@ struct ProfileSink {
       callback();
     }
     EXPECT_EQ(sink.begins, sink.ends + 1);
+    std::vector<uint8_t> contents;
+    iree_const_byte_span_t joined;
+    if (count > 1) {
+      for (iree_host_size_t i = 0; i < count; ++i) {
+        contents.insert(contents.end(), spans[i].data,
+                        spans[i].data + spans[i].data_length);
+      }
+      joined = iree_make_const_byte_span(contents.data(), contents.size());
+      spans = &joined;
+      count = 1;
+    }
     for (iree_host_size_t i = 0; i < count; ++i) {
       if (iree_string_view_equal(metadata->content_type,
                                  IREE_HAL_PROFILE_CONTENT_TYPE_QUEUE_EVENTS)) {
@@ -127,6 +148,26 @@ struct ProfileSink {
         }
       } else if (iree_string_view_equal(
                      metadata->content_type,
+                     IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_CODE_OBJECTS)) {
+        iree_hal_profile_executable_code_object_record_t record;
+        std::memcpy(&record, spans[i].data, sizeof(record));
+        EXPECT_EQ(record.record_length, spans[i].data_length);
+        EXPECT_EQ(record.data_length, spans[i].data_length - sizeof(record));
+        sink.code_objects.push_back(record);
+        sink.images.emplace_back(spans[i].data + sizeof(record),
+                                 spans[i].data + spans[i].data_length);
+      } else if (
+          iree_string_view_equal(
+              metadata->content_type,
+              IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_CODE_OBJECT_LOADS)) {
+        for (size_t offset = 0; offset < spans[i].data_length;) {
+          iree_hal_profile_executable_code_object_load_record_t record;
+          std::memcpy(&record, spans[i].data + offset, sizeof(record));
+          sink.loads.push_back(record);
+          offset += record.record_length;
+        }
+      } else if (iree_string_view_equal(
+                     metadata->content_type,
                      IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_BUFFERS)) {
         auto* record =
             reinterpret_cast<const iree_hal_profile_command_buffer_record_t*>(
@@ -166,6 +207,48 @@ struct ProfileSink {
   }
 };
 
+// Opaque artifact dependency with a separately observable host lifetime.
+struct ProfileImage {
+  // Refcounted sequence header; metadata retains this instead of the
+  // executable.
+  iree_byte_sequence_t base;
+  // Immutable source bytes exposed by the contiguous native-loader contract.
+  std::array<uint8_t, 4> bytes = {0x7f, 'E', 'L', 'F'};
+  // Shared observation survives a test's early return while capture owns bytes.
+  std::shared_ptr<bool> destroyed;
+
+  static iree_byte_sequence_t* Create(std::shared_ptr<bool> destroyed) {
+    static const iree_byte_sequence_vtable_t vtable = {
+        .destroy =
+            [](iree_byte_sequence_t* base) {
+              auto* self = reinterpret_cast<ProfileImage*>(base);
+              *self->destroyed = true;
+              delete self;
+            },
+        .enumerate =
+            [](const iree_byte_sequence_t* base,
+               iree_byte_sequence_segment_callback_t callback) {
+              const auto* self = reinterpret_cast<const ProfileImage*>(base);
+              return callback.fn(callback.user_data,
+                                 iree_make_const_byte_span(self->bytes.data(),
+                                                           self->bytes.size()));
+            },
+        .try_get_contiguous_span =
+            [](const iree_byte_sequence_t* base,
+               iree_const_byte_span_t* out_span) {
+              const auto* self = reinterpret_cast<const ProfileImage*>(base);
+              *out_span = iree_make_const_byte_span(self->bytes.data(),
+                                                    self->bytes.size());
+              return true;
+            },
+    };
+    auto* self = new ProfileImage;
+    self->destroyed = std::move(destroyed);
+    iree_byte_sequence_initialize(&vtable, self->bytes.size(), &self->base);
+    return &self->base;
+  }
+};
+
 // Reflection dependency with an observable code-owner destruction boundary.
 // The profile implementation must copy names and retain no executable owner.
 struct ReflectionExecutable {
@@ -177,6 +260,16 @@ struct ReflectionExecutable {
   iree_hal_queue_family_t family = {};
   // Confirms metadata owns no code or device resource reference.
   bool destroyed = false;
+  // Observes final host-source release independently of executable destruction.
+  std::shared_ptr<bool> image_destroyed = std::make_shared<bool>(false);
+  // Admitted image facts consumed by profiling, with a nonzero original base.
+  iree_hal_amd_gpu_image_t image = {
+      .source = ProfileImage::Create(image_destroyed),
+      .virtual_base = 0x400000,
+      .byte_length = 0x1000,
+  };
+  // Distinct native placements of the same image, as for per-queue TSAN code.
+  std::array<uint64_t, 2> load_addresses = {0x100000000ull, 0x200000000ull};
 
   ReflectionExecutable() {
     static const iree_hal_executable_vtable_t vtable = {
@@ -185,6 +278,7 @@ struct ReflectionExecutable {
               auto* self = reinterpret_cast<ReflectionExecutable*>(base);
               self->destroyed = true;
               self->names = {};
+              iree_byte_sequence_release(self->image.source);
             },
         .function_count = [](iree_hal_executable_t*) -> iree_host_size_t {
           return 2;
@@ -205,6 +299,12 @@ struct ReflectionExecutable {
             },
     };
     iree_hal_executable_initialize(&family, &vtable, &base);
+  }
+
+  iree_status_t Capture(iree_hal_amd_gpu_profile_executable_t** out_metadata) {
+    return iree_hal_amd_gpu_profile_executable_create(
+        &base, &image, load_addresses.size(), load_addresses.data(),
+        iree_allocator_system(), out_metadata);
   }
 };
 
@@ -316,8 +416,23 @@ TEST_F(GpuProfileTest,
 }
 
 TEST_F(GpuProfileTest, FailedEndStillClosesSessionAndReleasesSink) {
+  options_.data_families |= IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA;
   ASSERT_NO_FATAL_FAILURE(Begin());
   Append();
+  ReflectionExecutable executable;
+  iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
+  IREE_ASSERT_OK(executable.Capture(&metadata));
+  iree_hal_executable_release(&executable.base);
+  iree_hal_amd_gpu_profile_operation_t operation;
+  iree_hal_amd_gpu_profile_operation_initialize(
+      profile_, 0, IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_DISPATCH, 0, 1, 1,
+      &operation);
+  operation.dispatch = {metadata, iree_hal_profile_dispatch_event_default()};
+  operation.dispatch.event.executable_id =
+      iree_hal_amd_gpu_profile_executable_id(metadata);
+  iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+  iree_hal_amd_gpu_profile_executable_release(metadata);
+  EXPECT_FALSE(*executable.image_destroyed);
   sink_.fail_write = true;
   auto* profile = profile_;
   profile_ = nullptr;
@@ -325,6 +440,7 @@ TEST_F(GpuProfileTest, FailedEndStillClosesSessionAndReleasesSink) {
                         iree_hal_amd_gpu_profile_end(profile));
   EXPECT_EQ(sink_.ends, 1);
   EXPECT_EQ(sink_.end_status, IREE_STATUS_DATA_LOSS);
+  EXPECT_TRUE(*executable.image_destroyed);
   sink_.fail_write = false;
   ASSERT_NO_FATAL_FAILURE(Begin());
 }
@@ -366,10 +482,10 @@ TEST_F(GpuProfileTest, CompletedSamplesAndMetadataOutliveTheirOriginalOwners) {
   EXPECT_EQ(sink_.devices[0].timestamp_frequency_hz, 100000000u);
   ReflectionExecutable executable;
   iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
-      &executable.base, iree_allocator_system(), &metadata));
+  IREE_ASSERT_OK(executable.Capture(&metadata));
   iree_hal_executable_release(&executable.base);
   ASSERT_TRUE(executable.destroyed);
+  EXPECT_FALSE(*executable.image_destroyed);
   auto record = iree_hal_profile_command_buffer_record_default();
   record.command_buffer_id = 51;
   iree_hal_amd_gpu_profile_commands_t* commands = nullptr;
@@ -395,16 +511,34 @@ TEST_F(GpuProfileTest, CompletedSamplesAndMetadataOutliveTheirOriginalOwners) {
   iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
   sample = {};
   iree_hal_amd_gpu_profile_commands_release(commands);
-  sink_.fail_write = true;
+  sink_.fail_content_type =
+      IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_CODE_OBJECTS;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_DATA_LOSS,
                         iree_hal_amd_gpu_profile_flush(profile_));
-  sink_.fail_write = false;
+  EXPECT_FALSE(*executable.image_destroyed);
+  EXPECT_TRUE(sink_.dispatches.empty());
+  sink_.fail_content_type = {};
   IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
   ASSERT_EQ(sink_.dispatches.size(), 1u);
   EXPECT_EQ(sink_.dispatches[0].start_tick, 123u);
   EXPECT_EQ(sink_.dispatches[0].end_tick, 456u);
   EXPECT_EQ(sink_.commands, std::vector<uint64_t>({51}));
-  EXPECT_EQ(sink_.functions, std::vector<std::string>({"first", "second"}));
+  EXPECT_EQ(sink_.functions,
+            std::vector<std::string>({"first", "second", "first", "second"}));
+  EXPECT_TRUE(*executable.image_destroyed);
+  ASSERT_EQ(sink_.code_objects.size(), 1u);
+  const auto& code_object = sink_.code_objects[0];
+  EXPECT_EQ(code_object.executable_id, sink_.dispatches[0].executable_id);
+  EXPECT_EQ(sink_.images[0], std::vector<uint8_t>({0x7f, 'E', 'L', 'F'}));
+  ASSERT_EQ(sink_.loads.size(), 2u);
+  for (size_t i = 0; i < sink_.loads.size(); ++i) {
+    EXPECT_EQ(sink_.loads[i].executable_id, code_object.executable_id);
+    EXPECT_EQ(sink_.loads[i].code_object_id, code_object.code_object_id);
+    EXPECT_EQ(sink_.loads[i].physical_device_ordinal, 0u);
+    EXPECT_EQ(sink_.loads[i].load_delta,
+              executable.load_addresses[i] - executable.image.virtual_base);
+    EXPECT_EQ(sink_.loads[i].load_size, executable.image.byte_length);
+  }
   EXPECT_TRUE(sink_.events.empty());
 }
 
@@ -413,8 +547,7 @@ TEST_F(GpuProfileTest, DispatchDropsAndConcurrentFlushKeepOwnershipBounded) {
   ASSERT_NO_FATAL_FAILURE(Begin(100000000));
   ReflectionExecutable executable;
   iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
-      &executable.base, iree_allocator_system(), &metadata));
+  IREE_ASSERT_OK(executable.Capture(&metadata));
   iree_hal_executable_release(&executable.base);
   iree_hal_amd_gpu_profile_sample_t sample = {7, 9};
   iree_hal_amd_gpu_profile_operation_t operation;
@@ -452,8 +585,7 @@ TEST_F(GpuProfileTest, MetadataOnlyReportsIncompleteIdentityCoverage) {
   ReflectionExecutable executable;
   executable.names[1].clear();
   iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
-      &executable.base, iree_allocator_system(), &metadata));
+  IREE_ASSERT_OK(executable.Capture(&metadata));
   iree_hal_executable_release(&executable.base);
   iree_hal_amd_gpu_profile_operation_t operation;
   iree_hal_amd_gpu_profile_operation_initialize(
@@ -478,8 +610,7 @@ TEST_F(GpuProfileTest, LiveRetirementAndFlushPreserveSamplesAcrossRingWraps) {
   ASSERT_NO_FATAL_FAILURE(Begin(100000000));
   ReflectionExecutable executable;
   iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
-      &executable.base, iree_allocator_system(), &metadata));
+  IREE_ASSERT_OK(executable.Capture(&metadata));
   iree_hal_executable_release(&executable.base);
   const uint64_t executable_id =
       iree_hal_amd_gpu_profile_executable_id(metadata);
