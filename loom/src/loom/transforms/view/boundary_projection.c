@@ -232,7 +232,12 @@ static bool loom_view_boundary_function_requires_analysis(
     return true;
   }
   for (iree_host_size_t i = 0; i < function->candidate_count; ++i) {
-    if (function->candidates[i].schema.rule == rule) {
+    const loom_boundary_projection_slot_t* candidate = &function->candidates[i];
+    // Loop and RegionBranch schemas remain provisional until every rule has
+    // prepared the analyses used to decide whether their sources are viable.
+    if (candidate->schema.rule == rule ||
+        (candidate->schema.rule == NULL &&
+         loom_type_is_view(candidate->logical_type))) {
       return true;
     }
   }
@@ -253,7 +258,9 @@ static iree_status_t loom_view_boundary_prepare_function(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function) {
-  if (!function->selected || !loom_func_like_body(function->function) ||
+  if (!function->selected ||
+      !loom_view_boundary_function_applies(rule, plan, function) ||
+      !loom_func_like_body(function->function) ||
       !loom_view_boundary_function_requires_analysis(rule, plan, function)) {
     return iree_ok_status();
   }
@@ -740,7 +747,11 @@ static const loom_boundary_projection_rule_t kViewBoundaryRule = {
                       LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
                           LOOM_BOUNDARY_PROJECTION_SLOT_BLOCK_ARGUMENT) |
                       LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
-                          LOOM_BOUNDARY_PROJECTION_SLOT_CALL_RESULT),
+                          LOOM_BOUNDARY_PROJECTION_SLOT_CALL_RESULT) |
+                      LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
+                          LOOM_BOUNDARY_PROJECTION_SLOT_LOOP_STATE) |
+                      LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
+                          LOOM_BOUNDARY_PROJECTION_SLOT_BRANCH_RESULT),
     .function_applies = loom_view_boundary_function_applies,
     .initialize = loom_view_boundary_initialize_schema,
     .prepare_function = loom_view_boundary_prepare_function,
