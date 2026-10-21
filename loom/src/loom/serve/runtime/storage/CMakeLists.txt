@@ -43,6 +43,7 @@ loom_cc_library(
     iree::base::threading
     iree::hal
     iree::hal::memory::slab_cache
+    loom::serve::runtime::host::wake
   PUBLIC
 )
 endif()
@@ -133,8 +134,12 @@ if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
     memory_tests
+  HDRS
+    "memory_test_fixture.h"
   SRCS
     "memory_test.cc"
+    "memory_test_fixture.cc"
+    "virtual_pool_test.cc"
   DEPS
     ::memory
     ::virtual_pool

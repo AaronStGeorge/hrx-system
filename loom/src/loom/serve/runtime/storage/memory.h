@@ -9,6 +9,7 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "loom/serve/runtime/host/wake.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -143,9 +144,11 @@ iree_status_t loom_serve_memory_pool_query_status(
 // native work. Passing NULL detaches and joins the last callback access. The
 // callback only schedules its owner and cannot reenter this pool. This owner
 // observes completion/failure independently of any individual model lifetime.
-void loom_serve_memory_pool_set_observer(loom_serve_memory_pool_t* pool,
-                                         void (*wake)(void* user_data),
-                                         void* user_data);
+// Returns the previous observer so an exclusive blocking outer owner can
+// temporarily route capacity wakes to its wait and restore them afterward.
+loom_serve_wake_callback_t loom_serve_memory_pool_set_observer(
+    loom_serve_memory_pool_t* pool, void (*wake)(void* user_data),
+    void* user_data);
 
 // Collects completed operations and observes remaining native borrowers. True
 // requires another owner pass even if its capacity wake has already arrived;

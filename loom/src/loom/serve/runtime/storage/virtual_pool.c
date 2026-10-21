@@ -653,6 +653,8 @@ static void loom_serve_virtual_pool_advance_acquisitions(
   while (acquire) {
     iree_status_t status = iree_ok_status();
     bool admitted = acquire->started;
+    loom_serve_memory_admission_t admission =
+        LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
     while (!acquire->started && acquire->acquired_count < acquire->count &&
            iree_status_is_ok(status)) {
       const iree_host_size_t index = acquire->acquired_count;
@@ -695,8 +697,9 @@ static void loom_serve_virtual_pool_advance_acquisitions(
                                                   entry->range.length};
         }
         status = loom_serve_memory_pool_commit_async(
-            pool->memory_pool, acquire->count, ranges, NULL, 0, &admitted,
+            pool->memory_pool, acquire->count, ranges, NULL, 0, &admission,
             &acquire->operation);
+        admitted = admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
         acquire->started = acquire->operation != NULL || admitted;
         loom_serve_memory_operation_set_observer(
             acquire->operation, loom_serve_virtual_pool_wake, pool);
@@ -704,6 +707,13 @@ static void loom_serve_virtual_pool_advance_acquisitions(
       if (ranges != inline_ranges) {
         iree_allocator_free(pool->host_allocator, ranges);
       }
+    }
+    if (iree_status_is_ok(status) &&
+        admission == LOOM_SERVE_MEMORY_ADMISSION_DEFERRED) {
+      // Preserve this accepted queue acquisition while native capacity returns.
+      // A later owner turn retries the same selected ranges; completion may
+      // already have published its wake, so do not re-query pending state here.
+      break;
     }
     if (acquire->operation &&
         !loom_serve_memory_operation_is_complete(acquire->operation)) {
@@ -868,6 +878,12 @@ iree_status_t loom_serve_virtual_pool_wait(loom_serve_virtual_pool_t* pool,
       .callback = loom_serve_virtual_pool_wait_complete, .user_data = &wait};
   IREE_RETURN_IF_ERROR(iree_async_semaphore_acquire_timepoint(
       (iree_async_semaphore_t*)semaphore, value, &timepoint));
+  // The exclusive outer owner waits on both execution and shared capacity
+  // notifications. Joining all memory work would stall an independent warm
+  // execution behind a cold acquisition whose native return is still pending.
+  const loom_serve_wake_callback_t previous =
+      loom_serve_memory_pool_set_observer(pool->memory_pool,
+                                          loom_serve_virtual_pool_wake, pool);
   iree_status_t status = iree_ok_status();
   bool complete = false;
   bool cancelled = false;
@@ -893,6 +909,8 @@ iree_status_t loom_serve_virtual_pool_wait(loom_serve_virtual_pool_t* pool,
                                     IREE_TIME_INFINITE_FUTURE);
     }
   }
+  loom_serve_memory_pool_set_observer(pool->memory_pool, previous.wake,
+                                      previous.user_data);
   return iree_status_join(status, wait.status);
 }
 
