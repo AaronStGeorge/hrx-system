@@ -1051,6 +1051,7 @@ class CxxRenderer(CxxExpressionRenderer):
                 (target_name, self.targets[target_symbol])
                 for target_symbol, target_name in self.target_names.items()
             ),
+            uses_scalar_functions=self.uses_scalar_functions,
             uses_numeric_conversion=self.uses_numeric_conversion,
         )
         return "\n".join((*preamble, *self.writer.lines)) + "\n"

@@ -12,6 +12,7 @@ import pytest
 
 from loom.dialect.scalar.math import scalar_frexpf, scalar_ldexpf
 from loom.dsl import I1, Operand, SameType
+from loom.format.cxx.expressions import SCALAR_PROJECTION_OPERATIONS
 from loom.gen.cxx.intrinsics import scalar_projections, validate_scalar_projection
 
 
@@ -19,6 +20,10 @@ def test_exponent_family_has_one_floating_type_and_fixed_exponents() -> None:
     projections = scalar_projections()
     assert scalar_frexpf in projections
     assert scalar_ldexpf in projections
+
+
+def test_renderer_covers_every_generated_scalar_projection() -> None:
+    assert SCALAR_PROJECTION_OPERATIONS == {operation.name for operation in scalar_projections()}
 
 
 def test_fixed_fields_cannot_join_the_variable_type_relationship() -> None:

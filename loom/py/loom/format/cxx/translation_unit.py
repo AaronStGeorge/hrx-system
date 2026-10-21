@@ -31,6 +31,7 @@ def render_preamble(
     record_declarations: dict[str, tuple[tuple[str, str], ...]],
     table_lookup_declarations: set[tuple[str, str, str, str]],
     targets: tuple[tuple[str, TargetInfo], ...],
+    uses_scalar_functions: bool,
     uses_numeric_conversion: bool,
 ) -> list[str]:
     """Renders includes, helper declarations, and source target metadata."""
@@ -40,7 +41,7 @@ def render_preamble(
         headers.add("loomcxx/target/amdgpu.h")
     if any(name.startswith("view.atomic.") for name in operation_names):
         headers.add("loomcxx/atomic.h")
-    if "scalar.siluf" in operation_names:
+    if uses_scalar_functions:
         headers.add("loomcxx/scalar.h")
     if "index.assume" in operation_names:
         headers.add("loomcxx/predicate.h")
@@ -57,6 +58,7 @@ def render_preamble(
         "vector.minnumf",
         "vector.maxnumf",
         "vector.dot2f",
+        "vector.dotf",
         "vector.decode",
         "vector.fragment",
         "vector.load",

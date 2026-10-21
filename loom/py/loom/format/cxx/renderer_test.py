@@ -272,6 +272,85 @@ def test_projects_vector_absolute_value_as_typed_intrinsic() -> None:
     assert "Float32x4 absolute = loom::vector::absf(values);" in result
 
 
+def test_projects_scalar_intrinsic_family_through_public_facade() -> None:
+    source = """\
+kernel.def @scalar_math() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: f32) {
+  %exponential = scalar.expf<afn> %input : f32
+  %fast_exponential = scalar.expf<fast> %input : f32
+  %sine = scalar.sinf<afn|preserve> %input : f32
+  %fast_preserved_sine = scalar.sinf<fast|preserve> %input : f32
+  %cosine = scalar.cosf<reassoc|afn> %input : f32
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "#include <loomcxx/scalar.h>" in result
+    assert "float exponential = loom::scalar::approximate::expf(input);" in result
+    assert (
+        "[[loom::fastmath]] float fast_exponential = "
+        "loom::scalar::approximate::expf(input);" in result
+    )
+    assert "float sine = loom::scalar::approximate::preserved::sinf(input);" in result
+    assert (
+        "[[loom::fastmath]] float fast_preserved_sine = "
+        "loom::scalar::approximate::preserved::sinf(input);" in result
+    )
+    assert (
+        '[[loom::fastmath("reassoc")]] float cosine = '
+        "loom::scalar::approximate::cosf(input);" in result
+    )
+    assert "auto decomposition = loom::scalar::frexpf(input);" in result
+
+
+def test_projects_general_vector_dot_with_its_math_contract() -> None:
+    source = """\
+kernel.def @dot() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: f32) {
+  %values = vector.splat %input : vector<4xf32>
+  %result = vector.dotf<reassoc|contract> %values, %values, %input : vector<4xf32>, vector<4xf32>, f32
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "#include <loomcxx/vector.h>" in result
+    assert (
+        '[[loom::fastmath("reassoc", "contract")]] float result = '
+        "loom::vector::dotf(values, values, input);" in result
+    )
+
+
+def test_preserves_signed_view_elements_required_by_a_comparison() -> None:
+    source = """\
+kernel.def @page_present() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%pages: buffer) {
+  %zero_offset = index.constant 0 : offset
+  %pages_view = buffer.view %pages[%zero_offset] : buffer -> view<1xi32>
+  %page_id = view.load %pages_view[0] : view<1xi32> -> i32
+  %zero = scalar.constant 0 : i32
+  %present = scalar.cmpi sge, %page_id, %zero : i32
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "void page_present(const int* pages)" in result
+    assert "int page_id = loom::view::load(pages_view, 0);" in result
+    assert "bool present = page_id >= 0;" in result
+
+
 def test_projects_numeric_conversions_through_the_public_facade() -> None:
     source = """\
 kernel.def @conversions() {
