@@ -9,6 +9,18 @@
 
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
+py_library(
+    name = "github_actions_triage",
+    srcs = ["github_actions_triage.py"],
+)
+
+py_test(
+    name = "github_actions_triage_test",
+    size = "small",
+    srcs = ["github_actions_triage_test.py"],
+    deps = [":github_actions_triage"],
+)
+
 py_test(
     name = "change_scope_test",
     # This process-heavy integration test must still complete within one minute.
