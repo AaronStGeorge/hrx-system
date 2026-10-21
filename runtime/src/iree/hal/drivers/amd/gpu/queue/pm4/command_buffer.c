@@ -68,7 +68,7 @@ typedef struct iree_hal_amd_gpu_pm4_command_buffer_t {
   iree_hal_command_buffer_t base;
   // Allocator for this object, inputs, and temporary recording bytes.
   iree_allocator_t host_allocator;
-  // Borrowed native owner dominated by the retained family device.
+  // Borrowed native owner, dominated by the application-held family device.
   iree_hal_amd_gpu_pm4_program_pool_t* pool;
   // Independently retained resident execution facts after end.
   iree_hal_amd_gpu_pm4_command_program_t* program;
@@ -128,12 +128,10 @@ void iree_hal_amd_gpu_pm4_command_program_release(
   if (iree_atomic_ref_count_dec(&program->ref_count) != 1) {
     return;
   }
-  iree_hal_device_t* device = program->device;
   const iree_allocator_t host_allocator = program->host_allocator;
   iree_hal_amd_gpu_profile_commands_release(program->profile);
   iree_hal_amd_gpu_pm4_program_deinitialize(&program->resident);
   iree_allocator_free(host_allocator, program);
-  iree_hal_device_release(device);
 }
 
 static const iree_hal_command_buffer_vtable_t
@@ -207,11 +205,9 @@ iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
       host_allocator, sizeof(*buffer->program), (void**)&buffer->program);
   if (iree_status_is_ok(status)) {
     *buffer->program = (iree_hal_amd_gpu_pm4_command_program_t){
-        .device = family->device,
         .host_allocator = host_allocator,
     };
     iree_atomic_ref_count_init(&buffer->program->ref_count);
-    iree_hal_device_retain(buffer->program->device);
   }
   if (iree_status_is_ok(status) &&
       iree_any_bit_set(

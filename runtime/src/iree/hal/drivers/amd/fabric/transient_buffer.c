@@ -28,9 +28,6 @@ struct iree_hal_amd_fabric_transient_buffer_t {
   // Base HAL buffer resource exposed to callers.
   iree_hal_buffer_t base;
 
-  // Retained device keeping the queue and its wrapper block pool live.
-  iree_hal_device_t* device;
-
   // Borrowed reusable storage pool owned by |device|.
   iree_arena_block_pool_t* block_pool;
 
@@ -149,8 +146,6 @@ iree_status_t iree_hal_amd_fabric_transient_buffer_create(
   buffer->base.memory.contract = source_pool->memory_contract;
   buffer->base.host_binding_index = binding_layout->host_binding_index;
   memset(buffer->bindings, 0, binding_layout->byte_length);
-  buffer->device = placement.device;
-  iree_hal_device_retain(buffer->device);
   buffer->block_pool = block_pool;
   buffer->storage_block = storage_block;
   buffer->profile_id = iree_hal_buffer_allocation_next_id();
@@ -336,7 +331,6 @@ static void iree_hal_amd_fabric_transient_buffer_destroy(
     iree_hal_buffer_t* base_buffer) {
   iree_hal_amd_fabric_transient_buffer_t* buffer =
       iree_hal_amd_fabric_transient_buffer_cast(base_buffer);
-  iree_hal_device_t* device = buffer->device;
   iree_arena_block_pool_t* block_pool = buffer->block_pool;
   iree_arena_block_t* storage_block = buffer->storage_block;
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -352,7 +346,6 @@ static void iree_hal_amd_fabric_transient_buffer_destroy(
   } else {
     iree_allocator_free(block_pool->block_allocator, buffer);
   }
-  iree_hal_device_release(device);
   IREE_TRACE_ZONE_END(z0);
 }
 

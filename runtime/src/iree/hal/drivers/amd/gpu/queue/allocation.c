@@ -24,9 +24,9 @@ IREE_ASYNC_FIXED_FRONTIER_TYPE(iree_hal_amd_gpu_allocation_frontier_t,
 typedef struct iree_hal_amd_gpu_allocation_t {
   // Typed completed-acquisition link, unused for warm pool hits.
   iree_atomic_slist_entry_t entry;
-  // Borrowed embedded state dominated by the operation's device reference.
+  // Borrowed embedded state owned by the application-held device.
   iree_hal_amd_gpu_allocation_context_t* context;
-  // Retained parent, released after every capture and root access finishes.
+  // Borrowed parent for diagnostics and transient-root placement.
   iree_hal_device_t* device;
   // Owns this object and every variable-length capture allocation.
   iree_arena_allocator_t arena;
@@ -149,12 +149,10 @@ static void iree_hal_amd_gpu_allocation_retire(
 
 static void iree_hal_amd_gpu_allocation_free(
     iree_hal_amd_gpu_allocation_t* operation) {
-  iree_hal_device_t* device = operation->device;
   iree_arena_allocator_t arena = operation->arena;
   iree_hal_semaphore_list_release(operation->waits);
   iree_hal_semaphore_list_release(operation->signals);
   iree_arena_deinitialize(&arena);
-  iree_hal_device_release(device);
 }
 
 static void iree_hal_amd_gpu_allocation_complete(
@@ -365,15 +363,10 @@ static void iree_hal_amd_gpu_allocation_acquired(
   // owner. Publish only its typed result there: committing buffers and issuing
   // dependent GPU work belong to the device publisher. Warm hits finish on
   // their submitting caller after the other borrow is returned below.
-  iree_hal_device_t* device = operation->device;
-  iree_hal_device_retain(device);
   iree_hal_amd_gpu_allocation_context_t* context = operation->context;
   iree_atomic_slist_push(&context->ready, &operation->entry);
   iree_hal_amd_gpu_publication_notify(context->publication,
                                       context->publication_ordinal);
-  // The publication can complete before notify returns. This separate borrow
-  // protects the source and notification through the submitting call's tail.
-  iree_hal_device_release(device);
 }
 
 static void iree_hal_amd_gpu_allocation_acquire(
@@ -519,7 +512,6 @@ static iree_status_t iree_hal_amd_gpu_allocation_allocate(
     // before any fallible capture can invoke rollback.
     operation->release.marked_count = 0;
   }
-  iree_hal_device_retain(operation->device);
   const iree_allocator_t allocator = iree_arena_allocator(&operation->arena);
   status = iree_hal_semaphore_list_clone(&waits, allocator, &operation->waits);
   if (iree_status_is_ok(status)) {

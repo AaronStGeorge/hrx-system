@@ -1229,9 +1229,21 @@ class QueueHarness {
     }
     iree_hal_semaphore_release(done);
     done = nullptr;
-    iree_hal_device_release(device);
+    // The fixture owns caller-driven polling. Keep that progress running while
+    // an ordinary application thread performs synchronous final destruction.
+    std::atomic<bool> released = false;
+    std::thread teardown([&] {
+      iree_hal_device_release(device);
+      iree_hal_device_group_release(group);
+      released.store(true, std::memory_order_release);
+      iree_async_proactor_wake(proactor);
+    });
+    while (!released.load(std::memory_order_acquire)) {
+      IREE_CHECK_OK(
+          iree_async_proactor_poll(proactor, iree_infinite_timeout(), nullptr));
+    }
+    teardown.join();
     device = nullptr;
-    iree_hal_device_group_release(group);
     group = nullptr;
     device_release_requested = true;
   }

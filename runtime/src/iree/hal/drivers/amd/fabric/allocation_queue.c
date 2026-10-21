@@ -39,6 +39,10 @@ typedef struct iree_hal_amd_fabric_allocation_bucket_t {
   iree_host_size_t completed_count;
   // Cleanup of the head's completed prefix, owned by the native worker.
   iree_hal_slab_release_info_t release_info;
+  // Accepted request count, including rollback, protected by the queue mutex.
+  uint64_t submitted_count;
+  // Requests whose native work and callback tails have returned, under mutex.
+  uint64_t retired_count;
 } iree_hal_amd_fabric_allocation_bucket_t;
 
 struct iree_hal_amd_fabric_allocation_queue_t {
@@ -54,6 +58,10 @@ struct iree_hal_amd_fabric_allocation_queue_t {
   iree_slim_mutex_t mutex;
   // Wakes an idle worker on empty-to-nonempty or final teardown.
   iree_notification_t notification;
+  // Cold device teardown waits for captured request prefixes on this domain.
+  iree_notification_t drain_notification;
+  // Number of external drain callers, protected by mutex.
+  uint32_t drain_waiter_count;
   // Same-priority FIFO batches; heads include the currently active step.
   iree_hal_amd_fabric_allocation_bucket_t
       buckets[IREE_HAL_AMD_FABRIC_ALLOCATION_PRIORITY_COUNT];
@@ -111,6 +119,7 @@ static void iree_hal_amd_fabric_allocation_append(
     bucket->head = link;
   }
   bucket->tail = link;
+  ++bucket->submitted_count;
   queue->pending_mask |= 1u << priority;
 }
 
@@ -120,6 +129,7 @@ static void iree_hal_amd_fabric_allocation_queue_release_body(
     return;
   }
   iree_notification_deinitialize(&queue->notification);
+  iree_notification_deinitialize(&queue->drain_notification);
   iree_slim_mutex_deinitialize(&queue->mutex);
   iree_allocator_free(queue->host_allocator, queue);
 }
@@ -247,8 +257,9 @@ static iree_status_t iree_hal_amd_fabric_allocation_slab_step(
 }
 
 // Removes all scheduler borrows before invoking a callback that may immediately
-// free or reuse its request. The retained provider keeps its native owners live
-// through the callback. Accepted raw requests separately retain the queue.
+// free or reuse its request. The retained provider keeps its cleanup facts live
+// through the callback; the application owns the enclosing devices. Accepted
+// raw requests separately retain the queue.
 static void iree_hal_amd_fabric_allocation_complete(
     iree_hal_amd_fabric_allocation_link_t link, iree_status_t status,
     iree_hal_slab_release_info_t release_info) {
@@ -377,6 +388,21 @@ static int iree_hal_amd_fabric_allocation_queue_main(void* user_data) {
     }
     iree_hal_amd_fabric_allocation_complete(link, status, release_info);
     iree_hal_amd_fabric_allocation_queue_release(queue);
+    // The worker's independent body claim spans final public release and these
+    // retirement updates. The straight-line handle checker models one lifetime.
+    // NOLINTBEGIN(iree-refcount-lifecycle)
+    iree_slim_mutex_lock(&queue->mutex);
+    ++bucket->retired_count;
+    if (release && acquisition) {
+      // The failed acquisition is terminal only after its rollback callback.
+      ++queue->buckets[IREE_HAL_AMD_FABRIC_ALLOCATION_PRIORITY_ACQUIRE]
+            .retired_count;
+    }
+    if (queue->drain_waiter_count) {
+      iree_notification_post(&queue->drain_notification, IREE_ALL_WAITERS);
+    }
+    iree_slim_mutex_unlock(&queue->mutex);
+    // NOLINTEND(iree-refcount-lifecycle)
   }
   iree_hal_amd_fabric_allocation_queue_release_body(queue);
   return 0;
@@ -415,6 +441,7 @@ iree_status_t iree_hal_amd_fabric_allocation_queue_create(
   queue->host_allocator = host_allocator;
   iree_slim_mutex_initialize(&queue->mutex);
   iree_notification_initialize(&queue->notification);
+  iree_notification_initialize(&queue->drain_notification);
   iree_thread_create_params_t params = {
       .name = IREE_SV("amd-numa-any"),
       .create_suspended = true,
@@ -446,6 +473,45 @@ void iree_hal_amd_fabric_allocation_queue_retain(
 void iree_hal_amd_fabric_allocation_queue_release(
     iree_hal_amd_fabric_allocation_queue_t* queue) {
   iree_hal_resource_release(queue);
+}
+
+typedef struct iree_hal_amd_fabric_allocation_drain_t {
+  // Borrowed shared domain retained by the destroying device.
+  iree_hal_amd_fabric_allocation_queue_t* queue;
+  // Last request accepted in each FIFO when this drain began.
+  uint64_t targets[IREE_HAL_AMD_FABRIC_ALLOCATION_PRIORITY_COUNT];
+} iree_hal_amd_fabric_allocation_drain_t;
+
+static bool iree_hal_amd_fabric_allocation_queue_is_drained(void* user_data) {
+  iree_hal_amd_fabric_allocation_drain_t* drain = user_data;
+  iree_hal_amd_fabric_allocation_queue_t* queue = drain->queue;
+  iree_slim_mutex_lock(&queue->mutex);
+  bool complete = true;
+  for (uint32_t i = 0; i < IREE_HAL_AMD_FABRIC_ALLOCATION_PRIORITY_COUNT; ++i) {
+    complete &= queue->buckets[i].retired_count >= drain->targets[i];
+  }
+  iree_slim_mutex_unlock(&queue->mutex);
+  return complete;
+}
+
+void iree_hal_amd_fabric_allocation_queue_drain(
+    iree_hal_amd_fabric_allocation_queue_t* queue) {
+  if (!queue) {
+    return;
+  }
+  iree_hal_amd_fabric_allocation_drain_t drain = {.queue = queue};
+  iree_slim_mutex_lock(&queue->mutex);
+  for (uint32_t i = 0; i < IREE_HAL_AMD_FABRIC_ALLOCATION_PRIORITY_COUNT; ++i) {
+    drain.targets[i] = queue->buckets[i].submitted_count;
+  }
+  ++queue->drain_waiter_count;
+  iree_slim_mutex_unlock(&queue->mutex);
+  iree_notification_await(&queue->drain_notification,
+                          iree_hal_amd_fabric_allocation_queue_is_drained,
+                          &drain, iree_infinite_timeout());
+  iree_slim_mutex_lock(&queue->mutex);
+  --queue->drain_waiter_count;
+  iree_slim_mutex_unlock(&queue->mutex);
 }
 
 static void iree_hal_amd_fabric_allocation_queue_submit(

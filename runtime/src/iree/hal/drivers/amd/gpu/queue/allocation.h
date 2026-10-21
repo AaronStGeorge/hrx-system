@@ -21,10 +21,10 @@ extern "C" {
 // Device-owned queue allocation metadata and dependency registration. Native
 // backing work belongs to the pool's native allocation domain. Warm metadata
 // work completes inline; deferred acquisitions publish a result to the device.
-// Accepted operations and returned transient roots retain the device, keeping
-// this state alive independently of the caller's device reference.
+// The application keeps the device alive through operations and transient
+// roots.
 typedef struct iree_hal_amd_gpu_allocation_context_t {
-  // Borrowed parent, retained by individual operations and transient roots.
+  // Borrowed parent, dominated by the application's device ownership.
   iree_hal_device_t* device;
   // Borrowed diagnostic owner, dominated by device.
   const iree_hal_amd_gpu_context_t* context;
@@ -42,7 +42,7 @@ typedef struct iree_hal_amd_gpu_allocation_context_t {
   iree_async_semaphore_wait_context_t waits;
   // Optional device-owned session, stable while operations are in flight.
   iree_hal_amd_gpu_profile_t* profile;
-  // Optional device failure code, borrowed through the retained device owner.
+  // Optional device failure code, borrowed through the device lifetime.
   const iree_atomic_int32_t* failure;
 } iree_hal_amd_gpu_allocation_context_t;
 

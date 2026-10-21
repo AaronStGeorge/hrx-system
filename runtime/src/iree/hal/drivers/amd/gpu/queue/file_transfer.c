@@ -11,9 +11,9 @@
 #include "iree/hal/drivers/amd/fabric/file_transfer.h"
 
 typedef struct iree_hal_amd_gpu_file_transfer_t {
-  // Borrowed queue-owned services, dominated by the retained device.
+  // Borrowed queue-owned services, live through operation retirement.
   const iree_hal_amd_gpu_file_executor_t* executor;
-  // Retained parent dominating every borrowed executor field.
+  // Borrowed parent, kept alive by the application through completion.
   iree_hal_device_t* device;
   // Exact capture extent returned to the reusable metadata pool.
   iree_host_size_t allocation_size;
@@ -105,13 +105,13 @@ static void iree_hal_amd_gpu_file_transfer_submit_native(
 
 static void iree_hal_amd_gpu_file_transfer_free(
     iree_hal_amd_gpu_file_transfer_t* operation) {
-  iree_hal_device_t* device = operation->device;
+  const iree_hal_amd_gpu_file_executor_t* executor = operation->executor;
   iree_hal_semaphore_list_release(operation->waits);
   iree_hal_semaphore_list_release(operation->signals);
   iree_hal_amd_gpu_capture_pool_release(
       operation->executor->captures,
       iree_make_byte_span(operation, operation->allocation_size));
-  iree_hal_device_release(device);
+  executor->end(executor->queue);
 }
 
 static void iree_hal_amd_gpu_file_transfer_retire(void* user_data,
@@ -139,8 +139,8 @@ static void iree_hal_amd_gpu_file_transfer_retire(void* user_data,
                                            operation->device, status);
     iree_hal_semaphore_list_fail(operation->signals, status);
   }
-  iree_hal_amd_gpu_file_transfer_free(operation);
   IREE_TRACE_ZONE_END(z0);
+  iree_hal_amd_gpu_file_transfer_free(operation);
 }
 
 static void iree_hal_amd_gpu_file_transfer_staging_released(
@@ -439,9 +439,9 @@ iree_status_t iree_hal_amd_gpu_file_transfer_submit(
       .dependency = {.storage = {.capacity = tracker_size,
                                  .buffer = storage.data + tracker_offset}},
   };
+  executor->begin(executor->queue);
   memcpy(storage.data + before_offset, before, executor->barrier_size);
   memcpy(storage.data + after_offset, after, executor->barrier_size);
-  iree_hal_device_retain(operation->device);
   for (iree_host_size_t i = 0; i < waits.count; ++i) {
     operation->waits.semaphores[i] = waits.semaphores[i];
     operation->waits.payload_values[i] = waits.payload_values[i];

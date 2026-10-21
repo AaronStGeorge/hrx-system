@@ -63,12 +63,10 @@ typedef struct iree_hal_passthrough_pool_options_t {
 // is available for capacity diagnostics without poisoning later acquisition.
 //
 // Final public release requires returned reservations/views and
-// caller-quiescent execution. It cancels pending retirement records and submits
-// native cleanup without waiting. Public metadata is freed before returning.
-// Private retirement state uses the retained provider's host allocator and
-// retains |notification| and |frontier_tracker| through final completion. The
-// provider's native owner and allocator must remain valid through that final
-// provider release; neither depends on the public pool's allocator.
+// caller-quiescent execution. It cancels pending retirement records and joins
+// native cleanup before freeing the pool. The provider's native owner and both
+// allocators must remain valid through final release. Ordinary reservation
+// return and trim remain asynchronous when the provider defers native frees.
 //
 // |host_allocator| owns public pool metadata. Native retirement records and
 // source transactions use the provider's allocator, whose lifetime covers their

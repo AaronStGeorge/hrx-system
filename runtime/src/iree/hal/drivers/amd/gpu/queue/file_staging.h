@@ -20,9 +20,9 @@ typedef struct iree_hal_amd_gpu_file_staging_bucket_t
 
 // Placed staging use for one complete file operation. Physical ranges submit
 // serially through this state without releasing its prepared proactor view.
-// The parent file capture retains the device and immutable transfer.
-// Cursor, membership, status, and in_flight are protected by the staging lock;
-// slot I/O and GPU operations run outside that lock.
+// The parent file capture borrows the device and retains the immutable
+// transfer. Cursor, membership, status, and in_flight are protected by the
+// staging lock; slot I/O and GPU operations run outside that lock.
 typedef struct iree_hal_amd_gpu_file_staging_request_t {
   // Previous range awaiting a slot or backing generation, or NULL.
   struct iree_hal_amd_gpu_file_staging_request_t* previous;
@@ -72,7 +72,7 @@ iree_status_t iree_hal_amd_gpu_file_staging_query_profile(
 // for lane_count * lane_capacity. Per-proactor views add no physical payload.
 // The device proactor owns canonical preparation and cold result publication.
 // The native SDMA queue and HAL device outlive this engine. Cached backing owns
-// no device reference; parent file captures retain the device. Cold destruction
+// no device reference; parent file captures also borrow the device. Destruction
 // joins asynchronous detach and native release before releasing metadata.
 iree_status_t iree_hal_amd_gpu_file_staging_allocate(
     iree_hal_device_t* device, iree_hal_amd_gpu_context_t* context,
@@ -92,7 +92,7 @@ iree_status_t iree_hal_amd_gpu_file_staging_prepare(
     iree_hal_memory_effects_t* before, iree_hal_memory_effects_t* after);
 
 // Acquires one staging use spanning all physical ranges of a qualified file
-// operation. The parent capture retains the device, transfer, and signals
+// operation. The parent capture borrows the device and retains transfer/signals
 // through release completion. Acquisition allocates only per-proactor metadata;
 // native backing and registration attachment are demand-driven by submit.
 iree_status_t iree_hal_amd_gpu_file_staging_acquire(

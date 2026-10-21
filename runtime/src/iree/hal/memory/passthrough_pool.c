@@ -10,6 +10,7 @@
 #include "iree/async/notification.h"
 #include "iree/base/internal/math.h"
 #include "iree/base/threading/mutex.h"
+#include "iree/base/threading/notification.h"
 #include "iree/hal/memory/tracing.h"
 
 enum { IREE_HAL_PASSTHROUGH_POOL_INLINE_TRANSACTION_CAPACITY = 8 };
@@ -52,6 +53,9 @@ typedef struct iree_hal_passthrough_pool_state_t {
 
   // Protects state links, waiter disposition and shutdown publication.
   iree_slim_mutex_t retirement_mutex;
+
+  // Borrowed final-release notification, protected by retirement_mutex.
+  iree_notification_t* destruction_notification;
 
   // Every native allocation still owned, including pending retirement.
   iree_hal_passthrough_pool_allocation_state_t* allocation_head;
@@ -110,8 +114,7 @@ typedef struct iree_hal_passthrough_pool_state_t {
   iree_atomic_int64_t release_count;
 } iree_hal_passthrough_pool_state_t;
 
-// Public metadata is reclaimed at final pool release independently of native
-// cleanup. Its allocator therefore has exactly the public pool lifetime.
+// Final public release joins native cleanup before returning either allocator.
 typedef struct iree_hal_passthrough_pool_t {
   // Base pool resource for vtable dispatch and ref counting.
   iree_hal_pool_t base;
@@ -243,13 +246,28 @@ static void* iree_hal_passthrough_pool_trace_address(
 // Reservation state helpers
 //===----------------------------------------------------------------------===//
 
-// Releases the private body after public destruction and every native return.
-// No caller-visible resource reference is held by a retired allocation.
+// Returns a native completion's borrow. Final destruction keeps its own claim
+// until all borrowers have made their last access, including notification_post.
 static void iree_hal_passthrough_pool_release_body(
     iree_hal_passthrough_pool_state_t* pool) {
-  if (iree_atomic_ref_count_dec(&pool->body_ref_count) != 1) {
-    return;
+  iree_slim_mutex_lock(&pool->retirement_mutex);
+  if (iree_atomic_ref_count_dec(&pool->body_ref_count) == 2 &&
+      pool->destruction_notification) {
+    iree_notification_post(pool->destruction_notification, IREE_ALL_WAITERS);
   }
+  iree_slim_mutex_unlock(&pool->retirement_mutex);
+}
+
+static bool iree_hal_passthrough_pool_is_retired(void* user_data) {
+  iree_hal_passthrough_pool_state_t* pool = user_data;
+  iree_slim_mutex_lock(&pool->retirement_mutex);
+  const bool retired = iree_atomic_ref_count_load(&pool->body_ref_count) == 1;
+  iree_slim_mutex_unlock(&pool->retirement_mutex);
+  return retired;
+}
+
+static void iree_hal_passthrough_pool_free_body(
+    iree_hal_passthrough_pool_state_t* pool) {
   iree_allocator_t host_allocator = pool->host_allocator;
   iree_hal_memory_trace_deinitialize(&pool->trace);
   iree_async_frontier_tracker_release(pool->frontier_tracker);
@@ -639,9 +657,12 @@ static void iree_hal_passthrough_pool_destroy(iree_hal_pool_t* base_pool) {
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_passthrough_pool_state_t* pool =
       iree_hal_passthrough_pool_state(base_pool);
+  iree_notification_t destruction_notification;
+  iree_notification_initialize(&destruction_notification);
   iree_hal_slab_operation_t* ready_head = NULL;
   iree_slim_mutex_lock(&pool->retirement_mutex);
   pool->shutting_down = true;
+  pool->destruction_notification = &destruction_notification;
   for (iree_hal_passthrough_pool_allocation_state_t* state =
            pool->allocation_head;
        state; state = state->next) {
@@ -678,10 +699,14 @@ static void iree_hal_passthrough_pool_destroy(iree_hal_pool_t* base_pool) {
                                                             release_request));
     iree_hal_passthrough_pool_retire_allocation(state);
   }
+  iree_notification_await(&destruction_notification,
+                          iree_hal_passthrough_pool_is_retired, pool,
+                          iree_infinite_timeout());
+  iree_notification_deinitialize(&destruction_notification);
   iree_allocator_t host_allocator = base_pool->host_allocator;
   iree_hal_pool_deinitialize(base_pool);
   iree_allocator_free(host_allocator, base_pool);
-  iree_hal_passthrough_pool_release_body(pool);
+  iree_hal_passthrough_pool_free_body(pool);
   IREE_TRACE_ZONE_END(z0);
 }
 

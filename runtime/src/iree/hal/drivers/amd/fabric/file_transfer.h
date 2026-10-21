@@ -120,7 +120,7 @@ struct iree_hal_amd_fabric_file_transfer_t {
   // Physical ranges, including sources installed in an execution-only virtual
   // buffer. These immutable descriptors borrow the backing lifetimes.
   struct {
-    // Borrowed native API, dominated by the engine's retained device.
+    // Borrowed native API, dominated by the application's device ownership.
     const amdf_api_t* api;
     // File ranges in logical order, borrowing prepared views and optional
     // registrations. No physical backing is retained.

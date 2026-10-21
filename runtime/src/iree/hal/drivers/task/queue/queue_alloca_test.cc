@@ -1057,7 +1057,7 @@ TEST_P(TaskQueueNativeAllocationTest, AsyncBackingCompletesAndRetires) {
   ASSERT_NO_FATAL_FAILURE(CheckNativeQueueRoundTrip());
 }
 
-TEST_P(TaskQueueNativeAllocationTest, NativeReleaseOutlivesPublicPoolOwner) {
+TEST_P(TaskQueueNativeAllocationTest, PublicPoolReleaseJoinsNativeFree) {
   ASSERT_NO_FATAL_FAILURE(UseNativePool());
   const auto request = iree_hal_make_pool_reservation_request(kBlockSize, 0);
   uint64_t allocated_value = 1;
@@ -1083,12 +1083,14 @@ TEST_P(TaskQueueNativeAllocationTest, NativeReleaseOutlivesPublicPoolOwner) {
   EXPECT_GE(stats.bytes_committed, kBlockSize);
   iree_hal_pool_release(pool_);
   pool_ = nullptr;
-  iree_hal_pool_release(native_pool_);
-  native_pool_ = nullptr;
-  // Both public pool owners are gone while native free is still held. Its
-  // descriptor, provider, and progress owner survive through final callback.
   EXPECT_FALSE(backing_.released());
+  std::thread teardown([&] {
+    iree_hal_pool_release(native_pool_);
+    EXPECT_TRUE(backing_.released());
+  });
   backing_.Unblock();
+  teardown.join();
+  native_pool_ = nullptr;
   backing_.AwaitEmpty();
 }
 

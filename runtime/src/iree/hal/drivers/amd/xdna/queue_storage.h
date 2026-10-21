@@ -48,7 +48,7 @@ typedef struct iree_hal_amd_xdna_queue_storage_t {
 
 // Per-operation ownership of blocks acquired from queue storage.
 typedef struct iree_hal_amd_xdna_queue_capture_t {
-  // Queue-owned pools, retained through the operation's device reference.
+  // Borrowed queue-owned pools; device destruction joins operation callbacks.
   iree_hal_amd_xdna_queue_storage_t* storage;
   // Arena owning the operation and its metadata arrays.
   iree_arena_allocator_t metadata_arena;

@@ -7,6 +7,7 @@
 #include "iree/hal/drivers/amd/gpu/queue/host_call.h"
 
 #include <array>
+#include <atomic>
 #include <thread>
 #include <vector>
 
@@ -21,6 +22,15 @@ namespace {
 // Native submission is the dependency: the operation capture, callback,
 // private timepoints, and public signals all use their production paths.
 struct NativeQueue : iree_hal_queue_t {
+  // Accepted pipeline owners, independent of native packet completion.
+  std::atomic<int> host_owners{0};
+  static void Begin(iree_hal_queue_t* queue) {
+    ++static_cast<NativeQueue*>(queue)->host_owners;
+  }
+  static void End(iree_hal_queue_t* queue) {
+    --static_cast<NativeQueue*>(queue)->host_owners;
+  }
+
   struct Boundary {
     // Retained native completion operand, released after signaling.
     iree_hal_semaphore_t* semaphore = nullptr;
@@ -281,6 +291,8 @@ class HostCallTest : public ::testing::Test {
         .queue = &queue,
         .context = &context,
         .captures = &captures_,
+        .begin = NativeQueue::Begin,
+        .end = NativeQueue::End,
         .barrier = NativeQueue::Submit,
     };
     Callback callback;
@@ -309,7 +321,6 @@ class HostCallTest : public ::testing::Test {
       IREE_ASSERT_OK(status);
     }
     iree_hal_resource_release(&callback.resource);
-    iree_hal_device_release(device.get());
     if (options.rejected_boundary != 1 && !options.immediate) {
       EXPECT_FALSE(device.destroyed);
       EXPECT_FALSE(callback.destroyed);
@@ -335,6 +346,8 @@ class HostCallTest : public ::testing::Test {
                             ? iree_status_from_code(IREE_STATUS_ABORTED)
                             : iree_ok_status());
     }
+    EXPECT_EQ(queue.host_owners.load(), 0);
+    iree_hal_device_release(device.get());
     EXPECT_TRUE(device.destroyed);
     EXPECT_EQ(callback.count,
               options.rejected_boundary == 1 || options.failed_boundary == 1
@@ -405,7 +418,7 @@ TEST_F(HostCallTest, ConcurrentEarlyCompletionKeepsItsInvocationOwner) {
 TEST_F(HostCallTest, OversizedCaptureSurvivesConcurrentEarlyCompletion) {
   Run({.immediate = true, .concurrent = true, .signal_count = 1660});
 }
-TEST_F(HostCallTest, DeferredCompletionRetainsDeviceAfterCallbackRelease) {
+TEST_F(HostCallTest, DeferredCompletionRetainsOperandsAfterCallbackRelease) {
   Run({.deferred = true});
 }
 TEST_F(HostCallTest, DeferredCompletionBeforeCallbackReturns) {

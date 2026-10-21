@@ -351,7 +351,7 @@ static void iree_hal_amd_fabric_asan_quarantine_release_list(
   }
 }
 
-static void iree_hal_amd_fabric_asan_flush_quarantine(
+void iree_hal_amd_fabric_asan_flush_quarantine(
     iree_hal_amd_fabric_asan_t* state) {
   iree_slim_mutex_lock(&state->quarantine_mutex);
   iree_hal_amd_fabric_asan_quarantine_entry_t* entry = state->quarantine_head;

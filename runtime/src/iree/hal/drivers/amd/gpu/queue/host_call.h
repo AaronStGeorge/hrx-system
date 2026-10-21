@@ -18,14 +18,19 @@ extern "C" {
 // Borrowed native queue services. Successful barrier completion dispatches
 // host semaphore timepoints on the device's completion worker, after native
 // execution and cache effects. Submission hints never trigger those points.
-// Each accepted call retains the parent device through its terminal action.
+// Accepted calls borrow their parent device through the terminal action.
 typedef struct iree_hal_amd_gpu_host_call_executor_t {
   // Exact queue supplying native dependency and cache boundaries.
   iree_hal_queue_t* queue;
-  // Device diagnostics, dominated by the retained parent.
+  // Borrowed diagnostics, dominated by the application's device ownership.
   const iree_hal_amd_gpu_context_t* context;
   // Queue-owned reusable CPU capture storage.
   iree_hal_amd_gpu_capture_pool_t* captures;
+  // Marks accepted host work in the queue's existing shutdown accounting.
+  void (*begin)(iree_hal_queue_t* queue);
+  // Returns that borrow after the final capture access and wakes shutdown.
+  void (*end)(iree_hal_queue_t* queue);
+
   // Private native boundary. A non-NONE type identifies the public entry;
   // the return boundary carries NONE and contributes no public queue event.
   // Rejection retains no operands and cannot signal the private completion.

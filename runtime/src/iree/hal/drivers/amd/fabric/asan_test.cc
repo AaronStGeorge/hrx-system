@@ -326,7 +326,7 @@ TEST_F(AsanTest, NativeQueryFailureIsNotAnUnsupportedPlacement) {
 }
 
 // The mock devices own real sanitizer teardown and native backing lifetime.
-// Destruction must reach both owners without manually flushing quarantine.
+// Provider cleanup must finish before either application-held device is freed.
 struct DeviceLifetime {
   // Resource retained by the mock device until its final release.
   iree_hal_resource_t resource;
@@ -336,8 +336,8 @@ struct DeviceLifetime {
   Native* native = nullptr;
   // Optional shared physical backing that must be released before this device.
   bool* backing_released = nullptr;
-  // Joins teardown even when the native worker drops the last provider claim.
-  std::binary_semaphore reclaimed{0};
+  // Synchronous final-release witness.
+  uint32_t destruction_count = 0;
 
   DeviceLifetime(iree_hal_amd_fabric_asan_t* asan, Native* native)
       : asan(asan), native(native) {
@@ -352,7 +352,7 @@ struct DeviceLifetime {
               if (self->backing_released) {
                 EXPECT_TRUE(*self->backing_released);
               }
-              self->reclaimed.release();
+              ++self->destruction_count;
             },
     };
     iree_hal_resource_initialize(&vtable, &resource);
@@ -363,7 +363,7 @@ class QuarantineLifetimeTest : public AsanTest,
                                public ::testing::WithParamInterface<uint32_t> {
 };
 
-TEST_P(QuarantineLifetimeTest, ReleasesOwningDeviceAndRetainsPeerUntilCleanup) {
+TEST_P(QuarantineLifetimeTest, ProviderCleanupPrecedesBothBorrowedDevices) {
   Initialize();
   ASSERT_FALSE(HasFatalFailure());
   DeviceLifetime owners[] = {{&state_, &native_}, {nullptr, &native_}};
@@ -387,7 +387,6 @@ TEST_P(QuarantineLifetimeTest, ReleasesOwningDeviceAndRetainsPeerUntilCleanup) {
   };
   iree_hal_amd_fabric_slab_provider_options_t options = {
       .memory = state_.memory,
-      .access_devices = devices,
       .host_binding_index = IREE_HAL_BUFFER_NATIVE_BINDING_INDEX_NONE,
       .asan = &state_,
       .asan_application_mapping = true,
@@ -417,21 +416,19 @@ TEST_P(QuarantineLifetimeTest, ReleasesOwningDeviceAndRetainsPeerUntilCleanup) {
   EXPECT_EQ(observation.quarantine_size, 4096u);
   EXPECT_FALSE(native_.reservations[0]->pages.empty());
 
-  if (GetParam() < 2) {
-    // Last public provider release initiates owning-device teardown.
-    for (auto* device : devices) {
-      iree_hal_device_release(device);
-    }
-    iree_hal_slab_provider_release(provider);
-  } else {
-    // Quarantine outlives the public provider, retaining the peer's native
-    // dependencies until the ASAN owner eventually drains that quarantine.
-    iree_hal_device_release(devices[1]);
-    iree_hal_slab_provider_release(provider);
-    iree_hal_device_release(devices[0]);
+  for (auto* device : devices) {
+    EXPECT_EQ(iree_atomic_ref_count_load(
+                  &reinterpret_cast<iree_hal_resource_t*>(device)->ref_count),
+              1);
   }
+  iree_hal_slab_provider_release(provider);
+  iree_hal_amd_fabric_allocation_queue_drain(queue);
+  EXPECT_TRUE(backing_released);
+  // Either device may be released first once its borrowed backing is gone.
+  iree_hal_device_release(devices[GetParam() / 2]);
+  iree_hal_device_release(devices[1 - GetParam() / 2]);
   for (auto& owner : owners) {
-    owner.reclaimed.acquire();
+    EXPECT_EQ(owner.destruction_count, 1u);
   }
   iree_hal_amd_fabric_allocation_queue_release(queue);
 }

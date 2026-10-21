@@ -887,11 +887,12 @@ class MemoryBackendTest : public ::testing::Test {
 
   void TearDown() override {
     native_.AwaitEmpty();
-    iree_hal_device_group_release(group_);
+    iree_hal_amd_fabric_allocation_queue_drain(allocation_queue_);
     for (iree_hal_device_t* device : devices_) {
       iree_hal_device_release(device);
     }
     iree_hal_device_release(cpu_device_);
+    iree_hal_device_group_release(group_);
     iree_async_proactor_pool_release(proactor_pool_);
     iree_hal_allocator_release(cpu_allocator_);
     iree_task_executor_release(executor_);

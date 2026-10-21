@@ -211,6 +211,7 @@ static void iree_hal_amd_xdna_queue_abandon_pending(
   iree_hal_amd_xdna_queue_report(
       queue, iree_status_code(iree_hal_amd_xdna_queue_failure_status(queue)),
       iree_status_message(iree_hal_amd_xdna_queue_failure_status(queue)));
+  queue->operations_retained |= queue->pending.count != 0;
   while (queue->pending.count) {
     iree_hal_amd_xdna_pending_t* pending =
         &queue->pending.entries[queue->pending.head];
@@ -356,8 +357,7 @@ static void iree_hal_amd_xdna_queue_pump_after_retirement(
   if (!should_pump) {
     return;
   }
-  // The ready operation retains the device, so retirement publication cannot
-  // destroy the queue before the newly available slot is handed off.
+  // The application's device ownership spans publication and handoff.
   iree_slim_mutex_lock(&queue->state_mutex);
   iree_hal_amd_xdna_queue_pump_dispatch(queue);
   iree_slim_mutex_unlock(&queue->state_mutex);
@@ -540,6 +540,7 @@ static void iree_hal_amd_xdna_service_abandon(
       iree_hal_amd_xdna_operation_from_service_item(item);
   // Native replay may already have a visible prefix retiring on another thread.
   iree_slim_mutex_lock(&queue->state_mutex);
+  queue->operations_retained = true;
   status = iree_status_join(operation->status, status);
   status = iree_status_join(operation->native.publication.status, status);
   operation->native.publication.status = iree_ok_status();
@@ -1027,24 +1028,30 @@ bool iree_hal_amd_xdna_queue_try_wait_epoch(iree_hal_queue_t* base,
   return true;
 }
 
-// Releases the parent only from a poll callback after source unregistration has
-// returned the event and a separate placed handoff has executed.
+// The final callback returns its borrow before the destroying caller frees the
+// queue. The mutex joins notification_post's tail, not just its visible wake.
+static void iree_hal_amd_xdna_queue_finish_shutdown(
+    iree_hal_amd_xdna_queue_t* queue, bool complete) {
+  iree_slim_mutex_lock(&queue->state_mutex);
+  queue->shutdown_complete = complete;
+  iree_notification_t* notification = queue->shutdown_notification;
+  queue->shutdown_notification = NULL;
+  iree_notification_post(notification, IREE_ALL_WAITERS);
+  iree_slim_mutex_unlock(&queue->state_mutex);
+}
+
 static void iree_hal_amd_xdna_queue_finalize(
     void* user_data, iree_async_operation_t* base_operation,
     iree_status_t status, iree_async_completion_flags_t flags) {
   (void)base_operation;
   (void)flags;
   iree_hal_amd_xdna_queue_t* queue = user_data;
+  const bool complete = iree_status_is_ok(status) && !queue->handle &&
+                        !queue->operations_retained;
   if (!iree_status_is_ok(status)) {
     iree_hal_amd_xdna_queue_report_status(queue, status);
-    return;
   }
-  queue->shutdown_complete = true;
-  const iree_hal_amd_xdna_queue_shutdown_callback_t callback =
-      queue->shutdown_callback;
-  queue->shutdown_callback = (iree_hal_amd_xdna_queue_shutdown_callback_t){0};
-  callback.fn(callback.user_data);
-  // The callback releases |queue| and its proactor-owning parent.
+  iree_hal_amd_xdna_queue_finish_shutdown(queue, complete);
 }
 
 static void iree_hal_amd_xdna_queue_schedule_finalization(
@@ -1056,6 +1063,7 @@ static void iree_hal_amd_xdna_queue_schedule_finalization(
       queue->proactor, &queue->finalization_operation);
   if (!iree_status_is_ok(status)) {
     iree_hal_amd_xdna_queue_report_status(queue, status);
+    iree_hal_amd_xdna_queue_finish_shutdown(queue, false);
   }
 }
 
@@ -1065,6 +1073,7 @@ static void iree_hal_amd_xdna_queue_observer_unregistered(
   if (!iree_status_is_ok(status)) {
     queue->observer_state = IREE_HAL_AMD_XDNA_OBSERVER_STATE_RETAINED;
     iree_hal_amd_xdna_queue_report_status(queue, status);
+    iree_hal_amd_xdna_queue_finish_shutdown(queue, false);
     return;
   }
   queue->observer_state = IREE_HAL_AMD_XDNA_OBSERVER_STATE_RETIRED;
@@ -1081,17 +1090,18 @@ static void iree_hal_amd_xdna_queue_shutdown_on_proactor(
     iree_hal_amd_xdna_queue_service_deinitialize(&queue->publisher);
     queue->services_shutdown = true;
   }
-  if (queue->handle) {
+  // Failed observation can leave native work unretired. Stop host observation
+  // while preserving its native queue, event, and operand ownership.
+  if (queue->handle && !queue->operations_retained && !queue->pending.count) {
     amdf_status_t status =
         queue->context->api->kernel_queue_destroy(queue->handle);
     if (!amdf_status_is_ok(status)) {
       iree_hal_amd_xdna_context_report(queue->context, status,
                                        "kernel_queue_destroy");
-      // Failure does not prove that the native queue released its borrowed
-      // notification target. Retain the complete reachable owner graph.
-      return;
+      // Keep the native event alive, but still stop host callback admission.
+    } else {
+      queue->handle = NULL;
     }
-    queue->handle = NULL;
   }
 
   if (queue->observer_state == IREE_HAL_AMD_XDNA_OBSERVER_STATE_UNAVAILABLE) {
@@ -1104,6 +1114,7 @@ static void iree_hal_amd_xdna_queue_shutdown_on_proactor(
     iree_hal_amd_xdna_queue_report(
         queue, IREE_STATUS_INTERNAL,
         IREE_SV("XDNA queue shutdown lost persistent observer ownership"));
+    iree_hal_amd_xdna_queue_finish_shutdown(queue, false);
     return;
   }
 
@@ -1155,6 +1166,7 @@ static void iree_hal_amd_xdna_queue_shutdown_handoff(
   iree_hal_amd_xdna_queue_t* queue = user_data;
   if (!iree_status_is_ok(status)) {
     iree_hal_amd_xdna_queue_report_status(queue, status);
+    iree_hal_amd_xdna_queue_finish_shutdown(queue, false);
     return;
   }
   if (queue->observer_state == IREE_HAL_AMD_XDNA_OBSERVER_STATE_REGISTERING) {
@@ -1384,13 +1396,25 @@ iree_status_t iree_hal_amd_xdna_queue_assign_frontier(
   return iree_ok_status();
 }
 
-void iree_hal_amd_xdna_queue_begin_shutdown(
-    iree_hal_queue_t* base,
-    iree_hal_amd_xdna_queue_shutdown_callback_t callback) {
+static bool iree_hal_amd_xdna_queue_shutdown_finished(void* user_data) {
+  iree_hal_amd_xdna_queue_t* queue = user_data;
+  iree_slim_mutex_lock(&queue->state_mutex);
+  const bool finished = queue->shutdown_notification == NULL;
+  iree_slim_mutex_unlock(&queue->state_mutex);
+  return finished;
+}
+
+bool iree_hal_amd_xdna_queue_shutdown(iree_hal_queue_t* base) {
   iree_hal_amd_xdna_queue_t* queue = (iree_hal_amd_xdna_queue_t*)base;
+  // Nonblocking host calls can publish their signal before the callback body
+  // returns. Drain those services before placing the final proactor handoff.
+  iree_hal_amd_xdna_queue_service_await_idle(&queue->publisher);
+  iree_hal_amd_xdna_queue_service_await_idle(&queue->host_worker);
+  iree_notification_t notification;
+  iree_notification_initialize(&notification);
+  queue->shutdown_notification = &notification;
   iree_atomic_store(&queue->native_admission_open, 0,
                     iree_memory_order_release);
-  queue->shutdown_callback = callback;
   iree_async_operation_initialize(
       &queue->shutdown_operation, IREE_ASYNC_OPERATION_TYPE_NOP,
       IREE_ASYNC_OPERATION_FLAG_NONE, iree_hal_amd_xdna_queue_shutdown_handoff,
@@ -1399,7 +1423,13 @@ void iree_hal_amd_xdna_queue_begin_shutdown(
       queue->proactor, &queue->shutdown_operation);
   if (!iree_status_is_ok(status)) {
     iree_hal_amd_xdna_queue_report_status(queue, status);
+    iree_hal_amd_xdna_queue_finish_shutdown(queue, false);
   }
+  iree_notification_await(&notification,
+                          iree_hal_amd_xdna_queue_shutdown_finished, queue,
+                          iree_infinite_timeout());
+  iree_notification_deinitialize(&notification);
+  return queue->shutdown_complete;
 }
 
 static void iree_hal_amd_xdna_queue_destroy(iree_hal_queue_t* base) {

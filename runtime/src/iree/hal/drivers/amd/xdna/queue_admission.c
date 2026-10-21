@@ -21,14 +21,11 @@ typedef struct iree_hal_amd_xdna_wait_entry_t {
   iree_hal_semaphore_t* semaphore;
 } iree_hal_amd_xdna_wait_entry_t;
 
-// Returns both arenas before releasing the device that owns their pools.
+// Returns both arenas to their device-owned pools.
 static void iree_hal_amd_xdna_operation_deallocate(
     iree_hal_amd_xdna_operation_t* operation) {
-  iree_hal_device_t* device = operation->device;
   iree_hal_amd_xdna_queue_capture_t capture = operation->capture;
-  operation = NULL;
   iree_hal_amd_xdna_queue_capture_deinitialize(&capture);
-  iree_hal_device_release(device);
 }
 
 void iree_hal_amd_xdna_operation_register_producers(
@@ -106,8 +103,9 @@ iree_status_t iree_hal_amd_xdna_operation_signal(
   return iree_ok_status();
 }
 
-// The operation's device reference keeps queue storage live if a signal waiter
-// releases its public device reference inline.
+// The application keeps the device alive through completion. Its destructor
+// joins the proactor before freeing queue storage used after signal
+// publication.
 void iree_hal_amd_xdna_operation_complete(
     iree_hal_amd_xdna_operation_t* operation) {
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -582,7 +580,6 @@ iree_status_t iree_hal_amd_xdna_operation_allocate(
   operation->capture = capture;
   operation->kind = kind;
   iree_hal_amd_xdna_frontier_state_initialize(&operation->frontier);
-  iree_hal_device_retain(operation->device);
   status = iree_hal_amd_xdna_operation_capture_semaphores(
       operation, waits, IREE_HAL_AMD_XDNA_SEMAPHORE_CAPTURE_WAITS,
       &operation->waits);

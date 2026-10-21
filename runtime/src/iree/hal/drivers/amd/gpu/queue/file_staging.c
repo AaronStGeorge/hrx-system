@@ -128,9 +128,6 @@ struct iree_hal_amd_gpu_file_staging_block_t {
   iree_atomic_int32_t pending_detaches;
   // An unproven detach retains this entire native ownership graph.
   bool detach_failed;
-  // Release initiated during ordinary use retains the device through
-  // completion.
-  bool release_owns_device;
   // An idle trim also returns acquisition already accepted by the native owner.
   bool retire_on_publish;
   struct {
@@ -193,6 +190,9 @@ struct iree_hal_amd_gpu_file_staging_t {
   uint32_t transfer_count;
   // Physical ranges with queued or accepted work; only these justify growth.
   uint32_t request_count;
+  // Native preparation/release and view callback chains, under mutex. Their
+  // final access must return even after their visible state becomes idle.
+  uint32_t callback_count;
   // Maximum pipelined lanes requested by this device's file policy.
   uint32_t lane_count;
   // Maximum bytes per lane, qualified against the native single-allocation
@@ -228,6 +228,18 @@ struct iree_hal_amd_gpu_file_staging_t {
 
 static void iree_hal_amd_gpu_file_staging_progress(
     iree_hal_amd_gpu_file_staging_t* staging);
+
+// Returns a callback chain's borrow after its final access. The destructor
+// takes the same mutex so notification publication cannot escape destruction.
+static void iree_hal_amd_gpu_file_staging_callback_end(
+    iree_hal_amd_gpu_file_staging_t* staging) {
+  iree_slim_mutex_lock(&staging->mutex);
+  --staging->callback_count;
+  if (staging->closing) {
+    iree_notification_post(&staging->notification, IREE_ALL_WAITERS);
+  }
+  iree_slim_mutex_unlock(&staging->mutex);
+}
 
 static void iree_hal_amd_gpu_file_staging_list_append(
     iree_hal_amd_gpu_file_staging_list_t* list,
@@ -742,7 +754,6 @@ static void iree_hal_amd_gpu_file_staging_view_attached(void* user_data,
                                                         iree_status_t status) {
   iree_hal_amd_gpu_file_staging_view_t* view = user_data;
   iree_hal_amd_gpu_file_staging_t* staging = view->bucket->staging;
-  iree_hal_device_t* device = staging->device;
   iree_hal_amd_gpu_file_staging_list_t completed = {0};
   iree_slim_mutex_lock(&staging->mutex);
   --view->block->pending_views;
@@ -759,14 +770,13 @@ static void iree_hal_amd_gpu_file_staging_view_attached(void* user_data,
   iree_slim_mutex_unlock(&staging->mutex);
   iree_hal_amd_gpu_file_staging_progress(staging);
   iree_hal_amd_gpu_file_staging_complete_list(completed);
-  iree_hal_device_release(device);
+  iree_hal_amd_gpu_file_staging_callback_end(staging);
 }
 
 static void iree_hal_amd_gpu_file_staging_attach_view(
     iree_hal_amd_gpu_file_staging_view_t* view) {
   iree_hal_amd_gpu_file_staging_block_t* block = view->block;
   iree_hal_amd_gpu_file_staging_t* staging = block->staging;
-  iree_hal_device_retain(staging->device);
   iree_status_t status = iree_ok_status();
   if (!view->registration && block->preparation &&
       iree_any_bit_set(
@@ -854,6 +864,7 @@ static void iree_hal_amd_gpu_file_staging_view_detached(void* user_data,
     // File/GPU uses have retired. Unknown registration ownership retains the
     // view, physical backing, and device use independently of completed ranges.
     iree_hal_amd_gpu_file_staging_progress(staging);
+    iree_hal_amd_gpu_file_staging_callback_end(staging);
     return;
   }
   iree_slim_mutex_lock(&staging->mutex);
@@ -863,12 +874,11 @@ static void iree_hal_amd_gpu_file_staging_view_detached(void* user_data,
   staging->dirty = true;
   iree_slim_mutex_unlock(&staging->mutex);
   iree_hal_amd_gpu_file_staging_progress(staging);
-  iree_hal_device_release(device);
+  iree_hal_amd_gpu_file_staging_callback_end(staging);
 }
 
 static void iree_hal_amd_gpu_file_staging_detach_view(
     iree_hal_amd_gpu_file_staging_view_t* view) {
-  iree_hal_device_retain(view->bucket->staging->device);
   iree_async_proactor_detach_buffer(
       view->bucket->proactor, view->registration,
       (iree_async_buffer_registration_callback_t){
@@ -880,9 +890,7 @@ static void iree_hal_amd_gpu_file_staging_released(
     iree_async_completion_flags_t flags) {
   iree_hal_amd_gpu_file_staging_block_t* block = user_data;
   iree_hal_amd_gpu_file_staging_t* staging = block->staging;
-  iree_hal_device_t* device = staging->device;
   iree_hal_amd_gpu_file_staging_slot_t* slots = block->slots;
-  const bool release_device = block->release_owns_device;
   iree_slim_mutex_lock(&staging->mutex);
   if (!iree_status_is_ok(status)) {
     staging->failure = iree_status_join(staging->failure, status);
@@ -901,9 +909,7 @@ static void iree_hal_amd_gpu_file_staging_released(
   iree_slim_mutex_unlock(&staging->mutex);
   iree_allocator_free(staging->host_allocator, slots);
   iree_hal_amd_gpu_file_staging_progress(staging);
-  if (release_device) {
-    iree_hal_device_release(device);
-  }
+  iree_hal_amd_gpu_file_staging_callback_end(staging);
 }
 
 static void iree_hal_amd_gpu_file_staging_native_released(void* user_data) {
@@ -923,6 +929,7 @@ static void iree_hal_amd_gpu_file_staging_detach_join(
     return;
   }
   if (block->detach_failed) {
+    iree_hal_amd_gpu_file_staging_callback_end(block->staging);
     return;
   }
   iree_hal_amd_gpu_context_release_memory(
@@ -1025,7 +1032,6 @@ static void iree_hal_amd_gpu_file_staging_published(
     iree_async_completion_flags_t flags) {
   iree_hal_amd_gpu_file_staging_block_t* block = user_data;
   iree_hal_amd_gpu_file_staging_t* staging = block->staging;
-  iree_hal_device_t* device = staging->device;
   status = iree_status_join(block->status, status);
   block->status = iree_ok_status();
   if (iree_status_is_ok(status)) {
@@ -1053,7 +1059,7 @@ static void iree_hal_amd_gpu_file_staging_published(
     iree_hal_amd_gpu_file_staging_construction_failed(block, status);
   }
   iree_hal_amd_gpu_file_staging_progress(staging);
-  iree_hal_device_release(device);
+  iree_hal_amd_gpu_file_staging_callback_end(staging);
 }
 
 static void iree_hal_amd_gpu_file_staging_acquired(void* user_data,
@@ -1076,6 +1082,7 @@ static void iree_hal_amd_gpu_file_staging_block_allocate(
       (void**)&block->slots);
   if (!iree_status_is_ok(status)) {
     iree_hal_amd_gpu_file_staging_construction_failed(block, status);
+    iree_hal_amd_gpu_file_staging_callback_end(staging);
     return;
   }
   for (uint32_t i = 0; i < block->lane_count; ++i) {
@@ -1084,7 +1091,6 @@ static void iree_hal_amd_gpu_file_staging_block_allocate(
     block->slots[i].next = block->available;
     block->available = &block->slots[i];
   }
-  iree_hal_device_retain(staging->device);
   iree_hal_amd_gpu_context_acquire_memory(
       staging->context, 1, &block->allocation, &block->memory,
       (iree_hal_amd_fabric_memory_callback_t){
@@ -1168,11 +1174,6 @@ static void iree_hal_amd_gpu_file_staging_progress(
     return;
   }
   staging->pumping = true;
-  const bool retain_device = !staging->closing;
-  iree_hal_device_t* device = staging->device;
-  if (retain_device) {
-    iree_hal_device_retain(device);
-  }
   iree_slim_mutex_unlock(&staging->mutex);
   for (;;) {
     iree_hal_amd_gpu_file_staging_list_t completed = {0};
@@ -1242,15 +1243,12 @@ static void iree_hal_amd_gpu_file_staging_progress(
           !staging->requests[(1u << i) - 1].head &&
           !staging->requests[2].head) {
         block->phase = IREE_HAL_AMD_GPU_FILE_STAGING_RELEASING;
-        block->release_owns_device = !staging->closing;
-        if (block->release_owns_device) {
-          iree_hal_device_retain(device);
-        }
         release = block;
         break;
       }
     }
     if (release) {
+      ++staging->callback_count;
       iree_slim_mutex_unlock(&staging->mutex);
       iree_hal_amd_gpu_file_staging_block_release(release);
       continue;
@@ -1259,6 +1257,7 @@ static void iree_hal_amd_gpu_file_staging_progress(
     if (view) {
       staging->pending_views = view->next;
       view->next = NULL;
+      ++staging->callback_count;
       iree_slim_mutex_unlock(&staging->mutex);
       if (view->phase == IREE_HAL_AMD_GPU_FILE_STAGING_VIEW_DETACHING) {
         iree_hal_amd_gpu_file_staging_detach_view(view);
@@ -1270,6 +1269,7 @@ static void iree_hal_amd_gpu_file_staging_progress(
     iree_hal_amd_gpu_file_staging_block_t* grow =
         iree_hal_amd_gpu_file_staging_plan_growth(staging);
     if (grow) {
+      ++staging->callback_count;
       iree_slim_mutex_unlock(&staging->mutex);
       iree_hal_amd_gpu_file_staging_block_allocate(grow);
       continue;
@@ -1298,9 +1298,6 @@ static void iree_hal_amd_gpu_file_staging_progress(
         iree_notification_post(&staging->notification, IREE_ALL_WAITERS);
       }
       iree_slim_mutex_unlock(&staging->mutex);
-      if (retain_device) {
-        iree_hal_device_release(device);
-      }
       return;
     }
     const uint32_t ordinal = (request->block_mask & available & 1) ? 0 : 1;
@@ -1480,10 +1477,10 @@ static bool iree_hal_amd_gpu_file_staging_joined(void* user_data) {
   iree_hal_amd_gpu_file_staging_t* staging = user_data;
   iree_slim_mutex_lock(&staging->mutex);
   const bool complete =
-      (!staging->pumping &&
-       staging->blocks[0].phase == IREE_HAL_AMD_GPU_FILE_STAGING_EMPTY &&
-       staging->blocks[1].phase == IREE_HAL_AMD_GPU_FILE_STAGING_EMPTY) ||
-      staging->cleanup_blocked;
+      !staging->pumping && !staging->callback_count &&
+      ((staging->blocks[0].phase == IREE_HAL_AMD_GPU_FILE_STAGING_EMPTY &&
+        staging->blocks[1].phase == IREE_HAL_AMD_GPU_FILE_STAGING_EMPTY) ||
+       staging->cleanup_blocked);
   iree_slim_mutex_unlock(&staging->mutex);
   return complete;
 }

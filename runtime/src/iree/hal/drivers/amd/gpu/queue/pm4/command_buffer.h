@@ -16,8 +16,8 @@ extern "C" {
 #endif  // __cplusplus
 
 // Creates a recorder whose end operation seals device-resident native blocks.
-// Its independently retainable program holds the device for the recording; the
-// device-owned program pool provides placement and trim; native sealing
+// The recording and its independently retainable program borrow the device.
+// The device-owned program pool provides placement and trim; native sealing
 // allocations run on the caller. UNRETAINED controls only the caller's direct
 // buffers/executables, not native program ownership.
 iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
@@ -37,8 +37,6 @@ iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
 typedef struct iree_hal_amd_gpu_pm4_command_program_t {
   // Internal owners spanning native growth independently of the recording.
   iree_atomic_ref_count_t ref_count;
-  // Device retaining the program pool through final native growth completion.
-  iree_hal_device_t* device;
   // Allocator owning this separately retained program record.
   iree_allocator_t host_allocator;
   // Owned native instances and shared immutable fixup table.

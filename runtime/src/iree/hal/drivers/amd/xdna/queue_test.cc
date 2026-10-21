@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <semaphore>
 #include <thread>
 #include <vector>
 
@@ -1701,19 +1702,9 @@ TEST(XdnaQueueTest, FinalPublicationAllowsImmediateDeviceRelease) {
       IREE_HAL_SEMAPHORE_FLAG_NONE, &first));
   ASSERT_NO_FATAL_FAILURE(harness.Submit(first));
   ASSERT_NO_FATAL_FAILURE(harness.Submit());
-  iree_async_semaphore_timepoint_t release_timepoint = {
-      .callback =
-          +[](void* user_data, iree_async_semaphore_timepoint_t* timepoint,
-              iree_status_t status) {
-            IREE_EXPECT_OK(status);
-            static_cast<QueueHarness*>(user_data)->ReleaseDevice();
-          },
-      .user_data = &harness,
-  };
-  IREE_ASSERT_OK(iree_async_semaphore_acquire_timepoint(
-      reinterpret_cast<iree_async_semaphore_t*>(harness.done), 1,
-      &release_timepoint));
-  ASSERT_NO_FATAL_FAILURE(harness.PollUntilDeviceDestroyed());
+  ASSERT_NO_FATAL_FAILURE(harness.PollUntilDone(IREE_STATUS_OK));
+  iree_hal_semaphore_release(first);
+  harness.ReleaseDevice();
   EXPECT_EQ(harness.completion_status, IREE_STATUS_OK);
   EXPECT_EQ(harness.live_memories_at_completion, 1u);
   EXPECT_EQ(harness.native.live_memories, 0u);
@@ -1722,7 +1713,63 @@ TEST(XdnaQueueTest, FinalPublicationAllowsImmediateDeviceRelease) {
   EXPECT_EQ(harness.native.instance_destroy_count, 1u);
   EXPECT_TRUE(harness.native.context_destroy_saw_queue);
   EXPECT_EQ(harness.diagnostic_count, 0u);
-  iree_hal_semaphore_release(first);
+  harness.ReleasePool();
+  EXPECT_EQ(allocation_counters.live_allocations.load(), 0);
+}
+
+TEST(XdnaQueueTest, FinalReleaseJoinsNonBlockingHostCall) {
+  HostAllocationCounters allocation_counters;
+  QueueHarness harness;
+  ASSERT_NO_FATAL_FAILURE(
+      harness.Initialize(TrackingAllocator(&allocation_counters)));
+  ASSERT_NO_FATAL_FAILURE(harness.RegisterNativeObserver());
+  struct Callback {
+    // Controller observes the body before initiating final destruction.
+    std::binary_semaphore entered{0};
+    // Independent application work permits the body to finish.
+    std::binary_semaphore resume{0};
+    // Checked by the releasing thread after final destruction returns.
+    std::atomic<bool> finished{false};
+  } callback;
+  auto call = iree_hal_make_host_call(
+      +[](void* user_data, const uint64_t[4],
+          iree_hal_host_call_context_t*) -> iree_status_t {
+        auto* callback = static_cast<Callback*>(user_data);
+        callback->entered.release();
+        callback->resume.acquire();
+        callback->finished.store(true, std::memory_order_release);
+        return iree_ok_status();
+      },
+      &callback);
+  uint64_t value = 1;
+  const uint64_t arguments[4] = {};
+  IREE_ASSERT_OK(iree_hal_queue_host_call(
+      harness.queue, {}, {1, &harness.done, &value}, call, arguments,
+      IREE_HAL_HOST_CALL_FLAG_NON_BLOCKING));
+  ASSERT_NO_FATAL_FAILURE(harness.PollUntilValue(harness.done, value));
+  callback.entered.acquire();
+  iree_hal_semaphore_release(harness.done);
+  harness.done = nullptr;
+  std::binary_semaphore releasing{0};
+  std::atomic<bool> released = false;
+  std::thread teardown([&] {
+    releasing.release();
+    iree_hal_device_release(harness.device);
+    iree_hal_device_group_release(harness.group);
+    EXPECT_TRUE(callback.finished.load(std::memory_order_acquire));
+    released.store(true, std::memory_order_release);
+    iree_async_proactor_wake(harness.proactor);
+  });
+  releasing.acquire();
+  EXPECT_FALSE(released.load(std::memory_order_acquire));
+  callback.resume.release();
+  while (!released.load(std::memory_order_acquire)) {
+    IREE_CHECK_OK(iree_async_proactor_poll(harness.proactor,
+                                           iree_infinite_timeout(), nullptr));
+  }
+  teardown.join();
+  harness.device = nullptr;
+  harness.group = nullptr;
   harness.ReleasePool();
   EXPECT_EQ(allocation_counters.live_allocations.load(), 0);
 }

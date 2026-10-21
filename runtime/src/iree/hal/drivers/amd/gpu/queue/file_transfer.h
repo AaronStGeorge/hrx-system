@@ -18,16 +18,21 @@
 extern "C" {
 #endif
 
-// Native execution borrowed by the shared file pipeline. The operation
-// retains the queue's device. Packet encoding and publication remain with the
+// Native execution borrowed by the shared file pipeline. The application keeps
+// the queue's device alive. Packet encoding and publication remain with the
 // executor; this component owns I/O progress and captured payload lifetime.
 typedef struct iree_hal_amd_gpu_file_executor_t {
   // Borrowed exact queue whose native transfer engine moves buffer bytes.
   iree_hal_queue_t* queue;
-  // Borrowed device diagnostics, dominated by the retained device.
+  // Borrowed diagnostics, dominated by the application's device ownership.
   const iree_hal_amd_gpu_context_t* context;
   // Queue-owned reusable CPU metadata storage.
   iree_hal_amd_gpu_capture_pool_t* captures;
+  // Marks accepted host work in the queue's existing shutdown accounting.
+  void (*begin)(iree_hal_queue_t* queue);
+  // Returns that borrow after the final capture access and wakes shutdown.
+  void (*end)(iree_hal_queue_t* queue);
+
   // Device-owned native file-copy pipeline, or NULL without a transfer family.
   iree_hal_amd_gpu_file_staging_t* staging;
   // Queue-owned host dependency associations, finalized by their last borrower.

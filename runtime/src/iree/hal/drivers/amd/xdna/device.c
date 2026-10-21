@@ -132,10 +132,8 @@ static bool iree_hal_amd_xdna_device_query_pool_epoch(void* user_data,
              device->topology.frontier.tracker, axis, epoch);
 }
 
-// Runs from the queue's second placed finalization callback, after the queue no
-// longer borrows the native context or proactor.
-static void iree_hal_amd_xdna_device_finalize(void* user_data) {
-  iree_hal_amd_xdna_device_t* device = user_data;
+// Runs on the final releasing thread after queue callbacks and workers join.
+static void iree_hal_amd_xdna_device_free(iree_hal_amd_xdna_device_t* device) {
   iree_hal_queue_t* queue = device->queue;
   device->queue = NULL;
   iree_hal_queue_release(queue);
@@ -144,6 +142,7 @@ static void iree_hal_amd_xdna_device_finalize(void* user_data) {
   }
   iree_hal_allocator_release(device->allocator);
   iree_hal_amd_xdna_command_arena_free(device->command_arena);
+  iree_hal_amd_fabric_allocation_queue_drain(device->memory.allocation_queue);
   iree_hal_amd_fabric_allocation_queue_release(device->memory.allocation_queue);
   iree_async_notification_release(device->memory.notification);
   iree_hal_device_spec_release(device->spec);
@@ -162,9 +161,10 @@ static void iree_hal_amd_xdna_device_destroy(iree_hal_device_t* base) {
         "ownership");
     return;
   }
-  iree_hal_amd_xdna_queue_begin_shutdown(
-      device->queue, (iree_hal_amd_xdna_queue_shutdown_callback_t){
-                         iree_hal_amd_xdna_device_finalize, device});
+  iree_hal_amd_fabric_allocation_queue_drain(device->memory.allocation_queue);
+  if (iree_hal_amd_xdna_queue_shutdown(device->queue)) {
+    iree_hal_amd_xdna_device_free(device);
+  }
 }
 
 iree_status_t iree_hal_amd_xdna_device_create(

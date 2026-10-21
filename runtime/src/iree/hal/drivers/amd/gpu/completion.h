@@ -73,17 +73,6 @@ typedef struct iree_hal_amd_gpu_completion_source_t {
   iree_hal_amd_gpu_completion_wait_t wait;
 } iree_hal_amd_gpu_completion_source_t;
 
-// Final worker action after its last source, context, and completion-state
-// access. The owner may finalize its allocation here after its own lifetime
-// handoffs. Failure to initialize the worker does not invoke this callback.
-typedef struct iree_hal_amd_gpu_completion_exit_callback_t {
-  // Optional final action, which may deinitialize and free the completion
-  // owner.
-  void (*fn)(void* user_data);
-  // Borrowed owner state, live through this final action.
-  void* user_data;
-} iree_hal_amd_gpu_completion_exit_callback_t;
-
 // One high-priority completion worker per device. Its fixed source array has
 // no submission-time activation or registration traffic. The worker waits
 // on coherent completion words for a bounded interval after actual progress,
@@ -101,8 +90,6 @@ typedef struct iree_hal_amd_gpu_completion_t {
   iree_duration_t spin_ns;
   // Owned thread, or NULL after failed initialization or a successful join.
   iree_thread_t* thread;
-  // Final owner action, copied before source callbacks can request shutdown.
-  iree_hal_amd_gpu_completion_exit_callback_t exit_callback;
   // Running, stop-requested, or stopped state shared only with teardown.
   iree_atomic_int32_t state;
 } iree_hal_amd_gpu_completion_t;
@@ -111,19 +98,15 @@ typedef struct iree_hal_amd_gpu_completion_t {
 // priority hint. Sources must be ready before entry; callbacks may run before
 // this returns. Allocation and thread startup are cold, fallible operations.
 // Failure runs no callback and leaves out_completion safe to deinitialize.
-// The caller retains its construction ownership through this call even if the
-// worker exits immediately; the exit callback must join that ownership before
-// freeing the completion.
 iree_status_t iree_hal_amd_gpu_completion_initialize(
     const iree_hal_amd_gpu_context_t* context, iree_host_size_t source_count,
     iree_hal_amd_gpu_completion_source_t* sources, iree_duration_t spin_ns,
-    iree_hal_amd_gpu_completion_exit_callback_t exit_callback,
     iree_thread_affinity_t affinity, iree_allocator_t host_allocator,
     iree_hal_amd_gpu_completion_t* out_completion);
 
 // Requests exit after the current source round and wakes a parked worker.
 // Called only after accepted work and producers have joined. This does not
-// join or release any ownership; the exit callback reports final worker access.
+// join or release any ownership; deinitialization joins final worker access.
 // Native wake failure preserves the request and permits retry. The raw status
 // lets a void device destructor diagnose failure without constructing and
 // discarding an IREE status.
@@ -131,12 +114,7 @@ amdf_status_t iree_hal_amd_gpu_completion_request_stop(
     iree_hal_amd_gpu_completion_t* completion);
 
 // Stops and joins the final source access. Called by one external owner after
-// accepted work and producers have joined, never from a source callback. The
-// final exit callback may also call this to release its own thread handle;
-// that detaches the handle after the worker's final completion-state access.
-// Exactly one owner deinitializes: an exit callback that releases or frees the
-// completion excludes external deinitialization. An external joiner instead
-// keeps storage live through a callback that leaves thread ownership unchanged.
+// accepted work and producers have joined, never from a source callback.
 //
 // This does not wait for GPU work or consume notification tails on the owner's
 // behalf. A failed native stop wake returns an error and preserves the entire
