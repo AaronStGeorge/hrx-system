@@ -548,6 +548,7 @@ TEST_P(HsacoTest, NormalizesNonzeroLinkedVirtualBase) {
   }
   Image image;
   IREE_ASSERT_OK(Initialize(bytes_, &image, 7));
+  EXPECT_EQ(image.value.virtual_base, baseline.value.virtual_base + kBias);
   EXPECT_EQ(image.value.byte_length, baseline.value.byte_length);
   EXPECT_EQ(image.value.segment_count, baseline.value.segment_count);
   for (size_t i = 0; i < image.value.segment_count; ++i) {
