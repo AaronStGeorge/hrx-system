@@ -409,21 +409,21 @@ low.func.def target<test.low.core>(@test_target) @rematerialize_recipe_chain(%bl
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @rematerialize_recipe_chain(%block0: reg<test.explicit32>, %block1: reg<test.explicit32>, %block2: reg<test.explicit32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  %late = copy %seed : reg<test.i32> -> reg<test.explicit32>
   %use0 = copy %block0 : reg<test.explicit32> -> reg<test.i32>
   %use1 = copy %block1 : reg<test.explicit32> -> reg<test.i32>
   %use2 = copy %block2 : reg<test.explicit32> -> reg<test.i32>
-  %use3 = copy %late : reg<test.explicit32> -> reg<test.i32>
-  %literal_remat$21 = test.const.i32 3
-  %root_remat$22 = test.rematerialize.explicit32 %literal_remat$21
-  %chain0_remat$23 = test.rematerialize.tied.explicit32 %root_remat$22
-  %chain1_remat$24 = test.rematerialize.tied.explicit32 %chain0_remat$23
-  %chain_use0 = copy %chain1_remat$24 : reg<test.explicit32> -> reg<test.i32>
-  %literal_remat$25 = test.const.i32 3
-  %root_remat$26 = test.rematerialize.explicit32 %literal_remat$25
-  %chain0_remat$27 = test.rematerialize.tied.explicit32 %root_remat$26
-  %chain1_remat$28 = test.rematerialize.tied.explicit32 %chain0_remat$27
-  %chain_use1 = copy %chain1_remat$28 : reg<test.explicit32> -> reg<test.i32>
+  %late_remat = copy %seed : reg<test.i32> -> reg<test.explicit32>
+  %use3 = copy %late_remat : reg<test.explicit32> -> reg<test.i32>
+  %literal_remat$22 = test.const.i32 3
+  %root_remat$23 = test.rematerialize.explicit32 %literal_remat$22
+  %chain0_remat$24 = test.rematerialize.tied.explicit32 %root_remat$23
+  %chain1_remat$25 = test.rematerialize.tied.explicit32 %chain0_remat$24
+  %chain_use0 = copy %chain1_remat$25 : reg<test.explicit32> -> reg<test.i32>
+  %literal_remat$26 = test.const.i32 3
+  %root_remat$27 = test.rematerialize.explicit32 %literal_remat$26
+  %chain0_remat$28 = test.rematerialize.tied.explicit32 %root_remat$27
+  %chain1_remat$29 = test.rematerialize.tied.explicit32 %chain0_remat$28
+  %chain_use1 = copy %chain1_remat$29 : reg<test.explicit32> -> reg<test.i32>
   %sum01 = test.add.i32 %use0, %use1
   %sum23 = test.add.i32 %use2, %use3
   %sum0123 = test.add.i32 %sum01, %sum23
@@ -463,17 +463,17 @@ test.target<low_core> @test_target
 low.func.def target<test.low.core>(@test_target) @rematerialize_recipe_internal_cross_edge(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
   %root = test.const.explicit32 3
   %moved_root = move %root : reg<test.explicit32> -> reg<test.explicit32>
-  %late = copy %seed : reg<test.i32> -> reg<test.explicit32>
   %use0 = copy %moved_root : reg<test.explicit32> -> reg<test.i32>
-  %use1 = copy %late : reg<test.explicit32> -> reg<test.i32>
-  %root_remat$14 = test.const.explicit32 3
-  %chain0_remat$15 = test.rematerialize.pair.explicit32 %root_remat$14, %root_remat$14
-  %chain1_remat$16 = test.rematerialize.pair.explicit32 %chain0_remat$15, %root_remat$14
-  %chain_use0 = copy %chain1_remat$16 : reg<test.explicit32> -> reg<test.i32>
-  %root_remat$17 = test.const.explicit32 3
-  %chain0_remat$18 = test.rematerialize.pair.explicit32 %root_remat$17, %root_remat$17
-  %chain1_remat$19 = test.rematerialize.pair.explicit32 %chain0_remat$18, %root_remat$17
-  %chain_use1 = copy %chain1_remat$19 : reg<test.explicit32> -> reg<test.i32>
+  %late_remat = copy %seed : reg<test.i32> -> reg<test.explicit32>
+  %use1 = copy %late_remat : reg<test.explicit32> -> reg<test.i32>
+  %root_remat$15 = test.const.explicit32 3
+  %chain0_remat$16 = test.rematerialize.pair.explicit32 %root_remat$15, %root_remat$15
+  %chain1_remat$17 = test.rematerialize.pair.explicit32 %chain0_remat$16, %root_remat$15
+  %chain_use0 = copy %chain1_remat$17 : reg<test.explicit32> -> reg<test.i32>
+  %root_remat$18 = test.const.explicit32 3
+  %chain0_remat$19 = test.rematerialize.pair.explicit32 %root_remat$18, %root_remat$18
+  %chain1_remat$20 = test.rematerialize.pair.explicit32 %chain0_remat$19, %root_remat$18
+  %chain_use1 = copy %chain1_remat$20 : reg<test.explicit32> -> reg<test.i32>
   %sum01 = test.add.i32 %use0, %use1
   %sum_chain = test.add.i32 %chain_use0, %chain_use1
   %result = test.add.i32 %sum01, %sum_chain
@@ -575,7 +575,7 @@ low.func.def target<test.low.core>(@test_target) @unsupported_stack_spill_space(
 
 test.target<low_core> @test_target
 
-// REMARK@+1: BACKEND/045 {function_name="rematerialize_live_frontier", trigger_value_class="test.packed.narrow", trigger_kind="allocation-failure", repaired_value_count="1", cloned_packet_count="2", rewritten_operand_count="2", retained_placement_count="0", reason_key="producer-rematerializable"}
+// REMARK@+1: BACKEND/045 {function_name="rematerialize_live_frontier", trigger_value_class="test.packed.narrow", trigger_kind="allocation-failure", repaired_value_count="2", cloned_packet_count="3", rewritten_operand_count="3", retained_placement_count="0", reason_key="producer-rematerializable"}
 low.func.def target<test.low.core>(@test_target) @rematerialize_live_frontier(%blocker: reg<test.packed.narrow>) -> (reg<test.i32>) asm {
   %literal = test.const.packed.narrow 7
   %seed = copy %literal : reg<test.packed.narrow> -> reg<test.i32>

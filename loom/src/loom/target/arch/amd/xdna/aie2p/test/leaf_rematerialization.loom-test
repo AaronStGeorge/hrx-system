@@ -907,3 +907,68 @@ low.func.def target<amd.xdna.aie2p.core>(@core) abi(object_function) @read_coeff
 .rodata.coefficient8: address=0x00070060 bytes=4 initialized
   09000000
 .storage.read_coefficients.private: address=0x00070000 bytes=64 reserved
+
+// ====
+
+// All twenty accumulator units are live between the loads and stores. The
+// restricted zero must be captured near its later use, leaving those units
+// available to the memory operation phase.
+// RUN: emit aie2p-leaf @restricted_zero report=code
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @restricted_zero(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+  %clear = acc.clear.f32x64
+  %unit = slice %clear[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
+  %zero = copy %unit : reg<aie2p.mbms> -> reg<aie2p.ebmll>
+  low.br ^load
+^load:
+  %value0 = vlda.acc %input, 0
+  %value1 = vlda.acc %input, 0
+  %value2 = vlda.acc %input, 0
+  %value3 = vlda.acc %input, 0
+  %value4 = vlda.acc %input, 0
+  %value5 = vlda.acc %input, 0
+  %value6 = vlda.acc %input, 0
+  %value7 = vlda.acc %input, 0
+  %value8 = vlda.acc %input, 0
+  %value9 = vlda.acc %input, 0
+  %value10 = vlda.acc %input, 0
+  %value11 = vlda.acc %input, 0
+  %value12 = vlda.acc %input, 0
+  %value13 = vlda.acc %input, 0
+  %value14 = vlda.acc %input, 0
+  %value15 = vlda.acc %input, 0
+  %value16 = vlda.acc %input, 0
+  %value17 = vlda.acc %input, 0
+  %value18 = vlda.acc %input, 0
+  %value19 = vlda.acc %input, 0
+  low.br ^store
+^store:
+  vst.acc %value0, %output, 0
+  vst.acc %value1, %output, 0
+  vst.acc %value2, %output, 0
+  vst.acc %value3, %output, 0
+  vst.acc %value4, %output, 0
+  vst.acc %value5, %output, 0
+  vst.acc %value6, %output, 0
+  vst.acc %value7, %output, 0
+  vst.acc %value8, %output, 0
+  vst.acc %value9, %output, 0
+  vst.acc %value10, %output, 0
+  vst.acc %value11, %output, 0
+  vst.acc %value12, %output, 0
+  vst.acc %value13, %output, 0
+  vst.acc %value14, %output, 0
+  vst.acc %value15, %output, 0
+  vst.acc %value16, %output, 0
+  vst.acc %value17, %output, 0
+  vst.acc %value18, %output, 0
+  vst.acc %value19, %output, 0
+  low.br ^done
+^done:
+  %result = copy %zero : reg<aie2p.ebmll> -> reg<aie2p.mbms>
+  vst.acc %result, %output, 0
+  return
+}
+// ----
+code: 98 15 04 00 98 95 04 00 98 15 05 00 98 95 05 00 98 15 06 00 98 35 04 00 98 55 04 00 98 75 04 00 98 b5 04 00 98 d5 04 00 98 f5 04 00 98 35 05 00 98 55 05 00 98 75 05 00 98 b5 05 00 98 d5 05 00 98 f5 05 00 98 35 06 00 98 55 06 00 98 75 06 00 00 00 00 00 00 00 00 00 00 00 00 00 98 06 04 09 98 86 04 09 98 06 05 09 98 86 05 09 98 06 06 09 98 26 04 09 98 46 04 09 98 66 04 09 98 a6 04 09 98 c6 04 09 98 e6 04 09 98 26 05 09 98 46 05 09 98 66 05 09 98 a6 05 09 98 c6 05 09 98 e6 05 09 98 26 06 09 98 46 06 09 98 66 06 09 00 00 00 00 00 00 08 1d e0 00 00 00 00 00 00 00 18 00 28 10 00 00 98 06 04 09 00 00 00 00 00 00

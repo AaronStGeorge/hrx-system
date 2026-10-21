@@ -1,0 +1,154 @@
+// A class-constrained snapshot can be replayed from unchanged contents.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.f32=1}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @stable_copy(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %captured = copy %input : reg<test.i32> -> reg<test.f32>
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %result = copy %captured : reg<test.f32> -> reg<test.i32>
+  return %output, %result
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @stable_copy(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %captured_remat = copy %input : reg<test.i32> -> reg<test.f32>
+  %result = copy %captured_remat : reg<test.f32> -> reg<test.i32>
+  return %output, %result
+}
+
+// ====
+
+// A destructive update cannot be moved ahead of the saved snapshot.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.f32=1}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @snapshot_direct(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %captured = copy %input : reg<test.i32> -> reg<test.f32>
+  %changed = test.tied.any %input
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %result = copy %captured : reg<test.f32> -> reg<test.i32>
+  return %output, %result, %changed
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @snapshot_direct(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %snapshot_direct_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %captured = copy %input : reg<test.i32> -> reg<test.f32>
+  low.spill %captured, %snapshot_direct_spill_storage_0 : reg<test.f32>, low.storage<private>
+  %changed = test.tied.any %input
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %11 = low.reload %snapshot_direct_spill_storage_0 : low.storage<private> -> reg<test.f32>
+  %result = copy %11 : reg<test.f32> -> reg<test.i32>
+  return %output, %result, %changed
+}
+
+// ====
+
+// An alias does not list the consuming uses of its parent. Its captured
+// contents must still precede the parent update.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.f32=1}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @snapshot_alias_source(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %alias = low.assume %input [range(%input, 0, 1024)] : reg<test.i32>
+  %captured = copy %alias : reg<test.i32> -> reg<test.f32>
+  %changed = test.tied.any %input
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %result = copy %captured : reg<test.f32> -> reg<test.i32>
+  return %output, %result, %changed
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @snapshot_alias_source(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %snapshot_alias_source_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %alias = low.assume %input [range(%input, 0, 1024)] : reg<test.i32>
+  %captured = copy %alias : reg<test.i32> -> reg<test.f32>
+  low.spill %captured, %snapshot_alias_source_spill_storage_0 : reg<test.f32>, low.storage<private>
+  %changed = test.tied.any %input
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %12 = low.reload %snapshot_alias_source_spill_storage_0 : low.storage<private> -> reg<test.f32>
+  %result = copy %12 : reg<test.f32> -> reg<test.i32>
+  return %output, %result, %changed
+}
+
+// ====
+
+// A consuming use through a required alias also prevents replaying the
+// original source capture.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.f32=1}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @snapshot_alias_consumer(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %captured = copy %input : reg<test.i32> -> reg<test.f32>
+  %alias = low.assume %input [range(%input, 0, 1024)] : reg<test.i32>
+  %changed = test.tied.any %alias
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %result = copy %captured : reg<test.f32> -> reg<test.i32>
+  return %output, %result, %changed
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @snapshot_alias_consumer(%input: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %snapshot_alias_consumer_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %captured = copy %input : reg<test.i32> -> reg<test.f32>
+  low.spill %captured, %snapshot_alias_consumer_spill_storage_0 : reg<test.f32>, low.storage<private>
+  %alias = low.assume %input [range(%input, 0, 1024)] : reg<test.i32>
+  %changed = test.tied.any %alias
+  low.br ^work
+^work:
+  %temporary = copy %other : reg<test.i32> -> reg<test.f32>
+  %output = copy %temporary : reg<test.f32> -> reg<test.i32>
+  low.br ^consume
+^consume:
+  %12 = low.reload %snapshot_alias_consumer_spill_storage_0 : low.storage<private> -> reg<test.f32>
+  %result = copy %12 : reg<test.f32> -> reg<test.i32>
+  return %output, %result, %changed
+}
