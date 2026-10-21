@@ -13,6 +13,7 @@
 #include "loom/target/facts.h"
 #include "loom/util/fact_cfg.h"
 #include "loom/util/fact_loop.h"
+#include "loom/util/fact_snapshot.h"
 #include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//
@@ -742,6 +743,8 @@ static_assert(LOOM_VALUE_FACT_CFG_SAVED_CHUNK_CAPACITY <= UINT8_MAX,
 
 // Saved facts distinguish changed results from values merely revisited while
 // solving a cycle. Extension IDs continue to name payloads in the same table.
+// Incremental solves retain auxiliary publications in the trailing column;
+// initial bounded-solve restarts need only the numeric column and value IDs.
 typedef struct loom_value_fact_cfg_saved_chunk_t {
   // Next chunk in definition order, or NULL at the end of the stream.
   struct loom_value_fact_cfg_saved_chunk_t* next;
@@ -749,9 +752,13 @@ typedef struct loom_value_fact_cfg_saved_chunk_t {
   loom_value_id_t value_ids[LOOM_VALUE_FACT_CFG_SAVED_CHUNK_CAPACITY];
   // Facts before this update, indexed by the same row as value_ids.
   loom_value_facts_t facts[LOOM_VALUE_FACT_CFG_SAVED_CHUNK_CAPACITY];
+  // Complete auxiliary facts, present only when capture_auxiliary is set.
+  loom_value_fact_auxiliary_snapshot_t auxiliary[];
 } loom_value_fact_cfg_saved_chunk_t;
 
 typedef struct loom_value_fact_cfg_saved_values_t {
+  // Whether completion must compare auxiliary publications as well as numbers.
+  bool capture_auxiliary;
   // First saved chunk for the component and its nested definitions.
   loom_value_fact_cfg_saved_chunk_t* first;
   // Append cursor. Every preceding chunk has all rows initialized.
@@ -771,8 +778,12 @@ static iree_status_t loom_value_fact_table_save_cfg_value(
   }
   loom_value_fact_cfg_saved_chunk_t* chunk = saved->tail.chunk;
   if (!chunk || saved->tail.count == LOOM_VALUE_FACT_CFG_SAVED_CHUNK_CAPACITY) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate(arena, sizeof(*chunk), (void**)&chunk));
+    const iree_host_size_t auxiliary_size =
+        saved->capture_auxiliary ? LOOM_VALUE_FACT_CFG_SAVED_CHUNK_CAPACITY *
+                                       sizeof(chunk->auxiliary[0])
+                                 : 0;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        arena, sizeof(*chunk) + auxiliary_size, (void**)&chunk));
     chunk->next = NULL;
     if (saved->tail.chunk) {
       saved->tail.chunk->next = chunk;
@@ -785,6 +796,10 @@ static iree_status_t loom_value_fact_table_save_cfg_value(
   chunk->value_ids[saved->tail.count] = value_id;
   chunk->facts[saved->tail.count] =
       loom_value_fact_table_lookup(table, value_id);
+  if (saved->capture_auxiliary) {
+    loom_value_fact_table_snapshot_auxiliary(
+        table, value_id, &chunk->auxiliary[saved->tail.count]);
+  }
   ++saved->tail.count;
   loom_value_fact_table_undefine(table, value_id);
   return iree_ok_status();
@@ -946,7 +961,7 @@ iree_status_t loom_value_fact_table_recompute_cfg_component(
     const loom_value_fact_cfg_region_t* region, const loom_scc_t* component,
     iree_arena_allocator_t* scratch_arena,
     loom_value_fact_cfg_changed_fn_t on_changed, void* user_data) {
-  loom_value_fact_cfg_saved_values_t saved = {0};
+  loom_value_fact_cfg_saved_values_t saved = {.capture_auxiliary = true};
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        i < component->node_count && iree_status_is_ok(status); ++i) {
@@ -966,10 +981,17 @@ iree_status_t loom_value_fact_table_recompute_cfg_component(
                                      : saved.tail.count;
     for (uint32_t i = 0; i < value_count && iree_status_is_ok(status); ++i) {
       loom_value_id_t value_id = chunk->value_ids[i];
-      if (!loom_value_fact_table_facts_equal_for_type(
-              module, loom_module_value_type(module, value_id), table,
-              chunk->facts[i], table,
-              loom_value_fact_table_lookup(table, value_id))) {
+      bool changed = !loom_value_fact_table_facts_equal_for_type(
+          module, loom_module_value_type(module, value_id), table,
+          chunk->facts[i], table,
+          loom_value_fact_table_lookup(table, value_id));
+      if (!changed) {
+        loom_value_fact_auxiliary_snapshot_t current;
+        loom_value_fact_table_snapshot_auxiliary(table, value_id, &current);
+        changed = !loom_value_fact_auxiliary_snapshot_equal(
+            &chunk->auxiliary[i], &current);
+      }
+      if (changed) {
         status = on_changed(user_data, value_id);
       }
     }

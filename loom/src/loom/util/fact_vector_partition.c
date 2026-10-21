@@ -251,6 +251,21 @@ static bool loom_value_fact_vector_partition_components_equal(
   return count == 0 || memcmp(lhs, rhs, count * sizeof(*lhs)) == 0;
 }
 
+bool loom_value_fact_vector_partition_equal(
+    loom_value_fact_vector_partition_t lhs,
+    loom_value_fact_vector_partition_t rhs) {
+  return lhs.count == rhs.count && lhs.lane_count == rhs.lane_count &&
+         lhs.regular_lane_count == rhs.regular_lane_count &&
+         lhs.snapshot_count == rhs.snapshot_count &&
+         lhs.snapshot_lane_count == rhs.snapshot_lane_count &&
+         lhs.flags == rhs.flags &&
+         loom_value_fact_vector_partition_components_equal(
+             lhs.components, rhs.components, lhs.count) &&
+         loom_value_fact_vector_partition_components_equal(
+             lhs.snapshot_components, rhs.snapshot_components,
+             lhs.snapshot_count);
+}
+
 iree_status_t loom_value_fact_table_define_vector_partition(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
     loom_value_fact_vector_partition_t partition, bool* inout_changed) {
@@ -308,17 +323,7 @@ iree_status_t loom_value_fact_table_define_vector_partition(
       snapshot_reuses_components
           ? 0
           : partition.snapshot_count * sizeof(*partition.snapshot_components);
-  if (previous.count == partition.count &&
-      previous.lane_count == partition.lane_count &&
-      previous.regular_lane_count == partition.regular_lane_count &&
-      previous.snapshot_count == partition.snapshot_count &&
-      previous.snapshot_lane_count == partition.snapshot_lane_count &&
-      previous.flags == partition.flags &&
-      loom_value_fact_vector_partition_components_equal(
-          previous.components, partition.components, partition.count) &&
-      loom_value_fact_vector_partition_components_equal(
-          previous.snapshot_components, partition.snapshot_components,
-          partition.snapshot_count)) {
+  if (loom_value_fact_vector_partition_equal(previous, partition)) {
     return iree_ok_status();
   }
 

@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/ir.h"
+#include "loom/util/fact_layout.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -128,6 +129,35 @@ typedef struct loom_value_fact_contextual_query_origin_t {
 
 static_assert(sizeof(loom_value_fact_contextual_query_origin_t) == 24,
               "contextual query origin must remain 24 bytes");
+
+// Complete materialization publication retained across a fact-only solve.
+// Inline origins are copied; layout bindings borrow immutable scope storage.
+typedef struct loom_value_fact_origin_snapshot_t {
+  // Scalar and exact scalar materializations of a uniform aggregate.
+  loom_value_fact_uniform_element_origin_t uniform_element;
+  // Source-lane provenance, independent of element representation.
+  loom_value_fact_static_lane_origin_t static_lane;
+  // Source-lane provenance preserving represented scalar values.
+  loom_value_fact_exact_lane_origin_t exact_lane;
+  // Aggregate source and its uniform scalar multiplier.
+  loom_value_fact_uniform_scale_origin_t uniform_scale;
+  // Contextual query descriptor with its module-owned projection key.
+  loom_value_fact_contextual_query_origin_t contextual_query;
+  // Immutable per-axis SSA stride bindings, valid until scope clear.
+  loom_value_fact_layout_strides_t layout_strides;
+} loom_value_fact_origin_snapshot_t;
+
+// Captures every origin family, including absent proofs. The snapshot remains
+// valid until the table scope or module is cleared; it does not retain IR.
+void loom_value_fact_table_snapshot_origins(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_origin_snapshot_t* out_snapshot);
+
+// Compares materialization semantics, including layout binding contents rather
+// than their allocation addresses. Both snapshots belong to the same scope.
+bool loom_value_fact_origin_snapshot_equal(
+    const loom_value_fact_origin_snapshot_t* lhs,
+    const loom_value_fact_origin_snapshot_t* rhs);
 
 // Clears the populated origin scope while retaining reusable lookup storage.
 void loom_value_fact_table_clear_origin_scope(loom_value_fact_table_t* table);

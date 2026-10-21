@@ -11,12 +11,14 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/util/fact_cfg.h"
 #include "loom/util/fact_table.h"
 
 namespace loom {
@@ -547,6 +549,7 @@ class FactOriginTest : public ::testing::Test {
       const loom_op_vtable_t* const* (*vtables)(iree_host_size_t*);
     } dialects[] = {
         {LOOM_DIALECT_TEST, loom_test_dialect_vtables},
+        {LOOM_DIALECT_CFG, loom_cfg_dialect_vtables},
         {LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables},
         {LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables},
         {LOOM_DIALECT_INDEX, loom_index_dialect_vtables},
@@ -568,8 +571,13 @@ class FactOriginTest : public ::testing::Test {
                                               IREE_SV("origins"), &name));
     uint16_t symbol;
     IREE_ASSERT_OK(loom_module_add_symbol(module_, name, &symbol));
-    const loom_type_t types[] = {scalar_type_, scalar_type_, vector_type_,
-                                 vector_type_, index_type_,  index_type_};
+    const loom_type_t types[] = {scalar_type_,
+                                 scalar_type_,
+                                 vector_type_,
+                                 vector_type_,
+                                 index_type_,
+                                 index_type_,
+                                 loom_type_scalar(LOOM_SCALAR_TYPE_I1)};
     loom_op_t* function = nullptr;
     IREE_ASSERT_OK(loom_test_func_build(
         &rewriter_.builder, 0, 0, 0, {.module_id = 0, .symbol_id = symbol},
@@ -635,8 +643,8 @@ class FactOriginTest : public ::testing::Test {
   loom_rewriter_t rewriter_ = {};
   // Materialization proof owner borrowed by the rewriter.
   loom_value_fact_table_t table_ = {};
-  // Dynamic scalar, vector, and index pairs in the function signature.
-  loom_value_id_t inputs_[6];
+  // Dynamic scalar, vector, and index pairs followed by a loop condition.
+  loom_value_id_t inputs_[7];
   // Scalar element type used by the vector fixtures.
   const loom_type_t scalar_type_ = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   // Four-lane aggregate used by the vector fixtures.
@@ -668,6 +676,76 @@ TEST_F(FactOriginTest, RetargetedAliasMaterializesTheCurrentScalar) {
     bool folded = false;
     IREE_ASSERT_OK(loom_rewriter_try_fold(&rewriter_, op, &folded));
   }
+  IREE_ASSERT_OK(loom_vector_slice_canonicalize(slice, &rewriter_));
+  const auto* replacement = loom_value_def_op(
+      loom_module_value(module_, loom_op_const_operands(use)[0]));
+  ASSERT_TRUE(loom_vector_splat_isa(replacement));
+  EXPECT_EQ(loom_vector_splat_scalar(replacement), inputs_[1]);
+}
+
+TEST_F(FactOriginTest, CyclicPublicationRefreshesOutsideMaterialization) {
+  const auto function =
+      loom_func_like_cast(module_, rewriter_.builder.ip.parent_op);
+  auto* region = loom_func_like_body(function);
+  auto* splat = Splat(inputs_[0]);
+  loom_block_t* header = nullptr;
+  loom_block_t* latch = nullptr;
+  loom_block_t* exit = nullptr;
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &header));
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &latch));
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &exit));
+  loom_op_t* branch = nullptr;
+  IREE_ASSERT_OK(loom_cfg_br_build(&rewriter_.builder, header, nullptr, 0,
+                                   LOOM_LOCATION_UNKNOWN, &branch));
+  loom_builder_set_block(&rewriter_.builder, header);
+  auto* alias = Refine(loom_vector_splat_result(splat));
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&rewriter_.builder, inputs_[6], latch,
+                                        exit, LOOM_LOCATION_UNKNOWN, &branch));
+  loom_builder_set_block(&rewriter_.builder, latch);
+  IREE_ASSERT_OK(loom_cfg_br_build(&rewriter_.builder, header, nullptr, 0,
+                                   LOOM_LOCATION_UNKNOWN, &branch));
+  loom_builder_set_block(&rewriter_.builder, exit);
+  const auto slice_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(2), 0);
+  const int64_t offset = 0;
+  loom_op_t* slice = nullptr;
+  IREE_ASSERT_OK(loom_vector_slice_build(
+      &rewriter_.builder, loom_vector_refine_result(alias), nullptr, 0, &offset,
+      1, slice_type, LOOM_LOCATION_UNKNOWN, &slice));
+  const auto result = loom_vector_slice_result(slice);
+  loom_op_t* use = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&rewriter_.builder, &result, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+  IREE_ASSERT_OK(loom_test_yield_build(&rewriter_.builder, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &branch));
+  IREE_ASSERT_OK(loom_rewriter_enable_analysis(&rewriter_, function, &table_));
+  // Rebuilding the same auxiliary proofs must not notify unchanged users.
+  const auto* structure =
+      loom_value_fact_table_lookup_cfg_region(&table_, region);
+  const auto* component =
+      &structure->control_flow.components
+           .values[structure->graph.blocks[header->region_index].component];
+  iree_arena_allocator_t scratch;
+  iree_arena_initialize(&pool_, &scratch);
+  bool changed = false;
+  iree_status_t status = loom_value_fact_table_recompute_cfg_component(
+      &table_, module_, structure, component, &scratch,
+      [](void* data, loom_value_id_t) {
+        *static_cast<bool*>(data) = true;
+        return iree_ok_status();
+      },
+      &changed);
+  iree_arena_deinitialize(&scratch);
+  IREE_ASSERT_OK(status);
+  EXPECT_FALSE(changed);
+  IREE_ASSERT_OK(loom_rewriter_enable_worklist(&rewriter_));
+  IREE_ASSERT_OK(loom_rewriter_set_operand(&rewriter_, splat, 0, inputs_[1]));
+  while (auto* op = loom_rewriter_pop(&rewriter_)) {
+    bool folded = false;
+    IREE_ASSERT_OK(loom_rewriter_try_fold(&rewriter_, op, &folded));
+  }
+  EXPECT_EQ(Uniform(loom_vector_refine_result(alias)), inputs_[1]);
+  EXPECT_EQ(Uniform(result), inputs_[1]);
   IREE_ASSERT_OK(loom_vector_slice_canonicalize(slice, &rewriter_));
   const auto* replacement = loom_value_def_op(
       loom_module_value(module_, loom_op_const_operands(use)[0]));

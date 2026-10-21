@@ -602,6 +602,53 @@ static bool loom_value_fact_table_lookup_contextual_query_origin(
   return true;
 }
 
+void loom_value_fact_table_snapshot_origins(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_origin_snapshot_t* out_snapshot) {
+  loom_value_fact_table_lookup_uniform_element_origin(
+      table, value_id, &out_snapshot->uniform_element);
+  loom_value_fact_table_lookup_static_lane_origin(table, value_id,
+                                                  &out_snapshot->static_lane);
+  loom_value_fact_table_lookup_exact_lane_origin(table, value_id,
+                                                 &out_snapshot->exact_lane);
+  loom_value_fact_table_lookup_uniform_scale_origin(
+      table, value_id, &out_snapshot->uniform_scale);
+  loom_value_fact_table_lookup_contextual_query_origin(
+      table, value_id, &out_snapshot->contextual_query);
+  out_snapshot->layout_strides =
+      loom_value_fact_table_query_layout_strides(table, value_id);
+}
+
+bool loom_value_fact_origin_snapshot_equal(
+    const loom_value_fact_origin_snapshot_t* lhs,
+    const loom_value_fact_origin_snapshot_t* rhs) {
+  return lhs->uniform_element.scalar_value_id ==
+             rhs->uniform_element.scalar_value_id &&
+         lhs->uniform_element.exact_scalar_value_id ==
+             rhs->uniform_element.exact_scalar_value_id &&
+         lhs->static_lane.source_value_id == rhs->static_lane.source_value_id &&
+         lhs->static_lane.source_lane_offset ==
+             rhs->static_lane.source_lane_offset &&
+         lhs->static_lane.source_lane_stride ==
+             rhs->static_lane.source_lane_stride &&
+         lhs->exact_lane.source_value_id == rhs->exact_lane.source_value_id &&
+         lhs->exact_lane.source_lane_offset ==
+             rhs->exact_lane.source_lane_offset &&
+         lhs->exact_lane.source_lane_stride ==
+             rhs->exact_lane.source_lane_stride &&
+         lhs->uniform_scale.source_value_id ==
+             rhs->uniform_scale.source_value_id &&
+         lhs->uniform_scale.scale_value_id ==
+             rhs->uniform_scale.scale_value_id &&
+         loom_value_fact_contextual_query_origins_equal(
+             lhs->contextual_query, rhs->contextual_query) &&
+         lhs->layout_strides.count == rhs->layout_strides.count &&
+         (lhs->layout_strides.count == 0 ||
+          memcmp(lhs->layout_strides.values, rhs->layout_strides.values,
+                 lhs->layout_strides.count *
+                     sizeof(*lhs->layout_strides.values)) == 0);
+}
+
 iree_status_t loom_value_fact_table_define_contextual_query_origin(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
     loom_value_fact_contextual_query_origin_t origin) {

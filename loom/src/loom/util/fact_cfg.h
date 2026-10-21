@@ -176,6 +176,7 @@ void loom_value_fact_table_forget_cfg_region(loom_value_fact_table_t* table,
 
 // Receives each value whose facts changed, including block arguments and
 // results recomputed in a cyclic component. The callback schedules dependents.
+// It must not mutate source IR or the table during notification.
 typedef iree_status_t (*loom_value_fact_cfg_changed_fn_t)(
     void* user_data, loom_value_id_t value_id);
 
@@ -190,6 +191,7 @@ iree_status_t loom_value_fact_table_update_cfg_block_args(
 
 // Restarts one cyclic control-flow component from its unchanged external
 // inputs, then reports values whose converged facts differ from the old facts.
+// Comparison includes numeric facts and every auxiliary value publication.
 // Storage for the solve is temporary; extension payloads stay in the table.
 iree_status_t loom_value_fact_table_recompute_cfg_component(
     loom_value_fact_table_t* table, const loom_module_t* module,

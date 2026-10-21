@@ -15,6 +15,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/util/fact_snapshot.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/predicate_facts.h"
 
@@ -110,6 +111,12 @@ class FactRelationTest : public ::testing::Test {
     IREE_CHECK_OK(loom_value_fact_table_define(&table_, value,
                                                loom_value_facts_unknown()));
     return value;
+  }
+
+  loom_value_fact_auxiliary_snapshot_t Snapshot(loom_value_id_t value) {
+    loom_value_fact_auxiliary_snapshot_t snapshot;
+    loom_value_fact_table_snapshot_auxiliary(&table_, value, &snapshot);
+    return snapshot;
   }
 
   iree_arena_block_pool_t pool_;
@@ -486,6 +493,7 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_FALSE(changed);
   const loom_value_slice_t results = loom_index_assume_results(assume);
 
+  const auto first = Snapshot(results.values[0]);
   predicate.kind = LOOM_PREDICATE_GT;
   IREE_ASSERT_OK(loom_index_assume_set_predicates(
       module_, assume, loom_attr_predicate_list(&predicate, 1)));
@@ -496,6 +504,9 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
                 &table_, results.values[0], results.values[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER);
 
+  auto current = Snapshot(results.values[0]);
+  EXPECT_FALSE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
+
   IREE_ASSERT_OK(loom_index_assume_set_predicates(
       module_, assume, loom_attr_predicate_list(nullptr, 0)));
   IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(&table_, module_,
@@ -504,6 +515,9 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], results.values[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
+
+  current = Snapshot(results.values[0]);
+  EXPECT_FALSE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
 
   predicate.kind = LOOM_PREDICATE_LT;
   IREE_ASSERT_OK(loom_index_assume_set_predicates(
@@ -519,6 +533,9 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], inputs_[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
+
+  current = Snapshot(results.values[0]);
+  EXPECT_TRUE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
 
   loom_value_fact_table_clear_scope(&table_);
   EXPECT_EQ(table_.integer_relations, nullptr);
@@ -542,6 +559,7 @@ TEST_F(FactRelationTest, LiteralRelationLifecycleAndTransfer) {
   EXPECT_FALSE(changed);
   const loom_value_id_t result = loom_index_assume_results(assume).values[0];
 
+  const auto first = Snapshot(result);
   IREE_ASSERT_OK(loom_index_assume_set_predicates(
       module_, assume, loom_attr_predicate_list(nullptr, 0)));
   IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(&table_, module_,
@@ -551,6 +569,8 @@ TEST_F(FactRelationTest, LiteralRelationLifecycleAndTransfer) {
                                                              literal),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
 
+  auto current = Snapshot(result);
+  EXPECT_FALSE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
   IREE_ASSERT_OK(loom_index_assume_set_predicates(
       module_, assume, loom_attr_predicate_list(&predicate, 1)));
   IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
@@ -559,6 +579,9 @@ TEST_F(FactRelationTest, LiteralRelationLifecycleAndTransfer) {
                                                              literal),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
   IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
+
+  current = Snapshot(result);
+  EXPECT_TRUE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
 
   const loom_value_id_t selected[] = {result, literal};
   loom_value_fact_table_t clone = {};

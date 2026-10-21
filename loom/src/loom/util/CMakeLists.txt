@@ -338,6 +338,7 @@ loom_cc_library(
     "fact_recurrence.h"
     "fact_relation.h"
     "fact_select_dependencies.h"
+    "fact_snapshot.h"
     "fact_table.h"
     "fact_vector_partition.h"
     "reference_transfer.h"
@@ -353,6 +354,7 @@ loom_cc_library(
     "fact_recurrence.c"
     "fact_relation.c"
     "fact_select_dependencies.c"
+    "fact_snapshot.c"
     "fact_table.c"
     "fact_table_compute.c"
     "fact_vector_partition.c"
@@ -452,6 +454,18 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    fact_snapshot_test
+  SRCS
+    "fact_snapshot_test.cc"
+  DEPS
+    ::fact_table
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     fact_origin_test
   SRCS
     "fact_origin_test.cc"
@@ -461,6 +475,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir
+    loom::ops::cfg
     loom::ops::encoding
     loom::ops::index
     loom::ops::target
