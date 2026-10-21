@@ -7,7 +7,7 @@
 #ifndef LOOM_TRANSFORMS_BOUNDARY_PREDICATE_WORD_H_
 #define LOOM_TRANSFORMS_BOUNDARY_PREDICATE_WORD_H_
 
-#include "loom/ops/op_defs.h"
+#include "loom/ops/builder.h"
 
 #ifdef __cplusplus
 extern "C" {

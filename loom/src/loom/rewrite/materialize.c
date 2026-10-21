@@ -13,6 +13,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/op_defs.h"
 #include "loom/rewrite/rewriter.h"
 
 static iree_status_t loom_ir_clone_value_name(loom_ir_remap_t* remap,

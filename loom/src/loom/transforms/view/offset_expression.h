@@ -8,7 +8,7 @@
 #define LOOM_TRANSFORMS_VIEW_OFFSET_EXPRESSION_H_
 
 #include "loom/analysis/symbolic_expr.h"
-#include "loom/ops/op_defs.h"
+#include "loom/ops/builder.h"
 
 #ifdef __cplusplus
 extern "C" {
