@@ -546,7 +546,7 @@ static iree_status_t loom_low_schedule_add_state_read(
 
 static iree_status_t loom_low_schedule_add_state_chain_read(
     loom_low_schedule_build_state_t* state, uint32_t producer_node_index,
-    loom_low_schedule_state_access_t reader) {
+    loom_low_schedule_state_access_t reader, uint16_t value_operand_index) {
   if (producer_node_index == LOOM_LOW_SCHEDULE_NODE_NONE ||
       producer_node_index == reader.node_index ||
       state->state_chain_read_heads == NULL) {
@@ -568,6 +568,7 @@ static iree_status_t loom_low_schedule_add_state_chain_read(
       (loom_low_schedule_state_chain_read_record_t){
           .access = reader,
           .next_record = state->state_chain_read_heads[producer_node_index],
+          .value_operand_index = value_operand_index,
       };
   state->state_chain_read_heads[producer_node_index] =
       (uint32_t)state->state_chain_read_record_count++;
@@ -595,7 +596,8 @@ static iree_status_t loom_low_schedule_add_state_chain_read_dependencies(
         state->nodes[read_record->access.node_index].source_ordinal <
             state->nodes[consumer.node_index].source_ordinal) {
       IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_dependency(
-          state, read_record->access, consumer, LOOM_LOW_ID_NONE));
+          state, read_record->access, consumer,
+          read_record->value_operand_index));
     }
     read_record_index = read_record->next_record;
   }
@@ -1156,7 +1158,7 @@ static iree_status_t loom_low_schedule_note_state_read(
     IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_dependency(
         state, last_write, reader, LOOM_LOW_ID_NONE));
     IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_chain_read(
-        state, last_write.node_index, reader));
+        state, last_write.node_index, reader, LOOM_LOW_ID_NONE));
   }
   const loom_low_schedule_state_access_t ordering_frontier =
       state->state_ordering_frontiers[reg_class_id];
@@ -1248,8 +1250,8 @@ static iree_status_t loom_low_schedule_note_explicit_state_value_read(
         state, ordering_frontier, reader));
   }
   if (has_same_block_producer) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_schedule_add_state_chain_read(state, producer_node, reader));
+    IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_chain_read(
+        state, producer_node, reader, operand_index));
   }
   return loom_low_schedule_add_state_read(state, reader, reg_class_id);
 }

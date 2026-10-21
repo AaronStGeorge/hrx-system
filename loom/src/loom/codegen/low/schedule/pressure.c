@@ -624,7 +624,8 @@ static void loom_low_schedule_nominate_unspillable_completion(
   if (completion_domain_id == UINT16_MAX) {
     return;
   }
-  const uint32_t transaction_sink = value->unspillable_completion.sink;
+  const uint32_t transaction_sink =
+      state->value_unspillable_completions[value_ordinal].sink;
   if (state->value_producer_nodes[value_ordinal] !=
           LOOM_LOW_SCHEDULE_NODE_NONE &&
       transaction_sink != LOOM_LOW_SCHEDULE_NODE_NONE &&

@@ -102,11 +102,9 @@ typedef struct loom_low_schedule_dependency_t {
   loom_low_schedule_separation_source_t separation_source;
   // Target model quality encoded as loom_low_model_quality_t.
   uint8_t model_quality;
-  // Reserved for future dependency timing flags.
-  uint8_t reserved[3];
 } loom_low_schedule_dependency_t;
 
-static_assert(sizeof(loom_low_schedule_dependency_t) == 32,
+static_assert(sizeof(loom_low_schedule_dependency_t) == 28,
               "schedule dependency rows must remain compact");
 
 // Stable storage for one range of indexed scheduler dependencies.
@@ -116,8 +114,8 @@ typedef iree_alignas(64) struct loom_low_schedule_dependency_segment_t {
       rows[LOOM_LOW_SCHEDULE_DEPENDENCY_SEGMENT_CAPACITY];
 } loom_low_schedule_dependency_segment_t;
 
-static_assert(sizeof(loom_low_schedule_dependency_segment_t) == 64 * 1024,
-              "dependency segment must fit in a compiler workspace block");
+static_assert(sizeof(loom_low_schedule_dependency_segment_t) == 56 * 1024,
+              "dependency segments must pack in compiler workspace blocks");
 
 // Complete dependency graph storage for one scheduled function.
 typedef struct loom_low_schedule_dependency_graph_t {
