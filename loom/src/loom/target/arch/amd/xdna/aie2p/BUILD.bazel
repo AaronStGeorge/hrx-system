@@ -1491,6 +1491,18 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "bundle_alignment_test",
+    srcs = ["emit/bundle_alignment_test.cc"],
+    deps = [
+        ":bundle_alignment",
+        ":encoding",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "leaf_object_test",
     srcs = ["emit/leaf_object_test.cc"],
     deps = [
