@@ -452,9 +452,9 @@ static bool loom_serve_text_cache_reclaim_request(void* self) {
 }
 
 typedef enum loom_serve_text_admission_result_e {
-  // Model parameters cannot fit; changing requests cannot relieve this limit.
+  // Shared working-set pressure; preserve this model's admission turn.
   TEXT_ADMISSION_CAPACITY = 0,
-  // Request-specific logical/physical state cannot fit; another request may.
+  // Request-specific logical state cannot fit; another request may.
   TEXT_ADMISSION_STATE_CAPACITY,
   // Native retirement or an older admission owner can make progress.
   TEXT_ADMISSION_QUEUED,
@@ -482,24 +482,25 @@ static iree_status_t loom_serve_text_reclaim_idle(
         service->completion.work != TEXT_WORK_NONE) {
       break;
     }
-    loom_serve_residency_admission_t admission;
+    loom_serve_text_reserve_result_t admission;
     loom_serve_execution_frontier_t frontier;
     status = loom_serve_text_row_submit_reserve(
         selected->row, mode, checkpoint, reservation, &admission, &frontier);
     if (iree_status_is_ok(status) &&
-        admission != LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
-      // Parameter admission owns shared pressure and idle-cache reclamation.
-      // Its denial is not a row-state shortage: local eviction cannot override
-      // a decision to wait for pinned parameters or another admission owner.
-      *out_result = admission == LOOM_SERVE_RESIDENCY_ADMISSION_DEFERRED
+        (admission == LOOM_SERVE_TEXT_RESERVE_CAPACITY ||
+         admission == LOOM_SERVE_TEXT_RESERVE_DEFERRED)) {
+      // Shared admission owns physical pressure and idle-cache reclamation.
+      // No parameter activation or partial state reservation was submitted.
+      *out_result = admission == LOOM_SERVE_TEXT_RESERVE_DEFERRED
                         ? TEXT_ADMISSION_QUEUED
                         : TEXT_ADMISSION_CAPACITY;
       break;
     }
+    *out_result = TEXT_ADMISSION_STATE_CAPACITY;
     if (iree_status_is_ok(status) &&
-        admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
+        admission == LOOM_SERVE_TEXT_RESERVE_ACQUIRED) {
       // The previous frontier was consumed successfully before this call. An
-      // unchanged pair needs no new wait; warm denial must not wake itself.
+      // unchanged pair needs no new wait.
       const loom_serve_execution_frontier_t previous =
           service->completion.frontier;
       const bool complete = previous.semaphores[0] == frontier.semaphores[0] &&
@@ -508,18 +509,8 @@ static iree_status_t loom_serve_text_reclaim_idle(
                             previous.values[1] == frontier.values[1];
       service->completion.frontier = frontier;
       if (complete) {
-        const loom_serve_memory_admission_t state_admission =
-            loom_serve_text_row_complete_reserve(selected->row);
-        if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
-          *out_result = TEXT_ADMISSION_READY;
-        } else if (state_admission == LOOM_SERVE_MEMORY_ADMISSION_DEFERRED) {
-          // Native release may finish before a pending-work query observes it.
-          // Preserve the reservation's wake instead of rejecting that progress.
-          *out_result = TEXT_ADMISSION_QUEUED;
-          break;
-        } else {
-          *out_result = TEXT_ADMISSION_STATE_CAPACITY;
-        }
+        loom_serve_text_row_complete_reserve(selected->row);
+        *out_result = TEXT_ADMISSION_READY;
       } else {
         status = loom_serve_text_await_work(service, TEXT_WORK_RESERVE);
         break;
@@ -774,17 +765,8 @@ static iree_status_t loom_serve_text_admit_request(
 
 static iree_status_t loom_serve_text_complete_reservation(
     loom_serve_text_service_t* service, loom_serve_service_flags_t flags) {
-  if (loom_serve_text_row_complete_reserve(
-          service->pending.prepared.session->row) ==
-      LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
-    return loom_serve_text_admit_request(service, flags);
-  }
-  if (iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING) ||
-      !service->pending.prepared.request->consumer.vtable->is_open(
-          service->pending.prepared.request->consumer.self)) {
-    loom_serve_text_pending_cancel(service, service->pending.admission.cursor);
-  }
-  return iree_ok_status();
+  loom_serve_text_row_complete_reserve(service->pending.prepared.session->row);
+  return loom_serve_text_admit_request(service, flags);
 }
 
 static iree_status_t loom_serve_text_retain_selected(

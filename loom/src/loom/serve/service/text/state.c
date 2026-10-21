@@ -1004,8 +1004,8 @@ iree_status_t loom_serve_text_state_row_submit_pin(
   iree_status_t status = iree_ok_status();
   if (row->reserved_extent) {
     status = loom_serve_text_state_row_submit_reserve(
-        row, LOOM_SERVE_TEXT_RESERVE_CONTINUE, NULL, row->reserved_extent,
-        &admission);
+        row, LOOM_SERVE_TEXT_RESERVE_CONTINUE, NULL, row->reserved_extent, NULL,
+        NULL, &admission);
   }
   const bool reserved = admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   if (iree_status_is_ok(status) && !reserved) {
@@ -1372,6 +1372,7 @@ static void loom_serve_text_release_reverse(loom_serve_block_pool_t* pool,
 iree_status_t loom_serve_text_state_row_submit_reserve(
     loom_serve_text_state_row_t* row, loom_serve_text_reserve_mode_t mode,
     loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
+    loom_serve_text_state_admit_fn_t admit, void* user_data,
     loom_serve_memory_admission_t* out_admission) {
   *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
   loom_serve_text_state_t* state = row->owner;
@@ -1503,8 +1504,8 @@ iree_status_t loom_serve_text_state_row_submit_reserve(
   }
   loom_serve_memory_admission_t admission =
       LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
+  iree_host_size_t commitment_count = 0;
   if (iree_status_is_ok(status) && state->memory.pool) {
-    iree_host_size_t commitment_count = 0;
     for (iree_host_size_t i = 0; i < range_count + restore_count; ++i) {
       const loom_serve_snapshot_range_t* range =
           i < range_count ? &ranges[i] : &restore_ranges[i - range_count];
@@ -1515,12 +1516,22 @@ iree_status_t loom_serve_text_state_row_submit_reserve(
             (loom_serve_memory_range_t){buffer, range->offset, range->length};
       }
     }
+  }
+  if (iree_status_is_ok(status)) {
     IREE_ASSERT(!state->memory.backing.operation);
-    status = loom_serve_memory_pool_commit_async(
-        state->memory.pool, commitment_count, commitments,
-        state->memory.backing.semaphore, state->memory.backing.value + 1,
-        &admission, &state->memory.backing.operation);
-    if (admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
+    if (admit) {
+      status = admit(user_data, commitment_count, commitments,
+                     state->memory.backing.semaphore,
+                     state->memory.backing.value + 1, &admission,
+                     &state->memory.backing.operation);
+    } else if (state->memory.pool) {
+      status = loom_serve_memory_pool_commit_async(
+          state->memory.pool, commitment_count, commitments,
+          state->memory.backing.semaphore, state->memory.backing.value + 1,
+          &admission, &state->memory.backing.operation);
+    }
+    if (state->memory.pool &&
+        admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
       ++state->memory.backing.value;
     }
   }

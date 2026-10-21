@@ -241,6 +241,17 @@ typedef enum loom_serve_text_reserve_mode_e {
   LOOM_SERVE_TEXT_RESERVE_CHECKPOINT,
 } loom_serve_text_reserve_mode_t;
 
+typedef enum loom_serve_text_reserve_result_e {
+  // Shared parameter/state capacity cannot fit now; nothing was acquired.
+  LOOM_SERVE_TEXT_RESERVE_CAPACITY,
+  // Local KV/recurrent IDs cannot fit; eligible history may be evicted.
+  LOOM_SERVE_TEXT_RESERVE_STATE_CAPACITY,
+  // An older admission or pending release must progress before retrying.
+  LOOM_SERVE_TEXT_RESERVE_DEFERRED,
+  // The complete parameter/state unit was submitted and owns its pin/IDs.
+  LOOM_SERVE_TEXT_RESERVE_ACQUIRED,
+} loom_serve_text_reserve_result_t;
+
 // Submits the complete consumed-position high-water for one request, including
 // caller-computed speculative slack. CHECKPOINT supplies a same-model endpoint;
 // other modes supply NULL. Fresh replaces the selected row, CONTINUE preserves
@@ -248,32 +259,26 @@ typedef enum loom_serve_text_reserve_mode_e {
 // model frontier. No model-completion or native backing wait occurs. Only one
 // reservation may own a row.
 //
-// Parameter CAPACITY/DEFERRED mean admission is pending without a pin or state
-// change; abandoning the request cancels its residency admission interest.
-// ACQUIRED owns a parameter pin through successful ALL
-// readiness on the borrowed frontier and complete_reserve, even if subsequent
-// state admission was denied. The owner excludes model mutation until then;
-// request cancellation defers storage release until completion. Submission or
-// readiness failure is terminal and retains ownership for outer destruction.
-// Checkpoint semantic inputs are copied before return. Physical backing is
-// committed at this cold boundary, not per epoch; extent is not a context-size
-// allocation.
+// CAPACITY/STATE_CAPACITY/DEFERRED mean admission is pending without a pin,
+// partial load, or state change; abandoning the request cancels its residency
+// admission interest. ACQUIRED owns a parameter pin and state through
+// successful ALL readiness on the borrowed frontier and complete_reserve. The
+// owner excludes model mutation until then; request cancellation defers storage
+// release until completion. Submission or readiness failure is terminal and
+// retains ownership for outer destruction. Checkpoint semantic inputs are
+// copied before return. Physical backing is committed at this cold boundary,
+// not per epoch; extent is not a context-size allocation.
 iree_status_t loom_serve_text_row_submit_reserve(
     loom_serve_text_row_t* row, loom_serve_text_reserve_mode_t mode,
     const loom_serve_text_checkpoint_t* checkpoint, iree_host_size_t extent,
-    loom_serve_residency_admission_t* out_admission,
+    loom_serve_text_reserve_result_t* out_result,
     loom_serve_execution_frontier_t* out_frontier);
 
-// Consumes a submitted reservation after successful ALL readiness. AVAILABLE
-// owns the parameter pin and exact target/draft pages, private views and
-// recurrent writer until release_reservation. CAPACITY/DEFERRED release the
-// activation-only pin and preserve both selected row and checkpoint. DEFERRED
-// preserves the observed native progress even if it has since retired. Idle
-// owners may be reclaimed before retrying. No allocation or wait occurs. An
-// already-cancelled request completes normally, then releases any admitted
-// reservation.
-loom_serve_memory_admission_t loom_serve_text_row_complete_reserve(
-    loom_serve_text_row_t* row);
+// Consumes an ACQUIRED reservation after successful ALL readiness. The
+// parameter pin, exact target/draft pages, private views, and recurrent writer
+// remain owned until release_reservation. No allocation or wait occurs. An
+// already-cancelled request completes normally, then releases its reservation.
+void loom_serve_text_row_complete_reserve(loom_serve_text_row_t* row);
 
 // Copies source-validated request options into source-owned row state before
 // its next epoch. The caller excludes outstanding model work and other model

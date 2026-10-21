@@ -354,6 +354,29 @@ TEST_F(AdmissionServiceTest, RowReuseRepreparesEvictedHistoryExactlyOnce) {
 }
 
 TEST_F(AdmissionServiceTest,
+       LogicalReservationDenialDoesNotActivateParameters) {
+  const auto before = loom_serve_text_model_pool_usage(model_);
+  auto* row = loom_serve_text_model_row(model_, 0);
+  loom_serve_text_reserve_result_t result;
+  loom_serve_execution_frontier_t frontier;
+  IREE_ASSERT_OK(loom_serve_text_row_submit_reserve(
+      row, LOOM_SERVE_TEXT_RESERVE_FRESH, nullptr, 96, &result, &frontier));
+  EXPECT_EQ(result, LOOM_SERVE_TEXT_RESERVE_STATE_CAPACITY);
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available,
+            before.available);
+  EXPECT_EQ(loom_serve_text_row_position(row), 0u);
+  EXPECT_EQ(loom_serve_text_model_weight_activity(model_).activations, 0u);
+  EXPECT_EQ(loom_serve_text_model_weight_activity(model_).read_bytes, 0u);
+  EXPECT_FALSE(
+      loom_serve_residency_is_pinned(loom_serve_text_model_residency(model_)));
+
+  // The unchanged cold model remains usable through the real HTTP lifecycle.
+  Start();
+  EXPECT_EQ(Content(Read(Send(Request(Message("user", "abxa"), 4)))),
+            Oracle::Complete("abxa", 4));
+}
+
+TEST_F(AdmissionServiceTest,
        PinnedHistorySurvivesOvertakesWithoutRepreparation) {
   CheckBackfill(2, OverlapAction::kComplete, History::kPinned);
 }

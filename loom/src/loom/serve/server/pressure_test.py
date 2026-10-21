@@ -203,19 +203,26 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         admission = beta["parameters"]["primary"]["admission"]
         assert not admission["waiting"] and admission["age_seconds"] == 0, beta
         assert beta["parameters"]["primary"]["pins"] == 0, beta
-        if expected == 503 and retention == "parameters":
+        if expected == 503:
             assert admission["count"] >= 1, beta
-        elif expected == 503:
-            # A retained checkpoint can exhaust mutable KV backing after
-            # parameter admission succeeds. Earlier eviction may have required
-            # a native release wait, but that wait has completed, and the new
-            # weights are resident when state admission rejects the request.
-            assert beta["parameters"]["primary"]["active"], beta
+            # Complete-unit admission rejects before loading parameters that
+            # would leave no room for the request's state.
+            parameters = beta["parameters"]["primary"]
+            assert not parameters["active"], beta
+            assert parameters["activations"] == 0, beta
+            assert parameters["committed_bytes"] == parameters["pending_bytes"] == 0, (
+                beta
+            )
+        if expected == 503 and retention == "checkpoint":
             alpha = next(
                 item["loom"] for item in after["data"] if item["id"] == "alpha"
             )
-            assert not alpha["parameters"]["primary"]["active"], alpha
-            assert alpha["parameters"]["primary"]["committed_bytes"] == 0, alpha
+            alpha_before = next(
+                item["loom"] for item in before["data"] if item["id"] == "alpha"
+            )
+            # Evicting these weights cannot admit the peer while the checkpoint
+            # retains state. Keep them for the checkpoint's next invocation.
+            assert alpha["parameters"] == alpha_before["parameters"], alpha
         assert admission["duration_seconds"] >= 0, beta
         connection = http.client.HTTPConnection(address.hostname, address.port)
         try:
@@ -258,9 +265,13 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
                 200,
                 headers={"X-Loom-Model": "alpha"},
             )
-            # Weight pinning is not a session pin: capacity pressure can discard
-            # all idle histories while the parameters remain resident.
-            assert bool(sessions["data"]) == (memory_bytes == 2 * MODEL_BYTES), sessions
+            # Pinned weights plus the peer's complete requirement already
+            # exceed the small cap. Evicting history cannot make it fit, so
+            # admission preserves those histories instead of discarding them
+            # to partially activate an impossible peer.
+            assert {session["name"] for session in sessions["data"]} == {
+                f"conversation-{index}" for index in range(4)
+            }, sessions
             for _ in range(2):
                 unpinned = control(
                     address,

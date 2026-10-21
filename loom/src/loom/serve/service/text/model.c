@@ -123,8 +123,6 @@ struct loom_serve_text_row_t {
   loom_serve_text_state_row_t* state;
   // Whether the latest completed work selected a token at the current position.
   bool has_prediction;
-  // State admission observed by submit_reserve, retained through its frontier.
-  loom_serve_memory_admission_t reservation_admission;
   // Completed stage counts and end-to-end host durations.
   loom_serve_text_metrics_t metrics;
   // Single-row publication facts, owned until successful complete_step.
@@ -1105,12 +1103,46 @@ iree_status_t loom_serve_text_row_try_restore(
   return iree_ok_status();
 }
 
+typedef struct loom_serve_text_reserve_context_t {
+  // Borrowed model owning parameters and the selected row's state.
+  loom_serve_text_model_t* model;
+  // Caller-owned result, distinct from a local logical-ID shortage.
+  loom_serve_text_reserve_result_t* result;
+} loom_serve_text_reserve_context_t;
+
+static iree_status_t loom_serve_text_admit_state(
+    void* user_data, iree_host_size_t range_count,
+    const loom_serve_memory_range_t* ranges, iree_hal_semaphore_t* readiness,
+    uint64_t value, loom_serve_memory_admission_t* out_admission,
+    loom_serve_memory_operation_t** out_operation) {
+  loom_serve_text_reserve_context_t* context = user_data;
+  loom_serve_residency_admission_t admission;
+  const iree_status_t status = loom_serve_residency_try_admit_state(
+      context->model->residency, range_count, ranges, readiness, value,
+      &admission, out_operation);
+  switch (admission) {
+    case LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY:
+      *context->result = LOOM_SERVE_TEXT_RESERVE_CAPACITY;
+      *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
+      break;
+    case LOOM_SERVE_RESIDENCY_ADMISSION_DEFERRED:
+      *context->result = LOOM_SERVE_TEXT_RESERVE_DEFERRED;
+      *out_admission = LOOM_SERVE_MEMORY_ADMISSION_DEFERRED;
+      break;
+    case LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED:
+      *context->result = LOOM_SERVE_TEXT_RESERVE_ACQUIRED;
+      *out_admission = LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
+      break;
+  }
+  return status;
+}
+
 iree_status_t loom_serve_text_row_submit_reserve(
     loom_serve_text_row_t* row, loom_serve_text_reserve_mode_t mode,
     const loom_serve_text_checkpoint_t* checkpoint, iree_host_size_t extent,
-    loom_serve_residency_admission_t* out_admission,
+    loom_serve_text_reserve_result_t* out_result,
     loom_serve_execution_frontier_t* out_frontier) {
-  *out_admission = LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY;
+  *out_result = LOOM_SERVE_TEXT_RESERVE_STATE_CAPACITY;
   *out_frontier = (loom_serve_execution_frontier_t){0};
   const iree_host_size_t block_size = row->model->state.storage.block_size;
   const iree_host_size_t maximum =
@@ -1133,17 +1165,15 @@ iree_status_t loom_serve_text_row_submit_reserve(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "reservation requires an idle resident frontier");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_serve_residency_try_admit(row->model->residency, out_admission));
-  if (*out_admission != LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
-    return iree_ok_status();
-  }
-  // Even state-capacity denial retains the activation pin until completion.
-  // Cancellation likewise leaves this operation intact until it retires.
+  loom_serve_text_reserve_context_t context = {
+      .model = row->model,
+      .result = out_result,
+  };
+  loom_serve_memory_admission_t admission;
   IREE_RETURN_IF_ERROR(loom_serve_text_state_row_submit_reserve(
       row->state, mode, checkpoint ? checkpoint->state : NULL, extent,
-      &row->reservation_admission));
-  if (row->reservation_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
+      loom_serve_text_admit_state, &context, &admission));
+  if (admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
     if (mode == LOOM_SERVE_TEXT_RESERVE_FRESH) {
       row->has_prediction = false;
       memset(&row->transfer, 0, sizeof(row->transfer));
@@ -1162,17 +1192,9 @@ iree_status_t loom_serve_text_row_submit_reserve(
   return iree_ok_status();
 }
 
-loom_serve_memory_admission_t loom_serve_text_row_complete_reserve(
-    loom_serve_text_row_t* row) {
+void loom_serve_text_row_complete_reserve(loom_serve_text_row_t* row) {
   loom_serve_text_state_row_complete_reserve(row->state);
-  if (row->reservation_admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
-    loom_serve_residency_cancel_admission(row->model->residency);
-  } else {
-    // Activation retired, but this request still owns its FIFO turn while
-    // waiting for mutable backing. A younger model must not steal that turn.
-    loom_serve_residency_release(row->model->residency);
-  }
-  return row->reservation_admission;
+  loom_serve_residency_cancel_admission(row->model->residency);
 }
 
 iree_status_t loom_serve_text_row_try_reserve(
@@ -1181,17 +1203,16 @@ iree_status_t loom_serve_text_row_try_reserve(
     bool* out_admitted) {
   *out_admitted = false;
   IREE_RETURN_IF_ERROR(loom_serve_execution_drain(row->model->execution));
-  loom_serve_residency_admission_t admission;
+  loom_serve_text_reserve_result_t result;
   loom_serve_execution_frontier_t frontier;
   iree_status_t status = loom_serve_text_row_submit_reserve(
-      row, mode, checkpoint, extent, &admission, &frontier);
+      row, mode, checkpoint, extent, &result, &frontier);
   loom_serve_residency_cancel_admission(row->model->residency);
   status = iree_status_join(status,
                             loom_serve_execution_drain(row->model->execution));
-  if (iree_status_is_ok(status) &&
-      admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
-    *out_admitted = loom_serve_text_row_complete_reserve(row) ==
-                    LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
+  if (iree_status_is_ok(status) && result == LOOM_SERVE_TEXT_RESERVE_ACQUIRED) {
+    loom_serve_text_row_complete_reserve(row);
+    *out_admitted = true;
   }
   return status;
 }

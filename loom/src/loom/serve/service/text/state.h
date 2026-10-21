@@ -272,7 +272,20 @@ iree_status_t loom_serve_text_state_row_submit_pin(
 iree_status_t loom_serve_text_state_row_try_restore(
     loom_serve_text_state_row_t* row,
     loom_serve_text_state_checkpoint_t* checkpoint, bool* out_restored);
-// Starts at a successfully retired row boundary with a model parameter pin.
+// Joins a caller's complete working set to the state planner's exact range
+// union. Called synchronously on the serialized owner after logical IDs are
+// tentatively acquired, before publishing any row changes. Denial submits no
+// work and leaves no pin; success returns accepted native backing ownership.
+// Fixed backing supplies zero ranges and no readiness. The callback must not
+// yield or change the selected row/checkpoint; ordinary denial rolls their
+// tentative IDs back before this owner turn ends.
+typedef iree_status_t (*loom_serve_text_state_admit_fn_t)(
+    void* user_data, iree_host_size_t range_count,
+    const loom_serve_memory_range_t* ranges, iree_hal_semaphore_t* readiness,
+    uint64_t value, loom_serve_memory_admission_t* out_admission,
+    loom_serve_memory_operation_t** out_operation);
+
+// Starts at a successfully retired row boundary.
 // Extent and starting frontier have passed model validation. Denial changes no
 // selected row or checkpoint contents/ownership. Success installs ownership
 // before submitting transfers; new backing becomes ready on the model timeline
@@ -282,9 +295,12 @@ iree_status_t loom_serve_text_state_row_try_restore(
 // frontier. AVAILABLE distinguishes admission from an unchanged earlier
 // reservation. DEFERRED preserves observed physical progress independently of
 // later collection; logical page exhaustion reports CAPACITY.
+// admit joins new-request parameter admission with state backing; NULL uses
+// ordinary state admission for an already-admitted continuation/COW operation.
 iree_status_t loom_serve_text_state_row_submit_reserve(
     loom_serve_text_state_row_t* row, loom_serve_text_reserve_mode_t mode,
     loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
+    loom_serve_text_state_admit_fn_t admit, void* user_data,
     loom_serve_memory_admission_t* out_admission);
 // After successful readiness, releases the copied tail source. The recurrent
 // reader survives until the first epoch or cancellation.
