@@ -120,7 +120,8 @@ static iree_status_t loom_bytecode_emit_complete_type(
           loom_type_parameterized_parameters(type);
       uint32_t name = 0;
       IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-          numbering, loom_bstring_view(descriptor->name), &name));
+          numbering, loom_bstring_view(descriptor->type_descriptor->name),
+          &name));
       IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(sink, name));
       uint8_t count = 0;
       for (uint8_t i = 0; i < descriptor->parameter_count; ++i) {

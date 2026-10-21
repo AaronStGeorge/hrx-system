@@ -12,7 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ir/parameterized_type.h"
+#include "loom/ir/type_descriptor.h"
 
 namespace loom {
 namespace {
@@ -204,13 +204,26 @@ TEST_F(TypeIndexTest, ParameterAttributesRetainTypeDependencyIdentity) {
       .name = LOOM_BSTRING_REF(8, "metadata"),
       .attr_kind = LOOM_ATTR_DICT,
   }};
-  static const loom_parameterized_type_descriptor_t descriptor = {
-      .name = LOOM_BSTRING_REF(13, "test.metadata"),
-      .parameter_descriptors = parameters,
-      .fact_domain = nullptr,
-      .ir_kind = LOOM_TYPE_PARAMETERIZED,
-      .type_flags = 0,
-      .parameter_count = 1,
+  static const struct {
+    // Complete immutable metadata for the test family.
+    loom_type_descriptor_t type;
+    // Schema retained by parameterized type values.
+    loom_parameterized_type_descriptor_t parameters;
+  } descriptor = {
+      .type =
+          {
+              .name = LOOM_BSTRING_REF(13, "test.metadata<"),
+              .ir_kind = LOOM_TYPE_PARAMETERIZED,
+              .param_count = 1,
+              .parameterized = &descriptor.parameters,
+          },
+      .parameters =
+          {
+              .type_descriptor = &descriptor.type,
+              .parameter_descriptors = parameters,
+              .ir_kind = LOOM_TYPE_PARAMETERIZED,
+              .parameter_count = 1,
+          },
   };
   loom_string_id_t key = LOOM_STRING_ID_INVALID;
   IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("shape"), &key));
@@ -228,7 +241,8 @@ TEST_F(TypeIndexTest, ParameterAttributesRetainTypeDependencyIdentity) {
     loom_attribute_t metadata;
     IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
         module_, loom_make_named_attr_slice(&entry, 1), &metadata));
-    parent_ids[i] = Intern(loom_type_parameterized(&descriptor, 1, &metadata));
+    parent_ids[i] =
+        Intern(loom_type_parameterized(&descriptor.parameters, 1, &metadata));
   }
   ASSERT_NE(parent_ids[0], parent_ids[1]);
   loom_bytecode_type_index_t index;

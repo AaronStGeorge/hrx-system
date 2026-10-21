@@ -269,7 +269,8 @@ def generate_metadata_lines(types: Sequence[TypeDef]) -> list[str]:
         if type_def.fact_domain:
             lines.append(f"extern const struct loom_value_fact_domain_t {type_def.fact_domain};")
         lines.append(f"const loom_parameterized_type_descriptor_t {type_descriptor_symbol(type_def)} = {{")
-        lines.append(f"    .name = {_bstring(type_def.name)},")
+        type_ident = type_def.name.replace(".", "_")
+        lines.append(f"    .type_descriptor = &loom_type_{type_ident}_descriptor,")
         lines.append(f"    .ir_kind = {type_ir_kind_c_name(type_def)},")
         type_flags = inline_type_flags_c_expr(type_def)
         if type_flags is not None:

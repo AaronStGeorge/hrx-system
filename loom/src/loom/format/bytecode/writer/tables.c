@@ -8,7 +8,7 @@
 
 #include "loom/format/bytecode/writer/attribute.h"
 #include "loom/ir/module.h"
-#include "loom/ir/parameterized_type.h"
+#include "loom/ir/type_descriptor.h"
 #include "loom/ops/op_defs.h"
 
 static iree_status_t loom_bytecode_encoding_role_byte(loom_encoding_role_t role,
@@ -192,7 +192,8 @@ iree_status_t loom_bytecode_write_types_section(
             loom_type_parameterized_parameters(type);
         uint32_t family_name_id = 0;
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-            numbering, loom_bstring_view(descriptor->name), &family_name_id));
+            numbering, loom_bstring_view(descriptor->type_descriptor->name),
+            &family_name_id));
         IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
             page_writer, family_name_id));
         uint8_t present_count = 0;

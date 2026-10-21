@@ -707,6 +707,11 @@ TEST(TypeRegistry, RegisteredNamesCarryOpeningAngleByte) {
     const loom_type_descriptor_t* descriptor = entries[i].descriptor;
     const iree_string_view_t name = loom_bstring_view(descriptor->name);
     EXPECT_EQ(descriptor->name[name.size + 1], '<');
+    if (descriptor->parameterized) {
+      EXPECT_EQ(descriptor->parameterized->type_descriptor, descriptor);
+      EXPECT_EQ(descriptor->parameterized->parameter_count,
+                descriptor->param_count);
+    }
   }
 }
 
@@ -734,6 +739,15 @@ TEST(TypeRegistry, DialectOwnedTypesRequireDialectRegistration) {
   EXPECT_EQ(descriptor->ir_kind, LOOM_TYPE_PARAMETERIZED);
   EXPECT_EQ(loom_type_registry_lookup(&context, IREE_SV("tile")),
             loom_type_registry_lookup_builtin(LOOM_TYPE_TILE));
+
+  for (iree_host_size_t i = 0; i < context.registered_types.count; ++i) {
+    const auto* registered = context.registered_types.entries[i].descriptor;
+    if (registered->parameterized) {
+      EXPECT_EQ(registered->parameterized->type_descriptor, registered);
+      EXPECT_EQ(registered->parameterized->parameter_count,
+                registered->param_count);
+    }
+  }
 
   loom_context_deinitialize(&context);
 }

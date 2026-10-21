@@ -15,7 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/parameterized_attr.h"
-#include "loom/ir/parameterized_type.h"
+#include "loom/ir/type_descriptor.h"
 
 namespace loom {
 namespace {
@@ -439,13 +439,26 @@ TEST_F(CatalogTest, TypeAndAttributeMetadataKeepFirstUseOrder) {
           .flags = LOOM_ATTR_OPTIONAL,
       },
   };
-  static const loom_parameterized_type_descriptor_t descriptor = {
-      .name = LOOM_BSTRING_REF(17, "test.catalog_type"),
-      .parameter_descriptors = parameters,
-      .fact_domain = nullptr,
-      .ir_kind = LOOM_TYPE_PARAMETERIZED,
-      .type_flags = {},
-      .parameter_count = IREE_ARRAYSIZE(parameters),
+  static const struct {
+    // Complete immutable metadata for the test family.
+    loom_type_descriptor_t type;
+    // Schema retained by parameterized type values.
+    loom_parameterized_type_descriptor_t parameters;
+  } descriptor = {
+      .type =
+          {
+              .name = LOOM_BSTRING_REF(17, "test.catalog_type<"),
+              .ir_kind = LOOM_TYPE_PARAMETERIZED,
+              .param_count = IREE_ARRAYSIZE(parameters),
+              .parameterized = &descriptor.parameters,
+          },
+      .parameters =
+          {
+              .type_descriptor = &descriptor.type,
+              .parameter_descriptors = parameters,
+              .ir_kind = LOOM_TYPE_PARAMETERIZED,
+              .parameter_count = IREE_ARRAYSIZE(parameters),
+          },
   };
   // Module insertion order intentionally differs from first-use wire order.
   const auto late = Intern(IREE_SV("late"));
@@ -474,7 +487,8 @@ TEST_F(CatalogTest, TypeAndAttributeMetadataKeepFirstUseOrder) {
   loom_type_t type;
   loom_type_id_t type_id;
   IREE_ASSERT_OK(loom_module_make_parameterized_type(
-      module_, &descriptor, slots, IREE_ARRAYSIZE(slots), &type, &type_id));
+      module_, &descriptor.parameters, slots, IREE_ARRAYSIZE(slots), &type,
+      &type_id));
   loom_bytecode_numbering_t numbering;
   IREE_ASSERT_OK(
       loom_bytecode_numbering_initialize(&numbering, module_, &arena_));
@@ -520,13 +534,26 @@ TEST_F(CatalogTest, TypeAndAttributeMetadataKeepFirstUseOrder) {
 }
 
 TEST_F(CatalogTest, ParameterizedTypesResumeAfterNestedTypes) {
-  static const loom_parameterized_type_descriptor_t descriptor = {
-      .name = LOOM_BSTRING_REF(10, "test.chain"),
-      .parameter_descriptors = kPayloadParameters,
-      .fact_domain = nullptr,
-      .ir_kind = LOOM_TYPE_PARAMETERIZED,
-      .type_flags = {},
-      .parameter_count = IREE_ARRAYSIZE(kPayloadParameters),
+  static const struct {
+    // Complete immutable metadata for the test family.
+    loom_type_descriptor_t type;
+    // Schema retained by parameterized type values.
+    loom_parameterized_type_descriptor_t parameters;
+  } descriptor = {
+      .type =
+          {
+              .name = LOOM_BSTRING_REF(10, "test.chain<"),
+              .ir_kind = LOOM_TYPE_PARAMETERIZED,
+              .param_count = IREE_ARRAYSIZE(kPayloadParameters),
+              .parameterized = &descriptor.parameters,
+          },
+      .parameters =
+          {
+              .type_descriptor = &descriptor.type,
+              .parameter_descriptors = kPayloadParameters,
+              .ir_kind = LOOM_TYPE_PARAMETERIZED,
+              .parameter_count = IREE_ARRAYSIZE(kPayloadParameters),
+          },
   };
   const auto label = Intern(IREE_SV("chain_label"));
   std::vector<loom_type_id_t> types = {
@@ -536,8 +563,8 @@ TEST_F(CatalogTest, ParameterizedTypesResumeAfterNestedTypes) {
     const loom_attribute_t slots[] = {loom_attr_type(types.back()),
                                       loom_attr_string(label)};
     loom_type_id_t id;
-    IREE_ASSERT_OK(loom_module_make_parameterized_type(module_, &descriptor,
-                                                       slots, 2, &type, &id));
+    IREE_ASSERT_OK(loom_module_make_parameterized_type(
+        module_, &descriptor.parameters, slots, 2, &type, &id));
     types.push_back(id);
   }
   loom_bytecode_numbering_t numbering;

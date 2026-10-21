@@ -53,15 +53,7 @@ static const loom_attr_descriptor_t kParameters[] = {
         .flags = 0,
     },
 };
-static const loom_parameterized_type_descriptor_t kParameterDescriptor = {
-    .name = LOOM_BSTRING_REF(15, "wire.parameters"),
-    .parameter_descriptors = kParameters,
-    .fact_domain = nullptr,
-    .ir_kind = LOOM_TYPE_PARAMETERIZED,
-    .type_flags = 0,
-    .parameter_count = IREE_ARRAYSIZE(kParameters),
-    .flags = 0,
-};
+extern const loom_parameterized_type_descriptor_t kParameterDescriptor;
 static const loom_type_descriptor_t kTypeDescriptor = {
     .name = LOOM_BSTRING_REF(15, "wire.parameters<"),
     .ir_kind = LOOM_TYPE_PARAMETERIZED,
@@ -71,6 +63,15 @@ static const loom_type_descriptor_t kTypeDescriptor = {
     .format_elements = nullptr,
     .format_element_count = 0,
     .parameterized = &kParameterDescriptor,
+};
+const loom_parameterized_type_descriptor_t kParameterDescriptor = {
+    .type_descriptor = &kTypeDescriptor,
+    .parameter_descriptors = kParameters,
+    .fact_domain = nullptr,
+    .ir_kind = LOOM_TYPE_PARAMETERIZED,
+    .type_flags = 0,
+    .parameter_count = IREE_ARRAYSIZE(kParameters),
+    .flags = 0,
 };
 static const loom_type_registry_entry_t kTypeRegistry[] = {
     {IREE_SV("wire.parameters"), &kTypeDescriptor},
