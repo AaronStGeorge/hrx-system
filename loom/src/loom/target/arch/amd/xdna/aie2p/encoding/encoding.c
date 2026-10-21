@@ -439,6 +439,26 @@ bool loom_aie2p_encoding_query_bundle_format_info(
   return true;
 }
 
+iree_host_size_t loom_aie2p_encoding_query_bundle_format_slots(
+    loom_aie2p_bundle_format_id_t format, iree_host_size_t slot_capacity,
+    loom_aie2p_slot_t* out_slots) {
+  if (format == LOOM_AIE2P_BUNDLE_FORMAT_ID_INVALID ||
+      format >= IREE_ARRAYSIZE(kLoomAie2pBundleLayouts)) {
+    return 0;
+  }
+  const loom_aie2p_bundle_layout_t* layout = &kLoomAie2pBundleLayouts[format];
+  const iree_host_size_t copied_count =
+      iree_min(slot_capacity, (iree_host_size_t)layout->field_count);
+  if (out_slots != NULL) {
+    for (iree_host_size_t i = 0; i < copied_count; ++i) {
+      out_slots[i] =
+          (loom_aie2p_slot_t)kLoomAie2pBundleFields[layout->field_offset + i]
+              .slot_id;
+    }
+  }
+  return layout->field_count;
+}
+
 static uint64_t loom_aie2p_encoding_pack_verified_instruction_fields(
     loom_aie2p_instruction_id_t instruction,
     const loom_aie2p_instruction_layout_t* layout,

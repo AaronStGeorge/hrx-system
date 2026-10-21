@@ -514,6 +514,7 @@ loom_cc_library(
     loom::ops::buffer
     loom::ops::global
     loom::ops::low
+    loom::ops::op_defs
     loom::ops::vector
     loom::target::arch::amd::xdna::aie2p::contracts::core
     loom::target::arch::amd::xdna::aie2p::contracts::core_lower_rules
@@ -521,6 +522,23 @@ loom_cc_library(
     loom::target::contract
     loom::target::registers
     loom::util::fact_table
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_library(
+  NAME
+    call_abi
+  HDRS
+    "call_abi.h"
+  SRCS
+    "call_abi.c"
+  DEPS
+    ::core_descriptors
+    loom::codegen::low::allocation::call
+    loom::ir
+    loom::target::registers
   PUBLIC
 )
 endif()
@@ -552,6 +570,7 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
+    ::call_abi
     ::legalization
     ::low_registry
     ::low_verify
@@ -1009,11 +1028,13 @@ loom_check_test_suite(
     "test/module_contracts.loom-test"
     "test/native_admission.loom-test"
     "test/native_bindings.loom-test"
+    "test/native_calls.loom-test"
     "test/native_completion.loom-test"
     "test/native_distribution.loom-test"
     "test/native_dma_completions.loom-test"
     "test/native_dma_descriptors.loom-test"
     "test/native_endpoint_addresses.loom-test"
+    "test/native_helper_effects.loom-test"
     "test/native_local_buffers.loom-test"
     "test/native_repetition.loom-test"
     "test/native_strands.loom-test"
@@ -1289,6 +1310,46 @@ endif()
 if(LOOM_TARGET_ARCH_XDNA)
 loom_cc_library(
   NAME
+    program_object
+  HDRS
+    "emit/program_object.h"
+  SRCS
+    "emit/program_object.c"
+  DEPS
+    ::bundle_plan
+    ::leaf_object
+    ::relocation
+    iree::base
+    iree::base::internal::arena
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_library(
+  NAME
+    program_compile
+  HDRS
+    "emit/program_compile.h"
+  SRCS
+    "emit/program_compile.c"
+  DEPS
+    ::call_abi
+    ::core_descriptors
+    ::leaf_compile
+    ::program_object
+    iree::base
+    iree::base::internal::arena
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::registers
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_library(
+  NAME
     tile_link
   HDRS
     "emit/tile_link.h"
@@ -1381,6 +1442,7 @@ loom_cc_library(
     ::configuration_descriptors
     ::configuration_storage
     ::leaf_compile
+    ::program_compile
     ::provider
     ::target_facts
     ::target_profile
@@ -1462,6 +1524,25 @@ loom_cc_test(
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=libamdf"
+    "iree-build-requirement=loom.target.arch.xdna"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_test(
+  NAME
+    call_abi_test
+  SRCS
+    "call_abi_test.cc"
+  DEPS
+    ::call_abi
+    ::core_descriptors
+    ::machine
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::target::registers
+  LABELS
     "iree-build-requirement=loom.target.arch.xdna"
 )
 endif()
@@ -1597,6 +1678,57 @@ loom_cc_test(
   DEPS
     ::encoding
     ::leaf_object
+    ::relocation
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.xdna"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_test(
+  NAME
+    program_compile_test
+  SRCS
+    "emit/program_compile_test.cc"
+  DEPS
+    ::bundle_plan
+    ::core_descriptors
+    ::descriptor_encoding
+    ::encoding
+    ::low_registry
+    ::machine
+    ::program_compile
+    ::provider
+    ::relocation
+    ::tile_link
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::function_requirements
+    loom::codegen::low::text_asm
+    loom::format::text::parser
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::target::emit::native::object
+    loom::testing::module_ptr
+  LABELS
+    "iree-build-requirement=loom.target.arch.xdna"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_test(
+  NAME
+    program_object_test
+  SRCS
+    "emit/program_object_test.cc"
+  DEPS
+    ::program_object
     ::relocation
     iree::base::internal::arena
     iree::testing::gtest

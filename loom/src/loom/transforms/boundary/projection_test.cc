@@ -30,8 +30,12 @@ static iree_status_t PlanZeroComponentSlot(
   *out_schema = {};
   *out_claimed = false;
   loom_region_t* body = loom_func_like_body(function->function);
-  if (role != LOOM_BOUNDARY_PROJECTION_SLOT_BLOCK_ARGUMENT || !body || !block ||
-      block == loom_region_entry_block(body) ||
+  const bool is_function_argument =
+      role == LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_ARGUMENT;
+  const bool is_local_block_argument =
+      role == LOOM_BOUNDARY_PROJECTION_SLOT_BLOCK_ARGUMENT && body && block &&
+      block != loom_region_entry_block(body);
+  if ((!is_function_argument && !is_local_block_argument) ||
       !loom_type_equal(loom_module_value_type(plan->module, value_id),
                        loom_type_scalar(LOOM_SCALAR_TYPE_INDEX))) {
     return iree_ok_status();
@@ -600,6 +604,98 @@ TEST_F(BoundaryProjectionTest, RejectsCfgProjectionAtomically) {
   EXPECT_EQ(statistics.rules[0].projections, 0);
   EXPECT_EQ(statistics.rules[0].components, 0);
   EXPECT_EQ(statistics.rules[0].destination_uses_rewritten, 0);
+  Verify(module_);
+}
+
+TEST_F(BoundaryProjectionTest, KeepsCallsToRejectedSignaturesIntact) {
+  const loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  const loom_type_t placeholder_vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(1), 0);
+
+  const loom_symbol_ref_t callee_ref = MakeSymbol(IREE_SV("callee"));
+  const loom_type_t callee_argument_types[] = {index_type,
+                                               placeholder_vector_type};
+  loom_op_t* callee_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder_, /*build_flags=*/0, /*visibility=*/0, /*cc=*/0,
+      callee_ref, callee_argument_types, IREE_ARRAYSIZE(callee_argument_types),
+      /*result_types=*/nullptr,
+      /*result_count=*/0, /*tied_results=*/nullptr,
+      /*tied_result_count=*/0, /*predicates=*/nullptr,
+      /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN, &callee_op));
+  const loom_func_like_t callee = loom_func_like_cast(module_, callee_op);
+  uint16_t callee_argument_count = 0;
+  const loom_value_id_t* callee_arguments =
+      loom_func_like_arg_ids(callee, &callee_argument_count);
+  ASSERT_EQ(callee_argument_count, 2);
+  // The second argument depends on the first, so projecting the first requires
+  // rejecting the complete callable signature.
+  const loom_type_t dependent_vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(callee_arguments[0]), 0);
+  IREE_ASSERT_OK(loom_module_set_value_type(module_, callee_arguments[1],
+                                            dependent_vector_type));
+  loom_builder_t callee_builder = BlockBuilder(
+      callee_op, loom_region_entry_block(loom_func_like_body(callee)));
+  loom_op_t* callee_return = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&callee_builder, /*values=*/nullptr,
+                                       /*values_count=*/0,
+                                       LOOM_LOCATION_UNKNOWN, &callee_return));
+
+  loom_op_t* caller_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder_, /*build_flags=*/0, /*visibility=*/0, /*cc=*/0,
+      MakeSymbol(IREE_SV("caller")), /*arg_types=*/nullptr,
+      /*arg_types_count=*/0, /*result_types=*/nullptr, /*result_count=*/0,
+      /*tied_results=*/nullptr, /*tied_result_count=*/0,
+      /*predicates=*/nullptr, /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN,
+      &caller_op));
+  const loom_func_like_t caller = loom_func_like_cast(module_, caller_op);
+  loom_builder_t caller_builder = BlockBuilder(
+      caller_op, loom_region_entry_block(loom_func_like_body(caller)));
+  loom_op_t* width_op = nullptr;
+  IREE_ASSERT_OK(loom_index_constant_build(&caller_builder, loom_attr_i64(4),
+                                           index_type, LOOM_LOCATION_UNKNOWN,
+                                           &width_op));
+  const loom_value_id_t width = loom_index_constant_result(width_op);
+  const loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(width), 0);
+  loom_op_t* vector_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&caller_builder, loom_attr_f64(0.0),
+                                          vector_type, LOOM_LOCATION_UNKNOWN,
+                                          &vector_op));
+  const loom_value_id_t operands[] = {width,
+                                      loom_test_constant_result(vector_op)};
+  loom_op_t* call_op = nullptr;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &caller_builder, callee_ref, operands, IREE_ARRAYSIZE(operands),
+      /*result_types=*/nullptr, /*result_count=*/0,
+      /*tied_results=*/nullptr, /*tied_result_count=*/0, LOOM_LOCATION_UNKNOWN,
+      &call_op));
+  loom_op_t* caller_return = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&caller_builder, /*values=*/nullptr,
+                                       /*values_count=*/0,
+                                       LOOM_LOCATION_UNKNOWN, &caller_return));
+  Verify(module_);
+
+  loom_boundary_projection_rule_t rule = kZeroComponentRule;
+  // Callable projection proposes the rejected schema. Branch-result support
+  // keeps function collection active even though no signature is selected.
+  rule.slot_role_bits |= LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
+                             LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_ARGUMENT) |
+                         LOOM_BOUNDARY_PROJECTION_SLOT_ROLE_BIT(
+                             LOOM_BOUNDARY_PROJECTION_SLOT_BRANCH_RESULT);
+  loom_boundary_projection_statistics_t statistics = {};
+  Project(&rule, &statistics);
+
+  EXPECT_FALSE(iree_any_bit_set(call_op->flags, LOOM_OP_FLAG_DEAD));
+  const loom_value_slice_t projected_operands =
+      loom_test_invoke_operands(call_op);
+  ASSERT_EQ(projected_operands.count, IREE_ARRAYSIZE(operands));
+  EXPECT_EQ(projected_operands.values[0], operands[0]);
+  EXPECT_EQ(projected_operands.values[1], operands[1]);
+  EXPECT_EQ(statistics.calls_rewritten, 0);
+  EXPECT_EQ(statistics.functions_rewritten, 0);
   Verify(module_);
 }
 

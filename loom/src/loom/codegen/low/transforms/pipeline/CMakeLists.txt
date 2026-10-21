@@ -11,13 +11,38 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    source_invocation_facts
+  HDRS
+    "source_invocation_facts.h"
+  SRCS
+    "source_invocation_facts.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::codegen::low::lower::source_selection
+    loom::ir
+    loom::ops::op_defs
+    loom::ops::type_registry
+    loom::pass::types
+    loom::pass::value_facts
+    loom::target::provider
+    loom::util::call_graph
+    loom::util::fact_table
+    loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     source_to_low
   HDRS
     "source_to_low.h"
   SRCS
     "source_to_low.c"
   DEPS
+    ::source_invocation_facts
     iree::base
+    iree::base::internal::arena
     loom::analysis::storage_access
     loom::codegen::low::descriptors
     loom::codegen::low::launch_config_program
@@ -50,6 +75,7 @@ loom_cc_library(
     "target_legalize_preflight.c"
     "target_legalize_preflight.h"
   DEPS
+    ::source_invocation_facts
     iree::base
     iree::base::internal::arena
     loom::analysis::contract
@@ -91,6 +117,7 @@ loom_cc_test(
   SRCS
     "source_to_low_test.cc"
   DEPS
+    ::source_invocation_facts
     ::source_to_low
     iree::base::internal::arena
     iree::testing::gtest

@@ -155,6 +155,13 @@ bool loom_aie2p_encoding_query_bundle_format_info(
     loom_aie2p_bundle_format_id_t format,
     loom_aie2p_bundle_format_info_t* out_info);
 
+// Returns the physical slots carried by |format| in encoding-table order.
+// At most |slot_capacity| entries are written; the return value is the total
+// slot count, or zero when |format| is invalid.
+iree_host_size_t loom_aie2p_encoding_query_bundle_format_slots(
+    loom_aie2p_bundle_format_id_t format, iree_host_size_t slot_capacity,
+    loom_aie2p_slot_t* out_slots);
+
 // Packs one instruction from target-adapted field values.
 iree_status_t loom_aie2p_encoding_pack_instruction(
     loom_aie2p_instruction_id_t instruction,

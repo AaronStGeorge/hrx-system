@@ -2417,6 +2417,8 @@ iree_status_t loom_aie2p_array_plan_build(
   loom_aie2p_array_plan_t plan = {
       .function_op = function_op,
       .family = loom_xdna_npu2_array_family(),
+      .source_leaves = leaves,
+      .source_leaf_count = leaf_count,
   };
   const loom_aie2p_array_abi_layout_t abi_layout =
       loom_aie2p_array_abi_layout_from_verified(function_op);

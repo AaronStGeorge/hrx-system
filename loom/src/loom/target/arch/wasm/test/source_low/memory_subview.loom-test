@@ -123,6 +123,9 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @subview_prefetch_stri
 
 // ====
 
+// Ordinary helpers retain their authored argument domains. Facts from the
+// direct caller below do not specialize a helper without an explicit noinline
+// boundary.
 func.def @make_storage_crop(%input: buffer, %origin: offset, %columns: index) -> (%result_storage: encoding<storage>, view<2x3xf32, %result_storage>) {
   %layout = encoding.layout.strided [%columns, 1] : encoding<layout>
   %schema = encoding.define #encoding.f32 : encoding<schema>

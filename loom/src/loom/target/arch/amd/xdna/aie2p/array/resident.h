@@ -32,6 +32,8 @@ typedef struct loom_aie2p_array_resident_worker_t {
   loom_low_memory_access_map_t* memory_accesses;
   // Module-owned loop facts translated into the resident invocation.
   loom_low_loop_execution_map_t* loop_execution;
+  // Direct helper symbols remapped into the resident module.
+  loom_symbol_ref_array_t direct_callees;
 } loom_aie2p_array_resident_worker_t;
 
 // Materialized resident core programs for one physical array plan.

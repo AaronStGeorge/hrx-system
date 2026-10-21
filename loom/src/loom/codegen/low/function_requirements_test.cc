@@ -132,5 +132,34 @@ low.func.def target<test.low.core> @resident() asm {
   EXPECT_EQ(requirements.return_count, 0u);
 }
 
+TEST_F(LowFunctionRequirementsTest, RetainsUniqueDirectCalleesInCallOrder) {
+  auto module = Parse(R"(
+low.func.def target<test.low.core> @entry(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  %first = low.func.call @second(%value) : (reg<test.i32>) -> (reg<test.i32>)
+  %second = low.func.call @first(%first) : (reg<test.i32>) -> (reg<test.i32>)
+  %third = low.func.call @second(%second) : (reg<test.i32>) -> (reg<test.i32>)
+  return %third
+}
+low.func.def target<test.low.core> @first(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  return %value
+}
+low.func.def target<test.low.core> @second(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  return %value
+}
+)");
+  const auto requirements = Analyze(module.get());
+  ASSERT_EQ(requirements.direct_callees.count, 2u);
+  const loom_symbol_ref_t second = requirements.direct_callees.values[0];
+  const loom_symbol_ref_t first = requirements.direct_callees.values[1];
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_string_table_get(&module->strings,
+                            module->symbols.entries[second.symbol_id].name_id),
+      IREE_SV("second")));
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_string_table_get(&module->strings,
+                            module->symbols.entries[first.symbol_id].name_id),
+      IREE_SV("first")));
+}
+
 }  // namespace
 }  // namespace loom

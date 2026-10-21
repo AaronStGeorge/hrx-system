@@ -468,6 +468,10 @@ typedef struct loom_aie2p_array_plan_t {
   const loom_op_t* function_op;
   // Immutable physical family used by the plan.
   const loom_xdna_array_family_t* family;
+  // Source core inventory supplying worker and helper requirements.
+  const loom_aie2p_array_leaf_t* source_leaves;
+  // Number of entries in |source_leaves|.
+  iree_host_size_t source_leaf_count;
   // Logical worker groups in source order.
   const loom_aie2p_array_group_t* groups;
   // Number of logical worker groups.
