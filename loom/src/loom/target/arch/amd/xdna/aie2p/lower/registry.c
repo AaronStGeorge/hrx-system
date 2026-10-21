@@ -165,6 +165,10 @@ static iree_status_t loom_aie2p_map_value(void* user_data,
                                           loom_value_id_t source_value_id,
                                           loom_type_t source_type,
                                           loom_type_t* out_low_type) {
+  if (loom_type_is_view(source_type)) {
+    return loom_low_lower_make_register_type(
+        context, AIE2P_CORE_REG_CLASS_ID_AIE2P_EP, 1, out_low_type);
+  }
   if (loom_aie2p_f32_packet_type(source_type)) {
     loom_low_representation_id_t representation =
         LOOM_LOW_REPRESENTATION_ID_NONE;

@@ -11,9 +11,9 @@ func.def @observe_unused(%input: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @observe_unused() asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %first = lda.volatile<volatile> %source, 0
-  %second = lda.volatile<volatile> %source, 4
+  %aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %first = lda.volatile<volatile> %aligned, 0
+  %second = lda.volatile<volatile> %aligned, 4
   return
 }
 
@@ -34,12 +34,12 @@ func.def @observe_vector(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @observe_vector() asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %first = vlda.512.i32x16.volatile<volatile> %source, 0
-  %second = vlda.512.i32x16.volatile<volatile> %source, 0
-  vst.512.i32x16.volatile<volatile> %first, %destination, 0
-  vst.512.i32x16.volatile<volatile> %second, %destination, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %first = vlda.512.i32x16.volatile<volatile> %source_aligned, 0
+  %second = vlda.512.i32x16.volatile<volatile> %source_aligned, 0
+  vst.512.i32x16.volatile<volatile> %first, %destination_aligned, 0
+  vst.512.i32x16.volatile<volatile> %second, %destination_aligned, 64
   return
 }
 
@@ -58,12 +58,12 @@ func.def @observe_byte(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @observe_byte() asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %first = lda.u8.volatile<volatile> %source, 0
-  %second = lda.u8.volatile<volatile> %source, 0
-  st.s8.volatile<volatile> %first, %destination, 0
-  st.s8.volatile<volatile> %second, %destination, 1
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %first = lda.u8.volatile<volatile> %input, 0
+  %second = lda.u8.volatile<volatile> %input, 0
+  st.s8.volatile<volatile> %first, %output, 0
+  st.s8.volatile<volatile> %second, %output, 1
   return
 }
 
@@ -80,10 +80,10 @@ func.def @observe_dynamic_address(%input: buffer, %byte_offset: offset) -> (i32,
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @observe_dynamic_address(%base: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %13 = mov.address-index %base
-  %first = lda.i32.index.volatile<volatile> %source, %13
+  %first = lda.i32.index.volatile<volatile> %aligned, %13
   %15 = add.address-index.immediate %base, 4
-  %second = lda.i32.index.volatile<volatile> %source, %15
+  %second = lda.i32.index.volatile<volatile> %aligned, %15
   return %first, %second
 }

@@ -22,30 +22,30 @@ func.def @copy_byte_tail_3(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_byte_tail_3() asm {
-  %source_e5m2 = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target_e5m2 = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %37 = lda.u8 %source_e5m2, 1
-  %38 = lda.u8 %source_e5m2, 2
-  %39 = lda.u8 %source_e5m2, 3
-  st.s8 %37, %target_e5m2, 1
-  st.s8 %38, %target_e5m2, 2
-  st.s8 %39, %target_e5m2, 3
-  %40 = lda.u8 %source_e5m2, 4
-  %41 = lda.u8 %source_e5m2, 5
-  %42 = lda.u8 %source_e5m2, 6
-  st.s8 %40, %target_e5m2, 4
-  st.s8 %41, %target_e5m2, 5
-  st.s8 %42, %target_e5m2, 6
-  %43 = lda.u8 %source_e5m2, 7
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %37 = lda.u8 %input, 1
+  %38 = lda.u8 %input, 2
+  %39 = lda.u8 %input, 3
+  st.s8 %37, %output, 1
+  st.s8 %38, %output, 2
+  st.s8 %39, %output, 3
+  %40 = lda.u8 %input, 4
+  %41 = lda.u8 %input, 5
+  %42 = lda.u8 %input, 6
+  st.s8 %40, %output, 4
+  st.s8 %41, %output, 5
+  st.s8 %42, %output, 6
+  %43 = lda.u8 %input, 7
   %44 = mov.static-byte-offset 8
   %45 = mov.address-index %44
-  %46 = lda.i8.index %source_e5m2, %45
+  %46 = lda.i8.index %input, %45
   %47 = mov.static-byte-offset 9
   %48 = mov.address-index %47
-  %49 = lda.i8.index %source_e5m2, %48
-  st.s8 %43, %target_e5m2, 7
-  st.i8.index %46, %target_e5m2, %45
-  st.i8.index %49, %target_e5m2, %48
+  %49 = lda.i8.index %input, %48
+  st.s8 %43, %output, 7
+  st.i8.index %46, %output, %45
+  st.i8.index %49, %output, %48
   return
 }
 
@@ -72,78 +72,78 @@ func.def @copy_byte_tail_7(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_byte_tail_7() asm {
-  %source_e5m2 = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target_e5m2 = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %61 = lda.u8 %source_e5m2, 1
-  %62 = lda.u8 %source_e5m2, 2
-  %63 = lda.u8 %source_e5m2, 3
-  %64 = lda.u8 %source_e5m2, 4
-  %65 = lda.u8 %source_e5m2, 5
-  %66 = lda.u8 %source_e5m2, 6
-  %67 = lda.u8 %source_e5m2, 7
-  st.s8 %61, %target_e5m2, 1
-  st.s8 %62, %target_e5m2, 2
-  st.s8 %63, %target_e5m2, 3
-  st.s8 %64, %target_e5m2, 4
-  st.s8 %65, %target_e5m2, 5
-  st.s8 %66, %target_e5m2, 6
-  st.s8 %67, %target_e5m2, 7
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %61 = lda.u8 %input, 1
+  %62 = lda.u8 %input, 2
+  %63 = lda.u8 %input, 3
+  %64 = lda.u8 %input, 4
+  %65 = lda.u8 %input, 5
+  %66 = lda.u8 %input, 6
+  %67 = lda.u8 %input, 7
+  st.s8 %61, %output, 1
+  st.s8 %62, %output, 2
+  st.s8 %63, %output, 3
+  st.s8 %64, %output, 4
+  st.s8 %65, %output, 5
+  st.s8 %66, %output, 6
+  st.s8 %67, %output, 7
   %68 = mov.static-byte-offset 8
   %69 = mov.address-index %68
-  %70 = lda.i8.index %source_e5m2, %69
+  %70 = lda.i8.index %input, %69
   %71 = mov.static-byte-offset 9
   %72 = mov.address-index %71
-  %73 = lda.i8.index %source_e5m2, %72
+  %73 = lda.i8.index %input, %72
   %74 = mov.static-byte-offset 10
   %75 = mov.address-index %74
-  %76 = lda.i8.index %source_e5m2, %75
+  %76 = lda.i8.index %input, %75
   %77 = mov.static-byte-offset 11
   %78 = mov.address-index %77
-  %79 = lda.i8.index %source_e5m2, %78
+  %79 = lda.i8.index %input, %78
   %80 = mov.static-byte-offset 12
   %81 = mov.address-index %80
-  %82 = lda.i8.index %source_e5m2, %81
+  %82 = lda.i8.index %input, %81
   %83 = mov.static-byte-offset 13
   %84 = mov.address-index %83
-  %85 = lda.i8.index %source_e5m2, %84
+  %85 = lda.i8.index %input, %84
   %86 = mov.static-byte-offset 14
   %87 = mov.address-index %86
-  %88 = lda.i8.index %source_e5m2, %87
-  st.i8.index %70, %target_e5m2, %69
-  st.i8.index %73, %target_e5m2, %72
-  st.i8.index %76, %target_e5m2, %75
-  st.i8.index %79, %target_e5m2, %78
-  st.i8.index %82, %target_e5m2, %81
-  st.i8.index %85, %target_e5m2, %84
-  st.i8.index %88, %target_e5m2, %87
+  %88 = lda.i8.index %input, %87
+  st.i8.index %70, %output, %69
+  st.i8.index %73, %output, %72
+  st.i8.index %76, %output, %75
+  st.i8.index %79, %output, %78
+  st.i8.index %82, %output, %81
+  st.i8.index %85, %output, %84
+  st.i8.index %88, %output, %87
   %103 = mov.static-byte-offset 15
   %104 = mov.address-index %103
-  %105 = lda.i8.index %source_e5m2, %104
+  %105 = lda.i8.index %input, %104
   %106 = mov.static-byte-offset 16
   %107 = mov.address-index %106
-  %108 = lda.i8.index %source_e5m2, %107
+  %108 = lda.i8.index %input, %107
   %109 = mov.static-byte-offset 17
   %110 = mov.address-index %109
-  %111 = lda.i8.index %source_e5m2, %110
+  %111 = lda.i8.index %input, %110
   %112 = mov.static-byte-offset 18
   %113 = mov.address-index %112
-  %114 = lda.i8.index %source_e5m2, %113
+  %114 = lda.i8.index %input, %113
   %115 = mov.static-byte-offset 19
   %116 = mov.address-index %115
-  %117 = lda.i8.index %source_e5m2, %116
+  %117 = lda.i8.index %input, %116
   %118 = mov.static-byte-offset 20
   %119 = mov.address-index %118
-  %120 = lda.i8.index %source_e5m2, %119
+  %120 = lda.i8.index %input, %119
   %121 = mov.static-byte-offset 21
   %122 = mov.address-index %121
-  %123 = lda.i8.index %source_e5m2, %122
-  st.i8.index %105, %target_e5m2, %104
-  st.i8.index %108, %target_e5m2, %107
-  st.i8.index %111, %target_e5m2, %110
-  st.i8.index %114, %target_e5m2, %113
-  st.i8.index %117, %target_e5m2, %116
-  st.i8.index %120, %target_e5m2, %119
-  st.i8.index %123, %target_e5m2, %122
+  %123 = lda.i8.index %input, %122
+  st.i8.index %105, %output, %104
+  st.i8.index %108, %output, %107
+  st.i8.index %111, %output, %110
+  st.i8.index %114, %output, %113
+  st.i8.index %117, %output, %116
+  st.i8.index %120, %output, %119
+  st.i8.index %123, %output, %122
   return
 }
 
@@ -170,78 +170,78 @@ func.def @copy_word_tail_7(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_word_tail_7() asm {
-  %source_bfloat = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target_bfloat = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %61 = lda.u16 %source_bfloat, 2
-  %62 = lda.u16 %source_bfloat, 4
-  %63 = lda.u16 %source_bfloat, 6
-  %64 = lda.u16 %source_bfloat, 8
-  %65 = lda.u16 %source_bfloat, 10
-  %66 = lda.u16 %source_bfloat, 12
-  %67 = lda.u16 %source_bfloat, 14
-  st.s16 %61, %target_bfloat, 2
-  st.s16 %62, %target_bfloat, 4
-  st.s16 %63, %target_bfloat, 6
-  st.s16 %64, %target_bfloat, 8
-  st.s16 %65, %target_bfloat, 10
-  st.s16 %66, %target_bfloat, 12
-  st.s16 %67, %target_bfloat, 14
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %61 = lda.u16 %input, 2
+  %62 = lda.u16 %input, 4
+  %63 = lda.u16 %input, 6
+  %64 = lda.u16 %input, 8
+  %65 = lda.u16 %input, 10
+  %66 = lda.u16 %input, 12
+  %67 = lda.u16 %input, 14
+  st.s16 %61, %output, 2
+  st.s16 %62, %output, 4
+  st.s16 %63, %output, 6
+  st.s16 %64, %output, 8
+  st.s16 %65, %output, 10
+  st.s16 %66, %output, 12
+  st.s16 %67, %output, 14
   %68 = mov.static-byte-offset 16
   %69 = mov.address-index %68
-  %70 = lda.i16.index %source_bfloat, %69
+  %70 = lda.i16.index %input, %69
   %71 = mov.static-byte-offset 18
   %72 = mov.address-index %71
-  %73 = lda.i16.index %source_bfloat, %72
+  %73 = lda.i16.index %input, %72
   %74 = mov.static-byte-offset 20
   %75 = mov.address-index %74
-  %76 = lda.i16.index %source_bfloat, %75
+  %76 = lda.i16.index %input, %75
   %77 = mov.static-byte-offset 22
   %78 = mov.address-index %77
-  %79 = lda.i16.index %source_bfloat, %78
+  %79 = lda.i16.index %input, %78
   %80 = mov.static-byte-offset 24
   %81 = mov.address-index %80
-  %82 = lda.i16.index %source_bfloat, %81
+  %82 = lda.i16.index %input, %81
   %83 = mov.static-byte-offset 26
   %84 = mov.address-index %83
-  %85 = lda.i16.index %source_bfloat, %84
+  %85 = lda.i16.index %input, %84
   %86 = mov.static-byte-offset 28
   %87 = mov.address-index %86
-  %88 = lda.i16.index %source_bfloat, %87
-  st.i16.index %70, %target_bfloat, %69
-  st.i16.index %73, %target_bfloat, %72
-  st.i16.index %76, %target_bfloat, %75
-  st.i16.index %79, %target_bfloat, %78
-  st.i16.index %82, %target_bfloat, %81
-  st.i16.index %85, %target_bfloat, %84
-  st.i16.index %88, %target_bfloat, %87
+  %88 = lda.i16.index %input, %87
+  st.i16.index %70, %output, %69
+  st.i16.index %73, %output, %72
+  st.i16.index %76, %output, %75
+  st.i16.index %79, %output, %78
+  st.i16.index %82, %output, %81
+  st.i16.index %85, %output, %84
+  st.i16.index %88, %output, %87
   %103 = mov.static-byte-offset 30
   %104 = mov.address-index %103
-  %105 = lda.i16.index %source_bfloat, %104
+  %105 = lda.i16.index %input, %104
   %106 = mov.static-byte-offset 32
   %107 = mov.address-index %106
-  %108 = lda.i16.index %source_bfloat, %107
+  %108 = lda.i16.index %input, %107
   %109 = mov.static-byte-offset 34
   %110 = mov.address-index %109
-  %111 = lda.i16.index %source_bfloat, %110
+  %111 = lda.i16.index %input, %110
   %112 = mov.static-byte-offset 36
   %113 = mov.address-index %112
-  %114 = lda.i16.index %source_bfloat, %113
+  %114 = lda.i16.index %input, %113
   %115 = mov.static-byte-offset 38
   %116 = mov.address-index %115
-  %117 = lda.i16.index %source_bfloat, %116
+  %117 = lda.i16.index %input, %116
   %118 = mov.static-byte-offset 40
   %119 = mov.address-index %118
-  %120 = lda.i16.index %source_bfloat, %119
+  %120 = lda.i16.index %input, %119
   %121 = mov.static-byte-offset 42
   %122 = mov.address-index %121
-  %123 = lda.i16.index %source_bfloat, %122
-  st.i16.index %105, %target_bfloat, %104
-  st.i16.index %108, %target_bfloat, %107
-  st.i16.index %111, %target_bfloat, %110
-  st.i16.index %114, %target_bfloat, %113
-  st.i16.index %117, %target_bfloat, %116
-  st.i16.index %120, %target_bfloat, %119
-  st.i16.index %123, %target_bfloat, %122
+  %123 = lda.i16.index %input, %122
+  st.i16.index %105, %output, %104
+  st.i16.index %108, %output, %107
+  st.i16.index %111, %output, %110
+  st.i16.index %114, %output, %113
+  st.i16.index %117, %output, %116
+  st.i16.index %120, %output, %119
+  st.i16.index %123, %output, %122
   return
 }
 
@@ -266,26 +266,26 @@ func.def @capture_byte_tail(%input: buffer, %output: buffer, %replacement_input:
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @capture_byte_tail() asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %after = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %replacement_view = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
-  %36 = lda.u8.volatile<volatile> %source, 0
-  %37 = lda.u8.volatile<volatile> %source, 1
-  %38 = lda.u8.volatile<volatile> %source, 2
-  %39 = lda.u8 %replacement_view, 0
-  %40 = lda.u8 %replacement_view, 1
-  %41 = lda.u8 %replacement_view, 2
-  st.s8.volatile<volatile> %39, %source, 0
-  st.s8.volatile<volatile> %40, %source, 1
-  st.s8.volatile<volatile> %41, %source, 2
-  %42 = lda.u8.volatile<volatile> %source, 0
-  %43 = lda.u8.volatile<volatile> %source, 1
-  %44 = lda.u8.volatile<volatile> %source, 2
-  st.s8 %36, %after, 0
-  st.s8 %37, %after, 1
-  st.s8 %38, %after, 2
-  st.s8 %42, %after, 3
-  st.s8 %43, %after, 4
-  st.s8 %44, %after, 5
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %replacement_input = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
+  %36 = lda.u8.volatile<volatile> %input, 0
+  %37 = lda.u8.volatile<volatile> %input, 1
+  %38 = lda.u8.volatile<volatile> %input, 2
+  %39 = lda.u8 %replacement_input, 0
+  %40 = lda.u8 %replacement_input, 1
+  %41 = lda.u8 %replacement_input, 2
+  st.s8.volatile<volatile> %39, %input, 0
+  st.s8.volatile<volatile> %40, %input, 1
+  st.s8.volatile<volatile> %41, %input, 2
+  %42 = lda.u8.volatile<volatile> %input, 0
+  %43 = lda.u8.volatile<volatile> %input, 1
+  %44 = lda.u8.volatile<volatile> %input, 2
+  st.s8 %36, %output, 0
+  st.s8 %37, %output, 1
+  st.s8 %38, %output, 2
+  st.s8 %42, %output, 3
+  st.s8 %43, %output, 4
+  st.s8 %44, %output, 5
   return
 }

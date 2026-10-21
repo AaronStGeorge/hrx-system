@@ -13,8 +13,8 @@ func.def target(@target) @load_extf_bf16x16(%source: buffer) -> (vector<16xf32>)
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_extf_bf16x16() -> (reg<aie2p.vec256 x2>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %9 = vlda.convert.bf16x16.to.f32x16 %source_view, 0
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %9 = vlda.convert.bf16x16.to.f32x16 %source_aligned, 0
   %converted = vmov.accumulator512.to.vector512 %9
   return %converted
 }
@@ -36,11 +36,11 @@ func.def target(@target) @load_extf_bf16x32_dynamic(%source: buffer, %element0: 
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_extf_bf16x32_dynamic(%element: reg<aie2p.er>) -> (reg<aie2p.mbms x2>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %12 = mov.i32 1
   %13 = lshl %element, %12
   %14 = mov.address-index %13
-  %converted = vlda.convert.bf16x32.to.f32x32.index.volatile<volatile> %source_view, %14
+  %converted = vlda.convert.bf16x32.to.f32x32.index.volatile<volatile> %source_aligned, %14
   return %converted
 }
 
@@ -61,9 +61,9 @@ func.def target(@target) @load_encode_bfp(%source: buffer) -> (vector<72xi8>) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_encode_bfp() -> (reg<aie2p.mexa>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %10 = vlda.convert.bf16x32.to.f32x32 %source_view, 0
-  %11 = vlda.convert.bf16x32.to.f32x32 %source_view, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %10 = vlda.convert.bf16x32.to.f32x32 %source_aligned, 0
+  %11 = vlda.convert.bf16x32.to.f32x32 %source_aligned, 64
   %12 = concat(%10, %11) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
   set.rounding 12
   %encoded = vconv.bfp16ebs8.fp32 %12
@@ -88,9 +88,9 @@ func.def target(@target) @load_encode_bfp_last_immediate(%source: buffer) -> (ve
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_encode_bfp_last_immediate() -> (reg<aie2p.mexa>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %10 = vlda.convert.bf16x32.to.f32x32 %source_view, 384
-  %11 = vlda.convert.bf16x32.to.f32x32 %source_view, 448
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %10 = vlda.convert.bf16x32.to.f32x32 %source_aligned, 384
+  %11 = vlda.convert.bf16x32.to.f32x32 %source_aligned, 448
   %12 = concat(%10, %11) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
   set.rounding 12
   %encoded = vconv.bfp16ebs8.fp32 %12
@@ -115,13 +115,13 @@ func.def target(@target) @load_encode_bfp_register_offsets(%source: buffer) -> (
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_encode_bfp_register_offsets() -> (reg<aie2p.mexa>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %10 = mov.static-byte-offset 448
   %11 = mov.address-index %10
-  %12 = vlda.convert.bf16x32.to.f32x32.index %source_view, %11
+  %12 = vlda.convert.bf16x32.to.f32x32.index %source_aligned, %11
   %13 = mov.static-byte-offset 512
   %14 = mov.address-index %13
-  %15 = vlda.convert.bf16x32.to.f32x32.index %source_view, %14
+  %15 = vlda.convert.bf16x32.to.f32x32.index %source_aligned, %14
   %16 = concat(%12, %15) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
   set.rounding 12
   %encoded = vconv.bfp16ebs8.fp32 %16
@@ -146,13 +146,13 @@ func.def target(@target) @load_encode_bfp_dynamic_volatile(%source: buffer, %ele
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_encode_bfp_dynamic_volatile(%element: reg<aie2p.er>) -> (reg<aie2p.mexa>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %13 = mov.i32 1
   %14 = lshl %element, %13
   %15 = mov.address-index %14
-  %16 = vlda.convert.bf16x32.to.f32x32.index.volatile<volatile> %source_view, %15
+  %16 = vlda.convert.bf16x32.to.f32x32.index.volatile<volatile> %source_aligned, %15
   %17 = add.address-index.immediate %14, 64
-  %18 = vlda.convert.bf16x32.to.f32x32.index.volatile<volatile> %source_view, %17
+  %18 = vlda.convert.bf16x32.to.f32x32.index.volatile<volatile> %source_aligned, %17
   %19 = concat(%16, %18) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
   set.rounding 12
   %encoded = vconv.bfp16ebs8.fp32 %19
@@ -181,10 +181,10 @@ func.def target(@target) @shared_bfp_load_does_not_fuse(%source: buffer, %raw_ou
 aie2p.target<core> @target
 
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @shared_bfp_load_does_not_fuse() -> (reg<aie2p.mexa>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %14 = vlda.512.bf16x32 %source_view, 0
-  %15 = vlda.512.bf16x32 %source_view, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %14 = vlda.512.bf16x32 %source_aligned, 0
+  %15 = vlda.512.bf16x32 %source_aligned, 64
   %loaded = concat(%14, %15) : (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) -> reg<aie2p.vec256 x4>
   %17 = slice %loaded[0] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>
   %18 = vconv.fp32.bf16 %17
@@ -194,9 +194,9 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @shared_b
   set.rounding 12
   %encoded = vconv.bfp16ebs8.fp32 %21
   %23 = slice %loaded[0] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>
-  vst.512.bf16x32 %23, %output_view, 0
+  vst.512.bf16x32 %23, %output_aligned, 0
   %24 = slice %loaded[2] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>
-  vst.512.bf16x32 %24, %output_view, 64
+  vst.512.bf16x32 %24, %output_aligned, 64
   return %encoded
 }
 
@@ -221,11 +221,11 @@ func.def target(@target) @store_separated_bfp_load_does_not_fuse(%source: buffer
 aie2p.target<core> @target
 
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @store_separated_bfp_load_does_not_fuse(%replacement: reg<aie2p.vec256 x2>) -> (reg<aie2p.mexa>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %12 = vlda.512.bf16x32 %source_view, 0
-  %13 = vlda.512.bf16x32 %source_view, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %12 = vlda.512.bf16x32 %source_aligned, 0
+  %13 = vlda.512.bf16x32 %source_aligned, 64
   %loaded = concat(%12, %13) : (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) -> reg<aie2p.vec256 x4>
-  vst.512.bf16x32 %replacement, %source_view, 0
+  vst.512.bf16x32 %replacement, %source_aligned, 0
   %15 = slice %loaded[0] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>
   %16 = vconv.fp32.bf16 %15
   %17 = slice %loaded[2] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>
@@ -252,11 +252,11 @@ func.def target(@target) @load_extsi_i16x16(%source: buffer) -> (vector<16xi32>)
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_extsi_i16x16() -> (reg<aie2p.vec256 x2>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %9 = mov.shift 0
   set.saturation 0
   set.ups-mode 0
-  %10 = vlda.ups.2x.w-to-b.signed %9, %source_view, 0
+  %10 = vlda.ups.2x.w-to-b.signed %9, %source_aligned, 0
   %converted = vmov.accumulator512.to.vector512 %10
   return %converted
 }
@@ -278,12 +278,12 @@ func.def target(@target) @load_extui_i8x64_dynamic(%source: buffer, %element0: i
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_extui_i8x64_dynamic(%element: reg<aie2p.er>) -> (reg<aie2p.mbms x4>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %12 = mov.address-index %element
   %13 = mov.shift 0
   set.saturation 0
   set.ups-mode 0
-  %converted = vlda.ups.4x.x-to-d.unsigned.index %13, %source_view, %12
+  %converted = vlda.ups.4x.x-to-d.unsigned.index %13, %source_aligned, %12
   return %converted
 }
 
@@ -303,9 +303,9 @@ func.def target(@target) @load_bitunpacku_i4x64(%source: buffer) -> (vector<64xi
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_bitunpacku_i4x64() -> (reg<aie2p.vec256 x2>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   set.unpack-size 0
-  %unpacked = vldb.unpack.u4.to.u8x64 %source_view, 0
+  %unpacked = vldb.unpack.u4.to.u8x64 %source_aligned, 0
   return %unpacked
 }
 
@@ -326,10 +326,10 @@ func.def target(@target) @load_bitunpacks_i4x128_dynamic(%source: buffer, %eleme
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @load_bitunpacks_i4x128_dynamic(%element: reg<aie2p.er>) -> (reg<aie2p.vec256 x4>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %12 = mov.address-index %element
   set.unpack-size 0
-  %unpacked = vldb.unpack.s4.to.s8x128.index.volatile<volatile> %source_view, %12
+  %unpacked = vldb.unpack.s4.to.s8x128.index.volatile<volatile> %source_aligned, %12
   return %unpacked
 }
 
@@ -349,10 +349,10 @@ func.def target(@target) @store_fptrunc_bf16x16(%input: vector<16xf32>, %output:
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @store_fptrunc_bf16x16(%input: reg<aie2p.vec256 x2>) asm {
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %8 = vmov.vector512.to.accumulator512 %input
   set.rounding 12
-  vst.convert.f32x16.to.bf16x16 %8, %output_view, 0
+  vst.convert.f32x16.to.bf16x16 %8, %output_aligned, 0
   return
 }
 
@@ -373,12 +373,12 @@ func.def target(@target) @store_fptrunc_bf16x32_dynamic(%input: vector<32xf32>, 
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @store_fptrunc_bf16x32_dynamic(%input: reg<aie2p.mbms x2>, %element: reg<aie2p.er>) asm {
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %11 = mov.i32 1
   %12 = lshl %element, %11
   %13 = mov.address-index %12
   set.rounding 12
-  vst.convert.f32x32.to.bf16x32.index.volatile<volatile> %input, %output_view, %13
+  vst.convert.f32x32.to.bf16x32.index.volatile<volatile> %input, %output_aligned, %13
   return
 }
 
@@ -398,10 +398,10 @@ func.def target(@target) @store_trunci_i16x32(%input: vector<32xi16>, %output: b
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @store_trunci_i16x32(%input: reg<aie2p.vec256 x2>) asm {
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   set.saturation 0
   set.pack-size 1
-  vst.pack.w.trunc %input, %output_view, 0
+  vst.pack.w.trunc %input, %output_aligned, 0
   return
 }
 
@@ -422,11 +422,11 @@ func.def target(@target) @store_bitpack_i8x128_dynamic(%input: vector<128xi8>, %
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @store_bitpack_i8x128_dynamic(%input: reg<aie2p.vec256 x4>, %element: reg<aie2p.er>) asm {
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %11 = mov.address-index %element
   set.saturation 0
   set.pack-size 0
-  vst.pack.x.trunc.index %input, %output_view, %11
+  vst.pack.x.trunc.index %input, %output_aligned, %11
   return
 }
 
@@ -448,11 +448,11 @@ func.def target(@target) @shared_load_does_not_fuse(%source: buffer, %raw_output
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @shared_load_does_not_fuse() -> (reg<aie2p.mbms x2>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %loaded = vlda.512.bf16x32 %source_view, 0
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %loaded = vlda.512.bf16x32 %source_aligned, 0
   %converted = vconv.fp32.bf16 %loaded
-  vst.512.bf16x32 %loaded, %output_view, 0
+  vst.512.bf16x32 %loaded, %output_aligned, 0
   return %converted
 }
 
@@ -516,19 +516,19 @@ func.def target(@target) @extsi_i16x32_i64x32(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @extsi_i16x32_i64x32() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %11 = mov.shift 0
   set.saturation 0
   set.ups-mode 1
-  %result = vlda.ups.4x.x-to-d.signed %11, %input_view, 0
+  %result = vlda.ups.4x.x-to-d.signed %11, %input_aligned, 0
   %13 = slice %result[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %13, %output_view, 0
+  vst.acc %13, %output_aligned, 0
   %14 = slice %result[1] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %14, %output_view, 64
+  vst.acc %14, %output_aligned, 64
   %15 = slice %result[2] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %15, %output_view, 128
+  vst.acc %15, %output_aligned, 128
   %16 = slice %result[3] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %16, %output_view, 192
+  vst.acc %16, %output_aligned, 192
   return
 }

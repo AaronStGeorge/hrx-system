@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from loom.dialect.buffer import ALL_BUFFER_OPS
-from loom.dialect.buffer import defs as buffer
 from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.globals.defs import global_load
 from loom.dialect.index import ALL_INDEX_OPS
@@ -55,7 +54,11 @@ from loom.target.arch.amd.xdna.aie2p.contracts.integer_division import (
 from loom.target.arch.amd.xdna.aie2p.contracts.integer_shift import (
     AIE2P_INTEGER_SHIFT_RULES,
 )
-from loom.target.arch.amd.xdna.aie2p.contracts.memory import AIE2P_MEMORY_RULES
+from loom.target.arch.amd.xdna.aie2p.contracts.memory import (
+    AIE2P_MEMORY_RULES,
+    AIE2P_VIEW_CARRIER_RULES,
+    AIE2P_VIEW_ELEMENT_TYPES,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.nonlinear import (
     AIE2P_NONLINEAR_RULES,
 )
@@ -82,6 +85,7 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     AIE2P_CORE_DESCRIPTOR_SET,
 )
 from loom.target.contracts import (
+    Buffer,
     ContractCase,
     ContractFragment,
     DescriptorEmitForm,
@@ -92,6 +96,7 @@ from loom.target.contracts import (
     ValueProject,
     ValueRef,
     Vector,
+    View,
 )
 
 
@@ -109,20 +114,11 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
     vector_register_guard = Guard.low_value_register_class("result", "aie2p.vec256")
     return (
         ValueAliasRule(
-            source_op=buffer.buffer_view,
-            source=ValueRef.operand("buffer"),
-            result=ValueRef.result("result"),
-        ),
-        ValueAliasRule(
-            source_op=view.view_subview,
-            source=ValueRef.operand("source"),
-            result=ValueRef.result("result"),
-        ),
-        ValueAliasRule(
             source_op=view.view_refine,
             source=ValueRef.operand("source"),
             result=ValueRef.result("result"),
         ),
+        *AIE2P_VIEW_CARRIER_RULES,
         RecipeRule(source_op=global_load),
         *AIE2P_BF16_MATRIX_RULES,
         DescriptorMatrixRule(
@@ -1067,7 +1063,8 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
                 core_rules._OFFSET,
             )
         ),
-        core_rules._buffer_select_rule(),
+        core_rules._address_select_rule(Buffer()),
+        core_rules._address_select_rule(View(AIE2P_VIEW_ELEMENT_TYPES)),
         *core_rules._whole_predicate_select_rules(),
         *(
             core_rules._whole_vector_select_rule(result_type)

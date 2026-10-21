@@ -67,7 +67,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %319 = mov.short 1
   %320 = mov.short 0
   %140 = mov.acquire-delta -1
-  %payload = mov.local-address 458752
+  %135 = mov.local-address 458752
   low.br ^_bb1(%320: reg<aie2p.er>, %320: reg<aie2p.er>)
 ^_bb1(%value: reg<aie2p.er>, %write: reg<aie2p.er>):
   %325 = lt %value, %318
@@ -81,7 +81,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %330 = copy %329 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %331 = sel.nez %320, %328, %330
   %332 = mov.address-index %write
-  st.i32.index %value, %payload, %332
+  st.i32.index %value, %135, %332
   rel %319, 49
   %333 = add.nc %value, %319
   low.br ^_bb1(%333: reg<aie2p.er>, %331: reg<aie2p.er>)

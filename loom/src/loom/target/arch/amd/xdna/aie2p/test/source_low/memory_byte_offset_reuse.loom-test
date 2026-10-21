@@ -20,8 +20,8 @@ func.def @ranked_exchange(%input: buffer, %output: buffer, %row_input: index, %c
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @ranked_exchange(%row: reg<aie2p.er>, %column: reg<aie2p.er>, %replacement: reg<aie2p.er>, %base: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %70 = mov.short 19
   %71 = copy %column : reg<aie2p.er> -> reg<aie2p.er>
   %72 = mac %71, %row, %70
@@ -29,20 +29,20 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @ranked_exchange(%
   %74 = lshl %72, %73
   %75 = add.nc %74, %base
   %76 = mov.address-index %75
-  %first = lda.i32.index.volatile<volatile> %source, %76
-  %79 = lda.i32.index.volatile<volatile> %source, %76
+  %first = lda.i32.index.volatile<volatile> %input, %76
+  %79 = lda.i32.index.volatile<volatile> %input, %76
   %80 = add.address-index.immediate %75, 4
-  %81 = lda.i32.index.volatile<volatile> %source, %80
+  %81 = lda.i32.index.volatile<volatile> %input, %80
   %82 = add.address-index.immediate %75, 8
-  %83 = lda.i32.index.volatile<volatile> %source, %82
+  %83 = lda.i32.index.volatile<volatile> %input, %82
   %84 = add.address-index.immediate %75, 12
-  %85 = lda.i32.index.volatile<volatile> %source, %84
-  st.i32.index.volatile<volatile> %79, %source, %76
-  st.i32.index.volatile<volatile> %81, %source, %80
-  st.i32.index.volatile<volatile> %83, %source, %82
-  st.i32.index.volatile<volatile> %85, %source, %84
+  %85 = lda.i32.index.volatile<volatile> %input, %84
+  st.i32.index.volatile<volatile> %79, %input, %76
+  st.i32.index.volatile<volatile> %81, %input, %80
+  st.i32.index.volatile<volatile> %83, %input, %82
+  st.i32.index.volatile<volatile> %85, %input, %84
   %90 = add.address-index.immediate %75, 16
-  st.i32.index.volatile<volatile> %replacement, %destination, %90
+  st.i32.index.volatile<volatile> %replacement, %output, %90
   return %first
 }
 
@@ -72,8 +72,8 @@ func.def @biased_views(%input: buffer, %output: buffer, %row_input: index, %colu
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @biased_views(%row: reg<aie2p.er>, %column: reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %row_stride = mov.short 64
   %column_stride = mov.short 8
   %first_bias = mov.short 32
@@ -84,10 +84,10 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @biased_views(%row
   %first_base = add.nc %first_row_base, %column_bytes
   %second_base = add.nc %second_row_base, %column_bytes
   %32 = mov.address-index %first_base
-  %value = lda.i32.index %source, %32
+  %value = lda.i32.index %input, %32
   %34 = mov.address-index %second_base
-  st.i32.index %value, %destination, %34
+  st.i32.index %value, %output, %34
   %35 = add.address-index.immediate %second_base, 4
-  st.i32.index %value, %destination, %35
+  st.i32.index %value, %output, %35
   return
 }

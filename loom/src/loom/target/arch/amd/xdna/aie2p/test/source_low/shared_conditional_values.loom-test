@@ -31,26 +31,26 @@ func.def @shared_conditional_values(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @shared_conditional_values() asm {
-  %in = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %out = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %aligned_input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %aligned_output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %completed = mov.short 1
-  %outer_value = lda %in, 0
+  %outer_value = lda %aligned_input, 0
   %outer = nez %outer_value
   low.cond_br %outer, ^evaluate, ^fallback : reg<aie2p.er>
 ^evaluate:
-  %loaded = lda %in, 4
-  st %loaded, %out, 0
+  %loaded = lda %aligned_input, 4
+  st %loaded, %aligned_output, 0
   %inner = nez %loaded
   low.cond_br %inner, ^selected, ^fallback : reg<aie2p.er>
 ^selected:
   %result = add.nc %loaded, %loaded
-  st %result, %out, 4
+  st %result, %aligned_output, 4
   low.br ^exit
 ^fallback:
-  %fallback = lda %in, 8
-  st %fallback, %out, 4
+  %fallback = lda %aligned_input, 8
+  st %fallback, %aligned_output, 4
   low.br ^exit
 ^exit:
-  st %completed, %out, 8
+  st %completed, %aligned_output, 8
   return
 }

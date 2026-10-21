@@ -16,12 +16,12 @@ func.def @copy_float8_scalar(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_float8_scalar() asm {
-  %source_e5m2 = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target_e5m2 = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %e4m3 = lda.u8 %source_e5m2, 3
-  %e5m2 = lda.u8 %source_e5m2, 5
-  st.s8 %e4m3, %target_e5m2, 3
-  st.s8 %e5m2, %target_e5m2, 5
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %e4m3 = lda.u8 %input, 3
+  %e5m2 = lda.u8 %input, 5
+  st.s8 %e4m3, %output, 3
+  st.s8 %e5m2, %output, 5
   return
 }
 
@@ -44,16 +44,16 @@ func.def @copy_float8_tail(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_float8_tail() asm {
-  %source_e5m2 = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target_e5m2 = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %22 = lda.u8 %source_e5m2, 1
-  %23 = lda.u8 %source_e5m2, 2
-  %24 = lda.u8 %source_e5m2, 3
-  %25 = lda.u8 %source_e5m2, 4
-  st.s8 %22, %target_e5m2, 1
-  st.s8 %23, %target_e5m2, 2
-  st.s8 %24, %target_e5m2, 3
-  st.s8 %25, %target_e5m2, 4
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %22 = lda.u8 %input, 1
+  %23 = lda.u8 %input, 2
+  %24 = lda.u8 %input, 3
+  %25 = lda.u8 %input, 4
+  st.s8 %22, %output, 1
+  st.s8 %23, %output, 2
+  st.s8 %24, %output, 3
+  st.s8 %25, %output, 4
   return
 }
 
@@ -78,15 +78,15 @@ func.def @copy_float8_index(%input: buffer, %output: buffer, %byte_offset: offse
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_float8_index(%base: reg<aie2p.er>, %position: reg<aie2p.er>) asm {
-  %source_tail = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target_tail = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %18 = add.nc %base, %position
   %19 = mov.address-index %18
-  %e4m3 = lda.i8.index %source_tail, %19
+  %e4m3 = lda.i8.index %input, %19
   %21 = add.address-index.immediate %18, 16
-  %e5m2 = lda.i8.index %source_tail, %21
-  st.i8.index %e4m3, %target_tail, %19
-  st.i8.index %e5m2, %target_tail, %21
+  %e5m2 = lda.i8.index %input, %21
+  st.i8.index %e4m3, %output, %19
+  st.i8.index %e5m2, %output, %21
   return
 }
 
@@ -106,11 +106,11 @@ func.def @copy_float8_volatile(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_float8_volatile() asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %target = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %first = lda.u8.volatile<volatile> %source, 0
-  %second = lda.u8.volatile<volatile> %source, 0
-  st.s8.volatile<volatile> %first, %target, 0
-  st.s8.volatile<volatile> %second, %target, 1
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %first = lda.u8.volatile<volatile> %input, 0
+  %second = lda.u8.volatile<volatile> %input, 0
+  st.s8.volatile<volatile> %first, %output, 0
+  st.s8.volatile<volatile> %second, %output, 1
   return
 }

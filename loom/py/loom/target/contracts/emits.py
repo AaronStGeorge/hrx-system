@@ -158,11 +158,17 @@ class EmitRegisterSlice:
 
 @dataclass(frozen=True, slots=True)
 class EmitRegisterCopy:
-    """Copies one register value into a compatible register class."""
+    """Copies one register value into a compatible register class.
+
+    A source-memory root names the canonical storage root selected by memory
+    analysis instead of a source operand. Its constraint both selects that
+    root and participates in the rule's normal source-memory matching.
+    """
 
     source: ValueRef
     result: ValueRef
     result_type: ResultTypeBinding | None = None
+    source_memory: SourceMemoryConstraint | None = None
 
     def validate(
         self,
@@ -173,12 +179,24 @@ class EmitRegisterCopy:
         source_ops: Mapping[str, Op] | None = None,
     ) -> tuple[str, ...]:
         del descriptor_set
+        if self.source.kind is SourceValueKind.SOURCE_MEMORY_ROOT:
+            if self.source_memory is None:
+                raise ValueError(
+                    f"{source_op.name}: register copy source-memory root needs "
+                    "a source-memory constraint"
+                )
+        elif self.source_memory is not None:
+            raise ValueError(
+                f"{source_op.name}: register copy source-memory constraint "
+                "requires a source-memory root"
+            )
         _validate_structural_source(
             source_op,
             self.source,
             "register copy source",
             defined_temporaries,
             source_ops,
+            allow_source_memory_root=self.source_memory is not None,
         )
         return _validate_structural_result(
             source_op,
@@ -855,11 +873,16 @@ def _validate_structural_source(
     subject: str,
     defined_temporaries: set[str],
     source_ops: Mapping[str, Op] | None,
+    *,
+    allow_source_memory_root: bool = False,
 ) -> None:
-    if source.kind not in (SourceValueKind.OPERAND, SourceValueKind.TEMPORARY):
-        raise ValueError(
-            f"{source_op.name}: {subject} must bind an operand or temporary"
-        )
+    allowed_kinds = (SourceValueKind.OPERAND, SourceValueKind.TEMPORARY)
+    allowed_sources = "an operand or temporary"
+    if allow_source_memory_root:
+        allowed_kinds = (*allowed_kinds, SourceValueKind.SOURCE_MEMORY_ROOT)
+        allowed_sources += " or a selected source-memory root"
+    if source.kind not in allowed_kinds:
+        raise ValueError(f"{source_op.name}: {subject} must bind {allowed_sources}")
     _validate_value_ref(
         source_op,
         source,

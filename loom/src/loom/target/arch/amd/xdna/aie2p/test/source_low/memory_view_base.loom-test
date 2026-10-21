@@ -21,7 +21,7 @@ func.def @exchange_fields(%buffer: buffer, %row_input: index, %column_input: ind
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_fields(%row: reg<aie2p.er>, %column: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %row_stride = mov.short 64
   %column_stride = mov.short 8
   %header = mov.i32 32768
@@ -30,10 +30,10 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_fields(%
   %row_base = add.nc %row_bytes, %header
   %base = add.nc %row_base, %column_bytes
   %27 = mov.address-index %base
-  %first = lda.i32.index %view, %27
+  %first = lda.i32.index %buffer, %27
   %29 = add.address-index.immediate %base, 4
-  %second = lda.i32.index %view, %29
-  st.i32.index %first, %view, %29
+  %second = lda.i32.index %buffer, %29
+  st.i32.index %first, %buffer, %29
   return %second
 }
 
@@ -62,8 +62,8 @@ func.def @copy_chunks(%source_storage: buffer, %destination_storage: buffer, %ro
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_chunks(%row: reg<aie2p.er>, %column: reg<aie2p.er>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %row_stride = mov.short 256
   %column_stride = mov.short 64
   %row_bytes = mul %row, %row_stride
@@ -71,12 +71,12 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_chunks(%row:
   %row_base = add.nc %row_bytes, %column_stride
   %base = add.nc %row_base, %column_bytes
   %33 = add.address-index.immediate %base, 32
-  %34 = vlda.256.i32x8.index %source_view, %33
+  %34 = vlda.256.i32x8.index %source, %33
   %39 = mov.static-byte-offset 64
   %40 = add.nc %base, %39
   %41 = mov.address-index %40
-  %42 = vlda.256.i32x8.index %source_view, %41
-  vst.256.i32x8.index %34, %destination_view, %33
-  vst.256.i32x8.index %42, %destination_view, %41
+  %42 = vlda.256.i32x8.index %source, %41
+  vst.256.i32x8.index %34, %destination, %33
+  vst.256.i32x8.index %42, %destination, %41
   return
 }

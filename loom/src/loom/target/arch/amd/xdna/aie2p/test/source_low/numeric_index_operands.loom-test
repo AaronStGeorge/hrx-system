@@ -16,8 +16,8 @@ func.def @uniform_lhs_index_operands(%input: buffer, %uniform: index) -> (index,
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @uniform_lhs_index_operands(%uniform: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %value = lda %input_view, 0
+  %aligned_input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %value = lda %aligned_input, 0
   %multiply = mul %uniform, %value
   %and = and %uniform, %value
   %or = or %uniform, %value
@@ -44,8 +44,8 @@ func.def @uniform_rhs_index_operands(%input: buffer, %uniform: index) -> (index,
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @uniform_rhs_index_operands(%uniform: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %value = lda %input_view, 0
+  %aligned_input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %value = lda %aligned_input, 0
   %multiply = mul %value, %uniform
   %and = and %value, %uniform
   %or = or %value, %uniform
@@ -75,8 +75,8 @@ func.def @constant_index_operands(%input: buffer) -> (index, index, index, index
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @constant_index_operands() -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %value = lda %input_view, 0
+  %aligned_input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %value = lda %aligned_input, 0
   %inline = mov.short 64
   %literal = mov.short 128
   %negative = mov.short -16
@@ -129,9 +129,9 @@ func.def @varying_index_operands(%input: buffer) -> (index, index, index, index,
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @varying_index_operands() -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %lhs = lda %input_view, 0
-  %rhs = lda %input_view, 4
+  %aligned_input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %lhs = lda %aligned_input, 0
+  %rhs = lda %aligned_input, 4
   %multiply = mul %lhs, %rhs
   %and = and %lhs, %rhs
   %or = or %lhs, %rhs
@@ -156,8 +156,8 @@ func.def @bounded_offset_difference(%input: buffer, %wide_limit: offset) -> (off
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bounded_offset_difference(%limit: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %position = lda %input_view, 0
+  %aligned_input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %position = lda %aligned_input, 0
   %remaining = sub %limit, %position
   return %remaining
 }

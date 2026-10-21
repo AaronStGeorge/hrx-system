@@ -1277,14 +1277,22 @@ static bool loom_low_source_memory_access_plan_from_components(
           fact_table, &vector_access, axis, &axis_byte_strides[axis]);
     }
   }
-  if (vector_access.static_element_byte_count <= 0 ||
-      vector_access.static_element_byte_count > UINT32_MAX) {
-    out_diagnostic->rejection_bits |=
-        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_ELEMENT_WIDTH;
-    return false;
+  if (operation_kind == LOOM_LOW_SOURCE_MEMORY_OPERATION_VIEW_CARRIER) {
+    // A view carrier represents its byte-addressed origin, independently of
+    // the semantic element type. Canonical byte geometry keeps target rows
+    // shared across element widths and permits sub-byte views whose origin is
+    // still an exact byte address.
+    out_plan->element_byte_count = 1;
+  } else {
+    if (vector_access.static_element_byte_count <= 0 ||
+        vector_access.static_element_byte_count > UINT32_MAX) {
+      out_diagnostic->rejection_bits |=
+          LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_ELEMENT_WIDTH;
+      return false;
+    }
+    out_plan->element_byte_count =
+        (uint32_t)vector_access.static_element_byte_count;
   }
-  out_plan->element_byte_count =
-      (uint32_t)vector_access.static_element_byte_count;
   if (vector_access.vector_rank != 1) {
     out_diagnostic->rejection_bits |=
         LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VECTOR_RANK;

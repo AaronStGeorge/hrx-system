@@ -30,6 +30,9 @@ from loom.target.arch.amd.xdna.aie2p.contracts.floating import (
     _BF16_OUTER_PRODUCT_MULTIPLY_CONTROL,
     _BF16_OUTER_PRODUCT_SHUFFLE_CONTROLS,
 )
+from loom.target.arch.amd.xdna.aie2p.contracts.memory import (
+    AIE2P_VIEW_ELEMENT_TYPES,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.packed_dot import (
     _DOT4_GROW_CONTROL,
     _DOT4_TRANSPOSE_CONTROL,
@@ -46,6 +49,7 @@ from loom.target.arch.amd.xdna.aie2p.contracts.structural import (
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.table import AIE2P_TABLE_RULES
 from loom.target.contracts import (
+    Buffer,
     DescriptorEmitForm,
     DescriptorResultType,
     DescriptorRule,
@@ -59,6 +63,7 @@ from loom.target.contracts import (
     ValueProjectKind,
     ValueRef,
     Vector,
+    View,
 )
 
 
@@ -1578,18 +1583,34 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
         ],
     ]
 
+    address_select_rules = [
+        rule
+        for rule in whole_select_rules
+        if rule.guards[1].type_pattern in (Buffer(), View(AIE2P_VIEW_ELEMENT_TYPES))
+    ]
+    assert [rule.guards[1].type_pattern for rule in address_select_rules] == [
+        Buffer(),
+        View(AIE2P_VIEW_ELEMENT_TYPES),
+    ]
+    assert [
+        [emit.descriptor.key for emit in rule.emit] for rule in address_select_rules
+    ] == [
+        [
+            "amd.xdna.aie2p.move.local-address-to-scalar",
+            "amd.xdna.aie2p.move.local-address-to-scalar",
+            "amd.xdna.aie2p.select.nonzero.i32",
+            "amd.xdna.aie2p.move.scalar-to-local-address",
+        ],
+    ] * 2
+
     alias_rules = [
         case
         for case in AIE2P_CORE_CONTRACT_FRAGMENT.cases
         if isinstance(case, ValueAliasRule)
     ]
-    buffer_view_rules = [
-        rule for rule in alias_rules if rule.source_op is buffer.buffer_view
-    ]
-    assert len(buffer_view_rules) == 1
-    assert buffer_view_rules[0].guards == ()
-    assert (
-        len([rule for rule in alias_rules if rule.source_op is view.view_subview]) == 1
+    assert not any(
+        rule.source_op in (buffer.buffer_view, view.view_subview)
+        for rule in alias_rules
     )
     assert (
         len([rule for rule in alias_rules if rule.source_op is view.view_refine]) == 1

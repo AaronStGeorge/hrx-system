@@ -11,6 +11,8 @@ from dataclasses import replace
 
 import pytest
 
+from loom.dialect.buffer import ALL_BUFFER_OPS
+from loom.dialect.buffer import defs as buffer
 from loom.dialect.cfg import ALL_CFG_OPS, cfg_cond_br
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import analysis as scalar_analysis
@@ -317,6 +319,48 @@ def test_compile_structural_register_emits() -> None:
     assert copy_emit.kind is LowerEmitKind.REGISTER_COPY
     assert copy_emit.operand_ref_count == 1
     assert copy_emit.result_ref_count == 1
+
+
+def test_compile_register_copy_from_selected_source_memory_root() -> None:
+    source_memory = SourceMemoryConstraint(
+        operation=SourceMemoryOperation.VIEW_CARRIER,
+        root_kind=SourceMemoryRootKind.ANY,
+        memory_spaces=("unknown", "global"),
+        element_byte_count=4,
+        vector_lane_count=1,
+        vector_lane_byte_stride=4,
+        static_byte_offset=0,
+    )
+    fragment = ContractFragment(
+        name="test.source-memory-root-copy",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=(
+            DescriptorRule(
+                source_op=buffer.buffer_view,
+                emit=(
+                    EmitRegisterCopy(
+                        source=ValueRef.source_memory_root(),
+                        result=ValueRef.result("result"),
+                        source_memory=source_memory,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    compiled = compile_lower_rule_set(
+        fragment,
+        dialect_ops={"buffer": ALL_BUFFER_OPS},
+    )
+
+    assert len(compiled.source_memories) == 1
+    assert compiled.source_memories[0].constraint is source_memory
+    assert len(compiled.emits) == 1
+    emit = compiled.emits[0]
+    assert emit.kind is LowerEmitKind.REGISTER_COPY
+    assert emit.source_memory_ordinal == 1
+    source = compiled.value_refs[emit.operand_ref_start]
+    assert source.kind is SourceValueKind.SOURCE_MEMORY_ROOT
 
 
 @pytest.mark.parametrize("materialize", [False, True])

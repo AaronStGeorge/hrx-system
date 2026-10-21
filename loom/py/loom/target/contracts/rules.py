@@ -504,7 +504,7 @@ class DescriptorRule:
         source_memories = tuple(
             emit.source_memory
             for emit in self.emit
-            if isinstance(emit, EmitDescriptorOp)
+            if isinstance(emit, (EmitDescriptorOp, EmitRegisterCopy))
             if emit.source_memory is not None
         )
         if not source_memories:

@@ -159,10 +159,10 @@ low.func.def retain target<amd.xdna.aie2p.core> @broadcast_read_array$worker$0()
 ^_bb1(%5: reg<aie2p.ep>, %7: reg<aie2p.ep>):
   acq %acquire_delta, 49
   acq %acquire_delta, 50
-  %input_view = copy %5 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %output_view = copy %7 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %value = lda %input_view, 0
-  st %value, %output_view, 0
+  %input_aligned = copy %5 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_aligned = copy %7 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %value = lda %input_aligned, 0
+  st %value, %output_aligned, 0
   rel %release_delta, 51
   rel %release_delta, 48
   %9 = mov.address-to-scalar %5
@@ -184,10 +184,10 @@ low.func.def retain target<amd.xdna.aie2p.core> @broadcast_read_array$worker$1()
 ^_bb1(%23: reg<aie2p.ep>, %25: reg<aie2p.ep>):
   acq %acquire_delta, 49
   acq %acquire_delta, 50
-  %input_view = copy %23 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %output_view = copy %25 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %value = lda %input_view, 0
-  st %value, %output_view, 0
+  %input_aligned = copy %23 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_aligned = copy %25 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %value = lda %input_aligned, 0
+  st %value, %output_aligned, 0
   rel %release_delta, 51
   rel %release_delta, 48
   %27 = mov.address-to-scalar %23
@@ -374,10 +374,10 @@ low.func.def retain target<amd.xdna.aie2p.core> @partitioned_write_array$worker$
 ^_bb1(%5: reg<aie2p.ep>, %7: reg<aie2p.ep>):
   acq %acquire_delta, 49
   acq %acquire_delta, 50
-  %input_view = copy %5 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %output_view = copy %7 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %value = lda %input_view, 0
-  st %value, %output_view, 0
+  %input_aligned = copy %5 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_aligned = copy %7 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %value = lda %input_aligned, 0
+  st %value, %output_aligned, 0
   rel %release_delta, 51
   rel %release_delta, 48
   %9 = mov.address-to-scalar %5
@@ -399,10 +399,10 @@ low.func.def retain target<amd.xdna.aie2p.core> @partitioned_write_array$worker$
 ^_bb1(%23: reg<aie2p.ep>, %25: reg<aie2p.ep>):
   acq %acquire_delta, 49
   acq %acquire_delta, 50
-  %input_view = copy %23 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %output_view = copy %25 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %value = lda %input_view, 0
-  st %value, %output_view, 0
+  %input_aligned = copy %23 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_aligned = copy %25 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %value = lda %input_aligned, 0
+  st %value, %output_aligned, 0
   rel %release_delta, 51
   rel %release_delta, 48
   %27 = mov.address-to-scalar %23

@@ -56,7 +56,7 @@ pipeline.def<kernel> public retain target(@device) @mixed_arrivals() run(%input_
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %237 = mov.short 1
   %139 = mov.acquire-delta -1
-  %last_pair = mov.local-address 458752
+  %73 = mov.local-address 458752
   acq %139, 48
   %240 = mov.short 0
   %77 = mov.local-address 458768
@@ -81,7 +81,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   mov.ms.last %240
   %91 = mov.short -1
   acq %91, 51
-  %saved = lda %last_pair, 0
+  %saved = lda %73, 0
   mov.ms %87
   mov.ms %88
   mov.ms.last %237
@@ -89,7 +89,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   mov.ms %90
   mov.ms.last %237
   acq %91, 51
-  %saved_pair = lda %last_pair, 8
+  %saved_pair = lda %73, 8
   %104 = mov.short 2
   mov.ms %87
   mov.ms %88
@@ -116,10 +116,10 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   mov.ms.last %240
   acq %91, 51
   acq %91, 52
-  %value = lda %last_pair, 0
+  %value = lda %73, 0
   %partial_sum = add.nc %saved, %value
   %sum = add.nc %partial_sum, %saved_pair
-  st %sum, %last_pair, 0
+  st %sum, %73, 0
   rel %237, 49
   acq %139, 49
   %130 = mov.short 3

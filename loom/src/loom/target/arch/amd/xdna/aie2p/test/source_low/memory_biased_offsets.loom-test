@@ -13,12 +13,12 @@ func.def @exchange_biased_word(%buffer: buffer, %position: index, %replacement: 
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_biased_word(%signed_position: reg<aie2p.er>, %replacement: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %14 = mov.i32 2
   %15 = lshl %signed_position, %14
   %16 = add.address-index.immediate %15, 16
-  %previous = lda.i32.index %view, %16
-  st.i32.index %replacement, %view, %16
+  %previous = lda.i32.index %buffer, %16
+  st.i32.index %replacement, %buffer, %16
   return %previous
 }
 
@@ -37,12 +37,12 @@ func.def @exchange_nonnegative_word(%buffer: buffer, %position: index, %replacem
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_nonnegative_word(%bounded_position: reg<aie2p.er>, %replacement: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %14 = mov.i32 2
   %15 = lshl %bounded_position, %14
   %16 = add.address-index.immediate %15, 16
-  %previous = lda.i32.index %view, %16
-  st.i32.index %replacement, %view, %16
+  %previous = lda.i32.index %buffer, %16
+  st.i32.index %replacement, %buffer, %16
   return %previous
 }
 
@@ -62,22 +62,22 @@ func.def @copy_biased_vector(%source: buffer, %destination: buffer, %position: i
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_biased_vector(%signed_position: reg<aie2p.er>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %46 = mov.i32 2
   %47 = lshl %signed_position, %46
   %48 = add.address-index.immediate %47, 16
-  %49 = lda.i32.index %source_view, %48
+  %49 = lda.i32.index %source, %48
   %50 = add.address-index.immediate %47, 20
-  %51 = lda.i32.index %source_view, %50
+  %51 = lda.i32.index %source, %50
   %52 = add.address-index.immediate %47, 24
-  %53 = lda.i32.index %source_view, %52
+  %53 = lda.i32.index %source, %52
   %54 = add.address-index.immediate %47, 28
-  %55 = lda.i32.index %source_view, %54
-  st.i32.index %49, %destination_view, %48
-  st.i32.index %51, %destination_view, %50
-  st.i32.index %53, %destination_view, %52
-  st.i32.index %55, %destination_view, %54
+  %55 = lda.i32.index %source, %54
+  st.i32.index %49, %destination, %48
+  st.i32.index %51, %destination, %50
+  st.i32.index %53, %destination, %52
+  st.i32.index %55, %destination, %54
   return
 }
 

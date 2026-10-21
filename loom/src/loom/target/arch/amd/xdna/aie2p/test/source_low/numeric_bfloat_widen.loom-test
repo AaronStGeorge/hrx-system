@@ -24,8 +24,8 @@ func.def @load_bfloat(%input: buffer) -> (f32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @load_bfloat() -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %value = lda.u16 %source, 0
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %value = lda.u16 %input, 0
   %9 = mov.short 16
   %wide = lshl %value, %9
   return %wide
@@ -44,12 +44,12 @@ func.def @load_bfloat_at(%input: buffer, %origin: offset, %element: index) -> (f
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @load_bfloat_at(%base: reg<aie2p.er>, %position: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %13 = mov.i32 1
   %14 = lshl %position, %13
   %15 = add.nc %base, %14
   %16 = mov.address-index %15
-  %value = lda.i16.index %source, %16
+  %value = lda.i16.index %input, %16
   %18 = mov.short 16
   %wide = lshl %value, %18
   return %wide
@@ -70,9 +70,9 @@ func.def @bfloat_pair_sum(%input: buffer) -> (f32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bfloat_pair_sum() -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %14 = lda.u16 %source, 0
-  %15 = lda.u16 %source, 2
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %14 = lda.u16 %input, 0
+  %15 = lda.u16 %input, 2
   %16 = vbcst.16 %14
   %17 = mov.short 1
   %18 = copy %17 : reg<aie2p.er> -> reg<aie2p.mr29_insert>
@@ -110,10 +110,10 @@ func.def @replace_bfloat(%input: buffer, %replacement: bf16) -> (f32, f32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @replace_bfloat(%replacement: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %before = lda.u16 %source, 0
-  st.s16 %replacement, %source, 0
-  %after = lda.u16.volatile<volatile> %source, 0
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %before = lda.u16 %input, 0
+  st.s16 %replacement, %input, 0
+  %after = lda.u16.volatile<volatile> %input, 0
   %16 = mov.short 16
   %before_wide = lshl %before, %16
   %after_wide = lshl %after, %16
