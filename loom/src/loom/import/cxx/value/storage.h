@@ -124,6 +124,12 @@ class Storage {
   StorageAllocation allocate(const cxx::Type* type,
                              loom_value_fact_memory_space_t memory_space,
                              int64_t explicit_alignment, cxx::AST* owner);
+  // Admits an existing exact-size buffer root as one fixed source object.
+  // The producer owns lifetime, access rights, and root alignment; this owner
+  // retains the source layout, extent, and memory domain used by projections.
+  StorageAllocation admit_fixed(loom_value_id_t root, const cxx::Type* type,
+                                loom_value_fact_memory_space_t memory_space,
+                                cxx::AST* owner);
   // Allocates a runtime number of admitted objects and returns its typed source
   // pointer representation. The logical element count remains distinct from
   // its physical byte stride until index.scale forms the allocation extent.
@@ -162,6 +168,12 @@ class Storage {
                            cxx::AST* owner);
   // Copies producer-owned storage facts to a root refinement.
   void inherit_root_facts(loom_value_id_t source, loom_value_id_t result);
+  // Records one fixed allocation after its producer and source layout have
+  // established the trusted root contract.
+  StorageAllocation record_fixed(loom_value_id_t root, const cxx::Type* type,
+                                 loom_value_fact_memory_space_t memory_space,
+                                 int64_t byte_length,
+                                 uint64_t natural_alignment, cxx::AST* owner);
 
   // Source memory layout for element sizes and allocation alignment.
   cxx::TranslationUnit& unit_;

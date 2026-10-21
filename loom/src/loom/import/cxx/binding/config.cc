@@ -300,4 +300,8 @@ std::optional<loom_value_id_t> Configs::read(cxx::VariableSymbol* variable,
   return loom_op_results(op)[0];
 }
 
+bool Configs::contains(cxx::VariableSymbol* variable) const {
+  return variables_.contains(variable->canonical());
+}
+
 }  // namespace loom::cxx_import

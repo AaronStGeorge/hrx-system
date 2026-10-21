@@ -310,7 +310,26 @@ StorageAllocation Storage::allocate(const cxx::Type* type,
       &builder_, /*build_flags=*/0, memory_space, LOOM_VALUE_ID_INVALID,
       std::max<int64_t>(*alignment, explicit_alignment), length,
       loom_type_buffer(), locations_.get(owner), &op));
-  auto root = loom_op_results(op)[0];
+  return record_fixed(loom_op_results(op)[0], type, memory_space, bytes,
+                      *alignment, owner);
+}
+
+StorageAllocation Storage::admit_fixed(
+    loom_value_id_t root, const cxx::Type* type,
+    loom_value_fact_memory_space_t memory_space, cxx::AST* owner) {
+  auto bytes = types_.storage_size(type, owner);
+  auto alignment = unit_.control()->memoryLayout()->alignmentOf(type);
+  if (!alignment) {
+    diagnostics_.reject(unit_, owner, "unknown object alignment");
+  }
+  return record_fixed(root, type, memory_space, bytes, *alignment, owner);
+}
+
+StorageAllocation Storage::record_fixed(
+    loom_value_id_t root, const cxx::Type* type,
+    loom_value_fact_memory_space_t memory_space, int64_t bytes,
+    uint64_t natural_alignment, cxx::AST* owner) {
+  loom_op_t* op;
   auto base =
       scalars_.integer(0, LOOM_SCALAR_TYPE_OFFSET, locations_.get(owner));
   zero_origin_offsets_.insert(base);
@@ -337,8 +356,9 @@ StorageAllocation Storage::allocate(const cxx::Type* type,
   auto view_type = loom_type_shaped_1d(
       LOOM_TYPE_VIEW, loom_type_element_type(element), count, 0);
   view_type = loom_type_view_with_alignment(
-      view_type, static_cast<uint8_t>(std::min<uint64_t>(
-                     *alignment, loom_type_view_natural_alignment(view_type))));
+      view_type,
+      static_cast<uint8_t>(std::min<uint64_t>(
+          natural_alignment, loom_type_view_natural_alignment(view_type))));
   check(loom_buffer_view_build(&builder_, root, base, view_type,
                                locations_.get(owner), &op));
   auto view = loom_op_results(op)[0];

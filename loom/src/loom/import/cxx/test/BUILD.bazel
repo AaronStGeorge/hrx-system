@@ -114,6 +114,8 @@ loom_check_test_suite(
         "function_declarations.cxx-test",
         "function_declarations_invalid.cxx-test",
         "functions.cxx-test",
+        "immutable_objects.cxx-test",
+        "immutable_objects_invalid.cxx-test",
         "index_views.cxx-test",
         "initializer_dependencies.cxx-test",
         "integer_intrinsics.cxx-test",
@@ -357,6 +359,31 @@ loom_test(
     name = "integer_intrinsics_test",
     execution_profiles = [VM_REFERENCE_PROFILE],
     module = ":integer_intrinsics_module",
+    target_compatible_with = _HOST_COMPATIBILITY,
+)
+
+loom_test(
+    name = "immutable_objects_test",
+    srcs = ["immutable_objects.cxx"],
+    execution_profiles = [VM_REFERENCE_PROFILE],
+    target_compatible_with = _HOST_COMPATIBILITY,
+)
+
+loom_test_module(
+    name = "immutable_object_link_module",
+    srcs = [
+        "immutable_object_link_left.cxx",
+        "immutable_object_link_right.cxx",
+    ],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+)
+
+loom_test(
+    name = "immutable_object_link_test",
+    benchmark_smoke = False,
+    case = "immutable_object_link_identity",
+    execution_profiles = [VM_REFERENCE_PROFILE],
+    module = ":immutable_object_link_module",
     target_compatible_with = _HOST_COMPATIBILITY,
 )
 

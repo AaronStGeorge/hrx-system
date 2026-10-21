@@ -50,6 +50,7 @@
 #include "loom/import/cxx/source/locations.h"
 #include "loom/import/cxx/source/source.h"
 #include "loom/import/cxx/symbol/functions.h"
+#include "loom/import/cxx/symbol/immutable_objects.h"
 #include "loom/import/cxx/value/bitcast.h"
 #include "loom/import/cxx/value/initialization.h"
 #include "loom/import/cxx/value/objects.h"
@@ -61,6 +62,7 @@
 #include "loom/import/cxx/value/vector.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/global/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
@@ -81,6 +83,7 @@ class Translator final : private Initialization::Evaluation {
         types_(unit, diagnostics, module),
         scalars_(unit, diagnostics, types_, locations_, builder_),
         names_(unit, diagnostics),
+        immutable_objects_(unit, diagnostics, locations_, names_, module),
         fastmath_(unit, diagnostics),
         function_contracts_(unit, diagnostics),
         configs_(unit, diagnostics, types_, scalars_, locations_, names_),
@@ -113,6 +116,7 @@ class Translator final : private Initialization::Evaluation {
     }
     functions_.build_declarations(types_, locations_, &builder_);
     functions_.build_benchmarks(locations_, &builder_);
+    immutable_objects_.build(&builder_);
     assembly_fragments_.verify(module_, options_.diagnostic_sink);
   }
 
@@ -661,6 +665,8 @@ class Translator final : private Initialization::Evaluation {
     auto saved = loom_builder_enter_region(&builder_, op, region);
     values_.clear();
     locals_.clear();
+    immutable_storage_.clear();
+    immutable_preamble_end_ = nullptr;
     references_.clear();
     receivers_.clear();
     receiver_owners_.clear();
@@ -820,6 +826,38 @@ class Translator final : private Initialization::Evaluation {
     name(allocation.view, spelling + "_view");
     locals_[symbol] = allocation;
     return {allocation.view, std::nullopt};
+  }
+
+  StorageProjection immutable_object(cxx::VariableSymbol* variable,
+                                     cxx::AST* owner) {
+    auto* canonical = variable->canonical();
+    auto object = immutable_objects_.reference(canonical, owner);
+    auto found = immutable_storage_.find(canonical);
+    if (found == immutable_storage_.end()) {
+      auto saved = loom_builder_enter_region(
+          &builder_, current_function_.operation, current_function_.region);
+      auto* entry = loom_region_entry_block(current_function_.region);
+      if (immutable_preamble_end_) {
+        loom_builder_set_after(&builder_, immutable_preamble_end_);
+      } else if (entry->first_op) {
+        loom_builder_set_before(&builder_, entry->first_op);
+      }
+      auto type = loom_type_buffer();
+      loom_op_t* op;
+      check(loom_global_load_build(&builder_, object.symbol, &type, 1,
+                                   locations_.get(owner), &op));
+      auto allocation = storage_.admit_fixed(
+          loom_global_load_result(op).values[0], object.type,
+          LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT, owner);
+      std::string spelling(object.name.data, object.name.size);
+      name(Value(allocation.pointer), spelling + "_storage");
+      name(allocation.view, spelling + "_view");
+      immutable_preamble_end_ =
+          loom_value_def_op(loom_module_value(module_, allocation.view));
+      found = immutable_storage_.emplace(canonical, allocation).first;
+      loom_builder_restore(&builder_, saved);
+    }
+    return storage_.project(found->second.pointer, object.type, owner);
   }
 
   Value binding(cxx::Symbol* symbol, cxx::AST* owner) {
@@ -1220,6 +1258,13 @@ class Translator final : private Initialization::Evaluation {
       }
       if (auto found = locals_.find(id->symbol); found != locals_.end()) {
         return storage_.project(found->second.pointer, id->type, id);
+      }
+      if (auto* variable = cxx::symbol_cast<cxx::VariableSymbol>(id->symbol);
+          variable &&
+          cxx::symbol_cast<cxx::NamespaceSymbol>(
+              variable->canonical()->parent()) &&
+          !configs_.contains(variable)) {
+        return immutable_object(variable, id);
       }
       if (unit_.typeTraits().is_array(id->type)) {
         return storage_.project(expression(id).pointer(), id->type, id);
@@ -2734,6 +2779,9 @@ class Translator final : private Initialization::Evaluation {
                           types_.partition(variable->type(), ast), components),
                       cxx::to_string(variable->name()));
         }
+        if (unit_.typeTraits().is_array(variable->type())) {
+          return immutable_object(variable, id).pointer;
+        }
         if (variable->constValue() &&
             !unit_.typeTraits().is_volatile(variable->type()) &&
             (variable->isConstexpr() ||
@@ -4115,6 +4163,8 @@ class Translator final : private Initialization::Evaluation {
   Scalars scalars_;
   // Shared output namespace for callables and configuration symbols.
   SymbolNames names_;
+  // Reached source-owned immutable objects retain translation-unit identity.
+  ImmutableObjects immutable_objects_;
   // Explicit lexical floating-point permissions indexed by source scope.
   FastMathContracts fastmath_;
   // Callable predicates shared by definitions and template declarations.
@@ -4157,6 +4207,12 @@ class Translator final : private Initialization::Evaluation {
   // Storage-backed automatic objects retain one allocation across direct and
   // aliased accesses. They are not mutable SSA bindings at region edges.
   std::unordered_map<cxx::Symbol*, StorageAllocation> locals_;
+  // Each reached immutable source object has one entry-dominating root per
+  // function. The translation-unit owner separately retains its payload.
+  std::unordered_map<cxx::VariableSymbol*, StorageAllocation>
+      immutable_storage_;
+  // Last immutable-root setup op in the current function entry preamble.
+  loom_op_t* immutable_preamble_end_ = nullptr;
   // Runtime C++ reference bindings retain one resolved lvalue and never
   // rebind. Storage references therefore preserve their root and byte offset
   // without re-evaluating a source address expression.

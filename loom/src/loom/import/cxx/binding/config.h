@@ -53,6 +53,11 @@ class Configs {
                                       loom_builder_t* builder,
                                       loom_location_id_t location);
 
+  // Whether the source variable denotes a registered semantic config value.
+  // Config values have no C++ object-storage identity even when their source
+  // declaration is namespace scoped and const-qualified.
+  bool contains(cxx::VariableSymbol* variable) const;
+
  private:
   struct Binding {
     // Explicit key borrowed from the source's string literal pool.

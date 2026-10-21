@@ -83,6 +83,7 @@ loom_cc_library(
     loom::import::cxx::source::options
     loom::import::cxx::source::preamble
     loom::import::cxx::symbol::functions
+    loom::import::cxx::symbol::immutable_objects
     loom::import::cxx::value::bitcast
     loom::import::cxx::value::initialization
     loom::import::cxx::value::objects
@@ -95,6 +96,7 @@ loom_cc_library(
     loom::ir
     loom::ops::check
     loom::ops::func
+    loom::ops::global
     loom::ops::index
     loom::ops::kernel
     loom::ops::op_defs
