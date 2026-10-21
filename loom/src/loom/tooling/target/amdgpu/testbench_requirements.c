@@ -28,9 +28,12 @@ static iree_status_t loom_amdgpu_hal_testbench_select_device_identity(
         result, IREE_SV("AMDGPU HAL target selection failed"));
   }
   if (iree_status_is_ok(status)) {
+    // The selected AMDGPU provider creates this profile when no profile is
+    // supplied. Its family is established even if LoomC owns the descriptor in
+    // a different linked image from this native interop consumer.
     const loom_amdgpu_target_profile_t* profile =
-        loom_amdgpu_target_profile_cast(
-            loomc_target_profile_get_interop_view(selection.target_profile));
+        (const loom_amdgpu_target_profile_t*)
+            loomc_target_profile_get_interop_view(selection.target_profile);
     *out_identity = profile->identity;
   }
   loomc_result_release(result);
