@@ -460,17 +460,22 @@ static iree_status_t loom_value_fact_table_ensure_extension_capacity(
   }
 
   loom_value_fact_extension_entry_t* new_entries = NULL;
+  const iree_host_size_t pooled_capacity =
+      iree_arena_block_pool_max_allocation_size(
+          table->transient_arena->block_pool) /
+      sizeof(*new_entries);
+  const bool entries_persistent = new_capacity > pooled_capacity;
+  iree_arena_allocator_t* entries_arena =
+      entries_persistent ? table->arena : table->transient_arena;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->transient_arena, new_capacity,
-      sizeof(loom_value_fact_extension_entry_t), (void**)&new_entries));
-  memset(new_entries, 0,
-         new_capacity * sizeof(loom_value_fact_extension_entry_t));
+      entries_arena, new_capacity, sizeof(*new_entries), (void**)&new_entries));
   if (table->extensions.count > 0) {
     memcpy(new_entries, table->extensions.entries,
            table->extensions.count * sizeof(loom_value_fact_extension_entry_t));
   }
   table->extensions.entries = new_entries;
   table->extensions.capacity = new_capacity;
+  table->has_persistent_extension_entries = entries_persistent;
   return iree_ok_status();
 }
 

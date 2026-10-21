@@ -408,8 +408,10 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
   }
   table->touched_count = 0;
   table->count = 0;
-  table->extensions.entries = NULL;
-  table->extensions.capacity = 0;
+  if (!table->has_persistent_extension_entries) {
+    table->extensions.entries = NULL;
+    table->extensions.capacity = 0;
+  }
   table->extensions.count = 0;
   table->extensions.buckets = NULL;
   table->extensions.bucket_count = 0;

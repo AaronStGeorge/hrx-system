@@ -205,9 +205,10 @@ struct loom_fact_context_t {
 };
 
 struct loom_value_fact_table_t {
-  // Arena for direct-address entries and touched-value storage.
+  // Arena for reusable direct-address, touched-value, and oversized extension
+  // storage.
   iree_arena_allocator_t* arena;
-  // Arena for scope-local extension payloads and inference scratch buffers.
+  // Arena for pooled extension entries, payloads, hash buckets, and scratch.
   iree_arena_allocator_t* transient_arena;
 
   // Dense fact entries indexed by value ID minus first_value_id.
@@ -255,6 +256,9 @@ struct loom_value_fact_table_t {
   // This fact scope has published at least one counted-loop domain.
   bool has_counted_loop_domains;
 
+  // Extension entries bypassed the block pool and persist across scopes.
+  bool has_persistent_extension_entries;
+
   // Structured region entries with visible projected integer relations.
   uint32_t condition_integer_projection_count;
 
@@ -296,7 +300,8 @@ struct loom_value_fact_table_t {
   // loom_value_facts_t are one-based indexes into entries and are only valid
   // for this table/context.
   struct {
-    // Extension entries indexed by one-based extension ID minus one.
+    // Extension entries indexed by one-based extension ID minus one. Only
+    // entries below count are valid in the current scope.
     loom_value_fact_extension_entry_t* entries;
     // Allocated extension entry count.
     iree_host_size_t capacity;
@@ -470,7 +475,7 @@ struct loom_value_fact_table_t {
 // Initializes the table with the given arena and pre-allocates
 // |initial_capacity| value entries. All entries are zero-initialized
 // (known_divisor == 0 means undefined). The arena is stored and used for
-// subsequent value-entry growth, extension payloads, and scratch buffers.
+// subsequent reusable entry growth, extension payloads, and scratch buffers.
 iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity);
@@ -500,9 +505,9 @@ iree_status_t loom_value_fact_table_reserve(loom_value_fact_table_t* table,
                                             iree_host_size_t minimum_capacity);
 
 // Clears facts populated in the current scope and forgets transient extension
-// and scratch state. Callers that provided a separate transient arena should
-// reset that arena after this call. Direct-address entry storage and touched
-// storage remain allocated for reuse.
+// payload, hash, and scratch state. Callers that provided a separate transient
+// arena should reset that arena after this call. Direct-address, touched-value,
+// and oversized extension-entry storage remain allocated for reuse.
 void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table);
 
 // Returns true when |value_id| has explicitly defined facts in |table|.
