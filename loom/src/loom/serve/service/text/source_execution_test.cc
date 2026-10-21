@@ -14,6 +14,10 @@ using loom_serve::testing::text::SourceTextServiceTest;
 TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
   for (const auto flags : {0u, uint32_t{LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND}}) {
     SCOPED_TRACE(flags);
+    auto* pool = loom_serve_device_memory_pool(device_);
+    if (pool) {
+      IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+    }
     const auto before = loom_serve_device_memory_statistics(device_);
     const auto options = ModelOptions();
     iree_notification_t notification;
@@ -58,6 +62,11 @@ TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
         loom_serve_text_warmup_status(loom_serve_text_model_warmup(model)));
     IREE_ASSERT_OK(loom_serve_text_model_free(model));
     iree_notification_deinitialize(&notification);
+    // Model retirement releases logical ownership. Native disposal may finish
+    // later and remains charged to the shared pool until its outer join.
+    if (pool) {
+      IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+    }
     const auto after = loom_serve_device_memory_statistics(device_);
     EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
     EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
@@ -82,6 +91,10 @@ TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
     std::ofstream output(package + "/control.loom");
     output << source;
     ASSERT_TRUE(output.good());
+  }
+  auto* pool = loom_serve_device_memory_pool(device_);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   }
   const auto before = loom_serve_device_memory_statistics(device_);
   auto options = ModelOptions();
@@ -126,6 +139,9 @@ TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
       partial, iree_infinite_timeout()));
   IREE_ASSERT_OK(loom_serve_text_model_free_retired(partial));
   iree_notification_deinitialize(&notification);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
   const auto after = loom_serve_device_memory_statistics(device_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
   EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
@@ -138,6 +154,10 @@ TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
 }
 
 TEST_F(SourceTextServiceTest, MissingCheckpointRetiresPublishedLayouts) {
+  auto* pool = loom_serve_device_memory_pool(device_);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
   const auto before = loom_serve_device_memory_statistics(device_);
   auto options = ModelOptions();
   const auto missing = iree::testing::MakeTempFilePath("missing_checkpoint");
@@ -174,6 +194,9 @@ TEST_F(SourceTextServiceTest, MissingCheckpointRetiresPublishedLayouts) {
   EXPECT_TRUE(loom_serve_text_model_is_retired(partial));
   IREE_ASSERT_OK(loom_serve_text_model_free_retired(partial));
   iree_notification_deinitialize(&notification);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
   const auto after = loom_serve_device_memory_statistics(device_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
   EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
