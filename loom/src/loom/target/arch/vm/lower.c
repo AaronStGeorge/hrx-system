@@ -36,6 +36,18 @@ static bool loom_vm_source_vector_carrier_supported(
   return loom_vm_source_type_supported(user_data, module, type);
 }
 
+static const loom_target_vector_packet_policy_t kVmVectorPacketPolicy = {
+    .index_bit_count = 64u,
+    .offset_bit_count = 64u,
+    .flags = LOOM_TARGET_VECTOR_PACKET_POLICY_FLAG_BOUNDARY_PROJECTION |
+             LOOM_TARGET_VECTOR_PACKET_POLICY_FLAG_SCALAR_BOUNDARY_COMPONENTS,
+    // VM has no native vector packets. Keep ordinary vector legalization on
+    // the existing scalar-reference path while boundary projection expands
+    // its bounded signatures into scalar fields.
+    .maximum_unpacketized_bit_count =
+        LOOM_TARGET_VECTOR_PACKET_UNBOUNDED_BIT_COUNT,
+};
+
 static iree_status_t loom_vm_map_type(void* user_data,
                                       loom_low_lower_context_t* context,
                                       const loom_op_t* source_op,
@@ -121,6 +133,7 @@ static const loom_low_lower_policy_t kPolicy = {
     .name = IREE_SVL("vm-lower"),
     .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE,
     .error_catalog = &loom_error_catalog_core,
+    .vector_packet_policy = &kVmVectorPacketPolicy,
     .source_type_supported = {.fn = loom_vm_source_type_supported},
     .source_vector_carrier_supported =
         {.fn = loom_vm_source_vector_carrier_supported},
