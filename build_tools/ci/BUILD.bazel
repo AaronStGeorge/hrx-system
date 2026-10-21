@@ -10,6 +10,18 @@
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
 py_library(
+    name = "github_api",
+    srcs = ["github_api.py"],
+)
+
+py_test(
+    name = "github_api_test",
+    size = "small",
+    srcs = ["github_api_test.py"],
+    deps = [":github_api"],
+)
+
+py_library(
     name = "github_actions_triage",
     srcs = ["github_actions_triage.py"],
 )
@@ -133,9 +145,11 @@ py_test(
 
 py_test(
     name = "loom_binary_size_test",
+    size = "small",
     srcs = [
         "loom_binary_size.py",
         "loom_binary_size_test.py",
     ],
     main = "loom_binary_size_test.py",
+    deps = [":github_api"],
 )

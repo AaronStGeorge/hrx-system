@@ -20,11 +20,12 @@ import shutil
 import subprocess
 import sys
 import urllib.parse
-import urllib.request
 import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
+
+from build_tools.ci import github_api
 
 SCHEMA = "loom.binary-size-history.v1"
 MAIN_ARTIFACT_NAME = "loom-binary-size-history-main-v1"
@@ -648,67 +649,12 @@ def report(args: argparse.Namespace) -> None:
     (args.output_dir / "summary.md").write_text(summary, encoding="utf-8")
 
 
-def _url_origin(url: str) -> tuple[str, str | None, int | None]:
-    parsed = urllib.parse.urlsplit(url)
-    scheme = parsed.scheme.casefold()
-    port = parsed.port
-    if port is None:
-        port = {"http": 80, "https": 443}.get(scheme)
-    hostname = parsed.hostname.casefold() if parsed.hostname else None
-    return scheme, hostname, port
-
-
-class _GitHubRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Keeps GitHub API credentials within the request's origin."""
-
-    def redirect_request(
-        self,
-        request: urllib.request.Request,
-        file_pointer: Any,
-        code: int,
-        message: str,
-        headers: Any,
-        new_url: str,
-    ) -> urllib.request.Request | None:
-        redirected_request = super().redirect_request(
-            request, file_pointer, code, message, headers, new_url
-        )
-        if redirected_request is not None and _url_origin(
-            request.full_url
-        ) != _url_origin(new_url):
-            redirected_request.remove_header("Authorization")
-        return redirected_request
-
-
-def _open_github_request(request: urllib.request.Request) -> Any:
-    opener = urllib.request.build_opener(_GitHubRedirectHandler())
-    return opener.open(request)
-
-
 def _github_json(url: str, token: str) -> Any:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with _open_github_request(request) as response:
-        return json.load(response)
+    return github_api.get_json(url, token)
 
 
 def _github_bytes(url: str, token: str) -> bytes:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with _open_github_request(request) as response:
-        return response.read()
+    return github_api.get_bytes(url, token)
 
 
 def list_main_artifacts(
