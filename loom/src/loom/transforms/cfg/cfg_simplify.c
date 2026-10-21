@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "iree/base/alignment.h"
 #include "loom/analysis/cfg_condition_facts.h"
 #include "loom/analysis/cfg_value_identity.h"
 #include "loom/analysis/condition_fact_scope.h"
@@ -145,16 +146,17 @@ static iree_status_t loom_cfg_simplify_push_child_regions(
   return iree_ok_status();
 }
 
-// Marks CFG-shaped regions and retains the definition-ID prefix discovered by
-// the same body-tree walk. The prefix reserves fact storage for this body,
-// independent of unrelated values appended elsewhere in the module.
+// Marks CFG-shaped regions and retains the definition-ID range discovered by
+// the same function-tree walk. Function fact inference visits every projected
+// root region before the body, so the reservation must cover the same trees
+// while omitting values belonging to other module symbols.
 static iree_status_t loom_cfg_simplify_prepare_regions(
-    loom_region_t* root_region, iree_arena_allocator_t* arena,
-    uint32_t* out_value_capacity) {
-  *out_value_capacity = 0;
-  if (!root_region) {
-    return iree_ok_status();
-  }
+    const loom_module_t* module, loom_func_like_t function,
+    iree_arena_allocator_t* arena, loom_value_fact_range_t* out_value_range) {
+  *out_value_range = (loom_value_fact_range_t){0};
+
+  loom_value_id_t first_value_id = LOOM_VALUE_ID_INVALID;
+  iree_host_size_t end_value_id = 0;
 
   iree_host_size_t stack_capacity =
       LOOM_CFG_SIMPLIFY_INITIAL_REGION_STACK_CAPACITY;
@@ -162,7 +164,18 @@ static iree_status_t loom_cfg_simplify_prepare_regions(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, stack_capacity, sizeof(*stack), (void**)&stack));
   iree_host_size_t stack_count = 0;
-  stack[stack_count++] = root_region;
+  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+    loom_region_t* region = loom_func_like_region(function, i);
+    if (!region) {
+      continue;
+    }
+    if (stack_count >= stack_capacity) {
+      IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+          arena, stack_count, stack_count + 1, sizeof(*stack), &stack_capacity,
+          (void**)&stack));
+    }
+    stack[stack_count++] = region;
+  }
 
   while (stack_count > 0) {
     loom_region_t* region = stack[--stack_count];
@@ -171,15 +184,18 @@ static iree_status_t loom_cfg_simplify_prepare_regions(
     loom_block_t* block = NULL;
     loom_region_for_each_block(region, block) {
       for (uint16_t i = 0; i < block->arg_count; ++i) {
-        *out_value_capacity =
-            iree_max(*out_value_capacity, loom_block_arg_id(block, i) + 1);
+        const loom_value_id_t value_id = loom_block_arg_id(block, i);
+        first_value_id = iree_min(first_value_id, value_id);
+        end_value_id = iree_max(end_value_id, (iree_host_size_t)value_id + 1);
       }
       loom_op_t* op = NULL;
       loom_block_for_each_op(block, op) {
         is_cfg_shaped |= op->successor_count > 0;
         const loom_value_id_t* results = loom_op_results(op);
         for (uint16_t i = 0; i < op->result_count; ++i) {
-          *out_value_capacity = iree_max(*out_value_capacity, results[i] + 1);
+          first_value_id = iree_min(first_value_id, results[i]);
+          end_value_id =
+              iree_max(end_value_id, (iree_host_size_t)results[i] + 1);
         }
         loom_region_t** regions = loom_op_regions(op);
         for (uint8_t region_index = 0; region_index < op->region_count;
@@ -201,6 +217,19 @@ static iree_status_t loom_cfg_simplify_prepare_regions(
     } else {
       region->flags &= ~LOOM_REGION_INSTANCE_FLAG_CFG;
     }
+  }
+  if (first_value_id != LOOM_VALUE_ID_INVALID) {
+    // Rewrites append module IDs. Retain geometric headroom beyond the current
+    // value-table extent so ordinary additions remain inside one reservation.
+    const iree_host_size_t value_headroom =
+        iree_min(iree_host_size_next_power_of_two(
+                     loom_value_table_capacity(&module->values)),
+                 (iree_host_size_t)LOOM_VALUE_ID_INVALID);
+    end_value_id = iree_max(end_value_id, value_headroom);
+    *out_value_range = (loom_value_fact_range_t){
+        .first_value_id = first_value_id,
+        .capacity = end_value_id - first_value_id,
+    };
   }
   return iree_ok_status();
 }
@@ -1840,14 +1869,15 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
       loom_pass_value_fact_scope_function_for_target(
           function,
           loom_target_function_version_target_facts(pass->function_version));
+  loom_value_fact_range_t fact_range = {0};
   if (iree_status_is_ok(status)) {
-    status = loom_cfg_simplify_prepare_regions(
-        body, &analysis_arena, &fact_scope.minimum_value_capacity);
+    status = loom_cfg_simplify_prepare_regions(module, function,
+                                               &analysis_arena, &fact_range);
   }
   loom_value_fact_table_t* fact_table = NULL;
   if (iree_status_is_ok(status)) {
-    status =
-        loom_pass_value_facts_acquire(pass, module, fact_scope, &fact_table);
+    status = loom_pass_value_facts_acquire_range(pass, module, fact_scope,
+                                                 fact_range, &fact_table);
   }
   loom_rewriter_attach_value_facts(&rewriter, fact_table);
   bool changed = true;
@@ -1873,8 +1903,8 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
       break;
     }
 
-    status = loom_cfg_simplify_prepare_regions(
-        body, &analysis_arena, &fact_scope.minimum_value_capacity);
+    status = loom_cfg_simplify_prepare_regions(module, function,
+                                               &analysis_arena, &fact_range);
     if (!iree_status_is_ok(status)) {
       break;
     }

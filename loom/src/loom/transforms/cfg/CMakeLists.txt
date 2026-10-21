@@ -158,6 +158,7 @@ loom_cc_library(
     ::block_fusion
     ::branch_folding
     iree::base
+    iree::base::core_headers
     loom::analysis::cfg_condition_facts
     loom::analysis::cfg_value_identity
     loom::analysis::condition_fact_scope

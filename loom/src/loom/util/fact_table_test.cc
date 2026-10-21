@@ -722,6 +722,50 @@ TEST_F(FactTableTest, RangeGrowthRetainsUndefinedMembershipAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_lookup(&table, 320).range_lo, 29);
 }
 
+TEST_F(FactTableTest, ReserveRangeOmitsPrefixAndPreservesFacts) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_reserve_range(&table, (loom_value_fact_range_t){
+                                                      .first_value_id = 1027,
+                                                      .capacity = 97,
+                                                  }));
+  EXPECT_EQ(table.first_value_id, 1024u);
+  EXPECT_EQ(table.capacity, 100u);
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, 1027));
+
+  IREE_ASSERT_OK(loom_value_fact_table_define(&table, 1050,
+                                              loom_value_facts_exact_i64(17)));
+  loom_value_facts_t* entries = table.entries;
+  IREE_ASSERT_OK(
+      loom_value_fact_table_reserve_range(&table, (loom_value_fact_range_t){
+                                                      .first_value_id = 1030,
+                                                      .capacity = 32,
+                                                  }));
+  EXPECT_EQ(table.entries, entries);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 1050).range_lo, 17);
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_reserve_range(&table, (loom_value_fact_range_t){
+                                                      .first_value_id = 960,
+                                                      .capacity = 300,
+                                                  }));
+  EXPECT_EQ(table.first_value_id, 960u);
+  EXPECT_GE(table.capacity, 300u);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 1050).range_lo, 17);
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, 959));
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, 1259));
+}
+
+TEST_F(FactTableTest, ReserveEmptyRangeDoesNotAllocate) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+  IREE_ASSERT_OK(loom_value_fact_table_reserve_range(
+      &table, (loom_value_fact_range_t){0}));
+  EXPECT_EQ(table.entries, nullptr);
+  EXPECT_EQ(table.capacity, 0u);
+}
+
 TEST_F(FactTableTest, DescendingGrowthBoundsStorageAndPreservesMembership) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));

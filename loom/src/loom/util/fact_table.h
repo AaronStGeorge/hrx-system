@@ -483,6 +483,14 @@ iree_status_t loom_value_fact_table_initialize_with_arenas(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_arena_allocator_t* transient_arena, iree_host_size_t initial_capacity);
 
+// Reserves entries for |range|, preserving defined facts and touched
+// membership. Empty ranges allocate nothing. Existing storage grows
+// geometrically when it cannot cover the range; an empty table allocates only
+// the requested range and omits preceding module values. Does not populate
+// entries.
+iree_status_t loom_value_fact_table_reserve_range(
+    loom_value_fact_table_t* table, loom_value_fact_range_t range);
+
 // Reserves entries for [0, |minimum_capacity|), preserving defined facts and
 // touched membership. An existing capacity doubles until it covers the
 // minimum, but only the final array is allocated. This retains growth headroom

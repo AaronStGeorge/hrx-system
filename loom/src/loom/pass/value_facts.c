@@ -103,8 +103,23 @@ static iree_status_t loom_pass_value_fact_resolve_region_target(
   return iree_ok_status();
 }
 
+static iree_status_t loom_pass_value_fact_owner_initialize_table_storage(
+    loom_pass_value_fact_owner_t* owner, iree_host_size_t initial_capacity) {
+  owner->flags &= ~LOOM_PASS_VALUE_FACT_OWNER_FLAG_TABLE_INITIALIZED;
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize_with_arenas(
+      &owner->table, &owner->storage_arena, &owner->transient_arena,
+      initial_capacity));
+  loom_type_registry_configure_fact_context(&owner->table.context);
+  owner->table.context.resolve_region_target.fn =
+      loom_pass_value_fact_resolve_region_target;
+  owner->table.context.resolve_region_target.user_data = owner;
+  owner->flags |= LOOM_PASS_VALUE_FACT_OWNER_FLAG_TABLE_INITIALIZED;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_pass_value_fact_owner_ensure_table(
-    loom_pass_value_fact_owner_t* owner, const loom_module_t* module) {
+    loom_pass_value_fact_owner_t* owner, const loom_module_t* module,
+    loom_value_fact_range_t reserved_values) {
   if (iree_any_bit_set(owner->flags,
                        LOOM_PASS_VALUE_FACT_OWNER_FLAG_TABLE_INITIALIZED) &&
       owner->module == module) {
@@ -118,18 +133,61 @@ static iree_status_t loom_pass_value_fact_owner_ensure_table(
   iree_arena_reset(&owner->transient_arena);
   owner->module = module;
   owner->active_scope = loom_pass_value_fact_scope_none();
-  owner->flags &= ~LOOM_PASS_VALUE_FACT_OWNER_FLAG_TABLE_INITIALIZED;
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize_with_arenas(
-      &owner->table, &owner->storage_arena, &owner->transient_arena,
-      loom_value_table_capacity(&module->values)));
-  loom_type_registry_configure_fact_context(&owner->table.context);
+  // A producer-owned range supersedes the conservative module-wide initial
+  // reservation. Other consumers retain the single-allocation behavior used
+  // before range hints existed.
+  const iree_host_size_t initial_capacity =
+      reserved_values.capacity == 0 ? loom_value_table_capacity(&module->values)
+                                    : 0;
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_initialize_table_storage(
+      owner, initial_capacity));
   loom_symbol_fact_table_initialize(&owner->target_symbols,
                                     &owner->transient_arena);
-  owner->table.context.resolve_region_target.fn =
-      loom_pass_value_fact_resolve_region_target;
-  owner->table.context.resolve_region_target.user_data = owner;
-  owner->flags |= LOOM_PASS_VALUE_FACT_OWNER_FLAG_TABLE_INITIALIZED;
   return iree_ok_status();
+}
+
+static iree_status_t loom_pass_value_fact_owner_reserve_scope(
+    loom_pass_value_fact_owner_t* owner,
+    loom_value_fact_range_t reserved_values, bool preserve_existing) {
+  if (reserved_values.capacity == 0 || preserve_existing) {
+    return loom_value_fact_table_reserve_range(&owner->table, reserved_values);
+  }
+  if (reserved_values.capacity > (iree_host_size_t)LOOM_VALUE_ID_INVALID -
+                                     reserved_values.first_value_id) {
+    return loom_value_fact_table_reserve_range(&owner->table, reserved_values);
+  }
+  const uint64_t reserved_end =
+      (uint64_t)reserved_values.first_value_id + reserved_values.capacity;
+  const uint64_t table_end =
+      (uint64_t)owner->table.first_value_id + owner->table.capacity;
+  const bool table_covers_range =
+      reserved_values.first_value_id >= owner->table.first_value_id &&
+      reserved_end <= table_end;
+  if (table_covers_range) {
+    return iree_ok_status();
+  }
+  const iree_host_size_t pooled_entry_capacity =
+      iree_arena_block_pool_max_allocation_size(owner->block_pool) /
+      sizeof(*owner->table.entries);
+  if (owner->table.capacity > pooled_entry_capacity) {
+    // An oversized table is already reusable for the rest of the compiler
+    // invocation. Do not replace it or allocate speculative hint headroom;
+    // definition-time growth remains available if the scope actually needs it.
+    return iree_ok_status();
+  }
+  const loom_value_id_t storage_first_value_id =
+      reserved_values.first_value_id & ~UINT32_C(63);
+  const bool omits_existing_prefix =
+      storage_first_value_id > owner->table.first_value_id;
+  if (owner->table.capacity != 0 && omits_existing_prefix) {
+    // The previous scope is dead and its direct-address interval cannot serve
+    // this later producer-owned range. Return its blocks instead of retaining
+    // both intervals or widening through unrelated earlier module values.
+    iree_arena_reset(&owner->storage_arena);
+    IREE_RETURN_IF_ERROR(
+        loom_pass_value_fact_owner_initialize_table_storage(owner, 0));
+  }
+  return loom_value_fact_table_reserve_range(&owner->table, reserved_values);
 }
 
 static iree_status_t loom_pass_value_fact_owner_compute_module(
@@ -191,10 +249,9 @@ iree_status_t loom_pass_value_fact_owner_prepare(
     ++owner->lifecycle_counts->preparation_count;
   }
   IREE_RETURN_IF_ERROR(loom_pass_value_fact_scope_validate(scope));
-  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_ensure_table(owner, module));
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_ensure_table(
+      owner, module, (loom_value_fact_range_t){0}));
   loom_pass_value_fact_owner_clear_scope(owner);
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_reserve(
-      &owner->table, scope.minimum_value_capacity));
   owner->table.context.target_facts = scope.target_facts;
   if (scope.seed_facts.table) {
     const iree_status_t status = loom_value_fact_table_seed_values(
@@ -208,16 +265,18 @@ iree_status_t loom_pass_value_fact_owner_prepare(
   return iree_ok_status();
 }
 
-iree_status_t loom_pass_value_fact_owner_acquire(
+iree_status_t loom_pass_value_fact_owner_acquire_range(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module,
-    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
+    loom_pass_value_fact_scope_t scope, loom_value_fact_range_t reserved_values,
+    loom_value_fact_table_t** out_table) {
   *out_table = NULL;
 
   if (owner->lifecycle_counts) {
     ++owner->lifecycle_counts->acquisition_count;
   }
   IREE_RETURN_IF_ERROR(loom_pass_value_fact_scope_validate(scope));
-  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_ensure_table(owner, module));
+  IREE_RETURN_IF_ERROR(
+      loom_pass_value_fact_owner_ensure_table(owner, module, reserved_values));
   if (owner->module == module &&
       loom_pass_value_fact_scope_equal(owner->active_scope, scope)) {
     if (owner->lifecycle_counts) {
@@ -237,8 +296,8 @@ iree_status_t loom_pass_value_fact_owner_acquire(
   if (!refine_existing) {
     loom_pass_value_fact_owner_clear_scope(owner);
   }
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_reserve(
-      &owner->table, scope.minimum_value_capacity));
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_reserve_scope(
+      owner, reserved_values, refine_existing));
   owner->table.context.target_facts = scope.target_facts;
   *out_table = &owner->table;
   if (owner->lifecycle_counts) {
@@ -289,6 +348,13 @@ iree_status_t loom_pass_value_fact_owner_acquire(
   return status;
 }
 
+iree_status_t loom_pass_value_fact_owner_acquire(
+    loom_pass_value_fact_owner_t* owner, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
+  return loom_pass_value_fact_owner_acquire_range(
+      owner, module, scope, (loom_value_fact_range_t){0}, out_table);
+}
+
 iree_status_t loom_pass_value_facts_prepare(
     loom_pass_t* pass, loom_module_t* module,
     loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
@@ -301,4 +367,12 @@ iree_status_t loom_pass_value_facts_acquire(
     loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
   return loom_pass_value_fact_owner_acquire(pass->value_facts, module, scope,
                                             out_table);
+}
+
+iree_status_t loom_pass_value_facts_acquire_range(
+    loom_pass_t* pass, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_range_t reserved_values,
+    loom_value_fact_table_t** out_table) {
+  return loom_pass_value_fact_owner_acquire_range(
+      pass->value_facts, module, scope, reserved_values, out_table);
 }
