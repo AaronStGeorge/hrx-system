@@ -21,7 +21,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_benchmark",
     "loom_cc_library",
-    "loom_generated_file_family",
+    "loom_generated_source_family",
     "loom_low_descriptor_data_archive",
 )
 
@@ -90,7 +90,7 @@ _AMDGPU_TARGET_TABLE_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu/encoding:__pkg__",
 ]
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "descriptor_tables_gen",
     args = (
         _AMDGPU_ISA_XML_ARGS + [
@@ -119,7 +119,7 @@ loom_generated_file_family(
     visibility = _AMDGPU_DESCRIPTOR_TABLE_VISIBILITY,
 )
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "cdna_gen",
     args = [
         "--shared-strings=$(rootpath //loom/src/loom/target/arch/amdgpu/contracts:instruction_strings.json)",
@@ -157,7 +157,7 @@ loom_generated_file_family(
     visibility = _AMDGPU_TARGET_TABLE_VISIBILITY,
 )
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "rdna3_gen",
     args = [
         "--shared-strings=$(rootpath //loom/src/loom/target/arch/amdgpu/contracts:instruction_strings.json)",
@@ -193,7 +193,7 @@ loom_generated_file_family(
     visibility = _AMDGPU_TARGET_TABLE_VISIBILITY,
 )
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "rdna4_gen",
     args = [
         "--shared-strings=$(rootpath //loom/src/loom/target/arch/amdgpu/contracts:instruction_strings.json)",

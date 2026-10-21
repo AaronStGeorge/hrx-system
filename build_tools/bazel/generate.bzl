@@ -4,13 +4,14 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Shared generated-file actions for IREE Bazel rules."""
+"""Shared generated-file and generated-source actions for IREE Bazel rules."""
 
 IreeGeneratedFilesInfo = provider(
     doc = "Metadata for files produced by an IREE generator action.",
     fields = {
         "args": "Command-line arguments passed to the generator.",
         "outputs": "depset of generated output files.",
+        "outputs_by_name": "Package-relative output name to generated File mapping.",
         "srcs": "depset of declared source input files.",
         "tool": "Generator executable label.",
     },
@@ -57,15 +58,7 @@ def _resolve_output_arguments(ctx, outputs_by_name):
         fail("output_args missing declared outputs: %s" % ", ".join(missing_outputs))
     return resolved_outputs
 
-def _iree_generated_files_impl(ctx):
-    # Output labels and directory declarations already provide package-relative
-    # names. Keep these identities independent of Bazel's artifact path layout.
-    outputs_by_name = {
-        label.name: output
-        for label, output in zip(ctx.attr.outs, ctx.outputs.outs)
-    }
-    for name in ctx.attr.output_directories:
-        outputs_by_name[name] = ctx.actions.declare_directory(name)
+def _register_generated_action(ctx, outputs_by_name):
     outputs = outputs_by_name.values()
     outputs_by_argument = _resolve_output_arguments(ctx, outputs_by_name)
 
@@ -94,49 +87,197 @@ def _iree_generated_files_impl(ctx):
         IreeGeneratedFilesInfo(
             args = command_args,
             outputs = depset(outputs),
+            outputs_by_name = outputs_by_name,
             srcs = depset(ctx.files.srcs),
             tool = ctx.attr.tool.label,
         ),
     ]
 
+def _iree_generated_files_impl(ctx):
+    # Output labels and directory declarations already provide package-relative
+    # names. Keep these identities independent of Bazel's artifact path layout.
+    outputs_by_name = {
+        label.name: output
+        for label, output in zip(ctx.attr.outs, ctx.outputs.outs)
+    }
+    for name in ctx.attr.output_directories:
+        outputs_by_name[name] = ctx.actions.declare_directory(name)
+    return _register_generated_action(ctx, outputs_by_name)
+
+_GENERATOR_ATTRS = {
+    "args": attr.string_list(
+        doc = "Generator arguments before output arguments. $(location) references may name srcs or data labels.",
+    ),
+    "data": attr.label_list(
+        allow_files = True,
+        doc = "Additional files available to $(location) expansion and declared as action inputs.",
+    ),
+    "mnemonic": attr.string(
+        default = "IreeGenerate",
+        doc = "Bazel action mnemonic.",
+    ),
+    "output_args": attr.string_dict(
+        mandatory = True,
+        doc = "Map of package-relative output path to generator argument. A unique basename may be used as shorthand. Use '{path}' to embed the output path in a single argument; otherwise the path is passed as the following argument.",
+    ),
+    "output_directories": attr.string_list(
+        doc = "Generated directory trees whose members are owned by the generator.",
+    ),
+    "progress_message": attr.string(
+        default = "Generating files for %{label}",
+        doc = "Progress message displayed while the generator runs. Defaults to the exact generating target label.",
+    ),
+    "srcs": attr.label_list(
+        allow_files = True,
+        doc = "Source inputs consumed by the generator.",
+    ),
+    "tool": attr.label(
+        cfg = "exec",
+        executable = True,
+        mandatory = True,
+        doc = "Executable generator tool.",
+    ),
+}
+
+_GENERATED_FILES_ATTRS = dict(_GENERATOR_ATTRS)
+_GENERATED_FILES_ATTRS["outs"] = attr.output_list(
+    mandatory = True,
+    doc = "Generated output files.",
+)
+
 iree_generated_files = rule(
     implementation = _iree_generated_files_impl,
+    attrs = _GENERATED_FILES_ATTRS,
+    doc = "Runs an executable generator with declared inputs and outputs.",
+)
+
+def _iree_generated_sources_action_impl(ctx):
+    output_root = "_iree_generated/%s" % ctx.label.name
+    outputs_by_name = {
+        name: ctx.actions.declare_file("%s/%s" % (output_root, name))
+        for name in ctx.attr.outs
+    }
+    return _register_generated_action(ctx, outputs_by_name)
+
+_GENERATED_SOURCES_ATTRS = {
+    name: value
+    for name, value in _GENERATOR_ATTRS.items()
+    if name != "output_directories"
+}
+_GENERATED_SOURCES_ATTRS["outs"] = attr.string_list(
+    mandatory = True,
+    doc = "Package-relative names of generated source files.",
+)
+
+_iree_generated_sources_action = rule(
+    implementation = _iree_generated_sources_action_impl,
+    attrs = _GENERATED_SOURCES_ATTRS,
+)
+
+def _iree_generated_source_outputs_impl(ctx):
+    generated_outputs = ctx.attr.generator[IreeGeneratedFilesInfo].outputs_by_name
+    for label, output in zip(ctx.attr.outs, ctx.outputs.outs):
+        source = generated_outputs.get(label.name)
+        if source == None:
+            fail("unknown generated output: %s" % label.name)
+        ctx.actions.symlink(
+            output = output,
+            target_file = source,
+            progress_message = "Exposing generated source %s" % output.short_path,
+        )
+    return [DefaultInfo(files = depset(ctx.outputs.outs))]
+
+_iree_generated_source_outputs = rule(
+    implementation = _iree_generated_source_outputs_impl,
     attrs = {
-        "args": attr.string_list(
-            doc = "Generator arguments before output arguments. $(location) references may name srcs or data labels.",
-        ),
-        "data": attr.label_list(
-            allow_files = True,
-            doc = "Additional files available to $(location) expansion and declared as action inputs.",
-        ),
-        "mnemonic": attr.string(
-            default = "IreeGenerate",
-            doc = "Bazel action mnemonic.",
-        ),
-        "output_args": attr.string_dict(
+        "generator": attr.label(
+            cfg = "exec",
             mandatory = True,
-            doc = "Map of package-relative output path to generator argument. A unique basename may be used as shorthand. Use '{path}' to embed the output path in a single argument; otherwise the path is passed as the following argument.",
-        ),
-        "output_directories": attr.string_list(
-            doc = "Generated directory trees whose members are owned by the generator.",
+            providers = [IreeGeneratedFilesInfo],
+            doc = "Private source generator evaluated in the execution configuration.",
         ),
         "outs": attr.output_list(
             mandatory = True,
-            doc = "Generated output files.",
-        ),
-        "progress_message": attr.string(
-            doc = "Progress message displayed while the generator runs.",
-        ),
-        "srcs": attr.label_list(
-            allow_files = True,
-            doc = "Source inputs consumed by the generator.",
-        ),
-        "tool": attr.label(
-            cfg = "exec",
-            executable = True,
-            mandatory = True,
-            doc = "Executable generator tool.",
+            doc = "Generated source files exposed in the consuming configuration.",
         ),
     },
-    doc = "Runs an executable generator with declared inputs and outputs.",
 )
+
+def iree_generated_sources(
+        name,
+        tool,
+        outs,
+        output_args,
+        args = [],
+        data = [],
+        mnemonic = "IreeGenerate",
+        progress_message = None,
+        srcs = [],
+        tags = [],
+        testonly = False,
+        target_compatible_with = None,
+        visibility = None):
+    """Generates sources whose bytes do not vary across target/exec transition.
+
+    The generator runs in Bazel's execution configuration. Target- and
+    execution-configured consumers that resolve to the same execution
+    configuration therefore share one generator action. Cheap built-in symlink
+    actions preserve the public output labels and package-relative paths in
+    each consuming configuration.
+
+    Explicit project build settings may remain semantic generator inputs. This
+    rule is only for source or data files whose content does not depend on the
+    target/exec platform transition itself. Target artifacts such as object
+    files, device binaries, and linked modules need a target-configured rule.
+
+    Args:
+      name: Public aggregate target name.
+      tool: Executable generator tool label.
+      outs: Package-relative generated file names.
+      output_args: Map of output names to generator arguments.
+      args: Generator arguments before output arguments.
+      data: Additional generator inputs available to location expansion.
+      mnemonic: Generator action mnemonic.
+      progress_message: Generator action progress message.
+      srcs: Source inputs consumed by the generator.
+      tags: Tags applied to the public targets and private generator.
+      testonly: Whether the generated sources are restricted to tests.
+      target_compatible_with: Compatibility constraints for public targets.
+      visibility: Visibility of public targets.
+    """
+    if not outs:
+        fail("generated source actions require at least one output")
+    if progress_message == None:
+        progress_message = "Generating files for //%s:%s" % (native.package_name(), name)
+
+    generator_name = name + "__source_generator"
+    _iree_generated_sources_action(
+        name = generator_name,
+        tool = tool,
+        outs = outs,
+        output_args = output_args,
+        args = args,
+        data = data,
+        mnemonic = mnemonic,
+        progress_message = progress_message,
+        srcs = srcs,
+        tags = tags + ["manual"],
+        testonly = testonly,
+        visibility = ["//visibility:private"],
+    )
+
+    public_kwargs = {
+        "tags": tags,
+        "testonly": testonly,
+    }
+    if target_compatible_with != None:
+        public_kwargs["target_compatible_with"] = target_compatible_with
+    if visibility != None:
+        public_kwargs["visibility"] = visibility
+
+    _iree_generated_source_outputs(
+        name = name,
+        generator = ":" + generator_name,
+        outs = outs,
+        **public_kwargs
+    )

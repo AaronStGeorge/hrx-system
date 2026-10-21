@@ -953,10 +953,18 @@ cc_library(
             name="tables_gen",
             tags=["skip-bazel_to_cmake"],
         )
+        functions.iree_generated_sources(
+            name="source_tables_gen",
+            tags=["skip-bazel_to_cmake"],
+        )
         with self.assertRaisesRegex(
             NotImplementedError, "requires an explicit CMake projection"
         ):
             functions.iree_generated_files(name="tables_gen")
+        with self.assertRaisesRegex(
+            NotImplementedError, "requires an explicit CMake projection"
+        ):
+            functions.iree_generated_sources(name="source_tables_gen")
 
     def test_build_file_loads_cross_project_requirement_alias(self):
         with tempfile.TemporaryDirectory() as temp_dir:

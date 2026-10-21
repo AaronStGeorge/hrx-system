@@ -8,7 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_generated_file_family",
+    "loom_generated_source_family",
 )
 
 package(
@@ -246,7 +246,7 @@ loom_cc_test(
     ],
 )
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "registry_tables_gen",
     args = ["--registry"],
     generator = "//loom/py/loom/gen/ops:c_tables_generator",

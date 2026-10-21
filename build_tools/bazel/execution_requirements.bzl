@@ -132,6 +132,7 @@ for source in "$@"; do
 done > "$output"
 """,
                 mnemonic = "SanitizerSuppressions",
+                progress_message = "Combining sanitizer suppressions for %{label}",
             )
         suppression_files.append(output)
         resolved_suppressions[sanitizer] = depset([output])

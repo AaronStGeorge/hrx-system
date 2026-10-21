@@ -13,7 +13,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
-    "loom_generated_file",
+    "loom_generated_source",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -107,7 +107,7 @@ loom_cc_library(
     visibility = _SPIRV_EMIT_VISIBILITY,
 )
 
-loom_generated_file(
+loom_generated_source(
     name = "features_gen",
     args = [
         "--isa-header=$(location isa.h)",
@@ -162,7 +162,7 @@ loom_cc_library(
     ],
 )
 
-loom_generated_file(
+loom_generated_source(
     name = "packet_rows_tables_gen",
     generator = "//loom/py/loom/gen/target/arch/spirv:packet_rows",
     output = "packet_rows_tables.inl",
@@ -199,7 +199,7 @@ loom_cc_library(
     ],
 )
 
-loom_generated_file(
+loom_generated_source(
     name = "cooperative_properties_tables_gen",
     generator = "//loom/py/loom/gen/target/arch/spirv:cooperative_properties",
     output = "cooperative_properties_tables.inl",

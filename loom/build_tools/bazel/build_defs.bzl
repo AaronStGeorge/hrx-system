@@ -13,7 +13,7 @@ machine-readable data.
 """
 
 load("//build_tools/bazel:cmake.bzl", _iree_cmake_extra_content = "iree_cmake_extra_content")
-load("//build_tools/bazel:generate.bzl", "iree_generated_files")
+load("//build_tools/bazel:generate.bzl", "iree_generated_files", "iree_generated_sources")
 load("//build_tools/bazel:select.bzl", _iree_select = "iree_select")
 load(
     "//loom/requirements:package_policy.bzl",
@@ -79,7 +79,8 @@ def _loom_output_args(flags, outputs):
         output_args[_loom_output_basename(outputs[i])] = _loom_output_arg(flags[i])
     return output_args
 
-def _loom_generated_files(
+def _loom_generate_outputs(
+        generate,
         name,
         generator,
         outputs,
@@ -107,14 +108,15 @@ def _loom_generated_files(
         rule_kwargs["progress_message"] = comment
     if target_compatible_with != None:
         rule_kwargs["target_compatible_with"] = target_compatible_with
+    if output_directories:
+        rule_kwargs["output_directories"] = output_directories
     rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
     rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
-    iree_generated_files(
+    generate(
         name = name,
         srcs = inputs,
         outs = [output for output in outputs if output not in output_directories],
-        output_directories = output_directories,
         args = _loom_bazel_generator_args(args),
         output_args = _loom_output_args(output_flags, outputs),
         tool = generator,
@@ -133,7 +135,7 @@ def loom_generated_file(
         target_compatible_with = None,
         visibility = None,
         comment = None):
-    """Generates one source or data file consumed by a Loom target.
+    """Generates one target-configured artifact consumed by a Loom target.
 
     Args:
       name: Generator action target name.
@@ -149,7 +151,51 @@ def loom_generated_file(
       comment: Optional progress message for the generator action.
     """
 
-    _loom_generated_files(
+    _loom_generate_outputs(
+        iree_generated_files,
+        name = name,
+        generator = generator,
+        outputs = [output],
+        output_flags = [output_flag],
+        args = args,
+        inputs = inputs,
+        tags = tags,
+        testonly = testonly,
+        target_compatible_with = target_compatible_with,
+        visibility = visibility,
+        comment = comment,
+    )
+
+def loom_generated_source(
+        name,
+        generator,
+        output,
+        output_flag,
+        args = [],
+        inputs = [],
+        tags = [],
+        testonly = False,
+        target_compatible_with = None,
+        visibility = None,
+        comment = None):
+    """Generates one source invariant across Bazel's target/exec transition.
+
+    Args:
+      name: Generator action target name.
+      generator: Executable label that writes the output file.
+      output: Generated filename.
+      output_flag: Generator flag paired with the output path.
+      args: Generator arguments before the output flag.
+      inputs: Source data labels consumed by the generator.
+      tags: Additional Bazel tags for the generator action.
+      testonly: Whether the output is used only by tests.
+      target_compatible_with: Optional target compatibility constraints.
+      visibility: Passed through to the generated source targets.
+      comment: Optional progress message for the generator action.
+    """
+
+    _loom_generate_outputs(
+        iree_generated_sources,
         name = name,
         generator = generator,
         outputs = [output],
@@ -176,7 +222,7 @@ def loom_generated_file_family(
         target_compatible_with = None,
         visibility = None,
         comment = None):
-    """Generates a coherent family of files in one action.
+    """Generates a coherent family of target-configured artifacts.
 
     The generator must derive all outputs from the same materialized source
     model. Outputs that can be generated independently belong in separate
@@ -198,12 +244,61 @@ def loom_generated_file_family(
     """
     if len(outputs) < 2:
         fail("generated file families require at least two outputs")
-    _loom_generated_files(
+    _loom_generate_outputs(
+        iree_generated_files,
         name = name,
         generator = generator,
         outputs = outputs,
         output_flags = output_flags,
         output_directories = output_directories,
+        args = args,
+        inputs = inputs,
+        tags = tags,
+        testonly = testonly,
+        target_compatible_with = target_compatible_with,
+        visibility = visibility,
+        comment = comment,
+    )
+
+def loom_generated_source_family(
+        name,
+        generator,
+        outputs,
+        output_flags,
+        args = [],
+        inputs = [],
+        tags = [],
+        testonly = False,
+        target_compatible_with = None,
+        visibility = None,
+        comment = None):
+    """Generates sources invariant across Bazel's target/exec transition.
+
+    The generator must derive all outputs from the same materialized source
+    model. Outputs that can be generated independently belong in separate
+    singular actions so their invalidation and scheduling remain precise.
+
+    Args:
+      name: Generator action target name.
+      generator: Executable label that writes every output.
+      outputs: Generated filenames.
+      output_flags: Generator flags paired positionally with outputs.
+      args: Generator arguments before the output flags.
+      inputs: Source data labels consumed by the generator.
+      tags: Additional Bazel tags for the generator action.
+      testonly: Whether the output is used only by tests.
+      target_compatible_with: Optional target compatibility constraints.
+      visibility: Passed through to the generated source targets.
+      comment: Optional progress message for the generator action.
+    """
+    if len(outputs) < 2:
+        fail("generated source families require at least two outputs")
+    _loom_generate_outputs(
+        iree_generated_sources,
+        name = name,
+        generator = generator,
+        outputs = outputs,
+        output_flags = output_flags,
         args = args,
         inputs = inputs,
         tags = tags,
@@ -331,7 +426,7 @@ def loom_target_table_cc_library(
     output_flags = ["--source", "--header"] + generated_hdr_flags
     outputs = [source, header] + generated_hdrs
 
-    iree_generated_files(
+    iree_generated_sources(
         name = name + "_gen",
         srcs = inputs,
         outs = outputs,
@@ -452,7 +547,7 @@ def loom_target_contract_table_cc_libraries(
     if shared_strings:
         outputs.extend([shared_strings + ".h", shared_strings + ".c", shared_strings + ".json"])
         output_flags.extend(["--shared-strings-header", "--shared-strings-source", "--shared-strings-layout"])
-    iree_generated_files(
+    iree_generated_sources(
         name = name + "_gen",
         srcs = inputs,
         outs = outputs,
@@ -532,7 +627,8 @@ def loom_target_contract_file_family(
         outputs.extend([shared_strings + ".h", shared_strings + ".c", shared_strings + ".json"])
         output_flags.extend(["--shared-strings-header", "--shared-strings-source", "--shared-strings-layout"])
 
-    _loom_generated_files(
+    _loom_generate_outputs(
+        iree_generated_sources,
         name = name,
         generator = generator,
         outputs = outputs,
@@ -624,7 +720,7 @@ def loom_generated_cc_library(
     output_flags = source_flags + generated_hdr_flags + extra_output_flags
     outputs = sources + generated_hdrs + extra_outputs
 
-    iree_generated_files(
+    iree_generated_sources(
         name = name + "_gen",
         srcs = inputs,
         outs = outputs,

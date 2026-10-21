@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
-load("//build_tools/bazel:generate.bzl", "iree_generated_files")
+load("//build_tools/bazel:generate.bzl", "iree_generated_sources")
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
@@ -18,7 +18,7 @@ package(
     licenses = ["notice"],
 )
 
-iree_generated_files(
+iree_generated_sources(
     name = "runtime_projections",
     outs = [
         "interpreter_tables.inl",
@@ -44,7 +44,7 @@ iree_generated_files(
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_runtime",
 )
 
-iree_generated_files(
+iree_generated_sources(
     name = "conversion_test_projection",
     testonly = True,
     outs = ["interpreter_conversion_test_vectors.inl"],
@@ -55,7 +55,7 @@ iree_generated_files(
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_conversion_tests",
 )
 
-iree_generated_files(
+iree_generated_sources(
     name = "tooling_projection",
     outs = [
         "assembler_tables.inl",
@@ -69,7 +69,7 @@ iree_generated_files(
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_tooling",
 )
 
-iree_generated_files(
+iree_generated_sources(
     name = "documentation_projection",
     outs = ["docs/specification.md"],
     output_args = {

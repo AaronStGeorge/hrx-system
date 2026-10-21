@@ -9,7 +9,12 @@
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
 load("@rules_testing//lib:truth.bzl", "matching")
 load("@rules_testing//lib:util.bzl", "TestingAspectInfo", "util")
-load("//build_tools/bazel:generate.bzl", "IreeGeneratedFilesInfo", "iree_generated_files")
+load(
+    "//build_tools/bazel:generate.bzl",
+    "IreeGeneratedFilesInfo",
+    "iree_generated_files",
+    "iree_generated_sources",
+)
 
 def _expect_value(env, values, expected_value):
     if expected_value not in values:
@@ -141,6 +146,82 @@ def _test_generated_files_accepts_repeated_basenames_impl(env, target):
         "second/shared.h",
     )
 
+def _test_generated_sources_exposes_public_paths(name, **kwargs):
+    iree_generated_sources(
+        name = name + "_family",
+        outs = [
+            name + "/generated.c",
+            name + "/generated.h",
+        ],
+        output_args = {
+            name + "/generated.c": "--source={path}",
+            name + "/generated.h": "--header={path}",
+        },
+        tags = ["manual"],
+        tool = "//build_tools/bazel/test:generate_rule_fixture_tool",
+    )
+    analysis_test(
+        name = name,
+        impl = _test_generated_sources_exposes_public_paths_impl,
+        target = name + "_family",
+        **kwargs
+    )
+
+def _test_generated_sources_exposes_public_paths_impl(env, target):
+    _expect_basename(
+        env,
+        target[DefaultInfo].files.to_list(),
+        "generated.h",
+    )
+    _expect_basename(
+        env,
+        target[DefaultInfo].files.to_list(),
+        "generated.c",
+    )
+    actions = target[TestingAspectInfo].actions
+    env.expect.that_int(len(actions)).equals(2)
+    for action in actions:
+        env.expect.that_str(action.mnemonic).equals("Symlink")
+    _expect_arg_with_prefix_and_suffix(
+        env,
+        [file.path for action in actions for file in action.inputs.to_list()],
+        "",
+        "_iree_generated/test_generated_sources_exposes_public_paths_family__source_generator/test_generated_sources_exposes_public_paths/generated.h",
+    )
+
+def _test_generated_sources_declares_shared_action(name, **kwargs):
+    iree_generated_sources(
+        name = name + "_family",
+        outs = [name + "/generated.h"],
+        output_args = {name + "/generated.h": "--header={path}"},
+        tool = "//build_tools/bazel/test:generate_rule_fixture_tool",
+    )
+    analysis_test(
+        name = name,
+        impl = _test_generated_sources_declares_shared_action_impl,
+        target = name + "_family__source_generator",
+        **kwargs
+    )
+
+def _test_generated_sources_declares_shared_action_impl(env, target):
+    info = target[IreeGeneratedFilesInfo]
+    output = info.outputs_by_name["test_generated_sources_declares_shared_action/generated.h"]
+    _expect_arg_with_prefix_and_suffix(
+        env,
+        [output.path],
+        "",
+        "_iree_generated/test_generated_sources_declares_shared_action_family__source_generator/test_generated_sources_declares_shared_action/generated.h",
+    )
+    actions = target[TestingAspectInfo].actions
+    env.expect.that_int(len(actions)).equals(1)
+    env.expect.that_str(actions[0].mnemonic).equals("IreeGenerate")
+    _expect_arg_with_prefix_and_suffix(
+        env,
+        actions[0].argv,
+        "--header=",
+        "_iree_generated/test_generated_sources_declares_shared_action_family__source_generator/test_generated_sources_declares_shared_action/generated.h",
+    )
+
 def _test_invalid_output_arguments(name, outs, output_args, impl, **kwargs):
     util.helper_target(
         iree_generated_files,
@@ -227,5 +308,7 @@ def generate_rules_test_suite(name):
             _test_generated_files_rejects_missing_output,
             _test_generated_files_rejects_duplicate_selection,
             _test_generated_files_rejects_ambiguous_basename,
+            _test_generated_sources_exposes_public_paths,
+            _test_generated_sources_declares_shared_action,
         ],
     )

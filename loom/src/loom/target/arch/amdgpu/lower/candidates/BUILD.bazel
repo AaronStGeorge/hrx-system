@@ -7,7 +7,7 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
-    "loom_generated_file_family",
+    "loom_generated_source_family",
 )
 
 package(
@@ -18,7 +18,7 @@ package(
 
 _AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "candidate_tables_gen",
     generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:candidates",
     output_flags = [

@@ -64,6 +64,32 @@ cc_library(
                 )
                 self.assertIn(f"if({condition})", output)
 
+    def test_generated_sources_lower_to_cmake_file_rules(self):
+        repo_cfg = SimpleNamespace(PROJECTS=[self.project], REPO_MAP={"@hrx": ""})
+        output = bazel_to_cmake_converter.convert_build_file(
+            """
+loom_generated_source(
+    name = "table_gen",
+    generator = ":generate",
+    output = "table.inl",
+    output_flag = "--output=",
+)
+loom_generated_source_family(
+    name = "records_gen",
+    generator = ":generate",
+    outputs = ["records.c", "records.h"],
+    output_flags = ["--source", "--header"],
+)
+            """,
+            repo_cfg,
+            str(REPO_ROOT / "loom/consumer"),
+            repo_root=str(REPO_ROOT),
+        )
+        self.assertIn("loom_generated_file(\n", output)
+        self.assertIn('OUTPUT\n    "table.inl"', output)
+        self.assertIn("loom_generated_file_family(\n", output)
+        self.assertIn('OUTPUTS\n    "records.c"\n    "records.h"', output)
+
     def test_loom_image_provider_selection_survives_conversion(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(

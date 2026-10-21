@@ -13,7 +13,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_config_compatible_with",
-    "loom_generated_file_family",
+    "loom_generated_source_family",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -36,7 +36,7 @@ _XDNA_IMAGE_COMPATIBLE_WITH = loom_config_compatible_with([
     LIBAMDF.enabled_by,
 ])
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "target_tables_gen",
     generator = "//loom/py/loom/gen/target/arch/amd/xdna/aie2p:encoding_tables",
     output_flags = [
