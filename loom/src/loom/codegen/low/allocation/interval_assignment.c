@@ -791,6 +791,16 @@ loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
   const uint32_t current_residency_tier =
       loom_low_allocation_search_assignment_residency_tier(search_context,
                                                            assignment);
+  loom_low_allocation_write_assignment_map_t write_assignments = {0};
+  loom_low_allocation_storage_origin_t write_origin =
+      LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID;
+  if (state->unit_liveness.write_interference != NULL) {
+    write_assignments = loom_low_allocation_write_assignment_map_from_value_map(
+        &state->result.assignment_map);
+    write_origin =
+        loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+            state->unit_liveness.write_interference, value_ordinal);
+  }
   loom_low_allocation_preference_query_t relocation_preferences = {0};
   uint32_t current_preference_penalty = 0;
   if (protected_assignment != NULL) {
@@ -851,9 +861,9 @@ loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
               &candidate, protected_assignment))) ||
         (state->unit_liveness.write_interference != NULL &&
          loom_low_allocation_write_interference_conflicting_read(
-             state->unit_liveness.write_interference,
-             &state->result.assignment_map, state->unit_liveness.end_points,
-             &candidate) != LOOM_VALUE_ORDINAL_INVALID) ||
+             state->unit_liveness.write_interference, &write_assignments,
+             state->unit_liveness.end_points, write_origin,
+             &candidate) != LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID) ||
         loom_low_allocation_target_constraints_fixed_storage_conflicts(
             state->context->target_constraints, &state->unit_liveness,
             &candidate,
@@ -1066,8 +1076,13 @@ static uint32_t loom_low_allocation_interval_assignment_publish_assignment(
       state->result.assignment_count;
   state->result.assignment_indices_by_value_ordinal[value_ordinal] =
       assignment_index;
-  loom_low_allocation_write_interference_note_assignment(
-      state->unit_liveness.write_interference, value_ordinal, assignment);
+  if (state->unit_liveness.write_interference != NULL) {
+    const loom_low_allocation_storage_origin_t origin =
+        loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+            state->unit_liveness.write_interference, value_ordinal);
+    loom_low_allocation_write_interference_note_assignment(
+        state->unit_liveness.write_interference, origin, assignment);
+  }
   loom_low_allocation_target_constraints_record_location_extent(
       state->context->target_constraints, assignment->descriptor_reg_class_id,
       assignment->location_kind, assignment->location_base,

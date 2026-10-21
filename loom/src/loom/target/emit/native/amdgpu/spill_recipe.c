@@ -301,6 +301,57 @@ static iree_status_t loom_amdgpu_spill_recipe_visitor_step(
   return visitor->visit_step(visitor->user_data, &step);
 }
 
+loom_type_t loom_amdgpu_spill_recipe_step_result_type(
+    const loom_amdgpu_spill_recipe_t* recipe,
+    const loom_amdgpu_spill_recipe_step_t* step) {
+  IREE_ASSERT(recipe != NULL);
+  IREE_ASSERT(step != NULL);
+  if (step->result == LOOM_AMDGPU_SPILL_RECIPE_VALUE_NONE) {
+    return loom_type_none();
+  }
+  const uint64_t descriptor_set_stable_id =
+      loom_low_register_type_descriptor_set_stable_id(recipe->value_type);
+  switch (step->kind) {
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_READ:
+      return loom_low_register_type(descriptor_set_stable_id,
+                                    LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_SLICE:
+      IREE_ASSERT(step->chunk != NULL);
+      return loom_low_register_carrier_type_with_unit_count(
+          recipe->value_type, step->chunk->unit_count);
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_SGPR_TO_VGPR:
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_STORAGE_ADDRESS:
+      return loom_low_register_type(descriptor_set_stable_id,
+                                    LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_LOAD:
+      IREE_ASSERT(step->chunk != NULL);
+      if (recipe->register_kind == LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR) {
+        return loom_low_register_type(descriptor_set_stable_id,
+                                      LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                                      step->chunk->unit_count);
+      }
+      if (step->chunk->unit_count ==
+          loom_low_register_type_unit_count(recipe->value_type)) {
+        return recipe->value_type;
+      }
+      return loom_low_register_carrier_type_with_unit_count(
+          recipe->value_type, step->chunk->unit_count);
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_VGPR_TO_SGPR:
+      return loom_low_register_type(descriptor_set_stable_id,
+                                    LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_CONCAT:
+      return recipe->value_type;
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_FULL:
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_STORE:
+    case LOOM_AMDGPU_SPILL_RECIPE_STEP_EXEC_RESTORE:
+      IREE_ASSERT_UNREACHABLE("resultless AMDGPU spill recipe step has result");
+      return loom_type_none();
+    default:
+      IREE_ASSERT_UNREACHABLE("invalid AMDGPU spill recipe step");
+      return loom_type_none();
+  }
+}
+
 static iree_status_t loom_amdgpu_spill_recipe_visit_exec_enter(
     loom_amdgpu_spill_recipe_visitor_t* visitor) {
   visitor->saved_exec = loom_amdgpu_spill_recipe_visitor_next_value(visitor);

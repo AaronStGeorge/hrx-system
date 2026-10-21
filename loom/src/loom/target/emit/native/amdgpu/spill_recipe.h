@@ -160,6 +160,13 @@ iree_status_t loom_amdgpu_spill_recipe_visit(
     const loom_amdgpu_spill_recipe_t* recipe,
     loom_amdgpu_spill_recipe_step_fn_t visit_step, void* user_data);
 
+// Returns the exact register type produced by |step|, or none for a resultless
+// step. The type is derived from the same compact recipe that owns step order
+// and descriptors, so planning and emission share one helper-value shape.
+loom_type_t loom_amdgpu_spill_recipe_step_result_type(
+    const loom_amdgpu_spill_recipe_t* recipe,
+    const loom_amdgpu_spill_recipe_step_t* step);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

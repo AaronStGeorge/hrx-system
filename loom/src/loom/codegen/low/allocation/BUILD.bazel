@@ -855,8 +855,6 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:placement",
         "//loom/src/loom/codegen/low:read_retention",
         "//loom/src/loom/codegen/low:target_binding",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target:registers",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:index_set",
         "//loom/src/loom/util:segmented_storage",
