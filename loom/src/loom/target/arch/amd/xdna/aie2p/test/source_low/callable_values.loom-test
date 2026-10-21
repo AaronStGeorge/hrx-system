@@ -18,8 +18,8 @@ func.def @add_i32(%value: i32, %delta: i32) -> (i32) {
 // ----
 low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @call_mixed_i32(%input: reg<aie2p.vec256 x2>, %delta: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>) asm {
   %value = vextract.32.imm %input, 0
-  %result$25 = add.rr %value, %delta
-  %result$26 = add.rr %delta, %delta
+  %result$25 = add.nc %value, %delta
+  %result$26 = add.nc %delta, %delta
   return %result$25, %result$26
 }
 
@@ -115,8 +115,8 @@ low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @call_loop(
   %35 = lt %i, %count
   low.cond_br %35, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %result = add.rr %current, %delta
-  %37 = add.rr %i, %c1
+  %result = add.nc %current, %delta
+  %37 = add.nc %i, %c1
   low.br ^_bb1(%37: reg<aie2p.er>, %result: reg<aie2p.er>)
 ^_bb3:
   return %current
@@ -136,7 +136,7 @@ func.def @scalar_add(%value: i32, %delta: i32) -> (i32) {
 
 // ----
 low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @call_scalar(%value: reg<aie2p.er>, %delta: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %result = add.rr %value, %delta
+  %result = add.nc %value, %delta
   return %result
 }
 

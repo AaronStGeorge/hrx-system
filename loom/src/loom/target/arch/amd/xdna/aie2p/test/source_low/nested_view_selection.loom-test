@@ -36,7 +36,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @derived_selection
 ^_bb3(%pair_root: reg<aie2p.ep>, %pair_offset: reg<aie2p.er>):
   %56 = mov.i32 2
   %63 = lshl %position, %56
-  %69 = add.rr %pair_offset, %63
+  %69 = add.nc %pair_offset, %63
   low.cond_br %select_pair, ^_bb4, ^_bb5 : reg<aie2p.er>
 ^_bb4:
   low.br ^_bb6(%pair_root: reg<aie2p.ep>, %69: reg<aie2p.er>)

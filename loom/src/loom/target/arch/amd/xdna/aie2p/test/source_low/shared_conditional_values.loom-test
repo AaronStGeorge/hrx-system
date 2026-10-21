@@ -43,7 +43,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @shared_conditiona
   %inner = nez %loaded
   low.cond_br %inner, ^selected, ^fallback : reg<aie2p.er>
 ^selected:
-  %result = add.rr %loaded, %loaded
+  %result = add.nc %loaded, %loaded
   st %result, %out, 4
   low.br ^exit
 ^fallback:

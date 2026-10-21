@@ -80,7 +80,7 @@ func.def @copy_float8_index(%input: buffer, %output: buffer, %byte_offset: offse
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_float8_index(%base: reg<aie2p.er>, %position: reg<aie2p.er>) asm {
   %source_tail = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %target_tail = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %18 = add.rr %base, %position
+  %18 = add.nc %base, %position
   %19 = mov.address-index %18
   %e4m3 = lda.i8.index %source_tail, %19
   %21 = add.address-index.immediate %18, 16

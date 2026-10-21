@@ -96,7 +96,7 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @consume_
   %stride = mov.i32 28672
   %next_bits = xor %bits, %stride
   %next = mov.scalar-to-address %next_bits
-  %42 = add.rr %record, %step
+  %42 = add.nc %record, %step
   low.br ^_bb1(%42: reg<aie2p.er>, %next: reg<aie2p.ep>)
 ^_bb3:
   return

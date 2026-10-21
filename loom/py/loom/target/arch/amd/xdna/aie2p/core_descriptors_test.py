@@ -872,6 +872,14 @@ def test_descriptor_encoding_ids_and_adapters_are_materialized() -> None:
         assert descriptor.operands[0].ready_stage == 1
         assert Constraint(ConstraintKind.REMATERIALIZABLE, 0) in descriptor.constraints
 
+    acquire_delta = descriptors["amd.xdna.aie2p.lock.acquire-delta.i32"]
+    assert acquire_delta.op_kind is DescriptorOpKind.OP
+    assert acquire_delta.asm_forms[0].mnemonic == "mov.acquire-delta"
+    assert acquire_delta.operands[0].reg_alts[0].reg_class == "aie2p.er"
+    assert Constraint(ConstraintKind.REMATERIALIZABLE, 0) not in (
+        acquire_delta.constraints
+    )
+
     scalar_move = descriptors["amd.xdna.aie2p.move.scalar"]
     assert [operand.field_name for operand in scalar_move.operands] == [
         "dst",
@@ -1238,6 +1246,44 @@ def test_vector_predicates_use_one_partially_addressable_el_value() -> None:
     ]
     assert high_or.constraints == (Constraint(ConstraintKind.TIED, 0, 3),)
     assert high_or.asm_forms[0].operands == ("s0", "s1", "storage")
+
+    low_copy = descriptors["amd.xdna.aie2p.predicate.copy.scalar.to.low32"]
+    assert [operand.field_name for operand in low_copy.operands] == [
+        "d0",
+        "s0",
+        "s1",
+    ]
+    assert low_copy.operands[0].reg_alts[0].reg_class == "aie2p.elpredicate"
+    assert low_copy.operands[0].reg_alts[0].register_part == "aie2p.elpredicate.low32"
+    assert low_copy.operands[0].encoding_adapter_id != 0
+    assert all(
+        operand.reg_alts[0].reg_class == "aie2p.er" for operand in low_copy.operands[1:]
+    )
+    assert low_copy.constraints == ()
+    assert low_copy.asm_forms[0].operands == ("s0", "s1")
+
+    high_copy = descriptors["amd.xdna.aie2p.predicate.copy.scalar.to.high32"]
+    assert [operand.field_name for operand in high_copy.operands] == [
+        "d0",
+        "s0",
+        "s1",
+        "storage",
+    ]
+    assert high_copy.operands[0].reg_alts[0].reg_class == "aie2p.elpredicate"
+    assert high_copy.operands[0].reg_alts[0].register_part == "aie2p.elpredicate.high32"
+    assert high_copy.operands[0].encoding_adapter_id != 0
+    assert all(
+        operand.reg_alts[0].reg_class == "aie2p.er"
+        for operand in high_copy.operands[1:3]
+    )
+    high_copy_storage = high_copy.operands[3]
+    assert high_copy_storage.reg_alts[0].register_part == "aie2p.elpredicate.low32"
+    assert set(high_copy_storage.flags) == {
+        OperandFlag.IMPLICIT,
+        OperandFlag.STORAGE_CONTINUATION,
+    }
+    assert high_copy.constraints == (Constraint(ConstraintKind.TIED, 0, 3),)
+    assert high_copy.asm_forms[0].operands == ("s0", "s1", "storage")
 
     for width in (8, 16, 32):
         suffix = ".el.low32" if width != 8 else ""
@@ -2013,6 +2059,32 @@ def test_implicit_registers_and_machine_ties_reach_low() -> None:
     assert constraints[0].kind is ConstraintKind.TIED
     assert constraints[0].lhs_operand_index == 1
     assert constraints[0].rhs_operand_index == 2
+
+
+def test_no_carry_additions_avoid_sticky_state() -> None:
+    descriptors = {
+        descriptor.key: descriptor
+        for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
+    }
+    for key, operand_names, has_immediate in (
+        ("add.no-carry.i32", ("dst", "s0", "s1"), False),
+        ("add.no-carry.i32.immediate", ("dst", "s0"), True),
+    ):
+        descriptor = descriptors[f"amd.xdna.aie2p.{key}"]
+        assert (
+            tuple(operand.field_name for operand in descriptor.operands)
+            == operand_names
+        )
+        assert all(
+            OperandFlag.IMPLICIT not in operand.flags for operand in descriptor.operands
+        )
+        assert descriptor.operands[0].role is OperandRole.RESULT
+        assert descriptor.operands[0].reg_alts[0].reg_class == "aie2p.er"
+        assert Constraint(ConstraintKind.REMATERIALIZABLE, 0) in (
+            descriptor.constraints
+        )
+        assert DescriptorFlag.SAFE_TO_SPECULATE in descriptor.flags
+        assert bool(descriptor.immediates) is has_immediate
 
 
 def test_packed_scalar_conversion_producers_are_rematerializable() -> None:

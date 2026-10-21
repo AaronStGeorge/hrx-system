@@ -102,7 +102,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @rotate_buffer_coo
   %49 = lt %i, %count
   low.cond_br %49, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %50 = add.rr %i, %step
+  %50 = add.nc %i, %step
   low.br ^_bb1(%50: reg<aie2p.er>, %other: reg<aie2p.ep>, %unused_origin: reg<aie2p.er>, %current: reg<aie2p.ep>, %origin: reg<aie2p.er>)
 ^_bb3:
   %51 = mov.address-index %origin

@@ -136,7 +136,7 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @reduce_a
   %21 = vshuffle %19, %19, %20
   %22 = vadd.32 %19, %21
   %23 = vextract.32.imm %22, 0
-  %sum4 = add.rr %init, %23
+  %sum4 = add.nc %init, %23
   %25 = mova.i32 9
   %26 = vshuffle %v8, %v8, %25
   %27 = vadd.32 %v8, %26
@@ -145,7 +145,7 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @reduce_a
   %32 = vshuffle %30, %30, %20
   %33 = vadd.32 %30, %32
   %34 = vextract.32.imm %33, 0
-  %sum8 = add.rr %init, %34
+  %sum8 = add.nc %init, %34
   %36 = mova.i32 11
   %37 = vshuffle %v16, %v16, %36
   %38 = vadd.32 %v16, %37
@@ -156,7 +156,7 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @reduce_a
   %46 = vshuffle %44, %44, %20
   %47 = vadd.32 %44, %46
   %48 = vextract.32.imm %47, 0
-  %sum16 = add.rr %init, %48
+  %sum16 = add.nc %init, %48
   return %sum4, %sum8, %sum16
 }
 

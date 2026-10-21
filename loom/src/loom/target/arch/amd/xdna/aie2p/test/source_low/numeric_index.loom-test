@@ -16,7 +16,7 @@ func.def @index_arithmetic(%lhs0: index, %rhs0: index, %stride: offset) -> (inde
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @index_arithmetic(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>, %stride: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
-  %add = add.rr %lhs, %rhs
+  %add = add.nc %lhs, %rhs
   %sub = sub %lhs, %rhs
   %mul = mul %lhs, %rhs
   %44 = mov.dividend %lhs
@@ -76,7 +76,7 @@ func.def @offset_arithmetic(%lhs: offset, %rhs: offset) -> (offset, offset) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @offset_arithmetic(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>) asm {
-  %add = add.rr %lhs, %rhs
+  %add = add.nc %lhs, %rhs
   %sub = sub %lhs, %rhs
   return %add, %sub
 }
@@ -127,7 +127,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @index_bitwise(%in
   %clz = clz %input
   %69 = mov.short -1
   %70 = xor %input, %69
-  %71 = add %input, -1
+  %71 = add.nc.immediate %input, -1
   %72 = and %70, %71
   %73 = popcount %72
   %74 = mov.short 32

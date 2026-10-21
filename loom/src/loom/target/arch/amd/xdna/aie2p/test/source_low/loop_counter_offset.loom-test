@@ -15,4 +15,4 @@ CHECK: * = ltu %iv, %upper
 CHECK: * = sub %upper, %iv
 CHECK: * = ltu %positive_step, *
 CHECK: low.cond_br *
-CHECK: * = add.rr %iv, %positive_step
+CHECK: * = add.nc %iv, %positive_step

@@ -136,7 +136,7 @@ def _reduce_add_i32_rule(
     shuffle = _descriptor("amd.xdna.aie2p.shuffle.x.configured")
     vector_add = _descriptor("amd.xdna.aie2p.add.i32x16")
     extract = _descriptor("amd.xdna.aie2p.extract.i32.immediate")
-    scalar_add = _descriptor("amd.xdna.aie2p.add.i32")
+    scalar_add = _descriptor("amd.xdna.aie2p.add.no-carry.i32")
 
     emits: list[ContractEmit] = []
     current = ValueRef.operand("input")
@@ -180,7 +180,7 @@ def _reduce_add_i32_rule(
             _op_emit(
                 scalar_add,
                 operands={"s0": ValueRef.operand("init"), "s1": extracted},
-                results={"d0": ValueRef.result("result")},
+                results={"dst": ValueRef.result("result")},
             )
         )
 

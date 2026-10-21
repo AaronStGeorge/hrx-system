@@ -27,7 +27,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f32_down(%v
   %22 = ltu %21, %19
   %23 = copy %22 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %24 = sel.nez %21, %19, %23
-  %25 = add %19, 1
+  %25 = add.nc.immediate %19, 1
   %26 = sub %25, %24
   %27 = mov.short 25
   %28 = ltu %27, %26
@@ -40,8 +40,8 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f32_down(%v
   %37 = mov.short -1
   %38 = lshl %36, %37
   %39 = sub %38, %12
-  %40 = add.rr %39, %35
-  %41 = add.rr %18, %40
+  %40 = add.nc %39, %35
+  %41 = add.nc %18, %40
   %42 = lshl %41, %33
   %43 = mov.short 23
   %44 = lshl %19, %43
@@ -85,7 +85,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f16_down_ne
   %10 = lshl %9, %8
   %11 = and %value, %7
   %12 = clz %11
-  %13 = add %12, -21
+  %13 = add.nc.immediate %12, -21
   %14 = mov.short 0
   %15 = lt %13, %14
   %16 = copy %15 : reg<aie2p.er> -> reg<aie2p.mr27_select>
@@ -102,7 +102,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f16_down_ne
   %27 = sub %26, %17
   %28 = mov.short 23
   %29 = lshl %27, %28
-  %30 = add.rr %20, %29
+  %30 = add.nc %20, %29
   %31 = copy %11 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %32 = sel.nez %30, %14, %31
   %33 = or %10, %32
@@ -123,7 +123,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f16_down_ne
   %50 = ltu %49, %40
   %51 = copy %50 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %52 = sel.nez %49, %40, %51
-  %53 = add %40, 1
+  %53 = add.nc.immediate %40, 1
   %54 = sub %53, %52
   %55 = mov.short 25
   %56 = ltu %55, %54
@@ -136,8 +136,8 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f16_down_ne
   %65 = mov.short -1
   %66 = lshl %64, %65
   %67 = sub %66, %40
-  %68 = add.rr %67, %63
-  %69 = add.rr %46, %68
+  %68 = add.nc %67, %63
+  %69 = add.nc %46, %68
   %70 = lshl %69, %61
   %72 = lshl %40, %28
   %73 = sub %35, %72
@@ -173,8 +173,8 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f16_down_ne
   %111 = lshl %110, %101
   %112 = and %111, %40
   %113 = mov.i32 4095
-  %114 = add.rr %113, %112
-  %115 = add.rr %110, %114
+  %114 = add.nc %113, %112
+  %115 = add.nc %110, %114
   %116 = lshl %115, %101
   %117 = mov.short 102
   %118 = mov.short 113
@@ -193,8 +193,8 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scale_f16_down_ne
   %132 = sub %131, %125
   %133 = lshl %40, %132
   %134 = sub %133, %40
-  %135 = add.rr %134, %130
-  %136 = add.rr %128, %135
+  %135 = add.nc %134, %130
+  %136 = add.nc %128, %135
   %137 = lshl %136, %127
   %138 = copy %120 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %139 = sel.nez %14, %137, %138

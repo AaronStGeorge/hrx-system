@@ -200,7 +200,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @i16x2x2x16_insert
   %36 = copy %lane : reg<aie2p.er> -> reg<aie2p.er>
   %37 = mac %36, %plane, %35
   %38 = mov.short 16
-  %39 = add.rr %37, %38
+  %39 = add.nc %37, %38
   %40 = mov.short 0
   %41 = ltu %39, %35
   %42 = mov.short 64
@@ -296,7 +296,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @i8x64x2_insert_dy
   %77 = vinsert.8.reg %72, %76, %57
   %78 = select.mask %64, -1
   %79 = vsel.32 %77, %72, %78
-  %80 = add.rr %56, %55
+  %80 = add.nc %56, %55
   %81 = vextract.8.imm %pair, 1
   %82 = ltu %80, %59
   %83 = ltu %80, %61

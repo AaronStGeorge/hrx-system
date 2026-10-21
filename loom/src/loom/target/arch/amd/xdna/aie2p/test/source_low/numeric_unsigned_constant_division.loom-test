@@ -25,7 +25,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @pair_by_twenty(%i
   %28 = lshl %25, %18
   %29 = mac %28, %20, %22
   %30 = lshl %27, %18
-  %31 = add.rr %29, %30
+  %31 = add.nc %29, %30
   %32 = mov.short 4
   %33 = mov.short 0
   %34 = sub %33, %32
@@ -62,11 +62,11 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @pair_by_seven(%in
   %28 = lshl %25, %18
   %29 = mac %28, %20, %22
   %30 = lshl %27, %18
-  %31 = add.rr %29, %30
+  %31 = add.nc %29, %30
   %32 = mov.short -1
   %33 = sub %input, %31
   %34 = lshl %33, %32
-  %35 = add.rr %34, %31
+  %35 = add.nc %34, %31
   %36 = mov.short 2
   %37 = mov.short 0
   %38 = sub %37, %36

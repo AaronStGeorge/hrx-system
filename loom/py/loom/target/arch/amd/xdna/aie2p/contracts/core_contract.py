@@ -68,6 +68,9 @@ from loom.target.arch.amd.xdna.aie2p.contracts.packet_memory import (
 from loom.target.arch.amd.xdna.aie2p.contracts.power_of_two_scale import (
     AIE2P_POWER_OF_TWO_SCALE_RULES,
 )
+from loom.target.arch.amd.xdna.aie2p.contracts.predicate_range import (
+    AIE2P_PREDICATE_RANGE_RULES,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.reduction import (
     AIE2P_REDUCTION_RULES,
 )
@@ -132,6 +135,7 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
         *AIE2P_INTEGER_DIVISION_RULES,
         *AIE2P_REDUCTION_RULES,
         *AIE2P_STRUCTURAL_RULES,
+        *AIE2P_PREDICATE_RANGE_RULES,
         *AIE2P_TABLE_RULES,
         *AIE2P_I64_RULES,
         *AIE2P_PACKET_MEMORY_RULES,
@@ -164,10 +168,17 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
         *AIE2P_INDEX_CONVERSION_RULES,
         *AIE2P_VECTOR_INDEX_CONVERSION_RULES,
         *(
-            core_rules._binary_rule(source_op, type_pattern, descriptor_key)
-            for source_op, descriptor_key in (
-                (index.index_add, "amd.xdna.aie2p.add.i32"),
-                (index.index_sub, "amd.xdna.aie2p.sub.i32"),
+            core_rules._binary_rule(
+                index.index_add,
+                type_pattern,
+                "amd.xdna.aie2p.add.no-carry.i32",
+                result_field="dst",
+            )
+            for type_pattern in (core_rules._INDEX, core_rules._OFFSET)
+        ),
+        *(
+            core_rules._binary_rule(
+                index.index_sub, type_pattern, "amd.xdna.aie2p.sub.i32"
             )
             for type_pattern in (core_rules._INDEX, core_rules._OFFSET)
         ),
@@ -682,7 +693,8 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
         core_rules._binary_rule(
             scalar_arithmetic.scalar_addi,
             core_rules._I32,
-            "amd.xdna.aie2p.add.i32",
+            "amd.xdna.aie2p.add.no-carry.i32",
+            result_field="dst",
         ),
         core_rules._binary_rule(
             scalar_arithmetic.scalar_subi,
@@ -741,10 +753,18 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
         ),
         core_rules._madd_rule(scalar_arithmetic.scalar_fmai, core_rules._I32),
         *(
+            core_rules._binary_rule(
+                scalar_arithmetic.scalar_addi,
+                type_pattern,
+                "amd.xdna.aie2p.add.no-carry.i32",
+                result_field="dst",
+            )
+            for type_pattern in (core_rules._I8, core_rules._I16)
+        ),
+        *(
             core_rules._binary_rule(source_op, type_pattern, descriptor_key)
             for type_pattern in (core_rules._I8, core_rules._I16)
             for source_op, descriptor_key in (
-                (scalar_arithmetic.scalar_addi, "amd.xdna.aie2p.add.i32"),
                 (scalar_arithmetic.scalar_subi, "amd.xdna.aie2p.sub.i32"),
                 (scalar_arithmetic.scalar_muli, "amd.xdna.aie2p.mul.i32"),
             )

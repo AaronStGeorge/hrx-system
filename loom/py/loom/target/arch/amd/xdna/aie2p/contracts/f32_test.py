@@ -81,9 +81,12 @@ def _evaluate_rule(rule: DescriptorRule, inputs: dict[str, int]) -> int:
                 name: _value(ref, inputs, temporaries)
                 for name, ref in emit.operands.items()
             }
-            if descriptor_key == "add.i32.immediate":
+            if descriptor_key in (
+                "add.i32.immediate",
+                "add.no-carry.i32.immediate",
+            ):
                 value = operands["s0"] + emit.immediates["imm"]
-            elif descriptor_key == "add.i32":
+            elif descriptor_key in ("add.i32", "add.no-carry.i32"):
                 value = operands["s0"] + operands["s1"]
             elif descriptor_key == "sub.i32":
                 value = operands["s0"] - operands["s1"]

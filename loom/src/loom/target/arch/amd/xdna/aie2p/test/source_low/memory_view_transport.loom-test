@@ -21,8 +21,8 @@ func.def @selected_dynamic_rank1_packets(%input: buffer, %first_input: offset, %
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @selected_dynamic_rank1_packets(%first_origin: reg<aie2p.er>, %second_origin: reg<aie2p.er>, %read_first: reg<aie2p.er>, %write_first: reg<aie2p.er>) asm {
   %destination = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %26 = mov.short 16
-  %27 = add.rr %first_origin, %26
-  %28 = add.rr %second_origin, %26
+  %27 = add.nc %first_origin, %26
+  %28 = add.nc %second_origin, %26
   %29 = copy %read_first : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %source_offset = sel.nez %27, %28, %29
   %31 = copy %write_first : reg<aie2p.er> -> reg<aie2p.mr27_select>
@@ -57,18 +57,18 @@ func.def @selected_dynamic_rank2_packets(%input: buffer, %first_input: offset, %
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @selected_dynamic_rank2_packets(%first_origin: reg<aie2p.er>, %second_origin: reg<aie2p.er>, %row: reg<aie2p.er>, %read_first: reg<aie2p.er>, %write_first: reg<aie2p.er>) asm {
   %destination = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %40 = mov.short 16
-  %41 = add.rr %first_origin, %40
-  %42 = add.rr %second_origin, %40
+  %41 = add.nc %first_origin, %40
+  %42 = add.nc %second_origin, %40
   %43 = copy %read_first : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %source_offset = sel.nez %41, %42, %43
   %45 = copy %write_first : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %destination_offset = sel.nez %41, %42, %45
   %50 = mov.i32 6
   %51 = lshl %row, %50
-  %52 = add.rr %source_offset, %51
+  %52 = add.nc %source_offset, %51
   %53 = mov.address-index %52
   %54 = vlda.128.bf16x8.index %destination, %53
-  %59 = add.rr %destination_offset, %51
+  %59 = add.nc %destination_offset, %51
   %60 = mov.address-index %59
   vst.128.bf16x8.index %54, %destination, %60
   return
@@ -106,8 +106,8 @@ func.def @rotating_selected_rank1_packets(%input: buffer, %first_input: offset, 
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @rotating_selected_rank1_packets(%first_origin: reg<aie2p.er>, %second_origin: reg<aie2p.er>, %count: reg<aie2p.er>, %read_first: reg<aie2p.er>, %write_first: reg<aie2p.er>) asm {
   %destination = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %59 = mov.short 16
-  %60 = add.rr %first_origin, %59
-  %61 = add.rr %second_origin, %59
+  %60 = add.nc %first_origin, %59
+  %61 = add.nc %second_origin, %59
   %begin = mov.short 0
   %step = mov.short 1
   low.br ^_bb1(%begin: reg<aie2p.er>, %60: reg<aie2p.er>, %61: reg<aie2p.er>)
@@ -121,13 +121,13 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @rotating_selected
   %destination_offset = sel.nez %current_offset, %previous_offset, %67
   %72 = mov.i32 4
   %73 = lshl %iteration, %72
-  %74 = add.rr %source_offset, %73
+  %74 = add.nc %source_offset, %73
   %75 = mov.address-index %74
   %76 = vlda.128.bf16x8.index %destination, %75
-  %81 = add.rr %destination_offset, %73
+  %81 = add.nc %destination_offset, %73
   %82 = mov.address-index %81
   vst.128.bf16x8.index %76, %destination, %82
-  %83 = add.rr %iteration, %step
+  %83 = add.nc %iteration, %step
   low.br ^_bb1(%83: reg<aie2p.er>, %previous_offset: reg<aie2p.er>, %current_offset: reg<aie2p.er>)
 ^_bb3:
   return
@@ -161,8 +161,8 @@ func.def @rotating_selected_rank2_packets(%input: buffer, %first_input: offset, 
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @rotating_selected_rank2_packets(%first_origin: reg<aie2p.er>, %second_origin: reg<aie2p.er>, %count: reg<aie2p.er>, %read_first: reg<aie2p.er>, %write_first: reg<aie2p.er>) asm {
   %destination = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %66 = mov.short 16
-  %67 = add.rr %first_origin, %66
-  %68 = add.rr %second_origin, %66
+  %67 = add.nc %first_origin, %66
+  %68 = add.nc %second_origin, %66
   %begin = mov.short 0
   %step = mov.short 1
   low.br ^_bb1(%begin: reg<aie2p.er>, %67: reg<aie2p.er>, %68: reg<aie2p.er>)
@@ -176,13 +176,13 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @rotating_selected
   %destination_offset = sel.nez %current_offset, %previous_offset, %74
   %79 = mov.i32 6
   %80 = lshl %row, %79
-  %81 = add.rr %source_offset, %80
+  %81 = add.nc %source_offset, %80
   %82 = mov.address-index %81
   %83 = vlda.128.bf16x8.index %destination, %82
-  %88 = add.rr %destination_offset, %80
+  %88 = add.nc %destination_offset, %80
   %89 = mov.address-index %88
   vst.128.bf16x8.index %83, %destination, %89
-  %90 = add.rr %row, %step
+  %90 = add.nc %row, %step
   low.br ^_bb1(%90: reg<aie2p.er>, %previous_offset: reg<aie2p.er>, %current_offset: reg<aie2p.er>)
 ^_bb3:
   return

@@ -624,6 +624,43 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_accounts_for_fu
 block 0 order: 3, 0
 
 // ====
+// Before spill materialization, advance a retained private placement that
+// reaches an unspillable consumer while the consumer's bank still fits.
+// RUN: emit low-schedule-query @resource_stall_advances_retained_unspillable_value strategy=resource-stall test.i32=2 per-user-placement-values=%private required-register-values=%physical order=0,3
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @resource_stall_advances_retained_unspillable_value(%source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %private = copy %source : reg<test.i32> -> reg<test.i32>
+  %physical = copy %private : reg<test.i32> -> reg<test.explicit32>
+  %result = copy %physical : reg<test.explicit32> -> reg<test.i32>
+  %independent = test.const.zero.i32
+  return %result, %independent
+}
+
+// ----
+block 0 order: 0, 3
+
+// ====
+// Once allocation repair has materialized spill traffic, mandatory helpers can
+// intervene before the retained placement's consumer. Keep the placement
+// demand driven so it cannot recursively exhaust the same register bank.
+// RUN: emit low-schedule-query @resource_stall_defers_retained_spill_setup strategy=resource-stall materialized-spill-traffic test.i32=2 per-user-placement-values=%private required-register-values=%physical order=3,0
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @resource_stall_defers_retained_spill_setup(%source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %private = copy %source : reg<test.i32> -> reg<test.i32>
+  %physical = copy %private : reg<test.i32> -> reg<test.explicit32>
+  %result = copy %physical : reg<test.explicit32> -> reg<test.i32>
+  %independent = test.const.zero.i32
+  return %result, %independent
+}
+
+// ----
+block 0 order: 3, 0
+
+// ====
 // RUN: emit low-schedule-query @resource_stall_accounts_for_non_ssa_unlock_activation strategy=resource-stall order=0,5
 
 test.target<low_core> @test_target
@@ -863,6 +900,28 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_materializes_op
   %result = test.add.i32 %intermediate, %rhs
   return %loaded, %padding, %result
 }
+
+// ====
+// A short register-bank move retires its source but creates physical storage
+// used only by the return. Keep that destination closed while ordinary
+// arithmetic remains ready and the source bank has no pressure cliff.
+// RUN: emit low-schedule-query @resource_stall_defers_blocked_register_move strategy=resource-stall order=1,2,0,3 issue=*
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @resource_stall_defers_blocked_register_move(%source: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.spillable.explicit32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %materialized = test.rematerialize.spillable.explicit32 %source
+  %independent0 = test.add.i32 %lhs, %rhs
+  %independent1 = test.add.i32 %independent0, %rhs
+  return %materialized, %independent1, %lhs, %rhs
+}
+
+// ----
+block 0 order: 1, 2, 0, 3
+node 0 issue-cycle: 2
+node 1 issue-cycle: 0
+node 2 issue-cycle: 1
+node 3 issue-cycle: 3
 
 // ====
 // RUN: emit low-schedule-query @resource_stall_orders_exclusive_setup_after_prerequisites kind=order strategy=resource-stall order=0,1,2,3,4,5 consumer=*

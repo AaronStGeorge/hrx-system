@@ -94,8 +94,8 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
         )
     ]
     assert [rule.descriptor.key for rule in index_binary_rules] == [
-        "amd.xdna.aie2p.add.i32",
-        "amd.xdna.aie2p.add.i32",
+        "amd.xdna.aie2p.add.no-carry.i32",
+        "amd.xdna.aie2p.add.no-carry.i32",
         "amd.xdna.aie2p.sub.i32",
         "amd.xdna.aie2p.sub.i32",
         "amd.xdna.aie2p.mul.i32",
@@ -916,7 +916,7 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
             ]
             expected_keys.append("amd.xdna.aie2p.extract.i32.immediate")
             if not zero_init:
-                expected_keys.append("amd.xdna.aie2p.add.i32")
+                expected_keys.append("amd.xdna.aie2p.add.no-carry.i32")
             assert [emit.descriptor.key for emit in rule.emit] == expected_keys
 
     bitunpack_rules = [

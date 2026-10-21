@@ -27,7 +27,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @ranked_exchange(%
   %72 = mac %71, %row, %70
   %73 = mov.i32 2
   %74 = lshl %72, %73
-  %75 = add.rr %74, %base
+  %75 = add.nc %74, %base
   %76 = mov.address-index %75
   %first = lda.i32.index.volatile<volatile> %source, %76
   %79 = lda.i32.index.volatile<volatile> %source, %76
@@ -79,10 +79,10 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @biased_views(%row
   %first_bias = mov.short 32
   %row_bytes = mul %row, %row_stride
   %column_bytes = mul %column, %column_stride
-  %first_row_base = add.rr %row_bytes, %first_bias
-  %second_row_base = add.rr %row_bytes, %row_stride
-  %first_base = add.rr %first_row_base, %column_bytes
-  %second_base = add.rr %second_row_base, %column_bytes
+  %first_row_base = add.nc %row_bytes, %first_bias
+  %second_row_base = add.nc %row_bytes, %row_stride
+  %first_base = add.nc %first_row_base, %column_bytes
+  %second_base = add.nc %second_row_base, %column_bytes
   %32 = mov.address-index %first_base
   %value = lda.i32.index %source, %32
   %34 = mov.address-index %second_base

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/descriptor_traits.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/immediates.h"
 #include "loom/codegen/low/representation_binding.h"
@@ -148,6 +149,13 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   node->schedule_class_id = descriptor_view->schedule_class_id;
   node->schedule_class = loom_low_schedule_model_schedule_class(
       state->target.schedule_model, descriptor_view);
+  if (op->operand_count != 0 &&
+      iree_any_bit_set(descriptor_view->instruction_class_flags,
+                       LOOM_LOW_INSTRUCTION_CLASS_FLAG_REGISTER_MOVE) &&
+      loom_low_schedule_class_schedule_distance_cycles(node->schedule_class) <=
+          2) {
+    node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_SHORT_REGISTER_MOVE;
+  }
   *out_descriptor = packet.descriptor;
   return iree_ok_status();
 }
@@ -163,6 +171,43 @@ static bool loom_low_schedule_node_has_result_reg_class(
     }
   }
   return false;
+}
+
+// Records the immutable result facts needed to recognize a replayable
+// cross-bank move during candidate scoring. Register classes and descriptor
+// rematerialization are fixed when the graph is built; rescanning the node's
+// operands each time it becomes a ready nominee only repeats this analysis.
+static void loom_low_schedule_classify_short_register_move_results(
+    loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* node) {
+  if (!iree_any_bit_set(node->flags,
+                        LOOM_LOW_SCHEDULE_NODE_FLAG_SHORT_REGISTER_MOVE)) {
+    return;
+  }
+  const loom_value_ordinal_t* operand_ordinals =
+      loom_low_schedule_node_const_operand_ordinals(node);
+  const loom_value_ordinal_t* result_ordinals =
+      loom_low_schedule_node_const_result_ordinals(node);
+  for (uint16_t result_index = 0; result_index < node->result_count;
+       ++result_index) {
+    loom_low_schedule_value_record_t* result =
+        &state->values[result_ordinals[result_index]];
+    if (!loom_low_schedule_value_requires_register(result) ||
+        !loom_low_descriptor_result_can_rematerialize(
+            state->target.descriptor_set, node->descriptor, result_index)) {
+      continue;
+    }
+    for (uint16_t operand_index = 0; operand_index < node->operand_count;
+         ++operand_index) {
+      const loom_low_schedule_value_record_t* operand =
+          &state->values[operand_ordinals[operand_index]];
+      if (operand->register_class_id != result->register_class_id) {
+        result->flags |=
+            LOOM_LOW_SCHEDULE_VALUE_FLAG_REPLAYABLE_REGISTER_MOVE_RESULT;
+        break;
+      }
+    }
+  }
 }
 
 static void loom_low_schedule_index_active_structural_results(
@@ -1567,6 +1612,7 @@ iree_status_t loom_low_schedule_fill_nodes(
           loom_low_schedule_resolve_descriptor(state, op, node, &descriptor));
       IREE_RETURN_IF_ERROR(
           loom_low_schedule_initialize_node_value_ordinals(state, node));
+      loom_low_schedule_classify_short_register_move_results(state, node);
       loom_low_schedule_index_active_structural_results(state, node);
       IREE_RETURN_IF_ERROR(
           loom_low_schedule_apply_structural_model(state, node));

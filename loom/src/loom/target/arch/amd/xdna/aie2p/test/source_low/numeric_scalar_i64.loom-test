@@ -93,7 +93,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scalar_i64_shli_v
   %17 = and %13, %15
   %18 = mov.short -1
   %19 = lshl %11, %18
-  %20 = add %17, -31
+  %20 = add.nc.immediate %17, -31
   %21 = lshl %11, %17
   %22 = lshl %12, %17
   %23 = lshl %19, %20
@@ -142,7 +142,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scalar_i64_muli_b
   %32 = lshl %29, %21
   %33 = mac %32, %23, %25
   %34 = lshl %31, %21
-  %35 = add.rr %33, %34
+  %35 = add.nc %33, %34
   %36 = mac %35, %16, %19
   %37 = mac %36, %17, %18
   %41 = slice %mask[0] : reg<aie2p.er x2> -> reg<aie2p.er>

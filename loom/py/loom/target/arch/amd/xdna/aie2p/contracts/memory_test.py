@@ -257,7 +257,7 @@ def test_all_memory_families_project_dynamic_offsets_directly_into_dj() -> None:
             )
             materializer = complete_offset.source_memory_byte_offset_materializer
             assert materializer is not None
-            assert materializer.add.key == "amd.xdna.aie2p.add.i32"
+            assert materializer.add.key == "amd.xdna.aie2p.add.no-carry.i32"
             assert materializer.multiply.key == "amd.xdna.aie2p.mul.i32"
             assert materializer.multiply_add is not None
             assert materializer.multiply_add.key == "amd.xdna.aie2p.madd.i32"

@@ -7,6 +7,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/channel/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/type_registry.h"
 #include "loom/target/arch/amd/xdna/aie2p/pipeline/native.h"
@@ -58,6 +59,10 @@ typedef struct loom_aie2p_native_channel_emitter_t {
   loom_value_id_t origin;
   // Final completion publication followed by a quiescent stream wait.
   loom_symbol_ref_t complete;
+  // Canonical consuming-credit delta shared by all inlined lock helpers.
+  loom_value_id_t acquire_delta;
+  // Canonical single-credit completion delta shared by lock helpers.
+  loom_value_id_t release_delta;
 } loom_aie2p_native_channel_emitter_t;
 
 static iree_status_t loom_aie2p_native_invoke(loom_builder_t* builder,
@@ -103,14 +108,36 @@ static iree_status_t loom_aie2p_native_address_helper(
 
 static iree_status_t loom_aie2p_native_lock_helper(
     loom_aie2p_worker_builder_t* context, uint32_t descriptor,
-    uint16_t selector, int32_t delta, loom_symbol_ref_t* out_symbol) {
+    uint16_t selector, loom_symbol_ref_t* out_symbol) {
   loom_builder_t builder;
   loom_op_t* function;
+  const loom_type_t argument = context->scalar_type;
   IREE_RETURN_IF_ERROR(loom_aie2p_worker_helper(
-      context, NULL, 0, NULL, 0, &builder, out_symbol, &function));
-  IREE_RETURN_IF_ERROR(
-      loom_aie2p_worker_lock(context, &builder, descriptor, selector, delta));
+      context, &argument, 1, NULL, 0, &builder, out_symbol, &function));
+  const loom_value_id_t delta =
+      loom_region_entry_block(loom_low_func_def_body(function))->arg_ids[0];
+  const loom_named_attr_t attribute = {.name_id = context->lock_name,
+                                       .value = loom_attr_i64(selector)};
+  IREE_RETURN_IF_ERROR(loom_aie2p_worker_op(
+      context, &builder, descriptor, &delta, 1,
+      loom_make_named_attr_slice(&attribute, 1), NULL, NULL));
   return loom_aie2p_worker_return(&builder, NULL, 0);
+}
+
+static iree_status_t loom_aie2p_native_acquire_delta_helper(
+    loom_aie2p_worker_builder_t* context, loom_symbol_ref_t* out_symbol) {
+  loom_builder_t builder;
+  loom_op_t* function;
+  const loom_type_t scalar_type = context->scalar_type;
+  IREE_RETURN_IF_ERROR(loom_aie2p_worker_helper(
+      context, NULL, 0, &scalar_type, 1, &builder, out_symbol, &function));
+  const loom_named_attr_t attribute = {.name_id = context->integer_name,
+                                       .value = loom_attr_i64(-1)};
+  loom_value_id_t delta;
+  IREE_RETURN_IF_ERROR(loom_aie2p_worker_op(
+      context, &builder, AIE2P_CORE_DESCRIPTOR_REF_LOCK_ACQUIRE_DELTA_I32, NULL,
+      0, loom_make_named_attr_slice(&attribute, 1), &scalar_type, &delta));
+  return loom_aie2p_worker_return(&builder, &delta, 1);
 }
 
 static iree_status_t loom_aie2p_native_endpoint(
@@ -182,10 +209,10 @@ static iree_status_t loom_aie2p_native_channel_action(
             AIE2P_CORE_DESCRIPTOR_REF_LOCK_ACQUIRE_IMMEDIATE,
             write ? endpoint->access->locks.free
                   : endpoint->access->locks.ready,
-            -1, acquire));
+            acquire));
       }
-      IREE_RETURN_IF_ERROR(
-          loom_aie2p_native_invoke(builder, *acquire, NULL, 0, NULL, NULL));
+      IREE_RETURN_IF_ERROR(loom_aie2p_native_invoke(
+          builder, *acquire, &emitter->acquire_delta, 1, NULL, NULL));
       record = emitter->origin;
       const loom_aie2p_native_channel_t* physical = endpoint->access->channel;
       if ((write ? physical->cursor.writer : physical->cursor.reader)
@@ -278,9 +305,18 @@ static iree_status_t loom_aie2p_native_channel_action(
         &emitter->context->code,
         AIE2P_CORE_DESCRIPTOR_REF_LOCK_RELEASE_IMMEDIATE,
         publish ? endpoint->access->locks.ready : endpoint->access->locks.free,
-        (int32_t)credits, completion));
+        completion));
   }
-  return loom_aie2p_native_invoke(builder, *completion, NULL, 0, NULL, NULL);
+  loom_value_id_t delta = emitter->release_delta;
+  if (credits != 1) {
+    loom_op_t* constant;
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_constant_build(builder, loom_attr_i64((int32_t)credits),
+                                   loom_type_scalar(LOOM_SCALAR_TYPE_I32),
+                                   action->op->location, &constant));
+    delta = loom_scalar_constant_result(constant);
+  }
+  return loom_aie2p_native_invoke(builder, *completion, &delta, 1, NULL, NULL);
 }
 
 static iree_status_t loom_aie2p_native_channel_exit(
@@ -350,6 +386,22 @@ iree_status_t loom_aie2p_native_emit_worker(
   loom_builder_set_before(&rewriter->builder, entry->first_op);
   IREE_RETURN_IF_ERROR(
       loom_aie2p_native_materialize_buffer_accesses(context, rewriter, worker));
+  const loom_type_t delta_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  // Establish one canonical +/-1 pair in every channel-bearing worker. Source
+  // CSE also reuses +1 for cursor and loop arithmetic when completions publish
+  // multiple credits, avoiding independent constants in the resident program.
+  if (endpoint_count != 0) {
+    loom_op_t* delta;
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_constant_build(&rewriter->builder, loom_attr_i64(1),
+                                   delta_type, LOOM_LOCATION_UNKNOWN, &delta));
+    emitter.release_delta = loom_scalar_constant_result(delta);
+    loom_symbol_ref_t helper;
+    IREE_RETURN_IF_ERROR(loom_aie2p_native_acquire_delta_helper(code, &helper));
+    IREE_RETURN_IF_ERROR(loom_aie2p_native_invoke(&rewriter->builder, helper,
+                                                  NULL, 0, &delta_type,
+                                                  &emitter.acquire_delta));
+  }
   loom_op_t* origin;
   IREE_RETURN_IF_ERROR(
       loom_index_constant_build(&rewriter->builder, loom_attr_i64(0),

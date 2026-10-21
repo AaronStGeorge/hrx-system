@@ -1199,6 +1199,10 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
       return iree_ok_status();
     }
     IREE_ASSERT_EQ((iree_host_size_t)result.storage_count, storage_plan_count);
+    // Every subsequent frame contains traffic inserted by allocation repair,
+    // including target packets that replace the structural spill operations.
+    repair_options.schedule_flags |=
+        LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC;
     // Retain facts from the representation used by the next frame. A target
     // callback replaces this traffic and publishes its own register helpers;
     // incoming edge payloads remain independently spillable after that rewrite.

@@ -24,7 +24,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @tiled_channel_loa
   %21 = lshl %bounded_lane, %20
   %22 = mov.i32 10
   %23 = lshl %bounded_row, %22
-  %24 = add.rr %21, %23
+  %24 = add.nc %21, %23
   %25 = mov.address-index %24
   %value = lda.i32.index %data, %25
   %29 = mov.address-index %21

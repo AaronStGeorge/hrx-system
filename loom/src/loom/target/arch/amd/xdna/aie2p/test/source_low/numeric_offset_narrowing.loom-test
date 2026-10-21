@@ -15,7 +15,7 @@ func.def @native_origin(%origin: offset, %position: i32) -> (offset) {
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @native_origin(%origin: reg<aie2p.er>, %position: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %21 = mov.short 2
   %22 = lshl %position, %21
-  %result = add.rr %origin, %22
+  %result = add.nc %origin, %22
   return %result
 }
 
@@ -34,7 +34,7 @@ func.def @unsigned_half_origin(%input: i32) -> (offset, i64) {
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @unsigned_half_origin(%word: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er x2>) asm {
   %15 = mov.i32 -2147483648
-  %result = add.rr %word, %15
+  %result = add.nc %word, %15
   %17 = mov.short 0
   %roundtrip = concat(%result, %17) : (reg<aie2p.er>, reg<aie2p.er>) -> reg<aie2p.er x2>
   return %result, %roundtrip

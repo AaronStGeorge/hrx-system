@@ -1733,6 +1733,8 @@ void loom_low_schedule_pressure_score_candidate(
   uint64_t produced_live_units = 0;
   uint32_t produced_live_value_count = 0;
   bool has_per_user_placement = false;
+  bool short_replayable_register_move = iree_any_bit_set(
+      node->flags, LOOM_LOW_SCHEDULE_NODE_FLAG_SHORT_REGISTER_MOVE);
   bool rematerializable_leaf =
       node->descriptor != NULL && node->operand_count == 0 &&
       !iree_any_bit_set(node->traits, LOOM_TRAIT_OBSERVABLE_EFFECT);
@@ -1814,8 +1816,9 @@ void loom_low_schedule_pressure_score_candidate(
       state->options->per_user_placement_values;
   for (uint16_t result_index = 0; result_index < node->result_count;
        ++result_index) {
+    const loom_value_ordinal_t result_ordinal = result_ordinals[result_index];
     const loom_low_schedule_value_record_t* value =
-        &state->values[result_ordinals[result_index]];
+        &state->values[result_ordinal];
     if (value->remaining_use_count == 0) {
       continue;
     }
@@ -1843,6 +1846,13 @@ void loom_low_schedule_pressure_score_candidate(
           rematerializable_leaf &&
           loom_low_descriptor_result_can_rematerialize(
               state->target.descriptor_set, node->descriptor, result_index);
+      if (short_replayable_register_move) {
+        short_replayable_register_move =
+            iree_any_bit_set(
+                value->flags,
+                LOOM_LOW_SCHEDULE_VALUE_FLAG_REPLAYABLE_REGISTER_MOVE_RESULT) &&
+            pressure_state->remaining_consumer_counts[result_ordinal] == 1;
+      }
     }
     loom_low_schedule_note_candidate_pressure_delta(
         state, pressure_state, value->register_class_id, (int64_t)unit_count);
@@ -1872,6 +1882,10 @@ void loom_low_schedule_pressure_score_candidate(
           : 0;
   const bool is_storage_setup =
       iree_any_bit_set(node->flags, LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP);
+  const bool retains_pre_spill_placement =
+      has_per_user_placement &&
+      !iree_any_bit_set(state->options->flags,
+                        LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC);
   uint32_t data_ready_stall_cycles = 0;
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       state->node_ready_issue_cycles != NULL && !is_storage_setup) {
@@ -1933,16 +1947,23 @@ void loom_low_schedule_pressure_score_candidate(
       .opened_unspillable_completion_capacity = UINT32_MAX,
       .active_register_packing_completion_capacity = UINT32_MAX,
       .source_ordinal = node->source_ordinal,
-      .flags = (uint16_t)pressure_demand.candidate_flags |
-               (uint16_t)((node->flags &
-                           LOOM_LOW_SCHEDULE_NODE_FLAG_PAIR_TRANSPARENT)
-                          << 1u) |
-               ((is_storage_setup || has_per_user_placement)
-                    ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP
-                    : 0) |
-               (rematerializable_leaf && produced_live_value_count != 0
-                    ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF
-                    : 0),
+      .flags =
+          (uint16_t)pressure_demand.candidate_flags |
+          (uint16_t)((node->flags &
+                      LOOM_LOW_SCHEDULE_NODE_FLAG_PAIR_TRANSPARENT)
+                     << 1u) |
+          ((is_storage_setup || has_per_user_placement)
+               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP
+               : 0) |
+          (retains_pre_spill_placement
+               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_RETAINS_PRE_SPILL_PLACEMENT
+               : 0) |
+          (short_replayable_register_move && produced_live_value_count != 0
+               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_SHORT_REPLAYABLE_REGISTER_MOVE
+               : 0) |
+          (rematerializable_leaf && produced_live_value_count != 0
+               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF
+               : 0),
   };
   loom_low_schedule_target_pressure_score_candidate(state, pressure_state,
                                                     node_index, out_score);
