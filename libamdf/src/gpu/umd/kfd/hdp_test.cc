@@ -10,8 +10,11 @@
 #include <linux/kfd_ioctl.h>
 #include <sys/mman.h>
 
+#include <array>
+#include <barrier>
 #include <cerrno>
 #include <cstdarg>
+#include <thread>
 
 #include "gtest/gtest.h"
 #include "libamdf/src/allocator.h"
@@ -265,6 +268,27 @@ TEST_F(KfdHdpTest, CompletesGfx11FlushWithNativeTimestampRead) {
   EXPECT_EQ(native_.posting_count, 0u);
   ASSERT_EQ(amdf_gpu_kfd_hdp_publish_host_writes(hdp_), AMDF_STATUS_OK);
   EXPECT_EQ(native_.posting_count, 1u);
+}
+
+TEST_F(KfdHdpTest, ConcurrentPublishersShareRegister) {
+  ASSERT_EQ(amdf_gpu_kfd_hdp_create(&device_, &hdp_), AMDF_STATUS_OK);
+  ASSERT_NE(hdp_, nullptr);
+  std::array<std::thread, 4> publishers;
+  std::barrier<> ready(publishers.size());
+  for (auto& publisher : publishers) {
+    publisher = std::thread([&] {
+      ready.arrive_and_wait();
+      for (uint32_t i = 0; i < 256; ++i) {
+        EXPECT_EQ(amdf_gpu_kfd_hdp_publish_host_writes(hdp_), AMDF_STATUS_OK);
+      }
+    });
+  }
+  for (auto& publisher : publishers) {
+    publisher.join();
+  }
+  EXPECT_EQ(*static_cast<volatile uint32_t*>(native_.reservation), 1u);
+  EXPECT_EQ(native_.posting_count, 0u);
+  EXPECT_EQ(native_.cpu_mapping_count, 1u);
 }
 
 TEST_F(KfdHdpTest, PropagatesPostingReadFailureWithoutConsumingMapping) {

@@ -223,9 +223,13 @@ amdf_status_t amdf_gpu_kfd_hdp_create(amdf_gpu_umd_device_t* device,
 }
 
 amdf_status_t amdf_gpu_kfd_hdp_publish_host_writes(amdf_gpu_kfd_hdp_t* hdp) {
-  *hdp->memory_flush_control = 1;
+  // Independent publishers share this command register. Relaxed atomic MMIO
+  // preserves each aligned access without a host lock or read-modify-write;
+  // the posting read below completes this caller's flush command.
+  __atomic_store_n(hdp->memory_flush_control, 1, __ATOMIC_RELAXED);
   if (hdp->posting == AMDF_GPU_KFD_HDP_POSTING_REMAP) {
-    const uint32_t completion = *hdp->memory_flush_control;
+    const uint32_t completion =
+        __atomic_load_n(hdp->memory_flush_control, __ATOMIC_RELAXED);
     (void)completion;
     return AMDF_STATUS_OK;
   }
