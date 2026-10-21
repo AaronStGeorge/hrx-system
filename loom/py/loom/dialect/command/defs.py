@@ -204,8 +204,9 @@ command_program_launch = Op(
     phase=OpPhase.EXECUTABLE,
     doc=(
         "Invoke a command program with explicit specialization values and storage "
-        "bindings. Buffer operands forward their complete bound ranges; typed views "
-        "preserve derived offsets and extents through command composition."
+        "bindings. Buffer operands forward their complete bound ranges. Tensor or "
+        "typed-view operands may materialize buffer bindings while preserving their "
+        "derived storage ranges through command composition."
     ),
     operands=[
         Operand("specializations", ANY, variadic=True),

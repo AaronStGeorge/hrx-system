@@ -116,7 +116,7 @@ iree_status_t loom_command_program_decl_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_COMMAND_PROGRAM_LAUNCH: Invoke a command program with explicit specialization values and storage bindings. Buffer operands forward their complete bound ranges; typed views preserve derived offsets and extents through command composition.
+// LOOM_OP_COMMAND_PROGRAM_LAUNCH: Invoke a command program with explicit specialization values and storage bindings. Buffer operands forward their complete bound ranges. Tensor or typed-view operands may materialize buffer bindings while preserving their derived storage ranges through command composition.
 // command.program.launch @decode[%token_count](%parameters, %transient) : [index](buffer, buffer)
 LOOM_DEFINE_ISA(loom_command_program_launch_isa, LOOM_OP_COMMAND_PROGRAM_LAUNCH)
 LOOM_DEFINE_SEGMENTED_OPERANDS(loom_command_program_launch_specializations, 0)

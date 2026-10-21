@@ -39,7 +39,7 @@ def _roundtrip(text: str) -> None:
 def test_program_definition_and_launch_roundtrip() -> None:
     text = """test.target<low_core> @gfx1100
 
-command.program.def public target(@gfx1100) @decode(%token_count: index) launch(%parameters: buffer, %weights: view<16xf16>) {
+command.program.def public target(@gfx1100) @decode(%token_count: index) launch(%parameters: buffer, %weights: buffer) {
   command.return
 }
 
@@ -90,7 +90,7 @@ def test_structured_command_schedules_roundtrip() -> None:
   command.return
 }
 
-command.program.def @leaf() launch(%weights: view<16xf16>) {
+command.program.def @leaf() launch(%weights: buffer) {
   command.return
 }
 """

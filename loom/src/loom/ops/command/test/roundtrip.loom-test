@@ -40,7 +40,7 @@ command.program.def @scheduled() launch(%weights: view<16xf16>) {
   command.return
 }
 
-command.program.def @leaf() launch(%weights: view<16xf16>) {
+command.program.def @leaf() launch(%weights: buffer) {
   command.return
 }
 

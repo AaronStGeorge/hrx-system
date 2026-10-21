@@ -1,11 +1,23 @@
 // RUN: verify
 
-command.program.def @decode(%token_count: index) launch(%parameters: buffer, %weights: view<4xf16>) {
+command.program.def @decode(%token_count: index) launch(%parameters: buffer, %weights: buffer) {
   command.return
 }
 
 command.program.def @valid_launch(%token_count: index) launch(%parameters: buffer, %weights: view<4xf16>) {
   command.program.launch @decode[%token_count](%parameters, %weights) : [index](buffer, view<4xf16>)
+  command.return
+}
+
+// ====
+
+command.program.def @view_binding() launch(%weights: view<4xf16>) {
+  command.return
+}
+
+command.program.def @buffer_cannot_supply_view() launch(%weights: buffer) {
+  // ERROR@+1: TYPE/001 "binding 0" "buffer" "program launch binding 0" "view<4xf16>"
+  command.program.launch @view_binding(%weights) : (buffer)
   command.return
 }
 
