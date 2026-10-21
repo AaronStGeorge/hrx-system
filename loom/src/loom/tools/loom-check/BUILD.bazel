@@ -1,9 +1,9 @@
 load("//build_tools/bazel:query.bzl", "iree_assert_dependency_boundary")
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load("//loom/binding/c:shared.bzl", "loomc_cc_binary")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
-    "loom_cc_binary",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -525,10 +525,11 @@ loom_cc_test(
     ],
 )
 
-loom_cc_binary(
+loomc_cc_binary(
     name = "loom-check",
     srcs = ["loom-check.c"],
     copts = _LOOM_CHECK_PROVIDER_COPTS,
+    runtime_only = True,
     deps = [
         ":execute",
         ":provider",
@@ -541,11 +542,12 @@ loom_cc_binary(
     ] + _LOOM_CHECK_PROVIDER_DEPS,
 )
 
-loom_cc_binary(
+loomc_cc_binary(
     name = "loom-check-test",
     testonly = True,
     srcs = ["loom-check.c"],
     copts = ["-DLOOM_CHECK_HAVE_TEST_PROVIDER=1"] + _LOOM_CHECK_PROVIDER_COPTS,
+    runtime_only = True,
     deps = [
         ":execute",
         ":provider",

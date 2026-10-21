@@ -6,6 +6,7 @@
 
 load("//build_tools/bazel:executable.bzl", "iree_wasi_executable_alias")
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load("//loom/binding/c:shared.bzl", "loomc_cc_binary")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
@@ -174,10 +175,11 @@ loom_cc_library(
     ],
 )
 
-loom_cc_binary(
+loomc_cc_binary(
     name = "loom-test",
     srcs = ["loom-test.c"],
     copts = _LOOM_TEST_TARGET_COPTS,
+    runtime_only = True,
     deps = [
         ":main",
         "//loom/binding/c:loomc",

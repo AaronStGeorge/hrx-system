@@ -68,6 +68,21 @@ set_target_properties(collected PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_link_libraries(collected PRIVATE ${_LIBRARIES})
 target_link_options(collected PRIVATE ${_OPTIONS})
 iree_cc_binary(NAME collected_probe SRCS main.c DEPS collected)
+
+# Runtime-only tools keep compiler-owned objects local, even when a compiler
+# export exists, while substituting the shared runtime's retained dependencies.
+get_property(_LEAF_OBJECTS TARGET iree_fixture_leaf PROPERTY IREE_CC_OBJECTS)
+add_library(loomc_runtime SHARED ${_LEAF_OBJECTS})
+set_target_properties(loomc_runtime PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+set(_runtime_owned iree_fixture_leaf)
+set(_compiler_owned iree_fixture_library)
+set(_compiler_exports iree_fixture_library)
+_loomc_collect(iree_fixture_library runtime_tool
+  _OBJECTS _LIBRARIES _OWNED _OPTIONS)
+iree_cc_binary(NAME runtime_probe SRCS main.c DEPS ${_LIBRARIES})
+target_sources(iree_fixture_runtime_probe PRIVATE ${_OBJECTS})
+target_link_options(iree_fixture_runtime_probe PRIVATE ${_OPTIONS})
+
 iree_cc_test(
   NAME source_less_test_with_a_long_target_name_matching_real_cts_binaries
   DEPS ::test_main
@@ -86,4 +101,4 @@ add_subdirectory(producer)
 iree_finalize_target_dependencies()
 
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/paths-$<CONFIG>.txt"
-  CONTENT "${_LIBRARY_OBJECT_TARGET}\n$<TARGET_FILE:iree_fixture_leaf>\n$<TARGET_FILE:iree_fixture_probe>\n$<TARGET_FILE:iree_fixture_unified_probe>\n$<TARGET_FILE:iree_fixture_collected_probe>\n$<TARGET_FILE:iree_fixture_source_less_test_with_a_long_target_name_matching_real_cts_binaries>\n")
+  CONTENT "${_LIBRARY_OBJECT_TARGET}\n$<TARGET_FILE:iree_fixture_leaf>\n$<TARGET_FILE:iree_fixture_probe>\n$<TARGET_FILE:iree_fixture_unified_probe>\n$<TARGET_FILE:iree_fixture_collected_probe>\n$<TARGET_FILE:iree_fixture_runtime_probe>\n$<TARGET_FILE:iree_fixture_source_less_test_with_a_long_target_name_matching_real_cts_binaries>\n")

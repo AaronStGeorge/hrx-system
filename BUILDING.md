@@ -241,8 +241,10 @@ iree-cmake-configure -DLOOM_LINK_SHARED_TOOLS=ON
 The shared mode packages one `libloomc` and one `libiree` alongside the compiler
 tools and server. `loom-serve` keeps its serving implementation in the executable
 while reusing the same compiler and runtime companions as the other shared tools.
-`loom-check`, `loom-test`, and `loom-benchmark` retain static linkage in shared-tool
-mode.
+`loom-check`, `loom-test`, and `loom-benchmark` share the same IREE runtime but
+keep their compiler implementations in each executable. They do not load
+`libloomc`; their native compiler helpers and compiler state retain one local
+owner. Installing one of these tools alone requires only its `libiree` companion.
 The IREE companion includes the configured HAL drivers. Deploy all files from
 the same build; these companion libraries have no independent ABI version.
 Shared tools trade some cross-library optimization for a smaller bundle. Local

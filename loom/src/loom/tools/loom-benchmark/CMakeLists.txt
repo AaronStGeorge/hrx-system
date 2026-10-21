@@ -298,7 +298,8 @@ endif()
 if(LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
   list(APPEND _loom_benchmark_platform_deps loom::binding::c::target::amd::xdna::iree_hal)
 endif()
-loom_cc_binary(
+loomc_cc_binary(
+  RUNTIME_ONLY
   NAME
     loom-benchmark
   SRCS
