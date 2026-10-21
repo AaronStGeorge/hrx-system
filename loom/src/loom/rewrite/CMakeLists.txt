@@ -13,8 +13,10 @@ loom_cc_library(
   NAME
     rewriter
   HDRS
+    "fact_propagation.h"
     "rewriter.h"
   SRCS
+    "fact_propagation.c"
     "rewriter.c"
   DEPS
     iree::base
@@ -114,6 +116,30 @@ loom_cc_library(
     loom::ir
     loom::util::fact_table
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    fact_propagation_test
+  SRCS
+    "fact_propagation_test.cc"
+  DEPS
+    ::rewriter
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::analysis::control_uniformity
+    loom::ir
+    loom::ops::buffer
+    loom::ops::cfg
+    loom::ops::index
+    loom::ops::op_defs
+    loom::ops::scf
+    loom::ops::test
+    loom::pass::value_facts
+    loom::target::facts
+    loom::target::types
+    loom::util::fact_table
 )
 
 loom_cc_test(

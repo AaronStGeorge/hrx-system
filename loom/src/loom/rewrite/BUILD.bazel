@@ -14,8 +14,14 @@ package(
 
 loom_cc_library(
     name = "rewriter",
-    srcs = ["rewriter.c"],
-    hdrs = ["rewriter.h"],
+    srcs = [
+        "fact_propagation.c",
+        "rewriter.c",
+    ],
+    hdrs = [
+        "fact_propagation.h",
+        "rewriter.h",
+    ],
     deps = [
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
@@ -103,6 +109,29 @@ loom_cc_library(
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "fact_propagation_test",
+    srcs = ["fact_propagation_test.cc"],
+    deps = [
+        ":rewriter",
+        "//loom/src/loom/analysis:control_uniformity",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/target:facts",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
