@@ -53,6 +53,14 @@ typedef struct loom_type_propagator_boundary_callback_t {
   void* user_data;
 } loom_type_propagator_boundary_callback_t;
 
+// Type properties that one propagation instance may refine.
+typedef enum loom_type_propagator_scope_e {
+  // Refine every type property carried by facts and op constraints.
+  LOOM_TYPE_PROPAGATOR_SCOPE_ALL = 0,
+  // Refine encoding attachments while preserving dynamic SSA dimensions.
+  LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING = 1,
+} loom_type_propagator_scope_t;
+
 // Context passed to op-specific semantic type-transfer hooks. Hooks can inspect
 // the current transactional candidate type of a value and seed new candidates,
 // but they cannot commit mutations themselves.
@@ -64,7 +72,8 @@ typedef struct loom_type_transfer_context_t loom_type_transfer_context_t;
 iree_status_t loom_type_propagator_allocate(
     loom_module_t* module,
     loom_type_propagator_boundary_callback_t refine_boundary,
-    iree_arena_allocator_t* arena, loom_type_propagator_t** out_propagator);
+    loom_type_propagator_scope_t scope, iree_arena_allocator_t* arena,
+    loom_type_propagator_t** out_propagator);
 
 // Releases the propagator's active function-local value domain. The propagator
 // object itself is arena-allocated and has no heap ownership.

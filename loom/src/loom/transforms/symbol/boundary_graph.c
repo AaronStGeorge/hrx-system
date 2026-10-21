@@ -199,8 +199,9 @@ static iree_status_t loom_refine_boundaries_visit_successors(
 }
 
 iree_status_t loom_refine_boundaries_build_graph(
-    loom_module_t* module, iree_arena_allocator_t* arena,
-    iree_arena_allocator_t* scratch_arena,
+    loom_module_t* module,
+    const loom_function_version_list_t* function_versions,
+    iree_arena_allocator_t* arena, iree_arena_allocator_t* scratch_arena,
     loom_refine_boundaries_graph_t* out_graph, loom_scc_list_t* out_sccs) {
   memset(out_graph, 0, sizeof(*out_graph));
   out_graph->module = module;
@@ -268,10 +269,16 @@ iree_status_t loom_refine_boundaries_build_graph(
     info->argument_ids =
         loom_func_like_arg_ids(function, &info->argument_count);
     info->result_count = function.op->result_count;
+    const loom_function_version_t* function_version =
+        loom_function_version_list_find(function_versions, function);
+    const bool retained_version =
+        function_version != NULL &&
+        iree_any_bit_set(function_version->flags,
+                         LOOM_FUNCTION_VERSION_FLAG_RETAIN);
     info->can_refine_boundary =
         loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_CALLABLE) &&
         loom_func_like_repr_contract(function) == LOOM_STRING_ID_INVALID &&
-        loom_func_like_is_module_internal(function);
+        loom_func_like_is_module_internal(function) && !retained_version;
     info->can_refine_argument_facts = info->can_refine_boundary;
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_collect_argument_projections(
         module, info, arena));

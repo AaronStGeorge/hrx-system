@@ -693,6 +693,33 @@ static iree_status_t loom_target_pipeline_build_execution_cleanup(
   return loom_target_pipeline_build_inlined_source_cleanup(builder, user_data);
 }
 
+static iree_status_t loom_target_pipeline_build_finalize_refined_callgraph(
+    loom_builder_t* builder, void* user_data) {
+  (void)user_data;
+  // Boundary specialization retargets every concrete call away from the
+  // generic private definition. Erase that now-unreachable definition and
+  // reconcile its function version before registering the new specializations.
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_run(builder, IREE_SV("symbol-dce")));
+  return loom_target_pipeline_build_run(builder,
+                                        IREE_SV("specialize-target-callgraph"));
+}
+
+static iree_status_t loom_target_pipeline_build_refine_boundaries(
+    loom_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
+      builder, IREE_SV("refine-boundaries"), IREE_SV("mode"),
+      IREE_SV("encodings")));
+  // Boundary specialization may replace a generic private definition with new
+  // concrete definitions. Retire the obsolete version and project the new
+  // definitions into their callers' target contexts before target-local passes
+  // acquire the function-version list.
+  loom_op_t* refinement_changed = NULL;
+  return loom_pass_ir_build_if_changed(
+      builder, loom_target_pipeline_build_finalize_refined_callgraph, NULL,
+      &refinement_changed);
+}
+
 static iree_status_t loom_target_pipeline_build_realized_lexical_workers(
     loom_builder_t* builder, void* user_data) {
   // Execution realization may introduce pipeline strands after the initial
@@ -752,6 +779,11 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   IREE_RETURN_IF_ERROR(loom_pass_ir_build_if_changed(
       builder, loom_target_pipeline_build_execution_cleanup, user_data,
       &execution_changed));
+  // Authoring and execution expansion have now exposed the complete semantic
+  // call graph. Resolve facts owned by private callable boundaries before
+  // target-local analysis requires concrete dependent types such as view
+  // layouts and extents.
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_refine_boundaries(builder));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
       builder, IREE_SV("source"),
       loom_target_pipeline_build_source_preparation_before_legalize, user_data,
@@ -874,6 +906,7 @@ loom_target_pipeline_build_source_low_diagnostic_artifacts_body(
       builder, IREE_SV("materialize-locations")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("specialize-target-callgraph")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_refine_boundaries(builder));
   loom_op_t* for_op = NULL;
   if (loom_target_pipeline_source_to_low_has_memory_diagnostics(context)) {
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(

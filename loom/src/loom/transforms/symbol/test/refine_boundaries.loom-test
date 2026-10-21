@@ -916,6 +916,149 @@ func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
 
 // ====
 
+// RUN: pass refine-boundaries{mode=encodings}
+
+// Concrete argument layouts fork a void private callee even though its result
+// tuple provides no specialization key. Dependent extent identities compare
+// through their corresponding argument positions, so each clone retains a
+// dynamic extent while dropping its now-static layout argument.
+func.def @consume_dynamic_layout(%extent: index, %layout: encoding<layout>, %values: view<[%extent]xi8, %layout>) {
+  test.use %values : view<[%extent]xi8, %layout>
+  func.return
+}
+
+func.def public @call_dynamic_layouts(%buffer: buffer, %dense_extent: index, %strided_extent: index) {
+  %offset = index.constant 0 : offset
+  %dense_base = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %dense_base, #encoding.layout.dense : encoding<layout>
+  %dense_view = buffer.view %buffer[%offset] : buffer -> view<[%dense_extent]xi8, %dense>
+  %stride = index.constant 2 : index
+  %strided_base = encoding.layout.strided [%stride] : encoding<layout>
+  %strided = encoding.assume.spec %strided_base, #encoding.layout.strided<strides=[2]> : encoding<layout>
+  %strided_view = buffer.view %buffer[%offset] : buffer -> view<[%strided_extent]xi8, %strided>
+  func.call @consume_dynamic_layout(%dense_extent, %dense, %dense_view) : (index, encoding<layout>, view<[%dense_extent]xi8, %dense>)
+  func.call @consume_dynamic_layout(%strided_extent, %strided, %strided_view) : (index, encoding<layout>, view<[%strided_extent]xi8, %strided>)
+  func.return
+}
+
+// ----
+func.def @consume_dynamic_layout(%extent: index, %layout: encoding<layout>, %values: view<[%extent]xi8, %layout>) {
+  test.use %values : view<[%extent]xi8, %layout>
+  func.return
+}
+
+func.def @consume_dynamic_layout_spec0(%extent: index, %values: view<[%extent]xi8>) {
+  test.use %values : view<[%extent]xi8>
+  func.return
+}
+
+func.def @consume_dynamic_layout_spec1(%extent: index, %values: view<[%extent]xi8, #encoding.layout.strided<strides=[2]>>) {
+  test.use %values : view<[%extent]xi8, #encoding.layout.strided<strides=[2]>>
+  func.return
+}
+
+func.def public @call_dynamic_layouts(%buffer: buffer, %dense_extent: index, %strided_extent: index) {
+  %offset = index.constant 0 : offset
+  %dense_base = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %dense_base, #encoding.layout.dense : encoding<layout>
+  %dense_view = buffer.view %buffer[%offset] : buffer -> view<[%dense_extent]xi8>
+  %stride = index.constant 2 : index
+  %strided_base = encoding.layout.strided [%stride] : encoding<layout>
+  %strided = encoding.assume.spec %strided_base, #encoding.layout.strided<strides=[2]> : encoding<layout>
+  %strided_view = buffer.view %buffer[%offset] : buffer -> view<[%strided_extent]xi8, #encoding.layout.strided<strides=[2]>>
+  func.call @consume_dynamic_layout_spec0(%dense_extent, %dense_view) : (index, view<[%dense_extent]xi8>)
+  func.call @consume_dynamic_layout_spec1(%strided_extent, %strided_view) : (index, view<[%strided_extent]xi8, #encoding.layout.strided<strides=[2]>>)
+  func.return
+}
+
+// ====
+
+// RUN: pass refine-boundaries{mode=encodings}
+
+// Argument specialization also carries dependent result types in the callee's
+// coordinate system. Dynamic extents remain bound to each clone's extent
+// argument while concrete layouts specialize independently.
+func.def @forward_dynamic_layout(%extent: index, %layout: encoding<layout>, %values: view<[%extent]xi8, %layout>) -> (view<[%extent]xi8, %layout>) {
+  func.return %values : view<[%extent]xi8, %layout>
+}
+
+func.def public @call_forward_dynamic_layouts(%buffer: buffer, %dense_extent: index, %strided_extent: index) {
+  %offset = index.constant 0 : offset
+  %dense_base = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %dense_base, #encoding.layout.dense : encoding<layout>
+  %dense_view = buffer.view %buffer[%offset] : buffer -> view<[%dense_extent]xi8, %dense>
+  %stride = index.constant 2 : index
+  %strided_base = encoding.layout.strided [%stride] : encoding<layout>
+  %strided = encoding.assume.spec %strided_base, #encoding.layout.strided<strides=[2]> : encoding<layout>
+  %strided_view = buffer.view %buffer[%offset] : buffer -> view<[%strided_extent]xi8, %strided>
+  %dense_result = func.call @forward_dynamic_layout(%dense_extent, %dense, %dense_view) : (index, encoding<layout>, view<[%dense_extent]xi8, %dense>) -> (view<[%dense_extent]xi8, %dense>)
+  %strided_result = func.call @forward_dynamic_layout(%strided_extent, %strided, %strided_view) : (index, encoding<layout>, view<[%strided_extent]xi8, %strided>) -> (view<[%strided_extent]xi8, %strided>)
+  test.use %dense_result, %strided_result : view<[%dense_extent]xi8, %dense>, view<[%strided_extent]xi8, %strided>
+  func.return
+}
+
+// ----
+func.def @forward_dynamic_layout() {
+  func.return
+}
+
+func.def @forward_dynamic_layout_spec0(%extent: index, %values: view<[%extent]xi8>) -> (view<[%extent]xi8>) {
+  func.return %values : view<[%extent]xi8>
+}
+
+func.def @forward_dynamic_layout_spec1(%extent: index, %values: view<[%extent]xi8, #encoding.layout.strided<strides=[2]>>) -> (view<[%extent]xi8, #encoding.layout.strided<strides=[2]>>) {
+  func.return %values : view<[%extent]xi8, #encoding.layout.strided<strides=[2]>>
+}
+
+func.def public @call_forward_dynamic_layouts(%buffer: buffer, %dense_extent: index, %strided_extent: index) {
+  %offset = index.constant 0 : offset
+  %dense_base = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %dense_base, #encoding.layout.dense : encoding<layout>
+  %dense_view = buffer.view %buffer[%offset] : buffer -> view<[%dense_extent]xi8>
+  %stride = index.constant 2 : index
+  %strided_base = encoding.layout.strided [%stride] : encoding<layout>
+  %strided = encoding.assume.spec %strided_base, #encoding.layout.strided<strides=[2]> : encoding<layout>
+  %strided_view = buffer.view %buffer[%offset] : buffer -> view<[%strided_extent]xi8, #encoding.layout.strided<strides=[2]>>
+  %dense_result = func.call @forward_dynamic_layout_spec0(%dense_extent, %dense_view) : (index, view<[%dense_extent]xi8>) -> (view<[%dense_extent]xi8>)
+  %strided_result = func.call @forward_dynamic_layout_spec1(%strided_extent, %strided_view) : (index, view<[%strided_extent]xi8, #encoding.layout.strided<strides=[2]>>) -> (view<[%strided_extent]xi8, #encoding.layout.strided<strides=[2]>>)
+  test.use %dense_result, %strided_result : view<[%dense_extent]xi8>, view<[%strided_extent]xi8, #encoding.layout.strided<strides=[2]>>
+  func.return
+}
+
+// ====
+
+// RUN: pass refine-boundaries{mode=encodings}
+
+// Encoding-only refinement must retain an exact dimension's SSA identity: its
+// relational facts may be required by later footprint proofs even when its
+// current value could be embedded as a static extent.
+config.def @exact_extent = 4 : %value: index where [range(%value, 1, 16)]
+
+func.def public @preserve_exact_extent(%buffer: buffer) {
+  %extent = config.get @exact_extent : index
+  %offset = index.constant 0 : offset
+  %base = encoding.layout.dense : encoding<layout>
+  %layout = encoding.assume.spec %base, #encoding.layout.dense : encoding<layout>
+  %values = buffer.view %buffer[%offset] : buffer -> view<[%extent]xi8, %layout>
+  test.use %values : view<[%extent]xi8, %layout>
+  func.return
+}
+
+// ----
+config.def @exact_extent = 4 : %value: index where [range(%value, 1, 16)]
+
+func.def public @preserve_exact_extent(%buffer: buffer) {
+  %extent = config.get @exact_extent : index
+  %offset = index.constant 0 : offset
+  %base = encoding.layout.dense : encoding<layout>
+  %layout = encoding.assume.spec %base, #encoding.layout.dense : encoding<layout>
+  %values = buffer.view %buffer[%offset] : buffer -> view<[%extent]xi8>
+  test.use %values : view<[%extent]xi8>
+  func.return
+}
+
+// ====
+
 // Projected function-like regions share one logical signature. Exact caller
 // facts materialize as separate constants in each isolated projection so body
 // and config rewrite independently without crossing region SSA boundaries.

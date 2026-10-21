@@ -319,6 +319,9 @@ loom_cc_library(
     loom::pass::value_facts
     loom::rewrite::materialize
     loom::rewrite::remap
+    loom::rewrite::rewriter
+    loom::rewrite::type_propagation
+    loom::target::pass_environment
     loom::transforms::cleanup::canonicalizer
     loom::transforms::cleanup::pass_environment
     loom::util::fact_table

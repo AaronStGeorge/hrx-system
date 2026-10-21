@@ -75,6 +75,9 @@ struct loom_type_propagator_t {
   // Borrowed owner authorizing callable signature refinement, when present.
   loom_type_propagator_boundary_callback_t refine_boundary;
 
+  // Type properties this instance may refine.
+  loom_type_propagator_scope_t scope;
+
   // Region-local domain mapping module value IDs to compact ordinals.
   loom_local_value_domain_t value_domain;
 
@@ -273,7 +276,8 @@ static iree_status_t loom_type_propagator_register_value(
 iree_status_t loom_type_propagator_allocate(
     loom_module_t* module,
     loom_type_propagator_boundary_callback_t refine_boundary,
-    iree_arena_allocator_t* arena, loom_type_propagator_t** out_propagator) {
+    loom_type_propagator_scope_t scope, iree_arena_allocator_t* arena,
+    loom_type_propagator_t** out_propagator) {
   loom_type_propagator_t* propagator = NULL;
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate(arena, sizeof(*propagator), (void**)&propagator));
@@ -281,6 +285,7 @@ iree_status_t loom_type_propagator_allocate(
   propagator->module = module;
   propagator->arena = arena;
   propagator->refine_boundary = refine_boundary;
+  propagator->scope = scope;
   propagator->transaction_generation = 1;
   loom_segmented_storage_initialize(
       sizeof(loom_type_propagator_type_segment_t),
@@ -434,7 +439,32 @@ loom_type_propagator_statistics_t loom_type_propagator_statistics(
                     : (loom_type_propagator_statistics_t){0};
 }
 
-static bool loom_type_propagator_type_has_refinement_surface(loom_type_t type) {
+static bool loom_type_propagator_scope_property(
+    const loom_type_propagator_t* propagator,
+    loom_constraint_property_t property,
+    loom_constraint_property_t* out_property) {
+  *out_property = property;
+  switch (propagator->scope) {
+    case LOOM_TYPE_PROPAGATOR_SCOPE_ALL:
+      return true;
+    case LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING:
+      if (property == LOOM_PROPERTY_TYPE ||
+          property == LOOM_PROPERTY_ENCODING) {
+        *out_property = LOOM_PROPERTY_ENCODING;
+        return true;
+      }
+      return false;
+    default:
+      IREE_ASSERT_UNREACHABLE("invalid type propagation scope");
+      IREE_BUILTIN_UNREACHABLE();
+  }
+}
+
+static bool loom_type_propagator_type_has_refinement_surface(
+    const loom_type_propagator_t* propagator, loom_type_t type) {
+  if (propagator->scope == LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING) {
+    return loom_type_has_ssa_encoding(type);
+  }
   if (loom_type_has_dimensions(type) && !loom_type_is_all_static(type)) {
     return true;
   }
@@ -451,7 +481,7 @@ static bool loom_type_propagator_value_has_refinement_surface(
     return false;
   }
   return loom_type_propagator_type_has_refinement_surface(
-      loom_module_value_type(propagator->module, value_id));
+      propagator, loom_module_value_type(propagator->module, value_id));
 }
 
 static bool loom_type_propagator_op_values_have_refinement_surface(
@@ -480,8 +510,8 @@ bool loom_type_propagator_may_apply_op(const loom_type_propagator_t* propagator,
   if (!propagator || !op) {
     return false;
   }
-  // Facts refine dynamic dimensions and SSA encoding attachments. Both are
-  // represented by the module's incrementally maintained type-use table.
+  // Facts refine properties represented by the module's incrementally
+  // maintained type-use table.
   const bool facts_can_refine =
       rewriter && rewriter->fact_table &&
       loom_module_has_active_type_uses(propagator->module);
@@ -493,6 +523,10 @@ bool loom_type_propagator_may_apply_op(const loom_type_propagator_t* propagator,
   if (facts_can_refine || vtable_can_refine) {
     values_have_refinement_surface =
         loom_type_propagator_op_values_have_refinement_surface(propagator, op);
+  }
+  if (propagator->scope == LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING &&
+      !values_have_refinement_surface) {
+    return false;
   }
   if (facts_can_refine && values_have_refinement_surface) {
     return true;
@@ -662,6 +696,12 @@ static iree_status_t loom_type_propagator_seed_candidate(
   if (propagator->conflict) {
     return iree_ok_status();
   }
+  loom_constraint_property_t effective_property = property;
+  if (!loom_type_propagator_scope_property(propagator, property,
+                                           &effective_property)) {
+    return iree_ok_status();
+  }
+  property = effective_property;
   loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
   IREE_RETURN_IF_ERROR(loom_type_propagator_register_value(propagator, value_id,
                                                            &value_ordinal));
@@ -735,6 +775,9 @@ iree_status_t loom_type_transfer_seed_shape_dims(
                             "type transfer requires an active context");
   }
   loom_type_propagator_t* propagator = context->propagator;
+  if (propagator->scope == LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING) {
+    return iree_ok_status();
+  }
   if (propagator->conflict ||
       !loom_type_propagator_valid_value_id(propagator, value_id)) {
     return iree_ok_status();
@@ -817,7 +860,8 @@ iree_status_t loom_type_transfer_seed_static_structure_from_type(
 
   loom_type_t current_type =
       loom_type_propagator_value_type(propagator, value_id);
-  if (loom_type_is_shaped(current_type) &&
+  if (propagator->scope == LOOM_TYPE_PROPAGATOR_SCOPE_ALL &&
+      loom_type_is_shaped(current_type) &&
       loom_type_is_shaped(candidate_type) &&
       loom_type_rank(current_type) == loom_type_rank(candidate_type)) {
     uint8_t rank = loom_type_rank(candidate_type);
@@ -988,6 +1032,12 @@ static bool loom_type_propagator_region_yield_operands(
 static iree_status_t loom_type_propagator_join_value_span(
     loom_type_propagator_t* propagator, loom_type_value_span_t span,
     loom_constraint_property_t property) {
+  loom_constraint_property_t effective_property = property;
+  if (!loom_type_propagator_scope_property(propagator, property,
+                                           &effective_property)) {
+    return iree_ok_status();
+  }
+  property = effective_property;
   loom_value_id_t first_value = LOOM_VALUE_ID_INVALID;
   for (uint16_t i = 0; i < span.count; ++i) {
     if (loom_type_propagator_valid_value_id(propagator, span.values[i])) {
@@ -1207,15 +1257,31 @@ static iree_status_t loom_type_propagator_seed_value_facts(
       loom_type_propagator_value_type(propagator, value_id);
   loom_type_t refined_type = current_type;
   loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
-  IREE_RETURN_IF_ERROR(loom_type_specialize_with_value_facts(
-      propagator->module, current_type, rewriter->fact_table, propagator->arena,
-      &refined_type, &result));
+  loom_constraint_property_t property = LOOM_PROPERTY_TYPE;
+  switch (propagator->scope) {
+    case LOOM_TYPE_PROPAGATOR_SCOPE_ALL: {
+      IREE_RETURN_IF_ERROR(loom_type_specialize_with_value_facts(
+          propagator->module, current_type, rewriter->fact_table,
+          propagator->arena, &refined_type, &result));
+      break;
+    }
+    case LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING: {
+      IREE_RETURN_IF_ERROR(loom_type_specialize_encoding_with_value_facts(
+          propagator->module, current_type, rewriter->fact_table,
+          propagator->arena, &refined_type, &result));
+      property = LOOM_PROPERTY_ENCODING;
+      break;
+    }
+    default:
+      IREE_ASSERT_UNREACHABLE("invalid type propagation fact scope");
+      IREE_BUILTIN_UNREACHABLE();
+  }
   if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
     propagator->conflict = true;
     return iree_ok_status();
   }
   return loom_type_propagator_seed_candidate(propagator, value_id, refined_type,
-                                             LOOM_PROPERTY_TYPE);
+                                             property);
 }
 
 static iree_status_t loom_type_propagator_seed_value_span_facts(

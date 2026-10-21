@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <loomcxx/check.h>
+#include <loomcxx/kernel.h>
 
 #include "function_link_helpers.h"
 
@@ -17,6 +18,32 @@ unsigned apply_adjustment(unsigned value) {
          local_adjust(value);
 }
 
+static unsigned observe_linked_views(unsigned position) {
+  const unsigned char dense_values[4] = {2, 3, 5, 7};
+  const unsigned char strided_values[8] = {11, 0, 13, 0, 17, 0, 19, 0};
+  auto dense = loom::buffer::view<4>(dense_values, {},
+                                     loom::encoding::layout::dense<1>());
+  auto strided = loom::buffer::view<4>(strided_values, {},
+                                       loom::encoding::layout::strided(2u));
+  return linked_read_byte(dense, position) +
+         linked_read_byte(strided, position);
+}
+
+static unsigned observe_linked_dynamic_view() {
+  const unsigned char values[6] = {29, 31, 37, 41, 43, 47};
+  const auto count = loom::index::cast(4u);
+  auto view = loom::buffer::view<loom::type::dynamic>(
+      values, {count}, loom::encoding::layout::dense<1>());
+  return linked_read_dynamic_byte(view);
+}
+
 LOOM_CHECK_CASE(function_link) {
-  loom::check::expect_equal(apply_adjustment(2u), 56u);
+  const auto adjusted = apply_adjustment(2u);
+  const auto first = observe_linked_views(0u);
+  const auto last = observe_linked_views(3u);
+  const auto dynamic = observe_linked_dynamic_view();
+  loom::check::expect_equal(adjusted, 56u);
+  loom::check::expect_equal(first, 13u);
+  loom::check::expect_equal(last, 26u);
+  loom::check::expect_equal(dynamic, 41u);
 }

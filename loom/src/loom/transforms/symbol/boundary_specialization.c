@@ -9,17 +9,24 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "loom/analysis/type_refinement.h"
 #include "loom/ir/context.h"
 #include "loom/ops/func/ops.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
-#include "loom/util/walk.h"
+#include "loom/util/fact_table.h"
 
 typedef struct loom_refine_boundaries_specialization_group_t {
-  // Static result type tuple used as the specialization key.
+  // Number of entries in |argument_types|.
+  uint16_t argument_count;
+
+  // Fact-specialized argument types normalized to callee argument identities.
+  loom_type_t* argument_types;
+
+  // Fact-specialized result types normalized to callee boundary identities.
   loom_type_t* result_types;
 
-  // Calls whose current result types match |result_types|.
+  // Calls whose normalized argument and result types match this group.
   loom_op_t** calls;
 
   // Number of entries in |calls|.
@@ -32,7 +39,7 @@ typedef struct loom_refine_boundaries_specialization_group_t {
   loom_symbol_ref_t symbol_ref;
 } loom_refine_boundaries_specialization_group_t;
 
-typedef struct loom_refine_boundaries_specialization_plan_t {
+typedef struct loom_refine_boundaries_specialization_function_plan_t {
   // Specialization groups for one private function.
   loom_refine_boundaries_specialization_group_t* groups;
 
@@ -41,54 +48,119 @@ typedef struct loom_refine_boundaries_specialization_plan_t {
 
   // Allocated specialization group count.
   iree_host_size_t group_capacity;
-} loom_refine_boundaries_specialization_plan_t;
+} loom_refine_boundaries_specialization_function_plan_t;
 
-typedef struct loom_refine_boundaries_specialization_call_walk_t {
-  // Module being inspected.
-  loom_module_t* module;
+struct loom_refine_boundaries_specialization_plans_t {
+  // Dense function plans indexed by boundary graph node.
+  loom_refine_boundaries_specialization_function_plan_t* functions;
 
-  // Function graph for resolving direct callees.
-  const loom_refine_boundaries_graph_t* graph;
-
-  // Dense specialization plans indexed by function node.
-  loom_refine_boundaries_specialization_plan_t* plans;
-
-  // Scratch arena for specialization plans and call lists.
+  // Arena owning the plan, groups, normalized types, and call lists.
   iree_arena_allocator_t* arena;
-} loom_refine_boundaries_specialization_call_walk_t;
+
+  // True when specialization keys preserve dynamic SSA dimensions.
+  bool encodings_only;
+};
 
 static bool loom_refine_boundaries_can_specialize_function(
     const loom_refine_boundaries_function_t* function_info) {
   return function_info->can_refine_boundary &&
          loom_func_def_isa(function_info->function.op) &&
-         function_info->result_count > 0;
+         (function_info->argument_count > 0 || function_info->result_count > 0);
 }
 
-static bool loom_refine_boundaries_result_types_are_static(
-    const loom_module_t* module, loom_value_slice_t results,
-    uint16_t expected_result_count) {
-  if (results.count != expected_result_count) {
-    return false;
+static iree_status_t loom_refine_boundaries_specialize_call_boundary_types(
+    loom_module_t* module, const loom_value_fact_table_t* facts,
+    const loom_refine_boundaries_function_t* callee_info,
+    loom_value_slice_t operands, loom_value_slice_t results,
+    bool encodings_only, iree_arena_allocator_t* arena,
+    loom_type_t** out_argument_types, loom_type_t** out_result_types) {
+  *out_argument_types = NULL;
+  *out_result_types = NULL;
+
+  loom_ir_remap_t remap = {0};
+  const loom_ir_remap_options_t remap_options = {
+      .allow_unmapped_values = true,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_ir_remap_initialize(module, module, arena, &remap_options, &remap));
+  IREE_RETURN_IF_ERROR(loom_ir_remap_map_values(
+      &remap, operands.values, callee_info->argument_ids, operands.count));
+  const loom_value_id_t* callee_results =
+      loom_op_const_results(callee_info->function.op);
+  IREE_RETURN_IF_ERROR(loom_ir_remap_map_values(&remap, results.values,
+                                                callee_results, results.count));
+
+  loom_type_t* argument_types = NULL;
+  if (operands.count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, operands.count,
+                                                   sizeof(*argument_types),
+                                                   (void**)&argument_types));
   }
-  for (uint16_t i = 0; i < expected_result_count; ++i) {
-    loom_value_id_t result = results.values[i];
-    if (result == LOOM_VALUE_ID_INVALID || result >= module->values.count) {
-      return false;
+  for (iree_host_size_t i = 0; i < operands.count; ++i) {
+    loom_type_t specialized_type =
+        loom_module_value_type(module, operands.values[i]);
+    loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
+    if (encodings_only) {
+      IREE_RETURN_IF_ERROR(loom_type_specialize_encoding_with_value_facts(
+          module, specialized_type, facts, &module->arena, &specialized_type,
+          &result));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_type_specialize_with_value_facts(
+          module, specialized_type, facts, &module->arena, &specialized_type,
+          &result));
     }
-    if (!loom_type_is_all_static(loom_module_value_type(module, result))) {
-      return false;
+    if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
+      IREE_ASSERT_UNREACHABLE(
+          "verified call boundary facts conflict with its argument type");
+      IREE_BUILTIN_UNREACHABLE();
     }
+    IREE_RETURN_IF_ERROR(
+        loom_ir_remap_type(&remap, specialized_type, &argument_types[i]));
   }
-  return true;
+
+  loom_type_t* result_types = NULL;
+  if (results.count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, results.count, sizeof(*result_types), (void**)&result_types));
+  }
+  for (iree_host_size_t i = 0; i < results.count; ++i) {
+    loom_type_t specialized_type =
+        loom_module_value_type(module, results.values[i]);
+    loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
+    if (encodings_only) {
+      IREE_RETURN_IF_ERROR(loom_type_specialize_encoding_with_value_facts(
+          module, specialized_type, facts, &module->arena, &specialized_type,
+          &result));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_type_specialize_with_value_facts(
+          module, specialized_type, facts, &module->arena, &specialized_type,
+          &result));
+    }
+    if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
+      IREE_ASSERT_UNREACHABLE(
+          "verified call boundary facts conflict with its result type");
+      IREE_BUILTIN_UNREACHABLE();
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_ir_remap_type(&remap, specialized_type, &result_types[i]));
+  }
+
+  *out_argument_types = argument_types;
+  *out_result_types = result_types;
+  return iree_ok_status();
 }
 
-static bool loom_refine_boundaries_group_matches_call_results(
-    const loom_module_t* module,
+static bool loom_refine_boundaries_group_matches_call_boundary(
     const loom_refine_boundaries_specialization_group_t* group,
-    loom_value_slice_t results, uint16_t result_count) {
+    const loom_type_t* argument_types, const loom_type_t* result_types,
+    uint16_t result_count) {
+  for (uint16_t i = 0; i < group->argument_count; ++i) {
+    if (!loom_type_equal(group->argument_types[i], argument_types[i])) {
+      return false;
+    }
+  }
   for (uint16_t i = 0; i < result_count; ++i) {
-    if (!loom_type_equal(group->result_types[i],
-                         loom_module_value_type(module, results.values[i]))) {
+    if (!loom_type_equal(group->result_types[i], result_types[i])) {
       return false;
     }
   }
@@ -108,10 +180,9 @@ static iree_status_t loom_refine_boundaries_append_specialization_call(
 }
 
 static iree_status_t loom_refine_boundaries_add_specialization_group(
-    const loom_module_t* module,
-    loom_refine_boundaries_specialization_plan_t* plan,
-    loom_value_slice_t results, uint16_t result_count,
-    iree_arena_allocator_t* arena,
+    loom_refine_boundaries_specialization_function_plan_t* plan,
+    uint16_t argument_count, loom_type_t* argument_types,
+    loom_type_t* result_types, iree_arena_allocator_t* arena,
     loom_refine_boundaries_specialization_group_t** out_group) {
   *out_group = NULL;
   if (plan->group_count >= plan->group_capacity) {
@@ -124,34 +195,30 @@ static iree_status_t loom_refine_boundaries_add_specialization_group(
       &plan->groups[plan->group_count++];
   memset(group, 0, sizeof(*group));
   group->symbol_ref = loom_symbol_ref_null();
-  if (result_count > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, result_count, sizeof(*group->result_types),
-        (void**)&group->result_types));
-    for (uint16_t i = 0; i < result_count; ++i) {
-      group->result_types[i] =
-          loom_module_value_type(module, results.values[i]);
-    }
-  }
+  group->argument_count = argument_count;
+  group->argument_types = argument_types;
+  group->result_types = result_types;
 
   *out_group = group;
   return iree_ok_status();
 }
 
 static iree_status_t loom_refine_boundaries_record_specialization_call(
-    const loom_module_t* module,
-    const loom_refine_boundaries_function_t* callee_info,
-    loom_refine_boundaries_specialization_plan_t* plan, loom_op_t* call_op,
-    loom_value_slice_t results, iree_arena_allocator_t* arena) {
-  if (!loom_refine_boundaries_result_types_are_static(
-          module, results, callee_info->result_count)) {
-    return iree_ok_status();
-  }
+    loom_module_t* module, const loom_refine_boundaries_function_t* callee_info,
+    loom_refine_boundaries_specialization_function_plan_t* plan,
+    loom_op_t* call_op, loom_value_slice_t operands, loom_value_slice_t results,
+    const loom_value_fact_table_t* facts, bool encodings_only,
+    iree_arena_allocator_t* arena) {
+  loom_type_t* argument_types = NULL;
+  loom_type_t* result_types = NULL;
+  IREE_RETURN_IF_ERROR(loom_refine_boundaries_specialize_call_boundary_types(
+      module, facts, callee_info, operands, results, encodings_only, arena,
+      &argument_types, &result_types));
 
   for (iree_host_size_t i = 0; i < plan->group_count; ++i) {
     loom_refine_boundaries_specialization_group_t* group = &plan->groups[i];
-    if (!loom_refine_boundaries_group_matches_call_results(
-            module, group, results, callee_info->result_count)) {
+    if (!loom_refine_boundaries_group_matches_call_boundary(
+            group, argument_types, result_types, callee_info->result_count)) {
       continue;
     }
     return loom_refine_boundaries_append_specialization_call(group, call_op,
@@ -160,72 +227,36 @@ static iree_status_t loom_refine_boundaries_record_specialization_call(
 
   loom_refine_boundaries_specialization_group_t* group = NULL;
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_add_specialization_group(
-      module, plan, results, callee_info->result_count, arena, &group));
+      plan, callee_info->argument_count, argument_types, result_types, arena,
+      &group));
   return loom_refine_boundaries_append_specialization_call(group, call_op,
                                                            arena);
 }
 
-static iree_status_t loom_refine_boundaries_collect_specialization_call(
-    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
-    loom_walk_result_t* out_result) {
-  (void)context;
-  *out_result = LOOM_WALK_CONTINUE;
-
-  loom_refine_boundaries_specialization_call_walk_t* walk =
-      (loom_refine_boundaries_specialization_call_walk_t*)user_data;
+iree_status_t loom_refine_boundaries_specialization_plans_collect_call(
+    loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
+    loom_refine_boundaries_specialization_plans_t* plans,
+    const loom_value_fact_table_t* function_facts, loom_op_t* op) {
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(walk->module, op, NULL, &callee,
-                                        &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(module, op, NULL, &callee, &operands,
+                                        &results)) {
     return iree_ok_status();
   }
-  (void)operands;
-
   iree_host_size_t callee_node = IREE_HOST_SIZE_MAX;
-  if (!loom_refine_boundaries_callee_node(walk->graph, callee, &callee_node)) {
+  if (!loom_refine_boundaries_callee_node(graph, callee, &callee_node)) {
     return iree_ok_status();
   }
   const loom_refine_boundaries_function_t* callee_info =
-      &walk->graph->functions[callee_node];
+      &graph->functions[callee_node];
   if (!loom_refine_boundaries_can_specialize_function(callee_info)) {
     return iree_ok_status();
   }
 
   return loom_refine_boundaries_record_specialization_call(
-      walk->module, callee_info, &walk->plans[callee_node], op, results,
-      walk->arena);
-}
-
-static iree_status_t loom_refine_boundaries_collect_specialization_plans(
-    loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
-    iree_arena_allocator_t* arena,
-    loom_refine_boundaries_specialization_plan_t** out_plans) {
-  *out_plans = NULL;
-  if (graph->function_count == 0) {
-    return iree_ok_status();
-  }
-
-  loom_refine_boundaries_specialization_plan_t* plans = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, graph->function_count, sizeof(*plans), (void**)&plans));
-  memset(plans, 0, graph->function_count * sizeof(*plans));
-
-  loom_refine_boundaries_specialization_call_walk_t walk = {
-      .module = module,
-      .graph = graph,
-      .plans = plans,
-      .arena = arena,
-  };
-  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
-  IREE_RETURN_IF_ERROR(loom_walk_region(
-      module, module->body, LOOM_WALK_PRE_ORDER,
-      (loom_walk_callback_t){loom_refine_boundaries_collect_specialization_call,
-                             &walk},
-      &walk_result));
-
-  *out_plans = plans;
-  return iree_ok_status();
+      module, callee_info, &plans->functions[callee_node], op, operands,
+      results, function_facts, plans->encodings_only, plans->arena);
 }
 
 static iree_status_t loom_refine_boundaries_make_specialization_symbol(
@@ -285,9 +316,9 @@ static iree_status_t loom_refine_boundaries_make_specialization_symbol(
 static iree_status_t loom_refine_boundaries_clone_function_specialization(
     loom_module_t* module,
     const loom_refine_boundaries_function_t* function_info,
-    const loom_type_t* result_types, loom_symbol_ref_t target_ref,
-    const loom_op_t* insertion_anchor, iree_arena_allocator_t* arena,
-    loom_op_t** out_op) {
+    const loom_refine_boundaries_specialization_group_t* group,
+    loom_symbol_ref_t target_ref, const loom_op_t* insertion_anchor,
+    iree_arena_allocator_t* arena, loom_op_t** out_op) {
   *out_op = NULL;
   loom_op_t* source_op = function_info->function.op;
   loom_region_t* source_body = loom_func_like_body(function_info->function);
@@ -364,9 +395,26 @@ static iree_status_t loom_refine_boundaries_clone_function_specialization(
         loom_attr_predicate_list(target_predicates, predicate_count);
   }
 
-  for (uint16_t i = 0; i < source_op->result_count; ++i) {
+  for (uint16_t i = 0; i < function_info->argument_count; ++i) {
+    loom_value_id_t target_argument = LOOM_VALUE_ID_INVALID;
+    if (!loom_ir_remap_try_lookup_value(&remap, function_info->argument_ids[i],
+                                        &target_argument)) {
+      IREE_ASSERT_UNREACHABLE(
+          "cloned function is missing an argument value mapping");
+      IREE_BUILTIN_UNREACHABLE();
+    }
+    loom_type_t target_type = loom_type_none();
     IREE_RETURN_IF_ERROR(
-        loom_module_set_value_type(module, target_results[i], result_types[i]));
+        loom_ir_remap_type(&remap, group->argument_types[i], &target_type));
+    IREE_RETURN_IF_ERROR(
+        loom_module_set_value_type(module, target_argument, target_type));
+  }
+  for (uint16_t i = 0; i < source_op->result_count; ++i) {
+    loom_type_t target_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(
+        loom_ir_remap_type(&remap, group->result_types[i], &target_type));
+    IREE_RETURN_IF_ERROR(
+        loom_module_set_value_type(module, target_results[i], target_type));
   }
 
   IREE_RETURN_IF_ERROR(loom_builder_finalize_op(&builder, target_op));
@@ -386,8 +434,8 @@ static iree_status_t loom_refine_boundaries_create_specialization_group(
       module, source_ref, group_ordinal, arena, &group->symbol_ref));
 
   return loom_refine_boundaries_clone_function_specialization(
-      module, function_info, group->result_types, group->symbol_ref,
-      insertion_anchor, arena, out_op);
+      module, function_info, group, group->symbol_ref, insertion_anchor, arena,
+      out_op);
 }
 
 static void loom_refine_boundaries_retarget_call(loom_module_t* module,
@@ -399,11 +447,11 @@ static void loom_refine_boundaries_retarget_call(loom_module_t* module,
 
 static iree_status_t loom_refine_boundaries_create_specializations(
     loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
-    loom_refine_boundaries_specialization_plan_t* plans,
+    loom_refine_boundaries_specialization_function_plan_t* plans,
     iree_arena_allocator_t* arena, int64_t* out_specialization_count) {
   *out_specialization_count = 0;
   for (iree_host_size_t node = 0; node < graph->function_count; ++node) {
-    loom_refine_boundaries_specialization_plan_t* plan = &plans[node];
+    loom_refine_boundaries_specialization_function_plan_t* plan = &plans[node];
     if (plan->group_count < 2) {
       continue;
     }
@@ -432,16 +480,33 @@ static iree_status_t loom_refine_boundaries_create_specializations(
   return iree_ok_status();
 }
 
-iree_status_t loom_refine_boundaries_specialize_internal_boundaries(
-    loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
-    iree_arena_allocator_t* arena, int64_t* out_specialization_count) {
-  *out_specialization_count = 0;
-  loom_refine_boundaries_specialization_plan_t* plans = NULL;
-  IREE_RETURN_IF_ERROR(loom_refine_boundaries_collect_specialization_plans(
-      module, graph, arena, &plans));
-  if (!plans) {
-    return iree_ok_status();
+iree_status_t loom_refine_boundaries_specialization_plans_allocate(
+    const loom_refine_boundaries_graph_t* graph, bool encodings_only,
+    iree_arena_allocator_t* arena,
+    loom_refine_boundaries_specialization_plans_t** out_plans) {
+  *out_plans = NULL;
+  loom_refine_boundaries_specialization_plans_t* plans = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, sizeof(*plans), (void**)&plans));
+  memset(plans, 0, sizeof(*plans));
+  plans->arena = arena;
+  plans->encodings_only = encodings_only;
+  if (graph->function_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, graph->function_count,
+                                                   sizeof(*plans->functions),
+                                                   (void**)&plans->functions));
+    memset(plans->functions, 0,
+           graph->function_count * sizeof(*plans->functions));
   }
+  *out_plans = plans;
+  return iree_ok_status();
+}
+
+iree_status_t loom_refine_boundaries_specialization_plans_apply(
+    loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
+    loom_refine_boundaries_specialization_plans_t* plans,
+    int64_t* out_specialization_count) {
+  *out_specialization_count = 0;
   return loom_refine_boundaries_create_specializations(
-      module, graph, plans, arena, out_specialization_count);
+      module, graph, plans->functions, plans->arena, out_specialization_count);
 }
