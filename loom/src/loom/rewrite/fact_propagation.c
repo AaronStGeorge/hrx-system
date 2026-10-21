@@ -14,6 +14,7 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/fact_cfg.h"
 #include "loom/util/fact_loop.h"
+#include "loom/util/fact_observation.h"
 
 enum loom_rewriter_fact_entry_flag_bits_e {
   // The equation has a pending entry in one inference queue.
@@ -194,6 +195,9 @@ iree_status_t loom_rewriter_add_fact_user_to_worklist(loom_rewriter_t* rewriter,
   if (!rewriter->fact_table || (op->flags & LOOM_OP_FLAG_DEAD)) {
     return iree_ok_status();
   }
+#ifndef NDEBUG
+  loom_value_fact_table_invalidate_observations(rewriter->fact_table);
+#endif
   loom_rewriter_fact_entry_t* entry = NULL;
   IREE_RETURN_IF_ERROR(loom_rewriter_get_fact_entry(rewriter, op, &entry));
   if (entry->flags & LOOM_REWRITER_FACT_PENDING) {
@@ -231,6 +235,9 @@ iree_status_t loom_rewriter_add_changed_fact_user(
 
 iree_status_t loom_rewriter_add_fact_block(loom_rewriter_t* rewriter,
                                            loom_block_t* block) {
+#ifndef NDEBUG
+  loom_value_fact_table_invalidate_observations(rewriter->fact_table);
+#endif
   loom_rewriter_fact_entry_t* entry = NULL;
   IREE_RETURN_IF_ERROR(loom_rewriter_get_fact_entry(rewriter, block, &entry));
   if (!(entry->flags & LOOM_REWRITER_FACT_PENDING)) {
@@ -1104,6 +1111,9 @@ iree_status_t loom_rewriter_propagate_value_facts(loom_rewriter_t* rewriter) {
   if (iree_status_is_ok(status)) {
     pending->operations.count = 0;
     pending->operation_head = 0;
+#ifndef NDEBUG
+    loom_value_fact_table_publish_observations(rewriter->fact_table);
+#endif
   }
   return status;
 }

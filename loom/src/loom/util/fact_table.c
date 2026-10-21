@@ -224,6 +224,10 @@ iree_status_t loom_value_fact_table_reserve(loom_value_fact_table_t* table,
 }
 
 void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
+#ifndef NDEBUG
+  ++table->observation.generation;
+  table->observation.pending = false;
+#endif
   table->seeds.table = NULL;
   table->seeds.selected_bits = NULL;
   table->seeds.word_count = 0;

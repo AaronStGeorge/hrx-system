@@ -114,6 +114,22 @@ loom_cc_library(
 )
 
 loom_cc_test(
+    name = "fact_observation_test",
+    srcs = ["fact_observation_test.cc"],
+    deps = [
+        ":rewriter",
+        "//loom/src/loom/analysis:symbolic_expr",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "fact_propagation_test",
     srcs = ["fact_propagation_test.cc"],
     deps = [

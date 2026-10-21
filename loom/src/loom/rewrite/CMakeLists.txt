@@ -121,6 +121,23 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    fact_observation_test
+  SRCS
+    "fact_observation_test.cc"
+  DEPS
+    ::rewriter
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::analysis::symbolic_expr
+    loom::ir
+    loom::ops::test
+    loom::pass::value_facts
+    loom::util::fact_table
+)
+
+loom_cc_test(
+  NAME
     fact_propagation_test
   SRCS
     "fact_propagation_test.cc"

@@ -412,6 +412,15 @@ struct loom_value_fact_table_t {
     // Lazily allocated query scratch for condition-loop edge projections.
     loom_value_fact_condition_scratch_t* condition;
   } scratch;
+#ifndef NDEBUG
+  // Diagnostics for retained coherent observations; absent in release builds.
+  struct {
+    // Current semantic mutation batch or populated scope generation.
+    uint64_t generation;
+    // Queued equations have not completed publication.
+    bool pending;
+  } observation;
+#endif
 };
 
 // Initializes the table with the given arena and pre-allocates

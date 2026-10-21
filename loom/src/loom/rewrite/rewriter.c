@@ -16,6 +16,7 @@
 #include "loom/target/math_policy.h"
 #include "loom/util/fact_cfg.h"
 #include "loom/util/fact_loop.h"
+#include "loom/util/fact_observation.h"
 #include "loom/util/fact_vector_partition.h"
 
 #define LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY 64
@@ -376,6 +377,10 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(rewriter));
+#ifndef NDEBUG
+  const loom_value_fact_observation_t observation =
+      loom_value_fact_observation_capture(rewriter->fact_table);
+#endif
   const loom_op_vtable_t* vtable = loom_op_vtable(rewriter->module, op);
   if (!vtable || iree_any_bit_set(op->traits, LOOM_TRAIT_CONSTANT_LIKE)) {
     return iree_ok_status();
@@ -403,6 +408,9 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
     if (results[i] == LOOM_VALUE_ID_INVALID) {
       return iree_ok_status();
     }
+#ifndef NDEBUG
+    loom_value_fact_observation_assert_valid(observation);
+#endif
     loom_value_facts_t facts =
         loom_value_fact_table_lookup(rewriter->fact_table, results[i]);
     if (!loom_value_facts_is_exact(facts) ||
@@ -434,6 +442,9 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
       rewriter->fact_table, op->result_count, &replacement_ids));
 
   for (uint16_t i = 0; i < op->result_count; ++i) {
+#ifndef NDEBUG
+    loom_value_fact_observation_assert_valid(observation);
+#endif
     loom_value_facts_t facts =
         loom_value_fact_table_lookup(rewriter->fact_table, results[i]);
     loom_type_t result_type =

@@ -94,6 +94,9 @@ static iree_status_t loom_symbolic_expr_resolve_value_ordinal(
 static const loom_symbolic_expr_memo_entry_t*
 loom_symbolic_expr_ready_memo_entry(const loom_symbolic_expr_context_t* context,
                                     loom_value_id_t value_id) {
+#ifndef NDEBUG
+  loom_value_fact_observation_assert_valid(context->fact_observation);
+#endif
   const loom_value_ordinal_t value_ordinal =
       loom_symbolic_expr_try_value_ordinal(context, value_id);
   if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
@@ -202,6 +205,10 @@ void loom_symbolic_expr_context_initialize(
   out_context->module = module;
   out_context->value_domain = value_domain;
   out_context->fact_table = fact_table;
+#ifndef NDEBUG
+  out_context->fact_observation =
+      loom_value_fact_observation_capture(fact_table);
+#endif
   out_context->arena = arena;
   out_context->maximum_term_count = LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT;
   loom_condition_query_initialize(module, value_domain, arena,
@@ -232,6 +239,10 @@ void loom_symbolic_expr_context_reset(loom_symbolic_expr_context_t* context) {
            sizeof(*context->condition_fact_memo_entries));
   }
   context->touched_condition_fact_memo_ordinal_count = 0;
+#ifndef NDEBUG
+  context->fact_observation =
+      loom_value_fact_observation_capture(context->fact_table);
+#endif
 }
 
 bool loom_symbolic_expr_context_try_lookup_summary(
@@ -341,6 +352,9 @@ LOOM_DEFINE_ADAPTIVE_SORT(loom_symbolic_expr_sort_terms, loom_symbolic_term_t,
 static iree_status_t loom_symbolic_expr_context_lookup_facts_and_selected_value(
     loom_symbolic_expr_context_t* context, loom_value_id_t value_id,
     loom_value_facts_t* out_facts, loom_value_id_t* out_selected_value) {
+#ifndef NDEBUG
+  loom_value_fact_observation_assert_valid(context->fact_observation);
+#endif
   loom_value_facts_t facts =
       context->fact_table
           ? loom_value_fact_table_lookup(context->fact_table, value_id)
@@ -1857,6 +1871,9 @@ static iree_status_t loom_symbolic_expr_expansion_step(
 iree_status_t loom_symbolic_expr_from_value(
     loom_symbolic_expr_context_t* context, loom_value_id_t value_id,
     loom_symbolic_expr_t* out_expression) {
+#ifndef NDEBUG
+  loom_value_fact_observation_assert_valid(context->fact_observation);
+#endif
   if (!context->module || value_id >= context->module->values.count) {
     loom_symbolic_expr_unknown(loom_value_facts_unknown(), out_expression);
     return iree_ok_status();

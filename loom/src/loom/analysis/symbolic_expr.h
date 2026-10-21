@@ -46,6 +46,7 @@
 #include "loom/ir/facts.h"
 #include "loom/ir/ir.h"
 #include "loom/ir/module.h"
+#include "loom/util/fact_observation.h"
 #include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
@@ -152,6 +153,10 @@ typedef struct loom_symbolic_expr_context_t {
 
   // Dense facts used to seed ranges, exact constants, and divisibility.
   const loom_value_fact_table_t* fact_table;
+#ifndef NDEBUG
+  // Captured fact generation; resetting the memo retires its dependent results.
+  loom_value_fact_observation_t fact_observation;
+#endif
 
   // Optional direct CFG representatives for block argument expansion.
   const loom_cfg_value_identity_table_t* value_identities;
