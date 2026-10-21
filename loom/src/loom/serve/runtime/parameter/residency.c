@@ -618,6 +618,34 @@ void loom_serve_residency_free(loom_serve_residency_t* residency) {
   iree_allocator_free(residency->host_allocator, residency);
 }
 
+iree_status_t loom_serve_residency_check_working_set(
+    const loom_serve_residency_t* residency, iree_host_size_t extent_count,
+    const iree_device_size_t* extents) {
+  const uint64_t limit =
+      residency->cache->pool
+          ? loom_serve_memory_pool_limit(residency->cache->pool)
+          : UINT64_MAX;
+  uint64_t remaining = limit;
+  for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
+    const uint64_t required =
+        loom_serve_residency_group_statistics(residency->entries[i].group)
+            .reserved_bytes;
+    // Registration established that the distinct parameter groups fit alone.
+    remaining -= required;
+  }
+  for (iree_host_size_t i = 0; i < extent_count; ++i) {
+    if (extents[i] > remaining) {
+      return iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "model parameters and invocation working set exceed the serving "
+          "memory limit of %" PRIu64 " bytes",
+          limit);
+    }
+    remaining -= extents[i];
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_serve_residency_acquire_parameters(
     loom_serve_residency_t* residency,
     loom_serve_residency_admission_t* out_admission) {

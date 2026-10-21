@@ -98,6 +98,16 @@ iree_status_t loom_serve_residency_allocate(
 // Does not destroy borrowed plans or their backing. NULL is accepted.
 void loom_serve_residency_free(loom_serve_residency_t* residency);
 
+// Checks whether one invocation can fit by itself, before acquiring any pins
+// or submitting activation. Each extent describes additional simultaneously
+// live storage beyond the distinct parameter groups: model state, cohort I/O,
+// and the peak of ordered private commands. This checks the configured serving
+// ceiling, not available HAL memory, and neither reserves credit nor admits
+// work against other invocations. Fixed backing has no configured ceiling.
+iree_status_t loom_serve_residency_check_working_set(
+    const loom_serve_residency_t* residency, iree_host_size_t extent_count,
+    const iree_device_size_t* extents);
+
 // Borrowed admission/LRU owner, outliving this registration. Equal cache
 // identities share pressure; activity in another cache cannot release it.
 loom_serve_residency_cache_t* loom_serve_residency_cache(

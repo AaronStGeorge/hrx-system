@@ -141,6 +141,42 @@ TEST_F(SourceEmbeddingServiceTest,
 }
 
 TEST_F(SourceEmbeddingServiceTest,
+       ImpossibleWorkingSetRejectsBeforeActivation) {
+  const std::string package =
+      iree::testing::MakeTempFilePath("working_set_checkpoint");
+  ASSERT_NO_FATAL_FAILURE(WriteCheckpointPackage(package));
+  StartManagedRouter();
+  auto declaration = Declaration("large", package);
+  const std::string assets = R"("assets":".")";
+  const auto offset = declaration.find(assets);
+  ASSERT_NE(offset, std::string::npos);
+  declaration.insert(offset + assets.size(),
+                     R"(,"options":{"batch_units":256})");
+  ASSERT_EQ(Read(Send(declaration, "/v1/models/register")).find("HTTP/1.1 202"),
+            0u);
+  const auto response = Read(Send(R"({"model":"large","input":"a"})"));
+  if (loom_serve_device_memory_pool(device_)) {
+    ASSERT_EQ(response.find("HTTP/1.1 503"), 0u) << response;
+    EXPECT_NE(response.find("invocation working set"), std::string::npos);
+    const auto state = ModelStatus("large");
+    EXPECT_EQ(state.find(R"("error":)"), std::string::npos) << state;
+    EXPECT_NE(state.find(R"("activations":0)"), std::string::npos) << state;
+    EXPECT_NE(state.find(R"("read_bytes":0)"), std::string::npos) << state;
+  } else {
+    ASSERT_EQ(response.find("HTTP/1.1 200"), 0u) << response;
+    EXPECT_NE(response.find(R"("embedding":[2,2,2,2])"), std::string::npos);
+  }
+  // The same checkpoint and kernels fit with the ordinary cohort bound. A
+  // capacity rejection leaves registration and the other service usable.
+  ASSERT_EQ(Read(Send(Declaration("small", package), "/v1/models/register"))
+                .find("HTTP/1.1 202"),
+            0u);
+  const auto next = Read(Send(R"({"model":"small","input":"a"})"));
+  ASSERT_EQ(next.find("HTTP/1.1 200"), 0u) << next;
+  EXPECT_NE(next.find(R"("embedding":[2,2,2,2])"), std::string::npos);
+}
+
+TEST_F(SourceEmbeddingServiceTest,
        CheckpointRegistrationOwnsItsOperationAndIncarnation) {
   const std::string package =
       iree::testing::MakeTempFilePath("dynamic_checkpoint");

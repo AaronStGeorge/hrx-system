@@ -1147,8 +1147,16 @@ iree_status_t loom_serve_image_model_advance_batch(
         model->output.data_length, alignment);
     model->invocation.storage[1] = iree_hal_make_pool_reservation_request(
         stage->transient.required_byte_length, alignment);
-    // Fixed backing must fit both members of the allocation transaction in
-    // one range. Elastic backing retains its independently sized slab pool.
+    const iree_device_size_t extents[] = {
+        iree_hal_buffer_byte_length(model->input),
+        model->output.data_length,
+        stage->transient.required_byte_length,
+    };
+    IREE_RETURN_IF_ERROR(loom_serve_residency_check_working_set(
+        loom_serve_executables_residency(model->executables),
+        IREE_ARRAYSIZE(extents), extents));
+    // Register geometry for both members of this allocation transaction so
+    // they can occupy one backing range without sharing their lifetimes.
     return loom_serve_execution_reserve_workspace(
         model->execution,
         iree_device_align(model->output.data_length, alignment) +

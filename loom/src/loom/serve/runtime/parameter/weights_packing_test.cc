@@ -92,6 +92,42 @@ class WeightPackingTest : public WeightsTest {
 };
 
 TEST_P(WeightPackingTest,
+       InvocationWorkingSetChecksTheConfiguredLimitBeforeLoading) {
+  WriteFactors(path_.path(), 0, 8);
+  WriteFactors(adapter_path_.path(), 100, 4);
+  IREE_ASSERT_OK(Compile(0, "packed_target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_OK(CreateSourceRoots(0, 1, &root,
+                                   {{path_.path()}, {adapter_path_.path()}},
+                                   "packing_policy.loom"));
+  IREE_ASSERT_OK(Register(0, 0, 1));
+  const uint64_t weights =
+      loom_serve_residency_statistics(residencies_[0]).reserved_bytes;
+  const uint64_t limit =
+      pool_ ? loom_serve_memory_pool_limit(pool_) : UINT64_MAX;
+  const uint64_t headroom = limit - weights;
+  const iree_device_size_t fitting[] = {headroom / 2, headroom - headroom / 2};
+  IREE_ASSERT_OK(loom_serve_residency_check_working_set(
+      residencies_[0], IREE_ARRAYSIZE(fitting), fitting));
+  const iree_device_size_t impossible[] = {headroom / 2,
+                                           headroom - headroom / 2, 1};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_serve_residency_check_working_set(
+          residencies_[0], IREE_ARRAYSIZE(impossible), impossible));
+  const auto before = loom_serve_residency_snapshot(residencies_[0]);
+  EXPECT_FALSE(before.active);
+  EXPECT_EQ(before.pin_count, 0u);
+  EXPECT_FALSE(before.admission.waiting);
+  EXPECT_EQ(before.activity.read_bytes, 0u);
+  EXPECT_EQ(loom_serve_execution_frontier(execution_).values[0], 0u);
+  // A denied shape has not poisoned either the parameter plan or execution.
+  IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residencies_[0]));
+  ASSERT_NO_FATAL_FAILURE(CheckPackedOn(execution_));
+  loom_serve_residency_release(residencies_[0]);
+}
+
+TEST_P(WeightPackingTest,
        IndependentInputsPackWithBoundedLaneReuseAndWarmSharing) {
   WriteFactors(path_.path(), 0, 8);
   WriteFactors(adapter_path_.path(), 100, 4);

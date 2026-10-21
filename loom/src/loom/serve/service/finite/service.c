@@ -301,6 +301,27 @@ static void loom_serve_finite_finish(loom_serve_finite_service_t* service,
   service->phase = FINITE_IDLE;
 }
 
+// A prepared cohort can exceed the configured capacity without invalidating
+// the model or its queues. No device work has been submitted for these jobs.
+static iree_status_t loom_serve_finite_reject_cohort(
+    loom_serve_finite_service_t* service, const char* code,
+    iree_string_view_t message) {
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < service->cohort_count; ++i) {
+    loom_serve_finite_job_t* job = service->cohort[i];
+    job->outcome = LOOM_SERVE_TELEMETRY_REJECTED;
+    if (job->connection) {
+      status = iree_status_join(
+          status, loom_serve_finite_reject(service, job->id, job->connection,
+                                           code, message));
+      job->connection = NULL;
+    }
+  }
+  loom_serve_finite_model_release_batch(service->model);
+  loom_serve_finite_finish(service, status);
+  return status;
+}
+
 static iree_status_t loom_serve_finite_cpu_run(
     iree_task_process_t* process, const iree_task_worker_context_t* context,
     iree_task_process_drain_result_t* result) {
@@ -712,7 +733,14 @@ static iree_status_t loom_serve_finite_advance(void* self,
     bool complete = false;
     status = loom_serve_finite_model_advance_batch(service->model, cancel,
                                                    &complete);
-    if (!iree_status_is_ok(status)) {
+    if (iree_status_is_resource_exhausted(status)) {
+      loom_serve_finite_error(service, 0, status);
+      const iree_status_t rejection = loom_serve_finite_reject_cohort(
+          service, "503 Service Unavailable", iree_status_message(status));
+      iree_status_free(status);
+      status = rejection;
+      *out_progress = true;
+    } else if (!iree_status_is_ok(status)) {
       loom_serve_finite_model_release_batch(service->model);
       loom_serve_finite_error(service, 0, status);
       loom_serve_finite_finish(service, status);
@@ -747,21 +775,9 @@ static iree_status_t loom_serve_finite_advance(void* self,
                  admission == LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY &&
                  !iree_any_bit_set(flags,
                                    LOOM_SERVE_SERVICE_FLAG_SHARED_ACTIVITY)) {
-        for (iree_host_size_t i = 0; i < service->cohort_count; ++i) {
-          loom_serve_finite_job_t* job = service->cohort[i];
-          job->outcome = LOOM_SERVE_TELEMETRY_REJECTED;
-          if (job->connection) {
-            status = iree_status_join(
-                status,
-                loom_serve_finite_reject(
-                    service, job->id, job->connection,
-                    "503 Service Unavailable",
-                    IREE_SV("model parameters exceed available capacity")));
-            job->connection = NULL;
-          }
-        }
-        loom_serve_finite_model_release_batch(service->model);
-        loom_serve_finite_finish(service, status);
+        status = loom_serve_finite_reject_cohort(
+            service, "503 Service Unavailable",
+            IREE_SV("model parameters exceed available capacity"));
         *out_progress = true;
       }
       if (!iree_status_is_ok(status)) {
@@ -781,11 +797,10 @@ static iree_status_t loom_serve_finite_advance(void* self,
   }
   bool timer_progress = false;
   bool tick = false;
+  const bool stop_timer = service->stopping || !iree_status_is_ok(status);
   status = iree_status_join(
-      status,
-      loom_serve_timer_advance(&service->timer,
-                               service->stopping || !iree_status_is_ok(status),
-                               true, &timer_progress, &tick));
+      status, loom_serve_timer_advance(&service->timer, stop_timer, true,
+                                       &timer_progress, &tick));
   *out_progress |= timer_progress;
   if (tick) {
     loom_serve_finite_heartbeat(service);

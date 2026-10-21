@@ -66,8 +66,11 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
   void SetUp() override {
     const char* source_path = std::getenv("LOOM_SERVE_TEST_MODEL_SOURCE");
     ASSERT_NE(source_path, nullptr);
-    const auto application_options =
-        loom_serve_test_application_options_default();
+    auto application_options = loom_serve_test_application_options_default();
+    if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+      // Small fixture images fit, but a 64x64 float image does not.
+      application_options.memory_limit = 32 * 1024;
+    }
     loom_serve_test_application_t* application = nullptr;
     IREE_ASSERT_OK(loom_serve_test_application_acquire(
         &application_options, host_allocator_, &application));
@@ -1012,6 +1015,26 @@ TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
   }
   EXPECT_NE(Read(Send("GET", "/healthz")).find("\"status\":\"ready\""),
             std::string::npos);
+}
+
+TEST_P(SourceImageServiceTest, ImpossibleWorkingSetLeavesModelUsable) {
+  ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
+  Start();
+  const auto large = Read(Send(
+      "POST", "/v1/images/generations",
+      R"({"model":"fixture-image","prompt":"aba","seed":1,"size":"64x64"})"));
+  if (loom_serve_device_memory_pool(device_)) {
+    ASSERT_EQ(large.find("HTTP/1.1 503"), 0u) << large;
+    EXPECT_NE(large.find("invocation working set"), std::string::npos);
+  } else {
+    ASSERT_EQ(large.find("HTTP/1.1 200"), 0u) << large;
+    EXPECT_NE(large.find(EncodedPixels(3, 1, 64, 64)), std::string::npos);
+  }
+  const auto small =
+      Read(Send("POST", "/v1/images/generations",
+                R"({"model":"fixture-image","prompt":"aba","seed":1})"));
+  ASSERT_EQ(small.find("HTTP/1.1 200"), 0u) << small;
+  EXPECT_NE(small.find(EncodedPixels(3, 1)), std::string::npos);
 }
 
 TEST_P(SourceImageServiceTest, RequestGeometryOwnsPixelsAndPreservesDefault) {
