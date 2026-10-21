@@ -154,6 +154,14 @@ iree_host_size_t loom_serve_weights_parameter_count(
 loom_cmd_program_parameter_t loom_serve_weights_parameter_at(
     const loom_serve_weights_t* weights, iree_host_size_t index);
 
+// Complete captured-input staging allocation for one cold activation. Source
+// preparation has finalized the lane geometry before this query. All tensors
+// reuse these lanes; the extent is independent of tensor count. Canonical and
+// in-place preparation require zero bytes. Consuming execution imports a
+// readiness frontier that includes this allocation's queued deallocation.
+iree_hal_pool_reservation_request_t loom_serve_weights_activation_workspace(
+    const loom_serve_weights_t* weights);
+
 // Commits storage and streams directly into final roots through four read
 // lanes. Four preparation lanes join each tensor's reads and captured inputs.
 // An already active plan does not reload or prepare again. Success means

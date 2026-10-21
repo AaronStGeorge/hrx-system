@@ -176,9 +176,12 @@ bool loom_serve_residency_cache_is_reclaiming(
   return false;
 }
 
-static loom_serve_memory_usage_t loom_serve_residency_group_statistics(
+loom_serve_memory_usage_t loom_serve_residency_group_statistics(
     const loom_serve_residency_group_t* group) {
   loom_serve_memory_usage_t total = {0};
+  if (!group) {
+    return total;
+  }
   for (iree_host_size_t i = 0; i < group->weight_count; ++i) {
     const loom_serve_memory_statistics_t domain =
         loom_serve_weights_statistics(group->weights[i]);
@@ -187,6 +190,24 @@ static loom_serve_memory_usage_t loom_serve_residency_group_statistics(
     total.pending_bytes += domain.pending_bytes;
     total.releasing_bytes += domain.releasing_bytes;
     total.released_bytes += domain.released_bytes;
+  }
+  return total;
+}
+
+loom_serve_weight_activity_t loom_serve_residency_group_activity(
+    const loom_serve_residency_group_t* group) {
+  loom_serve_weight_activity_t total = {0};
+  if (!group) {
+    return total;
+  }
+  for (iree_host_size_t i = 0; i < group->weight_count; ++i) {
+    const loom_serve_weight_activity_t domain =
+        loom_serve_weights_activity(group->weights[i]);
+    total.activations += domain.activations;
+    total.deactivations += domain.deactivations;
+    total.read_bytes += domain.read_bytes;
+    total.prepared_bytes += domain.prepared_bytes;
+    total.groups += domain.groups;
   }
   return total;
 }
@@ -210,16 +231,13 @@ loom_serve_weight_activity_t loom_serve_residency_activity(
     const loom_serve_residency_t* residency) {
   loom_serve_weight_activity_t total = {0};
   for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
-    const loom_serve_residency_group_t* group = residency->entries[i].group;
-    for (iree_host_size_t j = 0; j < group->weight_count; ++j) {
-      const loom_serve_weight_activity_t domain =
-          loom_serve_weights_activity(group->weights[j]);
-      total.activations += domain.activations;
-      total.deactivations += domain.deactivations;
-      total.read_bytes += domain.read_bytes;
-      total.prepared_bytes += domain.prepared_bytes;
-      total.groups += domain.groups;
-    }
+    const loom_serve_weight_activity_t group =
+        loom_serve_residency_group_activity(residency->entries[i].group);
+    total.activations += group.activations;
+    total.deactivations += group.deactivations;
+    total.read_bytes += group.read_bytes;
+    total.prepared_bytes += group.prepared_bytes;
+    total.groups += group.groups;
   }
   return total;
 }
@@ -546,6 +564,25 @@ iree_status_t loom_serve_residency_allocate(
             loom_serve_memory_pool_limit(cache->pool));
       }
       remaining -= required;
+    }
+    // Independent weight plans stream concurrently. Their input lanes overlap
+    // all final parameter roots even though consumers can reuse those lanes'
+    // storage after importing activation readiness.
+    for (iree_host_size_t i = 0; i < group_count; ++i) {
+      const loom_serve_residency_group_t* group = groups[i];
+      for (iree_host_size_t j = 0; j < group->weight_count; ++j) {
+        const uint64_t required =
+            loom_serve_weights_activation_workspace(group->weights[j])
+                .allocation_size;
+        if (required > remaining) {
+          return iree_make_status(
+              IREE_STATUS_RESOURCE_EXHAUSTED,
+              "model parameters and activation staging exceed the serving "
+              "memory limit of %" PRIu64 " bytes",
+              loom_serve_memory_pool_limit(cache->pool));
+        }
+        remaining -= required;
+      }
     }
   }
   loom_serve_residency_t* residency = NULL;

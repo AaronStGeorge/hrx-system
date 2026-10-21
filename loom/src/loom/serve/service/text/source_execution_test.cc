@@ -189,6 +189,13 @@ TEST_F(SourceTextServiceTest, MissingCheckpointRetiresPublishedLayouts) {
   }
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   auto* partial = loom_serve_text_load_take_model(load);
+  const auto parameters = loom_serve_text_model_weight_statistics(partial);
+  if (pool) {
+    EXPECT_GT(parameters.reserved_bytes, 0u);
+  } else {
+    EXPECT_EQ(parameters.reserved_bytes, 0u);
+  }
+  EXPECT_EQ(parameters.committed_bytes, 0u);
   EXPECT_EQ(loom_serve_text_model_weight_activity(partial).activations, 0u);
   loom_serve_text_load_free(load);
   EXPECT_TRUE(loom_serve_text_model_is_retired(partial));

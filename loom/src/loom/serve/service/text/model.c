@@ -205,13 +205,10 @@ static iree_status_t loom_serve_text_load_bind(loom_serve_text_model_t* model) {
       model->device_owner, model->source.preparation,
       model->source.shared_stage_count, model->stage_count, model->stages,
       &model->parameters, model->host_allocator));
-  IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
+  return loom_serve_residency_group_allocate(
       loom_serve_device_residency_cache(model->device_owner),
       model->parameters.count, model->parameters.plans, model->host_allocator,
-      &model->parameter_group));
-  return loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(model->device_owner), model->execution,
-      1, &model->parameter_group, model->host_allocator, &model->residency);
+      &model->parameter_group);
 }
 
 static iree_status_t loom_serve_text_load_activate(
@@ -432,6 +429,13 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
               loom_serve_text_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
+          // Source preparation defines captured-input lane storage. Register
+          // the complete cold working set before optional activation, while
+          // device compilation and tokenization can still be running.
+          status = loom_serve_residency_allocate(
+              loom_serve_device_residency_cache(model->device_owner),
+              model->execution, 1, &model->parameter_group,
+              model->host_allocator, &model->residency);
           load->phase = TEXT_LOAD_ACTIVATE;
         }
         break;
@@ -705,12 +709,12 @@ loom_serve_memory_statistics_t loom_serve_text_model_memory_statistics(
 
 loom_serve_memory_usage_t loom_serve_text_model_weight_statistics(
     const loom_serve_text_model_t* model) {
-  return loom_serve_residency_statistics(model->residency);
+  return loom_serve_residency_group_statistics(model->parameter_group);
 }
 
 loom_serve_weight_activity_t loom_serve_text_model_weight_activity(
     const loom_serve_text_model_t* model) {
-  return loom_serve_residency_activity(model->residency);
+  return loom_serve_residency_group_activity(model->parameter_group);
 }
 
 loom_serve_residency_t* loom_serve_text_model_residency(
