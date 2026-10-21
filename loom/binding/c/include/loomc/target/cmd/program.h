@@ -113,15 +113,18 @@ typedef struct loomc_cmd_program_product_options_t {
   /// Per-invocation config bindings applied during selective materialization.
   loomc_config_options_t config;
 
-  /// Optional profile for all selected kernel entries and their launch
-  /// configurations. Command roots remain target-neutral.
+  /// Optional execution profile for all selected kernel entries and their
+  /// launch configurations. Every materialized command program also uses the
+  /// profile when its authored target still resolves to `target.decl`.
+  /// Targetless command programs remain target-neutral, and programs with
+  /// concrete targets retain their authored context.
   ///
   /// Borrowed synchronously from a compatible context target environment.
   /// Published requests own their concrete target definitions. NULL preserves
   /// source target selection and explicit invocation specializations. A
   /// non-NULL profile cannot be combined with nonempty per-function
   /// specializations or target-declaration bindings in `next`.
-  const loomc_target_profile_t* kernel_target_profile;
+  const loomc_target_profile_t* target_profile;
 
   /// Optional sink enabling source-backed request publication.
   ///
@@ -156,15 +159,18 @@ typedef struct loomc_cmd_program_request_options_t {
   /// Per-invocation config bindings applied during selective materialization.
   loomc_config_options_t config;
 
-  /// Optional profile for all selected kernel entries and their launch
-  /// configurations. Command roots remain target-neutral.
+  /// Optional execution profile for all selected kernel entries and their
+  /// launch configurations. Every materialized command program also uses the
+  /// profile when its authored target still resolves to `target.decl`.
+  /// Targetless command programs remain target-neutral, and programs with
+  /// concrete targets retain their authored context.
   ///
   /// Borrowed synchronously from a compatible context target environment.
   /// Published requests own their concrete target definitions. NULL preserves
   /// source target selection and explicit invocation specializations. A
   /// non-NULL profile cannot be combined with nonempty per-function
   /// specializations or target-declaration bindings in `next`.
-  const loomc_target_profile_t* kernel_target_profile;
+  const loomc_target_profile_t* target_profile;
 
   /// Optional sink enabling source-backed kernel request publication.
   ///
@@ -212,15 +218,18 @@ typedef struct loomc_cmd_program_module_options_t {
   /// Per-invocation config bindings applied during selective materialization.
   loomc_config_options_t config;
 
-  /// Optional profile for every selected kernel entry and launch
-  /// configuration. Command roots remain target-neutral.
+  /// Optional execution profile for every selected kernel entry and launch
+  /// configuration. Every materialized command program also uses the profile
+  /// when its authored target still resolves to `target.decl`. Targetless
+  /// command programs remain target-neutral, and programs with concrete targets
+  /// retain their authored context.
   ///
   /// Borrowed synchronously from the module context's target environment.
   /// Published requests own their concrete target definitions. NULL preserves
   /// source target selection and explicit invocation specializations. A
   /// non-NULL profile cannot be combined with nonempty per-function
   /// specializations or target-declaration bindings in `next`.
-  const loomc_target_profile_t* kernel_target_profile;
+  const loomc_target_profile_t* target_profile;
 
   /// Optional sink enabling source-backed kernel request publication.
   ///

@@ -148,7 +148,7 @@ static loomc_status_t loomc_cmd_program_product_validate_options(
         "command product construction requires an explicit or INPUT root");
   }
   LOOMC_RETURN_IF_ERROR(loomc_link_materialization_validate_targets(
-      options->kernel_target_profile, *out_target_specialization,
+      options->target_profile, *out_target_specialization,
       loomc_context_target_environment(
           loomc_link_index_context(options->link_index))));
   return loomc_config_validate_text_options(&options->config);
@@ -216,7 +216,7 @@ static loomc_status_t loomc_cmd_program_product_validate_request_options(
     }
   }
   LOOMC_RETURN_IF_ERROR(loomc_link_materialization_validate_targets(
-      options->kernel_target_profile, *out_target_specialization,
+      options->target_profile, *out_target_specialization,
       loomc_context_target_environment(context)));
   return loomc_config_validate_text_options(&options->config);
 }
@@ -297,7 +297,7 @@ static loomc_status_t loomc_cmd_program_product_validate_module_options(
         "command product construction requires an explicit or INPUT root");
   }
   LOOMC_RETURN_IF_ERROR(loomc_link_materialization_validate_targets(
-      options->kernel_target_profile, *out_target_specialization,
+      options->target_profile, *out_target_specialization,
       loomc_context_target_environment(context)));
   return loomc_config_validate_text_options(&options->config);
 }
@@ -738,8 +738,8 @@ loomc_status_t loomc_cmd_program_product_build(
         loomc_link_index_context(options->link_index), workspace,
         options->link_index, &options->config, target_specialization, result,
         &scratch_arena, allocator, &materialization_state);
-    materialization_state.specialization.kernel_profile =
-        options->kernel_target_profile;
+    materialization_state.specialization.deployment_profile =
+        options->target_profile;
     const loom_link_plan_materialization_environment_t
         materialization_environment =
             loomc_link_materialization_state_environment(
@@ -830,8 +830,8 @@ loomc_status_t loomc_cmd_program_product_build_module(
         context, workspace, options->library_index, module_provider_ordinal,
         /*appended_source=*/NULL, &options->config, target_specialization,
         result, &scratch_arena, allocator, &materialization_state);
-    materialization_state.specialization.kernel_profile =
-        options->kernel_target_profile;
+    materialization_state.specialization.deployment_profile =
+        options->target_profile;
     const loom_link_plan_materialization_environment_t
         materialization_environment =
             loomc_link_materialization_state_environment(
@@ -895,8 +895,8 @@ loomc_status_t loomc_cmd_program_product_build_request(
         request_overlay.request_provider_ordinal, loomc_request_source(request),
         &options->config, target_specialization, result, &scratch_arena,
         allocator, &materialization_state);
-    materialization_state.specialization.kernel_profile =
-        options->kernel_target_profile;
+    materialization_state.specialization.deployment_profile =
+        options->target_profile;
     const loom_link_plan_materialization_environment_t
         materialization_environment =
             loomc_link_materialization_state_environment(

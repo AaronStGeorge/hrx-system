@@ -21,10 +21,10 @@
 #include "workspace.h"
 
 loomc_status_t loomc_link_materialization_validate_targets(
-    const loomc_target_profile_t* kernel_profile,
+    const loomc_target_profile_t* deployment_profile,
     const loomc_target_specialization_options_t* target_specialization,
     const loomc_target_environment_t* target_environment) {
-  if (kernel_profile == NULL) {
+  if (deployment_profile == NULL) {
     return loomc_target_specialization_options_validate_environment(
         target_specialization, target_environment);
   }
@@ -33,10 +33,10 @@ loomc_status_t loomc_link_materialization_validate_targets(
        target_specialization->target_binding_count != 0)) {
     return loomc_make_status(
         LOOMC_STATUS_INVALID_ARGUMENT,
-        "kernel_target_profile cannot be combined with explicit target "
+        "target_profile cannot be combined with explicit target "
         "specializations or bindings");
   }
-  return loomc_target_profile_validate_environment(kernel_profile,
+  return loomc_target_profile_validate_environment(deployment_profile,
                                                    target_environment);
 }
 
@@ -319,9 +319,9 @@ static iree_status_t loomc_link_materialization_prepare_module(
 
   const loomc_target_specialization_options_t* target =
       state->specialization.target;
-  const loomc_target_profile_t* kernel_profile =
-      state->specialization.kernel_profile;
-  if (kernel_profile == NULL &&
+  const loomc_target_profile_t* deployment_profile =
+      state->specialization.deployment_profile;
+  if (deployment_profile == NULL &&
       (target == NULL || (target->specialization_count == 0 &&
                           target->target_binding_count == 0))) {
     return iree_ok_status();
@@ -344,11 +344,11 @@ static iree_status_t loomc_link_materialization_prepare_module(
       .fn = loomc_diagnostic_capture_emission,
       .user_data = &capture,
   };
-  if (kernel_profile != NULL) {
+  if (deployment_profile != NULL) {
     status =
-        loomc_status_from_iree(loom_target_specialize_module_kernel_entries(
+        loomc_status_from_iree(loom_target_specialize_module_deployment_entries(
             target_environment,
-            loomc_target_profile_loom_target_profile(kernel_profile),
+            loomc_target_profile_loom_target_profile(deployment_profile),
             diagnostic_emitter, block_pool, allocator, inout_module,
             &error_count));
   } else {

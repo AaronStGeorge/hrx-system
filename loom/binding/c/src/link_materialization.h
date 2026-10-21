@@ -65,9 +65,10 @@ typedef struct loomc_link_materialization_state_t {
     // Resolved input identities retained after the first materialization.
     const loomc_link_target_specializations_t* indexed;
 
-    // Optional homogeneous kernel-entry profile applied after configuration.
-    // Mutually exclusive with nonempty explicit target assignments.
-    const loomc_target_profile_t* kernel_profile;
+    // Optional homogeneous deployment profile applied after configuration to
+    // selected kernel entries and declaration-targeted functions. Mutually
+    // exclusive with nonempty explicit target assignments.
+    const loomc_target_profile_t* deployment_profile;
   } specialization;
 
   // Synchronous diagnostic destination and current provider source.
@@ -89,7 +90,7 @@ typedef struct loomc_link_materialization_state_t {
 // Validates the mutually exclusive homogeneous and explicit target policies at
 // the public invocation boundary, including profile/environment compatibility.
 LOOMC_API_PRIVATE loomc_status_t loomc_link_materialization_validate_targets(
-    const loomc_target_profile_t* kernel_profile,
+    const loomc_target_profile_t* deployment_profile,
     const loomc_target_specialization_options_t* target_specialization,
     const loomc_target_environment_t* target_environment);
 

@@ -37,13 +37,16 @@ iree_status_t loom_target_specialize_module(
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_module_t** inout_module, uint32_t* out_error_count);
 
-// Specializes every kernel entry in |*inout_module| to |target_profile|.
+// Specializes every declaration-targeted function and every kernel entry in
+// |*inout_module| to |target_profile|.
 //
 // This is the homogeneous deployment-product form of
-// loom_target_specialize_module. Request rows are derived from the verified
-// module and remain private to the call. Modules without kernel entries are
-// left unchanged.
-iree_status_t loom_target_specialize_module_kernel_entries(
+// loom_target_specialize_module. A non-kernel function opts into the invocation
+// profile by carrying an authored target reference that still resolves to
+// target.decl; targetless functions remain neutral and concrete target records
+// retain their authored context. Request rows are derived from verified
+// compiler-owned IR and remain private to the call.
+iree_status_t loom_target_specialize_module_deployment_entries(
     const loom_target_environment_t* environment,
     const loom_target_profile_t* target_profile,
     iree_diagnostic_emitter_t diagnostic_emitter,

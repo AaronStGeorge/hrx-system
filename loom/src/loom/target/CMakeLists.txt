@@ -197,6 +197,7 @@ loom_cc_library(
     loom::error::emitter
     loom::ir
     loom::ops::op_defs
+    loom::ops::target
   PUBLIC
 )
 

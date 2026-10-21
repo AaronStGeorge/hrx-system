@@ -1409,7 +1409,7 @@ iree_status_t loom_run_hal_testbench_command_scenario_product_prepare(
         .config = provider_options->compilation->config
                       ? *provider_options->compilation->config
                       : (loomc_config_options_t){0},
-        .kernel_target_profile = product->selected_target_profile,
+        .target_profile = product->selected_target_profile,
         .request_sink =
             {
                 .publish = loom_run_hal_command_scenario_publish,

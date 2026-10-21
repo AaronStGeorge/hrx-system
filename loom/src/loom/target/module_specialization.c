@@ -8,6 +8,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/target/ops.h"
 #include "loom/target/function_version_projection.h"
 
 static iree_status_t loom_target_specialize_module_with_arena(
@@ -68,7 +69,25 @@ iree_status_t loom_target_specialize_module(
   return status;
 }
 
-iree_status_t loom_target_specialize_module_kernel_entries(
+static bool loom_target_deployment_function_uses_profile(
+    const loom_module_t* module, loom_func_like_t function) {
+  if (!loom_func_like_isa(function)) {
+    return false;
+  }
+  if (loom_func_like_is_kernel_entry(function)) {
+    return true;
+  }
+  const loom_symbol_ref_t authored_target = loom_func_like_target(function);
+  if (!loom_symbol_ref_is_valid(authored_target)) {
+    return false;
+  }
+  IREE_ASSERT_EQ(authored_target.module_id, 0u);
+  IREE_ASSERT_LT(authored_target.symbol_id, module->symbols.count);
+  return loom_target_decl_isa(
+      module->symbols.entries[authored_target.symbol_id].defining_op);
+}
+
+iree_status_t loom_target_specialize_module_deployment_entries(
     const loom_target_environment_t* environment,
     const loom_target_profile_t* target_profile,
     iree_diagnostic_emitter_t diagnostic_emitter,
@@ -85,8 +104,8 @@ iree_status_t loom_target_specialize_module_kernel_entries(
   iree_host_size_t request_count = 0;
   loom_op_t* op = NULL;
   loom_block_for_each_op(loom_module_block(*inout_module), op) {
-    if (loom_func_like_is_kernel_entry(
-            loom_func_like_cast(*inout_module, op))) {
+    const loom_func_like_t function = loom_func_like_cast(*inout_module, op);
+    if (loom_target_deployment_function_uses_profile(*inout_module, function)) {
       ++request_count;
     }
   }
@@ -103,7 +122,8 @@ iree_status_t loom_target_specialize_module_kernel_entries(
     iree_host_size_t request_ordinal = 0;
     loom_block_for_each_op(loom_module_block(*inout_module), op) {
       const loom_func_like_t function = loom_func_like_cast(*inout_module, op);
-      if (!loom_func_like_is_kernel_entry(function)) {
+      if (!loom_target_deployment_function_uses_profile(*inout_module,
+                                                        function)) {
         continue;
       }
       const loom_symbol_ref_t function_ref = loom_func_like_callee(function);
@@ -112,6 +132,7 @@ iree_status_t loom_target_specialize_module_kernel_entries(
           .target_profile = target_profile,
       };
     }
+    IREE_ASSERT_EQ(request_ordinal, request_count);
     status = loom_target_specialize_module_with_arena(
         environment,
         (loom_target_specialization_request_list_t){

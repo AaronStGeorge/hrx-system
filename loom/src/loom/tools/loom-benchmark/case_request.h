@@ -34,7 +34,7 @@ typedef struct loom_benchmark_case_request_options_t {
   loom_testbench_case_sample_t case_sample;
   // Resolved invocation configuration consumed by product materialization.
   const loomc_config_options_t* config;
-  // Optional exact kernel target profile selected without a HAL device.
+  // Optional exact deployment target profile selected without a HAL device.
   const loomc_target_profile_t* target_profile;
 } loom_benchmark_case_request_options_t;
 
