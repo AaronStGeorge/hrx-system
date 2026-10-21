@@ -671,6 +671,7 @@ typedef enum loom_amdgpu_vector_conversion_kind_e {
   LOOM_AMDGPU_VECTOR_CONVERSION_KIND_PACKED_INTEGER_TO_FULL_64,
   LOOM_AMDGPU_VECTOR_CONVERSION_KIND_PACKED_INTEGER_TO_PACKED_INTEGER,
   LOOM_AMDGPU_VECTOR_CONVERSION_KIND_PACKED_U8_TO_F32,
+  LOOM_AMDGPU_VECTOR_CONVERSION_KIND_PACKED_I8_TO_F16,
   LOOM_AMDGPU_VECTOR_CONVERSION_KIND_FLOAT_TO_INTEGER64,
   LOOM_AMDGPU_VECTOR_CONVERSION_KIND_COUNT_,
 } loom_amdgpu_vector_conversion_kind_t;
@@ -700,8 +701,8 @@ typedef struct loom_amdgpu_vector_conversion_plan_t {
   uint32_t source_element_register_count;
   // Descriptor for lane conversion, or high-word construction for i64 results.
   loom_amdgpu_descriptor_ref_t convert_descriptor_ref;
-  // Byte permutation plan selected for full-register i8 result assembly.
-  loom_amdgpu_byte_permute_plan_t packed_i8_permute;
+  // Byte permutation plan for packed integer assembly or I8-to-F16 conversion.
+  loom_amdgpu_byte_permute_plan_t byte_permute;
   // Exact split-word strategy for floating lanes producing I64 payloads.
   loom_amdgpu_float_to_integer64_plan_t float_to_integer64;
   // True when integer source lanes require sign extension.

@@ -113,15 +113,14 @@ func.def target(@target) @exact_i8_to_f16_rdna(%input: vector<3xi8>) -> (vector<
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @exact_i8_to_f16_rdna(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %9 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 8}
-  %10 = v_cvt_f32_i32 %9
-  %11 = v_bfe_i32_offset_width_inline %input {offset = 8, width = 8}
-  %12 = v_cvt_f32_i32 %11
-  %13 = v_bfe_i32_offset_width_inline %input {offset = 16, width = 8}
-  %14 = v_cvt_f32_i32 %13
-  %18 = v_cvt_pk_rtz_f16_f32 %10, %12
-  %20 = v_cvt_pk_rtz_f16_f32 %14, %14
-  %narrow = concat(%18, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %7 = v_mov_b32 1684300900
+  %8 = s_mov_b32 3833652352
+  %9 = v_xor_b32_lit %input, 2155905152
+  %10 = v_perm_b32_src2_lit %7, %9, 67175424
+  %11 = v_pk_add_f16 %10, %8
+  %12 = v_perm_b32_src2_lit %7, %9, 67240962
+  %13 = v_pk_add_f16 %12, %8
+  %narrow = concat(%11, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 
@@ -137,15 +136,16 @@ func.def target(@target) @exact_i8_to_f16_cdna(%input: vector<3xi8>) -> (vector<
 
 // ----
 low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @exact_i8_to_f16_cdna(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %9 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
-  %10 = v_cvt_f32_i32 %9
-  %11 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
-  %12 = v_cvt_f32_i32 %11
-  %13 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
-  %14 = v_cvt_f32_i32 %13
-  %18 = v_cvt_pkrtz_f16_f32 %10, %12
-  %20 = v_cvt_pkrtz_f16_f32 %14, %14
-  %narrow = concat(%18, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %7 = v_mov_b32 1684300900
+  %8 = s_mov_b32 3833652352
+  %9 = v_xor_b32_lit %input, 2155905152
+  %10 = s_mov_b32 67175424
+  %11 = v_perm_b32 %7, %9, %10
+  %12 = v_pk_add_f16 %11, %8
+  %13 = s_mov_b32 67240962
+  %14 = v_perm_b32 %7, %9, %13
+  %15 = v_pk_add_f16 %14, %8
+  %narrow = concat(%12, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 
@@ -168,4 +168,32 @@ low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @rounded_unknown
   %10 = v_bfe_u32_offset_0_width_inline_low16 %9
   %narrow = v_lshl_add_u32_shift_imm %10, %7, 16
   return %narrow
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @unsigned_byte_to_half(%input: vector<5xi8>, %single: vector<1xi8>) -> (vector<5xf16>, vector<1xf16>) {
+  %halves = vector.uitofp %input : vector<5xi8> to vector<5xf16>
+  %half = vector.uitofp %single : vector<1xi8> to vector<1xf16>
+  func.return %halves, %half : vector<5xf16>, vector<1xf16>
+}
+
+// ----
+low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @unsigned_byte_to_half(%input: reg<amdgpu.vgpr x2>, %single: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x3>, reg<amdgpu.vgpr>) asm {
+  %10 = v_mov_b32 1684300900
+  %11 = s_mov_b32 3825263616
+  %12 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = v_perm_b32_src2_lit %10, %12, 67175424
+  %14 = v_pk_add_f16 %13, %11
+  %15 = v_perm_b32_src2_lit %10, %12, 67306498
+  %16 = v_pk_add_f16 %15, %11
+  %17 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = v_perm_b32_src2_lit %10, %17, 67109888
+  %19 = v_pk_add_f16 %18, %11
+  %halves = concat(%14, %16, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  %23 = v_perm_b32_src2_lit %10, %single, 67109888
+  %half = v_pk_add_f16 %23, %11
+  return %halves, %half
 }

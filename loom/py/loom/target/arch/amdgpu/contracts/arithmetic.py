@@ -103,6 +103,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.s_cvt_hi_f32_f16",
     "amdgpu.s_cvt_pk_rtz_f16_f32",
     "amdgpu.v_mov_b32_copy",
+    "amdgpu.v_perm_b32",
     "amdgpu.v_add_f32",
     "amdgpu.v_add_f64",
     "amdgpu.v_sub_f64",
@@ -1321,14 +1322,24 @@ def _vector_integer_conversion_recipe_rules() -> tuple[RecipeRule, ...]:
         for integer_type, float_type in integer_to_float_pairs
     )
     rules: list[RecipeRule] = []
-    for source_op, descriptor_key, pairs in (
-        (vector.vector_extsi, None, widening_pairs),
-        (vector.vector_extui, None, widening_pairs),
-        (vector.vector_trunci, None, narrowing_pairs),
-        (vector.vector_sitofp, "amdgpu.v_cvt_f32_i32", integer_to_float_pairs),
-        (vector.vector_uitofp, "amdgpu.v_cvt_f32_u32", integer_to_float_pairs),
-        (vector.vector_fptosi, "amdgpu.v_cvt_i32_f32", float_to_integer_pairs),
-        (vector.vector_fptoui, "amdgpu.v_cvt_u32_f32", float_to_integer_pairs),
+    for source_op, descriptor_keys, pairs in (
+        (vector.vector_extsi, (), widening_pairs),
+        (vector.vector_extui, (), widening_pairs),
+        (vector.vector_trunci, (), narrowing_pairs),
+        (vector.vector_sitofp, ("amdgpu.v_cvt_f32_i32",), integer_to_float_pairs),
+        (vector.vector_uitofp, ("amdgpu.v_cvt_f32_u32",), integer_to_float_pairs),
+        (vector.vector_fptosi, ("amdgpu.v_cvt_i32_f32",), float_to_integer_pairs),
+        (vector.vector_fptoui, ("amdgpu.v_cvt_u32_f32",), float_to_integer_pairs),
+        (
+            vector.vector_sitofp,
+            ("amdgpu.v_perm_b32", "amdgpu.v_pk_add_f16", "amdgpu.v_xor_b32.lit"),
+            ((_VEC_I8_PACKED, _VEC_F16_PACKED_STORAGE),),
+        ),
+        (
+            vector.vector_uitofp,
+            ("amdgpu.v_perm_b32", "amdgpu.v_pk_add_f16"),
+            ((_VEC_I8_PACKED, _VEC_F16_PACKED_STORAGE),),
+        ),
     ):
         for input_type, result_type in pairs:
             guards = (
@@ -1340,11 +1351,9 @@ def _vector_integer_conversion_recipe_rules() -> tuple[RecipeRule, ...]:
                     diagnostic=_VECTOR_INTEGER_CONVERSION_SHAPE_DIAGNOSTIC,
                 ),
             )
-            if descriptor_key is not None:
-                guards = (
-                    *guards,
-                    Guard.descriptor_available(_descriptor(descriptor_key)),
-                )
+            guards += tuple(
+                Guard.descriptor_available(_descriptor(key)) for key in descriptor_keys
+            )
             rules.append(RecipeRule(source_op=source_op, guards=guards))
     return tuple(rules)
 

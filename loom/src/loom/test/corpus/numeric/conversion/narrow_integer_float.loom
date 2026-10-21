@@ -84,6 +84,57 @@ check.scenario @i8_to_float_4_values_0 {
   check.return
 }
 
+// Full-width vectors and partial words share the same runtime byte inputs.
+// Separate output intervals preserve each conversion for bitwise comparison.
+func.def @i8_to_f16_vector_widths(%input: buffer, %signed: buffer, %unsigned: buffer) {
+  %base = index.constant 0 : offset
+  %begin = index.constant 0 : index
+  %end = index.constant 256 : index
+  %step = index.constant 32 : index
+  %partial_width = index.constant 5 : index
+  %tail_begin = index.constant 256 : index
+  %single_begin = index.constant 296 : index
+  %source = buffer.view %input[%base] : buffer -> view<256xi8>
+  %signed_result = buffer.view %signed[%base] : buffer -> view<304xf16>
+  %unsigned_result = buffer.view %unsigned[%base] : buffer -> view<304xf16>
+  scf.for %i = [%begin to %end step %step] {
+    %packet = vector.load %source[%i] : view<256xi8> -> vector<32xi8>
+    %signed_packet = vector.sitofp %packet : vector<32xi8> to vector<32xf16>
+    %unsigned_packet = vector.uitofp %packet : vector<32xi8> to vector<32xf16>
+    vector.store %signed_packet, %signed_result[%i] : vector<32xf16>, view<304xf16>
+    vector.store %unsigned_packet, %unsigned_result[%i] : vector<32xf16>, view<304xf16>
+
+    %ordinal = index.div %i, %step : index
+    %tail = index.madd %ordinal, %partial_width, %tail_begin : index
+    %partial = vector.load %source[%i] : view<256xi8> -> vector<5xi8>
+    %signed_partial = vector.sitofp %partial : vector<5xi8> to vector<5xf16>
+    %unsigned_partial = vector.uitofp %partial : vector<5xi8> to vector<5xf16>
+    vector.store %signed_partial, %signed_result[%tail] : vector<5xf16>, view<304xf16>
+    vector.store %unsigned_partial, %unsigned_result[%tail] : vector<5xf16>, view<304xf16>
+
+    %single = index.add %ordinal, %single_begin : index
+    %one = vector.load %source[%i] : view<256xi8> -> vector<1xi8>
+    %signed_one = vector.sitofp %one : vector<1xi8> to vector<1xf16>
+    %unsigned_one = vector.uitofp %one : vector<1xi8> to vector<1xf16>
+    vector.store %signed_one, %signed_result[%single] : vector<1xf16>, view<304xf16>
+    vector.store %unsigned_one, %unsigned_result[%single] : vector<1xf16>, view<304xf16>
+  }
+  func.return
+}
+
+check.scenario @i8_to_f16_vector_width_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-128) step(1) : tensor<256xi8>
+    %signed = check.generate.fill value(-1.0) : tensor<304xf16>
+    %unsigned = check.generate.fill value(-1.0) : tensor<304xf16>
+    check.compare<@i8_to_f16_vector_widths>(%input, %signed, %unsigned) : (tensor<256xi8>, tensor<304xf16>, tensor<304xf16>) -> () {
+      check.expect.bitwise actual(%signed) expected(%signed) : tensor<304xf16>
+      check.expect.bitwise actual(%unsigned) expected(%unsigned) : tensor<304xf16>
+    }
+  }
+  check.return
+}
+
 func.def @i16_to_float_1(%input: buffer, %s_f16: buffer, %u_f16: buffer, %s_bf16: buffer, %u_bf16: buffer) {
   %base = index.constant 0 : offset
   %begin = index.constant 0 : index
