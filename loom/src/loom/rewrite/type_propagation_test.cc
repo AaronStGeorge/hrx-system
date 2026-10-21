@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/families.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
@@ -41,6 +42,7 @@ class TypePropagationTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_register_builtin_encoding_vtables(&context_));
     IREE_ASSERT_OK(
         loom_context_register_encoding_vtable(&context_, &kLayoutVtable));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -92,8 +94,8 @@ class TypePropagationTest : public ::testing::Test {
     loom_rewriter_t rewriter;
     loom_rewriter_initialize(&rewriter, module_, &pass_arena);
     loom_type_propagator_t* propagator = NULL;
-    iree_status_t status =
-        loom_type_propagator_allocate(module_, {}, &pass_arena, &propagator);
+    iree_status_t status = loom_type_propagator_allocate(
+        module_, {}, LOOM_TYPE_PROPAGATOR_SCOPE_ALL, &pass_arena, &propagator);
     if (iree_status_is_ok(status)) {
       status = loom_type_propagator_prepare_function(propagator, function_);
     }
@@ -120,8 +122,9 @@ class TypePropagationTest : public ::testing::Test {
     }
     loom_type_propagator_t* propagator = NULL;
     if (iree_status_is_ok(status)) {
-      status =
-          loom_type_propagator_allocate(module_, {}, &pass_arena, &propagator);
+      status = loom_type_propagator_allocate(module_, {},
+                                             LOOM_TYPE_PROPAGATOR_SCOPE_ALL,
+                                             &pass_arena, &propagator);
     }
     if (iree_status_is_ok(status)) {
       status = loom_type_propagator_prepare_function(propagator, function_);
@@ -381,8 +384,8 @@ TEST_F(TypePropagationTest, RejectedCandidateClosureRunsOncePerIteration) {
   loom_rewriter_t rewriter;
   loom_rewriter_initialize(&rewriter, module_, &pass_arena);
   loom_type_propagator_t* propagator = NULL;
-  IREE_ASSERT_OK(
-      loom_type_propagator_allocate(module_, {}, &pass_arena, &propagator));
+  IREE_ASSERT_OK(loom_type_propagator_allocate(
+      module_, {}, LOOM_TYPE_PROPAGATOR_SCOPE_ALL, &pass_arena, &propagator));
   IREE_ASSERT_OK(loom_type_propagator_prepare_function(propagator, function_));
 
   loom_type_propagator_begin_iteration(propagator);
@@ -491,8 +494,9 @@ class TypePropagationStorageTest : public TypePropagationTest {
   }
 
   void Prepare() {
-    IREE_ASSERT_OK(loom_type_propagator_allocate(module_, {}, &scratch_arena_,
-                                                 &propagator_));
+    IREE_ASSERT_OK(loom_type_propagator_allocate(
+        module_, {}, LOOM_TYPE_PROPAGATOR_SCOPE_ALL, &scratch_arena_,
+        &propagator_));
     IREE_ASSERT_OK(
         loom_type_propagator_prepare_function(propagator_, function_));
     loom_type_propagator_begin_iteration(propagator_);
@@ -847,8 +851,8 @@ TEST_F(TypePropagationTest, ValueFactsNarrowDynamicDimensions) {
   loom_rewriter_initialize(&rewriter, module_, &pass_arena);
   IREE_ASSERT_OK(loom_rewriter_enable_analysis(&rewriter, function_, facts));
   loom_type_propagator_t* propagator = NULL;
-  IREE_ASSERT_OK(
-      loom_type_propagator_allocate(module_, {}, &pass_arena, &propagator));
+  IREE_ASSERT_OK(loom_type_propagator_allocate(
+      module_, {}, LOOM_TYPE_PROPAGATOR_SCOPE_ALL, &pass_arena, &propagator));
   IREE_ASSERT_OK(loom_type_propagator_prepare_function(propagator, function_));
 
   bool changed = false;
@@ -859,6 +863,59 @@ TEST_F(TypePropagationTest, ValueFactsNarrowDynamicDimensions) {
   loom_type_t refined_vector = loom_module_value_type(module_, vector);
   EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_vector, 0));
   EXPECT_EQ(loom_type_dim_static_size_at(refined_vector, 0), 16);
+
+  loom_type_propagator_deinitialize(propagator);
+  loom_rewriter_deinitialize(&rewriter);
+  loom_pass_value_fact_owner_deinitialize(&value_fact_owner);
+  iree_arena_deinitialize(&pass_arena);
+}
+
+TEST_F(TypePropagationTest, EncodingScopePreservesExactDynamicDimensions) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(16), index_type, &dim_op));
+  loom_value_id_t dim = loom_test_constant_result(dim_op);
+
+  loom_op_t* layout_op = NULL;
+  IREE_ASSERT_OK(loom_encoding_layout_dense_build(
+      &builder_, loom_type_encoding(), LOOM_LOCATION_UNKNOWN, &layout_op));
+  loom_value_id_t layout = loom_encoding_layout_dense_result(layout_op);
+
+  loom_type_t dynamic_view = loom_type_shaped_1d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I32, loom_dim_pack_dynamic(dim), 0);
+  dynamic_view.encoding_id = (uint16_t)layout;
+  dynamic_view.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  loom_op_t* view_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), dynamic_view, &view_op));
+  loom_value_id_t view = loom_test_constant_result(view_op);
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_pass_value_fact_owner_t value_fact_owner = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_fact_owner);
+  loom_value_fact_table_t* facts = NULL;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_prepare(
+      &value_fact_owner, module_,
+      loom_pass_value_fact_scope_function(function_), &facts));
+  loom_rewriter_t rewriter;
+  loom_rewriter_initialize(&rewriter, module_, &pass_arena);
+  IREE_ASSERT_OK(loom_rewriter_enable_analysis(&rewriter, function_, facts));
+  loom_type_propagator_t* propagator = NULL;
+  IREE_ASSERT_OK(loom_type_propagator_allocate(
+      module_, {}, LOOM_TYPE_PROPAGATOR_SCOPE_ENCODING, &pass_arena,
+      &propagator));
+  IREE_ASSERT_OK(loom_type_propagator_prepare_function(propagator, function_));
+
+  bool changed = false;
+  IREE_EXPECT_OK(
+      loom_type_propagator_apply_op(propagator, &rewriter, view_op, &changed));
+
+  EXPECT_TRUE(changed);
+  loom_type_t refined_view = loom_module_value_type(module_, view);
+  EXPECT_TRUE(loom_type_dim_is_dynamic_at(refined_view, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(refined_view, 0), dim);
+  EXPECT_FALSE(loom_type_has_ssa_encoding(refined_view));
+  EXPECT_EQ(refined_view.encoding_id, 0);
 
   loom_type_propagator_deinitialize(propagator);
   loom_rewriter_deinitialize(&rewriter);
@@ -896,8 +953,8 @@ TEST_F(TypePropagationTest, TypeUseUsersAreQueuedOnCommit) {
   loom_rewriter_initialize(&rewriter, module_, &pass_arena);
   IREE_ASSERT_OK(loom_rewriter_enable_worklist(&rewriter));
   loom_type_propagator_t* propagator = NULL;
-  IREE_ASSERT_OK(
-      loom_type_propagator_allocate(module_, {}, &pass_arena, &propagator));
+  IREE_ASSERT_OK(loom_type_propagator_allocate(
+      module_, {}, LOOM_TYPE_PROPAGATOR_SCOPE_ALL, &pass_arena, &propagator));
   IREE_ASSERT_OK(loom_type_propagator_prepare_function(propagator, function_));
 
   bool changed = false;

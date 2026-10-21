@@ -527,8 +527,8 @@ static iree_status_t loom_canonicalize_prepare_region(
   loom_canonicalize_rewrite_state_t* state =
       (loom_canonicalize_rewrite_state_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_type_propagator_allocate(
-      driver->module, state->refine_boundary, driver->scratch_arena,
-      &state->type_propagator));
+      driver->module, state->refine_boundary, LOOM_TYPE_PROPAGATOR_SCOPE_ALL,
+      driver->scratch_arena, &state->type_propagator));
   IREE_RETURN_IF_ERROR(loom_type_propagator_prepare_region(
       state->type_propagator, region, parent_op));
   loom_symbolic_expr_context_initialize(

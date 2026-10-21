@@ -289,12 +289,23 @@ static const loom_pass_requirement_def_t kLowTargetLegalizeRequirements[] = {
     },
 };
 
+static const loom_pass_option_enum_value_t kRefineBoundariesModeValues[] = {
+    {.value = IREE_SVL("encodings")},
+    {.value = IREE_SVL("whole")},
+};
+
 static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
     {
         .name = IREE_SVL("max-iterations"),
         .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
         .minimum_uint32 = 1,
         .maximum_uint32 = UINT32_MAX,
+    },
+    {
+        .name = IREE_SVL("mode"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kRefineBoundariesModeValues,
+        .enum_value_count = IREE_ARRAYSIZE(kRefineBoundariesModeValues),
     },
 };
 

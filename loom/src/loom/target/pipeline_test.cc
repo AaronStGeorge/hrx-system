@@ -32,7 +32,13 @@ typedef struct PipelineRunCounts {
   // Number of retained call-graph specialization pass runs.
   int target_callgraph_specialization = 0;
   // Lexical pass-run ordinals of the expected call-graph specializations.
-  int target_callgraph_specialization_ordinals[3] = {};
+  int target_callgraph_specialization_ordinals[4] = {};
+  // Number of semantic boundary-refinement pass runs.
+  int boundary_refinement = 0;
+  // Lexical pass-run ordinal of semantic boundary refinement.
+  int boundary_refinement_ordinal = 0;
+  // Lexical pass-run ordinal of dead generic boundary cleanup.
+  int boundary_cleanup_ordinal = 0;
   // Lexical pass-run ordinal of the first target-required call inlining.
   int first_target_inlining_ordinal = 0;
   // Lexical pass-run ordinal of the last target-required call inlining.
@@ -195,12 +201,15 @@ iree_status_t InspectPipelineRun(void* user_data, loom_op_t* op,
         count_context->module, loom_pass_run_options(op), IREE_SV("rewrite"));
   } else if (iree_string_view_equal(key,
                                     IREE_SV("specialize-target-callgraph"))) {
-    if (counts->target_callgraph_specialization < 3) {
+    if (counts->target_callgraph_specialization < 4) {
       counts->target_callgraph_specialization_ordinals
           [counts->target_callgraph_specialization] =
           count_context->current_run_ordinal;
     }
     ++counts->target_callgraph_specialization;
+  } else if (iree_string_view_equal(key, IREE_SV("refine-boundaries"))) {
+    ++counts->boundary_refinement;
+    counts->boundary_refinement_ordinal = count_context->current_run_ordinal;
   } else if (iree_string_view_equal(key, IREE_SV("inline-callables")) &&
              iree_string_view_equal(
                  FindStringOption(count_context->module,
@@ -272,10 +281,13 @@ iree_status_t InspectPipelineRun(void* user_data, loom_op_t* op,
     counts->source_to_low_sanitizer_reporting =
         FindStringOption(count_context->module, loom_pass_run_options(op),
                          IREE_SV("sanitizer-reporting"));
-  } else if (iree_string_view_equal(key, IREE_SV("symbol-dce")) &&
-             counts->source_to_low != 0) {
-    ++counts->symbol_dce;
-    counts->symbol_dce_ordinal = count_context->current_run_ordinal;
+  } else if (iree_string_view_equal(key, IREE_SV("symbol-dce"))) {
+    if (counts->boundary_refinement != 0 && counts->source_to_low == 0) {
+      counts->boundary_cleanup_ordinal = count_context->current_run_ordinal;
+    } else if (counts->source_to_low != 0) {
+      ++counts->symbol_dce;
+      counts->symbol_dce_ordinal = count_context->current_run_ordinal;
+    }
   } else if (iree_string_view_equal(key,
                                     IREE_SV("sanitizer-insert-assertions"))) {
     ++counts->sanitizer_insert_assertions;
@@ -365,7 +377,8 @@ TEST_F(TargetPipelineTest, ZeroChecksStillMaterializesAuthoredAssertions) {
   EXPECT_EQ(counts.final_template_selection, 1);
   EXPECT_TRUE(
       iree_string_view_equal(counts.final_template_rewrite, IREE_SV("inline")));
-  EXPECT_EQ(counts.target_callgraph_specialization, 3);
+  EXPECT_EQ(counts.target_callgraph_specialization, 4);
+  EXPECT_EQ(counts.boundary_refinement, 1);
   EXPECT_EQ(counts.pipeline_preparation, 2);
   EXPECT_EQ(counts.worker_outlining, 2);
   EXPECT_EQ(counts.boundary_projection, 1);
@@ -392,6 +405,12 @@ TEST_F(TargetPipelineTest, ZeroChecksStillMaterializesAuthoredAssertions) {
   EXPECT_LT(counts.worker_outlining_ordinals[1],
             counts.target_callgraph_specialization_ordinals[2]);
   EXPECT_LT(counts.target_callgraph_specialization_ordinals[2],
+            counts.boundary_refinement_ordinal);
+  EXPECT_LT(counts.boundary_refinement_ordinal,
+            counts.boundary_cleanup_ordinal);
+  EXPECT_LT(counts.boundary_cleanup_ordinal,
+            counts.target_callgraph_specialization_ordinals[3]);
+  EXPECT_LT(counts.target_callgraph_specialization_ordinals[3],
             counts.first_target_legalization_ordinal);
   EXPECT_EQ(counts.view_transport_decomposition, 1);
   EXPECT_LT(counts.worker_outlining_ordinals[1],
@@ -473,11 +492,18 @@ TEST_F(TargetPipelineTest, DiagnosticArtifactsPreserveRawSourceBoundary) {
 
   const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
   EXPECT_EQ(counts.final_template_selection, 0);
-  EXPECT_EQ(counts.target_callgraph_specialization, 1);
+  EXPECT_EQ(counts.target_callgraph_specialization, 2);
+  EXPECT_EQ(counts.boundary_refinement, 1);
   EXPECT_EQ(counts.boundary_projection, 1);
   EXPECT_EQ(counts.source_to_low, 1);
   EXPECT_EQ(counts.symbol_dce, 0);
   EXPECT_LT(counts.target_callgraph_specialization_ordinals[0],
+            counts.boundary_refinement_ordinal);
+  EXPECT_LT(counts.boundary_refinement_ordinal,
+            counts.boundary_cleanup_ordinal);
+  EXPECT_LT(counts.boundary_cleanup_ordinal,
+            counts.target_callgraph_specialization_ordinals[1]);
+  EXPECT_LT(counts.target_callgraph_specialization_ordinals[1],
             counts.first_target_inlining_ordinal);
   EXPECT_LT(counts.first_target_inlining_ordinal,
             counts.boundary_projection_ordinal);

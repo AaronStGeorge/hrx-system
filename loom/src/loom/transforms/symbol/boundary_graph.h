@@ -9,6 +9,7 @@
 
 #include "loom/analysis/scc.h"
 #include "loom/ir/facts.h"
+#include "loom/ir/function_version.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 
@@ -120,10 +121,13 @@ bool loom_refine_boundaries_callee_node(
     iree_host_size_t* out_node);
 
 // Builds graph nodes, argument projections and bottom-up SCC order in |arena|.
-// |scratch_arena| is borrowed by the graph and must outlive it.
+// Retained function versions own externally invoked boundaries and are excluded
+// from signature refinement. |scratch_arena| is borrowed by the graph and must
+// outlive it.
 iree_status_t loom_refine_boundaries_build_graph(
-    loom_module_t* module, iree_arena_allocator_t* arena,
-    iree_arena_allocator_t* scratch_arena,
+    loom_module_t* module,
+    const loom_function_version_list_t* function_versions,
+    iree_arena_allocator_t* arena, iree_arena_allocator_t* scratch_arena,
     loom_refine_boundaries_graph_t* out_graph, loom_scc_list_t* out_sccs);
 
 #ifdef __cplusplus

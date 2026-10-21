@@ -8,17 +8,35 @@
 #define LOOM_TRANSFORMS_SYMBOL_BOUNDARY_SPECIALIZATION_H_
 
 #include "loom/transforms/symbol/boundary_graph.h"
+#include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Groups calls to internal functions by concrete result types, clones each
-// needed specialization and retargets its calls. Plans live in |arena|. New
-// definitions and changed calls invalidate the graph.
-iree_status_t loom_refine_boundaries_specialize_internal_boundaries(
+typedef struct loom_refine_boundaries_specialization_plans_t
+    loom_refine_boundaries_specialization_plans_t;
+
+// Allocates empty specialization plans indexed by |graph| function node.
+iree_status_t loom_refine_boundaries_specialization_plans_allocate(
+    const loom_refine_boundaries_graph_t* graph, bool encodings_only,
+    iree_arena_allocator_t* arena,
+    loom_refine_boundaries_specialization_plans_t** out_plans);
+
+// Records |op| when it is a specializable call using the caller's
+// already-computed local value facts. Boundary types are normalized to callee
+// identities before entering the plan.
+iree_status_t loom_refine_boundaries_specialization_plans_collect_call(
     loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
-    iree_arena_allocator_t* arena, int64_t* out_specialization_count);
+    loom_refine_boundaries_specialization_plans_t* plans,
+    const loom_value_fact_table_t* function_facts, loom_op_t* op);
+
+// Clones each required internal specialization and retargets its calls. New
+// definitions and changed calls invalidate |graph| and |plans|.
+iree_status_t loom_refine_boundaries_specialization_plans_apply(
+    loom_module_t* module, const loom_refine_boundaries_graph_t* graph,
+    loom_refine_boundaries_specialization_plans_t* plans,
+    int64_t* out_specialization_count);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -165,13 +165,13 @@ iree_status_t loom_type_refine_with_value_facts(
   return iree_ok_status();
 }
 
-iree_status_t loom_type_specialize_with_value_facts(
+iree_status_t loom_type_specialize_encoding_with_value_facts(
     loom_module_t* module, loom_type_t current_type,
     const loom_value_fact_table_t* fact_table, iree_arena_allocator_t* arena,
     loom_type_t* out_type, loom_type_refinement_result_t* out_result) {
   loom_type_t refined_type = current_type;
   loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
-  IREE_RETURN_IF_ERROR(loom_type_refine_with_value_facts(
+  IREE_RETURN_IF_ERROR(loom_type_refine_encoding_with_value_facts(
       current_type, fact_table, arena, &refined_type, &result));
   if (result != LOOM_TYPE_REFINEMENT_CONFLICT &&
       loom_type_has_ssa_encoding(refined_type)) {
@@ -196,6 +196,29 @@ iree_status_t loom_type_specialize_with_value_facts(
         refined_type = encoding_refined_type;
       }
     }
+  }
+  *out_type = refined_type;
+  *out_result = result;
+  return iree_ok_status();
+}
+
+iree_status_t loom_type_specialize_with_value_facts(
+    loom_module_t* module, loom_type_t current_type,
+    const loom_value_fact_table_t* fact_table, iree_arena_allocator_t* arena,
+    loom_type_t* out_type, loom_type_refinement_result_t* out_result) {
+  loom_type_t refined_type = current_type;
+  loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
+  IREE_RETURN_IF_ERROR(loom_type_refine_with_value_facts(
+      current_type, fact_table, arena, &refined_type, &result));
+  if (result != LOOM_TYPE_REFINEMENT_CONFLICT) {
+    loom_type_t encoding_refined_type = refined_type;
+    loom_type_refinement_result_t encoding_result =
+        LOOM_TYPE_REFINEMENT_UNCHANGED;
+    IREE_RETURN_IF_ERROR(loom_type_specialize_encoding_with_value_facts(
+        module, refined_type, fact_table, arena, &encoding_refined_type,
+        &encoding_result));
+    loom_type_refinement_merge_analysis_result(encoding_result, &result);
+    refined_type = encoding_refined_type;
   }
   *out_type = refined_type;
   *out_result = result;

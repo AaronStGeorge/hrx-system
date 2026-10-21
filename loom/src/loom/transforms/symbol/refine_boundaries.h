@@ -27,10 +27,21 @@ extern "C" {
 // Returns immutable metadata for the refine-boundaries pass.
 const loom_pass_info_t* loom_refine_boundaries_pass_info(void);
 
+typedef enum loom_refine_boundaries_mode_e {
+  // Canonicalize every source function while propagating boundary facts.
+  LOOM_REFINE_BOUNDARIES_MODE_WHOLE = 0,
+  // Resolve encodings and persist exact boundary arguments without running
+  // function-body canonicalization.
+  LOOM_REFINE_BOUNDARIES_MODE_ENCODINGS = 1,
+} loom_refine_boundaries_mode_t;
+
 typedef struct loom_refine_boundaries_options_t {
   // Maximum number of outer boundary fixed-point iterations. Zero selects the
   // pass default.
   uint32_t max_iterations;
+
+  // Function-body mutation policy.
+  loom_refine_boundaries_mode_t mode;
 } loom_refine_boundaries_options_t;
 
 // Creates refine-boundaries pass state from a textual option dictionary.

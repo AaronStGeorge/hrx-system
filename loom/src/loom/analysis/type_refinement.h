@@ -37,6 +37,14 @@ iree_status_t loom_type_refine_with_value_facts(
     iree_arena_allocator_t* arena, loom_type_t* out_type,
     loom_type_refinement_result_t* out_result);
 
+// Specializes only the encoding attachment using exact facts and canonical
+// module encodings. Dynamic dimensions retain their SSA identities even when
+// their values are exact in |fact_table|.
+iree_status_t loom_type_specialize_encoding_with_value_facts(
+    loom_module_t* module, loom_type_t current_type,
+    const loom_value_fact_table_t* fact_table, iree_arena_allocator_t* arena,
+    loom_type_t* out_type, loom_type_refinement_result_t* out_result);
+
 // Specializes |current_type| using exact facts and canonical module encodings.
 //
 // This includes ordinary dimension/static-spec refinement and additionally
