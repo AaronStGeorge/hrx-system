@@ -9,10 +9,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "libamdf/cts/util/native_identity.h"
 #include "util/device_cache.h"
 #include "util/provider.h"
 
@@ -35,55 +35,13 @@ bool ParseEndpointId(const char* value, amdf_endpoint_id_t* out_id) {
   return true;
 }
 
-template <typename First, typename Second>
-bool ParseNativeIdentityPair(std::string_view text, int first_base,
-                             First* first, Second* second) {
-  const char* begin = text.data();
-  const char* end = begin + text.size();
-  const auto first_result = std::from_chars(begin, end, *first, first_base);
-  if (first_result.ec != std::errc{} || first_result.ptr == end ||
-      *first_result.ptr != ':') {
-    return false;
-  }
-  const auto second_result =
-      std::from_chars(first_result.ptr + 1, end, *second);
-  return second_result.ec == std::errc{} && second_result.ptr == end;
-}
-
-// Uses the native identity syntax recorded in CTS results, independently of
-// endpoint-ID encodings and foreign runtimes' device ordinals.
-bool ParseNativeIdentity(const char* value,
-                         amdf_endpoint_native_identity_t* out_identity) {
-  const std::string_view text(value);
-  amdf_endpoint_native_identity_t identity = {};
-  if (text.starts_with("linux_device:")) {
-    identity.type = AMDF_ENDPOINT_NATIVE_IDENTITY_TYPE_LINUX_DEVICE;
-    if (!ParseNativeIdentityPair(text.substr(13), 10,
-                                 &identity.value.linux_device.major,
-                                 &identity.value.linux_device.minor)) {
-      return false;
-    }
-  } else if (text.starts_with("windows_adapter:")) {
-    identity.type = AMDF_ENDPOINT_NATIVE_IDENTITY_TYPE_WINDOWS_ADAPTER;
-    if (!ParseNativeIdentityPair(
-            text.substr(16), 16, &identity.value.windows_adapter.luid,
-            &identity.value.windows_adapter.physical_adapter_index)) {
-      return false;
-    }
-  } else {
-    return false;
-  }
-  *out_identity = identity;
-  return true;
-}
-
 bool ResolveRunnerGpuSelection() {
   const char* value = std::getenv("AMDF_CTS_GPU_NATIVE_IDENTITY");
   if (value == nullptr) {
     return true;
   }
   amdf_endpoint_native_identity_t identity = {};
-  if (!ParseNativeIdentity(value, &identity)) {
+  if (!amdf::cts::ParseNativeIdentity(value, &identity)) {
     std::fprintf(stderr, "invalid AMDF_CTS_GPU_NATIVE_IDENTITY: %s\n", value);
     return false;
   }

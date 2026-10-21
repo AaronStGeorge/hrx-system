@@ -34,10 +34,42 @@ iree_cc_library(
   SRCS
     "device_cache.cc"
   DEPS
+    ::native_identity
     ::provider_headers
     amdf::headers
   TESTONLY
   PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    native_identity
+  HDRS
+    "native_identity.h"
+  SRCS
+    "native_identity.cc"
+  DEPS
+    amdf::headers
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    native_identity_test
+  SRCS
+    "native_identity_test.cc"
+  DEPS
+    ::native_identity
+    amdf::headers
+    iree::third_party::google_test
+    iree::third_party::google_test_main
+  LABELS
+    "iree-build-requirement=libamdf"
 )
 endif()
 
@@ -215,6 +247,7 @@ iree_cc_library(
     "test_main.cc"
   DEPS
     ::device_cache
+    ::native_identity
     ::provider_headers
     amdf::headers
     iree::third_party::google_test

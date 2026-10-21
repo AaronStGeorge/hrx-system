@@ -2404,14 +2404,18 @@ amdf_queue_publication_modes_t iree_hal_amd_gpu_pm4_queue_publication_modes(
   return modes;
 }
 
+bool iree_hal_amd_gpu_pm4_queue_host_is_supported(void) {
+  return iree_cpu_architecture_host() == IREE_CPU_ARCHITECTURE_X86_64 &&
+         iree_atomic_int32_is_lock_free() && iree_atomic_int64_is_lock_free();
+}
+
 iree_status_t iree_hal_amd_gpu_pm4_queue_create(
     const iree_hal_queue_family_t* family, iree_hal_amd_gpu_context_t* context,
     const iree_hal_amd_gpu_pm4_queue_options_t* options,
     const iree_hal_queue_params_t* params, iree_allocator_t host_allocator,
     iree_hal_queue_t** out_queue) {
   *out_queue = NULL;
-  if (iree_cpu_architecture_host() != IREE_CPU_ARCHITECTURE_X86_64 ||
-      !iree_atomic_int32_is_lock_free() || !iree_atomic_int64_is_lock_free()) {
+  if (!iree_hal_amd_gpu_pm4_queue_host_is_supported()) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "PM4 publication requires the qualified "
                             "x86-64 host store-fence and atomic contract");

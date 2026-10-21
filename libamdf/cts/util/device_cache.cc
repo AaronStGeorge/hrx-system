@@ -7,6 +7,7 @@
 #include "util/device_cache.h"
 
 #include "amdf/xdna.h"
+#include "libamdf/cts/util/native_identity.h"
 #include "util/provider.h"
 
 amdf_status_t CtsDeviceCache::GetInstance(amdf_instance_t** out_instance) {
@@ -86,21 +87,11 @@ amdf_status_t CtsDeviceCache::ResolveGpuEndpoint(
     if (amdf_status_is_ok(status)) {
       status = api_->endpoint_query_info(endpoint, &info);
     }
-    if (!amdf_status_is_ok(status) ||
-        info.native_identity.type != native_identity.type) {
+    if (!amdf_status_is_ok(status)) {
       continue;
     }
-    const auto& actual = info.native_identity.value;
-    const auto& requested = native_identity.value;
-    if ((native_identity.type ==
-             AMDF_ENDPOINT_NATIVE_IDENTITY_TYPE_LINUX_DEVICE &&
-         actual.linux_device.major == requested.linux_device.major &&
-         actual.linux_device.minor == requested.linux_device.minor) ||
-        (native_identity.type ==
-             AMDF_ENDPOINT_NATIVE_IDENTITY_TYPE_WINDOWS_ADAPTER &&
-         actual.windows_adapter.luid == requested.windows_adapter.luid &&
-         actual.windows_adapter.physical_adapter_index ==
-             requested.windows_adapter.physical_adapter_index)) {
+    if (amdf::cts::NativeIdentityIsEqual(info.native_identity,
+                                         native_identity)) {
       selected = info.id;
     }
   }

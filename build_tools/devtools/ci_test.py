@@ -1101,6 +1101,10 @@ class CiTest(unittest.TestCase):
             "HIP_VISIBLE_DEVICES": "0",
             "CUDA_VISIBLE_DEVICES": "1",
             "GPU_DEVICE_ORDINAL": "2",
+            "HAL_VISIBLE_XDNA_DEVICES": "",
+            "HAL_VISIBLE_RDNA_DEVICES": "1,0",
+            "HAL_VISIBLE_CDNA_DEVICES": "0",
+            "HAL_VISIBLE_AMDGPU2_DEVICES": "2,1",
             "AMDF_CTS_GPU_NATIVE_IDENTITY": "linux_device:226:144",
         }
         with mock.patch.dict(ci.os.environ, device_visibility, clear=True):
@@ -1120,6 +1124,43 @@ class CiTest(unittest.TestCase):
         for step in cmake_tests:
             for item in device_visibility.items():
                 self.assertIn(item, step.env)
+
+    def test_native_amd_profiles_preserve_independent_and_empty_visibility(self):
+        selection = {
+            "HAL_VISIBLE_XDNA_DEVICES": "",
+            "HAL_VISIBLE_RDNA_DEVICES": "1,0",
+            "HAL_VISIBLE_CDNA_DEVICES": "0",
+            "HAL_VISIBLE_AMDGPU2_DEVICES": "2,1",
+            "AMDF_CTS_GPU_NATIVE_IDENTITY": "windows_adapter:123456:0",
+        }
+        profiles = (
+            ("linux", ["iree-bazel-xdna-asan"]),
+            ("linux", ["iree-bazel-amd-client-asan"]),
+            ("win32", ["iree-bazel-amd-client-asan"]),
+            (
+                "win32",
+                ["iree-bazel-amdgpu-native-asan", "--amdgpu-target", "gfx1201"],
+            ),
+        )
+        for platform, arguments in profiles:
+            with self.subTest(platform=platform, arguments=arguments):
+                with (
+                    mock.patch.object(ci.sys, "platform", platform),
+                    mock.patch.dict(ci.os.environ, selection, clear=True),
+                    mock.patch.object(ci.shutil, "which", return_value=None),
+                ):
+                    steps = ci.steps_from_args(ci.parse_arguments(arguments))
+                tests = [step for step in steps if "test" in step.argv]
+                self.assertTrue(tests)
+                for step in tests:
+                    for name, value in selection.items():
+                        self.assertIn(f"--test_env={name}={value}", step.argv)
+                    self.assertFalse(
+                        any(
+                            arg.startswith("--test_env=IREE_HAL_AMDGPU_LIBHSA_PATH=")
+                            for arg in step.argv
+                        )
+                    )
 
     def test_amdgpu_bazel_device_toolchain_uses_fetched_rocm_root(self):
         args = ci.parse_arguments(["iree-bazel-amdgpu"])

@@ -259,20 +259,35 @@ def codec_options(build_system: str) -> tuple[str, ...]:
 
 # Bazel test actions do not inherit the client environment. Preserve the
 # selectors that establish the runner's GPU lease without choosing one here.
+AMD_DEVICE_VISIBILITY_ENV_VARS = (
+    "HAL_VISIBLE_XDNA_DEVICES",
+    "HAL_VISIBLE_RDNA_DEVICES",
+    "HAL_VISIBLE_CDNA_DEVICES",
+    "HAL_VISIBLE_AMDGPU2_DEVICES",
+    "AMDF_CTS_GPU_NATIVE_IDENTITY",
+)
 AMDGPU_DEVICE_VISIBILITY_ENV_VARS = (
     "ROCR_VISIBLE_DEVICES",
     "HIP_VISIBLE_DEVICES",
     "CUDA_VISIBLE_DEVICES",
     "GPU_DEVICE_ORDINAL",
-    "AMDF_CTS_GPU_NATIVE_IDENTITY",
+    *AMD_DEVICE_VISIBILITY_ENV_VARS,
 )
+
+
+def amd_test_env() -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (name, value)
+        for name in AMD_DEVICE_VISIBILITY_ENV_VARS
+        if (value := os.environ.get(name)) is not None
+    )
 
 
 def amdgpu_test_env() -> tuple[tuple[str, str], ...]:
     test_env = []
     for name in AMDGPU_DEVICE_VISIBILITY_ENV_VARS:
         value = os.environ.get(name)
-        if value:
+        if value is not None:
             test_env.append((name, value))
 
     libhsa_path = os.environ.get("IREE_HAL_AMDGPU_LIBHSA_PATH")
@@ -355,6 +370,7 @@ def rdna_windows_weights_step(options: tuple[str, ...], config: str | None) -> C
         (ci_config.RDNA_WEIGHTS_TARGET,),
         config=config,
         available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+        test_env=amd_test_env(),
         bazel_options=options
         + (
             "--test_arg=--weight_device_uri=rdna",
@@ -790,6 +806,7 @@ def xdna_steps(targets: tuple[str, ...], config: str | None) -> list[CiStep]:
             config=config,
             test_tag_filters=ci_config.XDNA_BAZEL_TEST_TAG_FILTERS,
             available_resources=ci_config.XDNA_RESOURCES,
+            test_env=amd_test_env(),
             bazel_options=options,
         ),
     ]
@@ -832,6 +849,7 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
             config=config,
             test_tag_filters=test_tag_filters,
             available_resources=resources,
+            test_env=amd_test_env(),
             bazel_options=options + native_options,
         ),
         *additional_steps,
@@ -902,6 +920,7 @@ def amdgpu_windows_steps(
             ("//libamdf/src/gpu/umd/wddm/wkmi:adapter_info_system_test",),
             config=config,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            test_env=amd_test_env(),
             bazel_options=options
             + (
                 f"--test_arg=--amdf_gpu_target={target_selector}",
@@ -922,6 +941,7 @@ def amdgpu_windows_steps(
                 (ci_config.AMDGPU_WINDOWS_QUEUE_TARGET,),
                 config=config,
                 available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+                test_env=amd_test_env(),
                 bazel_options=queue_options
                 + (
                     f"--test_arg=--amdf_native_lifetime={lifetime}",
@@ -935,6 +955,7 @@ def amdgpu_windows_steps(
             ("//libamdf/cts/gpu/pm4:pm4_dynamic",),
             config=config,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            test_env=amd_test_env(),
             bazel_options=options
             + (
                 f"--test_arg=--amdf_gpu_target={target_selector}",
@@ -950,6 +971,7 @@ def amdgpu_windows_steps(
             targets or ci_config.AMDGPU_WINDOWS_BAZEL_TARGETS,
             config=config,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            test_env=amd_test_env(),
             bazel_options=options + ("--test_env=GTEST_FAIL_FAST=1",),
         )
     )
@@ -959,6 +981,7 @@ def amdgpu_windows_steps(
             (ci_config.AMDGPU_WINDOWS_QUEUE_TARGET,),
             config=config,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            test_env=amd_test_env(),
             bazel_options=queue_options
             + ("--test_arg=--amdf_native_lifetime=instance",),
         )

@@ -65,4 +65,24 @@ iree_cc_library(
 )
 endif()
 
+if(AMDF_BUILD AND IREE_HAL_DRIVER_AMD)
+iree_cc_test(
+  NAME
+    driver_test
+  SRCS
+    "driver_test.cc"
+  DEPS
+    ::driver
+    amdf::headers
+    iree::async::util::proactor_pool
+    iree::base
+    iree::hal
+    iree::hal::drivers::amd::registration
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=libamdf"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

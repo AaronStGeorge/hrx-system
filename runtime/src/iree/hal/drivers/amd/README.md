@@ -36,17 +36,51 @@ registry/driver for devices using that native process context. Direct driver
 construction with INSTANCE bounds native reclamation to the fabric at the cost
 of services unsupported by secondary KFD contexts, including host registration.
 
-The `xdna` and `rdna` schemes share that driver identity. Both `rdna:0` and
-`rdna://0` select the first RDNA endpoint; `xdna:0?columns=4` configures an NPU
-context. Enumeration returns `id/<32 hexadecimal digits>` paths for exact native
-identity selection. Such identities can expire on reset, removal, or reboot.
-Selection checks the requested architecture, so ordinals exclude other GPU
-architectures and NPUs.
+The `xdna`, `rdna`, and `amdgpu2` schemes share that driver identity. `xdna`
+selects NPUs, `rdna` selects RDNA GPUs, and `amdgpu2` selects all GPUs supported
+by this build. Both `rdna:0` and `rdna://0` select the first visible RDNA device;
+`xdna:0?columns=4` configures an NPU context. The legacy `amdgpu` driver remains
+independent.
 
-GPU scheme filtering opens query-only endpoints and uses
-`amdf_gpu_endpoint_architecture`; it creates no device, address space, queue,
-or event. Queue admission then selects an advertised native protocol and
-publication mode. RDNA supports PM4 USER host-producer and KERNEL submission
+Each scheme has its own dense ordinal namespace. Driver creation captures these
+optional environment variables:
+
+| Scheme | Ordered visibility list |
+| --- | --- |
+| `xdna` | `HAL_VISIBLE_XDNA_DEVICES` |
+| `rdna` | `HAL_VISIBLE_RDNA_DEVICES` |
+| `amdgpu2` | `HAL_VISIBLE_AMDGPU2_DEVICES` |
+
+A list indexes that scheme's unmasked supported devices in native enumeration
+order. Unset exposes all devices; an empty or whitespace-only value exposes
+none. Comma-separated decimal ordinals select and reorder devices. Invalid,
+duplicate, or out-of-range ordinals fail driver creation with the variable
+named in the diagnostic. The lists are independent: filtering the unified GPU
+view does not filter the RDNA view or alter libamdf topology.
+
+For example, given native endpoints NPU A, RDNA B, RDNA C:
+
+```sh
+HAL_VISIBLE_RDNA_DEVICES=1,0 HAL_VISIBLE_AMDGPU2_DEVICES=0 iree-run-module ...
+```
+
+The process sees `xdna:0` as A, `rdna:0` as C, `rdna:1` as B, and `amdgpu2:0`
+as B. All aliases share the same native fabric. Existing drivers retain their
+captured selections if the environment changes later.
+
+Enumeration returns `id/<32 hexadecimal digits>` paths for exact native identity
+selection within the same visible scheme. An unsupported or hidden identity is
+unavailable; identities can expire on reset, removal, or reboot. Opaque numeric
+device IDs returned by enumeration name native endpoints across aliases, not
+URI ordinals. Visibility configures selection and is not an access-control
+boundary. Architecture-local ordinals do not claim to match another runtime's
+combined GPU numbering.
+
+GPU discovery captures architecture and usable compute families through query-only
+endpoints; it creates no device, address space, queue, or event. Enumeration and
+selection then use immutable endpoint-index lists. Queue admission selects an
+advertised native protocol and publication mode. RDNA supports PM4 USER
+host-producer and KERNEL submission
 families with GFX11/GFX12 launch and cache encodings. Both use the same bounded
 command recording, dependency, and retirement paths. Other native services fail
 explicitly at construction or operation admission.
