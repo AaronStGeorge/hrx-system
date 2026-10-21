@@ -209,13 +209,11 @@ static iree_status_t loom_liveness_pressure_sweep_sparse(
           &analysis->segments[range.start + i];
       events[event_index++] = (loom_liveness_event_t){
           .point = segment->start_point,
-          .value_id = analysis->value_ids[ordinal],
           .value_ordinal = ordinal,
           .value_delta = 1,
       };
       events[event_index++] = (loom_liveness_event_t){
           .point = segment->end_point,
-          .value_id = analysis->value_ids[ordinal],
           .value_ordinal = ordinal,
           .value_delta = -1,
       };

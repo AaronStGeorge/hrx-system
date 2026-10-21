@@ -18,7 +18,7 @@ static bool loom_liveness_event_less(const loom_liveness_event_t* lhs,
   if (lhs->value_delta != rhs->value_delta) {
     return lhs->value_delta < rhs->value_delta;
   }
-  return lhs->value_id < rhs->value_id;
+  return lhs->value_ordinal < rhs->value_ordinal;
 }
 
 LOOM_DEFINE_ADAPTIVE_SORT(loom_liveness_events_compare_sort,
@@ -26,17 +26,21 @@ LOOM_DEFINE_ADAPTIVE_SORT(loom_liveness_events_compare_sort,
 
 typedef struct loom_liveness_event_bucket_t {
   // First event reserved for this program point in the partitioned array.
-  iree_host_size_t start;
+  uint32_t start;
   // Histogram count during construction, then the next unfilled event slot.
-  iree_host_size_t cursor;
+  uint32_t cursor;
 } loom_liveness_event_bucket_t;
+
+static_assert(sizeof(loom_liveness_event_bucket_t) == 8,
+              "liveness event buckets must remain compact");
 
 iree_status_t loom_liveness_events_sort(loom_liveness_event_t* events,
                                         iree_host_size_t event_count,
                                         uint32_t maximum_point,
                                         iree_arena_allocator_t* scratch_arena) {
   if (event_count <= LOOM_ADAPTIVE_SORT_INSERTION_COUNT_THRESHOLD ||
-      maximum_point >= event_count) {
+      maximum_point >= event_count ||
+      event_count > (iree_host_size_t)UINT32_MAX) {
     loom_liveness_events_compare_sort(events, event_count);
     return iree_ok_status();
   }
@@ -51,7 +55,7 @@ iree_status_t loom_liveness_events_sort(loom_liveness_event_t* events,
   for (iree_host_size_t i = 0; i < event_count; ++i) {
     ++buckets[events[i].point].cursor;
   }
-  iree_host_size_t next_start = 0;
+  uint32_t next_start = 0;
   for (iree_host_size_t i = 0; i < bucket_count; ++i) {
     buckets[i].start = next_start;
     next_start += buckets[i].cursor;
@@ -59,8 +63,8 @@ iree_status_t loom_liveness_events_sort(loom_liveness_event_t* events,
   }
 
   for (iree_host_size_t i = 0; i < bucket_count; ++i) {
-    const iree_host_size_t end =
-        i + 1 < bucket_count ? buckets[i + 1].start : event_count;
+    const uint32_t end =
+        i + 1 < bucket_count ? buckets[i + 1].start : (uint32_t)event_count;
     // Each swap fills one slot in a later bucket. Earlier buckets are already
     // complete, and the current cursor advances only once its point matches.
     while (buckets[i].cursor < end) {

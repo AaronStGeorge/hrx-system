@@ -22,18 +22,16 @@ extern "C" {
 typedef struct loom_liveness_event_t {
   // Program point where the live set changes.
   uint32_t point;
-  // SSA identity used to order simultaneous events deterministically.
-  loom_value_id_t value_id;
-  // Retained index of the interval entering or leaving the live set.
+  // Retained local index used to identify and order simultaneous values.
   loom_value_ordinal_t value_ordinal;
   // Value-count delta: -1 at a segment end, +1 at a segment start.
   int8_t value_delta;
 } loom_liveness_event_t;
 
-static_assert(sizeof(loom_liveness_event_t) == 16,
+static_assert(sizeof(loom_liveness_event_t) == 12,
               "liveness events must remain compact for sorting");
 
-// Orders events in place by point, end before start, then SSA identity.
+// Orders events in place by point, end before start, then local value ordinal.
 // This order also makes pressure-class discovery and peak selection stable.
 //
 // The producer supplies |maximum_point| while constructing the endpoints;

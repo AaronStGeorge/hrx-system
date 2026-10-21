@@ -33,8 +33,8 @@ class LivenessEventsTest : public ::testing::Test {
     auto expected = events;
     std::sort(expected.begin(), expected.end(),
               [](const auto& a, const auto& b) {
-                return std::tie(a.point, a.value_delta, a.value_id) <
-                       std::tie(b.point, b.value_delta, b.value_id);
+                return std::tie(a.point, a.value_delta, a.value_ordinal) <
+                       std::tie(b.point, b.value_delta, b.value_ordinal);
               });
     IREE_ASSERT_OK(loom_liveness_events_sort(events.data(), events.size(),
                                              maximum_point, &arena_));
@@ -42,7 +42,6 @@ class LivenessEventsTest : public ::testing::Test {
       SCOPED_TRACE(i);
       EXPECT_EQ(events[i].point, expected[i].point);
       EXPECT_EQ(events[i].value_delta, expected[i].value_delta);
-      EXPECT_EQ(events[i].value_id, expected[i].value_id);
       EXPECT_EQ(events[i].value_ordinal, expected[i].value_ordinal);
     }
     EXPECT_LE(arena_.used_allocation_size,
@@ -78,10 +77,8 @@ TEST_F(LivenessEventsTest, MatchesEndpointOrderAcrossPointDomains) {
       for (uint32_t ordinal = 0; ordinal < segment_count; ++ordinal) {
         const uint32_t start = random() % maximum_point;
         const uint32_t end = start + 1u + random() % (maximum_point - start);
-        // SSA IDs and retained interval ordinals are distinct index domains.
-        const loom_value_id_t value_id = (segment_count - ordinal) * 7u;
-        events.push_back({end, value_id, ordinal, -1});
-        events.push_back({start, value_id, ordinal, 1});
+        events.push_back({end, ordinal, -1});
+        events.push_back({start, ordinal, 1});
       }
       CheckOrder(events, maximum_point);
       std::reverse(events.begin(), events.end());
