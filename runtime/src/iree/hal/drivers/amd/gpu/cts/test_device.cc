@@ -380,25 +380,28 @@ void GpuNativeTest::SetUp() {
   }
   for (uint32_t i = 0; i < fabric_->endpoint_count && !context_; ++i) {
     if (fabric_->endpoints[i].engine_kind == AMDF_ENGINE_KIND_GPU) {
-      iree::Status status =
-          iree_hal_amd_gpu_context_allocate(fabric_, &fabric_->endpoints[i].id,
-                                            iree_hal_device_event_sink_stderr(),
-                                            iree_allocator_system(), &context_);
-      if (status.code() == iree::StatusCode::kUnimplemented ||
-          status.code() == iree::StatusCode::kUnavailable) {
+      amdf_endpoint_t* endpoint = nullptr;
+      IREE_ASSERT_OK(IREE_HAL_AMD_STATUS_FROM_AMDF(
+          api->endpoint_open(fabric_->instance, &fabric_->endpoints[i].id,
+                             &endpoint),
+          "endpoint_open"));
+      bool supported = false;
+      iree_status_t status =
+          iree_hal_amd_gpu_device_query_support(api, endpoint, &supported);
+      const amdf_status_t close_status = api->endpoint_close(endpoint);
+      if (!amdf_status_is_ok(close_status)) {
+        iree_hal_amd_fabric_retain(fabric_);
+      }
+      IREE_ASSERT_OK(iree_status_join(
+          status,
+          IREE_HAL_AMD_STATUS_FROM_AMDF(close_status, "endpoint_close")));
+      if (!supported) {
         continue;
       }
-      IREE_ASSERT_OK(status);
-      bool supported = false;
-      for (uint32_t family = 0;
-           family < context_->endpoint_info.queue_family_count; ++family) {
-        supported |= iree_hal_amd_gpu_pm4_queue_publication_modes(
-                         &context_->families[family]) != 0;
-      }
-      if (!supported) {
-        iree_hal_amd_gpu_context_free(context_);
-        context_ = nullptr;
-      }
+      IREE_ASSERT_OK(iree_hal_amd_gpu_context_allocate(
+          fabric_, &fabric_->endpoints[i].id,
+          iree_hal_device_event_sink_stderr(), iree_allocator_system(),
+          &context_));
     }
   }
   if (!context_) {
