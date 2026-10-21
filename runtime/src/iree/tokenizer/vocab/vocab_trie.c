@@ -24,6 +24,11 @@
 
 #include <string.h>
 
+#define IREE_TOKENIZER_DAAC_CHILD_CACHE_CAPACITY 512
+static_assert((IREE_TOKENIZER_DAAC_CHILD_CACHE_CAPACITY &
+               (IREE_TOKENIZER_DAAC_CHILD_CACHE_CAPACITY - 1)) == 0,
+              "child cache capacity must be a power of two");
+
 //===----------------------------------------------------------------------===//
 // Internal Types
 //===----------------------------------------------------------------------===//
@@ -61,6 +66,10 @@ typedef struct iree_tokenizer_daac_builder_t {
   iree_host_size_t node_capacity;
   // Direct lookup for the root's frequently traversed byte fanout.
   uint32_t root_children[256];
+  // Packed (parent node index, edge byte) keys for cached edge traversals.
+  uint64_t child_cache_keys[IREE_TOKENIZER_DAAC_CHILD_CACHE_CAPACITY];
+  // Child node indices corresponding to child_cache_keys.
+  uint32_t child_cache_values[IREE_TOKENIZER_DAAC_CHILD_CACHE_CAPACITY];
 
   // Transition base offsets under construction.
   int32_t* base;
@@ -78,6 +87,14 @@ typedef struct iree_tokenizer_daac_builder_t {
   // Maximum inserted token length in bytes.
   iree_host_size_t max_depth;
 } iree_tokenizer_daac_builder_t;
+
+static iree_host_size_t iree_tokenizer_daac_child_cache_index(
+    uint32_t parent_index, uint8_t byte) {
+  // Multiplicative mixing keeps sequential node indices from aliasing before
+  // the edge byte participates in the direct-mapped index.
+  return ((parent_index * 0x9E3779B9u) ^ byte) &
+         (IREE_TOKENIZER_DAAC_CHILD_CACHE_CAPACITY - 1);
+}
 
 //===----------------------------------------------------------------------===//
 // Builder - Initialization and Cleanup
@@ -138,11 +155,18 @@ static iree_status_t iree_tokenizer_daac_builder_allocate_node(
 // Returns the child index if found, or UINT32_MAX if absent. out_previous is
 // the sibling after which a new child belongs, or UINT32_MAX at the front.
 static uint32_t iree_tokenizer_daac_find_child(
-    const iree_tokenizer_daac_builder_t* builder, uint32_t parent_index,
-    uint8_t byte, uint32_t* out_previous) {
+    iree_tokenizer_daac_builder_t* builder, uint32_t parent_index, uint8_t byte,
+    uint32_t* out_previous) {
   if (parent_index == 0 && builder->root_children[byte] != UINT32_MAX) {
     *out_previous = UINT32_MAX;
     return builder->root_children[byte];
+  }
+  const uint64_t cache_key = ((uint64_t)parent_index << 8) | byte;
+  const iree_host_size_t cache_index =
+      iree_tokenizer_daac_child_cache_index(parent_index, byte);
+  if (builder->child_cache_keys[cache_index] == cache_key) {
+    *out_previous = UINT32_MAX;
+    return builder->child_cache_values[cache_index];
   }
   uint32_t previous = UINT32_MAX;
   uint32_t child = builder->nodes[parent_index].first_child;
@@ -150,7 +174,12 @@ static uint32_t iree_tokenizer_daac_find_child(
     const iree_tokenizer_daac_build_node_t* child_node = &builder->nodes[child];
     if (child_node->edge_byte >= byte) {
       *out_previous = previous;
-      return child_node->edge_byte == byte ? child : UINT32_MAX;
+      if (child_node->edge_byte == byte) {
+        builder->child_cache_keys[cache_index] = cache_key;
+        builder->child_cache_values[cache_index] = child;
+        return child;
+      }
+      return UINT32_MAX;
     }
     previous = child;
     child = child_node->next_sibling;
@@ -183,6 +212,12 @@ static iree_status_t iree_tokenizer_daac_add_child(
   }
   if (parent_index == 0) {
     builder->root_children[byte] = child_index;
+  } else {
+    const iree_host_size_t cache_index =
+        iree_tokenizer_daac_child_cache_index(parent_index, byte);
+    builder->child_cache_keys[cache_index] =
+        ((uint64_t)parent_index << 8) | byte;
+    builder->child_cache_values[cache_index] = child_index;
   }
 
   *out_child_index = child_index;
@@ -498,6 +533,7 @@ iree_status_t iree_tokenizer_vocab_trie_build(
   memset(&builder, 0, sizeof(builder));
   builder.allocator = allocator;
   memset(builder.root_children, 0xFF, sizeof(builder.root_children));
+  memset(builder.child_cache_keys, 0xFF, sizeof(builder.child_cache_keys));
 
   // Allocate root node.
   uint32_t root_index = 0;
