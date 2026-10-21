@@ -7,6 +7,7 @@
 #ifndef LOOM_SERVE_RUNTIME_PROGRAM_EXECUTABLE_H_
 #define LOOM_SERVE_RUNTIME_PROGRAM_EXECUTABLE_H_
 
+#include "iree/base/byte_sequence.h"
 #include "loom/serve/runtime/execution/dispatch.h"
 #include "loomc/launch_config.h"
 
@@ -25,8 +26,9 @@ typedef struct loom_serve_executable_cache_t loom_serve_executable_cache_t;
 typedef struct loom_serve_executable_t loom_serve_executable_t;
 
 typedef struct loom_serve_executable_request_t {
-  // Owned emitted bytes, transferred to load with the cache's allocator.
-  iree_const_byte_span_t image;
+  // Owned emitted bytes transferred to the cache. Segmented sequences are
+  // coalesced once; contiguous producer storage is retained without copying.
+  iree_byte_sequence_t* image;
   // Root names borrowed through completion, in this input's binding order.
   const iree_string_view_t* roots;
   // Number of roots; a direct launch has exactly one.

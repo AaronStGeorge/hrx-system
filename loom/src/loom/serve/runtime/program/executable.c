@@ -15,7 +15,9 @@ typedef struct loom_serve_executable_image_t {
   iree_atomic_ref_count_t ref_count;
   // Allocator owning this record and the retained exact image bytes.
   iree_allocator_t host_allocator;
-  // Full emitted bytes establish identity, not a hash or root name alone.
+  // Owned immutable storage backing |data|.
+  iree_byte_sequence_t* storage;
+  // Full contiguous emitted bytes establish identity and feed the HAL loader.
   iree_const_byte_span_t data;
   // Owned HAL executable, published under the cache mutex after loading.
   iree_hal_executable_t* handle;
@@ -62,7 +64,7 @@ static void loom_serve_executable_image_release(
   }
   if (iree_atomic_ref_count_dec(&image->ref_count) == 1) {
     iree_hal_executable_release(image->handle);
-    iree_allocator_free(image->host_allocator, (void*)image->data.data);
+    iree_byte_sequence_release(image->storage);
     iree_allocator_free(image->host_allocator, image);
   }
 }
@@ -263,7 +265,7 @@ static iree_host_size_t loom_serve_executable_cache_position(
 
 static iree_status_t loom_serve_executable_cache_insert(
     loom_serve_executable_cache_t* cache, iree_host_size_t position,
-    loom_serve_executable_request_t* request,
+    loom_serve_executable_request_t* request, iree_const_byte_span_t data,
     loom_serve_executable_image_t** out_image) {
   if (cache->count == cache->capacity) {
     IREE_RETURN_IF_ERROR(iree_allocator_grow_array(
@@ -275,8 +277,9 @@ static iree_status_t loom_serve_executable_cache_insert(
                                              sizeof(*image), (void**)&image));
   iree_atomic_ref_count_init(&image->ref_count);
   image->host_allocator = cache->host_allocator;
-  image->data = request->image;
-  request->image = iree_const_byte_span_empty();
+  image->storage = request->image;
+  image->data = data;
+  request->image = NULL;
   memmove(&cache->images[position + 1], &cache->images[position],
           (cache->count - position) * sizeof(*cache->images));
   cache->images[position] = image;
@@ -298,6 +301,34 @@ static iree_status_t loom_serve_executable_cache_load_image(
   return status;
 }
 
+// Preserves contiguous producer storage and coalesces segmented producers once
+// before exact lookup. The request always retains the resulting span.
+static iree_status_t loom_serve_executable_request_prepare_image(
+    loom_serve_executable_cache_t* cache,
+    loom_serve_executable_request_t* request,
+    iree_const_byte_span_t* out_data) {
+  *out_data = iree_const_byte_span_empty();
+  if (iree_byte_sequence_try_get_contiguous_span(request->image, out_data)) {
+    return iree_ok_status();
+  }
+
+  iree_byte_span_t storage = iree_byte_span_empty();
+  iree_status_t status =
+      iree_byte_sequence_clone(request->image, cache->host_allocator, &storage);
+  iree_byte_sequence_t* image = NULL;
+  if (iree_status_is_ok(status)) {
+    *out_data = iree_make_const_byte_span(storage.data, storage.data_length);
+    status = iree_byte_sequence_create_from_span_move(
+        &storage, cache->host_allocator, &image);
+  }
+  iree_allocator_free(cache->host_allocator, storage.data);
+  if (iree_status_is_ok(status)) {
+    iree_byte_sequence_release(request->image);
+    request->image = image;
+  }
+  return status;
+}
+
 static void loom_serve_executable_complete(
     loom_serve_executable_image_t* image,
     loom_serve_executable_request_t* request) {
@@ -310,23 +341,32 @@ static void loom_serve_executable_complete(
 void loom_serve_executable_cache_load(
     loom_serve_executable_cache_t* cache,
     loom_serve_executable_request_t* request) {
+  iree_const_byte_span_t data = iree_const_byte_span_empty();
+  iree_status_t status =
+      loom_serve_executable_request_prepare_image(cache, request, &data);
+  if (!iree_status_is_ok(status)) {
+    iree_byte_sequence_release(request->image);
+    request->image = NULL;
+    request->completion(request->user_data, status, NULL);
+    return;
+  }
+
   iree_slim_mutex_lock(&cache->mutex);
   bool found = false;
   const iree_host_size_t position =
-      loom_serve_executable_cache_position(cache, request->image, &found);
+      loom_serve_executable_cache_position(cache, data, &found);
   loom_serve_executable_image_t* image = NULL;
-  iree_status_t status = iree_ok_status();
   if (found) {
     image = cache->images[position];
   } else {
-    status =
-        loom_serve_executable_cache_insert(cache, position, request, &image);
+    status = loom_serve_executable_cache_insert(cache, position, request, data,
+                                                &image);
   }
   const bool ready = image && image->handle;
   // Retire producer storage before publishing its continuation. The loader
   // can complete it immediately after unlock, including destroying the caller.
-  iree_allocator_free(cache->host_allocator, (void*)request->image.data);
-  request->image = iree_const_byte_span_empty();
+  iree_byte_sequence_release(request->image);
+  request->image = NULL;
   if (image && !ready) {
     request->next = image->waiters;
     image->waiters = request;

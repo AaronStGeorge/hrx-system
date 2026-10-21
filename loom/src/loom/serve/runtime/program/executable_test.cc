@@ -14,6 +14,19 @@ namespace {
 using loom_serve::testing::JitTest;
 using loom_serve::testing::loom_serve_test_compilation_t;
 
+static iree_status_t CreateOwnedSequence(iree_const_byte_span_t contents,
+                                         iree_allocator_t host_allocator,
+                                         iree_byte_sequence_t** out_sequence) {
+  iree_byte_span_t storage = iree_byte_span_empty();
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_clone(host_allocator, contents, (void**)&storage.data));
+  storage.data_length = contents.data_length;
+  iree_status_t status = iree_byte_sequence_create_from_span_move(
+      &storage, host_allocator, out_sequence);
+  iree_allocator_free(host_allocator, storage.data);
+  return status;
+}
+
 class ExecutableTest : public JitTest {
  protected:
   void CheckImageReuse(bool direct) {
@@ -158,12 +171,25 @@ TEST_P(ExecutableTest, FailedImageLoadsAreNotRetainedAndCanRetireCache) {
     completion.completed = false;
     completion.retire = attempt != 0;
     const uint8_t invalid[] = {0, 1, 2, 3};
-    void* data = nullptr;
-    IREE_ASSERT_OK(iree_allocator_clone(
-        host_allocator_, iree_make_const_byte_span(invalid, sizeof(invalid)),
-        &data));
+    iree_byte_sequence_t* image = nullptr;
+    if (attempt == 0) {
+      IREE_ASSERT_OK(CreateOwnedSequence(
+          iree_make_const_byte_span(invalid, sizeof(invalid)), host_allocator_,
+          &image));
+    } else {
+      iree_byte_sequence_t* segments[2] = {nullptr, nullptr};
+      IREE_ASSERT_OK(CreateOwnedSequence(iree_make_const_byte_span(invalid, 2),
+                                         host_allocator_, &segments[0]));
+      IREE_ASSERT_OK(
+          CreateOwnedSequence(iree_make_const_byte_span(invalid + 2, 2),
+                              host_allocator_, &segments[1]));
+      IREE_ASSERT_OK(iree_byte_sequence_create_concat(
+          IREE_ARRAYSIZE(segments), segments, host_allocator_, &image));
+      iree_byte_sequence_release(segments[0]);
+      iree_byte_sequence_release(segments[1]);
+    }
     loom_serve_executable_request_t request = {
-        .image = iree_make_const_byte_span(data, sizeof(invalid)),
+        .image = image,
         .completion =
             [](void* user_data, iree_status_t status,
                loom_serve_executable_t* executable) {
@@ -184,7 +210,7 @@ TEST_P(ExecutableTest, FailedImageLoadsAreNotRetainedAndCanRetireCache) {
     };
     loom_serve_executable_cache_load(completion.cache, &request);
     EXPECT_TRUE(completion.completed);
-    EXPECT_EQ(request.image.data_length, 0u);
+    EXPECT_EQ(request.image, nullptr);
   }
   EXPECT_EQ(completion.cache, nullptr);
 }
