@@ -1060,8 +1060,9 @@ iree_status_t loom_serve_finite_model_submit(
         loom_serve_execution_dealloca(execution, model->buffers[0], &value);
   }
   if (iree_status_is_ok(status)) {
-    loom_serve_finite_result_bind(model->invocation.result, execution,
-                                  model->buffers[1]);
+    loom_serve_finite_result_bind(
+        model->invocation.result, execution,
+        iree_hal_buffer_allocated_buffer(model->buffers[1]));
     *out_result = model->invocation.result;
     model->invocation.result = NULL;
     *out_frontier = loom_serve_finite_result_ready(*out_result);

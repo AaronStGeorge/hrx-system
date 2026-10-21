@@ -186,6 +186,8 @@ loom_cc_test(
     iree::vm
     loom::serve::runtime::device
     loom::serve::runtime::execution
+    loom::serve::runtime::execution::retirement
+    loom::serve::runtime::execution::workspace
     loom::serve::runtime::host
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
