@@ -69,6 +69,28 @@ typedef struct loom_aie2p_loop_alignment_state_t {
   bool reachable;
 } loom_aie2p_loop_alignment_state_t;
 
+// Best legal superset format for one exact increase in packet byte length.
+typedef struct loom_aie2p_loop_alignment_option_t {
+  // Superset format providing this byte-length increase.
+  loom_aie2p_bundle_format_id_t format;
+  // Increase over the original packet's byte length.
+  uint8_t added_byte_count;
+  // Number of output slot records required by the format.
+  uint8_t slot_record_count;
+} loom_aie2p_loop_alignment_option_t;
+
+// Packet-independent facts for one legal AIE2P bundle format.
+typedef struct loom_aie2p_loop_alignment_format_t {
+  // Dense encoding format identifier.
+  loom_aie2p_bundle_format_id_t format;
+  // Bit set for each physical slot carried by the format.
+  uint16_t slot_mask;
+  // Encoded packet byte length.
+  uint8_t byte_length;
+  // Number of output slot records required by the format.
+  uint8_t slot_record_count;
+} loom_aie2p_loop_alignment_format_t;
+
 static iree_host_size_t loom_aie2p_bundle_alignment_append_slot(
     loom_aie2p_bundle_alignment_storage_t* storage,
     loom_aie2p_planned_slot_t slot, loom_aie2p_slot_realization_t realization) {
@@ -79,43 +101,50 @@ static iree_host_size_t loom_aie2p_bundle_alignment_append_slot(
   return slot_index;
 }
 
-static bool loom_aie2p_bundle_alignment_loop_format_accepts_bundle(
-    loom_aie2p_bundle_format_id_t format,
-    const loom_aie2p_planned_bundle_t* bundle,
-    const loom_aie2p_planned_slot_t* slots,
-    loom_aie2p_bundle_format_info_t* out_format_info) {
-  if (!loom_aie2p_encoding_query_bundle_format_info(format, out_format_info) ||
-      out_format_info->bit_count % 8 != 0) {
-    return false;
-  }
-  const uint8_t original_byte_length =
-      loom_aie2p_bundle_encoding_format_byte_length(bundle->format,
-                                                    bundle->slot_count);
-  if (out_format_info->bit_count / 8 < original_byte_length) {
-    return false;
-  }
-  loom_aie2p_slot_t format_slots[LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
-  const iree_host_size_t format_slot_count =
-      loom_aie2p_encoding_query_bundle_format_slots(
-          format, IREE_ARRAYSIZE(format_slots), format_slots);
-  if (format_slot_count != out_format_info->slot_count) {
-    return false;
-  }
-  for (uint8_t i = 0; i < bundle->slot_count; ++i) {
-    const loom_aie2p_planned_slot_t* original_slot = &slots[i];
-    if (iree_any_bit_set(original_slot->flags,
-                         LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP)) {
+// Enumerates format compatibility once for one packet. The alignment search
+// only observes each format's byte-length increase and slot cost, so formats
+// with the same increase are interchangeable after retaining the cheapest one.
+static uint8_t loom_aie2p_bundle_alignment_query_loop_options(
+    const loom_aie2p_loop_alignment_format_t* formats,
+    iree_host_size_t format_count, uint16_t required_slot_mask,
+    uint8_t original_byte_length,
+    loom_aie2p_loop_alignment_option_t* out_options) {
+  memset(out_options, 0,
+         (LOOM_AIE2P_HARDWARE_LOOP_ALIGNMENT_MAX_ADDED_BYTES + 1u) *
+             sizeof(*out_options));
+  for (iree_host_size_t format_index = 0; format_index < format_count;
+       ++format_index) {
+    const loom_aie2p_loop_alignment_format_t* format = &formats[format_index];
+    if (format->byte_length < original_byte_length ||
+        (format->slot_mask & required_slot_mask) != required_slot_mask) {
       continue;
     }
-    bool found = false;
-    for (iree_host_size_t j = 0; j < format_slot_count; ++j) {
-      found |= format_slots[j] == original_slot->encoded_slot.slot;
+    const uint8_t added_byte_count = format->byte_length - original_byte_length;
+    if (added_byte_count > LOOM_AIE2P_HARDWARE_LOOP_ALIGNMENT_MAX_ADDED_BYTES) {
+      continue;
     }
-    if (!found) {
-      return false;
+    loom_aie2p_loop_alignment_option_t* option = &out_options[added_byte_count];
+    if (option->format != LOOM_AIE2P_BUNDLE_FORMAT_ID_INVALID &&
+        option->slot_record_count <= format->slot_record_count) {
+      continue;
     }
+    *option = (loom_aie2p_loop_alignment_option_t){
+        .format = format->format,
+        .slot_record_count = format->slot_record_count,
+    };
   }
-  return true;
+  uint8_t option_count = 0;
+  for (uint8_t added_byte_count = 0;
+       added_byte_count <= LOOM_AIE2P_HARDWARE_LOOP_ALIGNMENT_MAX_ADDED_BYTES;
+       ++added_byte_count) {
+    loom_aie2p_loop_alignment_option_t option = out_options[added_byte_count];
+    if (option.format == LOOM_AIE2P_BUNDLE_FORMAT_ID_INVALID) {
+      continue;
+    }
+    option.added_byte_count = added_byte_count;
+    out_options[option_count++] = option;
+  }
+  return option_count;
 }
 
 static bool loom_aie2p_bundle_alignment_bundle_is_nop(
@@ -197,15 +226,57 @@ iree_status_t loom_aie2p_bundle_alignment_try_loop_boundary(
 
   const iree_host_size_t format_count =
       loom_aie2p_encoding_bundle_format_count();
+  loom_aie2p_loop_alignment_format_t* formats = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(builder->scratch_arena,
+                                                 format_count, sizeof(*formats),
+                                                 (void**)&formats));
+  for (iree_host_size_t format_index = 0; format_index < format_count;
+       ++format_index) {
+    const loom_aie2p_bundle_format_id_t format =
+        (loom_aie2p_bundle_format_id_t)(format_index + 1u);
+    loom_aie2p_bundle_format_info_t format_info;
+    const bool found =
+        loom_aie2p_encoding_query_bundle_format_info(format, &format_info);
+    IREE_ASSERT(found && format_info.bit_count % 8 == 0);
+    loom_aie2p_slot_t format_slots[LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+    const iree_host_size_t format_slot_count =
+        loom_aie2p_encoding_query_bundle_format_slots(
+            format, IREE_ARRAYSIZE(format_slots), format_slots);
+    IREE_ASSERT_EQ(format_slot_count, format_info.slot_count);
+    uint16_t slot_mask = 0;
+    for (iree_host_size_t i = 0; i < format_slot_count; ++i) {
+      slot_mask |= (uint16_t)(1u << format_slots[i]);
+    }
+    formats[format_index] = (loom_aie2p_loop_alignment_format_t){
+        .format = format,
+        .slot_mask = slot_mask,
+        .byte_length = format_info.bit_count / 8,
+        .slot_record_count = format_info.slot_count,
+    };
+  }
+
   for (iree_host_size_t packet_index = 0; packet_index < packet_count;
        ++packet_index) {
     const loom_aie2p_planned_bundle_t* bundle =
         &builder->bundles[region_bundle_start + packet_index];
     const loom_aie2p_planned_slot_t* original_slots =
         &builder->slots[bundle->slot_start];
+    uint16_t required_slot_mask = 0;
+    for (uint8_t i = 0; i < bundle->slot_count; ++i) {
+      if (!iree_any_bit_set(original_slots[i].flags,
+                            LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP)) {
+        required_slot_mask |=
+            (uint16_t)(1u << original_slots[i].encoded_slot.slot);
+      }
+    }
     const uint8_t original_byte_length =
         loom_aie2p_bundle_encoding_format_byte_length(bundle->format,
                                                       bundle->slot_count);
+    loom_aie2p_loop_alignment_option_t
+        options[LOOM_AIE2P_HARDWARE_LOOP_ALIGNMENT_MAX_ADDED_BYTES + 1u];
+    const uint8_t option_count = loom_aie2p_bundle_alignment_query_loop_options(
+        formats, format_count, required_slot_mask, original_byte_length,
+        options);
     for (uint8_t added_byte_count = 0;
          added_byte_count <= LOOM_AIE2P_HARDWARE_LOOP_ALIGNMENT_MAX_ADDED_BYTES;
          ++added_byte_count) {
@@ -214,24 +285,18 @@ iree_status_t loom_aie2p_bundle_alignment_try_loop_boundary(
       if (!state->reachable) {
         continue;
       }
-      for (iree_host_size_t format_ordinal = 1; format_ordinal <= format_count;
-           ++format_ordinal) {
-        const loom_aie2p_bundle_format_id_t format =
-            (loom_aie2p_bundle_format_id_t)format_ordinal;
-        loom_aie2p_bundle_format_info_t format_info;
-        if (!loom_aie2p_bundle_alignment_loop_format_accepts_bundle(
-                format, bundle, original_slots, &format_info)) {
-          continue;
-        }
-        const uint8_t format_byte_length = format_info.bit_count / 8;
-        const uint8_t next_added_byte_count =
-            added_byte_count + format_byte_length - original_byte_length;
+      for (uint8_t option_index = 0; option_index < option_count;
+           ++option_index) {
+        const loom_aie2p_loop_alignment_option_t* option =
+            &options[option_index];
+        const unsigned next_added_byte_count =
+            (unsigned)added_byte_count + option->added_byte_count;
         if (next_added_byte_count >
             LOOM_AIE2P_HARDWARE_LOOP_ALIGNMENT_MAX_ADDED_BYTES) {
           continue;
         }
         const uint32_t next_slot_record_count =
-            state->slot_record_count + format_info.slot_count;
+            state->slot_record_count + option->slot_record_count;
         loom_aie2p_loop_alignment_state_t* next_state =
             &states[(packet_index + 1u) * state_width + next_added_byte_count];
         if (next_state->reachable &&
@@ -239,7 +304,7 @@ iree_status_t loom_aie2p_bundle_alignment_try_loop_boundary(
           continue;
         }
         *next_state = (loom_aie2p_loop_alignment_state_t){
-            .format = format,
+            .format = option->format,
             .previous_added_byte_count = added_byte_count,
             .slot_record_count = next_slot_record_count,
             .reachable = true,
