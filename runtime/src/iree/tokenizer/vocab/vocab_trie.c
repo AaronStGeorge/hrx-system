@@ -31,11 +31,18 @@
 // Temporary node used during construction.
 // Child edges are intrusive sibling links, avoiding separate storage per node.
 typedef struct iree_tokenizer_daac_build_node_t {
-  // Token ID if a word ends here, or -1 otherwise.
-  int32_t token_id;
+  // Phase-specific payload: construction records token IDs, then conversion
+  // replaces each consumed token ID with its assigned double-array state.
+  union {
+    // Token ID if a word ends here, or -1 otherwise.
+    int32_t token_id;
+    // Assigned double-array state once queued for conversion.
+    int32_t array_state;
+  } value;
   // First child node index, or UINT32_MAX when this node is a leaf.
   uint32_t first_child;
-  // Next child of the same parent, sorted by edge_byte, or UINT32_MAX.
+  // Next sibling during construction, then the BFS queue link after the
+  // parent has consumed its sorted child list.
   uint32_t next_sibling;
   // Byte labeling the incoming edge from this node's parent.
   uint8_t edge_byte;
@@ -114,7 +121,7 @@ static iree_status_t iree_tokenizer_daac_builder_allocate_node(
 
   uint32_t index = (uint32_t)builder->node_count++;
   iree_tokenizer_daac_build_node_t* node = &builder->nodes[index];
-  node->token_id = -1;
+  node->value.token_id = -1;
   node->first_child = UINT32_MAX;
   node->next_sibling = UINT32_MAX;
   node->edge_byte = 0;
@@ -213,7 +220,7 @@ static iree_status_t iree_tokenizer_daac_builder_insert(
   }
 
   // Mark token at final node.
-  builder->nodes[node_index].token_id = token_id;
+  builder->nodes[node_index].value.token_id = token_id;
   if (length > builder->max_depth) {
     builder->max_depth = length;
   }
@@ -354,14 +361,6 @@ static iree_status_t iree_tokenizer_daac_builder_find_base(
   }
 }
 
-// BFS queue entry for double-array construction.
-typedef struct iree_tokenizer_daac_bfs_entry_t {
-  // Index in the temporary trie.
-  uint32_t build_node;
-  // State in the double-array.
-  int32_t array_state;
-} iree_tokenizer_daac_bfs_entry_t;
-
 // Converts temporary trie to double-array format using BFS.
 static iree_status_t iree_tokenizer_daac_builder_to_array(
     iree_tokenizer_daac_builder_t* builder) {
@@ -381,27 +380,20 @@ static iree_status_t iree_tokenizer_daac_builder_to_array(
   // Initialize root.
   builder->base[0] = 0;
   builder->check[0] = 0;  // Root's check is itself (marks as occupied).
-  builder->output[0] = builder->nodes[0].token_id;
-
-  // Allocate BFS queue.
-  iree_tokenizer_daac_bfs_entry_t* queue = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      builder->allocator, builder->node_count, sizeof(*queue), (void**)&queue));
+  builder->output[0] = builder->nodes[0].value.token_id;
+  builder->nodes[0].value.array_state = 0;
 
   iree_status_t status = iree_ok_status();
 
-  // BFS from root.
-  iree_host_size_t queue_head = 0;
-  iree_host_size_t queue_tail = 0;
-  queue[queue_tail].build_node = 0;
-  queue[queue_tail].array_state = 0;
-  ++queue_tail;
-
-  while (queue_head < queue_tail && iree_status_is_ok(status)) {
-    iree_tokenizer_daac_bfs_entry_t entry = queue[queue_head++];
-    const iree_tokenizer_daac_build_node_t* node =
-        &builder->nodes[entry.build_node];
+  // Breadth-first conversion reuses consumed sibling links as queue links.
+  // Appended nodes retain their child lists until they themselves are visited.
+  uint32_t queue_head = 0;
+  uint32_t queue_tail = 0;
+  while (queue_head != UINT32_MAX && iree_status_is_ok(status)) {
+    uint32_t build_node = queue_head;
+    const iree_tokenizer_daac_build_node_t* node = &builder->nodes[build_node];
     if (node->first_child == UINT32_MAX) {
+      queue_head = node->next_sibling;
       continue;
     }
 
@@ -412,17 +404,20 @@ static iree_status_t iree_tokenizer_daac_builder_to_array(
       break;
     }
 
-    builder->base[entry.array_state] = base_value;
+    builder->base[node->value.array_state] = base_value;
 
     // Allocate children.
     uint32_t child_build_node = node->first_child;
     while (child_build_node != UINT32_MAX) {
-      const uint8_t byte = builder->nodes[child_build_node].edge_byte;
+      iree_tokenizer_daac_build_node_t* child =
+          &builder->nodes[child_build_node];
+      const uint32_t next_child = child->next_sibling;
+      const uint8_t byte = child->edge_byte;
       iree_host_size_t child_slot = (iree_host_size_t)base_value + byte;
 
       // Mark as occupied.
-      builder->check[child_slot] = entry.array_state;
-      builder->output[child_slot] = builder->nodes[child_build_node].token_id;
+      builder->check[child_slot] = node->value.array_state;
+      builder->output[child_slot] = child->value.token_id;
 
       if (child_slot >= builder->array_size) {
         builder->array_size = child_slot + 1;
@@ -435,14 +430,15 @@ static iree_status_t iree_tokenizer_daac_builder_to_array(
             "array state %" PRIhsz " exceeds int32_t limit", child_slot);
         break;
       }
-      queue[queue_tail].build_node = child_build_node;
-      queue[queue_tail].array_state = (int32_t)child_slot;
-      ++queue_tail;
-      child_build_node = builder->nodes[child_build_node].next_sibling;
+      child->value.array_state = (int32_t)child_slot;
+      child->next_sibling = UINT32_MAX;
+      builder->nodes[queue_tail].next_sibling = child_build_node;
+      queue_tail = child_build_node;
+      child_build_node = next_child;
     }
+    queue_head = builder->nodes[build_node].next_sibling;
   }
 
-  iree_allocator_free(builder->allocator, queue);
   return status;
 }
 
@@ -536,6 +532,8 @@ iree_status_t iree_tokenizer_vocab_trie_build(
   // Convert to double-array format.
   if (iree_status_is_ok(status)) {
     status = iree_tokenizer_daac_builder_to_array(&builder);
+    iree_allocator_free(builder.allocator, builder.nodes);
+    builder.nodes = NULL;
   }
 
   // Allocate final slab and copy data.
