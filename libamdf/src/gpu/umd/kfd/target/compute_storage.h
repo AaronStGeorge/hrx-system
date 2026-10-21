@@ -33,8 +33,8 @@ extern "C" {
 #endif
 
 // Resolves KFD's save-area ABI from the native geometry and reported sizes.
-// Older CDNA kernels use the architectural save layout. RDNA requires the
-// reported sizes because its per-CU register save area varies between ASICs.
+// Kernels without reported sizes use the architectural CDNA or pre-GFX125x
+// RDNA thunk layout. Explicit native sizes take precedence over that layout.
 // Unsupported or unrepresentable storage leaves the output unchanged.
 bool amdf_gpu_kfd_compute_storage_plan(
     const amdf_gpu_kfd_topology_t* topology,

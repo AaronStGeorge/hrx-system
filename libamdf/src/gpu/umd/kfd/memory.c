@@ -238,8 +238,9 @@ static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
   const amdf_gpu_umd_device_t* device = data;
   const bool device_local = (flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) != 0;
   // GTT and caller-owned pages have ordinary CPU mappings independently of
-  // the GPU PTE cache policy. Only local VRAM uses a WC aperture.
-  const bool write_back = !device_local;
+  // the GPU PTE cache policy. Unified cached SYSTEM storage can also be local
+  // to the GPU; only discrete local VRAM uses a WC aperture.
+  const bool write_back = !device_local || device->topology.integrated;
   const uint32_t line_size = write_back ? device->cache_line_size : 0;
   amdf_cache_transition_t flush = {0};
   if (write_back) {
@@ -535,7 +536,8 @@ amdf_status_t amdf_gpu_umd_host_mapping_cache_control(
     amdf_gpu_umd_host_mapping_t* mapping, amdf_host_cache_operation_t operation,
     uint64_t memory_byte_offset, uint64_t byte_length) {
   const amdf_gpu_umd_memory_t* memory = (amdf_gpu_umd_memory_t*)mapping;
-  if ((memory->flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) == 0) {
+  if ((memory->flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) == 0 ||
+      memory->device->topology.integrated) {
     // GPU snooping does not make this backing coherent with other consumers.
     // Explicit CPU operations cover the requested bytes even on coherent GTT.
     amdf_linux_host_cache_transfer(

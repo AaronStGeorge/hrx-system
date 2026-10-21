@@ -45,10 +45,45 @@ iree_runtime_cc_library(
     hdrs = ["memory.h"],
     deps = [
         "//libamdf:headers",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/async:types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd:status",
+    ],
+)
+
+# compiler-rt identifies libasan.so anywhere in a loaded library name, so a
+# library named asan is mistaken for a second sanitizer runtime.
+iree_runtime_cc_library(
+    name = "asan_support",
+    srcs = ["asan.c"],
+    hdrs = ["asan.h"],
+    deps = [
+        ":memory",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd:status",
+        "//runtime/src/iree/hal/memory:asan_pool",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "asan_test",
+    srcs = ["asan_test.cc"],
+    deps = [
+        ":asan_support",
+        ":slab_provider",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/testing:mock_device",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -71,9 +106,14 @@ iree_runtime_cc_library(
     hdrs = ["file_transfer.h"],
     deps = [
         ":buffer",
+        ":memory",
+        ":memory_backend",
+        ":memory_transition",
+        "//libamdf:headers",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/utils:files",
     ],
 )
@@ -104,9 +144,11 @@ iree_runtime_cc_library(
         "slab_provider.h",
     ],
     deps = [
+        ":asan_support",
         ":buffer",
         ":memory",
         "//libamdf:headers",
+        "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/threading",
@@ -119,6 +161,23 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_test(
+    name = "allocation_queue_test",
+    srcs = ["allocation_queue_test.cc"],
+    deps = [
+        ":memory",
+        ":slab_provider",
+        "//libamdf:headers",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/memory:slab_provider",
+        "//runtime/src/iree/hal/testing:mock_device",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "slab_provider_test",
     srcs = ["slab_provider_test.cc"],
     deps = [
@@ -126,6 +185,7 @@ iree_runtime_cc_test(
         "//libamdf:headers",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async:platform",
+        "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/async/util:proactor_thread",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
@@ -168,14 +228,20 @@ iree_runtime_cc_library(
         "memory_backend.c",
         "virtual_buffer.c",
     ],
-    hdrs = ["memory_backend.h"],
+    hdrs = [
+        "memory_backend.h",
+        "virtual_buffer.h",
+    ],
     deps = [
+        ":asan_support",
         ":memory",
         ":memory_transition",
         ":slab_provider",
         "//libamdf:headers",
+        "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/memory:passthrough_pool",
@@ -186,7 +252,6 @@ iree_runtime_cc_test(
     name = "memory_backend_test",
     srcs = [
         "memory_backend_test.cc",
-        "memory_backend_test_base.h",
         "virtual_buffer_test.cc",
     ],
     target_compatible_with = select({
@@ -194,8 +259,69 @@ iree_runtime_cc_test(
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
+        ":file_transfer",
+        ":memory",
         ":memory_backend",
+        ":memory_backend_test_base",
         ":slab_provider",
+        "//libamdf:headers",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/async:platform",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/task:device",
+        "//runtime/src/iree/hal/memory:fixed_block_pool",
+        "//runtime/src/iree/hal/memory:slab_cache",
+        "//runtime/src/iree/hal/testing:mock_device",
+        "//runtime/src/iree/hal/utils:files",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/task",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "file_transfer_ranges_test",
+    srcs = ["file_transfer_ranges_test.cc"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_task": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }) + select({
+        "//libamdf/config:enabled_setting": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":file_transfer",
+        ":memory_backend",
+        ":memory_backend_test_base",
+        "//libamdf:headers",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/async:platform",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/hal/utils:files",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "memory_backend_test_base",
+    testonly = True,
+    hdrs = ["memory_backend_test_base.h"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_task": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":memory_backend",
         "//libamdf:headers",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async:platform",
@@ -209,6 +335,42 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/testing:mock_device",
         "//runtime/src/iree/task",
         "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "transient_buffer",
+    srcs = ["transient_buffer.c"],
+    hdrs = ["transient_buffer.h"],
+    deps = [
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "transient_buffer_test",
+    srcs = ["transient_buffer_test.cc"],
+    deps = [
+        ":transient_buffer",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/memory:heap_pool",
+        "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "event",
+    srcs = ["event.c"],
+    hdrs = ["event.h"],
+    deps = [
+        "//libamdf:headers",
+        "//runtime/src/iree/async",
     ],
 )

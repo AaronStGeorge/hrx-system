@@ -422,8 +422,20 @@ class FileTest : public CtsTestBase<> {
                                        read_signal, file, file_offset,
                                        target_buffer, target_offset, length,
                                        &barriers, IREE_HAL_READ_FLAG_NONE));
-    IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
-        read_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+    iree::Status status = iree_hal_semaphore_list_wait(
+        read_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE);
+    if (!status.ok()) {
+      // List waits return only the error code. Query both timeline owners to
+      // distinguish a failed write from a read that inherited its failure.
+      uint64_t value = 0;
+      IREE_EXPECT_OK(
+          iree_hal_semaphore_query(write_signal.semaphores[0], &value))
+          << "file write completion";
+      IREE_EXPECT_OK(
+          iree_hal_semaphore_query(read_signal.semaphores[0], &value))
+          << "file read completion";
+    }
+    IREE_ASSERT_OK(status);
   }
 
  private:
@@ -595,6 +607,10 @@ TEST_P(AsyncFileTest, DirectFileRoundTripUsesReportedRequirements) {
   const size_t buffer_offset = alignment;
   const uint64_t file_offset = stride;
   const size_t buffer_length = length + 2 * alignment;
+  SCOPED_TRACE(::testing::Message()
+               << "buffer alignment=" << alignment << ", transfer alignment="
+               << stride << ", file offset=" << file_offset
+               << ", buffer offset=" << buffer_offset << ", length=" << length);
   // Request file-capable backing before allocation. Backends without retained
   // I/O registration exercise their ordinary file-transfer route.
   const iree_hal_pool_family_access_t family = {

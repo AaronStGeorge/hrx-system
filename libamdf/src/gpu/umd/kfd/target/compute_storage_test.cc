@@ -57,6 +57,43 @@ TEST(KfdComputeStorageTest, RdnaUsesNativeSaveSizesForBothPacketLanguages) {
   }
 }
 
+TEST(KfdComputeStorageTest, OlderRdnaKernelsUseThunkSaveGeometry) {
+  for (uint32_t target :
+       {110000u, 110001u, 110002u, 110003u, 110500u, 110501u, 110502u, 110503u,
+        110700u, 110701u, 110702u, 120000u, 120001u}) {
+    SCOPED_TRACE(target);
+    auto topology =
+        MakeTopology(target / 10000, (target / 100) % 100, target % 100);
+    topology.context_save_restore_byte_length = 0;
+    topology.control_stack_byte_length = 0;
+    for (uint32_t waves_per_cu : {16u, 32u}) {
+      SCOPED_TRACE(waves_per_cu);
+      topology.properties.compute.maximum_wave_count_per_compute_unit =
+          waves_per_cu;
+      for (auto command_type :
+           {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL}) {
+        SCOPED_TRACE(command_type);
+        amdf_gpu_kfd_compute_storage_plan_t plan;
+        ASSERT_TRUE(amdf_gpu_kfd_compute_storage_plan(&topology, command_type,
+                                                      4096, &plan));
+        EXPECT_EQ(plan.context_count, 1u);
+        // Forty CUs save 384 KiB VGPRs, 16 KiB SGPRs, 64 KiB LDS, and
+        // 4 KiB hardware registers each. Every wave consumes 12 stack bytes.
+        EXPECT_EQ(plan.control_stack_byte_length,
+                  waves_per_cu == 16 ? 8192u : 16384u);
+        EXPECT_EQ(plan.context_save_restore_byte_length,
+                  waves_per_cu == 16 ? 19177472u : 19185664u);
+        EXPECT_EQ(plan.debug_byte_offset,
+                  plan.context_save_restore_byte_length);
+        EXPECT_EQ(plan.debug_byte_length, waves_per_cu == 16 ? 20480u : 40960u);
+        EXPECT_EQ(plan.context_storage.byte_length,
+                  waves_per_cu == 16 ? 19197952u : 19226624u);
+        EXPECT_EQ(plan.end_of_pipe_storage.byte_length, 4096u);
+      }
+    }
+  }
+}
+
 TEST(KfdComputeStorageTest, Gfx12SaveProtocolsKeepEveryXccContext) {
   for (uint32_t minor : {0u, 5u}) {
     SCOPED_TRACE(minor);
@@ -115,12 +152,13 @@ TEST(KfdComputeStorageTest, Cdna4FallbackSavesExpandedLdsAndAllocatesEop) {
 }
 
 TEST(KfdComputeStorageTest, IncompleteOrUnrepresentableStorageNeverPublishes) {
-  for (uint32_t scenario = 0; scenario < 9; ++scenario) {
+  for (uint32_t scenario = 0; scenario < 12; ++scenario) {
     SCOPED_TRACE(scenario);
     auto topology = MakeTopology(11, 5, 1);
     size_t page_size = 4096;
     switch (scenario) {
       case 0:
+        topology.properties.gfx_ip = {12, 5, 0};
         topology.context_save_restore_byte_length = 0;
         topology.control_stack_byte_length = 0;
         break;
@@ -148,6 +186,21 @@ TEST(KfdComputeStorageTest, IncompleteOrUnrepresentableStorageNeverPublishes) {
         break;
       case 8:
         page_size = 65536;
+        break;
+      case 9:
+        topology.context_save_restore_byte_length = 0;
+        topology.control_stack_byte_length = 0;
+        topology.properties.compute.maximum_wave_count_per_compute_unit = 0;
+        break;
+      case 10:
+        topology.context_save_restore_byte_length = 0;
+        topology.control_stack_byte_length = 0;
+        topology.properties.compute.local_data_share_byte_length = 0;
+        break;
+      case 11:
+        topology.context_save_restore_byte_length = 0;
+        topology.control_stack_byte_length = 0;
+        topology.properties.compute.compute_unit_count = UINT32_MAX;
         break;
     }
     amdf_gpu_kfd_compute_storage_plan_t plan;

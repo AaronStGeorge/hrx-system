@@ -55,11 +55,54 @@ iree_cc_library(
     "memory.c"
   DEPS
     amdf::headers
+    iree::async
+    iree::async::types
     iree::base
     iree::base::internal
     iree::hal
     iree::hal::drivers::amd::status
   PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    asan_support
+  HDRS
+    "asan.h"
+  SRCS
+    "asan.c"
+  DEPS
+    ::memory
+    amdf::headers
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::status
+    iree::hal::memory::asan_pool
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    asan_test
+  SRCS
+    "asan_test.cc"
+  DEPS
+    ::asan_support
+    ::slab_provider
+    amdf::headers
+    iree::base
+    iree::hal
+    iree::hal::testing::mock_device
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=libamdf"
 )
 endif()
 
@@ -91,9 +134,14 @@ iree_cc_library(
     "file_transfer.c"
   DEPS
     ::buffer
+    ::memory
+    ::memory_backend
+    ::memory_transition
+    amdf::headers
     iree::async
     iree::base
     iree::hal
+    iree::hal::drivers::amd::status
     iree::hal::utils::files
   PUBLIC
 )
@@ -130,9 +178,11 @@ iree_cc_library(
     "allocation_queue.c"
     "slab_provider.c"
   DEPS
+    ::asan_support
     ::buffer
     ::memory
     amdf::headers
+    iree::async
     iree::base
     iree::base::internal
     iree::base::threading
@@ -148,6 +198,28 @@ endif()
 if(AMDF_BUILD)
 iree_cc_test(
   NAME
+    allocation_queue_test
+  SRCS
+    "allocation_queue_test.cc"
+  DEPS
+    ::memory
+    ::slab_provider
+    amdf::headers
+    iree::async::util::proactor_pool
+    iree::base
+    iree::hal
+    iree::hal::memory::slab_provider
+    iree::hal::testing::mock_device
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=libamdf"
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
     slab_provider_test
   SRCS
     "slab_provider_test.cc"
@@ -156,6 +228,7 @@ iree_cc_test(
     amdf::headers
     iree::async
     iree::async::platform
+    iree::async::util::proactor_pool
     iree::async::util::proactor_thread
     iree::base
     iree::hal
@@ -210,16 +283,20 @@ iree_cc_library(
     memory_backend
   HDRS
     "memory_backend.h"
+    "virtual_buffer.h"
   SRCS
     "memory_backend.c"
     "virtual_buffer.c"
   DEPS
+    ::asan_support
     ::memory
     ::memory_transition
     ::slab_provider
     amdf::headers
+    iree::async
     iree::base
     iree::base::internal
+    iree::base::threading
     iree::hal
     iree::hal::drivers::amd::status
     iree::hal::memory::passthrough_pool
@@ -233,11 +310,69 @@ iree_cc_test(
     memory_backend_test
   SRCS
     "memory_backend_test.cc"
-    "memory_backend_test_base.h"
     "virtual_buffer_test.cc"
   DEPS
+    ::file_transfer
+    ::memory
     ::memory_backend
+    ::memory_backend_test_base
     ::slab_provider
+    amdf::headers
+    iree::async
+    iree::async::platform
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::task::device
+    iree::hal::memory::fixed_block_pool
+    iree::hal::memory::slab_cache
+    iree::hal::testing::mock_device
+    iree::hal::utils::files
+    iree::io::file_handle
+    iree::task
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+  LABELS
+    "iree-build-requirement=libamdf"
+)
+endif()
+
+if(AMDF_BUILD AND IREE_HAL_DRIVER_TASK)
+iree_cc_test(
+  NAME
+    file_transfer_ranges_test
+  SRCS
+    "file_transfer_ranges_test.cc"
+  DEPS
+    ::file_transfer
+    ::memory_backend
+    ::memory_backend_test_base
+    amdf::headers
+    iree::async
+    iree::async::platform
+    iree::base
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::utils::files
+    iree::io::file_handle
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+  LABELS
+    "iree-build-requirement=libamdf"
+)
+endif()
+
+if(AMDF_BUILD AND IREE_HAL_DRIVER_TASK)
+iree_cc_library(
+  NAME
+    memory_backend_test_base
+  HDRS
+    "memory_backend_test_base.h"
+  DEPS
+    ::memory_backend
     amdf::headers
     iree::async
     iree::async::platform
@@ -251,9 +386,60 @@ iree_cc_test(
     iree::hal::testing::mock_device
     iree::task
     iree::testing::gtest
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    transient_buffer
+  HDRS
+    "transient_buffer.h"
+  SRCS
+    "transient_buffer.c"
+  DEPS
+    iree::async
+    iree::base
+    iree::base::internal::arena
+    iree::base::threading
+    iree::hal
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    transient_buffer_test
+  SRCS
+    "transient_buffer_test.cc"
+  DEPS
+    ::transient_buffer
+    iree::base
+    iree::base::internal::arena
+    iree::hal
+    iree::hal::memory::heap_pool
+    iree::testing::gtest
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=libamdf"
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    event
+  HDRS
+    "event.h"
+  SRCS
+    "event.c"
+  DEPS
+    amdf::headers
+    iree::async
+  PUBLIC
 )
 endif()
 

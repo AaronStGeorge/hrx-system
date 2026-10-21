@@ -95,13 +95,13 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/emit:spirv": "LOOM_EMIT_SPIRV",
     "//loom/config/emit:wasm": "LOOM_EMIT_WASM",
     "//loom/config/emit:xdna": "LOOM_EMIT_XDNA",
-    "//loom/config/execute:amdgpu_hal": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU",
+    "//loom/config/execute:amdgpu_hal": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD)",
     "//loom/config/execute:iree_hal": "LOOM_EXECUTE_IREE_HAL",
-    "//loom/config/execute:iree_hal_amdgpu": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU",
+    "//loom/config/execute:iree_hal_amdgpu": "LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD)",
     "//loom/config/execute:iree_hal_vulkan": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN",
     "//loom/config/execute:spirv_vulkan_hal": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN",
     "//loom/config/execute:task_hal": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK",
-    "//loom/config/execute:xdna_hal": "LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_XDNA",
+    "//loom/config/execute:xdna_hal": "LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD",
     "//loom/config/import/cxx:embed_includes_enabled": "LOOM_IMPORT_CXX_EMBED_INCLUDES",
     "//loom/config/import:cxx": "LOOM_IMPORT_CXX",
     "//loom/config/import:mlir": "LOOM_IMPORT_MLIR",
@@ -249,9 +249,6 @@ class LoomBuildFileFunctions(
         if not condition:
             return text
         return f"\nif({condition})\n{text}endif()\n\n"
-
-    def loom_config_compatible_with(self, config_labels):
-        return list(config_labels)
 
     def loom_target_profile(
         self, name, family, selector, target_compatible_with=None, **kwargs

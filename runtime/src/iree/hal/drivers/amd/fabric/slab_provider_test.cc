@@ -15,7 +15,9 @@
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/notification.h"
 #include "iree/async/proactor_platform.h"
+#include "iree/async/util/proactor_pool.h"
 #include "iree/async/util/proactor_thread.h"
+#include "iree/base/status_cc.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/pool_wait.h"
 #include "iree/hal/testing/mock_device.h"
@@ -101,6 +103,9 @@ struct FakeNative {
     }
     EXPECT_LE(info->minimum_alignment, 4096u);
     EXPECT_TRUE(iree_device_size_is_power_of_two(info->minimum_alignment));
+    if (self->create_count == self->fail_after_create_count) {
+      return amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
+    }
     self->created_lengths.push_back(info->byte_length);
     self->created_alignments.push_back(info->minimum_alignment);
     auto* memory = new FakeMemory{
@@ -333,6 +338,8 @@ struct FakeNative {
   std::promise<void> destroy_entered;
   // Caller-controlled continuation for that destruction, with no deadline.
   std::shared_future<void> destroy_resume;
+  // Successful creation count at which the next acquisition fails, or -1.
+  int fail_after_create_count = -1;
   // Expected backing requirements for the active provider.
   amdf_memory_flags_t required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
   // Native address failure injected after memory and mapping acquisition.
@@ -367,7 +374,8 @@ class SlabProviderTest : public ::testing::Test {
   void CreateProvider(
       amdf_memory_map_flags_t host_access,
       const iree_hal_pool_import_class_t* import_policy = nullptr,
-      uint64_t maximum_byte_length = 4096) {
+      uint64_t maximum_byte_length = 4096,
+      iree_async_proactor_t* const* io_proactors = nullptr) {
     iree_hal_slab_provider_release(provider_);
     provider_ = nullptr;
     accesses_[0].device = reinterpret_cast<amdf_device_t*>(uintptr_t{1});
@@ -411,6 +419,7 @@ class SlabProviderTest : public ::testing::Test {
       import_route.profile.registration.minimum_alignment = 1;
       import_route.profile.registration.maximum_alignment = 4096;
       import_route.required_flags = options.memory.required_flags;
+      import_route.host_access = host_access;
       if (import_policy->storage_class.type !=
           IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER) {
         import_route.profile.roles = AMDF_MEMORY_PROFILE_ROLE_IMPORT |
@@ -437,7 +446,7 @@ class SlabProviderTest : public ::testing::Test {
       options.import_count = 1;
       options.imports = &import_route;
     }
-    iree_hal_amd_fabric_binding_request_t bindings[3] = {};
+    iree_hal_amd_fabric_binding_request_t bindings[5] = {};
     bindings[1] = {IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS, 0,
                    AMDF_MEMORY_ADDRESS_GPU};
     bindings[2] = {IREE_HAL_BUFFER_INTERFACE_XDNA_SHIM_DMA, 1,
@@ -446,6 +455,14 @@ class SlabProviderTest : public ::testing::Test {
     options.host_binding_index =
         host_access ? 0 : IREE_HAL_BUFFER_NATIVE_BINDING_INDEX_NONE;
     options.bindings = host_access ? bindings : bindings + 1;
+    if (io_proactors) {
+      for (uint32_t i = 0; i < 2; ++i) {
+        bindings[3 + i].type = IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO;
+        bindings[3 + i].access_ordinal = i;
+        bindings[3 + i].io_proactor = io_proactors[i];
+      }
+      options.binding_count += 2;
+    }
     options.memory_type =
         IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL |
         IREE_HAL_MEMORY_TYPE_HOST_VISIBLE | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
@@ -498,6 +515,180 @@ class SlabProviderTest : public ::testing::Test {
   // Completion storage remains alive until TearDown joins the native owner.
   std::promise<void> release_completed_;
 };
+
+class RegisteredSlabProviderTest : public SlabProviderTest,
+                                   public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    SlabProviderTest::SetUp();
+    IREE_ASSERT_OK(iree_async_proactor_pool_create(
+        2, nullptr, iree_async_proactor_pool_options_default(),
+        iree_allocator_system(), &proactors_));
+    IREE_ASSERT_OK(
+        iree_async_proactor_pool_get(proactors_, 0, &io_proactors_[0]));
+    IREE_ASSERT_OK(iree_async_proactor_pool_get(proactors_, GetParam() ? 1 : 0,
+                                                &io_proactors_[1]));
+    for (auto* proactor : io_proactors_) {
+      if (!iree_all_bits_set(
+              iree_async_proactor_query_capabilities(proactor),
+              IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION)) {
+        GTEST_SKIP() << "Prepared buffer attachment is unavailable";
+      }
+    }
+    CreateProvider(AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
+                   nullptr, 4096, io_proactors_);
+  }
+
+  void TearDown() override {
+    SlabProviderTest::TearDown();
+    iree_async_proactor_pool_release(proactors_);
+  }
+
+  iree_status_t Acquire(
+      iree_host_size_t count, iree_hal_slab_t* slabs,
+      iree_hal_slab_release_info_t* out_release_info = nullptr) {
+    struct Completion {
+      // Published after both native and registration callbacks finish.
+      std::promise<iree::Status> status;
+      // Separate cleanup outcome, owned after the status is published.
+      iree_hal_slab_release_info_t release_info = {};
+    } completion;
+    std::vector<iree_hal_slab_request_t> geometries(count, {256, 64});
+    iree_hal_slab_acquire_request_t request = {
+        .count = count,
+        .requests = geometries.data(),
+        .slabs = slabs,
+        .completion = {[](void* user_data, iree_status_t status,
+                          iree_hal_slab_release_info_t release_info) {
+                         auto* completion = static_cast<Completion*>(user_data);
+                         completion->release_info = release_info;
+                         completion->status.set_value(
+                             iree::Status(std::move(status)));
+                       },
+                       &completion},
+    };
+    auto result = completion.status.get_future();
+    iree_hal_slab_provider_acquire_slabs(provider_, &request);
+    auto status = result.get();
+    if (out_release_info) {
+      *out_release_info = completion.release_info;
+    } else {
+      IREE_EXPECT_OK(iree::Status(std::move(completion.release_info.status)));
+      EXPECT_EQ(completion.release_info.abandoned_byte_length, 0u);
+    }
+    return status.release();
+  }
+
+  // Owns real polling owners until native cleanup and their callbacks finish.
+  iree_async_proactor_pool_t* proactors_ = nullptr;
+  // The two device bindings may share one owner or use independent owners.
+  iree_async_proactor_t* io_proactors_[2] = {};
+};
+
+TEST_P(RegisteredSlabProviderTest, PublishesAndReleasesAllBindingsInBatch) {
+  iree_hal_slab_t slabs[3] = {};
+  IREE_ASSERT_OK(Acquire(IREE_ARRAYSIZE(slabs), slabs));
+  for (auto& slab : slabs) {
+    iree_hal_buffer_t* buffer = nullptr;
+    IREE_ASSERT_OK(iree_hal_slab_provider_wrap_buffer(
+        provider_, &slab, 0, slab.length, IREE_HAL_MEMORY_ACCESS_ALL,
+        IREE_HAL_BUFFER_USAGE_TRANSFER, {}, &buffer));
+    iree_async_region_t* regions[2] = {};
+    for (uint16_t i = 0; i < 2; ++i) {
+      const auto binding = iree_hal_buffer_native_binding(
+          buffer, {static_cast<uint16_t>(3 + i),
+                   IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO});
+      auto* table = static_cast<const iree_hal_amd_fabric_io_binding_table_t*>(
+          binding.registered_io.table);
+      EXPECT_EQ(binding.registered_io.index, i);
+      regions[i] = table->regions[binding.registered_io.index];
+      EXPECT_EQ(regions[i]->proactor, io_proactors_[i]);
+      EXPECT_EQ(regions[i]->base_ptr, slab.base_ptr);
+      EXPECT_EQ(regions[i]->length, slab.length);
+    }
+    EXPECT_EQ(regions[0] == regions[1], !GetParam());
+    iree_hal_buffer_release(buffer);
+  }
+  auto completion = release_completed_.get_future();
+  iree_hal_slab_release_request_t release = {
+      .count = IREE_ARRAYSIZE(slabs),
+      .slabs = slabs,
+      .completion = {[](void* user_data,
+                        iree_hal_slab_release_info_t release_info) {
+                       IREE_EXPECT_OK(
+                           iree::Status(std::move(release_info.status)));
+                       EXPECT_EQ(release_info.abandoned_byte_length, 0u);
+                       static_cast<std::promise<void>*>(user_data)->set_value();
+                     },
+                     &release_completed_},
+  };
+  iree_hal_slab_provider_release_slabs(provider_, &release);
+  completion.get();
+  EXPECT_EQ(native_.create_count, 3);
+  EXPECT_EQ(native_.unmap_count, 3);
+  EXPECT_EQ(native_.destroy_count, 3);
+  for (const auto& slab : slabs) {
+    EXPECT_EQ(slab.provider_handle, 0u);
+  }
+}
+
+TEST_P(RegisteredSlabProviderTest,
+       PartialPreparationRollsBackBeforeCompletion) {
+  native_.fail_after_create_count = 1;
+  iree_hal_slab_t slabs[3] = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        Acquire(IREE_ARRAYSIZE(slabs), slabs));
+  EXPECT_EQ(native_.create_count, 1);
+  EXPECT_EQ(native_.unmap_count, 1);
+  EXPECT_EQ(native_.destroy_count, 1);
+  for (const auto& slab : slabs) {
+    EXPECT_EQ(slab.provider_handle, 0u);
+  }
+
+  native_.fail_after_create_count = -1;
+  iree_hal_slab_t slab = {};
+  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(provider_, 256, 64,
+                                                          &slab, nullptr));
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab, nullptr);
+  EXPECT_EQ(native_.create_count, 2);
+  EXPECT_EQ(native_.destroy_count, 2);
+}
+
+TEST_P(RegisteredSlabProviderTest,
+       ConstructorAndPrefixCleanupLossSurvivesPreparationRollback) {
+  native_.fail_create_at = 2;
+  native_.fail_memory_destroy = true;
+  native_.abandon_backing = true;
+  iree_hal_slab_t slabs[3] = {};
+  iree_hal_slab_release_info_t release_info = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        Acquire(IREE_ARRAYSIZE(slabs), slabs, &release_info));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, release_info.status);
+  EXPECT_EQ(release_info.abandoned_byte_length, 8192u);
+  EXPECT_EQ(native_.create_count, 1);
+  EXPECT_EQ(native_.destroy_count, 2);
+  EXPECT_EQ(native_.abandoned_backing.size(), 2u);
+  for (const auto& slab : slabs) {
+    EXPECT_EQ(slab.provider_handle, 0u);
+  }
+}
+
+TEST_P(RegisteredSlabProviderTest, ReleaseReportsBackingLossAfterIoDetachment) {
+  iree_hal_slab_t slab = {};
+  IREE_ASSERT_OK(Acquire(1, &slab));
+  native_.fail_memory_destroy = true;
+  native_.abandon_backing = true;
+  iree_hal_slab_release_info_t release_info = {};
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab, &release_info);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, release_info.status);
+  EXPECT_EQ(release_info.abandoned_byte_length, 4096u);
+  EXPECT_EQ(native_.destroy_count, 1);
+  EXPECT_EQ(native_.unmap_count, 1);
+  EXPECT_EQ(native_.abandoned_backing.size(), 1u);
+}
+
+INSTANTIATE_TEST_SUITE_P(SharedAndDistinctProactors, RegisteredSlabProviderTest,
+                         ::testing::Bool());
 
 TEST_F(SlabProviderTest, MixedReleaseDetachesImportsAndQueuesOwnedFrees) {
   const iree_hal_external_storage_class_t storage_class = {

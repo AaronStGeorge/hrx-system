@@ -16,6 +16,8 @@
 extern "C" {
 #endif  // __cplusplus
 
+typedef struct iree_hal_amd_fabric_asan_t iree_hal_amd_fabric_asan_t;
+
 // One engine address interface used by queue and program bindings.
 typedef struct iree_hal_amd_fabric_memory_binding_t {
   // HAL interface naming this native representation.
@@ -66,7 +68,7 @@ typedef struct iree_hal_amd_fabric_memory_storage_t {
 // one construction domain independently of its available storage scopes.
 typedef struct iree_hal_amd_fabric_memory_backend_options_t {
   // Static allocation-domain prefix for endpoint-local physical storage,
-  // such as "libamdf-rdna", "libamdf-cdna", or "libamdf-xdna".
+  // such as "amd-rdna", "amd-cdna", or "amd-xdna".
   const char* trace_device_domain;
   // Physical endpoint ordinal within that family, independent of HAL groups.
   uint32_t trace_device_ordinal;
@@ -76,6 +78,9 @@ typedef struct iree_hal_amd_fabric_memory_backend_options_t {
   amdf_instance_t* instance;
   // Already-created native device admitted by this backend.
   amdf_device_t* device;
+  // Existing file I/O owner, dominated by the retained HAL device; NULL when
+  // registered file buffers are unavailable. Cold construction prepares pins.
+  iree_async_proactor_t* io_proactor;
   // Ordinary device address domain consumed by the captured families.
   uint32_t address_domain_ordinal;
   // Number of immutable storage choices owned by this backend.
@@ -86,6 +91,8 @@ typedef struct iree_hal_amd_fabric_memory_backend_options_t {
   iree_hal_device_event_sink_t event_sink;
   // Borrowed immutable facts, one per family in HAL family-ordinal order.
   const iree_hal_amd_fabric_memory_family_t* families;
+  // Optional device-owned shadow namespace, borrowed by all created pools.
+  iree_hal_amd_fabric_asan_t* asan;
 } iree_hal_amd_fabric_memory_backend_options_t;
 
 // Borrowed native and progress owners established during device creation.
@@ -108,22 +115,6 @@ typedef struct iree_hal_amd_fabric_memory_backend_t {
   // Existing completion probe with a group-lifetime borrowed context.
   iree_hal_pool_epoch_query_t epoch_query;
 } iree_hal_amd_fabric_memory_backend_t;
-
-// Queries complete-scope native address geometry without reserving addresses.
-// Uses the same native consumer qualification as reservation creation.
-iree_status_t iree_hal_amd_fabric_virtual_buffer_query_capabilities(
-    const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
-    iree_hal_virtual_buffer_capabilities_t* out_capabilities);
-
-// Qualifies explicit native device address domains and creates the complete
-// reservation. Unsupported scopes return OK with no output. Address views
-// inherit no physical placement or visibility facts from future backing.
-iree_status_t iree_hal_amd_fabric_virtual_buffer_create(
-    const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope,
-    const iree_hal_virtual_buffer_options_t* options,
-    iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
 
 // Publishes the core libamdf factory after the caller supplies existing native
 // and progress services. This creates no native object, payload, or policy

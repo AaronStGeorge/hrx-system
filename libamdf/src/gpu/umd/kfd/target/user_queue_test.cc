@@ -199,6 +199,31 @@ TEST(KfdTargetUserQueueTest, Gfx11Pm4RequiresNativeTrapPolicyIdentity) {
             AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
 }
 
+TEST(KfdTargetUserQueueTest, OlderRdnaTopologyKeepsBothComputeFamilies) {
+  auto topology = MakeTopology();
+  topology.properties.gfx_ip = {11, 0, 1};
+  topology.gc_ip = {11, 0, 3, true};
+  topology.properties.compute.compute_unit_count = 60;
+  topology.properties.topology.shader_engine_count_per_xcc = 3;
+  topology.context_save_restore_byte_length = 0;
+  topology.control_stack_byte_length = 0;
+  amdf_gpu_kfd_user_queue_plans_t plans;
+  amdf_gpu_kfd_target_user_queue_plans_initialize(&topology, 4096, 64, &plans);
+  ASSERT_EQ(plans.count, 3u);
+  EXPECT_EQ(plans.values[0].family.command_type,
+            AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
+  EXPECT_EQ(plans.values[1].family.command_type,
+            AMDF_QUEUE_COMMAND_TYPE_GPU_AQL);
+  for (uint32_t i = 0; i < 2; ++i) {
+    EXPECT_EQ(plans.values[i].compute.control_stack_byte_length, 24576u);
+    EXPECT_EQ(plans.values[i].compute.context_save_restore_byte_length,
+              28778496u);
+    EXPECT_EQ(plans.values[i].compute.context_storage.byte_length, 28839936u);
+  }
+  EXPECT_EQ(plans.values[2].family.command_type,
+            AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
+}
+
 TEST(KfdTargetUserQueueTest,
      RetainedScratchPadsBackingSeparatelyFromWaveLimit) {
   auto topology = MakeTopology();

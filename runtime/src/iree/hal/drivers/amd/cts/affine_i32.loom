@@ -1,0 +1,27 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Match the sixteen-element XDNA multiply fixture. Unsigned integer arithmetic
+// wraps at 32 bits on all three execution engines.
+kernel.def export("affine_i32") @affine_i32() {
+  %one = index.constant 1 : index
+  %width = index.constant 32 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%width, %one, %one) : index
+} launch(%buffer: buffer, %addend: i32) {
+  %lane = kernel.workitem.id<x> : index
+  %count = index.constant 16 : index
+  %origin = index.constant 0 : offset
+  %values = buffer.view %buffer[%origin] : buffer -> view<[%count]xi32>
+  %in_bounds = index.cmp ult, %lane, %count : index
+  scf.if %in_bounds {
+    %value = view.load %values[%lane] : view<[%count]xi32> -> i32
+    %three = scalar.constant 3 : i32
+    %product = scalar.muli %value, %three : i32
+    %result = scalar.addi %product, %addend : i32
+    view.store %result, %values[%lane] : i32, view<[%count]xi32>
+  }
+  kernel.return
+}

@@ -38,19 +38,18 @@ TEST(MemoryTraceTest, EqualNamesShareAnIdentityBeyondCallerLifetime) {
 TEST(MemoryTraceTest, DomainsDistinguishPlacementAndShareProviders) {
   iree_hal_memory_trace_t first = {}, same = {}, other = {}, unspecified = {};
   IREE_ASSERT_OK(
-      iree_hal_memory_trace_initialize_domain("libamdf-numa", 0, &first));
+      iree_hal_memory_trace_initialize_domain("amd-numa", 0, &first));
+  IREE_ASSERT_OK(iree_hal_memory_trace_initialize_domain("amd-numa", 0, &same));
   IREE_ASSERT_OK(
-      iree_hal_memory_trace_initialize_domain("libamdf-numa", 0, &same));
-  IREE_ASSERT_OK(
-      iree_hal_memory_trace_initialize_domain("libamdf-numa", 1, &other));
+      iree_hal_memory_trace_initialize_domain("amd-numa", 1, &other));
   IREE_ASSERT_OK(iree_hal_memory_trace_initialize_domain(
-      "libamdf-system", UINT32_MAX, &unspecified));
+      "amd-system", UINT32_MAX, &unspecified));
   EXPECT_EQ(first.memory_id, same.memory_id);
   if (IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING) {
     EXPECT_NE(first.memory_id, other.memory_id);
-    EXPECT_STREQ(first.memory_id, "libamdf-numa-0");
-    EXPECT_STREQ(other.memory_id, "libamdf-numa-1");
-    EXPECT_STREQ(unspecified.memory_id, "libamdf-system");
+    EXPECT_STREQ(first.memory_id, "amd-numa-0");
+    EXPECT_STREQ(other.memory_id, "amd-numa-1");
+    EXPECT_STREQ(unspecified.memory_id, "amd-system");
   }
 }
 

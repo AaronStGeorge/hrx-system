@@ -14,12 +14,14 @@ fabric/
   memory_backend.{c,h}           Complete pool qualification and captured facts.
   memory_transition.{c,h}        Native visibility recipes translated to HAL.
 xdna/                           Native NPU contexts, programs, and execution.
+gpu/                            Native GPU images, PM4 execution, and retirement.
 ```
 
 `fabric/` depends on libamdf core and HAL memory interfaces. It has no execution
 engine dependency. XDNA owns its extension, execution context, queue resources,
-private firmware scope, and firmware address interpretation. A GPU engine can
-occupy `gpu/` with the same dependency direction.
+private firmware scope, and firmware address interpretation. GPU owns its
+extension, native context, command storage, and completion resources, with the
+same dependency direction.
 
 ## Discovery lifetime and device selection
 
@@ -27,22 +29,153 @@ The registry retains one lazily created AMD driver per canonical factory ID.
 Several URI schemes can name that identity without creating separate native
 instances. The original scheme reaches enumeration and device creation, so each
 family has its own ordinal namespace. Independent registries and direct driver
-construction provide separate instances.
+construction provide separate instances. The registry uses PROCESS native
+lifetime to support Linux KFD host registration. Its primary VM can survive
+fabric destruction and prevent a fresh acquisition, so applications retain one
+registry/driver for devices using that native process context. Direct driver
+construction with INSTANCE bounds native reclamation to the fabric at the cost
+of services unsupported by secondary KFD contexts, including host registration.
 
-The implemented scheme is `xdna`. Both `xdna:0` and `xdna://0` select its first
-endpoint; `xdna:0?columns=4` configures the engine context. Enumeration returns
-`id/<32 hexadecimal digits>` paths for exact native identity selection. Such
-identities can expire on reset, removal, or reboot. Selection still checks the
-requested family.
+The `xdna` and `rdna` schemes share that driver identity. Both `rdna:0` and
+`rdna://0` select the first RDNA endpoint; `xdna:0?columns=4` configures an NPU
+context. Enumeration returns `id/<32 hexadecimal digits>` paths for exact native
+identity selection. Such identities can expire on reset, removal, or reboot.
+Selection checks the requested architecture, so ordinals exclude other GPU
+architectures and NPUs.
 
-RDNA and CDNA registration accompanies the GPU engine implementation. libamdf's
-`amdf_gpu_endpoint_architecture` classifies qualified GPU identity without
-conflating all GFX9 devices with CDNA. Engine qualification belongs to the engine
-path; passive fabric discovery does not activate other engines.
+GPU scheme filtering opens query-only endpoints and uses
+`amdf_gpu_endpoint_architecture`; it creates no device, address space, queue,
+or event. Queue admission then selects an advertised native protocol and
+publication mode. RDNA supports PM4 USER host-producer and KERNEL submission
+families with GFX11/GFX12 launch and cache encodings. Both use the same bounded
+command recording, dependency, and retirement paths. Other native services fail
+explicitly at construction or operation admission.
+
+`rdna://0?queue_count=2` provisions two queues sharing the device's execution
+workers. `queue_family` selects an exact native family ordinal instead of the
+first supported family. `host_numa_node` selects CPU placement for the workers
+and shared proactor; GPU-local memory node IDs are not CPU NUMA node IDs.
+
+`completion_spin_ns` bounds active completion observation after actual progress
+(default 100,000 ns). While actively waiting, the existing retirement worker
+reads coherent USER queue completion words; a change resumes authoritative
+source drains. At expiry it parks on the native event, with no periodic wakeups.
+Setting zero parks immediately. KERNEL queues continue to use native events and
+status queries. This trades a bounded CPU tail after the last completion for
+lower latency between dependent operations; it does not alter process power
+policy, add a thread, or change submission and retirement ordering.
 
 Each materialized device retains the fabric independently. Releasing the
 registry and driver leaves those devices operational. The fabric owns the native
 instance and its discovery snapshot; engine contexts own their native children.
+
+## Shader diagnostics and sanitizers
+
+The generic URI parameters request runtime services at device creation:
+
+```text
+rdna://0?feedback
+rdna://0?asan&asan_report_policy=fail-device
+rdna://0?tsan&tsan_report_policy=report-only
+```
+
+Programmatic callers set the corresponding `runtime_features` in
+`iree_hal_device_create_params_t`. ASAN and TSAN also provision feedback.
+Executables use the existing compiler-generated configuration globals and report
+layouts; requesting a runtime service does not instrument an ordinary HSACO.
+Loading an executable requiring an unprovisioned service fails explicitly.
+
+Reports reach the supplied `event_sink`, with executable and source-site identity
+retained through delivery. The default sink discards events; applications can
+select `iree_hal_device_event_sink_stderr()` or provide their own callback. The
+existing completion worker drains the shared channel. There is no additional
+feedback thread. Assertion reports preserve the existing diagnostic behavior;
+they do not automatically fail submissions.
+
+ASAN defaults to `report-only`; TSAN defaults to `fail-device`. Both policies are
+selectable through the URI parameters above. A fail-device report propagates
+`ABORTED` for ASAN or `DATA_LOSS` for TSAN and rejects subsequent work. Failure
+notification does not cancel already-issued native work or certify its resource
+retirement. Pools and caller-owned backing must still outlive their users.
+
+ASAN maintains sparse address shadows, allocation redzones, and freed-backing
+quarantine. TSAN maintains per-queue workgroup shadows and immutable executable
+placements, including when a recorded command buffer runs on different queues.
+Shadow-slot reuse inserts execution joins before prior users can be overwritten.
+Sanitizer shadows use local storage when available and qualified system storage
+on devices without a separate local heap. Ordinary devices allocate none of this
+sanitizer state.
+
+The shared producer requires native shader-triggered events. The current Windows
+provider exposes submission completion but lacks that shader event producer, so
+feedback/ASAN/TSAN device creation is rejected there. Enabling those services
+requires implementing and qualifying the native shader producer; ordinary
+Windows PM4 execution does not depend on it.
+
+## GPU queue profiling
+
+The native GPU backend supports queue events, dispatch events, and executable
+metadata through the ordinary device profiling API. `LIGHTWEIGHT_STATISTICS`
+selects host queue events. Begin and end require an idle device and external
+serialization with submission, as specified by the HAL API:
+
+```c
+const iree_hal_device_profiling_options_t options = {
+    .data_families = IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS,
+    .sink = sink,
+};
+IREE_RETURN_IF_ERROR(iree_hal_device_profiling_begin(device, &options));
+// Submit work and wait for its completion.
+IREE_RETURN_IF_ERROR(iree_hal_device_profiling_end(device));
+```
+
+Each accepted public operation contributes one host-clock record with its queue,
+submission identity, payload size, and actual dependency admission strategy.
+Repeated command-buffer executions carry the same recording identity and distinct
+submission identities. Batched transfers use a `TRANSFER` record; internal file
+staging copies and host-call return barriers contribute no additional public
+events. Readiness denotes admission to the executor, including native entry
+barriers for host calls and mappings; it is not a GPU execution timestamp or a
+host callback start timestamp.
+
+Each queue retains up to 4096 records between flushes. Full streams count dropped
+records and report `TRUNCATED` chunks. Explicit flush can snapshot completed
+records while submissions continue; failed sink writes preserve their records
+for retry. Sink callbacks run only during begin, flush, and end, outside queue
+and completion locks. End releases the session even when the sink fails.
+
+Disabled sessions allocate no event storage or per-operation profile metadata.
+Enabled captures place metadata in the existing submission allocation and use
+bounded stream storage. Hardware counters and capture filters are rejected
+explicitly by this producer.
+
+### Dispatch timing
+
+Add `IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS` and
+`IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA` to the requested families
+for attributed device intervals. Direct dispatches supply attribution at
+submission. Recorded command buffers must retain it at recording time with
+`IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_PROFILE_METADATA` or
+`IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_DISPATCH_METADATA`.
+
+Each active dispatch uses two native timestamp words in invocation-owned
+argument storage. The normal GPU fixup pass patches their addresses into the
+resident program, so concurrent and pipelined invocations have independent
+samples without a host walk over recorded commands. Retirement copies completed
+samples into the bounded host stream before returning the argument storage.
+Export retains host reflection metadata without retaining executable code or
+model buffers until a later sink flush.
+
+Intervals join prior compute before the start sample and the dispatch's compute
+before the end sample. They measure isolated dispatch completion, including
+native issue and join costs; enabling them changes dispatch overlap. Raw ticks
+use the exact native family's timestamp frequency. They have no inferred host
+epoch and cannot establish host-request-to-first-workgroup latency.
+
+Profile-capable recordings retain optional sample packets and fixups even when
+capture is inactive; those packets become NOPs for an unprofiled invocation.
+Ordinary recordings retain neither the sample packets nor their fixups. Queue
+events remain the lighter option when device intervals are unnecessary.
 
 ## Memory construction
 
@@ -123,3 +256,56 @@ memory and creates no additional threads. Device-only backing without a host
 execution binding needs an engine-specific copy/staging route and is rejected by
 the direct host path. File and buffer references remain retained through the
 operation; callers still own backing retirement and the device lifetime.
+
+### GPU file backing
+
+GPU file transfers use a native host view directly when that exact view
+supports file I/O. CPU visibility alone does not establish file eligibility,
+for either buffered or direct files. Other ranges use the device's shared SDMA
+staging pool, including host-visible UMA allocations and device-local VRAM.
+Virtual buffers retain the routing and visibility requirements of each physical
+source range.
+
+Staging shares a 16 MiB backing budget per device across file proactors,
+growth, and trim, rounded to native allocation granularity. The staging
+allocation needs GPU addressing and file access, without virtual aliases; the
+destination independently retains its own mapping-source contract. This permits
+ordinary model backing with a bounded transfer allocation instead of
+registering the full model. Each staged ingress adds one payload read and
+write. Explicit file-capable pools avoid that copy when their placement and
+native admission costs suit the application.
+
+The device qualifies file-capable backing before creating its SDMA queue.
+Without that capability, compute remains available and file operations requiring
+staging report `UNAVAILABLE`. Linux process-lifetime registration can attach
+ordinary host pages; instance-lifetime native connections require the optional
+host exporter for this backing. Native file visibility uses its own pair
+queries and does not require CPU-coherent GPU accesses.
+
+### Registered physical backing
+
+A pool can request `IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO` from the family
+that will perform file transfers, alongside `MAPPING_SOURCE` when the storage
+will back virtual buffers. Construction qualifies native `HOST_FILE_IO` storage
+and the family's existing file proactor. The proactor must support concurrent
+buffer registration so cold page pinning runs on the allocation caller while
+unrelated I/O continues. On Linux, this requires actual `CLONE_BUFFERS` range
+replacement support; the proactor probes it before publication. Missing native
+or proactor support makes this optional pool profile unavailable at construction.
+
+Physical slabs retain their prepared host view and file registration through
+reuse. Virtual aliases preserve the original source binding, and file operations
+consume those retained fixed-buffer spans without pinning the payload again.
+Trim releases the registration before the native storage. Registration requires
+the file to use the captured proactor; a different I/O owner fails admission
+instead of silently registering another view. Physical allocation, registration,
+and I/O failures propagate after the pool has been selected.
+
+Linux exported-host backing also requires the native provider's huge-page
+preparation and `/dev/udmabuf` access, and fixed-buffer registration consumes the
+process's locked-memory allowance. These are optional deployment prerequisites,
+not requirements for ordinary device backing. The native memory documentation
+describes the export limits and supported alias contracts. Registered reads
+avoid repeated page lookup and pinning; buffered files still use the operating
+system's page cache. Direct file I/O additionally requires the file's advertised
+offset, length, and buffer alignment.

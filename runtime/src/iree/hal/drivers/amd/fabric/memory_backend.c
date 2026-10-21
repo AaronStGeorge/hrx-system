@@ -6,11 +6,14 @@
 
 #include "iree/hal/drivers/amd/fabric/memory_backend.h"
 
+#include "iree/async/proactor.h"
 #include "iree/base/internal/math.h"
 #include "iree/hal/device_group.h"
+#include "iree/hal/drivers/amd/fabric/asan.h"
 #include "iree/hal/drivers/amd/fabric/memory.h"
 #include "iree/hal/drivers/amd/fabric/memory_transition.h"
 #include "iree/hal/drivers/amd/fabric/slab_provider.h"
+#include "iree/hal/drivers/amd/fabric/virtual_buffer.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/hal/memory/passthrough_pool.h"
 
@@ -73,6 +76,9 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_plan_create(
         .memory_contract = plan->contract,
         .epoch_query = plan->progress.epoch_query,
         .owned_mode = plan->owned_mode,
+        .asan = plan->provider_options.asan
+                    ? plan->provider_options.asan->pool_options
+                    : (iree_hal_asan_pool_options_t){0},
         .imports =
             {
                 .class_count = plan->provider_options.import_count,
@@ -145,6 +151,21 @@ static bool iree_hal_amd_fabric_memory_supports_mapping(
                             AMDF_MEMORY_FLAG_HOST_VISIBLE) &&
           iree_all_bits_set(profile->host_mapping.supported_access,
                             host_access));
+}
+
+// Optional transfer views use visibility already guaranteed by this route.
+// They never turn host-visible VRAM into an allocation requirement.
+static amdf_memory_map_flags_t iree_hal_amd_fabric_memory_transfer_host_access(
+    const amdf_memory_profile_t* profile, amdf_memory_map_flags_t required,
+    amdf_memory_map_flags_t preferred) {
+  if (profile &&
+      (required || iree_any_bit_set(profile->guaranteed_flags,
+                                    AMDF_MEMORY_FLAG_HOST_VISIBLE)) &&
+      iree_hal_amd_fabric_memory_supports_mapping(profile,
+                                                  required | preferred)) {
+    return required | preferred;
+  }
+  return required;
 }
 
 static bool iree_hal_amd_fabric_memory_supports_exports(
@@ -275,6 +296,8 @@ typedef struct iree_hal_amd_fabric_slab_pool_query_t {
   iree_hal_slab_pool_plan_callback_t callback;
   // Allocator for temporary construction state and candidate plans.
   iree_allocator_t host_allocator;
+  // One consumer shadow namespace, or NULL when no family is instrumented.
+  iree_hal_amd_fabric_asan_t* asan;
 } iree_hal_amd_fabric_slab_pool_query_t;
 
 static void iree_hal_amd_fabric_memory_accumulate_pair(
@@ -548,27 +571,53 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
                            host.modes != query->scope.host.modes;
   }
 
-  const amdf_memory_map_flags_t host_access =
+  iree_hal_buffer_usage_t usage = IREE_HAL_BUFFER_USAGE_NONE;
+  iree_hal_memory_access_t transfer_access = IREE_HAL_MEMORY_ACCESS_NONE;
+  for (iree_host_size_t i = 0; i < query->scope.family_count; ++i) {
+    const iree_hal_pool_family_access_t* family = &query->scope.families[i];
+    usage |= family->usage;
+    if (iree_any_bit_set(family->usage, IREE_HAL_BUFFER_USAGE_TRANSFER) ||
+        iree_any_bit_set(family->interfaces,
+                         UINT64_C(1)
+                             << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE)) {
+      transfer_access |= iree_hal_buffer_usage_access(family->usage);
+    }
+  }
+  // Preserve device-written cache lines before a partial host overwrite.
+  if (iree_any_bit_set(transfer_access, IREE_HAL_MEMORY_ACCESS_WRITE)) {
+    transfer_access |= IREE_HAL_MEMORY_ACCESS_READ;
+  }
+  const amdf_memory_map_flags_t preferred_host_access =
+      iree_hal_amd_fabric_memory_host_access(transfer_access);
+  const amdf_memory_map_flags_t required_host_access =
       query->private_host_access |
       iree_hal_amd_fabric_memory_host_access(host.access);
-  const uint16_t binding_offset = host_access ? 0 : 1;
+  const amdf_memory_map_flags_t owned_host_access =
+      iree_hal_amd_fabric_memory_transfer_host_access(
+          profile, required_host_access, preferred_host_access);
+  bool any_host_access = owned_host_access != 0;
+  bool all_host_access = !profile || owned_host_access != 0;
+  for (iree_host_size_t i = 0; i < query->options->imports.class_count; ++i) {
+    const amdf_memory_map_flags_t import_host_access =
+        iree_hal_amd_fabric_memory_transfer_host_access(
+            &imports[i].profile, required_host_access, preferred_host_access);
+    any_host_access |= import_host_access != 0;
+    all_host_access &= import_host_access != 0;
+  }
+  const uint16_t binding_offset = any_host_access ? 0 : 1;
   const uint16_t host_binding_index =
-      host_access ? 0 : IREE_HAL_BUFFER_NATIVE_BINDING_INDEX_NONE;
+      any_host_access ? 0 : IREE_HAL_BUFFER_NATIVE_BINDING_INDEX_NONE;
   binding_count -= binding_offset;
   query->transition_sites[1] =
       (iree_hal_amd_fabric_memory_transition_site_t){0};
-  if (host_access) {
+  if (required_host_access) {
     query->transition_sites[1].kind = IREE_HAL_AMD_FABRIC_MEMORY_SITE_HOST;
     query->transition_sites[1].native.kind = AMDF_MEMORY_SITE_KIND_HOST;
-    query->transition_sites[1].native.value.host_access = host_access;
+    query->transition_sites[1].native.value.host_access = required_host_access;
   }
   memory_type |= IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
-  if (host_access) {
+  if (all_host_access) {
     memory_type |= IREE_HAL_MEMORY_TYPE_HOST_VISIBLE;
-  }
-  iree_hal_buffer_usage_t usage = IREE_HAL_BUFFER_USAGE_NONE;
-  for (iree_host_size_t i = 0; i < query->scope.family_count; ++i) {
-    usage |= query->scope.families[i].usage;
   }
   const iree_hal_buffer_usage_t mapping_usage =
       iree_hal_amd_fabric_memory_mapping_usage(host);
@@ -583,16 +632,25 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
   iree_host_size_t plan_size = 0;
   iree_host_size_t access_devices_offset = 0;
   iree_host_size_t bindings_offset = 0;
+  iree_host_size_t scope_access_ordinals_offset = 0;
   iree_host_size_t imports_offset = 0;
+  const uint32_t scope_count =
+      iree_hal_device_group_memory_scope_count(query->group);
+  const bool asan_application_mapping =
+      query->asan && profile &&
+      profile->memory_class == AMDF_MEMORY_CLASS_LOCAL;
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
       sizeof(iree_hal_amd_fabric_slab_pool_plan_t), &plan_size,
-      IREE_STRUCT_FIELD_FAM(query->access_count, amdf_memory_device_access_t),
+      IREE_STRUCT_FIELD_FAM(
+          query->access_count * (asan_application_mapping ? 2 : 1),
+          amdf_memory_device_access_t),
       IREE_STRUCT_FIELD(query->access_count, iree_hal_device_t*,
                         &access_devices_offset),
       IREE_STRUCT_FIELD_ALIGNED(
           binding_count, iree_hal_amd_fabric_binding_request_t,
           iree_alignof(iree_hal_amd_fabric_binding_request_t),
           &bindings_offset),
+      IREE_STRUCT_FIELD(scope_count, uint32_t, &scope_access_ordinals_offset),
       IREE_STRUCT_FIELD(query->options->imports.class_count,
                         iree_hal_amd_fabric_import_route_t, &imports_offset)));
   iree_hal_amd_fabric_slab_pool_plan_t* plan = NULL;
@@ -624,6 +682,15 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
                                                bindings_offset);
   memcpy(binding_requests, query->requests + binding_offset,
          binding_count * sizeof(*query->requests));
+  uint32_t* scope_access_ordinals =
+      (void*)((uint8_t*)plan + scope_access_ordinals_offset);
+  for (uint32_t i = 0; i < scope_count; ++i) {
+    if (query->transition_sites[i].kind ==
+        IREE_HAL_AMD_FABRIC_MEMORY_SITE_QUEUE) {
+      scope_access_ordinals[i] =
+          query->transition_sites[i].native.value.device.access_ordinal;
+    }
+  }
   iree_hal_amd_fabric_import_route_t* import_routes =
       (iree_hal_amd_fabric_import_route_t*)((uint8_t*)plan + imports_offset);
   if (query->options->imports.class_count) {
@@ -632,17 +699,20 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
     for (iree_host_size_t i = 0; i < query->options->imports.class_count; ++i) {
       import_routes[i].required_flags =
           query->required_flags |
-          (host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
+          (required_host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
           iree_hal_amd_fabric_memory_export_flags(
               import_routes[i].policy.exports);
+      import_routes[i].host_access =
+          iree_hal_amd_fabric_memory_transfer_host_access(
+              &imports[i].profile, required_host_access, preferred_host_access);
     }
   }
   plan->provider_options = (iree_hal_amd_fabric_slab_provider_options_t){
       .trace_domain =
           profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM
               ? (native_placement.kind == AMDF_MEMORY_PLACEMENT_KIND_HOST_NUMA
-                     ? "libamdf-numa"
-                     : "libamdf-system")
+                     ? "amd-numa"
+                     : "amd-system")
               : owner->native.trace_device_domain,
       .trace_ordinal =
           profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM
@@ -660,10 +730,10 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
               .accesses = plan->accesses,
               .required_flags =
                   query->required_flags |
-                  (host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
+                  (required_host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
                   iree_hal_amd_fabric_memory_export_flags(
                       query->options->owned.exports),
-              .host_access = host_access,
+              .host_access = owned_host_access,
               .exports = query->options->owned.exports,
           },
       .import_count = query->options->imports.class_count,
@@ -671,10 +741,56 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
       .binding_count = binding_count,
       .host_binding_index = host_binding_index,
       .bindings = binding_requests,
+      .scope_count = scope_count,
+      .scope_access_ordinals = scope_access_ordinals,
       .memory_type = memory_type,
       .supported_usage = usage | mapping_usage,
       .maintenance_alignment = 1,
+      .asan = query->asan,
+      .asan_application_mapping = asan_application_mapping,
   };
+  if (asan_application_mapping) {
+    amdf_memory_device_access_t* imports_accesses =
+        plan->accesses + query->access_count;
+    memcpy(imports_accesses, query->accesses,
+           query->access_count * sizeof(*imports_accesses));
+    plan->provider_options.import_accesses = imports_accesses;
+    for (uint32_t i = 0; i < query->access_count; ++i) {
+      if (plan->accesses[i].device == query->asan->device) {
+        plan->accesses[i].requirements.access |=
+            query->asan->application_info.access;
+        plan->accesses[i].requirements.flags |= AMDF_MEMORY_FLAG_MAPPING_SOURCE;
+      }
+    }
+    plan->provider_options.memory.required_flags |=
+        query->asan->application_source_flags;
+    const amdf_status_t native_status =
+        owner->native.api->memory_scope_query_device_profile(
+            storage->scope, profile->ordinal, query->access_count,
+            plan->accesses, &plan->provider_options.memory.profile,
+            query->capabilities);
+    if (!amdf_status_is_ok(native_status)) {
+      iree_hal_amd_fabric_slab_pool_plan_destroy(&plan->base);
+      return native_status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)
+                 ? iree_ok_status()
+                 : IREE_HAL_AMD_STATUS_FROM_AMDF(native_status,
+                                                 "ASAN owned backing profile");
+    }
+    amdf_memory_construction_capabilities_t* allocation =
+        &plan->provider_options.memory.profile.allocation;
+    if (!iree_math_checked_lcm_u64(
+            allocation->byte_length_granularity,
+            query->asan->application_info.mapping_granularity,
+            &allocation->byte_length_granularity) ||
+        allocation->byte_length_granularity > allocation->maximum_byte_length ||
+        !iree_hal_amd_fabric_memory_constrain_profile(
+            (iree_hal_external_storage_class_t){0},
+            query->options->owned.exports,
+            &plan->provider_options.memory.profile)) {
+      iree_hal_amd_fabric_slab_pool_plan_destroy(&plan->base);
+      return iree_ok_status();
+    }
+  }
   plan->owned_mode = query->options->owned.mode;
   plan->import_classes = query->options->imports.classes;
   plan->progress.notification = owner->notification;
@@ -685,16 +801,16 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
   plan->trace_name = query->options->trace_name;
   const iree_hal_buffer_binding_layout_t binding_layout = {
       .byte_length =
-          (uint32_t)(binding_count * sizeof(iree_hal_buffer_native_binding_t)),
+          (uint32_t)(binding_count * sizeof(iree_hal_buffer_native_binding_t) +
+                     sizeof(iree_hal_amd_fabric_memory_binding_facts_t)),
       .binding_count = binding_count,
       .host_binding_index = host_binding_index,
       .types = query->binding_types + binding_offset,
   };
   bool plan_consumed = false;
   iree_status_t status = iree_hal_memory_contract_create(
-      iree_hal_device_group_memory_domain(query->group),
-      iree_hal_device_group_memory_scope_count(query->group), &binding_layout,
-      query->host_allocator, &plan->contract);
+      iree_hal_device_group_memory_domain(query->group), scope_count,
+      &binding_layout, query->host_allocator, &plan->contract);
   if (iree_status_is_ok(status)) {
     iree_hal_memory_contract_t* contract = plan->contract;
     contract->host = host;
@@ -749,7 +865,7 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
                 .structure_size = sizeof(amdf_memory_profile_pair_query_t),
                 .access_count = query->access_count,
                 .required_flags =
-                    host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0,
+                    required_host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0,
                 .accesses = query->accesses,
             },
         .provider_options = &plan->provider_options,
@@ -1039,6 +1155,7 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query(
         AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
   }
   const iree_hal_amd_fabric_memory_backend_t* owner = NULL;
+  iree_hal_amd_fabric_asan_t* asan = NULL;
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t device_index = 0;
        device_index < iree_hal_device_group_device_count(group) && supported;
@@ -1131,6 +1248,14 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query(
       }
       const iree_hal_amd_fabric_memory_backend_t* backend =
           (const iree_hal_amd_fabric_memory_backend_t*)base;
+      if (backend->native.asan) {
+        if (asan && asan != backend->native.asan) {
+          // This provider's advice describes one device shadow namespace.
+          supported = false;
+          break;
+        }
+        asan = backend->native.asan;
+      }
       if (!owner) {
         owner = backend;
       } else if (backend->native.api != owner->native.api ||
@@ -1247,6 +1372,39 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query(
         bindings->bindings[IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE] =
             (uint16_t)index;
       }
+      if (requested->interfaces &
+          (UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO)) {
+        if (!backend->native.io_proactor ||
+            !iree_any_bit_set(
+                iree_async_proactor_query_capabilities(
+                    backend->native.io_proactor),
+                IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION)) {
+          supported = false;
+          break;
+        }
+        required_flags |= AMDF_MEMORY_FLAG_HOST_FILE_IO;
+        private_host_access |=
+            AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
+        uint32_t index = 1;
+        for (; index < binding_count; ++index) {
+          if (requests[index].access_ordinal == access_ordinal &&
+              binding_types[index] == IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO) {
+            break;
+          }
+        }
+        if (index == binding_count) {
+          requests[index] = (iree_hal_amd_fabric_binding_request_t){
+              .type = IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO,
+              .access_ordinal = access_ordinal,
+              .io_proactor = backend->native.io_proactor,
+          };
+          binding_types[index] = IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO;
+          ++binding_count;
+        }
+        bindings->interfaces |= 1u << IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO;
+        bindings->bindings[IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO] =
+            (uint16_t)index;
+      }
       if (requested->interfaces & ~((uint64_t)bindings->interfaces)) {
         supported = false;
         break;
@@ -1293,6 +1451,7 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query(
       .binding_types = binding_types,
       .callback = callback,
       .host_allocator = host_allocator,
+      .asan = asan,
   };
   // Keep consumer-owned storage first for automatic placement. Other devices
   // in the sealed group may own reachable storage without exposing a family in

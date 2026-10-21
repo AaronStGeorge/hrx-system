@@ -10,19 +10,16 @@
 
 namespace pm4 {
 
-size_t AtomicStore(uint32_t* words, uint64_t target_address, uint64_t value,
-                   AtomicStoreWidth width, uint32_t scope_control) {
-  words[0] = (3u << 30) | (7u << 16) | (0x1eu << 8);
-  // Single-pass command and default locality are zero; no retry/compare mode.
-  words[1] = static_cast<uint32_t>(width) | scope_control;
-  words[2] = static_cast<uint32_t>(target_address);
-  words[3] = static_cast<uint32_t>(target_address >> 32);
-  words[4] = static_cast<uint32_t>(value);
-  words[5] = static_cast<uint32_t>(value >> 32);
-  words[6] = 0;
-  words[7] = 0;
-  words[8] = 0;
-  return 9;
+size_t StoreImmediate(uint32_t* words, uint64_t target_address, uint64_t value,
+                      CopyDataWidth width) {
+  words[0] = (3u << 30) | (4u << 16) | (0x40u << 8);
+  // Immediate source, TC/L2 destination, width and CP write confirmation.
+  words[1] = 5u | (2u << 8) | (static_cast<uint32_t>(width) << 16) | (1u << 20);
+  words[2] = static_cast<uint32_t>(value);
+  words[3] = static_cast<uint32_t>(value >> 32);
+  words[4] = static_cast<uint32_t>(target_address);
+  words[5] = static_cast<uint32_t>(target_address >> 32);
+  return 6;
 }
 
 size_t CopyData(uint32_t* words, uint64_t source_address,

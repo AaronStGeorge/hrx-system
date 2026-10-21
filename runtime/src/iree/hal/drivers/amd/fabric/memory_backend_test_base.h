@@ -186,12 +186,16 @@ struct FakeNative {
         AMDF_MEMORY_PROFILE_ROLE_CREATE |
         (self->host_mappable ? AMDF_MEMORY_PROFILE_ROLE_HOST_MAP : 0);
     out_profile->guaranteed_flags =
-        (self->host_mappable ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
+        (self->host_mappable && self->host_visibility_guaranteed
+             ? AMDF_MEMORY_FLAG_HOST_VISIBLE
+             : 0) |
         (storage->memory_class == AMDF_MEMORY_CLASS_LOCAL
              ? AMDF_MEMORY_FLAG_DEVICE_LOCAL
              : 0);
     out_profile->supported_flags =
         out_profile->guaranteed_flags | AMDF_MEMORY_FLAG_DEVICE_ADDRESS |
+        (self->host_mappable ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
+        (self->file_io_enabled ? AMDF_MEMORY_FLAG_HOST_FILE_IO : 0) |
         (self->host_source_enabled ? AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE : 0);
     out_profile->allocation.maximum_byte_length = UINT64_C(1) << 30;
     out_profile->allocation.byte_length_granularity = 4096;
@@ -206,12 +210,14 @@ struct FakeNative {
     out_profile->host_mapping.maximum_byte_length = UINT64_C(1) << 30;
     out_profile->host_mapping.byte_offset_granularity = 1;
     out_profile->host_mapping.byte_length_granularity = 1;
+    out_profile->host_mapping.features = self->host_mapping_features;
     out_profile->host_mapping.supported_access =
         !self->host_mappable ? 0
         : self->supports_private_mapping
             ? AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE
             : AMDF_MEMORY_MAP_FLAG_READ;
     if (!placed && profile_ordinal == 1 && self->registration_enabled) {
+      out_profile->guaranteed_flags |= AMDF_MEMORY_FLAG_HOST_VISIBLE;
       out_profile->roles =
           AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
       out_profile->allocation = {};
@@ -369,6 +375,8 @@ struct FakeNative {
     uint64_t identity;
     // Native placement captured for owned construction only.
     amdf_memory_placement_t placement;
+    // Achieved physical storage class of the creating scope.
+    amdf_memory_class_t memory_class;
     // Whether the native object borrows application storage.
     bool registered;
     // Native attachments captured in the construction request's order.
@@ -398,6 +406,9 @@ struct FakeNative {
       EXPECT_EQ(info->byte_length % 12288, 0u);
     }
     const uint64_t identity = ++self->create_count;
+    if (self->before_create) {
+      self->before_create();
+    }
     if (self->create_failure != AMDF_STATUS_OK) {
       return self->create_failure;
     }
@@ -406,6 +417,7 @@ struct FakeNative {
                               info->byte_length,
                               identity,
                               info->placement,
+                              storage->memory_class,
                               info->registered_host_pointer != nullptr,
                               self->created_accesses};
     if (!memory->registered) {
@@ -428,6 +440,9 @@ struct FakeNative {
     }
     auto* memory = reinterpret_cast<Memory*>(handle);
     auto* self = memory->owner;
+    if (self->before_destroy) {
+      self->before_destroy();
+    }
     if (!memory->registered) {
       iree_allocator_free_aligned(iree_allocator_system(), memory->data);
     }
@@ -449,6 +464,7 @@ struct FakeNative {
     auto* memory = reinterpret_cast<Memory*>(handle);
     out_info->byte_length = memory->byte_length;
     out_info->placement = memory->placement;
+    out_info->memory_class = memory->memory_class;
     const uintptr_t pointer = reinterpret_cast<uintptr_t>(memory->data);
     out_info->alignment = memory->registered ? pointer & (~pointer + 1) : 4096;
     out_info->source_byte_offset =
@@ -496,6 +512,7 @@ struct FakeNative {
     info->pointer = memory->data;
     info->byte_length = memory->byte_length;
     info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    info->features = memory->owner->host_mapping_features;
     return AMDF_STATUS_OK;
   }
 
@@ -599,8 +616,9 @@ struct FakeNative {
     for (uint32_t i = 0; i < count; ++i) {
       if (updates[i].memory) {
         EXPECT_EQ(updates[i].memory_access_ordinal, device->ordinal);
-        EXPECT_EQ(updates[i].access,
-                  AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE);
+        EXPECT_TRUE(updates[i].access & AMDF_MEMORY_ACCESS_READ);
+        EXPECT_EQ(updates[i].access & reservation->accesses[ordinal].access,
+                  updates[i].access);
       }
     }
     return self->update_failure;
@@ -631,6 +649,10 @@ struct FakeNative {
   bool host_reservation_enabled = false;
   // Whether owned backing supports independently replaceable CPU aliases.
   bool host_source_enabled = false;
+  // Whether the native profile admits ordinary host buffers for file I/O.
+  bool file_io_enabled = false;
+  // Exact capabilities reported by prepared host views.
+  amdf_host_mapping_features_t host_mapping_features = 0;
   // Native address geometry per live consumer, before addresses are reserved.
   std::array<uint64_t, 2> reservation_granularities = {4096, 4096};
   // Whole-backing preparation required by each native address domain.
@@ -668,6 +690,8 @@ struct FakeNative {
   std::vector<amdf_memory_device_access_t> created_accesses;
   // Whether this profile has any host mapping route.
   bool host_mappable = true;
+  // Owned backing is host-visible without requesting a placement constraint.
+  bool host_visibility_guaranteed = true;
   // Native payload preceding usable byte zero for owned allocations.
   uint64_t native_prefix = 0;
   // Native permissions that cannot be narrowed by the caller.
@@ -678,7 +702,11 @@ struct FakeNative {
   // Exact permissions the device profile and allocation must receive.
   amdf_memory_access_t device_access =
       AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE;
-  // Native allocation attempts observed across the maintenance handoff.
+  // Optional native allocation gate, established before submission.
+  std::function<void()> before_create;
+  // Optional native release gate, established before submission.
+  std::function<void()> before_destroy;
+  // Native allocation attempts observed across allocation-worker completion.
   std::atomic<int> create_count{0};
   // Native allocation failure after the pool has selected its fixed contract.
   amdf_status_t create_failure = AMDF_STATUS_OK;

@@ -9,4 +9,457 @@
 
 iree_add_all_subdirs()
 
+iree_cc_library(
+  NAME
+    publication
+  HDRS
+    "publication.h"
+  SRCS
+    "publication.c"
+  DEPS
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::base::threading::thread
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    publication_test
+  SRCS
+    "publication_test.cc"
+  DEPS
+    ::publication
+    iree::base
+    iree::hal::drivers::amd::gpu::queue::publisher
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    device
+  HDRS
+    "device.h"
+  SRCS
+    "device.c"
+  DEPS
+    ::code
+    ::completion
+    ::context
+    ::executable
+    ::feedback
+    ::profile
+    ::publication
+    ::tsan
+    amdf::headers
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::base::threading::thread
+    iree::hal
+    iree::hal::drivers::amd::fabric::asan_support
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::fabric::memory_backend
+    iree::hal::drivers::amd::gpu::queue::allocation
+    iree::hal::drivers::amd::gpu::queue::file_staging
+    iree::hal::drivers::amd::gpu::queue::memory_mapping
+    iree::hal::drivers::amd::gpu::queue::pm4::barrier
+    iree::hal::drivers::amd::gpu::queue::pm4::command_buffer
+    iree::hal::drivers::amd::gpu::queue::pm4::program
+    iree::hal::drivers::amd::gpu::queue::pm4::queue
+    iree::hal::drivers::amd::gpu::queue::pm4::scratch
+    iree::hal::drivers::amd::gpu::queue::pm4::semaphore
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::hal::drivers::amd::gpu::target::identity
+    iree::hal::drivers::amd::status
+    iree::hal::utils::device_spec_builder
+    iree::hal::utils::files
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    code
+  HDRS
+    "code.h"
+  SRCS
+    "code.c"
+  DEPS
+    ::context
+    amdf::headers
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::fabric::memory_transition
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    code_test
+  SRCS
+    "code_test.cc"
+  DEPS
+    ::code
+    ::context
+    ::publication
+    amdf::headers
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    executable
+  HDRS
+    "executable.h"
+  SRCS
+    "executable.c"
+  DEPS
+    ::code
+    ::context
+    ::feedback
+    ::kernarg
+    ::profile
+    ::source_context
+    ::tsan
+    amdf::headers
+    iree::base
+    iree::base::core_headers
+    iree::base::internal
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::fabric::asan_support
+    iree::hal::drivers::amd::fabric::buffer
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::fabric::memory_transition
+    iree::hal::drivers::amd::gpu::image
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::image::metadata
+    iree::hal::drivers::amd::gpu::queue::pm4::dispatch
+    iree::hal::drivers::amd::gpu::queue::pm4::launch
+    iree::hal::drivers::amd::gpu::target::identity
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    tsan
+  HDRS
+    "tsan.h"
+  SRCS
+    "tsan.c"
+  DEPS
+    ::context
+    amdf::headers
+    iree::base
+    iree::hal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+iree_cc_library(
+  NAME
+    source_context
+  HDRS
+    "source_context.h"
+  SRCS
+    "source_context.c"
+  DEPS
+    iree::base
+    iree::base::threading
+    iree::hal
+  PUBLIC
+)
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    tsan_test
+  SRCS
+    "tsan_test.cc"
+  DEPS
+    ::tsan
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+iree_cc_test(
+  NAME
+    source_context_test
+  SRCS
+    "source_context_test.cc"
+  DEPS
+    ::source_context
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+iree_cc_fuzz(
+  NAME
+    source_context_fuzz
+  SRCS
+    "source_context_fuzz.cc"
+  DEPS
+    ::source_context
+    iree::base
+    iree::hal
+)
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    feedback
+  HDRS
+    "feedback.h"
+  SRCS
+    "feedback.c"
+  DEPS
+    ::completion
+    ::context
+    ::source_context
+    amdf::headers
+    iree::base
+    iree::base::internal
+    iree::hal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    feedback_test
+  SRCS
+    "feedback_test.cc"
+  DEPS
+    ::context
+    ::feedback
+    ::source_context
+    amdf::headers
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    executable_test
+  SRCS
+    "executable_test.cc"
+  DEPS
+    ::context
+    ::executable
+    ::feedback
+    ::kernarg
+    ::source_context
+    amdf::headers
+    iree::base
+    iree::base::core_headers
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::image
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::image::hsaco_test_util
+    iree::hal::drivers::amd::gpu::image::metadata
+    iree::hal::drivers::amd::gpu::queue::pm4::launch
+    iree::hal::drivers::amd::gpu::target::identity
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+iree_cc_library(
+  NAME
+    kernarg
+  HDRS
+    "kernarg.h"
+  SRCS
+    "kernarg.c"
+  DEPS
+    iree::base
+    iree::base::core_headers
+    iree::hal
+    iree::hal::drivers::amd::gpu::image::metadata
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    kernarg_test
+  SRCS
+    "kernarg_test.cc"
+  DEPS
+    ::kernarg
+    iree::base
+    iree::base::core_headers
+    iree::hal
+    iree::hal::drivers::amd::gpu::image
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::image::hsaco_test_util
+    iree::hal::drivers::amd::gpu::image::metadata
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+iree_cc_binary_benchmark(
+  NAME
+    kernarg_benchmark
+  SRCS
+    "kernarg_benchmark.cc"
+  DEPS
+    ::kernarg
+    iree::base
+    iree::hal::drivers::amd::gpu::image::metadata
+    iree::testing::benchmark_main
+    iree::third_party::google_benchmark
+  TESTONLY
+)
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    context
+  HDRS
+    "context.h"
+  SRCS
+    "context.c"
+  DEPS
+    amdf::headers
+    iree::async
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::fabric::event
+    iree::hal::drivers::amd::fabric::slab_provider
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    context_test
+  SRCS
+    "context_test.cc"
+  DEPS
+    ::context
+    amdf::headers
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::fabric::slab_provider
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    completion
+  HDRS
+    "completion.h"
+  SRCS
+    "completion.c"
+  DEPS
+    ::context
+    amdf::headers
+    iree::async
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::base::threading::thread
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    completion_test
+  SRCS
+    "completion_test.cc"
+  DEPS
+    ::completion
+    ::context
+    amdf::headers
+    iree::async
+    iree::base
+    iree::base::threading::thread
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+iree_cc_library(
+  NAME
+    profile
+  HDRS
+    "profile.h"
+  SRCS
+    "profile.c"
+  DEPS
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::hal
+    iree::hal::utils::profile_event_ring
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    profile_test
+  SRCS
+    "profile_test.cc"
+  DEPS
+    ::profile
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -47,6 +47,61 @@ from build_tools.devtools import ci, ci_config, run_requirements
 
 
 class CiTest(unittest.TestCase):
+    def test_sanitizer_uses_explicit_symbolizer_before_toolchain_discovery(self):
+        with (
+            mock.patch.dict(
+                os.environ,
+                {"UBSAN_SYMBOLIZER_PATH": "/chosen/llvm-symbolizer"},
+                clear=True,
+            ),
+            mock.patch.object(ci.shutil, "which") as which,
+        ):
+            step = ci.bazel_test_step("Test", ("//suite:test",), config="ubsan")
+        self.assertIn(
+            "--test_env=UBSAN_SYMBOLIZER_PATH=/chosen/llvm-symbolizer", step.argv
+        )
+        which.assert_not_called()
+
+    def test_sanitizer_discovers_existing_toolchain_symbolizer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binaries = root / "lib" / "llvm" / "bin"
+            binaries.mkdir(parents=True)
+            for platform, executable in (
+                ("linux", "llvm-symbolizer"),
+                ("win32", "llvm-symbolizer.exe"),
+            ):
+                symbolizer = binaries / executable
+                symbolizer.touch()
+                with (
+                    self.subTest(platform=platform),
+                    mock.patch.object(ci.sys, "platform", platform),
+                    mock.patch.dict(
+                        os.environ, {"HRX_ROCM_ROOT": str(root)}, clear=True
+                    ),
+                    mock.patch.object(ci.shutil, "which") as which,
+                ):
+                    environment = dict(ci.sanitizer_env("tsan"))
+                    self.assertEqual(
+                        environment["TSAN_SYMBOLIZER_PATH"], str(symbolizer)
+                    )
+                    self.assertIn("suppressions=", environment["TSAN_OPTIONS"])
+                    which.assert_not_called()
+
+    def test_sanitizer_symbolizer_discovery_does_not_invent_missing_paths(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(ci.shutil, "which", return_value=None) as which,
+        ):
+            self.assertEqual(ci.sanitizer_env(None), ())
+            which.assert_not_called()
+            self.assertEqual(ci.sanitizer_env("asan"), ())
+            which.return_value = "/tools/llvm-symbolizer"
+            self.assertEqual(
+                dict(ci.sanitizer_env("msan")),
+                {"MSAN_SYMBOLIZER_PATH": "/tools/llvm-symbolizer"},
+            )
+
     def test_requirement_audit_precedes_execution_and_rejects_unknown_tags(self):
         for requirement, audit_code, expected_code in (
             ("device", 0, 0),
@@ -1119,7 +1174,9 @@ class CiTest(unittest.TestCase):
             step for step in steps if step.name == "Test IREE with TSAN"
         )
         tsan_test_env = [
-            arg for arg in tsan_test_step.argv if arg.startswith("--test_env=")
+            arg
+            for arg in tsan_test_step.argv
+            if arg.startswith("--test_env=TSAN_OPTIONS=")
         ]
         self.assertEqual(len(tsan_test_env), 1)
         self.assertTrue(

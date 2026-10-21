@@ -73,6 +73,7 @@ iree_cc_test(
   SRCS
     "hsaco_test.cc"
   DEPS
+    ::asan_images
     ::hip_images
     ::hsaco
     ::image
@@ -94,6 +95,28 @@ iree_amdgpu_binary_variants_embed_data(
     "iree_hal_amd_gpu_hip_images"
   SRCS
     "testdata/image.hip"
+  COPTS
+    "-fno-offload-uniform-block"
+  SOURCE_FORMAT
+    hip
+  TESTONLY
+  FLATTEN
+  PUBLIC
+)
+
+iree_amdgpu_binary_variants_embed_data(
+  NAME
+    asan_images
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMD_GPU_TARGETS}
+  IDENTIFIER
+    "iree_hal_amd_gpu_asan_images"
+  SRCS
+    "testdata/asan.hip"
+  COPTS
+    "-fuse-cuid=none"
   SOURCE_FORMAT
     hip
   TESTONLY
@@ -133,6 +156,7 @@ iree_cc_fuzz(
   SRCS
     "hsaco_fuzz.cc"
   DEPS
+    ::asan_images
     ::hsaco
     ::hsaco_test_util
     ::image
@@ -151,6 +175,9 @@ iree_cc_fuzz(
     ::hsaco_test_util
     ::metadata
     iree::base
+    iree::base::core_headers
+    iree::hal
+    iree::hal::drivers::amd::gpu::kernarg
 )
 
 iree_cc_binary_benchmark(

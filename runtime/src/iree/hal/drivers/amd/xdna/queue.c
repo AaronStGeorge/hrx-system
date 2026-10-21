@@ -10,6 +10,7 @@
 #include "iree/async/operations/scheduling.h"
 #include "iree/async/semaphore.h"
 #include "iree/base/threading/mutex.h"
+#include "iree/hal/drivers/amd/fabric/event.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/hal/drivers/amd/xdna/barrier.h"
 #include "iree/hal/drivers/amd/xdna/executable.h"
@@ -499,7 +500,30 @@ static void iree_hal_amd_xdna_host_worker_execute(
     iree_hal_amd_xdna_operation_profile_ready(operation);
     start = iree_hal_amd_xdna_profile_host_begin(queue->profile);
   }
-  const uint32_t count = iree_hal_amd_xdna_operation_execute_host(operation);
+  if (operation->kind == IREE_HAL_AMD_XDNA_OPERATION_FILE &&
+      !operation->file.io_completed &&
+      !iree_hal_amd_fabric_file_transfer_bytes_transferred(
+          operation->file.transfer)) {
+    iree_hal_memory_effects_t before = {0}, after = {0};
+    operation->status = iree_hal_amd_fabric_file_transfer_prepare_ranges(
+        operation->file.transfer, queue->context->api, queue->base.queue_family,
+        queue->context->queue_family_ordinal, &before, &after);
+    // XDNA command boundaries supply global visibility, but this engine has
+    // no command for a range-specific queue recipe.
+    if (iree_status_is_ok(operation->status) &&
+        operation->file.transfer->sources.host_count ==
+            operation->file.transfer->sources.count &&
+        (iree_hal_memory_effects_requires_resources(before) ||
+         iree_hal_memory_effects_requires_resources(after))) {
+      operation->status = iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "XDNA file transfers cannot encode ranged queue transitions");
+    }
+  }
+  const uint32_t count =
+      iree_status_is_ok(operation->status)
+          ? iree_hal_amd_xdna_operation_execute_host(operation)
+          : 0;
   if (start) {
     iree_hal_amd_xdna_operation_profile_host_end(
         operation, start, iree_status_code(operation->status), count);
@@ -753,8 +777,13 @@ static void iree_hal_amd_xdna_queue_file_complete(
         iree_hal_amd_xdna_queue_failure_status(operation->queue));
   }
   operation->file.io_completed = true;
+  const iree_hal_amd_fabric_file_transfer_t* transfer =
+      operation->file.transfer;
   if (iree_status_is_ok(operation->status) &&
-      operation->file.transfer->file_access == IREE_HAL_MEMORY_ACCESS_READ) {
+      (transfer->file_access == IREE_HAL_MEMORY_ACCESS_READ ||
+       transfer->async.staging.data ||
+       iree_hal_amd_fabric_file_transfer_bytes_transferred(transfer) <
+           transfer->length)) {
     iree_hal_amd_xdna_queue_service_enqueue(&operation->queue->host_worker,
                                             &operation->service_item);
   } else {
@@ -793,8 +822,8 @@ static void iree_hal_amd_xdna_host_worker_complete(
         &operation->continuation, IREE_ASYNC_OPERATION_TYPE_NOP,
         IREE_ASYNC_OPERATION_FLAG_NONE, iree_hal_amd_xdna_queue_file_complete,
         operation);
-    operation->status = iree_hal_amd_fabric_file_transfer_submit(
-        operation->file.transfer,
+    operation->status = iree_hal_amd_fabric_file_request_submit(
+        &operation->file.transfer->async.request,
         (iree_hal_amd_fabric_file_transfer_callback_t){
             .fn = iree_hal_amd_xdna_operation_resume,
             .user_data = operation,
@@ -1501,15 +1530,8 @@ iree_status_t iree_hal_amd_xdna_queue_create(
     status = iree_async_event_create(proactor, &queue->event);
   }
   if (iree_status_is_ok(status)) {
-#if defined(IREE_ASYNC_HAVE_EVENTFD)
-    queue->native_event.type = AMDF_NATIVE_EVENT_TYPE_EVENTFD;
-    queue->native_event.payload.file_descriptor =
-        queue->event->native.signal_primitive.value.fd;
-#elif defined(IREE_ASYNC_HAVE_WIN32_HANDLE)
-    queue->native_event.type = AMDF_NATIVE_EVENT_TYPE_WIN32_EVENT;
-    queue->native_event.payload.native_handle =
-        (void*)queue->event->native.signal_primitive.value.win32_handle;
-#endif
+    queue->native_event =
+        iree_hal_amd_fabric_event_native_handle(&queue->event->native);
     if (!iree_any_bit_set(info.notification_types,
                           UINT64_C(1) << queue->native_event.type)) {
       status = iree_make_status(
@@ -1524,7 +1546,7 @@ iree_status_t iree_hal_amd_xdna_queue_create(
         .abandon = iree_hal_amd_xdna_service_abandon,
     };
     status = iree_hal_amd_xdna_queue_service_initialize(
-        IREE_SV("xdna-publish"), proactor, publisher_callbacks, queue,
+        IREE_SV("amd-xdna-publish"), proactor, publisher_callbacks, queue,
         host_allocator, &queue->publisher);
   }
   if (iree_status_is_ok(status)) {
@@ -1534,8 +1556,8 @@ iree_status_t iree_hal_amd_xdna_queue_create(
         .abandon = iree_hal_amd_xdna_service_abandon,
     };
     status = iree_hal_amd_xdna_queue_service_initialize(
-        IREE_SV("xdna-host"), proactor, host_callbacks, queue, host_allocator,
-        &queue->host_worker);
+        IREE_SV("amd-xdna-host"), proactor, host_callbacks, queue,
+        host_allocator, &queue->host_worker);
   }
   if (iree_status_is_ok(status)) {
     queue->observer_state = IREE_HAL_AMD_XDNA_OBSERVER_STATE_REGISTERING;

@@ -88,7 +88,7 @@ TEST_F(WkmiLoaderTest, NegotiationFailurePreservesLiveModuleOwner) {
   EXPECT_EQ(loader.module, nullptr);
 }
 
-TEST_F(WkmiLoaderTest, RejectsBridgeWithoutRequiredOperations) {
+TEST_F(WkmiLoaderTest, RejectsIncompatibleBridgeAbi) {
   amdf_gpu_wddm_wkmi_loader_t loader = {};
   ASSERT_EQ(
       amdf_gpu_wddm_wkmi_loader_initialize(amdf_allocator_system(), &loader),

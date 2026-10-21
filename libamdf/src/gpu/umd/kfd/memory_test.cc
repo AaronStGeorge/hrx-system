@@ -77,6 +77,44 @@ TEST(LinuxGpuMemoryProfileTest, InstanceLifetimeExposesOwnedSystemMemory) {
   EXPECT_EQ(unavailable.ordinal, UINT32_MAX);
 }
 
+TEST(LinuxGpuMemoryProfileTest, UnifiedCachedSystemStorageCanBeDeviceLocal) {
+  amdf_gpu_umd_device_t device = {
+      .native_lifetime = AMDF_NATIVE_LIFETIME_PROCESS,
+      .page_size = 4096,
+      .cache_line_size = 64,
+  };
+  device.topology.virtual_address.begin = UINT64_C(0x10000);
+  device.topology.virtual_address.end = UINT64_C(1) << 48;
+  device.topology.integrated = true;
+  const auto profile =
+      QueryProfile(&device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CACHED);
+  EXPECT_EQ(profile.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
+  EXPECT_NE(profile.supported_flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL, 0u);
+  EXPECT_NE(profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP, 0u);
+  const auto host = profile.visibility.describe_host(
+      profile.visibility.data, 0,
+      profile.guaranteed_flags | AMDF_MEMORY_FLAG_DEVICE_LOCAL);
+  EXPECT_EQ(host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(host.flush.host_instruction,
+            AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+  EXPECT_EQ(host.invalidate.host_instruction,
+            AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+  // Control and arbitrary registered pages do not inherit the owned cached
+  // allocation's device-local contract.
+  for (uint32_t ordinal :
+       {uint32_t{AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CONTROL},
+        uint32_t{AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT}}) {
+    EXPECT_EQ(QueryProfile(&device, ordinal).supported_flags &
+                  AMDF_MEMORY_FLAG_DEVICE_LOCAL,
+              0u);
+  }
+  device.topology.integrated = false;
+  EXPECT_EQ(QueryProfile(&device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CACHED)
+                    .supported_flags &
+                AMDF_MEMORY_FLAG_DEVICE_LOCAL,
+            0u);
+}
+
 TEST(LinuxGpuMemoryProfileTest,
      OwnedHostImportsDoNotAdvertiseForeignOwnership) {
   for (auto lifetime :

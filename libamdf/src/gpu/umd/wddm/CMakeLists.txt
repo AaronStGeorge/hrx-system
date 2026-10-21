@@ -55,7 +55,6 @@ iree_cc_library(
   DEPS
     amdf::headers
     libamdf::src::gpu::umd::memory
-    libamdf::src::gpu::umd::wddm::wkmi::bridge_api
     libamdf::src::memory_profile
     libamdf::src::platform
     libamdf::src::platform::windows::endpoint
@@ -305,6 +304,7 @@ iree_cc_test(
     "libamdf::src::gpu::umd::wddm::wkmi::fake_wkmi_bridge_test"
   DEPS
     ::device
+    ::memory_profile
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main

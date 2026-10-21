@@ -7,11 +7,11 @@ admits `.xdna` ELFs and applies their declared storage and binding contracts.
 
 ## Running a Loom scenario
 
-Enable the XDNA HAL driver. This selects libamdf automatically; the default
+Enable the shared AMD HAL driver. This selects libamdf automatically; the default
 Loom product already includes XDNA emission and the VM reference target:
 
 ```sh
-python dev.py bazel configure -DIREE_HAL_DRIVER_XDNA=ON
+python dev.py bazel configure -DIREE_HAL_DRIVER_AMD=ON
 python dev.py bazel run //loom/src/loom/tools/iree-test-loom -- \
   loom/src/loom/tooling/target/amd/xdna/test/hal_execution.loom --device=xdna
 ```
@@ -298,13 +298,15 @@ Disabled profiling performs no clock reads or profile allocation.
 
 ## Verification
 
-Native correctness suites declare an XDNA hardware requirement:
+Native correctness suites declare their required hardware. The shared backing
+replacement suite also requires a GPU:
 
 ```sh
 iree-bazel-test --config=asan \
-  --//runtime/config/hal:drivers=task,xdna \
+  --//runtime/config/hal:drivers=task,amd \
   //runtime/src/iree/hal/drivers/amd/xdna/cts:native_test \
-  //runtime/src/iree/hal/drivers/amd/fabric/cts/xdna:virtual_buffer_test \
+  //runtime/src/iree/hal/drivers/amd/cts:cpu_xdna_test \
+  //runtime/src/iree/hal/drivers/amd/cts:virtual_buffer_test \
   //loom/src/loom/tooling/target/amd/xdna:hal_execution_test
 ```
 
@@ -313,9 +315,11 @@ consumer-before-producer dependencies, direct transfers, file I/O, failure
 propagation, first-device-writer visibility and allocation properties. Its
 reservation case builds a pool from queried source requirements, replaces
 retained backing at stable NPU addresses, dispatches immediately after the
-mapping dependency and checks final detach. The fabric suite exercises composed
-CPU/GPU/NPU replacement through independently queried mapping groups. Each uses
-the source routes and queue capabilities advertised by the selected devices.
+mapping dependency and checks final detach. The AMD composition suites exercise
+CPU/XDNA HAL handoffs and CPU/GPU/NPU replacement through independently queried
+mapping groups. The replacement suite uses native GPU SDMA alongside Task and
+XDNA HAL execution. Each uses the source routes and queue capabilities advertised
+by the selected devices.
 The Loom suite exercises the public tool, compiler, HAL, physical execution,
 readback, and numerical oracle together.
 
@@ -367,7 +371,7 @@ measured cases; execution, collection, and protocol failures remain errors.
 
 ```sh
 iree-bazel-build --config=opt \
-  --//runtime/config/hal:drivers=task,xdna \
+  --//runtime/config/hal:drivers=task,amd \
   //runtime/src/iree/hal/drivers/amd/xdna/cts:queue_benchmark
 bazel-bin/runtime/src/iree/hal/drivers/amd/xdna/cts/queue_benchmark \
   --benchmark_min_time=200x --benchmark_repetitions=7 \
@@ -409,6 +413,6 @@ profiling cases without collecting performance evidence:
 
 ```sh
 iree-bazel-test --config=asan \
-  --//runtime/config/hal:drivers=task,xdna \
+  --//runtime/config/hal:drivers=task,amd \
   //runtime/src/iree/hal/drivers/amd/xdna/cts:queue_benchmark_test
 ```

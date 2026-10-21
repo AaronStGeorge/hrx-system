@@ -135,7 +135,7 @@ TEST_P(FabricVirtualBufferTest, CpuAndGpuShareStableViewsAcrossReplacement) {
   std::array<std::vector<uint32_t>, 2> expected;
   for (uint32_t i = 0; i < 2; ++i) {
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-        pool, iree_hal_make_pool_reservation_request(6 * unit, unit),
+        pool, iree_hal_make_pool_reservation_request(6 * unit, 0),
         iree_infinite_timeout(), backings[i].out()));
     IREE_ASSERT_OK(iree_hal_buffer_native_host_span(backings[i], 0, 6 * unit,
                                                     &original_spans[i]));
@@ -329,7 +329,7 @@ TEST_P(FabricVirtualBufferTest,
   for (uint32_t i = 0; i < backings.size(); ++i) {
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
         i < 2 ? local_pool.get() : pool_,
-        iree_hal_make_pool_reservation_request(unit, unit),
+        iree_hal_make_pool_reservation_request(unit, 0),
         iree_infinite_timeout(), backings[i].out()));
     for (uint32_t j = 0; j < 128; ++j) {
       staging[j] = 0x1000u + i * 0x1000u + j;

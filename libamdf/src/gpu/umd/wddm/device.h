@@ -27,7 +27,7 @@ struct amdf_gpu_umd_device_t {
   uint32_t physical_adapter_index;
   // Exact GPU MMU facts available to immutable memory-profile queries.
   amdf_windows_gpu_memory_capabilities_t memory_capabilities;
-  // Immutable native target and interconnect facts from the opened adapter.
+  // Immutable native target identity and queue-service facts.
   amdf_wkmi_bridge_gpu_properties_t properties;
   // Loaded WKMI module outliving its borrowed API table and native adapter.
   amdf_gpu_wddm_wkmi_loader_t wkmi_loader;

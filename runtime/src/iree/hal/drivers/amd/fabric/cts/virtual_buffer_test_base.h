@@ -66,9 +66,9 @@ struct NativeDeviceLifetime {
   }
 };
 
-// The memory adapter and Task queue are real HAL implementations. Only GPU
-// family metadata uses a mock device until the GPU execution HAL exists; all
-// address mutation and GPU execution use the public native API and hardware.
+// The memory adapter and Task queue are real HAL implementations. GPU family
+// metadata uses a mock device so memory conformance is independent of GPU HAL
+// execution; address mutation and GPU work use the native API and hardware.
 class FabricVirtualBufferTest
     : public ::testing::TestWithParam<amdf_native_lifetime_t> {
  protected:
@@ -298,8 +298,7 @@ class FabricVirtualBufferTest
               source_requirements.minimum_granularity);
     ASSERT_EQ(source_requirements.flags, 0u);
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-        pool_,
-        iree_hal_make_pool_reservation_request(6 * granularity_, granularity_),
+        pool_, iree_hal_make_pool_reservation_request(6 * granularity_, 0),
         iree_infinite_timeout(), &backing_));
     IREE_ASSERT_OK(iree_hal_buffer_map_range(
         backing_, IREE_HAL_MAPPING_MODE_PERSISTENT, IREE_HAL_MEMORY_ACCESS_ALL,

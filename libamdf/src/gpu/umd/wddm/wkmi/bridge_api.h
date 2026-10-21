@@ -49,8 +49,11 @@ extern "C" {
 // identifying whether the SDMA scheduler exposes a hardware-queue handle.
 #define AMDF_WKMI_BRIDGE_ABI_VERSION_9 9u
 
+// GPU property layout containing target identity and queue services.
+#define AMDF_WKMI_BRIDGE_ABI_VERSION_10 10u
+
 // Most recent private bridge ABI version described by this header.
-#define AMDF_WKMI_BRIDGE_ABI_VERSION_LATEST AMDF_WKMI_BRIDGE_ABI_VERSION_9
+#define AMDF_WKMI_BRIDGE_ABI_VERSION_LATEST AMDF_WKMI_BRIDGE_ABI_VERSION_10
 
 // Result of one bridge operation.
 typedef uint32_t amdf_wkmi_bridge_result_t;
@@ -124,17 +127,15 @@ typedef struct amdf_wkmi_bridge_gpu_properties_t {
   uint32_t supports_sdma_kernel_queue;
   // Nonzero for a discrete adapter, zero for an integrated processor.
   uint32_t is_discrete;
-  // Nonzero when the discrete adapter's platform route supports CPU atomics.
-  uint32_t supports_platform_atomics;
   // Nonzero when the selected SDMA scheduler exposes a hardware-queue handle.
   uint32_t supports_sdma_hardware_queue;
 } amdf_wkmi_bridge_gpu_properties_t;
 
 #ifdef __cplusplus
-static_assert(sizeof(amdf_wkmi_bridge_gpu_properties_t) == 72,
+static_assert(sizeof(amdf_wkmi_bridge_gpu_properties_t) == 64,
               "WKMI GPU property ABI must remain stable");
 #else
-_Static_assert(sizeof(amdf_wkmi_bridge_gpu_properties_t) == 72,
+_Static_assert(sizeof(amdf_wkmi_bridge_gpu_properties_t) == 64,
                "WKMI GPU property ABI must remain stable");
 #endif
 

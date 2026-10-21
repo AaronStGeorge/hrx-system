@@ -13,6 +13,7 @@ import argparse
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -35,13 +36,13 @@ BAZEL_HAL_DRIVER_DEFINES = (
     ("task", "IREE_HAL_DRIVER_TASK"),
     ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
     ("webgpu", "IREE_HAL_DRIVER_WEBGPU"),
-    ("xdna", "IREE_HAL_DRIVER_XDNA"),
+    ("amd", "IREE_HAL_DRIVER_AMD"),
 )
 CMAKE_HAL_DRIVER_DEFINES = (
     ("amdgpu", "IREE_HAL_DRIVER_AMDGPU"),
     ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
     ("webgpu", "IREE_HAL_DRIVER_WEBGPU"),
-    ("xdna", "IREE_HAL_DRIVER_XDNA"),
+    ("amd", "IREE_HAL_DRIVER_AMD"),
 )
 CMAKE_LOOM_TARGET_DEFINES = (
     ("amdgpu", "LOOM_TARGET_AMDGPU"),
@@ -58,11 +59,11 @@ CMAKE_LOOM_IMPORTER_DEFINES = (
 )
 CI_SUPPORTED_HAL_DRIVERS = frozenset(driver for driver, _ in BAZEL_HAL_DRIVER_DEFINES)
 REPOSITORY_BUILD_HAL_DRIVERS = (
+    "amd",
     "amdgpu",
     "task",
     "vulkan",
     "webgpu",
-    "xdna",
 )
 REPOSITORY_BUILD_LOOM_TARGETS = (
     "amdgpu",
@@ -192,9 +193,28 @@ def dev_command(*args: str) -> tuple[str, ...]:
 
 
 def sanitizer_env(config: str | None) -> tuple[tuple[str, str], ...]:
-    if config != "tsan":
+    if config not in CMAKE_SANITIZER_OPTIONS:
         return ()
-    return (("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"),)
+    environment = []
+    if config == "tsan":
+        environment.append(("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"))
+
+    # Bazel's test environment does not inherit the host toolchain's PATH.
+    # Pass the symbolizer explicitly so sanitizer failures retain source frames.
+    symbolizer_key = f"{config.upper()}_SYMBOLIZER_PATH"
+    symbolizer = os.environ.get(symbolizer_key)
+    if not symbolizer and (rocm_root := os.environ.get("HRX_ROCM_ROOT")):
+        executable = (
+            "llvm-symbolizer.exe" if sys.platform == "win32" else "llvm-symbolizer"
+        )
+        candidate = Path(rocm_root) / "lib" / "llvm" / "bin" / executable
+        if candidate.is_file():
+            symbolizer = str(candidate)
+    if not symbolizer:
+        symbolizer = shutil.which("llvm-symbolizer")
+    if symbolizer:
+        environment.append((symbolizer_key, symbolizer))
+    return tuple(environment)
 
 
 def platform_coverage_enabled() -> bool:
@@ -311,6 +331,29 @@ def amdgpu_bazel_options(target_selector: str) -> tuple[str, ...]:
     return (
         "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
         "--//loom/config/target/amdgpu:targets=iree_hal",
+    )
+
+
+def rdna_device_compiler_options() -> tuple[str, ...]:
+    # The native HAL consumes HIP code objects without loading ROCr. Its CTS
+    # still compiles real HIP inputs with the installed ROCm device toolchain.
+    options = ("--repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",)
+    if rocm_root := os.environ.get("HRX_ROCM_ROOT"):
+        options += (f"--repo_env=IREE_ROCM_PATH={rocm_root}",)
+    return options
+
+
+def rdna_windows_weights_step(options: tuple[str, ...], config: str | None) -> CiStep:
+    return bazel_test_step(
+        "Test RDNA weight streaming",
+        (ci_config.RDNA_WEIGHTS_TARGET,),
+        config=config,
+        available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+        bazel_options=options
+        + (
+            "--test_arg=--weight_device_uri=rdna",
+            "--test_filter=Streaming/*",
+        ),
     )
 
 
@@ -720,7 +763,7 @@ def xdna_steps(targets: tuple[str, ...], config: str | None) -> list[CiStep]:
     # Native ELF consumers and the HAL share the XDNA provider.
     options = (
         "--//libamdf/config:families=xdna",
-        "--//runtime/config/hal:drivers=task,xdna",
+        "--//runtime/config/hal:drivers=task,amd",
         "--//loom/config/execute:enable=iree_hal",
     )
     return [
@@ -752,11 +795,20 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
     default_targets = ci_config.AMD_CLIENT_BAZEL_TARGETS
     resources = ci_config.XDNA_RESOURCES
     test_tag_filters = ci_config.XDNA_BAZEL_TEST_TAG_FILTERS
+    native_options = ()
     if sys.platform == "win32":
         options = ci_config.AMD_CLIENT_WINDOWS_BAZEL_OPTIONS
         default_targets = ci_config.AMD_CLIENT_WINDOWS_BAZEL_TARGETS
         resources = ci_config.AMD_CLIENT_WINDOWS_RESOURCES
-        test_tag_filters += ci_config.VULKAN_BAZEL_TEST_TAG_FILTERS
+        test_tag_filters += ci_config.VULKAN_BAZEL_TEST_TAG_FILTERS + (
+            ci_config.RDNA_RUN_REQUIREMENT_TAG,
+        )
+        native_options = ci_config.RDNA_BAZEL_OPTIONS + rdna_device_compiler_options()
+    additional_steps = []
+    if sys.platform == "win32" and not targets:
+        additional_steps.append(
+            rdna_windows_weights_step(options + native_options, config)
+        )
     targets = targets or default_targets
     return [
         bazel_configure_step(extra_options=options),
@@ -765,7 +817,7 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
                 f"Build IREE / AMD RDNA+XDNA{config_name}",
                 targets,
                 config=config,
-                bazel_options=options,
+                bazel_options=options + native_options,
             )
         ),
         bazel_test_step(
@@ -774,8 +826,9 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
             config=config,
             test_tag_filters=test_tag_filters,
             available_resources=resources,
-            bazel_options=options,
+            bazel_options=options + native_options,
         ),
+        *additional_steps,
     ]
 
 
@@ -790,6 +843,10 @@ def amdgpu_test_steps(
     bazel_options = (
         amdgpu_bazel_options(target_selector) + ci_config.AMDGPU_BAZEL_OPTIONS
     )
+    if target_selector.startswith(("gfx11", "gfx12")):
+        bazel_options += ci_config.RDNA_BAZEL_OPTIONS + (
+            "--//runtime/config/hal:drivers=task,amdgpu,amd",
+        )
     host_sanitizer_tag_filters = (
         (f"-{ci_config.HOST_TSAN_INCOMPATIBLE_TEST_LABEL}",) if config == "tsan" else ()
     )
@@ -819,7 +876,11 @@ def amdgpu_test_steps(
 def amdgpu_windows_steps(
     targets: tuple[str, ...], target_selector: str, config: str | None
 ) -> list[CiStep]:
-    options = ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
+    options = (
+        ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
+        + ci_config.RDNA_BAZEL_OPTIONS
+        + rdna_device_compiler_options()
+    )
     config_name = f" / {config.upper()}" if config is not None else ""
     # A required finite PM4 copy establishes the exact GPU and usable native
     # transport. SDMA remains capability-admitted; its skip is not a proof.
@@ -829,7 +890,7 @@ def amdgpu_windows_steps(
         "--test_arg=--gtest_fail_fast=1",
     )
     steps = [
-        bazel_configure_step(extra_options=options),
+        bazel_configure_step(extra_options=ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS),
         bazel_test_step(
             "Query Windows GPU native queue capabilities",
             ("//libamdf/src/gpu/umd/wddm/wkmi:adapter_info_system_test",),
@@ -864,11 +925,26 @@ def amdgpu_windows_steps(
         )
     steps.append(
         bazel_test_step(
+            f"Test Windows GPU coherent signals{config_name}",
+            ("//libamdf/cts/gpu/pm4:pm4_dynamic",),
+            config=config,
+            available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            bazel_options=options
+            + (
+                f"--test_arg=--amdf_gpu_target={target_selector}",
+                "--test_env=GTEST_FAIL_FAST=1",
+                "--test_filter=*Pm4AtomicStoreTest.*:*Pm4WaitTest.*:"
+                "Pm4UnconditionalWaitTest.*",
+            ),
+        )
+    )
+    steps.append(
+        bazel_test_step(
             f"Test IREE / Windows AMDGPU{config_name}",
             targets or ci_config.AMDGPU_WINDOWS_BAZEL_TARGETS,
             config=config,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
-            bazel_options=options + ("--test_arg=--gtest_fail_fast=1",),
+            bazel_options=options + ("--test_env=GTEST_FAIL_FAST=1",),
         )
     )
     steps.append(
@@ -881,6 +957,8 @@ def amdgpu_windows_steps(
             + ("--test_arg=--amdf_native_lifetime=instance",),
         )
     )
+    if not targets:
+        steps.append(rdna_windows_weights_step(options, config))
     return steps
 
 
@@ -1080,7 +1158,7 @@ def cmake_xdna_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     steps = [
         cmake_configure_step(
             command_name,
-            enabled_drivers=("xdna",),
+            enabled_drivers=("amd",),
             enabled_loom_targets=("vm", "xdna"),
             sanitizer=sanitizer,
             extra_options=(

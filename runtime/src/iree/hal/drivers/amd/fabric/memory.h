@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_AMD_FABRIC_MEMORY_H_
 
 #include "amdf/amdf.h"
+#include "iree/async/types.h"
 #include "iree/hal/device_event.h"
 #include "iree/hal/slab_pool.h"
 
@@ -25,6 +26,10 @@ typedef struct iree_hal_amd_fabric_memory_t {
   amdf_host_mapping_t* mapping;
   // Borrowed host pointer and logical extent; empty without a host view.
   iree_byte_span_t contents;
+  // Actual permissions of the prepared host view, or zero when absent.
+  amdf_memory_map_flags_t host_access;
+  // Native capabilities of the prepared host view, independent of I/O pins.
+  amdf_host_mapping_features_t host_features;
   // Cache class of the native or registered host view, when established.
   iree_hal_host_cacheability_t host_cacheability;
   // Achieved attachment geometry and physical identity, captured once.
@@ -33,13 +38,38 @@ typedef struct iree_hal_amd_fabric_memory_t {
   iree_hal_buffer_range_t maintenance_range;
   // Borrowed export policy, dominated by the owning slab provider.
   iree_hal_pool_export_classes_t exports;
+  // Owned I/O pins, released before the persistent host view. The consumer
+  // attaches prepared entries and joins detachment before native release.
+  iree_async_buffer_registration_state_t registrations;
 } iree_hal_amd_fabric_memory_t;
+
+// Private suffix after the generic entries of a fabric native binding table.
+// Copies borrow the same physical owner and preserve its lifetime contract.
+// Translated host bindings establish byte correspondence for nested views.
+typedef struct iree_hal_amd_fabric_memory_binding_facts_t {
+  // Borrowed physical storage, including its optional prepared host view.
+  const iree_hal_amd_fabric_memory_t* memory;
+  // Provider-owned native access ordinals indexed by the HAL memory scope ID.
+  const uint32_t* scope_access_ordinals;
+} iree_hal_amd_fabric_memory_binding_facts_t;
+
+// Prepared file registrations placed with one physical slab. Regions borrow
+// the persistent host view and expire before native storage is released.
+typedef struct iree_hal_amd_fabric_io_binding_table_t {
+  // Borrowed native backing used for exact file/device visibility queries.
+  amdf_memory_t* memory;
+  // Borrowed persistent ordinary host view admitted for native file I/O.
+  amdf_host_mapping_t* mapping;
+  // Borrowed regions in native access-ordinal order, NULL for excluded devices.
+  // Devices sharing a proactor share one region and one set of retained pins.
+  iree_async_region_t** regions;
+} iree_hal_amd_fabric_io_binding_table_t;
 
 // Prepared source metadata owned by one physical slab. Native updates receive
 // logical offsets while HAL views preserve native coordinates for alignment.
 typedef struct iree_hal_amd_fabric_mapping_source_t {
-  // Borrowed prepared backing; no installed alias retains this handle.
-  amdf_memory_t* memory;
+  // Borrowed prepared backing; no installed alias retains this storage.
+  const iree_hal_amd_fabric_memory_t* storage;
   // Number of prepared native consumers in |accesses|.
   uint32_t access_count;
   // Borrowed provider-owned consumers in native memory access-ordinal order.
@@ -48,6 +78,8 @@ typedef struct iree_hal_amd_fabric_mapping_source_t {
   const amdf_memory_device_access_t* accesses;
   // Native payload preceding logical source byte zero.
   uint64_t logical_byte_offset;
+  // Optional file registrations owned by this same physical slab.
+  const iree_hal_amd_fabric_io_binding_table_t* io_bindings;
 } iree_hal_amd_fabric_mapping_source_t;
 
 // Qualified construction facts copied by a provider. Accesses and scope are
@@ -69,6 +101,14 @@ typedef struct iree_hal_amd_fabric_memory_options_t {
   amdf_memory_map_flags_t host_access;
   // Qualified exports; class storage outlives the native memory owner.
   iree_hal_pool_export_classes_t exports;
+  // Owned allocation prepares detached I/O pins against its persistent host
+  // view. Imports leave registration to their consumer.
+  struct {
+    // Number of distinct proactors requiring prepared pins on owned backing.
+    iree_host_size_t proactor_count;
+    // Borrowed proactors, live through native backing and pin release.
+    iree_async_proactor_t* const* proactors;
+  } io;
 } iree_hal_amd_fabric_memory_options_t;
 
 // Maps transport vocabulary only. NONE means libamdf has no representation;
@@ -91,9 +131,21 @@ bool iree_hal_amd_fabric_memory_constrain_profile(
     iree_hal_external_storage_class_t source_class,
     iree_hal_pool_export_classes_t exports, amdf_memory_profile_t* profile);
 
+// Qualifies CPU writes to one prospective device access before allocation.
+// Options describe owned, host-visible backing and a writable host view.
+// A false result means this placement has no qualified publication path;
+// native query failures propagate independently. This cold query owns no state.
+iree_status_t iree_hal_amd_fabric_memory_query_host_publication(
+    const amdf_api_t* api, const iree_hal_amd_fabric_memory_options_t* options,
+    uint32_t access_ordinal, uint32_t queue_family_ordinal,
+    bool* out_supported);
+
 // Allocates native backing, rounding the extent to the profile granularity.
-// A nonzero host_access creates the requested view before publication. Failure
-// leaves out_memory empty; native cleanup failures are reported to event_sink.
+// A nonzero host_access creates the requested view before publication.
+// Requested I/O pins are prepared against that view but remain detached. The
+// consumer attaches them before I/O. Failure leaves out_memory empty and
+// releases any prepared pins before the native view; cleanup failures report to
+// event_sink.
 // Optional out_release_info receives unpublished backing loss independently
 // of the returned construction status and is initialized on every path.
 iree_status_t iree_hal_amd_fabric_memory_allocate(
@@ -125,8 +177,9 @@ iree_status_t iree_hal_amd_fabric_memory_import(
     iree_hal_device_event_sink_t event_sink,
     iree_hal_amd_fabric_memory_t* out_memory);
 
-// Releases native ownership after all uses retire, without waiting for them.
-// Native release failures are diagnosed; consumed handles are never retried.
+// Releases I/O pins and native ownership after all uses retire, without waiting
+// for them. Prepared registrations must be detached before entry. Native
+// release failures are diagnosed; consumed handles are never retried.
 // The result distinguishes consumed metadata from relinquished owned backing.
 amdf_memory_release_info_t iree_hal_amd_fabric_memory_deinitialize(
     const amdf_api_t* api, iree_hal_device_event_sink_t event_sink,

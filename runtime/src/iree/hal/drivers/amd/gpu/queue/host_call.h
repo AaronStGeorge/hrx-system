@@ -1,0 +1,57 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#ifndef IREE_HAL_DRIVERS_AMD_GPU_QUEUE_HOST_CALL_H_
+#define IREE_HAL_DRIVERS_AMD_GPU_QUEUE_HOST_CALL_H_
+
+#include "iree/hal/drivers/amd/gpu/context.h"
+#include "iree/hal/drivers/amd/gpu/queue/capture_pool.h"
+#include "iree/hal/profile_schema.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Borrowed native queue services. Successful barrier completion dispatches
+// host semaphore timepoints on the device's completion worker, after native
+// execution and cache effects. Submission hints never trigger those points.
+// Each accepted call retains the parent device through its terminal action.
+typedef struct iree_hal_amd_gpu_host_call_executor_t {
+  // Exact queue supplying native dependency and cache boundaries.
+  iree_hal_queue_t* queue;
+  // Device diagnostics, dominated by the retained parent.
+  const iree_hal_amd_gpu_context_t* context;
+  // Queue-owned reusable CPU capture storage.
+  iree_hal_amd_gpu_capture_pool_t* captures;
+  // Private native boundary. A non-NONE type identifies the public entry;
+  // the return boundary carries NONE and contributes no public queue event.
+  // Rejection retains no operands and cannot signal the private completion.
+  iree_status_t (*barrier)(iree_hal_queue_t* queue,
+                           iree_hal_semaphore_list_t waits,
+                           iree_hal_semaphore_list_t signals,
+                           const iree_hal_queue_barriers_t* barriers,
+                           iree_hal_profile_queue_event_type_t type,
+                           iree_host_size_t operation_count,
+                           iree_host_size_t public_signal_count);
+} iree_hal_amd_gpu_host_call_executor_t;
+
+// The executor is queue-owned and outlives accepted operations.
+// Captures callback state and invokes it on the existing completion worker
+// after a native release boundary. DEFERRED callbacks receive a private
+// completion list; public completion follows the return-to-device acquire.
+// NON_BLOCKING publishes at invocation and promises no ordering against later
+// callback effects. Failure retains nothing and invokes no callback.
+iree_status_t iree_hal_amd_gpu_host_call_submit(
+    const iree_hal_amd_gpu_host_call_executor_t* executor,
+    iree_hal_semaphore_list_t waits, iree_hal_semaphore_list_t signals,
+    iree_hal_host_call_t call, const uint64_t arguments[4],
+    iree_hal_host_call_flags_t flags);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // IREE_HAL_DRIVERS_AMD_GPU_QUEUE_HOST_CALL_H_

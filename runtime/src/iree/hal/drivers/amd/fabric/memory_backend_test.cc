@@ -5,10 +5,140 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <cerrno>
+#include <utility>
 
+#include "iree/hal/drivers/amd/fabric/memory.h"
 #include "iree/hal/drivers/amd/fabric/memory_backend_test_base.h"
 
 namespace iree::hal::amd::fabric {
+
+TEST_F(MemoryBackendTest, RegisteredIoRequiresBothFileOwnerAndNativeAdmission) {
+  const uint64_t interfaces = UINT64_C(1)
+                              << IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO;
+  iree_hal_pool_t* pool = nullptr;
+  native_.file_io_enabled = true;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      CreatePool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool, interfaces, 0));
+  EXPECT_EQ(pool, nullptr);
+  for (auto& backend : backends_) {
+    backend.native.io_proactor = test_proactor();
+  }
+  native_.file_io_enabled = false;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      CreatePool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool, interfaces, 0));
+  EXPECT_EQ(pool, nullptr);
+  EXPECT_EQ(native_.create_count, 0);
+}
+
+TEST_F(MemoryBackendTest, PhysicalSlabsRetainSharedFileRegistrations) {
+  iree_async_proactor_pool_entry_t* entry = nullptr;
+  IREE_ASSERT_OK(iree_async_proactor_pool_acquire(proactor_pool_, 0, &entry));
+  iree_async_proactor_t* proactor =
+      iree_async_proactor_pool_entry_proactor(entry);
+  if (!iree_any_bit_set(
+          iree_async_proactor_query_capabilities(proactor),
+          IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION)) {
+    iree_async_proactor_pool_entry_release(entry);
+    GTEST_SKIP() << "file proactor cannot register from allocation owner";
+  }
+  for (auto& backend : backends_) {
+    backend.native.io_proactor = proactor;
+  }
+  native_.file_io_enabled = true;
+  const uint64_t interfaces = UINT64_C(1)
+                              << IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO;
+  native_.required_flags |= AMDF_MEMORY_FLAG_HOST_FILE_IO;
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(
+      CreatePool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool, interfaces, 0));
+  EXPECT_EQ(iree_hal_pool_query_host_access(pool).access, 0u);
+  native_.fail_after_bindings = true;
+  iree_hal_buffer_t* rejected = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      iree_hal_pool_allocate_buffer(
+          pool, iree_hal_make_pool_reservation_request(8192, 4096),
+          iree_infinite_timeout(), &rejected));
+  EXPECT_EQ(rejected, nullptr);
+  native_.AwaitEmpty();
+  native_.fail_after_bindings = false;
+  // Repeated physical acquisition/release exercises registration cleanup and
+  // slot reuse. Both participating devices share the same actual I/O owner.
+  for (int iteration = 0; iteration < 3; ++iteration) {
+    iree_hal_buffer_t* buffer = nullptr;
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool, iree_hal_make_pool_reservation_request(8192, 4096),
+        iree_infinite_timeout(), &buffer));
+    iree_async_region_t* region = nullptr;
+    for (uint32_t i = 0; i < families_.size(); ++i) {
+      iree_hal_buffer_native_binding_slot_t slot;
+      const iree_hal_memory_scope_t scope = {
+          families_[i]->memory.domain, families_[i]->memory.queue_scope_id};
+      IREE_ASSERT_OK(iree_hal_pool_resolve_binding(
+          pool, scope, IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO, &slot));
+      iree_hal_buffer_t* subspan = nullptr;
+      IREE_ASSERT_OK(iree_hal_buffer_subspan(
+          buffer, 123, 456, iree_allocator_system(), &subspan));
+      const auto binding = iree_hal_buffer_native_binding(subspan, slot);
+      const auto* table =
+          static_cast<const iree_hal_amd_fabric_io_binding_table_t*>(
+              binding.registered_io.table);
+      ASSERT_NE(table, nullptr);
+      EXPECT_NE(table->memory, nullptr);
+      EXPECT_NE(table->mapping, nullptr);
+      EXPECT_EQ(binding.registered_io.index, i);
+      EXPECT_EQ(binding.registered_io.offset, 123u);
+      auto* selected = table->regions[binding.registered_io.index];
+      ASSERT_NE(selected, nullptr);
+      EXPECT_EQ(selected->proactor, proactor);
+      EXPECT_EQ(selected->length, 8192u);
+      EXPECT_EQ(selected->access_flags,
+                IREE_ASYNC_BUFFER_ACCESS_FLAG_READ |
+                    IREE_ASYNC_BUFFER_ACCESS_FLAG_WRITE);
+      if (region) {
+        EXPECT_EQ(selected, region);
+      }
+      region = selected;
+      iree_hal_buffer_release(subspan);
+    }
+    iree_hal_buffer_release(buffer);
+    native_.AwaitEmpty();
+  }
+  iree_hal_pool_release(pool);
+  native_.AwaitEmpty();
+  EXPECT_EQ(native_.unmap_count, 4);
+  EXPECT_EQ(native_.destroy_count, 4);
+  iree_async_proactor_pool_entry_release(entry);
+}
+
+TEST_F(MemoryBackendTest, RegisteredIoRequiresConcurrentRegistration) {
+  auto options = iree_async_proactor_options_default();
+  options.allowed_capabilities &=
+      ~IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION;
+  iree_async_proactor_t* proactor = nullptr;
+  IREE_ASSERT_OK(iree_async_proactor_create_platform(
+      options, iree_allocator_system(), &proactor));
+  for (auto& backend : backends_) {
+    backend.native.io_proactor = proactor;
+  }
+  native_.file_io_enabled = true;
+  iree_hal_pool_t* pool = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      CreatePool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool,
+                 UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO, 0));
+  EXPECT_EQ(pool, nullptr);
+  EXPECT_EQ(native_.create_count, 0);
+  IREE_EXPECT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool));
+  EXPECT_NE(pool, nullptr);
+  iree_hal_pool_release(pool);
+  for (auto& backend : backends_) {
+    backend.native.io_proactor = nullptr;
+  }
+  iree_async_proactor_release(proactor);
+}
 
 TEST_F(MemoryBackendTest, UnavailableProfilesPreserveAvailableAllocation) {
   native_.host_placement_enabled = true;
@@ -727,6 +857,86 @@ TEST_F(MemoryBackendTest, IndependentNativeInstancesCannotShareBacking) {
   EXPECT_EQ(pool, nullptr);
   EXPECT_EQ(native_.profile_query_count, 0);
   EXPECT_EQ(independent.profile_query_count, 0);
+}
+
+TEST_F(MemoryBackendTest, PrivateTransferViewsFollowEachStorageRoute) {
+  for (auto& family : native_families_) {
+    family.host_usage = 0;
+  }
+  native_.required_flags = 0;
+  native_.registration_enabled = true;
+  static constexpr iree_hal_external_storage_class_t storage_class = {
+      IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER, {0, 0}};
+  static constexpr iree_hal_pool_import_class_t import_class = {storage_class,
+                                                                {}};
+  pool_options_.imports = {1, &import_class};
+  for (auto [host_visible, file_capable] :
+       {std::pair{false, false}, std::pair{false, true}, std::pair{true, false},
+        std::pair{true, true}}) {
+    native_.host_visibility_guaranteed = host_visible;
+    native_.file_io_enabled = file_capable;
+    native_.host_mapping_features =
+        file_capable ? AMDF_HOST_MAPPING_FEATURE_FILE_IO : 0;
+    const int map_count = native_.map_count;
+    iree_hal_pool_t* pool = nullptr;
+    IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool,
+                              /*interfaces=*/0, IREE_HAL_MEMORY_ACCESS_NONE));
+    EXPECT_EQ(iree_hal_pool_query_host_access(pool).access, 0u);
+    iree_hal_buffer_t* owned = nullptr;
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool, iree_hal_make_pool_reservation_request(4096, 64),
+        iree_infinite_timeout(), &owned));
+    EXPECT_EQ(native_.map_count, map_count + int(host_visible));
+
+    alignas(4096) uint8_t bytes[4096] = {};
+    iree_hal_external_storage_t storage = {.storage_class = storage_class};
+    storage.payload.host_pointer = bytes;
+    storage.byte_length = sizeof(bytes);
+    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.maintenance_range = iree_hal_make_buffer_range(128, 512);
+    iree_hal_buffer_t* imported = nullptr;
+    IREE_ASSERT_OK(iree_hal_pool_import_buffer(
+        pool, &storage, iree_hal_make_buffer_range(256, 128), &imported));
+    EXPECT_EQ(native_.map_count, map_count + int(host_visible) + 1);
+
+    for (auto* buffer : {owned, imported}) {
+      const auto memory = iree_hal_buffer_memory_view(buffer);
+      const auto* facts =
+          reinterpret_cast<const iree_hal_amd_fabric_memory_binding_facts_t*>(
+              memory.bindings + memory.contract->binding_layout.binding_count);
+      const bool mapped = buffer == imported || host_visible;
+      EXPECT_EQ(
+          facts->memory->host_access,
+          mapped ? AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE : 0u);
+      EXPECT_EQ(facts->memory->mapping != nullptr, mapped);
+      EXPECT_EQ(
+          facts->memory->host_features,
+          mapped && file_capable ? AMDF_HOST_MAPPING_FEATURE_FILE_IO : 0u);
+      for (uint32_t i = 0; i < families_.size(); ++i) {
+        EXPECT_EQ(
+            facts->scope_access_ordinals[families_[i]->memory.queue_scope_id],
+            i);
+      }
+      iree_hal_buffer_mapping_t mapping;
+      IREE_EXPECT_STATUS_IS(
+          IREE_STATUS_PERMISSION_DENIED,
+          iree_hal_buffer_map_range(
+              buffer, IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_READ,
+              IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, 64, &mapping));
+      if (buffer == imported) {
+        const auto binding = iree_hal_buffer_memory_native_binding(
+            &memory, {memory.contract->binding_layout.host_binding_index,
+                      IREE_HAL_BUFFER_INTERFACE_HOST});
+        EXPECT_EQ(binding.host_pointer, bytes + 256);
+        EXPECT_EQ(binding.host_pointer - facts->memory->contents.data, 128);
+      }
+    }
+    iree_hal_buffer_release(imported);
+    iree_hal_buffer_release(owned);
+    iree_hal_pool_release(pool);
+    native_.AwaitEmpty();
+    EXPECT_EQ(native_.map_count, native_.unmap_count);
+  }
 }
 
 TEST_F(MemoryBackendTest, RequiredPlacementSelectsBackingOwner) {
@@ -1532,7 +1742,9 @@ TEST_F(MemoryBackendTest, MappingSourcesHonorRequiredBackingPreparation) {
       pool, iree_hal_make_pool_reservation_request(4096, 4096),
       iree_infinite_timeout(), &buffer));
   EXPECT_EQ(native_.create_count, 1);
-  EXPECT_EQ(native_.map_count, 0);
+  // The private file view is prepared without adding HOST_VISIBLE to the
+  // allocation's required flags or granting public host access.
+  EXPECT_EQ(native_.map_count, 1);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
 
@@ -1551,7 +1763,8 @@ TEST_F(MemoryBackendTest, IndependentNpuMappingsNeedNoRemappableHostBacking) {
   native_.required_flags = 0;
   iree_hal_pool_t* pool = nullptr;
   // The same XDNA address kind may use independent device translations. Its
-  // source profile has no remappable host route and needs no host preparation.
+  // source profile has no remappable host route. An optional file view does
+  // not turn host remapping into a physical backing requirement.
   IREE_ASSERT_OK(
       CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool,
                  UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE, 0));
@@ -1561,7 +1774,7 @@ TEST_F(MemoryBackendTest, IndependentNpuMappingsNeedNoRemappableHostBacking) {
       pool, iree_hal_make_pool_reservation_request(4096, 4096),
       iree_infinite_timeout(), &buffer));
   EXPECT_EQ(native_.create_count, 1);
-  EXPECT_EQ(native_.map_count, 0);
+  EXPECT_EQ(native_.map_count, 1);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
 }
