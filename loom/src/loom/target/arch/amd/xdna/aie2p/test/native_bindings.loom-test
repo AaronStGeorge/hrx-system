@@ -442,22 +442,22 @@ pipeline.def<kernel> public retain target(@device) @pairwise_sum_difference() ru
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %227 = mov.short 1
   %119 = mov.acquire-delta -1
-  %right_source = mov.local-address 459004
-  %difference_destination = mov.local-address 459508
-  %sum_destination = mov.local-address 459256
-  %left_source = mov.local-address 458752
+  %108 = mov.local-address 459004
+  %110 = mov.local-address 459508
+  %112 = mov.local-address 459256
+  %114 = mov.local-address 458752
   acq %119, 49
   acq %119, 51
-  %left_value = lda %left_source, 0
-  %right_value = lda %right_source, 0
+  %left_value = lda %114, 0
+  %right_value = lda %108, 0
   %sum_value = add.nc %left_value, %right_value
   %difference_value = sub %left_value, %right_value
   rel %227, 48
   rel %227, 50
   acq %119, 52
   acq %119, 54
-  st %sum_value, %sum_destination, 0
-  st %difference_value, %difference_destination, 0
+  st %sum_value, %112, 0
+  st %difference_value, %110, 0
   rel %227, 53
   rel %227, 55
   rel %227, 56

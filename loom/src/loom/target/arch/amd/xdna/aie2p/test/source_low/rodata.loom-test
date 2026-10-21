@@ -12,7 +12,7 @@ func.def @read_table() -> (i32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @read_table() -> (reg<aie2p.er>) asm {
-  %view = mov.local-address @table
-  %value = lda %view, 4
+  %table = mov.local-address @table
+  %value = lda %table, 4
   return %value
 }

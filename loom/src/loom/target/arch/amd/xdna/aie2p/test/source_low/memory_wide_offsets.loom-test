@@ -4,7 +4,9 @@ func.def @scalar_wide_byte_offset(%input_storage: buffer, %output_storage: buffe
   %input = buffer.assume.alignment %input_storage {minimum_alignment = 4} : buffer
   %output = buffer.assume.alignment %output_storage {minimum_alignment = 4} : buffer
   %byte_offset = index.assume %byte_offset_input [multiple_of(%byte_offset_input, 4)] : offset
+  // ERROR@+1: TARGET/003 {constraint_key="source_memory.byte_offset_width"}
   %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xi32>
+  // ERROR@+1: TARGET/003 {constraint_key="source_memory.byte_offset_width"}
   %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xi32>
   // ERROR@+1: TARGET/003 {constraint_key="source_memory.byte_offset_width"}
   %loaded = view.load %input_view[0] : view<1xi32> -> i32
@@ -30,13 +32,13 @@ func.def @scalar_wide_scaled_index(%input_storage: buffer, %output_storage: buff
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scalar_wide_scaled_index(%element: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %element_bytes = mov.short 4
   %byte_offset = mul %element, %element_bytes
   %18 = mov.address-index %byte_offset
-  %loaded = lda.i32.index %input_view, %18
-  st.i32.index %loaded, %output_view, %18
+  %loaded = lda.i32.index %input, %18
+  st.i32.index %loaded, %output, %18
   return %loaded
 }
 
@@ -47,7 +49,9 @@ func.def @scalar_wide_static_base(%input_storage: buffer, %output_storage: buffe
   %output = buffer.assume.alignment %output_storage {minimum_alignment = 4} : buffer
   // ERROR@+1: TARGET/005
   %byte_offset = index.constant 1099511627784 : offset
+  // ERROR@+1: TARGET/003 {constraint_key="source_memory.static_offset"}
   %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xi32>
+  // ERROR@+1: TARGET/003 {constraint_key="source_memory.static_offset"}
   %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xi32>
   // ERROR@+1: TARGET/003 {constraint_key="source_memory.static_offset"}
   %loaded = view.load %input_view[0] : view<1xi32> -> i32
@@ -96,7 +100,9 @@ func.def @vector_wide_static_base(%input_storage: buffer, %output_storage: buffe
   %output = buffer.assume.alignment %output_storage {minimum_alignment = 16} : buffer
   // ERROR@+1: TARGET/005
   %byte_offset = index.constant 1099511627792 : offset
+  // ERROR@+1: TARGET/003 {constraint_key="source_memory.static_offset"}
   %input_view = buffer.view %input[%byte_offset] : buffer -> view<4xi32>
+  // ERROR@+1: TARGET/003 {constraint_key="source_memory.static_offset"}
   %output_view = buffer.view %output[%byte_offset] : buffer -> view<4xi32>
   // ERROR@+4: TARGET/003 {constraint_key="source_memory.static_offset"}
   // ERROR@+3: TARGET/003 {constraint_key="source_memory.static_offset"}

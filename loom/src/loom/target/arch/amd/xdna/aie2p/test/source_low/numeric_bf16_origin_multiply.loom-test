@@ -13,11 +13,11 @@ func.def @bf16_origin_scale(%input: buffer) -> (vector<16xf32>) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bf16_origin_scale() -> (reg<aie2p.vec256 x2>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %11 = mov.short 0
   %12 = vbcst.16 %11
   %13 = slice %12[1] : reg<aie2p.vec256 x2> -> reg<aie2p.vec256>
-  %14 = vlda.256.bf16x16 %input_view, 0
+  %14 = vlda.256.bf16x16 %input_aligned, 0
   %narrow = concat(%14, %13) : (reg<aie2p.vec256>, reg<aie2p.vec256>) -> reg<aie2p.vec256 x2>
   %16 = mov.i32 16313
   %17 = vbcst.16 %16
@@ -70,11 +70,11 @@ func.def @bf16_bitcast_origin_scale(%input: buffer) -> (vector<16xf32>) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bf16_bitcast_origin_scale() -> (reg<aie2p.vec256 x2>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %12 = mov.short 0
   %13 = vbcst.16 %12
   %14 = slice %13[1] : reg<aie2p.vec256 x2> -> reg<aie2p.vec256>
-  %15 = vlda.256.i16x16 %input_view, 0
+  %15 = vlda.256.i16x16 %input_aligned, 0
   %narrow = concat(%15, %14) : (reg<aie2p.vec256>, reg<aie2p.vec256>) -> reg<aie2p.vec256 x2>
   %17 = mov.i32 16313
   %18 = vbcst.16 %17
@@ -127,14 +127,14 @@ func.def @bf16_dynamic_origin_scale(%input: buffer, %element0: index) -> (vector
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bf16_dynamic_origin_scale(%element: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %14 = mov.short 0
   %15 = vbcst.16 %14
   %16 = slice %15[1] : reg<aie2p.vec256 x2> -> reg<aie2p.vec256>
   %17 = mov.i32 1
   %18 = lshl %element, %17
   %19 = mov.address-index %18
-  %20 = vlda.256.bf16x16.index %input_view, %19
+  %20 = vlda.256.bf16x16.index %input_aligned, %19
   %narrow = concat(%20, %16) : (reg<aie2p.vec256>, reg<aie2p.vec256>) -> reg<aie2p.vec256 x2>
   %22 = mov.i32 16313
   %23 = vbcst.16 %22
@@ -337,7 +337,7 @@ func.def @bf16_vector32_scalar_product_store(%values: vector<32xbf16>, %scale: b
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bf16_vector32_scalar_product_store(%values: reg<aie2p.vec256 x2>, %scale: reg<aie2p.er>, %position: reg<aie2p.er>) asm {
-  %output_view = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
   %17 = vbcst.16 %scale
   %18 = mova.i32 60
   %19 = vmul.bf16x32 %values, %17, %18
@@ -400,6 +400,6 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @bf16_vector32_sca
   %74 = mov.i32 1
   %75 = lshl %position, %74
   %76 = mov.address-index %75
-  vst.512.bf16x32.index %product, %output_view, %76
+  vst.512.bf16x32.index %product, %output_aligned, %76
   return
 }

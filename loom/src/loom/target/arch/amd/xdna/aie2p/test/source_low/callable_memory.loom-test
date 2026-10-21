@@ -77,22 +77,22 @@ func.def target(@target) @consume_ring(%output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @consume_ring() asm {
-  %result = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %aligned_output = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %address = mov.local-address 458752
   %begin = mov.short 0
   %count = mov.short 4
   %step = mov.short 1
   low.br ^_bb1(%begin: reg<aie2p.er>, %address: reg<aie2p.ep>)
-^_bb1(%record: reg<aie2p.er>, %source: reg<aie2p.ep>):
+^_bb1(%record: reg<aie2p.er>, %aligned: reg<aie2p.ep>):
   %36 = lt %record, %count
   low.cond_br %36, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %value = lda %source, 0
+  %value = lda %aligned, 0
   %38 = mov.i32 2
   %39 = lshl %record, %38
   %40 = mov.address-index %39
-  st.i32.index %value, %result, %40
-  %bits = mov.address-to-scalar %source
+  st.i32.index %value, %aligned_output, %40
+  %bits = mov.address-to-scalar %aligned
   %stride = mov.i32 28672
   %next_bits = xor %bits, %stride
   %next = mov.scalar-to-address %next_bits

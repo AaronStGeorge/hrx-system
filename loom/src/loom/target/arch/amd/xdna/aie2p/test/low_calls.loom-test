@@ -98,8 +98,10 @@ low.func.def noinline target<amd.xdna.aie2p.core>(@core_target) @copy_one(%input
 }
 
 low.func.def public retain target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @worker() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_view = copy %input : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_view = copy %output : reg<aie2p.ep> -> reg<aie2p.ep>
   low.func.call @copy_one(%input_view, %output_view) : (reg<aie2p.ep>, reg<aie2p.ep>)
   return
 }
@@ -137,8 +139,10 @@ low.func.def noinline target<amd.xdna.aie2p.core>(@core_target) @copy_aligned_ro
 }
 
 low.func.def public retain target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @aligned_worker() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_view = copy %input_aligned : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_view = copy %output_aligned : reg<aie2p.ep> -> reg<aie2p.ep>
   low.func.call @copy_aligned_row(%input_view, %output_view) : (reg<aie2p.ep>, reg<aie2p.ep>)
   return
 }
@@ -193,11 +197,173 @@ low.func.def noinline target<amd.xdna.aie2p.core>(@core_target) @copy_shared_row
 }
 
 low.func.def public retain target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @mixed_caller() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %unaligned_input_view = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
-  %unaligned_output_view = resource<native_pointer> {index = 3, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %unaligned_input = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
+  %unaligned_output = resource<native_pointer> {index = 3, source_type = buffer} : reg<aie2p.ep>
+  %input_view = copy %input_aligned : reg<aie2p.ep> -> reg<aie2p.ep>
+  %output_view = copy %output_aligned : reg<aie2p.ep> -> reg<aie2p.ep>
   low.func.call @copy_shared_row(%input_view, %output_view) : (reg<aie2p.ep>, reg<aie2p.ep>)
+  %unaligned_input_view = copy %unaligned_input : reg<aie2p.ep> -> reg<aie2p.ep>
+  %unaligned_output_view = copy %unaligned_output : reg<aie2p.ep> -> reg<aie2p.ep>
   low.func.call @copy_shared_row(%unaligned_input_view, %unaligned_output_view) : (reg<aie2p.ep>, reg<aie2p.ep>)
   return
+}
+
+// ====
+// RUN: emit source-low target=amd.xdna.aie2p:core output=module
+
+// A helper keeps its one-pointer view ABI while its internal control-flow join
+// carries the selected physical coordinate.
+aie2p.target<core> @core_target
+
+func.def noinline @read_selected(%left: view<1xi32>, %right: view<1xi32>, %choose_left: i1) -> (i32) {
+  %selected = scf.if %choose_left -> (view<1xi32>) {
+    scf.yield %left : view<1xi32>
+  } else {
+    scf.yield %right : view<1xi32>
+  }
+  %value = view.load %selected[0] : view<1xi32> -> i32
+  func.return %value : i32
+}
+
+func.def public retain target(@core_target) @selecting_caller(%left: buffer, %right: buffer, %choose_left: i1) -> (i32) {
+  %origin = index.constant 0 : offset
+  %left_view = buffer.view %left[%origin] : buffer -> view<1xi32>
+  %right_view = buffer.view %right[%origin] : buffer -> view<1xi32>
+  %value = func.call @read_selected(%left_view, %right_view, %choose_left) : (view<1xi32>, view<1xi32>, i1) -> (i32)
+  func.return %value : i32
+}
+
+// ----
+aie2p.target<core> @core_target
+
+low.func.def noinline target<amd.xdna.aie2p.core>(@core_target) @read_selected(%left: reg<aie2p.ep>, %right: reg<aie2p.ep>, %choose_left: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+  %4 = mov.address-to-scalar %left
+  %5 = mov.address-to-scalar %right
+  %6 = copy %choose_left : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %7 = sel.nez %4, %5, %6
+  %selected = mov.scalar-to-address %7
+  %value = lda %selected, 0
+  return %value
+}
+
+low.func.def public retain target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @selecting_caller(%choose_left: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+  %left = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %right = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %left_view = copy %left : reg<aie2p.ep> -> reg<aie2p.ep>
+  %right_view = copy %right : reg<aie2p.ep> -> reg<aie2p.ep>
+  %value = low.func.call @read_selected(%left_view, %right_view, %choose_left) : (reg<aie2p.ep>, reg<aie2p.ep>, reg<aie2p.er>) -> (reg<aie2p.er>)
+  return %value
+}
+
+// ====
+// RUN: emit source-low target=amd.xdna.aie2p:core output=module
+
+// View arguments carry their complete address. Aligned static origins use the
+// stepped pointer immediate, other static origins use a modifier, and dynamic
+// origins materialize the root-relative byte coordinate before the call.
+aie2p.target<core> @core_target
+
+func.def noinline @read_byte(%input: view<1xi8>) -> (i8) {
+  %value = view.load %input[0] : view<1xi8> -> i8
+  func.return %value : i8
+}
+
+func.def public retain target(@core_target) @read_origins(%input: buffer, %origin_input: offset) -> (i8, i8, i8) {
+  %aligned = buffer.assume.alignment %input {minimum_alignment = 64} : buffer
+  %aligned_origin = index.constant 64 : offset
+  %general_origin = index.constant 4 : offset
+  %dynamic_origin = index.assume %origin_input [range(%origin_input, 0, 1024)] : offset
+  %aligned_view = buffer.view %aligned[%aligned_origin] : buffer -> view<1xi8>
+  %general_view = buffer.view %aligned[%general_origin] : buffer -> view<1xi8>
+  %dynamic_view = buffer.view %input[%dynamic_origin] : buffer -> view<1xi8>
+  %aligned_value = func.call @read_byte(%aligned_view) : (view<1xi8>) -> (i8)
+  %general_value = func.call @read_byte(%general_view) : (view<1xi8>) -> (i8)
+  %dynamic_value = func.call @read_byte(%dynamic_view) : (view<1xi8>) -> (i8)
+  func.return %aligned_value, %general_value, %dynamic_value : i8, i8, i8
+}
+
+// ----
+aie2p.target<core> @core_target
+
+low.func.def noinline target<amd.xdna.aie2p.core>(@core_target) @read_byte(%input: reg<aie2p.ep>) -> (reg<aie2p.er>) asm {
+  %value = lda.u8 %input, 0
+  return %value
+}
+
+low.func.def public retain target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @read_origins(%dynamic_origin: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
+  %aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %8 = copy %aligned : reg<aie2p.ep> -> reg<aie2p.ep>
+  %aligned_view = padda %8, 64
+  %10 = copy %aligned : reg<aie2p.ep> -> reg<aie2p.ep>
+  %11 = mov.static-byte-offset 4
+  %12 = mov.modifier %11
+  %general_view = padda.modifier %10, %12
+  %14 = copy %aligned : reg<aie2p.ep> -> reg<aie2p.ep>
+  %15 = mov.modifier %dynamic_origin
+  %dynamic_view = padda.modifier %14, %15
+  %aligned_value = low.func.call @read_byte(%aligned_view) : (reg<aie2p.ep>) -> (reg<aie2p.er>)
+  %general_value = low.func.call @read_byte(%general_view) : (reg<aie2p.ep>) -> (reg<aie2p.er>)
+  %dynamic_value = low.func.call @read_byte(%dynamic_view) : (reg<aie2p.ep>) -> (reg<aie2p.er>)
+  return %aligned_value, %general_value, %dynamic_value
+}
+
+// ====
+// RUN: emit source-low target=amd.xdna.aie2p:core output=module
+
+// Complete view addresses remain one pointer while rotating through a loop,
+// deriving a dynamic subview, and returning across a retained call boundary.
+aie2p.target<core> @core_target
+
+func.def noinline @rotate_crop(%left: view<4xi32>, %right: view<4xi32>, %position_input: index, %count: index) -> (view<1xi32>) {
+  %position = index.assume %position_input [range(%position_input, 0, 3)] : index
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %selected, %other = scf.for %i = [%begin to %count step %step](%current = %left : view<4xi32>, %alternate = %right : view<4xi32>) -> (view<4xi32>, view<4xi32>) {
+    scf.yield %alternate, %current : view<4xi32>, view<4xi32>
+  }
+  %crop = view.subview %selected[%position] : view<4xi32> -> view<1xi32>
+  func.return %crop : view<1xi32>
+}
+
+func.def public retain target(@core_target) @read_rotated_crop(%left: buffer, %right: buffer, %position: index, %count: index) -> (i32) {
+  %origin = index.constant 0 : offset
+  %left_view = buffer.view %left[%origin] : buffer -> view<4xi32>
+  %right_view = buffer.view %right[%origin] : buffer -> view<4xi32>
+  %crop = func.call @rotate_crop(%left_view, %right_view, %position, %count) : (view<4xi32>, view<4xi32>, index, index) -> (view<1xi32>)
+  %value = view.load %crop[0] : view<1xi32> -> i32
+  func.return %value : i32
+}
+
+// ----
+aie2p.target<core> @core_target
+
+low.func.def noinline target<amd.xdna.aie2p.core>(@core_target) @rotate_crop(%left: reg<aie2p.ep>, %right: reg<aie2p.ep>, %position: reg<aie2p.er>, %count: reg<aie2p.er>) -> (reg<aie2p.ep>) asm {
+  %begin = mov.short 0
+  %step = mov.short 1
+  low.br ^_bb1(%begin: reg<aie2p.er>, %left: reg<aie2p.ep>, %right: reg<aie2p.ep>)
+^_bb1(%i: reg<aie2p.er>, %current: reg<aie2p.ep>, %alternate: reg<aie2p.ep>):
+  %9 = lt %i, %count
+  low.cond_br %9, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %10 = add.nc %i, %step
+  low.br ^_bb1(%10: reg<aie2p.er>, %alternate: reg<aie2p.ep>, %current: reg<aie2p.ep>)
+^_bb3:
+  %11 = copy %current : reg<aie2p.ep> -> reg<aie2p.ep>
+  %12 = mov.i32 2
+  %13 = lshl %position, %12
+  %14 = mov.modifier %13
+  %crop = padda.modifier %11, %14
+  return %crop
+}
+
+low.func.def public retain target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @read_rotated_crop(%position: reg<aie2p.er>, %count: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+  %left = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %right = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %left_view = copy %left : reg<aie2p.ep> -> reg<aie2p.ep>
+  %right_view = copy %right : reg<aie2p.ep> -> reg<aie2p.ep>
+  %crop = low.func.call pure @rotate_crop(%left_view, %right_view, %position, %count) : (reg<aie2p.ep>, reg<aie2p.ep>, reg<aie2p.er>, reg<aie2p.er>) -> (reg<aie2p.ep>)
+  %value = lda %crop, 0
+  return %value
 }

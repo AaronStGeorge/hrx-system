@@ -13,8 +13,8 @@ func.def @copy_i64x2(%input: buffer, %output: buffer) -> (vector<2xi64>) {
 
 // ----
 CHECK: low.func.def * @copy_i64x2() -> (reg<aie2p.vec256 x2>) asm {
-CHECK: * = vlda.128.i64x2 %source_view, 16
-CHECK: vst.128.i64x2 *, %destination_view, 0
+CHECK: * = vlda.128.i64x2 %source, 16
+CHECK: vst.128.i64x2 *, %destination, 0
 CHECK-NOT: *vextract*
 CHECK-NOT: *vinsert*
 
@@ -32,8 +32,8 @@ func.def @copy_f64x4_volatile(%input: buffer, %output: buffer) {
 }
 
 // ----
-CHECK: * = vlda.256.f64x4.volatile<volatile> %source_view, 32
-CHECK: vst.256.f64x4.volatile<volatile> *, %destination_view, 0
+CHECK: * = vlda.256.f64x4.volatile<volatile> %source, 32
+CHECK: vst.256.f64x4.volatile<volatile> *, %destination, 0
 CHECK-NOT: *vextract*
 CHECK-NOT: *vinsert*
 
@@ -51,8 +51,8 @@ func.def @copy_i64x8_dynamic(%input: buffer, %output: buffer, %position: offset)
 }
 
 // ----
-CHECK: %value = vlda.512.i64x8.index %source_view, *
-CHECK: vst.512.i64x8.index %value, %destination_view, *
+CHECK: %value = vlda.512.i64x8.index %source, *
+CHECK: vst.512.i64x8.index %value, %destination, *
 CHECK-NOT: *vextract*
 CHECK-NOT: *vinsert*
 
@@ -71,11 +71,11 @@ func.def @copy_f64x4_aligned16(%input: buffer, %output: buffer) {
 }
 
 // ----
-CHECK: * = vlda.128.i8x16 %source_view, 16
-CHECK: * = vlda.128.i8x16 %source_view, 32
+CHECK: * = vlda.128.i8x16 %source, 16
+CHECK: * = vlda.128.i8x16 %source, 32
 CHECK: * = vshift *
 CHECK: * = vsel.32 *
-CHECK: vst.256.f64x4 *, %destination_view, 0
+CHECK: vst.256.f64x4 *, %destination, 0
 CHECK-NOT: *vlda.256*
 CHECK-NOT: *vextract*
 CHECK-NOT: *vinsert*

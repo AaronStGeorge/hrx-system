@@ -34,6 +34,8 @@ from loom.target.contracts import (
     ReadOnlyDataLiteral,
     RecipeRule,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryOperation,
     SourceNode,
     ValueAliasRule,
     ValueElideRule,
@@ -567,6 +569,54 @@ def test_structural_register_emits_validate_program_shape() -> None:
         ),
     )
     assert len(fragment.cases[0].emit) == 2
+
+    source_memory = SourceMemoryConstraint(
+        operation=SourceMemoryOperation.VIEW_CARRIER,
+        memory_spaces=("unknown",),
+        element_byte_count=4,
+        vector_lane_count=1,
+        vector_lane_byte_stride=4,
+        static_byte_offset=0,
+    )
+    with pytest.raises(
+        ValueError,
+        match="source-memory root needs a source-memory constraint",
+    ):
+        ContractFragment(
+            name="register.copy.source-memory-missing",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=(
+                DescriptorRule(
+                    source_op=buffer.buffer_view,
+                    emit=(
+                        EmitRegisterCopy(
+                            source=ValueRef.source_memory_root(),
+                            result=ValueRef.result("result"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    with pytest.raises(
+        ValueError,
+        match="source-memory constraint requires a source-memory root",
+    ):
+        ContractFragment(
+            name="register.copy.source-memory-operand",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=(
+                DescriptorRule(
+                    source_op=buffer.buffer_view,
+                    emit=(
+                        EmitRegisterCopy(
+                            source=ValueRef.operand("buffer"),
+                            result=ValueRef.result("result"),
+                            source_memory=source_memory,
+                        ),
+                    ),
+                ),
+            ),
+        )
 
     with pytest.raises(ValueError, match="register move source must bind a temporary"):
         ContractFragment(

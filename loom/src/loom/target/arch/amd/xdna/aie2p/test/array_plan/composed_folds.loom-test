@@ -220,16 +220,16 @@ low.func.def retain target<amd.xdna.aie2p.core> @parallel_folded_composite_array
   acq %acquire_delta, 49
   acq %acquire_delta, 51
   acq %acquire_delta, 33
-  %shared_view = copy %31 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %left_view = copy %33 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %right_view = copy %35 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %left_output_view = copy %37 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %right_output_view = copy %39 : reg<aie2p.ep> -> reg<aie2p.ep>
-  %right_scratch_view = storage_address %7 : low.storage<private> -> reg<aie2p.ep>
-  %shared_value = lda %shared_view, 0
-  st %shared_value, %right_scratch_view, 0
-  %left_value = lda %left_view, 0
-  %left_shared_value = lda %right_scratch_view, 0
+  %shared_aligned = copy %31 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %left_aligned = copy %33 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %right_aligned = copy %35 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %left_output_aligned = copy %37 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %right_output_aligned = copy %39 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %right_scratch_aligned = storage_address %7 : low.storage<private> -> reg<aie2p.ep>
+  %shared_value = lda %shared_aligned, 0
+  st %shared_value, %right_scratch_aligned, 0
+  %left_value = lda %left_aligned, 0
+  %left_shared_value = lda %right_scratch_aligned, 0
   %12 = vbcst.32 %left_value
   %13 = vbcst.32 %left_shared_value
   %14 = vmov.vector512.to.accumulator512.low %12
@@ -239,9 +239,9 @@ low.func.def retain target<amd.xdna.aie2p.core> @parallel_folded_composite_array
   %18 = slice %17[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
   %19 = vmov.accumulator512.to.vector512 %18
   %left_sum = vextract.32.imm %19, 0
-  st %left_sum, %left_output_view, 0
-  %right_value = lda %right_view, 0
-  %right_shared_value = lda %right_scratch_view, 0
+  st %left_sum, %left_output_aligned, 0
+  %right_value = lda %right_aligned, 0
+  %right_shared_value = lda %right_scratch_aligned, 0
   %23 = vbcst.32 %right_value
   %24 = vbcst.32 %right_shared_value
   %25 = vmov.vector512.to.accumulator512.low %23
@@ -250,7 +250,7 @@ low.func.def retain target<amd.xdna.aie2p.core> @parallel_folded_composite_array
   %28 = slice %27[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
   %29 = vmov.accumulator512.to.vector512 %28
   %right_sum = vextract.32.imm %29, 0
-  st %right_sum, %right_output_view, 0
+  st %right_sum, %right_output_aligned, 0
   %54 = lda %37, 0
   %55 = vbcst.32 %54
   %56 = lda %39, 0

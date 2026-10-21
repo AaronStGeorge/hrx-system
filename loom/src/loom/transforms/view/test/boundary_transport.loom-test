@@ -299,3 +299,120 @@ CHECK: %selected_root, %selected_offset = scf.if * -> (buffer, offset) {
 CHECK: * = index.sub %selected_offset, * : offset
 CHECK: func.return %selected_root, * : buffer, offset
 CHECK-NOT: * = index.cast %selected_offset : offset to i64
+
+// ====
+
+// RUN: pass specialize-target-callgraph,decompose-view-boundaries,dce
+
+// A counted recurrence rotates distinct roots and their offsets together.
+test.target<low_core> @carrier_target
+
+func.def public target(@carrier_target) @rotate_region_views(%left: buffer, %right: buffer, %left_offset: offset, %right_offset: offset, %count: index) -> (i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %left_view = buffer.view %left[%left_offset] : buffer -> view<1xi32>
+  %right_view = buffer.view %right[%right_offset] : buffer -> view<1xi32>
+  %selected, %other = scf.for %i = [%begin to %count step %step](%current = %left_view : view<1xi32>, %alternate = %right_view : view<1xi32>) -> (view<1xi32>, view<1xi32>) {
+    scf.yield %alternate, %current : view<1xi32>, view<1xi32>
+  }
+  %value = view.load %selected[0] : view<1xi32> -> i32
+  func.return %value : i32
+}
+
+// ----
+test.target<low_core> @carrier_target
+
+func.def public target(@carrier_target) @rotate_region_views(%left: buffer, %right: buffer, %left_offset: offset, %right_offset: offset, %count: index) -> (i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %selected_root, %selected_offset, %other_root, %other_offset = scf.for %i = [%begin to %count step %step](%current_root = %left : buffer, %current_offset = %left_offset : offset, %alternate_root = %right : buffer, %alternate_offset = %right_offset : offset) -> (buffer, offset, buffer, offset) {
+    scf.yield %alternate_root, %alternate_offset, %current_root, %current_offset : buffer, offset, buffer, offset
+  }
+  %selected = buffer.view %selected_root[%selected_offset] : buffer -> view<1xi32>
+  %value = view.load %selected[0] : view<1xi32> -> i32
+  func.return %value : i32
+}
+
+// ====
+
+// RUN: pass specialize-target-callgraph,decompose-view-boundaries,dce
+
+// A condition recurrence transports distinct roots through its header, body,
+// and independently shaped result tuple.
+test.target<low_core> @carrier_target
+
+func.def public target(@carrier_target) @rotate_condition_views(%left: buffer, %right: buffer, %left_offset: offset, %right_offset: offset, %count: index) -> (i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %left_view = buffer.view %left[%left_offset] : buffer -> view<1xi32>
+  %right_view = buffer.view %right[%right_offset] : buffer -> view<1xi32>
+  %selected, %other, %last_i = scf.while(%current = %left_view : view<1xi32>, %alternate = %right_view : view<1xi32>, %i = %begin : index) -> (view<1xi32>, view<1xi32>, index) {
+    %more = index.cmp slt, %i, %count : index
+    scf.condition %more, %current, %alternate, %i : i1, view<1xi32>, view<1xi32>, index
+  } do(%body_current: view<1xi32>, %body_alternate: view<1xi32>, %body_i: index) {
+    %next_i = index.add %body_i, %step : index
+    scf.yield %body_alternate, %body_current, %next_i : view<1xi32>, view<1xi32>, index
+  }
+  %value = view.load %selected[0] : view<1xi32> -> i32
+  func.return %value : i32
+}
+
+// ----
+test.target<low_core> @carrier_target
+
+func.def public target(@carrier_target) @rotate_condition_views(%left: buffer, %right: buffer, %left_offset: offset, %right_offset: offset, %count: index) -> (i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %selected_root, %selected_offset, %other_root, %other_offset, %last_i = scf.while(%current_root = %left : buffer, %current_offset = %left_offset : offset, %alternate_root = %right : buffer, %alternate_offset = %right_offset : offset, %i = %begin : index) -> (buffer, offset, buffer, offset, index) {
+    %more = index.cmp slt, %i, %count : index
+    scf.condition %more, %current_root, %current_offset, %alternate_root, %alternate_offset, %i : i1, buffer, offset, buffer, offset, index
+  } do(%body_current_root: buffer, %body_current_offset: offset, %body_alternate_root: buffer, %body_alternate_offset: offset, %body_i: index) {
+    %next_i = index.add %body_i, %step : index
+    scf.yield %body_alternate_root, %body_alternate_offset, %body_current_root, %body_current_offset, %next_i : buffer, offset, buffer, offset, index
+  }
+  %selected = buffer.view %selected_root[%selected_offset] : buffer -> view<1xi32>
+  %value = view.load %selected[0] : view<1xi32> -> i32
+  func.return %value : i32
+}
+
+// ====
+
+// RUN: pass specialize-target-callgraph,decompose-view-boundaries,dce
+
+// View coordinates stay correlated with the dynamic dimension and layout
+// results named by the reconstructed semantic type.
+test.target<low_core> @carrier_target
+
+func.def public target(@carrier_target) @choose_dependent_region_view(%left: buffer, %right: buffer, %left_offset: offset, %right_offset: offset, %left_size: index, %right_size: index, %left_stride_input: index, %right_stride_input: index, %condition: i1) -> (i32) {
+  %left_stride = index.assume %left_stride_input [range(%left_stride_input, 1, 1024)] : index
+  %right_stride = index.assume %right_stride_input [range(%right_stride_input, 1, 1024)] : index
+  %selected, %size, %layout = scf.if %condition -> (view<[%size]xi32, %layout>, index, encoding<layout>) {
+    %left_layout = encoding.layout.strided [%left_stride] : encoding<layout>
+    %left_view = buffer.view %left[%left_offset] : buffer -> view<[%left_size]xi32, %left_layout>
+    scf.yield %left_view, %left_size, %left_layout : view<[%left_size]xi32, %left_layout>, index, encoding<layout>
+  } else {
+    %right_layout = encoding.layout.strided [%right_stride] : encoding<layout>
+    %right_view = buffer.view %right[%right_offset] : buffer -> view<[%right_size]xi32, %right_layout>
+    scf.yield %right_view, %right_size, %right_layout : view<[%right_size]xi32, %right_layout>, index, encoding<layout>
+  }
+  %value = view.load %selected[0] : view<[%size]xi32, %layout> -> i32
+  func.return %value : i32
+}
+
+// ----
+test.target<low_core> @carrier_target
+
+func.def public target(@carrier_target) @choose_dependent_region_view(%left: buffer, %right: buffer, %left_offset: offset, %right_offset: offset, %left_size: index, %right_size: index, %left_stride_input: index, %right_stride_input: index, %condition: i1) -> (i32) {
+  %left_stride = index.assume %left_stride_input [range(%left_stride_input, 1, 1024)] : index
+  %right_stride = index.assume %right_stride_input [range(%right_stride_input, 1, 1024)] : index
+  %20, %21, %size, %layout = scf.if %condition -> (buffer, offset, index, encoding<layout>) {
+    %left_layout = encoding.layout.strided [%left_stride] : encoding<layout>
+    scf.yield %left, %left_offset, %left_size, %left_layout : buffer, offset, index, encoding<layout>
+  } else {
+    %right_layout = encoding.layout.strided [%right_stride] : encoding<layout>
+    scf.yield %right, %right_offset, %right_size, %right_layout : buffer, offset, index, encoding<layout>
+  }
+  %selected = buffer.view %20[%21] : buffer -> view<[%size]xi32, %layout>
+  %value = view.load %selected[0] : view<[%size]xi32, %layout> -> i32
+  func.return %value : i32
+}

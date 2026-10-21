@@ -14,12 +14,12 @@ func.def @volatile_copy_i32x32(%source: buffer, %destination: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @volatile_copy_i32x32() asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %15 = vlda.512.i32x16.volatile<volatile> %source_view, 0
-  %16 = vlda.512.i32x16.volatile<volatile> %source_view, 64
-  vst.512.i32x16.volatile<volatile> %15, %destination_view, 0
-  vst.512.i32x16.volatile<volatile> %16, %destination_view, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %15 = vlda.512.i32x16.volatile<volatile> %source_aligned, 0
+  %16 = vlda.512.i32x16.volatile<volatile> %source_aligned, 64
+  vst.512.i32x16.volatile<volatile> %15, %destination_aligned, 0
+  vst.512.i32x16.volatile<volatile> %16, %destination_aligned, 64
   return
 }
 
@@ -38,9 +38,9 @@ func.def @volatile_reduce_i32x32(%source: buffer) -> (i32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @volatile_reduce_i32x32() -> (reg<aie2p.er>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %16 = vlda.512.i32x16.volatile<volatile> %source_view, 0
-  %17 = vlda.512.i32x16.volatile<volatile> %source_view, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %16 = vlda.512.i32x16.volatile<volatile> %source_aligned, 0
+  %17 = vlda.512.i32x16.volatile<volatile> %source_aligned, 64
   %18 = vadd.32 %16, %17
   %19 = mova.i32 11
   %20 = vshuffle %18, %18, %19
@@ -82,11 +82,11 @@ func.def @preserve_outer_read(%source: buffer, %destination0: buffer, %destinati
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @preserve_outer_read(%count: reg<aie2p.er>, %replacement: reg<aie2p.er>) asm {
-  %source_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination0_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %destination1_view = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
-  %32 = vlda.512.i32x16 %source_view, 0
-  %33 = vlda.512.i32x16 %source_view, 64
+  %source_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination0_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %destination1_aligned = resource<native_pointer> {index = 2, source_type = buffer} : reg<aie2p.ep>
+  %32 = vlda.512.i32x16 %source_aligned, 0
+  %33 = vlda.512.i32x16 %source_aligned, 64
   %lower = mov.short 0
   %step = mov.short 1
   low.br ^_bb1(%lower: reg<aie2p.er>)
@@ -94,11 +94,11 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @preserve_outer_re
   %36 = lt %iteration, %count
   low.cond_br %36, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  st %replacement, %source_view, 0
-  vst.512.i32x16 %32, %destination0_view, 0
-  vst.512.i32x16 %33, %destination0_view, 64
-  vst.512.i32x16 %32, %destination1_view, 0
-  vst.512.i32x16 %33, %destination1_view, 64
+  st %replacement, %source_aligned, 0
+  vst.512.i32x16 %32, %destination0_aligned, 0
+  vst.512.i32x16 %33, %destination0_aligned, 64
+  vst.512.i32x16 %32, %destination1_aligned, 0
+  vst.512.i32x16 %33, %destination1_aligned, 64
   %37 = add.nc %iteration, %step
   low.br ^_bb1(%37: reg<aie2p.er>)
 ^_bb3:

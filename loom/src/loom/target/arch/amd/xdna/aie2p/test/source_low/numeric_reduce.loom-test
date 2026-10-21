@@ -183,11 +183,11 @@ func.def @i32_configured_width_sum(%input: buffer) -> (i32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @i32_configured_width_sum() -> (reg<aie2p.er>) asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %18 = lda %input_view, 0
-  %19 = lda %input_view, 4
-  %20 = lda %input_view, 8
-  %21 = lda %input_view, 12
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %18 = lda %input, 0
+  %19 = lda %input, 4
+  %20 = lda %input, 8
+  %21 = lda %input, 12
   %22 = vbcst.32 %21
   %23 = vpush.lo.32 %20, %22
   %24 = vpush.lo.32 %19, %23

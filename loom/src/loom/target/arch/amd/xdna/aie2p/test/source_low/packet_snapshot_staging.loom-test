@@ -15,9 +15,9 @@ func.def @preserve_large_old_source(%source: buffer, %destination: buffer, %repl
 }
 
 // ----
-CHECK: %* = vlda.512.i32x16 %source_view, 0
+CHECK: %* = vlda.512.i32x16 %source_aligned, 0
 CHECK: %* = mov.static-byte-offset 2048
-CHECK: %* = vlda.512.i32x16.index %source_view, *
+CHECK: %* = vlda.512.i32x16.index %source_aligned, *
 CHECK: %* = storage {byte_alignment = 64, byte_length = 2112} : low.storage<private>
 CHECK: vst.512.i32x16 %*, %*, 0
 CHECK: vst.512.i32x16.index %*, %*, *

@@ -1849,6 +1849,7 @@ class _LowerRuleSetCompiler:
                 emit.result_type,
                 temporary_ordinals,
                 temporary_definition_slots,
+                source_memory=emit.source_memory,
             )
             return
         if isinstance(emit, EmitRegisterMove):
@@ -2085,6 +2086,7 @@ class _LowerRuleSetCompiler:
         temporary_ordinals: dict[str, int],
         temporary_definition_slots: Mapping[str, int],
         *,
+        source_memory: SourceMemoryConstraint | None = None,
         structural_offset: int = 0,
         structural_unit_count: int = 0,
     ) -> None:
@@ -2134,6 +2136,20 @@ class _LowerRuleSetCompiler:
             if result_type_ref != result_bind_ref:
                 flags |= LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS
 
+        source_memory_ordinal = LOWER_SOURCE_MEMORY_NONE
+        if source_memory is not None:
+            if emit_kind is not LowerEmitKind.REGISTER_COPY:
+                raise ValueError(
+                    f"{source_op.name}: only register copies may consume "
+                    "source memory structurally"
+                )
+            source_memory_ordinal = self._append_source_memory(
+                source_op,
+                source_memory,
+                byte_offset_materializer=None,
+                address_materializer=None,
+            )
+
         self._emits.append(
             LowerEmit(
                 kind=emit_kind,
@@ -2145,6 +2161,7 @@ class _LowerRuleSetCompiler:
                 result_type_pattern_start=result_type_pattern_start,
                 result_ref_count=1,
                 result_bind_ref_start=result_bind_ref_start,
+                source_memory_ordinal=source_memory_ordinal,
                 structural_offset=structural_offset,
                 structural_unit_count=structural_unit_count,
             )

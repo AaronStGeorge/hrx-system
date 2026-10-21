@@ -21,15 +21,15 @@ func.def target(@target) @resident_vector_add() {
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @resident_vector_add() asm {
   %11 = storage {byte_alignment = 64, byte_length = 64} : low.storage<workgroup>
-  %lhs_view = storage_address %11 : low.storage<workgroup> -> reg<aie2p.ep>
+  %lhs = storage_address %11 : low.storage<workgroup> -> reg<aie2p.ep>
   %13 = storage {byte_alignment = 64, byte_length = 64} : low.storage<workgroup>
-  %rhs_view = storage_address %13 : low.storage<workgroup> -> reg<aie2p.ep>
+  %rhs = storage_address %13 : low.storage<workgroup> -> reg<aie2p.ep>
   %15 = storage {byte_alignment = 64, byte_length = 64} : low.storage<workgroup>
-  %output_view = storage_address %15 : low.storage<workgroup> -> reg<aie2p.ep>
-  %lhs_value = vlda.512.i32x16 %lhs_view, 0
-  %rhs_value = vlda.512.i32x16 %rhs_view, 0
+  %output = storage_address %15 : low.storage<workgroup> -> reg<aie2p.ep>
+  %lhs_value = vlda.512.i32x16 %lhs, 0
+  %rhs_value = vlda.512.i32x16 %rhs, 0
   %sum = vadd.32 %lhs_value, %rhs_value
-  vst.512.i32x16 %sum, %output_view, 0
+  vst.512.i32x16 %sum, %output, 0
   return
 }
 
@@ -52,10 +52,10 @@ func.def target(@target) @bounded_private_scalar_copy(%byte_length0: offset) {
 // ----
 low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @bounded_private_scalar_copy(%byte_length: reg<aie2p.er>) asm {
   %9 = storage {byte_alignment = 64, byte_length = 128} : low.storage<private>
-  %source_view = storage_address %9 : low.storage<private> -> reg<aie2p.ep>
+  %source = storage_address %9 : low.storage<private> -> reg<aie2p.ep>
   %11 = storage {byte_alignment = 64, byte_length = 128} : low.storage<private>
-  %output_view = storage_address %11 : low.storage<private> -> reg<aie2p.ep>
-  %value = lda %source_view, 0
-  st %value, %output_view, 0
+  %output = storage_address %11 : low.storage<private> -> reg<aie2p.ep>
+  %value = lda %source, 0
+  st %value, %output, 0
   return
 }

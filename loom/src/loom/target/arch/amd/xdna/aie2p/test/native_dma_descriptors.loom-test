@@ -62,12 +62,12 @@ pipeline.def<kernel> public retain target(@device) @grouped_projection() run(%ou
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %378 = mov.short 1
   %245 = mov.acquire-delta -1
-  %destination = mov.local-address 458752
+  %90 = mov.local-address 458752
   acq %245, 48
   %381 = mov.short 11
   %values = vbcst.32 %381
   %383 = slice %values[0] : reg<aie2p.vec256 x2> -> reg<aie2p.vec256>
-  vst.128.i32x4 %383, %destination, 0
+  vst.128.i32x4 %383, %90, 0
   rel %378, 49
   acq %245, 49
   %begin = mov.short 0
@@ -337,10 +337,10 @@ pipeline.def<kernel> public retain target(@device) @fixed_snapshot() run(%output
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %124 = mov.short 1
   %57 = mov.acquire-delta -1
-  %destination = mov.local-address 458752
+  %38 = mov.local-address 458752
   acq %57, 48
   %initial = mov.short 11
-  st %initial, %destination, 0
+  st %initial, %38, 0
   rel %124, 49
   acq %57, 49
   %41 = mov.short 0
@@ -355,7 +355,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   mov.ms.last %41
   %47 = mov.ss
   %final = mov.short 22
-  st %final, %destination, 0
+  st %final, %38, 0
   mov.ms %124
   mov.ms %44
   mov.ms.last %42

@@ -29,24 +29,24 @@ func.def @exchange_offset_bias_boundaries(%buffer: buffer, %byte_offset: offset,
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_offset_bias_boundaries(%base: reg<aie2p.er>, %replacement: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
-  %after_outside_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %negative_boundary_prefix = mov.short 128
   %negative_outside_prefix = mov.short 129
   %before_boundary = sub %base, %negative_boundary_prefix
   %before_outside = sub %base, %negative_outside_prefix
   %35 = mov.address-index %before_boundary
-  %previous_before_boundary = lda.i8.index %after_outside_view, %35
+  %previous_before_boundary = lda.i8.index %buffer, %35
   %37 = mov.address-index %before_outside
-  %previous_before_outside = lda.i8.index %after_outside_view, %37
+  %previous_before_outside = lda.i8.index %buffer, %37
   %39 = add.address-index.immediate %base, 127
-  %previous_after_boundary = lda.i8.index %after_outside_view, %39
+  %previous_after_boundary = lda.i8.index %buffer, %39
   %41 = mov.static-byte-offset 128
   %42 = add.address-index %base, %41
-  %previous_after_outside = lda.i8.index %after_outside_view, %42
-  st.i8.index %replacement, %after_outside_view, %35
-  st.i8.index %replacement, %after_outside_view, %37
-  st.i8.index %replacement, %after_outside_view, %39
-  st.i8.index %replacement, %after_outside_view, %42
+  %previous_after_outside = lda.i8.index %buffer, %42
+  st.i8.index %replacement, %buffer, %35
+  st.i8.index %replacement, %buffer, %37
+  st.i8.index %replacement, %buffer, %39
+  st.i8.index %replacement, %buffer, %42
   return %previous_before_boundary, %previous_before_outside, %previous_after_boundary, %previous_after_outside
 }
 
@@ -70,13 +70,13 @@ func.def @exchange_signed_index_bias_boundaries(%buffer: buffer, %coordinate: in
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_signed_index_bias_boundaries(%signed_coordinate: reg<aie2p.er>, %replacement: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %19 = add.address-index.immediate %signed_coordinate, 127
-  %previous_boundary = lda.i8.index %view, %19
+  %previous_boundary = lda.i8.index %buffer, %19
   %21 = mov.static-byte-offset 128
   %22 = add.address-index %signed_coordinate, %21
-  %previous_outside = lda.i8.index %view, %22
-  st.i8.index %replacement, %view, %19
-  st.i8.index %replacement, %view, %22
+  %previous_outside = lda.i8.index %buffer, %22
+  st.i8.index %replacement, %buffer, %19
+  st.i8.index %replacement, %buffer, %22
   return %previous_boundary, %previous_outside
 }

@@ -45,7 +45,6 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
 )
 from loom.target.contracts import (
     AttrProject,
-    Buffer,
     DescriptorEmitForm,
     DescriptorResultType,
     DescriptorRule,
@@ -391,7 +390,7 @@ def _scalar_select_rule(type_pattern: TypePattern) -> DescriptorRule:
     )
 
 
-def _buffer_select_rule() -> DescriptorRule:
+def _address_select_rule(type_pattern: TypePattern) -> DescriptorRule:
     address_to_scalar = _descriptor("amd.xdna.aie2p.move.local-address-to-scalar")
     scalar_to_address = _descriptor("amd.xdna.aie2p.move.scalar-to-local-address")
     select = _descriptor("amd.xdna.aie2p.select.nonzero.i32")
@@ -403,7 +402,7 @@ def _buffer_select_rule() -> DescriptorRule:
         descriptor=select,
         guards=(
             Guard.value_type("condition", _I1),
-            *_typed_guards(("true_value", "false_value", "result"), Buffer()),
+            *_typed_guards(("true_value", "false_value", "result"), type_pattern),
         ),
         emit=(
             _op_emit(

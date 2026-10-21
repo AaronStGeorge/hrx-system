@@ -600,15 +600,24 @@ static iree_status_t loom_low_lower_rule_emit_register_copy(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_emit_state_t* state,
-    const loom_low_lower_resolved_emit_t* resolved_emit) {
+    const loom_low_lower_resolved_emit_t* resolved_emit,
+    const loom_low_lower_selected_source_memory_t* selected_source_memory) {
   const loom_low_lower_emit_t* emit = resolved_emit->emit;
   IREE_ASSERT_EQ(emit->operand_ref_count, 1);
   IREE_ASSERT_EQ(emit->result_ref_count, 1);
 
+  const loom_low_lower_source_memory_t* source_memory = NULL;
+  const loom_low_source_memory_access_plan_t* source_memory_access = NULL;
+  if (emit->source_memory_ordinal != 0) {
+    source_memory = &rule_set->source_memories[emit->source_memory_ordinal - 1];
+    IREE_ASSERT(selected_source_memory != NULL);
+    source_memory_access = &selected_source_memory->access;
+  }
+
   loom_value_id_t* low_operands = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_low_operands(
-      context, rule_set, source_op, state, resolved_emit, NULL, NULL,
-      &low_operands));
+      context, rule_set, source_op, state, resolved_emit, source_memory,
+      source_memory_access, &low_operands));
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
       context, resolved_emit, &result_types));
@@ -1195,7 +1204,8 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
       }
       case LOOM_LOW_LOWER_EMIT_REGISTER_COPY: {
         IREE_RETURN_IF_ERROR(loom_low_lower_rule_emit_register_copy(
-            context, rule_set, source_op, &state, resolved_emit));
+            context, rule_set, source_op, &state, resolved_emit,
+            source_memory));
         break;
       }
       case LOOM_LOW_LOWER_EMIT_REGISTER_MOVE: {

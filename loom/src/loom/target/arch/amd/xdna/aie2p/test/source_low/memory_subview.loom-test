@@ -21,8 +21,8 @@ func.def @subview_nested_dynamic(%input: buffer, %output: buffer, %base: offset,
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @subview_nested_dynamic(%origin: reg<aie2p.er>, %row_bounded: reg<aie2p.er>, %column_bounded: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %source_refined = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination_inner = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %26 = mov.static-byte-offset 76
   %27 = mov.i32 5
   %28 = lshl %row_bounded, %27
@@ -32,11 +32,11 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @subview_nested_dy
   %32 = add.nc %29, %31
   %33 = add.nc %32, %26
   %34 = mov.address-index %33
-  %value = lda.i32.index %source_refined, %34
+  %value = lda.i32.index %input_aligned, %34
   %36 = mov.static-byte-offset 68
   %43 = add.nc %32, %36
   %44 = mov.address-index %43
-  st.i32.index %value, %destination_inner, %44
+  st.i32.index %value, %output_aligned, %44
   return %value
 }
 
@@ -59,32 +59,32 @@ func.def @subview_vector_strided(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @subview_vector_strided() asm {
-  %source_crop = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination_crop = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %23 = mov.static-byte-offset 124
   %24 = mov.address-index %23
-  %25 = lda.i32.index %source_crop, %24
+  %25 = lda.i32.index %input_aligned, %24
   %26 = mov.static-byte-offset 128
   %27 = mov.address-index %26
-  %28 = lda.i32.index %source_crop, %27
+  %28 = lda.i32.index %input_aligned, %27
   %29 = mov.static-byte-offset 132
   %30 = mov.address-index %29
-  %31 = lda.i32.index %source_crop, %30
+  %31 = lda.i32.index %input_aligned, %30
   %32 = mov.static-byte-offset 136
   %33 = mov.address-index %32
-  %34 = lda.i32.index %source_crop, %33
+  %34 = lda.i32.index %input_aligned, %33
   %35 = mov.static-byte-offset 88
   %36 = mov.address-index %35
-  st.i32.index %25, %destination_crop, %36
+  st.i32.index %25, %output_aligned, %36
   %37 = mov.static-byte-offset 92
   %38 = mov.address-index %37
-  st.i32.index %28, %destination_crop, %38
+  st.i32.index %28, %output_aligned, %38
   %39 = mov.static-byte-offset 96
   %40 = mov.address-index %39
-  st.i32.index %31, %destination_crop, %40
+  st.i32.index %31, %output_aligned, %40
   %41 = mov.static-byte-offset 100
   %42 = mov.address-index %41
-  st.i32.index %34, %destination_crop, %42
+  st.i32.index %34, %output_aligned, %42
   return
 }
 
@@ -107,12 +107,12 @@ func.def @subview_vector_aligned(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @subview_vector_aligned() asm {
-  %source_crop = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination_crop = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %17 = mov.static-byte-offset 256
   %18 = mov.address-index %17
-  %19 = vlda.256.i32x8.index %source_crop, %18
-  vst.256.i32x8 %19, %destination_crop, 192
+  %19 = vlda.256.i32x8.index %input_aligned, %18
+  vst.256.i32x8 %19, %output_aligned, 192
   return
 }
 
@@ -177,8 +177,8 @@ func.def public @subview_composed_refined_nested(%input: buffer, %output: buffer
 
 // ----
 low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @subview_composed_refined_nested(%origin: reg<aie2p.er>, %row_stride: reg<aie2p.er>, %column_stride: reg<aie2p.er>) asm {
-  %inner = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %25 = mov.i32 3
   %26 = lshl %row_stride, %25
   %27 = add.nc %origin, %26
@@ -188,8 +188,8 @@ low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @subview_co
   %32 = lshl %row_stride, %31
   %33 = add.nc %30, %32
   %34 = mov.address-index %33
-  %value = lda.i32.index %inner, %34
-  st %value, %destination, 4
+  %value = lda.i32.index %input_aligned, %34
+  st %value, %output_aligned, 4
   return
 }
 
@@ -228,17 +228,17 @@ func.def public @subview_composed_distinct_bindings(%input: buffer, %output: buf
 
 // ----
 low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @subview_composed_distinct_bindings(%first_columns: reg<aie2p.er>, %second_columns: reg<aie2p.er>) asm {
-  %crop = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %43 = mov.i32 2
   %44 = lshl %first_columns, %43
   %47 = add.nc %44, %44
   %48 = add.address-index.immediate %47, 20
-  %value$49 = lda.i32.index %crop, %48
+  %value$49 = lda.i32.index %input_aligned, %48
   %51 = lshl %second_columns, %43
   %54 = add.nc %51, %51
   %55 = add.address-index.immediate %54, 20
-  %value$56 = lda.i32.index %crop, %55
+  %value$56 = lda.i32.index %input_aligned, %55
   %57 = vbcst.32 %value$49
   %58 = vbcst.32 %value$56
   %59 = vmov.vector512.to.accumulator512.low %57
@@ -248,6 +248,6 @@ low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @subview_co
   %63 = slice %62[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
   %64 = vmov.accumulator512.to.vector512 %63
   %value$65 = vextract.32.imm %64, 0
-  st %value$65, %destination, 4
+  st %value$65, %output_aligned, 4
   return
 }

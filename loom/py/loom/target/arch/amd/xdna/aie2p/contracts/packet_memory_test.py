@@ -444,7 +444,8 @@ def test_bfp_load_rules_preserve_two_native_chunks() -> None:
         assert source_memory.vector_lane_byte_stride == 2
         assert source_memory.minimum_alignment == 64
         assert all(
-            emit.operands["ptr"] == ValueRef.operand("view") for emit in memory_emits
+            emit.operands["ptr"] == ValueRef.source_memory_root()
+            for emit in memory_emits
         )
         assert not any(isinstance(emit, EmitRegisterSlice) for emit in rule.emit)
 

@@ -45,13 +45,13 @@ pipeline.def<kernel> public retain target(@npu) @reordered_publication() run(%ou
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %57 = mov.acquire-delta -1
-  %second_payload = mov.local-address 393216
+  %52 = mov.local-address 393216
   acq %57, 32
   acq %57, 32
   %later_value = mov.short 22
-  st %later_value, %second_payload, 4
+  st %later_value, %52, 4
   %earlier_value = mov.short 11
-  st %earlier_value, %second_payload, 0
+  st %earlier_value, %52, 0
   %247 = mov.short 2
   rel %247, 33
   %53 = mov.short 1
@@ -287,7 +287,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %197 = mov.short 1
   %62 = mov.acquire-delta -1
   %199 = mov.short 0
-  %payload = mov.local-address 393216
+  %57 = mov.local-address 393216
   %count = mov.short 3
   low.br ^_bb1(%199: reg<aie2p.er>, %199: reg<aie2p.er>)
 ^_bb1(%value: reg<aie2p.er>, %write: reg<aie2p.er>):
@@ -302,7 +302,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %209 = copy %208 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %210 = sel.nez %199, %207, %209
   %211 = mov.address-index %write
-  st.i32.index %value, %payload, %211
+  st.i32.index %value, %57, %211
   rel %197, 33
   %212 = add.nc %value, %197
   low.br ^_bb1(%212: reg<aie2p.er>, %210: reg<aie2p.er>)
@@ -522,7 +522,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %301 = mov.short 1
   %99 = mov.acquire-delta -1
   %303 = mov.short 0
-  %payload = mov.local-address 393216
+  %94 = mov.local-address 393216
   %count = mov.short 5
   low.br ^_bb1(%303: reg<aie2p.er>, %303: reg<aie2p.er>)
 ^_bb1(%value: reg<aie2p.er>, %write: reg<aie2p.er>):
@@ -537,7 +537,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %313 = copy %312 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %314 = sel.nez %303, %311, %313
   %315 = mov.address-index %write
-  st.i32.index %value, %payload, %315
+  st.i32.index %value, %94, %315
   rel %301, 33
   %316 = add.nc %value, %301
   low.br ^_bb1(%316: reg<aie2p.er>, %314: reg<aie2p.er>)
@@ -789,7 +789,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %122 = mov.short 1
   %52 = mov.acquire-delta -1
   %124 = mov.short 0
-  %payload = mov.local-address 393216
+  %47 = mov.local-address 393216
   low.br ^_bb1(%124: reg<aie2p.er>, %124: reg<aie2p.er>)
 ^_bb1(%value: reg<aie2p.er>, %write: reg<aie2p.er>):
   %128 = lt %value, %121
@@ -803,7 +803,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %133 = copy %132 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %134 = sel.nez %124, %131, %133
   %135 = mov.address-index %write
-  st.i32.index %value, %payload, %135
+  st.i32.index %value, %47, %135
   rel %122, 33
   %136 = add.nc %value, %122
   low.br ^_bb1(%136: reg<aie2p.er>, %134: reg<aie2p.er>)
@@ -818,11 +818,11 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %137 = mov.short 1
   %74 = mov.acquire-delta -1
-  %second_payload = mov.local-address 458752
+  %69 = mov.local-address 458752
   acq %74, 49
   acq %74, 49
-  %first_value = lda %second_payload, 0
-  %second_value = lda %second_payload, 4
+  %first_value = lda %69, 0
+  %second_value = lda %69, 4
   %first_is_smaller = lt %first_value, %second_value
   low.cond_br %first_is_smaller, ^_bb1, ^_bb2 : reg<aie2p.er>
 ^_bb1:

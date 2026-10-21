@@ -116,9 +116,9 @@ func.def @vector_i32x16_uniform_shift_left(%input_arg: buffer, %output_arg: buff
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_i32x16_uniform_shift_left() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %input = vlda.512.i32x16 %input_view, 0
+  %input_buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_buffer = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = vlda.512.i32x16 %input_buffer, 0
   %13 = mov.shift 23
   %14 = mov.shift 0
   set.saturation 0
@@ -127,7 +127,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_i32x16_uni
   set.rounding 0
   %15 = vups.2x.x-to-c.unsigned %input, %13
   %shifted = vsrs.2x.c-to-x.unsigned %15, %14
-  vst.512.i32x16 %shifted, %output_view, 0
+  vst.512.i32x16 %shifted, %output_buffer, 0
   return
 }
 
@@ -148,9 +148,9 @@ func.def @vector_i32x16_uniform_shift_signed(%input_arg: buffer, %output_arg: bu
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_i32x16_uniform_shift_signed() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %input = vlda.512.i32x16 %input_view, 0
+  %input_buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_buffer = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = vlda.512.i32x16 %input_buffer, 0
   %13 = mov.shift 0
   %14 = mov.shift 7
   set.saturation 0
@@ -159,7 +159,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_i32x16_uni
   set.rounding 0
   %15 = vups.2x.x-to-c.signed %input, %13
   %shifted = vsrs.2x.c-to-x.signed %15, %14
-  vst.512.i32x16 %shifted, %output_view, 0
+  vst.512.i32x16 %shifted, %output_buffer, 0
   return
 }
 
@@ -180,9 +180,9 @@ func.def @vector_i32x16_uniform_shift_unsigned(%input_arg: buffer, %output_arg: 
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_i32x16_uniform_shift_unsigned() asm {
-  %input_view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %output_view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %input = vlda.512.i32x16 %input_view, 0
+  %input_buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output_buffer = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %input = vlda.512.i32x16 %input_buffer, 0
   %13 = mov.shift 0
   %14 = mov.shift 31
   set.saturation 0
@@ -191,6 +191,6 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_i32x16_uni
   set.rounding 0
   %15 = vups.2x.x-to-c.unsigned %input, %13
   %shifted = vsrs.2x.c-to-x.unsigned %15, %14
-  vst.512.i32x16 %shifted, %output_view, 0
+  vst.512.i32x16 %shifted, %output_buffer, 0
   return
 }

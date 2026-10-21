@@ -8,9 +8,14 @@
 
 from dataclasses import replace
 
+from loom.dialect.buffer import defs as buffer
 from loom.dialect.vector import defs as vector
 from loom.dialect.view import defs as view
-from loom.target.arch.amd.xdna.aie2p.contracts.memory import AIE2P_MEMORY_RULES
+from loom.target.arch.amd.xdna.aie2p.contracts.memory import (
+    AIE2P_MEMORY_RULES,
+    AIE2P_VIEW_CARRIER_RULES,
+    AIE2P_VIEW_ELEMENT_TYPES,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.packet_memory import (
     AIE2P_PACKET_MEMORY_RULES,
 )
@@ -18,7 +23,9 @@ from loom.target.contracts import (
     DescriptorResultType,
     EmitDescriptorOp,
     EmitRegisterConcat,
+    EmitRegisterCopy,
     EmitRegisterSlice,
+    Guard,
     GuardKind,
     SourceMemoryAddressLayout,
     SourceMemoryDynamicIndexSource,
@@ -27,6 +34,8 @@ from loom.target.contracts import (
     SourceMemoryProjectKind,
     SourceMemoryRootKind,
     SourceValueKind,
+    ValueRef,
+    View,
 )
 
 _I32_MIN = -(2**31)
@@ -51,11 +60,11 @@ def _expected_memory_spaces(
     )
 
 
-def _source_memory_emit(rule) -> EmitDescriptorOp:
+def _source_memory_emit(rule):
     return next(
         emit
         for emit in reversed(rule.emit)
-        if isinstance(emit, EmitDescriptorOp) and emit.source_memory is not None
+        if getattr(emit, "source_memory", None) is not None
     )
 
 
@@ -199,6 +208,124 @@ def _assert_address_forms(
     assert materializer.static_bias.key == (
         "amd.xdna.aie2p.materialize.static-byte-offset.i32"
     )
+
+
+def test_view_carriers_materialize_every_supported_view_as_one_address() -> None:
+    assert len(AIE2P_VIEW_CARRIER_RULES) == 2 * 4
+    view_type = View(AIE2P_VIEW_ELEMENT_TYPES)
+    expected_descriptor_keys = (
+        None,
+        "amd.xdna.aie2p.address.add.a.immediate",
+        "amd.xdna.aie2p.address.add.a.register",
+        "amd.xdna.aie2p.address.add.a.register",
+    )
+    expected_shapes = (
+        (0, 0, 0, 0, False, False, 0),
+        (-512, 448, 0, 0, False, False, 64),
+        (_I32_MIN, _I32_MAX, 0, 0, False, False, 0),
+        (_I32_MIN, _I32_MAX, None, 1, True, True, 0),
+    )
+    rule_index = 0
+    for source_op in (buffer.buffer_view, view.view_subview):
+        rules = AIE2P_VIEW_CARRIER_RULES[rule_index : rule_index + 4]
+        rule_index += 4
+        assert [rule.source_op for rule in rules] == [source_op] * 4
+        assert [
+            rule.descriptor.key if rule.descriptor is not None else None
+            for rule in rules
+        ] == list(expected_descriptor_keys)
+        assert [rule.guards for rule in rules] == [
+            (Guard.value_type("result", view_type),)
+        ] * 4
+        constraints = [_source_memory_emit(rule).source_memory for rule in rules]
+        assert [
+            (
+                constraint.static_byte_offset_minimum,
+                constraint.static_byte_offset_maximum,
+                constraint.dynamic_term_count,
+                constraint.dynamic_term_count_minimum,
+                constraint.allow_dynamic_stride_values,
+                constraint.reuse_view_base,
+                constraint.minimum_alignment,
+            )
+            for constraint in constraints
+        ] == list(expected_shapes)
+        for constraint in constraints:
+            assert constraint.operation is SourceMemoryOperation.VIEW_CARRIER
+            assert constraint.root_kind is SourceMemoryRootKind.ANY
+            assert constraint.memory_spaces == tuple(
+                sorted(
+                    (
+                        "unknown",
+                        "global",
+                        "workgroup",
+                        "private",
+                        "constant",
+                        "host",
+                        "descriptor",
+                        "generic",
+                    )
+                )
+            )
+            assert constraint.element_byte_count == 1
+            assert constraint.vector_lane_count == 1
+            assert constraint.vector_lane_byte_stride == 1
+            assert constraint.byte_offset_unsigned_bit_count == 32
+
+        zero, immediate, static_register, dynamic_register = rules
+        assert isinstance(zero.emit[0], EmitRegisterCopy)
+        assert zero.emit[0].source.kind is SourceValueKind.SOURCE_MEMORY_ROOT
+        assert zero.emit[0].result == ValueRef.result("result")
+        for rule in (immediate, static_register, dynamic_register):
+            root_copy = rule.emit[0]
+            assert isinstance(root_copy, EmitRegisterCopy)
+            assert root_copy.source.kind is SourceValueKind.SOURCE_MEMORY_ROOT
+            assert root_copy.result.kind is SourceValueKind.TEMPORARY
+            assert root_copy.source_memory == _source_memory_emit(rule).source_memory
+        assert immediate.emit[1].immediates == {
+            "imm": SourceMemoryProject.static_byte_offset()
+        }
+        assert [
+            emit.descriptor.key
+            for emit in static_register.emit
+            if isinstance(emit, EmitDescriptorOp)
+        ] == [
+            "amd.xdna.aie2p.materialize.static-byte-offset.i32",
+            "amd.xdna.aie2p.move.er.to.em",
+            "amd.xdna.aie2p.address.add.a.register",
+        ]
+        assert [
+            emit.descriptor.key
+            for emit in dynamic_register.emit
+            if isinstance(emit, EmitDescriptorOp)
+        ] == [
+            "amd.xdna.aie2p.move.er.to.em",
+            "amd.xdna.aie2p.address.add.a.register",
+        ]
+        dynamic_offset = dynamic_register.emit[1]
+        assert dynamic_offset.operands["src"].kind is (
+            SourceValueKind.SOURCE_MEMORY_BYTE_OFFSET
+        )
+        assert dynamic_offset.source_memory_byte_offset_materializer is not None
+        assert static_register.emit[-1].copy_operands == ()
+        assert dynamic_register.emit[-1].copy_operands == ()
+
+
+def test_memory_families_consume_their_planned_storage_root() -> None:
+    for rules in (AIE2P_MEMORY_RULES, AIE2P_PACKET_MEMORY_RULES):
+        pointer_emits = [
+            emit
+            for rule in rules
+            for emit in rule.emit
+            if isinstance(emit, EmitDescriptorOp)
+            and emit.source_memory is not None
+            and "ptr" in emit.operands
+        ]
+        assert pointer_emits
+        assert all(
+            emit.operands["ptr"].kind is SourceValueKind.SOURCE_MEMORY_ROOT
+            for emit in pointer_emits
+        )
 
 
 def test_all_memory_families_project_dynamic_offsets_directly_into_dj() -> None:

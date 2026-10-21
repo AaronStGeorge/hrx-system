@@ -22,6 +22,7 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     EmitRegisterConcat,
+    EmitRegisterCopy,
     EmitRegisterSlice,
     Guard,
     Scalar,
@@ -36,8 +37,10 @@ from loom.target.contracts import (
     TypePattern,
     ValueRef,
     Vector,
+    View,
     descriptor_by_key,
 )
+from loom.target.contracts.memory_spaces import MEMORY_SPACE_NAMES
 from loom.target.low_descriptors import Descriptor
 
 _I1 = Scalar("i1")
@@ -51,6 +54,22 @@ _BF16 = Scalar("bf16")
 _F32 = Scalar("f32")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
+AIE2P_VIEW_ELEMENT_TYPES = (
+    "i1",
+    "i8",
+    "f8E4M3",
+    "f8E5M2",
+    "i16",
+    "f16",
+    "bf16",
+    "i32",
+    "f32",
+    "index",
+    "offset",
+    "i64",
+    "f64",
+)
+_VIEW_TYPE = View(AIE2P_VIEW_ELEMENT_TYPES)
 _SCALAR_MEMORY_SHAPES = (
     (
         "i8",
@@ -263,6 +282,171 @@ def _byte_offset_materializer() -> SourceMemoryByteOffsetMaterializer:
     )
 
 
+def _view_carrier_constraint(
+    *,
+    static_byte_offset_minimum: int,
+    static_byte_offset_maximum: int,
+    dynamic: bool,
+    minimum_alignment: int = 0,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=SourceMemoryOperation.VIEW_CARRIER,
+        root_kind=SourceMemoryRootKind.ANY,
+        memory_spaces=tuple(sorted(MEMORY_SPACE_NAMES)),
+        element_byte_count=1,
+        vector_lane_count=1,
+        vector_lane_byte_stride=1,
+        static_byte_offset_minimum=static_byte_offset_minimum,
+        static_byte_offset_maximum=static_byte_offset_maximum,
+        minimum_alignment=minimum_alignment,
+        dynamic_term_count=None if dynamic else 0,
+        dynamic_term_count_minimum=1 if dynamic else 0,
+        allow_dynamic_stride_values=dynamic,
+        reuse_view_base=dynamic,
+        byte_offset_unsigned_bit_count=32,
+    )
+
+
+def _view_carrier_zero_rule(source_op: Op) -> DescriptorRule:
+    source_memory = _view_carrier_constraint(
+        static_byte_offset_minimum=0,
+        static_byte_offset_maximum=0,
+        dynamic=False,
+    )
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=None,
+        guards=(Guard.value_type("result", _VIEW_TYPE),),
+        emit=(
+            EmitRegisterCopy(
+                source=ValueRef.source_memory_root(),
+                result=ValueRef.result("result"),
+                source_memory=source_memory,
+            ),
+        ),
+    )
+
+
+def _view_carrier_immediate_rule(source_op: Op) -> DescriptorRule:
+    descriptor = _descriptor("amd.xdna.aie2p.address.add.a.immediate")
+    (immediate,) = descriptor.immediates
+    source_memory = _view_carrier_constraint(
+        static_byte_offset_minimum=immediate.signed_min,
+        static_byte_offset_maximum=immediate.unsigned_max,
+        dynamic=False,
+        minimum_alignment=immediate.value_step,
+    )
+    root = ValueRef.temporary("root")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(Guard.value_type("result", _VIEW_TYPE),),
+        emit=(
+            EmitRegisterCopy(
+                source=ValueRef.source_memory_root(),
+                result=root,
+                result_type=ValueRef.result("result"),
+                source_memory=source_memory,
+            ),
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"ptr": root},
+                results={"ptr_out": ValueRef.result("result")},
+                immediates={"imm": SourceMemoryProject.static_byte_offset()},
+                source_memory=source_memory,
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _view_carrier_register_rule(source_op: Op, *, dynamic: bool) -> DescriptorRule:
+    source_memory = _view_carrier_constraint(
+        static_byte_offset_minimum=_I32_MIN,
+        static_byte_offset_maximum=_I32_MAX,
+        dynamic=dynamic,
+    )
+    byte_offset = ValueRef.temporary("byte_offset")
+    modifier = ValueRef.temporary("modifier")
+    root = ValueRef.temporary("root")
+    emits: list[ContractEmit] = [
+        EmitRegisterCopy(
+            source=ValueRef.source_memory_root(),
+            result=root,
+            result_type=ValueRef.result("result"),
+            source_memory=source_memory,
+        )
+    ]
+    if dynamic:
+        emits.append(
+            EmitDescriptorOp(
+                descriptor=_descriptor("amd.xdna.aie2p.move.er.to.em"),
+                operands={"src": ValueRef.source_memory_byte_offset()},
+                results={"dst": modifier},
+                result_types={"dst": DescriptorResultType()},
+                source_memory=source_memory,
+                source_memory_byte_offset_materializer=_byte_offset_materializer(),
+                form=DescriptorEmitForm.OP,
+            )
+        )
+    else:
+        emits.extend(
+            (
+                EmitDescriptorOp(
+                    descriptor=_descriptor(
+                        "amd.xdna.aie2p.materialize.static-byte-offset.i32"
+                    ),
+                    results={"dst": byte_offset},
+                    result_types={"dst": _OFFSET},
+                    immediates={
+                        "i": SourceMemoryProject.static_byte_offset(),
+                    },
+                    source_memory=source_memory,
+                    form=DescriptorEmitForm.OP,
+                ),
+                EmitDescriptorOp(
+                    descriptor=_descriptor("amd.xdna.aie2p.move.er.to.em"),
+                    operands={"src": byte_offset},
+                    results={"dst": modifier},
+                    result_types={"dst": DescriptorResultType()},
+                    form=DescriptorEmitForm.OP,
+                ),
+            )
+        )
+    descriptor = _descriptor("amd.xdna.aie2p.address.add.a.register")
+    emits.append(
+        EmitDescriptorOp(
+            descriptor=descriptor,
+            operands={
+                "ptr": root,
+                "mod": modifier,
+            },
+            results={"ptr_out": ValueRef.result("result")},
+            source_memory=source_memory,
+            form=DescriptorEmitForm.OP,
+        )
+    )
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(Guard.value_type("result", _VIEW_TYPE),),
+        emit=tuple(emits),
+    )
+
+
+def _view_carrier_rules() -> tuple[DescriptorRule, ...]:
+    return tuple(
+        rule
+        for source_op in (buffer.buffer_view, view.view_subview)
+        for rule in (
+            _view_carrier_zero_rule(source_op),
+            _view_carrier_immediate_rule(source_op),
+            _view_carrier_register_rule(source_op, dynamic=False),
+            _view_carrier_register_rule(source_op, dynamic=True),
+        )
+    )
+
+
 def _register_address_emits(
     source_memory: SourceMemoryConstraint,
     address_form: _MemoryAddressForm,
@@ -409,7 +593,6 @@ def _memory_rule(
     immediate_offset_minimum: int,
     immediate_offset_maximum: int,
     volatile: bool,
-    reference_field: str = "view",
     expand_to_x_carrier: bool = False,
 ) -> DescriptorRule:
     is_load = operation is SourceMemoryOperation.LOAD
@@ -439,11 +622,11 @@ def _memory_rule(
         else (result_value if is_load else source_value)
     )
     memory_operands = (
-        {"ptr": ValueRef.operand(reference_field)}
+        {"ptr": ValueRef.source_memory_root()}
         if is_load
         else {
             "src": descriptor_value,
-            "ptr": ValueRef.operand(reference_field),
+            "ptr": ValueRef.source_memory_root(),
         }
     )
     memory_results = {"dst": descriptor_value} if is_load else {}
@@ -580,9 +763,9 @@ def _chunked_vector_memory_rule(
             )
 
         memory_operands = (
-            {"ptr": ValueRef.operand("view")}
+            {"ptr": ValueRef.source_memory_root()}
             if is_load
-            else {"src": chunk, "ptr": ValueRef.operand("view")}
+            else {"src": chunk, "ptr": ValueRef.source_memory_root()}
         )
         memory_results = {"dst": chunk} if is_load else {}
         if immediate_memory:
@@ -695,9 +878,9 @@ def _pair_scalar_memory_rule(
             )
 
         memory_operands = (
-            {"ptr": ValueRef.operand("view")}
+            {"ptr": ValueRef.source_memory_root()}
             if is_load
-            else {"src": chunk, "ptr": ValueRef.operand("view")}
+            else {"src": chunk, "ptr": ValueRef.source_memory_root()}
         )
         memory_results = {"dst": chunk} if is_load else {}
         if immediate_memory:
@@ -786,7 +969,6 @@ def _raw_buffer_memory_rules() -> tuple[DescriptorRule, ...]:
             memory_spaces=memory_spaces,
             source_op=source_op,
             value_type=_I32,
-            reference_field=reference_field,
             immediate_descriptor_key=(
                 f"amd.xdna.aie2p.{descriptor_family}.scalar.i8.indexed.immediate"
             ),
@@ -800,9 +982,9 @@ def _raw_buffer_memory_rules() -> tuple[DescriptorRule, ...]:
             immediate_offset_maximum=7,
             volatile=False,
         )
-        for operation, source_op, reference_field, descriptor_family in (
-            (SourceMemoryOperation.LOAD, buffer.buffer_load_i8_u, "source", "load"),
-            (SourceMemoryOperation.STORE, buffer.buffer_store_i8, "target", "store"),
+        for operation, source_op, descriptor_family in (
+            (SourceMemoryOperation.LOAD, buffer.buffer_load_i8_u, "load"),
+            (SourceMemoryOperation.STORE, buffer.buffer_store_i8, "store"),
         )
         for root_kind, memory_spaces in _memory_roots(operation)
         for address_form in _MemoryAddressForm
@@ -943,7 +1125,7 @@ def _bytewise_scalar_memory_rule(
                 stored_byte = next_stored_byte
                 stored_bytes[word_index] = stored_byte
 
-        memory_operands = {"ptr": ValueRef.operand("view")}
+        memory_operands = {"ptr": ValueRef.source_memory_root()}
         memory_results = {}
         memory_result_types = None
         if is_load:
@@ -1131,7 +1313,7 @@ def _two_lane_16bit_load_rule(
     for lane_index, lane_byte_offset in enumerate((0, 2)):
         loaded_lane = ValueRef.temporary(f"lane_{lane_index}")
         loaded_lanes.append(loaded_lane)
-        memory_operands = {"ptr": ValueRef.operand("view")}
+        memory_operands = {"ptr": ValueRef.source_memory_root()}
         if address_form is _MemoryAddressForm.IMMEDIATE:
             static_byte_offset = (
                 SourceMemoryProject.static_byte_offset_plus(lane_byte_offset)
@@ -1329,7 +1511,7 @@ def _split_256bit_vector_load_rule(
         chunk = ValueRef.temporary(f"split_chunk_{chunk_index}")
         chunk_x = ValueRef.temporary(f"split_chunk_x_{chunk_index}")
         memory_operands = {
-            "ptr": ValueRef.operand("view"),
+            "ptr": ValueRef.source_memory_root(),
         }
         if immediate_memory:
             emits.append(
@@ -1563,6 +1745,9 @@ def _matrix_fragment_store_rules() -> tuple[DescriptorRule, ...]:
         for element_type in ("i32", "f32")
         for address_form in _MemoryAddressForm
     )
+
+
+AIE2P_VIEW_CARRIER_RULES = _view_carrier_rules()
 
 
 AIE2P_MEMORY_RULES: tuple[DescriptorRule, ...] = (

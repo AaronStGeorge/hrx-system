@@ -19,14 +19,14 @@ func.def @signed_irregular_stride(%input: buffer, %table: buffer) -> (i32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @signed_irregular_stride() -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %signed = lda %source, 0
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %table = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %signed = lda %input, 0
   %18 = mov.static-byte-offset 1536
   %19 = mov.i32 12
   %20 = mac %18, %signed, %19
   %21 = mov.address-index %20
-  %value = lda.i32.index %view, %21
+  %value = lda.i32.index %table, %21
   return %value
 }
 
@@ -50,9 +50,9 @@ func.def @signed_dynamic_stride(%input: buffer, %bias0: index, %stride0: index, 
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @signed_dynamic_stride(%bias: reg<aie2p.er>, %stride: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %view = resource<native_pointer> {index = 3, source_type = buffer} : reg<aie2p.ep>
-  %signed = lda %source, 0
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %table = resource<native_pointer> {index = 3, source_type = buffer} : reg<aie2p.ep>
+  %signed = lda %input, 0
   %23 = mul %bias, %stride
   %24 = mov.i32 2
   %25 = lshl %23, %24
@@ -60,7 +60,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @signed_dynamic_st
   %28 = lshl %26, %24
   %29 = add.nc %25, %28
   %30 = mov.address-index %29
-  %value = lda.i32.index %view, %30
+  %value = lda.i32.index %table, %30
   return %value
 }
 
@@ -78,11 +78,11 @@ func.def @dynamic_stride_static_bias(%table: buffer, %position0: index, %stride0
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @dynamic_stride_static_bias(%position: reg<aie2p.er>, %stride: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %table = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %14 = mov.static-byte-offset 128
   %15 = mac %14, %position, %stride
   %16 = mov.address-index %15
-  %value = lda.i8.index %view, %16
+  %value = lda.i8.index %table, %16
   return %value
 }
 
@@ -101,13 +101,13 @@ func.def @signed_wide_source(%input: i64, %table: buffer) -> (i32) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @signed_wide_source(%signed: reg<aie2p.er x2>) -> (reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %table = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %13 = mov.static-byte-offset 512
   %14 = slice %signed[0] : reg<aie2p.er x2> -> reg<aie2p.er>
   %15 = mov.i32 4
   %16 = mac %13, %14, %15
   %17 = mov.address-index %16
-  %value = lda.i32.index %view, %17
+  %value = lda.i32.index %table, %17
   return %value
 }
 
@@ -130,14 +130,14 @@ func.def @negative_varying_coefficient(%input: buffer, %table: buffer) -> (i32) 
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @negative_varying_coefficient() -> (reg<aie2p.er>) asm {
-  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
-  %view = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %coordinate = lda %source, 0
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %table = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %coordinate = lda %input, 0
   %c0 = mov.short 0
   %position = sub %c0, %coordinate
   %word_bytes = mov.short 4
   %origin = mul %position, %word_bytes
   %22 = mov.address-index %origin
-  %value = lda.i32.index %view, %22
+  %value = lda.i32.index %table, %22
   return %value
 }

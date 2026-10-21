@@ -88,11 +88,11 @@ func.def @exchange_signed_position(%buffer: buffer, %position: i32, %replacement
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_signed_position(%bounded_position: reg<aie2p.er>, %replacement: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %view = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %buffer = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %26 = mov.i32 2
   %27 = lshl %bounded_position, %26
   %28 = add.address-index.immediate %27, 16
-  %previous = lda.i32.index %view, %28
-  st.i32.index %replacement, %view, %28
+  %previous = lda.i32.index %buffer, %28
+  st.i32.index %replacement, %buffer, %28
   return %previous
 }
