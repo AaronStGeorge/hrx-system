@@ -104,6 +104,42 @@ TEST_F(StorageTest, RetainsArrayShapeAndExplicitAlignment) {
       loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, 64, 0)));
 }
 
+TEST_F(StorageTest, AdmitsExistingRootsAsFixedSourceObjects) {
+  Locations locations(source_.unit(), source_.diagnostics(), module_);
+  Scalars scalars(source_.unit(), source_.diagnostics(), types_, locations,
+                  builder_);
+  Storage storage(source_.unit(), source_.diagnostics(), types_, scalars,
+                  locations, builder_);
+  auto* control = source_.unit().control();
+  auto* owner = source_.unit().ast();
+  auto byte_length = scalars.integer(16, LOOM_SCALAR_TYPE_OFFSET);
+  loom_op_t* root_op;
+  IREE_ASSERT_OK(loom_buffer_alloca_build(
+      &builder_, 0, LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE, LOOM_VALUE_ID_INVALID,
+      4, byte_length, loom_type_buffer(), LOOM_LOCATION_UNKNOWN, &root_op));
+  auto root = loom_op_results(root_op)[0];
+  auto* array = control->getBoundedArrayType(control->getFloatType(), 4);
+
+  auto fixed = storage.admit_fixed(root, array,
+                                   LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE, owner);
+  EXPECT_EQ(fixed.pointer.root, root);
+  EXPECT_EQ(loom_buffer_view_buffer(producer(fixed.view)), root);
+  EXPECT_TRUE(loom_type_equal(
+      loom_module_value_type(module_, fixed.view),
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, 4, 0)));
+
+  auto access = storage.subscript(storage.project(fixed.pointer, array, owner),
+                                  scalars.integer(3, LOOM_SCALAR_TYPE_I32),
+                                  array, control->getUnsignedIntType(), owner);
+  EXPECT_EQ(access.view, fixed.view);
+  ASSERT_TRUE(access.index.has_value());
+  auto* assumed = producer(loom_index_cast_input(producer(*access.index)));
+  auto predicates = loom_scalar_assume_predicates(assumed);
+  ASSERT_EQ(predicates.count, 1u);
+  EXPECT_EQ(predicates.predicate_list[0].args[1], 0);
+  EXPECT_EQ(predicates.predicate_list[0].args[2], 3);
+}
+
 TEST_F(StorageTest, AggregateArraysRetainByteFootprints) {
   Source source(IREE_SV(R"(
     using Float4 = float __attribute__((ext_vector_type(4)));
