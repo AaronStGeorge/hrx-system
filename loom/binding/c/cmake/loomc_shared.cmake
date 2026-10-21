@@ -194,6 +194,11 @@ function(loomc_configure_shared_tools)
       BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
     set(_exports "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/iree_exports.lds")
     target_link_options(loomc_runtime PRIVATE "-Wl,--version-script=${_exports}")
+    # Exact-build companions own their function implementations. Data symbols
+    # and undefined external hooks retain ordinary ELF resolution.
+    foreach(_companion loomc_runtime loomc_shared)
+      target_link_options("${_companion}" PRIVATE "-Wl,-Bsymbolic-functions")
+    endforeach()
   endif()
   if(_exports)
     set_property(TARGET loomc_runtime APPEND PROPERTY LINK_DEPENDS "${_exports}")

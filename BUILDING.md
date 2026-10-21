@@ -247,6 +247,12 @@ the same build; these companion libraries have no independent ABI version.
 Shared compiler tools trade some cross-library optimization for a smaller
 bundle. Local development and benchmarks retain the default static mode.
 
+ELF shared-tool bundles bind internal function references to the implementation
+in the owning companion library. This avoids interposable procedure-linkage
+table entries while leaving data symbols and undefined external hooks under
+ordinary ELF resolution. Function interposition is not an extension mechanism
+for these exact-build companions; application callbacks use the public APIs.
+
 CMake shared tools require CMake 3.27 or newer and static component libraries
 (`BUILD_SHARED_LIBS=OFF`). This option controls final tool composition separately
 from the component sharing used for in-tree development. Each selected tool's
