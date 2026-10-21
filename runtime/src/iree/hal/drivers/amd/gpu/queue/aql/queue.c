@@ -132,7 +132,7 @@ struct iree_hal_amd_gpu_aql_queue_t {
     uint64_t* frontier;
     // Frontier width captured at construction.
     uint32_t queue_count;
-    // Accepted retirement count published before any terminal header is valid.
+    // Host-complete publication prefix, released before terminal headers.
     iree_atomic_int64_t count;
   } producer;
   // Completion credit is isolated from ordinary publisher writes.
@@ -523,8 +523,10 @@ static iree_hal_amd_gpu_aql_publish_result_t iree_hal_amd_gpu_aql_arguments(
   return IREE_HAL_AMD_GPU_AQL_PUBLISH_DONE;
 }
 
-// Installs ownership before firmware can observe the terminal valid header.
-// All fallible preparation and native reservation have already succeeded.
+// Transfers the publisher's capture access to retirement. All capture reads
+// precede this release; the terminal valid header follows it so native
+// completion cannot outrun the host handoff. All fallible preparation and
+// native reservation have already succeeded.
 static void iree_hal_amd_gpu_aql_accept(
     iree_hal_amd_gpu_aql_queue_t* queue,
     iree_hal_amd_gpu_aql_submission_t* submission,
@@ -769,10 +771,11 @@ static iree_hal_amd_gpu_aql_publish_result_t iree_hal_amd_gpu_aql_publish(
                                             queue->producer.frontier);
     }
   }
-  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position, argument_end,
-                              true, true);
   packet_position =
       iree_hal_amd_gpu_aql_emit_waits(ring, packet_position, wait_count, waits);
+  const uint64_t signal_address = signal->device_address;
+  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position, argument_end,
+                              true, true);
   if (prefix) {
     iree_hal_amd_gpu_aql_write_packet(
         ring, packet_position++,
@@ -796,7 +799,7 @@ static iree_hal_amd_gpu_aql_publish_result_t iree_hal_amd_gpu_aql_publish(
         iree_hal_amd_gpu_aql_packet_barrier(
             IREE_HAL_AMD_GPU_AQL_HEADER_BARRIER_AND | (after & (3u << 9)) |
                 IREE_HAL_AMD_GPU_AQL_HEADER_ORDERED,
-            0, NULL, signal->device_address));
+            0, NULL, signal_address));
   }
   // No capture/signal/request access follows the terminal header publication.
   iree_hal_amd_gpu_aql_ring_notify(ring);
@@ -882,10 +885,6 @@ iree_hal_amd_gpu_aql_publish_control(
                                             queue->producer.frontier);
     }
   }
-  // Prepare every byte before exposing the valid header. The native signal
-  // joins all XCCs, even when only XCC0 performs the scalar operation.
-  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position, end, true,
-                              true);
   packet_position = iree_hal_amd_gpu_aql_emit_waits(
       ring, packet_position, submission->wait_count, submission->waits);
   if (prefix) {
@@ -898,6 +897,11 @@ iree_hal_amd_gpu_aql_publish_control(
             0, NULL, 0));
   }
   const uint32_t after = submission->after;
+  const uint64_t signal_address = signal->device_address;
+  // The native signal joins all XCCs, even when only XCC0 performs the scalar
+  // operation. Its host owner must be published before this packet can run.
+  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position, end, true,
+                              true);
   iree_hal_amd_gpu_aql_write_packet(ring, packet_position++, packet);
   if (suffix) {
     iree_hal_amd_gpu_aql_write_packet(
@@ -905,7 +909,7 @@ iree_hal_amd_gpu_aql_publish_control(
         iree_hal_amd_gpu_aql_packet_barrier(
             IREE_HAL_AMD_GPU_AQL_HEADER_BARRIER_AND |
                 IREE_HAL_AMD_GPU_AQL_HEADER_ORDERED | (after & (3u << 9)),
-            0, NULL, signal->device_address));
+            0, NULL, signal_address));
   }
   iree_hal_amd_gpu_aql_ring_notify(ring);
   return IREE_HAL_AMD_GPU_AQL_PUBLISH_DONE;
@@ -1072,8 +1076,6 @@ iree_hal_amd_gpu_aql_publish_execute(
                                         : 0) |
       (invocation->program->profile ? IREE_HAL_AMD_GPU_AQL_PROGRAM_PROFILE : 0);
   ++invocation->block_ordinal;
-  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position, argument_end,
-                              terminal, true);
   packet_position = iree_hal_amd_gpu_aql_emit_waits(
       ring, packet_position, first ? submission->wait_count : 0,
       submission->waits);
@@ -1098,12 +1100,15 @@ iree_hal_amd_gpu_aql_publish_execute(
                                       sample_address, upload, program_flags);
   }
   packet_position += prefix + block.packet_count;
+  const uint64_t signal_address = signal->device_address;
+  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position, argument_end,
+                              terminal, true);
   iree_hal_amd_gpu_aql_write_packet(
       ring, packet_position,
       iree_hal_amd_gpu_aql_packet_barrier(
           IREE_HAL_AMD_GPU_AQL_HEADER_BARRIER_AND |
               IREE_HAL_AMD_GPU_AQL_HEADER_ORDERED,
-          0, NULL, signal->device_address));
+          0, NULL, signal_address));
   // No invocation access follows the terminal header: it may retire now.
   iree_hal_amd_gpu_aql_ring_notify(ring);
   return terminal ? IREE_HAL_AMD_GPU_AQL_PUBLISH_DONE
@@ -1208,12 +1213,12 @@ iree_hal_amd_gpu_aql_publish_transfer(
   transfer->cursor = chunk.next;
   queue->issued[position & (queue->options.retirement_capacity - 1)].download =
       chunk.download;
-  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position,
-                              arguments->end, terminal,
-                              !transfer->host_completion_required);
   packet_position = iree_hal_amd_gpu_aql_emit_waits(
       ring, packet_position, first ? submission->wait_count : 0,
       submission->waits);
+  iree_hal_amd_gpu_aql_accept(queue, submission, signal, position,
+                              arguments->end, terminal,
+                              !transfer->host_completion_required);
   if (prefix) {
     iree_hal_amd_gpu_aql_write_packet(
         ring, packet_position++,
