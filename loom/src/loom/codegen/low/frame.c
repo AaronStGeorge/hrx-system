@@ -993,6 +993,10 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
   if (spill_lowering_result.error_count != 0) {
     return iree_ok_status();
   }
+  if (spill_lowering_result.lowered_traffic) {
+    repair_options.schedule_flags |=
+        LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC;
+  }
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
       spill_lowering_result.required_register_value_ids,
       spill_lowering_result.required_register_value_count, repair_arena,
@@ -1218,7 +1222,7 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
     // Every subsequent frame contains traffic inserted by allocation repair,
     // including target packets that replace the structural spill operations.
     repair_options.schedule_flags |=
-        LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC;
+        LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC;
     const bool materialized_target_traffic =
         materialization_options.plan_traffic != NULL;
     // Retain facts from the representation used by the next frame. A target

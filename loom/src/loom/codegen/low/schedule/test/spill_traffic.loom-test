@@ -1,7 +1,7 @@
-// Materializing addresses inside a pinned completion cone must still wait
-// for actionable consumers. Ordered memory transfers cannot consume all their
-// addresses together; each transfer can release storage before the next.
-// RUN: emit low-schedule-query @scratch_chain strategy=resource-stall amdgpu.vgpr=4 required-register-values=%required,%final_address,%wide_load_address,%wide,%wide_store_address,%narrow_load_address,%narrow,%narrow_store_address order=* scheduled-pressure=amdgpu.vgpr
+// Target-lowered spill addresses inside a pinned completion cone must still
+// wait for actionable consumers. Ordered memory transfers cannot consume all
+// their addresses together; each transfer can release storage before the next.
+// RUN: emit low-schedule-query @scratch_chain strategy=resource-stall lowered-spill-traffic amdgpu.vgpr=4 required-register-values=%required,%final_address,%wide_load_address,%wide,%wide_store_address,%narrow_load_address,%narrow,%narrow_store_address order=* scheduled-pressure=amdgpu.vgpr
 
 amdgpu.target<gfx942> @target
 
@@ -30,7 +30,7 @@ scheduled pressure amdgpu.vgpr: peak-live-units=6 peak-live-values=4
 
 // ====
 
-// RUN: emit low-schedule-query @literal_chain strategy=resource-stall amdgpu.vgpr=4 required-register-values=%required,%final_address,%wide_load_address,%wide,%wide_store_address,%narrow_load_address,%narrow,%narrow_store_address order=* scheduled-pressure=amdgpu.vgpr
+// RUN: emit low-schedule-query @literal_chain strategy=resource-stall lowered-spill-traffic amdgpu.vgpr=4 required-register-values=%required,%final_address,%wide_load_address,%wide,%wide_store_address,%narrow_load_address,%narrow,%narrow_store_address order=* scheduled-pressure=amdgpu.vgpr
 
 amdgpu.target<gfx942> @target
 

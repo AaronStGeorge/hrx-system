@@ -1093,6 +1093,7 @@ iree_status_t loom_amdgpu_lower_spill_traffic(
   iree_arena_deinitialize(&recipe_arena);
   loom_rewriter_deinitialize(&rewriter);
   if (iree_status_is_ok(status)) {
+    out_result->lowered_traffic = true;
     out_result->required_register_value_ids =
         context.required_register_value_ids;
     out_result->required_register_value_count =

@@ -55,7 +55,6 @@ loom_corpus_test(
             "memory/storage/load_snapshot.loom:@computed_snapshot_across_barrier_values": "XDNA/051",
             "memory/storage/load_snapshot.loom:@extract_inside_loop_values": "XDNA/051",
             "memory/storage/load_snapshot.loom:@wide_snapshot_reduction_values": "BACKEND/005",
-            "numeric/conversion/float8_dequantization.loom:@e8m0_mxfp4_wide_bf16_values": "BACKEND/005",
             "numeric/conversion/float8_dequantization.loom:@e8m0_mxfp8_grouped_values": "BACKEND/005",
             "numeric/conversion/float8_dequantization.loom:@e8m0_mxfp8_wide_bf16_values": "BACKEND/005",
             "numeric/conversion/float8_dequantization.loom:@float8_dequantization_values": "XDNA/051",

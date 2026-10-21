@@ -413,18 +413,16 @@ static iree_status_t loom_check_test_low_schedule_parse_option(
     options->schedule_flags |= LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(name, IREE_SV("materialized-spill-traffic"))) {
+  if (iree_string_view_equal(name, IREE_SV("lowered-spill-traffic"))) {
     if (!iree_string_view_is_empty(value) ||
-        iree_any_bit_set(
-            options->schedule_flags,
-            LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC)) {
+        iree_any_bit_set(options->schedule_flags,
+                         LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-query flag 'materialized-spill-traffic' takes no "
+          "low-schedule-query flag 'lowered-spill-traffic' takes no "
           "value and may appear only once");
     }
-    options->schedule_flags |=
-        LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC;
+    options->schedule_flags |= LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC;
     return iree_ok_status();
   }
   iree_string_view_t* value_selectors = NULL;
