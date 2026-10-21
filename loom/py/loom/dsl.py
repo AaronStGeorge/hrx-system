@@ -5736,7 +5736,7 @@ class CallLikeKind(Enum):
     # Explicit semantic-to-target-low invocation of an already selected low function.
     LOW_INVOKE = "low_invoke"
     # Command-program invocation edge. Its operands are staged specialization
-    # values followed by issue-time buffer bindings.
+    # values followed by buffer or typed-view storage bindings.
     COMMAND_PROGRAM = "command_program"
     # Exact compile-time template implementation call.
     TEMPLATE = "template"

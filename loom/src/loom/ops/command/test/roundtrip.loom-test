@@ -31,16 +31,16 @@ command.program.def @bounded(%token_count: index) launch(%parameters: buffer) wh
 
 // ====
 
-command.program.def @scheduled() launch(%parameters: buffer) {
+command.program.def @scheduled() launch(%weights: view<16xf16>) {
   command.serial {
     command.concurrent {
-      command.program.launch @leaf(%parameters) : (buffer)
+      command.program.launch @leaf(%weights) : (view<16xf16>)
     }
   }
   command.return
 }
 
-command.program.def @leaf() launch(%parameters: buffer) {
+command.program.def @leaf() launch(%weights: view<16xf16>) {
   command.return
 }
 

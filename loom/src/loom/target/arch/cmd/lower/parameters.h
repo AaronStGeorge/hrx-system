@@ -24,7 +24,7 @@ typedef struct loom_cmd_parameter_requirement_t {
   // Fully substituted parameter key owned by the containing table.
   iree_string_view_t key;
 
-  // Source command-program launch-binding ordinal selecting the root group.
+  // Source command-program storage-binding ordinal selecting the root group.
   uint16_t source_binding_ordinal;
 
   // Dense fixed-buffer table index assigned to the source root.
@@ -42,7 +42,7 @@ typedef struct loom_cmd_parameter_requirement_t {
 
 // Aggregate requirement for one fixed parameter-buffer root.
 typedef struct loom_cmd_parameter_root_requirement_t {
-  // Source command-program launch-binding ordinal selecting this root.
+  // Source command-program storage-binding ordinal selecting this root.
   uint16_t source_binding_ordinal;
 
   // Dense fixed-buffer table index assigned to this root.
@@ -87,7 +87,7 @@ typedef struct loom_cmd_parameter_layout_t {
   // Number of dense fixed-buffer ABI resources.
   uint32_t fixed_buffer_count;
 
-  // Number of dense issue-time launch-binding ABI resources.
+  // Number of dense issue-time storage-binding ABI resources.
   uint32_t rebindable_binding_count;
 } loom_cmd_parameter_layout_t;
 
@@ -101,11 +101,11 @@ typedef struct loom_cmd_parameter_layout_t {
 // independently within each source root in first source occurrence order
 // using a canonical 256-byte minimum alignment.
 //
-// Exact view results rooted in launch bindings or parameter results are
+// Exact view results rooted in storage bindings or parameter results are
 // preserved in the same lower plan. Parameter-relative offsets compose with
 // the parameter's placement; fixed/rebindable roles and subranges propagate
 // without per-launch rediscovery. |bindings| is populated in source
-// launch-binding order. |out_requirements| owns its tables through
+// storage-binding order. |out_requirements| owns its tables through
 // |host_allocator|. |out_layout| references only |scratch_arena| storage and
 // remains valid until that arena is reset. The module's value-ordinal scratch
 // is acquired temporarily; no source IR is changed.

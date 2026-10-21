@@ -453,8 +453,10 @@ static iree_status_t loom_cmd_lower_map_source_bindings(
   for (uint16_t i = 0; i < binding_count; ++i) {
     const loom_value_id_t source_value = argument_ids[specialization_count + i];
     IREE_ASSERT_LT(source_value, state->resources.source_value_count);
-    IREE_ASSERT(loom_type_is_buffer(
-        loom_module_value_type(state->module, source_value)));
+    const loom_type_t source_type =
+        loom_module_value_type(state->module, source_value);
+    IREE_ASSERT(loom_type_is_buffer(source_type) ||
+                loom_type_is_view(source_type));
     const loom_cmd_buffer_binding_t* binding = &state->plan->bindings[i];
     loom_cmd_lower_buffer_tuple_t tuple = {0};
     IREE_RETURN_IF_ERROR(loom_cmd_lower_build_buffer_tuple(

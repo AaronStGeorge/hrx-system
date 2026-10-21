@@ -137,7 +137,7 @@ static iree_status_t loom_command_verify_program_contract(
 
   for (uint16_t i = (uint16_t)specialization_count; i < argument_count; ++i) {
     loom_type_t type = loom_module_value_type(module, argument_ids[i]);
-    if (loom_type_satisfies_constraint(type, LOOM_TYPE_CONSTRAINT_BUFFER)) {
+    if (loom_type_is_buffer(type) || loom_type_is_view(type)) {
       continue;
     }
     char field_name[32];
@@ -146,7 +146,7 @@ static iree_status_t loom_command_verify_program_contract(
     const loom_diagnostic_param_t params[] = {
         loom_param_string(iree_make_cstring_view(field_name)),
         loom_param_type(type),
-        loom_param_string(IREE_SV("buffer")),
+        loom_param_string(IREE_SV("buffer or view")),
     };
     return loom_command_emit(emitter, op, LOOM_ERR_TYPE_003, params,
                              IREE_ARRAYSIZE(params));

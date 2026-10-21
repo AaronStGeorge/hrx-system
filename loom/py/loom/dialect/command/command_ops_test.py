@@ -39,12 +39,12 @@ def _roundtrip(text: str) -> None:
 def test_program_definition_and_launch_roundtrip() -> None:
     text = """test.target<low_core> @gfx1100
 
-command.program.def public target(@gfx1100) @decode(%token_count: index) launch(%parameters: buffer, %transient: buffer) {
+command.program.def public target(@gfx1100) @decode(%token_count: index) launch(%parameters: buffer, %weights: view<16xf16>) {
   command.return
 }
 
-command.program.def @driver(%token_count: index) launch(%parameters: buffer, %transient: buffer) {
-  command.program.launch @decode[%token_count](%parameters, %transient) : [index](buffer, buffer)
+command.program.def @driver(%token_count: index) launch(%parameters: buffer, %weights: view<16xf16>) {
+  command.program.launch @decode[%token_count](%parameters, %weights) : [index](buffer, view<16xf16>)
   command.return
 }
 """
@@ -81,16 +81,16 @@ def test_parameter_roundtrip() -> None:
 
 def test_structured_command_schedules_roundtrip() -> None:
     _roundtrip(
-        """command.program.def @scheduled() launch(%parameters: buffer) {
+        """command.program.def @scheduled() launch(%weights: view<16xf16>) {
   command.serial {
     command.concurrent {
-      command.program.launch @leaf(%parameters) : (buffer)
+      command.program.launch @leaf(%weights) : (view<16xf16>)
     }
   }
   command.return
 }
 
-command.program.def @leaf() launch(%parameters: buffer) {
+command.program.def @leaf() launch(%weights: view<16xf16>) {
   command.return
 }
 """
