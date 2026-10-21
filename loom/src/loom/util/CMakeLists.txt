@@ -293,6 +293,8 @@ loom_cc_library(
     "fact_extensions.h"
     "fact_identity.h"
     "fact_layout.h"
+    "fact_observation.h"
+    "fact_origin.h"
     "fact_range.h"
     "fact_select_dependencies.h"
     "fact_table.h"
@@ -332,10 +334,13 @@ loom_cc_library(
     "fact_induction.h"
     "fact_layout.h"
     "fact_loop.h"
+    "fact_observation.h"
+    "fact_origin.h"
     "fact_range.h"
     "fact_recurrence.h"
     "fact_relation.h"
     "fact_select_dependencies.h"
+    "fact_snapshot.h"
     "fact_table.h"
     "fact_vector_partition.h"
     "reference_transfer.h"
@@ -346,10 +351,12 @@ loom_cc_library(
     "fact_induction.c"
     "fact_layout.c"
     "fact_loop.c"
+    "fact_origin.c"
     "fact_range.c"
     "fact_recurrence.c"
     "fact_relation.c"
     "fact_select_dependencies.c"
+    "fact_snapshot.c"
     "fact_table.c"
     "fact_table_compute.c"
     "fact_vector_partition.c"
@@ -445,6 +452,38 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir::facts
+)
+
+loom_cc_test(
+  NAME
+    fact_snapshot_test
+  SRCS
+    "fact_snapshot_test.cc"
+  DEPS
+    ::fact_table
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    fact_origin_test
+  SRCS
+    "fact_origin_test.cc"
+  DEPS
+    ::fact_table
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::cfg
+    loom::ops::encoding
+    loom::ops::index
+    loom::ops::target
+    loom::ops::test
+    loom::ops::vector
+    loom::rewrite::rewriter
 )
 
 loom_cc_test(

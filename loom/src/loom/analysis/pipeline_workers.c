@@ -388,15 +388,23 @@ static iree_status_t loom_pipeline_worker_build(
   worker->facts.context.target_facts = loom_value_fact_table_block_target_facts(
       construction_facts,
       loom_region_const_entry_block(loom_pipeline_strand_body(declaration)));
+  // Worker inference may refine argument domains, while the construction's
+  // captured inputs remain immutable for the retained worker analysis.
+  loom_value_fact_table_t* inputs = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, sizeof(*inputs), (void**)&inputs));
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(inputs, arena, 0));
+  inputs->context.resolve_type_domain =
+      construction_facts->context.resolve_type_domain;
   for (uint16_t i = 0; i < formal_count; ++i) {
     const loom_type_t type = loom_module_value_type(module, formals[i]);
     loom_value_facts_t facts;
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact_for_type(
-        &worker->facts, construction_facts, module, type,
+        inputs, construction_facts, module, type,
         loom_value_fact_table_lookup(construction_facts, actuals.values[i]),
         &facts));
     IREE_RETURN_IF_ERROR(
-        loom_value_fact_table_define(&worker->facts, formals[i], facts));
+        loom_value_fact_table_define(inputs, formals[i], facts));
     if (!loom_channel_type_isa(type)) {
       continue;
     }
@@ -426,6 +434,9 @@ static iree_status_t loom_pipeline_worker_build(
         .value_id = formals[i], .channel = &binding.channel->identity};
   }
   worker->bindings = bindings;
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_values(
+      &worker->facts,
+      (loom_value_fact_table_view_t){inputs, formals, formal_count}, module));
   IREE_RETURN_IF_ERROR(
       loom_value_fact_table_compute(&worker->facts, module, worker->function));
   const loom_value_fact_cfg_region_t* structure = NULL;

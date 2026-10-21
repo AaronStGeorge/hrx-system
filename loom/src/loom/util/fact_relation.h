@@ -16,6 +16,19 @@
 extern "C" {
 #endif
 
+// Canonical immutable relation sets within one populated table scope. Roots
+// remain comparable across inference and withdrawal until the scope is cleared.
+typedef struct loom_value_fact_relation_roots_t {
+  // Counterparts excluded from each signed ordering outcome.
+  uint32_t excluded[LOOM_INTEGER_ORDER_OUTCOME_COUNT];
+  // Signed literals excluded from equality with the value.
+  uint32_t excluded_literal_equal;
+} loom_value_fact_relation_roots_t;
+
+// Captures the retained relation sets without enumerating their counterparts.
+loom_value_fact_relation_roots_t loom_value_fact_integer_relations_snapshot(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id);
+
 // Returns the possible signed comparison outcomes for |lhs| relative to
 // |rhs|. Identity, scalar integer facts, retained alias relations, and literal
 // exclusions are resolved without walking producers or predicates. Unknown or

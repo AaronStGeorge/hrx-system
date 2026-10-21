@@ -15,6 +15,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/util/fact_snapshot.h"
 #include "loom/util/fact_table.h"
 
 namespace loom {
@@ -137,6 +138,8 @@ TEST_F(FactSelectDependenciesTest,
   EXPECT_EQ(SelectDependencies(table_, sum),
             std::vector<loom_value_id_t>({first_condition}));
 
+  loom_value_fact_auxiliary_snapshot_t first;
+  loom_value_fact_table_snapshot_auxiliary(&table_, sum, &first);
   IREE_ASSERT_OK(loom_op_set_operand(module_, select, 0, second_condition));
   IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(&table_, module_,
                                                              select, &changed));
@@ -149,6 +152,14 @@ TEST_F(FactSelectDependenciesTest,
   IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(&table_, module_,
                                                              add, &changed));
   EXPECT_FALSE(changed);
+
+  loom_value_fact_auxiliary_snapshot_t second;
+  loom_value_fact_table_snapshot_auxiliary(&table_, sum, &second);
+  EXPECT_FALSE(loom_value_fact_auxiliary_snapshot_equal(&first, &second));
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, add));
+  loom_value_fact_auxiliary_snapshot_t current;
+  loom_value_fact_table_snapshot_auxiliary(&table_, sum, &current);
+  EXPECT_TRUE(loom_value_fact_auxiliary_snapshot_equal(&second, &current));
 
   loom_value_fact_table_t clone = {};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&clone, &arena_, 0));

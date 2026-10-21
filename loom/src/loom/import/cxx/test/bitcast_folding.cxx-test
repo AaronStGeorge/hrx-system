@@ -42,8 +42,8 @@ unsigned entry() {
 
 // ----
 func.def public @entry() -> (i32) {
-  %72 = scalar.constant 2139169605 : i32
-  func.return %72 : i32
+  %62 = scalar.constant 2139169605 : i32
+  func.return %62 : i32
 }
 
 // ====

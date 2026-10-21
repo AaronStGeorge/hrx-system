@@ -40,7 +40,6 @@ loom_corpus_test(
     "numeric/vector/integer_comparison.loom"
     "numeric/vector/integer_extrema_reductions.loom"
     "numeric/vector/integer_shifts.loom"
-    "numeric/vector/interleave.loom"
     "numeric/vector/packed/arithmetic.loom"
     "numeric/vector/packed/dot.loom"
     "numeric/vector/packed/narrowing.loom"
@@ -48,6 +47,8 @@ loom_corpus_test(
   EXCLUDES
     "numeric/vector/integer_widening.loom"
     "Quarantined after an NPU firmware context timeout during partial-width widening execution."
+    "numeric/vector/interleave.loom"
+    "Quarantined after an NPU firmware context timeout and failed context restart during interleave execution."
   XFAILS
     "function/rodata.loom"
     "@rodata_copy_values"
@@ -129,9 +130,6 @@ loom_corpus_test(
     "BACKEND/005"
     "numeric/vector/integer_shifts.loom"
     "@vector_i8_shift_values"
-    "BACKEND/005"
-    "numeric/vector/interleave.loom"
-    "@irregular_byte_row_mask_values"
     "BACKEND/005"
     "numeric/vector/packed/arithmetic.loom"
     "@packed_halfword_add_values"

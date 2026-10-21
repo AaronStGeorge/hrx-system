@@ -232,7 +232,9 @@ static iree_status_t loom_cfg_converge_select(loom_cfg_converge_plan_t* plan,
 }
 
 static iree_status_t loom_cfg_converge_capture(loom_value_id_t value_id,
+                                               loom_value_id_t type_carrier,
                                                void* user_data) {
+  (void)type_carrier;
   loom_cfg_converge_plan_t* plan = user_data;
   if (!plan->representable) {
     return iree_ok_status();
@@ -327,10 +329,12 @@ static iree_status_t loom_cfg_converge_preflight(
         loom_type_use_iterator_t dependencies;
         loom_module_value_type_dependencies(
             plan->module, loom_block_arg_id(block, j), &dependencies);
-        for (loom_value_id_t dependency = loom_type_users_next(&dependencies);
+        for (loom_value_id_t dependency =
+                 loom_type_dependencies_next(&dependencies);
              dependency != LOOM_VALUE_ID_INVALID;
-             dependency = loom_type_users_next(&dependencies)) {
-          IREE_RETURN_IF_ERROR(loom_cfg_converge_capture(dependency, plan));
+             dependency = loom_type_dependencies_next(&dependencies)) {
+          IREE_RETURN_IF_ERROR(loom_cfg_converge_capture(
+              dependency, LOOM_VALUE_ID_INVALID, plan));
         }
       }
       const loom_op_t* op = NULL;
@@ -462,6 +466,7 @@ static iree_status_t loom_cfg_converge_once(loom_pass_t* pass,
                                             iree_arena_allocator_t* arena,
                                             bool* out_changed) {
   *out_changed = false;
+  IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(rewriter));
   const loom_value_fact_cfg_region_t* facts = NULL;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_get_or_build_cfg_region(
       rewriter->fact_table, module, body, &facts));

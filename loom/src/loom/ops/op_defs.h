@@ -1674,6 +1674,15 @@ typedef struct loom_builder_callback_t {
   void* user_data;
 } loom_builder_callback_t;
 
+// Fired after an argument's definition, type ownership, and block ordinal are
+// published. The containing region may still be under construction.
+typedef struct loom_builder_argument_callback_t {
+  // Receives the newly defined argument in its owning block.
+  iree_status_t (*fn)(void* user_data, loom_value_id_t argument);
+  // Borrowed state retained for the builder lifetime.
+  void* user_data;
+} loom_builder_argument_callback_t;
+
 // The builder is the single API surface for IR construction.
 //
 // It bundles the target module (for value/string/type tables), the
@@ -1694,6 +1703,8 @@ typedef struct loom_builder_t {
   iree_arena_allocator_t* arena;
   loom_builder_ip_t ip;
   loom_builder_callback_t on_op_finalized;
+  // Optional publication of newly defined block arguments.
+  loom_builder_argument_callback_t on_argument_defined;
   // Pre-allocated value IDs for the next op build. When
   // reserved_value_count > 0, loom_builder_define_value consumes from this
   // array instead of allocating new value IDs. Cleared by

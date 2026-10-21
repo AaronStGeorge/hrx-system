@@ -25,13 +25,10 @@
 // literal domains while keeping one-counterpart relations out of the index.
 typedef uint32_t loom_value_fact_relation_root_t;
 
-typedef struct loom_value_fact_relation_roots_t {
-  loom_value_fact_relation_root_t excluded[LOOM_INTEGER_ORDER_OUTCOME_COUNT];
-  loom_value_fact_relation_root_t excluded_literal_equal;
-} loom_value_fact_relation_roots_t;
-
 typedef struct loom_value_fact_relation_entry_t {
+  // Scoped alias whose canonical relation sets are retained.
   loom_value_id_t value_id;
+  // Current publication; zero roots retain reusable empty entries.
   loom_value_fact_relation_roots_t roots;
 } loom_value_fact_relation_entry_t;
 
@@ -144,7 +141,7 @@ static iree_host_size_t loom_value_fact_relation_entry_lower_bound(
   return lower;
 }
 
-static loom_value_fact_relation_roots_t loom_value_fact_relation_lookup_roots(
+loom_value_fact_relation_roots_t loom_value_fact_integer_relations_snapshot(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
   if (!table || !table->integer_relations) {
     return (loom_value_fact_relation_roots_t){0};
@@ -613,9 +610,9 @@ loom_value_fact_table_query_signed_integer_order(
     return outcomes ? outcomes : LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL;
   }
   const loom_value_fact_relation_roots_t lhs_roots =
-      loom_value_fact_relation_lookup_roots(table, lhs);
+      loom_value_fact_integer_relations_snapshot(table, lhs);
   const loom_value_fact_relation_roots_t rhs_roots =
-      loom_value_fact_relation_lookup_roots(table, rhs);
+      loom_value_fact_integer_relations_snapshot(table, rhs);
   const uint32_t lhs_identity_atom = loom_value_fact_relation_atom_find(
       table->integer_relations, LOOM_VALUE_FACT_RELATION_ATOM_VALUE,
       (uint64_t)lhs_identity);
@@ -680,7 +677,7 @@ loom_value_fact_table_query_signed_integer_literal_order(
   }
 
   const loom_value_fact_relation_roots_t roots =
-      loom_value_fact_relation_lookup_roots(table, value);
+      loom_value_fact_integer_relations_snapshot(table, value);
   const uint32_t literal_atom = loom_value_fact_relation_atom_find(
       table->integer_relations, LOOM_VALUE_FACT_RELATION_ATOM_LITERAL,
       (uint64_t)literal);
@@ -752,7 +749,7 @@ iree_status_t loom_value_fact_integer_relations_clone_value(
     return iree_ok_status();
   }
   const loom_value_fact_relation_roots_t source_roots =
-      loom_value_fact_relation_lookup_roots(source, value_id);
+      loom_value_fact_integer_relations_snapshot(source, value_id);
   loom_value_fact_relation_roots_t target_roots = {0};
   for (uint8_t outcome = 0; outcome < LOOM_INTEGER_ORDER_OUTCOME_COUNT;
        ++outcome) {
@@ -830,7 +827,8 @@ static iree_status_t loom_value_fact_relation_plan_initialize(
   for (uint16_t i = 0; i < pair_count; ++i) {
     plan->identities[i] =
         loom_value_fact_table_query_identity(table, operands[i]);
-    plan->plans[i] = loom_value_fact_relation_lookup_roots(table, operands[i]);
+    plan->plans[i] =
+        loom_value_fact_integer_relations_snapshot(table, operands[i]);
     plan->locals[i] = (loom_value_fact_relation_roots_t){0};
   }
   const bool use_index =
@@ -971,9 +969,9 @@ static bool loom_value_fact_integer_relations_identity_needs_plan(
   }
   for (uint16_t i = 0; i < pair_count; ++i) {
     if (!loom_value_fact_relation_roots_empty(
-            loom_value_fact_relation_lookup_roots(table, operands[i])) ||
+            loom_value_fact_integer_relations_snapshot(table, operands[i])) ||
         !loom_value_fact_relation_roots_empty(
-            loom_value_fact_relation_lookup_roots(table, results[i]))) {
+            loom_value_fact_integer_relations_snapshot(table, results[i]))) {
       return true;
     }
   }
@@ -1082,9 +1080,9 @@ static iree_status_t loom_value_fact_integer_relations_forward_alias(
     loom_value_fact_table_t* table, loom_value_id_t source,
     loom_value_id_t result, bool* inout_changed) {
   const loom_value_fact_relation_roots_t source_roots =
-      loom_value_fact_relation_lookup_roots(table, source);
+      loom_value_fact_integer_relations_snapshot(table, source);
   const loom_value_fact_relation_roots_t result_roots =
-      loom_value_fact_relation_lookup_roots(table, result);
+      loom_value_fact_integer_relations_snapshot(table, result);
   if (loom_value_fact_relation_roots_equal(source_roots, result_roots)) {
     return iree_ok_status();
   }

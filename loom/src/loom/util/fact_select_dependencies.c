@@ -38,15 +38,14 @@ static loom_value_set_id_t* loom_value_fact_table_lookup_select_dependency(
 loom_value_set_id_t loom_value_fact_table_select_dependencies_begin(
     const loom_value_fact_table_t* table, loom_value_id_t value_id,
     loom_value_set_cursor_t* out_cursor) {
-  const loom_value_set_id_t* entry =
-      loom_value_fact_table_lookup_select_dependency(table, value_id);
-  const loom_value_set_id_t root = entry ? *entry : 0;
+  const loom_value_set_id_t root =
+      loom_value_fact_table_select_dependency_root(table, value_id);
   loom_value_set_cursor_begin(table ? table->select_dependencies.index : NULL,
                               root, out_cursor);
   return root;
 }
 
-static loom_value_set_id_t loom_value_fact_table_select_dependency_root(
+loom_value_set_id_t loom_value_fact_table_select_dependency_root(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
   const loom_value_set_id_t* entry =
       loom_value_fact_table_lookup_select_dependency(table, value_id);

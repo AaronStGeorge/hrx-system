@@ -125,8 +125,13 @@ iree_status_t loom_greedy_rewrite_run_region(
     bool any_changed = false;
     if (callbacks && callbacks->before_worklist) {
       bool changed = false;
-      status = callbacks->before_worklist(callbacks->user_data, driver, region,
-                                          &result, &changed);
+      status = loom_rewriter_propagate_value_facts(&driver->rewriter);
+      loom_greedy_rewrite_result_record_rewriter_flags(&result,
+                                                       &driver->rewriter);
+      if (iree_status_is_ok(status)) {
+        status = callbacks->before_worklist(callbacks->user_data, driver,
+                                            region, &result, &changed);
+      }
       if (!iree_status_is_ok(status)) {
         break;
       }
@@ -142,6 +147,12 @@ iree_status_t loom_greedy_rewrite_run_region(
     while ((op = loom_rewriter_pop(&driver->rewriter)) != NULL) {
       if (!callbacks || !callbacks->rewrite_op) {
         continue;
+      }
+      status = loom_rewriter_propagate_value_facts(&driver->rewriter);
+      loom_greedy_rewrite_result_record_rewriter_flags(&result,
+                                                       &driver->rewriter);
+      if (!iree_status_is_ok(status)) {
+        break;
       }
       // Patterns and any operations they create use the current region's
       // target. Optional math choices require that target's own policy.
@@ -181,6 +192,11 @@ iree_status_t loom_greedy_rewrite_run_region(
     }
   }
 
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_propagate_value_facts(&driver->rewriter);
+    loom_greedy_rewrite_result_record_rewriter_flags(&result,
+                                                     &driver->rewriter);
+  }
   if (prepare_region_called && callbacks && callbacks->cleanup_region) {
     callbacks->cleanup_region(callbacks->user_data, driver);
   }

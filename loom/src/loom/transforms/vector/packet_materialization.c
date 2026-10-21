@@ -21,6 +21,7 @@
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/transforms/vector/packet_load.h"
 #include "loom/util/fact_vector_partition.h"
 
 // Intersects a dynamic lane offset's retained facts with the source vector's
@@ -107,236 +108,11 @@ static iree_status_t loom_vector_packet_build_memory_origin(
   }
   bool origin_built = false;
   IREE_RETURN_IF_ERROR(loom_vector_packet_memory_build_chunk_origin(
-      context, footprint, source_op, slice->static_lane_offset,
-      out_dynamic_indices, out_dynamic_index_count, out_static_indices,
-      out_static_index_count, &origin_built));
+      context, footprint->dynamic_indices, footprint->static_indices, source_op,
+      slice->static_lane_offset, out_dynamic_indices, out_dynamic_index_count,
+      out_static_indices, out_static_index_count, &origin_built));
   IREE_ASSERT_TRUE(origin_built);
   return iree_ok_status();
-}
-
-// Plans the exact component expansion before mutating IR. The old packet shape
-// is only a geometric upper bound: target queries may select much narrower
-// loads, so sizing storage from that shape can under-allocate and can hide a
-// scalar-width expansion behind a nominally wide packet.
-static iree_status_t loom_vector_packet_exact_memory_load_plan(
-    loom_target_legalization_context_t* context, const loom_op_t* load_op,
-    const loom_target_vector_packet_policy_t* policy, loom_type_t vector_type,
-    const loom_vector_packet_shape_t* shape, uint32_t* out_component_capacity,
-    bool* out_bounded) {
-  *out_component_capacity = 0;
-  *out_bounded = false;
-  iree_host_size_t aggregate_component_count = 0;
-  iree_host_size_t fact_component_count = 0;
-  iree_host_size_t operation_count = 0;
-  bool has_vector_packet = false;
-  uint32_t lane_offset = 0;
-  while (lane_offset < shape->lane_count) {
-    const uint32_t remaining_lane_count = shape->lane_count - lane_offset;
-    uint32_t packet_lane_count =
-        iree_min(remaining_lane_count, shape->chunk_lane_count);
-    IREE_RETURN_IF_ERROR(loom_vector_packet_memory_chunk_lane_count_select(
-        context, load_op, policy, vector_type, packet_lane_count,
-        &packet_lane_count));
-    if (packet_lane_count == 0) {
-      iree_host_size_t scalar_op_count = 0;
-      if (!iree_host_size_checked_add(fact_component_count,
-                                      remaining_lane_count,
-                                      &fact_component_count) ||
-          !iree_host_size_checked_add(remaining_lane_count, 1u,
-                                      &scalar_op_count) ||
-          !iree_host_size_checked_add(operation_count, scalar_op_count,
-                                      &operation_count) ||
-          !iree_host_size_checked_add(aggregate_component_count, 1u,
-                                      &aggregate_component_count)) {
-        return iree_ok_status();
-      }
-      if (fact_component_count >
-              LOOM_VALUE_FACT_VECTOR_PARTITION_EXPANSION_LIMIT ||
-          operation_count > LOOM_VECTOR_PACKET_STATIC_OP_LIMIT) {
-        return iree_ok_status();
-      }
-      lane_offset = shape->lane_count;
-      break;
-    }
-    has_vector_packet |= packet_lane_count > 1u;
-    if (!iree_host_size_checked_add(fact_component_count, 1u,
-                                    &fact_component_count) ||
-        !iree_host_size_checked_add(operation_count, 1u, &operation_count) ||
-        !iree_host_size_checked_add(aggregate_component_count, 1u,
-                                    &aggregate_component_count)) {
-      return iree_ok_status();
-    }
-    if (fact_component_count >
-            LOOM_VALUE_FACT_VECTOR_PARTITION_EXPANSION_LIMIT ||
-        operation_count > LOOM_VECTOR_PACKET_STATIC_OP_LIMIT) {
-      return iree_ok_status();
-    }
-    lane_offset += packet_lane_count;
-  }
-  if (aggregate_component_count > 1u &&
-      !iree_host_size_checked_add(operation_count, 1u, &operation_count)) {
-    return iree_ok_status();
-  }
-  if (!has_vector_packet ||
-      fact_component_count > LOOM_VALUE_FACT_VECTOR_PARTITION_EXPANSION_LIMIT ||
-      operation_count > LOOM_VECTOR_PACKET_STATIC_OP_LIMIT) {
-    return iree_ok_status();
-  }
-  *out_component_capacity = (uint32_t)aggregate_component_count;
-  *out_bounded = true;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_packet_rewrite_memory_load_impl(
-    loom_target_legalization_context_t* context, loom_op_t* load_op,
-    const loom_target_vector_packet_policy_t* policy,
-    const loom_vector_memory_footprint_t* footprint,
-    const loom_vector_packet_shape_t* shape,
-    loom_vector_memory_cache_policy_t cache_policy, bool* out_rewritten) {
-  if (out_rewritten != NULL) {
-    *out_rewritten = false;
-  }
-  uint32_t component_capacity = shape->chunk_count;
-  if (policy != NULL) {
-    bool exact_plan_is_bounded = false;
-    IREE_RETURN_IF_ERROR(loom_vector_packet_exact_memory_load_plan(
-        context, load_op, policy, footprint->vector_type, shape,
-        &component_capacity, &exact_plan_is_bounded));
-    if (!exact_plan_is_bounded) {
-      return iree_ok_status();
-    }
-  }
-
-  loom_rewriter_t* rewriter = context->rewriter;
-  loom_builder_t* builder = &rewriter->builder;
-  loom_builder_set_before(builder, load_op);
-  const loom_value_id_t value_checkpoint =
-      loom_rewriter_value_checkpoint(rewriter);
-  loom_value_id_t* components = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(context->arena, component_capacity,
-                                sizeof(*components), (void**)&components));
-  loom_value_id_t* scalar_tail = NULL;
-  if (policy != NULL) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(context->arena, shape->chunk_lane_count,
-                                  sizeof(*scalar_tail), (void**)&scalar_tail));
-  }
-
-  uint32_t component_count = 0;
-  uint32_t lane_offset = 0;
-  while (lane_offset < shape->lane_count) {
-    const uint32_t remaining_lane_count = shape->lane_count - lane_offset;
-    uint32_t packet_lane_count =
-        iree_min(remaining_lane_count, shape->chunk_lane_count);
-    if (policy != NULL) {
-      IREE_RETURN_IF_ERROR(loom_vector_packet_memory_chunk_lane_count_select(
-          context, load_op, policy, footprint->vector_type, packet_lane_count,
-          &packet_lane_count));
-    }
-    if (packet_lane_count == 0) {
-      IREE_ASSERT_LE(remaining_lane_count, shape->chunk_lane_count);
-      const loom_type_t scalar_type =
-          loom_type_scalar(loom_type_element_type(footprint->vector_type));
-      for (uint32_t i = 0; i < remaining_lane_count; ++i) {
-        const loom_vector_packet_slice_t slice = {
-            .dynamic_lane_offset = LOOM_VALUE_ID_INVALID,
-            .static_lane_offset = lane_offset + i,
-            .lane_count = 1,
-        };
-        const loom_value_id_t* dynamic_indices = NULL;
-        iree_host_size_t dynamic_index_count = 0;
-        const int64_t* static_indices = NULL;
-        iree_host_size_t static_index_count = 0;
-        IREE_RETURN_IF_ERROR(loom_vector_packet_build_memory_origin(
-            context, footprint, load_op, &slice, &dynamic_indices,
-            &dynamic_index_count, &static_indices, &static_index_count));
-        loom_op_t* scalar_load_op = NULL;
-        IREE_RETURN_IF_ERROR(loom_view_load_build(
-            builder, cache_policy.build_flags,
-            loom_vector_load_memory_flags(load_op), footprint->view,
-            dynamic_indices, dynamic_index_count, static_indices,
-            static_index_count, cache_policy.cache_scope,
-            cache_policy.cache_temporal, scalar_type, load_op->location,
-            &scalar_load_op));
-        scalar_tail[i] = loom_view_load_result(scalar_load_op);
-      }
-      const loom_type_t tail_type =
-          loom_vector_packet_type(footprint->vector_type, remaining_lane_count);
-      loom_op_t* tail_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
-          builder, scalar_tail, remaining_lane_count, tail_type,
-          load_op->location, &tail_op));
-      IREE_ASSERT_LT(component_count, component_capacity);
-      components[component_count++] = loom_vector_from_elements_result(tail_op);
-      lane_offset = shape->lane_count;
-      break;
-    }
-
-    const loom_vector_packet_slice_t slice = {
-        .dynamic_lane_offset = LOOM_VALUE_ID_INVALID,
-        .static_lane_offset = lane_offset,
-        .lane_count = packet_lane_count,
-    };
-    const loom_value_id_t* dynamic_indices = NULL;
-    iree_host_size_t dynamic_index_count = 0;
-    const int64_t* static_indices = NULL;
-    iree_host_size_t static_index_count = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_packet_build_memory_origin(
-        context, footprint, load_op, &slice, &dynamic_indices,
-        &dynamic_index_count, &static_indices, &static_index_count));
-    const loom_type_t packet_type =
-        loom_vector_packet_type(footprint->vector_type, slice.lane_count);
-    loom_op_t* packet_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_vector_load_build(
-        builder, cache_policy.build_flags,
-        loom_vector_load_memory_flags(load_op), footprint->view,
-        dynamic_indices, dynamic_index_count, static_indices,
-        static_index_count, cache_policy.cache_scope,
-        cache_policy.cache_temporal, packet_type, load_op->location,
-        &packet_op));
-    IREE_ASSERT_LT(component_count, component_capacity);
-    components[component_count++] = loom_vector_load_result(packet_op);
-    lane_offset += packet_lane_count;
-  }
-
-  IREE_ASSERT_EQ(component_count, component_capacity);
-  loom_value_id_t replacement = components[0];
-  if (component_count > 1) {
-    loom_op_t* concat_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_vector_concat_build(
-        builder, /*axis=*/0, components, component_count,
-        footprint->vector_type, load_op->location, &concat_op));
-    replacement = loom_vector_concat_result(concat_op);
-  }
-  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
-      rewriter, load_op, &replacement, 1, value_checkpoint));
-  IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
-      rewriter, load_op, &replacement, 1));
-  if (out_rewritten != NULL) {
-    *out_rewritten = true;
-  }
-  return iree_ok_status();
-}
-
-iree_status_t loom_vector_packet_rewrite_memory_load(
-    loom_target_legalization_context_t* context, loom_op_t* load_op,
-    const loom_vector_memory_footprint_t* footprint,
-    const loom_vector_packet_shape_t* shape,
-    loom_vector_memory_cache_policy_t cache_policy) {
-  return loom_vector_packet_rewrite_memory_load_impl(
-      context, load_op, /*policy=*/NULL, footprint, shape, cache_policy,
-      /*out_rewritten=*/NULL);
-}
-
-iree_status_t loom_vector_packet_rewrite_memory_load_components(
-    loom_target_legalization_context_t* context, loom_op_t* load_op,
-    const loom_target_vector_packet_policy_t* policy,
-    const loom_vector_memory_footprint_t* footprint,
-    const loom_vector_packet_shape_t* shape,
-    loom_vector_memory_cache_policy_t cache_policy, bool* out_rewritten) {
-  return loom_vector_packet_rewrite_memory_load_impl(
-      context, load_op, policy, footprint, shape, cache_policy, out_rewritten);
 }
 
 static iree_status_t loom_vector_packet_preserve_memory_loads_impl(
@@ -344,6 +120,8 @@ static iree_status_t loom_vector_packet_preserve_memory_loads_impl(
     const loom_vector_packet_shape_t* shape, bool exact_components,
     bool* out_preserved) {
   *out_preserved = false;
+  loom_vector_packet_load_plan_t* first_plan = NULL;
+  loom_vector_packet_load_plan_t** next_plan = &first_plan;
   for (uint32_t i = 0; i < packetization->value_count; ++i) {
     loom_vector_packetized_value_t* packetized_value =
         &packetization->values[i];
@@ -378,17 +156,21 @@ static iree_status_t loom_vector_packet_preserve_memory_loads_impl(
         packetization->context->module, load_op, &cache_policy);
     IREE_ASSERT_TRUE(cache_policy_described);
     (void)cache_policy_described;
-    if (exact_components) {
-      bool rewritten = false;
-      IREE_RETURN_IF_ERROR(loom_vector_packet_rewrite_memory_load_components(
-          packetization->context, load_op, packetization->policy, &footprint,
-          shape, cache_policy, &rewritten));
-      *out_preserved |= rewritten;
-    } else {
-      IREE_RETURN_IF_ERROR(loom_vector_packet_rewrite_memory_load(
-          packetization->context, load_op, &footprint, shape, cache_policy));
-      *out_preserved = true;
+    loom_vector_packet_load_plan_t* plan = NULL;
+    IREE_RETURN_IF_ERROR(loom_vector_packet_load_plan_allocate(
+        packetization->context, load_op,
+        exact_components ? packetization->policy : NULL, &footprint, shape,
+        cache_policy, &plan));
+    if (plan != NULL) {
+      *next_plan = plan;
+      next_plan = &plan->next;
     }
+  }
+  for (loom_vector_packet_load_plan_t* plan = first_plan; plan != NULL;
+       plan = plan->next) {
+    IREE_RETURN_IF_ERROR(
+        loom_vector_packet_load_plan_emit(packetization->context, plan));
+    *out_preserved = true;
   }
   return iree_ok_status();
 }

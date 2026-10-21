@@ -451,6 +451,9 @@ TEST_F(PipelineConstructionTest, CapturesKeepProtocolAndStorageSeparate) {
 
   // The nested kernel receives the parent's channels without reconstructing
   // their protocol identities or placements from the child's formal values.
+  loom_value_fact_table_t child_inputs = {};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&child_inputs, &arena_, 0));
+  loom_type_registry_configure_fact_context(&child_inputs.context);
   loom_value_fact_table_t child_facts = {};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&child_facts, &arena_, 0));
   loom_type_registry_configure_fact_context(&child_facts.context);
@@ -459,13 +462,16 @@ TEST_F(PipelineConstructionTest, CapturesKeepProtocolAndStorageSeparate) {
   for (size_t i = 0; i < child_actuals.count; ++i) {
     loom_value_facts_t incoming_fact;
     IREE_ASSERT_OK(loom_value_fact_table_clone_fact_for_type(
-        &child_facts, &facts, module_,
+        &child_inputs, &facts, module_,
         loom_module_value_type(module_, child_arguments_ids[i]),
         loom_value_fact_table_lookup(&facts, child_actuals.values[i]),
         &incoming_fact));
     IREE_ASSERT_OK(loom_value_fact_table_define(
-        &child_facts, child_arguments_ids[i], incoming_fact));
+        &child_inputs, child_arguments_ids[i], incoming_fact));
   }
+  IREE_ASSERT_OK(loom_value_fact_table_seed_values(
+      &child_facts, {&child_inputs, child_arguments_ids, child_actuals.count},
+      module_));
   IREE_ASSERT_OK(loom_value_fact_table_compute(
       &child_facts, module_, loom_func_like_cast(module_, child)));
   loom_pipeline_resources_t child_resources;

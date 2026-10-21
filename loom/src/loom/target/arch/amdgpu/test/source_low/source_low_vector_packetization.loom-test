@@ -167,11 +167,10 @@ func.def target(@target) @vector_extf_f16_deinterleaved_odd(%input: vector<4xf16
 // ----
 low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @vector_extf_f16_deinterleaved_odd(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm {
   %7 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %8 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %odd = v_perm_b32_src2_lit %7, %8, 50464518
-  %11 = v_cvt_f32_f16 %odd
-  %12 = v_cvt_f32_f16_input_high %odd
-  %result = concat(%11, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %8 = v_cvt_f32_f16_input_high %7
+  %9 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %10 = v_cvt_f32_f16_input_high %9
+  %result = concat(%8, %10) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %result
 }
 

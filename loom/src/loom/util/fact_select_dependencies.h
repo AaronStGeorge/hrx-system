@@ -21,6 +21,11 @@ typedef struct loom_value_fact_table_t loom_value_fact_table_t;
 typedef struct loom_value_fact_select_dependency_page_t
     loom_value_fact_select_dependency_page_t;
 
+// Returns the canonical selector-set identity, or zero when empty. Roots are
+// immutable and comparable within one populated fact-table scope.
+loom_value_set_id_t loom_value_fact_table_select_dependency_root(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id);
+
 // Begins increasing-order iteration over select conditions transitively
 // controlling |value_id|. Returns the canonical set identity, or zero when
 // empty; identities may be compared within one fact-table scope. The cursor

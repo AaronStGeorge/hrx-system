@@ -70,6 +70,12 @@ typedef struct loom_value_fact_vector_partition_t {
   loom_value_fact_vector_partition_flags_t flags;
 } loom_value_fact_vector_partition_t;
 
+// Compares both partition views by their component values, geometry, and
+// semantic flags. Borrowed components must remain stable across the comparison.
+bool loom_value_fact_vector_partition_equal(
+    loom_value_fact_vector_partition_t lhs,
+    loom_value_fact_vector_partition_t rhs);
+
 // Returns true when every exact component is a vector with the same lane
 // count. Regular partitions with a shorter terminal vector return false.
 static inline bool loom_value_fact_vector_partition_has_uniform_components(

@@ -1178,8 +1178,11 @@ iree_status_t loom_stage_loop_carried_fragments_run(loom_pass_t* pass,
         continue;
       }
       bool op_changed = false;
-      status = loom_stage_loop_carried_fragments_try_rewrite(&context, op,
-                                                             &op_changed);
+      status = loom_rewriter_propagate_value_facts(&rewriter);
+      if (iree_status_is_ok(status)) {
+        status = loom_stage_loop_carried_fragments_try_rewrite(&context, op,
+                                                               &op_changed);
+      }
       changed |= op_changed;
       iree_arena_checkpoint_restore(&scratch_checkpoint);
     }

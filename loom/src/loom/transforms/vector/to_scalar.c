@@ -1330,7 +1330,10 @@ static iree_status_t loom_vector_to_scalar_run_with_lowerer(
         continue;
       }
     }
-    status = lower_op(pass, &rewriter, op);
+    status = loom_rewriter_propagate_value_facts(&rewriter);
+    if (iree_status_is_ok(status)) {
+      status = lower_op(pass, &rewriter, op);
+    }
   }
   loom_rewriter_deinitialize(&rewriter);
   if (!iree_status_is_ok(status)) {

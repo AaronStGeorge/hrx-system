@@ -16,6 +16,11 @@
 extern "C" {
 #endif
 
+// Visits a provider and its value-type carrier. Operand and attribute edges
+// have LOOM_VALUE_ID_INVALID as their carrier.
+typedef iree_status_t (*loom_subtree_value_ref_callback_t)(
+    loom_value_id_t provider, loom_value_id_t type_carrier, void* user_data);
+
 // Walks outgoing SSA references owned by |op| and its nested regions: ordinary
 // operands, result/block/signature-argument type references, and attribute
 // references. Declaration-owned operands are definitions, not references.
@@ -28,7 +33,7 @@ extern "C" {
 // errors.
 iree_status_t loom_op_walk_subtree_value_refs(
     const loom_module_t* module, const loom_op_t* op,
-    loom_type_value_ref_callback_t callback, void* user_data);
+    loom_subtree_value_ref_callback_t callback, void* user_data);
 
 typedef struct loom_value_replacement_t loom_value_replacement_t;
 

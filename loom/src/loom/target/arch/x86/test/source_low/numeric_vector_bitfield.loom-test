@@ -38,22 +38,22 @@ func.def public target(@target) @widened_byte_packets(%input: buffer, %output_un
 
 // ----
 low.func.def public target<x86.avx2.core>(@target) abi(object_function) @widened_byte_packets(%input: reg<x86.gpr64>, %output_unsigned: reg<x86.gpr64>, %output_signed: reg<x86.gpr64>) asm {
-  %37 = vmovdqu32.load.xmm %input {disp32 = 0}
-  %38 = vmovdqu32.load.xmm %input {disp32 = 16}
-  %39 = vpmovzxbw.ymm %37
-  %40 = vpsllw.ymm %39, 9
-  %41 = vpsrlw.ymm %40, 10
-  vmovdqu32.store.ymm %41, %output_unsigned {disp32 = 0}
-  %42 = vpmovzxbw.ymm %38
-  %43 = vpsllw.ymm %42, 9
-  %44 = vpsrlw.ymm %43, 10
-  vmovdqu32.store.ymm %44, %output_unsigned {disp32 = 32}
-  %45 = vpmovsxbw.ymm %37
-  %46 = vpsraw.ymm %45, 4
-  vmovdqu32.store.ymm %46, %output_signed {disp32 = 0}
-  %47 = vpmovsxbw.ymm %38
-  %48 = vpsraw.ymm %47, 4
-  vmovdqu32.store.ymm %48, %output_signed {disp32 = 32}
+  %36 = vmovdqu32.load.xmm %input {disp32 = 0}
+  %37 = vmovdqu32.load.xmm %input {disp32 = 16}
+  %38 = vpmovzxbw.ymm %36
+  %39 = vpsllw.ymm %38, 9
+  %40 = vpsrlw.ymm %39, 10
+  vmovdqu32.store.ymm %40, %output_unsigned {disp32 = 0}
+  %41 = vpmovzxbw.ymm %37
+  %42 = vpsllw.ymm %41, 9
+  %43 = vpsrlw.ymm %42, 10
+  vmovdqu32.store.ymm %43, %output_unsigned {disp32 = 32}
+  %44 = vpmovsxbw.ymm %36
+  %45 = vpsraw.ymm %44, 4
+  vmovdqu32.store.ymm %45, %output_signed {disp32 = 0}
+  %46 = vpmovsxbw.ymm %37
+  %47 = vpsraw.ymm %46, 4
+  vmovdqu32.store.ymm %47, %output_signed {disp32 = 32}
   return
 }
 

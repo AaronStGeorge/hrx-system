@@ -121,8 +121,9 @@ static iree_status_t loom_scf_if_preview_clone_remapped_op(
   return iree_ok_status();
 }
 
-static iree_status_t loom_scf_if_preview_seed_value(loom_value_id_t value_id,
-                                                    void* user_data) {
+static iree_status_t loom_scf_if_preview_seed_value(
+    loom_value_id_t value_id, loom_value_id_t type_carrier, void* user_data) {
+  (void)type_carrier;
   loom_scf_if_fact_preview_t* preview = user_data;
   value_id = loom_scf_if_preview_remap_value(preview, value_id);
   if (value_id == LOOM_VALUE_ID_INVALID ||
@@ -201,7 +202,8 @@ static iree_status_t loom_scf_if_preview_compute_block(
   for (iree_host_size_t i = 0; i < yield_values.count; ++i) {
     const loom_value_id_t value =
         loom_scf_if_preview_remap_value(preview, yield_values.values[i]);
-    IREE_RETURN_IF_ERROR(loom_scf_if_preview_seed_value(value, preview));
+    IREE_RETURN_IF_ERROR(
+        loom_scf_if_preview_seed_value(value, LOOM_VALUE_ID_INVALID, preview));
     out_yield_values[i] = value;
     out_yield_facts[i] = loom_value_fact_table_lookup(&preview->facts, value);
   }
@@ -270,7 +272,8 @@ static iree_status_t loom_scf_if_preview_selectification_impl(
   }
 
   const loom_value_id_t condition = loom_scf_if_condition(op);
-  IREE_RETURN_IF_ERROR(loom_scf_if_preview_seed_value(condition, &preview));
+  IREE_RETURN_IF_ERROR(loom_scf_if_preview_seed_value(
+      condition, LOOM_VALUE_ID_INVALID, &preview));
   const loom_value_facts_t condition_facts =
       loom_value_fact_table_lookup(&preview.facts, condition);
   const loom_value_id_t* results = loom_op_const_results(op);

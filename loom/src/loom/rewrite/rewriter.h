@@ -32,6 +32,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/op_defs.h"
+#include "loom/rewrite/fact_propagation.h"
 #include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
@@ -103,6 +104,7 @@ typedef struct loom_rewriter_operation_creation_callback_t {
 
 typedef struct loom_rewriter_cfg_region_t loom_rewriter_cfg_region_t;
 typedef struct loom_rewriter_worklist_chunk_t loom_rewriter_worklist_chunk_t;
+typedef struct loom_rewriter_pending_facts_t loom_rewriter_pending_facts_t;
 
 struct loom_rewriter_t {
   // Builder whose finalize callback records mutations and maintains facts.
@@ -146,6 +148,9 @@ struct loom_rewriter_t {
   // Borrowed per-value analysis facts. Populated when a pass calls
   // loom_rewriter_enable_analysis. NULL means analysis is disabled.
   loom_value_fact_table_t* fact_table;
+
+  // Lazy arena-owned equation membership, independent of rewrite scheduling.
+  loom_rewriter_pending_facts_t* pending_facts;
 
   // Borrowed math policy selected once for this rewrite scope. NULL preserves
   // target-neutral optional arithmetic choices until a target is selected.
@@ -199,6 +204,11 @@ void loom_rewriter_set_operation_creation_source(loom_rewriter_t* rewriter,
 bool loom_rewriter_prefers_fma(const loom_rewriter_t* rewriter,
                                loom_type_t value_type, uint8_t fastmath_flags);
 
+// Records effect summaries and inherited execution facts for a reinserted
+// subtree, then schedules its operations when analysis is attached.
+iree_status_t loom_rewriter_record_subtree(loom_rewriter_t* rewriter,
+                                           loom_op_t* op);
+
 // Enables tracking of operations affected by subsequent mutations. Calling this
 // on an enabled rewriter preserves its pending operations and allocated
 // storage. A driver enables tracking before edits whose notifications it must
@@ -212,34 +222,6 @@ iree_status_t loom_rewriter_seed_region(loom_rewriter_t* rewriter,
 // Enables and seeds the worklist with live ops in a function-like body region.
 iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
                                           loom_func_like_t function);
-
-// Attaches caller-computed value facts to the rewriter for incremental
-// maintenance. The table must already cover every value the rewrite policy may
-// query and remains owned by the caller. NULL disables value-fact maintenance.
-void loom_rewriter_attach_value_facts(loom_rewriter_t* rewriter,
-                                      loom_value_fact_table_t* facts);
-
-// Updates the structural fact snapshot after a completed CFG edit and queues
-// users of changed block-argument joins. Call before querying facts or draining
-// the worklist after changing successors, block membership, or block arguments.
-// Ordinary value changes propagate through branch payloads in try_fold.
-iree_status_t loom_rewriter_refresh_cfg_facts(loom_rewriter_t* rewriter,
-                                              loom_region_t* region);
-
-// Enables value analysis on this rewriter using caller-owned fact storage and
-// runs the initial forward pass over |region| and its nested regions, seeding
-// facts from fact inference functions. |function| supplies the logical
-// function context for fact inference and may be empty for detached regions.
-// Call once after initialize, before the worklist loop. Patterns can then query
-// facts via loom_rewriter_value_facts.
-iree_status_t loom_rewriter_enable_region_analysis(
-    loom_rewriter_t* rewriter, loom_func_like_t function, loom_region_t* region,
-    loom_op_t* parent_op, loom_value_fact_table_t* facts);
-
-// Enables value analysis over a function-like body region.
-iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
-                                            loom_func_like_t function,
-                                            loom_value_fact_table_t* facts);
 
 // Looks up facts from the rewriter's fact table. Returns unknown
 // facts if analysis is not enabled or the value is not defined.
@@ -428,10 +410,11 @@ iree_status_t loom_rewriter_remove_blocks(loom_rewriter_t* rewriter,
 // Removes selected unused arguments and their retained SSA references. The
 // mask covers the block's arguments. The caller repairs branch payloads and
 // refreshes CFG structure after completing the structural edit.
-uint16_t loom_rewriter_remove_block_args(loom_rewriter_t* rewriter,
-                                         loom_block_t* block,
-                                         const bool* remove_args,
-                                         uint16_t remove_arg_count);
+iree_status_t loom_rewriter_remove_block_args(loom_rewriter_t* rewriter,
+                                              loom_block_t* block,
+                                              const bool* remove_args,
+                                              uint16_t remove_arg_count,
+                                              uint16_t* out_removed_count);
 
 // Moves |op| before |before_op|, preserving operands/results/regions while
 // retargeting ancestry, worklist membership, and region effect summaries.

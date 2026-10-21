@@ -43,6 +43,7 @@
 #include "loom/util/fact_extensions.h"
 #include "loom/util/fact_identity.h"
 #include "loom/util/fact_layout.h"
+#include "loom/util/fact_origin.h"
 #include "loom/util/fact_range.h"
 #include "loom/util/fact_select_dependencies.h"
 
@@ -71,68 +72,6 @@ typedef struct loom_condition_edge_projection_t
     loom_condition_edge_projection_t;
 typedef struct loom_cfg_graph_t loom_cfg_graph_t;
 typedef struct loom_target_facts_t loom_target_facts_t;
-
-// Scalar values that materialize every element of one aggregate value.
-typedef struct loom_value_fact_uniform_element_origin_t {
-  // Scalar value with the aggregate element type.
-  loom_value_id_t scalar_value_id;
-  // Scalar value preserving the elements before an exact float extension.
-  loom_value_id_t exact_scalar_value_id;
-} loom_value_fact_uniform_element_origin_t;
-
-// Static strided logical-lane origin for one aggregate value. Result lane N is
-// derived from source lane source_lane_offset + N * source_lane_stride. The
-// source and result may have different element types when an operation
-// preserves lane provenance while changing representation.
-typedef struct loom_value_fact_static_lane_origin_t {
-  // Aggregate source value containing the materialized lanes.
-  loom_value_id_t source_value_id;
-  // First logical source lane used by result lane zero.
-  uint32_t source_lane_offset;
-  // Logical source lane stride between adjacent result lanes.
-  uint32_t source_lane_stride;
-} loom_value_fact_static_lane_origin_t;
-
-// Static strided logical-lane origin preserving each lane's scalar value
-// exactly. Result lane N has the same value as source lane source_lane_offset +
-// N * source_lane_stride after conversion to the result element type. For
-// floating-point values the relation preserves signed zero and infinity but
-// does not promise NaN payload identity.
-typedef struct loom_value_fact_exact_lane_origin_t {
-  // Aggregate source value containing the exact lane values.
-  loom_value_id_t source_value_id;
-  // First logical source lane used by result lane zero.
-  uint32_t source_lane_offset;
-  // Logical source lane stride between adjacent result lanes.
-  uint32_t source_lane_stride;
-} loom_value_fact_exact_lane_origin_t;
-
-// Uniform scalar scale applied lanewise to one aggregate value. Result lane N
-// is source lane N multiplied by scale_value_id.
-typedef struct loom_value_fact_uniform_scale_origin_t {
-  // Aggregate source value containing the unscaled lanes.
-  loom_value_id_t source_value_id;
-  // Scalar value uniformly multiplied into each result lane.
-  loom_value_id_t scale_value_id;
-} loom_value_fact_uniform_scale_origin_t;
-
-// Structured contextual query materialized by an SSA value. The family is
-// shared with the paired static applicability attribute. The optional key
-// distinguishes projections within a family, such as one SPIR-V extension;
-// queries with no additional identity use an absent key.
-typedef struct loom_value_fact_contextual_query_origin_t {
-  // Context-local parameterized attribute family identifying query semantics.
-  loom_parameterized_attr_kind_t family_kind;
-
-  // Reserved for alignment and future query-origin flags. Always zero.
-  uint16_t reserved;
-
-  // Borrowed structured projection key owned by the current module.
-  loom_attribute_t key;
-} loom_value_fact_contextual_query_origin_t;
-
-static_assert(sizeof(loom_value_fact_contextual_query_origin_t) == 24,
-              "contextual query origin must remain 24 bytes");
 
 // Per-analysis context passed to op fact inference callbacks.
 struct loom_fact_context_t {
@@ -199,8 +138,8 @@ struct loom_fact_context_t {
   } refine_operands;
 
   // Active change accumulator for auxiliary result facts published by the
-  // current inference callback. NULL during whole-scope population and
-  // outside an inference callback.
+  // current inference callback. NULL when publication needs no change report,
+  // and outside an inference callback.
   bool* result_facts_changed;
 };
 
@@ -223,7 +162,8 @@ struct loom_value_fact_table_t {
   // Scope membership bits indexed relative to first_value_id, retained while
   // a cyclic solve undefines entries.
   uint64_t* touched_bits;
-  // Value IDs touched in the scope, including temporarily undefined entries.
+  // Values with numeric facts or direct-origin storage in the scope,
+  // including temporarily undefined entries.
   loom_value_id_t* touched_values;
   // Number of populated entries in touched_values.
   iree_host_size_t touched_count;
@@ -234,9 +174,22 @@ struct loom_value_fact_table_t {
   uint16_t result_type_kind_bits;
   // Context object passed to op-specific fact inference callbacks.
   loom_fact_context_t context;
+  // Stack-owned ordinary-result publication, active only during inference.
+  loom_value_fact_origin_publication_t* origin_publication;
 
-  // Immutable scope inputs supplied by a surrounding analysis. Opaque result
-  // definitions consult these instead of discarding call-boundary summaries.
+  // Optional completion consumer installed by the owner of pending inference.
+  // Nested summaries report completion within this table's solver traversal.
+  // Preview tables can borrow inference context without completing this work.
+  struct {
+    // Borrowed consumer state, valid while the callback is installed.
+    void* user_data;
+    // Consumes completed work without modifying source IR or value facts.
+    void (*fn)(void* user_data, const loom_op_t* op);
+  } summary_computed;
+
+  // Immutable scope inputs supplied by a surrounding analysis. Independent
+  // entry arguments and opaque results consult these on every solve instead
+  // of retaining constraints accumulated in their derived rows.
   struct {
     // Borrowed source whose selected facts outlive this populated scope.
     const loom_value_fact_table_t* table;
@@ -320,12 +273,6 @@ struct loom_value_fact_table_t {
     loom_value_fact_uniform_element_origin_t* entries;
     // Value-ID range covered by the direct entries.
     loom_value_fact_range_t range;
-    // Aggregate value IDs with origins defined in the current populated scope.
-    loom_value_id_t* touched_values;
-    // Number of populated entries in touched_values.
-    iree_host_size_t touched_count;
-    // Allocated touched_values entry count.
-    iree_host_size_t touched_capacity;
   } uniform_element_origins;
 
   // Static logical-lane origins keyed by aggregate value ID. An entry with
@@ -335,12 +282,6 @@ struct loom_value_fact_table_t {
     loom_value_fact_static_lane_origin_t* entries;
     // Value-ID range covered by the direct entries.
     loom_value_fact_range_t range;
-    // Aggregate value IDs with origins defined in the current populated scope.
-    loom_value_id_t* touched_values;
-    // Number of populated entries in touched_values.
-    iree_host_size_t touched_count;
-    // Allocated touched_values entry count.
-    iree_host_size_t touched_capacity;
   } static_lane_origins;
 
   // Exact logical-lane value origins keyed by aggregate value ID. This is
@@ -351,7 +292,7 @@ struct loom_value_fact_table_t {
   struct {
     // Sparse entries sorted by aggregate value ID.
     loom_value_fact_exact_lane_origin_entry_t* entries;
-    // Number of defined entries in the current populated scope.
+    // Retained slots in the scope, including withdrawn proofs.
     iree_host_size_t count;
     // Allocated sparse entry count retained across populated scopes.
     iree_host_size_t capacity;
@@ -364,12 +305,6 @@ struct loom_value_fact_table_t {
     loom_value_fact_uniform_scale_origin_t* entries;
     // Value-ID range covered by the direct entries.
     loom_value_fact_range_t range;
-    // Aggregate value IDs with origins defined in the current populated scope.
-    loom_value_id_t* touched_values;
-    // Number of populated entries in touched_values.
-    iree_host_size_t touched_count;
-    // Allocated touched_values entry count.
-    iree_host_size_t touched_capacity;
   } uniform_scale_origins;
 
   // Contextual query origins keyed by SSA value ID. Dense entries contain
@@ -387,7 +322,7 @@ struct loom_value_fact_table_t {
     iree_host_size_t touched_count;
     // Allocated touched_values entry count.
     iree_host_size_t touched_capacity;
-    // Sparse structured origins referenced by entries.
+    // One descriptor per retained value; ANY marks a withdrawn proof.
     loom_value_fact_contextual_query_origin_t* origins;
     // Number of populated sparse origins in the current scope.
     iree_host_size_t origin_count;
@@ -446,6 +381,13 @@ struct loom_value_fact_table_t {
       // Allocated frame count, reused until the scope is cleared.
       iree_host_size_t capacity;
     } regions;
+    // Family publication marks for the current ordinary operation.
+    struct {
+      // One family bitset per result ordinal, reused between operations.
+      uint8_t* values;
+      // Allocated result count, grown only for larger operations.
+      iree_host_size_t capacity;
+    } origins;
     // Value ID scratch buffer state.
     struct {
       // Scratch value IDs used by transforms that materialize replacements.
@@ -470,6 +412,15 @@ struct loom_value_fact_table_t {
     // Lazily allocated query scratch for condition-loop edge projections.
     loom_value_fact_condition_scratch_t* condition;
   } scratch;
+#ifndef NDEBUG
+  // Diagnostics for retained coherent observations; absent in release builds.
+  struct {
+    // Current semantic mutation batch or populated scope generation.
+    uint64_t generation;
+    // Queued equations have not completed publication.
+    bool pending;
+  } observation;
+#endif
 };
 
 // Initializes the table with the given arena and pre-allocates
@@ -509,6 +460,12 @@ iree_status_t loom_value_fact_table_reserve(loom_value_fact_table_t* table,
 // arena should reset that arena after this call. Direct-address, touched-value,
 // and oversized extension-entry storage remain allocated for reuse.
 void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table);
+
+// Retains unique scope membership without defining numeric facts. Direct-origin
+// setters use this so withdrawal and republication cannot duplicate cleanup
+// work.
+iree_status_t loom_value_fact_table_touch(loom_value_fact_table_t* table,
+                                          loom_value_id_t value_id);
 
 // Returns true when |value_id| has explicitly defined facts in |table|.
 static inline bool loom_value_fact_table_has_entry(
@@ -564,13 +521,22 @@ bool loom_value_fact_table_values_equal(const loom_value_fact_table_t* table,
 const loom_cfg_graph_t* loom_value_fact_table_lookup_cfg_graph(
     const loom_value_fact_table_t* table, const loom_region_t* region);
 
+// Returns the operation retained when this region's context was established.
+loom_op_t* loom_value_fact_table_region_parent(
+    const loom_value_fact_table_t* table, const loom_region_t* region);
+
+// Rebuilds independent entry arguments from immutable inputs and contracts.
+iree_status_t loom_value_fact_table_refresh_entry_args(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_block_t* block, loom_op_t* parent_op);
+
 // Publishes the temporal distribution and repetition inherited from enclosing
 // control flow. |may_repeat| includes structured loops and enclosing CFG
 // cycles. The region traversal owns this transitive context; nested regions
 // import their parent block's scope before computing any child facts.
 iree_status_t loom_value_fact_table_set_region_temporal_scope(
     loom_value_fact_table_t* table, const loom_region_t* region,
-    loom_value_facts_t scope, bool may_repeat);
+    loom_op_t* parent_op, loom_value_facts_t scope, bool may_repeat);
 
 // Returns inherited temporal context met with this block's execution scope
 // when it belongs to a CFG cycle. This bounds facts for operations whose
@@ -661,95 +627,6 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
 void loom_value_fact_table_undefine(loom_value_fact_table_t* table,
                                     loom_value_id_t value_id);
 
-// Defines the scalar SSA values that materialize every element of aggregate
-// |value_id|. |scalar_value_id| has the aggregate element type, while
-// |exact_scalar_value_id| may have a narrower floating-point type whose value
-// is preserved exactly by extension to the aggregate element type.
-iree_status_t loom_value_fact_table_define_uniform_element_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_id_t scalar_value_id, loom_value_id_t exact_scalar_value_id);
-
-// Returns true when |value_id| has a known scalar SSA origin that materializes
-// every element. The query validates that |value_id| is shaped, the origin is
-// scalar, and both have matching element types.
-bool loom_value_fact_table_query_uniform_element_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_id_t* out_scalar_value_id);
-
-// Returns the exact scalar SSA origin for every element of |value_id|. The
-// origin may have a narrower floating-point type than the aggregate.
-bool loom_value_fact_table_query_exact_uniform_element_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_id_t* out_scalar_value_id);
-
-// Defines a static strided source-lane view for aggregate |value_id|. The
-// relation is a materialization proof and is validated by the query API against
-// the current module value types and static lane counts.
-iree_status_t loom_value_fact_table_define_static_lane_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_static_lane_origin_t origin);
-
-// Returns true when |value_id| has a known static source-lane view. The query
-// validates that both values are vectors with static lane counts and an
-// in-bounds strided source lane mapping. Element types may differ when the
-// defining operation preserves lane provenance while changing representation.
-bool loom_value_fact_table_query_static_lane_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_fact_static_lane_origin_t* out_origin);
-
-// Defines an exact strided source-lane value origin for aggregate |value_id|.
-// The relation is validated by the query API against the current module value
-// types and static lane counts.
-iree_status_t loom_value_fact_table_define_exact_lane_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_exact_lane_origin_t origin);
-
-// Returns true when |value_id| has a known exact source-lane value origin. The
-// query validates that both values are vectors with static lane counts and an
-// in-bounds strided source lane mapping. Element types may differ because an
-// exact floating-point extension preserves the represented value.
-bool loom_value_fact_table_query_exact_lane_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_fact_exact_lane_origin_t* out_origin);
-
-// Defines a value as the lanewise multiplication of |origin.source_value_id|
-// and scalar |origin.scale_value_id|. The relation is a materialization proof
-// and is validated by the query API against the current module value types.
-iree_status_t loom_value_fact_table_define_uniform_scale_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_uniform_scale_origin_t origin);
-
-// Returns true when |value_id| has a known uniform scalar-scale origin. The
-// query validates that the result/source are same-typed vectors and the scale
-// is a same-element scalar.
-bool loom_value_fact_table_query_uniform_scale_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id,
-    loom_value_fact_uniform_scale_origin_t* out_origin);
-
-// Defines |value_id| as the SSA materialization of one contextual query. The
-// family is the descriptor-backed static applicability family with the same
-// public dotted name. The optional structured key distinguishes projections
-// within that family without flattening them into strings or feature bits.
-iree_status_t loom_value_fact_table_define_contextual_query_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_contextual_query_origin_t origin);
-
-// Returns true when scalar |value_id| materializes a contextual query. The
-// returned origin borrows its structured key from the current module and is
-// valid until the fact-table scope is cleared.
-bool loom_value_fact_table_query_contextual_query_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id,
-    loom_value_fact_contextual_query_origin_t* out_origin);
-
-// Returns the sparse value index for retained contextual query origins. The
-// borrowed values are unique, appear in first-definition order and remain valid
-// until the fact-table scope is cleared.
-void loom_value_fact_table_contextual_query_values(
-    const loom_value_fact_table_t* table, const loom_value_id_t** out_value_ids,
-    iree_host_size_t* out_value_count);
-
 // Returns the sparse value index for the populated fact scope. The borrowed
 // values are unique, appear in first-definition order, and remain valid until
 // the scope is cleared. Values temporarily undefined during a cyclic solve
@@ -827,13 +704,13 @@ iree_status_t loom_value_fact_table_clone_values(
     loom_value_fact_table_t* target, loom_value_fact_table_view_t source,
     const loom_module_t* module);
 
-// Imports selected inputs and retains their immutable source for opaque result
-// inference. Unlike an ordinary clone, this preserves external call summaries
-// when their local definition has no inference function, including recomputes
-// after cyclic solves undefine entries. The source and selected facts remain
-// valid and unchanged until target's scope is cleared. A caller that changes
-// the meaning of a seeded value must clear and rebuild the scope. Ordinary
-// semantic-preserving rewrites and type refinement retain the input contract.
+// Imports selected inputs and retains their immutable source for entry
+// arguments and opaque result inference. Unlike an ordinary clone, this
+// preserves external inputs when subsequent solves replace their derived facts.
+// The source and selected facts remain valid and unchanged until target's
+// scope is cleared. Changing a seeded value's meaning requires rebuilding the
+// scope. Ordinary semantic-preserving rewrites and type refinement retain the
+// input contract.
 iree_status_t loom_value_fact_table_seed_values(
     loom_value_fact_table_t* target, loom_value_fact_table_view_t source,
     const loom_module_t* module);
@@ -885,7 +762,10 @@ iree_status_t loom_value_fact_table_define_results(
 // native domain, or the source domain without a target. Declared preconditions,
 // imported facts, computed values, and internal block arguments retain their
 // producer-established domains. Offset and fixed-width parameters retain their
-// source domains.
+// source domains. Independent entry arguments are rebuilt from immutable
+// imported inputs, declaration projections, and current IR contracts on each
+// solve. External argument facts must be supplied with seed_values; define and
+// clone_values publish derived facts that inference may replace.
 iree_status_t loom_value_fact_table_compute_region(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op);
