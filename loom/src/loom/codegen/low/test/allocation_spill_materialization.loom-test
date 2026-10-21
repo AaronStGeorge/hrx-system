@@ -39,21 +39,21 @@ low.func.def target<test.low.core>(@target) @generated_edge_store_source_spill(%
   %17 = low.reload %generated_edge_store_source_spill_spill_storage_0 : low.storage<private> -> reg<test.i32>
   low.cond_br %17, ^body, ^exit : reg<test.i32>
 ^body:
+  %18 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
+  %n0 = test.add.i32 %a0, %18
+  %19 = low.reload %generated_edge_store_source_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %20 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
+  %n1 = test.add.i32 %19, %20
+  %21 = low.reload %generated_edge_store_source_spill_spill_storage_2 : low.storage<private> -> reg<test.i32>
   %22 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %n0 = test.add.i32 %a0, %22
-  %18 = low.reload %generated_edge_store_source_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
-  %23 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %n1 = test.add.i32 %18, %23
-  %20 = low.reload %generated_edge_store_source_spill_spill_storage_2 : low.storage<private> -> reg<test.i32>
-  %24 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %n2 = test.add.i32 %20, %24
+  %n2 = test.add.i32 %21, %22
   low.spill %n2, %generated_edge_store_source_spill_spill_storage_4 : reg<test.i32>, low.storage<private>
   low.spill %n1, %generated_edge_store_source_spill_spill_storage_1 : reg<test.i32>, low.storage<private>
-  %25 = low.reload %generated_edge_store_source_spill_spill_storage_4 : low.storage<private> -> reg<test.i32>
-  low.spill %25, %generated_edge_store_source_spill_spill_storage_2 : reg<test.i32>, low.storage<private>
+  %23 = low.reload %generated_edge_store_source_spill_spill_storage_4 : low.storage<private> -> reg<test.i32>
+  low.spill %23, %generated_edge_store_source_spill_spill_storage_2 : reg<test.i32>, low.storage<private>
   low.br ^loop(%n0: reg<test.i32>)
 ^exit:
-  %19 = low.reload %generated_edge_store_source_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
-  %21 = low.reload %generated_edge_store_source_spill_spill_storage_2 : low.storage<private> -> reg<test.i32>
-  return %a0, %19, %21
+  %24 = low.reload %generated_edge_store_source_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %25 = low.reload %generated_edge_store_source_spill_spill_storage_2 : low.storage<private> -> reg<test.i32>
+  return %a0, %24, %25
 }

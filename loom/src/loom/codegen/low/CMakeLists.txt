@@ -325,6 +325,7 @@ loom_cc_library(
   SRCS
     "function_requirements.c"
   DEPS
+    ::function
     ::representation_binding
     ::storage_layout
     iree::base
@@ -407,6 +408,7 @@ loom_cc_library(
   SRCS
     "storage_layout.c"
   DEPS
+    ::function
     iree::base
     iree::base::internal::arena
     loom::analysis::storage_layout
@@ -827,6 +829,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::diagnostics
+    ::function
     ::representation_binding
     ::storage_relation
     iree::base

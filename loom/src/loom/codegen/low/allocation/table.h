@@ -314,6 +314,9 @@ typedef struct loom_low_allocation_table_t {
   // Last entry live-in/resource declaration retained for body rewrite anchors.
   // NULL for an empty preamble; borrows the unchanged source declarations.
   const loom_op_t* entry_preamble_end;
+  // Last operation in the contiguous entry traffic prefix. NULL when ordinary
+  // traffic begins immediately; borrows the unchanged source operation.
+  const loom_op_t* entry_traffic_end;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
   // Final invocation-owned cells consumed by STORAGE assignments and moves.

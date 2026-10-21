@@ -489,10 +489,12 @@ loom_cc_library(
     iree::base
     iree::base::internal
     iree::base::internal::arena
+    loom::analysis::liveness
     loom::codegen::low::function
     loom::ir
     loom::ops::low
     loom::target::registers
+    loom::util::adaptive_sort
   PUBLIC
 )
 

@@ -191,6 +191,7 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
       loom_cfg_graph_build(module.get(), body, &arena, &table.cfg_graph));
   IREE_ASSERT_OK(loom_liveness_analyze_region(module.get(), body, &arena,
                                               &table.liveness));
+  IREE_ASSERT_OK(loom_liveness_retain_operation_index(&table.liveness, &arena));
   loom_low_allocation_materialization_result_t result = {};
   loom_low_allocation_materialization_options_t options = {};
   iree_host_size_t diagnostic_count = 0;

@@ -40,6 +40,9 @@ typedef struct loom_low_read_only_data_requirement_t {
 typedef struct loom_low_function_requirements_t {
   // Last entry live-in/resource declaration, or NULL for an empty preamble.
   const loom_op_t* entry_preamble_end;
+  // Last live-in/resource/spill in the contiguous entry traffic prefix, or
+  // NULL when ordinary traffic begins immediately.
+  const loom_op_t* entry_traffic_end;
   // Low resource declarations in function body order.
   const loom_op_t* const* resources;
   // Number of resource declarations.

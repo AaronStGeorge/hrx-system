@@ -438,10 +438,12 @@ loom_cc_library(
     deps = [
         ":assignment",
         ":table",
+        "//loom/src/loom/analysis:liveness",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",
+        "//loom/src/loom/util:adaptive_sort",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",

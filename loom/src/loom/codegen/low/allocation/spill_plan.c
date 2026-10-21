@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
+#include "loom/util/adaptive_sort.h"
 
 #define LOOM_LOW_ALLOCATION_SPILL_PLAN_MAX_NATURAL_ALIGNMENT 16u
 
@@ -171,6 +172,59 @@ typedef struct loom_low_spill_materialization_plan_builder_t {
   // Reused slice groups bounded by selected-value uses and body blocks.
   loom_low_spill_materialization_slice_group_t* slice_groups;
 } loom_low_spill_materialization_plan_builder_t;
+
+typedef struct loom_low_spill_materialization_instruction_sort_t {
+  // Retained instruction projection copied after sorting.
+  loom_low_spill_materialization_instruction_t instruction;
+  // Insertion class and order for instructions sharing one anchor.
+  uint32_t root_order;
+  // Order before the root instruction, or UINT32_MAX for the root itself.
+  uint32_t local_order;
+} loom_low_spill_materialization_instruction_sort_t;
+
+#define LOOM_LOW_SPILL_MATERIALIZATION_ORDINARY_ROOT_BIT (UINT32_C(1) << 31)
+
+static uint32_t loom_low_spill_materialization_instruction_point(
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_spill_materialization_instruction_t* instruction) {
+  const loom_liveness_operation_point_t* operation =
+      loom_liveness_operation_at(liveness, instruction->operation_index);
+  if (loom_low_spill_materialization_instruction_is_after(instruction)) {
+    return operation->end_point;
+  }
+  IREE_ASSERT_LT(operation->start_point, UINT32_MAX);
+  return operation->start_point + 1u;
+}
+
+static bool loom_low_spill_materialization_instruction_less(
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_spill_materialization_instruction_sort_t* lhs,
+    const loom_low_spill_materialization_instruction_sort_t* rhs) {
+  const uint32_t lhs_point = loom_low_spill_materialization_instruction_point(
+      liveness, &lhs->instruction);
+  const uint32_t rhs_point = loom_low_spill_materialization_instruction_point(
+      liveness, &rhs->instruction);
+  if (lhs_point != rhs_point) {
+    return lhs_point < rhs_point;
+  }
+  const bool lhs_after =
+      loom_low_spill_materialization_instruction_is_after(&lhs->instruction);
+  const bool rhs_after =
+      loom_low_spill_materialization_instruction_is_after(&rhs->instruction);
+  if (lhs_after != rhs_after) {
+    return !lhs_after;
+  }
+  if (lhs->root_order != rhs->root_order) {
+    return lhs->root_order < rhs->root_order;
+  }
+  return lhs->local_order < rhs->local_order;
+}
+
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT_OUTLINED_HEAP(
+    loom_low_spill_materialization_sort_instructions,
+    loom_low_spill_materialization_instruction_sort_t,
+    const loom_liveness_analysis_t*,
+    loom_low_spill_materialization_instruction_less)
 
 static loom_low_spill_materialization_value_ref_t
 loom_low_spill_materialization_original_value(loom_value_id_t value_id) {
@@ -675,7 +729,7 @@ static void loom_low_spill_materialization_append_reloads(
                     .target =
                         {
                             .kind =
-                                LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_OPERAND,
+                                LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE,
                             .owner.action_index = generated_use->action_index,
                         },
                 },
@@ -819,10 +873,214 @@ static void loom_low_spill_materialization_plan_one(
   }
 }
 
-static iree_status_t loom_low_spill_materialization_plan_copy(
+static uint32_t loom_low_spill_materialization_operation_index(
     const loom_low_spill_materialization_plan_builder_t* builder,
+    const loom_op_t* op) {
+  const uint32_t operation_index =
+      loom_liveness_operation_index_for_op(&builder->table->liveness, op);
+  IREE_ASSERT_NE(operation_index, UINT32_MAX);
+  return operation_index;
+}
+
+static const loom_op_t* loom_low_spill_materialization_target_source_op(
+    const loom_low_spill_materialization_target_t* target) {
+  switch (target->kind) {
+    case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_OPERATION_OPERAND:
+      return target->owner.operation;
+    case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_BRANCH_ARGUMENT:
+      return loom_block_const_last_op(target->owner.predecessor_block);
+    case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE:
+      return NULL;
+  }
+  IREE_ASSERT_UNREACHABLE("unknown spill materialization target kind");
+  return NULL;
+}
+
+static bool loom_low_spill_materialization_definition_is_entry_traffic(
+    const loom_low_spill_materialization_plan_builder_t* builder,
+    const loom_value_t* value) {
+  const loom_block_t* entry_block =
+      loom_region_const_entry_block(builder->body);
+  if (loom_value_is_block_arg(value)) {
+    return loom_value_def_block(value) == entry_block;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  return defining_op->parent_block == entry_block &&
+         loom_low_function_entry_preamble_op(defining_op);
+}
+
+static iree_status_t loom_low_spill_materialization_project_instructions(
+    loom_low_spill_materialization_plan_builder_t* builder,
+    iree_arena_allocator_t* arena,
+    loom_low_spill_materialization_instruction_t** out_instructions,
+    uint32_t* out_instruction_count) {
+  *out_instructions = NULL;
+  *out_instruction_count = 0;
+  if (builder->action_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_low_spill_materialization_instruction_sort_t* action_anchors = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &builder->scratch_arena, builder->action_count, sizeof(*action_anchors),
+      (void**)&action_anchors));
+  for (uint32_t i = 0; i < builder->action_count; ++i) {
+    action_anchors[i].instruction.operation_index = UINT32_MAX;
+  }
+  for (uint32_t i = 0; i < builder->action_count; ++i) {
+    const loom_low_spill_materialization_action_t* action =
+        &builder->actions[i];
+    uint32_t operation_index = UINT32_MAX;
+    uint32_t root_order = LOOM_LOW_SPILL_MATERIALIZATION_ORDINARY_ROOT_BIT | i;
+    uint32_t local_order = UINT32_MAX;
+    bool executes_after = false;
+    switch (action->kind) {
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_DEFINITION_STORE: {
+        const loom_low_allocation_spill_plan_t* spill_plan =
+            &builder->spill_plans[action->spill_plan_index];
+        const loom_value_t* value =
+            loom_module_value(builder->table->module, spill_plan->value_id);
+        if (loom_low_spill_materialization_definition_is_entry_traffic(builder,
+                                                                       value)) {
+          root_order = i;
+          if (builder->table->entry_traffic_end != NULL) {
+            operation_index = loom_low_spill_materialization_operation_index(
+                builder, builder->table->entry_traffic_end);
+            executes_after = true;
+          } else {
+            const loom_liveness_analysis_t* liveness =
+                &builder->table->liveness;
+            IREE_ASSERT_NE(liveness->block_count, 0u);
+            IREE_ASSERT_NE(liveness->blocks[0].operation_count, 0u);
+            operation_index = liveness->blocks[0].operation_start;
+          }
+        } else {
+          IREE_ASSERT(!loom_value_is_block_arg(value));
+          operation_index = loom_low_spill_materialization_operation_index(
+              builder, loom_value_def_op(value));
+          executes_after = true;
+          // Repeated fixed-anchor insertions execute in reverse
+          // transformation order.
+          root_order = LOOM_LOW_SPILL_MATERIALIZATION_ORDINARY_ROOT_BIT |
+                       (INT32_MAX - i);
+        }
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_EDGE_STORE:
+        operation_index = loom_low_spill_materialization_operation_index(
+            builder, loom_block_const_last_op(
+                         action->value.edge_store.predecessor_block));
+        break;
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD: {
+        const loom_low_spill_materialization_target_t* target =
+            &action->value.operand_reload.target;
+        if (target->kind ==
+            LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE) {
+          const uint32_t target_action_index = target->owner.action_index;
+          IREE_ASSERT_LT(target_action_index, i);
+          const loom_low_spill_materialization_instruction_sort_t*
+              target_anchor = &action_anchors[target_action_index];
+          IREE_ASSERT_NE(target_anchor->instruction.operation_index,
+                         UINT32_MAX);
+          operation_index = target_anchor->instruction.operation_index;
+          executes_after = loom_low_spill_materialization_instruction_is_after(
+              &target_anchor->instruction);
+          root_order = target_anchor->root_order;
+          local_order = i;
+        } else {
+          operation_index = loom_low_spill_materialization_operation_index(
+              builder, loom_low_spill_materialization_target_source_op(target));
+        }
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD:
+        operation_index = loom_low_spill_materialization_operation_index(
+            builder, action->value.narrow_slice_reload.slice_op);
+        break;
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD: {
+        const uint32_t target_start =
+            action->value.shared_slice_reload.target_start;
+        const uint32_t target_count =
+            action->value.shared_slice_reload.target_count;
+        IREE_ASSERT_NE(target_count, 0u);
+        IREE_ASSERT_LE((iree_host_size_t)target_start + target_count,
+                       builder->target_count);
+        uint32_t earliest_point = UINT32_MAX;
+        for (uint32_t j = 0; j < target_count; ++j) {
+          const loom_op_t* target_op =
+              loom_low_spill_materialization_target_source_op(
+                  &builder->targets[target_start + j]);
+          IREE_ASSERT_ARGUMENT(target_op);
+          const uint32_t target_operation_index =
+              loom_low_spill_materialization_operation_index(builder,
+                                                             target_op);
+          const loom_liveness_operation_point_t* target_operation =
+              loom_liveness_operation_at(&builder->table->liveness,
+                                         target_operation_index);
+          if (target_operation->start_point < earliest_point) {
+            earliest_point = target_operation->start_point;
+            operation_index = target_operation_index;
+          }
+        }
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BRANCH_ARGUMENT:
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BLOCK_ARGUMENT:
+        continue;
+    }
+    IREE_ASSERT_NE(operation_index, UINT32_MAX);
+    action_anchors[i] = (loom_low_spill_materialization_instruction_sort_t){
+        .instruction =
+            {
+                .operation_index = operation_index,
+                .action_index_and_after =
+                    i |
+                    (executes_after
+                         ? LOOM_LOW_SPILL_MATERIALIZATION_INSTRUCTION_AFTER_BIT
+                         : 0),
+            },
+        .root_order = root_order,
+        .local_order = local_order,
+    };
+  }
+
+  uint32_t instruction_count = 0;
+  for (uint32_t i = 0; i < builder->action_count; ++i) {
+    if (action_anchors[i].instruction.operation_index != UINT32_MAX) {
+      action_anchors[instruction_count++] = action_anchors[i];
+    }
+  }
+  uint64_t expected_instruction_count = 0;
+  for (uint32_t i = 0; i < builder->spill_plan_count; ++i) {
+    expected_instruction_count += builder->records[i].store_count;
+    expected_instruction_count += builder->records[i].reload_count;
+  }
+  IREE_ASSERT_EQ(instruction_count, expected_instruction_count);
+  loom_low_spill_materialization_sort_instructions(
+      &builder->table->liveness, action_anchors, instruction_count);
+
+  loom_low_spill_materialization_instruction_t* instructions = NULL;
+  if (instruction_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, instruction_count,
+                                                   sizeof(*instructions),
+                                                   (void**)&instructions));
+  }
+  for (uint32_t i = 0; i < instruction_count; ++i) {
+    instructions[i] = action_anchors[i].instruction;
+  }
+  *out_instructions = instructions;
+  *out_instruction_count = instruction_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_spill_materialization_plan_copy(
+    loom_low_spill_materialization_plan_builder_t* builder,
     iree_arena_allocator_t* arena,
     loom_low_spill_materialization_plan_t* out_plan) {
+  loom_low_spill_materialization_instruction_t* instructions = NULL;
+  uint32_t instruction_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_spill_materialization_project_instructions(
+      builder, arena, &instructions, &instruction_count));
   loom_low_spill_materialization_action_t* actions = NULL;
   if (builder->action_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -840,6 +1098,8 @@ static iree_status_t loom_low_spill_materialization_plan_copy(
   *out_plan = (loom_low_spill_materialization_plan_t){
       .actions = actions,
       .action_count = builder->action_count,
+      .instructions = instructions,
+      .instruction_count = instruction_count,
       .targets = targets,
       .target_count = builder->target_count,
       .records = builder->records,

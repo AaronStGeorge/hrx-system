@@ -1310,6 +1310,7 @@ loom_cc_library(
     "liveness_pressure.h"
   SRCS
     "liveness.c"
+    "liveness_operation_index.c"
     "liveness_pressure.c"
   DEPS
     ::liveness_dataflow

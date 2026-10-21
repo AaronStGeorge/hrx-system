@@ -284,12 +284,24 @@ func.def @ordered(%a: i32, %b: i32) -> (i32) {
   IREE_ASSERT_OK(loom_liveness_analyze_local_value_domain(
       &value_domain, order, &analysis_arena_, &analysis));
   loom_local_value_domain_release(&value_domain);
+  EXPECT_EQ(analysis.operation_indices_by_pointer, nullptr);
+  IREE_ASSERT_OK(
+      loom_liveness_retain_operation_index(&analysis, &analysis_arena_));
+  const uint32_t* retained_index = analysis.operation_indices_by_pointer;
+  ASSERT_NE(retained_index, nullptr);
+  IREE_ASSERT_OK(
+      loom_liveness_retain_operation_index(&analysis, &analysis_arena_));
+  EXPECT_EQ(analysis.operation_indices_by_pointer, retained_index);
+  EXPECT_EQ(loom_liveness_operation_index_for_op(&analysis, func.op),
+            UINT32_MAX);
 
   ASSERT_EQ(analysis.operation_count, IREE_ARRAYSIZE(ordered_ops));
   ASSERT_EQ(analysis.blocks[0].operation_start, 0u);
   ASSERT_EQ(analysis.blocks[0].operation_count, IREE_ARRAYSIZE(ordered_ops));
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(ordered_ops); ++i) {
     EXPECT_EQ(loom_liveness_operation_at(&analysis, i)->op, ordered_ops[i]);
+    EXPECT_EQ(loom_liveness_operation_index_for_op(&analysis, ordered_ops[i]),
+              i);
     EXPECT_EQ(loom_liveness_operation_at(&analysis, i)->start_point, i);
     EXPECT_EQ(loom_liveness_operation_at(&analysis, i)->end_point, i + 1u);
     for (uint16_t result_index = 0; result_index < ordered_ops[i]->result_count;
@@ -849,6 +861,11 @@ TEST_F(LivenessOperationStorageTest, ParentCompletionCrossesRowSegments) {
     EXPECT_EQ(row->end_point, i + 1u);
   }
   EXPECT_EQ(loom_liveness_operation_at(&analysis, 2049)->op, yield);
+  IREE_ASSERT_OK(
+      loom_liveness_retain_operation_index(&analysis, &result_arena_));
+  EXPECT_EQ(loom_liveness_operation_index_for_op(
+                &analysis, loom_liveness_operation_at(&analysis, 1024)->op),
+            1024u);
   const auto* return_row = loom_liveness_operation_at(&analysis, 2050);
   EXPECT_EQ(return_row->op, entry->last_op);
   EXPECT_EQ(return_row->parent_operation_index, UINT32_MAX);
