@@ -70,11 +70,13 @@ iree_status_t loom_serve_workspace_scope_allocate(
 iree_status_t loom_serve_workspace_scope_reserve(
     loom_serve_workspace_scope_t* scope, iree_host_size_t count);
 
-// Makes room for one capture and returns a retained current pool. Queue alloca
-// follows. On queue rejection, the caller releases the pool; on acceptance,
-// capture transfers that pool reference and retains the returned allocation.
+// Makes room for count captures and returns a retained current pool. Queue
+// alloca follows. On queue rejection, the caller releases the pool; on
+// acceptance, each capture transfers a pool reference and retains its returned
+// allocation. The caller retains additional pool references for a batch.
 iree_status_t loom_serve_workspace_scope_acquire(
-    loom_serve_workspace_scope_t* scope, iree_hal_pool_t** out_pool);
+    loom_serve_workspace_scope_t* scope, iree_host_size_t count,
+    iree_hal_pool_t** out_pool);
 void loom_serve_workspace_scope_capture(loom_serve_workspace_scope_t* scope,
                                         iree_hal_pool_t* pool,
                                         iree_hal_buffer_t* buffer);

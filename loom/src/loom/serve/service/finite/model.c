@@ -1024,15 +1024,14 @@ iree_status_t loom_serve_finite_model_submit(
   IREE_RETURN_IF_ERROR(loom_serve_execution_reserve_workspace(
       execution, iree_max(input.data_length, output_length),
       LOOM_SERVE_FINITE_BUFFER_ALIGNMENT));
-  iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0; i < 2 && iree_status_is_ok(status); ++i) {
-    const iree_hal_pool_reservation_request_t request = {
-        .allocation_size = i ? output_length : input.data_length,
-        .min_alignment = LOOM_SERVE_FINITE_BUFFER_ALIGNMENT,
-    };
-    status =
-        loom_serve_execution_alloca(execution, &request, &model->buffers[i]);
-  }
+  const iree_hal_pool_reservation_request_t requests[] = {
+      iree_hal_make_pool_reservation_request(
+          input.data_length, LOOM_SERVE_FINITE_BUFFER_ALIGNMENT),
+      iree_hal_make_pool_reservation_request(
+          output_length, LOOM_SERVE_FINITE_BUFFER_ALIGNMENT),
+  };
+  iree_status_t status = loom_serve_execution_alloca(
+      execution, IREE_ARRAYSIZE(requests), requests, model->buffers);
   uint64_t value = 0;
   if (iree_status_is_ok(status)) {
     const iree_hal_transfer_operation_t upload = {

@@ -1164,7 +1164,7 @@ static iree_status_t loom_serve_image_begin(loom_serve_image_model_t* model) {
       payload, 0, iree_vm_buffer_length(payload), &input));
   iree_hal_buffer_t* frame = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_execution_alloca(
-      model->execution, &model->invocation.storage, &frame));
+      model->execution, 1, &model->invocation.storage, &frame));
   iree_status_t status =
       iree_hal_buffer_subspan(frame, 0, model->output.data_length,
                               model->host_allocator, &model->invocation.output);

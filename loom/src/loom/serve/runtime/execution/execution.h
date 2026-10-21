@@ -66,19 +66,21 @@ iree_status_t loom_serve_execution_reserve_workspace(
     loom_serve_execution_t* execution, iree_device_size_t length,
     iree_device_size_t alignment);
 
-// Enqueues a private workspace allocation on the work timeline. The caller
-// owns the returned tracked view and orders its consumers through this domain.
+// Enqueues one all-or-nothing workspace allocation batch on the work timeline.
+// The caller owns each returned tracked view and orders its consumers through
+// this domain. Buffers required together at this boundary belong in one batch;
+// a capacity wait cannot hold only a prefix of that allocation transaction.
 // Work-only storage can enqueue execution_dealloca for early ordered reuse.
 // Storage escaping onto feedback or another consumer instead remains allocated
 // until its final queue/caller borrow retires. Release tracked views before
 // draining the domain. The shared workspace separately retains the original
-// root and source pool. A failed view allocation after accepted alloca leaves
-// no caller buffer, but the accepted timeline and allocation bookkeeping remain
-// protected.
+// roots and source pool. A failed view allocation after accepted alloca leaves
+// every output NULL, but the accepted timeline and allocation bookkeeping
+// remain protected. Count must be nonzero.
 iree_status_t loom_serve_execution_alloca(
-    loom_serve_execution_t* execution,
-    const iree_hal_pool_reservation_request_t* request,
-    iree_hal_buffer_t** out_buffer);
+    loom_serve_execution_t* execution, iree_host_size_t count,
+    const iree_hal_pool_reservation_request_t* requests,
+    iree_hal_buffer_t** out_buffers);
 
 // Enqueues a batch from caller-selected persistent storage on the work
 // timeline. The caller owns each returned buffer. The shared workspace captures

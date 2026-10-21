@@ -76,14 +76,14 @@ iree_status_t loom_serve_execution_reserve_workspace(
 }
 
 iree_status_t loom_serve_execution_alloca(
-    loom_serve_execution_t* execution,
-    const iree_hal_pool_reservation_request_t* request,
-    iree_hal_buffer_t** out_buffer) {
-  *out_buffer = NULL;
+    loom_serve_execution_t* execution, iree_host_size_t count,
+    const iree_hal_pool_reservation_request_t* requests,
+    iree_hal_buffer_t** out_buffers) {
+  memset(out_buffers, 0, count * sizeof(*out_buffers));
   iree_slim_mutex_lock(&execution->mutex);
   iree_hal_pool_t* pool = NULL;
   iree_status_t status =
-      loom_serve_workspace_scope_acquire(execution->scope, &pool);
+      loom_serve_workspace_scope_acquire(execution->scope, count, &pool);
   if (iree_status_is_ok(status) &&
       execution->work.submitted_value == IREE_HAL_SEMAPHORE_MAX_VALUE) {
     status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -96,18 +96,30 @@ iree_status_t loom_serve_execution_alloca(
                                              &next_value};
   if (iree_status_is_ok(status)) {
     status = iree_hal_queue_alloca(execution->binding.dispatch, waits, signals,
-                                   pool, 1, request, out_buffer);
+                                   pool, count, requests, out_buffers);
   }
   if (iree_status_is_ok(status)) {
     execution->work.submitted_value = next_value;
-    loom_serve_workspace_scope_capture(execution->scope, pool, *out_buffer);
-    status = loom_serve_retirement_track(&execution->consumers, out_buffer,
-                                         execution->host_allocator);
+    // Capture the complete accepted batch before wrapping caller views. Every
+    // raw root borrows its source pool independently of its siblings.
+    for (iree_host_size_t i = 0; i < count; ++i) {
+      if (i) {
+        iree_hal_pool_retain(pool);
+      }
+      loom_serve_workspace_scope_capture(execution->scope, pool,
+                                         out_buffers[i]);
+    }
+    for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
+      status = loom_serve_retirement_track(
+          &execution->consumers, &out_buffers[i], execution->host_allocator);
+    }
     if (!iree_status_is_ok(status)) {
-      // Alloca was accepted even if its model-view allocation failed. The
-      // shared scope keeps its original root and pool through queue retirement.
-      iree_hal_buffer_release(*out_buffer);
-      *out_buffer = NULL;
+      // Alloca was accepted even if a model-view allocation failed. The shared
+      // scope keeps every original root and pool through queue retirement.
+      for (iree_host_size_t i = 0; i < count; ++i) {
+        iree_hal_buffer_release(out_buffers[i]);
+        out_buffers[i] = NULL;
+      }
     }
   } else {
     iree_hal_pool_release(pool);

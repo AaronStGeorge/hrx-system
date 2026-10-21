@@ -178,7 +178,8 @@ class SnapshotLifetimeTest : public ResultTest,
     IREE_ASSERT_OK(
         loom_serve_execution_barrier(execution_, {1, &gate_, &value}));
     const auto request = iree_hal_make_pool_reservation_request(32, 16);
-    IREE_ASSERT_OK(loom_serve_execution_alloca(execution_, &request, &source_));
+    IREE_ASSERT_OK(
+        loom_serve_execution_alloca(execution_, 1, &request, &source_));
     const uint32_t pattern = 0x3F800000;
     const iree_hal_transfer_operation_t fill = {
         .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,

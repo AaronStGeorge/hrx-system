@@ -1701,8 +1701,8 @@ iree_status_t loom_serve_text_model_submit_epoch(
         .allocation_size = invocation_media->device_length,
         .min_alignment = LOOM_SERVE_TEXT_MEDIA_PACKET_FEATURE_ALIGNMENT,
     };
-    status =
-        loom_serve_execution_alloca(model->execution, &request, &dynamic_input);
+    status = loom_serve_execution_alloca(model->execution, 1, &request,
+                                         &dynamic_input);
   }
   iree_hal_buffer_t* device_input =
       dynamic_input ? dynamic_input : model->state.epoch.buffers[4];

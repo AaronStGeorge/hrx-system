@@ -868,7 +868,8 @@ static iree_status_t loom_serve_weight_allocate_staging(
       weights->device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, out_ready));
   iree_hal_pool_t* pool = NULL;
-  IREE_RETURN_IF_ERROR(loom_serve_workspace_scope_acquire(*out_scope, &pool));
+  IREE_RETURN_IF_ERROR(
+      loom_serve_workspace_scope_acquire(*out_scope, 1, &pool));
   uint64_t value = 1;
   const iree_hal_pool_reservation_request_t request =
       iree_hal_make_pool_reservation_request(length, alignment);

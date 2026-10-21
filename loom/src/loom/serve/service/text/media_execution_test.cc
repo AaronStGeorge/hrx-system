@@ -307,10 +307,10 @@ TEST_F(MediaExecutionTest,
   const auto metadata_request = iree_hal_make_pool_reservation_request(16, 16);
   const auto packet_request =
       iree_hal_make_pool_reservation_request(packet_.device_length, 16);
+  IREE_ASSERT_OK(loom_serve_execution_alloca(consumer_, 1, &metadata_request,
+                                             &buffers_[0]));
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(consumer_, &metadata_request, &buffers_[0]));
-  IREE_ASSERT_OK(
-      loom_serve_execution_alloca(consumer_, &packet_request, &buffers_[1]));
+      loom_serve_execution_alloca(consumer_, 1, &packet_request, &buffers_[1]));
   uint64_t value = 0;
   IREE_ASSERT_OK(loom_serve_text_media_epoch_enqueue(
       &packet_, consumer_,

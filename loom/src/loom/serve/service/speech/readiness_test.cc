@@ -327,7 +327,7 @@ class SpeechReadinessTest : public ::testing::Test {
       auto& invocation = *batch_[i];
       const auto reservation =
           iree_hal_make_pool_reservation_request(invocation.input.size(), 16);
-      status = loom_serve_execution_alloca(execution_, &reservation,
+      status = loom_serve_execution_alloca(execution_, 1, &reservation,
                                            &invocation.buffer);
       held |= invocation.block == held_block_;
       uploads[i] = {

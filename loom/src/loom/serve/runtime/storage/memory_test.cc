@@ -1229,7 +1229,7 @@ TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
   };
   for (int iteration = 0; iteration < 2; ++iteration) {
     IREE_ASSERT_OK(
-        loom_serve_execution_alloca(execution, &request, &workspace));
+        loom_serve_execution_alloca(execution, 1, &request, &workspace));
     RoundTrip(workspace, 0, 0x12345678);
     const auto before = loom_serve_device_memory_statistics(device);
     EXPECT_EQ(before.retained.committed_bytes, kSlabSize);

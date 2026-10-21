@@ -116,7 +116,7 @@ static iree_status_t loom_serve_module_execute(
         .min_alignment = stage->transient.minimum_alignment,
     };
     status =
-        loom_serve_execution_alloca(module->execution, &request, &workspace);
+        loom_serve_execution_alloca(module->execution, 1, &request, &workspace);
     if (iree_status_is_ok(status)) {
       bindings[stage->transient.binding_index] = (iree_hal_buffer_binding_t){
           workspace, 0, stage->transient.required_byte_length};
