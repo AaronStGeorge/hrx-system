@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/allocation_materialization.h"
 
+#include <vector>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -166,6 +168,21 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
   ASSERT_NE(early_interval, nullptr);
   ASSERT_NE(lane_interval, nullptr);
   ASSERT_NE(late_interval, nullptr);
+  std::vector<loom_value_ordinal_t> storage_value_order;
+  storage_value_order.reserve(table.liveness.value_count);
+  loom_value_ordinal_t wide_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  for (loom_value_ordinal_t i = 0; i < table.liveness.value_count; ++i) {
+    if (table.liveness.value_ids[i] == wide) {
+      wide_ordinal = i;
+    } else {
+      storage_value_order.push_back(i);
+    }
+  }
+  ASSERT_NE(wide_ordinal, LOOM_VALUE_ORDINAL_INVALID);
+  storage_value_order.push_back(wide_ordinal);
+  table.placement.value_count = table.liveness.value_count;
+  table.placement.storage_value_order = storage_value_order.data();
+  table.placement.storage_value_order_count = storage_value_order.size();
 
   const auto make_assignment = [](loom_value_id_t value_id,
                                   const loom_liveness_interval_t* interval,
@@ -204,11 +221,15 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
     };
   };
   loom_low_allocation_spill_plan_t spill_plans[] = {
-      make_spill_plan(wide, 0, 16, 16),
-      make_spill_plan(early, 1, 4, 4),
       make_spill_plan(lane, 2, 4, 4),
+      make_spill_plan(early, 1, 4, 4),
+      make_spill_plan(wide, 0, 16, 16),
       make_spill_plan(late, 3, 4, 4),
   };
+  // The retained source-before-users traversal makes the lane plan stale even
+  // though spill-decision order presents it first. Its unsupported slot space
+  // must not diagnose or reserve storage once exact traffic is known.
+  spill_plans[0].slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK;
   table.assignments = assignments;
   table.assignment_count = IREE_ARRAYSIZE(assignments);
   table.spill_plans = spill_plans;
@@ -238,13 +259,13 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
   EXPECT_EQ(result.reload_bytes, 12u);
   ASSERT_EQ(result.materialized_spill_count, 4u);
   ASSERT_NE(result.materialized_spills, nullptr);
-  EXPECT_EQ(result.materialized_spills[0].value_id, wide);
+  EXPECT_EQ(result.materialized_spills[2].value_id, wide);
   EXPECT_TRUE(iree_all_bits_set(
-      result.materialized_spills[0].flags,
+      result.materialized_spills[2].flags,
       LOOM_LOW_ALLOCATION_MATERIALIZED_SPILL_FLAG_VALUE_WAS_BLOCK_ARGUMENT));
-  EXPECT_EQ(result.materialized_spills[2].value_id, lane);
-  EXPECT_EQ(result.materialized_spills[2].store_count, 0u);
-  EXPECT_EQ(result.materialized_spills[2].reload_count, 0u);
+  EXPECT_EQ(result.materialized_spills[0].value_id, lane);
+  EXPECT_EQ(result.materialized_spills[0].store_count, 0u);
+  EXPECT_EQ(result.materialized_spills[0].reload_count, 0u);
 
   ASSERT_EQ(result.required_register_values.count, 6u);
   iree_host_size_t spill_source_count = 0;

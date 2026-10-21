@@ -269,13 +269,17 @@ static iree_status_t
 loom_low_allocation_validate_supported_spill_storage_spaces(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* spill_plans,
-    iree_host_size_t spill_plan_count,
+    const loom_low_spill_materialization_plan_t* materialization_plan,
     const loom_low_allocation_materialization_options_t* options,
     loom_low_allocation_materialization_result_t* result) {
   if (!options || !options->has_supported_storage_spaces) {
     return iree_ok_status();
   }
-  for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
+  for (iree_host_size_t i = 0; i < materialization_plan->record_count; ++i) {
+    if (!loom_low_spill_materialization_record_has_traffic(
+            &materialization_plan->records[i])) {
+      continue;
+    }
     const loom_low_allocation_spill_plan_t* plan = &spill_plans[i];
     const loom_storage_space_t storage_space =
         loom_low_allocation_storage_space_for_spill_slot(plan->slot_space);
@@ -1020,20 +1024,20 @@ iree_status_t loom_low_allocation_materialize_spills(
                             "materialized storage count overflow");
   }
 
+  loom_low_spill_materialization_plan_t materialization_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_low_spill_materialization_plan_build(
+      table, spill_plans, spill_plan_count, arena, &materialization_plan));
+  IREE_ASSERT_EQ(materialization_plan.record_count, spill_plan_count);
+
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_validate_supported_spill_storage_spaces(
-          table, spill_plans, spill_plan_count, options, &result));
+          table, spill_plans, &materialization_plan, options, &result));
   if (result.error_count != 0) {
     if (out_result) {
       *out_result = result;
     }
     return iree_ok_status();
   }
-
-  loom_low_spill_materialization_plan_t materialization_plan = {0};
-  IREE_RETURN_IF_ERROR(loom_low_spill_materialization_plan_build(
-      table, spill_plans, spill_plan_count, arena, &materialization_plan));
-  IREE_ASSERT_EQ(materialization_plan.record_count, spill_plan_count);
 
   loom_low_spill_materialization_traffic_plan_t traffic_plan = {0};
   if (options && options->plan_traffic != NULL) {

@@ -953,6 +953,34 @@ static void loom_low_spill_materialization_plan_one(
   }
 }
 
+static void loom_low_spill_materialization_plan_all(
+    loom_low_spill_materialization_plan_builder_t* builder) {
+  const loom_low_placement_table_t* placement = &builder->table->placement;
+  if (placement->storage_value_order_count == 0) {
+    for (uint32_t i = 0; i < builder->spill_plan_count; ++i) {
+      loom_low_spill_materialization_plan_one(builder, i);
+    }
+    return;
+  }
+
+  // Placement retains structural SSA storage topology in users-before-sources
+  // order. Visit it in reverse so a source plan can replace slice results
+  // before their now-stale plans observe the immutable source IR.
+  const loom_liveness_analysis_t* liveness = &builder->table->liveness;
+  IREE_ASSERT_EQ(placement->storage_value_order_count, liveness->value_count);
+  for (loom_value_ordinal_t cursor = placement->storage_value_order_count;
+       cursor > 0; --cursor) {
+    const loom_value_ordinal_t value_ordinal =
+        placement->storage_value_order[cursor - 1];
+    IREE_ASSERT_LT(value_ordinal, liveness->value_count);
+    uint32_t spill_plan_index = 0;
+    if (loom_low_spill_materialization_try_spill_plan_index(
+            builder, liveness->value_ids[value_ordinal], &spill_plan_index)) {
+      loom_low_spill_materialization_plan_one(builder, spill_plan_index);
+    }
+  }
+}
+
 static uint32_t loom_low_spill_materialization_operation_index(
     const loom_low_spill_materialization_plan_builder_t* builder,
     const loom_op_t* op) {
@@ -1281,9 +1309,7 @@ IREE_ATTRIBUTE_NOINLINE iree_status_t loom_low_spill_materialization_plan_build(
     }
   }
   if (iree_status_is_ok(status)) {
-    for (uint32_t i = 0; i < builder.spill_plan_count; ++i) {
-      loom_low_spill_materialization_plan_one(&builder, i);
-    }
+    loom_low_spill_materialization_plan_all(&builder);
   }
   if (iree_status_is_ok(status)) {
     status = loom_low_spill_materialization_plan_copy(&builder, arena, &plan);
