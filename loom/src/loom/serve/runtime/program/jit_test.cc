@@ -17,6 +17,7 @@
 #if defined(__linux__)
 #include "loom/serve/testing/stalled_stderr.h"
 #endif
+#include "loomc/iree.h"
 
 IREE_FLAG(string, invalid_sources, "", "Malformed source catalog.");
 
@@ -696,6 +697,34 @@ TEST_P(JitTest, CommandWithoutNativeRequests) {
 class JitReadinessTest : public JitTest {};
 
 TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
+  struct DeferredNatives {
+    // Shared executor preserving the catalog's worker ordinals.
+    loomc_task_sink_t target;
+    // The outer caller submits one parent before it can publish natives.
+    bool parent_submitted = false;
+    // Native tasks appended by that parent before its layout callback.
+    loomc_task_t* head = nullptr;
+    // Final queued task; ownership transfers after layout publication.
+    loomc_task_t* tail = nullptr;
+  } deferred{.target = loom_serve_jit_task_sink(jit_)};
+  const loomc_task_sink_t sink = {
+      .submit =
+          [](void* payload, loomc_task_t* task) {
+            auto* deferred = static_cast<DeferredNatives*>(payload);
+            if (!deferred->parent_submitted) {
+              deferred->parent_submitted = true;
+              return loomc_task_sink_submit(deferred->target, task);
+            }
+            if (deferred->tail) {
+              deferred->tail->next = task;
+            } else {
+              deferred->head = task;
+            }
+            deferred->tail = task;
+            return loomc_ok_status();
+          },
+      .user_data = &deferred,
+  };
   struct Completion {
     // Serializes the outer observer with both producer callbacks.
     std::mutex mutex;
@@ -703,8 +732,6 @@ TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
     std::condition_variable condition;
     // Borrowed immutable bytes owned by the eventual stage.
     const loom_cmd_program_t* program = nullptr;
-    // Test-controlled producer dependency, independent of the later job.
-    bool released = false;
     // Terminal publication relinquished this record.
     bool complete = false;
     // Owned terminal status, consumed by the outer observer.
@@ -723,16 +750,15 @@ TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
   };
   const loomc_config_options_t config = {
       nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
-  // Suspend one real producer at the layout handoff, leaving other workers
-  // free. The later independent job must finish before this dependency clears.
+  // Publish the real command layout while its native tasks remain queued.
+  // Neither the compiler nor its layout callback occupies a waiting worker.
   IREE_ASSERT_OK(loom_serve_jit_compile_async(
-      jit_, loom_serve_jit_task_sink(jit_), IREE_SV("advance"), &config,
+      jit_, sink, IREE_SV("advance"), &config,
       [](void* payload, const loom_cmd_program_t* program) {
         auto* result = static_cast<Completion*>(payload);
-        std::unique_lock<std::mutex> lock(result->mutex);
+        std::lock_guard<std::mutex> lock(result->mutex);
         result->program = program;
         result->condition.notify_one();
-        result->condition.wait(lock, [&] { return result->released; });
       },
       completed, &first));
   {
@@ -753,10 +779,19 @@ TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
   loom_serve_jit_report_snapshot(jit_, &snapshot);
   EXPECT_EQ(snapshot.commands, 1u);
   {
-    std::unique_lock<std::mutex> lock(first.mutex);
+    std::lock_guard<std::mutex> lock(first.mutex);
     EXPECT_FALSE(first.complete);
-    first.released = true;
-    first.condition.notify_one();
+  }
+  EXPECT_NE(deferred.head, nullptr);
+  while (deferred.head) {
+    auto* task = deferred.head;
+    deferred.head = task->next;
+    task->next = nullptr;
+    IREE_ASSERT_OK(
+        iree_status_from_loomc(loomc_task_sink_submit(deferred.target, task)));
+  }
+  {
+    std::unique_lock<std::mutex> lock(first.mutex);
     first.condition.wait(lock, [&] { return first.complete; });
   }
   EXPECT_EQ(first.program, loom_serve_jit_stage_program(first.stage));
@@ -766,7 +801,7 @@ TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
   EXPECT_EQ(compilation_.commands, 2u);
 }
 
-INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitReadinessTest, ::testing::Values(4));
+INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitReadinessTest, ::testing::Values(1));
 
 INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitTest, ::testing::Values(1, 4));
 
