@@ -139,7 +139,11 @@ else:
     from build_tools.devtools import ci_config
 
 from build_tools.ci import windows_diagnostics
-from build_tools.devtools import bazel_test_results, run_requirements
+from build_tools.devtools import (
+    bazel_profile_summary,
+    bazel_test_results,
+    run_requirements,
+)
 
 
 @dataclass(frozen=True)
@@ -157,6 +161,8 @@ class CiStep:
     env: tuple[tuple[str, str], ...] = ()
     # Metadata preflight that must succeed before executing a test command.
     requirement_audit: RequirementAudit | None = None
+    # Bazel execution profile summarized after this command completes.
+    bazel_profile: Path | None = None
     # Current-invocation Bazel test evidence staged after this command.
     test_results: bazel_test_results.BazelTestResultsCapture | None = None
 
@@ -1542,6 +1548,7 @@ def add_bazel_profiles(steps: list[CiStep], profile_dir: Path) -> list[CiStep]:
             replace(
                 step,
                 argv=step.argv[:4] + (f"--profile={profile_path}",) + step.argv[4:],
+                bazel_profile=profile_path,
             )
         )
     return profiled_steps
@@ -1674,6 +1681,21 @@ def audit_requirements(
     return 0
 
 
+def publish_bazel_profile(step: CiStep) -> None:
+    """Publishes the cost summary for a completed profiled Bazel phase."""
+    if step.bazel_profile is None:
+        return
+    summary = bazel_profile_summary.summarize(step.bazel_profile)
+    output_path = bazel_profile_summary.summary_path(step.bazel_profile)
+    bazel_profile_summary.write(summary, output_path)
+    print(bazel_profile_summary.render_console(summary, step.name), flush=True)
+    github_summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if github_summary_path:
+        with Path(github_summary_path).open("a", encoding="utf-8") as stream:
+            stream.write(bazel_profile_summary.render_markdown(summary, step.name))
+            stream.write("\n")
+
+
 def run_step(step: CiStep, verbose: bool) -> StepResult:
     print(f"[run] {step.name}", flush=True)
     if verbose or github_actions_enabled():
@@ -1713,6 +1735,13 @@ def run_step(step: CiStep, verbose: bool) -> StepResult:
         returncode = subprocess.run(
             step.argv, cwd=REPO_ROOT, env=environment
         ).returncode
+    if step.bazel_profile is not None:
+        try:
+            publish_bazel_profile(step)
+        except (bazel_profile_summary.BazelProfileSummaryError, OSError) as error:
+            print(f"[fail] Summarize Bazel profile: {error}", file=sys.stderr)
+            if returncode == 0:
+                returncode = 1
     if step.test_results is not None:
         try:
             output_count = bazel_test_results.stage(

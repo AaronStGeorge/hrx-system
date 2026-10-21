@@ -102,6 +102,7 @@ py_library(
     ],
     data = ["tsan.supp"],
     deps = [
+        ":bazel_profile_summary",
         ":bazel_test_results",
         ":command_line",
         ":run_requirements",
@@ -120,6 +121,7 @@ py_binary(
     ],
     data = ["tsan.supp"],
     deps = [
+        ":bazel_profile_summary",
         ":bazel_test_results",
         ":run_requirements",
         "//build_tools/ci:windows_diagnostics",
@@ -213,6 +215,7 @@ py_test(
     main = "ci_test.py",
     tags = _PRESUBMIT_TEST_TAGS,
     deps = [
+        ":bazel_profile_summary",
         ":bazel_test_results",
         ":run_requirements",
         "//build_tools/ci:windows_diagnostics",
