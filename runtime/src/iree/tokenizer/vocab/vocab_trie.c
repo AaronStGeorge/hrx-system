@@ -14,7 +14,7 @@
 // Memory usage is approximately 12 bytes per state (3 x int32_t arrays).
 //
 // Construction uses a two-phase approach:
-//   Phase 1: Build a temporary trie with arena-backed child arrays
+//   Phase 1: Build a temporary trie with intrusive sorted child lists
 //   Phase 2: Convert to double-array format via BFS
 //
 // Phase 1 is O(N * L) where N is token count and L is average length.
@@ -24,41 +24,27 @@
 
 #include <string.h>
 
-#include "iree/base/internal/arena.h"
-
 //===----------------------------------------------------------------------===//
 // Internal Types
 //===----------------------------------------------------------------------===//
 
-// Child edge during construction: (byte, node_index) pair.
-typedef struct iree_tokenizer_daac_child_t {
-  // Byte labeling this edge.
-  uint8_t byte;
-  // Destination index in the temporary node array.
-  uint32_t node_index;
-} iree_tokenizer_daac_child_t;
-
 // Temporary node used during construction.
-// Child arrays grow in a shared construction arena and are reclaimed together.
+// Child edges are intrusive sibling links, avoiding separate storage per node.
 typedef struct iree_tokenizer_daac_build_node_t {
   // Token ID if a word ends here, or -1 otherwise.
   int32_t token_id;
-  // Arena-owned children, sorted by byte.
-  iree_tokenizer_daac_child_t* children;
-  // Number of initialized children (0-256).
-  uint16_t child_count;
-  // Allocated child capacity.
-  uint16_t child_capacity;
+  // First child node index, or UINT32_MAX when this node is a leaf.
+  uint32_t first_child;
+  // Next child of the same parent, sorted by edge_byte, or UINT32_MAX.
+  uint32_t next_sibling;
+  // Byte labeling the incoming edge from this node's parent.
+  uint8_t edge_byte;
 } iree_tokenizer_daac_build_node_t;
 
 // Builder state for constructing DAAC from tokens.
 typedef struct iree_tokenizer_daac_builder_t {
   // Allocator for growable arrays and the final immutable trie.
   iree_allocator_t allocator;
-  // Shared backing for the small temporary child lists.
-  iree_arena_block_pool_t child_block_pool;
-  // Owns child lists, including old copies abandoned during growth.
-  iree_arena_allocator_t child_arena;
 
   // Temporary trie nodes, independently reallocated to release old copies.
   iree_tokenizer_daac_build_node_t* nodes;
@@ -66,6 +52,8 @@ typedef struct iree_tokenizer_daac_builder_t {
   iree_host_size_t node_count;
   // Allocated node capacity.
   iree_host_size_t node_capacity;
+  // Direct lookup for the root's frequently traversed byte fanout.
+  uint32_t root_children[256];
 
   // Transition base offsets under construction.
   int32_t* base;
@@ -91,8 +79,6 @@ typedef struct iree_tokenizer_daac_builder_t {
 static void iree_tokenizer_daac_builder_deinitialize(
     iree_tokenizer_daac_builder_t* builder) {
   IREE_TRACE_ZONE_BEGIN(z0);
-  iree_arena_deinitialize(&builder->child_arena);
-  iree_arena_block_pool_deinitialize(&builder->child_block_pool);
   iree_allocator_free(builder->allocator, builder->nodes);
   iree_allocator_free(builder->allocator, builder->base);
   iree_allocator_free(builder->allocator, builder->check);
@@ -129,9 +115,9 @@ static iree_status_t iree_tokenizer_daac_builder_allocate_node(
   uint32_t index = (uint32_t)builder->node_count++;
   iree_tokenizer_daac_build_node_t* node = &builder->nodes[index];
   node->token_id = -1;
-  node->children = NULL;
-  node->child_count = 0;
-  node->child_capacity = 0;
+  node->first_child = UINT32_MAX;
+  node->next_sibling = UINT32_MAX;
+  node->edge_byte = 0;
 
   *out_index = index;
   return iree_ok_status();
@@ -141,59 +127,28 @@ static iree_status_t iree_tokenizer_daac_builder_allocate_node(
 // Builder - Child Management
 //===----------------------------------------------------------------------===//
 
-// Ensures a node has capacity for at least one more child.
-static iree_status_t iree_tokenizer_daac_node_ensure_child_capacity(
-    iree_tokenizer_daac_build_node_t* node, iree_arena_allocator_t* arena) {
-  if (node->child_count < node->child_capacity) {
-    return iree_ok_status();
-  }
-  // Start small (4), double on growth. Max 256 children possible.
-  iree_host_size_t new_capacity =
-      node->child_capacity == 0 ? 4
-                                : (iree_host_size_t)node->child_capacity * 2;
-  if (new_capacity > 256) {
-    new_capacity = 256;
-  }
-
-  iree_tokenizer_daac_child_t* new_children = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, new_capacity, sizeof(*new_children), (void**)&new_children));
-
-  if (node->child_count > 0) {
-    memcpy(new_children, node->children,
-           node->child_count * sizeof(*new_children));
-  }
-  node->children = new_children;
-  node->child_capacity = (uint16_t)new_capacity;
-  return iree_ok_status();
-}
-
-// Binary search for a child with the given byte.
-// Returns the child's node_index if found, or UINT32_MAX if not found.
-// Sets *out_insert_pos to the sorted insertion position.
+// Finds a child with the given byte in the parent's sorted sibling list.
+// Returns the child index if found, or UINT32_MAX if absent. out_previous is
+// the sibling after which a new child belongs, or UINT32_MAX at the front.
 static uint32_t iree_tokenizer_daac_find_child(
-    const iree_tokenizer_daac_build_node_t* node, uint8_t byte,
-    uint16_t* out_insert_pos) {
-  if (node->child_count == 0) {
-    *out_insert_pos = 0;
-    return UINT32_MAX;
+    const iree_tokenizer_daac_builder_t* builder, uint32_t parent_index,
+    uint8_t byte, uint32_t* out_previous) {
+  if (parent_index == 0 && builder->root_children[byte] != UINT32_MAX) {
+    *out_previous = UINT32_MAX;
+    return builder->root_children[byte];
   }
-
-  int32_t low = 0;
-  int32_t high = (int32_t)node->child_count - 1;
-  while (low <= high) {
-    int32_t mid = low + (high - low) / 2;
-    uint8_t mid_byte = node->children[mid].byte;
-    if (mid_byte == byte) {
-      *out_insert_pos = (uint16_t)mid;
-      return node->children[mid].node_index;
-    } else if (mid_byte < byte) {
-      low = mid + 1;
-    } else {
-      high = mid - 1;
+  uint32_t previous = UINT32_MAX;
+  uint32_t child = builder->nodes[parent_index].first_child;
+  while (child != UINT32_MAX) {
+    const iree_tokenizer_daac_build_node_t* child_node = &builder->nodes[child];
+    if (child_node->edge_byte >= byte) {
+      *out_previous = previous;
+      return child_node->edge_byte == byte ? child : UINT32_MAX;
     }
+    previous = child;
+    child = child_node->next_sibling;
   }
-  *out_insert_pos = (uint16_t)low;
+  *out_previous = previous;
   return UINT32_MAX;
 }
 
@@ -201,26 +156,27 @@ static uint32_t iree_tokenizer_daac_find_child(
 // Returns the index of the new child node.
 static iree_status_t iree_tokenizer_daac_add_child(
     iree_tokenizer_daac_builder_t* builder, uint32_t parent_index, uint8_t byte,
-    uint16_t insert_pos, uint32_t* out_child_index) {
+    uint32_t previous_sibling, uint32_t* out_child_index) {
   // Allocate the new child node first.
   uint32_t child_index = 0;
   IREE_RETURN_IF_ERROR(
       iree_tokenizer_daac_builder_allocate_node(builder, &child_index));
 
-  // Re-fetch parent pointer (may have moved during node allocation).
-  iree_tokenizer_daac_build_node_t* parent = &builder->nodes[parent_index];
-
-  // Ensure parent has space for one more child.
-  IREE_RETURN_IF_ERROR(iree_tokenizer_daac_node_ensure_child_capacity(
-      parent, &builder->child_arena));
-
-  // Insert at sorted position by shifting elements right.
-  for (uint16_t i = parent->child_count; i > insert_pos; --i) {
-    parent->children[i] = parent->children[i - 1];
+  iree_tokenizer_daac_build_node_t* child = &builder->nodes[child_index];
+  child->edge_byte = byte;
+  if (previous_sibling == UINT32_MAX) {
+    iree_tokenizer_daac_build_node_t* parent = &builder->nodes[parent_index];
+    child->next_sibling = parent->first_child;
+    parent->first_child = child_index;
+  } else {
+    iree_tokenizer_daac_build_node_t* previous =
+        &builder->nodes[previous_sibling];
+    child->next_sibling = previous->next_sibling;
+    previous->next_sibling = child_index;
   }
-  parent->children[insert_pos].byte = byte;
-  parent->children[insert_pos].node_index = child_index;
-  parent->child_count++;
+  if (parent_index == 0) {
+    builder->root_children[byte] = child_index;
+  }
 
   *out_child_index = child_index;
   return iree_ok_status();
@@ -240,9 +196,9 @@ static iree_status_t iree_tokenizer_daac_builder_insert(
     uint8_t byte = string[i];
 
     // Look for existing child with this byte.
-    uint16_t insert_pos = 0;
+    uint32_t previous_sibling = UINT32_MAX;
     uint32_t child_index = iree_tokenizer_daac_find_child(
-        &builder->nodes[node_index], byte, &insert_pos);
+        builder, node_index, byte, &previous_sibling);
 
     if (child_index != UINT32_MAX) {
       // Child exists, follow it.
@@ -251,7 +207,7 @@ static iree_status_t iree_tokenizer_daac_builder_insert(
       // Create new child.
       uint32_t new_child = 0;
       IREE_RETURN_IF_ERROR(iree_tokenizer_daac_add_child(
-          builder, node_index, byte, insert_pos, &new_child));
+          builder, node_index, byte, previous_sibling, &new_child));
       node_index = new_child;
     }
   }
@@ -333,13 +289,17 @@ static iree_status_t iree_tokenizer_daac_builder_grow_arrays(
 static iree_status_t iree_tokenizer_daac_builder_find_base(
     iree_tokenizer_daac_builder_t* builder,
     const iree_tokenizer_daac_build_node_t* node, int32_t* out_base) {
-  if (node->child_count == 0) {
+  if (node->first_child == UINT32_MAX) {
     *out_base = 0;
     return iree_ok_status();
   }
 
-  uint8_t first_byte = node->children[0].byte;
-  uint8_t last_byte = node->children[node->child_count - 1].byte;
+  const uint8_t first_byte = builder->nodes[node->first_child].edge_byte;
+  uint32_t last_child = node->first_child;
+  while (builder->nodes[last_child].next_sibling != UINT32_MAX) {
+    last_child = builder->nodes[last_child].next_sibling;
+  }
+  const uint8_t last_byte = builder->nodes[last_child].edge_byte;
 
   // Start searching from next_check_pos, adjusted for first child byte.
   // base_candidate must be >= 1.
@@ -360,8 +320,9 @@ static iree_status_t iree_tokenizer_daac_builder_find_base(
 
     // Check if all children fit without collision.
     bool fits = true;
-    for (uint16_t i = 0; i < node->child_count; ++i) {
-      iree_host_size_t slot = base_candidate + node->children[i].byte;
+    uint32_t child = node->first_child;
+    while (child != UINT32_MAX) {
+      iree_host_size_t slot = base_candidate + builder->nodes[child].edge_byte;
       if (builder->check[slot] != -1) {
         fits = false;
         // Update next_check_pos hint: we know slots up to here might be full.
@@ -370,6 +331,7 @@ static iree_status_t iree_tokenizer_daac_builder_find_base(
         }
         break;
       }
+      child = builder->nodes[child].next_sibling;
     }
 
     if (fits) {
@@ -439,7 +401,7 @@ static iree_status_t iree_tokenizer_daac_builder_to_array(
     iree_tokenizer_daac_bfs_entry_t entry = queue[queue_head++];
     const iree_tokenizer_daac_build_node_t* node =
         &builder->nodes[entry.build_node];
-    if (node->child_count == 0) {
+    if (node->first_child == UINT32_MAX) {
       continue;
     }
 
@@ -453,9 +415,9 @@ static iree_status_t iree_tokenizer_daac_builder_to_array(
     builder->base[entry.array_state] = base_value;
 
     // Allocate children.
-    for (uint16_t i = 0; i < node->child_count; ++i) {
-      uint8_t byte = node->children[i].byte;
-      uint32_t child_build_node = node->children[i].node_index;
+    uint32_t child_build_node = node->first_child;
+    while (child_build_node != UINT32_MAX) {
+      const uint8_t byte = builder->nodes[child_build_node].edge_byte;
       iree_host_size_t child_slot = (iree_host_size_t)base_value + byte;
 
       // Mark as occupied.
@@ -476,6 +438,7 @@ static iree_status_t iree_tokenizer_daac_builder_to_array(
       queue[queue_tail].build_node = child_build_node;
       queue[queue_tail].array_state = (int32_t)child_slot;
       ++queue_tail;
+      child_build_node = builder->nodes[child_build_node].next_sibling;
     }
   }
 
@@ -538,9 +501,7 @@ iree_status_t iree_tokenizer_vocab_trie_build(
   iree_tokenizer_daac_builder_t builder;
   memset(&builder, 0, sizeof(builder));
   builder.allocator = allocator;
-  iree_arena_block_pool_initialize(/*total_block_size=*/64 * 1024, allocator,
-                                   &builder.child_block_pool);
-  iree_arena_initialize(&builder.child_block_pool, &builder.child_arena);
+  memset(builder.root_children, 0xFF, sizeof(builder.root_children));
 
   // Allocate root node.
   uint32_t root_index = 0;
