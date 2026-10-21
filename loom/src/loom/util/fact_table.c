@@ -699,21 +699,26 @@ iree_status_t loom_value_fact_table_get_or_build_cfg_region(
   return iree_ok_status();
 }
 
-iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
-                                           loom_value_id_t value_id,
-                                           loom_value_facts_t facts) {
-  IREE_ASSERT_NE(facts.known_divisor, 0);
+iree_status_t loom_value_fact_table_touch(loom_value_fact_table_t* table,
+                                          loom_value_id_t value_id) {
   IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_range(
       table, value_id, (iree_host_size_t)value_id + 1));
   const iree_host_size_t index = value_id - table->first_value_id;
-  uint64_t touched_bit = UINT64_C(1) << (index % 64);
-  if (table->entries[index].known_divisor == 0 &&
-      !(table->touched_bits[index / 64] & touched_bit)) {
+  const uint64_t touched_bit = UINT64_C(1) << (index % 64);
+  if (!(table->touched_bits[index / 64] & touched_bit)) {
     IREE_RETURN_IF_ERROR(
         loom_value_fact_table_append_touched_value(table, value_id));
     table->touched_bits[index / 64] |= touched_bit;
   }
-  table->entries[index] = facts;
+  return iree_ok_status();
+}
+
+iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
+                                           loom_value_id_t value_id,
+                                           loom_value_facts_t facts) {
+  IREE_ASSERT_NE(facts.known_divisor, 0);
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_touch(table, value_id));
+  table->entries[value_id - table->first_value_id] = facts;
   if ((iree_host_size_t)value_id + 1 > table->count) {
     table->count = (iree_host_size_t)value_id + 1;
   }
@@ -723,9 +728,7 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
 void loom_value_fact_table_undefine(loom_value_fact_table_t* table,
                                     loom_value_id_t value_id) {
   loom_value_fact_integer_relations_undefine(table, value_id);
-  if (table->layout_origins) {
-    loom_value_fact_table_clear_layout_strides(table, value_id);
-  }
+  loom_value_fact_table_clear_origins(table, value_id);
   if (table->vector_partitions) {
     loom_value_fact_table_clear_vector_partition(table, value_id);
   }
@@ -895,11 +898,6 @@ iree_status_t loom_value_fact_table_clone_values(
         loom_value_fact_table_query_identity(source, value_id), NULL));
     IREE_RETURN_IF_ERROR(loom_value_fact_integer_relations_clone_value(
         target, source, value_id));
-    if (source->layout_origins || target->layout_origins) {
-      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_layout_strides(
-          target, value_id,
-          loom_value_fact_table_query_layout_strides(source, value_id)));
-    }
     if (source->vector_partitions || target->vector_partitions) {
       IREE_RETURN_IF_ERROR(loom_value_fact_table_define_vector_partition(
           target, value_id,

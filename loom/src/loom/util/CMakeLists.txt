@@ -460,6 +460,13 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::ir
+    loom::ops::encoding
+    loom::ops::index
+    loom::ops::target
+    loom::ops::test
+    loom::ops::vector
+    loom::rewrite::rewriter
 )
 
 loom_cc_test(

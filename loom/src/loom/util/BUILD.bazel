@@ -409,6 +409,13 @@ loom_cc_test(
     srcs = ["fact_origin_test.cc"],
     deps = [
         ":fact_table",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

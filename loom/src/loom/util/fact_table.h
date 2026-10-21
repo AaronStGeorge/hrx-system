@@ -162,7 +162,8 @@ struct loom_value_fact_table_t {
   // Scope membership bits indexed relative to first_value_id, retained while
   // a cyclic solve undefines entries.
   uint64_t* touched_bits;
-  // Value IDs touched in the scope, including temporarily undefined entries.
+  // Values with numeric facts or direct-origin storage in the scope,
+  // including temporarily undefined entries.
   loom_value_id_t* touched_values;
   // Number of populated entries in touched_values.
   iree_host_size_t touched_count;
@@ -173,6 +174,8 @@ struct loom_value_fact_table_t {
   uint16_t result_type_kind_bits;
   // Context object passed to op-specific fact inference callbacks.
   loom_fact_context_t context;
+  // Stack-owned ordinary-result publication, active only during inference.
+  loom_value_fact_origin_publication_t* origin_publication;
 
   // Immutable scope inputs supplied by a surrounding analysis. Opaque result
   // definitions consult these instead of discarding call-boundary summaries.
@@ -259,12 +262,6 @@ struct loom_value_fact_table_t {
     loom_value_fact_uniform_element_origin_t* entries;
     // Value-ID range covered by the direct entries.
     loom_value_fact_range_t range;
-    // Aggregate value IDs with origins defined in the current populated scope.
-    loom_value_id_t* touched_values;
-    // Number of populated entries in touched_values.
-    iree_host_size_t touched_count;
-    // Allocated touched_values entry count.
-    iree_host_size_t touched_capacity;
   } uniform_element_origins;
 
   // Static logical-lane origins keyed by aggregate value ID. An entry with
@@ -274,12 +271,6 @@ struct loom_value_fact_table_t {
     loom_value_fact_static_lane_origin_t* entries;
     // Value-ID range covered by the direct entries.
     loom_value_fact_range_t range;
-    // Aggregate value IDs with origins defined in the current populated scope.
-    loom_value_id_t* touched_values;
-    // Number of populated entries in touched_values.
-    iree_host_size_t touched_count;
-    // Allocated touched_values entry count.
-    iree_host_size_t touched_capacity;
   } static_lane_origins;
 
   // Exact logical-lane value origins keyed by aggregate value ID. This is
@@ -290,7 +281,7 @@ struct loom_value_fact_table_t {
   struct {
     // Sparse entries sorted by aggregate value ID.
     loom_value_fact_exact_lane_origin_entry_t* entries;
-    // Number of defined entries in the current populated scope.
+    // Retained slots in the scope, including withdrawn proofs.
     iree_host_size_t count;
     // Allocated sparse entry count retained across populated scopes.
     iree_host_size_t capacity;
@@ -303,12 +294,6 @@ struct loom_value_fact_table_t {
     loom_value_fact_uniform_scale_origin_t* entries;
     // Value-ID range covered by the direct entries.
     loom_value_fact_range_t range;
-    // Aggregate value IDs with origins defined in the current populated scope.
-    loom_value_id_t* touched_values;
-    // Number of populated entries in touched_values.
-    iree_host_size_t touched_count;
-    // Allocated touched_values entry count.
-    iree_host_size_t touched_capacity;
   } uniform_scale_origins;
 
   // Contextual query origins keyed by SSA value ID. Dense entries contain
@@ -326,7 +311,7 @@ struct loom_value_fact_table_t {
     iree_host_size_t touched_count;
     // Allocated touched_values entry count.
     iree_host_size_t touched_capacity;
-    // Sparse structured origins referenced by entries.
+    // One descriptor per retained value; ANY marks a withdrawn proof.
     loom_value_fact_contextual_query_origin_t* origins;
     // Number of populated sparse origins in the current scope.
     iree_host_size_t origin_count;
@@ -385,6 +370,13 @@ struct loom_value_fact_table_t {
       // Allocated frame count, reused until the scope is cleared.
       iree_host_size_t capacity;
     } regions;
+    // Family publication marks for the current ordinary operation.
+    struct {
+      // One family bitset per result ordinal, reused between operations.
+      uint8_t* values;
+      // Allocated result count, grown only for larger operations.
+      iree_host_size_t capacity;
+    } origins;
     // Value ID scratch buffer state.
     struct {
       // Scratch value IDs used by transforms that materialize replacements.
@@ -448,6 +440,12 @@ iree_status_t loom_value_fact_table_reserve(loom_value_fact_table_t* table,
 // arena should reset that arena after this call. Direct-address, touched-value,
 // and oversized extension-entry storage remain allocated for reuse.
 void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table);
+
+// Retains unique scope membership without defining numeric facts. Direct-origin
+// setters use this so withdrawal and republication cannot duplicate cleanup
+// work.
+iree_status_t loom_value_fact_table_touch(loom_value_fact_table_t* table,
+                                          loom_value_id_t value_id);
 
 // Returns true when |value_id| has explicitly defined facts in |table|.
 static inline bool loom_value_fact_table_has_entry(

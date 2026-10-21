@@ -2960,6 +2960,24 @@ iree_status_t loom_vector_deinterleave_facts(
                                                  IREE_ARRAYSIZE(results));
   }
 
+  // Lane provenance is independent of whether either numeric lane summary
+  // can be computed. Publish both outputs before those summaries can stop.
+  if (axis == 0 && loom_type_rank(source_type) == 1) {
+    iree_status_t status = iree_ok_status();
+    for (uint16_t result_index = 0;
+         result_index < IREE_ARRAYSIZE(results) && iree_status_is_ok(status);
+         ++result_index) {
+      status = loom_value_fact_table_define_static_lane_origin(
+          context->table, results[result_index],
+          (loom_value_fact_static_lane_origin_t){
+              .source_value_id = source,
+              .source_lane_offset = result_index,
+              .source_lane_stride = 2,
+          });
+    }
+    IREE_RETURN_IF_ERROR(status);
+  }
+
   for (uint16_t result_index = 0; result_index < IREE_ARRAYSIZE(results);
        ++result_index) {
     loom_type_t result_type =
@@ -2968,15 +2986,6 @@ iree_status_t loom_vector_deinterleave_facts(
     if (loom_type_rank(result_type) != loom_type_rank(source_type)) {
       return loom_vector_make_unknown_result_facts(result_facts,
                                                    IREE_ARRAYSIZE(results));
-    }
-    if (axis == 0 && loom_type_rank(source_type) == 1) {
-      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_static_lane_origin(
-          context->table, results[result_index],
-          (loom_value_fact_static_lane_origin_t){
-              .source_value_id = source,
-              .source_lane_offset = result_index,
-              .source_lane_stride = 2,
-          }));
     }
     if (!loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
         result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
@@ -3635,25 +3644,6 @@ static iree_status_t loom_vector_try_define_select_same_lane_origin(
   return iree_ok_status();
 }
 
-static iree_status_t loom_vector_try_define_uniform_scale_origin(
-    loom_fact_context_t* context, const loom_module_t* module,
-    loom_value_id_t result, loom_value_id_t source, loom_value_id_t scale) {
-  if (context == NULL || context->table == NULL || module == NULL) {
-    return iree_ok_status();
-  }
-  loom_value_id_t scalar_scale = LOOM_VALUE_ID_INVALID;
-  if (!loom_value_fact_table_query_uniform_element_origin(
-          context->table, module, scale, &scalar_scale)) {
-    return iree_ok_status();
-  }
-  return loom_value_fact_table_define_uniform_scale_origin(
-      context->table, result,
-      (loom_value_fact_uniform_scale_origin_t){
-          .source_value_id = source,
-          .scale_value_id = scalar_scale,
-      });
-}
-
 iree_status_t loom_vector_mulf_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,
@@ -3665,11 +3655,22 @@ iree_status_t loom_vector_mulf_facts(loom_fact_context_t* context,
       op->instance_flags));
   const loom_value_id_t lhs = loom_vector_mulf_lhs(op);
   const loom_value_id_t rhs = loom_vector_mulf_rhs(op);
-  const loom_value_id_t result = loom_vector_mulf_result(op);
-  IREE_RETURN_IF_ERROR(loom_vector_try_define_uniform_scale_origin(
-      context, module, result, lhs, rhs));
-  return loom_vector_try_define_uniform_scale_origin(context, module, result,
-                                                     rhs, lhs);
+  loom_value_id_t source = rhs;
+  loom_value_id_t scalar_scale = LOOM_VALUE_ID_INVALID;
+  if (!loom_value_fact_table_query_uniform_element_origin(
+          context->table, module, lhs, &scalar_scale)) {
+    source = lhs;
+    if (!loom_value_fact_table_query_uniform_element_origin(
+            context->table, module, rhs, &scalar_scale)) {
+      return iree_ok_status();
+    }
+  }
+  return loom_value_fact_table_define_uniform_scale_origin(
+      context->table, loom_vector_mulf_result(op),
+      (loom_value_fact_uniform_scale_origin_t){
+          .source_value_id = source,
+          .scale_value_id = scalar_scale,
+      });
 }
 
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_divf_facts, loom_vector_div_f32,
