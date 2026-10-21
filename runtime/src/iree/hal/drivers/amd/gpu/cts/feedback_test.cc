@@ -21,6 +21,9 @@ namespace {
 class GpuFeedbackTest : public GpuNativeTest {
  protected:
   void SetUp() override {
+    IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_, UINT64_MAX,
+                                             AMDF_NATIVE_LIFETIME_PROCESS));
+    memory_gate_.RequireCodeUpload();
     GpuNativeTest::SetUp();
     if (HasFatalFailure() || IsSkipped()) {
       return;
@@ -107,6 +110,8 @@ class GpuFeedbackTest : public GpuNativeTest {
     }
     IREE_ASSERT_OK(iree_hal_command_buffer_end(*out_recording));
   }
+  // Configuration patching uses staging before real shader execution.
+  NativeMemoryGate memory_gate_;
   // Real Loom artifact compiled for this native device family.
   iree_const_byte_span_t artifact_ = {};
   // Public reports observed on the completion worker.

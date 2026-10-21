@@ -265,13 +265,9 @@ static iree_status_t iree_hal_amd_driver_create_gpu_device(
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_allocate(
       fabric, &endpoint->id, create_params->event_sink, host_allocator,
       &context));
-  iree_status_t status = iree_hal_amd_gpu_device_create(
+  return iree_hal_amd_gpu_device_create(
       context, iree_make_cstring_view(endpoint->name), &options, create_params,
       host_allocator, out_device);
-  if (!iree_status_is_ok(status)) {
-    iree_hal_amd_gpu_context_free(context);
-  }
-  return status;
 }
 
 static iree_status_t iree_hal_amd_driver_create_device_by_id(

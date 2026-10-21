@@ -58,6 +58,7 @@ iree_runtime_cc_library(
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     visibility = ["//runtime/src/iree/hal/drivers/amd:__subpackages__"],
     deps = [
+        ":code",
         ":completion",
         ":context",
         ":executable",
@@ -94,12 +95,51 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "code",
+    srcs = ["code.c"],
+    hdrs = ["code.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":context",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd:status",
+        "//runtime/src/iree/hal/drivers/amd/fabric:memory",
+        "//runtime/src/iree/hal/drivers/amd/fabric:memory_transition",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/sdma:queue",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "code_test",
+    srcs = ["code_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":code",
+        ":context",
+        ":publication",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal/drivers/amd/fabric",
+        "//runtime/src/iree/hal/drivers/amd/fabric:memory",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/sdma:queue",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "executable",
     srcs = ["executable.c"],
     hdrs = ["executable.h"],
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     visibility = ["//runtime/src/iree/hal/drivers/amd/gpu:__subpackages__"],
     deps = [
+        ":code",
         ":context",
         ":feedback",
         ":kernarg",

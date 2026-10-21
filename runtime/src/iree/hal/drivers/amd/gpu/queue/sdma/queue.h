@@ -31,7 +31,8 @@ amdf_queue_publication_modes_t iree_hal_amd_gpu_sdma_queue_publication_modes(
 
 // One ready copy with already-resolved addresses and visibility effects.
 // The pipeline owns this record and both operands through completion. A copy
-// never exceeds MAX_COPY_LENGTH; longer file ranges are pipelined in slots.
+// never exceeds MAX_COPY_LENGTH; callers split longer ranges into bounded
+// copies and choose their own pipelining depth.
 #define IREE_HAL_AMD_GPU_SDMA_MAX_COPY_LENGTH (UINT32_C(64) << 20)
 typedef struct iree_hal_amd_gpu_sdma_copy_t {
   // Intrusive publication ownership, reusable only after completion.
@@ -54,9 +55,9 @@ typedef struct iree_hal_amd_gpu_sdma_copy_t {
   void* user_data;
 } iree_hal_amd_gpu_sdma_copy_t;
 
-// Cold constructor for a file engine's explicitly selected transfer queue.
-// All command and completion storage is provisioned here. The device installs
-// the returned publication/completion sources before accepting file requests.
+// Cold constructor for a device's explicitly selected transfer queue. All
+// command and completion storage is provisioned here. The device installs
+// the returned publication/completion sources before submitting copies.
 // No HAL device reference, worker, or payload staging allocation is acquired.
 iree_status_t iree_hal_amd_gpu_sdma_queue_allocate(
     iree_hal_amd_gpu_context_t* context, uint32_t family_ordinal,
@@ -84,7 +85,7 @@ iree_hal_amd_gpu_completion_source_t
 iree_hal_amd_gpu_sdma_queue_completion_source(
     iree_hal_amd_gpu_sdma_queue_t* queue);
 
-// Cold query after the file engine has joined its operation producers.
+// Cold query after the device has joined its copy producers.
 bool iree_hal_amd_gpu_sdma_queue_is_idle(iree_hal_amd_gpu_sdma_queue_t* queue);
 
 // Joins the final notification tail and releases native storage. Called after

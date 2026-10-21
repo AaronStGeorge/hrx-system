@@ -12,79 +12,6 @@
 static_assert(sizeof(iree_hal_amd_gpu_pm4_program_queue_t) <= 32,
               "two publisher candidates must fit in one cache line");
 
-static iree_status_t iree_hal_amd_gpu_pm4_program_select_memory(
-    iree_hal_amd_gpu_pm4_program_pool_t* pool, amdf_memory_scope_t* scope,
-    uint32_t native_family_ordinal, bool upload, bool* out_found,
-    iree_hal_amd_fabric_memory_options_t* out_options) {
-  *out_found = false;
-  amdf_memory_scope_info_t info = {
-      .type = AMDF_STRUCTURE_TYPE_MEMORY_SCOPE_INFO,
-      .structure_size = sizeof(info),
-  };
-  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      pool->context->api->memory_scope_query_info(scope, &info),
-      "query resident program scope"));
-  if (!upload && info.kind != AMDF_MEMORY_SCOPE_KIND_LOCAL) {
-    return iree_ok_status();
-  }
-  for (uint32_t i = 0; i < info.memory_profile_count; ++i) {
-    amdf_memory_profile_t profile = {
-        .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE,
-        .structure_size = sizeof(profile),
-    };
-    amdf_memory_access_capabilities_t access = {
-        .type = AMDF_STRUCTURE_TYPE_MEMORY_ACCESS_CAPABILITIES,
-        .structure_size = sizeof(access),
-    };
-    amdf_status_t status =
-        pool->context->api->memory_scope_query_device_profile(
-            scope, i, 1, &pool->access, &profile, &access);
-    if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-        status, "qualify resident program profile"));
-    if (!iree_all_bits_set(profile.roles, AMDF_MEMORY_PROFILE_ROLE_CREATE) ||
-        (!upload && !iree_all_bits_set(profile.supported_flags,
-                                       AMDF_MEMORY_FLAG_DEVICE_LOCAL))) {
-      continue;
-    }
-    bool mapped =
-        iree_all_bits_set(profile.roles, AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) &&
-        iree_all_bits_set(profile.supported_flags,
-                          AMDF_MEMORY_FLAG_HOST_VISIBLE) &&
-        iree_all_bits_set(profile.host_mapping.supported_access,
-                          AMDF_MEMORY_MAP_FLAG_WRITE);
-    iree_hal_amd_fabric_memory_options_t options = {
-        .scope = scope,
-        .profile = profile,
-        .access_count = 1,
-        .accesses = &pool->access,
-        .required_flags = (mapped ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
-                          (upload ? 0 : AMDF_MEMORY_FLAG_DEVICE_LOCAL),
-        .host_access = mapped ? AMDF_MEMORY_MAP_FLAG_WRITE : 0,
-    };
-    if (mapped) {
-      // A CPU aperture alone does not qualify publication to command fetch.
-      // Keep local placement when that edge is unavailable and initialize the
-      // resident bytes through the ordinary device-side upload instead.
-      IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_query_host_publication(
-          pool->context->api, &options, 0, native_family_ordinal, &mapped));
-      if (!mapped) {
-        options.required_flags &= ~AMDF_MEMORY_FLAG_HOST_VISIBLE;
-        options.host_access = 0;
-      }
-    }
-    if (upload && !mapped) {
-      continue;
-    }
-    *out_options = options;
-    *out_found = true;
-    break;
-  }
-  return iree_ok_status();
-}
-
 iree_status_t iree_hal_amd_gpu_pm4_program_pool_initialize(
     iree_hal_amd_gpu_context_t* context, uint32_t native_family_ordinal,
     uint32_t queue_count, bool chain, iree_allocator_t host_allocator,
@@ -106,21 +33,9 @@ iree_status_t iree_hal_amd_gpu_pm4_program_pool_initialize(
       .chain = chain,
   };
   iree_slim_mutex_initialize(&out_pool->registry_mutex);
-  bool found = false;
-  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_program_select_memory(
-      out_pool, context->fabric->system_scope, native_family_ordinal, true,
-      &found, &out_pool->upload));
-  if (!found) {
-    return iree_make_status(IREE_STATUS_UNAVAILABLE,
-                            "GPU has no host-visible cached program profile");
-  }
-  out_pool->resident = out_pool->upload;
-  found = false;
-  for (uint32_t i = 0; i < context->memory_scope_count && !found; ++i) {
-    IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_program_select_memory(
-        out_pool, context->memory_scopes[i], native_family_ordinal, false,
-        &found, &out_pool->resident));
-  }
+  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_query_program_memory(
+      context, native_family_ordinal, &out_pool->access, &out_pool->upload,
+      &out_pool->resident));
   iree_hal_amd_gpu_gfxip_version_t gfxip = {
       context->target_info.gfx_ip.major, context->target_info.gfx_ip.minor,
       context->target_info.gfx_ip.stepping};
@@ -133,21 +48,13 @@ iree_status_t iree_hal_amd_gpu_pm4_program_pool_initialize(
   const uint64_t blit_offset = iree_align_uint64(fixup_code.data_length, 256);
   const uint64_t byte_length =
       blit_offset + iree_align_uint64(blit_code.data_length, 256) + 256;
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = &out_pool->upload,
-      .byte_length = byte_length,
-      .alignment = 256};
-  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_acquire_memory_sync(
-      context, 1, &request, &out_pool->code));
-  memset(out_pool->code.contents.data, 0, byte_length);
-  memcpy(out_pool->code.contents.data, fixup_code.data, fixup_code.data_length);
-  memcpy(out_pool->code.contents.data + blit_offset, blit_code.data,
-         blit_code.data_length);
-  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      context->api->host_mapping_cache_control(out_pool->code.mapping,
-                                               AMDF_HOST_CACHE_OPERATION_FLUSH,
-                                               0, byte_length),
-      "publish resident program builtins"));
+  iree_byte_span_t contents;
+  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_code_allocate(
+      context, &out_pool->resident, &out_pool->upload, byte_length, 256,
+      host_allocator, &out_pool->code, &out_pool->code_upload, &contents));
+  memset(contents.data, 0, byte_length);
+  memcpy(contents.data, fixup_code.data, fixup_code.data_length);
+  memcpy(contents.data + blit_offset, blit_code.data, blit_code.data_length);
   uint64_t address = 0;
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       context->api->memory_query_address(out_pool->code.handle, 0,
@@ -158,8 +65,12 @@ iree_status_t iree_hal_amd_gpu_pm4_program_pool_initialize(
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_launch_initialize(
       gfxip, format_features, &fixup_kernel, address, &out_pool->fixup));
   blit_kernel.entry_offset = blit_offset;
-  return iree_hal_amd_gpu_pm4_launch_initialize(
-      gfxip, format_features, &blit_kernel, address, &out_pool->blit);
+  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_launch_initialize(
+      gfxip, format_features, &blit_kernel, address, &out_pool->blit));
+  return out_pool->code_upload ? iree_ok_status()
+                               : iree_hal_amd_gpu_code_publish(
+                                     context, NULL, 0, native_family_ordinal,
+                                     &out_pool->code, &out_pool->code_upload);
 }
 
 void iree_hal_amd_gpu_pm4_program_pool_trim(
@@ -178,6 +89,7 @@ void iree_hal_amd_gpu_pm4_program_pool_deinitialize(
     return;
   }
   IREE_ASSERT(!pool->head);
+  iree_hal_amd_gpu_code_upload_free(pool->context, pool->code_upload);
   iree_hal_amd_gpu_context_release_memory_sync(pool->context, 1, &pool->code);
   iree_slim_mutex_deinitialize(&pool->registry_mutex);
   pool->context = NULL;

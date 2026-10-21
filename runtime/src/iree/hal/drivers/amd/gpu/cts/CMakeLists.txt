@@ -474,6 +474,7 @@ iree_cc_test(
   NAME
     native_test
   SRCS
+    "dispatch_test.cc"
     "native_test.cc"
   DEPS
     ::test_device
@@ -521,9 +522,13 @@ iree_cc_library(
     iree::base
     iree::hal
     iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::gpu::code
+    iree::hal::drivers::amd::gpu::completion
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::device
+    iree::hal::drivers::amd::gpu::publication
     iree::hal::drivers::amd::gpu::queue::pm4::queue
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
     iree::hal::drivers::amd::status
     iree::testing::gtest
   TESTONLY

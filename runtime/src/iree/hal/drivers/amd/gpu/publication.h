@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-// Device construction admits up to 256 execution queues, one file-copy queue,
+// Device construction admits up to 256 execution queues, one transfer queue,
 // and allocation and mapping result sources. Five words represent the complete
 // ready set without a source walk.
 #define IREE_HAL_AMD_GPU_PUBLICATION_MAX_SOURCES 259

@@ -17,6 +17,7 @@
 
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/util/proactor_pool.h"
+#include "iree/hal/drivers/amd/gpu/code.h"
 #include "iree/hal/drivers/amd/gpu/device.h"
 #include "iree/testing/gtest.h"
 
@@ -70,6 +71,9 @@ class NativeMemoryGate {
     amdf_memory_info_t last_allocation = {};
   };
 
+  // Removes host publication for local code without changing native backing.
+  void RequireCodeUpload() { require_code_upload_ = true; }
+
   MemoryUsage ResetPeak();
   MemoryUsage QueryUsage();
   MemoryUsage WaitForBytes(uint64_t byte_count);
@@ -97,6 +101,10 @@ class NativeMemoryGate {
       amdf_memory_profile_t* out_profile,
       amdf_memory_access_capabilities_t* out_access_capabilities);
 
+  static amdf_status_t AMDF_CALL QueryProfilePair(
+      amdf_memory_scope_t* scope, const amdf_memory_profile_pair_query_t* query,
+      amdf_memory_pair_info_t* out_info);
+
   static amdf_status_t AMDF_CALL CreateMemory(
       amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
       amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info);
@@ -111,6 +119,8 @@ class NativeMemoryGate {
   amdf_api_t forwarding_api_ = {};
   // Maximum backing size advertised and accepted by this native dependency.
   uint64_t maximum_byte_length_ = UINT64_MAX;
+  // Exercise staged loading even on a device with a usable CPU aperture.
+  bool require_code_upload_ = false;
   // Serial fixture identity required by the native ABI's context-free table.
   inline static NativeMemoryGate* active_ = nullptr;
   // One-shot hold consumed by the next native backing acquisition.
@@ -142,6 +152,16 @@ class GpuNativeTest : public ::testing::Test {
   void Create(iree_hal_device_runtime_feature_flags_t runtime_features = 0);
 
   void CreateSemaphore(iree_hal_semaphore_t** out_semaphore);
+
+  // Native ring/control backing is separate from device-local program storage.
+  void SelectControlMemory(amdf_memory_device_access_t* access,
+                           iree_hal_amd_fabric_memory_options_t* policy);
+
+  // Raw packet fixtures publish through the production transfer owner before
+  // entering programs; HAL device tests use their device-owned transfer queue.
+  void PublishCode(uint32_t compute_family_ordinal,
+                   iree_hal_amd_fabric_memory_t* memory,
+                   iree_hal_amd_gpu_code_upload_t** upload);
 
   // Independent native discovery ownership, released after device cleanup.
   iree_hal_amd_fabric_t* fabric_ = nullptr;

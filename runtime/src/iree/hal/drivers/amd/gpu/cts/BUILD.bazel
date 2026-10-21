@@ -277,7 +277,10 @@ iree_runtime_cc_benchmark(
 
 iree_runtime_cc_test(
     name = "native_test",
-    srcs = ["native_test.cc"],
+    srcs = [
+        "dispatch_test.cc",
+        "native_test.cc",
+    ],
     target_compatible_with = select({
         "//runtime/config/hal:driver_amd": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -319,9 +322,13 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/drivers/amd/fabric",
+        "//runtime/src/iree/hal/drivers/amd/gpu:code",
+        "//runtime/src/iree/hal/drivers/amd/gpu:completion",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
         "//runtime/src/iree/hal/drivers/amd/gpu:device",
+        "//runtime/src/iree/hal/drivers/amd/gpu:publication",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue/pm4:queue",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/sdma:queue",
         "//runtime/src/iree/testing:gtest",
     ],
 )

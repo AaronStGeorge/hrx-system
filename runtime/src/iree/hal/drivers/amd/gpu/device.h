@@ -80,9 +80,9 @@ void iree_hal_amd_gpu_device_options_initialize(
 // Creates a refcounted HAL device with provisioned queues, one completion
 // worker and one deferred publisher. Blocking allocation uses the fabric's
 // shared NUMA allocation owner; file I/O uses its proactor. Pools remain
-// explicit. Success transfers the unique context and returns one device
-// reference. Failure leaves out_device NULL and the context with the caller.
-// Failed native rollback latches context cleanup before returning an error.
+// explicit. Consumes the unique context on every outcome. Success returns one
+// device reference; failure leaves out_device NULL. Host cleanup is joined
+// unless a native stop wake fails; native rollback failure preserves ownership.
 //
 // Families, queues, and resources borrow their parent device. The final device
 // release closes admission and transfers cleanup to its completion worker;

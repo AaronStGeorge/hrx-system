@@ -9,7 +9,7 @@
 
 #include "iree/hal/drivers/amd/fabric/asan.h"
 #include "iree/hal/drivers/amd/fabric/memory.h"
-#include "iree/hal/drivers/amd/gpu/context.h"
+#include "iree/hal/drivers/amd/gpu/code.h"
 #include "iree/hal/drivers/amd/gpu/feedback.h"
 #include "iree/hal/drivers/amd/gpu/kernarg.h"
 #include "iree/hal/drivers/amd/gpu/profile.h"
@@ -28,9 +28,18 @@ typedef struct iree_hal_amd_gpu_executable_options_t {
   // Native family ordinal; its command protocol is independent of target ISA.
   uint32_t native_family_ordinal;
   // Qualified owned backing with read/write/execute access for context->device
-  // at native access ordinal zero, plus a writable persistent host view. The
-  // selected scope determines physical placement; this loader picks no pool.
+  // at native access ordinal zero. Host visibility is optional; placement is
+  // always device-local. The loader never substitutes host backing.
   const iree_hal_amd_fabric_memory_options_t* memory;
+  // Upload resources borrowed through image construction only.
+  struct {
+    // Host-visible initialization backing, used only without a local host view.
+    const iree_hal_amd_fabric_memory_options_t* memory;
+    // Existing transfer owner with live publication and completion sources.
+    iree_hal_amd_gpu_sdma_queue_t* queue;
+    // Native family accepting the upload copies.
+    uint32_t family_ordinal;
+  } upload;
   // Group-local placement guarantee established with the native memory policy.
   iree_hal_pool_placement_t placement;
   // Borrowed device capacity notification, live through global buffer uses.

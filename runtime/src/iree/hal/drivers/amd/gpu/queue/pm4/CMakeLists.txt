@@ -658,6 +658,7 @@ iree_cc_library(
     iree::base::internal
     iree::base::threading
     iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::code
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::status
   PUBLIC

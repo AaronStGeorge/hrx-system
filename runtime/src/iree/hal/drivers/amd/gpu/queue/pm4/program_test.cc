@@ -183,7 +183,9 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<LocalHostView> {
           profile->roles = AMDF_MEMORY_PROFILE_ROLE_CREATE |
                            (mapped ? AMDF_MEMORY_PROFILE_ROLE_HOST_MAP : 0);
           profile->supported_flags =
-              (scope->local ? AMDF_MEMORY_FLAG_DEVICE_LOCAL : 0) |
+              (scope->local || scope->owner->unified_
+                   ? AMDF_MEMORY_FLAG_DEVICE_LOCAL
+                   : 0) |
               (mapped ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0);
           profile->host_mapping.supported_access =
               mapped ? AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE
@@ -326,6 +328,9 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<LocalHostView> {
     iree_hal_amd_fabric_release(fabric_);
   }
 
+  // Pool preparation retains builtin code and any pending initialization span.
+  uint32_t BuiltinMemoryCount() const { return pool_.code_upload ? 2u : 1u; }
+
   void Record(iree_hal_amd_gpu_pm4_program_t* program) {
     IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_program_initialize(&pool_, 256, 4096,
                                                            16, program));
@@ -432,6 +437,8 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<LocalHostView> {
   amdf_queue_family_info_t family_ = {};
   // System upload scope.
   Scope system_ = {this, false};
+  // Owned SYSTEM storage also satisfies local placement on a unified device.
+  bool unified_ = false;
   // Physical-local program scope.
   Scope local_ = {this, true};
   // Context-owned native scope handle array.
@@ -460,6 +467,25 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<LocalHostView> {
   std::binary_semaphore* free_resume_ = nullptr;
 };
 
+TEST_P(ProgramLifetimeTest, QualifiedUnifiedStorageIsResident) {
+  context_.memory_scope_count = 0;
+  unified_ = true;
+  iree_hal_amd_fabric_memory_options_t upload = {}, resident = {};
+  IREE_ASSERT_OK(iree_hal_amd_gpu_context_query_program_memory(
+      &context_, 0, &pool_.access, &upload, &resident));
+  EXPECT_EQ(resident.scope, fabric_->system_scope);
+  EXPECT_NE(resident.required_flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL, 0u);
+  EXPECT_NE(resident.host_access, 0u);
+}
+
+TEST_P(ProgramLifetimeTest, UploadAvailabilityDoesNotPromiseLocalPlacement) {
+  context_.memory_scope_count = 0;
+  iree_hal_amd_fabric_memory_options_t upload = {}, resident = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
+                        iree_hal_amd_gpu_context_query_program_memory(
+                            &context_, 0, &pool_.access, &upload, &resident));
+}
+
 TEST_P(ProgramLifetimeTest, LastReleaseReturnsBeforeHeldNativeFree) {
   auto* program = new iree_hal_amd_gpu_pm4_program_t{};
   ASSERT_NO_FATAL_FAILURE(Record(program));
@@ -476,10 +502,11 @@ TEST_P(ProgramLifetimeTest, LastReleaseReturnsBeforeHeldNativeFree) {
   delete program;
   EXPECT_EQ(pool_.head, nullptr);
   entered.acquire();
-  EXPECT_EQ(live_count_, PublishesLocalWrites() ? 2u : 3u);
+  EXPECT_EQ(live_count_,
+            BuiltinMemoryCount() + (PublishesLocalWrites() ? 1u : 2u));
   resume.release();
   iree_hal_amd_gpu_context_join_memory(&context_);
-  EXPECT_EQ(live_count_, 1u);
+  EXPECT_EQ(live_count_, BuiltinMemoryCount());
   EXPECT_EQ(release_thread_, allocation_thread_);
 }
 
@@ -579,7 +606,7 @@ TEST_P(ProgramLifetimeTest, TrimReclaimsOnlyIdleClonesAndCompletedUpload) {
   EXPECT_EQ(program.queues[1].preferred, initial);
   EXPECT_EQ(program.upload, nullptr);
   iree_hal_amd_gpu_context_join_memory(&context_);
-  EXPECT_EQ(live_count_, 2u);
+  EXPECT_EQ(live_count_, BuiltinMemoryCount() + 1u);
   iree_hal_amd_gpu_pm4_program_deinitialize(&program);
 }
 
@@ -594,7 +621,7 @@ TEST_P(ProgramLifetimeTest, PartialConstructionReleasesItsAcquiredOwners) {
                               &pool_, 256, 4096, 16, &program));
     iree_hal_amd_gpu_pm4_program_deinitialize(&program);
     iree_hal_amd_gpu_context_join_memory(&context_);
-    EXPECT_EQ(live_count_, 1u);
+    EXPECT_EQ(live_count_, BuiltinMemoryCount());
     EXPECT_EQ(pool_.head, nullptr);
   }
 }
@@ -732,7 +759,7 @@ TEST_P(ProgramLifetimeTest, CancelledBorrowCanRequireMoreInstancesThanQueues) {
   }
   iree_hal_amd_gpu_pm4_program_pool_trim(&pool_);
   iree_hal_amd_gpu_context_join_memory(&context_);
-  EXPECT_EQ(live_count_, 2u);
+  EXPECT_EQ(live_count_, BuiltinMemoryCount() + 1u);
   EXPECT_EQ(iree_hal_amd_gpu_pm4_program_source(&program).address,
             first->address);
   for (uint32_t i = 1; i < program.capacity; ++i) {

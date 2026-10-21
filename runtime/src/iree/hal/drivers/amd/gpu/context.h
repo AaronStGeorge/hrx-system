@@ -98,6 +98,17 @@ iree_status_t iree_hal_amd_gpu_context_allocate(
 iree_status_t iree_hal_amd_gpu_context_prepare_memory(
     iree_hal_amd_gpu_context_t* context, uint32_t node_id);
 
+// Captures immutable placement for executable/program bytes. Upload permits a
+// host mapping; resident requires device-local storage, including qualified
+// shared DRAM on unified devices. Output policies borrow access and native
+// scopes through their use. This cold query allocates no backing and is
+// independent of packet protocol.
+iree_status_t iree_hal_amd_gpu_context_query_program_memory(
+    iree_hal_amd_gpu_context_t* context, uint32_t native_family_ordinal,
+    const amdf_memory_device_access_t* access,
+    iree_hal_amd_fabric_memory_options_t* out_upload,
+    iree_hal_amd_fabric_memory_options_t* out_resident);
+
 // Acquisition storage embedded in the owner being prepared. Completion may
 // reclaim or reuse this descriptor; the context join outlives that callback.
 typedef struct iree_hal_amd_gpu_memory_acquire_t {

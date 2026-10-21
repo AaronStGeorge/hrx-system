@@ -126,7 +126,7 @@ struct NativeMemory {
     info->alignment = self.request.minimum_alignment;
     info->native_allocation_byte_length = self.bytes.size();
     info->native_allocation_granularity = 4096;
-    info->flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
+    info->flags = self.request.required_flags;
     return AMDF_STATUS_OK;
   }
   static amdf_status_t AMDF_CALL QueryAccess(amdf_memory_t* memory,
@@ -312,6 +312,8 @@ class ExecutableTest : public ::testing::TestWithParam<size_t> {
     memory_.profile.allocation.maximum_byte_length = UINT64_MAX;
     memory_.access_count = 1;
     memory_.accesses = &access_;
+    memory_.required_flags =
+        AMDF_MEMORY_FLAG_DEVICE_LOCAL | AMDF_MEMORY_FLAG_HOST_VISIBLE;
     memory_.host_access =
         AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
     options_ = {

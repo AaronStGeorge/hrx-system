@@ -360,6 +360,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/drivers/amd/fabric:memory",
+        "//runtime/src/iree/hal/drivers/amd/gpu:code",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
     ],
 )

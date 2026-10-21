@@ -23,7 +23,9 @@ class GpuAsanTest : public GpuNativeTest,
                     public ::testing::WithParamInterface<bool> {
  protected:
   void SetUp() override {
-    IREE_ASSERT_OK(NativeMemoryGate::AcquireProcessFabric(&fabric_));
+    IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_, UINT64_MAX,
+                                             AMDF_NATIVE_LIFETIME_PROCESS));
+    memory_gate_.RequireCodeUpload();
     GpuNativeTest::SetUp();
     if (HasFatalFailure() || IsSkipped()) {
       return;
@@ -147,6 +149,8 @@ class GpuAsanTest : public GpuNativeTest,
     return observation.sanitizer.asan;
   }
 
+  // Force configuration patching through staging before real shader execution.
+  NativeMemoryGate memory_gate_;
   // Explicit source shared by owned and imported buffers.
   iree_hal_pool_t* pool_ = nullptr;
   // Shader-readable device address slot fixed during pool construction.

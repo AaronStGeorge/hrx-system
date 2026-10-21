@@ -119,10 +119,11 @@ class NativeQueue {
         &tracker_));
     auto params = iree_hal_device_create_params_default();
     params.proactor_pool = proactors_;
-    IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_device_create(
-        context_, IREE_SV("PM4 queue benchmark"), &options, &params,
-        iree_allocator_t{this, Allocate}, &device_));
+    auto* context = context_;
     context_ = nullptr;
+    IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_device_create(
+        context, IREE_SV("PM4 queue benchmark"), &options, &params,
+        iree_allocator_t{this, Allocate}, &device_));
     armed_.store(true);
     IREE_RETURN_IF_ERROR(iree_hal_device_group_create_from_device(
         device_, tracker_, iree_allocator_system(), &group_));

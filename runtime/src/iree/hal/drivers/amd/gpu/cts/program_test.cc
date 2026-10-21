@@ -65,6 +65,9 @@ class GpuProgramTest : public GpuNativeTest {
     IREE_ASSERT_OK(iree_hal_amd_gpu_context_prepare_memory(context_, 0));
     IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_program_pool_initialize(
         context_, family, 3, kernel_, iree_allocator_system(), &pool_));
+    ASSERT_NO_FATAL_FAILURE(
+        PublishCode(family, &pool_.code, &pool_.code_upload));
+    EXPECT_NE(pool_.code.info.flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL, 0u);
     for (auto& queue : queues_native_) {
       if (kernel_) {
         IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_kmq_storage_allocate(
@@ -122,63 +125,6 @@ class GpuProgramTest : public GpuNativeTest {
                                               context_->event_sink, &control_);
     }
     GpuNativeTest::TearDown();
-  }
-
-  void SelectControlMemory(amdf_memory_device_access_t* access,
-                           iree_hal_amd_fabric_memory_options_t* policy) {
-    *access = {
-        .device = context_->device,
-        .requirements =
-            {
-                .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE |
-                          AMDF_MEMORY_ACCESS_EXECUTE,
-                .flags = AMDF_MEMORY_FLAG_DEVICE_ADDRESS |
-                         AMDF_MEMORY_FLAG_HOST_COHERENT |
-                         AMDF_MEMORY_FLAG_QUEUE_STORAGE,
-                .address_kinds = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU,
-            },
-    };
-    amdf_memory_scope_info_t info = {
-        .type = AMDF_STRUCTURE_TYPE_MEMORY_SCOPE_INFO,
-        .structure_size = sizeof(info),
-    };
-    IREE_ASSERT_OK(IREE_HAL_AMD_STATUS_FROM_AMDF(
-        context_->api->memory_scope_query_info(context_->fabric->system_scope,
-                                               &info),
-        "query system storage"));
-    for (uint32_t i = 0; i < info.memory_profile_count; ++i) {
-      amdf_memory_profile_t profile = {
-          .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE,
-          .structure_size = sizeof(profile),
-      };
-      amdf_memory_access_capabilities_t capabilities = {
-          .type = AMDF_STRUCTURE_TYPE_MEMORY_ACCESS_CAPABILITIES,
-          .structure_size = sizeof(capabilities),
-      };
-      const auto status = context_->api->memory_scope_query_device_profile(
-          context_->fabric->system_scope, i, 1, access, &profile,
-          &capabilities);
-      if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
-        continue;
-      }
-      IREE_ASSERT_OK(
-          IREE_HAL_AMD_STATUS_FROM_AMDF(status, "qualify program storage"));
-      if (iree_all_bits_set(profile.roles,
-                            AMDF_MEMORY_PROFILE_ROLE_CREATE |
-                                AMDF_MEMORY_PROFILE_ROLE_HOST_MAP)) {
-        *policy = {
-            .scope = context_->fabric->system_scope,
-            .profile = profile,
-            .access_count = 1,
-            .accesses = access,
-            .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
-            .host_access =
-                AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
-        };
-        return;
-      }
-    }
-    FAIL() << "No admitted host control profile";
   }
 
   void Allocate(const iree_hal_amd_fabric_memory_options_t& policy,

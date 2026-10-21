@@ -9,7 +9,7 @@
 
 #include "iree/base/threading/mutex.h"
 #include "iree/hal/drivers/amd/fabric/memory.h"
-#include "iree/hal/drivers/amd/gpu/context.h"
+#include "iree/hal/drivers/amd/gpu/code.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/barrier.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/blit.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/fixup.h"
@@ -32,12 +32,14 @@ typedef struct iree_hal_amd_gpu_pm4_program_pool_t {
   iree_allocator_t host_allocator;
   // Persistent access requirements borrowed by both native policies.
   amdf_memory_device_access_t access;
-  // Cached host-visible upload and immutable builtin instruction placement.
+  // Cached host-visible initialization storage.
   iree_hal_amd_fabric_memory_options_t upload;
-  // Physical-local placement when advertised, otherwise cached system memory.
+  // Qualified device-local storage, including shared DRAM on unified devices.
   iree_hal_amd_fabric_memory_options_t resident;
   // Owned instruction bytes shared by every recording and invocation.
   iree_hal_amd_fabric_memory_t code;
+  // Optional builtin initialization backing, retired before device publication.
+  iree_hal_amd_gpu_code_upload_t* code_upload;
   // Prepared parallel relocation kernel.
   iree_hal_amd_gpu_pm4_launch_t fixup;
   // Prepared dynamic-extent copy/fill kernel.

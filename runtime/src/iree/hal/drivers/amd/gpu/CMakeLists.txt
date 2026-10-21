@@ -46,6 +46,7 @@ iree_cc_library(
   SRCS
     "device.c"
   DEPS
+    ::code
     ::completion
     ::context
     ::executable
@@ -85,12 +86,57 @@ endif()
 if(AMDF_BUILD)
 iree_cc_library(
   NAME
+    code
+  HDRS
+    "code.h"
+  SRCS
+    "code.c"
+  DEPS
+    ::context
+    amdf::headers
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::fabric::memory_transition
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    code_test
+  SRCS
+    "code_test.cc"
+  DEPS
+    ::code
+    ::context
+    ::publication
+    amdf::headers
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
     executable
   HDRS
     "executable.h"
   SRCS
     "executable.c"
   DEPS
+    ::code
     ::context
     ::feedback
     ::kernarg

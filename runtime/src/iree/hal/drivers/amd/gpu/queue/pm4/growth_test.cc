@@ -451,8 +451,9 @@ class ProgramGrowthTest : public GrowthTest {
            amdf_memory_access_capabilities_t*) {
           profile->roles = AMDF_MEMORY_PROFILE_ROLE_CREATE |
                            AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
-          profile->supported_flags =
-              AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_HOST_COHERENT;
+          profile->supported_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE |
+                                     AMDF_MEMORY_FLAG_HOST_COHERENT |
+                                     AMDF_MEMORY_FLAG_DEVICE_LOCAL;
           profile->host_mapping.supported_access =
               AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
           profile->allocation.minimum_alignment = 256;

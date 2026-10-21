@@ -464,3 +464,104 @@ iree_status_t iree_hal_amd_gpu_context_allocate(
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
+
+static iree_status_t iree_hal_amd_gpu_context_select_program_memory(
+    iree_hal_amd_gpu_context_t* context,
+    const amdf_memory_device_access_t* requirements, amdf_memory_scope_t* scope,
+    uint32_t native_family_ordinal, bool upload, bool* out_found,
+    iree_hal_amd_fabric_memory_options_t* out_options) {
+  *out_found = false;
+  amdf_memory_scope_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_SCOPE_INFO,
+      .structure_size = sizeof(info),
+  };
+  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
+      context->api->memory_scope_query_info(scope, &info),
+      "query resident program scope"));
+  for (uint32_t i = 0; i < info.memory_profile_count; ++i) {
+    amdf_memory_profile_t profile = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE,
+        .structure_size = sizeof(profile),
+    };
+    amdf_memory_access_capabilities_t access = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_ACCESS_CAPABILITIES,
+        .structure_size = sizeof(access),
+    };
+    amdf_status_t status = context->api->memory_scope_query_device_profile(
+        scope, i, 1, requirements, &profile, &access);
+    if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
+        status, "qualify resident program profile"));
+    if (!iree_all_bits_set(profile.roles, AMDF_MEMORY_PROFILE_ROLE_CREATE) ||
+        (!upload && !iree_all_bits_set(profile.supported_flags,
+                                       AMDF_MEMORY_FLAG_DEVICE_LOCAL))) {
+      continue;
+    }
+    bool mapped =
+        iree_all_bits_set(profile.roles, AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) &&
+        iree_all_bits_set(profile.supported_flags,
+                          AMDF_MEMORY_FLAG_HOST_VISIBLE) &&
+        iree_all_bits_set(profile.host_mapping.supported_access,
+                          AMDF_MEMORY_MAP_FLAG_WRITE);
+    iree_hal_amd_fabric_memory_options_t options = {
+        .scope = scope,
+        .profile = profile,
+        .access_count = 1,
+        .accesses = requirements,
+        .required_flags = (mapped ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0) |
+                          (upload ? 0 : AMDF_MEMORY_FLAG_DEVICE_LOCAL),
+        .host_access = mapped ? AMDF_MEMORY_MAP_FLAG_WRITE : 0,
+    };
+    if (mapped) {
+      // A CPU aperture alone does not qualify publication to command fetch.
+      // Keep local placement when that edge is unavailable and initialize the
+      // resident bytes through the ordinary device-side upload instead.
+      IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_query_host_publication(
+          context->api, &options, 0, native_family_ordinal, &mapped));
+      if (!mapped) {
+        options.required_flags &= ~AMDF_MEMORY_FLAG_HOST_VISIBLE;
+        options.host_access = 0;
+      }
+    }
+    if (upload && !mapped) {
+      continue;
+    }
+    *out_options = options;
+    *out_found = true;
+    break;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t iree_hal_amd_gpu_context_query_program_memory(
+    iree_hal_amd_gpu_context_t* context, uint32_t native_family_ordinal,
+    const amdf_memory_device_access_t* access,
+    iree_hal_amd_fabric_memory_options_t* out_upload,
+    iree_hal_amd_fabric_memory_options_t* out_resident) {
+  bool found = false;
+  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_select_program_memory(
+      context, access, context->fabric->system_scope, native_family_ordinal,
+      true, &found, out_upload));
+  if (!found) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "GPU has no host-visible cached program profile");
+  }
+  found = false;
+  for (uint32_t i = 0; i < context->memory_scope_count && !found; ++i) {
+    IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_select_program_memory(
+        context, access, context->memory_scopes[i], native_family_ordinal,
+        false, &found, out_resident));
+  }
+  if (!found) {
+    IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_select_program_memory(
+        context, access, context->fabric->system_scope, native_family_ordinal,
+        false, &found, out_resident));
+  }
+  if (!found) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "GPU has no device-local program profile");
+  }
+  return iree_ok_status();
+}

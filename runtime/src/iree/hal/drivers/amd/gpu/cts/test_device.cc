@@ -8,10 +8,116 @@
 
 #include "iree/hal/device_group.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/queue.h"
+#include "iree/hal/drivers/amd/gpu/queue/sdma/queue.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/testing/status_matchers.h"
 
 namespace iree::hal::amd::gpu::cts {
+
+void GpuNativeTest::SelectControlMemory(
+    amdf_memory_device_access_t* access,
+    iree_hal_amd_fabric_memory_options_t* policy) {
+  *access = {
+      .device = context_->device,
+      .requirements =
+          {
+              .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE |
+                        AMDF_MEMORY_ACCESS_EXECUTE,
+              .flags = AMDF_MEMORY_FLAG_DEVICE_ADDRESS |
+                       AMDF_MEMORY_FLAG_HOST_COHERENT |
+                       AMDF_MEMORY_FLAG_QUEUE_STORAGE,
+              .address_kinds = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU,
+          },
+  };
+  amdf_memory_scope_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_SCOPE_INFO,
+      .structure_size = sizeof(info),
+  };
+  IREE_ASSERT_OK(
+      IREE_HAL_AMD_STATUS_FROM_AMDF(context_->api->memory_scope_query_info(
+                                        context_->fabric->system_scope, &info),
+                                    "query system storage"));
+  for (uint32_t i = 0; i < info.memory_profile_count; ++i) {
+    amdf_memory_profile_t profile = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE,
+        .structure_size = sizeof(profile),
+    };
+    amdf_memory_access_capabilities_t capabilities = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_ACCESS_CAPABILITIES,
+        .structure_size = sizeof(capabilities),
+    };
+    const auto status = context_->api->memory_scope_query_device_profile(
+        context_->fabric->system_scope, i, 1, access, &profile, &capabilities);
+    if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
+      continue;
+    }
+    IREE_ASSERT_OK(
+        IREE_HAL_AMD_STATUS_FROM_AMDF(status, "qualify program storage"));
+    if (iree_all_bits_set(profile.roles,
+                          AMDF_MEMORY_PROFILE_ROLE_CREATE |
+                              AMDF_MEMORY_PROFILE_ROLE_HOST_MAP)) {
+      *policy = {
+          .scope = context_->fabric->system_scope,
+          .profile = profile,
+          .access_count = 1,
+          .accesses = access,
+          .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
+          .host_access = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
+      };
+      return;
+    }
+  }
+  FAIL() << "No admitted host control profile";
+}
+
+void GpuNativeTest::PublishCode(uint32_t compute_family_ordinal,
+                                iree_hal_amd_fabric_memory_t* memory,
+                                iree_hal_amd_gpu_code_upload_t** upload) {
+  if (!*upload) {
+    return;
+  }
+  uint32_t family = UINT32_MAX;
+  amdf_queue_publication_modes_t mode = 0;
+  for (uint32_t i = 0; i < context_->endpoint_info.queue_family_count; ++i) {
+    const auto modes =
+        iree_hal_amd_gpu_sdma_queue_publication_modes(&context_->families[i]);
+    if (modes) {
+      family = i;
+      mode = modes & AMDF_QUEUE_PUBLICATION_MODE_USER
+                 ? AMDF_QUEUE_PUBLICATION_MODE_USER
+                 : AMDF_QUEUE_PUBLICATION_MODE_KERNEL;
+      break;
+    }
+  }
+  ASSERT_NE(family, UINT32_MAX);
+  amdf_memory_device_access_t access;
+  iree_hal_amd_fabric_memory_options_t control;
+  ASSERT_NO_FATAL_FAILURE(SelectControlMemory(&access, &control));
+  iree_hal_amd_gpu_publication_t publication = {};
+  iree_hal_amd_gpu_sdma_queue_t* queue = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_sdma_queue_allocate(
+      context_, family, mode, &control, &publication, 0,
+      iree_allocator_system(), &queue));
+  auto publish_source = iree_hal_amd_gpu_sdma_queue_publication_source(queue);
+  auto completion_source = iree_hal_amd_gpu_sdma_queue_completion_source(queue);
+  iree_hal_amd_gpu_completion_t completion = {};
+  iree_status_t status = iree_hal_amd_gpu_publication_initialize(
+      1, &publish_source, {}, iree_allocator_system(), &publication);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amd_gpu_completion_initialize(
+        context_, 1, &completion_source, 0, {}, {}, iree_allocator_system(),
+        &completion);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amd_gpu_code_publish(
+        context_, queue, family, compute_family_ordinal, memory, upload);
+  }
+  IREE_ASSERT_OK(iree_hal_amd_gpu_completion_deinitialize(&completion));
+  iree_hal_amd_gpu_publication_deinitialize(&publication);
+  IREE_ASSERT_OK(IREE_HAL_AMD_STATUS_FROM_AMDF(
+      iree_hal_amd_gpu_sdma_queue_free(queue), "join code upload queue"));
+  IREE_ASSERT_OK(status);
+}
 
 iree_status_t DeviceAllocator::Control(void* self_pointer,
                                        iree_allocator_command_t command,
@@ -56,6 +162,7 @@ iree_status_t NativeMemoryGate::CreateFabric(iree_hal_amd_fabric_t** out_fabric,
   forwarding_api_ = *native_api_;
   maximum_byte_length_ = maximum_byte_length;
   forwarding_api_.memory_scope_query_device_profile = QueryDeviceProfile;
+  forwarding_api_.memory_scope_query_pair_info = QueryProfilePair;
   forwarding_api_.memory_create = CreateMemory;
   forwarding_api_.memory_destroy = DestroyMemory;
   active_ = this;
@@ -77,6 +184,7 @@ iree_status_t NativeMemoryGate::AcquireProcessFabric(
       if (iree_status_is_ok(status)) {
         api = *native_api_;
         api.memory_scope_query_device_profile = QueryDeviceProfile;
+        api.memory_scope_query_pair_info = QueryProfilePair;
         api.memory_create = CreateMemory;
         api.memory_destroy = DestroyMemory;
         status = iree_hal_amd_fabric_create(&api, AMDF_NATIVE_LIFETIME_PROCESS,
@@ -117,6 +225,21 @@ amdf_status_t AMDF_CALL NativeMemoryGate::QueryDeviceProfile(
                  self->maximum_byte_length_);
   }
   return status;
+}
+
+amdf_status_t AMDF_CALL NativeMemoryGate::QueryProfilePair(
+    amdf_memory_scope_t* scope, const amdf_memory_profile_pair_query_t* query,
+    amdf_memory_pair_info_t* out_info) {
+  if (active_ && active_->require_code_upload_ &&
+      (query->required_flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) &&
+      query->producer.kind == AMDF_MEMORY_SITE_KIND_HOST) {
+    for (uint32_t i = 0; i < query->access_count; ++i) {
+      if (query->accesses[i].requirements.access & AMDF_MEMORY_ACCESS_EXECUTE) {
+        return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+      }
+    }
+  }
+  return native_api_->memory_scope_query_pair_info(scope, query, out_info);
 }
 
 amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
@@ -311,10 +434,11 @@ void GpuNativeTest::Create(
   auto params = iree_hal_device_create_params_default();
   params.proactor_pool = proactors_;
   params.runtime_features = runtime_features;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_device_create(
-      context_, IREE_SV("PM4 native CTS"), &options_, &params,
-      allocator_.allocator(), &device_));
+  auto* context = context_;
   context_ = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_device_create(
+      context, IREE_SV("PM4 native CTS"), &options_, &params,
+      allocator_.allocator(), &device_));
   allocator_.armed.store(true);
   IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
       device_, tracker_, iree_allocator_system(), &group_));
