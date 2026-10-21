@@ -21,6 +21,7 @@ exports_files([
     "flash_attention.cxx",
     "llama_rms_norm.cxx",
     "mxfp_group_dot.cxx",
+    "paged_online_softmax_loop_f32.cxx",
     "packed_memory.cxx",
     "vector_lookup.cxx",
 ])
@@ -248,6 +249,7 @@ loom_check_test_suite(
         "packed_enums.h",
         "packed_group_dot.cxx",
         "packed_layout.h",
+        "paged_online_softmax_loop_f32.cxx",
         "record_layout.h",
         "record_values.cxx",
     ],
