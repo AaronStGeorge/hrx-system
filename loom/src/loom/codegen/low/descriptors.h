@@ -1139,17 +1139,21 @@ typedef struct loom_low_timing_event_t {
   uint32_t maximum_issue_separation_cycles;
 } loom_low_timing_event_t;
 
-// Signed minimum separation between two target timing events.
+// Signed minimum separation between two target timing events. The producer is
+// the event whose [separation_start, separation_count) range contains the row.
 typedef struct loom_low_event_separation_t {
-  // Producer timing-event identifier.
-  uint16_t producer_event_id;
-  // Consumer timing-event identifier.
-  uint16_t consumer_event_id;
   // Minimum consumer issue cycle relative to producer issue.
   int32_t minimum_issue_separation_cycles;
+  // Consumer timing-event identifier.
+  uint16_t consumer_event_id;
   // Quality of this event-pair timing fact.
   loom_low_model_quality_t model_quality;
+  // Reserved; must be zero.
+  uint8_t reserved;
 } loom_low_event_separation_t;
+
+static_assert(sizeof(loom_low_event_separation_t) == 8,
+              "timing-event separation rows must remain compact");
 
 typedef struct loom_low_hazard_t {
   // Hazard kind used by schedule policy and verification.
@@ -1570,7 +1574,7 @@ typedef struct loom_low_schedule_model_t {
   const uint16_t* schedule_class_row_ids;
   // Dense named timing events referenced by operands and effects.
   const loom_low_timing_event_t* timing_events;
-  // Sorted event-pair minimum issue separations.
+  // Producer-grouped, consumer-sorted event-pair minimum issue separations.
   const loom_low_event_separation_t* event_separations;
   // Dense issue-use rows referenced by schedule classes.
   const loom_low_issue_use_t* issue_uses;

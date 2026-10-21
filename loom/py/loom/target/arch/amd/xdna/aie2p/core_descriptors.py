@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from itertools import combinations
+from itertools import combinations, product
 from math import gcd
 from pathlib import Path
 
@@ -1069,6 +1069,11 @@ def _implicit_operands(spec: descriptor_specs._DescriptorSpec) -> tuple[Operand,
         flags = (OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE)
         if register_name in _STICKY_STATUS_REGISTERS:
             flags += (OperandFlag.COMMUTATIVE_STATE_UPDATE,)
+        write_event = _register_timing_event(
+            spec,
+            operand_ordinal,
+            ("sticky_update" if register_name in _STICKY_STATUS_REGISTERS else "write"),
+        )
         result.append(
             Operand(
                 field_name=(
@@ -1086,7 +1091,7 @@ def _implicit_operands(spec: descriptor_specs._DescriptorSpec) -> tuple[Operand,
                 flags=flags,
                 read_stage=read_stage,
                 ready_stage=ready_stage,
-                write_event=_register_timing_event(spec, operand_ordinal, "write"),
+                write_event=write_event,
             )
         )
     for register_name in form.implicit_uses:
@@ -1632,6 +1637,25 @@ _REGISTER_ENDPOINTS = tuple(
         key=lambda endpoint: (endpoint[0], endpoint[1] or ""),
     )
 )
+_STICKY_UPDATE_ENDPOINTS = tuple(
+    sorted(
+        {
+            (
+                itinerary.operand_cycles[operand_ordinal],
+                bypass_class(itinerary, operand_ordinal),
+            )
+            for spec in descriptor_specs._DESCRIPTOR_SPECS
+            for form in (descriptor_specs._MACHINE_FORMS[spec.form_name],)
+            for itinerary in (_itinerary(spec),)
+            for implicit_index, register_name in enumerate(form.implicit_defs)
+            if register_name in _STICKY_STATUS_REGISTERS
+            for operand_ordinal in (
+                len(form.outputs) + len(form.inputs) + implicit_index,
+            )
+        },
+        key=lambda endpoint: (endpoint[0], endpoint[1] or ""),
+    )
+)
 _MEMORY_ENDPOINTS = tuple(
     sorted(
         {
@@ -1651,6 +1675,10 @@ _TIMING_EVENTS = tuple(
                 _register_event_name(access, cycle, bypass)
                 for cycle, bypass in _REGISTER_ENDPOINTS
                 for access in ("read", "write")
+            ),
+            *(
+                _register_event_name("sticky_update", cycle, bypass)
+                for cycle, bypass in _STICKY_UPDATE_ENDPOINTS
             ),
             *(
                 _memory_event_name(access, memory)
@@ -1728,6 +1756,67 @@ def _event_separations() -> tuple[EventSeparation, ...]:
                     ),
                 )
             )
+    for (
+        producer_access,
+        producer_endpoints,
+        consumer_access,
+        consumer_endpoints,
+        dependency_kind,
+    ) in (
+        (
+            "sticky_update",
+            _STICKY_UPDATE_ENDPOINTS,
+            "read",
+            _REGISTER_ENDPOINTS,
+            DependencyKind.RAW,
+        ),
+        (
+            "sticky_update",
+            _STICKY_UPDATE_ENDPOINTS,
+            "write",
+            _REGISTER_ENDPOINTS,
+            DependencyKind.WAW,
+        ),
+        (
+            "read",
+            _REGISTER_ENDPOINTS,
+            "sticky_update",
+            _STICKY_UPDATE_ENDPOINTS,
+            DependencyKind.WAR,
+        ),
+        (
+            "write",
+            _REGISTER_ENDPOINTS,
+            "sticky_update",
+            _STICKY_UPDATE_ENDPOINTS,
+            DependencyKind.WAW,
+        ),
+    ):
+        for producer, consumer in product(producer_endpoints, consumer_endpoints):
+            result.append(
+                EventSeparation(
+                    _register_event_name(producer_access, *producer),
+                    _register_event_name(consumer_access, *consumer),
+                    dependency_separation(
+                        endpoint_itineraries[producer],
+                        0,
+                        endpoint_itineraries[consumer],
+                        0,
+                        dependency_kind,
+                    ),
+                    ModelQuality.EXACT,
+                )
+            )
+    result.extend(
+        EventSeparation(
+            _register_event_name("sticky_update", *producer),
+            _register_event_name("sticky_update", *consumer),
+            0,
+            ModelQuality.EXACT,
+        )
+        for producer in _STICKY_UPDATE_ENDPOINTS
+        for consumer in _STICKY_UPDATE_ENDPOINTS
+    )
     for producer in _MEMORY_ENDPOINTS:
         producer_itinerary = Itinerary(
             name="memory_producer",
