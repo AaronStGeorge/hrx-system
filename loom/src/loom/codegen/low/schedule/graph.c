@@ -546,7 +546,7 @@ static iree_status_t loom_low_schedule_add_state_read(
 
 static iree_status_t loom_low_schedule_add_state_chain_read(
     loom_low_schedule_build_state_t* state, uint32_t producer_node_index,
-    loom_low_schedule_state_access_t reader) {
+    loom_low_schedule_state_access_t reader, uint16_t value_operand_index) {
   if (producer_node_index == LOOM_LOW_SCHEDULE_NODE_NONE ||
       producer_node_index == reader.node_index ||
       state->state_chain_read_heads == NULL) {
@@ -568,6 +568,7 @@ static iree_status_t loom_low_schedule_add_state_chain_read(
       (loom_low_schedule_state_chain_read_record_t){
           .access = reader,
           .next_record = state->state_chain_read_heads[producer_node_index],
+          .value_operand_index = value_operand_index,
       };
   state->state_chain_read_heads[producer_node_index] =
       (uint32_t)state->state_chain_read_record_count++;
@@ -592,10 +593,10 @@ static iree_status_t loom_low_schedule_add_state_chain_read_dependencies(
     const loom_low_schedule_state_chain_read_record_t* read_record =
         &state->state_chain_read_records[read_record_index];
     if (read_record->access.node_index != consumer.node_index &&
-        state->nodes[read_record->access.node_index].source_ordinal <
-            state->nodes[consumer.node_index].source_ordinal) {
+        read_record->access.node_index < consumer.node_index) {
       IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_dependency(
-          state, read_record->access, consumer, LOOM_LOW_ID_NONE));
+          state, read_record->access, consumer,
+          read_record->value_operand_index));
     }
     read_record_index = read_record->next_record;
   }
@@ -771,11 +772,8 @@ static iree_status_t loom_low_schedule_add_storage_write_dependencies(
         &state->storage_reads.records[read_record_index];
     const uint32_t next_record_index = read_record->next_record;
     read_record->next_record = LOOM_LOW_SCHEDULE_NODE_NONE;
-    const loom_low_schedule_node_t* reader =
-        &state->nodes[read_record->reader_node];
-    const loom_low_schedule_node_t* writer = &state->nodes[writer_node_index];
     if (read_record->reader_node != writer_node_index &&
-        reader->source_ordinal < writer->source_ordinal &&
+        read_record->reader_node < writer_node_index &&
         loom_low_schedule_unit_ranges_overlap(
             read_record->unit_offset, read_record->unit_count,
             write_unit_offset, write_unit_count) &&
@@ -815,11 +813,8 @@ static iree_status_t loom_low_schedule_add_storage_antidependencies(
   while (read_record_index != LOOM_LOW_SCHEDULE_NODE_NONE) {
     const loom_low_schedule_storage_read_record_t* read_record =
         &state->storage_reads.records[read_record_index];
-    const loom_low_schedule_node_t* reader =
-        &state->nodes[read_record->reader_node];
-    const loom_low_schedule_node_t* writer = &state->nodes[writer_node_index];
     if (read_record->reader_node != writer_node_index &&
-        reader->source_ordinal < writer->source_ordinal &&
+        read_record->reader_node < writer_node_index &&
         loom_low_schedule_unit_ranges_overlap(
             read_record->unit_offset, read_record->unit_count,
             write_unit_offset, write_unit_count) &&
@@ -1156,7 +1151,7 @@ static iree_status_t loom_low_schedule_note_state_read(
     IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_dependency(
         state, last_write, reader, LOOM_LOW_ID_NONE));
     IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_chain_read(
-        state, last_write.node_index, reader));
+        state, last_write.node_index, reader, LOOM_LOW_ID_NONE));
   }
   const loom_low_schedule_state_access_t ordering_frontier =
       state->state_ordering_frontiers[reg_class_id];
@@ -1248,8 +1243,8 @@ static iree_status_t loom_low_schedule_note_explicit_state_value_read(
         state, ordering_frontier, reader));
   }
   if (has_same_block_producer) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_schedule_add_state_chain_read(state, producer_node, reader));
+    IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_chain_read(
+        state, producer_node, reader, operand_index));
   }
   return loom_low_schedule_add_state_read(state, reader, reg_class_id);
 }
@@ -1555,7 +1550,6 @@ iree_status_t loom_low_schedule_fill_nodes(
           .op = op,
           .block_index = block_index,
           .source_descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
-          .source_ordinal = next_node_index,
           .scheduled_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE,
           .issue_cycle = LOOM_LOW_SCHEDULE_NODE_NONE,
           .issue_group_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE,

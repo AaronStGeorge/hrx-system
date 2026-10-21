@@ -6,6 +6,8 @@
 
 #include "loom/transforms/cfg/cfg_simplify.h"
 
+#include <string>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -131,6 +133,59 @@ test.func @choose(%condition: i1) -> (i32) {
         loom_value_fact_table_lookup(facts, value), &constant));
     EXPECT_EQ(constant, i == 1 ? 7 : 11);
   }
+}
+
+TEST_F(CFGSimplifyFactsTest, FactStorageCoversFunctionRegionsWithoutPrefix) {
+  std::string source = "test.func @unrelated() {\n";
+  for (int i = 0; i < 128; ++i) {
+    source += "  %unrelated" + std::to_string(i) + " = test.constant 0 : i32\n";
+  }
+  source += R"(  test.yield
+}
+test.split_func @target() {
+  %config = test.constant 7 : i32
+  test.yield
+} launch {
+  %body = test.constant 42 : i32
+  test.yield
+}
+)";
+  Parse(iree_make_string_view(source.data(), source.size()));
+  ASSERT_NE(module_, nullptr);
+  loom_func_like_t unrelated = function_;
+  function_ = loom_func_like_cast(module_, loom_module_block(module_)->last_op);
+  ASSERT_TRUE(loom_func_like_isa(function_));
+
+  loom_region_t* unrelated_body = loom_func_like_body(unrelated);
+  const loom_op_t* first_unrelated_op =
+      loom_block_const_op(loom_region_entry_block(unrelated_body), 0);
+  ASSERT_TRUE(loom_test_constant_isa(first_unrelated_op));
+  const loom_value_id_t first_unrelated_value =
+      loom_test_constant_result(first_unrelated_op);
+  loom_region_t* config = loom_test_split_func_config(function_.op);
+  const loom_op_t* config_op =
+      loom_block_const_op(loom_region_entry_block(config), 0);
+  ASSERT_TRUE(loom_test_constant_isa(config_op));
+  const loom_value_id_t config_value = loom_test_constant_result(config_op);
+  loom_region_t* body = loom_func_like_body(function_);
+  const loom_op_t* body_op =
+      loom_block_const_op(loom_region_entry_block(body), 0);
+  ASSERT_TRUE(loom_test_constant_isa(body_op));
+  const loom_value_id_t body_value = loom_test_constant_result(body_op);
+  const loom_value_id_t first_target_value = iree_min(config_value, body_value);
+  ASSERT_GE(body_value, 128u);
+
+  bool changed = false;
+  IREE_ASSERT_OK(Simplify(&changed));
+  EXPECT_FALSE(changed);
+  EXPECT_EQ(owner_.table.first_value_id, first_target_value & ~UINT32_C(63));
+  EXPECT_GT(owner_.table.first_value_id, first_unrelated_value);
+  EXPECT_EQ(owner_.table.capacity, loom_value_table_capacity(&module_->values) -
+                                       owner_.table.first_value_id);
+  EXPECT_EQ(loom_value_fact_table_lookup(&owner_.table, body_value).range_lo,
+            42);
+  EXPECT_EQ(loom_value_fact_table_lookup(&owner_.table, config_value).range_lo,
+            7);
 }
 
 TEST_F(CFGSimplifyFactsTest, ChangedControlInvalidatesFacts) {

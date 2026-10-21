@@ -16,7 +16,7 @@ namespace {
 
 // Observes the actual allocator boundary, including every allocation failure.
 // Uninitialized backing is poisoned so construction cannot rely on zeroed
-// child lists. The allocator must outlive the returned trie.
+// temporary storage. The allocator must outlive the returned trie.
 struct BuildAllocator {
   // Number of allocation/reallocation commands attempted.
   size_t allocation_count = 0;
@@ -321,9 +321,9 @@ TEST(VocabTrieTest, BinaryData) {
 }
 
 TEST(VocabTrieTest, FullByteAlphabet) {
-  // Reverse insertion forces sorted child movement through every growth step,
-  // including the 128-to-256 transition. The zero byte also branches at
-  // depth 1.
+  // Reverse insertion exercises front insertion in the sorted sibling lists.
+  // The root uses the complete byte alphabet, and the zero byte also branches
+  // into another complete alphabet at depth 1.
   std::vector<std::string> strings;
   for (int byte = 255; byte >= 0; --byte) {
     strings.emplace_back(1, static_cast<char>(byte));
@@ -338,8 +338,8 @@ TEST(VocabTrieTest, FullByteAlphabet) {
         tokens.data(), tokens.size(), {table.data(), table.size()},
         allocator.allocator(), &trie));
   }
-  // Only the immutable slab escapes, and it needs neither the construction
-  // arena nor the source vocabulary to remain alive.
+  // Only the immutable slab escapes; temporary nodes and the source vocabulary
+  // need not remain alive.
   EXPECT_EQ(allocator.live_count, 1u);
   for (size_t i = 0; i < strings.size(); ++i) {
     auto matches = TraverseTrie(trie, strings[i]);
@@ -352,8 +352,8 @@ TEST(VocabTrieTest, FullByteAlphabet) {
 }
 
 TEST(VocabTrieTest, ConstructionStorageAndAllocationFailures) {
-  // Independent long suffixes cross arena blocks and repeatedly grow the node
-  // array, while the root exercises every child-array capacity.
+  // Independent long suffixes repeatedly grow the temporary node array, while
+  // the root exercises the complete byte alphabet.
   std::vector<std::string> strings;
   for (int byte = 0; byte < 256; ++byte) {
     strings.push_back(std::string(1, static_cast<char>(byte)) +
@@ -378,7 +378,7 @@ TEST(VocabTrieTest, ConstructionStorageAndAllocationFailures) {
   EXPECT_EQ(allocator.live_count, 0u);
 
   // Every possible backing allocation failure must release all prior storage,
-  // including arena blocks and partially grown construction arrays.
+  // including partially grown node and construction arrays.
   for (size_t fail_at = 0; fail_at < allocator.allocation_count; ++fail_at) {
     SCOPED_TRACE(fail_at);
     BuildAllocator failing_allocator;

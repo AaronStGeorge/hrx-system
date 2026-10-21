@@ -452,6 +452,9 @@ static iree_status_t loom_pass_interpreter_invoke(
         symbol_name.data);
   }
 
+  IREE_TRACE_ZONE_BEGIN_NAMED_DYNAMIC(z_pass, invoke->descriptor->key.data,
+                                      invoke->descriptor->key.size);
+
   iree_arena_allocator_t instance_arena;
   iree_arena_initialize(state->options->block_pool, &instance_arena);
   loom_pass_interpreter_diagnostic_counter_t diagnostic_counter = {
@@ -566,6 +569,7 @@ static iree_status_t loom_pass_interpreter_invoke(
           terminal_status, loom_pass_interpreter_emit_failure_diagnostic(
                                state, frame, instruction));
     }
+    IREE_TRACE_ZONE_END(z_pass);
     return iree_status_annotate_f(
         terminal_status, "while executing pass '%.*s' at %s anchor on @%.*s",
         (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
@@ -573,12 +577,14 @@ static iree_status_t loom_pass_interpreter_invoke(
         symbol_name.data);
   }
   if (!iree_status_is_ok(terminal_status)) {
+    IREE_TRACE_ZONE_END(z_pass);
     return iree_status_annotate_f(
         terminal_status, "while tracing pass '%.*s' at %s anchor on @%.*s",
         (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
         loom_pass_interpreter_anchor_name(frame->kind), (int)symbol_name.size,
         symbol_name.data);
   }
+  IREE_TRACE_ZONE_END(z_pass);
   return terminal_status;
 }
 

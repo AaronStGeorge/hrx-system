@@ -171,116 +171,9 @@ static iree_status_t iree_tokenizer_parse_vocab_object(
   return status;
 }
 
-// Context for resolving a token text to its ID via linear scan of vocab JSON.
-typedef struct iree_tokenizer_token_resolve_context_t {
-  iree_string_view_t target_text;
-  char unescape_buffer[IREE_TOKENIZER_MAX_MERGE_TOKEN_LENGTH];
-  iree_tokenizer_token_id_t resolved_id;
-  iree_status_t status;
-} iree_tokenizer_token_resolve_context_t;
-
-// Visitor callback that checks each vocab entry against the target text.
-static iree_status_t iree_tokenizer_token_resolve_visitor(
-    void* user_data, iree_string_view_t key, iree_string_view_t value) {
-  iree_tokenizer_token_resolve_context_t* context =
-      (iree_tokenizer_token_resolve_context_t*)user_data;
-
-  // Check if token could be too long. JSON escapes only make strings longer
-  // (e.g., " → \", © → \u00A9), so unescaped length <= escaped length.
-  // If the escaped form doesn't fit, query the actual unescaped length.
-  if (key.size > sizeof(context->unescape_buffer)) {
-    iree_host_size_t required_length = 0;
-    iree_status_t status =
-        iree_json_unescape_string(key, 0, NULL, &required_length);
-    if (!iree_status_is_ok(status)) {
-      context->status = status;
-      return iree_status_from_code(IREE_STATUS_CANCELLED);
-    }
-    if (required_length > sizeof(context->unescape_buffer)) {
-      // Token too long to be our target - skip.
-      return iree_ok_status();
-    }
-  }
-
-  // Unescape the key (token text). This cannot fail with RESOURCE_EXHAUSTED
-  // because we already verified the length above.
-  iree_host_size_t unescaped_length = 0;
-  iree_status_t status =
-      iree_json_unescape_string(key, sizeof(context->unescape_buffer),
-                                context->unescape_buffer, &unescaped_length);
-  if (!iree_status_is_ok(status)) {
-    context->status = status;
-    return iree_status_from_code(IREE_STATUS_CANCELLED);
-  }
-
-  iree_string_view_t token_text =
-      iree_make_string_view(context->unescape_buffer, unescaped_length);
-
-  // Check if this is the token we're looking for.
-  if (!iree_string_view_equal(token_text, context->target_text)) {
-    return iree_ok_status();
-  }
-
-  // Parse the value (token ID).
-  int64_t token_id_raw = 0;
-  status = iree_json_parse_int64(value, &token_id_raw);
-  if (!iree_status_is_ok(status)) {
-    context->status = status;
-    return iree_status_from_code(IREE_STATUS_CANCELLED);
-  }
-  if (token_id_raw < 0 || token_id_raw > INT32_MAX) {
-    context->status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                       "resolved token ID %" PRId64
-                                       " out of valid range [0, %" PRId32 "]",
-                                       token_id_raw, INT32_MAX);
-    return iree_status_from_code(IREE_STATUS_CANCELLED);
-  }
-
-  context->resolved_id = (iree_tokenizer_token_id_t)token_id_raw;
-  return iree_status_from_code(IREE_STATUS_CANCELLED);  // Found, stop.
-}
-
-// Scans a vocab JSON object for a token matching |target_text| and returns its
-// ID. This is a linear scan that processes each entry without building any
-// index structure — suitable for resolving a small number of known tokens.
-// Returns NOT_FOUND if the token is not present in the vocab.
-static iree_status_t iree_tokenizer_resolve_token_in_vocab_json(
-    iree_string_view_t vocab_json, iree_string_view_t target_text,
-    iree_tokenizer_token_id_t* out_token_id) {
-  *out_token_id = IREE_TOKENIZER_TOKEN_ID_INVALID;
-
-  iree_tokenizer_token_resolve_context_t context = {
-      .target_text = target_text,
-      .unescape_buffer = {0},
-      .resolved_id = IREE_TOKENIZER_TOKEN_ID_INVALID,
-      .status = iree_ok_status(),
-  };
-
-  iree_status_t status = iree_json_enumerate_object(
-      vocab_json, iree_tokenizer_token_resolve_visitor, &context);
-
-  // Check visitor error first (more specific than enumeration error).
-  if (!iree_status_is_ok(context.status)) {
-    iree_status_ignore(status);
-    return context.status;
-  }
-  IREE_RETURN_IF_ERROR(status);
-
-  // Check if the token was found (visitor sets resolved_id on match).
-  if (context.resolved_id != IREE_TOKENIZER_TOKEN_ID_INVALID) {
-    *out_token_id = context.resolved_id;
-    return iree_ok_status();
-  }
-
-  return iree_make_status(IREE_STATUS_NOT_FOUND,
-                          "token '%.*s' not found in vocabulary",
-                          (int)target_text.size, target_text.data);
-}
-
 // Context for merge array enumeration.
 typedef struct iree_tokenizer_merge_parse_context_t {
   iree_tokenizer_vocab_builder_t* builder;
-  const iree_tokenizer_vocab_t* vocab;
   char unescape_buffer[IREE_TOKENIZER_MAX_MERGE_TOKEN_LENGTH];
   iree_status_t status;
 } iree_tokenizer_merge_parse_context_t;
@@ -312,7 +205,7 @@ static iree_status_t iree_tokenizer_parse_merge_string(
 
   // Look up token IDs.
   iree_tokenizer_token_id_t left_id =
-      iree_tokenizer_vocab_lookup(context->vocab, left_text);
+      iree_tokenizer_vocab_builder_lookup(context->builder, left_text);
   if (left_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "merge at index %" PRIhsz
@@ -321,7 +214,7 @@ static iree_status_t iree_tokenizer_parse_merge_string(
   }
 
   iree_tokenizer_token_id_t right_id =
-      iree_tokenizer_vocab_lookup(context->vocab, right_text);
+      iree_tokenizer_vocab_builder_lookup(context->builder, right_text);
   if (right_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "merge at index %" PRIhsz
@@ -362,7 +255,7 @@ static iree_status_t iree_tokenizer_parse_merge_tuple(
 
   // Look up token IDs.
   iree_tokenizer_token_id_t left_id =
-      iree_tokenizer_vocab_lookup(context->vocab, left_text);
+      iree_tokenizer_vocab_builder_lookup(context->builder, left_text);
   if (left_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "merge at index %" PRIhsz
@@ -371,7 +264,7 @@ static iree_status_t iree_tokenizer_parse_merge_tuple(
   }
 
   iree_tokenizer_token_id_t right_id =
-      iree_tokenizer_vocab_lookup(context->vocab, right_text);
+      iree_tokenizer_vocab_builder_lookup(context->builder, right_text);
   if (right_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "merge at index %" PRIhsz
@@ -412,12 +305,9 @@ static iree_status_t iree_tokenizer_merge_visitor(void* user_data,
 
 // Parses merges array into a vocab builder.
 static iree_status_t iree_tokenizer_parse_merges_array(
-    iree_string_view_t merges_json, iree_tokenizer_vocab_builder_t* builder,
-    const iree_tokenizer_vocab_t* vocab, iree_allocator_t allocator) {
-  (void)allocator;  // Unused after removing dynamic buffer.
+    iree_string_view_t merges_json, iree_tokenizer_vocab_builder_t* builder) {
   iree_tokenizer_merge_parse_context_t context = {
       .builder = builder,
-      .vocab = vocab,
       .unescape_buffer = {0},
       .status = iree_ok_status(),
   };
@@ -547,71 +437,21 @@ iree_status_t iree_tokenizer_huggingface_parse_bpe_model(
 
   // Resources that need cleanup from this point forward.
   iree_tokenizer_vocab_builder_t* builder = NULL;
-  iree_tokenizer_vocab_t* temp_vocab = NULL;
   iree_tokenizer_vocab_t* vocab = NULL;
   iree_tokenizer_model_t* model = NULL;
 
   // Estimate capacity and create builder.
   iree_host_size_t capacity =
-      iree_tokenizer_huggingface_estimate_vocab_capacity(model_json.size);
+      iree_tokenizer_huggingface_estimate_vocab_capacity(vocab_json.size);
   iree_status_t status =
       iree_tokenizer_vocab_builder_allocate(capacity, allocator, &builder);
 
-  // Pass 1: Parse vocab into builder.
+  // Parse the vocabulary once into the builder.
   if (iree_status_is_ok(status)) {
     status = iree_tokenizer_parse_vocab_object(vocab_json, builder, allocator);
   }
 
-  // Build temporary vocab for merge token lookup.
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_vocab_builder_build(builder, &temp_vocab);
-    if (iree_status_is_ok(status)) {
-      builder = NULL;  // Consumed by build on success.
-    }
-  }
-
-  // Resolve unk_token string to ID in temp_vocab. This is done before
-  // temp_vocab is freed so we can look up the token by its text content.
-  iree_tokenizer_token_id_t unk_token_id = IREE_TOKENIZER_TOKEN_ID_INVALID;
-  if (iree_status_is_ok(status) && unk_token_value.size > 0 &&
-      !iree_string_view_equal(unk_token_value, IREE_SV("null"))) {
-    char unk_buffer[64];
-    iree_host_size_t unk_length = 0;
-    status = iree_json_unescape_string(unk_token_value, sizeof(unk_buffer),
-                                       unk_buffer, &unk_length);
-    if (iree_status_is_ok(status)) {
-      unk_token_id = iree_tokenizer_vocab_lookup(
-          temp_vocab, iree_make_string_view(unk_buffer, unk_length));
-      if (unk_token_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
-        status = iree_make_status(IREE_STATUS_NOT_FOUND,
-                                  "unk_token '%.*s' not found in vocabulary",
-                                  (int)unk_length, unk_buffer);
-      }
-    }
-  }
-
-  // Create new builder for second pass with merges.
-  if (iree_status_is_ok(status)) {
-    status =
-        iree_tokenizer_vocab_builder_allocate(capacity, allocator, &builder);
-  }
-
-  // Pass 2: Parse vocab again (needed because first builder was consumed).
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_parse_vocab_object(vocab_json, builder, allocator);
-  }
-
-  // Parse merges using temp_vocab for ID lookup.
-  if (iree_status_is_ok(status)) {
-    status = iree_tokenizer_parse_merges_array(merges_json, builder, temp_vocab,
-                                               allocator);
-  }
-
-  // Done with temp vocab.
-  iree_tokenizer_vocab_free(temp_vocab);
-  temp_vocab = NULL;
-
-  // Process added_tokens: insert new tokens or update attributes on existing.
+  // Insert added tokens and update attributes before sealing the token set.
   if (iree_status_is_ok(status) && added_tokens) {
     for (iree_host_size_t i = 0;
          i < added_tokens->count && iree_status_is_ok(status); ++i) {
@@ -631,7 +471,37 @@ iree_status_t iree_tokenizer_huggingface_parse_bpe_model(
     }
   }
 
-  // Set unk_token special ID on the builder (resolved earlier from temp_vocab).
+  // Seal once to create the text-to-ID index used by merge resolution and the
+  // final vocabulary.
+  if (iree_status_is_ok(status)) {
+    status = iree_tokenizer_vocab_builder_seal_tokens(builder);
+  }
+
+  // Resolve unk_token against the sealed token set.
+  iree_tokenizer_token_id_t unk_token_id = IREE_TOKENIZER_TOKEN_ID_INVALID;
+  if (iree_status_is_ok(status) && unk_token_value.size > 0 &&
+      !iree_string_view_equal(unk_token_value, IREE_SV("null"))) {
+    char unk_buffer[64];
+    iree_host_size_t unk_length = 0;
+    status = iree_json_unescape_string(unk_token_value, sizeof(unk_buffer),
+                                       unk_buffer, &unk_length);
+    if (iree_status_is_ok(status)) {
+      unk_token_id = iree_tokenizer_vocab_builder_lookup(
+          builder, iree_make_string_view(unk_buffer, unk_length));
+      if (unk_token_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
+        status = iree_make_status(IREE_STATUS_NOT_FOUND,
+                                  "unk_token '%.*s' not found in vocabulary",
+                                  (int)unk_length, unk_buffer);
+      }
+    }
+  }
+
+  // Resolve merge token IDs against the same index transferred at build().
+  if (iree_status_is_ok(status)) {
+    status = iree_tokenizer_parse_merges_array(merges_json, builder);
+  }
+
+  // Set unk_token special ID on the builder.
   if (iree_status_is_ok(status) &&
       unk_token_id != IREE_TOKENIZER_TOKEN_ID_INVALID) {
     status = iree_tokenizer_vocab_builder_set_special_token(
@@ -683,7 +553,6 @@ iree_status_t iree_tokenizer_huggingface_parse_bpe_model(
     iree_tokenizer_model_free(model);
     iree_tokenizer_vocab_free(vocab);
     iree_tokenizer_vocab_builder_free(builder);
-    iree_tokenizer_vocab_free(temp_vocab);
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
@@ -760,19 +629,6 @@ iree_status_t iree_tokenizer_huggingface_parse_wordpiece_model(
                          max_input_chars_per_word));
   }
 
-  // Resolve unk_token text to its ID via linear scan of the vocab JSON.
-  // This avoids building a temporary vocab just for one lookup.
-  iree_tokenizer_token_id_t unk_token_id = IREE_TOKENIZER_TOKEN_ID_INVALID;
-  if (unk_token_length > 0) {
-    IREE_RETURN_AND_END_ZONE_IF_ERROR(
-        z0,
-        iree_tokenizer_resolve_token_in_vocab_json(
-            vocab_json,
-            iree_make_string_view(unk_token_buffer, unk_token_length),
-            &unk_token_id),
-        "resolving WordPiece unk_token");
-  }
-
   // Resources that need cleanup from this point forward.
   iree_tokenizer_vocab_builder_t* builder = NULL;
   iree_tokenizer_vocab_t* vocab = NULL;
@@ -780,7 +636,7 @@ iree_status_t iree_tokenizer_huggingface_parse_wordpiece_model(
 
   // Estimate capacity and create builder.
   iree_host_size_t capacity =
-      iree_tokenizer_huggingface_estimate_vocab_capacity(model_json.size);
+      iree_tokenizer_huggingface_estimate_vocab_capacity(vocab_json.size);
   iree_status_t status =
       iree_tokenizer_vocab_builder_allocate(capacity, allocator, &builder);
 
@@ -803,6 +659,23 @@ iree_status_t iree_tokenizer_huggingface_parse_wordpiece_model(
           iree_tokenizer_huggingface_added_token_content(added_tokens, at);
       status = iree_tokenizer_vocab_builder_ensure_token(builder, at->id,
                                                          content, 0.0f, attrs);
+    }
+  }
+
+  // Seal the token set before resolving the configured unknown token.
+  if (iree_status_is_ok(status)) {
+    status = iree_tokenizer_vocab_builder_seal_tokens(builder);
+  }
+
+  iree_tokenizer_token_id_t unk_token_id = IREE_TOKENIZER_TOKEN_ID_INVALID;
+  if (iree_status_is_ok(status) && unk_token_length > 0) {
+    unk_token_id = iree_tokenizer_vocab_builder_lookup(
+        builder, iree_make_string_view(unk_token_buffer, unk_token_length));
+    if (unk_token_id == IREE_TOKENIZER_TOKEN_ID_INVALID) {
+      status = iree_make_status(IREE_STATUS_NOT_FOUND,
+                                "WordPiece unk_token '%.*s' not found in "
+                                "vocabulary",
+                                (int)unk_token_length, unk_token_buffer);
     }
   }
 
@@ -1016,7 +889,7 @@ iree_status_t iree_tokenizer_huggingface_parse_unigram_model(
 
   // Estimate capacity and create builder.
   iree_host_size_t capacity =
-      iree_tokenizer_huggingface_estimate_vocab_capacity(model_json.size);
+      iree_tokenizer_huggingface_estimate_vocab_capacity(vocab_json.size);
   iree_status_t status =
       iree_tokenizer_vocab_builder_allocate(capacity, allocator, &builder);
 

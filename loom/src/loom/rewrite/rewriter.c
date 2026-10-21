@@ -19,6 +19,7 @@
 #include "loom/util/fact_vector_partition.h"
 
 #define LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY 64
+#define LOOM_REWRITER_MAX_WORKLIST_CHUNK_SIZE (16 * 1024)
 #define LOOM_REWRITER_INITIAL_REGION_STACK_CAPACITY 8
 
 // Share the paged-value lookup across rewrite callbacks instead of duplicating
@@ -242,6 +243,72 @@ struct loom_rewriter_cfg_region_t {
   loom_rewriter_cfg_region_t* next_entry;
 };
 
+// Arena-backed worklist storage that grows without copying or abandoning prior
+// entries. Chunks double from the historical 64-entry initial capacity up to a
+// pool-sized 16 KiB ceiling, keeping both small and large rewrite runs dense.
+struct loom_rewriter_worklist_chunk_t {
+  // Older chunk containing the next entries after this chunk drains.
+  loom_rewriter_worklist_chunk_t* previous;
+  // Newer empty chunk retained for reuse after the worklist shrinks.
+  loom_rewriter_worklist_chunk_t* next;
+  // Number of pending operation pointers in entries.
+  iree_host_size_t entry_count;
+  // Number of operation pointers allocated in entries.
+  iree_host_size_t entry_capacity;
+  // LIFO operation pointers owned by this chunk.
+  loom_op_t* entries[];
+};
+
+IREE_ATTRIBUTE_NOINLINE static iree_status_t
+loom_rewriter_worklist_chunk_allocate(
+    loom_rewriter_t* rewriter, iree_host_size_t desired_capacity,
+    loom_rewriter_worklist_chunk_t* previous,
+    loom_rewriter_worklist_chunk_t** out_chunk) {
+  *out_chunk = NULL;
+  const iree_host_size_t pooled_size =
+      iree_arena_block_pool_max_allocation_size(rewriter->arena->block_pool);
+  const iree_host_size_t chunk_size = iree_min(
+      pooled_size, (iree_host_size_t)LOOM_REWRITER_MAX_WORKLIST_CHUNK_SIZE);
+  const iree_host_size_t maximum_capacity =
+      chunk_size > sizeof(loom_rewriter_worklist_chunk_t)
+          ? (chunk_size - sizeof(loom_rewriter_worklist_chunk_t)) /
+                sizeof(loom_op_t*)
+          : 1;
+  const iree_host_size_t entry_capacity =
+      iree_max(iree_min(desired_capacity, maximum_capacity), 1);
+  const iree_host_size_t allocation_size =
+      sizeof(loom_rewriter_worklist_chunk_t) +
+      entry_capacity * sizeof(loom_op_t*);
+  loom_rewriter_worklist_chunk_t* chunk = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(rewriter->arena, allocation_size, (void**)&chunk));
+  *chunk = (loom_rewriter_worklist_chunk_t){
+      .previous = previous,
+      .entry_capacity = entry_capacity,
+  };
+  if (previous) {
+    previous->next = chunk;
+  }
+  *out_chunk = chunk;
+  return iree_ok_status();
+}
+
+// Advances from a full chunk without inflating the inlined queueing path with
+// geometric capacity selection and allocation failure handling.
+IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_rewriter_worklist_advance(
+    loom_rewriter_t* rewriter) {
+  loom_rewriter_worklist_chunk_t* chunk = rewriter->worklist_chunk;
+  if (chunk->next) {
+    rewriter->worklist_chunk = chunk->next;
+    return iree_ok_status();
+  }
+  const iree_host_size_t desired_capacity =
+      iree_max(chunk->entry_capacity * 2,
+               (iree_host_size_t)LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY);
+  return loom_rewriter_worklist_chunk_allocate(
+      rewriter, desired_capacity, chunk, &rewriter->worklist_chunk);
+}
+
 static iree_host_size_t loom_rewriter_cfg_region_hash(
     const loom_region_t* region) {
   uintptr_t bits = (uintptr_t)region;
@@ -333,12 +400,18 @@ void loom_rewriter_initialize(loom_rewriter_t* rewriter, loom_module_t* module,
 
 void loom_rewriter_deinitialize(loom_rewriter_t* rewriter) {
   loom_rewriter_release_cfg_facts(rewriter);
-  // Clear ON_WORKLIST bits on any remaining ops.
-  for (iree_host_size_t i = 0; i < rewriter->worklist_count; ++i) {
-    rewriter->worklist[i]->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
+  // Clear ON_WORKLIST bits on any remaining ops. Start at the oldest chunk so
+  // emptied newer chunks retained for reuse are harmless.
+  loom_rewriter_worklist_chunk_t* chunk = rewriter->worklist_chunk;
+  while (chunk && chunk->previous) {
+    chunk = chunk->previous;
   }
-  // The worklist array itself is arena-allocated — freed when the
-  // pass arena is deinitialized.
+  for (; chunk; chunk = chunk->next) {
+    for (iree_host_size_t i = 0; i < chunk->entry_count; ++i) {
+      chunk->entries[i]->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
+    }
+  }
+  // Worklist chunks are arena-allocated and released with the pass arena.
   memset(rewriter, 0, sizeof(*rewriter));
 }
 
@@ -354,15 +427,12 @@ void loom_rewriter_set_operation_creation_source(loom_rewriter_t* rewriter,
 }
 
 iree_status_t loom_rewriter_enable_worklist(loom_rewriter_t* rewriter) {
-  if (rewriter->worklist) {
+  if (rewriter->worklist_chunk) {
     return iree_ok_status();
   }
-  const iree_host_size_t capacity = LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, capacity,
-                                                 sizeof(*rewriter->worklist),
-                                                 (void**)&rewriter->worklist));
-  rewriter->worklist_capacity = capacity;
-  return iree_ok_status();
+  return loom_rewriter_worklist_chunk_allocate(
+      rewriter, LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY, /*previous=*/NULL,
+      &rewriter->worklist_chunk);
 }
 
 iree_status_t loom_rewriter_seed_region(loom_rewriter_t* rewriter,
@@ -956,25 +1026,23 @@ iree_status_t loom_rewriter_erase_if_dead(loom_rewriter_t* rewriter,
 
 iree_status_t loom_rewriter_add_to_worklist(loom_rewriter_t* rewriter,
                                             loom_op_t* op) {
-  if (!rewriter->worklist ||
+  if (!rewriter->worklist_chunk ||
       (op->flags & (LOOM_OP_FLAG_DEAD | LOOM_OP_FLAG_ON_WORKLIST))) {
     return iree_ok_status();
   }
   op->flags |= LOOM_OP_FLAG_ON_WORKLIST;
 
-  // Grow worklist if needed (arena allocation — old array is abandoned).
-  if (rewriter->worklist_count >= rewriter->worklist_capacity) {
-    iree_status_t status = iree_arena_grow_array(
-        rewriter->arena, rewriter->worklist_count, rewriter->worklist_count + 1,
-        sizeof(loom_op_t*), &rewriter->worklist_capacity,
-        (void**)&rewriter->worklist);
+  loom_rewriter_worklist_chunk_t* chunk = rewriter->worklist_chunk;
+  if (IREE_UNLIKELY(chunk->entry_count >= chunk->entry_capacity)) {
+    iree_status_t status = loom_rewriter_worklist_advance(rewriter);
     if (!iree_status_is_ok(status)) {
       op->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
       return status;
     }
+    chunk = rewriter->worklist_chunk;
   }
 
-  rewriter->worklist[rewriter->worklist_count++] = op;
+  chunk->entries[chunk->entry_count++] = op;
   return iree_ok_status();
 }
 
@@ -1047,7 +1115,7 @@ static void loom_rewriter_invalidate_cfg_forwarding(loom_rewriter_t* rewriter,
 // an unused definition does not change an equation in its own CFG component.
 static iree_status_t loom_rewriter_add_parent_summary_ops_to_worklist(
     loom_rewriter_t* rewriter, loom_op_t* op) {
-  if (!rewriter->worklist && !rewriter->fact_table) {
+  if (!rewriter->worklist_chunk && !rewriter->fact_table) {
     return iree_ok_status();
   }
   bool has_cfg_facts =
@@ -1089,8 +1157,17 @@ static iree_status_t loom_rewriter_add_summary_ops_to_worklist(
 }
 
 loom_op_t* loom_rewriter_pop(loom_rewriter_t* rewriter) {
-  while (rewriter->worklist_count > 0) {
-    loom_op_t* op = rewriter->worklist[--rewriter->worklist_count];
+  loom_rewriter_worklist_chunk_t* chunk = rewriter->worklist_chunk;
+  while (chunk) {
+    if (chunk->entry_count == 0) {
+      if (!chunk->previous) {
+        return NULL;
+      }
+      chunk = chunk->previous;
+      rewriter->worklist_chunk = chunk;
+      continue;
+    }
+    loom_op_t* op = chunk->entries[--chunk->entry_count];
     op->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
     // Skip ops that were erased while on the worklist.
     if (op->flags & LOOM_OP_FLAG_DEAD) {
@@ -1124,7 +1201,7 @@ static iree_status_t loom_rewriter_add_value_ref_provider_to_worklist(
 
 static iree_status_t loom_rewriter_add_type_ref_providers_to_worklist(
     loom_rewriter_t* rewriter, loom_type_t type) {
-  if (!rewriter->worklist) {
+  if (!rewriter->worklist_chunk) {
     return iree_ok_status();
   }
   return loom_type_walk_value_refs(
@@ -1134,7 +1211,7 @@ static iree_status_t loom_rewriter_add_type_ref_providers_to_worklist(
 
 static iree_status_t loom_rewriter_add_subtree_providers_to_worklist(
     loom_rewriter_t* rewriter, loom_op_t* op) {
-  if (!rewriter->worklist) {
+  if (!rewriter->worklist_chunk) {
     return iree_ok_status();
   }
   return loom_op_walk_subtree_value_refs(
@@ -1161,7 +1238,7 @@ static iree_status_t loom_rewriter_add_attribute_users_to_worklist(
 static iree_status_t loom_rewriter_add_users_to_worklist(
     loom_rewriter_t* rewriter, loom_value_id_t value_id,
     loom_rewriter_user_change_flags_t flags) {
-  if (!rewriter->worklist && !rewriter->fact_table) {
+  if (!rewriter->worklist_chunk && !rewriter->fact_table) {
     return iree_ok_status();
   }
   loom_value_t* value = loom_module_value(rewriter->module, value_id);
@@ -1208,7 +1285,7 @@ static iree_status_t loom_rewriter_add_users_to_worklist(
 static iree_status_t loom_rewriter_add_operand_users_except_to_worklist(
     loom_rewriter_t* rewriter, loom_value_id_t value_id,
     const loom_op_t* except_op) {
-  if (!rewriter->worklist && !rewriter->fact_table) {
+  if (!rewriter->worklist_chunk && !rewriter->fact_table) {
     return iree_ok_status();
   }
   loom_value_t* value = loom_module_value(rewriter->module, value_id);
@@ -1565,7 +1642,7 @@ iree_status_t loom_rewriter_move_region_blocks(
   IREE_RETURN_IF_ERROR(loom_region_reserve_block_capacity(
       rewriter->module, storage_region, final_block_count));
 
-  if (rewriter->worklist) {
+  if (rewriter->worklist_chunk) {
     for (uint16_t block_index = 0; block_index < source_region->block_count;
          ++block_index) {
       loom_op_t* op = NULL;

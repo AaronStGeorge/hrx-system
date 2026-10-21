@@ -394,19 +394,16 @@ static iree_status_t loom_storage_interference_record_value_accesses(
 }
 
 static void loom_storage_interference_append_lifetime_events(
-    const loom_storage_interference_t* analysis, loom_value_ordinal_t ordinal,
-    uint32_t start_point, uint32_t end_point, loom_liveness_event_t* events,
-    iree_host_size_t* event_count, uint32_t* maximum_point) {
-  const loom_value_id_t value_id = analysis->value_domain->value_ids[ordinal];
+    loom_value_ordinal_t ordinal, uint32_t start_point, uint32_t end_point,
+    loom_liveness_event_t* events, iree_host_size_t* event_count,
+    uint32_t* maximum_point) {
   events[(*event_count)++] = (loom_liveness_event_t){
       .point = start_point,
-      .value_id = value_id,
       .value_ordinal = ordinal,
       .value_delta = 1,
   };
   events[(*event_count)++] = (loom_liveness_event_t){
       .point = end_point,
-      .value_id = value_id,
       .value_ordinal = ordinal,
       .value_delta = -1,
   };
@@ -460,8 +457,8 @@ static iree_status_t loom_storage_interference_append_async_events(
         completion_points[access->completion_group_ordinal];
     IREE_ASSERT_NE(end_point, UINT32_MAX);
     loom_storage_interference_append_lifetime_events(
-        analysis, access->reference_ordinal, start_point, end_point, events,
-        event_count, maximum_point);
+        access->reference_ordinal, start_point, end_point, events, event_count,
+        maximum_point);
   }
   return iree_ok_status();
 }
@@ -551,8 +548,8 @@ static iree_status_t loom_storage_interference_prove_single_instances(
       const loom_liveness_segment_t* segment =
           &liveness.segments[range.start + j];
       loom_storage_interference_append_lifetime_events(
-          analysis, i, segment->start_point, segment->end_point, events,
-          &event_count, &maximum_point);
+          i, segment->start_point, segment->end_point, events, &event_count,
+          &maximum_point);
     }
   }
   IREE_RETURN_IF_ERROR(loom_storage_interference_append_async_events(

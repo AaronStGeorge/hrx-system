@@ -103,8 +103,7 @@ static inline uint64_t loom_amdgpu_structural_packet_control_transfer_count(
 // Returns AMDGPU native scheduling facts for one structural low packet.
 loom_amdgpu_structural_packet_info_t loom_amdgpu_structural_packet_analyze(
     const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation,
-    const loom_low_schedule_node_t* node,
+    const loom_low_allocation_table_t* allocation, uint32_t node_index,
     loom_amdgpu_structural_packet_analysis_flags_t analysis_flags);
 
 #ifdef __cplusplus

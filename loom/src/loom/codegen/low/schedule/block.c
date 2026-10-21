@@ -34,16 +34,13 @@ void loom_low_schedule_block_begin(loom_low_schedule_build_state_t* state,
 static void loom_low_schedule_block_note_issue_group(
     loom_low_schedule_build_state_t* state, uint32_t node_index) {
   loom_low_schedule_node_t* node = &state->nodes[node_index];
-  if (state->issue_group_count != 0) {
+  const loom_low_schedule_block_t* block =
+      &state->blocks[state->current_block_index];
+  if (block->issue_group_count != 0) {
     loom_low_schedule_issue_group_t* group =
         &state->issue_groups[state->issue_group_count - 1];
-    if (group->block_index == node->block_index) {
-      IREE_ASSERT_LE(group->issue_cycle, node->issue_cycle);
-    }
-    if (group->block_index == node->block_index &&
-        group->issue_cycle == node->issue_cycle) {
-      IREE_ASSERT_NE(group->scheduled_node_count, UINT32_MAX);
-      ++group->scheduled_node_count;
+    IREE_ASSERT_LE(group->issue_cycle, node->issue_cycle);
+    if (group->issue_cycle == node->issue_cycle) {
       node->issue_group_ordinal = (uint32_t)state->issue_group_count - 1;
       return;
     }
@@ -52,10 +49,8 @@ static void loom_low_schedule_block_note_issue_group(
   node->issue_group_ordinal = (uint32_t)state->issue_group_count;
   state->issue_groups[state->issue_group_count++] =
       (loom_low_schedule_issue_group_t){
-          .block_index = node->block_index,
           .issue_cycle = node->issue_cycle,
           .scheduled_node_start = (uint32_t)state->scheduled_node_count,
-          .scheduled_node_count = 1,
       };
 }
 

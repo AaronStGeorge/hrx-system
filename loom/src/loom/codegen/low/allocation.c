@@ -399,7 +399,7 @@ static iree_status_t loom_low_allocation_build_call_moves(
     loom_low_allocation_call_moves_t* call =
         &state->call_moves[state->call_move_count++];
     *call = (loom_low_allocation_call_moves_t){
-        .source_ordinal = node->source_ordinal,
+        .source_ordinal = node_index,
         .argument_count = node->operand_count,
         .result_count = node->result_count,
     };
@@ -485,10 +485,11 @@ static iree_status_t loom_low_allocation_build_exit_moves(
     if (!node) {
       continue;
     }
+    const uint32_t node_index = (uint32_t)(node - schedule->nodes);
     loom_low_allocation_exit_moves_t* exit =
         &state->exit_moves[state->exit_move_count++];
     *exit = (loom_low_allocation_exit_moves_t){
-        .source_ordinal = node->source_ordinal,
+        .source_ordinal = node_index,
         .result_count = node->operand_count,
     };
     if (state->exit_move_count > 1) {
@@ -500,7 +501,6 @@ static iree_status_t loom_low_allocation_build_exit_moves(
         node->operand_count, state->options->exit_location_count);
     const loom_value_ordinal_t* ordinals =
         loom_low_schedule_node_const_operand_ordinals(node);
-    const uint32_t node_index = (uint32_t)(node - schedule->nodes);
     const loom_liveness_operation_point_t* point = loom_liveness_operation_at(
         &state->liveness,
         state->move_plan.operation_indices_by_source_node[node_index]);

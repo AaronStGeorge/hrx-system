@@ -69,6 +69,19 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "worklist_test",
+    srcs = ["worklist_test.cc"],
+    deps = [
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "pattern_registry_test",
     srcs = ["pattern_registry_test.cc"],
     deps = [

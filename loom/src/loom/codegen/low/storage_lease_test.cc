@@ -73,13 +73,11 @@ class LowStorageLeaseTest : public ::testing::Test {
         IREE_ARRAYSIZE(state->scheduled_node_indices);
 
     state->nodes[0].block_index = 0;
-    state->nodes[0].source_ordinal = 0;
     state->nodes[0].scheduled_ordinal = 0;
     state->nodes[0].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
     state->nodes[0].operand_count = 2;
     state->nodes[0].result_count = 1;
     state->nodes[1].block_index = 0;
-    state->nodes[1].source_ordinal = 1;
     state->nodes[1].scheduled_ordinal = 1;
     state->nodes[1].kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL;
     state->nodes[1].operand_count = 1;
@@ -137,8 +135,8 @@ iree_status_t SyntheticLeaseQuery(
     const loom_low_schedule_node_t* node,
     const loom_low_storage_lease_query_sink_t* sink) {
   (void)user_data;
-  (void)schedule;
-  if (node->source_ordinal == 0) {
+  const uint32_t node_index = (uint32_t)(node - schedule->nodes);
+  if (node_index == 0) {
     IREE_RETURN_IF_ERROR(EmitEvent(
         sink->emit_lease, sink->user_data, LOOM_LOW_STORAGE_LEASE_SOURCE_READ,
         LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND, 1, 0, 2,
@@ -248,8 +246,8 @@ iree_status_t SyntheticProgressQuery(
     const loom_low_schedule_node_t* node,
     const loom_low_storage_lease_query_sink_t* sink) {
   (void)user_data;
-  (void)schedule;
-  switch (node->source_ordinal) {
+  const uint32_t node_index = (uint32_t)(node - schedule->nodes);
+  switch (node_index) {
     case 0:
       return EmitEvent(sink->emit_lease, sink->user_data,
                        LOOM_LOW_STORAGE_LEASE_SOURCE_READ,
@@ -313,7 +311,6 @@ TEST_F(LowStorageLeaseTest,
   uint32_t scheduled_node_indices[] = {1, 0, 2, 3, 4, 5, 7, 6};
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(nodes); ++i) {
     nodes[i].block_index = i < 6 ? 0 : 1;
-    nodes[i].source_ordinal = i;
     nodes[i].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
     nodes[i].operand_count = 1;
   }

@@ -80,7 +80,6 @@ class AmdgpuAddressStateTest : public ::testing::Test {
     node.schedule_class = loom_low_schedule_model_schedule_class(
         schedule_model_, descriptor_view);
     node.block_index = 0;
-    node.source_ordinal = node_index;
     node.scheduled_ordinal = node_index;
     node.kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
     node.operand_count = 2;
@@ -104,7 +103,6 @@ class AmdgpuAddressStateTest : public ::testing::Test {
                              /*lhs_ordinal=*/4, /*rhs_ordinal=*/5);
     nodes_[2] = {};
     nodes_[2].block_index = 0;
-    nodes_[2].source_ordinal = 2;
     nodes_[2].scheduled_ordinal = 2;
     nodes_[2].traits = LOOM_TRAIT_TERMINATOR;
     nodes_[2].kind = LOOM_LOW_SCHEDULE_NODE_TERMINATOR;

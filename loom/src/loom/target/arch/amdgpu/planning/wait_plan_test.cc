@@ -223,7 +223,6 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
         .op = branch,
         .block_index = 0,
     };
-    branch_node.source_ordinal = nodes_.size();
     branch_node.scheduled_ordinal = 1;
     branch_node.kind = LOOM_LOW_SCHEDULE_NODE_TERMINATOR;
     branch_node.traits = branch->traits;
@@ -281,7 +280,6 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
         .traits = return_op->traits,
         .kind = LOOM_LOW_SCHEDULE_NODE_TERMINATOR,
     };
-    node.source_ordinal = nodes_.size();
     node.scheduled_ordinal = nodes_.size();
     nodes_.push_back(node);
     order_.resize(nodes_.size());
@@ -365,13 +363,13 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
   void Append(loom_amdgpu_descriptor_ref_t descriptor_ref,
               loom_named_attr_slice_t attrs,
               loom_memory_access_flags_t access_flags = 0) {
+    const uint32_t node_index = (uint32_t)nodes_.size();
     const auto* descriptor =
         loom_amdgpu_descriptor_ref_descriptor(descriptors_, descriptor_ref);
     const auto* layout = loom_low_descriptor_layout(descriptors_, descriptor);
     const auto* view =
         loom_low_descriptor_set_descriptor_view(descriptors_, descriptor);
     loom_low_schedule_node_t node = {};
-    node.source_ordinal = nodes_.size();
     node.scheduled_ordinal = nodes_.size();
     node.kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
     node.descriptor = descriptor;
@@ -397,7 +395,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
     for (uint16_t i = 0; i < layout->effect_count; ++i) {
       const auto& effect = descriptors_->effects[layout->effect_start + i];
       loom_low_schedule_effect_use_t use = {
-          .node_index = node.source_ordinal,
+          .node_index = node_index,
           .scheduled_ordinal = node.scheduled_ordinal,
           .effect_ordinal = i,
           .kind = effect.kind,
@@ -411,7 +409,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
     }
     for (uint16_t i = 0; i < node.schedule_class->hazard_count; ++i) {
       loom_low_schedule_hazard_use_t use = {
-          .node_index = node.source_ordinal,
+          .node_index = node_index,
           .hazard_index =
               static_cast<uint32_t>(node.schedule_class->hazard_start + i),
       };

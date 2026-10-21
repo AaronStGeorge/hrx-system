@@ -242,7 +242,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_assembly(
 
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &packet_plan));
+      &frame->schedule, &frame->allocation, arena,
+      /*out_vopd_rejections=*/NULL, &packet_plan));
   const loom_amdgpu_encode_instruction_stream_options_t encoding_options = {
       .packet_plan = &packet_plan,
   };
@@ -270,7 +271,8 @@ static iree_status_t loom_amdgpu_loom_check_encode_native(
 
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &packet_plan));
+      &frame->schedule, &frame->allocation, arena,
+      /*out_vopd_rejections=*/NULL, &packet_plan));
   const loom_amdgpu_encode_instruction_stream_options_t encoding_options = {
       .packet_plan = &packet_plan,
   };
@@ -295,7 +297,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_wait_state_plan_json(
     iree_arena_allocator_t* arena) {
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &packet_plan));
+      &frame->schedule, &frame->allocation, arena,
+      /*out_vopd_rejections=*/NULL, &packet_plan));
   return loom_amdgpu_wait_state_plan_format_json(&packet_plan.wait_states,
                                                  builder);
 }
@@ -305,7 +308,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_wait_state_plan(
     iree_arena_allocator_t* arena) {
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &packet_plan));
+      &frame->schedule, &frame->allocation, arena,
+      /*out_vopd_rejections=*/NULL, &packet_plan));
   return loom_amdgpu_wait_state_plan_format_text(&packet_plan.wait_states,
                                                  builder);
 }
@@ -315,7 +319,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_wait_counter_plan_json(
     iree_arena_allocator_t* arena) {
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &packet_plan));
+      &frame->schedule, &frame->allocation, arena,
+      /*out_vopd_rejections=*/NULL, &packet_plan));
   return loom_amdgpu_wait_plan_format_json(&packet_plan.wait_plan, builder);
 }
 
@@ -323,9 +328,11 @@ static iree_status_t loom_amdgpu_loom_check_emit_vopd_plan_json(
     const loom_low_emission_frame_t* frame, iree_string_builder_t* builder,
     iree_arena_allocator_t* arena) {
   loom_amdgpu_packet_plan_t packet_plan = {0};
+  loom_amdgpu_vopd_rejection_table_t rejections = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &packet_plan));
-  return loom_amdgpu_vopd_plan_format_json(&packet_plan.vopd_plan, builder);
+      &frame->schedule, &frame->allocation, arena, &rejections, &packet_plan));
+  return loom_amdgpu_vopd_plan_format_json(&packet_plan.vopd_plan, &rejections,
+                                           builder);
 }
 
 static bool loom_amdgpu_loom_check_needs_storage_leases(

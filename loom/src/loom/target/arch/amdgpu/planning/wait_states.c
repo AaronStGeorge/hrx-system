@@ -909,7 +909,7 @@ static iree_status_t loom_amdgpu_wait_state_append(
       .node_index = insertion_packet->node_index,
       .scheduled_ordinal = insertion_packet->node->scheduled_ordinal,
       .producer_node = match->producer_node,
-      .consumer_node = consumer_packet->node->source_ordinal,
+      .consumer_node = consumer_packet->node_index,
       .required_cycle_count = match->required_cycle_count,
       .observed_cycle_count = match->observed_cycle_count,
       .cycle_count = match->cycle_count,
@@ -1081,7 +1081,7 @@ static iree_status_t loom_amdgpu_wait_state_packet_analyze(
   *out_info = (loom_amdgpu_wait_state_packet_info_t){0};
   if (packet->descriptor == NULL) {
     out_info->structural = loom_amdgpu_structural_packet_analyze(
-        builder->schedule, builder->allocation, packet->node, 0);
+        builder->schedule, builder->allocation, packet->node_index, 0);
     out_info->instruction_count = out_info->structural.instruction_count;
     out_info->delay_alu_type = loom_amdgpu_wait_state_structural_delay_alu_type(
         builder, &out_info->structural);

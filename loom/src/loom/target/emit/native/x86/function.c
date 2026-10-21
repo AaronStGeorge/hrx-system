@@ -619,8 +619,8 @@ static iree_status_t loom_x86_function_call(
       loom_x86_module_abi_lookup(builder->module_abi, callee);
   IREE_ASSERT_NE(callee_abi, NULL);
   const loom_low_allocation_call_moves_t* moves =
-      loom_low_allocation_find_call_moves_by_source_ordinal(
-          &frame->allocation, packet->node->source_ordinal);
+      loom_low_allocation_find_call_moves_by_source_ordinal(&frame->allocation,
+                                                            packet->node_index);
   // Stack operands must be read before argument registers are permuted. The
   // outgoing area is disjoint from all function-local storage and is written
   // only by the call that consumes it.
@@ -777,8 +777,8 @@ static iree_status_t loom_x86_function_return(
     loom_x86_function_builder_t* builder) {
   const loom_x86_function_abi_t* abi = builder->function_abi;
   const loom_low_allocation_exit_moves_t* moves =
-      loom_low_allocation_find_exit_moves_by_source_ordinal(
-          &frame->allocation, packet->node->source_ordinal);
+      loom_low_allocation_find_exit_moves_by_source_ordinal(&frame->allocation,
+                                                            packet->node_index);
   for (uint16_t i = 0; i < packet->node->operand_count; ++i) {
     if (abi->call_contract.results[i].location_kind !=
         LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED) {
@@ -1065,7 +1065,7 @@ static iree_status_t loom_x86_function_structural(
   if (loom_low_br_isa(node->op)) {
     const loom_low_allocation_edge_copy_group_t* group =
         loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-            &frame->allocation, node->source_ordinal);
+            &frame->allocation, packet->node_index);
     if (group) {
       IREE_RETURN_IF_ERROR(loom_x86_function_moves(
           &frame->allocation, group->move_group.moves, builder));
@@ -1108,7 +1108,7 @@ static iree_status_t loom_x86_function_structural(
       loom_low_slice_isa(node->op) || loom_low_concat_isa(node->op)) {
     const loom_low_allocation_packet_move_group_t* group =
         loom_low_allocation_find_packet_move_group_by_source_ordinal(
-            &frame->allocation, node->source_ordinal);
+            &frame->allocation, packet->node_index);
     return group ? loom_x86_function_moves(&frame->allocation,
                                            group->move_group.moves, builder)
                  : iree_ok_status();

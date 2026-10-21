@@ -113,6 +113,21 @@ iree_status_t iree_tokenizer_vocab_builder_ensure_token(
     iree_tokenizer_vocab_builder_t* builder, int32_t token_id,
     iree_string_view_t text, double score, iree_tokenizer_token_attr_t attrs);
 
+// Seals the token set and builds its text-to-ID lookup index.
+//
+// Sealing is idempotent. Tokens and their attributes may no longer be added or
+// changed after this call succeeds. Merge rules and special token IDs remain
+// mutable until build(). The lookup index is transferred into the final
+// vocabulary without rebuilding it.
+iree_status_t iree_tokenizer_vocab_builder_seal_tokens(
+    iree_tokenizer_vocab_builder_t* builder);
+
+// Looks up a token in a sealed builder.
+// Returns the token ID if found, or -1 if absent.
+// The token set must have been sealed successfully before calling this.
+int32_t iree_tokenizer_vocab_builder_lookup(
+    const iree_tokenizer_vocab_builder_t* builder, iree_string_view_t text);
+
 // Adds a BPE merge rule.
 //
 // Merges are stored in the order added (rank order). Index 0 = highest

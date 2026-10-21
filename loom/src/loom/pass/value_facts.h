@@ -67,11 +67,6 @@ typedef struct loom_pass_value_fact_scope_t {
   // Requested fact population scope.
   loom_pass_value_fact_scope_kind_t kind;
 
-  // Optional producer-known value-entry prefix to reserve before population.
-  // Zero leaves capacity to definition-time growth. This is a backing-storage
-  // hint, not scope identity: a cache hit never reallocates for a new hint.
-  uint32_t minimum_value_capacity;
-
   // Function context for ordinary or conditioned FUNCTION and REGION scopes.
   // REGION scopes may leave this empty when analyzing detached IR, but
   // projected func-like regions provide the owning function for op fact
@@ -215,6 +210,15 @@ iree_status_t loom_pass_value_fact_owner_acquire(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module,
     loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
 
+// Acquires computed facts while using |reserved_values| as a producer-owned
+// direct-storage hint. The range is not scope identity, and a cache hit does
+// not reallocate for a different hint. An empty range is equivalent to
+// loom_pass_value_fact_owner_acquire.
+iree_status_t loom_pass_value_fact_owner_acquire_range(
+    loom_pass_value_fact_owner_t* owner, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_range_t reserved_values,
+    loom_value_fact_table_t** out_table);
+
 // Prepares scoped fact storage through a pass invocation.
 iree_status_t loom_pass_value_facts_prepare(
     loom_pass_t* pass, loom_module_t* module,
@@ -224,6 +228,12 @@ iree_status_t loom_pass_value_facts_prepare(
 iree_status_t loom_pass_value_facts_acquire(
     loom_pass_t* pass, loom_module_t* module,
     loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
+
+// Acquires scoped facts with a producer-owned direct-storage reservation.
+iree_status_t loom_pass_value_facts_acquire_range(
+    loom_pass_t* pass, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_range_t reserved_values,
+    loom_value_fact_table_t** out_table);
 
 #ifdef __cplusplus
 }  // extern "C"

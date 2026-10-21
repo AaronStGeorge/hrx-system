@@ -918,8 +918,11 @@ loomc_status_t loomc_emit_transaction_emit(
   };
   if (loomc_status_is_ok(status)) {
     bool target_emitted = false;
+    IREE_TRACE_ZONE_BEGIN_NAMED_DYNAMIC(z_target_emit, emitter->name.data,
+                                        emitter->name.size);
     iree_status_t emit_status =
         emitter->emit(&request, &target_emitted, &target_artifact);
+    IREE_TRACE_ZONE_END(z_target_emit);
     iree_status_code_t report_status = iree_status_code(emit_status);
     if (report_status == IREE_STATUS_OK && !target_emitted) {
       report_status = IREE_STATUS_FAILED_PRECONDITION;

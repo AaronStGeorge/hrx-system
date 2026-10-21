@@ -488,8 +488,8 @@ static iree_status_t loom_serve_jit_emit_module(
     loomc_module_t* module, iree_host_size_t specialization_count,
     const loomc_target_specialization_t* specializations,
     iree_string_view_t format, loom_serve_compilation_report_t* report,
-    iree_allocator_t host_allocator, iree_const_byte_span_t* out_image) {
-  *out_image = iree_const_byte_span_empty();
+    iree_allocator_t host_allocator, loomc_byte_sequence_t** out_contents) {
+  *out_contents = NULL;
   const loomc_allocator_t ca = loomc_allocator_from_iree(host_allocator);
   const loomc_target_specialization_options_t target_options = {
       .type = LOOMC_STRUCTURE_TYPE_TARGET_SPECIALIZATION_OPTIONS,
@@ -514,15 +514,13 @@ static iree_status_t loom_serve_jit_emit_module(
     result = NULL;
     operation = loomc_emit_module(compiler->environment, workspace, module,
                                   &emit_options, ca, &result);
-    // Retain result until the primary artifact bytes have been copied.
+    // Retain the result while capturing an independent contents reference.
     loomc_result_retain(result);
     status = loom_serve_compilation_result(operation, result, report);
     if (iree_status_is_ok(status)) {
       const loomc_artifact_t* artifact = loomc_result_artifact_at(result, 0);
-      loomc_byte_span_t image = loomc_byte_span_empty();
-      status = iree_status_from_loomc(
-          loomc_byte_sequence_clone(artifact->contents, ca, &image));
-      *out_image = iree_const_byte_span_from_loomc(image);
+      loomc_byte_sequence_retain(artifact->contents);
+      *out_contents = artifact->contents;
     }
     loomc_result_release(result);
   }
@@ -1032,8 +1030,8 @@ static void loom_serve_jit_native_loaded(void* user_data, iree_status_t status,
 static void loom_serve_jit_load_native(loom_serve_jit_native_t* native) {
   loom_serve_jit_t* jit = native->jit;
   if (!iree_status_is_ok(native->status)) {
-    iree_allocator_free(jit->host_allocator, (void*)native->load.image.data);
-    native->load.image = iree_const_byte_span_empty();
+    iree_byte_sequence_release(native->load.image);
+    native->load.image = NULL;
     loom_serve_jit_native_loaded(native, native->status, NULL);
     return;
   }
@@ -1077,10 +1075,12 @@ static iree_status_t loom_serve_jit_compile_request(
   }
   iree_allocator_free(jit->host_allocator, roots);
   if (iree_status_is_ok(status)) {
-    status = loom_serve_jit_emit_module(
-        &jit->kernel, workspace, module, native->load.root_count,
-        specializations, jit->artifact_format, report, jit->host_allocator,
-        &native->load.image);
+    loomc_byte_sequence_t* contents = NULL;
+    status = loom_serve_jit_emit_module(&jit->kernel, workspace, module,
+                                        native->load.root_count,
+                                        specializations, jit->artifact_format,
+                                        report, jit->host_allocator, &contents);
+    native->load.image = iree_byte_sequence_from_loomc(contents);
   }
   loomc_module_release(module);
   iree_allocator_free(jit->host_allocator, specializations);
@@ -1217,10 +1217,8 @@ static iree_status_t loom_serve_jit_emit_dispatch(
       status = iree_status_from_loomc(
           loomc_launch_config_program_load(artifact, host_allocator, &launch));
     } else if (artifact->kind == LOOMC_ARTIFACT_KIND_EXECUTABLE) {
-      loomc_byte_span_t image = loomc_byte_span_empty();
-      status = iree_status_from_loomc(loomc_byte_sequence_clone(
-          artifact->contents, host_allocator, &image));
-      native->load.image = iree_const_byte_span_from_loomc(image);
+      loomc_byte_sequence_retain(artifact->contents);
+      native->load.image = iree_byte_sequence_from_loomc(artifact->contents);
     }
   }
   loomc_result_release(result);
@@ -1609,9 +1607,17 @@ iree_status_t loom_serve_jit_compile_vm(
     status = loom_serve_compilation_result(operation, result, report);
   }
   if (iree_status_is_ok(status)) {
+    loomc_byte_sequence_t* contents = NULL;
     status = loom_serve_jit_emit_module(
         &compiler, workspace, module, root_count, specializations,
-        IREE_SV(LOOMC_ARTIFACT_FORMAT_VM), report, host_allocator, out_image);
+        IREE_SV(LOOMC_ARTIFACT_FORMAT_VM), report, host_allocator, &contents);
+    if (iree_status_is_ok(status)) {
+      loomc_byte_span_t image = loomc_byte_span_empty();
+      status = iree_status_from_loomc(
+          loomc_byte_sequence_clone(contents, ca, &image));
+      *out_image = iree_const_byte_span_from_loomc(image);
+    }
+    loomc_byte_sequence_release(contents);
   }
   loomc_module_release(module);
   loomc_linker_release(linker);

@@ -91,6 +91,8 @@ typedef struct loom_low_schedule_state_chain_read_record_t {
   loom_low_schedule_state_access_t access;
   // Next state-chain read record for the same producer node.
   uint32_t next_record;
+  // Packet operand carrying the explicit state value, or LOOM_LOW_ID_NONE.
+  uint16_t value_operand_index;
 } loom_low_schedule_state_chain_read_record_t;
 
 typedef struct loom_low_schedule_pair_affinity_record_t {
@@ -192,23 +194,30 @@ typedef struct loom_low_schedule_unspillable_completion_path_t {
 // Mutable scheduling facts indexed by function-local value ordinal. The
 // acquired value domain owns the corresponding module value IDs.
 typedef struct loom_low_schedule_value_record_t {
-  // First same-class architectural-state writer after the producer.
-  loom_low_schedule_state_access_t state_next_write;
+  // State-graph construction and pressure scheduling do not overlap. Reuse
+  // their three mutable words instead of charging every value for both phases.
+  union {
+    // First same-class architectural-state writer after the producer.
+    loom_low_schedule_state_access_t state_next_write;
+    struct {
+      // Live units currently charged to this value in the pressure model.
+      uint32_t live_unit_count;
+      // Units inherited before result writes while scoring a candidate.
+      uint32_t candidate_transferred_units;
+      // Remaining local operands plus one retained use for a block live-out.
+      uint32_t remaining_use_count;
+    };
+  };
   // Register units contributed to the pressure model.
   uint32_t unit_count;
-  // Live units currently charged to this value in the pressure model.
-  uint32_t live_unit_count;
-  // Units inherited before result writes while scoring the current candidate.
-  uint32_t candidate_transferred_units;
-  // Remaining local operands plus one retained use for a block live-out.
-  uint32_t remaining_use_count;
-  // Least expensive local exit for a compiler-produced unspillable value.
-  loom_low_schedule_unspillable_completion_path_t unspillable_completion;
   // Descriptor-set-local register class, or LOOM_LOW_REG_CLASS_NONE.
   uint16_t register_class_id;
   // Mutable per-schedule flags.
   loom_low_schedule_value_flags_t flags;
 } loom_low_schedule_value_record_t;
+
+static_assert(sizeof(loom_low_schedule_value_record_t) == 20,
+              "schedule value records must remain compact");
 
 static inline bool loom_low_schedule_value_requires_register(
     const loom_low_schedule_value_record_t* value) {
@@ -275,6 +284,10 @@ typedef struct loom_low_schedule_build_state_t {
   const loom_liveness_dataflow_t* liveness_dataflow;
   // Dense per-local-value scheduler records indexed by value ordinal.
   loom_low_schedule_value_record_t* values;
+  // Least expensive local exit for each compiler-produced unspillable value.
+  // Allocated by value ordinal only when bounded unspillable domains exist.
+  loom_low_schedule_unspillable_completion_path_t*
+      value_unspillable_completions;
   // Defining schedule node indexed by local value ordinal.
   uint32_t* value_producer_nodes;
   // Schedule block records indexed by region block ordinal.

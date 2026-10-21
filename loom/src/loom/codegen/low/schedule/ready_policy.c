@@ -190,20 +190,18 @@ static uint16_t loom_low_schedule_ready_policy_pair_priority(
 }
 
 static bool loom_low_schedule_ready_policy_pair_is_preferred(
-    const loom_low_schedule_build_state_t* state,
-    const loom_low_schedule_node_t* first,
-    const loom_low_schedule_node_t* second) {
+    const loom_low_schedule_build_state_t* state, uint32_t first_node,
+    uint32_t second_node) {
   return state->preferred_pair_nodes != NULL &&
-         state->preferred_pair_nodes[first->source_ordinal].successor_node ==
-             second->source_ordinal;
+         state->preferred_pair_nodes[first_node].successor_node == second_node;
 }
 
 static uint16_t loom_low_schedule_ready_policy_affinity_priority(
-    const loom_low_schedule_build_state_t* state,
-    const loom_low_schedule_node_t* first,
-    const loom_low_schedule_node_t* second,
-    uint16_t* out_placement_option_count) {
+    const loom_low_schedule_build_state_t* state, uint32_t first_node,
+    uint32_t second_node, uint16_t* out_placement_option_count) {
   *out_placement_option_count = 0;
+  const loom_low_schedule_node_t* first = &state->nodes[first_node];
+  const loom_low_schedule_node_t* second = &state->nodes[second_node];
   const loom_low_schedule_pair_affinity_record_t* record =
       loom_low_schedule_ready_policy_find_pair(state, first, second);
   if (record == NULL ||
@@ -211,8 +209,8 @@ static uint16_t loom_low_schedule_ready_policy_affinity_priority(
     return 0;
   }
   if (record->placement_recipe_index == LOOM_LOW_PLACEMENT_PAIR_RECIPE_NONE) {
-    return loom_low_schedule_ready_policy_pair_is_preferred(state, first,
-                                                            second)
+    return loom_low_schedule_ready_policy_pair_is_preferred(state, first_node,
+                                                            second_node)
                ? UINT16_MAX
                : record->priority;
   }
@@ -230,7 +228,8 @@ static uint16_t loom_low_schedule_ready_policy_affinity_priority(
   if (*out_placement_option_count == 0) {
     return 0;
   }
-  return loom_low_schedule_ready_policy_pair_is_preferred(state, first, second)
+  return loom_low_schedule_ready_policy_pair_is_preferred(state, first_node,
+                                                          second_node)
              ? UINT16_MAX
              : record->priority;
 }
@@ -264,11 +263,10 @@ uint16_t loom_low_schedule_ready_policy_score_candidate_pair(
       state->pending_pair_affinity_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
     return 0;
   }
-  const loom_low_schedule_node_t* anchor =
-      &state->nodes[state->pending_pair_affinity_node];
   const loom_low_schedule_node_t* candidate = &state->nodes[node_index];
   uint16_t priority = loom_low_schedule_ready_policy_affinity_priority(
-      state, anchor, candidate, out_placement_option_count);
+      state, state->pending_pair_affinity_node, node_index,
+      out_placement_option_count);
   if (priority != 0) {
     return priority > UINT16_MAX / 2u ? UINT16_MAX : (uint16_t)(priority * 2u);
   }
@@ -289,13 +287,13 @@ uint16_t loom_low_schedule_ready_policy_score_candidate_pair(
             &state->dependency_index, group_index)) {
       continue;
     }
-    const loom_low_schedule_node_t* consumer =
-        &state->nodes[loom_low_schedule_dependency_index_group_at(
-                          &state->dependency_index, group_index)
-                          ->consumer_node];
+    const uint32_t consumer_node = loom_low_schedule_dependency_index_group_at(
+                                       &state->dependency_index, group_index)
+                                       ->consumer_node;
     uint16_t placement_option_count = 0;
     priority = loom_low_schedule_ready_policy_affinity_priority(
-        state, anchor, consumer, &placement_option_count);
+        state, state->pending_pair_affinity_node, consumer_node,
+        &placement_option_count);
     if (priority != 0) {
       *out_placement_option_count = placement_option_count;
       return priority;
@@ -381,8 +379,7 @@ uint32_t loom_low_schedule_ready_policy_pair_nominee(
     if (record->priority > best_priority ||
         (record->priority == best_priority &&
          (best_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
-          state->nodes[candidate_node].source_ordinal <
-              state->nodes[best_node].source_ordinal))) {
+          candidate_node < best_node))) {
       best_node = candidate_node;
       best_priority = record->priority;
     }

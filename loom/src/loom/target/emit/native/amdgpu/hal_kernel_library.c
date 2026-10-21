@@ -11,7 +11,6 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
-#include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/frame.h"
@@ -456,20 +455,8 @@ loom_amdgpu_hal_kernel_library_record_target_profile_capabilities(
 static iree_status_t loom_amdgpu_hal_kernel_library_write_hsaco(
     const loom_amdgpu_hsaco_plan_t* plan, iree_arena_allocator_t* table_arena,
     iree_allocator_t allocator, iree_byte_sequence_t** out_hsaco) {
-  *out_hsaco = NULL;
-
-  iree_io_stream_t* stream = NULL;
-  IREE_RETURN_IF_ERROR(iree_io_vec_stream_create(
-      IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
-          IREE_IO_STREAM_MODE_SEEKABLE | IREE_IO_STREAM_MODE_RESIZABLE,
-      32 * 1024, allocator, &stream));
-  iree_status_t status =
-      loom_amdgpu_hsaco_write_plan(plan, stream, table_arena);
-  if (iree_status_is_ok(status)) {
-    status = iree_io_vec_stream_move_contents(stream, out_hsaco);
-  }
-  iree_io_stream_release(stream);
-  return status;
+  return loom_amdgpu_hsaco_serialize_plan(plan, allocator, table_arena,
+                                          out_hsaco);
 }
 
 void loom_amdgpu_hal_kernel_library_deinitialize(

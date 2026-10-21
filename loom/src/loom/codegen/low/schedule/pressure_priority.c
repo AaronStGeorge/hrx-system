@@ -137,7 +137,7 @@ static uint64_t loom_low_schedule_ready_schedule_key(
              (uint64_t)(UINT16_MAX - latency);
     }
     default:
-      return materialization_key | node->source_ordinal;
+      return materialization_key | node_index;
   }
 }
 
@@ -171,7 +171,7 @@ loom_low_schedule_ready_keys_t loom_low_schedule_pressure_ready_keys(
   return (loom_low_schedule_ready_keys_t){
       .values =
           {
-              [LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE] = node->source_ordinal,
+              [LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE] = node_index,
               [LOOM_LOW_SCHEDULE_READY_VIEW_PRESSURE] =
                   loom_low_schedule_pressure_ready_key(state, pressure_state,
                                                        node_index),
@@ -441,9 +441,10 @@ loom_low_schedule_select_unspillable_result_completion(
             state, value->register_class_id) != completion_domain_id) {
       continue;
     }
+    const loom_low_schedule_unspillable_completion_path_t* completion =
+        &state->value_unspillable_completions[result_ordinals[result_index]];
     loom_low_schedule_update_unspillable_completion_path(
-        value->unspillable_completion.activation_units,
-        value->unspillable_completion.sink, &selected);
+        completion->activation_units, completion->sink, &selected);
   }
   return selected;
 }
@@ -710,7 +711,8 @@ void loom_low_schedule_pressure_compute_node_priorities(
                         iree_any_bit_set(
                             consumer->flags,
                             LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER)),
-                    consumer_path.sink, &value->unspillable_completion);
+                    consumer_path.sink,
+                    &state->value_unspillable_completions[value_ordinal]);
               }
             }
           }

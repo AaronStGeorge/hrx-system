@@ -359,7 +359,7 @@ TEST_F(GreedyRewriteTest, MutationTrackingDoesNotRequireAWorklist) {
   EXPECT_TRUE(original->flags & LOOM_OP_FLAG_DEAD);
   EXPECT_EQ(rewriter.created_op_count, 1u);
   EXPECT_EQ(rewriter.erased_op_count, 1u);
-  EXPECT_EQ(rewriter.worklist, nullptr);
+  EXPECT_EQ(rewriter.worklist_chunk, nullptr);
   EXPECT_FALSE(replacement->flags & LOOM_OP_FLAG_ON_WORKLIST);
   EXPECT_FALSE(user->flags & LOOM_OP_FLAG_ON_WORKLIST);
 
@@ -413,7 +413,7 @@ TEST_F(GreedyRewriteTest,
   ASSERT_TRUE(loom_value_facts_as_exact_i64(
       loom_rewriter_value_facts(&rewriter, result), &value));
   EXPECT_EQ(value, 7);
-  EXPECT_EQ(rewriter.worklist, nullptr);
+  EXPECT_EQ(rewriter.worklist_chunk, nullptr);
   EXPECT_FALSE(constant_op->flags & LOOM_OP_FLAG_ON_WORKLIST);
 
   loom_rewriter_deinitialize(&rewriter);

@@ -154,6 +154,7 @@ loom_cc_library(
         "//loom/src/loom/util:dominance",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base:core_headers",
     ],
 )
 

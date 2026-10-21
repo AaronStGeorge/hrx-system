@@ -771,7 +771,7 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
     IREE_ASSERT_OK(
         loom_low_physical_issue_commit(&issue, &instruction, 1, cycle));
     loom_low_physical_issue_commit_source(&issue, i, cycle);
-    cycles[packet.node->source_ordinal] = cycle;
+    cycles[packet.node_index] = cycle;
     next_cycle = cycle + 1;
   }
   // SSA lifetimes permit reuse, but the physical read has not finished.
@@ -1372,6 +1372,10 @@ low.func.def target<test.low.core> @dependency_cycle(%lhs: reg<test.schedule_sta
   return
 }
 )");
+  const loom_region_t* body =
+      loom_low_func_def_body(loom_block_op(loom_module_block(module.get()), 0));
+  const loom_value_id_t expected_state_value_id = loom_op_const_results(
+      loom_block_const_op(loom_region_const_block(body, 1), 0))[0];
   uint32_t diagnostic_count = 0;
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &registry_.registry,
@@ -1393,6 +1397,7 @@ low.func.def target<test.low.core> @dependency_cycle(%lhs: reg<test.schedule_sta
 
   EXPECT_FALSE(accepted);
   EXPECT_EQ(frame.schedule.error_count, 1u);
+  EXPECT_EQ(frame.schedule.failure.state_value_id, expected_state_value_id);
   EXPECT_EQ(frame.schedule.source_suffix_issue_cycle_lower_bounds, nullptr);
   EXPECT_EQ(diagnostic_count, 1u);
 }

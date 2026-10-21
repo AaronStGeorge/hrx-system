@@ -1214,7 +1214,7 @@ static iree_status_t loom_amdgpu_encode_packet_moves(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_low_allocation_packet_move_group_t* group =
       loom_low_allocation_find_packet_move_group_by_source_ordinal(
-          state->inputs.allocation, packet->node->source_ordinal);
+          state->inputs.allocation, packet->node_index);
   return loom_amdgpu_encode_move_range(state, group == NULL
                                                   ? (loom_low_move_range_t){0}
                                                   : group->move_group.moves);
@@ -1776,7 +1776,7 @@ static iree_status_t loom_amdgpu_encode_branch_packet(
   if (args.count != 0) {
     const loom_low_allocation_edge_copy_group_t* group =
         loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-            state->inputs.allocation, packet->node->source_ordinal);
+            state->inputs.allocation, packet->node_index);
     if (!group) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,

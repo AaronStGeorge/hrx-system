@@ -466,7 +466,7 @@ static const loom_low_allocation_packet_move_group_t*
 loom_aie2p_bundle_plan_packet_move_group(const loom_low_emission_frame_t* frame,
                                          const loom_low_packet_view_t* packet) {
   return loom_low_allocation_find_packet_move_group_by_source_ordinal(
-      &frame->allocation, packet->node->source_ordinal);
+      &frame->allocation, packet->node_index);
 }
 
 static bool loom_aie2p_bundle_plan_physical_control_descriptor(
@@ -596,7 +596,7 @@ static iree_status_t loom_aie2p_bundle_plan_analyze(
       if (structure_kind == LOOM_AIE2P_CORE_STRUCTURE_CALL) {
         const loom_low_allocation_call_moves_t* call_moves =
             loom_low_allocation_find_call_moves_by_source_ordinal(
-                &frame->allocation, packet.node->source_ordinal);
+                &frame->allocation, packet.node_index);
         if (call_moves == NULL) {
           return iree_make_status(
               IREE_STATUS_FAILED_PRECONDITION,
@@ -738,7 +738,7 @@ static iree_status_t loom_aie2p_bundle_plan_analyze(
     if (block_analysis->terminator == LOOM_AIE2P_BLOCK_TERMINATOR_BRANCH) {
       const loom_low_allocation_edge_copy_group_t* edge_copy_group =
           loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-              &frame->allocation, terminator_packet.node->source_ordinal);
+              &frame->allocation, terminator_packet.node_index);
       if (edge_copy_group != NULL) {
         out_analysis->move_slot_count += loom_aie2p_bundle_plan_move_slot_count(
             frame, edge_copy_group->move_group.moves);
@@ -1986,7 +1986,7 @@ static iree_status_t loom_aie2p_bundle_plan_append_edge_moves(
     const loom_low_packet_view_t* terminator_packet) {
   const loom_low_allocation_edge_copy_group_t* edge_copy_group =
       loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-          &builder->frame->allocation, terminator_packet->node->source_ordinal);
+          &builder->frame->allocation, terminator_packet->node_index);
   if (edge_copy_group == NULL) {
     return iree_ok_status();
   }
@@ -2045,7 +2045,7 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
   const uint32_t logical_issue_cycle = packet->node->issue_cycle;
   const loom_low_allocation_call_moves_t* moves =
       loom_low_allocation_find_call_moves_by_source_ordinal(
-          &builder->frame->allocation, packet->node->source_ordinal);
+          &builder->frame->allocation, packet->node_index);
   IREE_ASSERT(moves != NULL &&
               "AIE2P call analysis requires retained ABI transport");
 

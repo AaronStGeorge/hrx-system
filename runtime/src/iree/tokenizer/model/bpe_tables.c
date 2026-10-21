@@ -37,11 +37,32 @@ static void iree_tokenizer_bpe_record_merge(iree_tokenizer_bpe_model_t* model,
 }
 
 // Compiles canonical histories by executing BPE on vocabulary spellings once.
-// The work array is reused for every spelling. Only character atoms are initial
-// symbols; an arbitrary multi-character merge operand is not itself an atom.
+// The work array is reused for every spelling. Each merge only invalidates its
+// two neighboring pairs, so cached results avoid repeating hash probes while
+// preserving the same left-to-right minimum-rank scan. Only character atoms
+// are initial symbols; an arbitrary multi-character merge operand is not
+// itself an atom.
+typedef struct iree_tokenizer_bpe_history_entry_t {
+  // Current token occupying this position.
+  int32_t token_id;
+  // Merge with the next live token, or no result at the final position.
+  iree_tokenizer_merge_hash_result_t merge_with_next;
+} iree_tokenizer_bpe_history_entry_t;
+
+static void iree_tokenizer_bpe_update_history_merge(
+    const iree_tokenizer_bpe_model_t* model,
+    iree_tokenizer_bpe_history_entry_t* entries, iree_host_size_t count,
+    iree_host_size_t position) {
+  entries[position].merge_with_next =
+      position + 1 < count ? iree_tokenizer_vocab_merge_hash_lookup(
+                                 model->merge_hash, entries[position].token_id,
+                                 entries[position + 1].token_id)
+                           : iree_tokenizer_merge_hash_result_none();
+}
+
 static void iree_tokenizer_bpe_build_token_history(
     iree_tokenizer_bpe_model_t* model, iree_string_view_t text,
-    int32_t* tokens) {
+    iree_tokenizer_bpe_history_entry_t* entries) {
   iree_host_size_t count = 0;
   for (iree_host_size_t position = 0; position < text.size;) {
     iree_host_size_t length = iree_tokenizer_bpe_character_length(
@@ -55,18 +76,19 @@ static void iree_tokenizer_bpe_build_token_history(
     }
     model->backtrack_tables.token_reachable[(uint32_t)token / 64] |=
         1ull << ((uint32_t)token % 64);
-    tokens[count++] = token;
+    entries[count++].token_id = token;
     position = end;
   }
 
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    iree_tokenizer_bpe_update_history_merge(model, entries, count, i);
+  }
   while (count > 1) {
     iree_host_size_t best_position = 0;
     iree_tokenizer_merge_hash_result_t best =
         iree_tokenizer_merge_hash_result_none();
     for (iree_host_size_t i = 0; i + 1 < count; ++i) {
-      iree_tokenizer_merge_hash_result_t merge =
-          iree_tokenizer_vocab_merge_hash_lookup(model->merge_hash, tokens[i],
-                                                 tokens[i + 1]);
+      iree_tokenizer_merge_hash_result_t merge = entries[i].merge_with_next;
       if (merge.rank < best.rank) {
         best = merge;
         best_position = i;
@@ -75,13 +97,19 @@ static void iree_tokenizer_bpe_build_token_history(
     if (!iree_tokenizer_merge_hash_result_is_valid(best)) {
       break;
     }
-    iree_tokenizer_bpe_record_merge(model, tokens[best_position],
-                                    tokens[best_position + 1], best.result_id,
-                                    best.rank + 1);
-    tokens[best_position] = best.result_id;
-    memmove(tokens + best_position + 1, tokens + best_position + 2,
-            (count - best_position - 2) * sizeof(*tokens));
+    iree_tokenizer_bpe_record_merge(model, entries[best_position].token_id,
+                                    entries[best_position + 1].token_id,
+                                    best.result_id, best.rank + 1);
+    entries[best_position].token_id = best.result_id;
+    memmove(entries + best_position + 1, entries + best_position + 2,
+            (count - best_position - 2) * sizeof(*entries));
     --count;
+    if (best_position > 0) {
+      iree_tokenizer_bpe_update_history_merge(model, entries, count,
+                                              best_position - 1);
+    }
+    iree_tokenizer_bpe_update_history_merge(model, entries, count,
+                                            best_position);
   }
 }
 
@@ -128,17 +156,17 @@ iree_status_t iree_tokenizer_bpe_build_backtrack_tables(
   memset(builder.backtrack_tables.token_reachable, 0,
          reachable_words * sizeof(uint64_t));
 
-  int32_t* tokens = NULL;
+  iree_tokenizer_bpe_history_entry_t* history = NULL;
   iree_host_size_t work_size = 0;
   iree_status_t status = iree_ok_status();
-  if (!iree_host_size_checked_mul(model->max_token_length, sizeof(*tokens),
+  if (!iree_host_size_checked_mul(model->max_token_length, sizeof(*history),
                                   &work_size)) {
     status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "BPE canonical history workspace overflow");
   }
   if (iree_status_is_ok(status)) {
     status =
-        iree_allocator_malloc(model->allocator, work_size, (void**)&tokens);
+        iree_allocator_malloc(model->allocator, work_size, (void**)&history);
   }
   if (iree_status_is_ok(status)) {
     for (iree_host_size_t i = 0; i < capacity; ++i) {
@@ -147,7 +175,7 @@ iree_status_t iree_tokenizer_bpe_build_backtrack_tables(
       }
       iree_tokenizer_bpe_build_token_history(
           &builder, iree_tokenizer_vocab_token_text(model->vocab, (int32_t)i),
-          tokens);
+          history);
     }
     for (iree_host_size_t i = 0; i < capacity; ++i) {
       iree_string_view_t text =
@@ -179,7 +207,7 @@ iree_status_t iree_tokenizer_bpe_build_backtrack_tables(
   } else {
     iree_allocator_free(model->allocator, slab);
   }
-  iree_allocator_free(model->allocator, tokens);
+  iree_allocator_free(model->allocator, history);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

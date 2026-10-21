@@ -968,7 +968,7 @@ iree_status_t loom_amdgpu_short_wait_resolve(
             .node_index = packet.node_index,
             .scheduled_ordinal = packet.node->scheduled_ordinal,
             .producer_node = LOOM_LOW_SCHEDULE_NODE_NONE,
-            .consumer_node = packet.node->source_ordinal,
+            .consumer_node = packet.node_index,
             .required_cycle_count = (uint16_t)required,
             .observed_cycle_count = (uint16_t)(position + delay),
             .cycle_count = (uint16_t)residual,

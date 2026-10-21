@@ -330,6 +330,20 @@ iree_status_t loom_value_fact_table_initialize_with_arenas(
                                                          initial_capacity);
 }
 
+iree_status_t loom_value_fact_table_reserve_range(
+    loom_value_fact_table_t* table, loom_value_fact_range_t range) {
+  if (range.capacity == 0) {
+    return iree_ok_status();
+  }
+  if (range.capacity >
+      (iree_host_size_t)LOOM_VALUE_ID_INVALID - range.first_value_id) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "fact range capacity overflow");
+  }
+  return loom_value_fact_table_ensure_range(
+      table, range.first_value_id, range.first_value_id + range.capacity);
+}
+
 iree_status_t loom_value_fact_table_reserve(loom_value_fact_table_t* table,
                                             iree_host_size_t minimum_capacity) {
   if (minimum_capacity == 0 ||
@@ -394,8 +408,10 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
   }
   table->touched_count = 0;
   table->count = 0;
-  table->extensions.entries = NULL;
-  table->extensions.capacity = 0;
+  if (!table->has_persistent_extension_entries) {
+    table->extensions.entries = NULL;
+    table->extensions.capacity = 0;
+  }
   table->extensions.count = 0;
   table->extensions.buckets = NULL;
   table->extensions.bucket_count = 0;

@@ -722,6 +722,50 @@ TEST_F(FactTableTest, RangeGrowthRetainsUndefinedMembershipAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_lookup(&table, 320).range_lo, 29);
 }
 
+TEST_F(FactTableTest, ReserveRangeOmitsPrefixAndPreservesFacts) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_reserve_range(&table, (loom_value_fact_range_t){
+                                                      .first_value_id = 1027,
+                                                      .capacity = 97,
+                                                  }));
+  EXPECT_EQ(table.first_value_id, 1024u);
+  EXPECT_EQ(table.capacity, 100u);
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, 1027));
+
+  IREE_ASSERT_OK(loom_value_fact_table_define(&table, 1050,
+                                              loom_value_facts_exact_i64(17)));
+  loom_value_facts_t* entries = table.entries;
+  IREE_ASSERT_OK(
+      loom_value_fact_table_reserve_range(&table, (loom_value_fact_range_t){
+                                                      .first_value_id = 1030,
+                                                      .capacity = 32,
+                                                  }));
+  EXPECT_EQ(table.entries, entries);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 1050).range_lo, 17);
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_reserve_range(&table, (loom_value_fact_range_t){
+                                                      .first_value_id = 960,
+                                                      .capacity = 300,
+                                                  }));
+  EXPECT_EQ(table.first_value_id, 960u);
+  EXPECT_GE(table.capacity, 300u);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 1050).range_lo, 17);
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, 959));
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, 1259));
+}
+
+TEST_F(FactTableTest, ReserveEmptyRangeDoesNotAllocate) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+  IREE_ASSERT_OK(loom_value_fact_table_reserve_range(
+      &table, (loom_value_fact_range_t){0}));
+  EXPECT_EQ(table.entries, nullptr);
+  EXPECT_EQ(table.capacity, 0u);
+}
+
 TEST_F(FactTableTest, DescendingGrowthBoundsStorageAndPreservesMembership) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
@@ -955,6 +999,74 @@ TEST_F(FactTableTest, DifferentExtensionsDoNotAlias) {
 
   EXPECT_NE(lhs.extension_id, rhs.extension_id);
   EXPECT_FALSE(loom_value_facts_equal(lhs, rhs));
+}
+
+TEST_F(FactTableTest, OversizedExtensionEntriesPersistAcrossScopes) {
+  iree_arena_allocator_t transient_arena = {};
+  iree_arena_initialize(&block_pool_, &transient_arena);
+  loom_value_fact_table_t table = {};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize_with_arenas(
+      &table, &arena_, &transient_arena, 0));
+
+  const uint8_t first_payload[] = {1, 2, 3, 4};
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &table.context, kTestRawPayloadTag, first_payload,
+      IREE_ARRAYSIZE(first_payload), &facts));
+  const auto* entries = table.extensions.entries;
+  const auto capacity = table.extensions.capacity;
+  const auto persistent_bytes = arena_.used_allocation_size;
+  EXPECT_TRUE(table.has_persistent_extension_entries);
+
+  loom_value_fact_table_clear_scope(&table);
+  iree_arena_reset(&transient_arena);
+  EXPECT_EQ(table.extensions.entries, entries);
+  EXPECT_EQ(table.extensions.capacity, capacity);
+  EXPECT_EQ(table.extensions.count, 0u);
+
+  const uint8_t second_payload[] = {5, 6, 7};
+  facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &table.context, kTestRawPayloadTag, second_payload,
+      IREE_ARRAYSIZE(second_payload), &facts));
+  EXPECT_EQ(table.extensions.entries, entries);
+  EXPECT_EQ(table.extensions.capacity, capacity);
+  EXPECT_EQ(arena_.used_allocation_size, persistent_bytes);
+  const void* stored_payload = nullptr;
+  iree_host_size_t stored_length = 0;
+  ASSERT_TRUE(loom_value_facts_query_extension_payload(
+      &table.context, facts, kTestRawPayloadTag, &stored_payload,
+      &stored_length));
+  EXPECT_EQ(stored_length, IREE_ARRAYSIZE(second_payload));
+  EXPECT_EQ(std::memcmp(stored_payload, second_payload, stored_length), 0);
+
+  iree_arena_deinitialize(&transient_arena);
+}
+
+TEST(FactTableStorageTest, PooledExtensionEntriesClearWithScope) {
+  iree_arena_block_pool_t block_pool = {};
+  iree_arena_block_pool_initialize(16384, iree_allocator_system(), &block_pool);
+  iree_arena_allocator_t arena = {};
+  iree_arena_initialize(&block_pool, &arena);
+  iree_arena_allocator_t transient_arena = {};
+  iree_arena_initialize(&block_pool, &transient_arena);
+  loom_value_fact_table_t table = {};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize_with_arenas(
+      &table, &arena, &transient_arena, 0));
+
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(42), &facts));
+  EXPECT_FALSE(table.has_persistent_extension_entries);
+
+  loom_value_fact_table_clear_scope(&table);
+  EXPECT_EQ(table.extensions.entries, nullptr);
+  EXPECT_EQ(table.extensions.capacity, 0u);
+  EXPECT_EQ(table.extensions.count, 0u);
+
+  iree_arena_deinitialize(&transient_arena);
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
 }
 
 TEST_F(FactTableTest, SmallStaticLanesExtensionRoundTrips) {

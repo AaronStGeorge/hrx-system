@@ -130,7 +130,7 @@ loom_amdgpu_wait_classification_classify_structural_node(
     return (loom_amdgpu_structural_packet_info_t){.instruction_count = 1};
   }
   return loom_amdgpu_structural_packet_analyze(
-      schedule, allocation, node,
+      schedule, allocation, node_index,
       LOOM_AMDGPU_STRUCTURAL_PACKET_ANALYSIS_FLAG_REQUIRE_ALLOCATION);
 }
 

@@ -151,7 +151,8 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
   EXPECT_EQ(order[4], 4u);
   EXPECT_EQ(order[5], 5u);
   EXPECT_EQ(blocks[1].issue_group_count, 3u);
-  EXPECT_EQ(groups[0].scheduled_node_count, 2u);
+  EXPECT_EQ(groups[1].scheduled_node_start - groups[0].scheduled_node_start,
+            2u);
   EXPECT_EQ(groups[1].issue_cycle, 8u);
   EXPECT_EQ(liveness_orders[1].ops, ordered_ops + 2);
   EXPECT_EQ(liveness_orders[1].op_count, 4u);
