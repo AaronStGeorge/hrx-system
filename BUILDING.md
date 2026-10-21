@@ -227,7 +227,7 @@ up that sanitizer environment separately.
 
 Loom tools link statically by default. Release bundles can share the compiler
 and runtime used by `loom-compile`, `loom-opt`, `loom-format`, `loom-link`,
-`loom-import-cxx`, and `loom-run`:
+`loom-import-cxx`, `loom-run`, and `loom-serve`:
 
 ```bash
 iree-bazel-build --config=opt --//loom/config:shared_tools \
@@ -239,13 +239,15 @@ iree-cmake-configure -DLOOM_LINK_SHARED_TOOLS=ON
 ```
 
 The shared mode packages one `libloomc` and one `libiree` alongside the compiler
-tools. `loom-serve` keeps its compiler and runtime statically linked in either
-mode, retaining whole-program optimization and standalone deployment.
-`loom-test` and `loom-benchmark` also retain static linkage in shared-tool mode.
+tools and server. `loom-serve` keeps its serving implementation in the executable
+while reusing the same compiler and runtime companions as the other shared tools.
+`loom-check`, `loom-test`, and `loom-benchmark` retain static linkage in shared-tool
+mode.
 The IREE companion includes the configured HAL drivers. Deploy all files from
 the same build; these companion libraries have no independent ABI version.
-Shared compiler tools trade some cross-library optimization for a smaller
-bundle. Local development and benchmarks retain the default static mode.
+Shared tools trade some cross-library optimization for a smaller bundle. Local
+development and performance-focused standalone deployments retain the default
+static mode, including a self-contained `loom-serve` executable.
 
 ELF shared-tool bundles bind internal function references to the implementation
 in the owning companion library. This avoids interposable procedure-linkage

@@ -97,7 +97,7 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
-loom_cc_binary(
+loomc_cc_binary(
   NAME
     loom-serve-test-tool
   DEPS
