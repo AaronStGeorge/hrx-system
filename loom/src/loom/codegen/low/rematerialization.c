@@ -21,6 +21,8 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/structural_hash.h"
+#include "loom/ops/low/capture.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
@@ -497,15 +499,17 @@ static iree_status_t loom_low_rematerialization_plan_recipe(
     }
     loom_op_t* op = loom_value_def_op(
         loom_module_value(module, facts->value_ids[cursor->ordinal]));
+    // Copies preserve the complete input width and can replay a stable capture.
+    // Aggregate identities need the closed recipe: replaying only their final
+    // composition retains every input and can multiply wide setup for slices.
     if (!(rebuild_composition &&
           iree_any_bit_set(flags, LOOM_LOW_REMATERIALIZATION_VALUE_CLOSED)) &&
         iree_any_bit_set(loom_op_vtable(module, op)->vtable_flags,
                          LOOM_OP_VTABLE_STRUCTURAL_MATERIALIZATION) &&
         !iree_any_bit_set(loom_op_effective_traits(module, op),
-                          LOOM_TRAIT_PURE)) {
+                          LOOM_TRAIT_PURE) &&
+        !loom_low_copy_isa(op)) {
       eligible = false;
-    }
-    if (!eligible) {
       break;
     }
     if (cursor->next_operand < op->operand_count) {
@@ -576,8 +580,10 @@ static iree_status_t loom_low_rematerialization_plan_recipe(
                            LOOM_LOW_REMATERIALIZATION_VALUE_COLLECTED)) {
         continue;
       }
-      eligible =
-          loom_value_consuming_use_count(loom_module_value(module, input)) == 0;
+      // Fresh structural identities can be recreated when their captures keep
+      // the same contents. Required aliases and ownership-sensitive uses need
+      // a lifetime proof beyond the captured value's direct consuming uses.
+      eligible = loom_low_capture_source_is_stable(module, input);
       has_required_external_input |=
           required_register_values != NULL &&
           input < required_register_values->bit_count &&
@@ -794,7 +800,7 @@ static iree_status_t loom_low_rematerialization_prepare_value(
 
   const loom_value_t* value = loom_module_value(module, value_id);
   if (loom_value_is_block_arg(value) ||
-      loom_value_consuming_use_count(value) != 0 ||
+      !loom_low_capture_source_is_stable(module, value_id) ||
       loom_value_has_attribute_uses(value) || value->use_count == 0 ||
       loom_module_value_has_type_uses(module, value_id)) {
     return iree_ok_status();

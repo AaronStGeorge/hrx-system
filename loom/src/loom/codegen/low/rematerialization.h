@@ -6,14 +6,16 @@
 
 // Value rematerialization and allocation-pressure repair.
 //
-// Target packets explicitly opt their results in to rematerialization. Shared
+// Target packets explicitly opt their results in to rematerialization. Copies
+// can replay stable captures when their result identity is unobserved. Shared
 // structural composition can recreate a closed graph over operand-free target
-// leaves. A narrow view retains its
-// wider input as a capture instead of rebuilding that input for each use.
+// leaves. A narrow view retains its wider input as a capture instead of
+// rebuilding that input for each use.
 // Other native recipes recreate tied ownership predecessors and available
 // descriptor-declared sources, retaining their remaining inputs as external
-// captures. Recipes preserve consuming order. Each distinct user receives a
-// private producer graph, shared by repeated operands of that user.
+// captures with stable contents and ownership. Recipes preserve consuming
+// order. Each distinct user receives a private producer graph, shared by
+// repeated operands of that user.
 //
 // Allocation and scheduling supply function-local value domains and ordering
 // facts. Rematerialization computes closure once per original value in a repair
@@ -79,7 +81,7 @@ typedef struct loom_low_rematerialization_state_t {
 // Repairs a scheduler's architectural-state failure by recreating the selected
 // value privately for each user. The failed schedule supplies its retained
 // function-local value domain and CFG. Recipe planning consumes verified SSA,
-// preserving ownership order and rejecting consumed external inputs. Callers
+// preserving ownership order and rejecting unstable external captures. Callers
 // rebuild the schedule after rewriting. Returns OK with a zero result when the
 // selected value has no safe rematerialization recipe.
 iree_status_t loom_low_schedule_rematerialize_failure(

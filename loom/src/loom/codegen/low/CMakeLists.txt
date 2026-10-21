@@ -807,6 +807,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::error::parameter
     loom::ir
+    loom::ops::low
     loom::ops::op_defs
     loom::rewrite::materialize
     loom::rewrite::remap
