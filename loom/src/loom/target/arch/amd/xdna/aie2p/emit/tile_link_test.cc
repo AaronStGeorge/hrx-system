@@ -374,6 +374,104 @@ TEST(Aie2pTileLinkTest, RelocatesMovxmInsideAMultiSlotBundle) {
   iree_arena_block_pool_deinitialize(&block_pool);
 }
 
+TEST(Aie2pTileLinkTest, RelocatesMovxmToExecutableCodeAddress) {
+  const loom_aie2p_instruction_id_t movxm =
+      loom_aie2p_encoding_find_instruction(IREE_SV("MOVXM"));
+  const loom_aie2p_encoding_field_id_t destination =
+      loom_aie2p_encoding_find_field(IREE_SV("dst"));
+  const loom_aie2p_encoding_field_id_t immediate =
+      loom_aie2p_encoding_find_field(IREE_SV("i"));
+  ASSERT_NE(movxm, LOOM_AIE2P_INSTRUCTION_ID_INVALID);
+  const loom_aie2p_encoding_field_value_t fields[] = {
+      {destination, 0},
+      {immediate, 0},
+  };
+  uint64_t movxm_value = 0;
+  IREE_ASSERT_OK(loom_aie2p_encoding_pack_instruction(
+      movxm, fields, IREE_ARRAYSIZE(fields), &movxm_value));
+  const loom_aie2p_encoded_slot_t slot = {
+      LOOM_AIE2P_SLOT_LNG,
+      movxm_value,
+  };
+  const loom_aie2p_bundle_format_id_t format =
+      loom_aie2p_encoding_find_bundle_format(IREE_SV("I48_LNG"));
+  loom_aie2p_encoding_packet_t packet;
+  IREE_ASSERT_OK(loom_aie2p_encoding_pack_bundle(format, &slot, 1, &packet));
+
+  std::array<uint8_t, 32> code = {};
+  std::memcpy(code.data(), packet.data, packet.data_length);
+  const loom_native_section_contribution_t section = {
+      .section_name = IREE_SV(".text.code_address"),
+      .storage = LOOM_NATIVE_SECTION_STORAGE_CONTENTS,
+      .access =
+          LOOM_NATIVE_SECTION_ACCESS_READ | LOOM_NATIVE_SECTION_ACCESS_EXECUTE,
+      .contribution_alignment = 16,
+      .contents = iree_make_const_byte_span(code.data(), code.size()),
+  };
+  const loom_native_object_symbol_t symbol = {
+      .name = IREE_SV("loop_body"),
+      .section_contribution_index = 0,
+      .section_offset = 16,
+      .size = 16,
+      .binding = LOOM_NATIVE_OBJECT_SYMBOL_BINDING_LOCAL,
+      .visibility = LOOM_NATIVE_OBJECT_SYMBOL_VISIBILITY_HIDDEN,
+      .kind = LOOM_NATIVE_OBJECT_SYMBOL_KIND_FUNCTION,
+  };
+  const loom_native_object_fixup_t fixup = {
+      .section_contribution_index = 0,
+      .section_offset = 0,
+      .relocation_kind =
+          LOOM_AIE2P_NATIVE_RELOCATION_KIND_CORE_CODE_ADDRESS_ABSOLUTE,
+      .target_symbol_index = 0,
+      .addend = 4,
+  };
+  const loom_native_object_contribution_t object = {
+      .sections = &section,
+      .section_count = 1,
+      .symbols = &symbol,
+      .symbol_count = 1,
+      .fixups = &fixup,
+      .fixup_count = 1,
+  };
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+  loom_native_section_contribution_assembly_t assembly = {};
+  IREE_ASSERT_OK(loom_native_assemble_section_contributions(
+      object.sections, object.section_count, &assembly, &arena));
+  ASSERT_EQ(assembly.section_count, 1u);
+  assembly.sections[0].address = 0x1000;
+  IREE_ASSERT_OK(
+      loom_aie2p_native_object_apply_fixups(&object, &assembly, &arena));
+
+  loom_aie2p_decoded_bundle_t decoded_bundle;
+  iree_host_size_t packet_length = 0;
+  IREE_ASSERT_OK(loom_aie2p_encoding_decode_bundle_prefix(
+      iree_make_const_byte_span(assembly.sections[0].contents.data,
+                                LOOM_AIE2P_ENCODING_MAX_PACKET_SIZE),
+      &decoded_bundle, &packet_length));
+  ASSERT_EQ(packet_length, packet.data_length);
+  ASSERT_EQ(decoded_bundle.slot_count, 1u);
+  loom_aie2p_encoding_field_value_t relocated_fields[2];
+  iree_host_size_t relocated_field_count = 0;
+  IREE_ASSERT_OK(loom_aie2p_encoding_unpack_instruction(
+      movxm, decoded_bundle.slots[0].value, IREE_ARRAYSIZE(relocated_fields),
+      relocated_fields, &relocated_field_count));
+  bool found_relocated_immediate = false;
+  for (iree_host_size_t i = 0; i < relocated_field_count; ++i) {
+    if (relocated_fields[i].field_id == immediate) {
+      EXPECT_EQ(relocated_fields[i].value, 0x1014u);
+      found_relocated_immediate = true;
+    }
+  }
+  EXPECT_TRUE(found_relocated_immediate);
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
 TEST(Aie2pTileLinkTest, PlacesAndRelocatesReadOnlyData) {
   const std::array<uint8_t, 6> code = {
       0x44, 0x00, 0xc0, 0x00, 0x00, 0x00,

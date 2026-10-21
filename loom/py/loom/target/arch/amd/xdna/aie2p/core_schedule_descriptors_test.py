@@ -441,6 +441,102 @@ def test_direct_call_retains_link_write_and_delay_contract() -> None:
     assert _INSTRUCTION_ENCODINGS["JL_lng"].delay_slot_count == 5
 
 
+def test_zero_overhead_loop_setup_owns_architectural_state() -> None:
+    descriptors = {
+        descriptor.key: descriptor
+        for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
+    }
+    specifications = {spec.key: spec for spec in _DESCRIPTOR_SPECS}
+    register_classes = {
+        register_class.name: register_class
+        for register_class in AIE2P_CORE_DESCRIPTOR_SET.reg_classes
+    }
+    expected = {
+        "amd.xdna.aie2p.state.loop-count.short": (
+            "MOVA",
+            "II_MOVA_mLCaCg",
+            "aie2p.mlcacg",
+            "lc",
+            ImmediateKind.SIGNED,
+            (),
+            11,
+        ),
+        "amd.xdna.aie2p.state.loop-count.long": (
+            "MOVXM",
+            "II_MOVXM_mLCmCg",
+            "aie2p.mlcmcg",
+            "lc",
+            ImmediateKind.SIGNED,
+            (),
+            32,
+        ),
+        "amd.xdna.aie2p.state.loop-start-address": (
+            "MOVXM",
+            "II_MOVXM_mLSm",
+            "aie2p.mlsm",
+            "ls",
+            ImmediateKind.ORDINAL,
+            (ImmediateFlag.SYMBOLIC,),
+            32,
+        ),
+        "amd.xdna.aie2p.state.loop-end-address": (
+            "MOVXM",
+            "II_MOVXM_mLEm",
+            "aie2p.mlem",
+            "le",
+            ImmediateKind.ORDINAL,
+            (ImmediateFlag.SYMBOLIC,),
+            32,
+        ),
+    }
+    for key, (
+        form,
+        itinerary,
+        register_class,
+        physical_register,
+        immediate_kind,
+        immediate_flags,
+        immediate_width,
+    ) in expected.items():
+        specification = specifications[key]
+        descriptor = descriptors[key]
+        assert specification.form_name == form
+        assert specification.itinerary == itinerary
+        assert descriptor.asm_forms[0].results == ()
+        assert descriptor.asm_forms[0].operands == ()
+        assert len(descriptor.operands) == 1
+        state_write = descriptor.operands[0]
+        assert state_write.role is OperandRole.IMPLICIT
+        assert state_write.reg_alts[0].reg_class == register_class
+        assert register_classes[register_class].physical_registers == (
+            physical_register,
+        )
+        assert state_write.flags == (
+            OperandFlag.IMPLICIT,
+            OperandFlag.STATE_WRITE,
+        )
+        adapter_name = "OP_mLdaCg" if form == "MOVA" else "OP_mMvSclDstCg"
+        adapter = next(
+            row
+            for row in CORE_MACHINE_TABLE.register_adapters
+            if row.name == adapter_name
+        )
+        assert len(descriptor.encoding_field_values) == 1
+        assert (
+            descriptor.encoding_field_values[0].value
+            == dict(adapter.effective_register_encodings)[physical_register]
+        )
+        assert len(descriptor.immediates) == 1
+        immediate = descriptor.immediates[0]
+        assert immediate.field_name == "i"
+        assert immediate.kind is immediate_kind
+        assert immediate.flags == immediate_flags
+        assert immediate.bit_width == immediate_width
+        assert DescriptorFlag.SIDE_EFFECTING in descriptor.flags
+        assert DescriptorFlag.STATE_ASSIGNMENT in descriptor.flags
+        assert DescriptorFlag.DEAD_REMOVABLE not in descriptor.flags
+
+
 def test_lock_memory_timing_matches_aie2p_stall_and_resume_oracle() -> None:
     descriptors = {
         descriptor.key: descriptor
