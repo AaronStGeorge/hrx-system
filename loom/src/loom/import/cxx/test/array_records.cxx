@@ -115,6 +115,8 @@ static unsigned constant_member(unsigned index) {
 }
 
 typedef unsigned U4 __attribute__((vector_size(16)));
+static U4 forward_vector(U4 value) { return value; }
+
 struct VectorRecord {
   // Explicit vectors remain vector components inside an array snapshot.
   U4 values[2];
@@ -123,7 +125,7 @@ static unsigned vector_elements(unsigned index) {
   VectorRecord original{{U4{1, 2, 3, 4}, U4{5, 6, 7, 8}}};
   VectorRecord copy = original;
   copy.values[index] += U4{1, 1, 1, 1};
-  U4 observed = copy.values[index];
+  U4 observed = forward_vector(copy.values[index]);
   U4 first = original.values[0];
   U4 array[2] = {U4{11, 13, 17, 19}, U4{23, 29, 31, 37}};
   U4 selected = array[index];

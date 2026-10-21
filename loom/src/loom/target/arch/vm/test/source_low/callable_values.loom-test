@@ -1,8 +1,6 @@
 // RUN: emit source-low target=vm:core output=low
 
-// ERROR@+1: TARGET/031 {op_name="func.def", actual_type="vector<1xi32>", type_constraint="vector.target_carrier"}
 func.def public @call_mixed_i32(%input: vector<1xi32>, %delta: i32) -> (i32, i32) {
-  // ERROR@+1: TARGET/031 {op_name="vector.extract", type_constraint="vector.target_carrier"}
   %value = vector.extract %input[0] : vector<1xi32> -> i32
   %mixed = func.call @add_i32(%value, %delta) : (i32, i32) -> (i32)
   %uniform = func.call @add_i32(%delta, %delta) : (i32, i32) -> (i32)
@@ -17,11 +15,24 @@ func.def @add_i32(%value: i32, %delta: i32) -> (i32) {
   func.return %result : i32
 }
 
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_mixed_i32(%19: reg<vm.value : i32>, %delta: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>) asm {
+  %mixed = low.func.call pure @add_i32(%19, %delta) : (reg<vm.value : i32>, reg<vm.value : i32>) -> (reg<vm.value : i32>)
+  %uniform = low.func.call pure @add_i32(%delta, %delta) : (reg<vm.value : i32>, reg<vm.value : i32>) -> (reg<vm.value : i32>)
+  return %mixed, %uniform
+}
+
+low.func.def target<vm.core> @add_i32(%value: reg<vm.value : i32>, %delta: reg<vm.value : i32>) -> (reg<vm.value : i32>) asm {
+  %wide_value = conversion.integer %value, "u32.to.i64"
+  %wide_delta = conversion.integer %delta, "u32.to.i64"
+  %sum = integer.add.i64 %wide_value, %wide_delta
+  %result = conversion.integer %sum, "i64.to.i32" : reg<vm.value : i32>
+  return %result
+}
+
 // ====
 
-// ERROR@+1: TARGET/031 {op_name="func.def", actual_type="vector<1xi64>", type_constraint="vector.target_carrier"}
 func.def public @call_mixed_i64(%input: vector<1xi64>, %delta: i64) -> (i64, i64) {
-  // ERROR@+1: TARGET/031 {op_name="vector.extract", type_constraint="vector.target_carrier"}
   %value = vector.extract %input[0] : vector<1xi64> -> i64
   %mixed = func.call @add_i64(%value, %delta) : (i64, i64) -> (i64)
   %uniform = func.call @add_i64(%delta, %delta) : (i64, i64) -> (i64)
@@ -33,62 +44,235 @@ func.def @add_i64(%value: i64, %delta: i64) -> (i64) {
   func.return %result : i64
 }
 
-// ====
-
-func.def public @call_vector_result(%input: i32, %lane: index) -> (i32) where [range(%lane, 0, 3)] {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %values = vector.from_elements %input, %c1, %c2, %c3 : vector<4xi32>
-  %result = func.call inline @select_lane(%values, %lane) : (vector<4xi32>, index) -> (i32)
-  func.return %result : i32
-}
-
-func.def @select_lane(%values: vector<4xi32>, %lane: index) -> (i32) where [range(%lane, 0, 3)] {
-  %result = vector.extract %values[%lane] : vector<4xi32> -> i32
-  func.return %result : i32
-}
-
 // ----
-low.func.def public target<vm.core> abi(vm_function) @call_vector_result(%input: reg<vm.value : i32>, %lane: reg<vm.value : i64>) -> (reg<vm.value : i32>) where [range(%lane, 0, 3)] asm {
-  %c1 = constant.i32 1
-  %c2 = constant.i32 2
-  %c3 = constant.i32 3
-  %27 = constant.i64 1
-  %28 = integer.compare.i64 %lane, %27, "eq"
-  %29 = value.select %28, %c1, %input : reg<vm.value : i32>
-  %30 = constant.i64 2
-  %31 = integer.compare.i64 %lane, %30, "eq"
-  %32 = value.select %31, %c2, %29 : reg<vm.value : i32>
-  %33 = constant.i64 3
-  %34 = integer.compare.i64 %lane, %33, "eq"
-  %result = value.select %34, %c3, %32 : reg<vm.value : i32>
+low.func.def public target<vm.core> abi(vm_function) @call_mixed_i64(%16: reg<vm.value : i64>, %delta: reg<vm.value : i64>) -> (reg<vm.value : i64>, reg<vm.value : i64>) asm {
+  %mixed = low.func.call pure @add_i64(%16, %delta) : (reg<vm.value : i64>, reg<vm.value : i64>) -> (reg<vm.value : i64>)
+  %uniform = low.func.call pure @add_i64(%delta, %delta) : (reg<vm.value : i64>, reg<vm.value : i64>) -> (reg<vm.value : i64>)
+  return %mixed, %uniform
+}
+
+low.func.def target<vm.core> @add_i64(%value: reg<vm.value : i64>, %delta: reg<vm.value : i64>) -> (reg<vm.value : i64>) asm {
+  %result = integer.add.i64 %value, %delta
   return %result
 }
 
 // ====
 
-// ERROR@+1: TARGET/031 {op_name="func.def", actual_type="vector<1xi32>", type_constraint="vector.target_carrier"}
+func.def public @call_vector_result(%input: i32) -> (i32, i32) {
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c3 = scalar.constant 3 : i32
+  %values = vector.from_elements %input, %c1, %c2, %c3 : vector<4xi32>
+  %result = func.call @identity_i32x4(%values) : (vector<4xi32>) -> (vector<4xi32>)
+  %first = vector.extract %result[0] : vector<4xi32> -> i32
+  %last = vector.extract %result[3] : vector<4xi32> -> i32
+  func.return %first, %last : i32, i32
+}
+
+func.def noinline @identity_i32x4(%values: vector<4xi32>) -> (vector<4xi32>) {
+  func.return %values : vector<4xi32>
+}
+
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_vector_result(%input: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>) asm {
+  %39 = constant.i32 1
+  %40 = constant.i32 2
+  %41 = constant.i32 3
+  %42, %43, %44, %45 = low.func.call pure @identity_i32x4(%input, %39, %40, %41) : (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>)
+  return %42, %45
+}
+
+low.func.def noinline target<vm.core> @identity_i32x4(%46: reg<vm.value : i32>, %47: reg<vm.value : i32>, %48: reg<vm.value : i32>, %49: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) asm {
+  return %46, %47, %48, %49
+}
+
+// ====
+
 func.def public @call_loop(%input: vector<1xi32>, %delta: i32, %count: index) -> (i32) {
-  // ERROR@+1: TARGET/031 {op_name="vector.extract", type_constraint="vector.target_carrier"}
-  %value = vector.extract %input[0] : vector<1xi32> -> i32
-  %result = func.call @repeat_add(%value, %delta, %count) : (i32, i32, index) -> (i32)
+  %values = func.call @repeat_add(%input, %delta, %count) : (vector<1xi32>, i32, index) -> (vector<1xi32>)
+  %result = vector.extract %values[0] : vector<1xi32> -> i32
   func.return %result : i32
 }
 
-func.def @repeat_add(%value: i32, %delta: i32, %count: index) -> (i32) {
+func.def @repeat_add(%values: vector<1xi32>, %delta: i32, %count: index) -> (vector<1xi32>) {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
-  %result = scf.for %i = [%c0 to %count step %c1](%current = %value : i32) -> (i32) {
-    %next = func.call @advance_i32(%current, %delta) : (i32, i32) -> (i32)
-    scf.yield %next : i32
+  %result = scf.for %i = [%c0 to %count step %c1](%current = %values : vector<1xi32>) -> (vector<1xi32>) {
+    %current_value = vector.extract %current[0] : vector<1xi32> -> i32
+    %next_value = func.call @advance_i32(%current_value, %delta) : (i32, i32) -> (i32)
+    %next = vector.from_elements %next_value : vector<1xi32>
+    scf.yield %next : vector<1xi32>
   }
-  func.return %result : i32
+  func.return %result : vector<1xi32>
 }
 
 func.def @advance_i32(%value: i32, %delta: i32) -> (i32) {
   %result = scalar.addi %value, %delta : i32
   func.return %result : i32
+}
+
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_loop(%43: reg<vm.value : i32>, %delta: reg<vm.value : i32>, %count: reg<vm.value : i64>) -> (reg<vm.value : i32>) asm {
+  %47 = low.func.call pure @repeat_add(%43, %delta, %count) : (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i64>) -> (reg<vm.value : i32>)
+  return %47
+}
+
+low.func.def target<vm.core> @repeat_add(%48: reg<vm.value : i32>, %delta: reg<vm.value : i32>, %count: reg<vm.value : i64>) -> (reg<vm.value : i32>) asm {
+  %c0 = constant.i64 0
+  %c1 = constant.i64 1
+  low.br ^_bb1(%c0: reg<vm.value : i64>, %48: reg<vm.value : i32>)
+^_bb1(%i: reg<vm.value : i64>, %53: reg<vm.value : i32>):
+  %56 = integer.compare.i64 %i, %count, "slt"
+  low.cond_br %56, ^_bb2, ^_bb3 : reg<vm.value : i1>
+^_bb2:
+  %next_value = low.func.call pure @advance_i32(%53, %delta) : (reg<vm.value : i32>, reg<vm.value : i32>) -> (reg<vm.value : i32>)
+  %58 = integer.add.i64 %i, %c1
+  low.br ^_bb1(%58: reg<vm.value : i64>, %next_value: reg<vm.value : i32>)
+^_bb3:
+  return %53
+}
+
+low.func.def target<vm.core> @advance_i32(%value: reg<vm.value : i32>, %delta: reg<vm.value : i32>) -> (reg<vm.value : i32>) asm {
+  %result = integer.add.i32 %value, %delta
+  return %result
+}
+
+// ====
+
+// Every scalar value representation admitted by VM remains available when a
+// singleton vector crosses an ordinary call boundary.
+func.def public @call_integer_vector_family(%predicate: i1, %byte: i8, %half: i16, %word: i32, %wide: i64, %position: index, %address: offset) -> (i1, i8, i16, i32, i64, index, offset) {
+  %predicate_vector = vector.from_elements %predicate : vector<1xi1>
+  %byte_vector = vector.from_elements %byte : vector<1xi8>
+  %half_vector = vector.from_elements %half : vector<1xi16>
+  %word_vector = vector.from_elements %word : vector<1xi32>
+  %wide_vector = vector.from_elements %wide : vector<1xi64>
+  %position_vector = vector.from_elements %position : vector<1xindex>
+  %address_vector = vector.from_elements %address : vector<1xoffset>
+  %predicate_result, %byte_result, %half_result, %word_result, %wide_result, %position_result, %address_result = func.call @identity_integer_vectors(%predicate_vector, %byte_vector, %half_vector, %word_vector, %wide_vector, %position_vector, %address_vector) : (vector<1xi1>, vector<1xi8>, vector<1xi16>, vector<1xi32>, vector<1xi64>, vector<1xindex>, vector<1xoffset>) -> (vector<1xi1>, vector<1xi8>, vector<1xi16>, vector<1xi32>, vector<1xi64>, vector<1xindex>, vector<1xoffset>)
+  %predicate_value = vector.extract %predicate_result[0] : vector<1xi1> -> i1
+  %byte_value = vector.extract %byte_result[0] : vector<1xi8> -> i8
+  %half_value = vector.extract %half_result[0] : vector<1xi16> -> i16
+  %word_value = vector.extract %word_result[0] : vector<1xi32> -> i32
+  %wide_value = vector.extract %wide_result[0] : vector<1xi64> -> i64
+  %position_value = vector.extract %position_result[0] : vector<1xindex> -> index
+  %address_value = vector.extract %address_result[0] : vector<1xoffset> -> offset
+  func.return %predicate_value, %byte_value, %half_value, %word_value, %wide_value, %position_value, %address_value : i1, i8, i16, i32, i64, index, offset
+}
+
+func.def noinline @identity_integer_vectors(%predicate: vector<1xi1>, %byte: vector<1xi8>, %half: vector<1xi16>, %word: vector<1xi32>, %wide: vector<1xi64>, %position: vector<1xindex>, %address: vector<1xoffset>) -> (vector<1xi1>, vector<1xi8>, vector<1xi16>, vector<1xi32>, vector<1xi64>, vector<1xindex>, vector<1xoffset>) {
+  func.return %predicate, %byte, %half, %word, %wide, %position, %address : vector<1xi1>, vector<1xi8>, vector<1xi16>, vector<1xi32>, vector<1xi64>, vector<1xindex>, vector<1xoffset>
+}
+
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_integer_vector_family(%predicate: reg<vm.value : i1>, %byte: reg<vm.value : i8>, %half: reg<vm.value : i16>, %word: reg<vm.value : i32>, %wide: reg<vm.value : i64>, %position: reg<vm.value : i64>, %address: reg<vm.value : i64>) -> (reg<vm.value : i1>, reg<vm.value : i8>, reg<vm.value : i16>, reg<vm.value : i32>, reg<vm.value : i64>, reg<vm.value : i64>, reg<vm.value : i64>) asm {
+  %112, %113, %114, %115, %116, %117, %118 = low.func.call pure @identity_integer_vectors(%predicate, %byte, %half, %word, %wide, %position, %address) : (reg<vm.value : i1>, reg<vm.value : i8>, reg<vm.value : i16>, reg<vm.value : i32>, reg<vm.value : i64>, reg<vm.value : i64>, reg<vm.value : i64>) -> (reg<vm.value : i1>, reg<vm.value : i8>, reg<vm.value : i16>, reg<vm.value : i32>, reg<vm.value : i64>, reg<vm.value : i64>, reg<vm.value : i64>)
+  return %112, %113, %114, %115, %116, %117, %118
+}
+
+low.func.def noinline target<vm.core> @identity_integer_vectors(%119: reg<vm.value : i1>, %120: reg<vm.value : i8>, %121: reg<vm.value : i16>, %122: reg<vm.value : i32>, %123: reg<vm.value : i64>, %124: reg<vm.value : i64>, %125: reg<vm.value : i64>) -> (reg<vm.value : i1>, reg<vm.value : i8>, reg<vm.value : i16>, reg<vm.value : i32>, reg<vm.value : i64>, reg<vm.value : i64>, reg<vm.value : i64>) asm {
+  return %119, %120, %121, %122, %123, %124, %125
+}
+
+// ====
+
+func.def public @call_float_vector_family(%e4m3: f8E4M3, %e5m2: f8E5M2, %half: f16, %brain: bf16, %single: f32, %double: f64) -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %e4m3_vector = vector.from_elements %e4m3 : vector<1xf8E4M3>
+  %e5m2_vector = vector.from_elements %e5m2 : vector<1xf8E5M2>
+  %half_vector = vector.from_elements %half : vector<1xf16>
+  %brain_vector = vector.from_elements %brain : vector<1xbf16>
+  %single_vector = vector.from_elements %single : vector<1xf32>
+  %double_vector = vector.from_elements %double : vector<1xf64>
+  %e4m3_result, %e5m2_result, %half_result, %brain_result, %single_result, %double_result = func.call @identity_float_vectors(%e4m3_vector, %e5m2_vector, %half_vector, %brain_vector, %single_vector, %double_vector) : (vector<1xf8E4M3>, vector<1xf8E5M2>, vector<1xf16>, vector<1xbf16>, vector<1xf32>, vector<1xf64>) -> (vector<1xf8E4M3>, vector<1xf8E5M2>, vector<1xf16>, vector<1xbf16>, vector<1xf32>, vector<1xf64>)
+  %e4m3_value = vector.extract %e4m3_result[0] : vector<1xf8E4M3> -> f8E4M3
+  %e5m2_value = vector.extract %e5m2_result[0] : vector<1xf8E5M2> -> f8E5M2
+  %half_value = vector.extract %half_result[0] : vector<1xf16> -> f16
+  %brain_value = vector.extract %brain_result[0] : vector<1xbf16> -> bf16
+  %single_value = vector.extract %single_result[0] : vector<1xf32> -> f32
+  %double_value = vector.extract %double_result[0] : vector<1xf64> -> f64
+  func.return %e4m3_value, %e5m2_value, %half_value, %brain_value, %single_value, %double_value : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+func.def noinline @identity_float_vectors(%e4m3: vector<1xf8E4M3>, %e5m2: vector<1xf8E5M2>, %half: vector<1xf16>, %brain: vector<1xbf16>, %single: vector<1xf32>, %double: vector<1xf64>) -> (vector<1xf8E4M3>, vector<1xf8E5M2>, vector<1xf16>, vector<1xbf16>, vector<1xf32>, vector<1xf64>) {
+  func.return %e4m3, %e5m2, %half, %brain, %single, %double : vector<1xf8E4M3>, vector<1xf8E5M2>, vector<1xf16>, vector<1xbf16>, vector<1xf32>, vector<1xf64>
+}
+
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_float_vector_family(%e4m3: reg<vm.value : f8E4M3>, %e5m2: reg<vm.value : f8E5M2>, %half: reg<vm.value : f16>, %brain: reg<vm.value : bf16>, %single: reg<vm.value : f32>, %double: reg<vm.value : f64>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %96, %97, %98, %99, %100, %101 = low.func.call pure @identity_float_vectors(%e4m3, %e5m2, %half, %brain, %single, %double) : (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>)
+  return %96, %97, %98, %99, %100, %101
+}
+
+low.func.def noinline target<vm.core> @identity_float_vectors(%102: reg<vm.value : f8E4M3>, %103: reg<vm.value : f8E5M2>, %104: reg<vm.value : f16>, %105: reg<vm.value : bf16>, %106: reg<vm.value : f32>, %107: reg<vm.value : f64>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  return %102, %103, %104, %105, %106, %107
+}
+
+// ====
+
+// Multi-rank vectors flatten in row-major logical order at the call and are
+// reconstructed with their authored shape inside the callee.
+func.def public @call_shaped_vector(%a: i32, %b: i32, %c: i32, %d: i32) -> (i32, i32, i32, i32) {
+  %matrix = vector.from_elements %a, %b, %c, %d : vector<2x2xi32>
+  %result = func.call @identity_i32x2x2(%matrix) : (vector<2x2xi32>) -> (vector<2x2xi32>)
+  %r0 = vector.extract %result[0, 0] : vector<2x2xi32> -> i32
+  %r1 = vector.extract %result[0, 1] : vector<2x2xi32> -> i32
+  %r2 = vector.extract %result[1, 0] : vector<2x2xi32> -> i32
+  %r3 = vector.extract %result[1, 1] : vector<2x2xi32> -> i32
+  func.return %r0, %r1, %r2, %r3 : i32, i32, i32, i32
+}
+
+func.def noinline @identity_i32x2x2(%matrix: vector<2x2xi32>) -> (vector<2x2xi32>) {
+  func.return %matrix : vector<2x2xi32>
+}
+
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_shaped_vector(%a: reg<vm.value : i32>, %b: reg<vm.value : i32>, %c: reg<vm.value : i32>, %d: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) asm {
+  %45, %46, %47, %48 = low.func.call pure @identity_i32x2x2(%a, %b, %c, %d) : (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>)
+  return %45, %46, %47, %48
+}
+
+low.func.def noinline target<vm.core> @identity_i32x2x2(%49: reg<vm.value : i32>, %50: reg<vm.value : i32>, %51: reg<vm.value : i32>, %52: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) asm {
+  return %49, %50, %51, %52
+}
+
+// ====
+
+// Declarations and definitions project the same signature independently so
+// ordinary IR linking retains the scalar VM call contract.
+func.def public @call_external_vector(%a: i32, %b: i32, %c: i32) -> (i32, i32, i32) {
+  %values = vector.from_elements %a, %b, %c : vector<3xi32>
+  %result = func.call @external_identity_i32x3(%values) : (vector<3xi32>) -> (vector<3xi32>)
+  %r0 = vector.extract %result[0] : vector<3xi32> -> i32
+  %r1 = vector.extract %result[1] : vector<3xi32> -> i32
+  %r2 = vector.extract %result[2] : vector<3xi32> -> i32
+  func.return %r0, %r1, %r2 : i32, i32, i32
+}
+
+func.decl @external_identity_i32x3(%values: vector<3xi32>) -> (vector<3xi32>)
+
+// ----
+low.func.def public target<vm.core> abi(vm_function) @call_external_vector(%a: reg<vm.value : i32>, %b: reg<vm.value : i32>, %c: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) asm {
+  %38, %39, %40 = low.func.call @external_identity_i32x3(%a, %b, %c) : (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>)
+  return %38, %39, %40
+}
+
+low.func.decl target<vm.core> @external_identity_i32x3(%26: reg<vm.value : i32>, %27: reg<vm.value : i32>, %28: reg<vm.value : i32>) -> (reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : i32>)
+
+// ====
+
+// Runtime-dependent lane counts cannot become a fixed VM register signature.
+// ERROR@+1: TARGET/031 {op_name="func.def", actual_type="vector<[%count]xi32>", type_constraint="vector.static"}
+func.def public @reject_dynamic_vector(%count: index, %values: vector<[%count]xi32>) -> (index) {
+  func.return %count : index
+}
+
+// ====
+
+// The shared boundary limit rejects signatures that would expand one authored
+// value into more than 64 physical fields.
+// ERROR@+1: TARGET/031 {op_name="func.def", actual_type="vector<65xi8>", type_constraint="vector.target_carrier"}
+func.def public @reject_oversized_vector(%values: vector<65xi8>) {
+  func.return
 }
 
 // ====

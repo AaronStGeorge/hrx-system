@@ -159,10 +159,6 @@ loom_corpus_build(
             "numeric/float/trigonometry_narrow.loom:@trigonometry_bf16": "LOWERING/036",
             "numeric/float/trigonometry_narrow.loom:@trigonometry_f16": "LOWERING/036",
             "numeric/matrix/nvfp4.loom:@nvfp4_matrix": "TARGET/031",
-            "numeric/vector/floating.loom:@vector_scale_f16": "TARGET/031",
-            "numeric/vector/floating.loom:@vector_scale_f32": "TARGET/031",
-            "numeric/vector/floating.loom:@vector_scale_f64": "TARGET/031",
-            "numeric/vector/insertion.loom:@dynamic_byte_lane_values": "TARGET/031",
         },
     },
 )

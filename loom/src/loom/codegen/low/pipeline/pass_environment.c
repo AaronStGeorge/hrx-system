@@ -122,6 +122,20 @@ loom_low_pass_capability_vector_packet_policy(
   return policy != NULL ? policy->vector_packet_policy : NULL;
 }
 
+bool loom_low_pass_capability_source_type_supported(
+    const loom_low_pass_capability_t* capability,
+    const loom_target_facts_t* target_facts, const loom_module_t* module,
+    loom_type_t type) {
+  const loom_low_lower_policy_t* policy =
+      loom_low_pass_capability_lower_policy_for_target_facts(capability,
+                                                             target_facts);
+  if (policy == NULL || policy->source_type_supported.fn == NULL) {
+    return false;
+  }
+  return policy->source_type_supported.fn(
+      policy->source_type_supported.user_data, module, type);
+}
+
 bool loom_low_pass_capability_source_vector_carrier_supported(
     const loom_low_pass_capability_t* capability,
     const loom_target_facts_t* target_facts, const loom_module_t* module,

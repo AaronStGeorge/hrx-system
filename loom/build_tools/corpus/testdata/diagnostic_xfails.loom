@@ -1,8 +1,8 @@
-func.def @unsupported_vector_one(%input: vector<1xi32>) {
+func.def @unsupported_vector_one(%count: index, %input: vector<[%count]xi32>) {
   func.return
 }
 
-func.def @unsupported_vector_two(%input: vector<1xi32>) {
+func.def @unsupported_vector_two(%count: index, %input: vector<[%count]xi32>) {
   func.return
 }
 
