@@ -20,6 +20,7 @@ REPOSITORY = "repository"
 KNOWN_PRODUCT = "known_product"
 KNOWN_FLAKE = "known_flake"
 UNKNOWN = "unknown"
+TRACKED_ISSUES = ("hrx-78tqc", "hrx-b1gxf3")
 
 RUNNER_LOST_MESSAGE = (
     "The self-hosted runner lost communication with the server. Verify the "
@@ -244,12 +245,16 @@ def classify_failure(
             summary="cold speech retained-memory accounting observed zero pending bytes",
         )
 
-    if "lld-link: error: undefined symbol: iree_flags_parse_checked" in log:
+    undefined_symbol_match = re.search(
+        r"(?:lld-link|ld\.lld): error: undefined symbol: (\S+)", log
+    )
+    if undefined_symbol_match:
+        symbol = undefined_symbol_match.group(1)
         return _finding(
             REPOSITORY,
-            "windows_shared_runtime_missing_flags",
-            "Windows shared runtime",
-            "the Windows shared-tool composition omitted the flags implementation",
+            "link_undefined_symbol",
+            symbol,
+            f"the linked program is missing symbol {symbol}",
         )
 
     if (

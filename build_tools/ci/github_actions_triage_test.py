@@ -146,6 +146,11 @@ class GitHubActionsTriageTest(unittest.TestCase):
                 "strict_xpass",
                 "@wide_values (BACKEND/005)",
             ),
+            (
+                "lld-link: error: undefined symbol: loom_cfg_forward_empty_blocks",
+                "link_undefined_symbol",
+                "loom_cfg_forward_empty_blocks",
+            ),
         )
         for log, code, subject in cases:
             with self.subTest(code=code):
@@ -157,7 +162,6 @@ class GitHubActionsTriageTest(unittest.TestCase):
     def test_identified_regressions_remain_repository_failures(self):
         logs = (
             "profile event has no numeric dur: {'ph': 'i'} Summarize Bazel profile",
-            "lld-link: error: undefined symbol: iree_flags_parse_checked",
             "CMake executable name 'loom-check' is ambiguous "
             "loom_target_arch_amd_xdna_aie2p_loom-check "
             "loom_tools_loom-check_loom-check",

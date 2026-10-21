@@ -7,7 +7,7 @@
 # CI orchestration has no CMake target surface.
 # bazel-to-cmake: skip
 
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 py_library(
     name = "github_api",
@@ -31,6 +31,29 @@ py_test(
     size = "small",
     srcs = ["github_actions_triage_test.py"],
     deps = [":github_actions_triage"],
+)
+
+py_binary(
+    name = "github_actions_watch",
+    srcs = ["github_actions_watch.py"],
+    deps = [
+        ":github_actions_triage",
+        ":github_api",
+    ],
+)
+
+py_test(
+    name = "github_actions_watch_test",
+    size = "small",
+    srcs = [
+        "github_actions_watch.py",
+        "github_actions_watch_test.py",
+    ],
+    main = "github_actions_watch_test.py",
+    deps = [
+        ":github_actions_triage",
+        ":github_api",
+    ],
 )
 
 py_test(
