@@ -89,7 +89,8 @@ loom_serve_text_session_cache_entry_t* loom_serve_text_session_cache_oldest(
   loom_serve_text_session_cache_entry_t* oldest = NULL;
   for (iree_host_size_t i = 0; cache->entries && i <= cache->capacity; ++i) {
     loom_serve_text_session_cache_entry_t* entry = &cache->entries[i];
-    if (entry != protected_entry && entry->lifetime.id &&
+    if (entry != protected_entry && !entry->endpoint.pending &&
+        entry->lifetime.id &&
         (!oldest || entry->lifetime.serial < oldest->lifetime.serial)) {
       oldest = entry;
     }
@@ -147,7 +148,7 @@ bool loom_serve_text_session_cache_evict(
   for (iree_host_size_t i = 0; i < row_count; ++i) {
     loom_serve_text_session_t* row = &rows[i];
     if (row != protected_row && !row->request.consumer.self &&
-        loom_serve_text_row_position(row->row) &&
+        !row->preparing && loom_serve_text_row_position(row->row) &&
         (!oldest || row->lifetime.serial < oldest->lifetime.serial)) {
       oldest = row;
     }

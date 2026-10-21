@@ -63,6 +63,8 @@ typedef struct loom_serve_text_session_t {
   loom_serve_text_mode_t mode;
   // Owned logical session currently assigned to this reusable execution row.
   loom_serve_text_session_lifetime_t lifetime;
+  // A queued media request owns this idle row's prepared continuation.
+  bool preparing;
   // Canonical completed client history validating the retained raw state.
   loom_serve_text_chat_completion_t completion;
   // Preallocated streaming decoder storage reused between requests.

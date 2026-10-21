@@ -78,7 +78,7 @@ static loom_serve_text_prefix_entry_t* loom_serve_text_prefix_cache_oldest(
   loom_serve_text_prefix_entry_t* oldest = NULL;
   for (iree_host_size_t i = 0; i < cache->capacity; ++i) {
     loom_serve_text_prefix_entry_t* entry = &cache->entries[i];
-    if (entry->state && entry != protected_entry &&
+    if (entry->state && !entry->pending && entry != protected_entry &&
         (!oldest || entry->serial < oldest->serial)) {
       oldest = entry;
     }

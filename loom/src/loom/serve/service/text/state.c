@@ -558,7 +558,11 @@ iree_status_t loom_serve_text_state_submit_trim(
   if (!state->memory.buffers[1]) {
     return iree_ok_status();
   }
-  state->memory.trim.phase = LOOM_SERVE_TEXT_TRIM_RELOCATE;
+  // Prepared continuations retain exact logical IDs, not relocation entries.
+  // Dead backing can still retire; moving IDs waits until their plans retire.
+  state->memory.trim.phase = state->prepared_reservations
+                                 ? LOOM_SERVE_TEXT_TRIM_COMPLETE
+                                 : LOOM_SERVE_TEXT_TRIM_RELOCATE;
   return loom_serve_text_trim_backing(state);
 }
 
@@ -1528,6 +1532,7 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
       .tail = tail,
       .cold = cold,
   };
+  ++state->prepared_reservations;
   iree_hal_buffer_t* views[5];
   memcpy(views, &row->buffers[TEXT_CONTROL], sizeof(views));
   views[TEXT_RECURRENT - TEXT_CONTROL] = state->recurrent.buffers[writer];
@@ -1719,6 +1724,7 @@ void loom_serve_text_state_reservation_free(
     return;
   }
   loom_serve_text_state_t* state = reservation->row->owner;
+  --state->prepared_reservations;
   if (!reservation->installed) {
     loom_serve_block_pool_release(&state->recurrent.pool, 1,
                                   &reservation->writer);

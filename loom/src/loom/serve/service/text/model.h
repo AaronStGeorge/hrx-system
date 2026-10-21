@@ -227,7 +227,8 @@ typedef struct loom_serve_text_pool_usage_t {
   iree_host_size_t block_size;
   // Total addressable positions in target and optional draft storage.
   iree_host_size_t capacity;
-  // Positions in pages not owned by any row, checkpoint or retiring use.
+  // Positions in pages not owned by a row, checkpoint, prepared continuation,
+  // or retiring use.
   iree_host_size_t available;
   // Owned positions beyond consumed frontiers, reserved for active requests.
   // These are disjoint from available and from positions retaining live KV.

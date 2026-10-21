@@ -11,6 +11,7 @@
 #include "loom/serve/service/text/consumer.h"
 #include "loom/serve/service/text/input.h"
 #include "loom/serve/service/text/media_projector.h"
+#include "loom/serve/service/text/pending_continuation.h"
 #include "loom/serve/service/text/sequence.h"
 #include "loom/serve/service/text/telemetry.h"
 
@@ -18,9 +19,9 @@
 extern "C" {
 #endif
 
-// A queued request owns no device reservation. Only the selected attempt may
-// borrow an idle row/cache; body/name/tool views borrow its consumer-owned
-// immutable input storage.
+// A queued request may own a logical continuation while media is produced, but
+// no text parameter pin or submitted text work. Body/name/tool views borrow
+// its consumer-owned immutable input storage.
 typedef struct loom_serve_text_pending_request_t {
   // Input lifetime and output delivery, moved at admission or consumed on end.
   loom_serve_text_consumer_t consumer;
@@ -34,6 +35,10 @@ typedef struct loom_serve_text_pending_request_t {
   loom_serve_text_input_t input;
   // Owned projected image occurrences, transferred to the admitted session.
   loom_serve_text_media_request_t* media;
+  // Exact consumer state protected before producing independent image output.
+  loom_serve_text_pending_continuation_t continuation;
+  // Optional prefix sharing was declined; retain the original replay input.
+  bool replay_prefix;
   // Page-rounded completion requirement for the prepared history.
   iree_host_size_t reservation;
   // Cumulative CPU preparation time, excluding unchanged admission retries.

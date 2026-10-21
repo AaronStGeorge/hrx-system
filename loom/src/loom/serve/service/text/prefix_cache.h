@@ -28,6 +28,8 @@ typedef struct loom_serve_text_prefix_entry_t {
   loom_serve_text_chat_media_identity_t media;
   // Monotonic last successful admission or capture, for cold LRU eviction.
   uint64_t serial;
+  // Prepared requests borrowing this immutable record across media work.
+  iree_host_size_t pending;
 } loom_serve_text_prefix_entry_t;
 
 typedef struct loom_serve_text_prefix_cache_t {

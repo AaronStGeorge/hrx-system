@@ -201,6 +201,7 @@ iree_status_t loom_serve_text_pending_queue_admit(
          pending->input.count * sizeof(*session->tokens));
   const iree_duration_t prepare_duration = pending->prepare_duration;
   loom_serve_text_session_cache_entry_t* cached = queue->prepared.cached;
+  loom_serve_text_pending_continuation_deinitialize(&pending->continuation);
   if (cached) {
     loom_serve_text_telemetry_session_end(queue->telemetry, &session->lifetime);
     session->lifetime = cached->lifetime;
@@ -277,6 +278,7 @@ iree_status_t loom_serve_text_pending_queue_admit(
 void loom_serve_text_pending_queue_remove(
     loom_serve_text_pending_queue_t* queue, iree_host_size_t index) {
   loom_serve_text_pending_request_t* request = queue->values[index];
+  loom_serve_text_pending_continuation_deinitialize(&request->continuation);
   if (request == queue->prepared.request) {
     loom_serve_residency_cancel_admission(
         loom_serve_text_model_residency(queue->model));
@@ -306,12 +308,15 @@ void loom_serve_text_pending_queue_cancel(
 
 bool loom_serve_text_pending_queue_cancel_failed(
     loom_serve_text_pending_queue_t* queue,
-    const loom_serve_text_pending_request_t* borrowed,
+    const loom_serve_text_pending_request_t* borrowed, bool rows_borrowed,
     loom_serve_text_media_projector_t* projector) {
   bool progress = false;
   for (iree_host_size_t i = 0; i < queue->count;) {
     loom_serve_text_pending_request_t* request = queue->values[i];
+    // A CPU input job selects across idle rows. Releasing a prepared media
+    // continuation changes its row lease; host-only queue removal does not.
     if (request != borrowed &&
+        (!rows_borrowed || !request->continuation.session) &&
         !request->consumer.vtable->is_open(request->consumer.self) &&
         loom_serve_text_media_projector_cancel(projector, request->media)) {
       loom_serve_text_pending_queue_cancel(queue, i, projector);
