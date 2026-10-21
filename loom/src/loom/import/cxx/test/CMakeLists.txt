@@ -141,6 +141,7 @@ loom_check_test_suite(
     "opaque_pointers_invalid.cxx-test"
     "packed_group_dot.cxx-test"
     "packed_memory.cxx-test"
+    "paged_online_softmax_loop_f32.cxx-test"
     "parameter_alignment.cxx-test"
     "parameter_alignment_invalid.cxx-test"
     "parameter_noalias.cxx-test"
@@ -236,6 +237,7 @@ loom_check_test_suite(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/packed_enums.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/packed_group_dot.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/packed_layout.h"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/paged_online_softmax_loop_f32.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/record_layout.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/record_values.cxx"
 )

@@ -13,11 +13,13 @@ output — these tests prove both are correct.
 """
 
 import struct
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from loom.dialect.test.defs import (
+    ALL_TEST_OPS,
     ALL_TEST_TYPES,
     test_enum_array_attrs,
     test_options_attr,
@@ -27,12 +29,14 @@ from loom.dialect.test.defs import (
     test_string_array_attrs,
     test_symbol_array_attrs,
     test_symbol_set_attrs,
+    test_template_param_symbol_flags,
 )
 from loom.format.bytecode.encoding import (
     decode_varint,
     encode_signed_varint,
     encode_varint,
 )
+from loom.format.bytecode.op_decls import default_op_decls
 from loom.format.bytecode.reader import (
     BytecodeError,
     BytecodeReader,
@@ -55,6 +59,7 @@ from loom.format.bytecode.writer import (
     SYMBOL_INTERFACE_FLAG_MASK,
     write_module,
 )
+from loom.format.text.parser import Parser
 from loom.ir import (
     ATTR_AGGREGATE_MAX_NESTING_DEPTH,
     BF16,
@@ -285,6 +290,18 @@ def _make_single_op_body_module(op_name: str = "test.yield") -> Module:
         )
     )
     return module
+
+
+def _make_instance_flags_module() -> Module:
+    parser = Parser()
+    parser.register_ops(ALL_TEST_OPS)
+    return parser.parse(
+        "test.func @f() {\n"
+        "  test.template_param_symbol_flags<@target, high>\n"
+        "  test.yield\n"
+        "}\n"
+        "test.record @target\n"
+    )
 
 
 def _root_region_source_flags_offset(data: bytes | bytearray) -> int:
@@ -655,6 +672,36 @@ class TestMalformedLocationMode:
 
         with pytest.raises(BytecodeError, match="source locations"):
             read_module(bytes(data))
+
+
+class TestMalformedOperationFlags:
+    def test_undeclared_instance_flag_bits_are_rejected(self) -> None:
+        data = bytearray(write_module(_make_instance_flags_module()))
+        op_offset = _single_op_offset(data)
+        _op_table_index_plus1, flags_offset = decode_varint(data, op_offset)
+        assert data[flags_offset] == 128
+        data[flags_offset] |= 4
+
+        with pytest.raises(BytecodeError, match="undeclared bits 0x04"):
+            read_module(bytes(data))
+
+    def test_ordinary_instance_flags_attribute_is_rejected(self) -> None:
+        module = _make_instance_flags_module()
+        declarations = list(default_op_decls())
+        declaration_index = declarations.index(test_template_param_symbol_flags)
+        declarations[declaration_index] = replace(
+            test_template_param_symbol_flags,
+            attrs=tuple(
+                attr
+                for attr in test_template_param_symbol_flags.attrs
+                if attr.name != "flags"
+            ),
+            format=(),
+        )
+        data = write_module(module, op_decls=declarations)
+
+        with pytest.raises(BytecodeError, match="as an ordinary attribute"):
+            read_module(data)
 
 
 class TestMalformedSymbolSection:

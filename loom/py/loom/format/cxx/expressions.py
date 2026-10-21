@@ -77,6 +77,75 @@ _ENCODING_ENUM_TYPES = {
     "affine": "affine_policy",
 }
 
+_SCALAR_OPERATOR_OPERATIONS = frozenset(
+    {"scalar.addf", "scalar.divf", "scalar.mulf", "scalar.subf"}
+)
+_SCALAR_TRIGONOMETRY_OPERATIONS = frozenset(
+    {"scalar.cosf", "scalar.costurnsf", "scalar.sinf", "scalar.sinturnsf"}
+)
+_SCALAR_NAMED_FUNCTION_OPERATIONS = frozenset(
+    {
+        "scalar.absf",
+        "scalar.acosf",
+        "scalar.acoshf",
+        "scalar.asinf",
+        "scalar.asinhf",
+        "scalar.atan2f",
+        "scalar.atanf",
+        "scalar.atanhf",
+        "scalar.cbrtf",
+        "scalar.ceilf",
+        "scalar.copysignf",
+        "scalar.coshf",
+        "scalar.ctlzi",
+        "scalar.ctpopi",
+        "scalar.cttzi",
+        "scalar.erfcf",
+        "scalar.erff",
+        "scalar.exp2f",
+        "scalar.expf",
+        "scalar.expm1f",
+        "scalar.floorf",
+        "scalar.fmaf",
+        "scalar.ldexpf",
+        "scalar.log10f",
+        "scalar.log1pf",
+        "scalar.log2f",
+        "scalar.logf",
+        "scalar.logisticf",
+        "scalar.maximumf",
+        "scalar.maxnumf",
+        "scalar.minimumf",
+        "scalar.minnumf",
+        "scalar.negf",
+        "scalar.powf",
+        "scalar.remf",
+        "scalar.roundevenf",
+        "scalar.roundf",
+        "scalar.rsqrtf",
+        "scalar.signf",
+        "scalar.siluf",
+        "scalar.sinhf",
+        "scalar.softplusf",
+        "scalar.sqrtf",
+        "scalar.tanf",
+        "scalar.tanhf",
+        "scalar.truncf",
+    }
+)
+
+# The renderer must remain the inverse of every typed scalar operation exposed
+# by loomcxx/scalar.h. The generator test compares this inventory against the
+# declarations selected from the dialect so either side cannot grow alone.
+SCALAR_PROJECTION_OPERATIONS = frozenset(
+    {
+        *_SCALAR_OPERATOR_OPERATIONS,
+        *_SCALAR_TRIGONOMETRY_OPERATIONS,
+        *_SCALAR_NAMED_FUNCTION_OPERATIONS,
+        "scalar.frexpf",
+    }
+)
+
 
 class CxxExpressionRenderer(CxxRenderContext):
     def _encoding_parameter_expression(
@@ -410,13 +479,21 @@ class CxxExpressionRenderer(CxxRenderContext):
             return self._literal(definition.attributes.get("value"), value_id)
         return self.expression(value_id)
 
-    def _unsigned_counted_bound(self, value_id: int) -> str | None:
-        """Recovers one C++ unsigned loop-bound expression from address IR."""
+    def _counted_integer_bound(
+        self,
+        value_id: int,
+        *,
+        carrier_type: str,
+        minimum: int,
+        maximum: int,
+        suffix: str = "",
+    ) -> str | None:
+        """Recovers one fixed-width C++ loop bound from address-domain IR."""
 
         constant = self._constant_integer(value_id)
         if constant is not None:
-            if 0 <= constant <= (1 << 32) - 1:
-                return f"{constant}u"
+            if minimum <= constant <= maximum:
+                return f"{constant}{suffix}"
             return None
         definition = self.definitions.get(value_id)
         if (
@@ -428,11 +505,32 @@ class CxxExpressionRenderer(CxxRenderContext):
         source = definition.operands[0]
         expression = self.expression(source)
         if (
-            self.expression_type(source) == "unsigned"
+            self.expression_type(source) == carrier_type
             and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", expression) is not None
         ):
             return expression
         return None
+
+    def _signed_counted_bound(self, value_id: int) -> str | None:
+        """Recovers one C++ int loop-bound expression from index IR."""
+
+        return self._counted_integer_bound(
+            value_id,
+            carrier_type="int",
+            minimum=-(1 << 31),
+            maximum=(1 << 31) - 1,
+        )
+
+    def _unsigned_counted_bound(self, value_id: int) -> str | None:
+        """Recovers one C++ unsigned loop-bound expression from offset IR."""
+
+        return self._counted_integer_bound(
+            value_id,
+            carrier_type="unsigned",
+            minimum=0,
+            maximum=(1 << 32) - 1,
+            suffix="u",
+        )
 
     def _predicate_arg(
         self, argument: PredicateArg, *, reference_id: int | None = None
@@ -984,6 +1082,72 @@ class CxxExpressionRenderer(CxxRenderContext):
         self._numeric_conversion(operation)
         return ()
 
+    def _render_scalar_intrinsic(self, operation: Operation) -> tuple[str, ...] | None:
+        name = operation.name
+        if name not in SCALAR_PROJECTION_OPERATIONS:
+            return None
+        if name in _SCALAR_OPERATOR_OPERATIONS:
+            return None
+
+        self.uses_scalar_functions = True
+        member = name.removeprefix("scalar.")
+        arguments = ", ".join(
+            self.expression(operand) for operand in operation.operands
+        )
+        if name == "scalar.frexpf":
+            fraction, exponent = operation.results
+            temporary = self._temporary_name("decomposition")
+            self.writer.line(f"auto {temporary} = loom::scalar::frexpf({arguments});")
+            self.expressions[fraction] = f"{temporary}.fraction"
+            self.expressions[exponent] = f"{temporary}.exponent"
+            self.expression_types[fraction] = self.cpp_type(fraction)
+            self.expression_types[exponent] = self.cpp_type(exponent)
+            return ()
+
+        if name in _SCALAR_TRIGONOMETRY_OPERATIONS:
+            value = operation.attributes.get("math")
+            flags = value.split("|") if isinstance(value, str) else []
+            approximate = "afn" in flags or "fast" in flags
+            preserve = "preserve" in flags
+            if preserve and not approximate:
+                raise CxxRenderError(
+                    operation,
+                    "preserved trigonometry without AFN has no public C++ spelling",
+                )
+            namespace = "loom::scalar"
+            if preserve:
+                namespace += "::approximate::preserved"
+            elif approximate:
+                namespace += "::approximate"
+            fastmath = self._fastmath_contract(
+                operation,
+                attribute_name="math",
+                exclude=frozenset({"afn", "preserve"}),
+            )
+            self._declare(
+                operation.results[0],
+                f"{namespace}::{member}({arguments})",
+                inlineable=True,
+                statement_attribute=fastmath,
+            )
+            return ("math",) if value is not None else ()
+
+        value = operation.attributes.get("fastmath")
+        flags = value.split("|") if isinstance(value, str) else []
+        namespace = (
+            "loom::scalar::approximate"
+            if "afn" in flags or "fast" in flags
+            else "loom::scalar"
+        )
+        fastmath = self._fastmath_contract(operation, exclude=frozenset({"afn"}))
+        self._declare(
+            operation.results[0],
+            f"{namespace}::{member}({arguments})",
+            inlineable=True,
+            statement_attribute=fastmath,
+        )
+        return ("fastmath",) if "fastmath" in operation.attributes else ()
+
     def _render_simple(self, operation: Operation) -> tuple[str, ...] | None:
         name = operation.name
         if name in {"scalar.constant", "index.constant"}:
@@ -1114,27 +1278,9 @@ class CxxExpressionRenderer(CxxRenderContext):
         projected = self._render_comparison(operation)
         if projected is not None:
             return projected
-
-        if name in {
-            "scalar.absf",
-            "scalar.minimumf",
-            "scalar.maximumf",
-            "scalar.minnumf",
-            "scalar.maxnumf",
-            "scalar.siluf",
-        }:
-            fastmath = self._fastmath_contract(operation)
-            member = name.removeprefix("scalar.")
-            arguments = ", ".join(
-                self.expression(operand) for operand in operation.operands
-            )
-            self._declare(
-                operation.results[0],
-                f"loom::scalar::{member}({arguments})",
-                inlineable=True,
-                statement_attribute=fastmath,
-            )
-            return ("fastmath",) if fastmath else ()
+        projected = self._render_scalar_intrinsic(operation)
+        if projected is not None:
+            return projected
 
         if name == "vector.constant":
             result = operation.results[0]
@@ -1241,12 +1387,18 @@ class CxxExpressionRenderer(CxxRenderContext):
                 inlineable=True,
             )
             return ()
-        if name == "vector.dot2f":
+        if name in {"vector.dot2f", "vector.dotf"}:
             arguments = ", ".join(
                 self.expression(operand) for operand in operation.operands
             )
-            self._declare(operation.results[0], f"loom::vector::dot2f({arguments})")
-            return ()
+            fastmath = self._fastmath_contract(operation)
+            member = name.removeprefix("vector.")
+            self._declare(
+                operation.results[0],
+                f"loom::vector::{member}({arguments})",
+                statement_attribute=fastmath,
+            )
+            return ("fastmath",) if fastmath else ()
         if name == "vector.reduce":
             kind = operation.attributes.get("kind")
             arguments = ", ".join(

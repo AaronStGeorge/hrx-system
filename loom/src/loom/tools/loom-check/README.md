@@ -164,11 +164,13 @@ records an unavailable feature. Numeric limits use the public
 The profile API validates these facts before compilation.
 
 `emit cxx` projects an admitted High module through the public
-`loom-export-cxx` tool. A `.cxx-test` therefore places authored C++ before
-`// ----` and its canonical readable C++ projection after it; a `.loom-test`
-can use the same mode to check how authored or transformed High IR reads in the
-C++ API. Files using the mode declare `// REQUIRES: loom-export-cxx` so the
-external tool boundary remains explicit.
+`loom-export-cxx` tool. `emit cxx @kernel` selects one kernel from a mixed
+module; omitting the root requires every top-level definition to be
+projectable. A `.cxx-test` therefore places authored C++ before `// ----` and
+its canonical readable C++ projection after it; a `.loom-test` can use the same
+mode to check how authored or transformed High IR reads in the C++ API. Files
+using the mode declare `// REQUIRES: loom-export-cxx` so the external tool
+boundary remains explicit.
 
 ### Running Fixtures
 

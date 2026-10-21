@@ -40,5 +40,8 @@ iree_py_test(
     ],
     args = ["loom.gen.cxx.intrinsics_test"],
     main = "pytest_style_runner.py",
-    deps = [":intrinsics"],
+    deps = [
+        ":intrinsics",
+        "//loom/py/loom/format/cxx",
+    ],
 )

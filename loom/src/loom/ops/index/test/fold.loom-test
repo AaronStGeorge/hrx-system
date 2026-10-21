@@ -1906,10 +1906,133 @@ func.def @logical_shift_requires_carrier() -> (index) {
   %shifted = index.shrui %bits, %amount : index
   func.return %shifted : index
 }
+
 // ----
 func.def @logical_shift_requires_carrier() -> (index) {
   %bits = index.constant -1 : index
   %amount = index.constant 1 : index
   %shifted = index.shrui %bits, %amount : index
   func.return %shifted : index
+}
+
+// ====
+
+// Roundtrips through every fixed-width integer preserve index values that fit
+// the intermediate signed carrier. i1 is the 0/1 Boolean domain.
+func.def @index_cast_roundtrips(%raw: index) -> (index, index, index, index, index) {
+  %bit = index.assume %raw [range(%raw, 0, 1)] : index
+  %byte = index.assume %raw [range(%raw, -128, 127)] : index
+  %half = index.assume %raw [range(%raw, -32768, 32767)] : index
+  %word = index.assume %raw [range(%raw, -2147483648, 2147483647)] : index
+  %bit_bits = index.cast %bit : index to i1
+  %byte_bits = index.cast %byte : index to i8
+  %half_bits = index.cast %half : index to i16
+  %word_bits = index.cast %word : index to i32
+  %wide_bits = index.cast %raw : index to i64
+  %bit_restored = index.cast %bit_bits : i1 to index
+  %byte_restored = index.cast %byte_bits : i8 to index
+  %half_restored = index.cast %half_bits : i16 to index
+  %word_restored = index.cast %word_bits : i32 to index
+  %wide_restored = index.cast %wide_bits : i64 to index
+  func.return %bit_restored, %byte_restored, %half_restored, %word_restored, %wide_restored : index, index, index, index, index
+}
+
+// ----
+func.def @index_cast_roundtrips(%raw: index) -> (index, index, index, index, index) {
+  %bit = index.assume %raw [range(%raw, 0, 1)] : index
+  %byte = index.assume %raw [range(%raw, -128, 127)] : index
+  %half = index.assume %raw [range(%raw, -32768, 32767)] : index
+  %word = index.assume %raw [range(%raw, -2147483648, 2147483647)] : index
+  func.return %bit, %byte, %half, %word, %raw : index, index, index, index, index
+}
+
+// ====
+
+// Roundtrips through every fixed-width integer preserve offset values that fit
+// the intermediate unsigned carrier.
+func.def @offset_cast_roundtrips(%raw: offset) -> (offset, offset, offset, offset, offset) {
+  %bit = index.assume %raw [range(%raw, 0, 1)] : offset
+  %byte = index.assume %raw [range(%raw, 0, 255)] : offset
+  %half = index.assume %raw [range(%raw, 0, 65535)] : offset
+  %word = index.assume %raw [range(%raw, 0, 4294967295)] : offset
+  %bit_bits = index.cast %bit : offset to i1
+  %byte_bits = index.cast %byte : offset to i8
+  %half_bits = index.cast %half : offset to i16
+  %word_bits = index.cast %word : offset to i32
+  %wide_bits = index.cast %raw : offset to i64
+  %bit_restored = index.cast %bit_bits : i1 to offset
+  %byte_restored = index.cast %byte_bits : i8 to offset
+  %half_restored = index.cast %half_bits : i16 to offset
+  %word_restored = index.cast %word_bits : i32 to offset
+  %wide_restored = index.cast %wide_bits : i64 to offset
+  func.return %bit_restored, %byte_restored, %half_restored, %word_restored, %wide_restored : offset, offset, offset, offset, offset
+}
+
+// ----
+func.def @offset_cast_roundtrips(%raw: offset) -> (offset, offset, offset, offset, offset) {
+  %bit = index.assume %raw [range(%raw, 0, 1)] : offset
+  %byte = index.assume %raw [range(%raw, 0, 255)] : offset
+  %half = index.assume %raw [range(%raw, 0, 65535)] : offset
+  %word = index.assume %raw [range(%raw, 0, 4294967295)] : offset
+  func.return %bit, %byte, %half, %word, %raw : offset, offset, offset, offset, offset
+}
+
+// ====
+
+// Truncating, sign-changing, and Boolean -1 roundtrips remain explicit.
+func.def @address_cast_roundtrips_that_change_values(%signed: index, %unsigned: offset) -> (index, index, index, index, offset, offset, offset, offset) {
+  %signed_bit = index.assume %signed [range(%signed, -1, 0)] : index
+  %signed_byte = index.assume %signed [range(%signed, -129, 127)] : index
+  %signed_half = index.assume %signed [range(%signed, -32769, 32767)] : index
+  %signed_word = index.assume %signed [range(%signed, -2147483649, 2147483647)] : index
+  %unsigned_bit = index.assume %unsigned [range(%unsigned, 0, 2)] : offset
+  %unsigned_byte = index.assume %unsigned [range(%unsigned, 0, 256)] : offset
+  %unsigned_half = index.assume %unsigned [range(%unsigned, 0, 65536)] : offset
+  %unsigned_word = index.assume %unsigned [range(%unsigned, 0, 4294967296)] : offset
+  %signed_bit_bits = index.cast %signed_bit : index to i1
+  %signed_byte_bits = index.cast %signed_byte : index to i8
+  %signed_half_bits = index.cast %signed_half : index to i16
+  %signed_word_bits = index.cast %signed_word : index to i32
+  %unsigned_bit_bits = index.cast %unsigned_bit : offset to i1
+  %unsigned_byte_bits = index.cast %unsigned_byte : offset to i8
+  %unsigned_half_bits = index.cast %unsigned_half : offset to i16
+  %unsigned_word_bits = index.cast %unsigned_word : offset to i32
+  %signed_bit_restored = index.cast %signed_bit_bits : i1 to index
+  %signed_byte_restored = index.cast %signed_byte_bits : i8 to index
+  %signed_half_restored = index.cast %signed_half_bits : i16 to index
+  %signed_word_restored = index.cast %signed_word_bits : i32 to index
+  %unsigned_bit_restored = index.cast %unsigned_bit_bits : i1 to offset
+  %unsigned_byte_restored = index.cast %unsigned_byte_bits : i8 to offset
+  %unsigned_half_restored = index.cast %unsigned_half_bits : i16 to offset
+  %unsigned_word_restored = index.cast %unsigned_word_bits : i32 to offset
+  func.return %signed_bit_restored, %signed_byte_restored, %signed_half_restored, %signed_word_restored, %unsigned_bit_restored, %unsigned_byte_restored, %unsigned_half_restored, %unsigned_word_restored : index, index, index, index, offset, offset, offset, offset
+}
+
+// ----
+func.def @address_cast_roundtrips_that_change_values(%signed: index, %unsigned: offset) -> (index, index, index, index, offset, offset, offset, offset) {
+  %signed_bit = index.assume %signed [range(%signed, -1, 0)] : index
+  %signed_byte = index.assume %signed [range(%signed, -129, 127)] : index
+  %signed_half = index.assume %signed [range(%signed, -32769, 32767)] : index
+  %signed_word = index.assume %signed [range(%signed, -2147483649, 2147483647)] : index
+  %unsigned_bit = index.assume %unsigned [range(%unsigned, 0, 2)] : offset
+  %unsigned_byte = index.assume %unsigned [range(%unsigned, 0, 256)] : offset
+  %unsigned_half = index.assume %unsigned [range(%unsigned, 0, 65536)] : offset
+  %unsigned_word = index.assume %unsigned [range(%unsigned, 0, 4294967296)] : offset
+  %signed_bit_bits = index.cast %signed_bit : index to i1
+  %signed_byte_bits = index.cast %signed_byte : index to i8
+  %signed_half_bits = index.cast %signed_half : index to i16
+  %signed_word_bits = index.cast %signed_word : index to i32
+  %unsigned_bit_bits = index.cast %unsigned_bit : offset to i1
+  %unsigned_byte_bits = index.cast %unsigned_byte : offset to i8
+  %unsigned_half_bits = index.cast %unsigned_half : offset to i16
+  %unsigned_word_bits = index.cast %unsigned_word : offset to i32
+  %signed_bit_restored = index.cast %signed_bit_bits : i1 to index
+  %signed_byte_restored = index.cast %signed_byte_bits : i8 to index
+  %signed_half_restored = index.cast %signed_half_bits : i16 to index
+  %signed_word_restored = index.cast %signed_word_bits : i32 to index
+  %unsigned_bit_restored = index.cast %unsigned_bit_bits : i1 to offset
+  %unsigned_byte_restored = index.cast %unsigned_byte_bits : i8 to offset
+  %unsigned_half_restored = index.cast %unsigned_half_bits : i16 to offset
+  %unsigned_word_restored = index.cast %unsigned_word_bits : i32 to offset
+  func.return %signed_bit_restored, %signed_byte_restored, %signed_half_restored, %signed_word_restored, %unsigned_bit_restored, %unsigned_byte_restored, %unsigned_half_restored, %unsigned_word_restored : index, index, index, index, offset, offset, offset, offset
 }

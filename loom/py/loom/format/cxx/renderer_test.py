@@ -58,6 +58,23 @@ def test_projects_multiple_kernels_in_one_translation_unit() -> None:
     assert "output_1" not in result
 
 
+def test_projects_selected_kernels_from_a_mixed_module_in_source_order() -> None:
+    source = (
+        "func.def @helper() {\n  func.return\n}\n\n"
+        + SOURCE_MODULE
+        + "\n"
+        + LOOP_MODULE
+    )
+    module = load_module(source.encode())
+    original_operations = tuple(module.body.ops)
+
+    result = render_module(module, roots=("@accumulate", "copy_one"))
+
+    assert result.index("void copy_one(") < result.index("void accumulate()")
+    assert "helper" not in result
+    assert tuple(module.body.ops) == original_operations
+
+
 def test_projects_distinct_kernel_targets_in_one_translation_unit() -> None:
     source = (
         "amdgpu.target<gfx1100> @first_target\n"
@@ -85,6 +102,58 @@ def test_projects_distinct_kernel_targets_in_one_translation_unit() -> None:
     )
     assert "loom::target(rendered_target_first_target)" in result
     assert "loom::target(rendered_target_second_target)" in result
+
+
+def test_projects_only_the_target_referenced_by_a_selected_kernel() -> None:
+    source = (
+        "amdgpu.target<gfx1100> @first_target\n"
+        "amdgpu.target<gfx942> @second_target\n"
+        + SOURCE_MODULE.replace(
+            "kernel.def @copy_one()", "kernel.def target(@first_target) @copy_one()"
+        )
+        + "\n"
+        + LOOP_MODULE.replace(
+            "kernel.def @accumulate()",
+            "kernel.def target(@second_target) @accumulate()",
+        )
+    )
+
+    result = render_module(load_module(source.encode()), roots=("@accumulate",))
+
+    assert "void copy_one(" not in result
+    assert "void accumulate()" in result
+    assert 'constexpr loom::amdgpu::target rendered_target{.kind = "gfx942"};' in result
+    assert "gfx1100" not in result
+
+
+@pytest.mark.parametrize(
+    ("roots", "message"),
+    [
+        (("@",), "kernel root name is empty"),
+        (("@missing",), "kernel root '@missing' was not found"),
+        (
+            ("copy_one", "@copy_one"),
+            "kernel root '@copy_one' is repeated",
+        ),
+    ],
+)
+def test_rejects_invalid_kernel_root_selections(
+    roots: tuple[str, ...], message: str
+) -> None:
+    with pytest.raises(CxxRenderError, match=message):
+        render_module(load_module(SOURCE_MODULE.encode()), roots=roots)
+
+
+def test_rejects_selected_roots_that_are_not_kernel_definitions() -> None:
+    module = load_module(
+        ("func.def @helper() {\n  func.return\n}\n\n" + SOURCE_MODULE).encode()
+    )
+
+    with pytest.raises(
+        CxxRenderError,
+        match=r"cannot project func\.def: root '@helper' is not a kernel definition",
+    ):
+        render_module(module, roots=("@helper",))
 
 
 def test_preserves_scalar_kernel_arguments() -> None:
@@ -196,6 +265,72 @@ def test_projects_loop_carried_ssa_as_mutable_cxx_state() -> None:
     assert "next" not in result
 
 
+def test_preserves_index_domain_in_scheduled_counted_loops() -> None:
+    source = LOOP_MODULE.replace(": offset", ": index")
+
+    result = render_module(load_module(source.encode()))
+
+    assert (
+        "[[loom::unroll(loom::type::index{4}), "
+        "loom::pipeline(loom::type::index{2}), "
+        'loom::schedule("recurrence")]]' in result
+    )
+    assert "for (int index = 0; index < 4; ++index) {" in result
+
+
+@pytest.mark.parametrize(
+    ("domain", "upper", "step", "expected"),
+    [
+        ("index", (1 << 31) - 1, 1, "int index = 0; index < 2147483647; ++index"),
+        ("index", (1 << 31) - 2, 2, "int index = 0; index < 2147483646; index += 2"),
+        (
+            "offset",
+            (1 << 32) - 1,
+            1,
+            "unsigned index = 0u; index < 4294967295u; ++index",
+        ),
+        (
+            "offset",
+            (1 << 32) - 2,
+            2,
+            "unsigned index = 0u; index < 4294967294u; index += 2u",
+        ),
+    ],
+)
+def test_preserves_nonwrapping_counted_loop_boundaries(
+    domain: str, upper: int, step: int, expected: str
+) -> None:
+    source = (
+        LOOP_MODULE.replace(": offset", f": {domain}")
+        .replace("%upper = index.constant 4", f"%upper = index.constant {upper}")
+        .replace("%step = index.constant 1", f"%step = index.constant {step}")
+    )
+
+    result = render_module(load_module(source.encode()))
+
+    assert f"for ({expected}) {{" in result
+
+
+@pytest.mark.parametrize(
+    ("domain", "upper"),
+    [("index", (1 << 31) - 1), ("offset", (1 << 32) - 1)],
+)
+def test_rejects_scheduled_counted_loops_that_can_overflow(
+    domain: str, upper: int
+) -> None:
+    source = (
+        LOOP_MODULE.replace(": offset", f": {domain}")
+        .replace("%upper = index.constant 4", f"%upper = index.constant {upper}")
+        .replace("%step = index.constant 1", "%step = index.constant 2")
+    )
+
+    with pytest.raises(
+        CxxRenderError,
+        match="scheduled loop has no recoverable nonwrapping integer C\\+\\+ induction contract",
+    ):
+        render_module(load_module(source.encode()))
+
+
 def test_stages_vector_insert_before_replacing_a_distinct_loop_carrier() -> None:
     source = """\
 kernel.def @replace_lane() {
@@ -270,6 +405,85 @@ def test_projects_vector_absolute_value_as_typed_intrinsic() -> None:
 
     assert "#include <loomcxx/vector.h>" in result
     assert "Float32x4 absolute = loom::vector::absf(values);" in result
+
+
+def test_projects_scalar_intrinsic_family_through_public_facade() -> None:
+    source = """\
+kernel.def @scalar_math() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: f32) {
+  %exponential = scalar.expf<afn> %input : f32
+  %fast_exponential = scalar.expf<fast> %input : f32
+  %sine = scalar.sinf<afn|preserve> %input : f32
+  %fast_preserved_sine = scalar.sinf<fast|preserve> %input : f32
+  %cosine = scalar.cosf<reassoc|afn> %input : f32
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "#include <loomcxx/scalar.h>" in result
+    assert "float exponential = loom::scalar::approximate::expf(input);" in result
+    assert (
+        "[[loom::fastmath]] float fast_exponential = "
+        "loom::scalar::approximate::expf(input);" in result
+    )
+    assert "float sine = loom::scalar::approximate::preserved::sinf(input);" in result
+    assert (
+        "[[loom::fastmath]] float fast_preserved_sine = "
+        "loom::scalar::approximate::preserved::sinf(input);" in result
+    )
+    assert (
+        '[[loom::fastmath("reassoc")]] float cosine = '
+        "loom::scalar::approximate::cosf(input);" in result
+    )
+    assert "auto decomposition = loom::scalar::frexpf(input);" in result
+
+
+def test_projects_general_vector_dot_with_its_math_contract() -> None:
+    source = """\
+kernel.def @dot() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: f32) {
+  %values = vector.splat %input : vector<4xf32>
+  %result = vector.dotf<reassoc|contract> %values, %values, %input : vector<4xf32>, vector<4xf32>, f32
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "#include <loomcxx/vector.h>" in result
+    assert (
+        '[[loom::fastmath("reassoc", "contract")]] float result = '
+        "loom::vector::dotf(values, values, input);" in result
+    )
+
+
+def test_preserves_signed_view_elements_required_by_a_comparison() -> None:
+    source = """\
+kernel.def @page_present() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%pages: buffer) {
+  %zero_offset = index.constant 0 : offset
+  %pages_view = buffer.view %pages[%zero_offset] : buffer -> view<1xi32>
+  %page_id = view.load %pages_view[0] : view<1xi32> -> i32
+  %zero = scalar.constant 0 : i32
+  %present = scalar.cmpi sge, %page_id, %zero : i32
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "void page_present(const int* pages)" in result
+    assert "int page_id = loom::view::load(pages_view, 0);" in result
+    assert "bool present = page_id >= 0;" in result
 
 
 def test_projects_numeric_conversions_through_the_public_facade() -> None:

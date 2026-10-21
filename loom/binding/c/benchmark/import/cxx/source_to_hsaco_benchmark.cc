@@ -35,6 +35,8 @@ struct CxxKernel {
   const char* const* include_sources = nullptr;
   // Number of entries in include_sources.
   iree_host_size_t include_source_count = 0;
+  // Translation-unit floating-point policy applied before source attributes.
+  loomc_cxx_fp_model_t fp_model = LOOMC_CXX_FP_MODEL_FAST;
 };
 
 enum class CxxJitPhase {
@@ -132,7 +134,7 @@ class CxxSourceScenarioBase : public TargetCompileScenario {
       loomc_cxx_import_options_t options = {
           .type = LOOMC_STRUCTURE_TYPE_CXX_IMPORT_OPTIONS,
           .structure_size = sizeof(options),
-          .fp_model = LOOMC_CXX_FP_MODEL_FAST,
+          .fp_model = kernel_.fp_model,
           .roots = &root,
           .root_count = 1,
       };
@@ -171,7 +173,7 @@ class CxxSourceScenarioBase : public TargetCompileScenario {
     loomc_cxx_import_options_t options = {
         .type = LOOMC_STRUCTURE_TYPE_CXX_IMPORT_OPTIONS,
         .structure_size = sizeof(options),
-        .fp_model = LOOMC_CXX_FP_MODEL_FAST,
+        .fp_model = kernel_.fp_model,
         .roots = &root,
         .root_count = 1,
         .preamble = preamble_.get(),
@@ -412,6 +414,12 @@ constexpr CxxKernel kFlashAttention = {"flash_attention.cxx", "flash_attention",
                                        "gfx1151"};
 constexpr CxxKernel kRmsNorm = {"llama_rms_norm.cxx", "llama_rms_norm",
                                 "gfx1151"};
+constexpr CxxKernel kPagedOnlineSoftmax = {
+    .source = "paged_online_softmax_loop_f32.cxx",
+    .root = "paged_online_softmax_loop_f32",
+    .target = "gfx1151",
+    .fp_model = LOOMC_CXX_FP_MODEL_PRECISE,
+};
 constexpr CxxKernel kSwiGlu = {"aiter_swiglu_f16.cxx", "aiter_swiglu_f16",
                                "gfx1151"};
 constexpr CxxKernel kCollectiveScanNativeU32 = {"collective_scans.cxx",
@@ -521,11 +529,12 @@ void RegisterCxxJitPhaseBenchmarks(const char* kernel_name,
 }
 
 [[maybe_unused]] const bool kCxxJitPhasesRegistered = [] {
-  // Phase attribution deliberately uses two representative source shapes.
+  // Phase attribution deliberately uses representative source shapes.
   // Additional kernels retain their authoritative end-to-end measurements
   // below without multiplying frontend and prepared-module setup across every
   // cumulative phase.
   RegisterCxxJitPhaseBenchmarks("RmsNorm", &kRmsNorm);
+  RegisterCxxJitPhaseBenchmarks("PagedOnlineSoftmax", &kPagedOnlineSoftmax);
   RegisterCxxJitPhaseBenchmarks("Mxfp8Gfx1250", &kMxfp8);
   return true;
 }();
@@ -533,6 +542,8 @@ void RegisterCxxJitPhaseBenchmarks(const char* kernel_name,
 BENCHMARK_CAPTURE(SourceToHsaco, FlashAttention, &kFlashAttention)
     ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToHsaco, RmsNorm, &kRmsNorm)
+    ->Unit(::benchmark::kMicrosecond);
+BENCHMARK_CAPTURE(SourceToHsaco, PagedOnlineSoftmax, &kPagedOnlineSoftmax)
     ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToHsaco, SwiGluF16, &kSwiGlu)
     ->Unit(::benchmark::kMicrosecond);

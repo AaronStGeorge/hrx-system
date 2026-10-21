@@ -216,6 +216,36 @@ def _assert_predicate_identities(module: Module) -> None:
     assert predicates[1].args[0].value == inner
 
 
+def _assert_instance_flags(module: Module) -> None:
+    function = next(symbol.op for symbol in module.symbols if symbol.name == "flagged")
+    assert function is not None
+    ops = function.regions[0].blocks[0].ops
+    assert ops[0].attributes["flags"] == "debug|trace|high"
+    assert ops[1].attributes["flags"] == "high"
+    assert "flags" not in ops[2].attributes
+
+
+def _test_instance_flags_interop(loom_format: Path) -> None:
+    source = (
+        "test.func @flagged() {\n"
+        "  test.template_param_symbol_flags<@target, all|debug>\n"
+        "  test.template_param_symbol_flags<@target, high|none>\n"
+        "  test.template_param_symbol_flags<@target, none>\n"
+        "  test.yield\n"
+        "}\n"
+        "test.record @target\n"
+    )
+    parser = Parser()
+    parser.register_ops(ALL_TEST_OPS)
+    module = parser.parse(source)
+    for loaded in (
+        read_module(write_module(module)),
+        _roundtrip_through_c(loom_format, module),
+        _roundtrip_through_c(loom_format, source),
+    ):
+        _assert_instance_flags(loaded)
+
+
 def _assert_module_structure(module: Module, register_type: RegisterType) -> Block:
     if module.file_header != ("Bytecode interoperability coverage.",):
         raise AssertionError("file header did not survive C bytecode")
@@ -772,6 +802,7 @@ def main() -> None:
     _test_predicate_attribute_interop(
         Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
     )
+    _test_instance_flags_interop(Path(sys.argv[1]))
     _test_scoped_type_interop(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[4]))
     _test_shared_projected_graph(Path(sys.argv[1]), Path(sys.argv[2]))
     source_module, register_type = _interop_module()

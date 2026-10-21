@@ -44,6 +44,7 @@ iree_py_test(
     "loom.gen.cxx.intrinsics_test"
   DEPS
     loom::py::loom::gen::cxx::intrinsics
+    loom::py::loom::format::cxx::cxx
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import replace
 
 from loom.format.cxx.context import (
     _memory_space,
@@ -547,35 +549,60 @@ class CxxRenderer(CxxExpressionRenderer):
         step_constant = self._constant_integer(step_id)
         upper_constant = self._constant_integer(upper_id)
         counted_bounds: list[str | None] = [None, None, None]
-        if (
+        induction_domain = repr(self.module.values[induction].type)
+        if induction_domain == "index" and (
+            step_constant is not None
+            and 0 < step_constant <= (1 << 31) - 1
+            and (
+                (
+                    upper_constant is not None
+                    and upper_constant <= (1 << 31) - step_constant
+                )
+                or (upper_constant is None and step_constant == 1)
+            )
+        ):
+            counted_bounds = [
+                self._signed_counted_bound(value_id)
+                for value_id in (lower_id, upper_id, step_id)
+            ]
+            if all(bound is not None for bound in counted_bounds):
+                loop_type = "int"
+        elif induction_domain == "offset" and (
             step_constant is not None
             and 0 < step_constant <= (1 << 32) - 1
-            and (upper_constant is None or upper_constant <= (1 << 32) - step_constant)
+            and (
+                (
+                    upper_constant is not None
+                    and upper_constant <= (1 << 32) - step_constant
+                )
+                or (upper_constant is None and step_constant == 1)
+            )
         ):
             counted_bounds = [
                 self._unsigned_counted_bound(value_id)
                 for value_id in (lower_id, upper_id, step_id)
             ]
-        if all(bound is not None for bound in counted_bounds):
-            loop_type = "unsigned"
+            if all(bound is not None for bound in counted_bounds):
+                loop_type = "unsigned"
+        if loop_type in {"int", "unsigned"}:
             lower, upper, step = (str(bound) for bound in counted_bounds)
         else:
             loop_type = self.cpp_type(induction)
             lower = self._address_operand(lower_id)
             upper = self._address_operand(upper_id)
             step = self._address_operand(step_id)
-        if attributes and loop_type != "unsigned":
+        if attributes and loop_type not in {"int", "unsigned"}:
             raise CxxRenderError(
                 operation,
-                "scheduled loop has no recoverable nonwrapping unsigned C++ "
+                "scheduled loop has no recoverable nonwrapping integer C++ "
                 "induction contract",
             )
         increment = (
             f"++{induction_name}"
-            if loop_type == "unsigned" and step in {"1", "1u", "1ull"}
+            if loop_type in {"int", "unsigned"} and step in {"1", "1u", "1ull"}
             else (
                 f"{induction_name} += {step}"
-                if loop_type == "unsigned"
+                if loop_type in {"int", "unsigned"}
                 else f"{induction_name} = {induction_name} + {step}"
             )
         )
@@ -1051,11 +1078,56 @@ class CxxRenderer(CxxExpressionRenderer):
                 (target_name, self.targets[target_symbol])
                 for target_symbol, target_name in self.target_names.items()
             ),
+            uses_scalar_functions=self.uses_scalar_functions,
             uses_numeric_conversion=self.uses_numeric_conversion,
         )
         return "\n".join((*preamble, *self.writer.lines)) + "\n"
 
 
-def render_module(module: Module) -> str:
-    """Renders a supported High IR kernel module as standalone Loom C++."""
-    return CxxRenderer(module).render()
+def _select_kernel_roots(module: Module, roots: Sequence[str]) -> Module:
+    """Returns an immutable presentation of selected kernels and their targets."""
+
+    normalized_roots: list[str] = []
+    seen_roots: set[str] = set()
+    for root in roots:
+        name = root.removeprefix("@")
+        if not name:
+            raise CxxRenderError(None, "kernel root name is empty")
+        if name in seen_roots:
+            raise CxxRenderError(None, f"kernel root '@{name}' is repeated")
+        seen_roots.add(name)
+        normalized_roots.append(name)
+
+    symbols = {symbol.name: symbol for symbol in module.symbols}
+    selected_operation_ids: set[int] = set()
+    target_names: set[str] = set()
+    for name in normalized_roots:
+        symbol = symbols.get(name)
+        if symbol is None or symbol.op is None:
+            raise CxxRenderError(None, f"kernel root '@{name}' was not found")
+        if symbol.op.name != "kernel.def":
+            raise CxxRenderError(
+                symbol.op,
+                f"root '@{name}' is not a kernel definition",
+            )
+        selected_operation_ids.add(id(symbol.op))
+        target = symbol.op.attributes.get("target")
+        if isinstance(target, str):
+            target_names.add(target)
+
+    selected_operations = [
+        operation
+        for operation in module.body.ops
+        if id(operation) in selected_operation_ids
+        or (
+            operation.name.endswith(".target")
+            and operation.attributes.get("symbol") in target_names
+        )
+    ]
+    return replace(module, body=replace(module.body, ops=selected_operations))
+
+
+def render_module(module: Module, *, roots: Sequence[str] = ()) -> str:
+    """Renders supported High IR kernel roots as standalone Loom C++."""
+    projected_module = _select_kernel_roots(module, roots) if roots else module
+    return CxxRenderer(projected_module).render()

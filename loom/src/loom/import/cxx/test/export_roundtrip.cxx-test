@@ -265,3 +265,80 @@ void scoped_bounds(bool first, bool second, unsigned coordinate, unsigned* outpu
     loom::view::store(2u, output_view, loom::index::cast(static_cast<int>(coordinate)));
   }
 }
+
+// ====
+#include <loomcxx/kernel.h>
+#include <loomcxx/scalar.h>
+#include <loomcxx/vector.h>
+
+using Float4 = float __attribute__((ext_vector_type(4)));
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void page_weighted_dot(const int* page_table, const float* lhs, const float* rhs, float* output) {
+  auto pages = loom::buffer::view<1>(page_table, {}, loom::encoding::layout::dense<1>());
+  auto lhs_values = loom::buffer::view<4>(lhs, {}, loom::encoding::layout::dense<1>());
+  auto rhs_values = loom::buffer::view<4>(rhs, {}, loom::encoding::layout::dense<1>());
+  auto result = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  int page_id = loom::view::load(pages, 0);
+  if (page_id >= 0) {
+    Float4 lhs_vector = loom::vector::load<Float4>(lhs_values, {0});
+    Float4 rhs_vector = loom::vector::load<Float4>(rhs_values, {0});
+    float score = loom::vector::dotf(lhs_vector, rhs_vector, 0.0f);
+    float weight = loom::scalar::approximate::expf(score);
+    loom::view::store(weight, result, 0);
+  }
+}
+
+// ----
+#include <loomcxx/kernel.h>
+#include <loomcxx/scalar.h>
+#include <loomcxx/vector.h>
+
+using Float32x4 = float __attribute__((ext_vector_type(4)));
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void page_weighted_dot(const int* page_table, const float* lhs, const float* rhs, float* output) {
+  auto pages = loom::buffer::view<1>(page_table, {}, loom::encoding::layout::dense<1>());
+  auto lhs_values = loom::buffer::view<4>(lhs, {}, loom::encoding::layout::dense<1>());
+  auto rhs_values = loom::buffer::view<4>(rhs, {}, loom::encoding::layout::dense<1>());
+  auto result = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  int page_id = loom::view::load(pages, loom::type::index{0});
+  if (page_id >= 0) {
+    Float32x4 lhs_vector = loom::vector::load<Float32x4>(lhs_values, loom::type::indices{loom::type::index{0}});
+    Float32x4 rhs_vector = loom::vector::load<Float32x4>(rhs_values, loom::type::indices{loom::type::index{0}});
+    float score = loom::vector::dotf(lhs_vector, rhs_vector, 0.0f);
+    float weight = loom::scalar::approximate::expf(score);
+    loom::view::store(weight, result, loom::type::index{0});
+  }
+}
+
+// ====
+// RUN: emit cxx @selected
+#include <loomcxx/kernel.h>
+
+unsigned helper(unsigned value) { return value + 1u; }
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void ignored(float* output) {
+  auto values = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  loom::view::store(0.0f, values, 0);
+}
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void selected(const float* input, float* output) {
+  auto input_values = loom::buffer::view<1>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_values = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  float value = loom::view::load(input_values, 0);
+  loom::view::store(value, output_values, 0);
+}
+
+// ----
+#include <loomcxx/kernel.h>
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void selected(const float* input, float* output) {
+  auto input_values = loom::buffer::view<1>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_values = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  float value = loom::view::load(input_values, loom::type::index{0});
+  loom::view::store(value, output_values, loom::type::index{0});
+}

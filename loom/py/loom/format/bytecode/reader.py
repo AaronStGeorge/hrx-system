@@ -25,9 +25,11 @@ from loom.fields import compute_layout
 from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
 from loom.format.bytecode.op_decls import (
     attr_def_for_op,
+    build_instance_flags_descriptor_map,
     build_op_decl_map,
     build_parameterized_attr_def_map,
     build_parameterized_type_def_map,
+    decode_instance_flags,
     func_like_interface_for_op,
     symbol_def_for_op,
 )
@@ -197,6 +199,9 @@ class BytecodeReader:
         self._data = data
         self._offset = 0
         self._op_decls_by_name = build_op_decl_map(op_decls)
+        self._instance_flags_by_op = build_instance_flags_descriptor_map(
+            self._op_decls_by_name
+        )
         self._parameterized_attrs_by_name = build_parameterized_attr_def_map(
             self._op_decls_by_name, parameterized_attrs
         )
@@ -1990,7 +1995,7 @@ class BytecodeReader:
         op_table_index_plus1, offset = decode_varint(data, offset)
         if op_table_index_plus1 == 0:
             raise BytecodeError("operation op_table_index_plus1 must be nonzero")
-        _instance_flags = data[offset]
+        instance_flags = data[offset]
         offset += 1
         location_id, offset = decode_varint(data, offset)
         if self._location_mode == LOCATION_MODE_NO_LOCATIONS and location_id != 0:
@@ -2067,6 +2072,26 @@ class BytecodeReader:
         attributes, offset = self._read_op_attr_entries(
             data, offset, attr_count, module, value_map, op_name
         )
+        flags_descriptor = self._instance_flags_by_op.get(op_name)
+        if flags_descriptor is None:
+            if instance_flags:
+                raise BytecodeError(
+                    f"operation {op_name!r} has instance flags 0x{instance_flags:02x} "
+                    "but declares no instance-flags field"
+                )
+        else:
+            attr_name = flags_descriptor.attr_def.name
+            if attr_name in attributes:
+                raise BytecodeError(
+                    f"operation {op_name!r} encodes instance-flags field "
+                    f"{attr_name!r} as an ordinary attribute"
+                )
+            try:
+                flag_value = decode_instance_flags(flags_descriptor, instance_flags)
+            except ValueError as exc:
+                raise BytecodeError(f"operation {op_name!r} {exc}") from exc
+            if flag_value is not None:
+                attributes[attr_name] = flag_value
 
         # Regions.
         region_count, offset = decode_varint(data, offset)

@@ -105,8 +105,11 @@ emission for maintained attention, normalization, activation, storage-encoding,
 and packed-quantized projection sources. Cases select `gfx1151` or `gfx1250`
 without opening a GPU device. Numerical execution coverage and source
 provenance live with each kernel's optional CXX test package.
-Compilation permits approximate mathematical functions and supplies three
-workgroups, matching that corpus's numerical configuration.
+Most corpus cases select the fast translation-unit floating-point model. Cases
+that carry their numerical policy in source can retain the precise model, so
+only their explicit approximate and contractable operations reach High IR.
+The benchmark supplies three workgroups, matching the corpus's numerical
+configuration.
 
 Each timed iteration preprocesses and type-checks source text, imports and
 verifies High IR, specializes launch configs, compiles, emits an HSACO,
@@ -115,8 +118,10 @@ compiler, prepared pipeline, target profile, config module, source handle, and
 workspace are reused. Process startup and setup are outside timing. One warmup
 compilation precedes measurement; parsed C++ ASTs are not cached.
 
-The `CxxJitPhase` rows attribute this endpoint with two representative source
-shapes. llama.cpp RMSNorm provides a small ordinary kernel; the MXFP8 group dot
+The `CxxJitPhase` rows attribute this endpoint with three representative source
+shapes. llama.cpp RMSNorm provides a small ordinary kernel. Paged online
+softmax exercises nested carried loops, guarded addressing, vector dot and
+accumulation, and source-local floating-point permissions. The MXFP8 group dot
 exercises storage encodings, narrow-float conversion, vectors, reductions, and
 target-specific lowering. Additional maintained kernels retain end-to-end
 `SourceToHsaco` rows without multiplying frontend and prepared-module setup
@@ -173,30 +178,11 @@ Configuration therefore changes the storage plan and specialized loop body
 without leaving configuration machinery or a runtime-sized allocation in the
 native artifact.
 
-An optimized 2026-10-08 run on an AMD Ryzen AI Max+ 395 measured these warmed
-medians. Phase rows used seven 100-iteration repetitions and complete rows used
-fifteen 50-iteration repetitions under the benchmark lease with no process
-allocator override.
-
-| Public boundary | llama.cpp RMSNorm | MXFP8 group dot |
-| --- | ---: | ---: |
-| Import to verified High IR | 3.221 ms | 4.101 ms |
-| Clone High IR | 22.7 us | 8.42 us |
-| Through source-low | 1.439 ms | 0.233 ms |
-| Through prepared-low | 1.614 ms | 0.291 ms |
-| Clone prepared Low IR | 33.6 us | 33.4 us |
-| Emit prepared Low IR to HSACO | 0.807 ms | 0.689 ms |
-| Complete source to HSACO | 6.443 ms | 5.509 ms |
-
 `SourceToHsacoColdWorkspace` skips scenario warmup and forces one compilation
 per repetition. Context, compiler, target, pass-program, source, and config
 setup remain outside timing, while the invocation workspace starts unused. Its
 allocation counters therefore report the first compilation's arena growth
 instead of mixing first-growth and reuse in one sample.
-All fifteen one-iteration repetitions reported twelve 128 KiB blocks for
-RMSNorm and eight blocks for MXFP8. Cold-workspace latency varied by 8.0% and
-6.3%, respectively, so it is compared as a repeated distribution rather than a
-single-sample threshold.
 
 Build an optimized executable before collecting numbers:
 

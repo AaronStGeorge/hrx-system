@@ -145,6 +145,7 @@ class CxxRenderContext:
         self.table_lookup_declarations: set[tuple[str, str, str, str]] = set()
         self.record_declarations: dict[str, tuple[tuple[str, str], ...]] = {}
         self.record_types: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
+        self.uses_scalar_functions = False
         self.uses_numeric_conversion = False
         self.signed_values = self._analyze_signed_values()
         self.types = CxxTypes(module, self.signed_values)
@@ -379,6 +380,14 @@ class CxxRenderContext:
                     ("extsi", "divsi", "remsi", "minsi", "maxsi", "ashri")
                 ):
                     signed.update(operation.results)
+            elif operation.name == "scalar.cmpi":
+                if operation.attributes.get("predicate") in {
+                    "slt",
+                    "sle",
+                    "sgt",
+                    "sge",
+                }:
+                    signed.update(operation.operands)
             elif operation.name in {"scalar.fptosi", "vector.fptosi"}:
                 signed.update(operation.results)
             elif operation.name == "vector.table.lookup":
@@ -1004,18 +1013,24 @@ class CxxRenderContext:
             self.writer.line(f"{prefix}{type_name} {name} = {statement_expression};")
             self.expressions[result_id] = name
 
-    def _fastmath_contract(self, operation: Operation) -> str | None:
-        value = operation.attributes.get("fastmath")
+    def _fastmath_contract(
+        self,
+        operation: Operation,
+        *,
+        attribute_name: str = "fastmath",
+        exclude: frozenset[str] = frozenset(),
+    ) -> str | None:
+        value = operation.attributes.get(attribute_name)
         if value is None:
             return None
         if not isinstance(value, str):
             raise CxxRenderError(
-                operation, "fastmath flags do not have a symbolic spelling"
+                operation, f"{attribute_name} flags do not have a symbolic spelling"
             )
         descriptor = next(
             attribute
             for attribute in _OP_BY_NAME[operation.name].attrs
-            if attribute.name == "fastmath"
+            if attribute.name == attribute_name
         )
         assert descriptor.enum_def is not None
         supported = {case.keyword for case in descriptor.enum_def.cases}
@@ -1023,8 +1038,12 @@ class CxxRenderContext:
         unknown = [flag for flag in flags if flag not in supported]
         if unknown:
             raise CxxRenderError(
-                operation, f"fastmath flag {unknown[0]!r} has no C++ spelling"
+                operation,
+                f"{attribute_name} flag {unknown[0]!r} has no C++ spelling",
             )
+        flags = [flag for flag in flags if flag not in exclude]
+        if not flags:
+            return None
         if flags == ["fast"]:
             return "loom::fastmath"
         return "loom::fastmath(" + ", ".join(f'"{flag}"' for flag in flags) + ")"

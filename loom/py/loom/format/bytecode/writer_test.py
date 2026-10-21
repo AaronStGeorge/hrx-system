@@ -1576,6 +1576,30 @@ class TestOpPatterns:
 class TestCrossFormatRoundTrip:
     """text → parse → IR → write bytecode → read bytecode → IR → print text."""
 
+    def test_instance_flags_use_wire_byte_and_canonical_spellings(self) -> None:
+        source = (
+            "test.func @flagged() {\n"
+            "  test.template_param_symbol_flags<@target, all|debug>\n"
+            "  test.template_param_symbol_flags<@target, high|none>\n"
+            "  test.template_param_symbol_flags<@target, none>\n"
+            "  test.yield\n"
+            "}\n"
+            "test.record @target\n"
+        )
+        expected = (
+            "test.func @flagged() {\n"
+            "  test.template_param_symbol_flags<@target, debug|trace|high>\n"
+            "  test.template_param_symbol_flags<@target, high>\n"
+            "  test.template_param_symbol_flags<@target>\n"
+            "  test.yield\n"
+            "}\n"
+            "\n"
+            "test.record @target\n"
+        )
+
+        actual = _roundtrip_text_through_bytecode(source)
+        assert actual == expected, actual
+
     def test_simple_function(self) -> None:
         text = (
             "func.def @negate(%input: f32) -> (f32) {\n"

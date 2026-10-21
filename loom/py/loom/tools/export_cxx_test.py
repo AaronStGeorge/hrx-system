@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-from loom.format.cxx.test_support import SOURCE_MODULE
+from loom.format.cxx.test_support import LOOP_MODULE, SOURCE_MODULE
 from loom.tools.export_cxx import run
 
 
@@ -47,6 +47,52 @@ def test_writes_an_output_file(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert "void copy_one(" in output_path.read_text()
+
+
+def test_selects_repeated_kernel_roots_from_a_mixed_module() -> None:
+    source = (
+        "func.def @helper() {\n  func.return\n}\n\n"
+        + SOURCE_MODULE
+        + "\n"
+        + LOOP_MODULE
+    )
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+
+    exit_code = run(
+        "-",
+        "-",
+        roots=("@accumulate", "@copy_one"),
+        stdin=io.BytesIO(source.encode()),
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert exit_code == 0
+    assert stdout.getvalue().index("void copy_one(") < stdout.getvalue().index(
+        "void accumulate()"
+    )
+    assert "helper" not in stdout.getvalue()
+    assert stderr.getvalue() == ""
+
+
+def test_reports_missing_kernel_root_without_a_traceback() -> None:
+    stderr = io.StringIO()
+
+    exit_code = run(
+        "-",
+        "-",
+        roots=("@missing",),
+        stdin=io.BytesIO(SOURCE_MODULE.encode()),
+        stdout=io.StringIO(),
+        stderr=stderr,
+    )
+
+    assert exit_code == 2
+    assert stderr.getvalue() == (
+        "loom-export-cxx: error: cannot project module: "
+        "kernel root '@missing' was not found\n"
+    )
 
 
 def test_reports_invalid_input_without_a_traceback() -> None:
