@@ -479,13 +479,21 @@ class CxxExpressionRenderer(CxxRenderContext):
             return self._literal(definition.attributes.get("value"), value_id)
         return self.expression(value_id)
 
-    def _unsigned_counted_bound(self, value_id: int) -> str | None:
-        """Recovers one C++ unsigned loop-bound expression from address IR."""
+    def _counted_integer_bound(
+        self,
+        value_id: int,
+        *,
+        carrier_type: str,
+        minimum: int,
+        maximum: int,
+        suffix: str = "",
+    ) -> str | None:
+        """Recovers one fixed-width C++ loop bound from address-domain IR."""
 
         constant = self._constant_integer(value_id)
         if constant is not None:
-            if 0 <= constant <= (1 << 32) - 1:
-                return f"{constant}u"
+            if minimum <= constant <= maximum:
+                return f"{constant}{suffix}"
             return None
         definition = self.definitions.get(value_id)
         if (
@@ -497,11 +505,32 @@ class CxxExpressionRenderer(CxxRenderContext):
         source = definition.operands[0]
         expression = self.expression(source)
         if (
-            self.expression_type(source) == "unsigned"
+            self.expression_type(source) == carrier_type
             and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", expression) is not None
         ):
             return expression
         return None
+
+    def _signed_counted_bound(self, value_id: int) -> str | None:
+        """Recovers one C++ int loop-bound expression from index IR."""
+
+        return self._counted_integer_bound(
+            value_id,
+            carrier_type="int",
+            minimum=-(1 << 31),
+            maximum=(1 << 31) - 1,
+        )
+
+    def _unsigned_counted_bound(self, value_id: int) -> str | None:
+        """Recovers one C++ unsigned loop-bound expression from offset IR."""
+
+        return self._counted_integer_bound(
+            value_id,
+            carrier_type="unsigned",
+            minimum=0,
+            maximum=(1 << 32) - 1,
+            suffix="u",
+        )
 
     def _predicate_arg(
         self, argument: PredicateArg, *, reference_id: int | None = None

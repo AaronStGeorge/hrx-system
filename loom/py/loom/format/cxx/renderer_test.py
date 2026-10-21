@@ -196,6 +196,72 @@ def test_projects_loop_carried_ssa_as_mutable_cxx_state() -> None:
     assert "next" not in result
 
 
+def test_preserves_index_domain_in_scheduled_counted_loops() -> None:
+    source = LOOP_MODULE.replace(": offset", ": index")
+
+    result = render_module(load_module(source.encode()))
+
+    assert (
+        "[[loom::unroll(loom::type::index{4}), "
+        "loom::pipeline(loom::type::index{2}), "
+        'loom::schedule("recurrence")]]' in result
+    )
+    assert "for (int index = 0; index < 4; ++index) {" in result
+
+
+@pytest.mark.parametrize(
+    ("domain", "upper", "step", "expected"),
+    [
+        ("index", (1 << 31) - 1, 1, "int index = 0; index < 2147483647; ++index"),
+        ("index", (1 << 31) - 2, 2, "int index = 0; index < 2147483646; index += 2"),
+        (
+            "offset",
+            (1 << 32) - 1,
+            1,
+            "unsigned index = 0u; index < 4294967295u; ++index",
+        ),
+        (
+            "offset",
+            (1 << 32) - 2,
+            2,
+            "unsigned index = 0u; index < 4294967294u; index += 2u",
+        ),
+    ],
+)
+def test_preserves_nonwrapping_counted_loop_boundaries(
+    domain: str, upper: int, step: int, expected: str
+) -> None:
+    source = (
+        LOOP_MODULE.replace(": offset", f": {domain}")
+        .replace("%upper = index.constant 4", f"%upper = index.constant {upper}")
+        .replace("%step = index.constant 1", f"%step = index.constant {step}")
+    )
+
+    result = render_module(load_module(source.encode()))
+
+    assert f"for ({expected}) {{" in result
+
+
+@pytest.mark.parametrize(
+    ("domain", "upper"),
+    [("index", (1 << 31) - 1), ("offset", (1 << 32) - 1)],
+)
+def test_rejects_scheduled_counted_loops_that_can_overflow(
+    domain: str, upper: int
+) -> None:
+    source = (
+        LOOP_MODULE.replace(": offset", f": {domain}")
+        .replace("%upper = index.constant 4", f"%upper = index.constant {upper}")
+        .replace("%step = index.constant 1", "%step = index.constant 2")
+    )
+
+    with pytest.raises(
+        CxxRenderError,
+        match="scheduled loop has no recoverable nonwrapping integer C\\+\\+ induction contract",
+    ):
+        render_module(load_module(source.encode()))
+
+
 def test_stages_vector_insert_before_replacing_a_distinct_loop_carrier() -> None:
     source = """\
 kernel.def @replace_lane() {

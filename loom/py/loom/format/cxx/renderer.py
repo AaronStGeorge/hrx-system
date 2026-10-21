@@ -547,35 +547,60 @@ class CxxRenderer(CxxExpressionRenderer):
         step_constant = self._constant_integer(step_id)
         upper_constant = self._constant_integer(upper_id)
         counted_bounds: list[str | None] = [None, None, None]
-        if (
+        induction_domain = repr(self.module.values[induction].type)
+        if induction_domain == "index" and (
+            step_constant is not None
+            and 0 < step_constant <= (1 << 31) - 1
+            and (
+                (
+                    upper_constant is not None
+                    and upper_constant <= (1 << 31) - step_constant
+                )
+                or (upper_constant is None and step_constant == 1)
+            )
+        ):
+            counted_bounds = [
+                self._signed_counted_bound(value_id)
+                for value_id in (lower_id, upper_id, step_id)
+            ]
+            if all(bound is not None for bound in counted_bounds):
+                loop_type = "int"
+        elif induction_domain == "offset" and (
             step_constant is not None
             and 0 < step_constant <= (1 << 32) - 1
-            and (upper_constant is None or upper_constant <= (1 << 32) - step_constant)
+            and (
+                (
+                    upper_constant is not None
+                    and upper_constant <= (1 << 32) - step_constant
+                )
+                or (upper_constant is None and step_constant == 1)
+            )
         ):
             counted_bounds = [
                 self._unsigned_counted_bound(value_id)
                 for value_id in (lower_id, upper_id, step_id)
             ]
-        if all(bound is not None for bound in counted_bounds):
-            loop_type = "unsigned"
+            if all(bound is not None for bound in counted_bounds):
+                loop_type = "unsigned"
+        if loop_type in {"int", "unsigned"}:
             lower, upper, step = (str(bound) for bound in counted_bounds)
         else:
             loop_type = self.cpp_type(induction)
             lower = self._address_operand(lower_id)
             upper = self._address_operand(upper_id)
             step = self._address_operand(step_id)
-        if attributes and loop_type != "unsigned":
+        if attributes and loop_type not in {"int", "unsigned"}:
             raise CxxRenderError(
                 operation,
-                "scheduled loop has no recoverable nonwrapping unsigned C++ "
+                "scheduled loop has no recoverable nonwrapping integer C++ "
                 "induction contract",
             )
         increment = (
             f"++{induction_name}"
-            if loop_type == "unsigned" and step in {"1", "1u", "1ull"}
+            if loop_type in {"int", "unsigned"} and step in {"1", "1u", "1ull"}
             else (
                 f"{induction_name} += {step}"
-                if loop_type == "unsigned"
+                if loop_type in {"int", "unsigned"}
                 else f"{induction_name} = {induction_name} + {step}"
             )
         )
