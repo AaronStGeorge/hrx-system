@@ -1274,6 +1274,7 @@ def _float_matrix_accumulator_zero_rule() -> DescriptorRule:
 def _float_packet_accumulator_zero_rule() -> DescriptorRule:
     descriptor = _descriptor("amd.xdna.aie2p.accumulator.clear.f32x64")
     cleared = ValueRef.temporary("cleared")
+    cleared_unit = ValueRef.temporary("cleared_unit")
     return DescriptorRule(
         source_op=vector.vector_constant,
         descriptor=descriptor,
@@ -1291,6 +1292,11 @@ def _float_packet_accumulator_zero_rule() -> DescriptorRule:
             ),
             EmitRegisterSlice(
                 source=cleared,
+                result=cleared_unit,
+                unit_count=1,
+            ),
+            EmitRegisterCopy(
+                source=cleared_unit,
                 result=ValueRef.result("result"),
             ),
         ),
