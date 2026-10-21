@@ -975,6 +975,66 @@ static iree_status_t loom_low_allocation_unit_liveness_note_call_clobbers(
   return iree_ok_status();
 }
 
+// Adapts one verified IR descriptor row to the storage-identity domain used by
+// retained-write planning. Target-planned instructions provide the same
+// occurrences directly and do not need this SSA lookup layer.
+static iree_status_t
+loom_low_allocation_unit_liveness_note_write_interference_operand(
+    loom_low_allocation_write_interference_t* write_interference,
+    const loom_local_value_domain_t* value_domain,
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, const loom_op_t* op,
+    uint16_t descriptor_operand_index, uint32_t point,
+    iree_arena_allocator_t* arena) {
+  if (write_interference == NULL) {
+    return iree_ok_status();
+  }
+  const loom_low_operand_t* operand = loom_low_descriptor_operand(
+      descriptor_set, descriptor, descriptor_operand_index);
+  if (operand->source_value_index == LOOM_LOW_ID_NONE) {
+    return loom_low_allocation_write_interference_note_occurrence(
+        write_interference, descriptor_set, descriptor,
+        descriptor_operand_index, /*occurrence=*/NULL, point, arena);
+  }
+  const bool result = descriptor_operand_index < descriptor->result_count;
+  if (!result && !loom_low_descriptor_operand_maps_to_packet_operand(
+                     descriptor_set, descriptor, descriptor_operand_index)) {
+    return iree_ok_status();
+  }
+  const uint16_t value_end =
+      !result &&
+              iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_VARIADIC)
+          ? op->operand_count
+          : operand->source_value_index + 1;
+  for (uint16_t value_index = operand->source_value_index;
+       value_index < value_end; ++value_index) {
+    const loom_value_id_t value = result
+                                      ? loom_op_const_results(op)[value_index]
+                                      : loom_op_const_operands(op)[value_index];
+    const loom_type_t type =
+        loom_module_value_type(value_domain->module, value);
+    if (!loom_low_type_is_register(type)) {
+      continue;
+    }
+    const loom_value_ordinal_t ordinal =
+        loom_local_value_domain_ordinal(value_domain, value);
+    const loom_liveness_interval_t* interval =
+        loom_liveness_interval_for_value_ordinal(liveness, ordinal);
+    const loom_low_allocation_write_occurrence_t occurrence = {
+        .origin =
+            loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
+                write_interference, ordinal),
+        .unit_count = interval != NULL ? interval->unit_count : 0,
+        .register_class = loom_low_register_type_class_id(type),
+    };
+    IREE_RETURN_IF_ERROR(loom_low_allocation_write_interference_note_occurrence(
+        write_interference, descriptor_set, descriptor,
+        descriptor_operand_index, &occurrence, point, arena));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_unit_liveness_note_instruction_effects(
     loom_low_allocation_unit_use_index_t* unit_use_index,
     const loom_low_resolved_target_t* target,
@@ -1028,9 +1088,10 @@ static iree_status_t loom_low_allocation_unit_liveness_note_instruction_effects(
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
     const loom_low_operand_t* operand =
         loom_low_descriptor_operand(descriptor_set, descriptor, i);
-    IREE_RETURN_IF_ERROR(loom_low_allocation_write_interference_note_operand(
-        unit_liveness->write_interference, value_domain, descriptor_set,
-        descriptor, op, i, clobber_point, arena));
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_unit_liveness_note_write_interference_operand(
+            unit_liveness->write_interference, value_domain, liveness,
+            descriptor_set, descriptor, op, i, clobber_point, arena));
     if (iree_any_bit_set(descriptor->flags,
                          LOOM_LOW_DESCRIPTOR_FLAG_LATE_READ) &&
         loom_low_operand_role_is_packet_operand(operand->role)) {

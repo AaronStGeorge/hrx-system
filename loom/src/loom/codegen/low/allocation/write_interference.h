@@ -15,7 +15,6 @@
 #include "loom/codegen/low/allocation/unit_liveness.h"
 #include "loom/codegen/low/placement.h"
 #include "loom/codegen/low/target_binding.h"
-#include "loom/ir/local_value_domain.h"
 #include "loom/util/cfg_graph.h"
 
 #ifdef __cplusplus
@@ -34,6 +33,17 @@ typedef struct loom_low_allocation_write_interference_t
 typedef uint32_t loom_low_allocation_storage_origin_t;
 #define LOOM_LOW_ALLOCATION_STORAGE_ORIGIN_INVALID \
   ((loom_low_allocation_storage_origin_t)UINT32_MAX)
+
+// One register value occurrence bound to a descriptor operand. Planning
+// domains supply storage identities directly; no SSA value is required.
+typedef struct loom_low_allocation_write_occurrence_t {
+  // Canonical storage identity observed or written by the instruction.
+  loom_low_allocation_storage_origin_t origin;
+  // Number of consecutive allocation units occupied by the occurrence.
+  uint32_t unit_count;
+  // Descriptor-local register class of the occurrence.
+  uint16_t register_class;
+} loom_low_allocation_write_occurrence_t;
 
 // Borrowed assignment lookup indexed by canonical storage origin. Allocation
 // over original SSA values may project its value-ordinal index directly;
@@ -66,14 +76,16 @@ iree_status_t loom_low_allocation_write_interference_allocate(
     const loom_liveness_analysis_t* liveness, iree_arena_allocator_t* arena,
     loom_low_allocation_write_interference_t** out_interference);
 
-// Records one operand during the existing unit-liveness descriptor traversal.
-// |point| is the instruction's write point, after its ordinary operand uses.
-iree_status_t loom_low_allocation_write_interference_note_operand(
+// Records one bound descriptor-operand occurrence. Pass NULL for an implicit
+// state operand. Explicit non-register values and descriptor rows that do not
+// map to packet values are omitted by the caller. |point| is the instruction's
+// write point, after its ordinary operand uses.
+iree_status_t loom_low_allocation_write_interference_note_occurrence(
     loom_low_allocation_write_interference_t* interference,
-    const loom_local_value_domain_t* value_domain,
     const loom_low_descriptor_set_t* descriptors,
-    const loom_low_descriptor_t* descriptor, const loom_op_t* op,
-    uint16_t operand_index, uint32_t point, iree_arena_allocator_t* arena);
+    const loom_low_descriptor_t* descriptor, uint16_t operand_index,
+    const loom_low_allocation_write_occurrence_t* occurrence, uint32_t point,
+    iree_arena_allocator_t* arena);
 
 // Retains the resolved fixed location of a value in the tracked bank. Required
 // tied aliases supply their canonical origin; other banks contribute no facts.

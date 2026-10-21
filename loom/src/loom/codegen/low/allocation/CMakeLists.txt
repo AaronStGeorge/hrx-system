@@ -960,8 +960,6 @@ loom_cc_library(
     loom::codegen::low::placement
     loom::codegen::low::read_retention
     loom::codegen::low::target_binding
-    loom::ir
-    loom::target::registers
     loom::util::cfg_graph
     loom::util::index_set
     loom::util::segmented_storage

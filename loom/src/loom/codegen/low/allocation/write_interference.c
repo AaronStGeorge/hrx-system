@@ -11,8 +11,6 @@
 #include "iree/base/bitmap.h"
 #include "loom/codegen/low/allocation/write_interference_flow.h"
 #include "loom/codegen/low/read_retention.h"
-#include "loom/ir/module.h"
-#include "loom/target/registers.h"
 #include "loom/util/index_set.h"
 #include "loom/util/segmented_storage.h"
 
@@ -248,7 +246,7 @@ iree_status_t loom_low_allocation_write_interference_allocate(
       iree_arena_allocate(arena, sizeof(*table), (void**)&table));
   *table = (loom_low_allocation_write_interference_t){
       .rule = rule,
-      .register_class = LOOM_LOW_REGISTER_CLASS_ID_INVALID,
+      .register_class = LOOM_LOW_REG_CLASS_NONE,
       .value_count = liveness->value_count,
       .point_count = end_point + 1,
   };
@@ -269,7 +267,7 @@ iree_status_t loom_low_allocation_write_interference_allocate(
     }
   }
   IREE_ASSERT_NE(
-      table->register_class, LOOM_LOW_REGISTER_CLASS_ID_INVALID,
+      table->register_class, LOOM_LOW_REG_CLASS_NONE,
       "target read-retention bank must belong to its representation");
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, table->value_count,
                                                  sizeof(*table->values),
@@ -330,12 +328,12 @@ static iree_status_t loom_low_write_append_access(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_allocation_write_interference_note_operand(
+iree_status_t loom_low_allocation_write_interference_note_occurrence(
     loom_low_allocation_write_interference_t* table,
-    const loom_local_value_domain_t* value_domain,
     const loom_low_descriptor_set_t* descriptors,
-    const loom_low_descriptor_t* descriptor, const loom_op_t* op,
-    uint16_t operand_index, uint32_t point, iree_arena_allocator_t* arena) {
+    const loom_low_descriptor_t* descriptor, uint16_t operand_index,
+    const loom_low_allocation_write_occurrence_t* occurrence, uint32_t point,
+    iree_arena_allocator_t* arena) {
   if (table == NULL) {
     return iree_ok_status();
   }
@@ -345,7 +343,7 @@ iree_status_t loom_low_allocation_write_interference_note_operand(
       loom_low_descriptor_set_descriptor_view(descriptors, descriptor)
           ->instruction_class_flags;
   const bool reader = iree_any_bit_set(classes, table->rule->reader_classes);
-  if (operand->source_value_index == LOOM_LOW_ID_NONE) {
+  if (occurrence == NULL) {
     if (reader &&
         iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_STATE_READ)) {
       const uint16_t register_class =
@@ -356,57 +354,36 @@ iree_status_t loom_low_allocation_write_interference_note_operand(
     return iree_ok_status();
   }
   const bool result = operand_index < descriptor->result_count;
-  if (!result && !loom_low_descriptor_operand_maps_to_packet_operand(
-                     descriptors, descriptor, operand_index)) {
+  if (reader && !result) {
+    table->events[point].reset |=
+        table->reset_classes[occurrence->register_class] != 0;
+  }
+  if (occurrence->register_class != table->register_class) {
     return iree_ok_status();
   }
-  const uint16_t end =
-      !result &&
-              iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_VARIADIC)
-          ? op->operand_count
-          : operand->source_value_index + 1;
-  for (uint16_t i = operand->source_value_index; i < end; ++i) {
-    const loom_value_id_t value =
-        result ? loom_op_const_results(op)[i] : loom_op_const_operands(op)[i];
-    const loom_type_t type =
-        loom_module_value_type(value_domain->module, value);
-    if (!loom_low_type_is_register(type)) {
-      continue;
+  uint8_t flags = 0;
+  if (result) {
+    flags = LOOM_LOW_WRITE_ACCESS_WRITE;
+    if (iree_any_bit_set(classes, table->rule->writer_classes)) {
+      flags |= LOOM_LOW_WRITE_ACCESS_INTERFERE;
     }
-    const uint16_t register_class = loom_low_register_type_class_id(type);
-    if (reader && !result) {
-      table->events[point].reset |= table->reset_classes[register_class] != 0;
+  } else if (reader && operand->role == table->rule->retained_operand_role) {
+    flags = LOOM_LOW_WRITE_ACCESS_RETAIN;
+    const loom_low_allocation_storage_origin_t origin = occurrence->origin;
+    if (table->values[origin].construction.retained_start == UINT32_MAX) {
+      table->values[origin].construction.retained_start =
+          table->retained_unit_count;
+      table->retained_unit_count += table->values[origin].construction.width;
     }
-    if (register_class != table->register_class) {
-      continue;
-    }
-    const loom_value_ordinal_t ordinal =
-        loom_local_value_domain_ordinal(value_domain, value);
-    const loom_value_ordinal_t origin = table->values[ordinal].origin;
-    uint8_t flags = 0;
-    if (result) {
-      flags = LOOM_LOW_WRITE_ACCESS_WRITE;
-      if (iree_any_bit_set(classes, table->rule->writer_classes)) {
-        flags |= LOOM_LOW_WRITE_ACCESS_INTERFERE;
-      }
-    } else if (reader && operand->role == table->rule->retained_operand_role) {
-      flags = LOOM_LOW_WRITE_ACCESS_RETAIN;
-      if (table->values[origin].construction.retained_start == UINT32_MAX) {
-        table->values[origin].construction.retained_start =
-            table->retained_unit_count;
-        table->retained_unit_count += table->values[origin].construction.width;
-      }
-    }
-    if (flags != 0) {
-      IREE_RETURN_IF_ERROR(loom_low_write_append_access(
-          table, point,
-          (loom_low_write_access_t){
-              .value = origin,
-              .source = LOOM_VALUE_ORDINAL_INVALID,
-              .count = table->values[ordinal].construction.width,
-              .flags = flags},
-          arena));
-    }
+  }
+  if (flags != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_write_append_access(
+        table, point,
+        (loom_low_write_access_t){.value = occurrence->origin,
+                                  .source = LOOM_VALUE_ORDINAL_INVALID,
+                                  .count = occurrence->unit_count,
+                                  .flags = flags},
+        arena));
   }
   return iree_ok_status();
 }
