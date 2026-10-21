@@ -157,7 +157,8 @@ typedef struct loom_dce_value_ref_provider_context_t {
 } loom_dce_value_ref_provider_context_t;
 
 static iree_status_t loom_dce_add_value_ref_provider_to_worklist(
-    loom_value_id_t value_id, void* user_data) {
+    loom_value_id_t value_id, loom_value_id_t type_carrier, void* user_data) {
+  (void)type_carrier;
   loom_dce_value_ref_provider_context_t* context =
       (loom_dce_value_ref_provider_context_t*)user_data;
   if (value_id >= context->module->values.count) {

@@ -240,7 +240,7 @@ TEST_F(OpEraseTest, KernelDeclarationDropsBothOwnedSignatures) {
   std::vector<uint32_t> visits(module_->values.count, 0);
   IREE_ASSERT_OK(loom_op_walk_subtree_value_refs(
       module_, declaration,
-      [](loom_value_id_t value, void* user_data) {
+      [](loom_value_id_t value, loom_value_id_t, void* user_data) {
         ++(*static_cast<std::vector<uint32_t>*>(user_data))[value];
         return iree_ok_status();
       },

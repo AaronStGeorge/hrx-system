@@ -32,6 +32,8 @@ typedef struct loom_value_fact_counted_loop_domain_t {
 struct loom_value_fact_region_entry_t {
   // Region whose execution context and optional CFG structure are retained.
   const loom_region_t* region;
+  // Owning operation retained by region construction and inference.
+  loom_op_t* parent_op;
   // Distribution inherited from enclosing CFG cycles, excluding this region.
   uint32_t temporal_distribution;
   // Boolean selector truth on region entry, stored as
@@ -54,7 +56,7 @@ struct loom_value_fact_region_entry_t {
   loom_value_fact_region_entry_t* next_bucket;
 };
 
-static_assert(sizeof(loom_value_fact_region_entry_t) <= 64,
+static_assert(sizeof(loom_value_fact_region_entry_t) <= 72,
               "region execution facts must retain a compact cache footprint");
 
 static iree_status_t loom_value_fact_table_ensure_range(
@@ -348,6 +350,13 @@ const loom_value_fact_cfg_region_t* loom_value_fact_table_lookup_cfg_region(
   return entry ? entry->structure : NULL;
 }
 
+loom_op_t* loom_value_fact_table_region_parent(
+    const loom_value_fact_table_t* table, const loom_region_t* region) {
+  const loom_value_fact_region_entry_t* entry =
+      loom_value_fact_table_lookup_region_entry(table, region);
+  return entry ? entry->parent_op : NULL;
+}
+
 const loom_cfg_graph_t* loom_value_fact_table_lookup_cfg_graph(
     const loom_value_fact_table_t* table, const loom_region_t* region) {
   const loom_value_fact_region_entry_t* entry =
@@ -399,10 +408,11 @@ static iree_status_t loom_value_fact_table_ensure_region_entry(
 
 iree_status_t loom_value_fact_table_set_region_temporal_scope(
     loom_value_fact_table_t* table, const loom_region_t* region,
-    loom_value_facts_t scope, bool may_repeat) {
+    loom_op_t* parent_op, loom_value_facts_t scope, bool may_repeat) {
   loom_value_fact_region_entry_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
       loom_value_fact_table_ensure_region_entry(table, region, &entry));
+  entry->parent_op = parent_op;
   entry->temporal_distribution =
       scope.flags & LOOM_VALUE_FACT_DISTRIBUTION_MASK;
   entry->may_repeat = may_repeat;

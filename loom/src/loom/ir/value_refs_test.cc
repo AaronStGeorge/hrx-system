@@ -205,7 +205,7 @@ TEST_F(ValueRefsTest, SubtreeWalkIncludesOperandTypeAndPredicateAttributes) {
   fail_allocations_ = true;
   iree_status_t status = loom_op_walk_subtree_value_refs(
       module_, owner,
-      [](loom_value_id_t value, void* user_data) {
+      [](loom_value_id_t value, loom_value_id_t, void* user_data) {
         ++(*static_cast<std::vector<uint32_t>*>(user_data))[value];
         return iree_ok_status();
       },
@@ -241,7 +241,7 @@ TEST_F(ValueRefsTest, SubtreeWalkIncludesDeclarationArgumentTypes) {
   fail_allocations_ = true;
   iree_status_t status = loom_op_walk_subtree_value_refs(
       module_, declaration,
-      [](loom_value_id_t value, void* user_data) {
+      [](loom_value_id_t value, loom_value_id_t, void* user_data) {
         ++(*static_cast<std::vector<uint32_t>*>(user_data))[value];
         return iree_ok_status();
       },
@@ -257,16 +257,16 @@ TEST_F(ValueRefsTest, SubtreeWalkIncludesDeclarationArgumentTypes) {
 TEST_F(ValueRefsTest, SubtreeWalkStopsAtCallbackFailure) {
   loom_op_t* owner = Assume(Constant(1));
   uint32_t visit_count = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        loom_op_walk_subtree_value_refs(
-                            module_, owner,
-                            [](loom_value_id_t value, void* user_data) {
-                              ++*static_cast<uint32_t*>(user_data);
-                              return iree_make_status(
-                                  IREE_STATUS_ABORTED,
-                                  "callback failed at value %u", value);
-                            },
-                            &visit_count));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      loom_op_walk_subtree_value_refs(
+          module_, owner,
+          [](loom_value_id_t value, loom_value_id_t, void* user_data) {
+            ++*static_cast<uint32_t*>(user_data);
+            return iree_make_status(IREE_STATUS_ABORTED,
+                                    "callback failed at value %u", value);
+          },
+          &visit_count));
   EXPECT_EQ(visit_count, 1u);
 }
 
@@ -278,18 +278,18 @@ TEST_F(ValueRefsTest, SubtreeWalkStopsInsideRetainedMembershipBatch) {
   IREE_ASSERT_OK(loom_test_assume_set_predicates(
       module_, owner, loom_attr_predicate_list(predicates, 3)));
   uint32_t visit_count = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        loom_op_walk_subtree_value_refs(
-                            module_, owner,
-                            [](loom_value_id_t, void* user_data) {
-                              if (++*static_cast<uint32_t*>(user_data) == 3) {
-                                return iree_make_status(
-                                    IREE_STATUS_ABORTED,
-                                    "callback failed inside a batch");
-                              }
-                              return iree_ok_status();
-                            },
-                            &visit_count));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      loom_op_walk_subtree_value_refs(
+          module_, owner,
+          [](loom_value_id_t, loom_value_id_t, void* user_data) {
+            if (++*static_cast<uint32_t*>(user_data) == 3) {
+              return iree_make_status(IREE_STATUS_ABORTED,
+                                      "callback failed inside a batch");
+            }
+            return iree_ok_status();
+          },
+          &visit_count));
   // The ordinary operand and two batch members precede the failure. The
   // remaining batch member is not visited and the index remains unchanged.
   EXPECT_EQ(visit_count, 3u);

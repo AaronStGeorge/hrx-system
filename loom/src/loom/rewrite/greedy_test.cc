@@ -336,6 +336,143 @@ TEST_F(GreedyRewriteTest, ExplicitTargetFactsSetAnalysisScope) {
   iree_arena_deinitialize(&arena);
 }
 
+// The driver owns publication at callback entry and successful return. Exercise
+// a transitive dependency whose consumer is first in the LIFO rewrite order.
+enum class ObservationBoundary { kReturn, kBeforeWorklist, kRewriteOperation };
+
+class GreedyObservationTest
+    : public GreedyRewriteTest,
+      public ::testing::WithParamInterface<ObservationBoundary> {};
+
+TEST_P(GreedyObservationTest, ObservesPublishedFacts) {
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* source = nullptr;
+  loom_op_t* one = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), type,
+                                          LOOM_LOCATION_UNKNOWN, &source));
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), type,
+                                          LOOM_LOCATION_UNKNOWN, &one));
+  loom_op_t* first = nullptr;
+  loom_op_t* second = nullptr;
+  IREE_ASSERT_OK(loom_test_addi_build(
+      &builder_, loom_test_constant_result(source),
+      loom_test_constant_result(one), type, LOOM_LOCATION_UNKNOWN, &first));
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, loom_test_addi_result(first),
+                                      loom_test_constant_result(one), type,
+                                      LOOM_LOCATION_UNKNOWN, &second));
+  const loom_value_id_t result_value = loom_test_addi_result(second);
+  loom_op_t* use = nullptr;
+  loom_op_t* terminator = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &result_value, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &terminator));
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_pass_value_fact_owner_t owner;
+  loom_pass_value_fact_owner_initialize(&block_pool_, &owner);
+  loom_value_fact_table_t* facts = nullptr;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+      &owner, module_, loom_pass_value_fact_scope_function(function_), &facts));
+  loom_greedy_rewrite_driver_t driver;
+  loom_greedy_rewrite_driver_initialize(module_, &arena, facts, &driver);
+  struct State {
+    // Producer changed by preparation before any consumer is visited.
+    loom_op_t* source;
+    // Final consumer replaced by the observing callback, when enabled.
+    loom_op_t* consumer;
+    static iree_status_t Materialize(void* user_data,
+                                     loom_greedy_rewrite_driver_t* driver,
+                                     loom_op_t* op,
+                                     loom_greedy_rewrite_result_t* result,
+                                     bool* out_changed) {
+      auto* state = static_cast<State*>(user_data);
+      *out_changed = false;
+      if (op != state->consumer || !state->consumer) {
+        return iree_ok_status();
+      }
+      auto* rewriter = &driver->rewriter;
+      const loom_value_id_t value = loom_test_addi_result(op);
+      const loom_value_facts_t facts =
+          loom_rewriter_value_facts(rewriter, value);
+      loom_builder_set_before(&rewriter->builder, op);
+      loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+          rewriter, facts, loom_module_value_type(driver->module, value),
+          op->location, &replacement));
+      IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+          rewriter, op, &replacement, 1));
+      loom_greedy_rewrite_result_record_change(
+          result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+      state->consumer = nullptr;
+      *out_changed = true;
+      return iree_ok_status();
+    }
+  } state = {source, second};
+  const loom_greedy_rewrite_options_t options = {
+      .materialize_constant =
+          [](loom_builder_t* builder, loom_value_facts_t facts,
+             loom_type_t type, loom_location_id_t location,
+             loom_value_id_t* out_value) {
+            int64_t value = 0;
+            EXPECT_TRUE(loom_value_facts_as_exact_i64(facts, &value));
+            loom_op_t* constant = nullptr;
+            IREE_RETURN_IF_ERROR(loom_test_constant_build(
+                builder, loom_attr_i64(value), type, location, &constant));
+            *out_value = loom_test_constant_result(constant);
+            return iree_ok_status();
+          },
+  };
+  loom_greedy_rewrite_callbacks_t callbacks = {
+      .user_data = &state,
+      .prepare_region =
+          [](void* user_data, loom_greedy_rewrite_driver_t* driver,
+             loom_func_like_t, loom_region_t*, loom_op_t*) {
+            return loom_test_constant_rewrite_value(
+                &driver->rewriter, static_cast<State*>(user_data)->source,
+                loom_attr_i64(9));
+          },
+  };
+  if (GetParam() == ObservationBoundary::kBeforeWorklist) {
+    callbacks.before_worklist =
+        [](void* user_data, loom_greedy_rewrite_driver_t* driver,
+           loom_region_t*, loom_greedy_rewrite_result_t* result,
+           bool* out_changed) {
+          auto* state = static_cast<State*>(user_data);
+          return State::Materialize(user_data, driver, state->consumer, result,
+                                    out_changed);
+        };
+  } else if (GetParam() == ObservationBoundary::kRewriteOperation) {
+    callbacks.rewrite_op = State::Materialize;
+  }
+  loom_greedy_rewrite_result_t result;
+  IREE_ASSERT_OK(loom_greedy_rewrite_run_region(
+      &driver, function_, loom_func_like_body(function_), function_.op,
+      &options, &callbacks, &result));
+  if (GetParam() == ObservationBoundary::kReturn) {
+    int64_t actual = 0;
+    ASSERT_TRUE(loom_value_facts_as_exact_i64(
+        loom_value_fact_table_lookup(facts, result_value), &actual));
+    EXPECT_EQ(actual, 11);
+  } else {
+    const loom_op_t* actual = loom_value_def_op(
+        loom_module_value(module_, loom_op_const_operands(use)[0]));
+    ASSERT_TRUE(loom_test_constant_isa(actual));
+    EXPECT_EQ(loom_attr_as_i64(loom_test_constant_value(actual)), 11);
+  }
+  EXPECT_TRUE(result.facts_changed);
+  loom_greedy_rewrite_driver_deinitialize(&driver);
+  loom_pass_value_fact_owner_deinitialize(&owner);
+  iree_arena_deinitialize(&arena);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Publication, GreedyObservationTest,
+    ::testing::Values(ObservationBoundary::kReturn,
+                      ObservationBoundary::kBeforeWorklist,
+                      ObservationBoundary::kRewriteOperation));
+
 TEST_F(GreedyRewriteTest, MutationTrackingDoesNotRequireAWorklist) {
   const loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_op_t* original = nullptr;

@@ -1675,6 +1675,7 @@ void loom_builder_initialize(loom_module_t* module,
   out_builder->ip.before_op = NULL;
   out_builder->on_op_finalized.fn = NULL;
   out_builder->on_op_finalized.user_data = NULL;
+  out_builder->on_argument_defined = (loom_builder_argument_callback_t){0};
   out_builder->reserved_value_ids = NULL;
   out_builder->reserved_value_count = 0;
   out_builder->reserved_value_next = 0;
@@ -1754,7 +1755,12 @@ iree_status_t loom_builder_define_block_arg(loom_builder_t* builder,
                                             loom_value_id_t* out_value_id) {
   IREE_RETURN_IF_ERROR(
       loom_module_define_value(builder->module, type, out_value_id));
-  return loom_block_add_arg(builder->module, block, *out_value_id);
+  IREE_RETURN_IF_ERROR(
+      loom_block_add_arg(builder->module, block, *out_value_id));
+  return builder->on_argument_defined.fn
+             ? builder->on_argument_defined.fn(
+                   builder->on_argument_defined.user_data, *out_value_id)
+             : iree_ok_status();
 }
 
 iree_status_t loom_builder_create_region(loom_builder_t* builder, loom_op_t* op,

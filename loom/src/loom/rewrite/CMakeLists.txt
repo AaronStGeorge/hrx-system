@@ -26,6 +26,7 @@ loom_cc_library(
     loom::ops::op_defs
     loom::target::math_policy
     loom::util::fact_table
+    loom::util::segmented_storage
   PUBLIC
 )
 
@@ -140,6 +141,24 @@ loom_cc_test(
     loom::target::facts
     loom::target::types
     loom::util::fact_table
+)
+
+loom_cc_test(
+  NAME
+    fact_inputs_test
+  SRCS
+    "fact_inputs_test.cc"
+  DEPS
+    ::rewriter
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::cfg
+    loom::ops::scalar
+    loom::ops::scf
+    loom::ops::test
+    loom::pass::value_facts
 )
 
 loom_cc_test(

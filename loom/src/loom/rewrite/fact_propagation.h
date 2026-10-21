@@ -21,15 +21,23 @@ extern "C" {
 // Attaches caller-computed value facts to the rewriter for incremental
 // maintenance. The table must already cover every value the rewrite policy may
 // query and remains owned by the caller. NULL disables value-fact maintenance.
+// Detaching discards pending equations; publish first if the old table will be
+// consumed without recomputation.
 void loom_rewriter_attach_value_facts(loom_rewriter_t* rewriter,
                                       loom_value_fact_table_t* facts);
 
 // Updates the structural fact snapshot after a completed CFG edit and queues
-// users of changed block-argument joins. Call before querying facts or draining
-// the worklist after changing successors, block membership, or block arguments.
-// Ordinary value changes propagate through branch payloads in try_fold.
+// users of changed block-argument joins. Call after changing successors, block
+// membership, or block arguments, then publish before observing derived facts.
+// Ordinary changes remain pending until that fact-publication boundary.
 iree_status_t loom_rewriter_refresh_cfg_facts(loom_rewriter_t* rewriter,
                                               loom_region_t* region);
+
+// Publishes all pending value equations without rewriting IR. Call after a
+// mutation batch and before reading derived facts. try_fold and the greedy
+// driver's callback and return boundaries publish automatically. A failed
+// publication leaves partial facts; their owner must invalidate before reuse.
+iree_status_t loom_rewriter_propagate_value_facts(loom_rewriter_t* rewriter);
 
 // Enables value analysis on this rewriter using caller-owned fact storage and
 // runs the initial forward pass over |region| and its nested regions, seeding
@@ -49,8 +57,28 @@ iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
 typedef enum loom_rewriter_user_change_flag_bits_e {
   // Operand identities are changing, not just the facts of the same value.
   LOOM_REWRITER_USER_CHANGE_FLAG_REPLACED = 1u << 0,
+  // An equation changed even if its current result facts did not.
+  LOOM_REWRITER_USER_CHANGE_FLAG_SEMANTIC = 1u << 1,
 } loom_rewriter_user_change_flag_bits_t;
 typedef uint32_t loom_rewriter_user_change_flags_t;
+
+// Queues an operation for inference and optional rewrite-policy notification.
+iree_status_t loom_rewriter_add_fact_user_to_worklist(loom_rewriter_t* rewriter,
+                                                      loom_op_t* op);
+
+// Retains semantic invalidation through the complete indexed user closure.
+iree_status_t loom_rewriter_add_changed_fact_user(
+    loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_rewriter_user_change_flags_t flags);
+
+// Queues the owner of changed independent or incoming argument equations.
+iree_status_t loom_rewriter_add_fact_block(loom_rewriter_t* rewriter,
+                                           loom_block_t* block);
+
+// Transfers pending argument work before an embedded entry payload is moved.
+iree_status_t loom_rewriter_relocate_fact_block(loom_rewriter_t* rewriter,
+                                                loom_block_t* source,
+                                                loom_block_t* target);
 
 // Returns whether inference owns a loop or region-branch summary.
 bool loom_rewriter_op_summarizes_nested_regions(const loom_op_vtable_t* vtable);
@@ -95,7 +123,8 @@ iree_status_t loom_rewriter_add_users_to_worklist(
 
 // Schedules retained dependencies of every result of an operation.
 iree_status_t loom_rewriter_add_result_users_to_worklist(
-    loom_rewriter_t* rewriter, loom_op_t* op);
+    loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_rewriter_user_change_flags_t flags);
 
 #ifdef __cplusplus
 }

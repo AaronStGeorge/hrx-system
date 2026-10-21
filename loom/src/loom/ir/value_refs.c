@@ -15,8 +15,8 @@
 // so the current batch remains local across calls instead of round-tripping
 // each provider through the address-exposed cursor.
 static iree_status_t loom_value_walk_dependencies(
-    loom_type_use_iterator_t* dependencies,
-    loom_type_value_ref_callback_t callback, void* user_data) {
+    loom_type_use_iterator_t* dependencies, loom_value_id_t carrier,
+    loom_subtree_value_ref_callback_t callback, void* user_data) {
   while (loom_type_dependencies_advance(dependencies)) {
     const loom_value_id_t base = dependencies->base;
     uint64_t members = dependencies->members;
@@ -24,7 +24,7 @@ static iree_status_t loom_value_walk_dependencies(
       const loom_value_id_t provider =
           base + iree_math_count_trailing_zeros_u64(members);
       members &= members - 1;
-      IREE_RETURN_IF_ERROR(callback(provider, user_data));
+      IREE_RETURN_IF_ERROR(callback(provider, carrier, user_data));
     }
   }
   return iree_ok_status();
@@ -32,15 +32,16 @@ static iree_status_t loom_value_walk_dependencies(
 
 static iree_status_t loom_value_walk_outgoing_type_refs(
     const loom_module_t* module, loom_value_id_t value_id,
-    loom_type_value_ref_callback_t callback, void* user_data) {
+    loom_subtree_value_ref_callback_t callback, void* user_data) {
   loom_type_use_iterator_t dependencies;
   loom_module_value_type_dependencies(module, value_id, &dependencies);
-  return loom_value_walk_dependencies(&dependencies, callback, user_data);
+  return loom_value_walk_dependencies(&dependencies, value_id, callback,
+                                      user_data);
 }
 
 iree_status_t loom_op_walk_subtree_value_refs(
     const loom_module_t* module, const loom_op_t* op,
-    loom_type_value_ref_callback_t callback, void* user_data) {
+    loom_subtree_value_ref_callback_t callback, void* user_data) {
   const loom_value_id_t* operands = loom_op_const_operands(op);
   // Only symbol signatures define operand values. Ordinary users need no
   // interface metadata lookup on this per-operation path.
@@ -54,7 +55,8 @@ iree_status_t loom_op_walk_subtree_value_refs(
   } else {
     for (uint16_t i = 0; i < op->operand_count; ++i) {
       if (operands[i] != LOOM_VALUE_ID_INVALID) {
-        IREE_RETURN_IF_ERROR(callback(operands[i], user_data));
+        IREE_RETURN_IF_ERROR(
+            callback(operands[i], LOOM_VALUE_ID_INVALID, user_data));
       }
     }
   }
@@ -72,8 +74,8 @@ iree_status_t loom_op_walk_subtree_value_refs(
     }
     loom_type_use_iterator_t dependencies;
     loom_attribute_dependencies_begin(&module->type_uses, op, i, &dependencies);
-    IREE_RETURN_IF_ERROR(
-        loom_value_walk_dependencies(&dependencies, callback, user_data));
+    IREE_RETURN_IF_ERROR(loom_value_walk_dependencies(
+        &dependencies, LOOM_VALUE_ID_INVALID, callback, user_data));
   }
 
   loom_region_t** regions = loom_op_regions(op);

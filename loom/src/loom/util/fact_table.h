@@ -177,6 +177,16 @@ struct loom_value_fact_table_t {
   // Stack-owned ordinary-result publication, active only during inference.
   loom_value_fact_origin_publication_t* origin_publication;
 
+  // Optional completion consumer installed by the owner of pending inference.
+  // Nested summaries report completion within this table's solver traversal.
+  // Preview tables can borrow inference context without completing this work.
+  struct {
+    // Borrowed consumer state, valid while the callback is installed.
+    void* user_data;
+    // Consumes completed work without modifying source IR or value facts.
+    void (*fn)(void* user_data, const loom_op_t* op);
+  } summary_computed;
+
   // Immutable scope inputs supplied by a surrounding analysis. Independent
   // entry arguments and opaque results consult these on every solve instead
   // of retaining constraints accumulated in their derived rows.
@@ -502,13 +512,22 @@ bool loom_value_fact_table_values_equal(const loom_value_fact_table_t* table,
 const loom_cfg_graph_t* loom_value_fact_table_lookup_cfg_graph(
     const loom_value_fact_table_t* table, const loom_region_t* region);
 
+// Returns the operation retained when this region's context was established.
+loom_op_t* loom_value_fact_table_region_parent(
+    const loom_value_fact_table_t* table, const loom_region_t* region);
+
+// Rebuilds independent entry arguments from immutable inputs and contracts.
+iree_status_t loom_value_fact_table_refresh_entry_args(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_block_t* block, loom_op_t* parent_op);
+
 // Publishes the temporal distribution and repetition inherited from enclosing
 // control flow. |may_repeat| includes structured loops and enclosing CFG
 // cycles. The region traversal owns this transitive context; nested regions
 // import their parent block's scope before computing any child facts.
 iree_status_t loom_value_fact_table_set_region_temporal_scope(
     loom_value_fact_table_t* table, const loom_region_t* region,
-    loom_value_facts_t scope, bool may_repeat);
+    loom_op_t* parent_op, loom_value_facts_t scope, bool may_repeat);
 
 // Returns inherited temporal context met with this block's execution scope
 // when it belongs to a CFG cycle. This bounds facts for operations whose

@@ -435,6 +435,26 @@ static iree_status_t loom_value_fact_table_seed_block_args(
                                                 parent_op);
 }
 
+iree_status_t loom_value_fact_table_refresh_entry_args(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_block_t* block, loom_op_t* parent_op) {
+  const loom_value_fact_reference_origin_t saved_origin =
+      table->context.reference_origin;
+  if (parent_op == table->context.function.op) {
+    const loom_func_like_t function = table->context.function;
+    for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+      if (loom_func_like_region(function, i) == block->parent_region) {
+        table->context.reference_origin.region_index = i;
+        break;
+      }
+    }
+  }
+  iree_status_t status =
+      loom_value_fact_table_seed_block_args(table, module, block, parent_op);
+  table->context.reference_origin = saved_origin;
+  return status;
+}
+
 //===----------------------------------------------------------------------===//
 // CFG block argument summaries
 //===----------------------------------------------------------------------===//
@@ -1092,6 +1112,7 @@ static iree_status_t loom_value_fact_table_solve_cfg_region_tree(
   while (loom_value_fact_control_take_changed_block(structure->control,
                                                     &changed_block)) {
   }
+  iree_bitmap_reset_all(structure->control_flow.dirty);
   return iree_ok_status();
 }
 
@@ -1332,13 +1353,16 @@ static iree_status_t loom_value_fact_table_compute_scoped_op(
   const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
   IREE_RETURN_IF_ERROR(loom_value_fact_table_propagate_select_dependencies(
       table, module, op, vtable, out_changed));
-  if (vtable && vtable->loop_like) {
-    return loom_value_fact_table_compute_loop_like_summary(
-        table, module, (loom_op_t*)op, out_changed);
-  }
-  if (vtable && vtable->region_branch) {
-    return loom_value_fact_table_compute_region_branch_results(
-        table, module, (loom_op_t*)op, out_changed);
+  if (vtable && (vtable->loop_like || vtable->region_branch)) {
+    iree_status_t status =
+        vtable->loop_like ? loom_value_fact_table_compute_loop_like_summary(
+                                table, module, (loom_op_t*)op, out_changed)
+                          : loom_value_fact_table_compute_region_branch_results(
+                                table, module, (loom_op_t*)op, out_changed);
+    if (iree_status_is_ok(status) && table->summary_computed.fn) {
+      table->summary_computed.fn(table->summary_computed.user_data, op);
+    }
+    return status;
   }
   loom_value_fact_origin_publication_t publication;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_begin_origins(
@@ -1442,7 +1466,7 @@ static iree_status_t loom_value_fact_table_begin_region(
         loom_value_fact_table_block_may_repeat(table, parent_op->parent_block);
   }
   IREE_RETURN_IF_ERROR(loom_value_fact_table_set_region_temporal_scope(
-      table, region, temporal_scope, may_repeat));
+      table, region, parent_op, temporal_scope, may_repeat));
   if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
     out_frame->next_block_index = region->block_count;
     return loom_value_fact_table_compute_cfg_region_tree(table, module, region,

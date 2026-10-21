@@ -1278,6 +1278,7 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
 static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
     loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
     loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(rewriter));
   loom_low_descriptor_packet_t packet = {0};
   loom_low_descriptor_packet_initialize(state->target->descriptor_set, op,
                                         &packet);

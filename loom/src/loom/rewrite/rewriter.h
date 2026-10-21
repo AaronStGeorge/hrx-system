@@ -104,6 +104,7 @@ typedef struct loom_rewriter_operation_creation_callback_t {
 
 typedef struct loom_rewriter_cfg_region_t loom_rewriter_cfg_region_t;
 typedef struct loom_rewriter_worklist_chunk_t loom_rewriter_worklist_chunk_t;
+typedef struct loom_rewriter_pending_facts_t loom_rewriter_pending_facts_t;
 
 struct loom_rewriter_t {
   // Builder whose finalize callback records mutations and maintains facts.
@@ -147,6 +148,9 @@ struct loom_rewriter_t {
   // Borrowed per-value analysis facts. Populated when a pass calls
   // loom_rewriter_enable_analysis. NULL means analysis is disabled.
   loom_value_fact_table_t* fact_table;
+
+  // Lazy arena-owned equation membership, independent of rewrite scheduling.
+  loom_rewriter_pending_facts_t* pending_facts;
 
   // Borrowed math policy selected once for this rewrite scope. NULL preserves
   // target-neutral optional arithmetic choices until a target is selected.
@@ -406,10 +410,11 @@ iree_status_t loom_rewriter_remove_blocks(loom_rewriter_t* rewriter,
 // Removes selected unused arguments and their retained SSA references. The
 // mask covers the block's arguments. The caller repairs branch payloads and
 // refreshes CFG structure after completing the structural edit.
-uint16_t loom_rewriter_remove_block_args(loom_rewriter_t* rewriter,
-                                         loom_block_t* block,
-                                         const bool* remove_args,
-                                         uint16_t remove_arg_count);
+iree_status_t loom_rewriter_remove_block_args(loom_rewriter_t* rewriter,
+                                              loom_block_t* block,
+                                              const bool* remove_args,
+                                              uint16_t remove_arg_count,
+                                              uint16_t* out_removed_count);
 
 // Moves |op| before |before_op|, preserving operands/results/regions while
 // retargeting ancestry, worklist membership, and region effect summaries.

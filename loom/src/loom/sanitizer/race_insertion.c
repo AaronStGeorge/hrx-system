@@ -758,6 +758,10 @@ iree_status_t loom_sanitizer_insert_race_observations_run(
     if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
       continue;
     }
+    status = loom_rewriter_propagate_value_facts(&rewriter);
+    if (!iree_status_is_ok(status)) {
+      continue;
+    }
     status = loom_sanitizer_try_instrument_race_access_op(pass, module,
                                                           &rewriter, op);
     if (!iree_status_is_ok(status)) {

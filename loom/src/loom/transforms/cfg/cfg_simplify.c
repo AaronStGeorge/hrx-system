@@ -1665,8 +1665,10 @@ static iree_status_t loom_cfg_simplify_remove_redundant_block_args_from_block(
     }
   }
   IREE_ASSERT_EQ((uint16_t)(retained_count + removed_count), initial_arg_count);
-  const uint16_t actual_removed_count = loom_rewriter_remove_block_args(
-      state->rewriter, block, remove_args, initial_arg_count);
+  uint16_t actual_removed_count = 0;
+  IREE_RETURN_IF_ERROR(loom_rewriter_remove_block_args(
+      state->rewriter, block, remove_args, initial_arg_count,
+      &actual_removed_count));
   IREE_ASSERT_EQ(actual_removed_count, removed_count);
   state->statistics->block_args_removed += removed_count;
   state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
@@ -1802,6 +1804,7 @@ static iree_status_t loom_cfg_simplify_process_function_once(
       break;
     }
 
+    IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(state->rewriter));
     uint16_t branches_folded = 0;
     IREE_RETURN_IF_ERROR(loom_cfg_fold_constant_branches(
         state->rewriter, region, state->analysis_arena, &branches_folded));

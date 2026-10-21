@@ -872,6 +872,8 @@ static iree_status_t loom_loop_fusion_process_block(
     if (next_op && loom_loop_fusion_read_for_info(op, &first)) {
       ++context->statistics->loops_visited;
       if (loom_loop_fusion_read_for_info(next_op, &second)) {
+        IREE_RETURN_IF_ERROR(
+            loom_rewriter_propagate_value_facts(context->rewriter));
         if (loom_loop_fusion_candidate_is_legal(context, &first, &second)) {
           loom_op_t* fused_loop = NULL;
           IREE_RETURN_IF_ERROR(loom_loop_fusion_fuse_pair(
