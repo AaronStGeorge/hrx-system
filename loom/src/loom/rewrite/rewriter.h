@@ -102,6 +102,7 @@ typedef struct loom_rewriter_operation_creation_callback_t {
 } loom_rewriter_operation_creation_callback_t;
 
 typedef struct loom_rewriter_cfg_region_t loom_rewriter_cfg_region_t;
+typedef struct loom_rewriter_worklist_chunk_t loom_rewriter_worklist_chunk_t;
 
 struct loom_rewriter_t {
   // Builder whose finalize callback records mutations and maintains facts.
@@ -138,13 +139,9 @@ struct loom_rewriter_t {
   // Central policy for optional SSA display names created during rewrites.
   loom_rewriter_name_policy_flags_t name_policy;
 
-  // Worklist of ops to revisit, or NULL when no driver consumes notifications.
-  // Deduped via LOOM_OP_FLAG_ON_WORKLIST while enabled.
-  loom_op_t** worklist;
-  // Number of pending operations in the enabled worklist.
-  iree_host_size_t worklist_count;
-  // Allocated worklist entries, retained until the pass arena is released.
-  iree_host_size_t worklist_capacity;
+  // Active chunk in the LIFO worklist, or NULL when scheduling is disabled.
+  // Entries are deduplicated through LOOM_OP_FLAG_ON_WORKLIST.
+  loom_rewriter_worklist_chunk_t* worklist_chunk;
 
   // Borrowed per-value analysis facts. Populated when a pass calls
   // loom_rewriter_enable_analysis. NULL means analysis is disabled.

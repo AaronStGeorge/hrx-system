@@ -75,6 +75,20 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    worklist_test
+  SRCS
+    "worklist_test.cc"
+  DEPS
+    ::rewriter
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::test
+)
+
+loom_cc_test(
+  NAME
     pattern_registry_test
   SRCS
     "pattern_registry_test.cc"
