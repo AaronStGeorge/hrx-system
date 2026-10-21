@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <array>
+#include <string>
 
 #include "iree/async/util/proactor_pool.h"
 #include "iree/hal/api.h"
@@ -50,14 +51,15 @@ class DriverTest : public ::testing::Test {
     iree_hal_driver_registry_free(registry_);
   }
 
-  void Create(size_t index, iree_string_view_t path) {
+  void Create(size_t index, iree_string_view_t path,
+              iree_string_view_t scheme = IREE_SV("rdna")) {
     auto params = iree_hal_device_create_params_default();
     params.proactor_pool = proactors_;
     const iree_string_pair_t options[] = {
         {.key = IREE_SV("queue_count"), .value = IREE_SV("2")}};
     iree::Status status = iree_hal_driver_create_device_by_path(
-        driver_, IREE_SV("rdna"), path, IREE_ARRAYSIZE(options), options,
-        &params, allocators_[index].allocator(), &devices_[index]);
+        driver_, scheme, path, IREE_ARRAYSIZE(options), options, &params,
+        allocators_[index].allocator(), &devices_[index]);
     IREE_ASSERT_OK(status);
     allocators_[index].armed.store(true);
     EXPECT_TRUE(iree_string_view_equal(iree_hal_device_id(devices_[index]),
@@ -108,6 +110,23 @@ TEST_F(DriverTest, DefaultAndNativeIdentityRetainOneOwner) {
       registry_, IREE_SV("xdna"), &xdna_driver));
   EXPECT_EQ(driver_, xdna_driver);
   iree_hal_driver_release(xdna_driver);
+  iree_hal_driver_t* gpu_driver = nullptr;
+  IREE_ASSERT_OK(iree_hal_driver_registry_acquire_driver(
+      registry_, IREE_SV("amdgpu2"), &gpu_driver));
+  EXPECT_EQ(driver_, gpu_driver);
+  iree_hal_driver_release(gpu_driver);
+
+  iree_host_size_t gpu_count = 0;
+  iree_hal_device_info_t* gpu_infos = nullptr;
+  IREE_ASSERT_OK(iree_hal_driver_query_available_devices(
+      driver_, IREE_SV("amdgpu2"), iree_allocator_system(), &gpu_count,
+      &gpu_infos));
+  if (!gpu_count) {
+    iree_allocator_free(iree_allocator_system(), gpu_infos);
+    GTEST_SKIP() << "No visible unified GPU endpoint";
+  }
+  const std::string gpu_path(gpu_infos[0].path.data, gpu_infos[0].path.size);
+  iree_allocator_free(iree_allocator_system(), gpu_infos);
 
   auto params = iree_hal_device_create_params_default();
   params.proactor_pool = proactors_;
@@ -126,7 +145,7 @@ TEST_F(DriverTest, DefaultAndNativeIdentityRetainOneOwner) {
   if (HasFatalFailure()) {
     return;
   }
-  Create(1, infos_[0].path);
+  Create(1, iree_make_cstring_view(gpu_path.c_str()), IREE_SV("amdgpu2"));
   if (HasFatalFailure()) {
     return;
   }

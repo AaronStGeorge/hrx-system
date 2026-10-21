@@ -77,6 +77,7 @@ iree_cc_test(
     iree::async::util::proactor_pool
     iree::base
     iree::hal
+    iree::hal::drivers::amd::registration
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

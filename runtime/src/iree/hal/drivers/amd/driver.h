@@ -25,15 +25,29 @@ extern "C" {
 // INSTANCE bounds acquired native state to this fabric's lifetime; unsupported
 // native services fail explicitly. It does not promise isolated GPU addresses.
 //
-// The execution schemes are `xdna` and `rdna`. A bare scheme selects its first
-// supported endpoint. GPUs require a usable native compute family; `rdna:N`
-// and `rdna://N` index that same filtered list. Architecture alone is
-// insufficient. Enumeration emits `id/<32 hexadecimal digits>` paths naming
+// The execution schemes are `xdna`, `rdna`, and `amdgpu2`. Each has an
+// independent ordinal namespace: NPUs, RDNA GPUs, and all supported GPUs,
+// respectively. GPU discovery requires a usable native compute family;
+// architecture alone is insufficient. A bare scheme selects visible ordinal
+// zero; `rdna:N` and `rdna://N` index the same visible list.
+//
+// Driver creation captures HAL_VISIBLE_XDNA_DEVICES, HAL_VISIBLE_RDNA_DEVICES,
+// and HAL_VISIBLE_AMDGPU2_DEVICES. Each optional comma-separated list selects
+// and orders ordinals from that scheme's unmasked supported endpoints. Unset
+// exposes all; empty or whitespace-only exposes none. Duplicate, malformed, and
+// out-of-range ordinals fail driver creation with INVALID_ARGUMENT. Variables
+// are independent: filtering amdgpu2 does not filter rdna. Changing environment
+// values afterward does not change this driver or its native topology.
+//
+// Enumeration emits `id/<32 hexadecimal digits>` paths naming
 // exact native endpoint identities. These identities may become stale after
 // native device removal, reset, or reboot; they are not persistent machine
 // identifiers. Identity selection still requires the endpoint to match the
-// requested family and, for GPUs, advertise a usable native compute queue. An
-// unsupported identity fails with UNAVAILABLE before native device activation.
+// requested scheme's visible set. An unsupported or hidden identity fails with
+// UNAVAILABLE before native activation. Opaque numeric device IDs returned by
+// enumeration name native endpoints without a scheme and retain their meaning
+// across aliases; they are not the public URI ordinals. Visibility is device
+// selection policy, not access control.
 // The `columns` XDNA parameter selects context width (default 1). GPU options
 // are `queue_count` (default 1), `queue_family` (an exact native family
 // ordinal; otherwise the first supported PM4 family, preferring USER
