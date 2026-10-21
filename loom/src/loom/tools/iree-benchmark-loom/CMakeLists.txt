@@ -220,11 +220,13 @@ loom_cc_test(
   DEPS
     ::main
     iree::base
+    iree::base::internal::arena
     iree::base::internal::json
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::ir
 )
 
 loom_cc_test(
@@ -248,6 +250,8 @@ loom_cc_test(
     run_test
   SRCS
     "run_test.cc"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/testdata/planning_error.loom"
   DEPS
     ::main
     iree::base
@@ -255,6 +259,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::testing::temp_file
+    loom::ir
+  ENV
+    "LOOM_BENCHMARK_PLANNING_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/testdata/planning_error.loom}}"
 )
 
 set(_iree_benchmark_loom_platform_copts "")

@@ -27,6 +27,8 @@ extern "C" {
 
 typedef struct iree_benchmark_loom_launch_evidence_t
     iree_benchmark_loom_launch_evidence_t;
+typedef struct iree_benchmark_loom_hal_compile_item_t
+    iree_benchmark_loom_hal_compile_item_t;
 
 // Invalid stable ordinal for optional benchmark model indexes.
 #define IREE_BENCHMARK_LOOM_INDEX_INVALID IREE_HOST_SIZE_MAX
@@ -189,7 +191,11 @@ typedef struct iree_benchmark_loom_benchmark_result_t {
   iree_host_size_t diagnostic_remark_count;
   // JSON array entries for structured diagnostics associated with the failure.
   iree_string_view_t diagnostic_json;
-  // Public structured compile-report artifact for the benchmark candidate.
+  // Planned compilation whose per-entry evidence is shared by case results.
+  // NULL for products whose compilation is owned by the work item itself.
+  const iree_benchmark_loom_hal_compile_item_t* compile_item;
+  // Public structured compile report, serialized inline only when the product
+  // has no shared |compile_item|.
   const loomc_artifact_t* compile_report;
   // Sidecar compile report artifact path for debug/full bundles, if any.
   iree_string_view_t compile_report_artifact_path;
@@ -245,6 +251,9 @@ typedef struct iree_benchmark_loom_hal_actual_provider_t {
   iree_benchmark_loom_hal_context_t* context;
   // Shared HAL actual provider owning compilation and dispatch state.
   loom_run_hal_testbench_actual_provider_t execution;
+  // First source-order launch of this root within the compile item. All calls
+  // of that root share its report; single-provider items use zero.
+  iree_host_size_t compile_entry_index;
   // Optional suffix appended to debug/full artifact leaves.
   iree_string_view_t artifact_path_suffix;
   // Structured diagnostics emitted while compiling this candidate.

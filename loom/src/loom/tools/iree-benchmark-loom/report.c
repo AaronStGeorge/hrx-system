@@ -24,6 +24,7 @@
 #include "loom/tools/iree-benchmark-loom/module_query.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
 #include "loom/tools/iree-benchmark-loom/profile_report.h"
+#include "loom/tools/iree-benchmark-loom/work_plan.h"
 #include "loom/util/json.h"
 #include "loomc/artifact_manifest.h"
 #include "loomc/compile_report.h"
@@ -2188,8 +2189,14 @@ iree_status_t iree_benchmark_loom_write_benchmark_evidence_fields_json(
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_hal_profile_replay_json(
         policy, benchmark_result, object->stream));
   }
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_field_json(
-      benchmark_result->compile_report, object));
+  if (benchmark_result->compile_item != NULL) {
+    IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+        object, IREE_SV("compile_item_index"),
+        benchmark_result->compile_item->compile_item_index));
+  } else {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_field_json(
+        benchmark_result->compile_report, object));
+  }
   if (benchmark_result->has_failure) {
     IREE_RETURN_IF_ERROR(
         loom_json_object_begin_field(object, IREE_SV("failure")));
@@ -2354,18 +2361,56 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
   return loom_json_object_end(&object);
 }
 
-iree_status_t iree_benchmark_loom_append_compile_row(
-    const iree_benchmark_loom_run_identity_t* run,
-    const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    const loom_testbench_case_plan_t* case_plan,
+iree_status_t iree_benchmark_loom_write_compile_fields_json(
+    const iree_benchmark_loom_hal_compile_item_t* compile_item,
     const iree_benchmark_loom_hal_actual_provider_t* provider,
-    iree_string_builder_t* compile_output) {
+    loom_json_object_writer_t* object) {
   iree_string_view_t entry_symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_module_symbol_name_from_ref(
       provider->execution.native_module,
       provider->execution.invocation->callee_ref, &entry_symbol));
 
+  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+      object, IREE_SV("compile_item_index"), compile_item->compile_item_index));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+      object, IREE_SV("compile_entry_index"), provider->compile_entry_index));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+      object, IREE_SV("entry"), entry_symbol));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+      object, IREE_SV("state"),
+      provider->execution.compile_rejected ? IREE_SV("failed")
+                                           : IREE_SV("ok")));
+  if (provider->execution.compile_rejected) {
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_write_compile_rejection_fields_json(provider,
+                                                                object));
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
+      &provider->diagnostics, object));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      object, IREE_SV("compile_report_path"),
+      provider->compile_report_artifact_path));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      object, IREE_SV("artifact_manifest_path"),
+      provider->artifact_manifest_path));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      object, IREE_SV("target_artifact_path"), provider->target_artifact_path));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      object, IREE_SV("target_listing_path"), provider->target_listing_path));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
+      object, IREE_SV("hal_executable_path"), provider->hal_executable_path));
+  return iree_benchmark_loom_write_compile_report_field_json(
+      provider->execution.artifacts.compile_report, object);
+}
+
+iree_status_t iree_benchmark_loom_append_compile_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_candidate_identity_t* candidate,
+    const iree_benchmark_loom_hal_compile_item_t* compile_item,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_benchmark_loom_hal_actual_provider_t* provider,
+    iree_string_builder_t* compile_output) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(compile_output, &stream);
   loom_json_object_writer_t object;
@@ -2380,34 +2425,8 @@ iree_status_t iree_benchmark_loom_append_compile_row(
       &object, IREE_SV("benchmark"), benchmark_plan->name));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("case"), case_plan->name));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
-      &object, IREE_SV("entry"), entry_symbol));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
-      &object, IREE_SV("state"),
-      provider->execution.compile_rejected ? IREE_SV("failed")
-                                           : IREE_SV("ok")));
-  if (provider->execution.compile_rejected) {
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_write_compile_rejection_fields_json(provider,
-                                                                &object));
-  }
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
-      &provider->diagnostics, &object));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
-      &object, IREE_SV("compile_report_path"),
-      provider->compile_report_artifact_path));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
-      &object, IREE_SV("artifact_manifest_path"),
-      provider->artifact_manifest_path));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
-      &object, IREE_SV("target_artifact_path"),
-      provider->target_artifact_path));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
-      &object, IREE_SV("target_listing_path"), provider->target_listing_path));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
-      &object, IREE_SV("hal_executable_path"), provider->hal_executable_path));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_field_json(
-      provider->execution.artifacts.compile_report, &object));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_fields_json(
+      compile_item, provider, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_end(&object));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "\n"));
   return iree_ok_status();

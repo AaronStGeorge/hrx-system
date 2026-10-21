@@ -135,6 +135,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_compile(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
+    const iree_benchmark_loom_hal_compile_item_t* compile_item,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_hal_actual_provider_t* provider) {
@@ -150,6 +151,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_compile(
                     {
                         .run = run,
                         .candidate = candidate,
+                        .compile_item = compile_item,
                         .benchmark_plan = benchmark_plan,
                         .case_plan = case_plan,
                         .provider = provider,
@@ -426,11 +428,12 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
                           iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_COMPILE:
       return iree_benchmark_loom_jsonl_sink_end(
-          jsonl_sink, iree_benchmark_loom_append_compile_row(
-                          event->compile.run, event->compile.candidate,
-                          event->compile.benchmark_plan,
-                          event->compile.case_plan, event->compile.provider,
-                          iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
+          jsonl_sink,
+          iree_benchmark_loom_append_compile_row(
+              event->compile.run, event->compile.candidate,
+              event->compile.compile_item, event->compile.benchmark_plan,
+              event->compile.case_plan, event->compile.provider,
+              iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_SAMPLE:
       return iree_benchmark_loom_jsonl_sink_end(
           jsonl_sink, iree_benchmark_loom_append_sample_row(

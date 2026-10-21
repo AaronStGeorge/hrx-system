@@ -689,8 +689,13 @@ supported reconstruction and acceptance boundary is described in
 
 ## Query reports retained by a benchmark
 
-Debug and full benchmark bundles write per-candidate report sidecars. Their
-paths are the cleanest route into the recipes above:
+Case benchmark snapshots retain requested reports in `compiled_entries`, shared
+by launches and samples. The [benchmark results workflow](benchmark-results.md#continue-into-compiler-evidence)
+explains how to join these entries to measurements and extract a canonical
+report. Scenario products retain their report on the owning work item.
+
+Debug and full benchmark bundles also write per-entry report sidecars. Their
+paths provide a direct route into the recipes above:
 
 ```shell
 jq 'select(.row == "compile" and .compile_report_path) |
@@ -711,21 +716,21 @@ jq 'select(.row == "compile" and .compile_report) as $event |
      live_units}' results.jsonl
 ```
 
-Some consumers retain the same report below a completed benchmark result. The
-adapter changes, but the report query does not:
+For the default snapshot, retain the compilation and entry identities around
+the query result:
 
 ```shell
-jq 'select(.row == "benchmark" and
-           .benchmark_result.compile_report) as $event |
-    $event.benchmark_result.compile_report |
-    {candidate_id: $event.candidate_id,
-     sample_id: $event.sample_id,
+jq '.compiled_entries[] | select(.compile_report) as $entry |
+    $entry.compile_report |
+    {compile_item_index: $entry.compile_item_index,
+     compile_entry_index: $entry.compile_entry_index,
+     function,
      code_bytes: .emission.code_byte_count,
      final_vgprs: .target_resources.vector.final.register_count,
      scheduled_vgpr_pressure:
        .target_resources.vector.scheduled_pressure.peak_live_units,
      materialized_spills:
-       .allocation.materialized_spill_storage_count}' results.jsonl
+       .allocation.materialized_spill_storage_count}' results.json
 ```
 
 Timing establishes whether performance changed. Report evidence explains which

@@ -38,7 +38,7 @@ typedef enum iree_benchmark_loom_event_kind_e {
   IREE_BENCHMARK_LOOM_EVENT_SUMMARY = 3,
   // Selected HAL device metadata.
   IREE_BENCHMARK_LOOM_EVENT_DEVICE = 4,
-  // Candidate compile metadata.
+  // One canonical compiled entry's metadata.
   IREE_BENCHMARK_LOOM_EVENT_COMPILE = 5,
   // One correctness sample result.
   IREE_BENCHMARK_LOOM_EVENT_SAMPLE = 6,
@@ -117,6 +117,8 @@ typedef struct iree_benchmark_loom_compile_event_t {
   const iree_benchmark_loom_run_identity_t* run;
   // Stable candidate identity for the compile row.
   const iree_benchmark_loom_candidate_identity_t* candidate;
+  // Planned compilation shared by benchmark aliases and their work items.
+  const iree_benchmark_loom_hal_compile_item_t* compile_item;
   // Benchmark plan owning the candidate.
   const loom_testbench_benchmark_plan_t* benchmark_plan;
   // Case plan referenced by |benchmark_plan|.
@@ -360,11 +362,12 @@ iree_status_t iree_benchmark_loom_event_sink_emit_device(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_hal_context_t* context);
 
-// Emits candidate compile metadata.
+// Emits one canonical compiled entry's metadata.
 iree_status_t iree_benchmark_loom_event_sink_emit_compile(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
+    const iree_benchmark_loom_hal_compile_item_t* compile_item,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_hal_actual_provider_t* provider);

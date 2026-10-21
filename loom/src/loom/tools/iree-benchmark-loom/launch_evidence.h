@@ -34,6 +34,8 @@ typedef struct iree_benchmark_loom_launch_record_t {
   loom_testbench_case_sample_t sample;
   // Source-order kernel launch ordinal within the case sample.
   iree_host_size_t sequence_step_ordinal;
+  // Canonical compiled entry within the work item's compile item.
+  iree_host_size_t compile_entry_index;
   // Borrowed executable entry symbol submitted for this launch.
   iree_string_view_t entry;
   // Ordered workload values borrowed from the containing evidence storage.
@@ -75,7 +77,8 @@ void iree_benchmark_loom_launch_evidence_deinitialize(
 void iree_benchmark_loom_launch_evidence_capture(
     const loom_run_hal_testbench_actual_provider_t* provider,
     loom_testbench_case_sample_t sample, iree_host_size_t sequence_step_ordinal,
-    iree_host_size_t record_ordinal, iree_host_size_t workload_value_ordinal,
+    iree_host_size_t compile_entry_index, iree_host_size_t record_ordinal,
+    iree_host_size_t workload_value_ordinal,
     iree_benchmark_loom_launch_evidence_t* evidence);
 
 // Writes launch records as a JSON array without a surrounding field name.

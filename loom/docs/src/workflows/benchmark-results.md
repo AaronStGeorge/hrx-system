@@ -32,7 +32,8 @@ The stable author-facing snapshot contains:
 | --- | --- |
 | `summary` | Planned, failure, correctness, and artifact totals. |
 | `device` | Selected driver, backend, and inexpensive HAL identity when execution selected a device. |
-| `work_items` | Deduplicated physical compilation, correctness, and measurement results. |
+| `compiled_entries` | Case compilation diagnostics, artifact links, and requested reports, shared by launches and samples. |
+| `work_items` | Deduplicated physical correctness and measurement results, with links to case compilation evidence. |
 | `benchmarks` | Logical benchmark records referring to physical results by `work_item_index`. |
 | `failed_samples` | Observed correctness failures; omitted when none were observed. |
 | `failures` | Parse, verification, selection, and planning failures; omitted when empty. |
@@ -415,6 +416,34 @@ jq 'select(.row == "profile_replay") |
 ```
 
 ## Continue into compiler evidence
+
+With `--compile-report=summary` or `--compile-report=details`, case benchmarks
+retain reports in `compiled_entries`, including multi-dispatch sequences. Each
+work item's `compile_item_index` selects its compilation group; each launch's
+`compile_entry_index` selects an entry within that group. These indexes are
+run-local identities, not positions in the output array. Benchmark aliases
+share the same physical work and compilation evidence.
+
+For a sequence calling A, B, then A again, the group contains one report for A
+and one for B. Both calls of A refer to the first call's report, while retaining
+their own workload and resolved launch configuration. The sequence's timing
+still measures the complete logical operation. Separate compilation groups
+remain distinct even when entry names match. Scenario products retain their
+compile report directly on the work item that owns their specialization.
+
+Extract one case entry's canonical report for further inspection:
+
+```shell
+jq '.compiled_entries[] |
+    select(.compile_item_index == 0 and .compile_entry_index == 0) |
+    .compile_report' results.json > entry-report.json
+
+loom-compile-report show entry-report.json
+```
+
+The lightweight entry identity and diagnostics remain available without report
+capture; the large report payload is present only when requested. JSONL `compile`
+rows carry the same entry indexes and payloads as the snapshot collection.
 
 Compile reports embedded in a `compile` row or retained as sidecars use the
 same schema as `loom-compile`. Sidecars can be passed directly to

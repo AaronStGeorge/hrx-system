@@ -64,6 +64,8 @@ typedef struct iree_benchmark_loom_snapshot_state_t {
   bool has_device_json;
   // JSON object for the selected device.
   iree_string_builder_t device_json;
+  // Canonical compiled entries shared by launches, samples, and aliases.
+  loom_json_value_list_t compiled_entries;
   // JSON array entries for logical benchmark rows.
   loom_json_value_list_t benchmarks;
   // JSON array entries for deduplicated physical work results.
@@ -677,6 +679,19 @@ static iree_status_t iree_benchmark_loom_snapshot_append_comparison(
   return loom_json_object_end(&object);
 }
 
+static iree_status_t iree_benchmark_loom_snapshot_append_compile(
+    iree_benchmark_loom_snapshot_state_t* state,
+    const iree_benchmark_loom_compile_event_t* event) {
+  loom_output_stream_t stream;
+  IREE_RETURN_IF_ERROR(
+      loom_json_value_list_begin_value(&state->compiled_entries, &stream));
+  loom_json_object_writer_t object;
+  IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &object));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_fields_json(
+      event->compile_item, event->provider, &object));
+  return loom_json_object_end(&object);
+}
+
 static iree_status_t iree_benchmark_loom_snapshot_emit_event(
     void* user_data, const iree_benchmark_loom_event_t* event) {
   iree_benchmark_loom_snapshot_state_t* state =
@@ -692,7 +707,8 @@ static iree_status_t iree_benchmark_loom_snapshot_emit_event(
     case IREE_BENCHMARK_LOOM_EVENT_DEVICE:
       return iree_benchmark_loom_snapshot_append_device(state, &event->device);
     case IREE_BENCHMARK_LOOM_EVENT_COMPILE:
-      return iree_ok_status();
+      return iree_benchmark_loom_snapshot_append_compile(state,
+                                                         &event->compile);
     case IREE_BENCHMARK_LOOM_EVENT_SAMPLE:
       return iree_benchmark_loom_snapshot_append_sample(state, &event->sample);
     case IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE:
@@ -736,8 +752,9 @@ iree_status_t iree_benchmark_loom_snapshot_sink_initialize(
   state->host_allocator = allocator;
   iree_string_builder_initialize(allocator, &state->device_json);
   loom_json_value_list_t* value_lists[] = {
-      &state->benchmarks, &state->work_items,  &state->failed_samples,
-      &state->failures,   &state->repetitions, &state->comparisons,
+      &state->compiled_entries, &state->benchmarks, &state->work_items,
+      &state->failed_samples,   &state->failures,   &state->repetitions,
+      &state->comparisons,
   };
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(value_lists); ++i) {
     loom_json_value_list_initialize(allocator, value_lists[i]);
@@ -759,6 +776,7 @@ void iree_benchmark_loom_snapshot_sink_deinitialize(
   loom_json_value_list_deinitialize(&state->failed_samples);
   loom_json_value_list_deinitialize(&state->work_items);
   loom_json_value_list_deinitialize(&state->benchmarks);
+  loom_json_value_list_deinitialize(&state->compiled_entries);
   iree_string_builder_deinitialize(&state->device_json);
   iree_allocator_free(state->host_allocator,
                       state->artifact_bundle_policy_storage);
@@ -880,6 +898,8 @@ iree_status_t iree_benchmark_loom_snapshot_sink_append_json(
   }
   IREE_RETURN_IF_ERROR(
       iree_benchmark_loom_snapshot_append_summary_json(state, &object));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_append_array(
+      IREE_SV("compiled_entries"), &state->compiled_entries, &object));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_append_array(
       IREE_SV("work_items"), &state->work_items, &object));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_append_array(
