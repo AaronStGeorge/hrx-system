@@ -1445,6 +1445,7 @@ loom_cc_library(
     loom::analysis::liveness
     loom::codegen::low::descriptors
     loom::codegen::low::placement
+    loom::codegen::low::storage_layout
     loom::codegen::low::storage_lease
     loom::codegen::low::storage_transport
     loom::codegen::low::target_binding
