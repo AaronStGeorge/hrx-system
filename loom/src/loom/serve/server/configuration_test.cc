@@ -356,7 +356,17 @@ TEST_F(ConfigurationTest, HttpRelativePathsRequireAnExplicitBase) {
                         Parse(Document("embedding", R"(,"assets":".")"), {}));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse(Document("embedding", R"(,"assets":".")",
-                                       R"(,"base_directory":"relative")")));
+                                       R"(,"base_directory":"relative")"),
+                              {}));
+}
+
+TEST_F(ConfigurationTest, RelativeBaseUsesTheContainingDocumentDirectory) {
+  IREE_ASSERT_OK(Parse(Document("embedding", R"(,"assets":".")",
+                                R"(,"base_directory":"program/model")")));
+  EXPECT_EQ(String(model_.sources.base_directory),
+            "models/local/program/model");
+  EXPECT_EQ(String(model_.sources.prepare), "boot.loombc");
+  EXPECT_EQ(String(model_.assets), ".");
 }
 
 TEST_F(ConfigurationTest,

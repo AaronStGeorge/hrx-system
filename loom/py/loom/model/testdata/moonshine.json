@@ -180,6 +180,14 @@
         "kind": "build",
         "target": "//model/moonshine-ai/moonshine-streaming-tiny:model_program"
       }
+    },
+    "program/weights.loom": {
+      "origin": {
+        "kind": "url",
+        "url": "https://raw.githubusercontent.com/ROCm/hrx-system/61417137f334cfa828b38d6e9b0f2d7190503f16/experimental/loom_serve/models/moonshine/weights.loom"
+      },
+      "size": 344,
+      "sha256": "37e3fa1c1cafa8230212847d4aed5b57ae711d24420d9988036b3373a302e3af"
     }
   },
   "entrypoints": {
@@ -200,7 +208,12 @@
       "programs": {
         "development": {
           "inputs": [
-            "program/prepare.loom",
+            {
+              "file": "program/prepare.loom",
+              "data": [
+                "program/weights.loom"
+              ]
+            },
             "program/control.loom"
           ],
           "libraries": [
@@ -221,7 +234,12 @@
         },
         "release": {
           "inputs": [
-            "program/model.loombc"
+            {
+              "file": "program/model.loombc",
+              "data": [
+                "program/weights.loom"
+              ]
+            }
           ],
           "libraries": [
             "program/convolution.loom",
@@ -253,7 +271,8 @@
         "encoder_positions": 2048,
         "decoder_tokens": 512,
         "resident_requests": 4
-      }
+      },
+      "directory": "program"
     }
   },
   "variants": {

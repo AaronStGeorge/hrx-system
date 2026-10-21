@@ -31,7 +31,7 @@ This document describes the arithmetic embedding package in the
 | `definition` | Required object specifying a modality, programs, assets and capacities. |
 | `admission` | `"open"` by default; `"drained"` registers metadata without reading programs, loading weights or allocating model storage. |
 | `device` | Nonnegative index into the ordered CLI device group; required when the group has more than one member. |
-| `base_directory` | Optional absolute server-local base for relative file references. |
+| `base_directory` | Optional local file base; relative values resolve from the containing document. |
 
 Placement is a deployment property, outside the reusable `definition`. Drained
 registrations still require a valid device selection. Indices are checked
@@ -285,7 +285,9 @@ A file document resolves relative references from its own directory. For
 `/srv/models/vectors/prepare.loom`. References can reach shared providers outside
 that directory; this is not a filesystem sandbox.
 
-An absolute `base_directory` overrides the containing directory. A JSON-only HTTP
+An absolute `base_directory` overrides the containing directory. A relative value
+such as `program/model` selects that directory inside the document's directory.
+A JSON-only HTTP
 request has no containing file, so relative references need an explicit absolute
 base on the server machine. A document with only absolute references needs no
 base; source programs must also return absolute parameter and policy paths in

@@ -544,8 +544,13 @@ static iree_status_t loom_serve_model_configuration_model_parse(
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
         &fields[3], host_allocator, &out_model->sources.base_directory));
     if (!loom_serve_path_is_absolute(out_model->sources.base_directory)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "explicit base_directory must be absolute");
+      char* base = NULL;
+      IREE_RETURN_IF_ERROR(loom_serve_path_resolve(
+          document_directory, out_model->sources.base_directory, host_allocator,
+          &base));
+      iree_allocator_free(host_allocator,
+                          (void*)out_model->sources.base_directory.data);
+      out_model->sources.base_directory = iree_make_cstring_view(base);
     }
   } else if (document_directory.size) {
     char* base = NULL;

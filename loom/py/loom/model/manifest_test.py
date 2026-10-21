@@ -22,7 +22,7 @@ def test_complete_moonshine_selection():
     assert selected.model_id == "moonshine-ai/moonshine-streaming-tiny"
     assert selected.entrypoint["kind"] == "recognition"
     assert selected.settings["execution"] == {"pending_requests": 4}
-    assert len(selected.files) == 19
+    assert len(selected.files) == 20
     assert "program/model.loombc" not in selected.files
     assert selected.files["asset/model.safetensors"]["size"] == 176237308
 

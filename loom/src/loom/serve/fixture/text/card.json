@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "loom-fixture/text",
+    "name": "Weighted text fixture"
+  },
+  "files": {
+    "program/prepare.loom": {
+      "origin": {
+        "kind": "local",
+        "path": "prepare.loom"
+      }
+    },
+    "program/control.loom": {
+      "origin": {
+        "kind": "local",
+        "path": "control.loom"
+      }
+    },
+    "program/advance.loom": {
+      "origin": {
+        "kind": "local",
+        "path": "advance.loom"
+      }
+    },
+    "program/weights.loom": {
+      "origin": {
+        "kind": "local",
+        "path": "weights.loom"
+      }
+    },
+    "weights.safetensors": {
+      "origin": {
+        "kind": "inline",
+        "base64": "QAAAAAAAAAB7ImJpYXMiOnsiZHR5cGUiOiJJMzIiLCJzaGFwZSI6WzFdLCJkYXRhX29mZnNldHMiOlswLDRdfX0gICAgICAgAgAAAA=="
+      },
+      "size": 76,
+      "sha256": "ffad45c5dd6fd5aa71e98414507ee8cf854d2934e778ccdfebfd116e8f4961f6"
+    },
+    "tokenizer.json": {
+      "origin": {
+        "kind": "local",
+        "path": "tokenizer.json"
+      }
+    }
+  },
+  "entrypoints": {
+    "text": {
+      "kind": "text",
+      "directory": "program",
+      "roots": {
+        "prepare": [
+          "prepare"
+        ],
+        "control": [
+          "model_name",
+          "request_defaults",
+          "request_options",
+          "bind_request",
+          "chat_image_limits",
+          "chat_begin",
+          "chat_message",
+          "chat_end",
+          "render_tool",
+          "parse_tools",
+          "prepare_input",
+          "output_next",
+          "complete_text",
+          "encode_state",
+          "capture_epoch",
+          "encode_epoch",
+          "publish_epoch",
+          "step",
+          "epoch"
+        ]
+      },
+      "programs": {
+        "development": {
+          "inputs": [
+            {
+              "file": "program/prepare.loom",
+              "data": [
+                "program/weights.loom"
+              ]
+            },
+            "program/control.loom"
+          ],
+          "libraries": [
+            "program/advance.loom"
+          ]
+        }
+      }
+    }
+  },
+  "variants": {
+    "fixture": {
+      "entrypoints": {
+        "text": {
+          "programs": [
+            "development"
+          ],
+          "bindings": {
+            "weights": {
+              "file": "weights.safetensors"
+            },
+            "tokenizer": {
+              "file": "tokenizer.json"
+            }
+          }
+        }
+      }
+    }
+  },
+  "configurations": {
+    "default": {
+      "entrypoint": "text",
+      "variant": "fixture",
+      "programs": "development",
+      "execution": {
+        "rows": 4,
+        "context_capacity": 96,
+        "pool_capacity": 256,
+        "prefill_capacity": 32,
+        "max_tokens": 16
+      }
+    }
+  },
+  "qualification": {}
+}

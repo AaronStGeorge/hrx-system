@@ -26,7 +26,10 @@ can contain bytecode libraries. Every selection has arrays of `inputs` and
 `libraries`; a provider is a file name or an object with `file`, optional
 `format`, importer `options`, and auxiliary `data` file names. Format detection
 and importer options use the public linker's contract. Files describe content;
-root groups describe what the selected program provides. A linked bytecode file
+root groups describe what the selected program provides. `directory` names the
+program context for source-declared relative paths. Provider `data` includes
+files opened during preparation, such as a weight policy that is absent from
+the linker index. A linked bytecode file
 still contains IR for runtime linking and specialization.
 
 A variant states which program selections it supports for each entrypoint.
@@ -50,7 +53,9 @@ checkpoint inputs; its empty qualification table makes no execution claim.
 
 `loom_model` is exported by `//loom/build_tools/bazel:defs.bzl`. It takes a card,
 a configuration name, an optional program selection, an output encoding, and
-Bazel targets mapped to logical file names. These targets supply already
+Bazel targets mapped to logical file names. `files` supplies program and
+auxiliary build inputs; `assets` supplies the selected runtime file bindings.
+These targets supply already
 materialized inputs; this rule performs no downloads or weight transformations.
 All selected files must be declared, including files whose published origin is
 inline or remote. Directory bindings require the declared files to preserve the
@@ -63,7 +68,10 @@ configuration and refers to asset runfiles without copying them. The native
 adapter requires `prepare` and `control` root groups. It does not make the
 portable card itself a native `loom-serve --model` input.
 
-The input card is a build dependency, but is not a test runfile. Documentation
+Program files and their auxiliary data retain their declared relative namespace
+in the output. Runtime asset bindings refer to runfiles without copying weights.
+The input card and original program inputs are build dependencies, but are not
+test runfiles. Documentation
 changes that leave selected outputs unchanged can reuse test results. Tests
 still depend on the declared inputs, generated deployment, linked programs, and
 runner. A cached build action alone does not establish a cached test result.
@@ -73,3 +81,7 @@ bytecode and linked text outputs through native serving, including concurrent
 streams. Model publication actions use Bazel runfiles; their fixture targets
 carry `skip-bazel_to_cmake`. The existing native deployment fixtures also retain
 CMake coverage.
+
+The weighted text fixture also consumes an inline checkpoint through normal
+parameter activation, including a source-declared weight policy. Its server
+runs from a different working directory to check document-relative binding.

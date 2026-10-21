@@ -30,6 +30,13 @@ iree_py_test(
 )
 
 iree_py_binary(
+    name = "inline_file",
+    srcs = ["inline_file.py"],
+    main = "inline_file.py",
+    deps = [":manifest"],
+)
+
+iree_py_binary(
     name = "build",
     srcs = ["build.py"],
     main = "build.py",

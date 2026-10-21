@@ -41,6 +41,17 @@ iree_py_test(
 
 iree_py_library(
   NAME
+    inline_file
+  MAIN
+    "inline_file.py"
+  SRCS
+    "inline_file.py"
+  DEPS
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
     build
   MAIN
     "build.py"

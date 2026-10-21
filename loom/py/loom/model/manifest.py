@@ -177,9 +177,17 @@ def _entrypoint(value: dict, files: dict, path: str) -> None:
         value,
         path,
         ("kind", "roots", "programs"),
-        ("interface", "constraints", "components", "description", "options"),
+        (
+            "interface",
+            "constraints",
+            "components",
+            "description",
+            "options",
+            "directory",
+        ),
     )
     _string(value["kind"], path + ".kind")
+    _path(value.get("directory", "."), path + ".directory", directory=True)
     _strings(value.get("options", []), path + ".options")
     for role, roots in _mapping(value["roots"], path + ".roots").items():
         _strings(roots, path + ".roots." + role, empty=False)

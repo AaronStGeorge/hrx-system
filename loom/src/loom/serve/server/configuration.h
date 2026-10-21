@@ -129,9 +129,10 @@ typedef struct loom_serve_model_configuration_t {
 // Unknown, duplicate, wrong-kind and invalid fields reject before any model
 // I/O. Admission defaults to "open"; "drained" defers preparation. Device
 // selection is a nonnegative group ordinal; membership is resolved separately.
-// document_directory supplies the local base for file input. HTTP passes an
-// empty base: filesystem references then require an explicit absolute
-// base_directory in the document. That explicit base overrides the file base.
+// document_directory supplies the local base for file input; a relative
+// base_directory resolves within it. HTTP passes an empty document directory:
+// relative filesystem references then require an explicit absolute base.
+// An absolute base_directory overrides the document directory.
 // package, when present, supplies a separate namespace for relative source and
 // metadata references; parameter checkpoints remain filesystem references.
 // All strings are copied and package is retained through deinitialization.

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -28,17 +29,27 @@ def build(plan: dict, linker: str) -> None:
     output = Path(plan["output"])
     output.mkdir(parents=True, exist_ok=True)
     runtime_output = Path(plan["runtime_output"])
+    context = Path("file") / selection.entrypoint.get("directory", ".")
+    (output / context).mkdir(parents=True, exist_ok=True)
+    runtime_base = runtime_output / context
     bound_files = plan["files"]
+    runtime_assets = set(plan["assets"])
+    used_assets = set()
     for name in selection.files:
         if name not in bound_files:
             raise ManifestError(f"file {name!r} requires a declared build input")
 
     def asset_path(binding):
+        names = [binding["file"]] if "file" in binding else binding["files"]
+        for name in names:
+            if name not in runtime_assets:
+                raise ManifestError(f"file {name!r} requires a runtime asset binding")
+            used_assets.add(name)
         if "file" in binding:
             path = Path(bound_files[binding["file"]]["runtime_path"])
         elif not binding["files"]:
             (output / "empty").mkdir(exist_ok=True)
-            return "empty"
+            return os.path.relpath(runtime_output / "empty", runtime_base)
         else:
             # A directory binding is an authored layout contract. Declared data
             # must provide that layout; linking never copies checkpoint files.
@@ -56,7 +67,22 @@ def build(plan: dict, linker: str) -> None:
                     "directory binding requires one declared asset root"
                 )
             path = roots.pop()
-        return os.path.relpath(path, runtime_output)
+        return os.path.relpath(path, runtime_base)
+
+    copied = set()
+
+    def copy_program_file(name):
+        destination = output / "file" / name
+        if name not in copied:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bound_files[name]["path"], destination)
+            copied.add(name)
+        return destination
+
+    def relative_program_path(path):
+        return os.path.relpath(path, output / context)
+
+    admitted = {}
 
     def link(arguments, destination):
         subprocess.run(
@@ -70,6 +96,10 @@ def build(plan: dict, linker: str) -> None:
         )
 
     def compile_entry(entry, assets, directory):
+        if "directory" in entry and Path("file") / entry["directory"] != context:
+            raise ManifestError(
+                "native components share the enclosing program directory"
+            )
         directory.mkdir(parents=True)
         program = entry["programs"][selection.programs]
         inputs = []
@@ -82,12 +112,17 @@ def build(plan: dict, linker: str) -> None:
                     else provider_value
                 )
                 name = provider["file"]
-                source = bound_files[name]["path"]
-                if "format" in provider or provider.get("options"):
-                    admitted = (
-                        directory / f"provider-{len(inputs) + len(libraries)}.loombc"
-                    )
-                    options = ["--mode=merge", source]
+                source = copy_program_file(name)
+                for auxiliary in provider.get("data", []):
+                    copy_program_file(auxiliary)
+                previous = admitted.get(name)
+                if previous is not None and previous != provider:
+                    raise ManifestError(f"conflicting provider options for {name!r}")
+                if previous is None and (
+                    "format" in provider or provider.get("options")
+                ):
+                    normalized = directory / f"provider-{len(admitted)}.loombc"
+                    options = ["--mode=merge", str(source)]
                     if "format" in provider:
                         options.append("--input-format=" + provider["format"])
                     options.extend(
@@ -95,11 +130,12 @@ def build(plan: dict, linker: str) -> None:
                         for option in provider.get("options", [])
                     )
                     subprocess.run(
-                        [linker, *options, "--to=bc", "--output=" + str(admitted)],
+                        [linker, *options, "--to=bc", "--output=" + str(normalized)],
                         check=True,
                     )
-                    source = str(admitted)
-                paths.append(source)
+                    normalized.replace(source)
+                admitted[name] = provider
+                paths.append(str(source))
 
         linked = {}
         for index, (role, roots) in enumerate(entry["roots"].items()):
@@ -113,25 +149,19 @@ def build(plan: dict, linker: str) -> None:
                 ],
                 destination,
             )
-            linked[role] = str(destination.relative_to(output))
+            linked[role] = relative_program_path(destination)
         if set(linked) != {"prepare", "control"}:
             raise ManifestError(
                 "the native model contract requires prepare and control roles"
             )
 
-        # Preserve the complete provider universe for dynamically declared stages.
-        catalog = directory / "catalog.loom"
-        link(["--mode=merge", *inputs], catalog)
-        runtime_libraries = []
-        for index, source in enumerate(libraries):
-            destination = directory / f"library-{index}.loom"
-            link(["--mode=merge", source], destination)
-            runtime_libraries.append(str(destination.relative_to(output)))
+        # Dynamic stage and parameter-policy locators retain their authored
+        # namespace, including program data outside the linker provider list.
         definition = {
             "kind": entry["kind"],
             "prepare": linked["prepare"],
             "control": linked["control"],
-            "sources": [str(catalog.relative_to(output)), *runtime_libraries],
+            "sources": [relative_program_path(path) for path in [*inputs, *libraries]],
             "options": assets.get("options", {}),
         }
         for name, binding in assets["bindings"].items():
@@ -148,7 +178,9 @@ def build(plan: dict, linker: str) -> None:
                 component_assets,
                 directory / f"component-{index}",
             )
-            definition["sources"].extend(component.pop("sources"))
+            definition["sources"] = list(
+                dict.fromkeys([*definition["sources"], *component.pop("sources")])
+            )
             component.pop("kind")
             definition[name] = component
         return definition
@@ -166,7 +198,13 @@ def build(plan: dict, linker: str) -> None:
             **definition["options"],
             **selection.settings["options"],
         }
-    deployment = {"name": plan["name"], "definition": definition}
+    deployment = {
+        "name": plan["name"],
+        "base_directory": str(context),
+        "definition": definition,
+    }
+    if runtime_assets != used_assets:
+        raise ManifestError("runtime assets must match the selected binding closure")
     (output / "serve.json").write_text(json.dumps(deployment, indent=2) + "\n")
 
 

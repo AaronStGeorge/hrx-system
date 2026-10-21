@@ -12,7 +12,8 @@ def _loom_model_impl(ctx):
     output = ctx.actions.declare_directory(ctx.label.name)
     files = {}
     inputs = [ctx.file.card]
-    for target, name in ctx.attr.files.items():
+    assets = []
+    for target, name in (ctx.attr.files | ctx.attr.assets).items():
         artifacts = target[DefaultInfo].files.to_list()
         if len(artifacts) != 1:
             fail("%s must supply exactly one file for %s" % (target.label, name))
@@ -21,8 +22,13 @@ def _loom_model_impl(ctx):
         artifact = artifacts[0]
         files[name] = {"path": artifact.path, "runtime_path": artifact.short_path}
         inputs.append(artifact)
+        if target in ctx.attr.assets:
+            assets.append(artifact)
+    if len(ctx.attr.files) + len(ctx.attr.assets) != len(files):
+        fail("files and assets must have disjoint bindings")
     plan = ctx.actions.declare_file(ctx.label.name + ".plan.json")
     ctx.actions.write(plan, json.encode({
+        "assets": ctx.attr.assets.values(),
         "card": ctx.file.card.path,
         "configuration": ctx.attr.configuration,
         "encoding": ctx.attr.encoding,
@@ -44,12 +50,13 @@ def _loom_model_impl(ctx):
     )
     return [DefaultInfo(
         files = depset([output]),
-        runfiles = ctx.runfiles(files = inputs[1:] + [output]),
+        runfiles = ctx.runfiles(files = assets + [output]),
     )]
 
 loom_model = rule(
     implementation = _loom_model_impl,
     attrs = {
+        "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Runtime asset files mapped to logical model-card paths."),
         "card": attr.label(mandatory = True, allow_single_file = [".json"]),
         "configuration": attr.string(mandatory = True),
         "encoding": attr.string(default = "bc", values = ["text", "bc"]),

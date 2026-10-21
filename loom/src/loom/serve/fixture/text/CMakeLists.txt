@@ -9,4 +9,22 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_TARGET_ARCH_VM)
+loom_generated_file(
+  NAME
+    card_weights
+  GENERATOR
+    loom::py::loom::model::inline_file
+  OUTPUT
+    "weights.safetensors"
+  OUTPUT_FLAG
+    "--output="
+  ARGS
+    "--card=card.json"
+    "--file=weights.safetensors"
+  INPUTS
+    "card.json"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
