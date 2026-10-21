@@ -1132,7 +1132,7 @@ static iree_status_t iree_hal_amd_gpu_device_create_prepared(
       .publication_mode = publication_mode,
       .command_byte_capacity = options->queue.ring_byte_length
                                    ? options->queue.ring_byte_length
-                               : aql ? 256 * 1024
+                               : aql ? 2 * 1024 * 1024
                                      : 64 * 1024,
       .memory = &device->memory.control,
       .scratch_memory = &device->scratch.memory,

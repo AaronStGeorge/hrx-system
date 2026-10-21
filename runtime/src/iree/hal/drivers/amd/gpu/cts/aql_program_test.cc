@@ -470,6 +470,6 @@ TEST_P(AqlProgramTest, TaggedCompletionsCaptureAndElideAcrossRingWrap) {
 }
 
 INSTANTIATE_TEST_SUITE_P(NativeRings, AqlProgramTest,
-                         ::testing::Values(64u, 1024u, 4096u));
+                         ::testing::Values(64u, 1024u, 4096u, 32768u));
 
 }  // namespace

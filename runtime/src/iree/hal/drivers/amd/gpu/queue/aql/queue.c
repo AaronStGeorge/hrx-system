@@ -2629,7 +2629,7 @@ iree_status_t iree_hal_amd_gpu_aql_queue_create(
 uint32_t iree_hal_amd_gpu_aql_queue_maximum_program_packet_count(
     iree_hal_queue_t* base) {
   const iree_hal_amd_gpu_aql_queue_t* queue = (const void*)base;
-  // Bound each device materialization while amortizing its launch and packet
-  // publication across enough payloads for large resident recordings.
-  return iree_min(2048u, queue->producer.ring.capacity / 2);
+  // Use the configured ring capacity to amortize each device materialization,
+  // leaving half the ring for dependencies and publication packets.
+  return queue->producer.ring.capacity / 2;
 }

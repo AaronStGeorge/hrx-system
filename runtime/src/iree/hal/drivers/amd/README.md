@@ -133,9 +133,11 @@ storage. Submission uploads invocation inputs, reserves bounded ring ranges,
 and issues GPU fixup and materialization kernels. Materialization copies packets
 into the reserved slots and publishes the first header after all packet writes
 are visible. Host work scales with the number of chunks and supplied inputs,
-not a replay of each recorded dispatch. The AQL default ring is 256 KiB, with at
-most 2048 payload packets per chunk; explicit ring sizes are preserved. PM4
-retains its 64 KiB default and executes resident indirect buffers.
+not a replay of each recorded dispatch. The AQL default ring is 2 MiB, with at
+most half the ring's slots used for a chunk's payload packets. This permits
+16384 payload packets per default chunk while retaining space for dependencies
+and publication. Explicit ring sizes are preserved. PM4 retains its 64 KiB
+default and executes resident indirect buffers.
 
 The host may publish multiple AQL chunks ahead while ring credit permits.
 Each chunk's ordered terminal packet joins its payload before the next chunk's
