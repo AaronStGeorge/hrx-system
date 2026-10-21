@@ -36,7 +36,7 @@ loom_serve_text_session_t* loom_serve_text_session_select(
             name, iree_make_cstring_view(session->lifetime.name))) {
       return session;
     }
-    if (session->request.consumer.self) {
+    if (session->request.consumer.self || session->preparing) {
       continue;
     }
     if (!oldest || session->lifetime.serial < oldest->lifetime.serial) {

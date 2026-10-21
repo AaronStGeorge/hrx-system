@@ -91,6 +91,34 @@ class WeightPackingTest : public WeightsTest {
   }
 };
 
+TEST_P(WeightPackingTest, ActivationWorkingSetIncludesCapturedInputLanes) {
+  WriteFactors(path_.path(), 0, 8);
+  WriteFactors(adapter_path_.path(), 100, 4);
+  IREE_ASSERT_OK(Compile(0, "packed_target"));
+  // Final parameters fit the full budget by themselves. Their independently
+  // captured source inputs still need four reusable staging lanes while the
+  // final output storage is live.
+  const auto root = Root(0, 0, 2 * kSlabBytes);
+  IREE_ASSERT_OK(CreateSourceRoots(0, 1, &root,
+                                   {{path_.path()}, {adapter_path_.path()}},
+                                   "packing_policy.loom"));
+  const auto staging = loom_serve_weights_activation_workspace(plans_[0]);
+  EXPECT_EQ(staging.allocation_size, 512u);
+  EXPECT_EQ(staging.min_alignment, 64u);
+  if (pool_) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, Register(0, 0, 1));
+    EXPECT_EQ(residencies_[0], nullptr);
+    EXPECT_EQ(loom_serve_weights_statistics(plans_[0]).committed_bytes, 0u);
+    EXPECT_EQ(loom_serve_weights_statistics(plans_[0]).pending_bytes, 0u);
+  } else {
+    IREE_ASSERT_OK(Register(0, 0, 1));
+  }
+  const auto activity = loom_serve_weights_activity(plans_[0]);
+  EXPECT_EQ(activity.activations, 0u);
+  EXPECT_EQ(activity.read_bytes, 0u);
+  EXPECT_EQ(loom_serve_execution_frontier(execution_).values[0], 0u);
+}
+
 TEST_P(WeightPackingTest,
        InvocationWorkingSetChecksTheConfiguredLimitBeforeLoading) {
   WriteFactors(path_.path(), 0, 8);

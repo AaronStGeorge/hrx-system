@@ -69,6 +69,14 @@ iree_status_t loom_serve_residency_group_allocate(
 // operations have retired. Does not destroy borrowed plans. NULL is accepted.
 void loom_serve_residency_group_free(loom_serve_residency_group_t* group);
 
+// Storage and loading activity owned by the immutable parameter group,
+// independent of invocation admission. Valid during source preparation and
+// failed-load retirement. NULL reports zero before group registration.
+loom_serve_memory_usage_t loom_serve_residency_group_statistics(
+    const loom_serve_residency_group_t* group);
+loom_serve_weight_activity_t loom_serve_residency_group_activity(
+    const loom_serve_residency_group_t* group);
+
 // Bank-owner retention, independent of invocation residency lifetimes. Applies
 // to current and future activations without loading; destruction drops policy.
 void loom_serve_residency_group_set_pinned(loom_serve_residency_group_t* group,
@@ -85,8 +93,9 @@ iree_status_t loom_serve_residency_group_deactivate(
 // Registers one invocation/cohort working set of distinct groups in this cache.
 // Copies the pointer array; groups outlive the residency. Borrows execution for
 // readiness import and synchronous outer-thread error retirement, never waiting
-// on unrelated consumer timelines. The complete working set must fit the pool
-// budget independent of current usage; impossible sets fail before admission.
+// on unrelated consumer timelines. Parameters and their concurrent activation
+// staging must fit the pool budget independent of current usage; impossible
+// sets fail before admission. Weight source preparation precedes registration.
 // A shared group contributes physical storage once regardless of its borrowers.
 iree_status_t loom_serve_residency_allocate(
     loom_serve_residency_cache_t* cache, loom_serve_execution_t* execution,

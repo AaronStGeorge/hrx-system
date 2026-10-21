@@ -203,8 +203,17 @@ loom_cc_library(
     checkpoint_tests
   SRCS
     "checkpoint_test.cc"
+    "reservation_test.cc"
+    "state_reservation_test.cc"
   DEPS
+    ::model
     ::source_service_fixture
+    iree::base
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::host
+    loom::serve::runtime::storage::memory
+    loom::serve::testing::device
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -547,6 +556,7 @@ loom_cc_library(
     "media_epoch.h"
     "media_input.h"
     "model.h"
+    "reservation.h"
     "source.h"
     "stages.h"
     "state.h"
@@ -557,6 +567,9 @@ loom_cc_library(
     "epoch_plan.c"
     "media_epoch.c"
     "model.c"
+    "model_instance.h"
+    "reservation.c"
+    "row.c"
     "source.c"
     "stages.c"
     "state.c"
@@ -1116,6 +1129,25 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    pending_continuation
+  HDRS
+    "pending_continuation.h"
+  SRCS
+    "pending_continuation.c"
+  DEPS
+    ::checkpoint_registry
+    ::model
+    ::prefix_cache
+    ::session
+    ::session_cache
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     pending_request
   HDRS
     "pending_request.h"
@@ -1128,6 +1160,7 @@ loom_cc_library(
     ::input
     ::media_projector
     ::model
+    ::pending_continuation
     ::schedule
     ::sequence
     ::telemetry
@@ -1153,6 +1186,7 @@ loom_cc_library(
     ::input
     ::media_projector
     ::model
+    ::pending_continuation
     ::pending_request
     ::prefix_cache
     ::sequence
@@ -1193,7 +1227,11 @@ loom_cc_library(
   HDRS
     "service.h"
   SRCS
+    "request_admission.c"
+    "request_admission.h"
     "service.c"
+    "service_owner.c"
+    "service_owner.h"
   DEPS
     ::admission
     ::capture
@@ -1211,6 +1249,7 @@ loom_cc_library(
     ::media_projector
     ::model
     ::packing
+    ::pending_continuation
     ::pending_queue
     ::pending_request
     ::prefix_cache

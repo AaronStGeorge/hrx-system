@@ -172,10 +172,23 @@ loom_cc_library(
 loom_cc_library(
     name = "checkpoint_tests",
     testonly = True,
-    srcs = ["checkpoint_test.cc"],
+    srcs = [
+        "checkpoint_test.cc",
+        "reservation_test.cc",
+        "state_reservation_test.cc",
+    ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     visibility = ["//loom/src/loom/serve:implementation"],
-    deps = [":source_service_fixture"],
+    deps = [
+        ":model",
+        ":source_service_fixture",
+        "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/execution",
+        "//loom/src/loom/serve/runtime/host",
+        "//loom/src/loom/serve/runtime/storage:memory",
+        "//loom/src/loom/serve/testing:device",
+        "//runtime/src/iree/base",
+    ],
     alwayslink = True,
 )
 
@@ -466,6 +479,9 @@ loom_cc_library(
         "epoch_plan.c",
         "media_epoch.c",
         "model.c",
+        "model_instance.h",
+        "reservation.c",
+        "row.c",
         "source.c",
         "stages.c",
         "state.c",
@@ -478,6 +494,7 @@ loom_cc_library(
         "media_epoch.h",
         "media_input.h",
         "model.h",
+        "reservation.h",
         "source.h",
         "stages.h",
         "state.h",
@@ -917,6 +934,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "pending_continuation",
+    srcs = ["pending_continuation.c"],
+    hdrs = ["pending_continuation.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":checkpoint_registry",
+        ":model",
+        ":prefix_cache",
+        ":session",
+        ":session_cache",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "pending_request",
     srcs = ["pending_request.c"],
     hdrs = ["pending_request.h"],
@@ -928,6 +960,7 @@ loom_cc_library(
         ":input",
         ":media_projector",
         ":model",
+        ":pending_continuation",
         ":schedule",
         ":sequence",
         ":telemetry",
@@ -949,6 +982,7 @@ loom_cc_library(
         ":input",
         ":media_projector",
         ":model",
+        ":pending_continuation",
         ":pending_request",
         ":prefix_cache",
         ":sequence",
@@ -979,7 +1013,13 @@ loom_cc_library(
 
 loom_cc_library(
     name = "service",
-    srcs = ["service.c"],
+    srcs = [
+        "request_admission.c",
+        "request_admission.h",
+        "service.c",
+        "service_owner.c",
+        "service_owner.h",
+    ],
     hdrs = ["service.h"],
     deps = [
         ":admission",
@@ -998,6 +1038,7 @@ loom_cc_library(
         ":media_projector",
         ":model",
         ":packing",
+        ":pending_continuation",
         ":pending_queue",
         ":pending_request",
         ":prefix_cache",

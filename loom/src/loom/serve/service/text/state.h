@@ -113,6 +113,8 @@ struct loom_serve_text_state_t {
   iree_host_size_t row_count;
   // Owned rows, stable through final queue retirement.
   loom_serve_text_state_row_t* rows;
+  // Prepared logical plans whose selected IDs exclude compaction until freed.
+  iree_host_size_t prepared_reservations;
   // Validated source geometry and retained initialization payloads.
   loom_serve_text_storage_t storage;
   // Explicit endpoint records, separate from active row capacity.
@@ -277,13 +279,43 @@ iree_status_t loom_serve_text_state_row_try_restore(
 // tentatively acquired, before publishing any row changes. Denial submits no
 // work and leaves no pin; success returns accepted native backing ownership.
 // Fixed backing supplies zero ranges and no readiness. The callback must not
-// yield or change the selected row/checkpoint; ordinary denial rolls their
-// tentative IDs back before this owner turn ends.
+// yield or change the selected row/checkpoint. Denial leaves the prepared plan
+// intact; the immediate wrapper returns its tentative IDs in this owner turn.
 typedef iree_status_t (*loom_serve_text_state_admit_fn_t)(
     void* user_data, iree_host_size_t range_count,
     const loom_serve_memory_range_t* ranges, iree_hal_semaphore_t* readiness,
     uint64_t value, loom_serve_memory_admission_t* out_admission,
     loom_serve_memory_operation_t** out_operation);
+
+// A prepared continuation owns its selected logical IDs without changing the
+// row, mapping backing, or submitting work. The row and optional checkpoint
+// remain borrowed and immutable until submission or cancellation; other rows
+// may execute, but state compaction waits for prepared continuations to retire.
+typedef struct loom_serve_text_state_reservation_t
+    loom_serve_text_state_reservation_t;
+
+// Uses the same KV/COW planner as immediate reservation. NULL means logical-ID
+// capacity is unavailable; no row/checkpoint changes or device work occur.
+// The caller supplies the validated extent and a successfully retired row.
+iree_status_t loom_serve_text_state_row_prepare_reserve(
+    loom_serve_text_state_row_t* row, loom_serve_text_reserve_mode_t mode,
+    loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
+    loom_serve_text_state_reservation_t** out_reservation);
+
+// Commits the prepared union and installs its selected IDs on success. Denial
+// keeps the plan intact for retry. The owner excludes concurrent state edits
+// and joins prior backing work before submission. Native failure is terminal;
+// state keeps any installed ownership through ordinary retirement.
+iree_status_t loom_serve_text_state_reservation_submit(
+    loom_serve_text_state_reservation_t* reservation,
+    loom_serve_text_state_admit_fn_t admit, void* user_data,
+    loom_serve_memory_admission_t* out_admission);
+
+// Before submission, returns the prepared logical ownership without changing
+// the row/checkpoint. After successful submission, only host planning storage
+// remains here; the row/checkpoint retain accepted device work. NULL is valid.
+void loom_serve_text_state_reservation_free(
+    loom_serve_text_state_reservation_t* reservation);
 
 // Starts at a successfully retired row boundary.
 // Extent and starting frontier have passed model validation. Denial changes no

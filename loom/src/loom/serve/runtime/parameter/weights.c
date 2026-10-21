@@ -854,14 +854,12 @@ static iree_status_t loom_serve_weight_input_enumerate(
 // The shared scope owns raw allocation/pool lifetime independently of the
 // plan's readiness. Tracked views cover every payload read and pack dispatch.
 static iree_status_t loom_serve_weight_allocate_staging(
-    loom_serve_weights_t* weights, iree_device_size_t stride,
-    loom_serve_workspace_scope_t** out_scope, iree_hal_buffer_t** out_buffer,
-    iree_hal_semaphore_t** out_ready) {
-  const iree_device_size_t length = stride * WEIGHT_LANES;
-  const iree_device_size_t alignment =
-      loom_serve_weight_inputs_staging_alignment(weights->inputs);
-  IREE_RETURN_IF_ERROR(
-      loom_serve_workspace_reserve(weights->workspace, length, alignment));
+    loom_serve_weights_t* weights, loom_serve_workspace_scope_t** out_scope,
+    iree_hal_buffer_t** out_buffer, iree_hal_semaphore_t** out_ready) {
+  const iree_hal_pool_reservation_request_t request =
+      loom_serve_weights_activation_workspace(weights);
+  IREE_RETURN_IF_ERROR(loom_serve_workspace_reserve(
+      weights->workspace, request.allocation_size, request.min_alignment));
   IREE_RETURN_IF_ERROR(
       loom_serve_workspace_scope_allocate(weights->workspace, true, out_scope));
   IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(
@@ -871,8 +869,6 @@ static iree_status_t loom_serve_weight_allocate_staging(
   IREE_RETURN_IF_ERROR(
       loom_serve_workspace_scope_acquire(*out_scope, 1, &pool));
   uint64_t value = 1;
-  const iree_hal_pool_reservation_request_t request =
-      iree_hal_make_pool_reservation_request(length, alignment);
   iree_status_t status =
       iree_hal_queue_alloca(weights->dispatch, iree_hal_semaphore_list_empty(),
                             (iree_hal_semaphore_list_t){1, out_ready, &value},
@@ -917,8 +913,8 @@ static iree_status_t loom_serve_weight_stream(loom_serve_weights_t* weights) {
   iree_hal_buffer_t* staging = NULL;
   iree_hal_semaphore_t* staging_ready = NULL;
   if (staging_stride && iree_status_is_ok(status)) {
-    status = loom_serve_weight_allocate_staging(weights, staging_stride, &scope,
-                                                &staging, &staging_ready);
+    status = loom_serve_weight_allocate_staging(weights, &scope, &staging,
+                                                &staging_ready);
   }
   const iree_host_size_t lane_count =
       plan.has_preparation ? WEIGHT_COMPLETIONS : WEIGHT_LANES;
@@ -1382,6 +1378,13 @@ iree_host_size_t loom_serve_weights_parameter_count(
 loom_cmd_program_parameter_t loom_serve_weights_parameter_at(
     const loom_serve_weights_t* weights, iree_host_size_t index) {
   return weights->spans[index].parameter;
+}
+
+iree_hal_pool_reservation_request_t loom_serve_weights_activation_workspace(
+    const loom_serve_weights_t* weights) {
+  return iree_hal_make_pool_reservation_request(
+      loom_serve_weight_inputs_staging_length(weights->inputs) * WEIGHT_LANES,
+      loom_serve_weight_inputs_staging_alignment(weights->inputs));
 }
 
 loom_serve_memory_demand_t loom_serve_weights_missing_demand(

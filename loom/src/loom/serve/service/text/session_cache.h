@@ -63,8 +63,9 @@ void loom_serve_text_session_cache_deinitialize(
 loom_serve_text_session_cache_entry_t* loom_serve_text_session_cache_find(
     loom_serve_text_session_cache_t* cache, iree_string_view_t name);
 
-// Returns the least recently admitted published entry other than protected, or
-// NULL. Lookup is a cold admission operation, never per-token work.
+// Returns the least recently admitted unborrowed published entry other than
+// protected, or NULL. Lookup is a cold admission operation, never per-token
+// work.
 loom_serve_text_session_cache_entry_t* loom_serve_text_session_cache_oldest(
     loom_serve_text_session_cache_t* cache,
     const loom_serve_text_session_cache_entry_t* protected_entry);

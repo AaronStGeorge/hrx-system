@@ -556,6 +556,8 @@ TEST_P(WeightsTest, SharedWorkingSetsAdmitAtomicallyAndEvictOnlyIdleGroups) {
     const auto root = Root(i, 0);
     IREE_ASSERT_OK(CreateRoots(0, 1, &root,
                                {i == 2 ? adapter_path_.path() : path_.path()}));
+    EXPECT_EQ(
+        loom_serve_weights_activation_workspace(plans_[i]).allocation_size, 0u);
     IREE_ASSERT_OK(loom_serve_residency_group_allocate(
         cache, 1, &plans_[i], host_allocator_, &parameter_groups_[i]));
   }

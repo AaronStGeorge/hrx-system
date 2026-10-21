@@ -101,17 +101,23 @@ class MediaServiceTest : public SourceTextServiceTest {
     return result;
   }
 
-  // Capture real transport requests before the owner turn so tests never block
-  // a shared worker on I/O. Every claim enters the same bounded queue window.
-  void AcceptTogether(const std::vector<int>& clients) {
-    std::vector<loom_serve_http_connection_t*> connections(clients.size());
-    std::vector<const loom_serve_http_request_t*> requests(clients.size());
-    for (size_t i = 0; i < clients.size(); ++i) {
+  // Claim each real transport request before sending the next so body order
+  // is admission order. All claims enter one owner turn; no shared worker
+  // waits for I/O or starts preparation before the whole cohort is accepted.
+  void SendTogether(const std::vector<std::string>& bodies,
+                    std::vector<int>* out_clients) {
+    out_clients->assign(bodies.size(), -1);
+    std::vector<loom_serve_http_connection_t*> connections(bodies.size());
+    std::vector<const loom_serve_http_request_t*> requests(bodies.size());
+    for (size_t i = 0; i < bodies.size(); ++i) {
+      (*out_clients)[i] = Send(bodies[i]);
       IREE_ASSERT_OK(
-          http_.TakeRequest(clients[i], &connections[i], &requests[i]));
+          http_.TakeRequest((*out_clients)[i], &connections[i], &requests[i]));
+      ASSERT_EQ(std::string(requests[i]->body.data, requests[i]->body.size),
+                bodies[i]);
     }
     OwnerTurn::Run(loom_serve_host_executor(host_), [&] {
-      for (size_t i = 0; i < clients.size(); ++i) {
+      for (size_t i = 0; i < bodies.size(); ++i) {
         IREE_ASSERT_OK(
             interface_.accept(interface_.self, connections[i], requests[i], 0));
       }
@@ -166,17 +172,173 @@ class FailedMediaServiceTest : public MediaServiceTest {
   }
 };
 
+class CapacityMediaServiceTest : public MediaServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.pool_capacity = 8;
+    return options;
+  }
+};
+
+class CachedMediaServiceTest : public MediaServiceTest {
+ protected:
+  loom_serve_text_service_options_t ServiceOptions() const override {
+    auto options = SourceTextServiceTest::ServiceOptions();
+    options.session_cache_capacity = 1;
+    return options;
+  }
+
+  size_t CachedSessions() {
+    size_t count = 0;
+    loom_serve_http_session_snapshot_t snapshot = {};
+    for (size_t i = 0;
+         interface_.inspection.session_at(interface_.self, i, &snapshot); ++i) {
+      count += snapshot.id && std::string(snapshot.storage) == "cache";
+    }
+    return count;
+  }
+};
+
+TEST_F(CachedMediaServiceTest,
+       DetachedHistorySurvivesPreparedMediaAndExchange) {
+  if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
+    return;
+  }
+  const std::string prompt = "abxa";
+  std::string original;
+  for (size_t i = 0; i < 5; ++i) {
+    const std::string header =
+        "X-Loom-Session: peer" + std::to_string(i) + "\r\n";
+    const int client =
+        Send(Request(Message("user", prompt), 2), header.c_str());
+    loom_serve_http_connection_t* connection = nullptr;
+    ASSERT_NO_FATAL_FAILURE(Accept(client, interface_, &connection));
+    ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
+    const auto output = Content(Read(client));
+    EXPECT_EQ(output, Oracle::Complete(prompt, 2));
+    if (!i) {
+      original = output;
+    }
+  }
+  const std::string history =
+      Message("user", prompt) + "," + Message("assistant", original);
+  const int continued =
+      Send(Request(history + "," +
+                       ImageMessage("a", "image/x-portable-arbitrarymap", kPam,
+                                    "low", "b"),
+                   4),
+           "X-Loom-Session: peer0\r\n");
+  loom_serve_http_connection_t* connection = nullptr;
+  ASSERT_NO_FATAL_FAILURE(Accept(continued, interface_, &connection));
+  ASSERT_NO_FATAL_FAILURE(AtImagePhase("image_prepare", [&] {
+    // The outgoing row uses the exchange slot while the incoming cached
+    // endpoint remains the prepared consumer's immutable source.
+    EXPECT_EQ(CachedSessions(), 2u);
+  }));
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
+  Oracle oracle;
+  oracle.Consume(prompt + original + "#a");
+  oracle.Consume(Feature(511));
+  oracle.Consume("b");
+  const auto response = Read(continued);
+  EXPECT_EQ(Content(response), Complete(oracle, 4));
+  EXPECT_NE(response.find("\"cached_tokens\":5}"), std::string::npos)
+      << response;
+  EXPECT_EQ(CachedSessions(), 1u);
+  EXPECT_EQ(interface_.telemetry.counters->completed, 6u);
+  EXPECT_EQ(interface_.telemetry.counters->rejected, 0u);
+}
+
+TEST_F(CapacityMediaServiceTest, ProjectionWaitsForItsTextContinuation) {
+  const std::string image =
+      ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b");
+  std::vector<int> clients;
+  ASSERT_NO_FATAL_FAILURE(
+      SendTogether({Request(image, 4), Request(image, 4)}, &clients));
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
+  if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
+    EXPECT_EQ(Read(clients[0]).find("HTTP/1.1 501"), 0u);
+    EXPECT_EQ(Read(clients[1]).find("HTTP/1.1 501"), 0u);
+    return;
+  }
+  // Each request requires the full eight-token completion bound. The next
+  // image cannot be projected until its consumer can own that state; the
+  // real projector encodes cohort width so this distinguishes two single-row
+  // cohorts from producing both features and only then attempting admission.
+  Oracle oracle;
+  for (int32_t value : {0, Feature(511), 1}) {
+    oracle.Consume(value);
+  }
+  const std::string expected = Complete(oracle, 4);
+  EXPECT_EQ(Content(Read(clients[0])), expected);
+  EXPECT_EQ(Content(Read(clients[1])), expected);
+  EXPECT_EQ(interface_.telemetry.counters->completed, 2u);
+  EXPECT_EQ(interface_.telemetry.counters->rejected, 0u);
+}
+
+class OrderedMediaServiceTest
+    : public MediaServiceTest,
+      public ::testing::WithParamInterface<iree_host_size_t> {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.pool_capacity = 16;
+    return options;
+  }
+
+  loom_serve_text_service_options_t ServiceOptions() const override {
+    auto options = SourceTextServiceTest::ServiceOptions();
+    options.admission_overtakes = GetParam();
+    return options;
+  }
+};
+
+TEST_P(OrderedMediaServiceTest, LookaheadCannotReservePastUnadmittedText) {
+  if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
+    return;
+  }
+  const std::string image =
+      ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b");
+  const std::string prompt = "abxabbxabxax";
+  std::vector<int> clients;
+  ASSERT_NO_FATAL_FAILURE(
+      SendTogether({Request(image, 4), Request(Message("user", prompt), 4),
+                    Request(image, 4)},
+                   &clients));
+  ASSERT_NO_FATAL_FAILURE(AtImagePhase("image_prepare", [&] {
+    // The first image owns eight tokens. Reserving the later image's eight
+    // would strand the intervening text request, which needs all sixteen.
+    EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 8u);
+  }));
+  ASSERT_FALSE(HasFailure());
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
+  Oracle oracle;
+  for (int32_t value : {0, Feature(511), 1}) {
+    oracle.Consume(value);
+  }
+  const auto expected = Complete(oracle, 4);
+  EXPECT_EQ(Content(Read(clients[0])), expected);
+  EXPECT_EQ(Content(Read(clients[1])), Oracle::Complete(prompt, 4));
+  EXPECT_EQ(Content(Read(clients[2])), expected);
+  EXPECT_EQ(interface_.telemetry.counters->completed, 3u);
+  EXPECT_EQ(interface_.telemetry.counters->rejected, 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(FifoAndBackfill, OrderedMediaServiceTest,
+                         ::testing::Values(0, 1));
+
 TEST_F(FailedMediaServiceTest, ComponentFailureRejectsImagesButPreservesText) {
   const std::string image =
       ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b");
-  const int first = Send(Request(image, 4));
-  const int second = Send(Request(image, 4));
-  const int text = Send(Request(Message("user", "abxa"), 4));
-  ASSERT_NO_FATAL_FAILURE(AcceptTogether({first, second, text}));
+  std::vector<int> clients;
+  ASSERT_NO_FATAL_FAILURE(SendTogether({Request(image, 4), Request(image, 4),
+                                        Request(Message("user", "abxa"), 4)},
+                                       &clients));
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
   const bool enabled = loom_serve_media_image_codec(
                            LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM) != nullptr;
-  for (int client : {first, second}) {
+  for (int client : {clients[0], clients[1]}) {
     const std::string response = Read(client);
     EXPECT_EQ(response.find(enabled ? "HTTP/1.1 503" : "HTTP/1.1 501"), 0u)
         << response;
@@ -185,7 +347,7 @@ TEST_F(FailedMediaServiceTest, ComponentFailureRejectsImagesButPreservesText) {
                 std::string::npos);
     }
   }
-  EXPECT_EQ(Content(Read(text)), Oracle::Complete("abxa", 4));
+  EXPECT_EQ(Content(Read(clients[2])), Oracle::Complete("abxa", 4));
   EXPECT_EQ(loom_serve_finite_component_phase(image_),
             enabled ? LOOM_SERVE_FINITE_COMPONENT_FAILED
                     : LOOM_SERVE_FINITE_COMPONENT_DECLARED);
@@ -233,18 +395,21 @@ TEST_F(MediaServiceTest, LateCodecErrorRejectsOneRequestWithoutLosingPeers) {
   const char* damaged =
       "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
       "UkdCCkVOREhEUgr/AAAA/wAAAP///w==";
-  const int first = Send(Request(
-      ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b"), 4));
-  const int invalid = Send(Request(
-      ImageMessage("x", "image/x-portable-arbitrarymap", damaged, "low", ""),
-      4));
-  const int third = Send(Request(
-      ImageMessage("b", "image/x-portable-arbitrarymap", kAlphaPam, "low", "a"),
-      4));
-  ASSERT_NO_FATAL_FAILURE(AcceptTogether({first, invalid, third}));
+  std::vector<int> clients;
+  ASSERT_NO_FATAL_FAILURE(SendTogether(
+      {Request(
+           ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b"),
+           4),
+       Request(ImageMessage("x", "image/x-portable-arbitrarymap", damaged,
+                            "low", ""),
+               4),
+       Request(ImageMessage("b", "image/x-portable-arbitrarymap", kAlphaPam,
+                            "low", "a"),
+               4)},
+      &clients));
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
   if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
-    for (int client : {first, invalid, third}) {
+    for (int client : clients) {
       EXPECT_EQ(Read(client).find("HTTP/1.1 501"), 0u);
     }
     return;
@@ -257,9 +422,9 @@ TEST_F(MediaServiceTest, LateCodecErrorRejectsOneRequestWithoutLosingPeers) {
   for (int32_t value : {1, Feature(12), 0}) {
     third_oracle.Consume(value);
   }
-  EXPECT_EQ(Content(Read(first)), Complete(first_oracle, 4));
-  EXPECT_EQ(Read(invalid).find("HTTP/1.1 400"), 0u);
-  EXPECT_EQ(Content(Read(third)), Complete(third_oracle, 4));
+  EXPECT_EQ(Content(Read(clients[0])), Complete(first_oracle, 4));
+  EXPECT_EQ(Read(clients[1]).find("HTTP/1.1 400"), 0u);
+  EXPECT_EQ(Content(Read(clients[2])), Complete(third_oracle, 4));
   EXPECT_EQ(interface_.telemetry.counters->rejected, 1u);
   EXPECT_EQ(interface_.telemetry.counters->failed, 0u);
 }
@@ -273,13 +438,25 @@ TEST_P(CancelledMediaServiceTest,
   if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
     return;
   }
-  const int first = Send(Request(
-      ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b"), 4));
-  const int second = Send(Request(
-      ImageMessage("x", "image/x-portable-arbitrarymap", kAlphaPam, "low", "a"),
-      4));
-  ASSERT_NO_FATAL_FAILURE(AcceptTogether({first, second}));
+  std::vector<int> clients;
+  ASSERT_NO_FATAL_FAILURE(SendTogether(
+      {Request(
+           ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b"),
+           4),
+       Request(ImageMessage("x", "image/x-portable-arbitrarymap", kAlphaPam,
+                            "low", "a"),
+               4)},
+      &clients));
   ASSERT_NO_FATAL_FAILURE(AtImagePhase(GetParam(), [&] {
+    // Both real HTTP requests own their future rows before producing features,
+    // but no language parameter activation or text state submission occurs.
+    EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 240u);
+    EXPECT_EQ(loom_serve_text_model_weight_activity(model_).activations, 0u);
+    for (size_t i = 0; i < 4; ++i) {
+      EXPECT_EQ(
+          loom_serve_text_row_pool_usage(loom_serve_text_model_row(model_, i)),
+          0u);
+    }
     bool progress = false;
     IREE_ASSERT_OK(interface_.advance(
         interface_.self, LOOM_SERVE_SERVICE_FLAG_STOPPING, &progress));
@@ -289,9 +466,10 @@ TEST_P(CancelledMediaServiceTest,
   }));
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil(
       interface_, [&] { return Idle(); }, LOOM_SERVE_SERVICE_FLAG_STOPPING));
-  EXPECT_TRUE(Read(first, true).empty());
-  EXPECT_TRUE(Read(second, true).empty());
+  EXPECT_TRUE(Read(clients[0], true).empty());
+  EXPECT_TRUE(Read(clients[1], true).empty());
   EXPECT_EQ(interface_.telemetry.counters->cancelled, 2u);
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 256u);
 }
 
 INSTANTIATE_TEST_SUITE_P(CodecAndCompiler, CancelledMediaServiceTest,
@@ -367,16 +545,20 @@ TEST_F(MediaServiceTest, CrossRequestImagesConditionTextAndRetainedFollowup) {
                    kAlphaPam + "\"}}");
   const std::string second =
       ImageMessage("x", "image/x-portable-arbitrarymap", kPam, "low", "a");
-  const std::array<int, 3> clients = {
-      Send(Request(first, 4), "X-Loom-Session: images\r\n"),
-      Send(Request(second, 4)),
-      Send(Request(Message("user", "abxa"), 4)),
+  const std::array<std::string, 3> bodies = {
+      Request(first, 4),
+      Request(second, 4),
+      Request(Message("user", "abxa"), 4),
   };
+  std::array<int, 3> clients = {};
   std::array<loom_serve_http_connection_t*, 3> connections = {};
   std::array<const loom_serve_http_request_t*, 3> requests = {};
   for (size_t i = 0; i < clients.size(); ++i) {
+    clients[i] = Send(bodies[i], !i ? "X-Loom-Session: images\r\n" : "");
     IREE_ASSERT_OK(
         http_.TakeRequest(clients[i], &connections[i], &requests[i]));
+    EXPECT_EQ(std::string(requests[i]->body.data, requests[i]->body.size),
+              bodies[i]);
   }
   // All three real HTTP claims arrive in one owner turn. The single shared
   // worker cannot run the first queued CPU preparation until this returns.

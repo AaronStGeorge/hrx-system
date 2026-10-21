@@ -132,10 +132,12 @@ void loom_serve_text_pending_queue_cancel(
 
 // Removes closed consumers except borrowed, which the scheduler retains through
 // readiness release. A media borrower may similarly prevent cancellation.
+// rows_borrowed protects prepared row leases during CPU selection; unrelated
+// host-only requests can still release their queue credit and session names.
 // Returns whether any request retired; it never waits for a borrower.
 bool loom_serve_text_pending_queue_cancel_failed(
     loom_serve_text_pending_queue_t* queue,
-    const loom_serve_text_pending_request_t* borrowed,
+    const loom_serve_text_pending_request_t* borrowed, bool rows_borrowed,
     loom_serve_text_media_projector_t* projector);
 
 #ifdef __cplusplus
