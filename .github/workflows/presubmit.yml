@@ -8,13 +8,18 @@ name: HRX
 
 on:
   workflow_dispatch:
+  merge_group:
+    types:
+      - checks_requested
+    branches:
+      - main
   pull_request:
   push:
     branches:
       - main-staging
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -58,6 +63,12 @@ jobs:
           python3 dev.py bazel setup --venv
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Set up Node.js
+        if: github.event_name == 'merge_group'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
       - name: Check tool versions
         run: |
           python3 dev.py bazel doctor
@@ -74,8 +85,17 @@ jobs:
               --profile ci \
               --no-project-tests \
               --base "${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            python3 dev.py bazel presubmit \
+              --profile ci \
+              --no-project-tests \
+              --base "${{ github.event.merge_group.base_sha }}"
           else
             python3 dev.py bazel presubmit \
               --profile ci \
               --no-project-tests
           fi
+
+      - name: Run core Linux smoke
+        if: github.event_name == 'merge_group'
+        run: python3 build_tools/devtools/ci.py iree-bazel-cpu --keep-going
