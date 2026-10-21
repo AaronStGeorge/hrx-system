@@ -1067,6 +1067,17 @@ iree_status_t loom_serve_memory_pool_commit_async(
     const loom_serve_memory_range_t* ranges, iree_hal_semaphore_t* readiness,
     uint64_t value, loom_serve_memory_admission_t* out_admission,
     loom_serve_memory_operation_t** out_operation) {
+  return loom_serve_memory_pool_commit_with_demand_async(
+      pool, range_count, ranges, (loom_serve_memory_demand_t){0}, readiness,
+      value, out_admission, out_operation);
+}
+
+iree_status_t loom_serve_memory_pool_commit_with_demand_async(
+    loom_serve_memory_pool_t* pool, iree_host_size_t range_count,
+    const loom_serve_memory_range_t* ranges,
+    loom_serve_memory_demand_t immediate, iree_hal_semaphore_t* readiness,
+    uint64_t value, loom_serve_memory_admission_t* out_admission,
+    loom_serve_memory_operation_t** out_operation) {
   IREE_TRACE_ZONE_BEGIN(z0);
   *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
   *out_operation = NULL;
@@ -1095,8 +1106,10 @@ iree_status_t loom_serve_memory_pool_commit_async(
       }
     }
   }
+  loom_serve_memory_demand_t demand = additional;
+  loom_serve_memory_demand_add(&demand, immediate);
   loom_serve_memory_admission_t admission;
-  status = loom_serve_memory_pool_prepare(pool, additional, &admission);
+  status = loom_serve_memory_pool_prepare(pool, demand, &admission);
   const bool admitted = admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   loom_serve_memory_operation_t* operation = NULL;
   if (iree_status_is_ok(status) && admitted && count) {

@@ -98,6 +98,16 @@ iree_status_t loom_serve_residency_allocate(
 // Does not destroy borrowed plans or their backing. NULL is accepted.
 void loom_serve_residency_free(loom_serve_residency_t* residency);
 
+// Checks whether one invocation can fit by itself, before acquiring any pins
+// or submitting activation. Each extent describes additional simultaneously
+// live storage beyond the distinct parameter groups: model state, cohort I/O,
+// and the peak of ordered private commands. This checks the configured serving
+// ceiling, not available HAL memory, and neither reserves credit nor admits
+// work against other invocations. Fixed backing has no configured ceiling.
+iree_status_t loom_serve_residency_check_working_set(
+    const loom_serve_residency_t* residency, iree_host_size_t extent_count,
+    const iree_device_size_t* extents);
+
 // Borrowed admission/LRU owner, outliving this registration. Equal cache
 // identities share pressure; activity in another cache cannot release it.
 loom_serve_residency_cache_t* loom_serve_residency_cache(
@@ -178,6 +188,21 @@ iree_status_t loom_serve_residency_try_admit(
     loom_serve_residency_t* residency,
     loom_serve_residency_admission_t* out_admission);
 
+// Admits parameters and the caller's complete mutable-state range union before
+// submitting either. Ranges belong to this residency's physical owner and
+// their logical borrowers exclude policy reclamation for the call. Denial
+// retains neither a parameter pin nor new backing; FIFO interest remains.
+// Success owns a parameter pin and publishes state backing on readiness/value,
+// independently of parameter loading on the execution timeline. The caller
+// owns the returned operation through actual native retirement, including
+// terminal activation failure. A fixed-backed caller supplies no ranges or
+// readiness. No task or device wait occurs.
+iree_status_t loom_serve_residency_try_admit_state(
+    loom_serve_residency_t* residency, iree_host_size_t range_count,
+    const loom_serve_memory_range_t* ranges, iree_hal_semaphore_t* readiness,
+    uint64_t value, loom_serve_residency_admission_t* out_admission,
+    loom_serve_memory_operation_t** out_operation);
+
 // Withdraws this model's pending admission, without changing any owned pin or
 // queued device work. Idempotent; called on the owner when its prepared request
 // is fully admitted, cancelled, or rejected. A later request joins behind
@@ -252,7 +277,7 @@ typedef struct loom_serve_residency_snapshot_t {
   bool elastic;
   // Accepted-consumer and explicit-retention pins, excluding persistent policy.
   iree_host_size_t pin_count;
-  // New-work FIFO turns, including state retries after parameter acquisition;
+  // New-work FIFO turns, including joint parameter/state admission retries;
   // not total request queue latency or execution duration.
   struct {
     // One new-work interest is waiting for parameter admission.

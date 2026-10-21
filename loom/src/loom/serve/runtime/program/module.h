@@ -107,6 +107,14 @@ iree_status_t loom_serve_module_bind_stages(iree_vm_module_t* module,
 // every stage until the owner binds a new table; VM declarations remain linked.
 void loom_serve_module_clear_stages(iree_vm_module_t* module);
 
+// Maximum private allocation among the bound stages. Calls on the module's
+// work timeline are ordered, so private storage is a peak, not a sum over
+// stages or invocations. Model-owned inputs, outputs, and state are additional
+// live storage. The owner captures this fact when binding the table; querying
+// does not walk commands, allocate, or inspect HAL pool availability.
+iree_hal_pool_reservation_request_t loom_serve_module_workspace_requirement(
+    const iree_vm_module_t* module);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

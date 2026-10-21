@@ -124,9 +124,9 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // alignment; stronger private storage and parameter alignments come from their
 // compiler-reflected contracts. Input capacity comes from source; compiler
 // reflection supplies the workspace extent and alignment. One queue allocation
-// contains the RGB prefix and aligned private workspace; execute_3 receives
-// distinct views. Final output or cancellation releases those views; queue
-// captures retain the allocation through actual feedback retirement. Private
+// transaction acquires independent output and private workspace roots.
+// execute_3 receives both. Final work or cancellation queue-releases workspace;
+// feedback retains only output through its actual retirement. Private
 // storage belongs to the shared workspace pool, not this model's residency.
 // This model owns independent work and feedback timelines over the device
 // queues. The cold constructor drives the asynchronous load and joins on its

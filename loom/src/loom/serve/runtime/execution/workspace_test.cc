@@ -109,7 +109,8 @@ class WorkspaceTest : public ::testing::TestWithParam<uint32_t> {
 
   void TearDown() override {
     if (gate_) {
-      IREE_EXPECT_OK(iree_hal_semaphore_signal(gate_, 2, nullptr));
+      // Open both consumer phases even if an assertion stopped the test.
+      IREE_EXPECT_OK(iree_hal_semaphore_signal(gate_, 3, nullptr));
     }
     // An assertion may leave a caller view alive or miss queue_dealloca.
     // Release views before joining; accepted consumers still own their actual
@@ -719,6 +720,109 @@ TEST_P(WorkspaceTest, LiveEscapeDoesNotRetainRetiredGeneration) {
   EXPECT_EQ(retired.bytes_committed, 0u);
   EXPECT_EQ(retired.reserve_count, 3u);
   EXPECT_EQ(retired.release_count, 3u);
+}
+
+TEST_P(WorkspaceTest, OutputLifetimeDoesNotPinIndependentWorkspace) {
+  constexpr iree_device_size_t kOutputBytes = 64;
+  constexpr iree_device_size_t kWorkspaceBytes = 3072;
+  for (bool combined : {true, false}) {
+    const uint64_t gate_value = combined ? 1 : 2;
+    const iree_hal_pool_reservation_request_t requests[] = {
+        iree_hal_make_pool_reservation_request(
+            combined ? kOutputBytes + kWorkspaceBytes : kOutputBytes, 16),
+        iree_hal_make_pool_reservation_request(kWorkspaceBytes, 16),
+    };
+    iree_hal_buffer_t* buffers[2] = {};
+    IREE_ASSERT_OK(loom_serve_execution_alloca(
+        producer_.execution, combined ? 1 : 2, requests, buffers));
+    producer_.buffer = buffers[0];
+    std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)>
+        workspace(buffers[1], &iree_hal_buffer_release);
+    const uint32_t pattern = 0x2468ACE0;
+    const iree_hal_transfer_operation_t fill = {
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
+        .fill =
+            {
+                .target_buffer = producer_.buffer,
+                .length = kOutputBytes,
+                .pattern = &pattern,
+                .pattern_length = sizeof(pattern),
+            },
+    };
+    uint64_t value = 0;
+    IREE_ASSERT_OK(
+        loom_serve_execution_transfer(producer_.execution, 1, &fill, &value));
+    const auto produced = loom_serve_execution_frontier(producer_.execution);
+    iree_hal_semaphore_t* waits[] = {produced.semaphores[0], gate_};
+    uint64_t wait_values[] = {produced.values[0], gate_value};
+    IREE_ASSERT_OK(loom_serve_execution_barrier(consumer_.execution,
+                                                {2, waits, wait_values}));
+    const iree_hal_transfer_operation_t download = {
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+        .download =
+            {
+                .source_buffer = producer_.buffer,
+                .target = consumer_.output.data(),
+                .length = kOutputBytes,
+            },
+    };
+    uint64_t consumed = 0;
+    IREE_ASSERT_OK(loom_serve_execution_transfer(consumer_.execution, 1,
+                                                 &download, &consumed));
+    if (workspace) {
+      IREE_ASSERT_OK(loom_serve_execution_dealloca(producer_.execution,
+                                                   workspace.get(), &value));
+      workspace.reset();
+    }
+    iree_hal_buffer_release(producer_.buffer);
+    producer_.buffer = nullptr;
+    IREE_ASSERT_OK(loom_serve_execution_wait(producer_.execution, value));
+    auto retained = loom_serve_workspace_statistics(workspace_);
+    EXPECT_EQ(retained.bytes_reserved,
+              combined ? kOutputBytes + kWorkspaceBytes : kOutputBytes);
+    EXPECT_EQ(retained.bytes_committed, kSlabBytes);
+
+    // A held output must not prevent another operation using the generation
+    // storage. A combined root instead forces a second backing range.
+    IREE_ASSERT_OK(loom_serve_execution_alloca(
+        independent_.execution, 1, &requests[1], &independent_.buffer));
+    const auto allocated =
+        loom_serve_execution_frontier(independent_.execution);
+    IREE_ASSERT_OK(
+        loom_serve_execution_wait(independent_.execution, allocated.values[0]));
+    EXPECT_EQ(loom_serve_workspace_statistics(workspace_).bytes_committed,
+              (combined ? 2 : 1) * kSlabBytes);
+    const uint32_t workspace_pattern = 0x13579BDF;
+    const iree_hal_transfer_operation_t overwrite = {
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
+        .fill =
+            {
+                .target_buffer = independent_.buffer,
+                .length = kWorkspaceBytes,
+                .pattern = &workspace_pattern,
+                .pattern_length = sizeof(workspace_pattern),
+            },
+    };
+    IREE_ASSERT_OK(loom_serve_execution_transfer(independent_.execution, 1,
+                                                 &overwrite, &value));
+    IREE_ASSERT_OK(DownloadAndRelease(independent_));
+    IREE_ASSERT_OK(loom_serve_execution_drain(independent_.execution));
+    for (uint32_t actual : independent_.output) {
+      EXPECT_EQ(actual, workspace_pattern);
+    }
+    const auto consumer = loom_serve_execution_frontier(consumer_.execution);
+    uint64_t observed = 0;
+    IREE_ASSERT_OK(iree_hal_semaphore_query(consumer.semaphores[0], &observed));
+    EXPECT_LT(observed, consumed);
+    IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, gate_value, nullptr));
+    IREE_ASSERT_OK(loom_serve_execution_drain(consumer_.execution));
+    IREE_ASSERT_OK(loom_serve_execution_drain(producer_.execution));
+    for (uint32_t actual : consumer_.output) {
+      EXPECT_EQ(actual, pattern);
+    }
+    Trim();
+    EXPECT_EQ(loom_serve_workspace_statistics(workspace_).bytes_committed, 0u);
+  }
 }
 
 TEST_P(WorkspaceTest, CaptureCompactionPreservesLiveRootsAcrossRingWrap) {

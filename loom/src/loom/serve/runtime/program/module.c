@@ -26,6 +26,8 @@ typedef struct loom_serve_module_t {
   iree_host_size_t stage_count;
   // Owned stage array with retained command buffers or direct executables.
   loom_serve_stage_t* stages;
+  // Private high-water requirement of the currently bound, ordered stages.
+  iree_hal_pool_reservation_request_t workspace_requirement;
   // Copied descriptors borrowing stable host feedback storage.
   iree_byte_span_t* feedback;
   // Number of registered feedback slots.
@@ -59,6 +61,12 @@ void loom_serve_module_clear_stages(iree_vm_module_t* base) {
   iree_allocator_free(module->host_allocator, module->stages);
   module->stages = NULL;
   module->stage_count = 0;
+  module->workspace_requirement = (iree_hal_pool_reservation_request_t){0};
+}
+
+iree_hal_pool_reservation_request_t loom_serve_module_workspace_requirement(
+    const iree_vm_module_t* base) {
+  return ((const loom_serve_module_t*)base)->workspace_requirement;
 }
 
 static void loom_serve_module_destroy(iree_vm_module_t* base) {
@@ -278,6 +286,8 @@ iree_status_t loom_serve_module_bind_stages(iree_vm_module_t* base,
     loom_serve_module_clear_stages(base);
     module->stages = replacement;
     module->stage_count = stage_count;
+    module->workspace_requirement = iree_hal_make_pool_reservation_request(
+        workspace_length, workspace_alignment);
   } else {
     iree_allocator_free(module->host_allocator, replacement);
   }
@@ -317,6 +327,8 @@ iree_status_t loom_serve_module_create(const iree_hal_module_types_t* types,
   module->host_allocator = host_allocator;
   module->buffer_type = types->buffer;
   module->execution = execution;
+  module->workspace_requirement = iree_hal_make_pool_reservation_request(
+      workspace_length, workspace_alignment);
   loom_serve_execution_retain(execution);
   const iree_host_size_t export_count = options.binding_capacity + 2;
   module->descriptor = (iree_vm_module_descriptor_t){

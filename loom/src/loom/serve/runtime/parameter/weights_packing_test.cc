@@ -92,6 +92,107 @@ class WeightPackingTest : public WeightsTest {
 };
 
 TEST_P(WeightPackingTest,
+       InvocationWorkingSetChecksTheConfiguredLimitBeforeLoading) {
+  WriteFactors(path_.path(), 0, 8);
+  WriteFactors(adapter_path_.path(), 100, 4);
+  IREE_ASSERT_OK(Compile(0, "packed_target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_OK(CreateSourceRoots(0, 1, &root,
+                                   {{path_.path()}, {adapter_path_.path()}},
+                                   "packing_policy.loom"));
+  IREE_ASSERT_OK(Register(0, 0, 1));
+  const uint64_t weights =
+      loom_serve_residency_statistics(residencies_[0]).reserved_bytes;
+  const uint64_t limit =
+      pool_ ? loom_serve_memory_pool_limit(pool_) : UINT64_MAX;
+  const uint64_t headroom = limit - weights;
+  const iree_device_size_t fitting[] = {headroom / 2, headroom - headroom / 2};
+  IREE_ASSERT_OK(loom_serve_residency_check_working_set(
+      residencies_[0], IREE_ARRAYSIZE(fitting), fitting));
+  const iree_device_size_t impossible[] = {headroom / 2,
+                                           headroom - headroom / 2, 1};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_serve_residency_check_working_set(
+          residencies_[0], IREE_ARRAYSIZE(impossible), impossible));
+  const auto before = loom_serve_residency_snapshot(residencies_[0]);
+  EXPECT_FALSE(before.active);
+  EXPECT_EQ(before.pin_count, 0u);
+  EXPECT_FALSE(before.admission.waiting);
+  EXPECT_EQ(before.activity.read_bytes, 0u);
+  EXPECT_EQ(loom_serve_execution_frontier(execution_).values[0], 0u);
+  // A denied shape has not poisoned either the parameter plan or execution.
+  IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residencies_[0]));
+  ASSERT_NO_FATAL_FAILURE(CheckPackedOn(execution_));
+  loom_serve_residency_release(residencies_[0]);
+}
+
+TEST_P(WeightPackingTest,
+       InvocationWorkingSetAdmitsStateAndParametersTogether) {
+  WriteFactors(path_.path(), 0, 8);
+  WriteFactors(adapter_path_.path(), 100, 4);
+  IREE_ASSERT_OK(Compile(0, "packed_target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_OK(CreateSourceRoots(0, 1, &root,
+                                   {{path_.path()}, {adapter_path_.path()}},
+                                   "packing_policy.loom"));
+  IREE_ASSERT_OK(Register(0, 0, 1));
+  loom_serve_residency_admission_t admission;
+  loom_serve_memory_operation_t* operation = nullptr;
+  loom_serve_memory_range_t range = {};
+  if (pool_) {
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+        pool_, loom_serve_device_weight_geometry(device_owner_), 2 * kSlabBytes,
+        256, &state_statistics_, &state_));
+    range = {state_, 0, 2 * kSlabBytes};
+    // Either resource fits alone. Their union does not: neither backing nor
+    // parameter I/O may start, and the caller retains no partial pin.
+    IREE_ASSERT_OK(loom_serve_residency_try_admit_state(
+        residencies_[0], 1, &range, nullptr, 0, &admission, &operation));
+    EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);
+    EXPECT_EQ(operation, nullptr);
+    EXPECT_EQ(state_statistics_.pending_bytes, 0u);
+    EXPECT_EQ(state_statistics_.committed_bytes, 0u);
+    const auto denied = loom_serve_residency_snapshot(residencies_[0]);
+    EXPECT_EQ(denied.pin_count, 0u);
+    EXPECT_FALSE(denied.active);
+    EXPECT_EQ(denied.activity.activations, 0u);
+    EXPECT_EQ(denied.activity.read_bytes, 0u);
+    EXPECT_EQ(denied.memory.pending_bytes, 0u);
+    EXPECT_EQ(denied.memory.committed_bytes, 0u);
+    range.length = kSlabBytes;
+  }
+  IREE_ASSERT_OK(loom_serve_residency_try_admit_state(
+      residencies_[0], pool_ ? 1 : 0, &range, nullptr, 0, &admission,
+      &operation));
+  ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+  loom_serve_memory_operation_await(operation);
+  IREE_EXPECT_OK(loom_serve_memory_operation_query_status(operation));
+  loom_serve_memory_operation_free(operation);
+  IREE_ASSERT_OK(loom_serve_residency_await(residencies_[0]));
+  loom_serve_residency_cancel_admission(residencies_[0]);
+  ASSERT_NO_FATAL_FAILURE(CheckPackedOn(execution_));
+  if (pool_) {
+    EXPECT_EQ(state_statistics_.committed_bytes, kSlabBytes);
+    const auto before = loom_serve_residency_snapshot(residencies_[0]);
+    // Another row may share the active weights, but it still needs admission
+    // for its state growth. Denial must preserve the accepted consumer's pin.
+    range.length = 2 * kSlabBytes;
+    IREE_ASSERT_OK(loom_serve_residency_try_admit_state(
+        residencies_[0], 1, &range, nullptr, 0, &admission, &operation));
+    EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);
+    EXPECT_EQ(operation, nullptr);
+    const auto denied = loom_serve_residency_snapshot(residencies_[0]);
+    EXPECT_EQ(denied.pin_count, before.pin_count);
+    EXPECT_EQ(denied.activity.activations, before.activity.activations);
+    EXPECT_EQ(state_statistics_.committed_bytes, kSlabBytes);
+    ASSERT_NO_FATAL_FAILURE(CheckPackedOn(execution_));
+    loom_serve_residency_cancel_admission(residencies_[0]);
+  }
+  loom_serve_residency_release(residencies_[0]);
+}
+
+TEST_P(WeightPackingTest,
        IndependentInputsPackWithBoundedLaneReuseAndWarmSharing) {
   WriteFactors(path_.path(), 0, 8);
   WriteFactors(adapter_path_.path(), 100, 4);

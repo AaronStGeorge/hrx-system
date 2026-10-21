@@ -278,6 +278,20 @@ iree_status_t loom_serve_memory_pool_commit_async(
     uint64_t value, loom_serve_memory_admission_t* out_admission,
     loom_serve_memory_operation_t** out_operation);
 
+// Commits the same range union while admitting additional immediate demand
+// owned by the caller (such as parameters loaded after mutable-state growth).
+// The demand excludes these ranges and existing committed or pending backing.
+// Denial submits neither ranges nor additional demand. Success publishes range
+// ownership before returning; the caller commits additional demand in the same
+// serialized owner turn, before another admission can consume that headroom.
+// This checks the serving owner's ledger, not available device memory.
+iree_status_t loom_serve_memory_pool_commit_with_demand_async(
+    loom_serve_memory_pool_t* pool, iree_host_size_t range_count,
+    const loom_serve_memory_range_t* ranges,
+    loom_serve_memory_demand_t immediate, iree_hal_semaphore_t* readiness,
+    uint64_t value, loom_serve_memory_admission_t* out_admission,
+    loom_serve_memory_operation_t** out_operation);
+
 // Copies the unkept physical slab set of these distinct reservations and queues
 // its return to the shared cache. The caller has retired every consumer and
 // keeps reservations/accounting alive through operation completion. Kept slabs

@@ -840,7 +840,7 @@ loom_cc_test(
     ],
     args = [
         "--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom)",
-        "--gtest_filter=Streaming/*",
+        "--gtest_filter=Streaming/*:Backing/WeightPackingTest.InvocationWorkingSet*",
         "--executable_sources=$(rootpath //loom/src/loom/serve/service:testdata/executables/prepare.loom)",
     ],
     data = [
