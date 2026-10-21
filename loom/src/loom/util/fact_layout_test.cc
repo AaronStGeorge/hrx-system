@@ -80,6 +80,36 @@ TEST_F(FactLayoutTest, ForwardingSharesAndReplacesScopedBindings) {
   EXPECT_EQ(loom_value_fact_table_query_layout_strides(&table_, 2).count, 2);
 }
 
+TEST_F(FactLayoutTest, RelativeRangeGrowthPreservesBorrowedBindings) {
+  constexpr loom_value_id_t first = 1u << 16;
+  const loom_value_id_t strides[] = {first + 1, LOOM_VALUE_ID_INVALID};
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_strides(
+      &table_, first + 32, {strides, 2}));
+  const auto borrowed =
+      loom_value_fact_table_query_layout_strides(&table_, first + 32);
+  IREE_ASSERT_OK(
+      loom_value_fact_table_forward_layout_strides(&table_, first + 32, first));
+  IREE_ASSERT_OK(loom_value_fact_table_forward_layout_strides(&table_, first,
+                                                              first + 120));
+  EXPECT_LT(arena_.used_allocation_size, 8192u);
+  for (uint32_t offset : {0u, 32u, 120u}) {
+    const auto current =
+        loom_value_fact_table_query_layout_strides(&table_, first + offset);
+    EXPECT_EQ(current.values, borrowed.values);
+    ASSERT_EQ(current.count, 2);
+    EXPECT_EQ(current.values[0], strides[0]);
+    EXPECT_EQ(current.values[1], strides[1]);
+  }
+  loom_value_fact_table_clear_layout_strides(&table_, first);
+  EXPECT_EQ(loom_value_fact_table_query_layout_strides(&table_, first).count,
+            0);
+  EXPECT_EQ(borrowed.values[0], strides[0]);
+  loom_value_fact_table_clear_scope(&table_);
+  EXPECT_EQ(
+      loom_value_fact_table_query_layout_strides(&table_, first + 120).count,
+      0);
+}
+
 TEST_F(FactLayoutTest, UndefinitionAndScopeResetWithdrawBindings) {
   const loom_value_id_t strides[] = {1, LOOM_VALUE_ID_INVALID};
   IREE_ASSERT_OK(
