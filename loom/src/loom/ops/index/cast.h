@@ -23,6 +23,14 @@ loom_value_facts_t loom_index_cast_transfer_facts(
     loom_scalar_type_t input_type, loom_scalar_type_t result_type,
     loom_value_facts_t input_facts);
 
+// Returns true when an address -> fixed-width payload -> same address
+// roundtrip preserves every value described by |source_facts|. Roundtrips from
+// index require signed fit, roundtrips from offset require unsigned fit, and i1
+// uses the 0/1 Boolean domain for either address type.
+bool loom_index_cast_roundtrip_preserves_value(loom_scalar_type_t address_type,
+                                               loom_scalar_type_t payload_type,
+                                               loom_value_facts_t source_facts);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

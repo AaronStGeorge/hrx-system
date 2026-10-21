@@ -60,3 +60,24 @@ loom_value_facts_t loom_index_cast_transfer_facts(
   // exact value and let folding erase the cast before legality checks it.
   return loom_value_facts_make(result_lo, result_hi, 1);
 }
+
+bool loom_index_cast_roundtrip_preserves_value(
+    loom_scalar_type_t address_type, loom_scalar_type_t payload_type,
+    loom_value_facts_t source_facts) {
+  if ((address_type != LOOM_SCALAR_TYPE_INDEX &&
+       address_type != LOOM_SCALAR_TYPE_OFFSET) ||
+      !loom_scalar_type_is_integer(payload_type)) {
+    return false;
+  }
+
+  const int32_t payload_bit_count = loom_scalar_type_bitwidth(payload_type);
+  if (payload_bit_count <= 0 || payload_bit_count > 64) {
+    return false;
+  }
+  const bool uses_unsigned_domain = payload_type == LOOM_SCALAR_TYPE_I1 ||
+                                    address_type == LOOM_SCALAR_TYPE_OFFSET;
+  return uses_unsigned_domain ? loom_value_facts_fit_unsigned_bit_count(
+                                    source_facts, (uint8_t)payload_bit_count)
+                              : loom_value_facts_fit_signed_bit_count(
+                                    source_facts, (uint8_t)payload_bit_count);
+}

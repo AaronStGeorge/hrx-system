@@ -7,6 +7,7 @@
 #include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/carrier.h"
+#include "loom/ops/index/cast.h"
 #include "loom/ops/index/compare.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
@@ -1592,6 +1593,38 @@ iree_status_t loom_index_rotri_canonicalize(loom_op_t* op,
 // Casts, comparisons, and selection
 //===----------------------------------------------------------------------===//
 
+static loom_value_id_t loom_index_cast_roundtrip_source(
+    loom_op_t* op, loom_rewriter_t* rewriter) {
+  const loom_value_id_t intermediate = loom_index_cast_input(op);
+  loom_op_t* producer = loom_rewriter_value_defining_op(rewriter, intermediate);
+  if (!producer || !loom_index_cast_isa(producer)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+
+  const loom_value_id_t source = loom_index_cast_input(producer);
+  const loom_type_t source_type =
+      loom_module_value_type(rewriter->module, source);
+  const loom_type_t intermediate_type =
+      loom_module_value_type(rewriter->module, intermediate);
+  const loom_type_t result_type =
+      loom_module_value_type(rewriter->module, loom_index_cast_result(op));
+  if (!loom_type_equal(source_type, result_type) ||
+      !loom_type_is_scalar(source_type) ||
+      !loom_type_is_scalar(intermediate_type)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+
+  const loom_scalar_type_t address_type = loom_type_element_type(source_type);
+  const loom_scalar_type_t payload_type =
+      loom_type_element_type(intermediate_type);
+  const loom_value_facts_t source_facts =
+      loom_rewriter_value_facts(rewriter, source);
+  return loom_index_cast_roundtrip_preserves_value(address_type, payload_type,
+                                                   source_facts)
+             ? source
+             : LOOM_VALUE_ID_INVALID;
+}
+
 iree_status_t loom_index_cast_canonicalize(loom_op_t* op,
                                            loom_rewriter_t* rewriter) {
   loom_type_t input_type =
@@ -1599,7 +1632,13 @@ iree_status_t loom_index_cast_canonicalize(loom_op_t* op,
   loom_type_t result_type =
       loom_module_value_type(rewriter->module, loom_index_cast_result(op));
   if (!loom_type_equal(input_type, result_type)) {
-    return iree_ok_status();
+    const loom_value_id_t roundtrip_source =
+        loom_index_cast_roundtrip_source(op, rewriter);
+    if (roundtrip_source == LOOM_VALUE_ID_INVALID) {
+      return iree_ok_status();
+    }
+    return loom_index_replace_single_result_with_value(op, rewriter,
+                                                       roundtrip_source);
   }
   return loom_index_replace_single_result_with_value(op, rewriter,
                                                      loom_index_cast_input(op));
