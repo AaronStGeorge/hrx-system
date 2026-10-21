@@ -491,7 +491,7 @@ void GpuNativeFileTest::BufferedRoundTrip() {
       observed.data(), observed.size() * 4, nullptr));
   ASSERT_NO_FATAL_FAILURE(Wait(six));
   for (size_t i = 0; i < observed.size(); ++i) {
-    EXPECT_EQ(observed[i],
+    ASSERT_EQ(observed[i],
               i >= kBufferOffset / 4 && i < (kBufferOffset + kLength) / 4
                   ? expected[i - kBufferOffset / 4 + 16]
                   : sentinel)
