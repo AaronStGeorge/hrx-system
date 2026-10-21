@@ -11,11 +11,14 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "iree/testing/gtest.h"
 #include "loom/error/parameter.h"
+#include "loom/ir/module.h"
 #include "loom/pass/registry.h"
 #include "loom/target/math_policy.h"
+#include "loom/util/stream.h"
 #include "loomc/context.h"
 #include "loomc/module.h"
 #include "loomc/source.h"
@@ -285,11 +288,86 @@ func.def public @identity(%value: i32) -> (i32) {
   ASSERT_TRUE(loomc_result_succeeded(result_ptr.get()));
   ASSERT_NE(view.module, nullptr);
   ASSERT_NE(view.source_table, nullptr);
+  EXPECT_NE(view.type_formatter.fn, nullptr);
   ASSERT_EQ(view.source_table->module, view.module);
   ASSERT_EQ(view.source_table->count, 1u);
   EXPECT_TRUE(iree_string_view_equal(view.source_table->entries[0].filename,
                                      IREE_SV("module.loom")));
   EXPECT_FALSE(iree_string_view_is_empty(view.source_table->entries[0].source));
+}
+
+TEST(InteropTest, FormatsTypesUsingBorrowedModuleState) {
+  auto context = CreateContext();
+  auto workspace = CreateWorkspace();
+  auto source = CreateSource("empty.loom", "");
+  auto module = Deserialize(context.get(), workspace.get(), source.get());
+  loomc_module_mutable_interop_view_t mutable_view =
+      loomc_module_get_mutable_interop_view(module.get());
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(
+      mutable_view.module, IREE_SV("external.buffer"), &name_id));
+
+  loomc_module_interop_view_t view = {};
+  loomc_result_t* result = nullptr;
+  LOOMC_ASSERT_OK(loomc_module_get_interop_view(
+      module.get(), loomc_allocator_system(), &view, &result));
+  ResultPtr result_ptr(result);
+  ASSERT_TRUE(loomc_result_succeeded(result));
+  ASSERT_NE(view.type_formatter.fn, nullptr);
+  source.reset();
+  workspace.reset();
+  context.reset();
+
+  const std::pair<loom_type_t, const char*> cases[] = {
+      {loom_type_scalar(LOOM_SCALAR_TYPE_F32), "f32"},
+      {loom_type_shaped_2d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                           loom_dim_pack_static(4), loom_dim_pack_static(8),
+                           /*encoding_id=*/0),
+       "tensor<4x8xf32>"},
+      {loom_type_dialect_opaque(name_id), "external.buffer"},
+  };
+  for (const auto& [type, expected] : cases) {
+    SCOPED_TRACE(expected);
+    iree_string_builder_t output;
+    iree_string_builder_initialize(iree_allocator_system(), &output);
+    loom_output_stream_t stream;
+    loom_output_stream_for_builder(&output, &stream);
+    IREE_EXPECT_OK(
+        view.type_formatter.fn(type, view.type_formatter.user_data, &stream));
+    EXPECT_EQ(std::string(iree_string_builder_buffer(&output),
+                          iree_string_builder_size(&output)),
+              expected);
+    EXPECT_EQ(stream.offset, std::strlen(expected));
+    iree_string_builder_deinitialize(&output);
+  }
+}
+
+TEST(InteropTest, TypeFormatterPropagatesOutputFailure) {
+  auto context = CreateContext();
+  auto workspace = CreateWorkspace();
+  auto source = CreateSource("empty.loom", "");
+  auto module = Deserialize(context.get(), workspace.get(), source.get());
+  loomc_module_interop_view_t view = {};
+  loomc_result_t* result = nullptr;
+  LOOMC_ASSERT_OK(loomc_module_get_interop_view(
+      module.get(), loomc_allocator_system(), &view, &result));
+  ResultPtr result_ptr(result);
+  ASSERT_TRUE(loomc_result_succeeded(result));
+  ASSERT_NE(view.type_formatter.fn, nullptr);
+
+  loom_output_stream_t stream = {
+      .write =
+          [](void*, iree_string_view_t) {
+            return iree_status_from_code(IREE_STATUS_RESOURCE_EXHAUSTED);
+          },
+  };
+  const loom_type_t type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4),
+      /*encoding_id=*/0);
+  EXPECT_THAT(
+      view.type_formatter.fn(type, view.type_formatter.user_data, &stream),
+      iree::testing::status::StatusIs(iree::StatusCode::kResourceExhausted));
+  EXPECT_EQ(stream.offset, 0u);
 }
 
 TEST(InteropTest, RejectsStructurallyInvalidModuleBeforeProjection) {
@@ -310,6 +388,8 @@ func.def @missing_result(%value: i32) -> (i32, i32) {
   EXPECT_FALSE(loomc_result_succeeded(result_ptr.get()));
   EXPECT_EQ(view.module, nullptr);
   EXPECT_EQ(view.source_table, nullptr);
+  EXPECT_EQ(view.type_formatter.fn, nullptr);
+  EXPECT_EQ(view.type_formatter.user_data, nullptr);
 
   bool found_structural_error = false;
   for (loomc_host_size_t i = 0;
@@ -351,6 +431,7 @@ func.def public @identity(%value: i32) -> (i32) {
   ASSERT_TRUE(loomc_result_succeeded(result_ptr.get()));
   EXPECT_EQ(verified_view.module, mutable_view.module);
   EXPECT_EQ(verified_view.source_table, mutable_view.source_table);
+  EXPECT_NE(verified_view.type_formatter.fn, nullptr);
   EXPECT_TRUE(iree_string_view_equal(
       loom_string_table_get(&verified_view.module->strings,
                             verified_view.module->name_id),

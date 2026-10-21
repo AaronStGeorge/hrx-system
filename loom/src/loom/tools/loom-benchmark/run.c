@@ -764,7 +764,7 @@ iree_status_t loom_benchmark_run_file(
           .workspace = compiler_workspace,
           .pass_program = pass_program,
           .module = module,
-          .native_module = native_module,
+          .module_view = &module_view,
           .module_plan = &module_plan,
           .work_plan = &work_plan,
           .config = &config_options,

@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "loom/format/text/printer.h"
 #include "loom/tooling/cli/loomc_result.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/source_report.h"
@@ -244,19 +243,21 @@ static iree_status_t loom_benchmark_write_config_json(
 }
 
 static iree_status_t loom_benchmark_write_binding_type_json(
-    const loom_module_t* module, loom_type_t type,
+    loom_type_formatter_t type_formatter, loom_type_t type,
     loom_json_object_writer_t* object) {
   IREE_RETURN_IF_ERROR(loom_json_object_begin_field(object, IREE_SV("type")));
   loom_json_string_writer_t string;
   IREE_RETURN_IF_ERROR(loom_json_string_begin(object->stream, &string));
-  IREE_RETURN_IF_ERROR(loom_text_print_type(type, module, &string.stream));
+  IREE_RETURN_IF_ERROR(
+      type_formatter.fn(type, type_formatter.user_data, &string.stream));
   return loom_json_string_end(&string);
 }
 
 static iree_status_t loom_benchmark_write_bindings_json(
-    const loom_module_t* module,
+    const loomc_module_interop_view_t* module_view,
     const loom_benchmark_case_request_capture_t* capture,
     loom_output_stream_t* stream) {
+  const loom_module_t* module = module_view->module;
   loom_json_array_writer_t array;
   IREE_RETURN_IF_ERROR(loom_json_array_begin(stream, &array));
   for (iree_host_size_t i = 0; i < capture->binding_count; ++i) {
@@ -271,8 +272,8 @@ static iree_status_t loom_benchmark_write_bindings_json(
         &object, IREE_SV("value_id"), value_id));
     IREE_RETURN_IF_ERROR(loom_json_object_write_string_field_if_nonempty(
         &object, IREE_SV("name"), loom_benchmark_value_name(module, value_id)));
-    IREE_RETURN_IF_ERROR(
-        loom_benchmark_write_binding_type_json(module, value->type, &object));
+    IREE_RETURN_IF_ERROR(loom_benchmark_write_binding_type_json(
+        module_view->type_formatter, value->type, &object));
     if (!loom_value_is_block_arg(value)) {
       const loom_op_t* defining_op = loom_value_owner_op(value);
       if (defining_op != NULL) {
@@ -616,7 +617,7 @@ static iree_status_t loom_benchmark_write_capture_json(
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("case"), case_plan->name));
   IREE_RETURN_IF_ERROR(loom_benchmark_write_sample_fields_json(
-      options->native_module, case_plan, sample, &object));
+      options->module_view->module, case_plan, sample, &object));
 
   const loom_benchmark_case_request_options_t capture_options = {
       .workspace = options->workspace,
@@ -670,7 +671,7 @@ static iree_status_t loom_benchmark_write_capture_json(
           loom_json_object_begin_field(&object, IREE_SV("command_bindings"));
     }
     if (iree_status_is_ok(status)) {
-      status = loom_benchmark_write_bindings_json(options->native_module,
+      status = loom_benchmark_write_bindings_json(options->module_view,
                                                   &capture, stream);
     }
     if (iree_status_is_ok(status)) {
@@ -950,7 +951,7 @@ iree_status_t loom_benchmark_export_compile_requests(
   IREE_ASSERT_ARGUMENT(options->workspace);
   IREE_ASSERT_ARGUMENT(options->pass_program);
   IREE_ASSERT_ARGUMENT(options->module);
-  IREE_ASSERT_ARGUMENT(options->native_module);
+  IREE_ASSERT_ARGUMENT(options->module_view);
   IREE_ASSERT_ARGUMENT(options->module_plan);
   IREE_ASSERT_ARGUMENT(options->work_plan);
   IREE_ASSERT_ARGUMENT(options->config);

@@ -54,7 +54,9 @@ typedef iree_status_t (*loom_type_format_fn_t)(loom_type_t type,
 // A type formatter: callback + context. When .fn is NULL, TYPE params
 // render as "<type>".
 typedef struct loom_type_formatter_t {
+  // Synchronous rendering callback, or NULL when no formatter is available.
   loom_type_format_fn_t fn;
+  // Borrowed callback state that must outlive each rendering call.
   void* user_data;
 } loom_type_formatter_t;
 

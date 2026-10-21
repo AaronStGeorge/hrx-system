@@ -94,7 +94,6 @@ loom_cc_library(
     loom::error::diagnostic
     loom::error::json_sink
     loom::error::renderer
-    loom::format::text::printer
     loom::ir
     loom::ir::facts
     loom::ops::check

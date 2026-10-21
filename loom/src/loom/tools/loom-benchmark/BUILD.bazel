@@ -172,7 +172,6 @@ loom_cc_library(
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:json_sink",
         "//loom/src/loom/error:renderer",
-        "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops/check",
