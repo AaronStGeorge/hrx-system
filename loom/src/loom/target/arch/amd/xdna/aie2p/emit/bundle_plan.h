@@ -18,12 +18,6 @@
 extern "C" {
 #endif
 
-// Sentinel used when a physical slot was synthesized by the target planner.
-#define LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE UINT32_MAX
-
-// Architectural core program-memory capacity in bytes.
-#define LOOM_AIE2P_CORE_PROGRAM_MEMORY_SIZE 16384u
-
 typedef struct loom_aie2p_bundle_plan_options_t {
   // Whether this entry program preserves its incoming link register across
   // direct helper calls.

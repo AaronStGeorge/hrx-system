@@ -1951,6 +1951,12 @@ static iree_status_t loom_low_schedule_build(
     }
   }
 
+  loom_low_loop_execution_index_t loop_execution = {0};
+  if (iree_status_is_ok(status) && state.error_count == 0) {
+    status = loom_low_loop_execution_index_build(
+        options->loop_execution, state.body, arena, &loop_execution);
+  }
+
   if (iree_status_is_ok(status)) {
     *out_table = (loom_low_schedule_table_t){
         .module = model->context.module,
@@ -1978,6 +1984,7 @@ static iree_status_t loom_low_schedule_build(
         .cfg_graph = model->cfg_graph,
         .loop_forest = model->loop_forest,
         .loop_nest = model->loop_nest,
+        .loop_execution = loop_execution,
         .nodes = state.nodes,
         .node_count = node_count,
         .scopes = state.scopes,

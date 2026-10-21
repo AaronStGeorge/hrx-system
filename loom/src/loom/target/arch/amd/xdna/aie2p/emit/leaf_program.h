@@ -19,6 +19,12 @@
 extern "C" {
 #endif
 
+// Sentinel used when a physical slot was synthesized by the target planner.
+#define LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE UINT32_MAX
+
+// Architectural core program-memory capacity in bytes.
+#define LOOM_AIE2P_CORE_PROGRAM_MEMORY_SIZE 16384u
+
 enum loom_aie2p_planned_slot_flag_bits_e {
   // Slot is a planner-synthesized architectural NOP.
   LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP = 1u << 0,
@@ -30,6 +36,8 @@ enum loom_aie2p_planned_slot_flag_bits_e {
   LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_STORAGE_ADDRESS = 1u << 3,
   // Slot materializes one symbolic read-only data address.
   LOOM_AIE2P_PLANNED_SLOT_FLAG_READ_ONLY_DATA_ADDRESS = 1u << 4,
+  // Slot programs architectural zero-overhead-loop state.
+  LOOM_AIE2P_PLANNED_SLOT_FLAG_HARDWARE_LOOP_SETUP = 1u << 5,
 };
 typedef uint16_t loom_aie2p_planned_slot_flags_t;
 
@@ -95,6 +103,14 @@ typedef struct loom_aie2p_planned_read_only_data_fixup_t {
   // Retained read-only data record referenced by the instruction.
   uint32_t read_only_data_ordinal;
 } loom_aie2p_planned_read_only_data_fixup_t;
+
+// One contribution-relative executable address programmed into core state.
+typedef struct loom_aie2p_planned_code_address_fixup_t {
+  // Bundle containing the MOVXM address materialization.
+  uint32_t bundle_index;
+  // Byte offset from the leaf entry symbol to the executable target.
+  uint32_t target_byte_offset;
+} loom_aie2p_planned_code_address_fixup_t;
 
 // One detached immutable data definition required by the leaf program.
 typedef struct loom_aie2p_leaf_read_only_data_t {
@@ -210,6 +226,10 @@ typedef struct loom_aie2p_leaf_program_plan_t {
   const loom_aie2p_planned_read_only_data_fixup_t* read_only_data_fixups;
   // Number of records in |read_only_data_fixups|.
   iree_host_size_t read_only_data_fixup_count;
+  // Core code-address sites targeting this contribution.
+  const loom_aie2p_planned_code_address_fixup_t* code_address_fixups;
+  // Number of records in |code_address_fixups|.
+  iree_host_size_t code_address_fixup_count;
   // Exact byte length after variable-width bundle packing.
   iree_host_size_t encoded_byte_length;
   // Union of atomic register units written by committed native instructions,

@@ -431,6 +431,7 @@ static iree_status_t loom_low_emission_frame_build_impl(
       .storage_transport = storage_transport,
       .retained_blocks = retained_blocks,
       .memory_accesses = options->memory_accesses,
+      .loop_execution = options->loop_execution,
       .residency = out_frame->residency,
       .allocation_budgets = options->allocation_budgets,
       .allocation_budget_count = options->allocation_budget_count,
@@ -794,7 +795,7 @@ static iree_status_t loom_low_emission_frame_try_loop_placement(
     loom_low_emission_frame_t* frame) {
   loom_low_loop_placement_plan_t plan = {0};
   IREE_RETURN_IF_ERROR(loom_low_loop_placement_plan(
-      &frame->schedule, &frame->allocation, frame_options->loop_execution,
+      &frame->schedule, &frame->allocation,
       spill_free_options->loop_placement_cost_query,
       spill_free_options->loop_placement_cost_query_user_data, repair_arena,
       &plan));

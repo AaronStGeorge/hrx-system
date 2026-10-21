@@ -214,14 +214,13 @@ static iree_status_t loom_aie2p_native_relocation_patch_core_control(
   return iree_ok_status();
 }
 
-static iree_status_t loom_aie2p_native_relocation_patch_local_address(
+static iree_status_t loom_aie2p_native_relocation_patch_movxm(
     uint64_t target_address, uint64_t fixup_offset,
     loom_native_section_t* section) {
   if (fixup_offset > IREE_HOST_SIZE_MAX ||
       (iree_host_size_t)fixup_offset >= section->contents.data_length) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AIE2P local-address fixup lies outside its section");
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AIE2P MOVXM fixup lies outside its section");
   }
 
   uint8_t* packet_bytes =
@@ -245,9 +244,7 @@ static iree_status_t loom_aie2p_native_relocation_patch_local_address(
       loom_aie2p_encoding_find_instruction(IREE_SV("MOVXM"));
   IREE_ASSERT(movxm_instruction != LOOM_AIE2P_INSTRUCTION_ID_INVALID &&
               "generated AIE2P tables must contain MOVXM");
-  loom_aie2p_instruction_id_t address_instruction =
-      LOOM_AIE2P_INSTRUCTION_ID_INVALID;
-  loom_aie2p_encoded_slot_t* address_slot = NULL;
+  loom_aie2p_encoded_slot_t* movxm_slot = NULL;
   for (uint8_t i = 0; i < decoded_bundle.slot_count; ++i) {
     loom_aie2p_encoded_slot_t* slot = &decoded_bundle.slots[i];
     const iree_host_size_t candidate_count =
@@ -259,51 +256,47 @@ static iree_status_t loom_aie2p_native_relocation_patch_local_address(
       if (candidate != movxm_instruction) {
         continue;
       }
-      if (address_slot != NULL) {
+      if (movxm_slot != NULL) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
-            "AIE2P local-address relocation matches multiple MOVXM slots");
+            "AIE2P relocation matches multiple MOVXM slots");
       }
-      address_slot = slot;
-      address_instruction = candidate;
+      movxm_slot = slot;
     }
   }
-  if (address_slot == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AIE2P local-address relocation does not reference MOVXM");
+  if (movxm_slot == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AIE2P relocation does not reference MOVXM");
   }
 
-  const loom_aie2p_native_relocation_immediate_t address_immediate =
-      loom_aie2p_native_relocation_immediate(address_instruction);
-  const iree_host_size_t field_capacity = address_immediate.field_count;
+  const loom_aie2p_native_relocation_immediate_t target_immediate =
+      loom_aie2p_native_relocation_immediate(movxm_instruction);
+  const iree_host_size_t field_capacity = target_immediate.field_count;
   loom_aie2p_encoding_field_value_t* field_values =
       (loom_aie2p_encoding_field_value_t*)iree_alloca(field_capacity *
                                                       sizeof(*field_values));
   iree_host_size_t field_count = 0;
   IREE_RETURN_IF_ERROR(loom_aie2p_encoding_unpack_instruction(
-      address_instruction, address_slot->value, field_capacity, field_values,
+      movxm_instruction, movxm_slot->value, field_capacity, field_values,
       &field_count));
   if (target_address > INT64_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AIE2P local-memory address exceeds signed MOVXM range");
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AIE2P target exceeds signed MOVXM range");
   }
   uint64_t encoded_target = 0;
   IREE_RETURN_IF_ERROR(loom_aie2p_machine_encode_immediate(
-      address_immediate.immediate, (int64_t)target_address, &encoded_target));
+      target_immediate.immediate, (int64_t)target_address, &encoded_target));
   bool target_field_found = false;
   for (iree_host_size_t i = 0; i < field_count; ++i) {
-    if (field_values[i].field_id != address_immediate.field) {
+    if (field_values[i].field_id != target_immediate.field) {
       continue;
     }
     field_values[i].value = encoded_target;
     target_field_found = true;
   }
-  IREE_ASSERT(target_field_found &&
-              "generated local-address form must encode i");
+  IREE_ASSERT(target_field_found && "generated MOVXM form must encode i");
   IREE_RETURN_IF_ERROR(loom_aie2p_encoding_pack_instruction(
-      address_instruction, field_values, field_count, &address_slot->value));
+      movxm_instruction, field_values, field_count, &movxm_slot->value));
 
   loom_aie2p_encoding_packet_t encoded_bundle;
   IREE_RETURN_IF_ERROR(loom_aie2p_encoding_pack_bundle(
@@ -311,6 +304,32 @@ static iree_status_t loom_aie2p_native_relocation_patch_local_address(
       &encoded_bundle));
   IREE_ASSERT_EQ(encoded_bundle.data_length, packet_length);
   memcpy(packet_bytes, encoded_bundle.data, packet_length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_aie2p_native_relocation_validate_code_target(
+    const loom_native_object_fixup_layout_t* fixup_layout,
+    const loom_native_object_symbol_layout_t* target_layout,
+    uint64_t target_offset, const loom_native_section_t* source_section,
+    const loom_native_section_t* target_section) {
+  if (fixup_layout->section_index != target_layout->section_index) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AIE2P core code target must share its executable section");
+  }
+  if (source_section->storage != LOOM_NATIVE_SECTION_STORAGE_CONTENTS ||
+      (source_section->access & (LOOM_NATIVE_SECTION_ACCESS_READ |
+                                 LOOM_NATIVE_SECTION_ACCESS_EXECUTE)) !=
+          (LOOM_NATIVE_SECTION_ACCESS_READ |
+           LOOM_NATIVE_SECTION_ACCESS_EXECUTE)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AIE2P core code fixup requires executable contents");
+  }
+  if (target_offset >= target_section->contents.data_length) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AIE2P core code target lies outside its section");
+  }
   return iree_ok_status();
 }
 
@@ -367,28 +386,20 @@ iree_status_t loom_aie2p_native_object_apply_fixups(
         const bool is_call =
             fixup->relocation_kind ==
             LOOM_AIE2P_NATIVE_RELOCATION_KIND_CORE_CALL_ABSOLUTE;
-        if (fixup_layout->section_index != target_layout->section_index) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "AIE2P core control target must share its executable section");
-        }
-        if (source_section->storage != LOOM_NATIVE_SECTION_STORAGE_CONTENTS ||
-            (source_section->access & (LOOM_NATIVE_SECTION_ACCESS_READ |
-                                       LOOM_NATIVE_SECTION_ACCESS_EXECUTE)) !=
-                (LOOM_NATIVE_SECTION_ACCESS_READ |
-                 LOOM_NATIVE_SECTION_ACCESS_EXECUTE)) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "AIE2P core branch fixup requires executable contents");
-        }
-        if (target_offset >= target_section->contents.data_length) {
-          return iree_make_status(
-              IREE_STATUS_OUT_OF_RANGE,
-              "AIE2P core branch target lies outside its code section");
-        }
+        IREE_RETURN_IF_ERROR(loom_aie2p_native_relocation_validate_code_target(
+            fixup_layout, target_layout, target_offset, source_section,
+            target_section));
         IREE_RETURN_IF_ERROR(loom_aie2p_native_relocation_patch_core_control(
             is_call, target_address, fixup_layout->section_offset,
             source_section));
+        break;
+      }
+      case LOOM_AIE2P_NATIVE_RELOCATION_KIND_CORE_CODE_ADDRESS_ABSOLUTE: {
+        IREE_RETURN_IF_ERROR(loom_aie2p_native_relocation_validate_code_target(
+            fixup_layout, target_layout, target_offset, source_section,
+            target_section));
+        IREE_RETURN_IF_ERROR(loom_aie2p_native_relocation_patch_movxm(
+            target_address, fixup_layout->section_offset, source_section));
         break;
       }
       case LOOM_AIE2P_NATIVE_RELOCATION_KIND_LOCAL_ADDRESS_ABSOLUTE:
@@ -420,7 +431,7 @@ iree_status_t loom_aie2p_native_object_apply_fixups(
               IREE_STATUS_OUT_OF_RANGE,
               "AIE2P local address lies outside its storage domain");
         }
-        IREE_RETURN_IF_ERROR(loom_aie2p_native_relocation_patch_local_address(
+        IREE_RETURN_IF_ERROR(loom_aie2p_native_relocation_patch_movxm(
             target_address, fixup_layout->section_offset, source_section));
         break;
       case LOOM_AIE2P_NATIVE_RELOCATION_KIND_NONE:

@@ -187,6 +187,7 @@ loom_cc_library(
     loom::codegen::low::function_model
     loom::codegen::low::function_requirements
     loom::codegen::low::immediates
+    loom::codegen::low::loop_execution
     loom::codegen::low::memory_access
     loom::codegen::low::placement
     loom::codegen::low::representation_binding

@@ -10,7 +10,6 @@
 #define LOOM_CODEGEN_LOW_LOOP_PLACEMENT_H_
 
 #include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/loop_execution.h"
 #include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
@@ -77,7 +76,6 @@ typedef struct loom_low_loop_placement_plan_t {
 iree_status_t loom_low_loop_placement_plan(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    const loom_low_loop_execution_map_t* loop_execution,
     loom_low_loop_placement_cost_query_fn_t cost_query,
     void* cost_query_user_data, iree_arena_allocator_t* arena,
     loom_low_loop_placement_plan_t* out_plan);

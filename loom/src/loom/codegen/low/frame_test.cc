@@ -247,19 +247,25 @@ TEST_F(LowEmissionFrameTest, LoopPlacementConsumesRetainedHeaderCount) {
                                                &arena_, &frame, &accepted));
   ASSERT_TRUE(accepted);
   ASSERT_EQ(frame.allocation.spill_count, 2u);
+  const loom_low_loop_execution_facts_t* retained_facts =
+      loom_low_loop_execution_index_lookup(&frame.schedule.loop_execution,
+                                           loop);
+  ASSERT_NE(retained_facts, nullptr);
+  EXPECT_EQ(retained_facts->trip_count, 7u);
+  EXPECT_EQ(retained_facts->count_kind, LOOM_LOW_LOOP_EXECUTION_COUNT_BOUNDED);
 
   LoopPlacementCost cost = {.maximum_execution_multiplier = 7};
   loom_low_loop_placement_plan_t rejected_plan = {};
   IREE_ASSERT_OK(loom_low_loop_placement_plan(
-      &frame.schedule, &frame.allocation, loop_execution,
-      QueryLoopPlacementCost, &cost, &arena_, &rejected_plan));
+      &frame.schedule, &frame.allocation, QueryLoopPlacementCost, &cost,
+      &arena_, &rejected_plan));
   EXPECT_EQ(rejected_plan.candidate_count, 0u);
 
   cost.maximum_execution_multiplier = 8;
   loom_low_loop_placement_plan_t accepted_plan = {};
   IREE_ASSERT_OK(loom_low_loop_placement_plan(
-      &frame.schedule, &frame.allocation, loop_execution,
-      QueryLoopPlacementCost, &cost, &arena_, &accepted_plan));
+      &frame.schedule, &frame.allocation, QueryLoopPlacementCost, &cost,
+      &arena_, &accepted_plan));
   ASSERT_EQ(accepted_plan.candidate_count, 1u);
   EXPECT_EQ(cost.query_count, 2u);
 
@@ -285,7 +291,8 @@ TEST_F(LowEmissionFrameTest, LoopPlacementMultipliesCrossedLoopCounts) {
   loom_region_t* body = loom_low_func_def_body(function);
   loom_block_t* entry = loom_region_block(body, 0);
   loom_op_t* outer_branch = loom_region_block(body, 1)->last_op;
-  loom_op_t* inner_branch = loom_region_block(body, 3)->last_op;
+  loom_block_t* inner = loom_region_block(body, 3);
+  loom_op_t* inner_branch = inner->last_op;
   const loom_low_allocation_budget_t budget = {
       .register_class = IREE_SV("test.i32"),
       .max_units = 2,
@@ -303,41 +310,50 @@ TEST_F(LowEmissionFrameTest, LoopPlacementMultipliesCrossedLoopCounts) {
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
   };
-  loom_low_emission_frame_t frame = {};
-  bool accepted = false;
-  IREE_ASSERT_OK(loom_low_emission_frame_build(module.get(), function, &options,
-                                               &arena_, &frame, &accepted));
-  ASSERT_TRUE(accepted);
-  ASSERT_GT(frame.allocation.spill_count, 0u);
-
-  const auto expect_plan =
-      [&](bool has_outer_count, uint64_t outer_count, uint64_t inner_count,
-          iree_host_size_t expected_candidates, uint32_t expected_queries) {
-        loom_low_loop_execution_map_t* loop_execution = nullptr;
-        IREE_ASSERT_OK(
-            loom_low_loop_execution_map_allocate(&arena_, &loop_execution));
-        IREE_ASSERT_OK(loom_low_loop_execution_map_insert(
-            loop_execution, inner_branch,
-            {
-                .trip_count = inner_count,
-                .count_kind = LOOM_LOW_LOOP_EXECUTION_COUNT_EXACT,
-            }));
-        if (has_outer_count) {
-          IREE_ASSERT_OK(loom_low_loop_execution_map_insert(
-              loop_execution, outer_branch,
-              {
-                  .trip_count = outer_count,
-                  .count_kind = LOOM_LOW_LOOP_EXECUTION_COUNT_BOUNDED,
-              }));
-        }
-        LoopPlacementCost cost = {.maximum_execution_multiplier = 8};
-        loom_low_loop_placement_plan_t plan = {};
-        IREE_ASSERT_OK(loom_low_loop_placement_plan(
-            &frame.schedule, &frame.allocation, loop_execution,
-            QueryLoopPlacementCost, &cost, &arena_, &plan));
-        EXPECT_EQ(plan.candidate_count, expected_candidates);
-        EXPECT_EQ(cost.query_count, expected_queries);
-      };
+  const auto expect_plan = [&](bool has_outer_count, uint64_t outer_count,
+                               uint64_t inner_count,
+                               iree_host_size_t expected_candidates,
+                               uint32_t expected_queries) {
+    loom_low_loop_execution_map_t* loop_execution = nullptr;
+    IREE_ASSERT_OK(
+        loom_low_loop_execution_map_allocate(&arena_, &loop_execution));
+    IREE_ASSERT_OK(loom_low_loop_execution_map_insert(
+        loop_execution, inner_branch,
+        {
+            .trip_count = inner_count,
+            .count_kind = LOOM_LOW_LOOP_EXECUTION_COUNT_EXACT,
+        }));
+    if (has_outer_count) {
+      IREE_ASSERT_OK(loom_low_loop_execution_map_insert(
+          loop_execution, outer_branch,
+          {
+              .trip_count = outer_count,
+              .count_kind = LOOM_LOW_LOOP_EXECUTION_COUNT_BOUNDED,
+          }));
+    }
+    loom_low_emission_frame_options_t scenario_options = options;
+    scenario_options.loop_execution = loop_execution;
+    loom_low_emission_frame_t frame = {};
+    bool accepted = false;
+    IREE_ASSERT_OK(loom_low_emission_frame_build(
+        module.get(), function, &scenario_options, &arena_, &frame, &accepted));
+    ASSERT_TRUE(accepted);
+    ASSERT_GT(frame.allocation.spill_count, 0u);
+    const loom_low_loop_execution_facts_t* retained_inner_facts =
+        loom_low_loop_execution_index_lookup(&frame.schedule.loop_execution,
+                                             inner);
+    ASSERT_NE(retained_inner_facts, nullptr);
+    EXPECT_EQ(retained_inner_facts->trip_count, inner_count);
+    EXPECT_EQ(retained_inner_facts->count_kind,
+              LOOM_LOW_LOOP_EXECUTION_COUNT_EXACT);
+    LoopPlacementCost cost = {.maximum_execution_multiplier = 8};
+    loom_low_loop_placement_plan_t plan = {};
+    IREE_ASSERT_OK(loom_low_loop_placement_plan(
+        &frame.schedule, &frame.allocation, QueryLoopPlacementCost, &cost,
+        &arena_, &plan));
+    EXPECT_EQ(plan.candidate_count, expected_candidates);
+    EXPECT_EQ(cost.query_count, expected_queries);
+  };
 
   expect_plan(false, 0, 4, 0, 1);
   expect_plan(false, 0, 0, 1, 1);

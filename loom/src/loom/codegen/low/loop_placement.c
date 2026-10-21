@@ -137,9 +137,7 @@ loom_low_loop_placement_execution_index_factor(
 }
 
 static iree_status_t loom_low_loop_placement_execution_index_build(
-    const loom_low_schedule_table_t* schedule,
-    const loom_low_loop_execution_map_t* loop_execution,
-    iree_arena_allocator_t* arena,
+    const loom_low_schedule_table_t* schedule, iree_arena_allocator_t* arena,
     loom_low_loop_placement_execution_index_t* out_index) {
   *out_index = (loom_low_loop_placement_execution_index_t){
       .schedule = schedule,
@@ -148,9 +146,7 @@ static iree_status_t loom_low_loop_placement_execution_index_build(
   if (forest->interval_count == 0 || forest->innermost_loop_indices == NULL) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_low_loop_execution_index_build(
-      loop_execution, loom_low_func_def_body(schedule->function_op), arena,
-      &out_index->facts));
+  out_index->facts = schedule->loop_execution;
 
   uint32_t maximum_depth = 0;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, forest->interval_count,
@@ -293,7 +289,6 @@ static bool loom_low_loop_placement_execution_multiplier(
 typedef struct loom_low_loop_placement_planner_t {
   const loom_low_schedule_table_t* schedule;
   const loom_low_allocation_table_t* allocation;
-  const loom_low_loop_execution_map_t* loop_execution;
   loom_low_loop_placement_cost_query_fn_t cost_query;
   void* cost_query_user_data;
   iree_arena_allocator_t* arena;
@@ -390,8 +385,7 @@ static iree_status_t loom_low_loop_placement_match_candidate(
   }
   if (!planner->execution_index_built) {
     IREE_RETURN_IF_ERROR(loom_low_loop_placement_execution_index_build(
-        schedule, planner->loop_execution, planner->arena,
-        &planner->execution_index));
+        schedule, planner->arena, &planner->execution_index));
     planner->execution_index_built = true;
   }
   uint64_t execution_multiplier = 0;
@@ -418,12 +412,11 @@ static iree_status_t loom_low_loop_placement_match_candidate(
 iree_status_t loom_low_loop_placement_plan(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    const loom_low_loop_execution_map_t* loop_execution,
     loom_low_loop_placement_cost_query_fn_t cost_query,
     void* cost_query_user_data, iree_arena_allocator_t* arena,
     loom_low_loop_placement_plan_t* out_plan) {
   *out_plan = (loom_low_loop_placement_plan_t){0};
-  if (loop_execution == NULL || cost_query == NULL ||
+  if (schedule->loop_execution.facts_by_block == NULL || cost_query == NULL ||
       allocation->spill_plan_count == 0 || schedule->block_count < 2 ||
       schedule->scopes.scope_count != 0 ||
       loom_low_function_schedule(schedule->function_op) ==
@@ -436,7 +429,6 @@ iree_status_t loom_low_loop_placement_plan(
   loom_low_loop_placement_planner_t planner = {
       .schedule = schedule,
       .allocation = allocation,
-      .loop_execution = loop_execution,
       .cost_query = cost_query,
       .cost_query_user_data = cost_query_user_data,
       .arena = arena,

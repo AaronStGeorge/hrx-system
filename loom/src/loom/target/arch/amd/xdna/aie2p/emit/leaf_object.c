@@ -433,6 +433,8 @@ iree_status_t loom_aie2p_leaf_object_emit(
       !iree_host_size_checked_add(fixup_count, plan->storage_fixup_count,
                                   &fixup_count) ||
       !iree_host_size_checked_add(fixup_count, plan->read_only_data_fixup_count,
+                                  &fixup_count) ||
+      !iree_host_size_checked_add(fixup_count, plan->code_address_fixup_count,
                                   &fixup_count)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "AIE2P native fixup count exceeds host size");
@@ -505,6 +507,22 @@ iree_status_t loom_aie2p_leaf_object_emit(
         .target_symbol_index =
             read_only_data[data_fixup->read_only_data_ordinal].symbol_index,
         .addend = 0,
+    };
+  }
+  const iree_host_size_t code_address_fixup_start =
+      read_only_data_fixup_start + plan->read_only_data_fixup_count;
+  for (iree_host_size_t i = 0; i < plan->code_address_fixup_count; ++i) {
+    const loom_aie2p_planned_code_address_fixup_t* code_fixup =
+        &plan->code_address_fixups[i];
+    IREE_ASSERT_LT(code_fixup->bundle_index, plan->bundle_count);
+    IREE_ASSERT_LT(code_fixup->target_byte_offset, plan->encoded_byte_length);
+    fixups[code_address_fixup_start + i] = (loom_native_object_fixup_t){
+        .section_contribution_index = 0,
+        .section_offset = plan->bundles[code_fixup->bundle_index].byte_offset,
+        .relocation_kind =
+            LOOM_AIE2P_NATIVE_RELOCATION_KIND_CORE_CODE_ADDRESS_ABSOLUTE,
+        .target_symbol_index = 0,
+        .addend = code_fixup->target_byte_offset,
     };
   }
 

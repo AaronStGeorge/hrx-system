@@ -23,6 +23,7 @@
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/function_requirements.h"
+#include "loom/codegen/low/loop_execution.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/placement.h"
 #include "loom/codegen/low/schedule/dependencies.h"
@@ -753,6 +754,8 @@ typedef struct loom_low_schedule_options_t {
   // Optional source-derived memory summaries for the modeled function. Empty
   // uses conservative descriptor effect summaries.
   const loom_low_memory_access_map_t* memory_accesses;
+  // Optional producer-proven execution counts to index by final block order.
+  const loom_low_loop_execution_map_t* loop_execution;
   // Physical spill traffic incorporated into callable boundaries. The plan
   // adds boundary memory effects without mutating semantic operation traits.
   const struct loom_low_storage_transport_t* storage_transport;
@@ -846,6 +849,8 @@ typedef struct loom_low_schedule_table_t {
   loom_cfg_loop_forest_t loop_forest;
   // Semantic natural loops shared by target planning overlays.
   loom_cfg_loop_nest_t loop_nest;
+  // Producer-proven execution counts indexed by final source block order.
+  loom_low_loop_execution_index_t loop_execution;
   // Per-op schedule nodes in source order. Each node's array index is its
   // source-order ordinal within the whole low function body.
   const loom_low_schedule_node_t* nodes;

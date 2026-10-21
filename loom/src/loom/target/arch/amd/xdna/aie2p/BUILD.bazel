@@ -642,6 +642,8 @@ loom_cc_library(
         ":array_resident",
         ":artifact",
         ":core_descriptors",
+        ":descriptor_encoding",
+        ":encoding",
         ":leaf_compile",
         ":machine",
         ":provider",
@@ -844,6 +846,7 @@ loom_check_test_suite(
         "test/descriptors/scalar_stream.loom-test",
         "test/descriptors/vector_push.loom-test",
         "test/expansion_report.loom-test",
+        "test/hardware_loops.loom-test",
         "test/kernel_realization.loom-test",
         "test/leaf_alignment.loom-test",
         "test/leaf_allocation.loom-test",
@@ -1035,20 +1038,104 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "bundle_plan",
-    srcs = ["emit/bundle_plan.c"],
-    hdrs = ["emit/bundle_plan.h"],
+    name = "leaf_plan_metadata",
+    srcs = ["emit/leaf_plan_metadata.c"],
+    hdrs = ["emit/leaf_plan_metadata.h"],
+    deps = [
+        ":leaf_program",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:storage_layout",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_analysis",
+    srcs = ["emit/bundle_analysis.c"],
+    hdrs = ["emit/bundle_analysis.h"],
     deps = [
         ":core_descriptors",
         ":core_structure",
         ":descriptor_encoding",
         ":encoding",
-        ":leaf_program",
-        ":machine",
-        "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:loop_execution",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_alignment",
+    srcs = ["emit/bundle_alignment.c"],
+    hdrs = ["emit/bundle_alignment.h"],
+    deps = [
+        ":bundle_encoding",
+        ":core_descriptors",
+        ":descriptor_encoding",
+        ":encoding",
+        ":leaf_program",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_encoding",
+    srcs = ["emit/bundle_encoding.c"],
+    hdrs = ["emit/bundle_encoding.h"],
+    deps = [
+        ":core_descriptors",
+        ":descriptor_encoding",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:function_requirements",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low:storage_layout",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_fixup",
+    srcs = ["emit/bundle_fixup.c"],
+    hdrs = ["emit/bundle_fixup.h"],
+    deps = [
+        ":leaf_program",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_plan",
+    srcs = ["emit/bundle_plan.c"],
+    hdrs = ["emit/bundle_plan.h"],
+    deps = [
+        ":bundle_alignment",
+        ":bundle_analysis",
+        ":bundle_encoding",
+        ":bundle_fixup",
+        ":core_descriptors",
+        ":core_structure",
+        ":descriptor_encoding",
+        ":encoding",
+        ":leaf_plan_metadata",
+        ":leaf_program",
+        ":machine",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low/schedule:physical_issue",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",

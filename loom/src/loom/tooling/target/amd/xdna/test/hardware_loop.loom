@@ -1,0 +1,114 @@
+// A long single-block loop exercises native LC/LS/LE execution, including the
+// induction and loop-carried copies feeding the next iteration and the final
+// loop-carried value consumed after fallthrough.
+aie2p.target<array> @array_target
+
+pipeline.def<kernel> public retain target(@array_target) @hardware_loop_i32() run(%lhs: buffer, %rhs: buffer, %output: buffer) {
+  %lhs_aligned, %rhs_aligned, %output_aligned = buffer.assume.alignment %lhs, %rhs, %output {minimum_alignment = 64} : buffer, buffer, buffer
+  %memory = pipeline.memory<workgroup>[0, 3] : pool
+  %origin = index.constant 0 : offset
+  %storage_bytes = index.constant 64 : offset
+  %capacity = index.constant 1 : index
+  %lhs_storage = buffer.alloca<workgroup> pool(%memory) align(64) %storage_bytes : buffer
+  %lhs_slots = buffer.view %lhs_storage[%origin] : buffer -> view<1x16xi32>
+  %lhs_records = channel.bind<fifo> %lhs_slots, %capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %rhs_storage = buffer.alloca<workgroup> pool(%memory) align(64) %storage_bytes : buffer
+  %rhs_slots = buffer.view %rhs_storage[%origin] : buffer -> view<1x16xi32>
+  %rhs_records = channel.bind<fifo> %rhs_slots, %capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %output_storage = buffer.alloca<workgroup> pool(%memory) align(64) %storage_bytes : buffer
+  %output_slots = buffer.view %output_storage[%origin] : buffer -> view<1x16xi32>
+  %output_records = channel.bind<fifo> %output_slots, %capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %begin = index.constant 0 : index
+  %end = index.constant 16 : index
+  %step = index.constant 1 : index
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    %lhs_external = buffer.view %lhs_aligned[%origin] : buffer -> view<16xi32>
+    %lhs_write, %lhs_destination = channel.reserve %lhs_records : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %lhs_ingress = kernel.async.copy %lhs_external to %lhs_destination {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %lhs_incoming = kernel.async.group %lhs_ingress : kernel.async.token -> kernel.async.group
+    kernel.async.wait %lhs_incoming {newer_groups = 0} : kernel.async.group
+    channel.publish %lhs_write : write<tile<16xi32>>
+    %rhs_external = buffer.view %rhs_aligned[%origin] : buffer -> view<16xi32>
+    %rhs_write, %rhs_destination = channel.reserve %rhs_records : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %rhs_ingress = kernel.async.copy %rhs_external to %rhs_destination {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %rhs_incoming = kernel.async.group %rhs_ingress : kernel.async.token -> kernel.async.group
+    kernel.async.wait %rhs_incoming {newer_groups = 0} : kernel.async.group
+    channel.publish %rhs_write : write<tile<16xi32>>
+    %output_read, %output_source = channel.acquire %output_records : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+    %output_external = buffer.view %output_aligned[%origin] : buffer -> view<16xi32>
+    %egress = kernel.async.copy %output_source to %output_external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %outgoing = kernel.async.group %egress : kernel.async.token -> kernel.async.group
+    kernel.async.wait %outgoing {newer_groups = 0} : kernel.async.group
+    channel.release %output_read : read<tile<16xi32>>
+  }
+  pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
+    %lhs_read, %lhs_source = channel.acquire %lhs_records : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+    %rhs_read, %rhs_source = channel.acquire %rhs_records : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+    %output_write, %output_destination = channel.reserve %output_records : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %initial_state = scalar.constant 0 : i32
+    %final_state = scf.for %i = [%begin to %end step %step](%state = %initial_state : i32) -> (i32) {
+      %lhs_value = view.load %lhs_source[%i] : view<16xi32> -> i32
+      %rhs_value = view.load %rhs_source[%i] : view<16xi32> -> i32
+      %next_state = scalar.addi %state, %rhs_value : i32
+      %v0 = scalar.addi %lhs_value, %rhs_value : i32
+      %v1 = scalar.addi %v0, %rhs_value : i32
+      %v2 = scalar.addi %v1, %rhs_value : i32
+      %v3 = scalar.addi %v2, %rhs_value : i32
+      %v4 = scalar.addi %v3, %rhs_value : i32
+      %v5 = scalar.addi %v4, %rhs_value : i32
+      %v6 = scalar.addi %v5, %rhs_value : i32
+      %v7 = scalar.addi %v6, %rhs_value : i32
+      %v8 = scalar.addi %v7, %rhs_value : i32
+      %v9 = scalar.addi %v8, %rhs_value : i32
+      %v10 = scalar.addi %v9, %rhs_value : i32
+      %v11 = scalar.addi %v10, %rhs_value : i32
+      %v12 = scalar.addi %v11, %rhs_value : i32
+      %v13 = scalar.addi %v12, %rhs_value : i32
+      view.store %v13, %output_destination[%i] : i32, view<16xi32>
+      scf.yield %next_state : i32
+    }
+    view.store %final_state, %output_destination[%begin] : i32, view<16xi32>
+    channel.publish %output_write : write<tile<16xi32>>
+    channel.release %rhs_read : read<tile<16xi32>>
+    channel.release %lhs_read : read<tile<16xi32>>
+  }
+}
+
+func.def @hardware_loop_reference(%lhs: buffer, %rhs: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs[%origin] : buffer -> view<16xi32>
+  %rhs_view = buffer.view %rhs[%origin] : buffer -> view<16xi32>
+  %output_view = buffer.view %output[%origin] : buffer -> view<16xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 16 : index
+  %step = index.constant 1 : index
+  %scale = scalar.constant 14 : i32
+  %initial_state = scalar.constant 0 : i32
+  %final_state = scf.for %i = [%begin to %end step %step](%state = %initial_state : i32) -> (i32) {
+    %lhs_value = view.load %lhs_view[%i] : view<16xi32> -> i32
+    %rhs_value = view.load %rhs_view[%i] : view<16xi32> -> i32
+    %next_state = scalar.addi %state, %rhs_value : i32
+    %scaled_rhs = scalar.muli %rhs_value, %scale : i32
+    %expected = scalar.addi %lhs_value, %scaled_rhs : i32
+    view.store %expected, %output_view[%i] : i32, view<16xi32>
+    scf.yield %next_state : i32
+  }
+  view.store %final_state, %output_view[%begin] : i32, view<16xi32>
+  func.return
+}
+
+check.scenario public @hardware_loop_induction_and_exit {
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %lhs = check.generate.random.uniform seed(%seed) range(-4096 to 4096) : tensor<16xi32>
+    %rhs = check.generate.random.uniform seed(%seed) range(-1024 to 1024) : tensor<16xi32>
+    %output_storage = check.generate.fill value(-1515870811) : tensor<48xi32>
+    %output = check.tensor.view %output_storage offset(64) : tensor<48xi32> -> tensor<16xi32>
+    check.compare<@hardware_loop_i32, @hardware_loop_reference>(%lhs, %rhs, %output) : (tensor<16xi32>, tensor<16xi32>, tensor<16xi32>) -> () {
+      check.expect.equal actual(%lhs) expected(%lhs) : tensor<16xi32>
+      check.expect.equal actual(%rhs) expected(%rhs) : tensor<16xi32>
+      check.expect.equal actual(%output_storage) expected(%output_storage) : tensor<48xi32>
+    }
+  }
+  check.return
+}

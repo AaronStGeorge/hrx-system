@@ -740,8 +740,73 @@ _DENSE_MATRIX_DESCRIPTOR_SPECS = (
 )
 
 
+def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
+    """Models the complete immediate zero-overhead-loop setup family."""
+
+    return tuple(
+        _DescriptorSpec(
+            form,
+            f"{_TARGET_KEY}.state.{key}",
+            semantic_tag,
+            itinerary,
+            storage_overrides=(("dst", register_class),),
+            implicit_outputs=("dst",),
+            asm_mnemonic=mnemonic,
+            symbolic_immediates=(("i",) if symbolic else ()),
+            flags=(DescriptorFlag.STATE_ASSIGNMENT,),
+        )
+        for (
+            form,
+            key,
+            semantic_tag,
+            itinerary,
+            register_class,
+            mnemonic,
+            symbolic,
+        ) in (
+            (
+                "MOVA",
+                "loop-count.short",
+                "state.write.loop-count",
+                "II_MOVA_mLCaCg",
+                "mLCaCg",
+                "set.loop-count.short",
+                False,
+            ),
+            (
+                "MOVXM",
+                "loop-count.long",
+                "state.write.loop-count",
+                "II_MOVXM_mLCmCg",
+                "mLCmCg",
+                "set.loop-count.long",
+                False,
+            ),
+            (
+                "MOVXM",
+                "loop-start-address",
+                "state.write.loop-start-address",
+                "II_MOVXM_mLSm",
+                "mLSm",
+                "set.loop-start-address",
+                True,
+            ),
+            (
+                "MOVXM",
+                "loop-end-address",
+                "state.write.loop-end-address",
+                "II_MOVXM_mLEm",
+                "mLEm",
+                "set.loop-end-address",
+                True,
+            ),
+        )
+    )
+
+
 _BASE_DESCRIPTOR_SPECS = (
     *_address_descriptor_specs(),
+    *_loop_setup_descriptor_specs(),
     _DescriptorSpec(
         "ADD_NC_mv_add_ri",
         f"{_TARGET_KEY}.add.i32.immediate.shift",

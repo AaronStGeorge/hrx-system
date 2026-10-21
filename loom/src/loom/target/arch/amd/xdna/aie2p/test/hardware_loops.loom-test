@@ -1,0 +1,67 @@
+// RUN: emit aie2p-xdna input=source-low output=hardware-loops
+
+aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
+
+aie2p.target<core> @core_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
+
+low.func.def public retain target<amd.xdna.aie2p.array>(@array_target) abi(array_program) abi_layout({binding_count = 3}) @hardware_loop_pipeline() asm {
+  %worker_count = constant.u32 1 : reg<aie2p.array.scalar : index>
+  %workers = group %worker_count
+  %worker_rank = constant.u32 0 : reg<aie2p.array.scalar : index>
+  %worker = worker %workers, %worker_rank, @hardware_loop_worker
+  %lhs = binding 0, "read"
+  %rhs = binding 1, "read"
+  %output = binding 2, "write"
+  %lhs_sender = sender %lhs, 0 : reg<aie2p.array.sender : tile<4xi32>>
+  %worker_receiver_0 = receiver %worker, 0 : reg<aie2p.array.receiver : tile<4xi32>>
+  %lhs_capacity = constant.u32 2 : reg<aie2p.array.scalar : index>
+  %one_record = constant.u32 1 : reg<aie2p.array.scalar : index>
+  %lhs_channel = channel %lhs_sender, %worker_receiver_0, %lhs_capacity, %one_record : reg<aie2p.array.channel : tile<4xi32>>
+  %rhs_sender = sender %rhs, 0 : reg<aie2p.array.sender : tile<4xi32>>
+  %worker_receiver_1 = receiver %worker, 1 : reg<aie2p.array.receiver : tile<4xi32>>
+  %rhs_capacity = constant.u32 2 : reg<aie2p.array.scalar : index>
+  %rhs_channel = channel %rhs_sender, %worker_receiver_1, %rhs_capacity, %one_record : reg<aie2p.array.channel : tile<4xi32>>
+  %worker_sender_2 = sender %worker, 2 : reg<aie2p.array.sender : tile<4xi32>>
+  %output_receiver = receiver %output, 0 : reg<aie2p.array.receiver : tile<4xi32>>
+  %output_capacity = constant.u32 2 : reg<aie2p.array.scalar : index>
+  %output_channel = channel %worker_sender_2, %output_receiver, %output_capacity, %one_record : reg<aie2p.array.channel : tile<4xi32>>
+  %worker_column = constant.u32 0 : reg<aie2p.array.scalar : index>
+  %worker_row = constant.u32 2 : reg<aie2p.array.scalar : index>
+  constrain.location %worker, %worker_column, %worker_row
+  return
+}
+
+func.def target(@core_target) @hardware_loop_worker(%lhs: buffer, %rhs: buffer, %output: buffer) {
+  %lhs_aligned, %rhs_aligned, %output_aligned = buffer.assume.alignment %lhs, %rhs, %output {minimum_alignment = 64} : buffer, buffer, buffer
+  %base = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_aligned[%base] : buffer -> view<4xi32>
+  %rhs_view = buffer.view %rhs_aligned[%base] : buffer -> view<4xi32>
+  %output_view = buffer.view %output_aligned[%base] : buffer -> view<4xi32>
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %count = index.constant 4 : index
+  scf.for %i = [%c0 to %count step %c1] {
+    %lhs_value = view.load %lhs_view[%i] : view<4xi32> -> i32
+    %rhs_value = view.load %rhs_view[%i] : view<4xi32> -> i32
+    %v0 = scalar.addi %lhs_value, %rhs_value : i32
+    %v1 = scalar.addi %v0, %rhs_value : i32
+    %v2 = scalar.addi %v1, %rhs_value : i32
+    %v3 = scalar.addi %v2, %rhs_value : i32
+    %v4 = scalar.addi %v3, %rhs_value : i32
+    %v5 = scalar.addi %v4, %rhs_value : i32
+    %v6 = scalar.addi %v5, %rhs_value : i32
+    %v7 = scalar.addi %v6, %rhs_value : i32
+    %v8 = scalar.addi %v7, %rhs_value : i32
+    %v9 = scalar.addi %v8, %rhs_value : i32
+    %v10 = scalar.addi %v9, %rhs_value : i32
+    %v11 = scalar.addi %v10, %rhs_value : i32
+    %v12 = scalar.addi %v11, %rhs_value : i32
+    %v13 = scalar.addi %v12, %rhs_value : i32
+    view.store %v13, %output_view[%i] : i32, view<4xi32>
+  }
+  func.return
+}
+
+// ----
+.text.hardware_loop_pipeline$worker$0: hardware_loops=1
+  loop 0: iterations=4 count_start_coissued=true end_setup_next=true start_aligned=true start_after_setup=true end_aligned=true end_on_bundle=true end_group_full_width=true setup_distance_valid=true body_control=0
