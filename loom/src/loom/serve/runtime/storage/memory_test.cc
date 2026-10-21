@@ -1274,16 +1274,21 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
       &statistics[1], &second));
   std::array<loom_serve_memory_operation_t*, 2> operations = {};
   {
-    // The source pool frees its acquisition capture after accounting native
-    // backing and before publishing completion to the queue. Hold that real
-    // allocator boundary while the owner admits an independent commitment.
+    // Select this acquisition before holding its publication. Earlier native
+    // operations may still free metadata after their backing has retired.
     loom_serve::testing::ScopedNativeHold gate(native,
-                                               IREE_ALLOCATOR_COMMAND_FREE);
+                                               IREE_ALLOCATOR_COMMAND_CALLOC);
     const loom_serve_memory_range_t first_range = {first, 0, kSlabSize};
     loom_serve_memory_admission_t commit_admission;
     IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
         pool, 1, &first_range, nullptr, 0, &commit_admission, &operations[0]));
     ASSERT_EQ(commit_admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
+    gate.WaitEntered();
+    EXPECT_EQ(loom_serve_memory_pool_statistics(pool).peak_bytes, 0u);
+    // The source pool frees its acquisition capture after accounting native
+    // backing and before publishing completion to the queue. Transfer the hold
+    // atomically so that this worker cannot pass the publication boundary.
+    gate.ReleaseAndArm(IREE_ALLOCATOR_COMMAND_FREE);
     gate.WaitEntered();
     EXPECT_FALSE(loom_serve_memory_operation_is_complete(operations[0]));
     const auto pending = loom_serve_memory_pool_statistics(pool);
