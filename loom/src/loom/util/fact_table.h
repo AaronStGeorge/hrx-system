@@ -43,6 +43,7 @@
 #include "loom/util/fact_extensions.h"
 #include "loom/util/fact_identity.h"
 #include "loom/util/fact_layout.h"
+#include "loom/util/fact_origin.h"
 #include "loom/util/fact_range.h"
 #include "loom/util/fact_select_dependencies.h"
 
@@ -71,68 +72,6 @@ typedef struct loom_condition_edge_projection_t
     loom_condition_edge_projection_t;
 typedef struct loom_cfg_graph_t loom_cfg_graph_t;
 typedef struct loom_target_facts_t loom_target_facts_t;
-
-// Scalar values that materialize every element of one aggregate value.
-typedef struct loom_value_fact_uniform_element_origin_t {
-  // Scalar value with the aggregate element type.
-  loom_value_id_t scalar_value_id;
-  // Scalar value preserving the elements before an exact float extension.
-  loom_value_id_t exact_scalar_value_id;
-} loom_value_fact_uniform_element_origin_t;
-
-// Static strided logical-lane origin for one aggregate value. Result lane N is
-// derived from source lane source_lane_offset + N * source_lane_stride. The
-// source and result may have different element types when an operation
-// preserves lane provenance while changing representation.
-typedef struct loom_value_fact_static_lane_origin_t {
-  // Aggregate source value containing the materialized lanes.
-  loom_value_id_t source_value_id;
-  // First logical source lane used by result lane zero.
-  uint32_t source_lane_offset;
-  // Logical source lane stride between adjacent result lanes.
-  uint32_t source_lane_stride;
-} loom_value_fact_static_lane_origin_t;
-
-// Static strided logical-lane origin preserving each lane's scalar value
-// exactly. Result lane N has the same value as source lane source_lane_offset +
-// N * source_lane_stride after conversion to the result element type. For
-// floating-point values the relation preserves signed zero and infinity but
-// does not promise NaN payload identity.
-typedef struct loom_value_fact_exact_lane_origin_t {
-  // Aggregate source value containing the exact lane values.
-  loom_value_id_t source_value_id;
-  // First logical source lane used by result lane zero.
-  uint32_t source_lane_offset;
-  // Logical source lane stride between adjacent result lanes.
-  uint32_t source_lane_stride;
-} loom_value_fact_exact_lane_origin_t;
-
-// Uniform scalar scale applied lanewise to one aggregate value. Result lane N
-// is source lane N multiplied by scale_value_id.
-typedef struct loom_value_fact_uniform_scale_origin_t {
-  // Aggregate source value containing the unscaled lanes.
-  loom_value_id_t source_value_id;
-  // Scalar value uniformly multiplied into each result lane.
-  loom_value_id_t scale_value_id;
-} loom_value_fact_uniform_scale_origin_t;
-
-// Structured contextual query materialized by an SSA value. The family is
-// shared with the paired static applicability attribute. The optional key
-// distinguishes projections within a family, such as one SPIR-V extension;
-// queries with no additional identity use an absent key.
-typedef struct loom_value_fact_contextual_query_origin_t {
-  // Context-local parameterized attribute family identifying query semantics.
-  loom_parameterized_attr_kind_t family_kind;
-
-  // Reserved for alignment and future query-origin flags. Always zero.
-  uint16_t reserved;
-
-  // Borrowed structured projection key owned by the current module.
-  loom_attribute_t key;
-} loom_value_fact_contextual_query_origin_t;
-
-static_assert(sizeof(loom_value_fact_contextual_query_origin_t) == 24,
-              "contextual query origin must remain 24 bytes");
 
 // Per-analysis context passed to op fact inference callbacks.
 struct loom_fact_context_t {
@@ -660,95 +599,6 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
 // update without removing its scope membership or allocating another record.
 void loom_value_fact_table_undefine(loom_value_fact_table_t* table,
                                     loom_value_id_t value_id);
-
-// Defines the scalar SSA values that materialize every element of aggregate
-// |value_id|. |scalar_value_id| has the aggregate element type, while
-// |exact_scalar_value_id| may have a narrower floating-point type whose value
-// is preserved exactly by extension to the aggregate element type.
-iree_status_t loom_value_fact_table_define_uniform_element_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_id_t scalar_value_id, loom_value_id_t exact_scalar_value_id);
-
-// Returns true when |value_id| has a known scalar SSA origin that materializes
-// every element. The query validates that |value_id| is shaped, the origin is
-// scalar, and both have matching element types.
-bool loom_value_fact_table_query_uniform_element_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_id_t* out_scalar_value_id);
-
-// Returns the exact scalar SSA origin for every element of |value_id|. The
-// origin may have a narrower floating-point type than the aggregate.
-bool loom_value_fact_table_query_exact_uniform_element_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_id_t* out_scalar_value_id);
-
-// Defines a static strided source-lane view for aggregate |value_id|. The
-// relation is a materialization proof and is validated by the query API against
-// the current module value types and static lane counts.
-iree_status_t loom_value_fact_table_define_static_lane_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_static_lane_origin_t origin);
-
-// Returns true when |value_id| has a known static source-lane view. The query
-// validates that both values are vectors with static lane counts and an
-// in-bounds strided source lane mapping. Element types may differ when the
-// defining operation preserves lane provenance while changing representation.
-bool loom_value_fact_table_query_static_lane_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_fact_static_lane_origin_t* out_origin);
-
-// Defines an exact strided source-lane value origin for aggregate |value_id|.
-// The relation is validated by the query API against the current module value
-// types and static lane counts.
-iree_status_t loom_value_fact_table_define_exact_lane_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_exact_lane_origin_t origin);
-
-// Returns true when |value_id| has a known exact source-lane value origin. The
-// query validates that both values are vectors with static lane counts and an
-// in-bounds strided source lane mapping. Element types may differ because an
-// exact floating-point extension preserves the represented value.
-bool loom_value_fact_table_query_exact_lane_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id, loom_value_fact_exact_lane_origin_t* out_origin);
-
-// Defines a value as the lanewise multiplication of |origin.source_value_id|
-// and scalar |origin.scale_value_id|. The relation is a materialization proof
-// and is validated by the query API against the current module value types.
-iree_status_t loom_value_fact_table_define_uniform_scale_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_uniform_scale_origin_t origin);
-
-// Returns true when |value_id| has a known uniform scalar-scale origin. The
-// query validates that the result/source are same-typed vectors and the scale
-// is a same-element scalar.
-bool loom_value_fact_table_query_uniform_scale_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id,
-    loom_value_fact_uniform_scale_origin_t* out_origin);
-
-// Defines |value_id| as the SSA materialization of one contextual query. The
-// family is the descriptor-backed static applicability family with the same
-// public dotted name. The optional structured key distinguishes projections
-// within that family without flattening them into strings or feature bits.
-iree_status_t loom_value_fact_table_define_contextual_query_origin(
-    loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_contextual_query_origin_t origin);
-
-// Returns true when scalar |value_id| materializes a contextual query. The
-// returned origin borrows its structured key from the current module and is
-// valid until the fact-table scope is cleared.
-bool loom_value_fact_table_query_contextual_query_origin(
-    const loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_value_id_t value_id,
-    loom_value_fact_contextual_query_origin_t* out_origin);
-
-// Returns the sparse value index for retained contextual query origins. The
-// borrowed values are unique, appear in first-definition order and remain valid
-// until the fact-table scope is cleared.
-void loom_value_fact_table_contextual_query_values(
-    const loom_value_fact_table_t* table, const loom_value_id_t** out_value_ids,
-    iree_host_size_t* out_value_count);
 
 // Returns the sparse value index for the populated fact scope. The borrowed
 // values are unique, appear in first-definition order, and remain valid until
