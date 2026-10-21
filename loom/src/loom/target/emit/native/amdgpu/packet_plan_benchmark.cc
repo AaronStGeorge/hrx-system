@@ -951,9 +951,10 @@ static PlanMetrics BuildReferencePlan(PacketPlanFixture& fixture,
         fixture.transient_arena()->used_allocation_size;
   } else {
     loom_amdgpu_packet_plan_t plan = {};
-    AbortOnError(loom_amdgpu_packet_plan_build(&fixture.frame().schedule,
-                                               &fixture.frame().allocation,
-                                               fixture.plan_arena(), &plan));
+    AbortOnError(loom_amdgpu_packet_plan_build(
+        &fixture.frame().schedule, &fixture.frame().allocation,
+        fixture.plan_arena(),
+        /*out_vopd_rejections=*/nullptr, &plan));
     metrics.wait_action_count = plan.wait_plan.action_count;
     metrics.hazard_record_count = plan.wait_plan.hazard_plan.record_count +
                                   plan.wait_states.hazard_plan.record_count;
@@ -1046,9 +1047,10 @@ static void BenchmarkPlan(benchmark::State& state, const FixtureSpec& spec,
       benchmark::DoNotOptimize(plan);
     } else {
       loom_amdgpu_packet_plan_t plan = {};
-      AbortOnError(loom_amdgpu_packet_plan_build(&fixture.frame().schedule,
-                                                 &fixture.frame().allocation,
-                                                 fixture.plan_arena(), &plan));
+      AbortOnError(loom_amdgpu_packet_plan_build(
+          &fixture.frame().schedule, &fixture.frame().allocation,
+          fixture.plan_arena(),
+          /*out_vopd_rejections=*/nullptr, &plan));
       benchmark::DoNotOptimize(plan);
     }
   }

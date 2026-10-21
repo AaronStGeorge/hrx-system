@@ -258,7 +258,8 @@ iree_status_t loom_amdgpu_kernel_plan_build(
   }
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
-      &frame->schedule, &frame->allocation, arena, &out_plan->packet_plan));
+      &frame->schedule, &frame->allocation, arena,
+      /*out_vopd_rejections=*/NULL, &out_plan->packet_plan));
   const loom_amdgpu_kernel_record_options_t record_options = {
       .abi_layout = options->abi_layout,
       .abi_verify = options->abi_verify,

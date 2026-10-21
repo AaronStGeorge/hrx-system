@@ -13,7 +13,12 @@
 iree_status_t loom_amdgpu_packet_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    iree_arena_allocator_t* arena, loom_amdgpu_packet_plan_t* out_plan) {
+    iree_arena_allocator_t* arena,
+    loom_amdgpu_vopd_rejection_table_t* out_vopd_rejections,
+    loom_amdgpu_packet_plan_t* out_plan) {
+  if (out_vopd_rejections != NULL) {
+    *out_vopd_rejections = (loom_amdgpu_vopd_rejection_table_t){0};
+  }
   *out_plan = (loom_amdgpu_packet_plan_t){0};
   *out_plan = (loom_amdgpu_packet_plan_t){
       .schedule = schedule,
@@ -59,7 +64,7 @@ iree_status_t loom_amdgpu_packet_plan_build(
     status = loom_amdgpu_vopd_plan_build(
         schedule, allocation, processor_properties, &out_plan->address_state,
         &out_plan->wait_packets, matrix_coexecution, arena, &transient_arena,
-        &out_plan->vopd_plan);
+        out_vopd_rejections, &out_plan->vopd_plan);
     iree_arena_checkpoint_restore(&vopd_checkpoint);
   }
   if (iree_status_is_ok(status) && matrix_coexecution != NULL) {

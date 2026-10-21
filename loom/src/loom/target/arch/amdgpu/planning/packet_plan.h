@@ -48,12 +48,15 @@ typedef struct loom_amdgpu_packet_plan_t {
 } loom_amdgpu_packet_plan_t;
 
 // Builds the target-owned AMDGPU packet plan for an addressability-accepted
-// emission frame. The caller must keep |schedule|, |allocation|, and |arena|
-// immutable/alive for as long as |out_plan| is used.
+// emission frame. |out_vopd_rejections| may be NULL unless detailed VOPD
+// diagnostics are required. The caller must keep |schedule|, |allocation|,
+// and |arena| immutable/alive for as long as either output is used.
 iree_status_t loom_amdgpu_packet_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    iree_arena_allocator_t* arena, loom_amdgpu_packet_plan_t* out_plan);
+    iree_arena_allocator_t* arena,
+    loom_amdgpu_vopd_rejection_table_t* out_vopd_rejections,
+    loom_amdgpu_packet_plan_t* out_plan);
 
 #ifdef __cplusplus
 }  // extern "C"

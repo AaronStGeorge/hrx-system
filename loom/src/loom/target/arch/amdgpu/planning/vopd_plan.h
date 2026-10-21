@@ -179,6 +179,14 @@ typedef struct loom_amdgpu_vopd_rejection_t {
   loom_amdgpu_vopd_rejection_component_t second;
 } loom_amdgpu_vopd_rejection_t;
 
+// Optional diagnostic records for rejected adjacent VOPD candidates.
+typedef struct loom_amdgpu_vopd_rejection_table_t {
+  // Rejections in scheduled order.
+  const loom_amdgpu_vopd_rejection_t* values;
+  // Number of rejection records in |values|.
+  iree_host_size_t count;
+} loom_amdgpu_vopd_rejection_table_t;
+
 // AMDGPU VOPD packetization table for one scheduled and allocated low function.
 typedef struct loom_amdgpu_vopd_plan_t {
   // Schedule table this plan was built from.
@@ -189,10 +197,6 @@ typedef struct loom_amdgpu_vopd_plan_t {
   const loom_amdgpu_vopd_pair_t* pairs;
   // Number of VOPD pair records.
   iree_host_size_t pair_count;
-  // Rejected adjacent VOPD candidates in scheduled order.
-  const loom_amdgpu_vopd_rejection_t* rejections;
-  // Number of VOPD rejection records.
-  iree_host_size_t rejection_count;
   // Per-scheduled-packet VOPD membership records. NULL when no pair exists.
   const loom_amdgpu_vopd_packet_t* packets;
   // Number of scheduled packets in the membership domain.
@@ -217,9 +221,11 @@ iree_string_view_t loom_amdgpu_vopd_rejection_reason_name(
 // Builds conservative AMDGPU VOPD pairings from a scheduled and allocated low
 // function. Optional address-state and wait-packet plans suppress pairs that
 // would consume an insertion point before the second component. Fixed
-// wait-state planning runs over the resulting native packet stream. The caller
-// must keep |schedule| and |allocation| immutable and |arena| alive for as long
-// as |out_plan| is used.
+// wait-state planning runs over the resulting native packet stream.
+// |out_rejections| may be NULL when detailed rejection diagnostics are not
+// required; ordinary emission leaves it NULL. The caller must keep |schedule|,
+// |allocation|, and |arena| immutable/alive for as long as either output is
+// used.
 iree_status_t loom_amdgpu_vopd_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -228,6 +234,7 @@ iree_status_t loom_amdgpu_vopd_plan_build(
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     struct loom_amdgpu_matrix_coexecution_t* matrix_coexecution,
     iree_arena_allocator_t* arena, iree_arena_allocator_t* transient_arena,
+    loom_amdgpu_vopd_rejection_table_t* out_rejections,
     loom_amdgpu_vopd_plan_t* out_plan);
 
 // Builds AMDGPU scheduling affinities for descriptors that can later form VOPD
@@ -242,9 +249,12 @@ iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
 const loom_amdgpu_vopd_packet_t* loom_amdgpu_vopd_plan_packet_at(
     const loom_amdgpu_vopd_plan_t* plan, iree_host_size_t packet_index);
 
-// Appends a compact JSON representation of |plan| to |builder|.
+// Appends a compact JSON representation of |plan| and its |rejections| to
+// |builder|.
 iree_status_t loom_amdgpu_vopd_plan_format_json(
-    const loom_amdgpu_vopd_plan_t* plan, iree_string_builder_t* builder);
+    const loom_amdgpu_vopd_plan_t* plan,
+    const loom_amdgpu_vopd_rejection_table_t* rejections,
+    iree_string_builder_t* builder);
 
 #ifdef __cplusplus
 }  // extern "C"
