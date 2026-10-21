@@ -919,23 +919,17 @@ static bool loom_link_materialized_symbol_has_visibility_attr(
     return false;
   }
   const loom_op_vtable_t* vtable = loom_op_vtable(module, symbol->defining_op);
-  if (!vtable || !vtable->attr_descriptors) {
+  if (!vtable || !vtable->symbol_def) {
     return false;
   }
-  const loom_attribute_t* attrs = loom_op_const_attrs(symbol->defining_op);
-  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
-    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
-    if (!iree_string_view_equal(loom_attr_descriptor_name(descriptor),
-                                IREE_SV("visibility"))) {
-      continue;
-    }
-    if (descriptor->attr_kind != LOOM_ATTR_ENUM ||
-        i >= symbol->defining_op->attribute_count) {
-      return false;
-    }
-    return loom_attr_as_enum(attrs[i]) != 0;
+  const uint8_t attr_index =
+      loom_symbol_definition_visibility_attr_index(vtable->symbol_def);
+  if (attr_index == LOOM_ATTR_INDEX_NONE ||
+      attr_index >= symbol->defining_op->attribute_count) {
+    return false;
   }
-  return false;
+  return loom_attr_as_enum(
+             loom_op_const_attrs(symbol->defining_op)[attr_index]) != 0;
 }
 
 static loom_link_symbol_flags_t loom_link_materialized_symbol_flags(

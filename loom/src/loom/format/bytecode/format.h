@@ -1225,7 +1225,7 @@ enum loom_bytecode_symbol_flag_bits_e {
   LOOM_BYTECODE_SYMBOL_FLAG_EXPORT = 1u << 7,
   // Concrete definition may coalesce with same-named link-once definitions.
   // The producer promises equivalent semantics; linking validates contracts
-  // but does not compare bodies.
+  // but does not compare definition contents.
   LOOM_BYTECODE_SYMBOL_FLAG_LINK_ONCE = 1u << 8,
 };
 typedef uint16_t loom_bytecode_symbol_flags_t;

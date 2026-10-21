@@ -190,6 +190,17 @@ static bool loom_bytecode_func_metadata_attr_is_shared(
   return false;
 }
 
+// Returns whether a record attribute is carried by the common symbol header.
+// The reader reconstructs these generic policy fields from the indexed flags
+// so planning and materialized IR cannot observe different symbol identities.
+static bool loom_bytecode_record_metadata_attr_is_shared(
+    const loom_op_vtable_t* vtable, uint8_t attr_index) {
+  if (loom_bytecode_attr_is_symbol_identity(vtable, attr_index)) {
+    return true;
+  }
+  return loom_symbol_definition_attr_is_policy(vtable->symbol_def, attr_index);
+}
+
 static iree_status_t loom_bytecode_write_func_payload_attrs(
     loom_bytecode_page_writer_t* writer, loom_bytecode_numbering_t* numbering,
     const loom_module_t* module, loom_func_like_t func_like,
@@ -500,7 +511,7 @@ static iree_status_t loom_bytecode_write_record_metadata(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (present && !loom_bytecode_attr_is_symbol_identity(vtable, i)) {
+    if (present && !loom_bytecode_record_metadata_attr_is_shared(vtable, i)) {
       ++present_attr_count;
     }
   }
@@ -511,7 +522,7 @@ static iree_status_t loom_bytecode_write_record_metadata(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
+    if (!present || loom_bytecode_record_metadata_attr_is_shared(vtable, i)) {
       continue;
     }
 
@@ -581,23 +592,17 @@ static bool loom_bytecode_symbol_has_visibility_attr(
     return false;
   }
   const loom_op_vtable_t* vtable = loom_op_vtable(module, symbol->defining_op);
-  if (!vtable || !vtable->attr_descriptors) {
+  if (!vtable || !vtable->symbol_def) {
     return false;
   }
-  const loom_attribute_t* attrs = loom_op_const_attrs(symbol->defining_op);
-  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
-    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
-    if (!iree_string_view_equal(loom_attr_descriptor_name(descriptor),
-                                IREE_SV("visibility"))) {
-      continue;
-    }
-    if (descriptor->attr_kind != LOOM_ATTR_ENUM ||
-        i >= symbol->defining_op->attribute_count) {
-      return false;
-    }
-    return loom_attr_as_enum(attrs[i]) != 0;
+  const uint8_t attr_index =
+      loom_symbol_definition_visibility_attr_index(vtable->symbol_def);
+  if (attr_index == LOOM_ATTR_INDEX_NONE ||
+      attr_index >= symbol->defining_op->attribute_count) {
+    return false;
   }
-  return false;
+  return loom_attr_as_enum(
+             loom_op_const_attrs(symbol->defining_op)[attr_index]) != 0;
 }
 
 static iree_status_t loom_bytecode_symbol_linkage(

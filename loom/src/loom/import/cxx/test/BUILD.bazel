@@ -375,6 +375,7 @@ loom_test_module(
         "immutable_object_link_left.cxx",
         "immutable_object_link_right.cxx",
     ],
+    data = ["immutable_object_link_tables.h"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
 )
 

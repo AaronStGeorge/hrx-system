@@ -28,6 +28,20 @@ cxx::VariableSymbol* variable(cxx::TranslationUnit& unit, const char* name) {
   return cxx::symbol_cast<cxx::VariableSymbol>(*symbols.begin());
 }
 
+cxx::VariableSymbol* variable(cxx::NamespaceSymbol* scope, const char* name) {
+  auto symbols = scope->find(name);
+  if (symbols.begin() == symbols.end()) {
+    return nullptr;
+  }
+  return cxx::symbol_cast<cxx::VariableSymbol>(*symbols.begin());
+}
+
+iree_string_view_t symbol_name(const loom_module_t* module,
+                               loom_symbol_ref_t symbol) {
+  return loom_string_table_get(
+      &module->strings, module->symbols.entries[symbol.symbol_id].name_id);
+}
+
 TEST_F(ImmutableObjectsTest, RetainsEachReachedSourceObjectOnce) {
   Source source(IREE_SV(R"(
     namespace detail {
@@ -49,7 +63,8 @@ TEST_F(ImmutableObjectsTest, RetainsEachReachedSourceObjectOnce) {
   auto first = objects.reference(table, table->initializer());
   auto second = objects.reference(table, table->initializer());
   EXPECT_EQ(first.symbol.symbol_id, second.symbol.symbol_id);
-  EXPECT_TRUE(iree_string_view_equal(first.name, IREE_SV("detail_table")));
+  EXPECT_TRUE(
+      iree_string_view_equal(first.value_name, IREE_SV("detail_table")));
   EXPECT_EQ(first.type, table->type());
   EXPECT_EQ(first.alignment, 4);
   objects.build(&builder_);
@@ -68,11 +83,100 @@ TEST_F(ImmutableObjectsTest, RetainsEachReachedSourceObjectOnce) {
   EXPECT_EQ(definition->next_op, nullptr);
 }
 
+TEST_F(ImmutableObjectsTest, ProjectsSourceLinkage) {
+  Source source(IREE_SV(R"(
+    namespace tables {
+    extern const unsigned declaration[2];
+    extern const unsigned definition[2] = {3, 4};
+    inline constexpr unsigned inline_definition[2] = {5, 6};
+    static constexpr unsigned private_definition[2] = {7, 8};
+    }
+  )"),
+                IREE_SV("immutable_object_linkage.cxx"), options());
+  Locations locations(source.unit(), source.diagnostics(), module_);
+  SymbolNames names(source.unit(), source.diagnostics());
+  ImmutableObjects objects(source.unit(), source.diagnostics(), locations,
+                           names, module_);
+  auto* tables = cxx::symbol_cast<cxx::NamespaceSymbol>(
+      *source.unit().globalScope()->find("tables").begin());
+  ASSERT_NE(tables, nullptr);
+  auto* declaration = variable(tables, "declaration");
+  auto* definition = variable(tables, "definition");
+  auto* inline_definition = variable(tables, "inline_definition");
+  auto* private_definition = variable(tables, "private_definition");
+  ASSERT_NE(declaration, nullptr);
+  ASSERT_NE(definition, nullptr);
+  ASSERT_NE(inline_definition, nullptr);
+  ASSERT_NE(private_definition, nullptr);
+
+  auto* owner = source.unit().ast();
+  auto declaration_object = objects.reference(declaration, owner);
+  objects.retain_definition(definition, owner);
+  auto definition_object = objects.reference(definition, owner);
+  objects.retain_definition(inline_definition, owner);
+  auto inline_object = objects.reference(inline_definition, owner);
+  objects.retain_definition(private_definition, owner);
+  auto private_object = objects.reference(private_definition, owner);
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol_name(module_, declaration_object.symbol),
+                             IREE_SV("tables.declaration")));
+  EXPECT_TRUE(iree_string_view_equal(declaration_object.value_name,
+                                     IREE_SV("tables_declaration")));
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol_name(module_, definition_object.symbol),
+                             IREE_SV("tables.definition")));
+  EXPECT_TRUE(iree_string_view_equal(definition_object.value_name,
+                                     IREE_SV("tables_definition")));
+  EXPECT_TRUE(iree_string_view_equal(symbol_name(module_, inline_object.symbol),
+                                     IREE_SV("tables.inline_definition")));
+  EXPECT_TRUE(iree_string_view_equal(inline_object.value_name,
+                                     IREE_SV("tables_inline_definition")));
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol_name(module_, private_object.symbol),
+                             IREE_SV("tables_private_definition")));
+  EXPECT_TRUE(iree_string_view_equal(private_object.value_name,
+                                     IREE_SV("tables_private_definition")));
+  objects.build(&builder_);
+
+  auto* declaration_op = loom_module_block(module_)->first_op;
+  ASSERT_NE(declaration_op, nullptr);
+  ASSERT_TRUE(loom_global_rodata_decl_isa(declaration_op));
+  EXPECT_EQ(loom_global_rodata_decl_symbol(declaration_op).symbol_id,
+            declaration_object.symbol.symbol_id);
+
+  auto* definition_op = declaration_op->next_op;
+  ASSERT_NE(definition_op, nullptr);
+  ASSERT_TRUE(loom_global_rodata_def_isa(definition_op));
+  EXPECT_EQ(loom_global_rodata_def_symbol(definition_op).symbol_id,
+            definition_object.symbol.symbol_id);
+  EXPECT_EQ(loom_global_rodata_def_visibility(definition_op),
+            LOOM_GLOBAL_RODATA_DEF_VISIBILITY_PUBLIC);
+  EXPECT_EQ(loom_global_rodata_def_linkage(definition_op), 0);
+
+  auto* inline_op = definition_op->next_op;
+  ASSERT_NE(inline_op, nullptr);
+  ASSERT_TRUE(loom_global_rodata_def_isa(inline_op));
+  EXPECT_EQ(loom_global_rodata_def_symbol(inline_op).symbol_id,
+            inline_object.symbol.symbol_id);
+  EXPECT_EQ(loom_global_rodata_def_visibility(inline_op),
+            LOOM_GLOBAL_RODATA_DEF_VISIBILITY_PUBLIC);
+  EXPECT_EQ(loom_global_rodata_def_linkage(inline_op),
+            LOOM_SYMBOL_LINKAGE_LINK_ONCE);
+
+  auto* private_op = inline_op->next_op;
+  ASSERT_NE(private_op, nullptr);
+  ASSERT_TRUE(loom_global_rodata_def_isa(private_op));
+  EXPECT_EQ(loom_global_rodata_def_symbol(private_op).symbol_id,
+            private_object.symbol.symbol_id);
+  EXPECT_EQ(loom_global_rodata_def_visibility(private_op), 0);
+  EXPECT_EQ(loom_global_rodata_def_linkage(private_op), 0);
+  EXPECT_EQ(private_op->next_op, nullptr);
+}
+
 TEST_F(ImmutableObjectsTest, RejectsUnsupportedIdentityAndRepresentation) {
   Source source(IREE_SV(R"(
     struct Inner { mutable unsigned value; };
     struct Outer { Inner inner; };
-    inline constexpr unsigned external_identity[1] = {1};
     static constexpr Outer mutable_object{{2}};
     static constexpr const unsigned* address_object = nullptr;
   )"),
@@ -82,15 +186,10 @@ TEST_F(ImmutableObjectsTest, RejectsUnsupportedIdentityAndRepresentation) {
   ImmutableObjects objects(source.unit(), source.diagnostics(), locations,
                            names, module_);
 
-  auto* external_identity = variable(source.unit(), "external_identity");
   auto* mutable_object = variable(source.unit(), "mutable_object");
   auto* address_object = variable(source.unit(), "address_object");
-  ASSERT_NE(external_identity, nullptr);
   ASSERT_NE(mutable_object, nullptr);
   ASSERT_NE(address_object, nullptr);
-  EXPECT_THROW(
-      objects.reference(external_identity, external_identity->initializer()),
-      SourceRejected);
   EXPECT_THROW(objects.reference(mutable_object, mutable_object->initializer()),
                SourceRejected);
   EXPECT_THROW(objects.reference(address_object, address_object->initializer()),

@@ -336,7 +336,8 @@ iree_status_t loom_low_lower_module_state_finalize(
     if (iree_status_is_ok(status)) {
       loom_op_t* definition = NULL;
       status = loom_global_rodata_def_build(
-          &builder, LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT, symbol,
+          &builder, LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT,
+          /*visibility=*/0, /*linkage=*/0, symbol,
           (int64_t)(UINT64_C(1) << record->minimum_alignment_log2),
           loom_symbol_ref_array_empty(), record->contents, record->location,
           &definition);

@@ -590,7 +590,8 @@ iree_status_t loom_bytecode_number_record(loom_bytecode_numbering_t* numbering,
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
+    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i) ||
+        loom_symbol_definition_attr_is_policy(vtable->symbol_def, i)) {
       continue;
     }
 

@@ -35,6 +35,8 @@
 
 namespace loom::cxx_import {
 
+class ImmutableObjects;
+
 enum class FunctionKind {
   Ordinary,
   Kernel,
@@ -135,14 +137,15 @@ struct DefinedFunction {
 class Functions {
  public:
   Functions(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
-            loom_module_t* module, Intrinsics& intrinsics,
-            LaunchContracts& launches, Configs& configs,
+            loom_module_t* module, ImmutableObjects& immutable_objects,
+            Intrinsics& intrinsics, LaunchContracts& launches, Configs& configs,
             FastMathContracts& fastmath, FunctionContracts& function_contracts,
             TargetDefinitions& target_definitions,
             TemplateDefinitions& template_definitions, SymbolNames& names)
       : unit_(unit),
         diagnostics_(diagnostics),
         module_(module),
+        immutable_objects_(immutable_objects),
         intrinsics_(intrinsics),
         launches_(launches),
         configs_(configs),
@@ -253,6 +256,8 @@ class Functions {
   Diagnostics& diagnostics_;
   // Owns output strings, symbols and definitions.
   loom_module_t* module_;
+  // Retains namespace-scope strong external immutable definitions.
+  ImmutableObjects& immutable_objects_;
   // Retains generated operation bindings admitted while visiting declarations.
   Intrinsics& intrinsics_;
   // Retains merged launch contracts for definitions and concrete instances.

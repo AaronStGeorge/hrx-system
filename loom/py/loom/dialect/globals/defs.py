@@ -18,10 +18,11 @@ Body ops (inside function/template bodies):
   global.load      — Load value + dynamic dims/encoding from global.
   global.store     — Store value + dynamic dims/encoding to global.
 
-Global definitions are module-private today. `global.rodata.def` is executable
-data, not a value global: it gives target emitters named bytes they can place
-in read-only artifact sections. Loading one materializes the complete payload
-as an opaque read-only `buffer` root.
+Global value definitions are module-private today. `global.rodata.def` is
+executable data, not a value global: it gives target emitters named bytes they
+can place in read-only artifact sections. Read-only data may carry ordinary
+public or link-once symbol policy for cross-module composition. Loading one
+materializes the complete payload as an opaque read-only `buffer` root.
 """
 
 from loom.assembly import (
@@ -39,6 +40,7 @@ from loom.assembly import (
     TypeOf,
     kw,
 )
+from loom.dialect.symbol import Linkage, Visibility
 from loom.dsl import (
     ANY,
     ATTR_TYPE_SYMBOL_SET,
@@ -194,9 +196,13 @@ global_rodata = Op(
         name="rodata",
         interfaces=["rodata", "record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
+        visibility="visibility",
+        linkage="linkage",
     ),
     attrs=[
         AttrDef("symbol", "symbol"),
+        AttrDef("visibility", "enum", enum_def=Visibility, optional=True),
+        AttrDef("linkage", "enum", enum_def=Linkage, optional=True),
         AttrDef("contents", "bytes"),
         AttrDef("alignment", "i64", optional=True),
         AttrDef(
@@ -208,6 +214,8 @@ global_rodata = Op(
         ),
     ],
     format=[
+        OptionalGroup([Attr("visibility")], anchor="visibility"),
+        OptionalGroup([Attr("linkage")], anchor="linkage"),
         SymbolRef("symbol"),
         EQUALS,
         OptionalGroup([Clause("align", Attr("alignment"))], anchor="alignment"),
@@ -220,6 +228,7 @@ global_rodata = Op(
     verify="loom_global_rodata_def_verify",
     examples=[
         'global.rodata.def @loom_sanitizer_sites = align(8) bytes("4c53495401000000")',
+        'global.rodata.def public linkonce @lookup = bytes("00010203")',
         'global.rodata.def @empty = bytes("")',
     ],
 )

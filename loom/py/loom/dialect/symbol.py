@@ -8,6 +8,24 @@
 
 from loom.dsl import EnumCase, EnumDef
 
+Visibility = EnumDef(
+    "Visibility",
+    [
+        # Value 0 is reserved for "absent" (private) in optional enum attrs.
+        EnumCase("public", 1, doc="Visible outside the module."),
+    ],
+    doc="Symbol visibility. Absent (0) means private (module-internal).",
+)
+
+Retain = EnumDef(
+    "Retain",
+    [
+        # Value 0 is reserved for "absent" (ordinary DCE may erase).
+        EnumCase("retain", 1, doc="Preserve the symbol across ordinary DCE."),
+    ],
+    doc="Private symbol retention policy. Absent (0) permits ordinary DCE.",
+)
+
 Linkage = EnumDef(
     "Linkage",
     [

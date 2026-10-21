@@ -97,9 +97,9 @@ class Translator final : private Initialization::Evaluation {
         launches_(unit, diagnostics),
         intrinsics_(unit, diagnostics, types_, scalars_, vectors_, locations_,
                     names_, launches_, function_contracts_, module),
-        functions_(unit, diagnostics, module, intrinsics_, launches_, configs_,
-                   fastmath_, function_contracts_, target_definitions_,
-                   template_definitions_, names_),
+        functions_(unit, diagnostics, module, immutable_objects_, intrinsics_,
+                   launches_, configs_, fastmath_, function_contracts_,
+                   target_definitions_, template_definitions_, names_),
         options_(options),
         default_fastmath_flags_(options.fp_model == LOOM_CXX_FP_MODEL_FAST
                                     ? LOOM_SCALAR_FASTMATHFLAGS_FAST
@@ -849,7 +849,7 @@ class Translator final : private Initialization::Evaluation {
       auto allocation = storage_.admit_fixed(
           loom_global_load_result(op).values[0], object.type,
           LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT, owner);
-      std::string spelling(object.name.data, object.name.size);
+      std::string spelling(object.value_name.data, object.value_name.size);
       name(Value(allocation.pointer), spelling + "_storage");
       name(allocation.view, spelling + "_view");
       immutable_preamble_end_ =

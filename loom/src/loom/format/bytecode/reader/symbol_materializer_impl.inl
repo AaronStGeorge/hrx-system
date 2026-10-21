@@ -661,8 +661,8 @@ loom_bytecode_reader_materialize_record_symbol(
     loom_bytecode_symbol_policy_materializer_t* reader,
     loom_bytecode_reader_cursor_t* cursor,
     const loom_bytecode_symbol_policy_body_source_t* body_source,
-    uint64_t name_id, uint64_t symbol_index, loom_location_id_t location,
-    loom_builder_t* builder) {
+    uint64_t name_id, uint64_t symbol_index, loom_bytecode_symbol_flags_t flags,
+    loom_location_id_t location, loom_builder_t* builder) {
   uint16_t symbol_id =
       loom_bytecode_symbol_policy_lookup_symbol(reader, (uint32_t)name_id);
   loom_symbol_ref_t symbol_ref = {0, symbol_id};
@@ -689,6 +689,40 @@ loom_bytecode_reader_materialize_record_symbol(
   uint8_t symbol_attr_index =
       loom_bytecode_symbol_find_identity_attr_index(vtable);
   attrs[symbol_attr_index] = loom_attr_symbol(symbol_ref);
+  const loom_symbol_definition_descriptor_t* definition = vtable->symbol_def;
+  const uint8_t visibility_attr_index =
+      loom_symbol_definition_visibility_attr_index(definition);
+  const uint8_t linkage_attr_index =
+      loom_symbol_definition_linkage_attr_index(definition);
+  const uint8_t retain_attr_index =
+      loom_symbol_definition_retain_attr_index(definition);
+  if (iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC)) {
+    if (visibility_attr_index == LOOM_ATTR_INDEX_NONE) {
+      return loom_bytecode_reader_emit_invalid_field(
+          &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+          IREE_SV("flags"), 0,
+          IREE_SV("public_record_symbol_op_has_no_visibility_attr"));
+    }
+    attrs[visibility_attr_index] = loom_attr_enum(1);
+  }
+  if (iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_LINK_ONCE)) {
+    if (linkage_attr_index == LOOM_ATTR_INDEX_NONE) {
+      return loom_bytecode_reader_emit_invalid_field(
+          &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+          IREE_SV("flags"), 0,
+          IREE_SV("link_once_record_symbol_op_has_no_linkage_attr"));
+    }
+    attrs[linkage_attr_index] = loom_attr_enum(LOOM_SYMBOL_LINKAGE_LINK_ONCE);
+  }
+  if (iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_RETAIN)) {
+    if (retain_attr_index == LOOM_ATTR_INDEX_NONE) {
+      return loom_bytecode_reader_emit_invalid_field(
+          &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+          IREE_SV("flags"), 0,
+          IREE_SV("retained_record_symbol_op_has_no_retain_attr"));
+    }
+    attrs[retain_attr_index] = loom_attr_enum(1);
+  }
 
   uint64_t attr_count = 0;
   uint64_t attr_count_offset =
@@ -725,6 +759,14 @@ loom_bytecode_reader_materialize_record_symbol(
           IREE_SV("attribute_key"), key_offset,
           IREE_SV("record identity symbol attribute is reconstructed from "
                   "name_id"));
+    }
+    if (attr_index == visibility_attr_index ||
+        attr_index == linkage_attr_index || attr_index == retain_attr_index) {
+      return loom_bytecode_reader_emit_invalid_field(
+          &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+          IREE_SV("attribute_key"), key_offset,
+          IREE_SV(
+              "record_symbol_policy_attribute_is_reconstructed_from_flags"));
     }
     if (!loom_attr_is_absent(attrs[attr_index])) {
       return loom_bytecode_reader_emit_invalid_field(
@@ -874,7 +916,7 @@ static iree_status_t loom_bytecode_symbol_materialize_entry(
   } else if (header.kind == LOOM_BYTECODE_SYMBOL_RECORD) {
     return loom_bytecode_reader_materialize_record_symbol(
         reader, cursor, body_source, header.name_string_ordinal, symbol_ordinal,
-        header.location, builder);
+        header.flags, header.location, builder);
   } else {
     return loom_bytecode_reader_emit_invalid_field(
         &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_ordinal,

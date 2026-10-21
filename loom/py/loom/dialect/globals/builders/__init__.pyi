@@ -39,6 +39,8 @@ class GlobalBuilder(DialectBuilder):
     def def_(
         self,
         *,
+        visibility: str | None = ...,
+        linkage: str | None = ...,
         symbol: str,
         alignment: int | None = ...,
         bank_conflicts: Sequence[str] | None = ...,

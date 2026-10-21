@@ -216,3 +216,47 @@ global.rodata.def @codes = bytes("0309")
 global.rodata.def @words = align(4) bytes("0102030405060708")
 
 global.rodata.def @text = bytes("4c6f6f6d00")
+
+// ====
+namespace shared {
+extern const unsigned declaration[2];
+extern const unsigned definition[2] = {3, 5};
+inline constexpr unsigned inline_definition[2] = {7, 11};
+static constexpr unsigned private_definition[2] = {13, 17};
+}
+
+unsigned linked_lookup(unsigned index) {
+  const unsigned lane = index & 1u;
+  return shared::declaration[lane] + shared::inline_definition[lane] +
+         shared::private_definition[lane];
+}
+
+// ----
+func.def public @linked_lookup(%index: i32) -> (i32) {
+  %shared_declaration_storage = global.load @shared.declaration : buffer
+  %shared_declaration_storage_byte_offset = index.constant 0 : offset
+  %shared_declaration_view = buffer.view %shared_declaration_storage[%shared_declaration_storage_byte_offset] : buffer -> view<2xi32>
+  %shared_inline_definition_storage = global.load @shared.inline_definition : buffer
+  %shared_inline_definition_view = buffer.view %shared_inline_definition_storage[%shared_declaration_storage_byte_offset] : buffer -> view<2xi32>
+  %shared_private_definition_storage = global.load @shared_private_definition : buffer
+  %shared_private_definition_view = buffer.view %shared_private_definition_storage[%shared_declaration_storage_byte_offset] : buffer -> view<2xi32>
+  %2 = scalar.constant 1 : i32
+  %lane = scalar.andi %index, %2 : i32
+  %7 = scalar.extui %lane : i32 to i64
+  %8 = scalar.assume %7 [range(%7, 0, 1)] : i64
+  %9 = index.cast %8 : i64 to index
+  %10 = view.load %shared_declaration_view[%9] : view<2xi32> -> i32
+  %17 = view.load %shared_inline_definition_view[%9] : view<2xi32> -> i32
+  %18 = scalar.addi %10, %17 : i32
+  %25 = view.load %shared_private_definition_view[%9] : view<2xi32> -> i32
+  %26 = scalar.addi %18, %25 : i32
+  func.return %26 : i32
+}
+
+global.rodata.def public @shared.definition = align(4) bytes("0300000005000000")
+
+global.rodata.decl @shared.declaration
+
+global.rodata.def public linkonce @shared.inline_definition = align(4) bytes("070000000b000000")
+
+global.rodata.def @shared_private_definition = align(4) bytes("0d00000011000000")

@@ -17,6 +17,7 @@ iree_py_library(
     "defs.py"
   DEPS
     loom::py::loom::core
+    loom::py::loom::dialect::shared
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

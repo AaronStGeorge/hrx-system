@@ -57,10 +57,9 @@ from loom.dialect.func.defs import (
     CallingConv,
     EffectContract,
     InlinePolicyAttr,
-    Retain,
-    Visibility,
 )
 from loom.dialect.memory import MemoryAccessFlags
+from loom.dialect.symbol import Retain, Visibility
 from loom.dialect.target.defs import ExportAbiKind, ExportLinkage
 from loom.dsl import (
     ANY,

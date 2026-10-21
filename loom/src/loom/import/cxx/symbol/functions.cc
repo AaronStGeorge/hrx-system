@@ -27,6 +27,7 @@
 #include "loom/import/cxx/source/attributes.h"
 #include "loom/import/cxx/source/error.h"
 #include "loom/import/cxx/source/expressions.h"
+#include "loom/import/cxx/symbol/immutable_objects.h"
 #include "loom/import/cxx/value/signature.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
@@ -383,14 +384,17 @@ void Functions::collect(cxx::DeclarationAST* declaration,
       }
       auto* variable =
           cxx::symbol_cast<cxx::VariableSymbol>(declarator->symbol);
-      if (variable && !is_module_metadata && !variable->isExtern() &&
-          (unit_.typeTraits().is_volatile(variable->type()) ||
-           !(variable->isConstexpr() ||
-             (unit_.typeTraits().is_const(variable->type()) &&
-              variable->constValue())))) {
-        diagnostics_.reject(
-            unit_, declarator,
-            "global storage definitions require a global-storage projection");
+      if (variable && !is_module_metadata) {
+        if (!variable->isExtern() &&
+            (unit_.typeTraits().is_volatile(variable->type()) ||
+             !(variable->isConstexpr() ||
+               (unit_.typeTraits().is_const(variable->type()) &&
+                variable->constValue())))) {
+          diagnostics_.reject(unit_, declarator,
+                              "global storage definitions require a "
+                              "global-storage projection");
+        }
+        immutable_objects_.retain_definition(variable, declarator);
       }
     }
   }

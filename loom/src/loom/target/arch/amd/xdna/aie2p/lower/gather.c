@@ -553,7 +553,7 @@ static iree_status_t loom_aie2p_gather_emit_derived_definition(
       builder,
       LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT |
           LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_BANK_CONFLICTS,
-      symbol, /*alignment=*/64,
+      /*visibility=*/0, /*linkage=*/0, symbol, /*alignment=*/64,
       loom_make_symbol_ref_array(&conflicting_symbol, 1), contents, location,
       &definition);
 }

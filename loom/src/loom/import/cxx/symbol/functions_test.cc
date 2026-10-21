@@ -13,6 +13,7 @@
 #include <cxx/types.h>
 
 #include "loom/import/cxx/source/expressions.h"
+#include "loom/import/cxx/symbol/immutable_objects.h"
 #include "loom/import/cxx/value/builder_test.h"
 #include "loom/import/cxx/value/vector.h"
 #include "loom/ops/check/ops.h"
@@ -81,6 +82,8 @@ TEST_F(FunctionsTest, RootsQueueEachConcreteHelperOnceWithPrivateVisibility) {
   Vectors vectors(source.unit(), source.diagnostics(), types, scalars,
                   locations, builder_);
   SymbolNames names(source.unit(), source.diagnostics());
+  ImmutableObjects immutable_objects(source.unit(), source.diagnostics(),
+                                     locations, names, module_);
   LaunchContracts launches(source.unit(), source.diagnostics());
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
@@ -92,9 +95,10 @@ TEST_F(FunctionsTest, RootsQueueEachConcreteHelperOnceWithPrivateVisibility) {
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
                                        locations, names, module_);
   TemplateDefinitions template_definitions(source.unit(), source.diagnostics());
-  Functions functions(source.unit(), source.diagnostics(), module_, intrinsics,
-                      launches, configs, fastmath, function_contracts,
-                      target_definitions, template_definitions, names);
+  Functions functions(source.unit(), source.diagnostics(), module_,
+                      immutable_objects, intrinsics, launches, configs,
+                      fastmath, function_contracts, target_definitions,
+                      template_definitions, names);
   const iree_string_view_t roots[] = {IREE_SV("entry")};
   functions.select(roots);
   ASSERT_EQ(functions.pending().size(), 1u);
@@ -138,6 +142,8 @@ TEST_F(FunctionsTest,
   Vectors vectors(source.unit(), source.diagnostics(), types, scalars,
                   locations, builder_);
   SymbolNames names(source.unit(), source.diagnostics());
+  ImmutableObjects immutable_objects(source.unit(), source.diagnostics(),
+                                     locations, names, module_);
   LaunchContracts launches(source.unit(), source.diagnostics());
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
@@ -149,9 +155,10 @@ TEST_F(FunctionsTest,
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
                                        locations, names, module_);
   TemplateDefinitions template_definitions(source.unit(), source.diagnostics());
-  Functions functions(source.unit(), source.diagnostics(), module_, intrinsics,
-                      launches, configs, fastmath, function_contracts,
-                      target_definitions, template_definitions, names);
+  Functions functions(source.unit(), source.diagnostics(), module_,
+                      immutable_objects, intrinsics, launches, configs,
+                      fastmath, function_contracts, target_definitions,
+                      template_definitions, names);
   functions.select({});
   ASSERT_EQ(functions.pending().size(), 2u);
   auto defined =
@@ -186,6 +193,8 @@ TEST_F(FunctionsTest, ConfiguredScenarioRetainsItsNativeRegionSignature) {
   Vectors vectors(source.unit(), source.diagnostics(), types, scalars,
                   locations, builder_);
   SymbolNames names(source.unit(), source.diagnostics());
+  ImmutableObjects immutable_objects(source.unit(), source.diagnostics(),
+                                     locations, names, module_);
   LaunchContracts launches(source.unit(), source.diagnostics());
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
@@ -197,9 +206,10 @@ TEST_F(FunctionsTest, ConfiguredScenarioRetainsItsNativeRegionSignature) {
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
                                        locations, names, module_);
   TemplateDefinitions template_definitions(source.unit(), source.diagnostics());
-  Functions functions(source.unit(), source.diagnostics(), module_, intrinsics,
-                      launches, configs, fastmath, function_contracts,
-                      target_definitions, template_definitions, names);
+  Functions functions(source.unit(), source.diagnostics(), module_,
+                      immutable_objects, intrinsics, launches, configs,
+                      fastmath, function_contracts, target_definitions,
+                      template_definitions, names);
 
   functions.select({});
   ASSERT_EQ(functions.pending().size(), 1u);

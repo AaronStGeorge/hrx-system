@@ -1,11 +1,4 @@
 // RUN: verify
-inline constexpr unsigned external_identity[2] = {1, 2};
-unsigned external_lookup(unsigned index) {
-  // ERROR@+1: LOWERING/059 "immutable storage requires an internal-linkage object"
-  return external_identity[index & 1u];
-}
-
-// ====
 struct Entry {
   mutable unsigned value;
 };
@@ -28,13 +21,6 @@ static thread_local const unsigned thread_table[1] = {1};
 unsigned thread_lookup(unsigned index) {
   // ERROR@+1: LOWERING/059 "immutable storage requires a namespace-scope object without thread-local storage"
   return thread_table[index % 1u];
-}
-
-// ====
-extern const unsigned missing_table[];
-unsigned missing_lookup(unsigned index) {
-  // ERROR@+1: LOWERING/059 "immutable storage requires an internal-linkage object"
-  return missing_table[index];
 }
 
 // ====
@@ -71,4 +57,13 @@ static constexpr Derived base_table[1] = {{{7}, 9}};
 unsigned base_lookup(unsigned index) {
   // ERROR@+1: LOWERING/059 "record storage requires a complete aggregate without unions, bases or nontrivial lifecycle operations"
   return base_table[index % 1u].other;
+}
+
+// ====
+template <unsigned Value>
+inline constexpr unsigned templated_table[1] = {Value};
+
+unsigned templated_lookup(unsigned index) {
+  // ERROR@+1: LOWERING/059 "linkable immutable object template specializations are unsupported"
+  return templated_table<7>[index % 1u];
 }

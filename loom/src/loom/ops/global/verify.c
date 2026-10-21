@@ -422,9 +422,13 @@ iree_status_t loom_global_rodata_def_verify(const loom_module_t* module,
           module, op, emitter, source_ref, target_ref,
           IREE_SV("the target is not a read-only data definition"), target_op);
     }
-    if (target_op->attribute_count <= 3 ||
-        (loom_op_const_attrs(target_op)[3].kind != LOOM_ATTR_ABSENT &&
-         loom_op_const_attrs(target_op)[3].kind != LOOM_ATTR_SYMBOL_SET)) {
+    const uint16_t conflicts_attr_index =
+        loom_global_rodata_def_bank_conflicts_diagnostic_ref().index;
+    if (target_op->attribute_count <= conflicts_attr_index ||
+        (loom_op_const_attrs(target_op)[conflicts_attr_index].kind !=
+             LOOM_ATTR_ABSENT &&
+         loom_op_const_attrs(target_op)[conflicts_attr_index].kind !=
+             LOOM_ATTR_SYMBOL_SET)) {
       // The target's own structural verification diagnoses malformed storage.
       continue;
     }

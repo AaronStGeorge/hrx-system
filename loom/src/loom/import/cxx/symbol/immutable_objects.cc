@@ -7,6 +7,7 @@
 #include "loom/import/cxx/symbol/immutable_objects.h"
 
 #include <cxx/ast_interpreter.h>
+#include <cxx/binder.h>
 #include <cxx/control.h>
 #include <cxx/memory_layout.h>
 #include <cxx/names.h>
@@ -50,14 +51,20 @@ bool contains_mutable_subobject(cxx::TranslationUnit& unit,
   return false;
 }
 
-std::string object_name(cxx::VariableSymbol* variable) {
+std::string qualified_object_name(cxx::VariableSymbol* variable,
+                                  char separator) {
   std::string spelling = cxx::to_string(variable->name());
   for (auto* owner : variable->enclosingSymbols()) {
     auto* space = cxx::symbol_cast<cxx::NamespaceSymbol>(owner);
     if (space && space->name()) {
-      spelling = cxx::to_string(space->name()) + "_" + spelling;
+      spelling = cxx::to_string(space->name()) + separator + spelling;
     }
   }
+  return spelling;
+}
+
+std::string private_object_name(cxx::VariableSymbol* variable) {
+  auto spelling = qualified_object_name(variable, '_');
   for (char& character : spelling) {
     if (!std::isalnum(static_cast<unsigned char>(character)) &&
         character != '_') {
@@ -67,31 +74,98 @@ std::string object_name(cxx::VariableSymbol* variable) {
   return spelling;
 }
 
+std::string value_name(std::string spelling) {
+  for (char& character : spelling) {
+    if (!std::isalnum(static_cast<unsigned char>(character)) &&
+        character != '_') {
+      character = '_';
+    }
+  }
+  return spelling;
+}
+
+std::string external_object_name(cxx::TranslationUnit& unit,
+                                 Diagnostics& diagnostics,
+                                 cxx::VariableSymbol* variable,
+                                 cxx::AST* owner) {
+  if (variable->isSpecialization() || variable->isTemplatePattern()) {
+    diagnostics.reject(
+        unit, owner,
+        "linkable immutable object template specializations are unsupported");
+  }
+  if (!cxx::name_cast<cxx::Identifier>(variable->name())) {
+    diagnostics.reject(unit, owner,
+                       "linkable immutable object name is unsupported");
+  }
+  auto spelling = qualified_object_name(variable, '.');
+  if (!is_symbol_name(spelling)) {
+    diagnostics.reject(unit, owner,
+                       "linkable immutable object name is not a Loom symbol");
+  }
+  return spelling;
+}
+
+bool is_thread_local(cxx::VariableSymbol* variable) {
+  return variable->isThreadLocal() ||
+         std::ranges::any_of(variable->redeclarations(),
+                             &cxx::VariableSymbol::isThreadLocal);
+}
+
+bool is_inline(cxx::VariableSymbol* variable) {
+  return variable->isInline() ||
+         std::ranges::any_of(variable->redeclarations(),
+                             &cxx::VariableSymbol::isInline);
+}
+
+int64_t explicit_alignment(cxx::VariableSymbol* variable) {
+  int64_t alignment = variable->explicitAlignment();
+  for (auto* declaration : variable->redeclarations()) {
+    alignment = std::max<int64_t>(alignment, declaration->explicitAlignment());
+  }
+  return alignment;
+}
+
 }  // namespace
+
+void ImmutableObjects::retain_definition(cxx::VariableSymbol* variable,
+                                         cxx::AST* owner) {
+  if (unit_.typeTraits().is_reference(variable->type()) ||
+      !cxx::Binder::declaresVariableDefinition(variable)) {
+    return;
+  }
+  auto* canonical = variable->canonical();
+  if (!cxx::symbol_cast<cxx::NamespaceSymbol>(canonical->parent()) ||
+      cxx::has_internal_linkage(canonical) || is_inline(canonical)) {
+    return;
+  }
+  reference(variable, owner);
+}
 
 ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
                                             cxx::AST* owner) {
   auto* canonical = variable->canonical();
   if (auto found = variables_.find(canonical); found != variables_.end()) {
-    return definitions_[found->second].object;
+    return emissions_[found->second].object;
   }
-  auto* definition = canonical->resolvedDefinition();
-  if (!definition) {
-    diagnostics_.reject(unit_, owner,
-                        "immutable storage requires an object definition");
+  auto* definition = canonical->definition();
+  if (!definition && cxx::Binder::declaresVariableDefinition(canonical)) {
+    definition = canonical;
   }
   auto traits = unit_.typeTraits();
-  auto* source_type = definition->type();
-  if (!cxx::symbol_cast<cxx::NamespaceSymbol>(definition->parent()) ||
-      definition->isThreadLocal()) {
+  auto* source_type = definition ? definition->type() : canonical->type();
+  if (!cxx::symbol_cast<cxx::NamespaceSymbol>(canonical->parent()) ||
+      is_thread_local(canonical)) {
     diagnostics_.reject(
         unit_, owner,
         "immutable storage requires a namespace-scope object without "
         "thread-local storage");
   }
-  if (!cxx::has_internal_linkage(canonical)) {
+  const bool has_internal_linkage = cxx::has_internal_linkage(canonical);
+  if (!definition && has_internal_linkage) {
     diagnostics_.reject(
-        unit_, owner, "immutable storage requires an internal-linkage object");
+        unit_, owner,
+        "immutable storage with internal linkage requires an object "
+        "definition");
   }
   if (!traits.is_const(source_type) || traits.is_volatile(source_type) ||
       contains_mutable_subobject(unit_, source_type)) {
@@ -99,54 +173,98 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
         unit_, owner,
         "immutable storage requires a nonvolatile deeply const object");
   }
-  if (!definition->constValue()) {
-    diagnostics_.reject(unit_, owner,
-                        "immutable storage requires constant initialization");
-  }
-  cxx::ASTInterpreter interpreter(&unit_);
-  auto contents =
-      interpreter.objectRepresentation(*definition->constValue(), source_type);
-  if (!contents) {
-    diagnostics_.reject(
-        unit_, owner,
-        "immutable storage requires a fully initialized, trivially copyable, "
-        "address-free object representation");
-  }
   auto natural_alignment =
       unit_.control()->memoryLayout()->alignmentOf(source_type);
   if (!natural_alignment) {
     diagnostics_.reject(unit_, owner, "unknown immutable object alignment");
   }
-  auto spelling = names_.unique(object_name(definition));
+  EmissionKind kind;
+  std::vector<uint8_t> contents;
+  std::string spelling;
+  if (!definition) {
+    kind = EmissionKind::Declaration;
+    spelling = external_object_name(unit_, diagnostics_, canonical, owner);
+    names_.reserve(spelling, owner);
+  } else {
+    if (!definition->constValue()) {
+      diagnostics_.reject(unit_, owner,
+                          "immutable storage requires constant initialization");
+    }
+    cxx::ASTInterpreter interpreter(&unit_);
+    auto representation = interpreter.objectRepresentation(
+        *definition->constValue(), source_type);
+    if (!representation) {
+      diagnostics_.reject(
+          unit_, owner,
+          "immutable storage requires a fully initialized, trivially "
+          "copyable, address-free object representation");
+    }
+    contents = std::move(*representation);
+    if (has_internal_linkage) {
+      kind = EmissionKind::PrivateDefinition;
+      spelling = names_.unique(private_object_name(definition));
+    } else {
+      kind = is_inline(canonical) ? EmissionKind::LinkOnceDefinition
+                                  : EmissionKind::PublicDefinition;
+      spelling = external_object_name(unit_, diagnostics_, canonical, owner);
+      names_.reserve(spelling, owner);
+    }
+  }
   loom_string_id_t name;
   check(loom_module_intern_string(module_, view(spelling), &name));
+  auto value_spelling = value_name(spelling);
+  loom_string_id_t value_name_id;
+  check(
+      loom_module_intern_string(module_, view(value_spelling), &value_name_id));
   loom_symbol_id_t symbol;
   check(loom_module_add_symbol(module_, name, &symbol));
   ImmutableObject object = {
       .symbol = {0, symbol},
-      .name = loom_string_table_get(&module_->strings, name),
+      .value_name = loom_string_table_get(&module_->strings, value_name_id),
       .type = source_type,
-      .alignment = std::max<int64_t>(*natural_alignment,
-                                     definition->explicitAlignment()),
+      .alignment =
+          std::max<int64_t>(*natural_alignment, explicit_alignment(canonical)),
   };
-  variables_.emplace(canonical, definitions_.size());
-  definitions_.push_back(
-      {.object = object, .contents = std::move(*contents), .source = owner});
+  variables_.emplace(canonical, emissions_.size());
+  emissions_.push_back({
+      .object = object,
+      .kind = kind,
+      .contents = std::move(contents),
+      .source = owner,
+  });
   return object;
 }
 
 void ImmutableObjects::build(loom_builder_t* builder) {
-  for (const auto& definition : definitions_) {
-    auto flags = definition.object.alignment > 1
-                     ? LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT
-                     : 0;
+  for (const auto& emission : emissions_) {
     loom_op_t* op;
+    if (emission.kind == EmissionKind::Declaration) {
+      check(loom_global_rodata_decl_build(builder, emission.object.symbol,
+                                          locations_.get(emission.source),
+                                          &op));
+      continue;
+    }
+    loom_global_rodata_def_build_flags_t flags =
+        emission.object.alignment > 1
+            ? LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT
+            : 0;
+    uint8_t visibility = 0;
+    uint8_t linkage = 0;
+    if (emission.kind == EmissionKind::PublicDefinition ||
+        emission.kind == EmissionKind::LinkOnceDefinition) {
+      flags |= LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_VISIBILITY;
+      visibility = LOOM_GLOBAL_RODATA_DEF_VISIBILITY_PUBLIC;
+    }
+    if (emission.kind == EmissionKind::LinkOnceDefinition) {
+      flags |= LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_LINKAGE;
+      linkage = LOOM_SYMBOL_LINKAGE_LINK_ONCE;
+    }
     check(loom_global_rodata_def_build(
-        builder, flags, definition.object.symbol, definition.object.alignment,
-        loom_symbol_ref_array_empty(),
-        iree_make_const_byte_span(definition.contents.data(),
-                                  definition.contents.size()),
-        locations_.get(definition.source), &op));
+        builder, flags, visibility, linkage, emission.object.symbol,
+        emission.object.alignment, loom_symbol_ref_array_empty(),
+        iree_make_const_byte_span(emission.contents.data(),
+                                  emission.contents.size()),
+        locations_.get(emission.source), &op));
   }
 }
 
