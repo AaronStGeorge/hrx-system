@@ -81,9 +81,15 @@ static iree_status_t TestProfileSinkWrite(
   if (iovec_count == 0) {
     return iree_ok_status();
   }
-  if (iovec_count != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected one profile chunk iovec");
+  std::vector<uint8_t> contents;
+  iree_const_byte_span_t joined;
+  if (iovec_count > 1) {
+    for (iree_host_size_t i = 0; i < iovec_count; ++i) {
+      contents.insert(contents.end(), iovecs[i].data,
+                      iovecs[i].data + iovecs[i].data_length);
+    }
+    joined = iree_make_const_byte_span(contents.data(), contents.size());
+    iovecs = &joined;
   }
 
   if (iree_string_view_equal(metadata->content_type,
@@ -169,6 +175,43 @@ static iree_status_t TestProfileSinkWrite(
       payload_offset += record.record_length;
     }
     ++test_sink->executable_function_metadata_count;
+  } else if (iree_string_view_equal(
+                 metadata->content_type,
+                 IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_CODE_OBJECTS)) {
+    for (iree_host_size_t offset = 0; offset < iovecs[0].data_length;) {
+      TestProfileSink::CodeObject image;
+      if (iovecs[0].data_length - offset < sizeof(image.record)) {
+        return iree_make_status(IREE_STATUS_DATA_LOSS,
+                                "truncated profile code-object header");
+      }
+      memcpy(&image.record, iovecs[0].data + offset, sizeof(image.record));
+      if (image.record.record_length < sizeof(image.record) ||
+          image.record.record_length > iovecs[0].data_length - offset ||
+          image.record.data_length !=
+              image.record.record_length - sizeof(image.record)) {
+        return iree_make_status(IREE_STATUS_DATA_LOSS,
+                                "invalid profile code-object extent");
+      }
+      image.data.assign(iovecs[0].data + offset + sizeof(image.record),
+                        iovecs[0].data + offset + image.record.record_length);
+      offset += image.record.record_length;
+      test_sink->code_objects.push_back(std::move(image));
+    }
+  } else if (iree_string_view_equal(
+                 metadata->content_type,
+                 IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_CODE_OBJECT_LOADS)) {
+    using Record = iree_hal_profile_executable_code_object_load_record_t;
+    if (iovecs[0].data_length % sizeof(Record)) {
+      return iree_make_status(IREE_STATUS_DATA_LOSS,
+                              "truncated profile code-object load record");
+    }
+    for (iree_host_size_t offset = 0; offset < iovecs[0].data_length;
+         offset += sizeof(Record)) {
+      Record record;
+      memcpy(&record, iovecs[0].data + offset, sizeof(record));
+      EXPECT_EQ(record.record_length, sizeof(record));
+      test_sink->code_object_loads.push_back(record);
+    }
   } else if (iree_string_view_equal(
                  metadata->content_type,
                  IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_BUFFERS)) {

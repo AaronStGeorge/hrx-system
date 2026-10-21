@@ -922,8 +922,13 @@ iree_status_t iree_hal_amd_gpu_executable_profile_metadata(
       &executable->profile_metadata, iree_memory_order_relaxed);
   iree_status_t status = iree_ok_status();
   if (!metadata) {
+    const uint64_t* load_addresses = executable->queue_image_addresses;
+    if (!load_addresses) {
+      load_addresses = &executable->variants[0].bindings[1].device_address;
+    }
     status = iree_hal_amd_gpu_profile_executable_create(
-        base, executable->host_allocator, &metadata);
+        base, &executable->image, executable->variant_count, load_addresses,
+        executable->host_allocator, &metadata);
     if (iree_status_is_ok(status)) {
       iree_atomic_store(&executable->profile_metadata, (intptr_t)metadata,
                         iree_memory_order_release);

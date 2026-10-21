@@ -338,6 +338,7 @@ iree_cc_test(
     ::tsan_images
     iree::base
     iree::hal
+    iree::hal::cts::util::profile_test_util
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
@@ -610,7 +611,11 @@ iree_cc_test(
     iree::hal
     iree::hal::cts::util::profile_test_util
     iree::hal::cts::util::test_base
+    iree::hal::drivers::amd::gpu::executable
+    iree::hal::drivers::amd::gpu::image
     iree::hal::drivers::amd::gpu::image::hip_images
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::image::hsaco_test_util
     iree::io::file_handle
     iree::testing::gtest
     iree::testing::gtest_main

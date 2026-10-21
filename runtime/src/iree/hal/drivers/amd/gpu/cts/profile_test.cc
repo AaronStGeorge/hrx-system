@@ -14,7 +14,10 @@
 #include "iree/hal/cts/util/profile_test_util.h"
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/amd/gpu/cts/test_device.h"
+#include "iree/hal/drivers/amd/gpu/executable.h"
 #include "iree/hal/drivers/amd/gpu/image/hip_images.h"
+#include "iree/hal/drivers/amd/gpu/image/hsaco.h"
+#include "iree/hal/drivers/amd/gpu/image/hsaco_test_util.h"
 #include "iree/io/file_handle.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -122,6 +125,7 @@ class GpuNativeProfileTest : public GpuNativeTest {
       }
     }
     ASSERT_NE(params.executable_data.data, nullptr);
+    loaded_image_ = params.executable_data;
     const auto* targets =
         iree_hal_device_spec_executables(iree_hal_device_spec(device_));
     IREE_ASSERT_OK(iree_hal_executable_load(iree_hal_queue_family(queues_[0]),
@@ -197,6 +201,9 @@ class GpuNativeProfileTest : public GpuNativeTest {
 
   // Native image selector captured before ownership transfers into the device.
   uint32_t gfx_major_ = 0;
+  // Borrowed embedded artifact passed to the most recent native executable
+  // load.
+  iree_const_byte_span_t loaded_image_ = {};
   // Explicit storage contract for dispatches, transfers, and mapping sources.
   Ref<iree_hal_pool_t> pool_;
   // Session sink remains live through idle end and device teardown.
@@ -220,6 +227,12 @@ TEST_F(GpuNativeDispatchProfileTest, DirectSamplesSurviveExecutableRelease) {
   Ref<iree_hal_executable_t> executable;
   iree_hal_executable_function_t function;
   ASSERT_NO_FATAL_FAILURE(Load(executable, function));
+  const iree_hal_amd_gpu_pm4_function_t* native_function = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_executable_lookup_pm4(executable, function,
+                                                        &native_function));
+  const uint64_t entry_address =
+      (uint64_t{native_function->launch.program[0]} << 8) |
+      (uint64_t{native_function->launch.program[1]} << 40);
   Ref<iree_hal_semaphore_t> done;
   CreateSemaphore(done.out());
   auto* timeline = done.get();
@@ -248,7 +261,33 @@ TEST_F(GpuNativeDispatchProfileTest, DirectSamplesSurviveExecutableRelease) {
   executable.reset();
   ASSERT_NO_FATAL_FAILURE(End());
   ASSERT_EQ(sink_.dispatch_events.size(), 16u);
-  EXPECT_EQ(sink_.executable_ids.size(), 1u);
+  ASSERT_EQ(sink_.executable_ids.size(), 1u);
+  ASSERT_EQ(sink_.code_objects.size(), 1u);
+  ASSERT_EQ(sink_.code_object_loads.size(), 1u);
+  const auto& artifact = sink_.code_objects[0];
+  const auto& load = sink_.code_object_loads[0];
+  EXPECT_EQ(artifact.record.executable_id, sink_.executable_ids[0]);
+  EXPECT_EQ(load.executable_id, artifact.record.executable_id);
+  EXPECT_EQ(load.code_object_id, artifact.record.code_object_id);
+  EXPECT_EQ(load.physical_device_ordinal, 0u);
+  ASSERT_EQ(artifact.data.size(), loaded_image_.data_length);
+  EXPECT_EQ(std::memcmp(artifact.data.data(), loaded_image_.data,
+                        artifact.data.size()),
+            0);
+  // Offline attribution uses only the emitted image and placement. It must
+  // recover the actual native program address even after executable release.
+  auto* source = iree::hal::amd::gpu::testing::ByteSequence::Create(
+      iree_make_const_byte_span(artifact.data.data(), artifact.data.size()), 0);
+  iree_hal_amd_gpu_image_t image = {};
+  iree_status_t status = iree_hal_amd_gpu_hsaco_image_initialize(
+      source, iree_allocator_system(), &image);
+  iree_byte_sequence_release(source);
+  IREE_ASSERT_OK(status);
+  EXPECT_EQ(load.load_size, image.byte_length);
+  EXPECT_EQ(static_cast<uint64_t>(load.load_delta) + image.virtual_base +
+                image.kernels[function.value].entry_offset,
+            entry_address);
+  iree_hal_amd_gpu_image_deinitialize(&image);
   for (const auto& event : sink_.dispatch_events) {
     EXPECT_GT(event.start_tick, 0u);
     EXPECT_GE(event.end_tick, event.start_tick);
