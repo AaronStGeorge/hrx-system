@@ -1947,7 +1947,7 @@ void loom_low_schedule_pressure_score_candidate(
       .active_unspillable_transaction_final_capacity = UINT32_MAX,
       .opened_unspillable_completion_capacity = UINT32_MAX,
       .active_register_packing_completion_capacity = UINT32_MAX,
-      .source_ordinal = node->source_ordinal,
+      .source_ordinal = node_index,
       .flags =
           (uint16_t)pressure_demand.candidate_flags |
           (uint16_t)((node->flags &

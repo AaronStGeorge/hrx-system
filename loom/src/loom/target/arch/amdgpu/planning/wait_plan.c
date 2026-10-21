@@ -456,7 +456,7 @@ loom_amdgpu_wait_plan_edge_copy_group(
     return NULL;
   }
   return loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-      builder->allocation, node->source_ordinal);
+      builder->allocation, node_index);
 }
 
 static bool loom_amdgpu_wait_plan_op_has_packet_transfers(const loom_op_t* op) {
@@ -476,7 +476,7 @@ loom_amdgpu_wait_plan_packet_transfer_group(
     return NULL;
   }
   return loom_low_allocation_find_packet_move_group_by_source_ordinal(
-      builder->allocation, node->source_ordinal);
+      builder->allocation, node_index);
 }
 
 static iree_status_t loom_amdgpu_wait_plan_ensure_dependency_visit_state(

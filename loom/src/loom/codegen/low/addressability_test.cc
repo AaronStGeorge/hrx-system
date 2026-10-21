@@ -166,7 +166,6 @@ void InitializeAddressabilityTestState(
 
   state->nodes[0].op = &state->packet_op;
   state->nodes[0].block_index = 0;
-  state->nodes[0].source_ordinal = 0;
   state->nodes[0].scheduled_ordinal = 0;
   state->nodes[0].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
   state->nodes[0].descriptor = &state->descriptors[0];

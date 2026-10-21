@@ -939,8 +939,7 @@ static void loom_low_schedule_insert_ready_node(
     keys = loom_low_schedule_pressure_ready_keys(state, pressure_state,
                                                  node_index);
   } else {
-    keys.values[LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE] =
-        state->nodes[node_index].source_ordinal;
+    keys.values[LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE] = node_index;
   }
   loom_low_schedule_ready_policy_insert(state, ready_policy, node_index, &keys);
 }

@@ -326,8 +326,6 @@ typedef struct loom_low_schedule_node_t {
   uint32_t source_descriptor_ordinal;
   // Region block ordinal containing |op|.
   uint32_t block_index;
-  // Source-order ordinal within the whole low function body.
-  uint32_t source_ordinal;
   // Scheduled ordinal within the containing block after topological scheduling.
   uint32_t scheduled_ordinal;
   // Abstract issue cycle within the containing block after timing-aware
@@ -365,7 +363,7 @@ typedef struct loom_low_schedule_node_t {
   } value_ordinals;
 } loom_low_schedule_node_t;
 
-static_assert(sizeof(loom_low_schedule_node_t) <= 88,
+static_assert(sizeof(loom_low_schedule_node_t) <= 80,
               "schedule nodes must retain compact indexed identities");
 
 static inline loom_value_ordinal_t* loom_low_schedule_node_value_ordinals(
@@ -696,15 +694,14 @@ typedef struct loom_low_schedule_resource_summary_t {
 
 // Maximal contiguous run of scheduled nodes that issue in one block cycle.
 typedef struct loom_low_schedule_issue_group_t {
-  // Region block containing every node in the group.
-  uint32_t block_index;
   // Abstract issue cycle shared by every node in the group.
   uint32_t issue_cycle;
   // First entry in the table scheduled-node-index array.
   uint32_t scheduled_node_start;
-  // Number of scheduled-node-index entries in the group.
-  uint32_t scheduled_node_count;
 } loom_low_schedule_issue_group_t;
+
+static_assert(sizeof(loom_low_schedule_issue_group_t) == 8,
+              "issue groups must retain compact indexed ranges");
 
 // Schedule metadata for one low function block.
 typedef struct loom_low_schedule_block_t {
@@ -849,7 +846,8 @@ typedef struct loom_low_schedule_table_t {
   loom_cfg_loop_forest_t loop_forest;
   // Semantic natural loops shared by target planning overlays.
   loom_cfg_loop_nest_t loop_nest;
-  // Per-op schedule nodes in source order.
+  // Per-op schedule nodes in source order. Each node's array index is its
+  // source-order ordinal within the whole low function body.
   const loom_low_schedule_node_t* nodes;
   // Number of schedule nodes.
   iree_host_size_t node_count;

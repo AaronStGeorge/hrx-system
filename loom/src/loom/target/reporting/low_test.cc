@@ -74,11 +74,13 @@ TEST(CompileReportLowMixTest,
       .block_index = 0,
       .kind = LOOM_LOW_SCHEDULE_NODE_TERMINATOR,
   };
+  schedule.nodes = &node;
+  schedule.node_count = 1;
   loom_low_allocation_table_t allocation = {};
   loom_target_compile_report_static_instruction_mix_t mix = {};
 
   loom_target_compile_report_accumulate_low_node_static_mix(
-      &schedule, &allocation, &descriptor_set, &node, &mix);
+      &schedule, &allocation, &descriptor_set, 0, &mix);
 
   EXPECT_EQ(mix.descriptor_count, 1u);
   EXPECT_EQ(mix.scalar_alu_count, 1u);
@@ -93,7 +95,7 @@ TEST(CompileReportLowMixTest,
       LOOM_LOW_INSTRUCTION_CLASS_FLAG_CONTROL;
   node.op = &generic_terminator;
   loom_target_compile_report_accumulate_low_node_static_mix(
-      &schedule, &allocation, &descriptor_set, &node, &mix);
+      &schedule, &allocation, &descriptor_set, 0, &mix);
 
   EXPECT_EQ(mix.descriptor_count, 2u);
   EXPECT_EQ(mix.scalar_alu_count, 1u);
@@ -131,8 +133,10 @@ TEST(CompileReportLowMixTest, CountsExecutionBarriersFromInstructionClasses) {
         .descriptor = &descriptor,
         .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
     };
+    schedule.nodes = &node;
+    schedule.node_count = 1;
     loom_target_compile_report_accumulate_low_node_static_mix(
-        &schedule, &allocation, &descriptor_set, &node, &mix);
+        &schedule, &allocation, &descriptor_set, 0, &mix);
   }
   EXPECT_EQ(mix.execution_barrier_count, 1u);
 
@@ -186,8 +190,10 @@ TEST(CompileReportLowMixTest, CountsOnlyMemoryAttachedReadWriteEffects) {
         .descriptor = &descriptor,
         .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
     };
+    schedule.nodes = &node;
+    schedule.node_count = 1;
     loom_target_compile_report_accumulate_low_node_static_mix(
-        &schedule, &allocation, &descriptor_set, &node, &mix);
+        &schedule, &allocation, &descriptor_set, 0, &mix);
   }
 
   EXPECT_EQ(mix.descriptor_count, 6u);
@@ -665,7 +671,6 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
     schedule_nodes[i].descriptor = &descriptors[i];
     schedule_nodes[i].schedule_class = loom_low_schedule_model_schedule_class(
         &schedule_model, &descriptor_views[i]);
-    schedule_nodes[i].source_ordinal = i;
     schedule_nodes[i].scheduled_ordinal = i;
     schedule_nodes[i].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
   }

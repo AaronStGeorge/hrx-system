@@ -595,10 +595,10 @@ static void loom_vm_function_call_bindings(
 // permutations. Overflow arguments are stored before the argument permutation;
 // overflow results load after direct results leave their ABI registers.
 IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_vm_function_call(
-    const loom_low_emission_frame_t* frame,
-    const loom_low_schedule_node_t* node,
+    const loom_low_emission_frame_t* frame, uint32_t node_index,
     const loom_vm_program_build_t* functions, loom_vm_call_scratch_t* scratch,
     iree_io_stream_t* stream, iree_vm_bytecode_v0_function_row_t* out_row) {
+  const loom_low_schedule_node_t* node = &frame->schedule.nodes[node_index];
   const loom_vm_program_callable_t* binding =
       functions
           ->bindings_by_symbol[loom_low_func_call_callee(node->op).symbol_id];
@@ -607,8 +607,8 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_vm_function_call(
   const loom_vm_call_bank_t* values = &banks[VM_CORE_REG_CLASS_ID_VALUE];
   const loom_vm_call_bank_t* refs = &banks[VM_CORE_REG_CLASS_ID_REF];
   const loom_low_allocation_call_moves_t* moves =
-      loom_low_allocation_find_call_moves_by_source_ordinal(
-          &frame->allocation, node->source_ordinal);
+      loom_low_allocation_find_call_moves_by_source_ordinal(&frame->allocation,
+                                                            node_index);
   out_row->flags_u16 |= IREE_VM_BYTECODE_FUNCTION_FLAG_HAS_CALL;
   out_row->value_register_count_u16 = iree_max(
       out_row->value_register_count_u16,
@@ -1086,8 +1086,8 @@ iree_status_t loom_vm_function_plan_write(
       if (node->descriptor) {
         status = loom_vm_function_packet(&frame, node, functions, stream);
       } else if (loom_low_func_call_isa(node->op)) {
-        status = loom_vm_function_call(&frame, node, functions, &call_scratch,
-                                       stream, out_row);
+        status = loom_vm_function_call(&frame, node_index, functions,
+                                       &call_scratch, stream, out_row);
       } else if (loom_low_storage_reserve_isa(node->op) ||
                  loom_low_storage_view_isa(node->op)) {
         // Storage layout is already fixed by the shared scheduler.
@@ -1146,7 +1146,7 @@ iree_status_t loom_vm_function_plan_write(
                  loom_low_concat_isa(node->op)) {
         const loom_low_allocation_packet_move_group_t* group =
             loom_low_allocation_find_packet_move_group_by_source_ordinal(
-                &frame.allocation, node->source_ordinal);
+                &frame.allocation, node_index);
         if (group) {
           const loom_low_move_range_t range = group->move_group.moves;
           status = loom_vm_function_moves(frame.allocation.moves, range,

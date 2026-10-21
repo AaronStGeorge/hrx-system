@@ -767,7 +767,7 @@ static iree_status_t loom_low_packet_json_write_packet(
   IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
       &object, IREE_SV("block"), node->block_index));
   IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-      &object, IREE_SV("source_ordinal"), node->source_ordinal));
+      &object, IREE_SV("source_ordinal"), packet->node_index));
   IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
       &object, IREE_SV("scheduled_ordinal"), node->scheduled_ordinal));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(

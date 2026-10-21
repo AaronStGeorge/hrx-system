@@ -137,7 +137,7 @@ static uint64_t loom_low_schedule_ready_schedule_key(
              (uint64_t)(UINT16_MAX - latency);
     }
     default:
-      return materialization_key | node->source_ordinal;
+      return materialization_key | node_index;
   }
 }
 
@@ -171,7 +171,7 @@ loom_low_schedule_ready_keys_t loom_low_schedule_pressure_ready_keys(
   return (loom_low_schedule_ready_keys_t){
       .values =
           {
-              [LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE] = node->source_ordinal,
+              [LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE] = node_index,
               [LOOM_LOW_SCHEDULE_READY_VIEW_PRESSURE] =
                   loom_low_schedule_pressure_ready_key(state, pressure_state,
                                                        node_index),

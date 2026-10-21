@@ -67,10 +67,10 @@ static void loom_amdgpu_structural_packet_analyze_packet_moves(
 
 loom_amdgpu_structural_packet_info_t loom_amdgpu_structural_packet_analyze(
     const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation,
-    const loom_low_schedule_node_t* node,
+    const loom_low_allocation_table_t* allocation, uint32_t node_index,
     loom_amdgpu_structural_packet_analysis_flags_t analysis_flags) {
   loom_amdgpu_structural_packet_info_t info = {0};
+  const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
   const loom_op_t* op = node->op;
   if (op == NULL) {
     info.flags = LOOM_AMDGPU_STRUCTURAL_PACKET_FLAG_MATERIALIZES;
@@ -83,8 +83,8 @@ loom_amdgpu_structural_packet_info_t loom_amdgpu_structural_packet_analyze(
   const loom_low_allocation_packet_move_op_kind_t packet_move_kind =
       loom_low_allocation_move_topology_packet_move_op_kind(op);
   if (packet_move_kind != LOOM_LOW_ALLOCATION_PACKET_MOVE_OP_NONE) {
-    loom_amdgpu_structural_packet_analyze_packet_moves(
-        allocation, node->source_ordinal, analysis_flags, &info);
+    loom_amdgpu_structural_packet_analyze_packet_moves(allocation, node_index,
+                                                       analysis_flags, &info);
     return info;
   }
   if (loom_low_live_in_isa(op) || loom_low_storage_reserve_isa(op)) {
@@ -104,7 +104,7 @@ loom_amdgpu_structural_packet_info_t loom_amdgpu_structural_packet_analyze(
     if (allocation != NULL && loom_low_br_args(op).count != 0) {
       const loom_low_allocation_edge_copy_group_t* group =
           loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-              allocation, node->source_ordinal);
+              allocation, node_index);
       IREE_ASSERT(group != NULL);
       loom_amdgpu_structural_packet_analyze_move_range(
           allocation, group->move_group.moves, &info);

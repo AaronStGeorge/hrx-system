@@ -105,7 +105,6 @@ class LowPacketProgressTest : public ::testing::Test {
 
     for (uint32_t i = 0; i < packet_count; ++i) {
       state->nodes[i].block_index = 0;
-      state->nodes[i].source_ordinal = i;
       state->nodes[i].scheduled_ordinal = i;
       state->nodes[i].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
       state->nodes[i].descriptor = &state->descriptor;

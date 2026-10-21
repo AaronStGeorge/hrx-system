@@ -407,7 +407,7 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
         &node_object, IREE_SV("block"), node->block_index));
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-        &node_object, IREE_SV("source_ordinal"), node->source_ordinal));
+        &node_object, IREE_SV("source_ordinal"), (uint32_t)i));
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
         &node_object, IREE_SV("scheduled_ordinal"), node->scheduled_ordinal));
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
@@ -542,16 +542,23 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &group_object));
     IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
         &group_object, IREE_SV("index"), i));
+    const uint32_t first_node_index =
+        table->scheduled_node_indices[group->scheduled_node_start];
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
-        &group_object, IREE_SV("block"), group->block_index));
+        &group_object, IREE_SV("block"),
+        table->nodes[first_node_index].block_index));
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
         &group_object, IREE_SV("issue_cycle"), group->issue_cycle));
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
         &group_object, IREE_SV("scheduled_node_start"),
         group->scheduled_node_start));
+    const uint32_t scheduled_node_end =
+        i + 1 < table->issue_group_count
+            ? table->issue_groups[i + 1].scheduled_node_start
+            : (uint32_t)table->scheduled_node_count;
     IREE_RETURN_IF_ERROR(loom_json_object_write_uint32_field(
         &group_object, IREE_SV("scheduled_node_count"),
-        group->scheduled_node_count));
+        scheduled_node_end - group->scheduled_node_start));
     IREE_RETURN_IF_ERROR(loom_json_object_end(&group_object));
   }
   IREE_RETURN_IF_ERROR(loom_json_array_end(&issue_groups));

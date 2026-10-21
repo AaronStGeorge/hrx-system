@@ -771,7 +771,7 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
     IREE_ASSERT_OK(
         loom_low_physical_issue_commit(&issue, &instruction, 1, cycle));
     loom_low_physical_issue_commit_source(&issue, i, cycle);
-    cycles[packet.node->source_ordinal] = cycle;
+    cycles[packet.node_index] = cycle;
     next_cycle = cycle + 1;
   }
   // SSA lifetimes permit reuse, but the physical read has not finished.
