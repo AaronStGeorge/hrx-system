@@ -56,6 +56,8 @@ typedef struct loom_serve_router_held_request_t {
   const loom_serve_http_request_t* request;
   // Stable registration slot, not reusable while this claim remains held.
   iree_host_size_t service_index;
+  // Inference-route classification retained until this claim is released.
+  bool demands_parameters;
 } loom_serve_router_held_request_t;
 
 typedef struct loom_serve_router_log_reader_t {
@@ -994,6 +996,7 @@ static void loom_serve_router_held_collect(loom_serve_router_t* router,
       continue;
     }
     --state->held_count;
+    state->parameter_demand_count -= entry.demands_parameters;
     *out_progress = true;
   }
   router->held.count = remaining;
@@ -1434,9 +1437,15 @@ static iree_status_t loom_serve_router_accept(
               router->server, connection, 429, "Too Many Requests",
               IREE_SV("model admission holding capacity is full"), output);
         }
+        const bool demands_parameters =
+            post && iree_string_view_equal(
+                        request->target,
+                        iree_make_cstring_view(state->service.endpoint));
         router->held.values[router->held.count++] =
-            (loom_serve_router_held_request_t){connection, request, i};
+            (loom_serve_router_held_request_t){connection, request, i,
+                                               demands_parameters};
         ++state->held_count;
+        state->parameter_demand_count += demands_parameters;
         return iree_ok_status();
       }
       return loom_serve_router_admit(router, i, connection, request);

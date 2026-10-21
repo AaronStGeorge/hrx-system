@@ -39,6 +39,8 @@ struct loom_serve_test_compilation_t {
   iree_string_view_t root = {};
   // Borrowed specialization retained through Await.
   const loomc_config_options_t* config = nullptr;
+  // Early immutable layout, borrowed until the returned stage is freed.
+  const loom_cmd_program_t* layout = nullptr;
 
  private:
   static iree_status_t Drain(iree_task_process_t* process,
@@ -46,6 +48,7 @@ struct loom_serve_test_compilation_t {
                              iree_task_process_drain_result_t* result);
   static void Complete(void* user_data, iree_status_t status,
                        loom_serve_jit_stage_t* stage);
+  static void Layout(void* user_data, const loom_cmd_program_t* program);
   static void Release(iree_task_process_t* process);
 
   // Immediate process representing a scheduler's compilation submission.

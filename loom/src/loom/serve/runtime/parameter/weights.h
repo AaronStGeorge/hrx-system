@@ -124,8 +124,10 @@ typedef void (*loom_serve_weights_completion_fn_t)(void* user_data,
 // staging shared across tensors. The temporary VM policy is released before
 // JIT.
 //
-// Success accepts exclusive access to weights and jit until completion, which
-// may run before return. The caller keeps both, declaration, host and user_data
+// Success accepts exclusive access to weights until completion, which may run
+// before return. Independent compilations may share jit; policy evidence is
+// accumulated privately and merged through its report lock. The caller keeps
+// both, declaration, host and user_data
 // alive through that callback. Rejection owes no callback. Preparation is
 // attempted once per plan; failure returns ownership for destruction, not
 // activation.

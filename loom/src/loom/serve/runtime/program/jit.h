@@ -41,8 +41,9 @@ typedef struct loom_serve_jit_stage_t loom_serve_jit_stage_t;
 // declarations and launch configurations are specialized to that profile at
 // each command's kernel roots before planning and native entry compilation.
 // report receives copied evidence even on failure and outlives the catalog.
-// Reports publish in submission order. The owner reads the accumulator only
-// after all accepted compilations complete; callbacks are serialized.
+// Reports and callbacks publish in readiness order; independent compilations
+// never wait for an earlier submission. Callbacks are serialized. Direct reads
+// of report require every accepted compilation and report producer to retire.
 iree_status_t loom_serve_jit_create(iree_hal_device_t* device,
                                     iree_hal_queue_t* dispatch,
                                     loom_serve_host_t* host,
@@ -57,7 +58,7 @@ void loom_serve_jit_retain(loom_serve_jit_t* jit);
 
 // Releases caller ownership without waiting or closing the host compiler queue.
 // Accepted jobs retain the catalog until their compiler/native work and result
-// binding retire. Ordered callback state then survives independently, allowing
+// binding retire. Callback state then survives independently, allowing
 // catalog/device ownership to retire before completion becomes externally
 // visible. Release does not cancel jobs. The host, originating device owner and
 // caller-owned root/config storage still outlive all accepted completions. A
@@ -96,21 +97,45 @@ void loom_serve_jit_trim(loom_serve_jit_t* jit);
 // compilations are outstanding. Compiler tasks merge before their completions.
 loom_serve_compilation_report_t* loom_serve_jit_report(loom_serve_jit_t* jit);
 
+// Ordinary catalog compilation queue. An individual request may instead use
+// another sink sharing this host's executor and mutually exclusive worker
+// ordinals; the request carries that sink through every native child.
+loomc_task_sink_t loom_serve_jit_task_sink(const loom_serve_jit_t* jit);
+
+// Copies accumulated evidence or merges private producer evidence under the
+// publication lock. Neither waits for outstanding compilation or callbacks.
+void loom_serve_jit_report_snapshot(
+    loom_serve_jit_t* jit, loom_serve_compilation_report_t* out_report);
+void loom_serve_jit_report_merge(loom_serve_jit_t* jit,
+                                 const loom_serve_compilation_report_t* report);
+
 // Borrows the catalog's shared native and VM source grammar through jit
 // lifetime.
 loomc_target_environment_t* loom_serve_jit_target_environment(
     const loom_serve_jit_t* jit);
 
-// Receives the owned stage on success (NULL on failure) and owns status. Runs
-// on a shared task worker after every native request and compiler access has
-// retired. May schedule more work or destroy its completed catalog, but never
-// blocks or releases the final host owner from this callback.
+// Borrows an immutable command layout before its native requests have joined.
+// Called at most once, on successful command construction. May overlap other
+// layout callbacks and native compilation, but precedes this job's completion.
+// The layout lives in the final stage, including when native compilation fails;
+// consumers retain it only until they free that stage. Never blocks a worker.
+typedef void (*loom_serve_jit_layout_fn_t)(void* user_data,
+                                           const loom_cmd_program_t* program);
+
+// Receives the owned stage and status. Failure can carry a partially
+// constructed stage owning a previously published layout; the recipient always
+// frees it. Runs on a shared task worker after every native request and
+// compiler access has retired. May schedule more work or destroy its completed
+// catalog, but never blocks or releases the final host owner from this
+// callback.
 typedef void (*loom_serve_jit_completion_fn_t)(void* user_data,
                                                iree_status_t status,
                                                loom_serve_jit_stage_t* stage);
 
-// Accepts a compilation without waiting. Product construction, native kernel
-// compilation and final binding all run on the caller's shared executor.
+// Accepts a compilation without waiting. New product/native tasks use sink,
+// which shares the catalog's host executor and dense worker ordinals and
+// outlives completion. Reused pending natives retain their original scheduling
+// domain. Final binding and callbacks run on the shared executor.
 // Published native requests are deduplicated and submitted during command
 // construction; their compilation does not depend on the completed parent.
 // Completion joins all accepted native work even when parent construction
@@ -120,12 +145,12 @@ typedef void (*loom_serve_jit_completion_fn_t)(void* user_data,
 // callback publication has an independent lifetime. The caller keeps root,
 // config and its referenced storage alive through completion. Compilations may
 // overlap on the same catalog, including exact-input requests whose native work
-// is still pending. Callbacks publish in submission order, after their borrowed
-// compiler inputs and catalog ownership retire. Different catalogs share
-// workers and progress independently.
+// is still pending. Completions publish in readiness order, after their
+// borrowed compiler inputs and catalog ownership retire. Different catalogs
+// share workers and progress independently.
 iree_status_t loom_serve_jit_compile_async(
-    loom_serve_jit_t* jit, iree_string_view_t root,
-    const loomc_config_options_t* config,
+    loom_serve_jit_t* jit, loomc_task_sink_t sink, iree_string_view_t root,
+    const loomc_config_options_t* config, loom_serve_jit_layout_fn_t layout,
     loom_serve_jit_completion_fn_t completion, void* user_data);
 
 // Compiles a kernel root and its zero-argument launch configuration for direct
@@ -133,7 +158,7 @@ iree_status_t loom_serve_jit_compile_async(
 // and completion contract as command compilation. The entry takes only buffer
 // arguments. Model values belong in specialization or device input packets.
 iree_status_t loom_serve_jit_compile_dispatch_async(
-    loom_serve_jit_t* jit, iree_string_view_t root,
+    loom_serve_jit_t* jit, loomc_task_sink_t sink, iree_string_view_t root,
     const loomc_config_options_t* config,
     loom_serve_jit_completion_fn_t completion, void* user_data);
 

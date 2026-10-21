@@ -47,7 +47,9 @@ static void loom_serve_activation_ready(void* user_data,
   iree_slim_mutex_lock(&activation->event.mutex);
   activation->event.status = status;
   activation->event.ready = true;
-  activation->event.wake(activation->event.user_data);
+  if (activation->event.wake) {
+    activation->event.wake(activation->event.user_data);
+  }
   iree_slim_mutex_unlock(&activation->event.mutex);
 }
 
@@ -130,6 +132,21 @@ iree_status_t loom_serve_activation_advance(
   }
   *out_phase = activation->phase;
   return status;
+}
+
+void loom_serve_activation_set_observer(loom_serve_activation_t* activation,
+                                        void (*wake)(void* user_data),
+                                        void* user_data) {
+  if (!activation) {
+    return;
+  }
+  iree_slim_mutex_lock(&activation->event.mutex);
+  activation->event.wake = wake;
+  activation->event.user_data = user_data;
+  if (wake && activation->event.ready) {
+    wake(user_data);
+  }
+  iree_slim_mutex_unlock(&activation->event.mutex);
 }
 
 void loom_serve_activation_free(loom_serve_activation_t* activation) {

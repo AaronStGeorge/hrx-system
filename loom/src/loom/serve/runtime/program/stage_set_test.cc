@@ -37,7 +37,7 @@ class StageSetTest : public loom_serve::testing::JitTest {
                                                  &sources, Complete, this,
                                                  host_allocator_)
             : loom_serve_stage_set_compile_catalog_async(
-                  jit_, preparation_, Complete, this, host_allocator_);
+                  jit_, preparation_, Layout, Complete, this, host_allocator_);
     IREE_RETURN_IF_ERROR(status);
     // The final set owns native results independently of either source catalog.
     loom_serve_jit_release(jit_);
@@ -78,12 +78,24 @@ class StageSetTest : public loom_serve::testing::JitTest {
     EXPECT_EQ(stages_->compilation.kernels, 9u);
     EXPECT_EQ(stages_->compilation.reused_kernels, fail ? 1u : 2u);
     EXPECT_EQ(stages_->compilation.entries, fail ? 9u : 11u);
+    if (!private_catalog) {
+      EXPECT_EQ(layouts_[0], loom_serve_jit_stage_program(stages_->values[0]));
+      EXPECT_EQ(
+          layouts_[1],
+          fail ? nullptr : loom_serve_jit_stage_program(stages_->values[1]));
+      EXPECT_EQ(layouts_[2], nullptr);
+    }
   }
 
   // Final set, including successfully compiled stages around a failed parent.
   loom_serve_stage_set_t* stages_ = nullptr;
 
  private:
+  static void Layout(void* user_data, iree_host_size_t index,
+                     const loom_cmd_program_t* program) {
+    static_cast<StageSetTest*>(user_data)->layouts_[index] = program;
+  }
+
   static void Complete(void* user_data, iree_status_t status,
                        loom_serve_stage_set_t* stages) {
     auto* test = static_cast<StageSetTest*>(user_data);
@@ -106,6 +118,8 @@ class StageSetTest : public loom_serve::testing::JitTest {
   bool complete_ = false;
   // Owned terminal status, consumed by CompileSet or teardown.
   iree_status_t status_ = iree_ok_status();
+  // Disjoint early command views, borrowed through stage-set destruction.
+  std::array<const loom_cmd_program_t*, 3> layouts_ = {};
 };
 
 TEST_P(StageSetTest, ExistingCatalogJoinsMixedStages) {

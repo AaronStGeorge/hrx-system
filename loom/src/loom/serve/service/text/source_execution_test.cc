@@ -11,6 +11,204 @@ namespace {
 using loom_serve::testing::text::Oracle;
 using loom_serve::testing::text::SourceTextServiceTest;
 
+TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
+  for (const auto flags : {0u, uint32_t{LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND}}) {
+    SCOPED_TRACE(flags);
+    auto* pool = loom_serve_device_memory_pool(device_);
+    if (pool) {
+      IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+    }
+    const auto before = loom_serve_device_memory_statistics(device_);
+    const auto options = ModelOptions();
+    iree_notification_t notification;
+    iree_notification_initialize(&notification);
+    loom_serve_text_load_t* load = nullptr;
+    IREE_ASSERT_OK(loom_serve_text_load_allocate(
+        device_, &options,
+        [](void* payload) {
+          iree_notification_post(static_cast<iree_notification_t*>(payload),
+                                 IREE_ALL_WAITERS);
+        },
+        &notification, host_allocator_, &load));
+    bool complete = false;
+    while (!complete) {
+      const auto ticket = iree_notification_prepare_wait(&notification);
+      IREE_ASSERT_OK(loom_serve_text_load_advance(load, flags, &complete));
+      if (complete) {
+        iree_notification_cancel_wait(&notification);
+      } else {
+        iree_notification_commit_wait(&notification, ticket, IREE_DURATION_ZERO,
+                                      IREE_TIME_INFINITE_FUTURE);
+      }
+    }
+    auto* model = loom_serve_text_load_take_model(load);
+    loom_serve_text_load_free(load);
+    const auto parameters =
+        loom_serve_residency_snapshot(loom_serve_text_model_residency(model));
+    // Warmup owns an independent invocation. Preparation does not import its
+    // weight-ready dependency into the mutable-state execution timeline.
+    EXPECT_FALSE(parameters.active);
+    EXPECT_EQ(parameters.pin_count, 0u);
+    EXPECT_EQ(parameters.activity.activations, flags ? 1u : 0u);
+    auto* row = loom_serve_text_model_row(model, 0);
+    const int32_t token = Oracle::Id('a');
+    IREE_ASSERT_OK(loom_serve_text_row_prefill(row, 1, &token));
+    Oracle reference;
+    reference.Consume("a");
+    EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
+    EXPECT_EQ(loom_serve_text_model_weight_activity(model).activations, 1u);
+    loom_serve_text_warmup_poll(loom_serve_text_model_warmup(model));
+    IREE_ASSERT_OK(
+        loom_serve_text_warmup_status(loom_serve_text_model_warmup(model)));
+    IREE_ASSERT_OK(loom_serve_text_model_free(model));
+    iree_notification_deinitialize(&notification);
+    // Model retirement releases logical ownership. Native disposal may finish
+    // later and remains charged to the shared pool until its outer join.
+    if (pool) {
+      IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+    }
+    const auto after = loom_serve_device_memory_statistics(device_);
+    EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
+    EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
+  }
+}
+
+TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
+  const auto package = iree::testing::MakeTempFilePath("failed_text_link");
+  ASSERT_TRUE(std::filesystem::create_directory(package));
+  for (const char* file : {"prepare.loom", "advance.loom", "model.json",
+                           "weights.loom", "tokenizer.json"}) {
+    ASSERT_TRUE(std::filesystem::copy_file(directory_ + "/" + file,
+                                           package + "/" + file));
+  }
+  {
+    std::ifstream input(directory_ + "/control.loom");
+    std::string source((std::istreambuf_iterator<char>(input)), {});
+    const auto offset = source.find("import(\"runner\")");
+    ASSERT_NE(offset, std::string::npos);
+    source.replace(offset, std::string("import(\"runner\")").size(),
+                   "import(\"missing\")");
+    std::ofstream output(package + "/control.loom");
+    output << source;
+    ASSERT_TRUE(output.good());
+  }
+  auto* pool = loom_serve_device_memory_pool(device_);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
+  const auto before = loom_serve_device_memory_statistics(device_);
+  auto options = ModelOptions();
+  options.sources.base_directory = iree_make_cstring_view(package.c_str());
+  iree_notification_t notification;
+  iree_notification_initialize(&notification);
+  const auto wake = [](void* payload) {
+    iree_notification_post(static_cast<iree_notification_t*>(payload),
+                           IREE_ALL_WAITERS);
+  };
+  loom_serve_text_load_t* load = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_load_allocate(
+      device_, &options, wake, &notification, host_allocator_, &load));
+  bool complete = false;
+  iree_status_t status = iree_ok_status();
+  while (!complete) {
+    const auto ticket = iree_notification_prepare_wait(&notification);
+    status = loom_serve_text_load_advance(
+        load, LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND, &complete);
+    if (complete) {
+      iree_notification_cancel_wait(&notification);
+    } else {
+      IREE_ASSERT_OK(status);
+      iree_notification_commit_wait(&notification, ticket, IREE_DURATION_ZERO,
+                                    IREE_TIME_INFINITE_FUTURE);
+    }
+  }
+  EXPECT_NE(
+      iree::Status::ToString(status).find("requires missing module 'missing'"),
+      std::string::npos);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  auto* partial = loom_serve_text_load_take_model(load);
+  EXPECT_EQ(loom_serve_text_model_weight_activity(partial).activations, 1u);
+  loom_serve_text_load_free(load);
+  loom_serve_text_model_retire(partial, wake, &notification);
+  EXPECT_TRUE(iree_notification_await(
+      &notification,
+      [](void* payload) {
+        return loom_serve_text_model_is_retired(
+            static_cast<loom_serve_text_model_t*>(payload));
+      },
+      partial, iree_infinite_timeout()));
+  IREE_ASSERT_OK(loom_serve_text_model_free_retired(partial));
+  iree_notification_deinitialize(&notification);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
+  const auto after = loom_serve_device_memory_statistics(device_);
+  EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
+  EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
+  auto* row = loom_serve_text_model_row(model_, 0);
+  const int32_t token = Oracle::Id('a');
+  IREE_ASSERT_OK(loom_serve_text_row_prefill(row, 1, &token));
+  Oracle reference;
+  reference.Consume("a");
+  EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
+}
+
+TEST_F(SourceTextServiceTest, MissingCheckpointRetiresPublishedLayouts) {
+  auto* pool = loom_serve_device_memory_pool(device_);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
+  const auto before = loom_serve_device_memory_statistics(device_);
+  auto options = ModelOptions();
+  const auto missing = iree::testing::MakeTempFilePath("missing_checkpoint");
+  ASSERT_FALSE(std::filesystem::exists(missing));
+  options.weights_path = iree_make_cstring_view(missing.c_str());
+  iree_notification_t notification;
+  iree_notification_initialize(&notification);
+  loom_serve_text_load_t* load = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_load_allocate(
+      device_, &options,
+      [](void* payload) {
+        iree_notification_post(static_cast<iree_notification_t*>(payload),
+                               IREE_ALL_WAITERS);
+      },
+      &notification, host_allocator_, &load));
+  bool complete = false;
+  iree_status_t status = iree_ok_status();
+  while (!complete) {
+    const auto ticket = iree_notification_prepare_wait(&notification);
+    status = loom_serve_text_load_advance(
+        load, LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND, &complete);
+    if (complete) {
+      iree_notification_cancel_wait(&notification);
+    } else {
+      IREE_ASSERT_OK(status);
+      iree_notification_commit_wait(&notification, ticket, IREE_DURATION_ZERO,
+                                    IREE_TIME_INFINITE_FUTURE);
+    }
+  }
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  auto* partial = loom_serve_text_load_take_model(load);
+  EXPECT_EQ(loom_serve_text_model_weight_activity(partial).activations, 0u);
+  loom_serve_text_load_free(load);
+  EXPECT_TRUE(loom_serve_text_model_is_retired(partial));
+  IREE_ASSERT_OK(loom_serve_text_model_free_retired(partial));
+  iree_notification_deinitialize(&notification);
+  if (pool) {
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
+  const auto after = loom_serve_device_memory_statistics(device_);
+  EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
+  EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
+  // The failed preparation did not retire shared queues or existing models.
+  auto* row = loom_serve_text_model_row(model_, 0);
+  const int32_t token = Oracle::Id('a');
+  IREE_ASSERT_OK(loom_serve_text_row_prefill(row, 1, &token));
+  Oracle reference;
+  reference.Consume("a");
+  EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
+}
+
 TEST_F(SourceTextServiceTest, ChunkingRowsAndForksMatchDenseOracle) {
   const std::string prompt = "abxabbaaxbabx";
   std::vector<int32_t> tokens;

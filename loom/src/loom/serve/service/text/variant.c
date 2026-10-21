@@ -134,6 +134,10 @@ static void loom_serve_text_variant_compiled(void* user_data,
   loom_serve_text_variant_job_t* job = user_data;
   for (iree_host_size_t i = 0; i < stages->count; ++i) {
     job->variant->stages[i].compiled = stages->values[i];
+    if (iree_status_is_ok(status)) {
+      job->variant->stages[i].program =
+          *loom_serve_jit_stage_program(stages->values[i]);
+    }
     stages->values[i] = NULL;
   }
   loom_serve_stage_set_free(stages);
@@ -155,7 +159,7 @@ static void loom_serve_text_variant_release(loomc_task_t* task) {
   iree_status_t status = job->status;
   if (iree_status_is_ok(status)) {
     status = loom_serve_stage_set_compile_catalog_async(
-        job->jit, job->preparation, loom_serve_text_variant_compiled, job,
+        job->jit, job->preparation, NULL, loom_serve_text_variant_compiled, job,
         job->variant->host_allocator);
   }
   if (!iree_status_is_ok(status)) {

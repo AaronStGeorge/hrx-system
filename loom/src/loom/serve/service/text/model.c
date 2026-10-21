@@ -73,6 +73,8 @@ struct loom_serve_text_model_t {
   loom_serve_residency_group_t* parameter_group;
   // Atomic invocation working set and independent admission interest.
   loom_serve_residency_t* residency;
+  // Independent demanded parameter I/O, retained across service publication.
+  loom_serve_text_warmup_t* warmup;
   // Source-declared command programs, owned in declaration order.
   loom_serve_text_stage_t* stages;
   // Number of allocated stages, including partially initialized cold entries.
@@ -165,6 +167,7 @@ typedef enum loom_serve_text_load_phase_e {
   TEXT_LOAD_STAGES,
   TEXT_LOAD_BIND,
   TEXT_LOAD_WEIGHTS,
+  TEXT_LOAD_ACTIVATE,
   TEXT_LOAD_LINK,
   TEXT_LOAD_READY,
   TEXT_LOAD_COMPLETE,
@@ -195,8 +198,12 @@ struct loom_serve_text_load_t {
   struct {
     // Protects completion publication and its final notification access.
     iree_slim_mutex_t mutex;
-    // Accepted work retains this load until its final callback.
+    // Accepted foreground phase retains this load until its final callback.
     bool pending;
+    // Native stage compilation may overlap parameter preparation/activation.
+    bool compiling;
+    // Immutable command layouts published by the accepted stage set.
+    iree_host_size_t layout_count;
     // Owned callback outcome, consumed by advance.
     iree_status_t status;
     // Nonblocking serialized-owner notification.
@@ -219,7 +226,7 @@ static void loom_serve_text_load_complete(void* user_data,
                                           iree_status_t status) {
   loom_serve_text_load_t* load = user_data;
   iree_slim_mutex_lock(&load->event.mutex);
-  load->event.status = status;
+  load->event.status = iree_status_join(load->event.status, status);
   load->event.pending = false;
   load->event.wake(load->event.user_data);
   iree_slim_mutex_unlock(&load->event.mutex);
@@ -286,6 +293,17 @@ static const loomc_task_vtable_t text_load_vtable = {
     .destroy = loom_serve_text_load_release,
 };
 
+static void loom_serve_text_load_layout(void* user_data, iree_host_size_t index,
+                                        const loom_cmd_program_t* program) {
+  loom_serve_text_load_t* load = user_data;
+  iree_slim_mutex_lock(&load->event.mutex);
+  load->model->stages[index].program = *program;
+  if (++load->event.layout_count == load->model->stage_count) {
+    load->event.wake(load->event.user_data);
+  }
+  iree_slim_mutex_unlock(&load->event.mutex);
+}
+
 static void loom_serve_text_load_compiled(void* user_data, iree_status_t status,
                                           loom_serve_stage_set_t* compiled) {
   loom_serve_text_load_t* load = user_data;
@@ -294,7 +312,11 @@ static void loom_serve_text_load_compiled(void* user_data, iree_status_t status,
     compiled->values[i] = NULL;
   }
   loom_serve_stage_set_free(compiled);
-  loom_serve_text_load_complete(load, status);
+  iree_slim_mutex_lock(&load->event.mutex);
+  load->event.status = iree_status_join(load->event.status, status);
+  load->event.compiling = false;
+  load->event.wake(load->event.user_data);
+  iree_slim_mutex_unlock(&load->event.mutex);
 }
 
 static void loom_serve_text_load_ready(void* user_data,
@@ -307,22 +329,32 @@ static void loom_serve_text_load_ready(void* user_data,
 static iree_status_t loom_serve_text_load_bind(loom_serve_text_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(model->device_owner,
                                                           &model->execution));
-  return loom_serve_text_stages_bind(
+  IREE_RETURN_IF_ERROR(loom_serve_text_stages_bind(
       model->device_owner, model->source.preparation,
       model->source.shared_stage_count, model->stage_count, model->stages,
-      &model->parameters, model->host_allocator);
+      &model->parameters, model->host_allocator));
+  IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
+      loom_serve_device_residency_cache(model->device_owner),
+      model->parameters.count, model->parameters.plans, model->host_allocator,
+      &model->parameter_group));
+  return loom_serve_residency_allocate(
+      loom_serve_device_residency_cache(model->device_owner), model->execution,
+      1, &model->parameter_group, model->host_allocator, &model->residency);
+}
+
+static iree_status_t loom_serve_text_load_activate(
+    loom_serve_text_load_t* load) {
+  loom_serve_text_model_t* model = load->model;
+  IREE_RETURN_IF_ERROR(loom_serve_text_warmup_allocate(
+      model->device_owner, model->parameter_group, load->event.wake,
+      load->event.user_data, load->host_allocator, &model->warmup));
+  loom_serve_text_warmup_poll(model->warmup);
+  return loom_serve_text_warmup_status(model->warmup);
 }
 
 static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
   loom_serve_text_model_t* model = load->model;
   iree_status_t status = iree_ok_status();
-  IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
-      loom_serve_device_residency_cache(model->device_owner),
-      model->parameters.count, model->parameters.plans, model->host_allocator,
-      &model->parameter_group));
-  IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(model->device_owner), model->execution,
-      1, &model->parameter_group, model->host_allocator, &model->residency));
   for (iree_host_size_t i = 0;
        i < model->stage_count && iree_status_is_ok(status); ++i) {
     loom_serve_text_stage_t* stage = &model->stages[i];
@@ -470,6 +502,9 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
       iree_status_join(load->terminal_status, load->event.status);
   load->terminal_status = iree_ok_status();
   load->event.status = iree_ok_status();
+  const bool layouts_ready =
+      load->event.layout_count == load->model->stage_count;
+  const bool compiling = load->event.compiling;
   iree_slim_mutex_unlock(&load->event.mutex);
   if (iree_status_is_ok(status) && load->cancelled) {
     status = iree_make_status(IREE_STATUS_CANCELLED, "model load cancelled");
@@ -492,14 +527,22 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
       case TEXT_LOAD_STAGES:
         load->phase = TEXT_LOAD_BIND;
         iree_slim_mutex_lock(&load->event.mutex);
-        load->event.pending = true;
+        load->event.compiling = true;
         iree_slim_mutex_unlock(&load->event.mutex);
         status = loom_serve_stage_set_compile_catalog_async(
-            model->jit, model->source.preparation,
+            model->jit, model->source.preparation, loom_serve_text_load_layout,
             loom_serve_text_load_compiled, load, load->host_allocator);
         submitted = iree_status_is_ok(status);
+        if (!submitted) {
+          iree_slim_mutex_lock(&load->event.mutex);
+          load->event.compiling = false;
+          iree_slim_mutex_unlock(&load->event.mutex);
+        }
         break;
       case TEXT_LOAD_BIND:
+        if (!layouts_ready) {
+          return iree_ok_status();
+        }
         status = loom_serve_text_load_bind(model);
         load->phase = TEXT_LOAD_WEIGHTS;
         break;
@@ -517,10 +560,19 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
               loom_serve_text_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
-          load->phase = TEXT_LOAD_LINK;
+          load->phase = TEXT_LOAD_ACTIVATE;
         }
         break;
+      case TEXT_LOAD_ACTIVATE:
+        if (iree_any_bit_set(flags, LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND)) {
+          status = loom_serve_text_load_activate(load);
+        }
+        load->phase = TEXT_LOAD_LINK;
+        break;
       case TEXT_LOAD_LINK:
+        if (compiling) {
+          return iree_ok_status();
+        }
         if (!loom_serve_tokenizer_load_take(&load->tokenizer_load, &status,
                                             &model->source.tokenizer)) {
           return iree_ok_status();
@@ -547,15 +599,27 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
     }
   }
   if (!submitted) {
-    // Rejected model work owes no callback. Tokenizer work retires separately.
+    // Rejected foreground work owes no callback. Independent stage work still
+    // owns layout bytes and model borrows until its terminal publication.
     iree_slim_mutex_lock(&load->event.mutex);
     load->event.pending = false;
+    const bool stages_pending = load->event.compiling;
     iree_slim_mutex_unlock(&load->event.mutex);
     load->phase = TEXT_LOAD_COMPLETE;
+    if (stages_pending) {
+      load->terminal_status = status;
+      return iree_ok_status();
+    }
     if (!loom_serve_tokenizer_load_take(&load->tokenizer_load, &status,
                                         &model->source.tokenizer)) {
       load->terminal_status = status;
       return iree_ok_status();
+    }
+  }
+  if (!submitted) {
+    loom_serve_text_warmup_poll(model->warmup);
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_text_warmup_status(model->warmup);
     }
   }
   if (!iree_status_is_ok(status)) {
@@ -580,6 +644,7 @@ const loom_serve_compilation_report_t* loom_serve_text_load_report(
 loom_serve_text_model_t* loom_serve_text_load_take_model(
     loom_serve_text_load_t* load) {
   loom_serve_text_model_t* model = load->model;
+  loom_serve_text_warmup_set_observer(model->warmup, NULL, NULL);
   load->model = NULL;
   return model;
 }
@@ -634,6 +699,7 @@ iree_status_t loom_serve_text_model_allocate(
 void loom_serve_text_model_retire(loom_serve_text_model_t* model,
                                   void (*wake)(void* user_data),
                                   void* user_data) {
+  loom_serve_text_warmup_set_observer(model->warmup, wake, user_data);
   if (model->execution) {
     loom_serve_execution_set_retirement_observer(model->execution, wake,
                                                  user_data);
@@ -658,8 +724,10 @@ bool loom_serve_text_model_is_retired(loom_serve_text_model_t* model) {
   if (!model) {
     return true;
   }
+  loom_serve_text_warmup_poll(model->warmup);
   bool retired =
-      !model->execution || loom_serve_execution_is_retired(model->execution);
+      !loom_serve_text_warmup_is_pending(model->warmup) &&
+      (!model->execution || loom_serve_execution_is_retired(model->execution));
   for (iree_host_size_t i = 0; i < model->parameters.count; ++i) {
     retired &= loom_serve_weights_is_retired(model->parameters.plans[i]);
   }
@@ -672,6 +740,8 @@ iree_status_t loom_serve_text_model_free_retired(
     return iree_ok_status();
   }
   IREE_ASSERT(loom_serve_text_model_is_retired(model));
+  iree_status_t warmup_status = loom_serve_text_warmup_free(model->warmup);
+  model->warmup = NULL;
   loom_serve_residency_free(model->residency);
   model->residency = NULL;
   loom_serve_residency_group_free(model->parameter_group);
@@ -684,8 +754,12 @@ iree_status_t loom_serve_text_model_free_retired(
       model->parameters.plans[i] = NULL;
     }
   }
-  IREE_RETURN_IF_ERROR(status);
-  IREE_RETURN_IF_ERROR(loom_serve_text_state_deinitialize(&model->state));
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_text_state_deinitialize(&model->state);
+  }
+  if (!iree_status_is_ok(status)) {
+    return iree_status_join(status, warmup_status);
+  }
   for (iree_host_size_t i = 0; i < model->stage_count; ++i) {
     loom_serve_jit_stage_free(model->stages[i].compiled);
     iree_allocator_free(model->host_allocator, model->stages[i].fixed_buffers);
@@ -703,7 +777,7 @@ iree_status_t loom_serve_text_model_free_retired(
   loom_serve_execution_release(model->execution);
   loom_serve_text_source_deinitialize(&model->source);
   iree_allocator_free(model->host_allocator, model);
-  return iree_ok_status();
+  return warmup_status;
 }
 
 iree_status_t loom_serve_text_model_free(loom_serve_text_model_t* model) {
@@ -711,6 +785,7 @@ iree_status_t loom_serve_text_model_free(loom_serve_text_model_t* model) {
     return iree_ok_status();
   }
   loom_serve_text_model_retire(model, NULL, NULL);
+  loom_serve_text_warmup_await(model->warmup);
   iree_status_t status = model->execution
                              ? loom_serve_execution_drain(model->execution)
                              : iree_ok_status();
@@ -769,6 +844,11 @@ loom_serve_weight_activity_t loom_serve_text_model_weight_activity(
 loom_serve_residency_t* loom_serve_text_model_residency(
     const loom_serve_text_model_t* model) {
   return model->residency;
+}
+
+loom_serve_text_warmup_t* loom_serve_text_model_warmup(
+    const loom_serve_text_model_t* model) {
+  return model->warmup;
 }
 
 iree_status_t loom_serve_text_model_activate(loom_serve_text_model_t* model) {

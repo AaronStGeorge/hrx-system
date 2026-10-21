@@ -84,12 +84,15 @@ typedef struct loom_serve_finite_registration_t {
 } loom_serve_finite_registration_t;
 
 static iree_status_t loom_serve_finite_registration_prepare(
-    void* self, bool cancel, bool* out_complete,
-    loom_serve_service_t* out_service,
+    void* self, loom_serve_registration_prepare_flags_t flags,
+    bool* out_complete, loom_serve_service_t* out_service,
     loom_serve_compilation_report_t* out_report) {
   loom_serve_finite_registration_t* registration = self;
   iree_status_t status = loom_serve_finite_load_advance(
-      registration->load, cancel ? LOOM_SERVE_FINITE_LOAD_FLAG_CANCEL : 0,
+      registration->load,
+      iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)
+          ? LOOM_SERVE_FINITE_LOAD_FLAG_CANCEL
+          : 0,
       out_complete);
   if (!*out_complete) {
     return status;
@@ -253,12 +256,15 @@ typedef struct loom_serve_image_registration_t {
 } loom_serve_image_registration_t;
 
 static iree_status_t loom_serve_image_registration_prepare(
-    void* self, bool cancel, bool* out_complete,
-    loom_serve_service_t* out_service,
+    void* self, loom_serve_registration_prepare_flags_t flags,
+    bool* out_complete, loom_serve_service_t* out_service,
     loom_serve_compilation_report_t* out_report) {
   loom_serve_image_registration_t* registration = self;
   iree_status_t status = loom_serve_image_load_advance(
-      registration->load, cancel ? LOOM_SERVE_IMAGE_LOAD_FLAG_CANCEL : 0,
+      registration->load,
+      iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)
+          ? LOOM_SERVE_IMAGE_LOAD_FLAG_CANCEL
+          : 0,
       out_complete);
   if (!*out_complete) {
     return status;
@@ -430,12 +436,15 @@ typedef struct loom_serve_speech_registration_t {
 } loom_serve_speech_registration_t;
 
 static iree_status_t loom_serve_speech_registration_prepare(
-    void* self, bool cancel, bool* out_complete,
-    loom_serve_service_t* out_service,
+    void* self, loom_serve_registration_prepare_flags_t flags,
+    bool* out_complete, loom_serve_service_t* out_service,
     loom_serve_compilation_report_t* out_report) {
   loom_serve_speech_registration_t* registration = self;
   iree_status_t status = loom_serve_speech_load_advance(
-      registration->load, cancel ? LOOM_SERVE_SPEECH_LOAD_FLAG_CANCEL : 0,
+      registration->load,
+      iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)
+          ? LOOM_SERVE_SPEECH_LOAD_FLAG_CANCEL
+          : 0,
       out_complete);
   if (!*out_complete) {
     return status;
@@ -600,12 +609,15 @@ typedef struct loom_serve_recognition_registration_t {
 } loom_serve_recognition_registration_t;
 
 static iree_status_t loom_serve_recognition_registration_prepare(
-    void* self, bool cancel, bool* out_complete,
-    loom_serve_service_t* out_service,
+    void* self, loom_serve_registration_prepare_flags_t flags,
+    bool* out_complete, loom_serve_service_t* out_service,
     loom_serve_compilation_report_t* out_report) {
   loom_serve_recognition_registration_t* registration = self;
   iree_status_t status = loom_serve_recognition_load_advance(
-      registration->load, cancel ? LOOM_SERVE_RECOGNITION_LOAD_FLAG_CANCEL : 0,
+      registration->load,
+      iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)
+          ? LOOM_SERVE_RECOGNITION_LOAD_FLAG_CANCEL
+          : 0,
       out_complete);
   if (!*out_complete) {
     return status;
@@ -780,13 +792,19 @@ typedef struct loom_serve_text_registration_t {
 } loom_serve_text_registration_t;
 
 static iree_status_t loom_serve_text_registration_prepare(
-    void* self, bool cancel, bool* out_complete,
-    loom_serve_service_t* out_service,
+    void* self, loom_serve_registration_prepare_flags_t flags,
+    bool* out_complete, loom_serve_service_t* out_service,
     loom_serve_compilation_report_t* out_report) {
   loom_serve_text_registration_t* registration = self;
-  iree_status_t status = loom_serve_text_load_advance(
-      registration->load, cancel ? LOOM_SERVE_TEXT_LOAD_FLAG_CANCEL : 0,
-      out_complete);
+  loom_serve_text_load_flags_t load_flags = 0;
+  if (iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)) {
+    load_flags |= LOOM_SERVE_TEXT_LOAD_FLAG_CANCEL;
+  }
+  if (iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_DEMAND)) {
+    load_flags |= LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND;
+  }
+  iree_status_t status = loom_serve_text_load_advance(registration->load,
+                                                      load_flags, out_complete);
   if (!*out_complete) {
     return status;
   }

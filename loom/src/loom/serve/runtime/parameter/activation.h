@@ -55,6 +55,15 @@ iree_status_t loom_serve_activation_advance(
     loom_serve_activation_t* activation, loom_serve_activation_flags_t flags,
     loom_serve_activation_phase_t* out_phase);
 
+// Transfers notification ownership without cancelling accepted work. Joins the
+// previous callback payload's final access; NULL detaches. A replacement sees
+// already-published completion, including completion during a detached
+// interval. The observer only schedules its owner and never reenters this
+// operation. NULL activation is accepted.
+void loom_serve_activation_set_observer(loom_serve_activation_t* activation,
+                                        void (*wake)(void* user_data),
+                                        void* user_data);
+
 // Called only after terminal advance, with all completion access joined.
 void loom_serve_activation_free(loom_serve_activation_t* activation);
 

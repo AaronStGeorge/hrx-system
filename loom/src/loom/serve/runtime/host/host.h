@@ -84,6 +84,13 @@ iree_hal_driver_t* loom_serve_host_task_driver(const loom_serve_host_t* host);
 // Worker ordinals match the shared task pool and executor.
 loomc_task_sink_t loom_serve_host_compiler_sink(const loom_serve_host_t* host);
 
+// Model preparation chains use an independent ready queue so bulk native
+// compilation cannot strand the work that makes weight I/O runnable. Shares
+// the same executor, worker ordinals, and retirement contract as compiler_sink;
+// dependent native preparer compilation uses this sink as well.
+loomc_task_sink_t loom_serve_host_preparation_sink(
+    const loom_serve_host_t* host);
+
 // Shared native and VM compiler environment, or NULL for a device-only host.
 // Borrowed through host release. All model source catalogs use this grammar.
 loomc_target_environment_t* loom_serve_host_target_environment(

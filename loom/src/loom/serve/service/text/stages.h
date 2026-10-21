@@ -19,7 +19,7 @@ extern "C" {
 typedef struct loom_serve_text_stage_t {
   // Owned JIT command image and loaded executable entries.
   loom_serve_jit_stage_t* compiled;
-  // Parsed view borrowing compiled.
+  // Immutable layout borrowing compiled (or its still-running producer).
   loom_cmd_program_t program;
   // Reusable command retaining its executable and fixed weight resources.
   iree_hal_command_buffer_t* command;
@@ -39,10 +39,11 @@ typedef struct loom_serve_text_parameters_t {
   const loom_serve_preparation_parameter_t** sources;
 } loom_serve_text_parameters_t;
 
-// Binds compiled stages without loading checkpoint payloads. The shared prefix
-// has identical target placement; auxiliary roots are grouped by checkpoint
-// path and preparation policy. Equal keys in different domains never alias.
-// Stages and parameters start zeroed except for compiled stage ownership.
+// Binds immutable command layouts without loading checkpoint payloads. Native
+// compilation may still be running. The shared prefix has identical target
+// placement; auxiliary roots are grouped by checkpoint path and preparation
+// policy. Equal keys in different domains never alias.
+// Stages and parameters start zeroed except for their published program views.
 // On failure the caller still owns every populated plan and fixed-buffer slot.
 // Consumers retire before plans; declarations outlive the returned sources.
 iree_status_t loom_serve_text_stages_bind(
@@ -54,9 +55,10 @@ iree_status_t loom_serve_text_stages_bind(
 // Binds replacement code to the original stages' parameter roots. Reflection
 // must preserve parameter keys, placement, alignment and model-buffer arity;
 // private workspace may change. No weight plan, storage or I/O is created.
-// Stages start zeroed except for compiled ownership. The caller releases all
-// populated fixed-buffer slots even on failure. Preparation and baseline are
-// immutable and outlive this call; successful slots own independent references.
+// Stages start zeroed except for compiled ownership and program views. The
+// caller releases all populated fixed-buffer slots even on failure. Preparation
+// and baseline are immutable and outlive this call; successful slots own
+// independent references.
 iree_status_t loom_serve_text_stages_rebind(
     const loom_serve_preparation_t* preparation, iree_host_size_t shared_count,
     iree_host_size_t stage_count, const loom_serve_text_stage_t* baseline,

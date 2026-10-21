@@ -967,8 +967,8 @@ iree_status_t loom_serve_speech_load_advance(
         load->event.pending = true;
         iree_slim_mutex_unlock(&load->event.mutex);
         status = loom_serve_stage_set_compile_catalog_async(
-            model->jit, model->preparation, loom_serve_speech_load_compiled,
-            load, load->host_allocator);
+            model->jit, model->preparation, NULL,
+            loom_serve_speech_load_compiled, load, load->host_allocator);
         submitted = iree_status_is_ok(status);
         break;
       case SPEECH_LOAD_BIND:

@@ -130,12 +130,14 @@ struct loom_serve_test_variant_dependency_t : loom_serve_test_model_service_t {
     dependency->condition.notify_all();
     return iree_ok_status();
   }
-  static iree_status_t Prepare(void* self, bool cancel, bool* out_complete,
+  static iree_status_t Prepare(void* self,
+                               loom_serve_registration_prepare_flags_t flags,
+                               bool* out_complete,
                                loom_serve_service_t* out_service,
                                loom_serve_compilation_report_t* out_report) {
     auto* dependency = static_cast<loom_serve_test_variant_dependency_t*>(self);
     *out_complete = true;
-    if (cancel) {
+    if (iree_any_bit_set(flags, LOOM_SERVE_REGISTRATION_PREPARE_FLAG_CANCEL)) {
       return iree_make_status(IREE_STATUS_CANCELLED, "preparation cancelled");
     }
     *out_service = dependency->Interface(nullptr, nullptr);

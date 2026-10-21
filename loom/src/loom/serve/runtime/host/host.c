@@ -32,6 +32,8 @@ struct loom_serve_host_t {
   loomc_task_pool_t* task_pool;
   // Compiler scheduling domain shared by every independently owned catalog.
   loomc_task_queue_t* compiler_queue;
+  // Preparation continuations progress independently of bulk native requests.
+  loomc_task_queue_t* preparation_queue;
   // Immutable exact compiler target package shared by every catalog.
   loomc_target_environment_t* target_environment;
   // Owned copy of process-lifetime HAL target provider pointers.
@@ -173,6 +175,11 @@ iree_status_t loom_serve_host_create(
         &host->compiler_queue));
   }
   if (iree_status_is_ok(status)) {
+    status = iree_status_from_loomc(loomc_task_queue_allocate(
+        host->task_pool, loomc_allocator_from_iree(host_allocator),
+        &host->preparation_queue));
+  }
+  if (iree_status_is_ok(status)) {
     iree_async_proactor_pool_options_t options =
         iree_async_proactor_pool_options_default();
 #if !IREE_PLATFORM_WASM
@@ -200,6 +207,7 @@ void loom_serve_host_release(loom_serve_host_t* host) {
   if (IREE_LIKELY(host) && iree_atomic_ref_count_dec(&host->ref_count) == 1) {
     iree_async_proactor_pool_release(host->proactor_pool);
     loomc_task_queue_free(host->compiler_queue);
+    loomc_task_queue_free(host->preparation_queue);
     loomc_task_pool_free(host->task_pool);
     iree_hal_driver_release(host->task_driver);
     iree_task_executor_release(host->executor);
@@ -228,6 +236,11 @@ iree_hal_driver_t* loom_serve_host_task_driver(const loom_serve_host_t* host) {
 
 loomc_task_sink_t loom_serve_host_compiler_sink(const loom_serve_host_t* host) {
   return loomc_task_queue_sink(host->compiler_queue);
+}
+
+loomc_task_sink_t loom_serve_host_preparation_sink(
+    const loom_serve_host_t* host) {
+  return loomc_task_queue_sink(host->preparation_queue);
 }
 
 loomc_target_environment_t* loom_serve_host_target_environment(

@@ -17,6 +17,7 @@
 #if defined(__linux__)
 #include "loom/serve/testing/stalled_stderr.h"
 #endif
+#include "loomc/iree.h"
 
 IREE_FLAG(string, invalid_sources, "", "Malformed source catalog.");
 
@@ -98,6 +99,22 @@ class JitConcurrentTest : public JitTest {
 void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
   const loomc_config_options_t config = {
       nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
+  struct Submissions {
+    // Independent scheduling domain over the catalog's same worker pool.
+    loomc_task_sink_t target;
+    // Includes parents and their newly published native requests.
+    std::atomic<size_t> count = 0;
+  } submissions{
+      loom_serve_host_preparation_sink(loom_serve_device_host(device_owner_))};
+  const loomc_task_sink_t sink = {
+      .submit =
+          [](void* payload, loomc_task_t* task) {
+            auto* submissions = static_cast<Submissions*>(payload);
+            ++submissions->count;
+            return loomc_task_sink_submit(submissions->target, task);
+          },
+      .user_data = &submissions,
+  };
   struct loom_serve_test_jit_result_t {
     // Joins callback publication before the outer test consumes its output.
     std::mutex mutex;
@@ -109,36 +126,30 @@ void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
     iree_status_t status = iree_ok_status();
     // Owned output independent of the source catalog.
     loom_serve_jit_stage_t* stage = nullptr;
-    // Shared completion ordinal counter, alive through every callback.
-    std::atomic<size_t>* next_completion = nullptr;
-    // Observed publication order, independent of native completion order.
-    size_t completion_index = 0;
   } results[3];
-  std::atomic<size_t> next_completion = 0;
   const iree_string_view_t roots[] = {
       direct_dispatch ? IREE_SV("increment_0") : IREE_SV("advance"),
       direct_dispatch ? IREE_SV("increment_0") : IREE_SV("selected_pair"),
       direct_dispatch ? IREE_SV("absent") : IREE_SV("invalid_argument"),
   };
-  const auto compile = direct_dispatch ? loom_serve_jit_compile_dispatch_async
-                                       : loom_serve_jit_compile_async;
   HoldParents();
   auto status = iree_ok_status();
   for (size_t i = 0; i < IREE_ARRAYSIZE(results); ++i) {
-    results[i].next_completion = &next_completion;
-    auto submitted = compile(
-        jit_, roots[i], &config,
-        [](void* payload, iree_status_t outcome,
-           loom_serve_jit_stage_t* stage) {
-          auto* result = static_cast<loom_serve_test_jit_result_t*>(payload);
-          std::lock_guard<std::mutex> lock(result->mutex);
-          result->status = outcome;
-          result->stage = stage;
-          result->completion_index = result->next_completion->fetch_add(1);
-          result->complete = true;
-          result->condition.notify_one();
-        },
-        &results[i]);
+    const auto completion = [](void* payload, iree_status_t outcome,
+                               loom_serve_jit_stage_t* stage) {
+      auto* result = static_cast<loom_serve_test_jit_result_t*>(payload);
+      std::lock_guard<std::mutex> lock(result->mutex);
+      result->status = outcome;
+      result->stage = stage;
+      result->complete = true;
+      result->condition.notify_one();
+    };
+    auto submitted =
+        direct_dispatch
+            ? loom_serve_jit_compile_dispatch_async(
+                  jit_, sink, roots[i], &config, completion, &results[i])
+            : loom_serve_jit_compile_async(jit_, sink, roots[i], &config,
+                                           nullptr, completion, &results[i]);
     if (!iree_status_is_ok(submitted)) {
       results[i].complete = true;
     }
@@ -153,7 +164,6 @@ void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
     auto& result = results[i];
     std::unique_lock<std::mutex> lock(result.mutex);
     result.condition.wait(lock, [&] { return result.complete; });
-    EXPECT_EQ(result.completion_index, i);
     if (i == 2) {
       IREE_EXPECT_STATUS_IS(direct_dispatch ? IREE_STATUS_NOT_FOUND
                                             : IREE_STATUS_INVALID_ARGUMENT,
@@ -177,6 +187,11 @@ void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
   IREE_ASSERT_OK(status);
   EXPECT_EQ(compilation_.commands, direct_dispatch ? 0u : 3u);
   EXPECT_EQ(compilation_.kernels, direct_dispatch ? 1u : 8u);
+  // Direct roots compile in the submitted task; command parents publish
+  // independent native tasks, which must inherit the caller's sink too.
+  EXPECT_EQ(
+      submissions.count,
+      IREE_ARRAYSIZE(results) + (direct_dispatch ? 0 : compilation_.kernels));
   EXPECT_EQ(compilation_.reused_kernels, direct_dispatch ? 1u : 3u);
   EXPECT_EQ(compilation_.entries, direct_dispatch ? 2u : 10u);
   if (direct_dispatch) {
@@ -417,7 +432,15 @@ class JitCacheTest : public JitTest {
           loom_serve_host_executor(loom_serve_device_host(device_owner_)));
       IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                             job.Await(&stages_[0]));
-      ASSERT_EQ(stages_[0], nullptr);
+      if (direct_dispatch) {
+        EXPECT_EQ(stages_[0], nullptr);
+        EXPECT_EQ(job.layout, nullptr);
+      } else {
+        ASSERT_NE(stages_[0], nullptr);
+        ASSERT_NE(job.layout, nullptr);
+        EXPECT_EQ(job.layout, loom_serve_jit_stage_program(stages_[0]));
+        EXPECT_EQ(job.layout->requirements.rebindable_binding_count, 1u);
+      }
       EXPECT_GT(compilation_.severities[LOOMC_DIAGNOSTIC_SEVERITY_ERROR], 0u);
       ASSERT_GT(compilation_.diagnostic_count, 0u);
       EXPECT_GT(compilation_.diagnostics[0].message_length, 0u);
@@ -428,6 +451,8 @@ class JitCacheTest : public JitTest {
                 !direct_dispatch && attempt ? 8u : 0u);
       EXPECT_EQ(loom_serve_jit_cache_storage(jit_).count,
                 direct_dispatch ? 0u : 8u);
+      loom_serve_jit_stage_free(stages_[0]);
+      stages_[0] = nullptr;
     }
     const auto diagnostic = compilation_.diagnostics[0];
     loom_serve_jit_release(jit_);
@@ -668,6 +693,115 @@ TEST_P(JitTest, InvalidRootLeavesCompilerReusable) {
 TEST_P(JitTest, CommandWithoutNativeRequests) {
   IREE_ASSERT_OK(Compile("3", 0, IREE_SV("idle")));
 }
+
+class JitReadinessTest : public JitTest {};
+
+TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
+  struct DeferredNatives {
+    // Shared executor preserving the catalog's worker ordinals.
+    loomc_task_sink_t target;
+    // The outer caller submits one parent before it can publish natives.
+    bool parent_submitted = false;
+    // Native tasks appended by that parent before its layout callback.
+    loomc_task_t* head = nullptr;
+    // Final queued task; ownership transfers after layout publication.
+    loomc_task_t* tail = nullptr;
+  } deferred{.target = loom_serve_jit_task_sink(jit_)};
+  const loomc_task_sink_t sink = {
+      .submit =
+          [](void* payload, loomc_task_t* task) {
+            auto* deferred = static_cast<DeferredNatives*>(payload);
+            if (!deferred->parent_submitted) {
+              deferred->parent_submitted = true;
+              return loomc_task_sink_submit(deferred->target, task);
+            }
+            if (deferred->tail) {
+              deferred->tail->next = task;
+            } else {
+              deferred->head = task;
+            }
+            deferred->tail = task;
+            return loomc_ok_status();
+          },
+      .user_data = &deferred,
+  };
+  struct Completion {
+    // Serializes the outer observer with both producer callbacks.
+    std::mutex mutex;
+    // Explicit dependency events; no timing-based readiness assumptions.
+    std::condition_variable condition;
+    // Borrowed immutable bytes owned by the eventual stage.
+    const loom_cmd_program_t* program = nullptr;
+    // Terminal publication relinquished this record.
+    bool complete = false;
+    // Owned terminal status, consumed by the outer observer.
+    iree_status_t status = iree_ok_status();
+    // Owned partial or final result, independent of catalog lifetime.
+    loom_serve_jit_stage_t* stage = nullptr;
+  } first, second;
+  const auto completed = [](void* payload, iree_status_t status,
+                            loom_serve_jit_stage_t* stage) {
+    auto* result = static_cast<Completion*>(payload);
+    std::lock_guard<std::mutex> lock(result->mutex);
+    result->status = status;
+    result->stage = stage;
+    result->complete = true;
+    result->condition.notify_one();
+  };
+  const loomc_config_options_t config = {
+      nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
+  // Publish the real command layout while its native tasks remain queued.
+  // Neither the compiler nor its layout callback occupies a waiting worker.
+  IREE_ASSERT_OK(loom_serve_jit_compile_async(
+      jit_, sink, IREE_SV("advance"), &config,
+      [](void* payload, const loom_cmd_program_t* program) {
+        auto* result = static_cast<Completion*>(payload);
+        std::lock_guard<std::mutex> lock(result->mutex);
+        result->program = program;
+        result->condition.notify_one();
+      },
+      completed, &first));
+  {
+    std::unique_lock<std::mutex> lock(first.mutex);
+    first.condition.wait(lock, [&] { return first.program != nullptr; });
+  }
+  auto status = loom_serve_jit_compile_async(
+      jit_, loom_serve_jit_task_sink(jit_), IREE_SV("idle"), &config, nullptr,
+      completed, &second);
+  if (iree_status_is_ok(status)) {
+    std::unique_lock<std::mutex> lock(second.mutex);
+    second.condition.wait(lock, [&] { return second.complete; });
+    status = second.status;
+  }
+  // Snapshot while the first compilation is still outstanding. Reentrant
+  // publication and report access must not require a whole-catalog join.
+  loom_serve_compilation_report_t snapshot = {};
+  loom_serve_jit_report_snapshot(jit_, &snapshot);
+  EXPECT_EQ(snapshot.commands, 1u);
+  {
+    std::lock_guard<std::mutex> lock(first.mutex);
+    EXPECT_FALSE(first.complete);
+  }
+  EXPECT_NE(deferred.head, nullptr);
+  while (deferred.head) {
+    auto* task = deferred.head;
+    deferred.head = task->next;
+    task->next = nullptr;
+    IREE_ASSERT_OK(
+        iree_status_from_loomc(loomc_task_sink_submit(deferred.target, task)));
+  }
+  {
+    std::unique_lock<std::mutex> lock(first.mutex);
+    first.condition.wait(lock, [&] { return first.complete; });
+  }
+  EXPECT_EQ(first.program, loom_serve_jit_stage_program(first.stage));
+  loom_serve_jit_stage_free(first.stage);
+  loom_serve_jit_stage_free(second.stage);
+  IREE_ASSERT_OK(iree_status_join(status, first.status));
+  EXPECT_EQ(compilation_.commands, 2u);
+}
+
+INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitReadinessTest, ::testing::Values(1));
 
 INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitTest, ::testing::Values(1, 4));
 

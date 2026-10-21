@@ -1592,6 +1592,8 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   if (!service) {
     return;
   }
+  loom_serve_text_warmup_set_observer(
+      loom_serve_text_model_warmup(service->model), NULL, NULL);
   loom_serve_residency_set_reclaimer(
       loom_serve_text_model_residency(service->model),
       (loom_serve_residency_reclaimer_t){0});
@@ -1726,6 +1728,9 @@ iree_status_t loom_serve_text_service_allocate(
 static void loom_serve_text_set_observer(void* self,
                                          loom_serve_wake_callback_t observer) {
   loom_serve_text_service_t* service = self;
+  loom_serve_text_warmup_set_observer(
+      loom_serve_text_model_warmup(service->model), observer.wake,
+      observer.user_data);
   loom_serve_text_readiness_set_observer(&service->readiness, observer);
   loom_serve_text_media_projector_set_observer(service->projector, observer);
   loom_serve_execution_reconfiguration_set_observer(service->reconfiguration,
@@ -1743,6 +1748,8 @@ static void loom_serve_text_set_observer(void* self,
 static bool loom_serve_text_is_pending(void* self) {
   loom_serve_text_service_t* service = self;
   return loom_serve_text_has_work(service) ||
+         loom_serve_text_warmup_is_pending(
+             loom_serve_text_model_warmup(service->model)) ||
          loom_serve_text_media_projector_is_pending(service->projector) ||
          loom_serve_finite_component_is_pending(service->image) ||
          loom_serve_execution_reconfiguration_pending(
@@ -1753,6 +1760,8 @@ static bool loom_serve_text_is_pending(void* self) {
 static bool loom_serve_text_is_active(void* self) {
   const loom_serve_text_service_t* service = self;
   if (loom_serve_text_has_work(service) || service->pool.trim.pending ||
+      loom_serve_text_warmup_is_pending(
+          loom_serve_text_model_warmup(service->model)) ||
       loom_serve_text_media_projector_is_pending(service->projector) ||
       service->control.consumer.self) {
     return true;
@@ -1999,6 +2008,12 @@ static iree_status_t loom_serve_text_advance(void* self,
   iree_status_t status = loom_serve_text_heartbeat_advance(
       &service->heartbeat,
       iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING), out_progress);
+  loom_serve_text_warmup_t* warmup =
+      loom_serve_text_model_warmup(service->model);
+  const bool was_loading = loom_serve_text_warmup_is_pending(warmup);
+  loom_serve_text_warmup_poll(warmup);
+  *out_progress |= was_loading && !loom_serve_text_warmup_is_pending(warmup);
+  status = iree_status_join(status, loom_serve_text_warmup_status(warmup));
   if (!iree_status_is_ok(status)) {
     flags |= LOOM_SERVE_SERVICE_FLAG_STOPPING;
   }

@@ -33,6 +33,14 @@ typedef struct loom_serve_stage_set_t {
 typedef void (*loom_serve_stage_set_completion_fn_t)(
     void* user_data, iree_status_t status, loom_serve_stage_set_t* stages);
 
+// Optional per-command immutable-layout publication. Ordinals match preparation
+// declaration order, but callbacks may overlap and arrive in any order. Direct
+// stages publish no command layout. The borrowed program survives until the
+// recipient frees the final stage set, including after native compilation
+// fails.
+typedef void (*loom_serve_stage_set_layout_fn_t)(
+    void* user_data, iree_host_size_t index, const loom_cmd_program_t* program);
+
 // Snapshots providers and concurrently compiles declarations on shared workers,
 // enforcing their workspace limits before publishing successful completion.
 // Reuses identical kernel requests within the new catalog. Success owes one
@@ -48,12 +56,13 @@ iree_status_t loom_serve_stage_set_compile_async(
 // Compiles all declarations concurrently against an already indexed catalog.
 // Retains jit through the final join, including after submission or stage
 // failure. Results remain in declaration order and include successfully built
-// stages on failure. The returned set copies the catalog's cumulative report.
-// The caller excludes other compilation/report producers on this catalog until
-// completion; preparation and user_data remain borrowed. Success owes exactly
+// stages on failure. The returned set snapshots the catalog's cumulative report
+// at completion; independent catalog jobs may still be running. Preparation and
+// user_data remain borrowed through completion. Success owes exactly
 // one completion, possibly before return; rejection owes none.
 iree_status_t loom_serve_stage_set_compile_catalog_async(
     loom_serve_jit_t* jit, const loom_serve_preparation_t* preparation,
+    loom_serve_stage_set_layout_fn_t layout,
     loom_serve_stage_set_completion_fn_t completion, void* user_data,
     iree_allocator_t host_allocator);
 

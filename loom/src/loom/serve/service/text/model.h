@@ -20,6 +20,7 @@
 #include "loom/serve/service/text/chat.h"
 #include "loom/serve/service/text/media_input.h"
 #include "loom/serve/service/text/packing.h"
+#include "loom/serve/service/text/warmup.h"
 #include "loomc/sanitizer.h"
 
 #ifdef __cplusplus
@@ -342,12 +343,19 @@ iree_status_t loom_serve_text_load_allocate(
 enum loom_serve_text_load_flag_bits_e {
   // Irreversible cancellation stops new phases after accepted work returns.
   LOOM_SERVE_TEXT_LOAD_FLAG_CANCEL = 1u << 0,
+  // Current inference or explicit warmup allows prepared weights to activate
+  // while native compilation/tokenizer work remains pending. Ordinary
+  // registration stays cold.
+  LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND = 1u << 1,
 };
 typedef uint32_t loom_serve_text_load_flags_t;
 
 // Serialized owner turn. Never joins CPU or device work. Terminal advance
-// joins every load callback, but a failed initialization can still own queue
-// consumers. Success means initialization readiness and a fully linked model.
+// joins every preparation callback, but a failed initialization can still own
+// queue consumers. Success means state initialization and a fully linked model;
+// demanded parameter I/O may remain owned by model_warmup. The service can
+// admit actual requests while those weights load; execution still imports
+// readiness.
 iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
                                            loom_serve_text_load_flags_t flags,
                                            bool* out_complete);
@@ -422,6 +430,12 @@ iree_status_t loom_serve_text_model_deactivate(loom_serve_text_model_t* model,
 // work, retaining the returned pin across invocations until release. Ordinary
 // capacity backpressure leaves all model state unchanged.
 loom_serve_residency_t* loom_serve_text_model_residency(
+    const loom_serve_text_model_t* model);
+
+// Borrowed demanded parameter warmup, or NULL for cold preparation. The service
+// transfers its observer and polls it on owner turns; model retirement joins
+// it.
+loom_serve_text_warmup_t* loom_serve_text_model_warmup(
     const loom_serve_text_model_t* model);
 
 // Parameter-only virtual/physical statistics, excluding mutable state.

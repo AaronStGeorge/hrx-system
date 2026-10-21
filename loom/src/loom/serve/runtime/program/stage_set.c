@@ -37,6 +37,8 @@ struct loom_serve_stage_set_job_t {
   loom_serve_jit_t* jit;
   // Initial task result consumed only after task release.
   iree_status_t status;
+  // Optional immutable layout consumer, independent of native readiness.
+  loom_serve_stage_set_layout_fn_t layout;
   // Terminal consumer after compiler and source accesses retire.
   loom_serve_stage_set_completion_fn_t completion;
   // Borrowed terminal consumer state.
@@ -69,13 +71,19 @@ static void loom_serve_stage_set_job_release(loom_serve_stage_set_job_t* job) {
     status = iree_status_join(status, job->entries[i].status);
   }
   if (job->jit) {
-    stages->compilation = *loom_serve_jit_report(job->jit);
+    loom_serve_jit_report_snapshot(job->jit, &stages->compilation);
   }
   loom_serve_jit_release(job->jit);
   const loom_serve_stage_set_completion_fn_t completion = job->completion;
   void* user_data = job->user_data;
   iree_allocator_free(stages->host_allocator, job);
   completion(user_data, status, stages);
+}
+
+static void loom_serve_stage_set_layout(void* user_data,
+                                        const loom_cmd_program_t* program) {
+  loom_serve_stage_set_entry_t* entry = user_data;
+  entry->job->layout(entry->job->user_data, entry->index, program);
 }
 
 static void loom_serve_stage_set_compiled(void* user_data, iree_status_t status,
@@ -105,10 +113,13 @@ static void loom_serve_stage_set_submit(loom_serve_stage_set_job_t* job) {
     iree_atomic_ref_count_inc(&job->ref_count);
     status = declaration->kind == LOOM_SERVE_PREPARATION_STAGE_DISPATCH
                  ? loom_serve_jit_compile_dispatch_async(
-                       job->jit, declaration->root, &declaration->config,
+                       job->jit, loom_serve_jit_task_sink(job->jit),
+                       declaration->root, &declaration->config,
                        loom_serve_stage_set_compiled, entry)
                  : loom_serve_jit_compile_async(
-                       job->jit, declaration->root, &declaration->config,
+                       job->jit, loom_serve_jit_task_sink(job->jit),
+                       declaration->root, &declaration->config,
+                       job->layout ? loom_serve_stage_set_layout : NULL,
                        loom_serve_stage_set_compiled, entry);
     // The loop retains job even if callbacks finish inline. Rejection owns
     // this outcome and owes no callback; previously accepted stages still join.
@@ -207,12 +218,14 @@ iree_status_t loom_serve_stage_set_compile_async(
 
 iree_status_t loom_serve_stage_set_compile_catalog_async(
     loom_serve_jit_t* jit, const loom_serve_preparation_t* preparation,
+    loom_serve_stage_set_layout_fn_t layout,
     loom_serve_stage_set_completion_fn_t completion, void* user_data,
     iree_allocator_t host_allocator) {
   loom_serve_stage_set_job_t* job = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_stage_set_job_create(
       preparation, completion, user_data, host_allocator, &job));
   job->jit = jit;
+  job->layout = layout;
   loom_serve_jit_retain(jit);
   loom_serve_stage_set_submit(job);
   return iree_ok_status();
