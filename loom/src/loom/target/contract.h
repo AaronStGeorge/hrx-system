@@ -73,6 +73,11 @@ typedef struct loom_target_bitstream_policy_t {
 // policy entry.
 #define LOOM_TARGET_VECTOR_PACKET_LANE_COUNT_LIMIT 64u
 
+// Disables the aggregate payload ceiling while retaining any explicit
+// per-element lane ceilings. Scalar targets use this when vector operations
+// lower without a native packet representation.
+#define LOOM_TARGET_VECTOR_PACKET_UNBOUNDED_BIT_COUNT UINT16_MAX
+
 // Target vector packet candidates consumed by shared legalization.
 //
 // The target contributes representation widths only. Shared planners query
@@ -113,6 +118,10 @@ typedef enum loom_target_vector_packet_policy_flag_bits_e {
   // has a native target contract. Targets with later packet legalization can
   // leave this unset and consume the cloned operation there.
   LOOM_TARGET_VECTOR_PACKET_POLICY_FLAG_REPLAY_REQUIRES_CONTRACT = 1u << 6,
+  // Uses scalar elements as the final boundary components when the target has
+  // no vector carrier. This affects callable and control-flow projection only;
+  // it does not declare singleton vectors to be native packets.
+  LOOM_TARGET_VECTOR_PACKET_POLICY_FLAG_SCALAR_BOUNDARY_COMPONENTS = 1u << 7,
 } loom_target_vector_packet_policy_flag_bits_t;
 typedef uint8_t loom_target_vector_packet_policy_flags_t;
 
@@ -131,7 +140,8 @@ typedef struct loom_target_vector_packet_policy_t {
   // Sparse per-element lane ceilings for structural packet widths.
   const loom_target_vector_packet_lane_limit_t* structural_lane_limits;
   // Largest payload in bits that remains owned by ordinary structural
-  // lowering instead of packet legalization.
+  // lowering instead of packet legalization. The unbounded sentinel leaves
+  // every payload with ordinary lowering while retaining structural limits.
   uint16_t maximum_unpacketized_bit_count;
   // Maximum number of packet operations materialized for one static
   // decomposable component. Zero uses the shared conservative limit.

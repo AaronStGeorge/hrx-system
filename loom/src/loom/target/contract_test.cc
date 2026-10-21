@@ -230,4 +230,23 @@ TEST(TargetVectorPacketPolicyTest, UsesTargetAddressLaneWidth) {
       loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_INDEX, 3, 0)));
 }
 
+TEST(TargetVectorPacketPolicyTest, UnboundedPayloadRetainsStructuralLimits) {
+  const loom_target_vector_packet_lane_limit_t lane_limits[] = {
+      {LOOM_SCALAR_TYPE_I16, 32u},
+  };
+  const loom_target_vector_packet_policy_t policy = {
+      .structural_lane_limits = lane_limits,
+      .maximum_unpacketized_bit_count =
+          LOOM_TARGET_VECTOR_PACKET_UNBOUNDED_BIT_COUNT,
+      .structural_lane_limit_count = IREE_ARRAYSIZE(lane_limits),
+  };
+
+  EXPECT_FALSE(loom_target_vector_packet_policy_requires_packets(
+      &policy,
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, 65535, 0)));
+  EXPECT_TRUE(loom_target_vector_packet_policy_requires_packets(
+      &policy,
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I16, 33, 0)));
+}
+
 }  // namespace

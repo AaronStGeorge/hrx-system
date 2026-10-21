@@ -62,8 +62,10 @@ bool loom_target_vector_packet_policy_requires_packets(
       return true;
     }
   }
-  return element_count * (uint32_t)element_bit_count >
-         policy->maximum_unpacketized_bit_count;
+  return policy->maximum_unpacketized_bit_count !=
+             LOOM_TARGET_VECTOR_PACKET_UNBOUNDED_BIT_COUNT &&
+         element_count * (uint32_t)element_bit_count >
+             policy->maximum_unpacketized_bit_count;
 }
 
 loom_type_t loom_target_contract_query_projected_value_type(

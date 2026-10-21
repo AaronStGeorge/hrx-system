@@ -120,6 +120,13 @@ loom_low_pass_capability_vector_packet_policy(
     const loom_low_pass_capability_t* capability,
     const loom_target_facts_t* target_facts);
 
+// Returns whether |type| has a direct source-to-Low carrier for the target
+// selected by |target_facts|. Missing target or type policies reject the query.
+bool loom_low_pass_capability_source_type_supported(
+    const loom_low_pass_capability_t* capability,
+    const loom_target_facts_t* target_facts, const loom_module_t* module,
+    loom_type_t type);
+
 // Returns whether |type| has a direct source-operation carrier for the target
 // selected by |target_facts|. Missing target or carrier policies reject the
 // query; a selected policy with no callback admits the type. Concrete values

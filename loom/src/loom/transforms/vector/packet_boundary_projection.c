@@ -24,10 +24,10 @@
 typedef struct loom_vector_packet_boundary_slot_plan_t {
   // Physical component types in boundary order.
   const loom_type_t* component_types;
-  // Number of lanes in every component except a possible final tail.
-  uint32_t packet_lane_count;
   // Number of physical components.
   uint16_t component_count;
+  // True when every one-lane component is represented as a scalar.
+  bool scalar_components;
 } loom_vector_packet_boundary_slot_plan_t;
 
 typedef struct loom_vector_packet_boundary_source_plan_t {
@@ -111,22 +111,41 @@ static bool loom_vector_packet_boundary_carrier_supported(
 }
 
 static loom_type_t loom_vector_packet_boundary_type(loom_type_t source_type,
-                                                    uint32_t lane_count) {
+                                                    uint32_t lane_count,
+                                                    bool scalar_components) {
+  if (scalar_components) {
+    IREE_ASSERT_EQ(lane_count, 1u);
+    return loom_type_scalar(loom_type_element_type(source_type));
+  }
   return loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, loom_type_element_type(source_type),
       loom_dim_pack_static(lane_count), source_type.encoding_id);
+}
+
+static bool loom_vector_packet_boundary_scalar_components_enabled(
+    const loom_target_vector_packet_policy_t* policy) {
+  return policy != NULL &&
+         iree_any_bit_set(
+             policy->flags,
+             LOOM_TARGET_VECTOR_PACKET_POLICY_FLAG_SCALAR_BOUNDARY_COMPONENTS);
 }
 
 static bool loom_vector_packet_boundary_select_schema(
     const loom_boundary_projection_plan_t* plan,
     const loom_boundary_projection_function_t* function,
     loom_boundary_projection_slot_role_t role, loom_type_t logical_type,
-    loom_value_id_t value_id, uint32_t* out_packet_lane_count,
-    uint16_t* out_component_count) {
-  *out_packet_lane_count = 0;
+    loom_value_id_t value_id, uint32_t* out_component_lane_count,
+    uint16_t* out_component_count, bool* out_scalar_components) {
+  *out_component_lane_count = 0;
   *out_component_count = 0;
+  *out_scalar_components = false;
+  const loom_target_vector_packet_policy_t* policy =
+      loom_vector_packet_boundary_policy(plan, function);
+  const bool scalar_components_enabled =
+      loom_vector_packet_boundary_scalar_components_enabled(policy);
   if (loom_vector_packet_boundary_is_object_signature_role(function, role) ||
-      !loom_type_is_vector(logical_type) || loom_type_rank(logical_type) != 1 ||
+      !loom_type_is_vector(logical_type) || loom_type_rank(logical_type) == 0 ||
+      (!scalar_components_enabled && loom_type_rank(logical_type) != 1) ||
       !loom_type_is_all_static(logical_type) ||
       loom_vector_packet_boundary_carrier_supported(plan, function, role,
                                                     logical_type, value_id)) {
@@ -135,50 +154,63 @@ static bool loom_vector_packet_boundary_select_schema(
 
   uint64_t logical_lane_count = 0;
   if (!loom_type_static_element_count(logical_type, &logical_lane_count) ||
-      logical_lane_count < 2 || logical_lane_count > UINT32_MAX) {
+      logical_lane_count == 0 || logical_lane_count > UINT32_MAX ||
+      (!scalar_components_enabled && logical_lane_count < 2)) {
     return false;
   }
-  const loom_target_vector_packet_policy_t* policy =
-      loom_vector_packet_boundary_policy(plan, function);
-  if (policy == NULL || policy->native_lane_count_count == 0) {
+  if (policy == NULL) {
     return false;
   }
 
-  uint32_t packet_lane_count = 0;
-  for (uint8_t i = 0; i < policy->native_lane_count_count; ++i) {
-    const uint32_t candidate_lane_count = policy->native_lane_counts[i];
-    if (candidate_lane_count == 0 ||
-        candidate_lane_count >= logical_lane_count ||
-        candidate_lane_count <= packet_lane_count) {
-      continue;
+  uint32_t component_lane_count = 0;
+  if (loom_type_rank(logical_type) == 1) {
+    for (uint8_t i = 0; i < policy->native_lane_count_count; ++i) {
+      const uint32_t candidate_lane_count = policy->native_lane_counts[i];
+      if (candidate_lane_count == 0 ||
+          candidate_lane_count >= logical_lane_count ||
+          candidate_lane_count <= component_lane_count) {
+        continue;
+      }
+      const loom_type_t packet_type = loom_vector_packet_boundary_type(
+          logical_type, candidate_lane_count, /*scalar_components=*/false);
+      if (!loom_vector_packet_boundary_carrier_supported(
+              plan, function, role, packet_type, LOOM_VALUE_ID_INVALID)) {
+        continue;
+      }
+      const uint32_t tail_lane_count =
+          (uint32_t)(logical_lane_count % candidate_lane_count);
+      if (tail_lane_count != 0 &&
+          !loom_vector_packet_boundary_carrier_supported(
+              plan, function, role,
+              loom_vector_packet_boundary_type(logical_type, tail_lane_count,
+                                               /*scalar_components=*/false),
+              LOOM_VALUE_ID_INVALID)) {
+        continue;
+      }
+      component_lane_count = candidate_lane_count;
     }
-    const loom_type_t packet_type =
-        loom_vector_packet_boundary_type(logical_type, candidate_lane_count);
-    if (!loom_vector_packet_boundary_carrier_supported(
-            plan, function, role, packet_type, LOOM_VALUE_ID_INVALID)) {
-      continue;
-    }
-    const uint32_t tail_lane_count =
-        (uint32_t)(logical_lane_count % candidate_lane_count);
-    if (tail_lane_count != 0 &&
-        !loom_vector_packet_boundary_carrier_supported(
-            plan, function, role,
-            loom_vector_packet_boundary_type(logical_type, tail_lane_count),
-            LOOM_VALUE_ID_INVALID)) {
-      continue;
-    }
-    packet_lane_count = candidate_lane_count;
   }
-  if (packet_lane_count == 0) {
+  if (component_lane_count == 0 && scalar_components_enabled) {
+    const loom_type_t scalar_type =
+        loom_type_scalar(loom_type_element_type(logical_type));
+    if (!loom_low_pass_capability_source_type_supported(
+            loom_vector_packet_boundary_low_capability(plan),
+            loom_vector_packet_boundary_target_facts(function), plan->module,
+            scalar_type)) {
+      return false;
+    }
+    component_lane_count = 1;
+    *out_scalar_components = true;
+  } else if (component_lane_count == 0) {
     return false;
   }
   const uint64_t component_count =
-      (logical_lane_count - 1u) / packet_lane_count + 1u;
+      (logical_lane_count - 1u) / component_lane_count + 1u;
   if (component_count > LOOM_VECTOR_PACKET_BOUNDARY_COMPONENT_LIMIT ||
       component_count > UINT16_MAX) {
     return false;
   }
-  *out_packet_lane_count = packet_lane_count;
+  *out_component_lane_count = component_lane_count;
   *out_component_count = (uint16_t)component_count;
   return true;
 }
@@ -190,7 +222,9 @@ static bool loom_vector_packet_boundary_function_applies(
   (void)rule;
   const loom_target_vector_packet_policy_t* policy =
       loom_vector_packet_boundary_policy(plan, function);
-  return policy != NULL && policy->native_lane_count_count != 0 &&
+  return policy != NULL &&
+         (policy->native_lane_count_count != 0 ||
+          loom_vector_packet_boundary_scalar_components_enabled(policy)) &&
          iree_any_bit_set(
              policy->flags,
              LOOM_TARGET_VECTOR_PACKET_POLICY_FLAG_BOUNDARY_PROJECTION);
@@ -204,11 +238,13 @@ static bool loom_vector_packet_boundary_slot_matches(
     loom_block_t* block) {
   (void)rule;
   (void)block;
-  uint32_t packet_lane_count = 0;
+  uint32_t component_lane_count = 0;
   uint16_t component_count = 0;
+  bool scalar_components = false;
   return loom_vector_packet_boundary_select_schema(
       plan, function, role, loom_module_value_type(plan->module, value_id),
-      LOOM_VALUE_ID_INVALID, &packet_lane_count, &component_count);
+      LOOM_VALUE_ID_INVALID, &component_lane_count, &component_count,
+      &scalar_components);
 }
 
 static iree_status_t loom_vector_packet_boundary_plan_slot(
@@ -223,11 +259,12 @@ static iree_status_t loom_vector_packet_boundary_plan_slot(
   *out_claimed = false;
   const loom_type_t logical_type =
       loom_module_value_type(plan->module, value_id);
-  uint32_t packet_lane_count = 0;
+  uint32_t component_lane_count = 0;
   uint16_t component_count = 0;
+  bool scalar_components = false;
   if (!loom_vector_packet_boundary_select_schema(
-          plan, function, role, logical_type, value_id, &packet_lane_count,
-          &component_count)) {
+          plan, function, role, logical_type, value_id, &component_lane_count,
+          &component_count, &scalar_components)) {
     return iree_ok_status();
   }
 
@@ -245,15 +282,15 @@ static iree_status_t loom_vector_packet_boundary_plan_slot(
   (void)has_static_lane_count;
   for (uint16_t i = 0; i < component_count; ++i) {
     const uint32_t lane_count =
-        (uint32_t)iree_min(remaining_lane_count, packet_lane_count);
-    component_types[i] =
-        loom_vector_packet_boundary_type(logical_type, lane_count);
+        (uint32_t)iree_min(remaining_lane_count, component_lane_count);
+    component_types[i] = loom_vector_packet_boundary_type(
+        logical_type, lane_count, scalar_components);
     remaining_lane_count -= lane_count;
   }
   *slot_plan = (loom_vector_packet_boundary_slot_plan_t){
       .component_types = component_types,
-      .packet_lane_count = packet_lane_count,
       .component_count = component_count,
+      .scalar_components = scalar_components,
   };
   *out_schema = (loom_boundary_projection_schema_t){
       .rule = rule,
@@ -361,6 +398,30 @@ static iree_status_t loom_vector_packet_boundary_materialize_source(
 
   const loom_value_id_t logical_value = loom_boundary_projection_resolve_value(
       function, source_plan->logical_value_id);
+  if (source_plan->slot_plan->scalar_components) {
+    const loom_type_t logical_type =
+        loom_module_value_type(plan->module, logical_value);
+    const uint8_t rank = loom_type_rank(logical_type);
+    int64_t indices[LOOM_TYPE_MAX_RANK];
+    for (uint16_t i = 0; i < source_plan->slot_plan->component_count; ++i) {
+      uint64_t remaining_ordinal = i;
+      for (uint8_t reverse_axis = 0; reverse_axis < rank; ++reverse_axis) {
+        const uint8_t axis = rank - reverse_axis - 1u;
+        const int64_t dimension =
+            loom_type_dim_static_size_at(logical_type, axis);
+        indices[axis] = (int64_t)(remaining_ordinal % (uint64_t)dimension);
+        remaining_ordinal /= (uint64_t)dimension;
+      }
+      loom_op_t* extract_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_vector_extract_build(
+          &plan->rewriter.builder, logical_value,
+          /*indices=*/NULL, /*indices_count=*/0, indices, rank,
+          source_plan->slot_plan->component_types[i],
+          source->boundary_op->location, &extract_op));
+      out_component_values[i] = loom_vector_extract_result(extract_op);
+    }
+    return iree_ok_status();
+  }
   uint32_t lane_offset = 0;
   for (uint16_t i = 0; i < source_plan->slot_plan->component_count; ++i) {
     const int64_t static_offset = lane_offset;
@@ -389,6 +450,20 @@ static iree_status_t loom_vector_packet_boundary_reconstruct(
     loom_location_id_t location, loom_value_id_t* out_logical_value) {
   IREE_ASSERT(slot->schema.rule == rule);
   loom_vector_packet_boundary_mark_function(function);
+  const loom_vector_packet_boundary_slot_plan_t* slot_plan =
+      (const loom_vector_packet_boundary_slot_plan_t*)slot->schema.rule_plan;
+  IREE_ASSERT(slot_plan != NULL);
+  if (slot_plan->scalar_components) {
+    loom_op_t* from_elements_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
+        &plan->rewriter.builder, slot->component_value_ids,
+        slot->schema.component_count, logical_type, location,
+        &from_elements_op));
+    *out_logical_value = loom_vector_from_elements_result(from_elements_op);
+    loom_boundary_projection_record(plan, rule, 1,
+                                    slot->schema.component_count);
+    return iree_ok_status();
+  }
   loom_op_t* concat_op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_concat_build(
       &plan->rewriter.builder, /*axis=*/0, slot->component_value_ids,
