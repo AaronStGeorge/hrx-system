@@ -38,10 +38,12 @@ loom_cc_library(
     hdrs = ["target_legalization.h"],
     deps = [
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/target:legalization",
+        "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
 )

@@ -20,6 +20,7 @@ loom_cc_library(
     ::narrowing
     iree::base
     loom::ir
+    loom::ir::facts
     loom::ops::scalar
     loom::rewrite::pattern_registry
     loom::rewrite::rewriter

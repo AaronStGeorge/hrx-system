@@ -714,6 +714,47 @@ TEST(FloatFacts, IntegerToFloatProvesCompleteExactDomains) {
       kWideTypes);
 }
 
+TEST(FloatFacts, IntegerConversionExactnessPrecedesRounding) {
+  const struct {
+    // Complete integer domain being converted.
+    loom_scalar_type_t source_type;
+    // Formats that preserve every integer in that domain.
+    loom_scalar_type_set_t exact_types;
+  } cases[] = {
+      {LOOM_SCALAR_TYPE_I1, LOOM_SCALAR_TYPE_SET_FLOAT},
+      {LOOM_SCALAR_TYPE_I8,
+       LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_BF16 |
+           LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64},
+      {LOOM_SCALAR_TYPE_I16,
+       LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64},
+      {LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_SET_F64},
+      {LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_SET_NONE},
+  };
+  for (const auto& test_case : cases) {
+    for (auto kind : {LOOM_FLOAT_INTEGER_CONVERSION_SIGNED,
+                      LOOM_FLOAT_INTEGER_CONVERSION_UNSIGNED}) {
+      EXPECT_EQ(loom_value_facts_integer_exact_float_types(
+                    test_case.source_type, kind, loom_value_facts_unknown()),
+                test_case.exact_types);
+    }
+  }
+
+  // This integer is above a BF16 midpoint but rounds to the midpoint in F32.
+  // The rounded F32 value is exactly representable in F32; the integer is not.
+  const auto midpoint = loom_value_facts_exact_i64(16842753);
+  EXPECT_EQ(
+      loom_value_facts_integer_exact_float_types(
+          LOOM_SCALAR_TYPE_I32, LOOM_FLOAT_INTEGER_CONVERSION_SIGNED, midpoint),
+      LOOM_SCALAR_TYPE_SET_F64);
+  for (int64_t divisor : {1, 2}) {
+    const auto formats = loom_value_facts_integer_exact_float_types(
+        LOOM_SCALAR_TYPE_I32, LOOM_FLOAT_INTEGER_CONVERSION_SIGNED,
+        loom_value_facts_make(-33554432, 33554432, divisor));
+    EXPECT_EQ(loom_scalar_type_set_contains(formats, LOOM_SCALAR_TYPE_F32),
+              divisor == 2);
+  }
+}
+
 TEST(FloatFacts, IntegerToFloatUsesRangeAndDivisibilityTogether) {
   constexpr loom_scalar_type_set_t kF16Bf16AndWider =
       LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_BF16 |
@@ -782,6 +823,9 @@ TEST(FloatFacts, IntegerToFloatExactTypesMatchExhaustiveByteDomains) {
 
       const loom_value_facts_t source =
           loom_value_facts_make(INT8_MIN, INT8_MAX, divisor);
+      EXPECT_EQ(loom_value_facts_integer_exact_float_types(LOOM_SCALAR_TYPE_I8,
+                                                           kind, source),
+                expected);
       const loom_value_facts_t result = EvaluateIntegerToFloat(
           LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_F32, kind, source);
       ExpectExactFloatTypes(result, expected);

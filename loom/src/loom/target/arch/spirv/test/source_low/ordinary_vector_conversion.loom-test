@@ -93,11 +93,10 @@ low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @unsign
   %step = OpConstant.i32 1 : reg<spirv.id : index>
   %initial = OpCompositeConstruct.v4f32 %input, %input, %input, %input
   %result = low.scf.for signed [%begin to %count step %step] iter_args(%initial: reg<spirv.id : vector<4xf32>>) -> (reg<spirv.id : vector<4xf32>>) do(%iteration: reg<spirv.id : index>, %state: reg<spirv.id : vector<4xf32>>) {
-    %22 = OpConvertFToU.v4f32.v4u16 %state
-    %integers = OpBitcast.v4u16.v4i16 %22
-    %24 = OpBitcast.v4i16.v4u16 %integers
-    %doubles = OpConvertUToF.v4u16.v4f64 %24
-    %singles = OpFConvert.v4f64.v4f32 %doubles
+    %23 = OpConvertFToU.v4f32.v4u16 %state
+    %integers = OpBitcast.v4u16.v4i16 %23
+    %25 = OpBitcast.v4i16.v4u16 %integers
+    %singles = OpConvertUToF.v4u16.v4f32 %25
     low.scf.yield %singles : reg<spirv.id : vector<4xf32>>
   }
   %value = OpCompositeExtract.v4f32.f32 %result, 3

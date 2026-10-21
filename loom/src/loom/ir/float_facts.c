@@ -1094,6 +1094,40 @@ static loom_scalar_type_set_t loom_unsigned_integer_exact_float_destinations(
                                                trailing_zero_count);
 }
 
+static loom_value_facts_t loom_integer_to_float_source_facts(
+    loom_scalar_type_t source_type, loom_float_integer_conversion_kind_t kind,
+    loom_value_facts_t source_facts) {
+  int64_t domain_lo = 0;
+  int64_t domain_hi = 0;
+  loom_value_facts_scalar_type_domain(source_type, &domain_lo, &domain_hi);
+  loom_value_facts_t bounded =
+      loom_value_facts_clamp_domain(source_facts, domain_lo, domain_hi);
+  return kind == LOOM_FLOAT_INTEGER_CONVERSION_SIGNED
+             ? loom_value_facts_sign_extend(
+                   bounded, loom_scalar_type_bitwidth(source_type))
+             : bounded;
+}
+
+static loom_scalar_type_set_t loom_integer_to_float_exact_types(
+    loom_float_integer_conversion_kind_t kind, int32_t source_bit_count,
+    loom_value_facts_t bounded) {
+  return kind == LOOM_FLOAT_INTEGER_CONVERSION_SIGNED
+             ? loom_signed_integer_exact_float_destinations(bounded)
+             : loom_unsigned_integer_exact_float_destinations(bounded,
+                                                              source_bit_count);
+}
+
+loom_scalar_type_set_t loom_value_facts_integer_exact_float_types(
+    loom_scalar_type_t source_type, loom_float_integer_conversion_kind_t kind,
+    loom_value_facts_t source_facts) {
+  if (!loom_scalar_type_is_integer(source_type)) {
+    return LOOM_SCALAR_TYPE_SET_NONE;
+  }
+  return loom_integer_to_float_exact_types(
+      kind, loom_scalar_type_bitwidth(source_type),
+      loom_integer_to_float_source_facts(source_type, kind, source_facts));
+}
+
 void loom_value_facts_eval_integer_to_float(
     loom_scalar_type_t source_type, loom_scalar_type_t result_type,
     loom_float_integer_conversion_kind_t kind,
@@ -1105,25 +1139,17 @@ void loom_value_facts_eval_integer_to_float(
     return;
   }
 
-  int64_t source_domain_lo = 0;
-  int64_t source_domain_hi = 0;
-  if (!loom_value_facts_scalar_type_domain(source_type, &source_domain_lo,
-                                           &source_domain_hi)) {
-    return;
-  }
   const int32_t source_bit_count = loom_scalar_type_bitwidth(source_type);
-  loom_value_facts_t bounded = loom_value_facts_clamp_domain(
-      *source_facts, source_domain_lo, source_domain_hi);
+  const loom_value_facts_t bounded =
+      loom_integer_to_float_source_facts(source_type, kind, *source_facts);
 
   double result_lo = 0.0;
   double result_hi = 0.0;
   bool has_rounded_range = false;
-  loom_scalar_type_set_t integer_exact_types = LOOM_SCALAR_TYPE_SET_NONE;
+  const loom_scalar_type_set_t integer_exact_types =
+      loom_integer_to_float_exact_types(kind, source_bit_count, bounded);
   switch (kind) {
     case LOOM_FLOAT_INTEGER_CONVERSION_SIGNED: {
-      bounded = loom_value_facts_sign_extend(bounded, source_bit_count);
-      integer_exact_types =
-          loom_signed_integer_exact_float_destinations(bounded);
       has_rounded_range = loom_signed_integer_to_rounded_float(
                               result_type, bounded.range_lo, &result_lo) &&
                           loom_signed_integer_to_rounded_float(
@@ -1131,8 +1157,6 @@ void loom_value_facts_eval_integer_to_float(
       break;
     }
     case LOOM_FLOAT_INTEGER_CONVERSION_UNSIGNED: {
-      integer_exact_types = loom_unsigned_integer_exact_float_destinations(
-          bounded, source_bit_count);
       uint64_t exact_bits = 0;
       if (loom_value_facts_as_exact_raw_bits(bounded, source_bit_count,
                                              &exact_bits)) {

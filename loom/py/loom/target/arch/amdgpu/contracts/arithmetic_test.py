@@ -1527,6 +1527,7 @@ def test_vector_integer_conversion_contracts_preserve_storage_and_lane_counts() 
     }
     to_float = {("i8", "f32"), ("i16", "f32"), ("i32", "f32")}
     from_float = {(result, source) for source, result in to_float}
+    to_float.add(("i8", "f16"))
     for source_op, expected_pairs in (
         (vector.vector_extsi, widening),
         (vector.vector_extui, widening),

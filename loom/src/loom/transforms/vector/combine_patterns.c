@@ -9,6 +9,7 @@
 #include "iree/base/internal/math.h"
 #include "loom/analysis/symbolic_expr_proof.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/carrier.h"
 #include "loom/ops/scalar/ops.h"
@@ -57,6 +58,10 @@ static loom_conversion_kind_t loom_vector_combine_conversion_kind(
       return LOOM_CONVERSION_EXTUI;
     case LOOM_OP_VECTOR_TRUNCI:
       return LOOM_CONVERSION_TRUNCI;
+    case LOOM_OP_VECTOR_SITOFP:
+      return LOOM_CONVERSION_SITOFP;
+    case LOOM_OP_VECTOR_UITOFP:
+      return LOOM_CONVERSION_UITOFP;
     default:
       return LOOM_CONVERSION_NONE;
   }
@@ -120,6 +125,15 @@ static iree_status_t loom_vector_combine_replace_with_conversion(
       IREE_RETURN_IF_ERROR(
           loom_vector_trunci_build(&rewriter->builder, input, input_type,
                                    result_type, op->location, &replacement_op));
+      break;
+    }
+    case LOOM_CONVERSION_SITOFP:
+    case LOOM_CONVERSION_UITOFP: {
+      IREE_RETURN_IF_ERROR((replacement_kind == LOOM_CONVERSION_SITOFP
+                                ? loom_vector_sitofp_build
+                                : loom_vector_uitofp_build)(
+          &rewriter->builder, input, input_type, result_type, op->location,
+          &replacement_op));
       break;
     }
     case LOOM_CONVERSION_EXTRACT_SIGNED:
@@ -252,9 +266,25 @@ iree_status_t loom_vector_combine_conversion(loom_op_t* op,
       !loom_vector_combine_value_is_non_negative(rewriter, outer_input)) {
     return iree_ok_status();
   }
+  const loom_value_id_t input = loom_op_const_operands(defining_op)[0];
+  if (iree_any_bit_set(match.flags, LOOM_CONVERSION_CHAIN_FLAG_EXACT_INTEGER)) {
+    const loom_scalar_type_t input_type =
+        loom_type_element_type(loom_module_value_type(rewriter->module, input));
+    const loom_scalar_type_t intermediate_type = loom_type_element_type(
+        loom_module_value_type(rewriter->module, outer_input));
+    const loom_float_integer_conversion_kind_t kind =
+        inner_kind == LOOM_CONVERSION_SITOFP
+            ? LOOM_FLOAT_INTEGER_CONVERSION_SIGNED
+            : LOOM_FLOAT_INTEGER_CONVERSION_UNSIGNED;
+    if (!loom_scalar_type_set_contains(
+            loom_value_facts_integer_exact_float_types(
+                input_type, kind, loom_rewriter_value_facts(rewriter, input)),
+            intermediate_type)) {
+      return iree_ok_status();
+    }
+  }
   return loom_vector_combine_replace_with_conversion(
-      rewriter, op, match.candidate, loom_op_const_operands(defining_op)[0],
-      out_changed);
+      rewriter, op, match.candidate, input, out_changed);
 }
 
 static iree_status_t loom_vector_conversion_chain_pattern(

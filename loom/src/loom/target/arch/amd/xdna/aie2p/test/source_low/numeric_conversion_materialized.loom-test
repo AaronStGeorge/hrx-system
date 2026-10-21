@@ -257,11 +257,11 @@ func.def @narrow_exact_byte_to_bfloat(%input: i8) -> (bf16) {
 
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @narrow_exact_byte_to_bfloat(%input: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
-  %6 = extend.s8 %input
-  %7 = mov.fx2flt-scale 0
-  %wide = convert.signed.i32.to.f32 %6, %7
-  %9 = mov.short -16
-  %result = lshl %wide, %9
+  %9 = extend.s8 %input
+  %10 = mov.fx2flt-scale 0
+  %11 = convert.signed.i32.to.f32 %9, %10
+  %12 = mov.short -16
+  %result = lshl %11, %12
   return %result
 }
 

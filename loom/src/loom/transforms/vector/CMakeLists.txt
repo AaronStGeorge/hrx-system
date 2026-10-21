@@ -38,6 +38,7 @@ loom_cc_library(
     iree::base::internal
     loom::analysis::symbolic_expr
     loom::ir
+    loom::ir::facts
     loom::ops::index::comparison
     loom::ops::scalar
     loom::ops::vector

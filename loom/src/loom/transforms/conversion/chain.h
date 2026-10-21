@@ -25,6 +25,8 @@ enum loom_conversion_kind_e {
   LOOM_CONVERSION_EXTSI,
   LOOM_CONVERSION_EXTUI,
   LOOM_CONVERSION_TRUNCI,
+  LOOM_CONVERSION_SITOFP,
+  LOOM_CONVERSION_UITOFP,
   // Preserve the intermediate truncation's low-bit field while extending it
   // to the final width. The caller supplies that intermediate field width.
   LOOM_CONVERSION_EXTRACT_SIGNED,
@@ -43,13 +45,16 @@ enum loom_conversion_chain_flag_bits_e {
   // The intermediate result must be proven non-negative before composition.
   // Signed extension of a true i1 is negative despite the Boolean input facts.
   LOOM_CONVERSION_CHAIN_FLAG_NON_NEGATIVE = 1u << 0,
+  // The original integer must be exactly representable in the intermediate
+  // float format. Facts about the rounded float alone cannot prove this.
+  LOOM_CONVERSION_CHAIN_FLAG_EXACT_INTEGER = 1u << 1,
 };
 
 // Semantic decision for two consecutive elementwise conversions.
 typedef struct loom_conversion_chain_match_t {
   // Candidate to resolve against endpoint types, or NONE to retain the chain.
   loom_conversion_kind_t candidate;
-  // Facts the caller must prove about the intermediate conversion result.
+  // Facts the caller must prove about the original or intermediate value.
   loom_conversion_chain_flags_t flags;
 } loom_conversion_chain_match_t;
 
