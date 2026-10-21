@@ -28,6 +28,19 @@ py_library(
     srcs = ["bazel_test_results.py"],
 )
 
+py_library(
+    name = "bazel_profile_summary",
+    srcs = ["bazel_profile_summary.py"],
+)
+
+py_test(
+    name = "bazel_profile_summary_test",
+    size = _PRESUBMIT_TEST_SIZE,
+    srcs = ["bazel_profile_summary_test.py"],
+    tags = _PRESUBMIT_TEST_TAGS,
+    deps = [":bazel_profile_summary"],
+)
+
 py_test(
     name = "bazel_test_results_test",
     size = _PRESUBMIT_TEST_SIZE,
@@ -89,6 +102,7 @@ py_library(
     ],
     data = ["tsan.supp"],
     deps = [
+        ":bazel_profile_summary",
         ":bazel_test_results",
         ":command_line",
         ":run_requirements",
@@ -107,6 +121,7 @@ py_binary(
     ],
     data = ["tsan.supp"],
     deps = [
+        ":bazel_profile_summary",
         ":bazel_test_results",
         ":run_requirements",
         "//build_tools/ci:windows_diagnostics",
@@ -200,6 +215,7 @@ py_test(
     main = "ci_test.py",
     tags = _PRESUBMIT_TEST_TAGS,
     deps = [
+        ":bazel_profile_summary",
         ":bazel_test_results",
         ":run_requirements",
         "//build_tools/ci:windows_diagnostics",
@@ -410,6 +426,7 @@ test_suite(
     tags = _PRESUBMIT_TEST_TAGS,
     tests = [
         ":bazel_launcher_test",
+        ":bazel_profile_summary_test",
         ":bazel_test",
         ":bazel_test_results_test",
         ":ci_test",

@@ -499,6 +499,110 @@ class CiTest(unittest.TestCase):
                         for name in expected_names
                     ],
                 )
+                self.assertEqual(
+                    [
+                        step.bazel_profile
+                        for step in steps
+                        if step.bazel_profile is not None
+                    ],
+                    [resolved_profile_dir / name for name in expected_names],
+                )
+
+    def test_profile_summary_is_published_after_success_and_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile_path = root / "test-example.profile.gz"
+            output_path = root / "test-example.summary.json"
+            step = ci.CiStep(
+                "Test example",
+                ("example",),
+                bazel_profile=profile_path,
+            )
+            summary = object()
+
+            for command_code in (0, 7):
+                with self.subTest(command_code=command_code):
+                    job_summary_path = root / f"job-{command_code}.md"
+                    with (
+                        mock.patch.object(
+                            ci.subprocess,
+                            "run",
+                            return_value=subprocess.CompletedProcess(
+                                step.argv, command_code
+                            ),
+                        ),
+                        mock.patch.object(
+                            ci.bazel_profile_summary,
+                            "summarize",
+                            return_value=summary,
+                        ) as summarize,
+                        mock.patch.object(
+                            ci.bazel_profile_summary,
+                            "summary_path",
+                            return_value=output_path,
+                        ),
+                        mock.patch.object(
+                            ci.bazel_profile_summary, "write"
+                        ) as write_summary,
+                        mock.patch.object(
+                            ci.bazel_profile_summary,
+                            "render_console",
+                            return_value="console summary",
+                        ),
+                        mock.patch.object(
+                            ci.bazel_profile_summary,
+                            "render_markdown",
+                            return_value="markdown summary",
+                        ),
+                        mock.patch.dict(
+                            os.environ,
+                            {"GITHUB_STEP_SUMMARY": str(job_summary_path)},
+                            clear=True,
+                        ),
+                        contextlib.redirect_stdout(io.StringIO()),
+                        contextlib.redirect_stderr(io.StringIO()),
+                    ):
+                        result = ci.run_step(step, verbose=False)
+
+                    self.assertEqual(result.returncode, command_code)
+                    summarize.assert_called_once_with(profile_path)
+                    write_summary.assert_called_once_with(summary, output_path)
+                    self.assertEqual(job_summary_path.read_text(), "markdown summary\n")
+
+    def test_profile_summary_failure_preserves_command_failure(self):
+        profile_error = ci.bazel_profile_summary.BazelProfileSummaryError(
+            "truncated profile"
+        )
+        step = ci.CiStep(
+            "Test example",
+            ("example",),
+            bazel_profile=Path("/tmp/test-example.profile.gz"),
+        )
+
+        for command_code, expected_code in ((0, 1), (7, 7)):
+            with self.subTest(command_code=command_code):
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        ci.subprocess,
+                        "run",
+                        return_value=subprocess.CompletedProcess(
+                            step.argv, command_code
+                        ),
+                    ),
+                    mock.patch.object(
+                        ci,
+                        "publish_bazel_profile",
+                        side_effect=profile_error,
+                    ),
+                    mock.patch.dict(os.environ, {}, clear=True),
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(stderr),
+                ):
+                    result = ci.run_step(step, verbose=False)
+
+                self.assertEqual(result.returncode, expected_code)
+                self.assertIn("truncated profile", stderr.getvalue())
 
     def test_bazel_test_results_capture_only_test_phases(self):
         result_dir = Path("/tmp/iree-bazel-test-results").resolve()
