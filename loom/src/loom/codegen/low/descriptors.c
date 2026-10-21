@@ -58,29 +58,27 @@ loom_low_schedule_model_lookup_event_separation(
   }
   IREE_ASSERT_LT(producer_event_id, schedule_model->timing_event_count);
   IREE_ASSERT_LT(consumer_event_id, schedule_model->timing_event_count);
-  uint32_t begin = 0;
-  uint32_t end = schedule_model->event_separation_count;
+  const loom_low_timing_event_t* producer_event =
+      &schedule_model->timing_events[producer_event_id];
+  uint32_t begin = producer_event->separation_start;
+  const uint32_t range_end = begin + producer_event->separation_count;
+  uint32_t end = range_end;
   while (begin < end) {
     const uint32_t middle = begin + (end - begin) / 2;
     const loom_low_event_separation_t* candidate =
         &schedule_model->event_separations[middle];
-    if (candidate->producer_event_id < producer_event_id ||
-        (candidate->producer_event_id == producer_event_id &&
-         candidate->consumer_event_id < consumer_event_id)) {
+    if (candidate->consumer_event_id < consumer_event_id) {
       begin = middle + 1;
     } else {
       end = middle;
     }
   }
-  if (begin == schedule_model->event_separation_count) {
+  if (begin == range_end) {
     return NULL;
   }
   const loom_low_event_separation_t* candidate =
       &schedule_model->event_separations[begin];
-  return candidate->producer_event_id == producer_event_id &&
-                 candidate->consumer_event_id == consumer_event_id
-             ? candidate
-             : NULL;
+  return candidate->consumer_event_id == consumer_event_id ? candidate : NULL;
 }
 
 const loom_low_physical_register_t*

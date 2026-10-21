@@ -505,9 +505,8 @@ def _event_separation_row_lines(
 ) -> list[list[str]]:
     return [
         [
-            f".producer_event_id = {model.timing_event_ids[separation.producer_event]},",
-            f".consumer_event_id = {model.timing_event_ids[separation.consumer_event]},",
             f".minimum_issue_separation_cycles = {separation.minimum_issue_separation_cycles},",
+            f".consumer_event_id = {model.timing_event_ids[separation.consumer_event]},",
             f".model_quality = {separation.model_quality.c_name},",
         ]
         for separation in model.event_separations

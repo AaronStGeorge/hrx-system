@@ -85,6 +85,50 @@ TEST(LowDescriptorsTest, EmptyDescriptorLookup) {
             LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 }
 
+TEST(LowDescriptorsTest, EventSeparationLookupUsesProducerRange) {
+  constexpr uint16_t kEventCount = 4;
+  const std::array<loom_low_event_separation_t, 5> separations = {{
+      {.minimum_issue_separation_cycles = -2, .consumer_event_id = 1},
+      {.minimum_issue_separation_cycles = 4, .consumer_event_id = 3},
+      {.minimum_issue_separation_cycles = 7, .consumer_event_id = 0},
+      {.minimum_issue_separation_cycles = 8, .consumer_event_id = 1},
+      {.minimum_issue_separation_cycles = 9, .consumer_event_id = 3},
+  }};
+  const std::array<loom_low_timing_event_t, kEventCount> events = {{
+      {.separation_start = 0, .separation_count = 2},
+      {},
+      {.separation_start = 2, .separation_count = 3},
+      {},
+  }};
+  const loom_low_schedule_model_t model = {
+      .timing_events = events.data(),
+      .event_separations = separations.data(),
+      .timing_event_count = kEventCount,
+      .event_separation_count = IREE_ARRAYSIZE(separations),
+  };
+
+  const std::array<std::array<int, kEventCount>, kEventCount> expected_indices =
+      {{
+          {{-1, 0, -1, 1}},
+          {{-1, -1, -1, -1}},
+          {{2, 3, -1, 4}},
+          {{-1, -1, -1, -1}},
+      }};
+
+  for (uint16_t producer = 0; producer < kEventCount; ++producer) {
+    for (uint16_t consumer = 0; consumer < kEventCount; ++consumer) {
+      const auto* actual = loom_low_schedule_model_lookup_event_separation(
+          &model, producer, consumer);
+      const int expected_index = expected_indices[producer][consumer];
+      if (expected_index < 0) {
+        EXPECT_EQ(actual, nullptr);
+      } else {
+        EXPECT_EQ(actual, &separations[expected_index]);
+      }
+    }
+  }
+}
+
 TEST(LowDescriptorsTest, SummarizesOnlyMemoryAttachedEffects) {
   loom_low_effect_t effects[6] = {};
   effects[0].kind = LOOM_LOW_EFFECT_KIND_READ;

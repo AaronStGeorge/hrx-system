@@ -147,14 +147,14 @@ TEST_F(ScheduleEventFrontierTest, DelayedOverwriteKeepsOldAndNewValueReads) {
   constexpr uint16_t kRead = 1;
   constexpr uint16_t kImmediateWrite = 2;
   const loom_low_event_separation_t separations[] = {
-      {kDelayedWrite, kDelayedWrite, 1, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kDelayedWrite, kRead, 7, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kDelayedWrite, kImmediateWrite, 7, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kRead, kDelayedWrite, -6, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kRead, kImmediateWrite, 0, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kImmediateWrite, kDelayedWrite, -5, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kImmediateWrite, kRead, 1, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kImmediateWrite, kImmediateWrite, 1, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {1, kDelayedWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {7, kRead, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {7, kImmediateWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {-6, kDelayedWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {0, kImmediateWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {-5, kDelayedWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {1, kRead, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {1, kImmediateWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
   };
   loom_low_timing_event_t events[3] = {};
   events[kDelayedWrite].separation_count = 3;
@@ -205,11 +205,11 @@ TEST_F(ScheduleEventFrontierTest, ForwardedOverwriteRetainsEveryAliasedReader) {
   constexpr uint16_t kForwardedRead = 1;
   constexpr uint16_t kStorageRead = 2;
   const loom_low_event_separation_t separations[] = {
-      {kWrite, kWrite, 1, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kWrite, kForwardedRead, 1, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kWrite, kStorageRead, 2, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kForwardedRead, kWrite, 0, LOOM_LOW_MODEL_QUALITY_EXACT},
-      {kStorageRead, kWrite, -1, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {1, kWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {1, kForwardedRead, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {2, kStorageRead, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {0, kWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
+      {-1, kWrite, LOOM_LOW_MODEL_QUALITY_EXACT},
   };
   loom_low_timing_event_t events[3] = {};
   events[kWrite].separation_count = 3;
