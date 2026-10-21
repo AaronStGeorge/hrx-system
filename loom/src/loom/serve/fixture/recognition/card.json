@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "loom-fixture/recognition",
+    "name": "Continuing recognition fixture"
+  },
+  "files": {
+    "prepare.loom": {"origin": {"kind": "local", "path": "prepare.loom"}},
+    "control.loom": {"origin": {"kind": "local", "path": "control.loom"}},
+    "generate.loombc": {
+      "origin": {"kind": "build", "target": ":generate_module"}
+    }
+  },
+  "entrypoints": {
+    "recognition": {
+      "kind": "recognition",
+      "roots": {
+        "prepare": ["prepare"],
+        "control": [
+          "prepare_request", "prepare_work", "prepare_batch", "generate", "complete"
+        ]
+      },
+      "programs": {
+        "development": {
+          "inputs": ["prepare.loom", "control.loom"],
+          "libraries": ["generate.loombc"]
+        }
+      }
+    }
+  },
+  "variants": {
+    "fixture": {
+      "entrypoints": {
+        "recognition": {
+          "programs": ["development"],
+          "bindings": {"assets": {"directory": ".", "files": []}},
+          "options": {}
+        }
+      }
+    }
+  },
+  "configurations": {
+    "default": {
+      "entrypoint": "recognition",
+      "variant": "fixture",
+      "programs": "development",
+      "execution": {"pending_requests": 4}
+    }
+  },
+  "qualification": {}
+}
