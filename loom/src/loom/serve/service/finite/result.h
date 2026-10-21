@@ -15,7 +15,8 @@ extern "C" {
 #endif
 
 // Immutable cohort metadata and independently retained device output. The
-// result owns its allocation, not the source model, commands, or parameters.
+// result owns its logical output storage, not the source model, commands, or
+// parameters.
 // Device consumers import ready before reading and retain their buffer views
 // through actual queue retirement. The application device group outlives all
 // results and their consumers; a shared group alone grants no device access.
@@ -35,10 +36,14 @@ iree_status_t loom_serve_finite_result_create(
     const iree_host_size_t* expected_rows, iree_allocator_t host_allocator,
     loom_serve_finite_result_t** out_result);
 
-// Captures the accepted producer frontier and retains its complete allocation
-// root, independently of the producer's retirement-tracked view. Called once
-// after successful submission; output has the checked physical extent. The
-// producer keeps its own view through completion or terminal retirement.
+// Captures the accepted producer frontier and retains the exact output view,
+// including its offset and storage-release obligations. The caller supplies
+// storage independent of the producer's retirement-tracked views: a queue
+// allocation root or an owning logical suballocation, never a view whose
+// release keeps the producer model alive. Called once after successful
+// submission; output has the checked physical extent. Its source pool outlives
+// the result and every later buffer consumer. The producer separately retains
+// its tracked view through completion or terminal retirement.
 void loom_serve_finite_result_bind(loom_serve_finite_result_t* result,
                                    loom_serve_execution_t* execution,
                                    iree_hal_buffer_t* output);
@@ -46,11 +51,12 @@ void loom_serve_finite_result_bind(loom_serve_finite_result_t* result,
 void loom_serve_finite_result_retain(loom_serve_finite_result_t* result);
 
 // Releases caller ownership without waiting. Queue-captured views preserve
-// the root, and the shared workspace preserves its source pool until the final
-// capture retires. NULL is accepted. There is no result cache in this layer.
+// the exact logical storage. The storage owner keeps its source pool alive
+// until the final capture retires. NULL is accepted. There is no result cache
+// in this layer.
 void loom_serve_finite_result_release(loom_serve_finite_result_t* result);
 
-// Physical allocation extent charged by a retaining owner, including padding.
+// Source-declared output extent, including padding, not allocator overhead.
 iree_host_size_t loom_serve_finite_result_output_length(
     const loom_serve_finite_result_t* result);
 

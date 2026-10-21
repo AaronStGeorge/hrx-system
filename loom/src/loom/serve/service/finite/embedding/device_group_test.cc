@@ -70,7 +70,7 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
       .min_alignment = 16,
   };
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(execution_, &request, &workspace_));
+      loom_serve_execution_alloca(execution_, 1, &request, &workspace_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(first), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));

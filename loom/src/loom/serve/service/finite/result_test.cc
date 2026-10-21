@@ -14,6 +14,8 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/serve/runtime/device/device.h"
+#include "loom/serve/runtime/execution/retirement.h"
+#include "loom/serve/runtime/execution/workspace.h"
 
 namespace {
 
@@ -176,7 +178,8 @@ class SnapshotLifetimeTest : public ResultTest,
     IREE_ASSERT_OK(
         loom_serve_execution_barrier(execution_, {1, &gate_, &value}));
     const auto request = iree_hal_make_pool_reservation_request(32, 16);
-    IREE_ASSERT_OK(loom_serve_execution_alloca(execution_, &request, &source_));
+    IREE_ASSERT_OK(
+        loom_serve_execution_alloca(execution_, 1, &request, &source_));
     const uint32_t pattern = 0x3F800000;
     const iree_hal_transfer_operation_t fill = {
         .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
@@ -191,7 +194,8 @@ class SnapshotLifetimeTest : public ResultTest,
     IREE_ASSERT_OK(loom_serve_execution_transfer(execution_, 1, &fill, &value));
     IREE_ASSERT_OK(CreatePlan());
     IREE_ASSERT_OK(CreateResult(allocator_.allocator()));
-    loom_serve_finite_result_bind(result_, execution_, source_);
+    loom_serve_finite_result_bind(result_, execution_,
+                                  iree_hal_buffer_allocated_buffer(source_));
   }
 
   void TearDown() override {
@@ -263,5 +267,121 @@ TEST_P(SnapshotLifetimeTest, EarlyReleasePreservesAcceptedDownloadStorage) {
 
 INSTANTIATE_TEST_SUITE_P(FailedReadiness, SnapshotLifetimeTest,
                          ::testing::Bool());
+
+class SuballocationLifetimeTest : public ResultTest {
+ protected:
+  void SetUp() override {
+    loom_serve_retirement_initialize(&producer_);
+    IREE_ASSERT_OK(
+        loom_serve_host_create(2, nullptr, iree_allocator_system(), &host_));
+    const loom_serve_device_options_t options = {
+        .driver = loom_serve_host_task_driver(host_),
+        .uri = IREE_SV("task"),
+    };
+    IREE_ASSERT_OK(loom_serve_device_group_allocate(
+        host_, 1, &options, iree_allocator_system(), &group_));
+    auto* device = loom_serve_device_group_at(group_, 0);
+    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+    auto* workspace = loom_serve_device_workspace(device);
+    IREE_ASSERT_OK(loom_serve_workspace_reserve(workspace, 2048, 256));
+    IREE_ASSERT_OK(loom_serve_workspace_acquire_pool(workspace, &pool_));
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool_, iree_hal_make_pool_reservation_request(256, 256),
+        iree_infinite_timeout(), &prefix_));
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool_, iree_hal_make_pool_reservation_request(32, 256),
+        iree_infinite_timeout(), &output_));
+  }
+
+  void TearDown() override {
+    iree_hal_buffer_release(view_);
+    loom_serve_finite_snapshot_release(snapshot_);
+    ResultTest::TearDown();
+    iree_hal_buffer_release(output_);
+    iree_hal_buffer_release(prefix_);
+    if (execution_) {
+      IREE_EXPECT_OK(loom_serve_execution_drain(execution_));
+    }
+    loom_serve_retirement_await(&producer_);
+    loom_serve_retirement_deinitialize(&producer_);
+    loom_serve_execution_release(execution_);
+    iree_hal_pool_release(pool_);
+    IREE_EXPECT_OK(loom_serve_device_group_free(group_));
+    loom_serve_host_release(host_);
+  }
+
+  // Runtime owner kept through every pool and queue consumer.
+  loom_serve_host_t* host_ = nullptr;
+  // One task device with its application-owned persistent workspace.
+  loom_serve_device_group_t* group_ = nullptr;
+  // Producer and download timelines, also retained by the result.
+  loom_serve_execution_t* execution_ = nullptr;
+  // Shared logical allocator outliving its ordinary suballocated buffers.
+  iree_hal_pool_t* pool_ = nullptr;
+  // Occupied prefix forcing the output to a nonzero physical offset.
+  iree_hal_buffer_t* prefix_ = nullptr;
+  // Independent output storage with its own reservation-release obligation.
+  iree_hal_buffer_t* output_ = nullptr;
+  // Producer tracking, which must retire while the result remains usable.
+  loom_serve_retirement_t producer_;
+  // Producer-only view captured by the upload operation.
+  iree_hal_buffer_t* view_ = nullptr;
+  // Explicit host result, independent of the device output after download.
+  loom_serve_finite_snapshot_t* snapshot_ = nullptr;
+  // Upload payload outliving accepted queue work, including failed checks.
+  const std::array<float, 5> values_ = {11, 12, 21, 22, 31};
+};
+
+TEST_F(SuballocationLifetimeTest, RetainsLogicalStorageAfterProducerRetires) {
+  ASSERT_NE(iree_hal_buffer_byte_offset(output_), 0u);
+  ASSERT_NE(output_, iree_hal_buffer_allocated_buffer(output_));
+  IREE_ASSERT_OK(CreatePlan());
+  IREE_ASSERT_OK(CreateResult(iree_allocator_system()));
+  view_ = output_;
+  iree_hal_buffer_retain(view_);
+  IREE_ASSERT_OK(
+      loom_serve_retirement_track(&producer_, &view_, iree_allocator_system()));
+  const iree_hal_transfer_operation_t upload = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
+      .upload =
+          {
+              .source = values_.data(),
+              .target_buffer = view_,
+              .length = sizeof(values_),
+          },
+  };
+  uint64_t completion = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_transfer(execution_, 1, &upload, &completion));
+  loom_serve_finite_result_bind(result_, execution_, output_);
+  const auto row = loom_serve_finite_result_row(result_, 0, 0);
+  EXPECT_EQ(row.buffer, output_);
+  EXPECT_EQ(row.offset, 8u);
+  iree_hal_buffer_release(std::exchange(output_, nullptr));
+  iree_hal_buffer_release(std::exchange(view_, nullptr));
+  IREE_ASSERT_OK(loom_serve_execution_wait(execution_, completion));
+  loom_serve_retirement_await(&producer_);
+  iree_hal_pool_stats_t statistics;
+  iree_hal_pool_query_stats(pool_, &statistics);
+  EXPECT_EQ(statistics.reservation_count, 2u);
+
+  loom_serve_execution_frontier_t ready;
+  IREE_ASSERT_OK(
+      loom_serve_finite_result_download(result_, &snapshot_, &ready));
+  loom_serve_finite_result_release(std::exchange(result_, nullptr));
+  IREE_ASSERT_OK(
+      loom_serve_execution_feedback_wait(execution_, ready.values[1]));
+  const auto first = loom_serve_finite_snapshot_row(snapshot_, 0, 0);
+  const auto second = loom_serve_finite_snapshot_row(snapshot_, 0, 1);
+  const auto third = loom_serve_finite_snapshot_row(snapshot_, 1, 0);
+  EXPECT_EQ(first.data_length, 2 * sizeof(float));
+  EXPECT_EQ(second.data_length, 2 * sizeof(float));
+  EXPECT_EQ(third.data_length, sizeof(float));
+  EXPECT_EQ(iree_unaligned_load_le_f32(first.data), 21);
+  EXPECT_EQ(iree_unaligned_load_le_f32(first.data + 4), 22);
+  EXPECT_EQ(iree_unaligned_load_le_f32(second.data), 11);
+  EXPECT_EQ(iree_unaligned_load_le_f32(second.data + 4), 12);
+  EXPECT_EQ(iree_unaligned_load_le_f32(third.data), 31);
+}
 
 }  // namespace

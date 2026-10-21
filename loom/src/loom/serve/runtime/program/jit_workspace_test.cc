@@ -137,7 +137,7 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
       .min_alignment = 16,
   };
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(held_.execution, &request, &held_.buffer));
+      loom_serve_execution_alloca(held_.execution, 1, &request, &held_.buffer));
   ASSERT_NE(held_.buffer->memory.contract, nullptr);
   EXPECT_EQ(held_.buffer->memory.contract->domain,
             iree_hal_device_group_memory_domain(
@@ -216,7 +216,7 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
       .min_alignment = 16,
   };
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(held_.execution, &request, &held_.buffer));
+      loom_serve_execution_alloca(held_.execution, 1, &request, &held_.buffer));
   iree_hal_transfer_operation_t upload = {
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
       .upload = {input_.data(), held_.buffer, 0, sizeof(input_)},
@@ -326,7 +326,7 @@ TEST_P(JitWorkspaceTest, RetiredModelDoesNotJoinRawQueueAllocationCaptures) {
       .min_alignment = 16,
   };
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(held_.execution, &request, &held_.buffer));
+      loom_serve_execution_alloca(held_.execution, 1, &request, &held_.buffer));
   IREE_ASSERT_OK(
       loom_serve_execution_dealloca(held_.execution, held_.buffer, &value));
   iree_hal_buffer_release(held_.buffer);

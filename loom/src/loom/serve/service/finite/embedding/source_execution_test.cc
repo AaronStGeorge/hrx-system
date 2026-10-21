@@ -977,7 +977,7 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   const auto reservation =
       iree_hal_make_pool_reservation_request(sizeof(output_), 16);
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(consumer_, &reservation, &target_));
+      loom_serve_execution_alloca(consumer_, 1, &reservation, &target_));
 
   std::array<iree_hal_transfer_operation_t, 3> copies = {};
   const std::array<std::array<size_t, 2>, 3> rows = {{{0, 0}, {0, 1}, {1, 0}}};

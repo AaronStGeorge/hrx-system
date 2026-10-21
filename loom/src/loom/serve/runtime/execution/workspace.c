@@ -405,9 +405,10 @@ iree_status_t loom_serve_workspace_scope_reserve(
 }
 
 iree_status_t loom_serve_workspace_scope_acquire(
-    loom_serve_workspace_scope_t* scope, iree_hal_pool_t** out_pool) {
+    loom_serve_workspace_scope_t* scope, iree_host_size_t count,
+    iree_hal_pool_t** out_pool) {
   *out_pool = NULL;
-  IREE_RETURN_IF_ERROR(loom_serve_workspace_scope_reserve(scope, 1));
+  IREE_RETURN_IF_ERROR(loom_serve_workspace_scope_reserve(scope, count));
   return loom_serve_workspace_acquire_pool(scope->workspace, out_pool);
 }
 

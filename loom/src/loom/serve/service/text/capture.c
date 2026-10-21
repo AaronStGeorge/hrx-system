@@ -120,7 +120,7 @@ iree_status_t loom_serve_text_capture_submit(loom_serve_text_capture_t* capture,
       .allocation_size = capture->length, .min_alignment = 1};
   iree_hal_buffer_t* output = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_serve_execution_alloca(execution, &request, &output));
+      loom_serve_execution_alloca(execution, 1, &request, &output));
   capture->buffer = iree_hal_buffer_allocated_buffer(output);
   iree_hal_buffer_retain(capture->buffer);
   iree_hal_transfer_operation_t operations[64];

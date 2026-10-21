@@ -11,7 +11,7 @@ struct loom_serve_finite_result_t {
   iree_atomic_ref_count_t ref_count;
   // Allocator owning this metadata object.
   iree_allocator_t host_allocator;
-  // Physical output allocation extent, including source-required padding.
+  // Source-declared output extent, including required padding.
   iree_host_size_t output_length;
   // Live result prefix containing every checked row.
   iree_host_size_t length;
@@ -21,7 +21,7 @@ struct loom_serve_finite_result_t {
   iree_host_size_t records_length;
   // Retained producer timeline and shared workspace, not its source model.
   loom_serve_execution_t* execution;
-  // Owned allocation root, independent of producer retirement tracking.
+  // Exact output view, including storage ownership but not producer tracking.
   iree_hal_buffer_t* buffer;
   // Accepted producer frontier, whose semaphores are owned by execution.
   loom_serve_execution_frontier_t ready;
@@ -121,7 +121,7 @@ void loom_serve_finite_result_bind(loom_serve_finite_result_t* result,
   result->execution = execution;
   loom_serve_execution_retain(execution);
   result->ready = loom_serve_execution_frontier(execution);
-  result->buffer = iree_hal_buffer_allocated_buffer(output);
+  result->buffer = output;
   iree_hal_buffer_retain(result->buffer);
 }
 
@@ -212,7 +212,8 @@ iree_status_t loom_serve_finite_result_download(
   memcpy(snapshot->storage, result->records, result->records_length);
   iree_hal_buffer_t* source = NULL;
   iree_status_t status = iree_hal_subspan_buffer_create_with_callback(
-      result->buffer, 0, result->length,
+      result->buffer, iree_hal_buffer_byte_offset(result->buffer),
+      result->length,
       (iree_hal_buffer_release_callback_t){loom_serve_finite_snapshot_retired,
                                            snapshot},
       result->host_allocator, &source);

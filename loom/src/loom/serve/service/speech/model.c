@@ -1417,17 +1417,15 @@ static iree_status_t loom_serve_speech_generator_submit(
   IREE_RETURN_IF_ERROR(iree_vm_buffer_map_read(
       model->batch.payload, 0, iree_vm_buffer_length(model->batch.payload),
       &payload));
-  const iree_host_size_t lengths[] = {payload.data_length,
-                                      model->output_capacity};
-  iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(lengths) && iree_status_is_ok(status); ++i) {
-    const iree_hal_pool_reservation_request_t reservation =
-        iree_hal_make_pool_reservation_request(
-            lengths[i], LOOM_SERVE_SPEECH_BUFFER_ALIGNMENT);
-    status = loom_serve_execution_alloca(model->execution, &reservation,
-                                         &model->batch.buffers[i]);
-  }
+  const iree_hal_pool_reservation_request_t requests[] = {
+      iree_hal_make_pool_reservation_request(
+          payload.data_length, LOOM_SERVE_SPEECH_BUFFER_ALIGNMENT),
+      iree_hal_make_pool_reservation_request(
+          model->output_capacity, LOOM_SERVE_SPEECH_BUFFER_ALIGNMENT),
+  };
+  iree_status_t status =
+      loom_serve_execution_alloca(model->execution, IREE_ARRAYSIZE(requests),
+                                  requests, model->batch.buffers);
   uint64_t value = 0;
   if (iree_status_is_ok(status)) {
     const iree_hal_transfer_operation_t upload = {

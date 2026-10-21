@@ -1531,7 +1531,7 @@ TEST_P(WeightsTest,
       .min_alignment = 256,
   };
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(execution_, &request, &workspace_));
+      loom_serve_execution_alloca(execution_, 1, &request, &workspace_));
   uint64_t completion = 0;
   IREE_ASSERT_OK(
       loom_serve_execution_dealloca(execution_, workspace_, &completion));
@@ -1555,7 +1555,7 @@ TEST_P(WeightsTest,
   ASSERT_NO_FATAL_FAILURE(Run(1, 70));
 
   IREE_ASSERT_OK(
-      loom_serve_execution_alloca(execution_, &request, &workspace_));
+      loom_serve_execution_alloca(execution_, 1, &request, &workspace_));
   // The model's real command completion follows allocation on the work chain.
   ASSERT_NO_FATAL_FAILURE(Run(0, 70));
   IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, kSlabBytes - 1));
