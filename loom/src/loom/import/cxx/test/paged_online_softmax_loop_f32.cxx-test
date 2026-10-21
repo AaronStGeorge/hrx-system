@@ -1,0 +1,167 @@
+// RUN: pass combine,cse,dce
+#include <loomcxx/kernel.h>
+#include <loomcxx/predicate.h>
+#include <loomcxx/scalar.h>
+#include <loomcxx/vector.h>
+
+using Float32x4 = float __attribute__((ext_vector_type(4)));
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void paged_online_softmax_loop_f32(loom::type::index token_count, [[loom::noalias, loom::assume_aligned(4)]] const float* query_storage, [[loom::noalias, loom::assume_aligned(4)]] const int* table_storage, [[loom::noalias, loom::assume_aligned(4)]] const float* key_storage, [[loom::noalias, loom::assume_aligned(4)]] const float* value_storage, [[loom::noalias, loom::assume_aligned(4)]] float* state_storage, [[loom::noalias, loom::assume_aligned(4)]] float* output_storage) {
+  loom::assume(loom::predicate::range(token_count, 0, 32));
+  Float32x4 initial_accumulator = 0.0f;
+  auto query_view = loom::buffer::view<4>(query_storage, {}, loom::encoding::layout::dense<1>());
+  auto table = loom::buffer::view<8>(table_storage, {}, loom::encoding::layout::dense<1>());
+  auto state = loom::buffer::view<2>(state_storage, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<4>(output_storage, {}, loom::encoding::layout::dense<1>());
+  Float32x4 query_vector = loom::vector::load<Float32x4>(query_view, loom::type::indices{loom::type::index{0}});
+  float maximum = -1000000000.0f;
+  float denominator = 0.0f;
+  Float32x4 numerator = initial_accumulator;
+  for (loom::type::index page_begin = loom::type::index{0}; page_begin < token_count; page_begin = page_begin + loom::type::index{4}) {
+    loom::type::index logical_page = page_begin / loom::type::index{4};
+    int page_id = loom::view::load(table, logical_page);
+    bool present = page_id >= 0;
+    if (present) {
+      loom::type::index page_index = loom::index::cast(page_id);
+      loom::assume(loom::predicate::range(page_index, 0, 2));
+      loom::type::offset page_offset = loom::index::scale(page_index, loom::type::offset{64});
+      maximum = maximum;
+      denominator = denominator;
+      numerator = numerator;
+      for (int row = 0; row < 4; ++row) {
+        loom::type::index token = page_begin + loom::index::cast(row);
+        bool valid = token < token_count;
+        if (valid) {
+          loom::type::offset row_offset = loom::index::scale(loom::index::cast(row), loom::type::offset{16});
+          loom::type::offset physical_offset = page_offset + row_offset;
+          auto key_row = loom::buffer::view<4>(reinterpret_cast<const float*>(reinterpret_cast<const unsigned char*>(key_storage) + static_cast<unsigned long long>(physical_offset)), {}, loom::encoding::layout::dense<1>());
+          auto value_row = loom::buffer::view<4>(reinterpret_cast<const float*>(reinterpret_cast<const unsigned char*>(value_storage) + static_cast<unsigned long long>(physical_offset)), {}, loom::encoding::layout::dense<1>());
+          Float32x4 key = loom::vector::load<Float32x4>(key_row, loom::type::indices{loom::type::index{0}});
+          Float32x4 value = loom::vector::load<Float32x4>(value_row, loom::type::indices{loom::type::index{0}});
+          float score = loom::vector::dotf(query_vector, key, 0.0f);
+          float updated_max = loom::scalar::maxnumf(maximum, score);
+          float old_delta = maximum - updated_max;
+          float score_delta = score - updated_max;
+          float old_scale = loom::scalar::approximate::expf(old_delta);
+          float weight = loom::scalar::approximate::expf(score_delta);
+          [[loom::fastmath("contract")]] float rescaled_sum = denominator * old_scale;
+          [[loom::fastmath("contract")]] denominator = rescaled_sum + weight;
+          Float32x4 old_scale_vector = old_scale;
+          Float32x4 weight_vector = weight;
+          [[loom::fastmath("contract")]] Float32x4 rescaled_accumulator = numerator * old_scale_vector;
+          [[loom::fastmath("contract")]] Float32x4 weighted_value = value * weight_vector;
+          [[loom::fastmath("contract")]] numerator = rescaled_accumulator + weighted_value;
+          maximum = updated_max;
+        }
+      }
+    }
+  }
+  bool nonempty = denominator > 0.0f;
+  Float32x4 normalized = Float32x4{};
+  if (nonempty) {
+    Float32x4 denominators = denominator;
+    normalized = numerator / denominators;
+  } else {
+    normalized = initial_accumulator;
+  }
+  loom::view::store(maximum, state, loom::type::index{0});
+  loom::view::store(denominator, state, loom::type::index{1});
+  loom::vector::store(normalized, output_view, loom::type::indices{loom::type::index{0}});
+}
+
+// ----
+kernel.def @paged_online_softmax_loop_f32() {
+  %7 = index.constant 1 : index
+  kernel.launch.config workgroups(%7, %7, %7) workgroup_size(%7, %7, %7) : index
+} launch(%token_count$0: index, %1: buffer, %2: buffer, %3: buffer, %4: buffer, %5: buffer, %6: buffer) {
+  %13 = buffer.assume.alignment %1 {minimum_alignment = 4} : buffer
+  %query_storage = buffer.assume.noalias %13 : buffer
+  %query_storage_byte_offset = index.constant 0 : offset
+  %16 = buffer.assume.alignment %2 {minimum_alignment = 4} : buffer
+  %table_storage = buffer.assume.noalias %16 : buffer
+  %19 = buffer.assume.alignment %3 {minimum_alignment = 4} : buffer
+  %key_storage = buffer.assume.noalias %19 : buffer
+  %22 = buffer.assume.alignment %4 {minimum_alignment = 4} : buffer
+  %value_storage = buffer.assume.noalias %22 : buffer
+  %25 = buffer.assume.alignment %5 {minimum_alignment = 4} : buffer
+  %state_storage = buffer.assume.noalias %25 : buffer
+  %28 = buffer.assume.alignment %6 {minimum_alignment = 4} : buffer
+  %output_storage = buffer.assume.noalias %28 : buffer
+  %token_count$31 = index.assume %token_count$0 [range(%token_count$0, 0, 32)] : index
+  %initial_accumulator = vector.constant 0.0 : vector<4xf32>
+  %query_view = buffer.view %query_storage[%query_storage_byte_offset] : buffer -> view<4xf32>
+  %table = buffer.view %table_storage[%query_storage_byte_offset] : buffer -> view<8xi32>
+  %state = buffer.view %state_storage[%query_storage_byte_offset] : buffer -> view<2xf32>
+  %output_view = buffer.view %output_storage[%query_storage_byte_offset] : buffer -> view<4xf32>
+  %190 = index.constant 0 : index
+  %query_vector = vector.load %query_view[%190] : view<4xf32> -> vector<4xf32>
+  %maximum$189 = scalar.constant -1000000000.0 : f32
+  %denominator$48 = scalar.constant 0.0 : f32
+  %178 = index.constant 4 : index
+  %maximum$183, %denominator$184, %numerator = scf.for %page_begin = [%190 to %token_count$31 step %178](%maximum$180 = %maximum$189 : f32, %denominator$181 = %denominator$48 : f32, %numerator$182 = %initial_accumulator : vector<4xf32>) -> (f32, f32, vector<4xf32>) {
+    %186 = index.constant 2 : index
+    %logical_page = index.shrui %page_begin, %186 : index
+    %page_id = view.load %table[%logical_page] : view<8xi32> -> i32
+    %70 = scalar.constant 0 : i32
+    %present = scalar.cmpi sge, %page_id, %70 : i32
+    %maximum$72, %denominator$73, %numerator$74 = scf.if %present -> (f32, f32, vector<4xf32>) {
+      %166 = scalar.assume %page_id [ge(%page_id, 0)] : i32
+      %page_index$75 = index.cast %166 : i32 to index
+      %page_index$76 = index.assume %page_index$75 [range(%page_index$75, 0, 2)] : index
+      %172 = index.constant 64 : offset
+      %page_offset = index.scale %page_index$76, %172 : index, offset -> offset
+      %85 = index.constant 1 : index
+      %denominator, %numerator, %maximum = scf.for %row = [%190 to %178 step %85](%denominator$87 = %denominator$181 : f32, %numerator$88 = %numerator$182 : vector<4xf32>, %maximum$89 = %maximum$180 : f32) -> (f32, vector<4xf32>, f32) {
+        %token = index.add %page_begin, %row : index
+        %valid = index.cmp slt, %token, %token_count$31 : index
+        %denominator$97, %numerator$98, %maximum$99 = scf.if %valid -> (f32, vector<4xf32>, f32) {
+          %169 = index.constant 16 : offset
+          %row_offset = index.scale %row, %169 : index, offset -> offset
+          %physical_offset = index.add %page_offset, %row_offset : offset
+          %106 = index.cast %physical_offset : offset to i64
+          %111 = scalar.assume %106 [range(%106, 0, 9223372036854775807)] : i64
+          %112 = index.cast %111 : i64 to offset
+          %key_row = buffer.view %key_storage[%112] : buffer -> view<4xf32>
+          %value_row = buffer.view %value_storage[%112] : buffer -> view<4xf32>
+          %key = vector.load %key_row[%190] : view<4xf32> -> vector<4xf32>
+          %value = vector.load %value_row[%190] : view<4xf32> -> vector<4xf32>
+          %score = vector.dotf %query_vector, %key, %denominator$48 : vector<4xf32>, vector<4xf32>, f32
+          %updated_max = scalar.maxnumf %maximum$89, %score : f32
+          %old_delta = scalar.subf %maximum$89, %updated_max : f32
+          %score_delta = scalar.subf %score, %updated_max : f32
+          %old_scale = scalar.expf<afn> %old_delta : f32
+          %weight = scalar.expf<afn> %score_delta : f32
+          %rescaled_sum = scalar.mulf<contract> %denominator$87, %old_scale : f32
+          %denominator = scalar.addf<contract> %rescaled_sum, %weight : f32
+          %old_scale_vector = vector.splat %old_scale : vector<4xf32>
+          %weight_vector = vector.splat %weight : vector<4xf32>
+          %rescaled_accumulator = vector.mulf<contract> %numerator$88, %old_scale_vector : vector<4xf32>
+          %weighted_value = vector.mulf<contract> %value, %weight_vector : vector<4xf32>
+          %numerator = vector.addf<contract> %rescaled_accumulator, %weighted_value : vector<4xf32>
+          scf.yield %denominator, %numerator, %updated_max : f32, vector<4xf32>, f32
+        } else {
+          scf.yield %denominator$87, %numerator$88, %maximum$89 : f32, vector<4xf32>, f32
+        }
+        scf.yield %denominator$97, %numerator$98, %maximum$99 : f32, vector<4xf32>, f32
+      }
+      scf.yield %maximum, %denominator, %numerator : f32, f32, vector<4xf32>
+    } else {
+      scf.yield %maximum$180, %denominator$181, %numerator$182 : f32, f32, vector<4xf32>
+    }
+    scf.yield %maximum$72, %denominator$73, %numerator$74 : f32, f32, vector<4xf32>
+  }
+  %nonempty = scalar.cmpf ogt, %denominator$184, %denominator$48 : f32
+  %normalized = scf.if %nonempty -> (vector<4xf32>) {
+    %denominators = vector.splat %denominator$184 : vector<4xf32>
+    %normalized = vector.divf %numerator, %denominators : vector<4xf32>
+    scf.yield %normalized : vector<4xf32>
+  } else {
+    scf.yield %initial_accumulator : vector<4xf32>
+  }
+  view.store %maximum$183, %state[%190] : f32, view<2xf32>
+  %176 = index.constant 1 : index
+  view.store %denominator$184, %state[%176] : f32, view<2xf32>
+  vector.store %normalized, %output_view[%190] : vector<4xf32>, view<4xf32>
+  kernel.return
+}
