@@ -869,6 +869,9 @@ class CiTest(unittest.TestCase):
             "//loom/src/loom/import/cxx/tooling:execution_test", steps[6].argv
         )
         self.assertIn("//loom/src/loom/tooling/target/cpu/serve:all", steps[6].argv)
+        for tool in ("loom-check", "loom-test", "loom-benchmark"):
+            self.assertIn(f"//loom/src/loom/tools/{tool}:execution_test", steps[6].argv)
+        self.assertIn("//loom/src/loom/tools/loom-check/test:core_test", steps[6].argv)
         for step in steps[:6]:
             self.assertNotIn("--//loom/config:shared_tools", step.argv)
 
@@ -1848,6 +1851,10 @@ fi
         self.assertIn("loom-format", steps[configure_index + 1].argv)
         self.assertIn("loom-link", steps[configure_index + 1].argv)
         self.assertIn("loom-run", steps[configure_index + 1].argv)
+        for tool in ("loom-check", "loom-check-test", "loom-test", "loom-benchmark"):
+            self.assertIn(tool, steps[configure_index + 1].argv)
+        for tool in ("loom-check", "loom-test", "loom-benchmark"):
+            self.assertIn(tool, steps[-1].argv[steps[-1].argv.index("-R") + 1])
         self.assertIn(
             "loom_import_cxx_tooling_execution_test_test_deps",
             steps[configure_index + 1].argv,

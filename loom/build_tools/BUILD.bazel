@@ -37,6 +37,7 @@ py_test(
         "//loom/build_tools/amdgpu:target_config.bzl",
         "//loom/requirements:defs.bzl",
         "//loom/requirements:package_policy.bzl",
+        "//runtime:.bazel_to_cmake.cfg.py",
     ],
     main = "bazel_to_cmake/config_test.py",
     tags = ["manual"],

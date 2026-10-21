@@ -818,10 +818,17 @@ class LoomBuildFileFunctions(
             ),
         )
 
-    def loomc_cc_binary(self, **kwargs):
+    def loomc_cc_binary(self, runtime_only=False, **kwargs):
+        body_start = len(self._converter.body)
         self._emit_rewritten_cmake_rule(
             "loom_cc_binary", "loomc_cc_binary", lambda: self.loom_cc_binary(**kwargs)
         )
+        if runtime_only:
+            emitted_body = self._converter.body[body_start:]
+            emitted_body = emitted_body.replace(
+                "loomc_cc_binary(\n", "loomc_cc_binary(\n  RUNTIME_ONLY\n", 1
+            )
+            self._converter.body = self._converter.body[:body_start] + emitted_body
 
     def loomc_interop_headers(self, name, deps):
         self._converter.body += (

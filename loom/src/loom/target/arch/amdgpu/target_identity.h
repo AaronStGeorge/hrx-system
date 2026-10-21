@@ -34,7 +34,8 @@ void loom_amdgpu_target_identity_initialize(
     loom_amdgpu_target_identity_t* out_identity);
 
 // Returns whether two identities select the same canonical target and every
-// known target-ID feature state.
+// known target-ID feature state. Catalog records from separate linked images
+// of the same compiler build compare by target kind, not storage address.
 bool loom_amdgpu_target_identity_equal(
     const loom_amdgpu_target_identity_t* lhs,
     const loom_amdgpu_target_identity_t* rhs);

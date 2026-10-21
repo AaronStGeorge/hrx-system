@@ -66,7 +66,9 @@ _exports = rule(
     fragments = ["cpp"],
 )
 
-def _loomc_cc_binary_impl(name, visibility, linkopts, **kwargs):
+def _loomc_cc_binary_impl(name, visibility, linkopts, runtime_only, **kwargs):
+    shared_libraries = [] if runtime_only else ["//loom/binding/c:loomc_shared"]
+    shared_libraries.append("//loom/binding/c:iree_shared")
     loom_cc_binary(
         name = name,
         visibility = visibility,
@@ -76,10 +78,7 @@ def _loomc_cc_binary_impl(name, visibility, linkopts, **kwargs):
             "//conditions:default": [],
         }),
         dynamic_deps = select({
-            _SHARED_TOOLS: [
-                "//loom/binding/c:loomc_shared",
-                "//loom/binding/c:iree_shared",
-            ],
+            _SHARED_TOOLS: shared_libraries,
             "//conditions:default": [],
         }),
         **kwargs
@@ -89,7 +88,14 @@ loomc_cc_binary = macro(
     doc = "Defines a LoomC tool with static linkage unless shared tools are selected.",
     implementation = _loomc_cc_binary_impl,
     inherit_attrs = loom_cc_binary,
-    attrs = {"dynamic_deps": None},
+    attrs = {
+        "dynamic_deps": None,
+        "runtime_only": attr.bool(
+            default = False,
+            configurable = False,
+            doc = "Keep compiler implementations executable-local while sharing the IREE runtime.",
+        ),
+    },
 )
 
 def _interop_headers_impl(ctx):

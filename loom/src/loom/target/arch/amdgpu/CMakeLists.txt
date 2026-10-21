@@ -249,6 +249,19 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    profile_types
+  HDRS
+    "profile_types.h"
+  DEPS
+    ::target_identity
+    loom::target::profile
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     profile
   HDRS
     "profile.h"
@@ -257,6 +270,7 @@ loom_cc_library(
   DEPS
     ::artifact_key
     ::facts
+    ::profile_types
     ::target_identity
     ::target_info
     iree::base

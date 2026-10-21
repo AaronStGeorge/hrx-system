@@ -5,3 +5,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 package(default_visibility = ["//visibility:public"])
+
+exports_files([".bazel_to_cmake.cfg.py"])

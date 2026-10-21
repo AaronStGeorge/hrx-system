@@ -289,6 +289,24 @@ loom_kernel_binary(name="program", srcs=["program.loom"], deps=[":support"], tar
         self.assertIn("  LIBRARIES\n    ::support", output)
         self.assertIn('OUTPUT\n    "program"', output)
 
+    def test_shared_tools_preserve_runtime_only_ownership(self):
+        runtime_project = bazel_to_cmake_config.include_project(
+            REPO_ROOT / ".bazel_to_cmake.cfg.py", "runtime/.bazel_to_cmake.cfg.py"
+        )
+        repo_cfg = SimpleNamespace(
+            PROJECTS=[runtime_project, self.project], REPO_MAP={"@hrx": ""}
+        )
+        for runtime_only in (False, True):
+            with self.subTest(runtime_only=runtime_only):
+                output = bazel_to_cmake_converter.convert_build_file(
+                    f"loomc_cc_binary(name='tool', srcs=['main.c'], runtime_only={runtime_only})",
+                    repo_cfg,
+                    str(REPO_ROOT / "loom/tools"),
+                    repo_root=str(REPO_ROOT),
+                )
+                self.assertIn("loomc_cc_binary(\n", output)
+                self.assertEqual("  RUNTIME_ONLY\n" in output, runtime_only)
+
     def test_shared_bindings_preserve_configuration_and_helper_ownership(self):
         repo_cfg = SimpleNamespace(PROJECTS=[self.project], REPO_MAP={"@hrx": ""})
         output = bazel_to_cmake_converter.convert_build_file(

@@ -290,6 +290,16 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "profile_types",
+    hdrs = ["profile_types.h"],
+    visibility = _AMDGPU_TOOLING_VISIBILITY,
+    deps = [
+        ":target_identity",
+        "//loom/src/loom/target:profile",
+    ],
+)
+
+loom_cc_library(
     name = "profile",
     srcs = ["profile.c"],
     hdrs = ["profile.h"],
@@ -304,6 +314,7 @@ loom_cc_library(
     deps = [
         ":artifact_key",
         ":facts",
+        ":profile_types",
         ":target_identity",
         ":target_info",
         "//loom/src/loom/target:profile",

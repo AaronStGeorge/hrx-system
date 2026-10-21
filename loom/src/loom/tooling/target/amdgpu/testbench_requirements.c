@@ -6,7 +6,8 @@
 
 #include "loom/tooling/target/amdgpu/testbench_requirements.h"
 
-#include "loom/target/arch/amdgpu/profile.h"
+#include "loom/target/arch/amdgpu/artifact_key.h"
+#include "loom/target/arch/amdgpu/profile_types.h"
 #include "loom/target/arch/amdgpu/target_identity.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
@@ -73,15 +74,15 @@ static iree_status_t loom_amdgpu_hal_testbench_evaluate_targets(
   for (iree_host_size_t i = 0; i < targets.count; ++i) {
     const iree_string_view_t selector =
         loom_string_table_get(&module->strings, targets.values[i]);
-    const loom_amdgpu_target_profile_t* required_profile = NULL;
+    loom_amdgpu_target_identity_t required_identity = {0};
     iree_status_t status =
-        loom_amdgpu_target_profile_select(selector, &required_profile);
+        loom_amdgpu_artifact_key_parse(selector, &required_identity);
     if (!iree_status_is_ok(status)) {
       return iree_status_annotate_f(
           status, "requirement attr 'targets[%" PRIhsz "]'", i);
     }
     if (actual_identity && loom_amdgpu_target_identity_satisfies_requirement(
-                               actual_identity, &required_profile->identity)) {
+                               actual_identity, &required_identity)) {
       *out_satisfied = true;
     }
   }
@@ -147,14 +148,14 @@ static iree_status_t loom_amdgpu_hal_testbench_query_target_requirement(
         "'targets'");
   }
 
-  const loom_amdgpu_target_profile_t* required_profile = NULL;
+  loom_amdgpu_target_identity_t required_identity = {0};
   loom_string_id_array_t required_targets = loom_string_id_array_empty();
   if (target_attr) {
     iree_string_view_t required_target = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_string_attr(
         module, attrs, IREE_SV("target"), &required_target));
     IREE_RETURN_IF_ERROR(
-        loom_amdgpu_target_profile_select(required_target, &required_profile));
+        loom_amdgpu_artifact_key_parse(required_target, &required_identity));
   } else {
     IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_string_array_attr(
         module, attrs, IREE_SV("targets"), &required_targets));
@@ -169,8 +170,8 @@ static iree_status_t loom_amdgpu_hal_testbench_query_target_requirement(
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hal_testbench_select_device_identity(context, &identity));
   bool satisfies_requirement =
-      required_profile && loom_amdgpu_target_identity_satisfies_requirement(
-                              &identity, &required_profile->identity);
+      !has_targets && loom_amdgpu_target_identity_satisfies_requirement(
+                          &identity, &required_identity);
   if (has_targets) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_testbench_evaluate_targets(
         module, required_targets, &identity, &satisfies_requirement));

@@ -6,8 +6,6 @@
 
 #include "loom/tools/loom-benchmark/module_query.h"
 
-#include "loom/ops/special_values.h"
-
 iree_string_view_t loom_benchmark_module_string(const loom_module_t* module,
                                                 loom_string_id_t string_id) {
   if (string_id >= module->strings.count) {

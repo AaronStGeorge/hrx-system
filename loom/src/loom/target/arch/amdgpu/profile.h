@@ -10,6 +10,7 @@
 #define LOOM_TARGET_ARCH_AMDGPU_PROFILE_H_
 
 #include "iree/base/api.h"
+#include "loom/target/arch/amdgpu/profile_types.h"
 #include "loom/target/arch/amdgpu/target_identity.h"
 #include "loom/target/profile.h"
 
@@ -19,15 +20,6 @@ extern "C" {
 
 // AMDGPU family profile identity.
 extern const loom_target_profile_type_t loom_amdgpu_target_profile_type;
-
-// Structured external AMDGPU target refinement profile.
-typedef struct loom_amdgpu_target_profile_t {
-  // Target-neutral family identity and bundle projection.
-  loom_target_profile_t base;
-
-  // Structured target and AMDHSA feature identity.
-  loom_amdgpu_target_identity_t identity;
-} loom_amdgpu_target_profile_t;
 
 // Initializes an AMDGPU profile and its target-neutral bundle projection.
 iree_status_t loom_amdgpu_target_profile_initialize(
