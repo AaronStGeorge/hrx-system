@@ -148,6 +148,7 @@ genrule(
     testonly = True,
     outs = ["bazel_launcher_tool_configuration.txt"],
     cmd = "$(location :bazel_launcher_integration_fixture) --exit-code 0 > $@",
+    message = "Generating Bazel launcher tool configuration",
     tags = _PRESUBMIT_TEST_TAGS,
     tools = [":bazel_launcher_integration_fixture"],
 )

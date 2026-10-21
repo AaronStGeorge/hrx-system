@@ -125,7 +125,8 @@ iree_generated_files = rule(
             doc = "Generated output files.",
         ),
         "progress_message": attr.string(
-            doc = "Progress message displayed while the generator runs.",
+            default = "Generating files for %{label}",
+            doc = "Progress message displayed while the generator runs. Defaults to the exact generating target label.",
         ),
         "srcs": attr.label_list(
             allow_files = True,
