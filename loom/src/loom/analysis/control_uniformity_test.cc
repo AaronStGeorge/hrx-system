@@ -35,6 +35,8 @@ class ControlUniformityTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     iree_arena_initialize(&block_pool_, &analysis_arena_);
+    IREE_ASSERT_OK(
+        loom_value_fact_table_initialize(&input_facts_, &analysis_arena_, 0));
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
@@ -110,8 +112,7 @@ class ControlUniformityTest : public ::testing::Test {
     }
   }
 
-  void DefineArgumentScope(loom_value_fact_table_t* fact_table,
-                           loom_func_like_t function, uint16_t argument_ordinal,
+  void DefineArgumentScope(loom_func_like_t function, uint16_t argument_ordinal,
                            loom_value_fact_uniform_scope_t scope) {
     uint16_t argument_count = 0;
     const loom_value_id_t* arguments =
@@ -120,7 +121,18 @@ class ControlUniformityTest : public ::testing::Test {
     loom_value_facts_t facts = loom_value_facts_make(0, 1, 1);
     loom_value_facts_mark_uniform_at_scope(&facts, scope);
     IREE_ASSERT_OK(loom_value_fact_table_define(
-        fact_table, arguments[argument_ordinal], facts));
+        &input_facts_, arguments[argument_ordinal], facts));
+  }
+
+  iree_status_t ComputeFacts(loom_value_fact_table_t* fact_table,
+                             const loom_module_t* module,
+                             loom_func_like_t function) {
+    uint16_t argument_count = 0;
+    const loom_value_id_t* arguments =
+        loom_func_like_arg_ids(function, &argument_count);
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_values(
+        fact_table, {&input_facts_, arguments, argument_count}, module));
+    return loom_value_fact_table_compute(fact_table, module, function);
   }
 
   bool ProveMutuallyExclusive(loom_control_uniformity_info_t* info,
@@ -165,6 +177,8 @@ class ControlUniformityTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   // Reset between independently generated CFGs.
   iree_arena_allocator_t analysis_arena_;
+  // Immutable selector inputs consumed by the function fact analysis.
+  loom_value_fact_table_t input_facts_;
   // Registered dialect semantics used by fixtures.
   loom_context_t context_;
 };
@@ -272,10 +286,8 @@ func.def @direct(%condition: i1, %lhs: i32, %rhs: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -329,12 +341,9 @@ func.def @nested(%outer: i1, %inner: i1, %a: i32, %b: i32, %c: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  DefineArgumentScope(&fact_table, function, 1,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  DefineArgumentScope(function, 1, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -379,10 +388,8 @@ func.def @footprints(%outer: i1, %continue: i1, %lhs: i32, %rhs: i32, %joined: i
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -423,10 +430,8 @@ func.def @structured(%outer: i1, %inner: i1, %lhs: i32, %rhs: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_SUBGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -459,8 +464,7 @@ func.def @constant_structured(%lhs: i32, %rhs: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -497,10 +501,8 @@ func.def @structured_switch(%selector: index, %first: i32, %second: i32, %fallba
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -538,10 +540,8 @@ func.def @structured_loop(%condition: i1, %lhs: i32, %rhs: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -573,12 +573,9 @@ func.def @structured_cfg_loop(%continue: i1, %condition: i1, %lhs: i32, %rhs: i3
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  DefineArgumentScope(&fact_table, function, 1,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  DefineArgumentScope(function, 1, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -612,12 +609,9 @@ func.def @cyclic(%continue: i1, %condition: i1, %lhs: i32, %rhs: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  DefineArgumentScope(&fact_table, function, 0,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  DefineArgumentScope(&fact_table, function, 1,
-                      LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  DefineArgumentScope(function, 0, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  DefineArgumentScope(function, 1, LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP);
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);
@@ -641,8 +635,7 @@ func.def @linear(%lhs: i32, %rhs: i32) {
   loom_value_fact_table_t fact_table;
   IREE_ASSERT_OK(
       loom_value_fact_table_initialize(&fact_table, &analysis_arena_, 8));
-  IREE_ASSERT_OK(
-      loom_value_fact_table_compute(&fact_table, module.get(), function));
+  IREE_ASSERT_OK(ComputeFacts(&fact_table, module.get(), function));
   loom_control_uniformity_info_t info;
   loom_control_uniformity_info_initialize(module.get(), &fact_table,
                                           &analysis_arena_, &info);

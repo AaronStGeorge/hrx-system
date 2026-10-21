@@ -315,9 +315,54 @@ static iree_status_t loom_value_fact_table_apply_func_predicates(
   return iree_ok_status();
 }
 
+// Independent entry inputs consume immutable seeds and declaration projections.
+// Reusing derived rows would retain withdrawn predicates and shape constraints.
+// CFG payloads and loop-carried arguments come from their equation owners.
+static iree_status_t loom_value_fact_table_seed_entry_inputs(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_block_t* block, loom_op_t* parent_op) {
+  const loom_func_like_t function = loom_func_like_cast(module, parent_op);
+  if (block != loom_region_const_entry_block(block->parent_region) ||
+      loom_loop_like_isa(loom_loop_like_cast(module, parent_op))) {
+    return iree_ok_status();
+  }
+  const loom_value_id_t* projected_arguments = NULL;
+  uint16_t projected_count = 0;
+  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+    if (loom_func_like_region(function, i) == block->parent_region &&
+        loom_func_like_region_projects_args(module, function, i)) {
+      projected_arguments = loom_func_like_arg_ids(function, &projected_count);
+      break;
+    }
+  }
+  iree_status_t status = iree_ok_status();
+  for (uint16_t i = 0; i < block->arg_count && iree_status_is_ok(status); ++i) {
+    const loom_value_id_t argument = loom_block_arg_id(block, i);
+    loom_value_fact_table_undefine(table, argument);
+    if (argument / 64 < table->seeds.word_count &&
+        (table->seeds.selected_bits[argument / 64] &
+         (UINT64_C(1) << (argument % 64)))) {
+      status = loom_value_fact_table_clone_values(
+          table,
+          (loom_value_fact_table_view_t){table->seeds.table, &argument, 1},
+          module);
+    }
+    if (iree_status_is_ok(status) && i < projected_count) {
+      const loom_value_facts_t facts =
+          loom_value_fact_table_lookup(table, projected_arguments[i]);
+      if (!loom_value_facts_is_unknown(facts)) {
+        status = loom_value_fact_table_define(table, argument, facts);
+      }
+    }
+  }
+  return status;
+}
+
 static iree_status_t loom_value_fact_table_seed_block_args(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_block_t* block, loom_op_t* parent_op) {
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_seed_entry_inputs(table, module, block, parent_op));
   // Declared preconditions establish parameter facts before native defaults.
   // In particular, an explicit wide range remains a wide carrier contract.
   IREE_RETURN_IF_ERROR(loom_value_fact_table_apply_func_predicates(
@@ -1068,47 +1113,6 @@ static iree_status_t loom_value_fact_table_compute_cfg_region_tree(
   return status;
 }
 
-static iree_status_t loom_value_fact_table_seed_projected_func_args(
-    loom_value_fact_table_t* table, const loom_module_t* module,
-    loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op) {
-  if (!loom_func_like_isa(function) || parent_op != function.op || !region ||
-      region->block_count == 0) {
-    return iree_ok_status();
-  }
-
-  uint8_t region_index = LOOM_REGION_INDEX_NONE;
-  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
-    if (loom_func_like_region(function, i) == region) {
-      region_index = i;
-      break;
-    }
-  }
-  if (region_index == LOOM_REGION_INDEX_NONE ||
-      !loom_func_like_region_projects_args(module, function, region_index)) {
-    return iree_ok_status();
-  }
-
-  uint16_t argument_count = 0;
-  const loom_value_id_t* arguments =
-      loom_func_like_arg_ids(function, &argument_count);
-  loom_block_t* entry_block = loom_region_entry_block(region);
-  if (!arguments || !entry_block) {
-    return iree_ok_status();
-  }
-
-  uint16_t projected_count = iree_min(argument_count, entry_block->arg_count);
-  for (uint16_t i = 0; i < projected_count; ++i) {
-    loom_value_facts_t facts =
-        loom_value_fact_table_lookup(table, arguments[i]);
-    if (loom_value_facts_is_unknown(facts)) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_define(
-        table, loom_block_arg_id(entry_block, i), facts));
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_value_fact_table_define_results(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* result_facts,
@@ -1568,8 +1572,6 @@ iree_status_t loom_value_fact_table_compute_region(
       }
     }
   }
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_projected_func_args(
-      table, module, function, region, parent_op));
   return loom_value_fact_table_compute_region_tree(table, module, region,
                                                    parent_op);
 }

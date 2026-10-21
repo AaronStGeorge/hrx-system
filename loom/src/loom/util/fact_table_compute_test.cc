@@ -773,6 +773,96 @@ TEST_F(FactTableComputeTest, DependentResultsPublishOnlyFinalChanges) {
   }
 }
 
+class FactEntryInputTest : public FactTableComputeTest,
+                           public ::testing::WithParamInterface<bool> {};
+
+TEST_P(FactEntryInputTest, RefreshWithdrawsExtentConstraints) {
+  const loom_type_t scalar_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  const loom_type_t static_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(1), 0);
+  loom_string_id_t name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("extent"), &name));
+  uint16_t symbol = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name, &symbol));
+  loom_op_t* definition = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &builder_, 0, 0, 0, {0, symbol}, &scalar_type, 1, nullptr, 0, nullptr, 0,
+      nullptr, 0, LOOM_LOCATION_UNKNOWN, &definition));
+  const auto function = loom_func_like_cast(module_, definition);
+  loom_region_t* body = loom_func_like_body(function);
+  body->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_builder_enter_region(&builder_, definition, body);
+  if (GetParam()) {
+    const loom_value_id_t input = loom_region_entry_arg_id(body, 0);
+    loom_op_t* nested = nullptr;
+    IREE_ASSERT_OK(loom_test_block_args_build(&builder_, &input, 1,
+                                              LOOM_LOCATION_UNKNOWN, &nested));
+    loom_op_t* terminator = nullptr;
+    IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                         LOOM_LOCATION_UNKNOWN, &terminator));
+    body = loom_test_block_args_body(nested);
+    loom_builder_enter_region(&builder_, nested, body);
+  }
+  const loom_value_id_t extent = loom_region_entry_arg_id(body, 0);
+  const loom_type_t dynamic_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_dynamic(extent), 0);
+  loom_op_t* zero = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(0), scalar_type, LOOM_LOCATION_UNKNOWN, &zero));
+  loom_op_t* shaped = nullptr;
+  IREE_ASSERT_OK(
+      loom_test_attrs_build(&builder_, 0, loom_test_constant_result(zero), {},
+                            static_type, LOOM_LOCATION_UNKNOWN, &shaped));
+  const loom_value_id_t vector = loom_test_attrs_result(shaped);
+  loom_op_t* comparison = nullptr;
+  IREE_ASSERT_OK(loom_scalar_cmpi_build(
+      &builder_, LOOM_SCALAR_CMPI_PREDICATE_SGE, extent,
+      loom_test_constant_result(zero), LOOM_LOCATION_UNKNOWN, &comparison));
+  const loom_value_id_t result = loom_scalar_cmpi_result(comparison);
+  loom_op_t* use = nullptr;
+  IREE_ASSERT_OK(
+      loom_test_use_build(&builder_, &result, 1, LOOM_LOCATION_UNKNOWN, &use));
+  loom_op_t* terminator = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &terminator));
+  loom_value_fact_table_t inputs;
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&inputs, &arena_, 0));
+  const auto input_facts = loom_value_facts_make(-8, 64, 4);
+  IREE_ASSERT_OK(loom_value_fact_table_define(&inputs, extent, input_facts));
+
+  for (bool seeded : {false, true}) {
+    SCOPED_TRACE(seeded);
+    loom_value_fact_table_clear_scope(&table_);
+    if (seeded) {
+      IREE_ASSERT_OK(loom_value_fact_table_seed_values(
+          &table_, {&inputs, &extent, 1}, module_));
+    }
+    // Exercise both introduction and withdrawal twice without rebuilding the
+    // scope. Derived bounds must never become the next solve's input bounds.
+    for (unsigned iteration = 0; iteration < 2; ++iteration) {
+      IREE_ASSERT_OK(loom_module_set_value_type(module_, vector, dynamic_type));
+      IREE_ASSERT_OK(loom_value_fact_table_compute(&table_, module_, function));
+      int64_t constant = 0;
+      EXPECT_TRUE(loom_value_facts_as_exact_i64(
+          loom_value_fact_table_lookup(&table_, result), &constant));
+      EXPECT_EQ(constant, 1);
+
+      IREE_ASSERT_OK(loom_module_set_value_type(module_, vector, static_type));
+      IREE_ASSERT_OK(loom_value_fact_table_compute(&table_, module_, function));
+      const auto facts = loom_value_fact_table_lookup(&table_, extent);
+      EXPECT_EQ(facts.range_lo, seeded ? -8 : INT32_MIN);
+      EXPECT_EQ(facts.range_hi, seeded ? 64 : INT32_MAX);
+      EXPECT_EQ(facts.known_divisor, seeded ? 4 : 1);
+      EXPECT_FALSE(loom_value_facts_as_exact_i64(
+          loom_value_fact_table_lookup(&table_, result), &constant));
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(IndependentEntries, FactEntryInputTest,
+                         ::testing::Bool());
+
 TEST_F(FactTableComputeTest, ConditionLoopRetainsAndReplacesBodyEntryFacts) {
   loom_op_t* bound_op = nullptr;
   IREE_ASSERT_OK(loom_index_add_build(&builder_, inputs_[1], inputs_[1], type_,

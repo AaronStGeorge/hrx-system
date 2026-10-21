@@ -177,8 +177,9 @@ struct loom_value_fact_table_t {
   // Stack-owned ordinary-result publication, active only during inference.
   loom_value_fact_origin_publication_t* origin_publication;
 
-  // Immutable scope inputs supplied by a surrounding analysis. Opaque result
-  // definitions consult these instead of discarding call-boundary summaries.
+  // Immutable scope inputs supplied by a surrounding analysis. Independent
+  // entry arguments and opaque results consult these on every solve instead
+  // of retaining constraints accumulated in their derived rows.
   struct {
     // Borrowed source whose selected facts outlive this populated scope.
     const loom_value_fact_table_t* table;
@@ -675,13 +676,13 @@ iree_status_t loom_value_fact_table_clone_values(
     loom_value_fact_table_t* target, loom_value_fact_table_view_t source,
     const loom_module_t* module);
 
-// Imports selected inputs and retains their immutable source for opaque result
-// inference. Unlike an ordinary clone, this preserves external call summaries
-// when their local definition has no inference function, including recomputes
-// after cyclic solves undefine entries. The source and selected facts remain
-// valid and unchanged until target's scope is cleared. A caller that changes
-// the meaning of a seeded value must clear and rebuild the scope. Ordinary
-// semantic-preserving rewrites and type refinement retain the input contract.
+// Imports selected inputs and retains their immutable source for entry
+// arguments and opaque result inference. Unlike an ordinary clone, this
+// preserves external inputs when subsequent solves replace their derived facts.
+// The source and selected facts remain valid and unchanged until target's
+// scope is cleared. Changing a seeded value's meaning requires rebuilding the
+// scope. Ordinary semantic-preserving rewrites and type refinement retain the
+// input contract.
 iree_status_t loom_value_fact_table_seed_values(
     loom_value_fact_table_t* target, loom_value_fact_table_view_t source,
     const loom_module_t* module);
@@ -733,7 +734,10 @@ iree_status_t loom_value_fact_table_define_results(
 // native domain, or the source domain without a target. Declared preconditions,
 // imported facts, computed values, and internal block arguments retain their
 // producer-established domains. Offset and fixed-width parameters retain their
-// source domains.
+// source domains. Independent entry arguments are rebuilt from immutable
+// imported inputs, declaration projections, and current IR contracts on each
+// solve. External argument facts must be supplied with seed_values; define and
+// clone_values publish derived facts that inference may replace.
 iree_status_t loom_value_fact_table_compute_region(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op);

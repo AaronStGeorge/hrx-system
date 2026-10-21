@@ -74,9 +74,9 @@ iree_status_t CheckControlExecution(
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "control oracle produced invalid IR");
   }
-  loom_value_fact_table_t facts;
+  loom_value_fact_table_t inputs;
   IREE_RETURN_IF_ERROR(
-      loom_value_fact_table_initialize(&facts, analysis_arena, 8));
+      loom_value_fact_table_initialize(&inputs, analysis_arena, 8));
   for (size_t i = 0; i < count; ++i) {
     auto selector = loom_value_facts_make(0, 1, 1);
     if (uniform_selectors & (1u << i)) {
@@ -85,8 +85,14 @@ iree_status_t CheckControlExecution(
       loom_value_facts_mark_lane_predicate(&selector);
     }
     IREE_RETURN_IF_ERROR(loom_value_fact_table_define(
-        &facts, loom_block_arg_id(blocks[0], i), selector));
+        &inputs, loom_block_arg_id(blocks[0], i), selector));
   }
+  loom_value_fact_table_t facts;
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_initialize(&facts, analysis_arena, 8));
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_values(
+      &facts, {&inputs, blocks[0]->arg_ids, blocks[0]->arg_count},
+      module.get()));
   IREE_RETURN_IF_ERROR(
       loom_value_fact_table_compute(&facts, module.get(), function));
   // Each entry argument is constant throughout one lane's execution. Trace

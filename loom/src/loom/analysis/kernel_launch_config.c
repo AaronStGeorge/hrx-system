@@ -163,6 +163,13 @@ iree_status_t loom_kernel_launch_config_function_evaluate(
   iree_status_t status = loom_pass_value_fact_owner_prepare(
       fact_owner, module,
       loom_pass_value_fact_scope_function(function->function), &fact_table);
+  // Workload inputs stay separate from inferred domains. Terminal owner
+  // invalidation ends their borrowed lifetime before this stack frame returns.
+  loom_value_fact_table_t inputs = {0};
+  if (iree_status_is_ok(status)) {
+    status = loom_value_fact_table_initialize(&inputs,
+                                              fact_table->transient_arena, 0);
+  }
   for (uint16_t i = 0;
        iree_status_is_ok(status) && i < function->argument_count; ++i) {
     const loom_type_t type =
@@ -180,9 +187,16 @@ iree_status_t loom_kernel_launch_config_function_evaluate(
     status =
         loom_kernel_launch_config_check_argument(module, function, i, facts);
     if (iree_status_is_ok(status)) {
-      status = loom_value_fact_table_define(fact_table,
-                                            function->argument_ids[i], facts);
+      status = loom_value_fact_table_define(&inputs, function->argument_ids[i],
+                                            facts);
     }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_value_fact_table_seed_values(
+        fact_table,
+        (loom_value_fact_table_view_t){&inputs, function->argument_ids,
+                                       function->argument_count},
+        module);
   }
   if (iree_status_is_ok(status)) {
     status =
