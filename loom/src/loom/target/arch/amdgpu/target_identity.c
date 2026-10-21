@@ -25,7 +25,8 @@ bool loom_amdgpu_target_identity_equal(
     const loom_amdgpu_target_identity_t* lhs,
     const loom_amdgpu_target_identity_t* rhs) {
   if (lhs == NULL || rhs == NULL || lhs->target == NULL ||
-      lhs->target != rhs->target) {
+      rhs->target == NULL ||
+      lhs->target->target_kind != rhs->target->target_kind) {
     return false;
   }
 

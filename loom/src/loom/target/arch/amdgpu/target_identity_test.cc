@@ -35,6 +35,14 @@ TEST(AmdgpuTargetIdentityTest, ExhaustsTargetFeatureSatisfactionRelation) {
     loom_amdgpu_target_identity_initialize(target, &base_identity);
     EXPECT_TRUE(
         loom_amdgpu_target_identity_equal(&base_identity, &base_identity));
+    // Exact-build consumers can have separate copies of the target catalog.
+    const loom_amdgpu_target_info_t target_copy = *target;
+    loom_amdgpu_target_identity_t copied_identity = base_identity;
+    copied_identity.target = &target_copy;
+    EXPECT_TRUE(
+        loom_amdgpu_target_identity_equal(&base_identity, &copied_identity));
+    EXPECT_TRUE(
+        loom_amdgpu_target_identity_equal(&copied_identity, &base_identity));
     EXPECT_TRUE(loom_amdgpu_target_identity_satisfies_requirement(
         &base_identity, &base_identity));
 
@@ -65,6 +73,8 @@ TEST(AmdgpuTargetIdentityTest, ExhaustsTargetFeatureSatisfactionRelation) {
                             ? LOOM_AMDGPU_TARGET_FEATURE_OFF
                             : LOOM_AMDGPU_TARGET_FEATURE_ON;
       EXPECT_FALSE(loom_amdgpu_target_identity_equal(&base_identity,
+                                                     &distinct_identity));
+      EXPECT_FALSE(loom_amdgpu_target_identity_equal(&copied_identity,
                                                      &distinct_identity));
 
       if (!loom_amdgpu_processor_supports_target_id_features(processor,
@@ -105,8 +115,23 @@ TEST(AmdgpuTargetIdentityTest, ExhaustsTargetFeatureSatisfactionRelation) {
       EXPECT_EQ(
           loom_amdgpu_target_identity_equal(&base_identity, &other_identity),
           target == other_target);
+      EXPECT_EQ(
+          loom_amdgpu_target_identity_equal(&copied_identity, &other_identity),
+          target == other_target);
     }
   }
+}
+
+TEST(AmdgpuTargetIdentityTest, MissingTargetsAreNotEqual) {
+  loom_amdgpu_target_identity_t identity = {};
+  loom_amdgpu_target_identity_initialize(LookupTarget("gfx1151"), &identity);
+  const loom_amdgpu_target_identity_t empty_identity = {};
+  EXPECT_FALSE(loom_amdgpu_target_identity_equal(nullptr, &identity));
+  EXPECT_FALSE(loom_amdgpu_target_identity_equal(&identity, nullptr));
+  EXPECT_FALSE(loom_amdgpu_target_identity_equal(&empty_identity, &identity));
+  EXPECT_FALSE(loom_amdgpu_target_identity_equal(&identity, &empty_identity));
+  EXPECT_FALSE(
+      loom_amdgpu_target_identity_equal(&empty_identity, &empty_identity));
 }
 
 TEST(AmdgpuTargetIdentityTest, OverlayTargetsRemainExact) {
