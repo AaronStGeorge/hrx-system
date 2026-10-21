@@ -430,6 +430,8 @@ loom_test_module(
   SRCS
     "immutable_object_link_left.cxx"
     "immutable_object_link_right.cxx"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/immutable_object_link_tables.h"
 )
 endif()
 

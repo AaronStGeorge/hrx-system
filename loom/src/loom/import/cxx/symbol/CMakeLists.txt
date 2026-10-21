@@ -92,6 +92,7 @@ loom_cc_library(
   SRCS
     "functions.cc"
   DEPS
+    ::immutable_objects
     ::names
     iree::third_party::cxx_parser
     loom::import::cxx::binding::config
@@ -133,6 +134,7 @@ loom_cc_test(
     "rtti"
   DEPS
     ::functions
+    ::immutable_objects
     iree::testing::gtest
     iree::testing::gtest_main
     iree::third_party::cxx_parser

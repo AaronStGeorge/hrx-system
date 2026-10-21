@@ -24,10 +24,10 @@ namespace loom::cxx_import {
 // One reached source-owned immutable object. Its symbol and source layout are
 // stable for the translation-unit lifetime; SSA roots remain function-local.
 struct ImmutableObject {
-  // Private symbol naming the emitted read-only payload.
+  // Symbol naming the emitted read-only declaration or payload.
   loom_symbol_ref_t symbol;
-  // Stable module-owned spelling shared with the private symbol.
-  iree_string_view_t name;
+  // Stable module-owned spelling suitable for derived SSA value names.
+  iree_string_view_t value_name;
   // Complete source object type represented by the payload bytes.
   const cxx::Type* type;
   // Source ABI alignment, including an explicit stronger declaration.
@@ -35,8 +35,9 @@ struct ImmutableObject {
 };
 
 // Owns immutable C++ object identity and payloads for one output module.
-// Objects are admitted lazily from reached expressions, keyed by canonical
-// source symbol, and emitted after callable translation has completed.
+// Strong external definitions are retained as source-module roots; other
+// objects are admitted lazily from reached expressions. All objects are keyed
+// by canonical source symbol and emitted after callable translation completes.
 class ImmutableObjects {
  public:
   ImmutableObjects(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
@@ -48,21 +49,36 @@ class ImmutableObjects {
         names_(names),
         module_(module) {}
 
-  // Admits or reuses one namespace-scope internal-linkage constant object.
-  // Unsupported lifetime, identity, mutability, or representation semantics
-  // diagnose at the source use that reached the object.
+  // Admits or reuses one namespace-scope constant object. Unsupported lifetime,
+  // identity, mutability, or representation semantics diagnose at the source
+  // use that reached the object.
   ImmutableObject reference(cxx::VariableSymbol* variable, cxx::AST* owner);
 
-  // Emits every reached object definition into the module insertion block.
+  // Retains a namespace-scope strong external definition even when no local
+  // expression reaches it. Declarations, inline definitions, and private
+  // definitions remain lazy.
+  void retain_definition(cxx::VariableSymbol* variable, cxx::AST* owner);
+
+  // Emits every reached object declaration or definition into the module
+  // insertion block.
   void build(loom_builder_t* builder);
 
  private:
-  struct Definition {
+  enum class EmissionKind {
+    Declaration,
+    PrivateDefinition,
+    PublicDefinition,
+    LinkOnceDefinition,
+  };
+
+  struct Emission {
     // Public reference returned to function translators.
     ImmutableObject object;
-    // Concrete selected-source-ABI representation.
+    // Source linkage policy projected into the emitted symbol.
+    EmissionKind kind;
+    // Concrete selected-source-ABI representation, empty for declarations.
     std::vector<uint8_t> contents;
-    // First source use responsible for retaining this definition.
+    // First source use responsible for retaining this object.
     cxx::AST* source;
   };
 
@@ -76,10 +92,10 @@ class ImmutableObjects {
   SymbolNames& names_;
   // Output symbol and payload owner.
   loom_module_t* module_;
-  // Canonical source identity to retained definition ordinal.
+  // Canonical source identity to retained emission ordinal.
   std::unordered_map<cxx::VariableSymbol*, size_t> variables_;
-  // Encounter-ordered reached definitions.
-  std::vector<Definition> definitions_;
+  // Encounter-ordered retained objects.
+  std::vector<Emission> emissions_;
 };
 
 }  // namespace loom::cxx_import

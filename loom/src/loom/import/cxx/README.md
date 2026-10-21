@@ -705,6 +705,53 @@ definition. Non-overloaded external names derive from their qualified C++ names.
 Overloads, operators and template specializations need `loom::symbol` because a
 stable cross-module identity cannot depend on reachability or declaration order.
 
+Namespace-scope immutable object storage uses the same module boundary. A
+header can declare externally supplied data and define an inline table:
+
+```cpp
+namespace coefficients {
+inline constexpr unsigned bias[2] = {3, 5};
+extern const unsigned weights[2];
+}
+```
+
+One translation unit supplies the strong definition:
+
+```cpp
+#include "coefficients.h"
+
+namespace coefficients {
+extern const unsigned weights[2] = {10, 20};
+}
+```
+
+Another translation unit reads both objects through ordinary C++ indexing:
+
+```cpp
+#include "coefficients.h"
+
+unsigned coefficient(unsigned index) {
+  const unsigned lane = index & 1u;
+  return coefficients::weights[lane] + coefficients::bias[lane];
+}
+```
+
+The consumer emits `global.rodata.decl @coefficients.weights`; the provider
+emits `global.rodata.def public @coefficients.weights`. Every translation unit
+that reaches `bias` emits an equivalent
+`global.rodata.def public linkonce @coefficients.bias`, and the Loom linker
+coalesces those definitions. Internal-linkage `static const` and ordinary
+namespace `constexpr` objects remain private to their source module.
+
+Strong external definitions are published even when no function in their own
+translation unit reads them. Declarations, inline definitions and private
+definitions remain lazy and appear only when reached. As in C++, matching
+external declarations and definitions are an ODR promise from the source;
+read-only data symbols do not add a second type system or compare inline
+payload bodies while linking. Linkable object template specializations remain
+unsupported because their readable source name does not identify a concrete
+specialization.
+
 `loom::import` binds a bodyless function to a runtime module or service instead
 of another Loom definition. The first string names the service. An optional
 second string names its external function; omitting it reuses the local Loom
@@ -1868,7 +1915,8 @@ resolve its `kernel.decl` through normal library dependencies. An explicit
 `export("name")` is needed only when the artifact export name differs.
 Overloaded root names require disambiguation in the source. Template helpers
 are instantiated by cxx before import. This interface does not yet define an
-external C++ ABI for linking separately compiled C++ translation units.
+external C++ ABI for arbitrary source entities; supported callable and
+immutable-object identities project directly onto Loom symbols instead.
 
 Scoped and unscoped enums preserve their resolved integer representation:
 

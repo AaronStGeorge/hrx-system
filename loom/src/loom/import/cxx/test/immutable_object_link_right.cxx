@@ -4,6 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-static constexpr unsigned table[2] = {10, 20};
+#include "immutable_object_link_tables.h"
 
-unsigned immutable_right_lookup(unsigned index) { return table[index & 1u]; }
+namespace immutable_link {
+extern const unsigned weights[2] = {10, 20};
+}  // namespace immutable_link
+
+static constexpr unsigned local_table[2] = {100, 200};
+
+unsigned immutable_right_lookup(unsigned index) {
+  const unsigned lane = index & 1u;
+  return local_table[lane] + immutable_link::bias[lane];
+}

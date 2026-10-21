@@ -441,6 +441,8 @@ func.def public @entry() -> (i32) {
   func.return %result : i32
 }
 
+global.rodata.def public @value = align(4) bytes("05000000")
+
 // ====
 // Forming an address evaluates side effects once, including reference-returning
 // calls and the index expression of a subscript.

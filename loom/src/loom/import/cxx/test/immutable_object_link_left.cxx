@@ -6,9 +6,15 @@
 
 #include <loomcxx/check.h>
 
-static constexpr unsigned table[2] = {1, 2};
+#include "immutable_object_link_tables.h"
 
-unsigned immutable_left_lookup(unsigned index) { return table[index & 1u]; }
+static constexpr unsigned local_table[2] = {1, 2};
+
+unsigned immutable_left_lookup(unsigned index) {
+  const unsigned lane = index & 1u;
+  return local_table[lane] + immutable_link::bias[lane] +
+         immutable_link::weights[lane];
+}
 unsigned immutable_right_lookup(unsigned index);
 
 static unsigned immutable_combined_lookup(unsigned index) {
@@ -18,6 +24,6 @@ static unsigned immutable_combined_lookup(unsigned index) {
 LOOM_CHECK_CASE(immutable_object_link_identity) {
   const auto first = immutable_combined_lookup(0);
   const auto second = immutable_combined_lookup(1);
-  loom::check::expect_equal(first, 11u);
-  loom::check::expect_equal(second, 22u);
+  loom::check::expect_equal(first, 117u);
+  loom::check::expect_equal(second, 232u);
 }
