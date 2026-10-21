@@ -83,14 +83,6 @@ TEST_F(TextStateReservationTest, PreparationOwnsIdsWithoutSubmittingOrMapping) {
     EXPECT_EQ(after.values[i], before.values[i]);
   }
 
-  iree_host_size_t range_count = 0;
-  const auto* ranges =
-      loom_serve_text_state_reservation_ranges(reservation_, &range_count);
-  EXPECT_EQ(range_count != 0, state_.memory.pool != nullptr);
-  for (size_t i = 0; i < range_count; ++i) {
-    EXPECT_NE(ranges[i].buffer, nullptr);
-    EXPECT_GT(ranges[i].length, 0u);
-  }
   loom_serve_text_state_reservation_free(reservation_);
   reservation_ = nullptr;
   EXPECT_EQ(state_.cache.pool.available, pages);
@@ -118,25 +110,33 @@ TEST_F(TextStateReservationTest,
   // reservation. The prepared plan owns four additional pages only.
   EXPECT_EQ(state_.cache.pool.available, pages - 4);
   EXPECT_EQ(state_.recurrent.pool.available, recurrent);
-  iree_host_size_t range_count = 0;
-  const auto* ranges =
-      loom_serve_text_state_reservation_ranges(reservation_, &range_count);
-  std::vector<loom_serve_memory_range_t> planned;
-  if (range_count) {
-    planned.assign(ranges, ranges + range_count);
-  }
+  struct Admission {
+    // Borrowed physical owner used by ordinary state commitment.
+    loom_serve_memory_pool_t* pool;
+    // Exact ranges observed at the first real admission attempt.
+    std::vector<loom_serve_memory_range_t> planned;
+  } context = {state_.memory.pool, {}};
   const auto deny = [](void* user_data, iree_host_size_t count,
                        const loom_serve_memory_range_t* ranges,
                        iree_hal_semaphore_t* readiness, uint64_t value,
                        loom_serve_memory_admission_t* out_admission,
                        loom_serve_memory_operation_t** out_operation) {
+    auto* context = static_cast<Admission*>(user_data);
+    EXPECT_EQ(count != 0, context->pool != nullptr);
+    if (count) {
+      context->planned.assign(ranges, ranges + count);
+    }
+    for (size_t i = 0; i < count; ++i) {
+      EXPECT_NE(ranges[i].buffer, nullptr);
+      EXPECT_GT(ranges[i].length, 0u);
+    }
     *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
     *out_operation = nullptr;
     return iree_ok_status();
   };
   loom_serve_memory_admission_t admission;
-  IREE_ASSERT_OK(loom_serve_text_state_reservation_submit(reservation_, deny,
-                                                          nullptr, &admission));
+  IREE_ASSERT_OK(loom_serve_text_state_reservation_submit(
+      reservation_, deny, &context, &admission));
   ASSERT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_CAPACITY);
   EXPECT_EQ(row->reserved_extent, 16u);
   EXPECT_EQ(std::vector<uint32_t>(state_.cache.maps,
@@ -147,18 +147,28 @@ TEST_F(TextStateReservationTest,
   // This does not replan the protected destination or steal its selected IDs.
   ASSERT_NO_FATAL_FAILURE(Reserve(1, 16));
   loom_serve_text_state_row_reset(&state_.rows[1]);
-  IREE_ASSERT_OK(loom_serve_text_state_reservation_submit(reservation_, nullptr,
-                                                          nullptr, &admission));
+  const auto commit = [](void* user_data, iree_host_size_t count,
+                         const loom_serve_memory_range_t* ranges,
+                         iree_hal_semaphore_t* readiness, uint64_t value,
+                         loom_serve_memory_admission_t* out_admission,
+                         loom_serve_memory_operation_t** out_operation) {
+    auto* context = static_cast<Admission*>(user_data);
+    EXPECT_EQ(count, context->planned.size());
+    for (size_t i = 0; i < iree_min(count, context->planned.size()); ++i) {
+      EXPECT_EQ(ranges[i].buffer, context->planned[i].buffer);
+      EXPECT_EQ(ranges[i].offset, context->planned[i].offset);
+      EXPECT_EQ(ranges[i].length, context->planned[i].length);
+    }
+    *out_admission = LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
+    *out_operation = nullptr;
+    return context->pool ? loom_serve_memory_pool_commit_async(
+                               context->pool, count, ranges, readiness, value,
+                               out_admission, out_operation)
+                         : iree_ok_status();
+  };
+  IREE_ASSERT_OK(loom_serve_text_state_reservation_submit(
+      reservation_, commit, &context, &admission));
   ASSERT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
-  iree_host_size_t submitted_count = 0;
-  ranges =
-      loom_serve_text_state_reservation_ranges(reservation_, &submitted_count);
-  ASSERT_EQ(submitted_count, planned.size());
-  for (size_t i = 0; i < submitted_count; ++i) {
-    EXPECT_EQ(ranges[i].buffer, planned[i].buffer);
-    EXPECT_EQ(ranges[i].offset, planned[i].offset);
-    EXPECT_EQ(ranges[i].length, planned[i].length);
-  }
   loom_serve_text_state_reservation_free(reservation_);
   reservation_ = nullptr;
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));

@@ -1589,13 +1589,6 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
   return status;
 }
 
-const loom_serve_memory_range_t* loom_serve_text_state_reservation_ranges(
-    const loom_serve_text_state_reservation_t* reservation,
-    iree_host_size_t* out_count) {
-  *out_count = reservation->commitment_count;
-  return reservation->commitments;
-}
-
 iree_status_t loom_serve_text_state_reservation_submit(
     loom_serve_text_state_reservation_t* reservation,
     loom_serve_text_state_admit_fn_t admit, void* user_data,

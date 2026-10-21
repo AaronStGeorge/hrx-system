@@ -302,12 +302,6 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
     loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
     loom_serve_text_state_reservation_t** out_reservation);
 
-// Exact source-described backing union, borrowed through reservation lifetime.
-// These ranges describe the continuation, not a second estimate or admission.
-const loom_serve_memory_range_t* loom_serve_text_state_reservation_ranges(
-    const loom_serve_text_state_reservation_t* reservation,
-    iree_host_size_t* out_count);
-
 // Commits the prepared union and installs its selected IDs on success. Denial
 // keeps the plan intact for retry. The owner excludes concurrent state edits
 // and joins prior backing work before submission. Native failure is terminal;

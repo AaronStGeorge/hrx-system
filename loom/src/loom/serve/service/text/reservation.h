@@ -37,12 +37,6 @@ iree_status_t loom_serve_text_reservation_prepare(
     loom_serve_text_checkpoint_t* checkpoint, iree_host_size_t extent,
     loom_serve_text_reservation_t* out_reservation);
 
-// Borrows the source-described physical range union for complete admission.
-// Valid only for a nonempty prepared record, through submission/cancellation.
-const loom_serve_memory_range_t* loom_serve_text_reservation_ranges(
-    const loom_serve_text_reservation_t* reservation,
-    iree_host_size_t* out_count);
-
 // Submits the same plan after earlier model work has completed. Capacity or
 // deferred admission leaves it intact; ACQUIRED transfers logical ownership
 // into the row and requires successful ALL readiness and row_complete_reserve.

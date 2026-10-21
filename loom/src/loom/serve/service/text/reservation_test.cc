@@ -77,13 +77,6 @@ TEST_P(TextReservationTest,
   // Dropping a caller handle cannot destroy the endpoint borrowed by the plan.
   loom_serve_text_checkpoint_release(checkpoint_);
   checkpoint_ = nullptr;
-  iree_host_size_t range_count = 0;
-  const auto* ranges =
-      loom_serve_text_reservation_ranges(&reservation_, &range_count);
-  std::vector<loom_serve_memory_range_t> planned;
-  if (range_count) {
-    planned.assign(ranges, ranges + range_count);
-  }
   const int32_t peer_tokens[] = {2, 1};
   IREE_ASSERT_OK(loom_serve_text_row_prefill(peer, IREE_ARRAYSIZE(peer_tokens),
                                              peer_tokens));
@@ -93,13 +86,6 @@ TEST_P(TextReservationTest,
   loom_serve_text_trim_result_t trim;
   IREE_ASSERT_OK(loom_serve_text_model_trim(model_, &trim));
   EXPECT_EQ(trim.moved_blocks, 0u);
-  ranges = loom_serve_text_reservation_ranges(&reservation_, &range_count);
-  ASSERT_EQ(range_count, planned.size());
-  for (size_t i = 0; i < range_count; ++i) {
-    EXPECT_EQ(ranges[i].buffer, planned[i].buffer);
-    EXPECT_EQ(ranges[i].offset, planned[i].offset);
-    EXPECT_EQ(ranges[i].length, planned[i].length);
-  }
 
   loom_serve_text_reserve_result_t admitted;
   IREE_ASSERT_OK(

@@ -89,13 +89,6 @@ iree_status_t loom_serve_text_reservation_prepare(
   return iree_ok_status();
 }
 
-const loom_serve_memory_range_t* loom_serve_text_reservation_ranges(
-    const loom_serve_text_reservation_t* reservation,
-    iree_host_size_t* out_count) {
-  return loom_serve_text_state_reservation_ranges(reservation->state,
-                                                  out_count);
-}
-
 iree_status_t loom_serve_text_reservation_submit(
     loom_serve_text_reservation_t* reservation,
     loom_serve_text_reserve_result_t* out_result,
