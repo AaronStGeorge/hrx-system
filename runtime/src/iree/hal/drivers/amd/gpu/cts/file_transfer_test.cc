@@ -665,14 +665,8 @@ class GpuNativeFileAccessTest : public GpuNativeFileTest {
 // according to the exact native capability, followed by independent GPU work.
 class GpuInstanceFileAccessTest : public GpuNativeFileAccessTest {
  protected:
-  void SetUp() override {
-    const amdf_api_t* api = nullptr;
-    ASSERT_EQ(
-        amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST, &api),
-        AMDF_STATUS_OK);
-    IREE_ASSERT_OK(iree_hal_amd_fabric_create(
-        api, AMDF_NATIVE_LIFETIME_INSTANCE, iree_allocator_system(), &fabric_));
-    GpuNativeFileAccessTest::SetUp();
+  amdf_native_lifetime_t native_lifetime() const override {
+    return AMDF_NATIVE_LIFETIME_INSTANCE;
   }
 };
 

@@ -25,11 +25,7 @@ class GpuNativeQueueLifetimeTest
   amdf_queue_command_type_t command_type() const override { return GetParam(); }
 
   void SetUp() override {
-    IREE_ASSERT_OK(memory_gate_.CreateFabric(
-        &fabric_, UINT64_MAX,
-        command_type() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
-            ? AMDF_NATIVE_LIFETIME_PROCESS
-            : AMDF_NATIVE_LIFETIME_INSTANCE));
+    IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_));
     GpuNativeTest::SetUp();
     if (HasFatalFailure() || IsSkipped()) {
       return;

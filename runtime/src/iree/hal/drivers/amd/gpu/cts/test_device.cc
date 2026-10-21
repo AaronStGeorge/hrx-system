@@ -426,12 +426,11 @@ void GpuNativeTest::SetUp() {
       amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST, &api),
       "amdf_query_api"));
   if (!fabric_) {
-    if (command_type() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL) {
+    if (native_lifetime() == AMDF_NATIVE_LIFETIME_PROCESS) {
       IREE_ASSERT_OK(NativeMemoryGate::AcquireProcessFabric(&fabric_));
     } else {
-      IREE_ASSERT_OK(
-          iree_hal_amd_fabric_create(api, AMDF_NATIVE_LIFETIME_INSTANCE,
-                                     iree_allocator_system(), &fabric_));
+      IREE_ASSERT_OK(iree_hal_amd_fabric_create(
+          api, native_lifetime(), iree_allocator_system(), &fabric_));
     }
   }
   bool selected_endpoint_found = false;
@@ -495,10 +494,17 @@ void GpuNativeTest::SetUp() {
       if (!is_selected || !supported) {
         continue;
       }
-      IREE_ASSERT_OK(iree_hal_amd_gpu_context_allocate(
-          fabric_, &fabric_->endpoints[i].id,
-          iree_hal_device_event_sink_stderr(), iree_allocator_system(),
-          &context_));
+      iree::Status context_status =
+          iree_hal_amd_gpu_context_allocate(fabric_, &fabric_->endpoints[i].id,
+                                            iree_hal_device_event_sink_stderr(),
+                                            iree_allocator_system(), &context_);
+      // Independent native lifetime is optional. Ordinary PROCESS fixtures
+      // still require activation to succeed for their advertised queue family.
+      if (native_lifetime() == AMDF_NATIVE_LIFETIME_INSTANCE &&
+          context_status.code() == iree::StatusCode::kUnimplemented) {
+        GTEST_SKIP() << context_status.ToString();
+      }
+      IREE_ASSERT_OK(context_status);
     }
   }
   if (!context_) {

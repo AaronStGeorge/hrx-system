@@ -54,7 +54,7 @@ class NativeMemoryGate {
   iree_status_t CreateFabric(
       iree_hal_amd_fabric_t** out_fabric,
       uint64_t maximum_byte_length = UINT64_MAX,
-      amdf_native_lifetime_t lifetime = AMDF_NATIVE_LIFETIME_INSTANCE);
+      amdf_native_lifetime_t lifetime = AMDF_NATIVE_LIFETIME_PROCESS);
 
   // PROCESS native bindings share one fabric across fixtures, as the registered
   // driver does. Reopening a different render file cannot replace that VM.
@@ -193,6 +193,12 @@ class GpuNativeTest : public ::testing::Test {
   // Native packet protocol exercised by this fixture, independent of ISA.
   virtual amdf_queue_command_type_t command_type() const {
     return AMDF_QUEUE_COMMAND_TYPE_GPU_PM4;
+  }
+
+  // Ordinary execution shares the process binding used by the registered
+  // driver. Explicit lifetime cases can request an independent native owner.
+  virtual amdf_native_lifetime_t native_lifetime() const {
+    return AMDF_NATIVE_LIFETIME_PROCESS;
   }
 
   void SetUp() override;
