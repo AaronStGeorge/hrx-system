@@ -52,6 +52,13 @@ struct NativeMemory {
   std::thread::id publication_thread;
   // Thread running native destruction, captured after the native backing join.
   std::thread::id destruction_thread;
+  // Optional externally controlled stall inside the native allocation.
+  struct {
+    // Signals that the allocation worker has entered the native call.
+    std::binary_semaphore* entered = nullptr;
+    // Allows that call to finish independently of executable loading.
+    std::binary_semaphore* resume = nullptr;
+  } acquisition;
   // Optional externally controlled stall inside the native cleanup dependency.
   struct {
     // Signals that the simulated driver has entered its blocking operation.
@@ -99,6 +106,10 @@ struct NativeMemory {
                   AMDF_MEMORY_ACCESS_EXECUTE);
     self.request = *info;
     self.allocation_thread = std::this_thread::get_id();
+    if (self.acquisition.entered) {
+      self.acquisition.entered->release();
+      self.acquisition.resume->acquire();
+    }
     self.bytes.assign(info->byte_length, 0xa5);
     ++self.allocations;
     *out_memory = reinterpret_cast<amdf_memory_t*>(&self);
@@ -393,7 +404,7 @@ class ExecutableTest : public ::testing::TestWithParam<size_t> {
 TEST_P(ExecutableTest, OwnsArtifactAndReflectsPreparedFunctions) {
   IREE_ASSERT_OK(Load());
   EXPECT_EQ(native_.flushes, 1u);
-  EXPECT_NE(native_.allocation_thread, std::this_thread::get_id());
+  EXPECT_EQ(native_.allocation_thread, std::this_thread::get_id());
   std::fill(bytes_.begin(), bytes_.end(), 0xa5);
   iree_hal_amd_gpu_image_deinitialize(&image_);
   EXPECT_EQ(iree_hal_executable_queue_family(executable_), &family_);
@@ -757,6 +768,53 @@ TEST_P(ExecutableTest, NativeConstructionFailuresReleasePartialOwnership) {
   }
 }
 
+TEST_P(ExecutableTest, LoadingAndRollbackProgressDuringBulkAllocation) {
+  IREE_ASSERT_OK(Load());
+  const uint32_t call_count = native_.calls;
+  Release();
+
+  NativeMemory bulk;
+  std::binary_semaphore entered{0};
+  std::binary_semaphore resume{0};
+  bulk.acquisition = {&entered, &resume};
+  auto bulk_options = memory_;
+  bulk_options.scope = bulk.scope();
+  const iree_hal_amd_fabric_memory_request_t request = {
+      .options = &bulk_options,
+      .byte_length = 4096,
+      .alignment = 4096,
+  };
+  iree_hal_amd_fabric_memory_t backing = {};
+  iree_hal_amd_gpu_memory_acquire_t operation;
+  iree_hal_amd_gpu_context_acquire_memory(
+      &context_, 1, &request, &backing,
+      {[](void*, iree_status_t status) { IREE_EXPECT_OK(status); }, nullptr},
+      &operation);
+  entered.acquire();
+
+  // No allocation-worker completion can run until resume is released. Every
+  // failed load must reclaim its unpublished storage on the loading caller.
+  for (uint32_t i = 1; i <= call_count; ++i) {
+    SCOPED_TRACE(i);
+    native_.fail_at = i;
+    native_.calls = 0;
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, Load());
+    EXPECT_EQ(executable_, nullptr);
+    EXPECT_EQ(native_.allocations, 0u);
+    EXPECT_EQ(native_.mappings, 0u);
+  }
+  native_.fail_at = 0;
+  IREE_EXPECT_OK(Load());
+  EXPECT_EQ(native_.allocation_thread, std::this_thread::get_id());
+  EXPECT_EQ(native_.publication_thread, std::this_thread::get_id());
+  EXPECT_NE(bulk.allocation_thread, std::this_thread::get_id());
+
+  resume.release();
+  iree_hal_amd_gpu_context_join_memory(&context_);
+  iree_hal_amd_fabric_memory_deinitialize(context_.api, context_.event_sink,
+                                          &backing);
+}
+
 TEST_P(ExecutableTest, HostConstructionFailuresReleasePartialOwnership) {
   FailingAllocator baseline = {.fail_at = 0};
   IREE_ASSERT_OK(Load({&baseline, FailingAllocator::Control}));
@@ -777,7 +835,7 @@ TEST_P(ExecutableTest, HostConstructionFailuresReleasePartialOwnership) {
 TEST_P(ExecutableTest, FinalReleaseDoesNotWaitForNativeCleanup) {
   IREE_ASSERT_OK(Load());
   EXPECT_EQ(native_.publication_thread, std::this_thread::get_id());
-  EXPECT_NE(native_.allocation_thread, native_.publication_thread);
+  EXPECT_EQ(native_.allocation_thread, native_.publication_thread);
   std::binary_semaphore entered{0};
   std::binary_semaphore resume{0};
   native_.cleanup = {&entered, &resume};
@@ -786,7 +844,7 @@ TEST_P(ExecutableTest, FinalReleaseDoesNotWaitForNativeCleanup) {
   entered.acquire();
   EXPECT_EQ(native_.allocations, 1u);
   EXPECT_EQ(native_.mappings, 0u);
-  EXPECT_EQ(native_.destruction_thread, native_.allocation_thread);
+  EXPECT_NE(native_.destruction_thread, native_.allocation_thread);
   EXPECT_NE(native_.destruction_thread, std::this_thread::get_id());
   resume.release();
   iree_hal_amd_gpu_context_join_memory(&context_);

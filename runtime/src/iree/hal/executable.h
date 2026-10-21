@@ -304,8 +304,9 @@ typedef struct iree_hal_executable_t iree_hal_executable_t;
 //
 // The executable data and constants are borrowed only for the duration of the
 // call. Implementations must finish consuming or copy any retained data before
-// returning. Loading is a cold path and implementations may parse, verify,
-// link, or optimize the native artifact before returning.
+// returning. Implementations may parse, verify, link, or optimize the native
+// artifact before returning. Applications may load executables throughout
+// normal operation while previously loaded executables are executing.
 //
 // On success, |out_executable| is assigned one owning reference. It is
 // unchanged on failure. The family owner must outlive the executable.

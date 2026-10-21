@@ -557,13 +557,12 @@ static iree_status_t iree_hal_amd_gpu_executable_load_image(
     packet_program_offset =
         byte_length - IREE_HAL_AMD_GPU_PM4_DISPATCH_PROGRAM_LENGTH;
   }
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = options->memory,
-      .byte_length = byte_length,
-      .alignment = image->alignment,
-  };
-  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_acquire_memory_sync(
-      executable->context, 1, &request, variant->memory));
+  // Loading is synchronous on its caller and may overlap bulk allocation.
+  // Native serialization applies to individual driver calls, without making
+  // this image wait behind an entire batch on the slab allocation worker.
+  IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
+      executable->context->api, options->memory, byte_length, image->alignment,
+      executable->context->event_sink, variant->memory, NULL));
   variant->bindings[0].host_pointer = variant->memory->contents.data;
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       executable->context->api->memory_query_address(
@@ -865,8 +864,10 @@ iree_status_t iree_hal_amd_gpu_executable_create(
     *out_executable = &executable->base;
   } else if (executable) {
     iree_hal_amd_gpu_executable_release_metadata(executable);
-    iree_hal_amd_gpu_context_release_memory_sync(
-        context, executable->variant_count, executable->memories);
+    for (uint32_t i = 0; i < executable->variant_count; ++i) {
+      iree_hal_amd_fabric_memory_deinitialize(context->api, context->event_sink,
+                                              &executable->memories[i]);
+    }
     iree_hal_amd_gpu_executable_free(executable);
   }
   return status;
