@@ -89,8 +89,8 @@ class BazelProfileSummary:
     action_seconds: float
     # Per-mnemonic action counts and aggregate durations.
     action_aggregates: tuple[ActionAggregate, ...]
-    # Number of TestRunner actions.
-    test_count: int
+    # Number of profiled TestRunner actions.
+    test_action_count: int
     # Sum of TestRunner action durations.
     test_action_seconds: float
     # Number of TestRunner actions with nested process timing.
@@ -361,7 +361,7 @@ def summarize(profile_path: Path) -> BazelProfileSummary:
         action_count=len(action_events),
         action_seconds=_seconds(action_seconds),
         action_aggregates=action_aggregates,
-        test_count=len(test_timings),
+        test_action_count=len(test_timings),
         test_action_seconds=round(
             sum(timing.action_seconds for timing in test_timings), 6
         ),
@@ -425,7 +425,7 @@ def render_markdown(summary: BazelProfileSummary, title: str) -> str:
         "| --- | ---: |",
         f"| Phase span | {summary.elapsed_seconds:.3f} s |",
         f"| Actions | {summary.action_count:,} |",
-        f"| Tests | {summary.test_count:,} |",
+        f"| TestRunner actions | {summary.test_action_count:,} |",
         f"| Aggregate test-process work | {summary.test_process_seconds:.3f} s |",
         f"| Test processes at or above {SLOW_DURATION_SECONDS:g} s | "
         f"{summary.slow_test_process_count:,} |",
@@ -514,7 +514,8 @@ def render_console(summary: BazelProfileSummary, title: str) -> str:
     """Renders a compact log summary for local and CI diagnosis."""
     lines = [
         f"[profile] {title}: {summary.elapsed_seconds:.3f}s phase, "
-        f"{summary.test_count} tests, {summary.test_process_seconds:.3f}s process work, "
+        f"{summary.test_action_count} test actions, "
+        f"{summary.test_process_seconds:.3f}s process work, "
         f"{summary.slow_test_count} test suspect(s), "
         f"{summary.slow_non_test_action_count} non-test action suspect(s)"
     ]

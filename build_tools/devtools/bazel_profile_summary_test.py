@@ -109,7 +109,7 @@ class BazelProfileSummaryTest(unittest.TestCase):
             self.assertEqual(summary.elapsed_seconds, 32.0)
             self.assertEqual(summary.action_count, 3)
             self.assertEqual(summary.action_seconds, 29.5)
-            self.assertEqual(summary.test_count, 1)
+            self.assertEqual(summary.test_action_count, 1)
             self.assertEqual(summary.test_action_seconds, 12.5)
             self.assertEqual(summary.test_process_count, 1)
             self.assertEqual(summary.test_process_seconds, 10.25)
