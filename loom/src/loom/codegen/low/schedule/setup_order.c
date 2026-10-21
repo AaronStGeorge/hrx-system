@@ -195,14 +195,88 @@ static iree_status_t loom_low_schedule_setup_order_append(
       state->dependency_arena);
 }
 
+// A private producer P can retain its sole value consumer S even when it
+// also precedes Q, if S already precedes Q. The dependency remains in the
+// graph with its original timing; only the setup ownership query consumes
+// this implication. Grouping incoming edges by Q proves every such relation
+// with one stamp lookup, without transitive closure or per-producer searches.
+static iree_status_t loom_low_schedule_setup_order_resolve_successors(
+    loom_low_schedule_build_state_t* state, uint32_t node_count,
+    uint32_t dependency_count) {
+  loom_low_schedule_setup_order_t* order = &state->setup_order;
+  bool has_ambiguous_member = false;
+  for (uint32_t producer = 0; producer < node_count; ++producer) {
+    const uint32_t successor = order->entry_nodes[producer];
+    if (order->completion_nodes[producer] == producer &&
+        successor != LOOM_LOW_SCHEDULE_NODE_NONE && successor != producer &&
+        iree_any_bit_set(state->nodes[producer].flags,
+                         LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP)) {
+      order->completion_nodes[producer] = successor;
+      has_ambiguous_member = true;
+    }
+  }
+  if (!has_ambiguous_member) {
+    return iree_ok_status();
+  }
+  uint32_t* incoming_heads = NULL;
+  uint32_t* incoming_next = NULL;
+  uint32_t* predecessor_stamps = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->scratch_arena, node_count, sizeof(*incoming_heads),
+      (void**)&incoming_heads));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->scratch_arena, dependency_count, sizeof(*incoming_next),
+      (void**)&incoming_next));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->scratch_arena, node_count, sizeof(*predecessor_stamps),
+      (void**)&predecessor_stamps));
+  memset(incoming_heads, 0xFF, node_count * sizeof(*incoming_heads));
+  memset(predecessor_stamps, 0xFF, node_count * sizeof(*predecessor_stamps));
+  for (uint32_t i = 0; i < dependency_count; ++i) {
+    const loom_low_schedule_dependency_t* dependency =
+        loom_low_schedule_dependency_graph_at(&state->dependencies, i);
+    incoming_next[i] = incoming_heads[dependency->consumer_node];
+    incoming_heads[dependency->consumer_node] = i;
+  }
+  for (uint32_t consumer = 0; consumer < node_count; ++consumer) {
+    for (uint32_t i = incoming_heads[consumer];
+         i != LOOM_LOW_SCHEDULE_NODE_NONE; i = incoming_next[i]) {
+      const loom_low_schedule_dependency_t* dependency =
+          loom_low_schedule_dependency_graph_at(&state->dependencies, i);
+      predecessor_stamps[dependency->producer_node] = consumer;
+    }
+    for (uint32_t i = incoming_heads[consumer];
+         i != LOOM_LOW_SCHEDULE_NODE_NONE; i = incoming_next[i]) {
+      const loom_low_schedule_dependency_t* dependency =
+          loom_low_schedule_dependency_graph_at(&state->dependencies, i);
+      const uint32_t producer = dependency->producer_node;
+      const uint32_t successor = order->completion_nodes[producer];
+      if (successor != LOOM_LOW_SCHEDULE_NODE_NONE && successor != producer &&
+          successor != consumer && predecessor_stamps[successor] != consumer) {
+        order->completion_nodes[producer] = producer;
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_schedule_setup_order_finish(
-    loom_low_schedule_build_state_t* state) {
+    loom_low_schedule_build_state_t* state, uint32_t node_count) {
   loom_low_schedule_setup_order_t* order = &state->setup_order;
   if (order->completion_nodes == NULL) {
     return iree_ok_status();
   }
   const uint32_t dependency_count = (uint32_t)state->dependencies.count;
   iree_status_t status = iree_ok_status();
+  if (iree_any_bit_set(state->options->flags,
+                       LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP)) {
+    const iree_arena_checkpoint_t proof_checkpoint =
+        iree_arena_checkpoint_save(state->scratch_arena);
+    status = loom_low_schedule_setup_order_resolve_successors(state, node_count,
+                                                              dependency_count);
+    iree_arena_checkpoint_restore(&proof_checkpoint);
+    IREE_RETURN_IF_ERROR(status);
+  }
   for (uint16_t block_index = 0;
        block_index < state->body->block_count && iree_status_is_ok(status);
        ++block_index) {

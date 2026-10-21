@@ -1910,7 +1910,7 @@ static iree_status_t loom_low_schedule_build(
     status = loom_low_schedule_build_scope_dependencies(&state);
   }
   if (iree_status_is_ok(status) && state.error_count == 0) {
-    status = loom_low_schedule_setup_order_finish(&state);
+    status = loom_low_schedule_setup_order_finish(&state, (uint32_t)node_count);
   }
   if (iree_status_is_ok(status) && state.error_count == 0) {
     status = loom_low_schedule_run_list_scheduler(&state, node_count);
