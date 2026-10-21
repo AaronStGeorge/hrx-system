@@ -1377,6 +1377,8 @@ static iree_status_t loom_refine_boundaries_propagate_op_types(
                                          propagation->rewriter, op, vtable)) {
     return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_propagate_value_facts(propagation->rewriter));
   bool changed = false;
   propagation->rewriter->flags = 0;
   IREE_RETURN_IF_ERROR(loom_type_propagator_apply_op(
@@ -1430,6 +1432,9 @@ static iree_status_t loom_refine_boundaries_propagate_function_types(
     *out_changed |= propagation.changed;
   }
 
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_propagate_value_facts(&rewriter);
+  }
   loom_type_propagator_deinitialize(propagator);
   loom_rewriter_deinitialize(&rewriter);
   return status;
