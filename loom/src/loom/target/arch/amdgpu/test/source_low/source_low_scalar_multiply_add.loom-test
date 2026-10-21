@@ -82,7 +82,8 @@ func.def target(@target) @uniform_u24_multiply_add(%value: i32, %start: i32) -> 
 amdgpu.target<gfx942> @target
 
 low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @uniform_u24_multiply_add(%bounded: reg<amdgpu.sgpr>, %start: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm {
-  %product = s_mulk_i32 %bounded, 20
+  %bounded_copy = copy %bounded : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>
+  %product = s_mulk_i32 %bounded_copy, 20
   %result = s_add_u32 %product, %start
   return %result
 }

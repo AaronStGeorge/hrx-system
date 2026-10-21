@@ -564,17 +564,16 @@ static iree_status_t loom_low_select_operand_form_emit_decision(
   return iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission);
 }
 
-// Preferred ties preserve existing ownership across operand remapping; they
-// never turn an explicitly independent result into a consuming update.
+// Physical input/result ties preserve existing ownership across operand
+// remapping. Independent results get their own input copy; allocation can
+// coalesce that copy when the source location is writable and reusable.
 static bool loom_low_operand_form_owns_tied_input(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor,
     const loom_low_operand_form_t* form, const loom_op_t* op,
     const loom_low_constraint_t* constraint) {
-  if (constraint->kind == LOOM_LOW_CONSTRAINT_KIND_TIED) {
-    return true;
-  }
-  if (constraint->kind != LOOM_LOW_CONSTRAINT_KIND_PREFER_TIED) {
+  if (constraint->kind != LOOM_LOW_CONSTRAINT_KIND_TIED &&
+      constraint->kind != LOOM_LOW_CONSTRAINT_KIND_PREFER_TIED) {
     return false;
   }
   const loom_tied_result_t* tie =
@@ -1255,6 +1254,17 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
       op->location, &replacement_op);
   loom_builder_restore(&rewriter->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
+
+  if (loom_low_operand_ties_need_materialization(descriptor_set,
+                                                 replacement_op)) {
+    const uint16_t original_tied_result_count =
+        replacement_op->tied_result_count;
+    IREE_RETURN_IF_ERROR(loom_low_operand_ties_materialize(
+        rewriter, descriptor_set, /*memory_accesses=*/NULL, replacement_op,
+        &replacement_op));
+    state->statistics->tied_inputs_copied +=
+        replacement_op->tied_result_count - original_tied_result_count;
+  }
 
   loom_target_function_version_t* version =
       loom_target_function_version_cast(state->pass->function_version);

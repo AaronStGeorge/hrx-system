@@ -94,3 +94,105 @@ check.scenario @execution_geometry_values {
   }
   check.return
 }
+
+// Scaling one workgroup coordinate gives each invocation a unique output.
+// Each axis is exercised separately so its incoming identity has one consumer.
+kernel.def @scaled_workgroup_x() {
+  %inactive_groups = index.constant 1 : index
+  %groups = index.constant 64 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%groups, %inactive_groups, %inactive_groups) workgroup_size(%threads, %inactive_groups, %inactive_groups) : index
+} launch(%output: buffer) {
+  %group = kernel.workgroup.id<x> : index
+  %lane = kernel.workitem.id<x> : index
+  %width = index.constant 64 : offset
+  %group_offset = index.scale %group, %width : index, offset -> offset
+  %group_index = index.cast %group_offset : offset to index
+  %position = index.add %group_index, %lane : index
+  %value = index.cast %position : index to i32
+  %base = index.constant 0 : offset
+  %destination = buffer.view %output[%base] : buffer -> view<4096xi32>
+  view.store %value, %destination[%position] : i32, view<4096xi32>
+  kernel.return
+}
+
+kernel.def @scaled_workgroup_y() {
+  %inactive_groups = index.constant 1 : index
+  %groups = index.constant 64 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%inactive_groups, %groups, %inactive_groups) workgroup_size(%threads, %inactive_groups, %inactive_groups) : index
+} launch(%output: buffer) {
+  %group = kernel.workgroup.id<y> : index
+  %lane = kernel.workitem.id<x> : index
+  %width = index.constant 64 : offset
+  %group_offset = index.scale %group, %width : index, offset -> offset
+  %group_index = index.cast %group_offset : offset to index
+  %position = index.add %group_index, %lane : index
+  %value = index.cast %position : index to i32
+  %base = index.constant 0 : offset
+  %destination = buffer.view %output[%base] : buffer -> view<4096xi32>
+  view.store %value, %destination[%position] : i32, view<4096xi32>
+  kernel.return
+}
+
+kernel.def @scaled_workgroup_z() {
+  %inactive_groups = index.constant 1 : index
+  %groups = index.constant 64 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%inactive_groups, %inactive_groups, %groups) workgroup_size(%threads, %inactive_groups, %inactive_groups) : index
+} launch(%output: buffer) {
+  %group = kernel.workgroup.id<z> : index
+  %lane = kernel.workitem.id<x> : index
+  %width = index.constant 64 : offset
+  %group_offset = index.scale %group, %width : index, offset -> offset
+  %group_index = index.cast %group_offset : offset to index
+  %position = index.add %group_index, %lane : index
+  %value = index.cast %position : index to i32
+  %base = index.constant 0 : offset
+  %destination = buffer.view %output[%base] : buffer -> view<4096xi32>
+  view.store %value, %destination[%position] : i32, view<4096xi32>
+  kernel.return
+}
+
+func.def @scaled_workgroup_oracle(%output: buffer) {
+  %base = index.constant 0 : offset
+  %destination = buffer.view %output[%base] : buffer -> view<4096xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 4096 : index
+  %step = index.constant 1 : index
+  scf.for %position = [%begin to %end step %step] {
+    %value = index.cast %position : index to i32
+    view.store %value, %destination[%position] : i32, view<4096xi32>
+  }
+  func.return
+}
+
+check.scenario @scaled_workgroup_x_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(-1) : tensor<4096xi32>
+    check.compare<@scaled_workgroup_x, @scaled_workgroup_oracle>(%output) : (tensor<4096xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4096xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @scaled_workgroup_y_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(-1) : tensor<4096xi32>
+    check.compare<@scaled_workgroup_y, @scaled_workgroup_oracle>(%output) : (tensor<4096xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4096xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @scaled_workgroup_z_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(-1) : tensor<4096xi32>
+    check.compare<@scaled_workgroup_z, @scaled_workgroup_oracle>(%output) : (tensor<4096xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4096xi32>
+    }
+  }
+  check.return
+}
