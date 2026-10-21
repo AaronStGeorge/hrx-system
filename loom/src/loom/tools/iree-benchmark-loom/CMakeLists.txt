@@ -220,11 +220,13 @@ loom_cc_test(
   DEPS
     ::main
     iree::base
+    iree::base::internal::arena
     iree::base::internal::json
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::ir
 )
 
 loom_cc_test(

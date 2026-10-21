@@ -131,6 +131,9 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   loom_testbench_case_sample_result_t sample_result = {};
   iree_benchmark_loom_hal_context_t hal_context = {};
   iree_benchmark_loom_hal_actual_provider_t provider = {};
+  const iree_benchmark_loom_hal_compile_item_t compile_item = {
+      .compile_item_index = 4,
+  };
   iree_benchmark_loom_diagnostic_capture_t diagnostics = {};
   iree_benchmark_loom_selected_benchmark_t baseline_selection = {};
   baseline_selection.identity.candidate_id = IREE_SV("c0");
@@ -146,7 +149,8 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   IREE_ASSERT_OK(
       iree_benchmark_loom_event_sink_emit_device(&sink, &run, &hal_context));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_compile(
-      &sink, &run, &candidate, &benchmark_plan, &case_plan, &provider));
+      &sink, &run, &candidate, &compile_item, &benchmark_plan, &case_plan,
+      &provider));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_sample(
       &sink, &run, &candidate, /*work_item_index=*/7, &module, &benchmark_plan,
       &case_plan, /*benchmark_sample_ordinal=*/1, &sample_result));
@@ -173,6 +177,7 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   ASSERT_EQ(collector.event_count, 8u);
   EXPECT_EQ(collector.events[0].kind, IREE_BENCHMARK_LOOM_EVENT_DEVICE);
   EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_COMPILE);
+  EXPECT_EQ(collector.events[1].compile.compile_item, &compile_item);
   EXPECT_EQ(collector.events[2].kind, IREE_BENCHMARK_LOOM_EVENT_SAMPLE);
   EXPECT_EQ(collector.events[2].sample.work_item_index, 7u);
   EXPECT_EQ(collector.events[2].sample.benchmark_sample_ordinal, 1u);

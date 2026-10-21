@@ -264,10 +264,17 @@ iree_status_t iree_benchmark_loom_write_compile_report_artifact(
     iree_benchmark_loom_hal_actual_provider_t* provider,
     iree_allocator_t allocator);
 
-// Appends a candidate compile row.
+// Writes one canonical compiled entry, shared by snapshot and JSONL output.
+iree_status_t iree_benchmark_loom_write_compile_fields_json(
+    const iree_benchmark_loom_hal_compile_item_t* compile_item,
+    const iree_benchmark_loom_hal_actual_provider_t* provider,
+    loom_json_object_writer_t* object);
+
+// Appends a canonical compiled-entry row.
 iree_status_t iree_benchmark_loom_append_compile_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
+    const iree_benchmark_loom_hal_compile_item_t* compile_item,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_hal_actual_provider_t* provider,

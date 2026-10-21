@@ -366,6 +366,7 @@ static iree_status_t iree_benchmark_loom_run_comparison_window(
           &compile_context->benchmark_materializer, candidate->begin_sample,
           options->host_allocator, &benchmark_result);
     }
+    benchmark_result.compile_item = compile_context->compile_item;
     benchmark_result.launch_evidence =
         &work_item_states[candidate->work_item_index].launch_evidence;
   }

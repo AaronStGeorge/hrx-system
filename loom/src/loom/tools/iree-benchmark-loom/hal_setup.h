@@ -49,6 +49,8 @@ typedef struct iree_benchmark_loom_hal_setup_options_t {
 } iree_benchmark_loom_hal_setup_options_t;
 
 typedef struct iree_benchmark_loom_hal_compile_context_t {
+  // Planned compilation identity shared by all providers and work results.
+  const iree_benchmark_loom_hal_compile_item_t* compile_item;
   // True once this compile item has been initialized.
   bool initialized;
   // True when this compile item executes a multi-actual sequence.
@@ -100,7 +102,8 @@ iree_status_t iree_benchmark_loom_hal_compile_context_initialize(
 void iree_benchmark_loom_hal_compile_context_deinitialize(
     iree_benchmark_loom_hal_compile_context_t* context);
 
-// Projects single-provider compile artifacts owned by |context| into |result|.
+// Projects compilation identity and single-provider artifact paths into
+// |result|.
 void iree_benchmark_loom_hal_compile_context_set_result_artifacts(
     const iree_benchmark_loom_hal_compile_context_t* context,
     iree_benchmark_loom_benchmark_result_t* result);

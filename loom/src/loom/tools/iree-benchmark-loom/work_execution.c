@@ -46,6 +46,7 @@ static iree_status_t iree_benchmark_loom_run_dispatch_sample_work_item(
           work_item->begin_benchmark_sample, options->host_allocator,
           &benchmark_result);
       if (iree_status_is_ok(status)) {
+        benchmark_result.compile_item = compile_context->compile_item;
         benchmark_result.launch_evidence = &work_item_state.launch_evidence;
         status = iree_benchmark_loom_emit_work_item_result_aliases(
             options->run, options->module_plan, work_plan, work_item,
@@ -63,6 +64,7 @@ static iree_status_t iree_benchmark_loom_run_dispatch_sample_work_item(
           work_item->begin_benchmark_sample, options->host_allocator,
           &benchmark_result);
       if (iree_status_is_ok(status)) {
+        benchmark_result.compile_item = compile_context->compile_item;
         benchmark_result.launch_evidence = &work_item_state.launch_evidence;
         status = iree_benchmark_loom_emit_work_item_result_aliases(
             options->run, options->module_plan, work_plan, work_item,

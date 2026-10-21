@@ -10,6 +10,54 @@
 
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
+#include "loom/util/adaptive_sort.h"
+
+static bool iree_benchmark_loom_compile_entry_less(
+    const iree_benchmark_loom_hal_actual_sequence_t* sequence,
+    const iree_host_size_t* lhs, const iree_host_size_t* rhs) {
+  const uint16_t lhs_symbol =
+      sequence->providers[*lhs].execution.invocation->callee_ref.symbol_id;
+  const uint16_t rhs_symbol =
+      sequence->providers[*rhs].execution.invocation->callee_ref.symbol_id;
+  return lhs_symbol != rhs_symbol ? lhs_symbol < rhs_symbol : *lhs < *rhs;
+}
+
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT(
+    iree_benchmark_loom_sort_compile_entries, iree_host_size_t,
+    const iree_benchmark_loom_hal_actual_sequence_t*,
+    iree_benchmark_loom_compile_entry_less)
+
+// All providers in a sequence compile the same immutable module, configuration,
+// pass program, and target request. Only the root varies; workload arguments
+// are evaluated at execution time. Retain the first call as report owner so
+// consumers never need to rediscover equivalence or copy reports per call.
+static iree_status_t iree_benchmark_loom_index_compile_entries(
+    iree_benchmark_loom_hal_actual_sequence_t* sequence) {
+  iree_host_size_t* indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+      sequence->host_allocator, sequence->provider_count, sizeof(*indices),
+      (void**)&indices));
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    indices[i] = i;
+  }
+  iree_benchmark_loom_sort_compile_entries(sequence, indices,
+                                           sequence->provider_count);
+  uint16_t previous_symbol = LOOM_SYMBOL_ID_INVALID;
+  iree_host_size_t entry_index = 0;
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    iree_benchmark_loom_hal_actual_provider_t* provider =
+        &sequence->providers[indices[i]];
+    const uint16_t symbol =
+        provider->execution.invocation->callee_ref.symbol_id;
+    if (symbol != previous_symbol) {
+      entry_index = indices[i];
+      previous_symbol = symbol;
+    }
+    provider->compile_entry_index = entry_index;
+  }
+  iree_allocator_free(sequence->host_allocator, indices);
+  return iree_ok_status();
+}
 
 static iree_status_t iree_benchmark_loom_hal_actual_observe_result(
     void* user_data, const loomc_result_t* result) {
@@ -159,6 +207,9 @@ iree_status_t iree_benchmark_loom_hal_actual_sequence_initialize(
         execution_providers, host_allocator, &out_sequence->execution);
   }
   iree_allocator_free(host_allocator, execution_providers);
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_index_compile_entries(out_sequence);
+  }
   if (!iree_status_is_ok(status)) {
     iree_benchmark_loom_hal_actual_sequence_deinitialize(out_sequence);
   }
