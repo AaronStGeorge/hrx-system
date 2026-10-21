@@ -11,7 +11,6 @@ on:
   pull_request:
   push:
     branches:
-      - main
       - main-staging
 
 concurrency:
