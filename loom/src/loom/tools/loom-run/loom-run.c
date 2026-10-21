@@ -8,7 +8,6 @@
 
 #include <stddef.h>
 
-#include "loom/tooling/input/configured.h"
 #include "loom/tooling/input/loomc_configured.h"
 #include "loom/tools/loom-run/main.h"
 #include "loomc/target/configured.h"
@@ -56,7 +55,7 @@ int main(int argc, char** argv) {
 #endif  // LOOM_RUN_HAVE_TASK
 
   const loom_run_configuration_t configuration = {
-      .input_providers = loom_configured_input_providers(),
+      .input_formats = loom_configured_input_loomc_formats(),
       .tool_name = "loom-run",
       .create_target_environment = loomc_target_environment_create_configured,
       .import = loom_configured_input_loomc_importer(),

@@ -10,7 +10,7 @@
 #define LOOM_TOOLS_LOOM_RUN_MAIN_H_
 
 #include "iree/base/api.h"
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 #include "loom/tooling/input/loomc.h"
 #include "loomc/iree.h"
 #include "loomc/target/iree_hal.h"
@@ -25,8 +25,8 @@ typedef loomc_status_t (*loom_run_create_target_environment_fn_t)(
     loomc_target_environment_t** out_target_environment);
 
 typedef struct loom_run_configuration_t {
-  // Borrowed optional source importers selected by the final application.
-  loom_input_provider_list_t input_providers;
+  // Borrowed optional source formats selected by the final application.
+  loom_input_format_list_t input_formats;
   // Null-terminated executable name used in help and diagnostics.
   const char* tool_name;
   // Factory for the runner's artifact-capable target environment.

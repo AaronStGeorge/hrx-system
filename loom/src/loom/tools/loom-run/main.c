@@ -754,12 +754,12 @@ int loom_run_main(int argc, char** argv,
         .import = configuration->import,
         .import_user_data = configuration->import_user_data,
     };
-    const loom_input_provider_t* provider = NULL;
-    status = loom_input_provider_select(configuration->input_providers,
-                                        admission_options.input.format,
-                                        admission_options.path, &provider);
+    const loom_input_format_t* format = NULL;
+    status = loom_input_format_select(configuration->input_formats,
+                                      admission_options.input.format,
+                                      admission_options.path, &format, NULL);
     if (iree_status_is_ok(status)) {
-      admission_options.input.format = provider->format->name;
+      admission_options.input.format = format->name;
       status = loom_tooling_input_admit_loomc_module(
           &admission_options, context, workspace, &block_pool, &module, &result,
           allocator);

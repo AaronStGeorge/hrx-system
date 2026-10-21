@@ -33,8 +33,8 @@ loom_cc_library(
     loom::tooling::config::input
     loom::tooling::execution::hal::invocation
     loom::tooling::execution::hal::runtime
-    loom::tooling::input
     loom::tooling::input::flags
+    loom::tooling::input::format
     loom::tooling::input::loomc
     loom::tooling::io::file
   PUBLIC
@@ -60,7 +60,7 @@ endif()
 if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK)
   list(APPEND _loom_run_platform_deps loom::binding::c::target::cpu::iree_hal)
 endif()
-loom_cc_binary(
+loomc_cc_binary(
   NAME
     loom-run
   SRCS
@@ -71,7 +71,6 @@ loom_cc_binary(
     ::main
     iree::base
     loom::binding::c::target::configured
-    loom::tooling::input::configured
     loom::tooling::input::loomc_configured
     ${_loom_run_platform_deps}
 )

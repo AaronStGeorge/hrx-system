@@ -10,7 +10,7 @@
 
 IREE_FLAG_NAMED(string, input_format, "input-format", "",
                 "Source input format. Empty selects from each filename. "
-                "Bytecode is detected by file magic.");
+                "Use 'loombc' for bytecode on stdin.");
 IREE_FLAG_LIST_NAMED(string, input_options, "input-options",
                      "Options for an input provider: 'format:key=value ...'. "
                      "Repeat once per format, for example "

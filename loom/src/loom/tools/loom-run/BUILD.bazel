@@ -5,10 +5,10 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load("//loom/binding/c:shared.bzl", "loomc_cc_binary")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
-    "loom_cc_binary",
     "loom_cc_library",
 )
 
@@ -79,8 +79,8 @@ loom_cc_library(
         "//loom/src/loom/tooling/config:input",
         "//loom/src/loom/tooling/execution/hal:invocation",
         "//loom/src/loom/tooling/execution/hal:runtime",
-        "//loom/src/loom/tooling/input",
         "//loom/src/loom/tooling/input:flags",
+        "//loom/src/loom/tooling/input:format",
         "//loom/src/loom/tooling/input:loomc",
         "//loom/src/loom/tooling/io:file",
         "//runtime/src/iree/base",
@@ -92,14 +92,13 @@ loom_cc_library(
     ],
 )
 
-loom_cc_binary(
+loomc_cc_binary(
     name = "loom-run",
     srcs = ["loom-run.c"],
     copts = _LOOM_RUN_EXECUTE_COPTS,
     deps = [
         ":main",
         "//loom/binding/c/target/configured",
-        "//loom/src/loom/tooling/input:configured",
         "//loom/src/loom/tooling/input:loomc_configured",
         "//runtime/src/iree/base",
     ] + _LOOM_RUN_EXECUTE_DEPS,

@@ -600,6 +600,25 @@ loom_check_compile_tests(
 )
 endif()
 
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+loom_generated_file(
+  NAME
+    multiple_entries_bytecode
+  GENERATOR
+    loom::tools::loom-format
+  OUTPUT
+    "multiple_entries.loombc"
+  OUTPUT_FLAG
+    "--output="
+  ARGS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/spirv/test/multiple_entries.loom"
+    "--to=bytecode"
+  INPUTS
+    "test/multiple_entries.loom"
+  TESTONLY
+)
+endif()
+
 if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 iree_native_test(
   NAME
@@ -621,6 +640,35 @@ iree_native_test(
     loom::tools::loom-run
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/spirv/test/multiple_entries.loom"
+  LABELS
+    "iree-run-requirement=vulkan.resource.device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+iree_native_test(
+  NAME
+    "aliased_entry_bytecode_test"
+  ARGS
+    "{{${CMAKE_CURRENT_BINARY_DIR}/multiple_entries.loombc}}"
+    "--device=vulkan"
+    "--vulkan_validation_layers=false"
+    "--root=@combine"
+    "--kernel-input-buffer=1xi32=6"
+    "--kernel-input-buffer=1xi32=10"
+    "--kernel-input-buffer=1xi32=0"
+    "--kernel-input-value=i32=4"
+    "--kernel-input-value=i32=5"
+    "--expected-kernel-buffer=1xi32=6"
+    "--expected-kernel-buffer=1xi32=10"
+    "--expected-kernel-buffer=1xi32=25"
+  SRC
+    loom::tools::loom-run
+  DATA
+    "${CMAKE_CURRENT_BINARY_DIR}/multiple_entries.loombc"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "runtime-resource=vulkan-device"

@@ -16,6 +16,7 @@ package(
 
 exports_files([
     "aiter_swiglu_f16.cxx",
+    "array_records_kernel.cxx",
     "check_records.cxx",
     "configured_workgroup_storage.cxx",
     "flash_attention.cxx",
