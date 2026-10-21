@@ -1239,6 +1239,8 @@ class BuildFileFunctions(object):
             "iree_generated_files requires an explicit CMake projection"
         )
 
+    iree_generated_sources = iree_generated_files
+
     def objc_library(self, tags=None, **kwargs):
         if self._should_skip_target(tags=tags):
             return

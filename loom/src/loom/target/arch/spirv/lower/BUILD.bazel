@@ -8,7 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_config_compatible_with",
-    "loom_generated_file",
+    "loom_generated_source",
 )
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
 
@@ -20,14 +20,14 @@ package(
 
 _SPIRV_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/spirv:__pkg__"]
 
-loom_generated_file(
+loom_generated_source(
     name = "collective_rows_gen",
     generator = "//loom/py/loom/gen/target/arch/spirv:collective_rows",
     output = "collective_rows.inl",
     output_flag = "--tables",
 )
 
-loom_generated_file(
+loom_generated_source(
     name = "workgroup_reduce_rows_gen",
     generator = "//loom/py/loom/gen/target/arch/spirv:collective_rows",
     output = "workgroup_reduce_rows.inl",

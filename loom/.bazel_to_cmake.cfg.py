@@ -1168,6 +1168,12 @@ class LoomBuildFileFunctions(
         )
         self._emit_platform_guard_end(target_compatible_with)
 
+    # CMake has no target/exec configuration split. Sources invariant across
+    # that transition therefore use the same custom-command representation as
+    # ordinary generated files.
+    loom_generated_source = loom_generated_file
+    loom_generated_source_family = loom_generated_file_family
+
     def loom_generated_cc_library(
         self,
         name,

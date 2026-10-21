@@ -8,7 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_generated_file_family",
+    "loom_generated_source_family",
 )
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test")
 
@@ -58,7 +58,7 @@ exports_files(
     visibility = ["//loom/py/loom/target/arch/amdgpu/contracts:__pkg__"],
 )
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "fp8_tables_gen",
     generator = _AMDGPU_NARROW_FLOAT_TABLE_GENERATOR,
     output_flags = [

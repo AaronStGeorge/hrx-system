@@ -9,7 +9,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
-    "loom_generated_file_family",
+    "loom_generated_source_family",
 )
 
 package(
@@ -35,7 +35,7 @@ loom_generated_cc_library(
     deps = ["//loom/src/loom/error:error_defs"],
 )
 
-loom_generated_file_family(
+loom_generated_source_family(
     name = "hardware_tables_gen",
     generator = "//loom/py/loom/gen/target/arch/amd/xdna:hardware_tables",
     output_flags = [
