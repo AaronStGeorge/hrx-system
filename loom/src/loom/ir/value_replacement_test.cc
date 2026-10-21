@@ -14,6 +14,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_descriptor.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/test/registry.h"
 #include "loom/ops/test/types.h"
@@ -26,8 +27,15 @@ static const loom_attr_descriptor_t kLookupParameters[] = {{
     .attr_kind = LOOM_ATTR_DICT,
 }};
 
-static const loom_parameterized_type_descriptor_t kLookupDescriptor = {
-    .name = LOOM_BSTRING_REF(11, "test.lookup"),
+extern const loom_parameterized_type_descriptor_t kLookupDescriptor;
+static const loom_type_descriptor_t kLookupType = {
+    .name = LOOM_BSTRING_REF(11, "test.lookup<"),
+    .ir_kind = LOOM_TYPE_PARAMETERIZED,
+    .param_count = IREE_ARRAYSIZE(kLookupParameters),
+    .parameterized = &kLookupDescriptor,
+};
+const loom_parameterized_type_descriptor_t kLookupDescriptor = {
+    .type_descriptor = &kLookupType,
     .parameter_descriptors = kLookupParameters,
     .fact_domain = nullptr,
     .ir_kind = LOOM_TYPE_PARAMETERIZED,

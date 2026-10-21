@@ -38,7 +38,7 @@
     {
       "name": "executes calls between authored and inherited compatible target contexts",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_call_context.loom"
         ]
@@ -52,9 +52,9 @@
       }
     },
     {
-      "name": "iree-test-loom applies invocation config 5 before VM compilation",
+      "name": "loom-test applies invocation config 5 before VM compilation",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_config.loom",
           "--case=five",
@@ -70,9 +70,9 @@
       }
     },
     {
-      "name": "iree-benchmark-loom applies invocation config 5 before VM compilation",
+      "name": "loom-benchmark applies invocation config 5 before VM compilation",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/source_config.loom",
           "--case=five",
@@ -89,9 +89,9 @@
       }
     },
     {
-      "name": "iree-test-loom applies invocation config 9 before VM compilation",
+      "name": "loom-test applies invocation config 9 before VM compilation",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_config.loom",
           "--case=nine",
@@ -107,9 +107,9 @@
       }
     },
     {
-      "name": "iree-benchmark-loom applies invocation config 9 before VM compilation",
+      "name": "loom-benchmark applies invocation config 9 before VM compilation",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/source_config.loom",
           "--case=nine",
@@ -128,7 +128,7 @@
     {
       "name": "VM compilation resolves a linked helper source snapshot",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_math_case.loom",
           "--library={srcdir}/source_math.loom"
@@ -178,7 +178,7 @@
     {
       "name": "benchmark correctness failure reports the authored assertion range",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/source_mismatch.loom",
           "--iterations=1",
@@ -199,9 +199,9 @@
       }
     },
     {
-      "name": "iree-test-loom reports the authored assertion range after linking",
+      "name": "loom-test reports the authored assertion range after linking",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_cases.loom",
           "--library={srcdir}/source_mismatch.loom",
@@ -223,7 +223,7 @@
     {
       "name": "rejects an unavailable callee when a case actually invokes it",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_unavailable.loom",
           "--library={srcdir}/source_cases.loom"
@@ -241,7 +241,7 @@
     {
       "name": "executes a selected source closure with public and private invocation roots",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_cases.loom"
         ]
@@ -258,7 +258,7 @@
     {
       "name": "uses the same invocation closure after execution library linking",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/source_library_cases.loom",
           "--library={srcdir}/source_cases.loom"
@@ -275,7 +275,7 @@
     {
       "name": "benchmarks a source case after its VM correctness gate",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/source_cases.loom",
           "--iterations=1",

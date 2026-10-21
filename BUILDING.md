@@ -226,23 +226,34 @@ up that sanitizer environment separately.
 ### Shared Loom tool bundles
 
 Loom tools link statically by default. Release bundles can share the compiler
-and runtime used by `loom-compile`, `loom-opt`, and `loom-import-cxx`:
+and runtime used by `loom-compile`, `loom-opt`, `loom-format`, `loom-link`,
+`loom-import-cxx`, `loom-run`, and `loom-serve`:
 
 ```bash
 iree-bazel-build --config=opt --//loom/config:shared_tools \
   //loom/src/loom/tools/loom-compile \
   //loom/src/loom/tools/loom-opt \
+  //loom/src/loom/tools/loom-run \
   //loom/src/loom/tools/loom-serve
 iree-cmake-configure -DLOOM_LINK_SHARED_TOOLS=ON
 ```
 
 The shared mode packages one `libloomc` and one `libiree` alongside the compiler
-tools. `loom-serve` keeps its compiler and runtime statically linked in either
-mode, retaining whole-program optimization and standalone deployment.
+tools and server. `loom-serve` keeps its serving implementation in the executable
+while reusing the same compiler and runtime companions as the other shared tools.
+`loom-check`, `loom-test`, and `loom-benchmark` retain static linkage in shared-tool
+mode.
 The IREE companion includes the configured HAL drivers. Deploy all files from
 the same build; these companion libraries have no independent ABI version.
-Shared compiler tools trade some cross-library optimization for a smaller
-bundle. Local development and benchmarks retain the default static mode.
+Shared tools trade some cross-library optimization for a smaller bundle. Local
+development and performance-focused standalone deployments retain the default
+static mode, including a self-contained `loom-serve` executable.
+
+ELF shared-tool bundles bind internal function references to the implementation
+in the owning companion library. This avoids interposable procedure-linkage
+table entries while leaving data symbols and undefined external hooks under
+ordinary ELF resolution. Function interposition is not an extension mechanism
+for these exact-build companions; application callbacks use the public APIs.
 
 CMake shared tools require CMake 3.27 or newer and static component libraries
 (`BUILD_SHARED_LIBS=OFF`). This option controls final tool composition separately
@@ -364,7 +375,7 @@ $env:BAZEL_LLVM = 'C:\Program Files\LLVM'
 python dev.py bazel setup --venv
 python dev.py bazel configure
 python dev.py bazel build `
-  //loom/src/loom/tools/iree-run-loom `
+  //loom/src/loom/tools/loom-run `
   //loom/src/loom/tools/loom-compile `
   //loom/binding/c:loomc
 ```
@@ -376,7 +387,7 @@ Neither native command needs `--config=windows-x86_64`:
 
 ```powershell
 python dev.py bazel build `
-  //loom/src/loom/tools/iree-run-loom `
+  //loom/src/loom/tools/loom-run `
   //loom/src/loom/tools/loom-compile `
   //loom/binding/c:loomc `
   --config=windows-msvc

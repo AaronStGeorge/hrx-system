@@ -4,7 +4,7 @@
     {
       "name": "single-dispatch comparisons omit suppressed profile artifacts",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/benchmark_profile_policy.loom",
           "--device=amdgpu",
@@ -42,7 +42,7 @@
     {
       "name": "dispatch-sequence comparisons preserve suppression in snapshots",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/benchmark_profile_policy.loom",
           "--device=amdgpu",

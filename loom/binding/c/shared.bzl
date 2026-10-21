@@ -173,7 +173,14 @@ def loomc_shared_libraries(name, components, runtime_deps, tool_components = [])
             user_link_flags = cc_opts.iree_code_link_options() + select({
                 "@platforms//os:macos": ["-Wl,-exported_symbols_list,$(location cmake/" + library_name + "_exports.macos)"],
                 "@platforms//os:windows": [],
-                "//conditions:default": ["-Wl,--version-script=$(location " + export_file + ")", "-Wl,-rpath,$ORIGIN"],
+                # These exact-build companions own their implementations. Bind
+                # internal function references without binding data symbols or
+                # undefined external hooks.
+                "//conditions:default": [
+                    "-Wl,--version-script=$(location " + export_file + ")",
+                    "-Wl,-Bsymbolic-functions",
+                    "-Wl,-rpath,$ORIGIN",
+                ],
             }),
             target_compatible_with = compatible_with,
         )

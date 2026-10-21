@@ -19,13 +19,13 @@ output_dir="$(cd -- "${output_dir}" && pwd -P)"
   //loom/src/loom/tools/loom-format \
   //loom/src/loom/tools/loom-link \
   //loom/src/loom/tools/loom-compile \
-  //loom/src/loom/tools/iree-benchmark-loom \
+  //loom/src/loom/tools/loom-benchmark \
   //loom/py/loom/tools:loom-compile-report
 loom_format="${repo_root}/bazel-bin/loom/src/loom/tools/loom-format/loom-format"
 loom_link="${repo_root}/bazel-bin/loom/src/loom/tools/loom-link/loom-link"
 loom_compile="${repo_root}/bazel-bin/loom/src/loom/tools/loom-compile/loom-compile"
 loom_report="${repo_root}/bazel-bin/loom/py/loom/tools/loom-compile-report"
-loom_benchmark="${repo_root}/bazel-bin/loom/src/loom/tools/iree-benchmark-loom/iree-benchmark-loom"
+loom_benchmark="${repo_root}/bazel-bin/loom/src/loom/tools/loom-benchmark/loom-benchmark"
 
 cp -- "${script_dir}/read-ahead.loom" "${output_dir}/read-ahead.loom"
 cp -- "${script_dir}/read-ahead-tests.loom" "${output_dir}/read-ahead-tests.loom"

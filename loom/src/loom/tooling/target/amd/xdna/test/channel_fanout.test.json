@@ -4,7 +4,7 @@
     {
       "name": "executes finite strided and repeated ingress with replay",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/finite_ingress.loom",
           "--device=xdna://0?columns=1"
@@ -22,7 +22,7 @@
     {
       "name": "executes finite multicast tasks through compute and SRAM rings with replay",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/channel_fanout.loom",
           "--device=xdna://0?columns=2"
@@ -41,7 +41,7 @@
     {
       "name": "executes two SRAM broadcasts across all four compute rows",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/channel_sram.loom",
           "--device=xdna://0?columns=3",
@@ -62,7 +62,7 @@
     {
       "name": "retires terminal compute and SRAM DMA before replay",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/channel_sram.loom",
           "--device=xdna://0?columns=1",

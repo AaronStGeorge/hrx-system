@@ -423,8 +423,7 @@ static iree_status_t loom_print_descriptor_backed_type(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "parameterized type has no family descriptor");
     }
-    descriptor = loom_type_registry_lookup(
-        module->context, loom_bstring_view(parameterized->name));
+    descriptor = parameterized->type_descriptor;
     parameter_count = loom_type_parameterized_parameter_count(type);
     parameters = loom_type_parameterized_parameters(type);
   } else {
@@ -447,10 +446,6 @@ static iree_status_t loom_print_descriptor_backed_type(
             : loom_attr_enum(payload);
     parameter_count = 1;
     parameters = &inline_parameter;
-  }
-  if (!descriptor || descriptor->parameterized != parameterized) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "parameterized type family is not registered");
   }
   if (parameter_count != parameterized->parameter_count ||
       (parameter_count > 0 && !parameters)) {

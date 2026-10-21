@@ -12,7 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ir/parameterized_type.h"
+#include "loom/ir/type_descriptor.h"
 
 namespace loom {
 namespace {
@@ -68,8 +68,15 @@ static const loom_attr_descriptor_t kRepeatedTypeParameters[] = {
     },
 };
 
-static const loom_parameterized_type_descriptor_t kRepeatedTypeDescriptor = {
-    .name = LOOM_BSTRING_REF(13, "test.repeated"),
+extern const loom_parameterized_type_descriptor_t kRepeatedTypeDescriptor;
+static const loom_type_descriptor_t kRepeatedType = {
+    .name = LOOM_BSTRING_REF(13, "test.repeated<"),
+    .ir_kind = LOOM_TYPE_PARAMETERIZED,
+    .param_count = IREE_ARRAYSIZE(kRepeatedTypeParameters),
+    .parameterized = &kRepeatedTypeDescriptor,
+};
+const loom_parameterized_type_descriptor_t kRepeatedTypeDescriptor = {
+    .type_descriptor = &kRepeatedType,
     .parameter_descriptors = kRepeatedTypeParameters,
     .fact_domain = nullptr,
     .ir_kind = LOOM_TYPE_PARAMETERIZED,
@@ -82,8 +89,15 @@ static const loom_attr_descriptor_t kRepeatedDictParameters[] = {{
     .attr_kind = LOOM_ATTR_DICT,
 }};
 
-static const loom_parameterized_type_descriptor_t kRepeatedDictDescriptor = {
-    .name = LOOM_BSTRING_REF(18, "test.repeated_dict"),
+extern const loom_parameterized_type_descriptor_t kRepeatedDictDescriptor;
+static const loom_type_descriptor_t kRepeatedDictType = {
+    .name = LOOM_BSTRING_REF(18, "test.repeated_dict<"),
+    .ir_kind = LOOM_TYPE_PARAMETERIZED,
+    .param_count = IREE_ARRAYSIZE(kRepeatedDictParameters),
+    .parameterized = &kRepeatedDictDescriptor,
+};
+const loom_parameterized_type_descriptor_t kRepeatedDictDescriptor = {
+    .type_descriptor = &kRepeatedDictType,
     .parameter_descriptors = kRepeatedDictParameters,
     .fact_domain = nullptr,
     .ir_kind = LOOM_TYPE_PARAMETERIZED,

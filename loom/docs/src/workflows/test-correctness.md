@@ -1,6 +1,6 @@
 # Test correctness
 
-`iree-test-loom` executes [`check.case`](../reference/dialects/check/ops/case.md)
+`loom-test` executes [`check.case`](../reference/dialects/check/ops/case.md)
 and [`check.scenario`](../reference/dialects/check/ops/scenario.md) programs in
 an ordinary `.loom` or `.loombc` module. The same source can create inputs, call
 reference functions, launch kernels, compare an unchanged subject across target
@@ -13,7 +13,7 @@ report, and returns failure when any planned sample or trial fails.
 With the Loom tools on `PATH`, pass the authored module directly to the runner:
 
 ```shell
-iree-test-loom program.loom
+loom-test program.loom
 ```
 
 Cases and scenarios execute in source order. Reference-only cases and VM-only
@@ -22,7 +22,7 @@ scenarios need no device. Cases that contain
 whose target runs through HAL, use the device selected for the run:
 
 ```shell
-iree-test-loom program.loom --device=amdgpu
+loom-test program.loom --device=amdgpu
 ```
 
 The device normally selects the most specific compatible compiler target. An
@@ -30,7 +30,7 @@ explicit target keeps cross-device comparisons on a stable compilation
 baseline:
 
 ```shell
-iree-test-loom program.loom \
+loom-test program.loom \
   --device=amdgpu \
   --target=amdgpu:gfx11-generic
 ```
@@ -58,7 +58,7 @@ loom-check --target=spirv:vulkan1.3+bda program.loombc
 Each source case must produce a nonempty final artifact or exactly match its
 diagnostic annotations. Linked kernel entries compile independently, just as
 independent runtime launches do. This checks compilation, not numerical
-correctness: `check.expect` programs still need `iree-test-loom` on the intended
+correctness: `check.expect` programs still need `loom-test` on the intended
 execution device.
 
 Compilation leaves ordinary `RUN` goldens unchanged, ignores their execution
@@ -72,7 +72,7 @@ A source file can keep smoke cases, edge cases, and larger validation cases
 beside the same implementation. Select one symbol while iterating:
 
 ```shell
-iree-test-loom program.loom --case=@decode_tail
+loom-test program.loom --case=@decode_tail
 ```
 
 [`check.param.choice`](../reference/dialects/check/ops/param-choice.md) and the
@@ -80,7 +80,7 @@ other parameter generators expand one case into concrete samples. Select one
 planned sample by ordinal when investigating a failure:
 
 ```shell
-iree-test-loom program.loom --case=@decode_shapes --sample=1
+loom-test program.loom --case=@decode_shapes --sample=1
 ```
 
 The ordinal selects from the deterministic plan; it is not a random seed. A
@@ -88,7 +88,7 @@ generator-heavy case is bounded explicitly when its Cartesian product would be
 larger than the evidence needed for one run:
 
 ```shell
-iree-test-loom program.loom --max-samples-per-case=16
+loom-test program.loom --max-samples-per-case=16
 ```
 
 ## Compare a target against its oracle
@@ -98,7 +98,7 @@ profile as the oracle and, when a HAL device is selected, prepares the target
 for that device:
 
 ```shell
-iree-test-loom program.loom \
+loom-test program.loom \
   --case=@advance_sweep \
   --device=amdgpu \
   --target=amdgpu:gfx1151 \
@@ -154,7 +154,7 @@ it calls, own private wrapper kernels and `check.case` programs, and load the
 implementation as bytecode libraries:
 
 ```shell
-iree-test-loom test.loom \
+loom-test test.loom \
   --library=motifs.loombc \
   --library=kernels.loombc
 ```
@@ -178,7 +178,7 @@ Configuration bindings specialize the private compile copy used for HAL
 launches:
 
 ```shell
-iree-test-loom program.loom \
+loom-test program.loom \
   --device=amdgpu \
   --config=model.hidden_size=4096
 ```
@@ -187,7 +187,7 @@ Larger configuration objects can be supplied as JSON or JSONC. Nested object
 keys flatten with `.` separators:
 
 ```shell
-iree-test-loom program.loom \
+loom-test program.loom \
   --device=amdgpu \
   --config-file=model-config.jsonc
 ```
@@ -203,11 +203,11 @@ Sanitizers are target-pipeline instrumentation, so the same authored case and
 expectations remain in use:
 
 ```shell
-iree-test-loom program.loom \
+loom-test program.loom \
   --device=amdgpu \
   --sanitizer=access
 
-iree-test-loom program.loom \
+loom-test program.loom \
   --device=amdgpu \
   --sanitizer=asan \
   --sanitizer-reporting=report-only
@@ -227,7 +227,7 @@ being measured.
 Capture the report when a run is part of CI or a larger investigation:
 
 ```shell
-iree-test-loom program.loom >test-results.json
+loom-test program.loom >test-results.json
 ```
 
 The first useful views are bounded summaries rather than the complete payload:
@@ -250,7 +250,7 @@ means a declared requirement was unavailable; it is distinct from a passed
 sample. Planning issues identify a case and source operation that could not be
 formed into executable work.
 
-`iree-test-loom` writes the JSON report before returning a failing process
+`loom-test` writes the JSON report before returning a failing process
 status. CI therefore gets both a hard failure and the structured explanation.
 
 ## Continue to measurement

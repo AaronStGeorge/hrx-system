@@ -292,12 +292,12 @@ correctness or measured device throughput.
 
 ## The caller owns the invocation lifetime
 
-The normal `iree-test-loom` path can compile and execute buffer-bound XDNA
+The normal `loom-test` path can compile and execute buffer-bound XDNA
 pipelines through the
 [XDNA HAL](https://github.com/ROCm/hrx-system/tree/main/runtime/src/iree/hal/drivers/amd/xdna):
 
 ```shell
-iree-test-loom checked-pipeline.loom --device=xdna
+loom-test checked-pipeline.loom --device=xdna
 ```
 
 The HAL selects the exact compiler profile from immutable device facts, loads

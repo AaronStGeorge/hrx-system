@@ -96,7 +96,8 @@ typedef struct loom_type_descriptor_t {
   const loom_type_format_element_t* format_elements;
   // Number of entries in `format_elements`.
   uint8_t format_element_count;
-  // Descriptor-backed parameter schema, or NULL when not declared.
+  // Descriptor-backed parameter schema whose type_descriptor refers to this
+  // descriptor, or NULL when not declared.
   const loom_parameterized_type_descriptor_t* parameterized;
   // Borrowed immutable identity for MANAGED_REFERENCE, otherwise NULL. Managed
   // references are opaque dialect types with no parameters or interior format.

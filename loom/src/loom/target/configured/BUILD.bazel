@@ -243,8 +243,6 @@ loom_cc_library(
     copts = _CONFIGURED_COMPILER_COPTS,
     visibility = [
         "//loom/binding/c/target/configured:__pkg__",
-        "//loom/src/loom/tools/iree-benchmark-loom:__pkg__",
-        "//loom/src/loom/tools/iree-test-loom:__pkg__",
         "//loom/src/loom/tools/loom-check:__pkg__",
     ],
     deps = [

@@ -111,7 +111,7 @@ iree_native_test(
     "{{${CMAKE_CURRENT_BINARY_DIR}/generic_test_module.loombc}}"
     "--device=amdgpu"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${CMAKE_CURRENT_BINARY_DIR}/generic_test_module.loombc"
   LABELS
@@ -197,7 +197,7 @@ iree_native_test(
     "--device=amdgpu"
     "--config=benchmark.pair_count=16"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${CMAKE_CURRENT_BINARY_DIR}/gfx11_test_module.loombc"
   LABELS
@@ -234,7 +234,7 @@ iree_native_test(
     "--device=amdgpu"
     "--sanitizer=access"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${CMAKE_CURRENT_BINARY_DIR}/gfx11_loop_entry_module.loombc"
   LABELS
@@ -271,7 +271,7 @@ iree_native_test(
     "{{${CMAKE_CURRENT_BINARY_DIR}/gfx1100_test_module.loombc}}"
     "--device=amdgpu"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${CMAKE_CURRENT_BINARY_DIR}/gfx1100_test_module.loombc"
   LABELS
@@ -308,7 +308,7 @@ iree_native_test(
     "{{${CMAKE_CURRENT_BINARY_DIR}/gfx9_4_test_module.loombc}}"
     "--device=amdgpu"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${CMAKE_CURRENT_BINARY_DIR}/gfx9_4_test_module.loombc"
   LABELS

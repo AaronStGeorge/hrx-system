@@ -48,8 +48,8 @@ python dev.py bazel build \
   //loom/src/loom/tools/loom-check:loom-check \
   //loom/src/loom/tools/loom-compile:loom-compile \
   //loom/src/loom/tools/loom-link:loom-link \
-  //loom/src/loom/tools/iree-test-loom:iree-test-loom \
-  //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom \
+  //loom/src/loom/tools/loom-test:loom-test \
+  //loom/src/loom/tools/loom-benchmark:loom-benchmark \
   //loom/py/loom/tools:loom-compile-report \
   //loom/binding/c:loomc \
   //loom/binding/c/example:source_info \
@@ -83,7 +83,7 @@ python dev.py bazel test \
 You can also run the benchmark planner directly:
 
 ```bash
-python dev.py bazel run //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom -- \
+python dev.py bazel run //loom/src/loom/tools/loom-benchmark:loom-benchmark -- \
   loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom \
   --dry-run \
   --config=mlp_down_projection_residual_bf16.row_capacity=3584
@@ -97,7 +97,7 @@ same source:
 ```bash
 python dev.py bazel run \
   --//runtime/config/hal:drivers=amdgpu,task \
-  //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom -- \
+  //loom/src/loom/tools/loom-benchmark:loom-benchmark -- \
   loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom \
   --config=mlp_down_projection_residual_bf16.row_capacity=3584 \
   --device=amdgpu \
@@ -123,7 +123,7 @@ target listings, and correctness-gated dispatch benchmark bundles.
 ## Inspect Compile Reports
 
 `loom-compile-report` provides a bounded first view over the structured reports
-emitted by `loom-compile` and `iree-benchmark-loom`:
+emitted by `loom-compile` and `loom-benchmark`:
 
 ```bash
 python dev.py bazel run //loom/py/loom/tools:loom-compile-report -- \
@@ -289,7 +289,7 @@ useful when evaluating Loom as a compiler for target-explicit IREE HAL loading.
 | [loom/py/loom/dialect](/loom/py/loom/dialect) | Python op/dialect authoring DSL, assembly formats, and source-format migration breadcrumbs |
 | [loom/py/loom/migration](/loom/py/loom/migration) | Source migration driver, rule generation, baselines, compatibility windows, and `loom-migrate` |
 | [src/loom/test/corpus/authoring](src/loom/test/corpus/authoring) | Canonical hand-authored Loom examples for model/kernel-shaped source |
-| [src/loom/tools/iree-benchmark-loom](src/loom/tools/iree-benchmark-loom) | Runner for `check.case`, `check.benchmark`, correctness samples, timing, and reports |
+| [src/loom/tools/loom-benchmark](src/loom/tools/loom-benchmark) | Runner for `check.case`, `check.benchmark`, correctness samples, timing, and reports |
 | [src/loom/tools/loom-check](src/loom/tools/loom-check) | Text/test corpus checking and `--update` workflow |
 | [src/loom/target](src/loom/target) | Target providers, target-low infrastructure, artifact plans, and compile reports |
 | [src/loom/target/arch/amdgpu](src/loom/target/arch/amdgpu) | AMDGPU source-to-low policy and target contracts |

@@ -861,6 +861,10 @@ class CiTest(unittest.TestCase):
         self.assertIn("//loom/src/loom/tools/loom-opt:execution_test", steps[6].argv)
         self.assertIn("//loom/src/loom/tools/loom-format:execution_test", steps[6].argv)
         self.assertIn("//loom/src/loom/tools/loom-link:execution_test", steps[6].argv)
+        self.assertIn("//loom/src/loom/tools/loom-run:execution_test", steps[6].argv)
+        self.assertIn(
+            "//loom/src/loom/tooling/target/cpu:run_cxx_input_test", steps[6].argv
+        )
         self.assertIn(
             "//loom/src/loom/import/cxx/tooling:execution_test", steps[6].argv
         )
@@ -1843,12 +1847,18 @@ fi
         self.assertIn("loom-import-cxx", steps[configure_index + 1].argv)
         self.assertIn("loom-format", steps[configure_index + 1].argv)
         self.assertIn("loom-link", steps[configure_index + 1].argv)
+        self.assertIn("loom-run", steps[configure_index + 1].argv)
         self.assertIn(
             "loom_import_cxx_tooling_execution_test_test_deps",
             steps[configure_index + 1].argv,
         )
         self.assertIn("loom-link", steps[-1].argv[steps[-1].argv.index("-R") + 1])
         self.assertIn("loom-format", steps[-1].argv[steps[-1].argv.index("-R") + 1])
+        self.assertIn("loom-run", steps[-1].argv[steps[-1].argv.index("-R") + 1])
+        self.assertIn(
+            "loom/tooling/target/cpu/run_cxx_input_test",
+            steps[-1].argv[steps[-1].argv.index("-R") + 1],
+        )
         self.assertIn(
             "loom_tooling_target_cpu_serve_loom-serve-test-tool",
             steps[configure_index + 1].argv,

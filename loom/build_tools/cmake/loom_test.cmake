@@ -83,7 +83,7 @@ function(_loom_declare_execution_test ID)
   get_target_property(_DATA "${_MODULE_TARGET}" LOOM_TEST_DATA)
   iree_native_test(
     NAME "${_RULE_NAME}"
-    SRC loom::tools::iree-test-loom
+    SRC loom::tools::loom-test
     ARGS "{{${_MODULE}}}" ${_RULE_RUNNER_ARGS} ${_RULE_ARGS}
     DATA ${_DATA}
     LABELS ${_RULE_LABELS}
@@ -92,7 +92,7 @@ function(_loom_declare_execution_test ID)
   if(NOT _RULE_CORRECTNESS_ONLY)
     iree_native_test(
       NAME "${_RULE_NAME}_benchmark"
-      SRC loom::tools::iree-benchmark-loom
+      SRC loom::tools::loom-benchmark
       ARGS "{{${_MODULE}}}" ${_RULE_RUNNER_ARGS} --iterations=1 --warmup-iterations=0
         --output-format=jsonl --compile-report=none
       DATA ${_DATA}

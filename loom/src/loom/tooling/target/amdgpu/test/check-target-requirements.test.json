@@ -4,7 +4,7 @@
     {
       "name": "executes compatible targets and skips incompatible targets before compilation",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/check_target_requirements.loom",
           "--device=amdgpu"
@@ -23,7 +23,7 @@
     {
       "name": "benchmarks only the compatible target",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/check_target_requirements.loom",
           "--device=amdgpu",

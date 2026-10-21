@@ -627,7 +627,7 @@ instead of being repeated in every tool's help.
 
 ## Relate reports to benchmark results
 
-`iree-benchmark-loom` can retain the same compile-report tree beside timing
+`loom-benchmark` can retain the same compile-report tree beside timing
 evidence. Debug and full artifact bundles write per-candidate report sidecars;
 JSONL compile rows identify candidates so report, correctness, profile, and
 benchmark events can be joined.

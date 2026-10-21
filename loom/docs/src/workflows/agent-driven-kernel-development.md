@@ -227,12 +227,12 @@ The cheap front of the loop uses the public tools:
 ```shell
 loom-format --check kernel.loom
 
-iree-benchmark-loom kernel.loom \
+loom-benchmark kernel.loom \
   --benchmark=@production_bucket \
   --dry-run \
   --output=plan.json
 
-iree-test-loom kernel.loom \
+loom-test kernel.loom \
   --case=@production_cut_case \
   --device=amdgpu \
   --sanitizer=access
@@ -567,7 +567,7 @@ traffic reduction, or resolving a noisy boundary near the stop threshold.
 Two candidates in one module can run under an interleaved policy:
 
 ```shell
-iree-benchmark-loom candidates.loom \
+loom-benchmark candidates.loom \
   --device=amdgpu \
   --compare=@baseline,@candidate \
   --sample=0 \

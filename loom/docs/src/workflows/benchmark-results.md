@@ -1,6 +1,6 @@
 # Read benchmark results
 
-`iree-benchmark-loom` joins planning, compilation, correctness, execution, and
+`loom-benchmark` joins planning, compilation, correctness, execution, and
 measurement evidence. Its default snapshot is convenient when one process can
 consume the complete result. JSONL preserves the same run as a stream of typed
 events for long sweeps, live inspection, and interleaved comparisons.
@@ -347,7 +347,7 @@ directory implies `--profile-final-batch=true` unless that flag was explicitly
 set false:
 
 ```shell
-iree-benchmark-loom kernel.loom \
+loom-benchmark kernel.loom \
   --benchmark=@kernel_latency \
   --device=amdgpu \
   --measure=dispatch_complete \

@@ -118,11 +118,11 @@ Targetless Loom source can be exercised through the Vulkan/SPIR-V path and the
 native AMDGPU path without forking the algorithm:
 
 ```shell
-iree-test-loom kernel.loom \
+loom-test kernel.loom \
   --case=@production_cut_case \
   --device=vulkan
 
-iree-test-loom kernel.loom \
+loom-test kernel.loom \
   --case=@production_cut_case \
   --device=amdgpu
 ```
@@ -130,13 +130,13 @@ iree-test-loom kernel.loom \
 Use the same checked benchmark catalog for controlled physical comparison:
 
 ```shell
-iree-benchmark-loom kernel.loom \
+loom-benchmark kernel.loom \
   --benchmark=@production_bucket \
   --device=vulkan \
   --output-format=jsonl \
   --output=vulkan.jsonl
 
-iree-benchmark-loom kernel.loom \
+loom-benchmark kernel.loom \
   --benchmark=@production_bucket \
   --device=amdgpu \
   --output-format=jsonl \

@@ -9,4 +9,190 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    xfail
+  HDRS
+    "xfail.h"
+  SRCS
+    "xfail.c"
+  DEPS
+    iree::base
+    loom::binding::c::loomc
+    loom::error::diagnostic
+    loom::error::error_defs
+    loom::tooling::cli::loomc_result
+    loom::tooling::testbench::api
+    loom::tooling::testbench::expectation
+    loom::util::json
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    main
+  HDRS
+    "main.h"
+  SRCS
+    "main.c"
+  DEPS
+    ::xfail
+    iree::base
+    iree::base::internal::arena
+    iree::base::internal::path
+    iree::base::tooling::flags
+    iree::hal::memory::heap_pool
+    iree::io::stream
+    loom::binding::c::interop
+    loom::binding::c::loomc
+    loom::binding::c::target::iree_hal
+    loom::config::text_binding
+    loom::ops::check
+    loom::sanitizer::options
+    loom::tooling::cli::help
+    loom::tooling::cli::loomc_options
+    loom::tooling::cli::loomc_result
+    loom::tooling::config::input
+    loom::tooling::execution::hal::scenario_profile
+    loom::tooling::execution::hal::testbench_actual
+    loom::tooling::input::flags
+    loom::tooling::input::format
+    loom::tooling::input::loomc
+    loom::tooling::io::file
+    loom::tooling::testbench::compiled_provider
+    loom::tooling::testbench::device_event
+    loom::tooling::testbench::executor
+    loom::tooling::testbench::invocation
+    loom::tooling::testbench::issue_report
+    loom::tooling::testbench::reference
+    loom::tooling::testbench::requirements
+    loom::tooling::testbench::scenario::entropy
+    loom::tooling::testbench::scenario::executor
+    loom::tooling::testbench::scenario::values
+    loom::util::json
+    loom::util::stream
+  PUBLIC
+)
+
+set(_loom_test_platform_copts "")
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD))
+  list(APPEND _loom_test_platform_copts "-DLOOM_TEST_HAVE_AMDGPU=1")
+endif()
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+  list(APPEND _loom_test_platform_copts "-DLOOM_TEST_HAVE_SPIRV=1")
+endif()
+if(LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+  list(APPEND _loom_test_platform_copts "-DLOOM_TEST_HAVE_XDNA=1")
+endif()
+if(LOOM_TARGET_ARCH_VM)
+  list(APPEND _loom_test_platform_copts "-DLOOM_TEST_HAVE_VM=1")
+endif()
+if(LOOM_TARGET_ARCH_WASM)
+  list(APPEND _loom_test_platform_copts "-DLOOM_TEST_HAVE_WASM=1")
+endif()
+if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK)
+  list(APPEND _loom_test_platform_copts "-DLOOM_TEST_HAVE_TASK=1")
+endif()
+set(_loom_test_platform_deps "")
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD))
+  list(APPEND _loom_test_platform_deps loom::binding::c::target::amdgpu::iree_hal)
+  list(APPEND _loom_test_platform_deps loom::tooling::target::amdgpu::testbench_requirements)
+endif()
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+  list(APPEND _loom_test_platform_deps loom::binding::c::target::spirv::iree_hal)
+  list(APPEND _loom_test_platform_deps loom::tooling::target::spirv::testbench_requirements)
+endif()
+if(LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+  list(APPEND _loom_test_platform_deps loom::binding::c::target::amd::xdna::iree_hal)
+endif()
+if(LOOM_TARGET_ARCH_VM)
+  list(APPEND _loom_test_platform_deps loom::tooling::target::vm::testbench)
+endif()
+if(LOOM_TARGET_ARCH_WASM)
+  list(APPEND _loom_test_platform_deps loom::tooling::target::wasm::testbench)
+endif()
+if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK)
+  list(APPEND _loom_test_platform_deps loom::binding::c::target::cpu::iree_hal)
+endif()
+loom_cc_binary(
+  NAME
+    loom-test
+  SRCS
+    "loom-test.c"
+  COPTS
+    ${_loom_test_platform_copts}
+  DEPS
+    ::main
+    iree::base
+    loom::binding::c::loomc
+    loom::binding::c::target::configured
+    loom::tooling::execution::hal::testbench_actual
+    loom::tooling::input::loomc_configured
+    ${_loom_test_platform_deps}
+)
+
+loom_cc_binary(
+  NAME
+    scenario_failure_test_tool
+  SRCS
+    "scenario_failure_test.c"
+  DEPS
+    ::main
+    iree::base
+    iree::hal
+    loom::ir
+    loom::tooling::testbench::requirements
+    loom::tooling::testbench::scenario::executor
+  TESTONLY
+)
+
+iree_execution_test_suite(
+  NAME
+    execution_test
+  MANIFESTS
+    "loom-test.test.json"
+  TOOLS
+    "loom-link=loom::tools::loom-link"
+    "loom-test=::loom-test"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/input/testdata/duplicate_symbols.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/requirements.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/file_cases.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/library_cases.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/linked_input_cases.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/scalar_cases.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/xfail_cases.loom"
+  LABELS
+    "hostonly"
+)
+
+if(LOOM_TARGET_ARCH_VM)
+iree_execution_test_suite(
+  NAME
+    scenario_execution_test
+  MANIFESTS
+    "scenario_execution.test.json"
+  TOOLS
+    "loom-test=::loom-test"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/scenario_cases.loom"
+  LABELS
+    "hostonly"
+)
+endif()
+
+iree_execution_test_suite(
+  NAME
+    scenario_failure_test
+  MANIFESTS
+    "scenario_failure.test.json"
+  TOOLS
+    "scenario-failure-test=::scenario_failure_test_tool"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/scenario_failures.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/loom-test/testdata/scenario_requirements.loom"
+  LABELS
+    "hostonly"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -17,9 +17,11 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_descriptor.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/test/registry.h"
+#include "loom/ops/test/types.h"
 #include "loom/target/registers.h"
 #include "loom/util/stream.h"
 
@@ -424,6 +426,22 @@ class PrintOpTest : public ::testing::Test {
   loom_module_t* module_ = nullptr;
   loom_builder_t builder_;
 };
+
+TEST_F(PrintOpTest, ParameterizedTypeUsesOwnerMetadata) {
+  // A native client can borrow types from another compiler instance. Its local
+  // registry has the same family spelling but a different descriptor address.
+  const auto& local_schema = loom_test_scope_type_parameterized_descriptor;
+  loom_type_descriptor_t owner = *local_schema.type_descriptor;
+  loom_parameterized_type_descriptor_t schema = local_schema;
+  owner.parameterized = &schema;
+  schema.type_descriptor = &owner;
+  const loom_attribute_t parameter =
+      loom_attr_enum(LOOM_TEST_SCOPE_TYPE_SCOPE_WORKGROUP);
+  const loom_type_t type = loom_type_parameterized(&schema, 1, &parameter);
+  EXPECT_EQ(print_type(type, module_), "test.scope<workgroup>");
+  // This type has no module-owned parameters and needs no registry to print.
+  EXPECT_EQ(print_type(type), "test.scope<workgroup>");
+}
 
 TEST_F(PrintOpTest, PrintRegisterType) {
   loom_type_t type = loom_low_register_type(

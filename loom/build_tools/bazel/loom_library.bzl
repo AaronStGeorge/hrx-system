@@ -985,8 +985,8 @@ def loom_test(
     module containing every root-owned ``check.case`` and ``check.benchmark``
     plus their reachable dependencies. Test-only symbols from ``deps`` are not
     selected. The linked module is the only Loom input to the runners.
-    Default execution profiles run ``iree-test-loom`` for correctness. When
-    benchmark smoke is enabled, ``iree-benchmark-loom`` then executes each
+    Default execution profiles run ``loom-test`` for correctness. When
+    benchmark smoke is enabled, ``loom-benchmark`` then executes each
     benchmark with one measured iteration and no warmup. A profile with an
     explicit runner delegates the linked module to that runner once.
 

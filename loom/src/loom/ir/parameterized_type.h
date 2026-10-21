@@ -10,7 +10,6 @@
 #define LOOM_IR_PARAMETERIZED_TYPE_H_
 
 #include "loom/ir/attribute_schema.h"
-#include "loom/util/bstring.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,8 +24,9 @@ typedef uint8_t loom_parameterized_type_flags_t;
 
 // Generated metadata for one descriptor-backed type family.
 typedef struct loom_parameterized_type_descriptor_t {
-  // Stable dotted public family name.
-  loom_bstring_t name;
+  // Immutable owning type descriptor, including its name and text format. The
+  // owner and parameter schema share a lifetime and refer to each other.
+  const struct loom_type_descriptor_t* type_descriptor;
 
   // Parameter descriptors in stable declaration order.
   const loom_attr_descriptor_t* parameter_descriptors;

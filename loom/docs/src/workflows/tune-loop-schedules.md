@@ -242,7 +242,7 @@ one/factor two in the same entry, verifying that both choices coexist.
 ```shell
 loom-link vector-read-ahead.loom vector-read-ahead-tests.loom \
   --mode=merge --to=bc --output=vector-read-ahead.loombc
-iree-test-loom vector-read-ahead.loombc --device=amdgpu \
+loom-test vector-read-ahead.loombc --device=amdgpu \
   --target=amdgpu:gfx11-generic --sanitizer=access
 loom-compile vector-read-ahead.loombc --root=@sum_vector_rows \
   --target=amdgpu:gfx11-generic --format=amdgpu-hsaco \
@@ -303,7 +303,7 @@ program, including the inner pipeline's short-loop path.
 ```shell
 loom-link guarded-read-ahead.loom guarded-read-ahead-tests.loom \
   --mode=merge --to=bc --output=guarded-read-ahead.loombc
-iree-test-loom guarded-read-ahead.loombc --device=amdgpu \
+loom-test guarded-read-ahead.loombc --device=amdgpu \
   --target=amdgpu:gfx11-generic --sanitizer=access
 loom-compile guarded-read-ahead.loombc --root=@sum_guarded_rows \
   --target=amdgpu:gfx11-generic --format=amdgpu-hsaco \
@@ -392,7 +392,7 @@ candidate before accepting a timing result:
 ```shell
 for depth in 1 3; do
   for factor in 1 2 4; do
-    iree-test-loom read-ahead.loombc \
+    loom-test read-ahead.loombc \
       --device=amdgpu --target=amdgpu:gfx11-generic --sanitizer=access \
       --config=read_ahead.depth="$depth" --config=read_ahead.unroll="$factor" \
       >"sum-rows-d${depth}-u${factor}.test.json"
@@ -544,7 +544,7 @@ The example's `@sum_rows_64` benchmark selects the 64-row correctness case.
 First inspect its plan without executing a device:
 
 ```shell
-iree-benchmark-loom read-ahead.loombc --benchmark=@sum_rows_64 \
+loom-benchmark read-ahead.loombc --benchmark=@sum_rows_64 \
   --config=read_ahead.depth=3 --config=read_ahead.unroll=4 \
   --dry-run --output=sum-rows.plan.json
 ```
@@ -554,7 +554,7 @@ each configuration under the same policy:
 
 ```shell
 for depth in 1 3; do
-  iree-benchmark-loom read-ahead.loombc --benchmark=@sum_rows_64 \
+  loom-benchmark read-ahead.loombc --benchmark=@sum_rows_64 \
     --device=amdgpu --target=amdgpu:gfx11-generic \
     --config=read_ahead.depth="$depth" --config=read_ahead.unroll=4 \
     --measure=dispatch_complete --batch-size=64 \
@@ -599,7 +599,7 @@ serial recurrence across 14 lengths, including zero, short loops, and tails.
 After saving the file, run those checks with an author-selected configuration:
 
 ```shell
-iree-test-loom streaming-packed-dot.loom --device=amdgpu \
+loom-test streaming-packed-dot.loom --device=amdgpu \
   --target=amdgpu:gfx11-generic --sanitizer=access \
   --config=packed_stream.depth=4 --config=packed_stream.unroll=2
 
@@ -612,7 +612,7 @@ loom-compile streaming-packed-dot.loom \
 loom-compile-report show packed-dot.report.json
 loom-compile-report suggest packed-dot.report.json
 
-iree-benchmark-loom streaming-packed-dot.loom \
+loom-benchmark streaming-packed-dot.loom \
   --benchmark=@streaming_packed_s8_dot_read_ahead_n128_time \
   --device=amdgpu --target=amdgpu:gfx11-generic \
   --config=packed_stream.depth=4 --config=packed_stream.unroll=2 \
@@ -662,9 +662,9 @@ After saving the example, check its varied inputs, missing routes, short loops
 and cancellation cases, then compare the two named workloads:
 
 ```shell
-iree-test-loom routed-row-combine.loom --device=amdgpu --sanitizer=access
+loom-test routed-row-combine.loom --device=amdgpu --sanitizer=access
 
-iree-benchmark-loom routed-row-combine.loom \
+loom-benchmark routed-row-combine.loom \
   --compare=@routed_row_combine_serial_workloads,@routed_row_combine_pipelined_workloads \
   --sample=2 --device=amdgpu --measure=dispatch_complete \
   --batch-size=64 --input-ring-count=3 \
@@ -713,9 +713,9 @@ two.
 Save the example, check it, and compare the same workload and input-reuse policy:
 
 ```shell
-iree-test-loom cooperative-paged-attention.loom --device=amdgpu --sanitizer=access
+loom-test cooperative-paged-attention.loom --device=amdgpu --sanitizer=access
 
-iree-benchmark-loom cooperative-paged-attention.loom \
+loom-benchmark cooperative-paged-attention.loom \
   --compare=@cooperative_paged_attention_serial_workloads,@cooperative_paged_attention_pipelined_workloads \
   --sample=2 --device=amdgpu --measure=dispatch_complete \
   --batch-size=8 --input-ring-count=3 \
@@ -806,9 +806,9 @@ ID/K/V read closure while retaining each record's validity and consumption
 order. These values belong to the caller's workload and target policy.
 
 ```shell
-iree-test-loom sparse-token-attention.loom --device=amdgpu --sanitizer=access
+loom-test sparse-token-attention.loom --device=amdgpu --sanitizer=access
 
-iree-benchmark-loom sparse-token-attention.loom \
+loom-benchmark sparse-token-attention.loom \
   --compare=@sparse_token_attention_serial_workloads,@sparse_token_attention_pipelined_workloads \
   --sample=2 --device=amdgpu --measure=dispatch_complete \
   --batch-size=8 --input-ring-count=3 \
@@ -867,9 +867,9 @@ control reads the same pair-owned table and places the two heads in adjacent
 workgroups. All callers take policy values through template arguments.
 
 ```shell
-iree-test-loom grouped-paged-attention.loom --device=amdgpu --sanitizer=access
+loom-test grouped-paged-attention.loom --device=amdgpu --sanitizer=access
 
-iree-benchmark-loom grouped-paged-attention.loom \
+loom-benchmark grouped-paged-attention.loom \
   --compare=@grouped_paged_attention_independent_workloads,@grouped_paged_attention_shared_serial_workloads,@grouped_paged_attention_shared_workloads \
   --sample=2 --device=amdgpu --measure=dispatch_complete \
   --batch-size=8 --input-ring-count=3 \

@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-#include "loom/ir/parameterized_type.h"
+#include "loom/ir/type_descriptor.h"
 
 // Orders new complete records for this SSA scope child before parent.
 static iree_status_t loom_bytecode_prepare_type_bindings(

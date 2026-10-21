@@ -34,7 +34,7 @@ that retains its dataflow, resource requirements, and launch contract. Execute
 it through Loom rather than loading its artifact through an unrelated runtime:
 
 ```shell
-iree-run-loom oracle.loom \
+loom-run oracle.loom \
   --device=amdgpu \
   --root=kernel \
   --pipeline=none \
@@ -124,7 +124,7 @@ packet contains:
 
 - the smallest source or source-plus-`low.invoke` module that reproduces the
   divergence;
-- the default-pipeline `iree-test-loom` command;
+- the default-pipeline `loom-test` command;
 - expected and observed numerical behavior;
 - the prepared-Low oracle and the last passing raised form; and
 - the smallest report, IR snapshot, or native listing that identifies the
@@ -144,11 +144,11 @@ evidence.
 Acceptance returns to the ordinary production path:
 
 ```shell
-iree-test-loom kernel.loom \
+loom-test kernel.loom \
   --case=@oracle_case \
   --device=amdgpu
 
-iree-benchmark-loom kernel.loom \
+loom-benchmark kernel.loom \
   --benchmark=@production_shape \
   --device=amdgpu \
   --output=results.json

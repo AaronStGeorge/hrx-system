@@ -252,6 +252,11 @@ def _append_type_definition_source(source: list[str], all_types: Sequence[Any]) 
         source.append(f'static const uint8_t loom_type_{ident}_name[{storage_length}] = "\\x{name_len:02x}" "{type_def.name}<";')
 
     source.append("")
+    for type_def in all_types:
+        if type_def.uses_attribute_parameters:
+            ident = _type_c_ident(type_def.name)
+            source.append(f"static const loom_type_descriptor_t loom_type_{ident}_descriptor;")
+    source.append("")
     source.extend(_generate_parameterized_type_metadata_lines(all_types))
 
     fact_domain_symbols = sorted({fact_domain for type_def in all_types if (fact_domain := _type_fact_domain_symbol(type_def)) is not None})

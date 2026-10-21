@@ -12,6 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/parameterized_type.h"
 #include "loom/ir/structural_hash.h"
+#include "loom/ir/type_descriptor.h"
 #include "loom/ir/type_identity.h"
 #include "loom/ir/type_import.h"
 #include "loom/util/adaptive_sort.h"
@@ -4300,7 +4301,8 @@ iree_status_t loom_module_make_parameterized_type(
                             "parameterized type descriptor is NULL");
   }
   if (parameter_count != descriptor->parameter_count) {
-    iree_string_view_t type_name = loom_bstring_view(descriptor->name);
+    iree_string_view_t type_name =
+        loom_bstring_view(descriptor->type_descriptor->name);
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "parameterized type '%.*s' has %" PRIhsz
                             " slots but its descriptor requires %u",

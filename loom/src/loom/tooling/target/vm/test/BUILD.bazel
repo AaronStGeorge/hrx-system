@@ -69,9 +69,9 @@ iree_execution_test_suite(
     manifests = ["vm.test.json"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
     tools = {
-        "iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom",
-        "iree-test-loom": "//loom/src/loom/tools/iree-test-loom",
+        "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
         "loom-compile": "//loom/src/loom/tools/loom-compile",
+        "loom-test": "//loom/src/loom/tools/loom-test",
         "vm-dis": "//tools:vm-dis",
     },
 )

@@ -67,8 +67,8 @@ iree_execution_test_suite(
         "//loom/config/target/arch:vm",
     ]),
     tools = {
-        "iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom",
-        "iree-test-loom": "//loom/src/loom/tools/iree-test-loom",
+        "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
+        "loom-test": "//loom/src/loom/tools/loom-test",
     },
 )
 
@@ -89,7 +89,7 @@ iree_execution_test_suite(
         "//loom/config/execute:xdna_hal",
         "//loom/config/target/arch:vm",
     ]),
-    tools = {"iree-test-loom": "//loom/src/loom/tools/iree-test-loom"},
+    tools = {"loom-test": "//loom/src/loom/tools/loom-test"},
 )
 
 # This topology reserves all eight columns of the Strix Halo array.

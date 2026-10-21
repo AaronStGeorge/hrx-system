@@ -22,7 +22,7 @@ exclusions represent semantic incompatibilities that cannot be implemented on
 the target, such as an execution model with no equivalent barrier contract.
 
 The VM corpus executes every enrolled source independently through
-`iree-test-loom`. Compile-only targets emit the deployable artifact and detailed
+`loom-test`. Compile-only targets emit the deployable artifact and detailed
 compile report for every supported root set; diagnostic probes remain batched
 per source and profile.
 

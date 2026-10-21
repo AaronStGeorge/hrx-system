@@ -10,8 +10,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ir/parameterized_type.h"
 #include "loom/ir/structural_hash.h"
+#include "loom/ir/type_descriptor.h"
 #include "loom/ops/op_defs.h"
 
 uint8_t loom_bytecode_type_kind_byte(loom_type_kind_t kind) {
@@ -941,11 +941,12 @@ static iree_status_t loom_bytecode_catalog_enter_type(
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "parameterized type '%.*s' has malformed slot storage",
-          (int)loom_bstring_view(descriptor->name).size,
-          loom_bstring_view(descriptor->name).data);
+          (int)loom_bstring_view(descriptor->type_descriptor->name).size,
+          loom_bstring_view(descriptor->type_descriptor->name).data);
     }
     IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-        numbering, loom_bstring_view(descriptor->name), &unused_id));
+        numbering, loom_bstring_view(descriptor->type_descriptor->name),
+        &unused_id));
     IREE_RETURN_IF_ERROR(loom_bytecode_catalog_push(
         numbering, count,
         (loom_bytecode_catalog_frame_t){
@@ -1034,8 +1035,8 @@ static iree_status_t loom_bytecode_catalog_complete(
                 IREE_STATUS_INVALID_ARGUMENT,
                 "parameterized type '%.*s' has absent required parameter "
                 "'%.*s'",
-                (int)loom_bstring_view(family->name).size,
-                loom_bstring_view(family->name).data,
+                (int)loom_bstring_view(family->type_descriptor->name).size,
+                loom_bstring_view(family->type_descriptor->name).data,
                 (int)loom_attr_descriptor_name(descriptor).size,
                 loom_attr_descriptor_name(descriptor).data);
             break;

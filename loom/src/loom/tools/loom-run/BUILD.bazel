@@ -1,0 +1,114 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load("//loom/binding/c:shared.bzl", "loomc_cc_binary")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_select",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_AMDGPU_EXECUTE_COPTS = iree_select({
+    "//loom/config/execute:amdgpu_hal": [
+        "-DLOOM_RUN_HAVE_AMDGPU=1",
+    ],
+    "//conditions:default": [],
+})
+
+_AMDGPU_EXECUTE_DEPS = iree_select({
+    "//loom/config/execute:amdgpu_hal": [
+        "//loom/binding/c/target/amdgpu:iree_hal",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_VULKAN_EXECUTE_COPTS = iree_select({
+    "//loom/config/execute:spirv_vulkan_hal": [
+        "-DLOOM_RUN_HAVE_SPIRV=1",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
+    "//loom/config/execute:spirv_vulkan_hal": [
+        "//loom/binding/c/target/spirv:iree_hal",
+    ],
+    "//conditions:default": [],
+})
+
+_TASK_EXECUTE_COPTS = iree_select({
+    "//loom/config/execute:task_hal": ["-DLOOM_RUN_HAVE_TASK=1"],
+    "//conditions:default": [],
+})
+
+_TASK_EXECUTE_DEPS = iree_select({
+    "//loom/config/execute:task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
+    "//conditions:default": [],
+})
+
+_LOOM_RUN_EXECUTE_COPTS = _AMDGPU_EXECUTE_COPTS + _SPIRV_VULKAN_EXECUTE_COPTS + _TASK_EXECUTE_COPTS
+
+_LOOM_RUN_EXECUTE_DEPS = _AMDGPU_EXECUTE_DEPS + _SPIRV_VULKAN_EXECUTE_DEPS + _TASK_EXECUTE_DEPS
+
+loom_cc_library(
+    name = "main",
+    srcs = [
+        "main.c",
+    ],
+    hdrs = [
+        "main.h",
+    ],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/iree_hal",
+        "//loom/src/loom/config:text_binding",
+        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/tooling/cli:help",
+        "//loom/src/loom/tooling/cli:loomc_options",
+        "//loom/src/loom/tooling/cli:loomc_result",
+        "//loom/src/loom/tooling/config:input",
+        "//loom/src/loom/tooling/execution/hal:invocation",
+        "//loom/src/loom/tooling/execution/hal:runtime",
+        "//loom/src/loom/tooling/input:flags",
+        "//loom/src/loom/tooling/input:format",
+        "//loom/src/loom/tooling/input:loomc",
+        "//loom/src/loom/tooling/io:file",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/tooling:device_profiling",
+        "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/tooling:value_io",
+    ],
+)
+
+loomc_cc_binary(
+    name = "loom-run",
+    srcs = ["loom-run.c"],
+    copts = _LOOM_RUN_EXECUTE_COPTS,
+    deps = [
+        ":main",
+        "//loom/binding/c/target/configured",
+        "//loom/src/loom/tooling/input:loomc_configured",
+        "//runtime/src/iree/base",
+    ] + _LOOM_RUN_EXECUTE_DEPS,
+)
+
+iree_execution_test_suite(
+    name = "execution_test",
+    manifests = ["loom-run.test.json"],
+    tags = ["hostonly"],
+    tools = {
+        "loom-run": ":loom-run",
+    },
+)

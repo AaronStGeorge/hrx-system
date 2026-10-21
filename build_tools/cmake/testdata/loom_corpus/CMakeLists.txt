@@ -19,7 +19,7 @@ include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_test.cmake")
 include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_corpus.cmake")
 include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_target_profile.cmake")
 # Only test registration is exercised; imported tools are never executed.
-foreach(_TOOL loom-link iree-test-loom)
+foreach(_TOOL loom-link loom-test)
   add_executable(loom::tools::${_TOOL} IMPORTED GLOBAL)
   set_target_properties(loom::tools::${_TOOL} PROPERTIES IMPORTED_LOCATION "${CMAKE_COMMAND}")
 endforeach()
