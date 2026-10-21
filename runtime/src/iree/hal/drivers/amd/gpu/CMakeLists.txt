@@ -475,6 +475,7 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     dispatch
@@ -491,7 +492,9 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::image::metadata
   PUBLIC
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_test(
   NAME
     dispatch_test
@@ -506,7 +509,9 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_binary_benchmark(
   NAME
     dispatch_benchmark
@@ -523,5 +528,6 @@ iree_cc_binary_benchmark(
     iree::third_party::google_benchmark
   TESTONLY
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -441,6 +441,7 @@ iree_runtime_cc_library(
     name = "dispatch",
     srcs = ["dispatch.c"],
     hdrs = ["dispatch.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":kernarg",
         "//libamdf:headers",
@@ -454,6 +455,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "dispatch_test",
     srcs = ["dispatch_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":dispatch",
         ":kernarg",
@@ -468,6 +470,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_benchmark(
     name = "dispatch_benchmark",
     srcs = ["dispatch_benchmark.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":dispatch",
         "//libamdf:headers",

@@ -373,6 +373,7 @@ iree_cc_library(
   PUBLIC
 )
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     code
@@ -395,6 +396,7 @@ iree_cc_library(
     iree::hal::drivers::amd::status
   PUBLIC
 )
+endif()
 
 iree_cc_library(
   NAME
@@ -514,6 +516,7 @@ iree_cc_test(
 )
 endif()
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     dispatch
@@ -527,6 +530,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::dispatch
   PUBLIC
 )
+endif()
 
 if(AMDF_BUILD)
 iree_cc_library(
@@ -563,6 +567,7 @@ iree_cc_test(
 )
 endif()
 
+if(AMDF_BUILD)
 iree_cc_test(
   NAME
     dispatch_test
@@ -579,6 +584,7 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 iree_cc_library(
   NAME
@@ -617,6 +623,7 @@ iree_cc_library(
 )
 endif()
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     submission
@@ -638,6 +645,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::queue::transfer
   PUBLIC
 )
+endif()
 
 iree_cc_test(
   NAME

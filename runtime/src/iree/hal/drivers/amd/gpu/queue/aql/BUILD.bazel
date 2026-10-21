@@ -111,6 +111,10 @@ iree_runtime_cc_library(
     name = "code",
     srcs = ["code.c"],
     hdrs = ["code.h"],
+    target_compatible_with = select({
+        "//libamdf/config:enabled_setting": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":packet",
         ":ring",
@@ -235,6 +239,10 @@ iree_runtime_cc_library(
     name = "dispatch",
     srcs = ["dispatch.c"],
     hdrs = ["dispatch.h"],
+    target_compatible_with = select({
+        "//libamdf/config:enabled_setting": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":barrier",
         ":packet",
@@ -280,6 +288,10 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "dispatch_test",
     srcs = ["dispatch_test.cc"],
+    target_compatible_with = select({
+        "//libamdf/config:enabled_setting": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":dispatch",
         ":packet",
@@ -330,6 +342,10 @@ iree_runtime_cc_library(
     name = "submission",
     srcs = ["submission.c"],
     hdrs = ["submission.h"],
+    target_compatible_with = select({
+        "//libamdf/config:enabled_setting": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":barrier",
         ":command_buffer",

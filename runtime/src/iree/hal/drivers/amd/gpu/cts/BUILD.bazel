@@ -402,9 +402,9 @@ iree_runtime_cc_test(
     }),
     deps = [
         ":test_device",
-        "//libamdf/cts/util:native_identity",
         "//libamdf:amdf_static",
         "//libamdf:headers",
+        "//libamdf/cts/util:native_identity",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
