@@ -1243,7 +1243,8 @@ static iree_status_t loom_value_fact_table_compute_scoped_op(
   IREE_RETURN_IF_ERROR(
       loom_value_fact_table_facts_scratch(table, total, &scratch));
   loom_value_facts_t* operand_facts = scratch;
-  loom_value_facts_t* result_facts = scratch + op->operand_count;
+  loom_value_facts_t* result_facts =
+      op->result_count ? scratch + op->operand_count : NULL;
 
   // Gather operand facts from the table.
   const loom_value_id_t* operands = loom_op_const_operands(op);
