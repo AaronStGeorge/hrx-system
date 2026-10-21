@@ -7,6 +7,7 @@
 #include "iree/hal/memory/passthrough_pool.h"
 
 #include <atomic>
+#include <semaphore>
 #include <thread>
 
 #include "iree/async/frontier_tracker.h"
@@ -63,6 +64,8 @@ typedef struct iree_hal_test_opaque_slab_provider_t {
     // Intrusive native return list using acquisition-secured descriptor
     // storage.
     iree_hal_slab_operation_t* releases;
+    // Optional observer of a native release enqueued during destruction.
+    std::binary_semaphore* release_ready;
   } deferred;
 
   // Optional external witness that the last provider reference was released.
@@ -299,6 +302,9 @@ static void iree_hal_test_opaque_slab_provider_release_slabs(
   if (native->deferred.release) {
     request->operation.next = native->deferred.releases;
     native->deferred.releases = &request->operation;
+    if (native->deferred.release_ready) {
+      native->deferred.release_ready->release();
+    }
     return;
   }
   iree_hal_slab_provider_release_slabs_inline(
@@ -623,7 +629,7 @@ TEST_F(NativePassthroughPoolTest, NativeLimitMustFitProtectedAllocation) {
 }
 
 TEST_F(NativePassthroughPoolTest,
-       DeferredBatchPublishesTogetherAndReleaseSurvivesPoolDestruction) {
+       DeferredBatchPublishesTogetherAndDestructionJoinsRelease) {
   native_->deferred.acquire = true;
   native_->deferred.release = true;
   const iree_hal_pool_reservation_request_t requests[] = {
@@ -677,21 +683,27 @@ TEST_F(NativePassthroughPoolTest,
   EXPECT_EQ(stats.bytes_reserved, 0u);
   EXPECT_EQ(stats.bytes_committed, 2304u);
   EXPECT_EQ(stats.slab_count, 2u);
-  iree_hal_pool_release(pool_);
+  std::thread destroy([&] {
+    iree_hal_pool_release(pool_);
+    EXPECT_EQ(
+        iree_atomic_load(&native_->release_count, iree_memory_order_relaxed),
+        2);
+  });
+  EXPECT_EQ(destruction_count_, 0u);
+  CompleteNativeRelease(native_);
+  EXPECT_EQ(destruction_count_, 0u);
+  CompleteNativeRelease(native_);
+  destroy.join();
   pool_ = nullptr;
   iree_hal_slab_provider_release(provider_);
   provider_ = nullptr;
-  EXPECT_EQ(destruction_count_, 0u);
-  CompleteNativeRelease(native_);
-  EXPECT_EQ(destruction_count_, 0u);
-  CompleteNativeRelease(native_);
   native_ = nullptr;
   EXPECT_EQ(destruction_count_, 1u);
   EXPECT_EQ(allocations_.allocation_count, allocated);
 }
 
 TEST_F(NativePassthroughPoolTest,
-       NativeRetirementDoesNotBorrowThePublicPoolAllocator) {
+       FinalReleaseReturnsBothAllocatorsAfterNativeRetirement) {
   iree_hal_pool_release(pool_);
   pool_ = nullptr;
   CountingAllocator public_allocator;
@@ -712,12 +724,18 @@ TEST_F(NativePassthroughPoolTest,
   EXPECT_EQ(result, pattern);
   iree_hal_buffer_release(buffer);
   ASSERT_NE(native_->deferred.releases, nullptr);
-  iree_hal_pool_release(pool_);
+  const size_t allocation_count = allocations_.allocation_count;
+  std::thread destroy([&] {
+    iree_hal_pool_release(pool_);
+    EXPECT_EQ(
+        iree_atomic_load(&native_->release_count, iree_memory_order_relaxed),
+        1);
+  });
+  CompleteNativeRelease(native_);
+  destroy.join();
   pool_ = nullptr;
   EXPECT_EQ(public_allocator.live_count, 0u);
   public_allocator.closed = true;
-  const size_t allocation_count = allocations_.allocation_count;
-  CompleteNativeRelease(native_);
   EXPECT_EQ(public_allocator.calls_after_close, 0u);
   EXPECT_EQ(allocations_.allocation_count, allocation_count);
 }
@@ -876,9 +894,10 @@ TEST_F(NativePassthroughPoolTest,
   EXPECT_EQ(stats.bytes_committed, 0u);
 }
 
-TEST_F(NativePassthroughPoolTest,
-       DestructionCancelsWaitWithoutJoiningNativeFree) {
+TEST_F(NativePassthroughPoolTest, DestructionCancelsWaitAndJoinsNativeFree) {
   native_->deferred.release = true;
+  std::binary_semaphore release_ready{0};
+  native_->deferred.release_ready = &release_ready;
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
@@ -893,16 +912,23 @@ TEST_F(NativePassthroughPoolTest,
   ReleaseOneReservation(pool_, &reservation,
                         iree_async_fixed_frontier_as_const_frontier(&frontier));
   EXPECT_EQ(native_->deferred.releases, nullptr);
-  iree_hal_pool_release(pool_);
-  pool_ = nullptr;
+  std::thread destroy([&] {
+    iree_hal_pool_release(pool_);
+    EXPECT_EQ(
+        iree_atomic_load(&native_->release_count, iree_memory_order_relaxed),
+        1);
+  });
+  release_ready.acquire();
   ASSERT_NE(native_->deferred.releases, nullptr);
   EXPECT_EQ(iree_async_frontier_tracker_advance(tracker_, axis, 1), 0u);
   iree_async_frontier_tracker_release(tracker_);
   tracker_ = nullptr;
-  iree_hal_slab_provider_release(provider_);
-  provider_ = nullptr;
   EXPECT_EQ(destruction_count_, 0u);
   CompleteNativeRelease(native_);
+  destroy.join();
+  pool_ = nullptr;
+  iree_hal_slab_provider_release(provider_);
+  provider_ = nullptr;
   native_ = nullptr;
   EXPECT_EQ(destruction_count_, 1u);
 }

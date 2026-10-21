@@ -346,19 +346,16 @@ TEST_P(VulkanSlabPoolTest, NativeAllocationDoesNotBlockCachedWorkOrRetirement) {
     ScopedNativeAllocationHold hold(native, IREE_ALLOCATOR_COMMAND_FREE);
     growing.reset();
     native.WaitEntered();
-    // Pool return stays asynchronous. Final device destruction is the native
-    // ownership join, so it cannot finish while cleanup remains held.
-    source.reset();
-    group.reset();
-    iree_hal_device_t* retiring = device.get();
-    iree_hal_device_retain(retiring);
-    device.reset();
+    // Reservation return is asynchronous; final pool/device release joins
+    // native cleanup while the application's parent owners remain alive.
     std::promise<void> started;
     std::promise<void> destroyed;
     auto destroyed_future = destroyed.get_future();
     std::thread teardown([&] {
       started.set_value();
-      iree_hal_device_release(retiring);
+      source.reset();
+      device.reset();
+      group.reset();
       destroyed.set_value();
     });
     started.get_future().get();

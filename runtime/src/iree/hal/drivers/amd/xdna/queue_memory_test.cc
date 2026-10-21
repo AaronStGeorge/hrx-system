@@ -770,7 +770,7 @@ TEST(XdnaQueueMemoryTest, NativeGrowthLeavesCachedMemoryAndExecutionReady) {
   iree_hal_pool_release(pool);
 }
 
-TEST(XdnaQueueMemoryTest, PendingNativeFreeRetainsDeviceAndFabric) {
+TEST(XdnaQueueMemoryTest, PoolReleaseJoinsNativeFreeBeforeDeviceRelease) {
   QueueHarness harness;
   ASSERT_NO_FATAL_FAILURE(harness.Initialize());
   ASSERT_NO_FATAL_FAILURE(harness.SealDeviceGroup());
@@ -788,11 +788,12 @@ TEST(XdnaQueueMemoryTest, PendingNativeFreeRetainsDeviceAndFabric) {
   ScopedMemoryGate gate{&harness.native.release_gate};
   iree_hal_buffer_release(buffer);
   harness.native.release_gate.AwaitEntry();
-  iree_hal_pool_release(pool);
-  harness.ReleaseDevice();
+  std::thread teardown([&] { iree_hal_pool_release(pool); });
   EXPECT_EQ(harness.native.context_destroy_count, 0u);
   EXPECT_EQ(harness.native.instance_destroy_count, 0u);
   gate.gate->Release();
+  teardown.join();
+  harness.ReleaseDevice();
   ASSERT_NO_FATAL_FAILURE(harness.PollUntilDeviceDestroyed());
   EXPECT_EQ(harness.native.instance_destroy_count, 1u);
   EXPECT_EQ(harness.native.live_memories, 0u);

@@ -1019,7 +1019,7 @@ class SlabPoolTest : public SlabProviderTest {
   iree_async_proactor_thread_t* thread_ = nullptr;
 };
 
-TEST_F(SlabPoolTest, PublicReleaseDoesNotWaitForNativeCleanup) {
+TEST_F(SlabPoolTest, PublicReleaseJoinsNativeCleanup) {
   iree_hal_pool_reservation_t reservation = {};
   Acquire(pools_[0], &reservation);
   native_.hold_destroy = true;
@@ -1029,11 +1029,11 @@ TEST_F(SlabPoolTest, PublicReleaseDoesNotWaitForNativeCleanup) {
   Release(pools_[0], &reservation);
   entered.get();
 
-  // Public pool metadata can go away while the native free is still blocked.
-  // Its private callback state and device owners survive until that free ends.
-  iree_hal_pool_release(pools_[0]);
-  pools_[0] = nullptr;
+  std::thread teardown([&] { iree_hal_pool_release(pools_[0]); });
   resume.set_value();
+  teardown.join();
+  pools_[0] = nullptr;
+  EXPECT_EQ(native_.destroy_count, 1);
 }
 
 TEST_F(SlabPoolTest, ConstructorAndPrefixLossesStayWithOriginatingPool) {
