@@ -644,7 +644,9 @@ static iree_status_t loom_low_allocate_function_impl(
       .module = model->context.module,
       .function_op = model->context.function_op,
       .entry_preamble_end = model->context.requirements.entry_preamble_end,
+      .entry_traffic_end = model->context.requirements.entry_traffic_end,
       .target = model->context.target,
+      .storage_layout = model->context.requirements.storage_layout,
       .error_count = model->context.error_count,
       .cfg_graph = model->cfg_graph,
       .loop_forest = model->loop_forest,
@@ -874,6 +876,11 @@ static iree_status_t loom_low_allocate_function_impl(
     status = loom_low_allocation_number_registers(&numbering_context,
                                                   &decision_arena);
   }
+  if (locations_replayed && iree_status_is_ok(status) &&
+      state.target_constraints.error_count == 0 &&
+      state.interval_assignment.spill_plan_count != 0) {
+    status = loom_liveness_retain_operation_index(&state.liveness, arena);
+  }
   iree_arena_deinitialize(&decision_arena);
 
   uint32_t* first_storage_release_action_by_node = NULL;
@@ -895,8 +902,10 @@ static iree_status_t loom_low_allocate_function_impl(
         .module = model->context.module,
         .function_op = model->context.function_op,
         .entry_preamble_end = model->context.requirements.entry_preamble_end,
+        .entry_traffic_end = model->context.requirements.entry_traffic_end,
         .target = state.target,
         .storage_transport = options->storage_transport,
+        .storage_layout = model->context.requirements.storage_layout,
         .liveness = state.liveness,
         .storage_segments = state.unit_liveness.storage_segments.entries,
         .placement = state.placement,

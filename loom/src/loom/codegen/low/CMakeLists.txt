@@ -325,6 +325,7 @@ loom_cc_library(
   SRCS
     "function_requirements.c"
   DEPS
+    ::function
     ::representation_binding
     ::storage_layout
     iree::base
@@ -407,6 +408,7 @@ loom_cc_library(
   SRCS
     "storage_layout.c"
   DEPS
+    ::function
     iree::base
     iree::base::internal::arena
     loom::analysis::storage_layout
@@ -680,7 +682,6 @@ loom_cc_library(
     loom::codegen::low::allocation::packet_move
     loom::codegen::low::allocation::placement
     loom::codegen::low::allocation::search
-    loom::codegen::low::allocation::spill_plan
     loom::codegen::low::allocation::spill_traffic
     loom::codegen::low::allocation::storage
     loom::codegen::low::allocation::storage_lease
@@ -749,7 +750,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation::spill_plan
-    loom::codegen::low::allocation::spill_storage
     loom::codegen::low::allocation::storage
     loom::error::error_defs
     loom::error::parameter
@@ -775,6 +775,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::analysis::liveness
+    loom::codegen::low::allocation::spill_plan
     loom::format::text::parser
     loom::ir
     loom::ops::low
@@ -827,6 +828,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::diagnostics
+    ::function
     ::representation_binding
     ::storage_relation
     iree::base

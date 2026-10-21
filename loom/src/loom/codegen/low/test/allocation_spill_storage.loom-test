@@ -251,28 +251,28 @@ low.func.def target<test.low.core>(@target) @loop_edges(%condition: reg<test.i32
   %c = test.const.i32 3
   low.spill %c, %loop_edges_spill_storage_2 : reg<test.i32>, low.storage<private>
   %ab = test.add.i32 %a, %b
-  %22 = low.reload %loop_edges_spill_storage_2 : low.storage<private> -> reg<test.i32>
-  %abc = test.add.i32 %ab, %22
+  %20 = low.reload %loop_edges_spill_storage_2 : low.storage<private> -> reg<test.i32>
+  %abc = test.add.i32 %ab, %20
   %21 = low.reload %loop_edges_spill_storage_1 : low.storage<private> -> reg<test.i32>
   %next = test.add.i32 %abc, %21
   low.spill %next, %loop_edges_spill_storage_3 : reg<test.i32>, low.storage<private>
-  %20 = low.reload %loop_edges_spill_storage_0 : low.storage<private> -> reg<test.i32>
-  low.cond_br %20, ^backedge, ^exit : reg<test.i32>
+  %22 = low.reload %loop_edges_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  low.cond_br %22, ^backedge, ^exit : reg<test.i32>
 ^backedge:
   %d = test.const.i32 4
   %e = test.const.i32 5
   %f = test.const.i32 6
   low.spill %f, %loop_edges_spill_storage_2 : reg<test.i32>, low.storage<private>
   %de = test.add.i32 %d, %e
-  %25 = low.reload %loop_edges_spill_storage_2 : low.storage<private> -> reg<test.i32>
-  %def = test.add.i32 %de, %25
-  %23 = low.reload %loop_edges_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %updated = test.add.i32 %def, %23
+  %23 = low.reload %loop_edges_spill_storage_2 : low.storage<private> -> reg<test.i32>
+  %def = test.add.i32 %de, %23
+  %24 = low.reload %loop_edges_spill_storage_3 : low.storage<private> -> reg<test.i32>
+  %updated = test.add.i32 %def, %24
   low.spill %updated, %loop_edges_spill_storage_1 : reg<test.i32>, low.storage<private>
   low.br ^loop
 ^exit:
-  %24 = low.reload %loop_edges_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  return %24
+  %25 = low.reload %loop_edges_spill_storage_3 : low.storage<private> -> reg<test.i32>
+  return %25
 }
 
 // ====

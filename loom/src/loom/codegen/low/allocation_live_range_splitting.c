@@ -9,6 +9,7 @@
 #include "loom/codegen/low/allocation/live_range.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/representation_binding.h"
 #include "loom/codegen/low/storage_relation.h"
 #include "loom/error/error_catalog.h"
@@ -143,10 +144,9 @@ static bool loom_low_allocation_value_can_split_after_definition(
     return false;
   }
   *out_insertion_block = defining_op->parent_block;
-  *out_insertion_anchor =
-      loom_low_live_in_isa(defining_op) || loom_low_resource_isa(defining_op)
-          ? (loom_op_t*)table->entry_preamble_end
-          : defining_op;
+  *out_insertion_anchor = loom_low_function_entry_preamble_op(defining_op)
+                              ? (loom_op_t*)table->entry_preamble_end
+                              : defining_op;
   return true;
 }
 

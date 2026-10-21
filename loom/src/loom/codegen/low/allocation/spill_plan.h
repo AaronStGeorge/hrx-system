@@ -45,17 +45,18 @@ typedef enum loom_low_spill_materialization_target_kind_e {
   LOOM_LOW_SPILL_MATERIALIZATION_TARGET_OPERATION_OPERAND = 0,
   // Payload for an original destination block argument on the current branch.
   LOOM_LOW_SPILL_MATERIALIZATION_TARGET_BRANCH_ARGUMENT = 1,
-  // Operand on an operation produced by an earlier materialization action.
-  LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_OPERAND = 2,
+  // Logical source consumed by an earlier materialization action.
+  LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE = 2,
 } loom_low_spill_materialization_target_kind_t;
 
-// Mutable operand occurrence targeted by a spill reload. Branch targets name
-// the destination argument instead of a positional operand so earlier argument
-// removal cannot invalidate the target.
+// Mutable logical source targeted by a spill reload. Branch targets name the
+// destination argument instead of a positional operand so earlier argument
+// removal cannot invalidate the target. Action sources are resolved before the
+// consuming traffic action is emitted.
 typedef struct loom_low_spill_materialization_target_t {
   // Target kind selecting the active union member.
   uint8_t kind;
-  // Operand index for operation and action targets.
+  // Operand index for operation targets.
   uint16_t operand_index;
   // Original destination block argument for branch targets.
   loom_value_id_t block_argument_value_id;
@@ -65,7 +66,7 @@ typedef struct loom_low_spill_materialization_target_t {
     loom_op_t* operation;
     // Predecessor block whose current terminator owns a branch payload.
     loom_block_t* predecessor_block;
-    // Earlier action that produced the operation owning an action operand.
+    // Earlier action consuming the logical source.
     uint32_t action_index;
   } owner;
 } loom_low_spill_materialization_target_t;
@@ -133,6 +134,36 @@ typedef struct loom_low_spill_materialization_action_t {
   } value;
 } loom_low_spill_materialization_action_t;
 
+enum {
+  // The instruction executes after its original liveness point instead of
+  // before it. Action counts are bounded below this bit during plan creation.
+  LOOM_LOW_SPILL_MATERIALIZATION_INSTRUCTION_AFTER_BIT = UINT32_C(1) << 31,
+};
+
+// One traffic-producing action projected into accepted program-point and final
+// execution order. The action retains its immutable IR mutation anchor; target
+// recipes may expand it into native instructions while preserving this order.
+typedef struct loom_low_spill_materialization_instruction_t {
+  // Liveness operation row whose boundary locates the generated instruction.
+  uint32_t operation_index;
+  // Action index with INSTRUCTION_AFTER_BIT selecting the execution side.
+  uint32_t action_index_and_after;
+} loom_low_spill_materialization_instruction_t;
+
+// Returns the transformation-order action referenced by |instruction|.
+static inline uint32_t loom_low_spill_materialization_instruction_action_index(
+    const loom_low_spill_materialization_instruction_t* instruction) {
+  return instruction->action_index_and_after &
+         ~LOOM_LOW_SPILL_MATERIALIZATION_INSTRUCTION_AFTER_BIT;
+}
+
+// Returns true when |instruction| executes after its anchor point.
+static inline bool loom_low_spill_materialization_instruction_is_after(
+    const loom_low_spill_materialization_instruction_t* instruction) {
+  return iree_any_bit_set(instruction->action_index_and_after,
+                          LOOM_LOW_SPILL_MATERIALIZATION_INSTRUCTION_AFTER_BIT);
+}
+
 // Exact memory traffic for one selected spill plan.
 typedef struct loom_low_spill_materialization_record_t {
   // True when the spilled value is a block argument.
@@ -147,12 +178,22 @@ typedef struct loom_low_spill_materialization_record_t {
   uint64_t reload_bytes;
 } loom_low_spill_materialization_record_t;
 
+// Returns true when |record| retains traffic that requires spill storage.
+static inline bool loom_low_spill_materialization_record_has_traffic(
+    const loom_low_spill_materialization_record_t* record) {
+  return record->store_count != 0 || record->reload_count != 0;
+}
+
 // Immutable ordered realization of one selected spill-plan batch.
 typedef struct loom_low_spill_materialization_plan_t {
   // Actions in transformation order.
   const loom_low_spill_materialization_action_t* actions;
   // Number of records in |actions|.
   iree_host_size_t action_count;
+  // Traffic-producing actions in accepted point and per-anchor execution order.
+  const loom_low_spill_materialization_instruction_t* instructions;
+  // Number of records in |instructions|.
+  iree_host_size_t instruction_count;
   // Shared-slice operand targets referenced by action spans.
   const loom_low_spill_materialization_target_t* targets;
   // Number of records in |targets|.
@@ -161,7 +202,28 @@ typedef struct loom_low_spill_materialization_plan_t {
   const loom_low_spill_materialization_record_t* records;
   // Number of records in |records|.
   iree_host_size_t record_count;
+  // Earliest traffic-producing plan sharing each spill reservation, or NULL
+  // when every traffic-producing plan has an independent reservation.
+  // Records without traffic map to themselves and require no reservation.
+  const uint32_t* slot_representatives;
 } loom_low_spill_materialization_plan_t;
+
+typedef enum loom_low_spill_materialization_traffic_kind_e {
+  LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_STORE = 0,
+  LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_RELOAD = 1,
+} loom_low_spill_materialization_traffic_kind_t;
+
+// Target-independent access shape for one materialization action. This is a
+// transient query result; the ordered action remains the retained source of
+// structural mutation and value identity.
+typedef struct loom_low_spill_materialization_traffic_t {
+  // Store or reload traffic for the reported action.
+  loom_low_spill_materialization_traffic_kind_t kind;
+  // Complete register value transferred by the action.
+  loom_type_t value_type;
+  // Byte offset within the action's spill slot.
+  int64_t byte_offset;
+} loom_low_spill_materialization_traffic_t;
 
 enum {
   // Equal-byte full reloads are only worthwhile after removing enough reload
@@ -188,6 +250,16 @@ bool loom_low_allocation_spill_plan_slice_reload_byte_size(
 bool loom_low_allocation_spill_plan_use_full_slice_reload(
     uint32_t slice_count, uint64_t narrow_reload_bytes,
     uint32_t spill_byte_size);
+
+// Resolves the traffic shape for one retained action in constant time. Target
+// planners use this instead of interpreting mutable IR or reconstructing action
+// result types. Returns false for structural-only actions.
+bool loom_low_spill_materialization_plan_query_traffic(
+    const loom_module_t* module,
+    const loom_low_allocation_spill_plan_t* spill_plans,
+    const loom_low_spill_materialization_plan_t* plan,
+    iree_host_size_t action_index,
+    loom_low_spill_materialization_traffic_t* out_traffic);
 
 // Builds the exact ordered actions for the selected spill batch. The source IR
 // and allocation snapshot remain immutable. All retained arrays are owned by

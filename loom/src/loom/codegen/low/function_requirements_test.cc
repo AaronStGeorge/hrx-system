@@ -72,6 +72,8 @@ TEST_F(LowFunctionRequirementsTest, ImportsPreserveBodyOrder) {
 low.func.def target<test.low.core> @imports() asm {
   %input = resource<native_pointer> {index = 7, source_type = buffer, extent = 64} : reg<test.ptr>
   %output = resource<native_pointer> {index = 2, source_type = buffer} : reg<test.ptr>
+  %slot = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  low.spill %output, %slot : reg<test.ptr>, low.storage<private>
   return
 }
 )");
@@ -80,6 +82,11 @@ low.func.def target<test.low.core> @imports() asm {
   EXPECT_EQ(loom_low_resource_index(requirements.resources[0]), 7);
   EXPECT_EQ(loom_low_resource_extent(requirements.resources[0]), 64);
   EXPECT_EQ(loom_low_resource_index(requirements.resources[1]), 2);
+  loom_op_t* function = loom_block_op(loom_module_block(module.get()), 0);
+  const loom_block_t* entry =
+      loom_region_const_entry_block(loom_low_func_def_body(function));
+  EXPECT_EQ(requirements.entry_preamble_end, loom_block_const_op(entry, 1));
+  EXPECT_EQ(requirements.entry_traffic_end, loom_block_const_op(entry, 3));
 }
 
 TEST_F(LowFunctionRequirementsTest, CollectsStorageAcrossBlocks) {

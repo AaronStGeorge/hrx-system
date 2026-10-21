@@ -147,13 +147,13 @@ typedef struct loom_low_emission_frame_t {
   uint64_t materialized_spill_storage_bytes;
   // Strongest byte alignment required by materialized spill storage.
   uint64_t materialized_spill_storage_minimum_alignment;
-  // Cumulative low.spill stores materialized while reaching this frame.
+  // Cumulative spill stores materialized while reaching this frame.
   uint64_t materialized_spill_store_count;
-  // Cumulative materialized low.spill store byte traffic.
+  // Cumulative materialized spill-store byte traffic.
   uint64_t materialized_spill_store_bytes;
-  // Cumulative low.reload ops materialized while reaching this frame.
+  // Cumulative spill reloads materialized while reaching this frame.
   uint64_t materialized_reload_count;
-  // Cumulative materialized low.reload byte traffic.
+  // Cumulative materialized spill-reload byte traffic.
   uint64_t materialized_reload_bytes;
   // Materialized spill records retained while reaching this frame.
   loom_low_allocation_materialized_spill_list_t materialized_spills;
@@ -210,7 +210,9 @@ typedef iree_status_t (*loom_low_emission_frame_validate_fn_t)(
 typedef struct loom_low_emission_frame_spill_free_options_t {
   // Materialization contract used when final allocation exposes new spills.
   loom_low_allocation_materialization_options_t materialization_options;
-  // Target-owned lowering callback for structural spill traffic.
+  // Target-owned lowering callback for authored or generic spill traffic.
+  // Target-planned materialization uses this only for authored traffic present
+  // before the first frame.
   loom_low_emission_frame_lower_spill_traffic_fn_t lower_spill_traffic;
   // Caller-owned data passed to |lower_spill_traffic|.
   void* lower_spill_traffic_user_data;
@@ -246,13 +248,13 @@ iree_status_t loom_low_emission_frame_build(
 // Static storage reservations first move to the entry prefix in declaration
 // order. Repair appends new reservations so target-lowered offsets stay stable.
 // Each iteration materializes the accepted allocation snapshot as a batch.
-// Materialized plan values enter a monotonic required-register set, and target
-// lowering extends that set with its traffic values. Each batch therefore
-// retires distinct spillable program values; an unsatisfiable required set is
-// reported by allocation instead of by an arbitrary iteration ceiling.
-// Individual plan traffic is recomputed from the current IR while consuming
-// that batch because earlier spill rewrites can make later allocation-time
-// traffic predictions stale.
+// Materialized plan values enter a monotonic required-register set. A target
+// may select final traffic recipes from the immutable batch before mutation or
+// lower generic traffic afterward; either path publishes its helper values into
+// that same set. Each batch therefore retires distinct spillable program
+// values, and allocation reports an unsatisfiable required set instead of using
+// an arbitrary iteration ceiling. The batch plan captures current IR once and
+// applies its accepted traffic in retained execution order.
 //
 // Like loom_low_emission_frame_build, this path synthesizes allocation and
 // admits only absent or virtual allocation modes. It rejects assigned or fixed

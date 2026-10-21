@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "loom/codegen/low/allocation/spill_plan.h"
-#include "loom/codegen/low/allocation/spill_storage.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
@@ -29,9 +28,9 @@ typedef struct loom_low_materialized_spill_slot_t {
 } loom_low_materialized_spill_slot_t;
 
 typedef struct loom_low_materialized_traffic_t {
-  // Number of materialized traffic ops inserted.
+  // Number of logical spill transfers materialized.
   uint32_t count;
-  // Byte traffic represented by the inserted ops.
+  // Byte traffic represented by the materialized transfers.
   uint64_t bytes;
 } loom_low_materialized_traffic_t;
 
@@ -49,7 +48,14 @@ typedef struct loom_low_materialized_value_facts_t {
   loom_low_materialized_value_list_builder_t required_register_values;
   // Reload results private to one consumer setup chain.
   loom_low_materialized_value_list_builder_t per_user_placement_values;
+  // Values defined outside their surrounding semantic execution domain.
+  loom_low_materialized_value_list_builder_t expanded_execution_values;
 } loom_low_materialized_value_facts_t;
+
+typedef struct loom_low_materialized_action_state_t {
+  // Reload result or a replacement source for a later store action.
+  loom_value_id_t value_id;
+} loom_low_materialized_action_state_t;
 
 static iree_status_t loom_low_allocation_append_materialized_value(
     loom_value_id_t value_id, iree_arena_allocator_t* arena,
@@ -71,17 +77,64 @@ loom_low_allocation_record_materialized_required_register_value(
       value_id, arena, &facts->required_register_values);
 }
 
+static bool loom_low_allocation_materialized_value_has_private_consumer(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (defining_op == NULL || defining_op->result_count != 1 ||
+      value->use_count == 0 || loom_value_has_attribute_uses(value) ||
+      loom_module_value_has_type_uses(module, value_id)) {
+    return false;
+  }
+  const loom_use_t* uses = loom_value_uses(value);
+  const loom_op_t* user = loom_use_user_op(uses[0]);
+  if (user == NULL) {
+    return false;
+  }
+  for (uint32_t i = 1; i < value->use_count; ++i) {
+    if (loom_use_user_op(uses[i]) != user) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static iree_status_t loom_low_allocation_record_materialized_reload_value(
     const loom_module_t* module, loom_value_id_t value_id,
     iree_arena_allocator_t* arena, loom_low_materialized_value_facts_t* facts) {
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_record_materialized_required_register_value(
           value_id, arena, facts));
-  if (loom_module_value(module, value_id)->use_count != 1) {
+  if (!loom_low_allocation_materialized_value_has_private_consumer(module,
+                                                                   value_id)) {
     return iree_ok_status();
   }
   return loom_low_allocation_append_materialized_value(
       value_id, arena, &facts->per_user_placement_values);
+}
+
+static iree_status_t loom_low_allocation_record_materialized_action_values(
+    const loom_low_spill_materialized_action_t* action,
+    iree_arena_allocator_t* arena, loom_low_materialized_value_facts_t* facts) {
+  for (iree_host_size_t i = 0; i < action->emitted_value_count; ++i) {
+    const loom_low_spill_materialized_value_t value = action->emitted_values[i];
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_record_materialized_required_register_value(
+            value.value_id, arena, facts));
+    if (iree_any_bit_set(
+            value.flags,
+            LOOM_LOW_SPILL_MATERIALIZED_VALUE_FLAG_EXPANDED_EXECUTION)) {
+      IREE_RETURN_IF_ERROR(loom_low_allocation_append_materialized_value(
+          value.value_id, arena, &facts->expanded_execution_values));
+    }
+    if (iree_any_bit_set(
+            value.flags,
+            LOOM_LOW_SPILL_MATERIALIZED_VALUE_FLAG_PRIVATE_TO_CONSUMER)) {
+      IREE_RETURN_IF_ERROR(loom_low_allocation_append_materialized_value(
+          value.value_id, arena, &facts->per_user_placement_values));
+    }
+  }
+  return iree_ok_status();
 }
 
 typedef struct loom_low_allocation_storage_prefix_t {
@@ -216,13 +269,17 @@ static iree_status_t
 loom_low_allocation_validate_supported_spill_storage_spaces(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* spill_plans,
-    iree_host_size_t spill_plan_count,
+    const loom_low_spill_materialization_plan_t* materialization_plan,
     const loom_low_allocation_materialization_options_t* options,
     loom_low_allocation_materialization_result_t* result) {
   if (!options || !options->has_supported_storage_spaces) {
     return iree_ok_status();
   }
-  for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
+  for (iree_host_size_t i = 0; i < materialization_plan->record_count; ++i) {
+    if (!loom_low_spill_materialization_record_has_traffic(
+            &materialization_plan->records[i])) {
+      continue;
+    }
     const loom_low_allocation_spill_plan_t* plan = &spill_plans[i];
     const loom_storage_space_t storage_space =
         loom_low_allocation_storage_space_for_spill_slot(plan->slot_space);
@@ -264,14 +321,6 @@ static iree_status_t loom_low_allocation_set_storage_value_name(
   return loom_module_set_value_name(module, storage_value_id, name_id);
 }
 
-static bool loom_low_allocation_entry_preamble_op(const loom_op_t* op) {
-  return loom_low_live_in_isa(op) || loom_low_resource_isa(op);
-}
-
-static bool loom_low_allocation_entry_traffic_op(const loom_op_t* op) {
-  return loom_low_allocation_entry_preamble_op(op) || loom_low_spill_isa(op);
-}
-
 static iree_status_t loom_low_allocation_prepare_storage_prefix(
     loom_module_t* module, const loom_op_t* function_op,
     iree_arena_allocator_t* arena,
@@ -304,12 +353,12 @@ static iree_status_t loom_low_allocation_prepare_storage_prefix(
       ++storage_reserve_count;
       last_storage_reserve = op;
     } else {
-      if (op == insertion_op && loom_low_allocation_entry_preamble_op(op)) {
+      if (op == insertion_op && loom_low_function_entry_preamble_op(op)) {
         preamble_anchor = op;
         insertion_op = next_op;
       }
       if (entry_prefix_open) {
-        if (loom_low_allocation_entry_traffic_op(op)) {
+        if (loom_low_function_entry_traffic_op(op)) {
           entry_traffic_insertion_anchor = op;
         } else {
           entry_prefix_open = false;
@@ -370,7 +419,7 @@ static void loom_low_allocation_set_spill_insertion_point(
 
 static bool loom_low_allocation_defines_entry_preamble_value(
     const loom_op_t* function_op, const loom_op_t* op) {
-  if (!loom_low_allocation_entry_preamble_op(op)) {
+  if (!loom_low_function_entry_preamble_op(op)) {
     return false;
   }
   const loom_region_t* body = loom_low_function_const_body(function_op);
@@ -381,12 +430,11 @@ static iree_status_t loom_low_allocation_insert_storage_reserves(
     loom_module_t* module, const loom_low_allocation_table_t* table,
     loom_low_allocation_storage_prefix_t* storage_prefix,
     const loom_low_allocation_spill_plan_t* spill_plans,
+    const loom_low_spill_materialization_plan_t* materialization_plan,
     iree_host_size_t spill_plan_count, iree_arena_allocator_t* arena,
     loom_low_materialized_spill_slot_t* slots,
     loom_low_allocation_materialization_result_t* result) {
-  const uint32_t* representatives = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_spill_storage_plan(
-      table, spill_plans, spill_plan_count, arena, &representatives));
+  const uint32_t* representatives = materialization_plan->slot_representatives;
   const iree_string_view_t function_name =
       loom_low_diagnostic_function_name(module, table->function_op);
   const iree_host_size_t storage_name_start =
@@ -396,19 +444,24 @@ static iree_status_t loom_low_allocation_insert_storage_reserves(
   loom_low_allocation_set_storage_insertion_point(
       &builder, (loom_op_t*)table->function_op, storage_prefix);
   for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
+    if (!loom_low_spill_materialization_record_has_traffic(
+            &materialization_plan->records[i])) {
+      continue;
+    }
     if (representatives && representatives[i] != i) {
       slots[i] = slots[representatives[i]];
       continue;
     }
-    const loom_low_allocation_spill_plan_t* plan = &spill_plans[i];
+    const loom_low_allocation_spill_plan_t* spill_plan = &spill_plans[i];
     const loom_storage_space_t storage_space =
-        loom_low_allocation_storage_space_for_spill_slot(plan->slot_space);
+        loom_low_allocation_storage_space_for_spill_slot(
+            spill_plan->slot_space);
 
     loom_op_t* reserve_op = NULL;
     IREE_RETURN_IF_ERROR(loom_low_storage_reserve_build(
-        &builder, (int64_t)plan->byte_size, (int64_t)plan->byte_alignment,
-        loom_type_storage(storage_space), table->function_op->location,
-        &reserve_op));
+        &builder, (int64_t)spill_plan->byte_size,
+        (int64_t)spill_plan->byte_alignment, loom_type_storage(storage_space),
+        table->function_op->location, &reserve_op));
     loom_value_id_t storage_value_id =
         loom_low_storage_reserve_storage(reserve_op);
     if (storage_prefix->generated_storage_extends_entry_prefix) {
@@ -423,9 +476,9 @@ static iree_status_t loom_low_allocation_insert_storage_reserves(
         .storage_value_id = storage_value_id,
     };
     ++result->storage_count;
-    result->storage_bytes += plan->byte_size;
+    result->storage_bytes += spill_plan->byte_size;
     result->storage_minimum_alignment =
-        iree_max(result->storage_minimum_alignment, plan->byte_alignment);
+        iree_max(result->storage_minimum_alignment, spill_plan->byte_alignment);
   }
 
   return iree_ok_status();
@@ -463,21 +516,21 @@ static iree_status_t loom_low_allocation_rebuild_br_without_arg(
 
 static loom_value_id_t loom_low_allocation_materialization_resolve_value(
     loom_low_spill_materialization_value_ref_t value,
-    loom_op_t* const* action_ops, iree_host_size_t action_count) {
+    const loom_low_materialized_action_state_t* action_states,
+    iree_host_size_t action_count) {
   if (value.action_index == UINT32_MAX) {
     IREE_ASSERT_NE(value.value_id, LOOM_VALUE_ID_INVALID);
     return value.value_id;
   }
   IREE_ASSERT_LT(value.action_index, action_count);
-  loom_op_t* action_op = action_ops[value.action_index];
-  IREE_ASSERT(action_op != NULL && loom_low_reload_isa(action_op));
-  return loom_low_reload_result(action_op);
+  const loom_value_id_t value_id = action_states[value.action_index].value_id;
+  IREE_ASSERT_NE(value_id, LOOM_VALUE_ID_INVALID);
+  return value_id;
 }
 
 static loom_op_t* loom_low_allocation_materialization_target_op(
     loom_module_t* module,
     const loom_low_spill_materialization_target_t* target,
-    loom_op_t* const* action_ops, iree_host_size_t action_count,
     uint16_t* out_operand_index) {
   switch (target->kind) {
     case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_OPERATION_OPERAND:
@@ -495,163 +548,173 @@ static loom_op_t* loom_low_allocation_materialization_target_op(
       IREE_ASSERT_EQ(loom_low_br_dest(branch_op), destination_block);
       return branch_op;
     }
-    case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_OPERAND:
-      IREE_ASSERT_LT(target->owner.action_index, action_count);
-      IREE_ASSERT(action_ops[target->owner.action_index] != NULL);
-      *out_operand_index = target->operand_index;
-      return action_ops[target->owner.action_index];
+    case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE:
+      IREE_ASSERT_UNREACHABLE("action targets have no emitted operation yet");
+      return NULL;
   }
-  IREE_ASSERT(false, "unknown spill materialization target kind");
-  *out_operand_index = 0;
+  IREE_ASSERT_UNREACHABLE("unknown spill materialization target kind");
   return NULL;
 }
 
-static iree_status_t loom_low_allocation_insert_definition_store(
-    loom_module_t* module, const loom_op_t* function_op,
-    loom_low_allocation_storage_prefix_t* storage_prefix,
-    const loom_low_allocation_spill_plan_t* spill_plan,
-    loom_value_id_t storage_value_id, iree_arena_allocator_t* arena,
-    loom_low_materialized_value_facts_t* facts, loom_op_t** out_spill_op) {
-  *out_spill_op = NULL;
-  loom_value_t* value = loom_module_value(module, spill_plan->value_id);
-  loom_builder_t builder;
-  bool extends_entry_prefix = false;
-  loom_location_id_t location = function_op->location;
-  if (loom_value_is_block_arg(value)) {
-    loom_block_t* block = loom_value_def_block(value);
-    loom_builder_initialize(module, &module->arena, block, &builder);
-    loom_low_allocation_set_spill_insertion_point(&builder, storage_prefix,
-                                                  block);
-    extends_entry_prefix = block == storage_prefix->entry_block;
-  } else {
-    loom_op_t* defining_op = loom_value_def_op(value);
-    loom_builder_initialize(module, &module->arena, defining_op->parent_block,
-                            &builder);
-    if (loom_low_allocation_defines_entry_preamble_value(function_op,
-                                                         defining_op)) {
-      loom_low_allocation_set_spill_insertion_point(&builder, storage_prefix,
-                                                    defining_op->parent_block);
-      extends_entry_prefix = true;
-    } else {
-      loom_builder_set_after(&builder, defining_op);
+typedef struct loom_low_materialization_insertion_t {
+  // Original operation anchoring the emitted traffic, or NULL at entry.
+  loom_op_t* anchor_op;
+  // Source location assigned to the generated traffic.
+  loom_location_id_t location;
+  // Whether traffic belongs after |anchor_op|.
+  bool after;
+  // Whether traffic extends the normalized entry prefix.
+  bool entry_prefix;
+} loom_low_materialization_insertion_t;
+
+static loom_low_materialization_insertion_t
+loom_low_allocation_materialization_insertion(
+    loom_module_t* module, const loom_low_allocation_table_t* table,
+    const loom_low_allocation_spill_plan_t* spill_plans,
+    const loom_low_spill_materialization_action_t* action,
+    const loom_low_spill_materialization_instruction_t* instruction) {
+  const loom_liveness_operation_point_t* operation = loom_liveness_operation_at(
+      &table->liveness, instruction->operation_index);
+  loom_low_materialization_insertion_t insertion = {
+      .anchor_op = (loom_op_t*)operation->op,
+      .location = operation->op->location,
+      .after = loom_low_spill_materialization_instruction_is_after(instruction),
+  };
+  switch (action->kind) {
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_DEFINITION_STORE: {
+      const loom_low_allocation_spill_plan_t* spill_plan =
+          &spill_plans[action->spill_plan_index];
+      const loom_value_t* value =
+          loom_module_value(module, spill_plan->value_id);
+      const bool extends_entry_prefix =
+          loom_value_is_block_arg(value)
+              ? loom_value_def_block(value) ==
+                    loom_region_const_entry_block(
+                        loom_low_function_const_body(table->function_op))
+              : loom_low_allocation_defines_entry_preamble_value(
+                    table->function_op, loom_value_def_op(value));
+      if (extends_entry_prefix) {
+        insertion.anchor_op = NULL;
+        insertion.location = table->function_op->location;
+        insertion.after = false;
+        insertion.entry_prefix = true;
+      }
+      break;
     }
-    location = defining_op->location;
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD:
+      // Capacity follows accepted schedule order, while mutation must dominate
+      // every source-order slice until the generated reload is rescheduled.
+      insertion.anchor_op = action->value.shared_slice_reload.first_slice_op;
+      insertion.location = insertion.anchor_op->location;
+      insertion.after = false;
+      break;
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_EDGE_STORE:
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD:
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD:
+      break;
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BRANCH_ARGUMENT:
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BLOCK_ARGUMENT:
+      IREE_ASSERT_UNREACHABLE("structural action has no traffic insertion");
+      break;
   }
-  IREE_RETURN_IF_ERROR(loom_low_spill_build(&builder, spill_plan->value_id,
-                                            storage_value_id, 0, location,
-                                            out_spill_op));
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocation_record_materialized_required_register_value(
-          spill_plan->value_id, arena, facts));
-  if (extends_entry_prefix) {
-    storage_prefix->entry_traffic_insertion_anchor = *out_spill_op;
+  return insertion;
+}
+
+static void loom_low_allocation_materialization_set_insertion_point(
+    loom_module_t* module, loom_builder_t* builder,
+    loom_low_allocation_storage_prefix_t* storage_prefix,
+    const loom_low_materialization_insertion_t* insertion,
+    loom_op_t** inout_after_source_anchor,
+    loom_op_t** inout_after_insertion_anchor) {
+  if (insertion->entry_prefix) {
+    loom_builder_initialize(module, &module->arena, storage_prefix->entry_block,
+                            builder);
+    loom_low_allocation_set_spill_insertion_point(builder, storage_prefix,
+                                                  storage_prefix->entry_block);
+    return;
   }
+  IREE_ASSERT_ARGUMENT(insertion->anchor_op);
+  loom_builder_initialize(module, &module->arena,
+                          insertion->anchor_op->parent_block, builder);
+  if (!insertion->after) {
+    loom_builder_set_before(builder, insertion->anchor_op);
+    return;
+  }
+  if (*inout_after_source_anchor != insertion->anchor_op) {
+    *inout_after_source_anchor = insertion->anchor_op;
+    *inout_after_insertion_anchor = insertion->anchor_op;
+  }
+  loom_builder_set_after(builder, *inout_after_insertion_anchor);
+}
+
+typedef struct loom_low_materialized_op_capture_t {
+  // Builder callback restored after the traffic recipe finishes.
+  loom_builder_callback_t previous_callback;
+  // Last operation finalized by the traffic recipe.
+  loom_op_t* last_op;
+} loom_low_materialized_op_capture_t;
+
+static iree_status_t loom_low_allocation_capture_materialized_op(
+    void* user_data, loom_op_t* op) {
+  loom_low_materialized_op_capture_t* capture =
+      (loom_low_materialized_op_capture_t*)user_data;
+  if (capture->previous_callback.fn != NULL) {
+    IREE_RETURN_IF_ERROR(capture->previous_callback.fn(
+        capture->previous_callback.user_data, op));
+  }
+  capture->last_op = op;
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_insert_edge_store(
-    loom_module_t* module, loom_block_t* predecessor_block,
-    loom_value_id_t source_value_id, loom_value_id_t storage_value_id,
-    iree_arena_allocator_t* arena, loom_low_materialized_value_facts_t* facts,
-    loom_op_t** out_spill_op) {
-  *out_spill_op = NULL;
-  loom_op_t* branch_op =
-      (loom_op_t*)loom_block_const_last_op(predecessor_block);
-  loom_builder_t builder;
-  loom_builder_initialize(module, &module->arena, predecessor_block, &builder);
-  loom_builder_set_before(&builder, branch_op);
-  IREE_RETURN_IF_ERROR(loom_low_spill_build(&builder, source_value_id,
-                                            storage_value_id, 0,
-                                            branch_op->location, out_spill_op));
-  return loom_low_allocation_record_materialized_required_register_value(
-      source_value_id, arena, facts);
-}
-
-static iree_status_t loom_low_allocation_insert_operand_reload(
-    loom_module_t* module, const loom_low_allocation_spill_plan_t* spill_plan,
-    loom_value_id_t storage_value_id,
-    const loom_low_spill_materialization_target_t* target,
-    loom_op_t* const* action_ops, iree_host_size_t action_count,
-    iree_arena_allocator_t* arena, loom_low_materialized_value_facts_t* facts,
-    loom_op_t** out_reload_op) {
-  *out_reload_op = NULL;
-  uint16_t operand_index = 0;
-  loom_op_t* user_op = loom_low_allocation_materialization_target_op(
-      module, target, action_ops, action_count, &operand_index);
-  loom_builder_t builder;
-  loom_builder_initialize(module, &module->arena, user_op->parent_block,
-                          &builder);
-  loom_builder_set_before(&builder, user_op);
-  IREE_RETURN_IF_ERROR(loom_low_reload_build(
-      &builder, storage_value_id, 0,
-      loom_module_value_type(module, spill_plan->value_id), user_op->location,
-      out_reload_op));
-  const loom_value_id_t reload_value_id =
-      loom_low_reload_result(*out_reload_op);
-  IREE_RETURN_IF_ERROR(
-      loom_op_set_operand(module, user_op, operand_index, reload_value_id));
-  return loom_low_allocation_record_materialized_reload_value(
-      module, reload_value_id, arena, facts);
-}
-
-static iree_status_t loom_low_allocation_insert_narrow_slice_reload(
-    loom_module_t* module,
-    const loom_low_spill_materialization_action_t* action,
-    loom_value_id_t storage_value_id, iree_arena_allocator_t* arena,
-    loom_low_materialized_value_facts_t* facts, loom_op_t** out_reload_op) {
-  *out_reload_op = NULL;
-  loom_op_t* slice_op = action->value.narrow_slice_reload.slice_op;
-  const loom_value_id_t slice_result = loom_low_slice_result(slice_op);
-  const loom_type_t result_type = loom_module_value_type(module, slice_result);
-  loom_builder_t builder;
-  loom_builder_initialize(module, &module->arena, slice_op->parent_block,
-                          &builder);
-  loom_builder_set_before(&builder, slice_op);
-  IREE_RETURN_IF_ERROR(loom_low_reload_build(
-      &builder, storage_value_id, action->value.narrow_slice_reload.byte_offset,
-      result_type, slice_op->location, out_reload_op));
-  const loom_value_id_t reload_value_id =
-      loom_low_reload_result(*out_reload_op);
-  IREE_RETURN_IF_ERROR(
-      loom_value_replace_all_uses_with(module, slice_result, reload_value_id));
-  IREE_RETURN_IF_ERROR(loom_op_erase(module, slice_op));
-  return loom_low_allocation_record_materialized_reload_value(
-      module, reload_value_id, arena, facts);
-}
-
-static iree_status_t loom_low_allocation_insert_shared_slice_reload(
-    loom_module_t* module, const loom_low_allocation_spill_plan_t* spill_plan,
-    const loom_low_spill_materialization_action_t* action,
-    const loom_low_spill_materialization_plan_t* materialization_plan,
-    loom_value_id_t storage_value_id, loom_op_t* const* action_ops,
-    iree_host_size_t action_count, iree_arena_allocator_t* arena,
-    loom_low_materialized_value_facts_t* facts, loom_op_t** out_reload_op) {
-  *out_reload_op = NULL;
-  loom_op_t* first_slice_op = action->value.shared_slice_reload.first_slice_op;
-  loom_builder_t builder;
-  loom_builder_initialize(module, &module->arena, first_slice_op->parent_block,
-                          &builder);
-  loom_builder_set_before(&builder, first_slice_op);
-  IREE_RETURN_IF_ERROR(loom_low_reload_build(
-      &builder, storage_value_id, 0,
-      loom_module_value_type(module, spill_plan->value_id),
-      first_slice_op->location, out_reload_op));
-  const loom_value_id_t reload_value_id =
-      loom_low_reload_result(*out_reload_op);
-  const uint32_t target_start = action->value.shared_slice_reload.target_start;
-  const uint32_t target_count = action->value.shared_slice_reload.target_count;
-  IREE_ASSERT_LE((iree_host_size_t)target_start + target_count,
-                 materialization_plan->target_count);
-  for (uint32_t i = 0; i < target_count; ++i) {
-    uint16_t operand_index = 0;
-    loom_op_t* slice_op = loom_low_allocation_materialization_target_op(
-        module, &materialization_plan->targets[target_start + i], action_ops,
-        action_count, &operand_index);
-    IREE_RETURN_IF_ERROR(
-        loom_op_set_operand(module, slice_op, operand_index, reload_value_id));
+static iree_status_t loom_low_allocation_emit_spill_traffic(
+    const loom_low_spill_materialization_traffic_plan_t* traffic_plan,
+    iree_host_size_t instruction_index,
+    const loom_low_spill_materialization_traffic_t* traffic,
+    loom_builder_t* builder, loom_value_id_t storage_value_id,
+    loom_value_id_t source_value_id, loom_location_id_t location,
+    iree_arena_allocator_t* arena, loom_op_t** out_last_op,
+    loom_low_spill_materialized_action_t* out_action) {
+  *out_last_op = NULL;
+  *out_action = (loom_low_spill_materialized_action_t){
+      .value_id = LOOM_VALUE_ID_INVALID,
+  };
+  if (traffic_plan->emit == NULL) {
+    if (traffic->kind == LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_STORE) {
+      IREE_ASSERT_NE(source_value_id, LOOM_VALUE_ID_INVALID);
+      IREE_RETURN_IF_ERROR(
+          loom_low_spill_build(builder, source_value_id, storage_value_id,
+                               traffic->byte_offset, location, out_last_op));
+    } else {
+      IREE_ASSERT_EQ(traffic->kind,
+                     LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_RELOAD);
+      IREE_ASSERT_EQ(source_value_id, LOOM_VALUE_ID_INVALID);
+      IREE_RETURN_IF_ERROR(
+          loom_low_reload_build(builder, storage_value_id, traffic->byte_offset,
+                                traffic->value_type, location, out_last_op));
+      out_action->value_id = loom_low_reload_result(*out_last_op);
+    }
+    return iree_ok_status();
   }
-  return loom_low_allocation_record_materialized_required_register_value(
-      reload_value_id, arena, facts);
+
+  IREE_ASSERT_ARGUMENT(arena);
+  iree_arena_reset(arena);
+  loom_low_materialized_op_capture_t capture = {
+      .previous_callback = builder->on_op_finalized,
+  };
+  builder->on_op_finalized = (loom_builder_callback_t){
+      .fn = loom_low_allocation_capture_materialized_op,
+      .user_data = &capture,
+  };
+  iree_status_t status = traffic_plan->emit(
+      traffic_plan->user_data, instruction_index, builder, storage_value_id,
+      source_value_id, location, arena, out_action);
+  builder->on_op_finalized = capture.previous_callback;
+  IREE_RETURN_IF_ERROR(status);
+  IREE_ASSERT(capture.last_op != NULL);
+  IREE_ASSERT_EQ(traffic->kind == LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_RELOAD,
+                 out_action->value_id != LOOM_VALUE_ID_INVALID);
+  *out_last_op = capture.last_op;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_remove_branch_argument(
@@ -678,63 +741,226 @@ static iree_status_t loom_low_allocation_apply_spill_materialization_plan(
     const loom_low_allocation_spill_plan_t* spill_plans,
     const loom_low_materialized_spill_slot_t* slots,
     const loom_low_spill_materialization_plan_t* materialization_plan,
+    const loom_low_spill_materialization_traffic_plan_t* traffic_plan,
     loom_low_allocation_storage_prefix_t* storage_prefix,
-    iree_bitmap_t per_user_placement_values, iree_arena_allocator_t* arena,
+    iree_bitmap_t per_user_placement_values,
+    iree_arena_allocator_t* traffic_arena, iree_arena_allocator_t* arena,
     loom_low_materialized_value_facts_t* facts) {
-  loom_op_t** action_ops = NULL;
+  loom_low_materialized_action_state_t* action_states = NULL;
   if (materialization_plan->action_count != 0) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(arena, materialization_plan->action_count,
-                                  sizeof(*action_ops), (void**)&action_ops));
-    memset(action_ops, 0,
-           materialization_plan->action_count * sizeof(*action_ops));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, materialization_plan->action_count, sizeof(*action_states),
+        (void**)&action_states));
+    for (iree_host_size_t i = 0; i < materialization_plan->action_count; ++i) {
+      action_states[i].value_id = LOOM_VALUE_ID_INVALID;
+    }
   }
 
-  for (iree_host_size_t i = 0; i < materialization_plan->action_count; ++i) {
+  loom_op_t* after_source_anchor = NULL;
+  loom_op_t* after_insertion_anchor = NULL;
+  for (iree_host_size_t i = 0; i < materialization_plan->instruction_count;
+       ++i) {
+    const loom_low_spill_materialization_instruction_t* instruction =
+        &materialization_plan->instructions[i];
+    const uint32_t action_index =
+        loom_low_spill_materialization_instruction_action_index(instruction);
+    IREE_ASSERT_LT(action_index, materialization_plan->action_count);
     const loom_low_spill_materialization_action_t* action =
-        &materialization_plan->actions[i];
+        &materialization_plan->actions[action_index];
     IREE_ASSERT_LT(action->spill_plan_index,
                    materialization_plan->record_count);
     const loom_low_allocation_spill_plan_t* spill_plan =
         &spill_plans[action->spill_plan_index];
     const loom_value_id_t storage_value_id =
         slots[action->spill_plan_index].storage_value_id;
+    const loom_low_materialization_insertion_t insertion =
+        loom_low_allocation_materialization_insertion(
+            module, table, spill_plans, action, instruction);
+    loom_builder_t builder = {0};
+    loom_low_allocation_materialization_set_insertion_point(
+        module, &builder, storage_prefix, &insertion, &after_source_anchor,
+        &after_insertion_anchor);
+    loom_low_spill_materialization_traffic_t traffic = {0};
+    const bool has_traffic = loom_low_spill_materialization_plan_query_traffic(
+        module, spill_plans, materialization_plan, action_index, &traffic);
+    loom_op_t* last_traffic_op = NULL;
+    loom_low_spill_materialized_action_t materialized_action = {
+        .value_id = LOOM_VALUE_ID_INVALID,
+    };
     switch (action->kind) {
       case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_DEFINITION_STORE: {
-        IREE_RETURN_IF_ERROR(loom_low_allocation_insert_definition_store(
-            module, table->function_op, storage_prefix, spill_plan,
-            storage_value_id, arena, facts, &action_ops[i]));
+        IREE_ASSERT(has_traffic);
+        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_spill_traffic(
+            traffic_plan, i, &traffic, &builder, storage_value_id,
+            spill_plan->value_id, insertion.location, traffic_arena,
+            &last_traffic_op, &materialized_action));
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_EDGE_STORE: {
+        IREE_ASSERT(has_traffic);
+        const loom_value_id_t source_value_id =
+            action_states[action_index].value_id != LOOM_VALUE_ID_INVALID
+                ? action_states[action_index].value_id
+                : loom_low_allocation_materialization_resolve_value(
+                      action->value.edge_store.source, action_states,
+                      materialization_plan->action_count);
+        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_spill_traffic(
+            traffic_plan, i, &traffic, &builder, storage_value_id,
+            source_value_id, insertion.location, traffic_arena,
+            &last_traffic_op, &materialized_action));
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD: {
+        IREE_ASSERT(has_traffic);
+        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_spill_traffic(
+            traffic_plan, i, &traffic, &builder, storage_value_id,
+            LOOM_VALUE_ID_INVALID, insertion.location, traffic_arena,
+            &last_traffic_op, &materialized_action));
+        const loom_value_id_t reload_value_id = materialized_action.value_id;
+        action_states[action_index].value_id = reload_value_id;
+        const loom_low_spill_materialization_target_t* target =
+            &action->value.operand_reload.target;
+        if (target->kind ==
+            LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE) {
+          IREE_ASSERT_LT(target->owner.action_index,
+                         materialization_plan->action_count);
+          IREE_ASSERT_EQ(action_states[target->owner.action_index].value_id,
+                         LOOM_VALUE_ID_INVALID);
+          action_states[target->owner.action_index].value_id = reload_value_id;
+        } else {
+          uint16_t operand_index = 0;
+          loom_op_t* user_op = loom_low_allocation_materialization_target_op(
+              module, target, &operand_index);
+          IREE_RETURN_IF_ERROR(loom_op_set_operand(
+              module, user_op, operand_index, reload_value_id));
+        }
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD: {
+        IREE_ASSERT(has_traffic);
+        loom_op_t* slice_op = action->value.narrow_slice_reload.slice_op;
+        const loom_value_id_t slice_result = loom_low_slice_result(slice_op);
+        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_spill_traffic(
+            traffic_plan, i, &traffic, &builder, storage_value_id,
+            LOOM_VALUE_ID_INVALID, insertion.location, traffic_arena,
+            &last_traffic_op, &materialized_action));
+        const loom_value_id_t reload_value_id = materialized_action.value_id;
+        action_states[action_index].value_id = reload_value_id;
+        IREE_RETURN_IF_ERROR(loom_value_replace_all_uses_with(
+            module, slice_result, reload_value_id));
+        IREE_RETURN_IF_ERROR(loom_op_erase(module, slice_op));
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD: {
+        IREE_ASSERT(has_traffic);
+        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_spill_traffic(
+            traffic_plan, i, &traffic, &builder, storage_value_id,
+            LOOM_VALUE_ID_INVALID, insertion.location, traffic_arena,
+            &last_traffic_op, &materialized_action));
+        const loom_value_id_t reload_value_id = materialized_action.value_id;
+        action_states[action_index].value_id = reload_value_id;
+        const uint32_t target_start =
+            action->value.shared_slice_reload.target_start;
+        const uint32_t target_count =
+            action->value.shared_slice_reload.target_count;
+        IREE_ASSERT_LE((iree_host_size_t)target_start + target_count,
+                       materialization_plan->target_count);
+        for (uint32_t j = 0; j < target_count; ++j) {
+          uint16_t operand_index = 0;
+          loom_op_t* slice_op = loom_low_allocation_materialization_target_op(
+              module, &materialization_plan->targets[target_start + j],
+              &operand_index);
+          IREE_RETURN_IF_ERROR(loom_op_set_operand(
+              module, slice_op, operand_index, reload_value_id));
+        }
+        break;
+      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BRANCH_ARGUMENT:
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BLOCK_ARGUMENT:
+        IREE_ASSERT_UNREACHABLE("structural action entered traffic stream");
+        break;
+    }
+    IREE_ASSERT(has_traffic);
+    IREE_ASSERT_ARGUMENT(last_traffic_op);
+    if (traffic_plan->emit != NULL) {
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_record_materialized_action_values(
+              &materialized_action, arena, facts));
+    }
+    if (insertion.entry_prefix) {
+      storage_prefix->entry_traffic_insertion_anchor = last_traffic_op;
+    } else if (insertion.after) {
+      after_insertion_anchor = last_traffic_op;
+    }
+  }
+
+  // Value facts retain transformation order and observe the complete emitted
+  // use graph. In particular, an action-target reload has its store use now.
+  for (uint32_t action_index = 0;
+       action_index < materialization_plan->action_count; ++action_index) {
+    const loom_low_spill_materialization_action_t* action =
+        &materialization_plan->actions[action_index];
+    if (traffic_plan->emit != NULL) {
+      switch (action->kind) {
+        case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD:
+        case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD:
+        case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD: {
+          const loom_value_id_t value_id = action_states[action_index].value_id;
+          if (loom_low_allocation_materialized_value_has_private_consumer(
+                  module, value_id)) {
+            IREE_RETURN_IF_ERROR(loom_low_allocation_append_materialized_value(
+                value_id, arena, &facts->per_user_placement_values));
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      continue;
+    }
+    switch (action->kind) {
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_DEFINITION_STORE: {
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_record_materialized_required_register_value(
+                spill_plans[action->spill_plan_index].value_id, arena, facts));
         break;
       }
       case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_EDGE_STORE: {
         const loom_value_id_t source_value_id =
-            loom_low_allocation_materialization_resolve_value(
-                action->value.edge_store.source, action_ops,
-                materialization_plan->action_count);
-        IREE_RETURN_IF_ERROR(loom_low_allocation_insert_edge_store(
-            module, action->value.edge_store.predecessor_block, source_value_id,
-            storage_value_id, arena, facts, &action_ops[i]));
+            action_states[action_index].value_id != LOOM_VALUE_ID_INVALID
+                ? action_states[action_index].value_id
+                : loom_low_allocation_materialization_resolve_value(
+                      action->value.edge_store.source, action_states,
+                      materialization_plan->action_count);
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_record_materialized_required_register_value(
+                source_value_id, arena, facts));
         break;
       }
-      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD: {
-        IREE_RETURN_IF_ERROR(loom_low_allocation_insert_operand_reload(
-            module, spill_plan, storage_value_id,
-            &action->value.operand_reload.target, action_ops,
-            materialization_plan->action_count, arena, facts, &action_ops[i]));
-        break;
-      }
+      case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD:
       case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD: {
-        IREE_RETURN_IF_ERROR(loom_low_allocation_insert_narrow_slice_reload(
-            module, action, storage_value_id, arena, facts, &action_ops[i]));
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_record_materialized_reload_value(
+                module, action_states[action_index].value_id, arena, facts));
         break;
       }
       case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD: {
-        IREE_RETURN_IF_ERROR(loom_low_allocation_insert_shared_slice_reload(
-            module, spill_plan, action, materialization_plan, storage_value_id,
-            action_ops, materialization_plan->action_count, arena, facts,
-            &action_ops[i]));
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_record_materialized_required_register_value(
+                action_states[action_index].value_id, arena, facts));
         break;
       }
+      default:
+        break;
+    }
+  }
+
+  // CFG signature mutation remains in transformation order after every
+  // traffic action has consumed its original anchor and logical payload.
+  for (iree_host_size_t i = 0; i < materialization_plan->action_count; ++i) {
+    const loom_low_spill_materialization_action_t* action =
+        &materialization_plan->actions[i];
+    switch (action->kind) {
       case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BRANCH_ARGUMENT: {
         IREE_RETURN_IF_ERROR(loom_low_allocation_remove_branch_argument(
             module, action, per_user_placement_values, arena));
@@ -750,6 +976,8 @@ static iree_status_t loom_low_allocation_apply_spill_materialization_plan(
             loom_block_remove_arg(module, block, argument_index));
         break;
       }
+      default:
+        break;
     }
   }
   return iree_ok_status();
@@ -796,9 +1024,14 @@ iree_status_t loom_low_allocation_materialize_spills(
                             "materialized storage count overflow");
   }
 
+  loom_low_spill_materialization_plan_t materialization_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_low_spill_materialization_plan_build(
+      table, spill_plans, spill_plan_count, arena, &materialization_plan));
+  IREE_ASSERT_EQ(materialization_plan.record_count, spill_plan_count);
+
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_validate_supported_spill_storage_spaces(
-          table, spill_plans, spill_plan_count, options, &result));
+          table, spill_plans, &materialization_plan, options, &result));
   if (result.error_count != 0) {
     if (out_result) {
       *out_result = result;
@@ -806,10 +1039,13 @@ iree_status_t loom_low_allocation_materialize_spills(
     return iree_ok_status();
   }
 
-  loom_low_spill_materialization_plan_t materialization_plan = {0};
-  IREE_RETURN_IF_ERROR(loom_low_spill_materialization_plan_build(
-      table, spill_plans, spill_plan_count, arena, &materialization_plan));
-  IREE_ASSERT_EQ(materialization_plan.record_count, spill_plan_count);
+  loom_low_spill_materialization_traffic_plan_t traffic_plan = {0};
+  if (options && options->plan_traffic != NULL) {
+    IREE_RETURN_IF_ERROR(options->plan_traffic(
+        options->plan_traffic_user_data, table, spill_plans, spill_plan_count,
+        &materialization_plan, arena, &traffic_plan));
+    IREE_ASSERT(traffic_plan.emit != NULL);
+  }
 
   loom_low_allocation_storage_prefix_t storage_prefix;
   IREE_RETURN_IF_ERROR(loom_low_allocation_prepare_storage_prefix(
@@ -826,8 +1062,8 @@ iree_status_t loom_low_allocation_materialize_spills(
   }
 
   IREE_RETURN_IF_ERROR(loom_low_allocation_insert_storage_reserves(
-      module, table, &storage_prefix, spill_plans, spill_plan_count, arena,
-      slots, &result));
+      module, table, &storage_prefix, spill_plans, &materialization_plan,
+      spill_plan_count, arena, slots, &result));
 
   for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
     if (spill_plans[i].value_id < per_user_placement_values.bit_count) {
@@ -857,9 +1093,21 @@ iree_status_t loom_low_allocation_materialize_spills(
     result.reload_bytes += plan_record->reload_bytes;
   }
 
-  IREE_RETURN_IF_ERROR(loom_low_allocation_apply_spill_materialization_plan(
-      module, table, spill_plans, slots, &materialization_plan, &storage_prefix,
-      per_user_placement_values, arena, &value_facts));
+  iree_arena_allocator_t traffic_arena;
+  iree_arena_allocator_t* traffic_arena_ptr = NULL;
+  if (traffic_plan.emit != NULL) {
+    iree_arena_initialize(arena->block_pool, &traffic_arena);
+    traffic_arena_ptr = &traffic_arena;
+  }
+  const iree_status_t traffic_status =
+      loom_low_allocation_apply_spill_materialization_plan(
+          module, table, spill_plans, slots, &materialization_plan,
+          &traffic_plan, &storage_prefix, per_user_placement_values,
+          traffic_arena_ptr, arena, &value_facts);
+  if (traffic_arena_ptr != NULL) {
+    iree_arena_deinitialize(&traffic_arena);
+  }
+  IREE_RETURN_IF_ERROR(traffic_status);
 
   for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
     const loom_low_spill_materialization_record_t* plan_record =
@@ -881,7 +1129,8 @@ iree_status_t loom_low_allocation_materialize_spills(
           table, &spill_plans[i], materialized_store_traffic,
           materialized_reload_traffic, record_flags, &materialized_spills[i]);
     }
-    if (emit_spill_diagnostics) {
+    if (emit_spill_diagnostics &&
+        loom_low_spill_materialization_record_has_traffic(plan_record)) {
       IREE_RETURN_IF_ERROR(loom_low_allocation_emit_materialized_spill(
           table, &spill_plans[i], slots[i].storage_value_id,
           materialized_store_traffic, materialized_reload_traffic, emitter));
@@ -900,6 +1149,11 @@ iree_status_t loom_low_allocation_materialize_spills(
       (loom_low_allocation_materialized_value_list_t){
           .values = value_facts.per_user_placement_values.values,
           .count = value_facts.per_user_placement_values.count,
+      };
+  result.expanded_execution_values =
+      (loom_low_allocation_materialized_value_list_t){
+          .values = value_facts.expanded_execution_values.values,
+          .count = value_facts.expanded_execution_values.count,
       };
   if (out_result) {
     *out_result = result;

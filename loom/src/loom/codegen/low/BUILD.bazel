@@ -337,6 +337,7 @@ loom_cc_library(
     srcs = ["function_requirements.c"],
     hdrs = ["function_requirements.h"],
     deps = [
+        ":function",
         ":representation_binding",
         ":storage_layout",
         "//loom/src/loom/ir",
@@ -409,6 +410,7 @@ loom_cc_library(
     srcs = ["storage_layout.c"],
     hdrs = ["storage_layout.h"],
     deps = [
+        ":function",
         "//loom/src/loom/analysis:storage_layout",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:type_registry",
@@ -648,7 +650,6 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/allocation:packet_move",
         "//loom/src/loom/codegen/low/allocation:placement",
         "//loom/src/loom/codegen/low/allocation:search",
-        "//loom/src/loom/codegen/low/allocation:spill_plan",
         "//loom/src/loom/codegen/low/allocation:spill_traffic",
         "//loom/src/loom/codegen/low/allocation:storage",
         "//loom/src/loom/codegen/low/allocation:storage_lease",
@@ -712,7 +713,6 @@ loom_cc_library(
         ":function",
         ":storage_layout",
         "//loom/src/loom/codegen/low/allocation:spill_plan",
-        "//loom/src/loom/codegen/low/allocation:spill_storage",
         "//loom/src/loom/codegen/low/allocation:storage",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:parameter",
@@ -735,6 +735,7 @@ loom_cc_test(
         ":diagnostics",
         ":text_asm",
         "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low/allocation:spill_plan",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
@@ -785,6 +786,7 @@ loom_cc_library(
     deps = [
         ":allocation",
         ":diagnostics",
+        ":function",
         ":representation_binding",
         ":storage_relation",
         "//loom/src/loom/codegen/low/allocation:live_range",

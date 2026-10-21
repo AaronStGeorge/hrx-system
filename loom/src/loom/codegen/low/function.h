@@ -49,6 +49,15 @@ loom_region_t* loom_low_function_body(loom_op_t* function_op);
 // Returns the executable body region of |function_op|, or NULL when absent.
 const loom_region_t* loom_low_function_const_body(const loom_op_t* function_op);
 
+// Returns true for an entry declaration that imports a register value or
+// resource before ordinary function traffic.
+bool loom_low_function_entry_preamble_op(const loom_op_t* op);
+
+// Returns true for an operation that may extend the contiguous entry traffic
+// prefix. Storage reservations are declarations and are ignored while finding
+// the prefix; callers establish that |op| belongs to the entry block.
+bool loom_low_function_entry_traffic_op(const loom_op_t* op);
+
 // Materializes a verified Low body's implicit function scheduling contract as
 // explicit controls in |blocks|. |schedule| uses the mode returned by
 // loom_low_function_schedule. The span begins with the source entry block and

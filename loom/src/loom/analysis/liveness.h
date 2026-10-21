@@ -297,6 +297,9 @@ typedef struct loom_liveness_analysis_t {
   const loom_liveness_operation_table_t* operations;
   // Number of operation records in |operations|.
   iree_host_size_t operation_count;
+  // Operation row indices sorted by operation pointer, or NULL when the
+  // optional direct operation lookup was not retained.
+  const uint32_t* operation_indices_by_pointer;
   // Number of semantic-use local value ordinals in |operations|.
   iree_host_size_t operation_use_count;
 } loom_liveness_analysis_t;
@@ -358,6 +361,18 @@ iree_status_t loom_liveness_analyze_region_with_order(
 // scratch and remains valid until the result arena is reset.
 const loom_liveness_operation_point_t* loom_liveness_operation_at(
     const loom_liveness_analysis_t* analysis, uint32_t operation_index);
+
+// Retains an operation-to-row index in |analysis|. The operation rows and
+// pointed-to IR must remain immutable. Repeated calls preserve the first index.
+// This is optional because most analyses traverse accepted order directly.
+iree_status_t loom_liveness_retain_operation_index(
+    loom_liveness_analysis_t* analysis, iree_arena_allocator_t* arena);
+
+// Returns the indexed row for |op|, or UINT32_MAX when |op| is outside
+// |analysis|. loom_liveness_retain_operation_index must have completed first
+// unless the analysis contains no operations.
+uint32_t loom_liveness_operation_index_for_op(
+    const loom_liveness_analysis_t* analysis, const loom_op_t* op);
 
 // Returns the nonempty contiguous prefix of [operation_index, operation_end).
 // Both bounds belong to the analysis's operation domain, with the exclusive

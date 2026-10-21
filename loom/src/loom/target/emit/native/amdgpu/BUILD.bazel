@@ -288,10 +288,13 @@ loom_cc_library(
     deps = [
         ":spill_recipe",
         ":storage_layout",
+        "//loom/src/loom/codegen/low:allocation_materialization",
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low/allocation:spill_plan",
+        "//loom/src/loom/codegen/low/allocation:storage",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",

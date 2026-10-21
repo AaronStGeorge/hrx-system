@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/representation_binding.h"
 #include "loom/ops/global/ops.h"
 #include "loom/ops/low/ops.h"
@@ -114,14 +115,25 @@ iree_status_t loom_low_function_requirements_build(
   }
   loom_low_storage_layout_builder_t storage_builder;
   loom_low_storage_layout_builder_initialize(&storage_builder);
+  const loom_block_t* entry_block = loom_region_const_entry_block(body);
+  bool entry_traffic_prefix_open = true;
   const loom_block_t* block = NULL;
   loom_region_for_each_block(body, block) {
     out_requirements->node_count += block->op_count;
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
+      if (block == entry_block && entry_traffic_prefix_open &&
+          !loom_low_storage_reserve_isa(op)) {
+        entry_traffic_prefix_open = loom_low_function_entry_traffic_op(op);
+        if (entry_traffic_prefix_open) {
+          out_requirements->entry_traffic_end = op;
+          if (loom_low_function_entry_preamble_op(op)) {
+            out_requirements->entry_preamble_end = op;
+          }
+        }
+      }
       switch (op->kind) {
         case LOOM_OP_LOW_RESOURCE: {
-          out_requirements->entry_preamble_end = op;
           const iree_host_size_t minimum_capacity =
               out_requirements->resource_count + 1;
           if (minimum_capacity > resource_capacity) {
@@ -134,7 +146,6 @@ iree_status_t loom_low_function_requirements_build(
           break;
         }
         case LOOM_OP_LOW_LIVE_IN:
-          out_requirements->entry_preamble_end = op;
           break;
         case LOOM_OP_LOW_STORAGE_RESERVE:
         case LOOM_OP_LOW_STORAGE_VIEW: {

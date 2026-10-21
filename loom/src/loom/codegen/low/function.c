@@ -84,6 +84,14 @@ const loom_region_t* loom_low_function_const_body(
   return NULL;
 }
 
+bool loom_low_function_entry_preamble_op(const loom_op_t* op) {
+  return loom_low_live_in_isa(op) || loom_low_resource_isa(op);
+}
+
+bool loom_low_function_entry_traffic_op(const loom_op_t* op) {
+  return loom_low_function_entry_preamble_op(op) || loom_low_spill_isa(op);
+}
+
 iree_status_t loom_low_function_materialize_schedule(
     loom_builder_t* builder, uint8_t schedule, loom_block_t* const* blocks,
     uint16_t block_count) {
@@ -93,8 +101,7 @@ iree_status_t loom_low_function_materialize_schedule(
   }
 
   loom_op_t* entry_first_op = blocks[0]->first_op;
-  while (loom_low_live_in_isa(entry_first_op) ||
-         loom_low_resource_isa(entry_first_op)) {
+  while (loom_low_function_entry_preamble_op(entry_first_op)) {
     entry_first_op = entry_first_op->next_op;
   }
   loom_op_t* control_op = NULL;

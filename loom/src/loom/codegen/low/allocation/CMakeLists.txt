@@ -485,14 +485,17 @@ loom_cc_library(
     "spill_plan.c"
   DEPS
     ::assignment
+    ::spill_storage
     ::table
     iree::base
     iree::base::internal
     iree::base::internal::arena
+    loom::analysis::liveness
     loom::codegen::low::function
     loom::ir
     loom::ops::low
     loom::target::registers
+    loom::util::adaptive_sort
   PUBLIC
 )
 
@@ -1443,6 +1446,7 @@ loom_cc_library(
     loom::analysis::liveness
     loom::codegen::low::descriptors
     loom::codegen::low::placement
+    loom::codegen::low::storage_layout
     loom::codegen::low::storage_lease
     loom::codegen::low::storage_transport
     loom::codegen::low::target_binding

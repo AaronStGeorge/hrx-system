@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/allocation_materialization.h"
 
+#include <vector>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -114,83 +116,124 @@ class LowAllocationMaterializationTest : public ::testing::Test {
 };
 
 TEST_F(LowAllocationMaterializationTest,
-       RecordsRecomputedTrafficWithoutImplicitDiagnostics) {
+       ExcludesStalePlansFromTrafficAndStorageColoring) {
   ModulePtr module = ParseModule(R"(
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
+  %early = test.const.i32 1
+  %early_rhs = test.const.i32 2
+  %early_use = test.add.i32 %early, %early_rhs
+  low.br ^middle
+^middle:
   %lane = slice %wide[1] : reg<test.i32 x4> -> reg<test.i32>
-  return %lane
+  low.br ^late
+^late:
+  %late = test.const.i32 3
+  %late_rhs = test.const.i32 4
+  %late_use = test.add.i32 %late, %late_rhs
+  %result = test.add.i32 %lane, %late_use
+  return %result
 }
 )");
   ASSERT_NE(module.get(), nullptr);
   loom_op_t* function_op =
       FindLowFunction(module.get(), IREE_SV("stale_slice_plan"));
   const loom_value_id_t wide = FindValueByName(module.get(), IREE_SV("wide"));
+  const loom_value_id_t early = FindValueByName(module.get(), IREE_SV("early"));
   const loom_value_id_t lane = FindValueByName(module.get(), IREE_SV("lane"));
-  const loom_low_allocation_assignment_t assignments[] = {
-      {
-          .value_id = wide,
-          .descriptor_reg_class_id = 0,
-          .flags = {},
-          .start_point = 0,
-          .end_point = 4,
-          .unit_count = 4,
-          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,
-          .location_base = 0,
-          .location_count = 4,
-          .unit_point_start = 0,
-      },
-      {
-          .value_id = lane,
-          .descriptor_reg_class_id = 0,
-          .flags = {},
-          .start_point = 1,
-          .end_point = 3,
-          .unit_count = 1,
-          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,
-          .location_base = 1,
-          .location_count = 1,
-          .unit_point_start = 0,
-      },
-  };
-  const loom_low_allocation_spill_plan_t spill_plans[] = {
-      {
-          .value_id = wide,
-          .assignment_index = 0,
-          .slot_index = 0,
-          .slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
-          .byte_size = 16,
-          .byte_alignment = 16,
-          .store_count = 1,
-          .reload_count = 1,
-      },
-      {
-          .value_id = lane,
-          .assignment_index = 1,
-          .slot_index = 1,
-          .slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
-          .byte_size = 4,
-          .byte_alignment = 4,
-          .store_count = 1,
-          .reload_count = 1,
-      },
-  };
+  const loom_value_id_t late = FindValueByName(module.get(), IREE_SV("late"));
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
   loom_low_allocation_table_t table = {
       .module = module.get(),
       .function_op = function_op,
-      .assignments = assignments,
-      .assignment_count = IREE_ARRAYSIZE(assignments),
-      .spill_plans = spill_plans,
-      .spill_plan_count = IREE_ARRAYSIZE(spill_plans),
   };
-  iree_arena_allocator_t arena;
-  iree_arena_initialize(&block_pool_, &arena);
   const loom_region_t* body = loom_low_func_def_body(function_op);
   IREE_ASSERT_OK(
       loom_cfg_graph_build(module.get(), body, &arena, &table.cfg_graph));
   IREE_ASSERT_OK(loom_liveness_analyze_region(module.get(), body, &arena,
                                               &table.liveness));
+  IREE_ASSERT_OK(loom_liveness_retain_operation_index(&table.liveness, &arena));
+  const loom_liveness_interval_t* wide_interval =
+      loom_liveness_interval_for_value(&table.liveness, wide);
+  const loom_liveness_interval_t* early_interval =
+      loom_liveness_interval_for_value(&table.liveness, early);
+  const loom_liveness_interval_t* lane_interval =
+      loom_liveness_interval_for_value(&table.liveness, lane);
+  const loom_liveness_interval_t* late_interval =
+      loom_liveness_interval_for_value(&table.liveness, late);
+  ASSERT_NE(wide_interval, nullptr);
+  ASSERT_NE(early_interval, nullptr);
+  ASSERT_NE(lane_interval, nullptr);
+  ASSERT_NE(late_interval, nullptr);
+  std::vector<loom_value_ordinal_t> storage_value_order;
+  storage_value_order.reserve(table.liveness.value_count);
+  loom_value_ordinal_t wide_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  for (loom_value_ordinal_t i = 0; i < table.liveness.value_count; ++i) {
+    if (table.liveness.value_ids[i] == wide) {
+      wide_ordinal = i;
+    } else {
+      storage_value_order.push_back(i);
+    }
+  }
+  ASSERT_NE(wide_ordinal, LOOM_VALUE_ORDINAL_INVALID);
+  storage_value_order.push_back(wide_ordinal);
+  table.placement.value_count = table.liveness.value_count;
+  table.placement.storage_value_order = storage_value_order.data();
+  table.placement.storage_value_order_count = storage_value_order.size();
+
+  const auto make_assignment = [](loom_value_id_t value_id,
+                                  const loom_liveness_interval_t* interval,
+                                  uint32_t unit_count, uint32_t location_base) {
+    return loom_low_allocation_assignment_t{
+        .value_id = value_id,
+        .descriptor_reg_class_id = 0,
+        .flags = {},
+        .start_point = interval->start_point,
+        .end_point = interval->end_point,
+        .unit_count = unit_count,
+        .location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,
+        .location_base = location_base,
+        .location_count = unit_count,
+        .unit_point_start = 0,
+    };
+  };
+  loom_low_allocation_assignment_t assignments[] = {
+      make_assignment(wide, wide_interval, 4, 0),
+      make_assignment(early, early_interval, 1, 1),
+      make_assignment(lane, lane_interval, 1, 2),
+      make_assignment(late, late_interval, 1, 3),
+  };
+  const auto make_spill_plan = [](loom_value_id_t value_id,
+                                  uint32_t assignment_index, uint32_t byte_size,
+                                  uint32_t byte_alignment) {
+    return loom_low_allocation_spill_plan_t{
+        .value_id = value_id,
+        .assignment_index = assignment_index,
+        .slot_index = assignment_index,
+        .slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
+        .byte_size = byte_size,
+        .byte_alignment = byte_alignment,
+        .store_count = 1,
+        .reload_count = 1,
+    };
+  };
+  loom_low_allocation_spill_plan_t spill_plans[] = {
+      make_spill_plan(lane, 2, 4, 4),
+      make_spill_plan(early, 1, 4, 4),
+      make_spill_plan(wide, 0, 16, 16),
+      make_spill_plan(late, 3, 4, 4),
+  };
+  // The retained source-before-users traversal makes the lane plan stale even
+  // though spill-decision order presents it first. Its unsupported slot space
+  // must not diagnose or reserve storage once exact traffic is known.
+  spill_plans[0].slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK;
+  table.assignments = assignments;
+  table.assignment_count = IREE_ARRAYSIZE(assignments);
+  table.spill_plans = spill_plans;
+  table.spill_plan_count = IREE_ARRAYSIZE(spill_plans);
   loom_low_allocation_materialization_result_t result = {};
   loom_low_allocation_materialization_options_t options = {};
   iree_host_size_t diagnostic_count = 0;
@@ -210,45 +253,44 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
   EXPECT_EQ(result.storage_count, 2u);
   EXPECT_EQ(result.storage_bytes, 20u);
   EXPECT_EQ(result.storage_minimum_alignment, 16u);
-  EXPECT_EQ(result.spill_count, 1u);
-  EXPECT_EQ(result.spill_bytes, 16u);
-  EXPECT_EQ(result.reload_count, 1u);
-  EXPECT_EQ(result.reload_bytes, 4u);
-  ASSERT_EQ(result.materialized_spill_count, 2u);
+  EXPECT_EQ(result.spill_count, 3u);
+  EXPECT_EQ(result.spill_bytes, 24u);
+  EXPECT_EQ(result.reload_count, 3u);
+  EXPECT_EQ(result.reload_bytes, 12u);
+  ASSERT_EQ(result.materialized_spill_count, 4u);
   ASSERT_NE(result.materialized_spills, nullptr);
-  EXPECT_EQ(result.materialized_spills[0].value_id, wide);
+  EXPECT_EQ(result.materialized_spills[2].value_id, wide);
   EXPECT_TRUE(iree_all_bits_set(
-      result.materialized_spills[0].flags,
+      result.materialized_spills[2].flags,
       LOOM_LOW_ALLOCATION_MATERIALIZED_SPILL_FLAG_VALUE_WAS_BLOCK_ARGUMENT));
-  EXPECT_EQ(result.materialized_spills[0].store_count, 1u);
-  EXPECT_EQ(result.materialized_spills[0].store_bytes, 16u);
-  EXPECT_EQ(result.materialized_spills[0].reload_count, 1u);
-  EXPECT_EQ(result.materialized_spills[0].reload_bytes, 4u);
-  EXPECT_EQ(result.materialized_spills[1].value_id, lane);
-  EXPECT_EQ(result.materialized_spills[1].flags, 0u);
-  EXPECT_EQ(result.materialized_spills[1].store_count, 0u);
-  EXPECT_EQ(result.materialized_spills[1].store_bytes, 0u);
-  EXPECT_EQ(result.materialized_spills[1].reload_count, 0u);
-  EXPECT_EQ(result.materialized_spills[1].reload_bytes, 0u);
+  EXPECT_EQ(result.materialized_spills[0].value_id, lane);
+  EXPECT_EQ(result.materialized_spills[0].store_count, 0u);
+  EXPECT_EQ(result.materialized_spills[0].reload_count, 0u);
 
-  ASSERT_EQ(result.required_register_values.count, 2u);
-  bool found_spill_input = false;
-  loom_value_id_t reload_result = LOOM_VALUE_ID_INVALID;
+  ASSERT_EQ(result.required_register_values.count, 6u);
+  iree_host_size_t spill_source_count = 0;
+  iree_host_size_t reload_result_count = 0;
   for (iree_host_size_t i = 0; i < result.required_register_values.count; ++i) {
     const loom_value_id_t value_id = result.required_register_values.values[i];
-    if (value_id == wide) {
-      found_spill_input = true;
+    if (value_id == wide || value_id == early || value_id == late) {
+      ++spill_source_count;
       continue;
     }
     const loom_value_t* value = loom_module_value(module.get(), value_id);
     ASSERT_NE(value, nullptr);
     EXPECT_TRUE(loom_low_reload_isa(loom_value_def_op(value)));
-    reload_result = value_id;
+    ++reload_result_count;
   }
-  EXPECT_TRUE(found_spill_input);
-  ASSERT_NE(reload_result, LOOM_VALUE_ID_INVALID);
-  ASSERT_EQ(result.per_user_placement_values.count, 1u);
-  EXPECT_EQ(result.per_user_placement_values.values[0], reload_result);
+  EXPECT_EQ(spill_source_count, 3u);
+  EXPECT_EQ(reload_result_count, 3u);
+  ASSERT_EQ(result.per_user_placement_values.count, 3u);
+  for (iree_host_size_t i = 0; i < result.per_user_placement_values.count;
+       ++i) {
+    const loom_value_t* value = loom_module_value(
+        module.get(), result.per_user_placement_values.values[i]);
+    ASSERT_NE(value, nullptr);
+    EXPECT_TRUE(loom_low_reload_isa(loom_value_def_op(value)));
+  }
 
   iree_arena_deinitialize(&arena);
 }

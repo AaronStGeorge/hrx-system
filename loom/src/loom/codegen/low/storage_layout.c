@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "loom/analysis/storage_layout.h"
+#include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/type_registry.h"
@@ -58,7 +59,7 @@ iree_status_t loom_low_storage_layout_hoist_reservations(
           status = loom_rewriter_move_before(&rewriter, op, insertion_op);
         }
       } else if (op == insertion_op &&
-                 (loom_low_live_in_isa(op) || loom_low_resource_isa(op))) {
+                 loom_low_function_entry_preamble_op(op)) {
         insertion_op = next_op;
       }
       op = next_op;
