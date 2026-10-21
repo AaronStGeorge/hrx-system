@@ -751,7 +751,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation::spill_plan
-    loom::codegen::low::allocation::spill_storage
     loom::codegen::low::allocation::storage
     loom::error::error_defs
     loom::error::parameter
@@ -777,6 +776,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::analysis::liveness
+    loom::codegen::low::allocation::spill_plan
     loom::format::text::parser
     loom::ir
     loom::ops::low

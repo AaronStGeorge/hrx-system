@@ -485,12 +485,15 @@ loom_cc_library(
     "spill_plan.c"
   DEPS
     ::assignment
+    ::spill_storage
+    ::storage
     ::table
     iree::base
     iree::base::internal
     iree::base::internal::arena
     loom::analysis::liveness
     loom::codegen::low::function
+    loom::codegen::low::storage_layout
     loom::ir
     loom::ops::low
     loom::target::registers

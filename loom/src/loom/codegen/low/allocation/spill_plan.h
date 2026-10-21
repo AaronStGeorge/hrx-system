@@ -13,6 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation/assignment.h"
 #include "loom/codegen/low/allocation/table.h"
+#include "loom/codegen/low/storage_layout.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -196,6 +197,13 @@ typedef struct loom_low_spill_materialization_plan_t {
   const loom_low_spill_materialization_record_t* records;
   // Number of records in |records|.
   iree_host_size_t record_count;
+  // Earliest plan sharing each spill reservation, or NULL when every plan has
+  // an independent reservation.
+  const uint32_t* slot_representatives;
+  // Generic-space byte offsets indexed by input spill plan.
+  const uint64_t* slot_byte_offsets;
+  // Storage-space sizes after packing every distinct selected spill slot.
+  loom_low_storage_layout_space_sizes_t storage_sizes;
 } loom_low_spill_materialization_plan_t;
 
 enum {
@@ -224,9 +232,20 @@ bool loom_low_allocation_spill_plan_use_full_slice_reload(
     uint32_t slice_count, uint64_t narrow_reload_bytes,
     uint32_t spill_byte_size);
 
+// Returns the canonical generic-space reservation for one selected spill.
+// |spill_plan_index| indexes both |plan| and |spill_plans|. Plans sharing one
+// reservation return the same byte offset and layout.
+loom_low_storage_layout_reservation_t
+loom_low_spill_materialization_plan_slot_reservation(
+    const loom_low_spill_materialization_plan_t* plan,
+    const loom_low_allocation_spill_plan_t* spill_plans,
+    iree_host_size_t spill_plan_index);
+
 // Builds the exact ordered actions for the selected spill batch. The source IR
-// and allocation snapshot remain immutable. All retained arrays are owned by
-// |arena|; branch and generated-use scratch is released before return.
+// and allocation snapshot remain immutable. Slot reservations extend the
+// snapshot's canonical storage layout in spill-plan order, including plans
+// whose traffic later becomes stale. All retained arrays are owned by |arena|;
+// branch and generated-use scratch is released before return.
 iree_status_t loom_low_spill_materialization_plan_build(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* spill_plans,

@@ -10,6 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/liveness.h"
+#include "loom/codegen/low/allocation/spill_plan.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/parser.h"
@@ -119,6 +120,7 @@ TEST_F(LowAllocationMaterializationTest,
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
+  %existing = storage {byte_alignment = 1, byte_length = 3} : low.storage<private>
   %lane = slice %wide[1] : reg<test.i32 x4> -> reg<test.i32>
   return %lane
 }
@@ -179,6 +181,10 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
   loom_low_allocation_table_t table = {
       .module = module.get(),
       .function_op = function_op,
+      .storage_layout =
+          {
+              .space_sizes = {.private_bytes = 3},
+          },
       .assignments = assignments,
       .assignment_count = IREE_ARRAYSIZE(assignments),
       .spill_plans = spill_plans,
@@ -192,6 +198,19 @@ low.func.def target<test.low.core>(@test_target) @stale_slice_plan(%wide: reg<te
   IREE_ASSERT_OK(loom_liveness_analyze_region(module.get(), body, &arena,
                                               &table.liveness));
   IREE_ASSERT_OK(loom_liveness_retain_operation_index(&table.liveness, &arena));
+  loom_low_spill_materialization_plan_t materialization_plan = {};
+  IREE_ASSERT_OK(loom_low_spill_materialization_plan_build(
+      &table, spill_plans, IREE_ARRAYSIZE(spill_plans), &arena,
+      &materialization_plan));
+  const auto wide_slot = loom_low_spill_materialization_plan_slot_reservation(
+      &materialization_plan, spill_plans, 0);
+  const auto stale_lane_slot =
+      loom_low_spill_materialization_plan_slot_reservation(
+          &materialization_plan, spill_plans, 1);
+  EXPECT_EQ(wide_slot.byte_offset, 16u);
+  EXPECT_EQ(stale_lane_slot.byte_offset, 32u);
+  EXPECT_EQ(materialization_plan.storage_sizes.private_bytes, 36u);
+
   loom_low_allocation_materialization_result_t result = {};
   loom_low_allocation_materialization_options_t options = {};
   iree_host_size_t diagnostic_count = 0;
