@@ -1062,6 +1062,22 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
       return iree_ok_status();
     }
     if (frame.allocation.error_count != 0) {
+      const loom_value_id_t failed_value = frame.allocation.failure.value_id;
+      // A private producer can remain live across unrelated work when its
+      // value consumer shares a later state or scope successor. Reconcile
+      // those setup dependencies before cloning the failure frontier. This
+      // transition is attempted once per materialized storage generation.
+      if (!iree_any_bit_set(repair_options.schedule_flags,
+                            LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP) &&
+          failed_value < rematerialization.per_user_values.bit_count &&
+          iree_bitmap_test(rematerialization.per_user_values, failed_value)) {
+        repair_options.schedule_flags |=
+            LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP |
+            LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP;
+        loom_low_emission_frame_advance_repair_iteration(statistics);
+        restore_frame_before_build = true;
+        continue;
+      }
       if (value_repair_iteration_count < value_repair_iteration_limit) {
         loom_low_rematerialization_batch_result_t result = {0};
         IREE_RETURN_IF_ERROR(loom_low_allocation_rematerialize_failure(
@@ -1227,7 +1243,8 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
             &materialization_summary.spill_records, repair_arena));
     last_rematerialized_spill_plan_count = IREE_HOST_SIZE_MAX;
     repair_options.schedule_flags &=
-        ~LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP;
+        ~(LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP |
+          LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP);
     value_repair_iteration_count = 0;
     value_repair_iteration_limit = 0;
 

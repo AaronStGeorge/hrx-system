@@ -195,6 +195,8 @@ enum loom_low_schedule_flag_bits_e {
   // scheduled function. Retained private placements remain demand driven once
   // mandatory spill helpers can intervene before their consumers.
   LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC = 1u << 9,
+  // Reconciles private setup ownership after required-register exhaustion.
+  LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP = 1u << 10,
 };
 typedef uint32_t loom_low_schedule_flags_t;
 
