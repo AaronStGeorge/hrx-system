@@ -37,10 +37,14 @@ using iree::hal::amd::gpu::cts::DeviceAllocator;
 using iree::hal::amd::gpu::cts::GpuNativeTest;
 
 TEST_F(GpuNativeTest, TrimReleasesUnusedCaptureCache) {
+  auto* context = context_;
   Create();
   if (HasFatalFailure()) {
     return;
   }
+  // Construction may still be releasing builtin-upload metadata. Join those
+  // callbacks before measuring host allocations owned by capture-cache trim.
+  iree_hal_amd_gpu_context_join_memory(context);
   const size_t before = allocator_.live_count.load();
   IREE_ASSERT_OK(iree_hal_device_trim(device_));
   EXPECT_EQ(allocator_.live_count.load(),
