@@ -329,9 +329,10 @@ static iree_status_t loom_cfg_converge_preflight(
         loom_type_use_iterator_t dependencies;
         loom_module_value_type_dependencies(
             plan->module, loom_block_arg_id(block, j), &dependencies);
-        for (loom_value_id_t dependency = loom_type_users_next(&dependencies);
+        for (loom_value_id_t dependency =
+                 loom_type_dependencies_next(&dependencies);
              dependency != LOOM_VALUE_ID_INVALID;
-             dependency = loom_type_users_next(&dependencies)) {
+             dependency = loom_type_dependencies_next(&dependencies)) {
           IREE_RETURN_IF_ERROR(loom_cfg_converge_capture(
               dependency, LOOM_VALUE_ID_INVALID, plan));
         }

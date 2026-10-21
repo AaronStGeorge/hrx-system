@@ -909,3 +909,48 @@ func.def @outer_bypass_capture(%enabled: i1, %leader: i1, %capture: i1, %input: 
 ^exit:
   func.return
 }
+
+// ====
+
+// RUN: pass cfg-converge,cfg-converge
+
+// Shared extent providers remain available to block argument types.
+func.def @argument_type_capture(%outer: i1, %inner: i1, %size: index, %seed: i32) {
+  cfg.cond_br %outer, ^evaluate, ^fallback
+^evaluate:
+  cfg.cond_br %inner, ^selected, ^fallback
+^selected:
+  %tile = test.convert %seed : i32 -> tile<[%size]xf32>
+  cfg.br ^carried(%tile: tile<[%size]xf32>)
+^carried(%argument: tile<[%size]xf32>):
+  test.use %argument : tile<[%size]xf32>
+  cfg.br ^exit
+^fallback:
+  test.use %seed : i32
+  cfg.br ^exit
+^exit:
+  func.return
+}
+
+// ----
+func.def @argument_type_capture(%outer: i1, %inner: i1, %size: index, %seed: i32) {
+  cfg.cond_br %outer, ^evaluate, ^_bb2
+^evaluate:
+  cfg.br ^_bb3(%inner: i1)
+^_bb2:
+  %7 = scalar.constant 0 : i1
+  cfg.br ^_bb3(%7: i1)
+^_bb3(%6: i1):
+  cfg.cond_br %6, ^selected, ^fallback
+^selected:
+  %tile = test.convert %seed : i32 -> tile<[%size]xf32>
+  cfg.br ^carried(%tile: tile<[%size]xf32>)
+^carried(%argument: tile<[%size]xf32>):
+  test.use %argument : tile<[%size]xf32>
+  cfg.br ^exit
+^fallback:
+  test.use %seed : i32
+  cfg.br ^exit
+^exit:
+  func.return
+}
