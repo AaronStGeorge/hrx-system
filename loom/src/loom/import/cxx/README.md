@@ -30,13 +30,19 @@ its output requires the importer.
 
 ```sh
 loom-export-cxx specialized.loombc --output=specialized.cxx
+loom-export-cxx mixed.loombc --root=@attention --output=attention.cxx
 loom-import-cxx specialized.cxx --to=bc --output=edited.loombc
 ```
 
-The first projection accepts one structured kernel and reconstructs ordinary
-C++ expressions, mutable loop-carried state, views, launch contracts, target
-records, and Loom scheduling attributes. For example, an SSA chain containing
-hardware IDs, integer casts, and a dynamic subview renders as:
+Without `--root`, every top-level definition must have a C++ projection so the
+tool cannot silently omit program semantics. Repeated `--root=@kernel` options
+select kernels from a mixed module and retain only their referenced target
+definitions. Selected kernels remain in module order.
+
+The projection reconstructs ordinary C++ expressions, mutable loop-carried
+state, views, launch contracts, target records, and Loom scheduling attributes.
+For example, an SSA chain containing hardware IDs, integer casts, and a dynamic
+subview renders as:
 
 ```cpp
 constexpr loom::amdgpu::target rendered_target{.kind = "gfx942"};
@@ -527,10 +533,11 @@ same module.
 `emit cxx` instead compares the readable C++ projection of the admitted module.
 It uses the public `loom-export-cxx` tool, so the golden covers the same bytecode
 boundary and renderer as the command-line workflow. Declare the tool requirement
-in files using the mode:
+in files using the mode. `emit cxx @kernel` selects one kernel from a mixed
+module:
 
 ```cpp
-// RUN: emit cxx
+// RUN: emit cxx @copy_one
 // REQUIRES: loom-export-cxx
 #include <loomcxx/kernel.h>
 

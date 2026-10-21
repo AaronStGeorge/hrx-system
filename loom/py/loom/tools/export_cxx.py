@@ -24,6 +24,7 @@ def run(
     input_path: str,
     output_path: str,
     *,
+    roots: Sequence[str] = (),
     stdin: BinaryIO,
     stdout: TextIO,
     stderr: TextIO,
@@ -38,7 +39,7 @@ def run(
             path = Path(input_path)
             data = path.read_bytes()
             filename = str(path)
-        result = render_module(load_module(data, filename=filename))
+        result = render_module(load_module(data, filename=filename), roots=roots)
         if output_path == "-":
             stdout.write(result)
         else:
@@ -73,6 +74,13 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         metavar="OUTPUT",
         help="Output .cxx path, or '-' for standard output (the default).",
     )
+    parser.add_argument(
+        "--root",
+        action="append",
+        default=[],
+        metavar="@SYMBOL",
+        help="Kernel root to render. Repeat to select multiple kernels.",
+    )
     return parser
 
 
@@ -81,6 +89,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return run(
         args.input,
         args.output,
+        roots=args.root,
         stdin=sys.stdin.buffer,
         stdout=sys.stdout,
         stderr=sys.stderr,

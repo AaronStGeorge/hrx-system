@@ -58,6 +58,23 @@ def test_projects_multiple_kernels_in_one_translation_unit() -> None:
     assert "output_1" not in result
 
 
+def test_projects_selected_kernels_from_a_mixed_module_in_source_order() -> None:
+    source = (
+        "func.def @helper() {\n  func.return\n}\n\n"
+        + SOURCE_MODULE
+        + "\n"
+        + LOOP_MODULE
+    )
+    module = load_module(source.encode())
+    original_operations = tuple(module.body.ops)
+
+    result = render_module(module, roots=("@accumulate", "copy_one"))
+
+    assert result.index("void copy_one(") < result.index("void accumulate()")
+    assert "helper" not in result
+    assert tuple(module.body.ops) == original_operations
+
+
 def test_projects_distinct_kernel_targets_in_one_translation_unit() -> None:
     source = (
         "amdgpu.target<gfx1100> @first_target\n"
@@ -85,6 +102,58 @@ def test_projects_distinct_kernel_targets_in_one_translation_unit() -> None:
     )
     assert "loom::target(rendered_target_first_target)" in result
     assert "loom::target(rendered_target_second_target)" in result
+
+
+def test_projects_only_the_target_referenced_by_a_selected_kernel() -> None:
+    source = (
+        "amdgpu.target<gfx1100> @first_target\n"
+        "amdgpu.target<gfx942> @second_target\n"
+        + SOURCE_MODULE.replace(
+            "kernel.def @copy_one()", "kernel.def target(@first_target) @copy_one()"
+        )
+        + "\n"
+        + LOOP_MODULE.replace(
+            "kernel.def @accumulate()",
+            "kernel.def target(@second_target) @accumulate()",
+        )
+    )
+
+    result = render_module(load_module(source.encode()), roots=("@accumulate",))
+
+    assert "void copy_one(" not in result
+    assert "void accumulate()" in result
+    assert 'constexpr loom::amdgpu::target rendered_target{.kind = "gfx942"};' in result
+    assert "gfx1100" not in result
+
+
+@pytest.mark.parametrize(
+    ("roots", "message"),
+    [
+        (("@",), "kernel root name is empty"),
+        (("@missing",), "kernel root '@missing' was not found"),
+        (
+            ("copy_one", "@copy_one"),
+            "kernel root '@copy_one' is repeated",
+        ),
+    ],
+)
+def test_rejects_invalid_kernel_root_selections(
+    roots: tuple[str, ...], message: str
+) -> None:
+    with pytest.raises(CxxRenderError, match=message):
+        render_module(load_module(SOURCE_MODULE.encode()), roots=roots)
+
+
+def test_rejects_selected_roots_that_are_not_kernel_definitions() -> None:
+    module = load_module(
+        ("func.def @helper() {\n  func.return\n}\n\n" + SOURCE_MODULE).encode()
+    )
+
+    with pytest.raises(
+        CxxRenderError,
+        match=r"cannot project func\.def: root '@helper' is not a kernel definition",
+    ):
+        render_module(module, roots=("@helper",))
 
 
 def test_preserves_scalar_kernel_arguments() -> None:

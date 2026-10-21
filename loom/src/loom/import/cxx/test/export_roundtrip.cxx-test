@@ -311,3 +311,34 @@ void page_weighted_dot(const int* page_table, const float* lhs, const float* rhs
     loom::view::store(weight, result, loom::type::index{0});
   }
 }
+
+// ====
+// RUN: emit cxx @selected
+#include <loomcxx/kernel.h>
+
+unsigned helper(unsigned value) { return value + 1u; }
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void ignored(float* output) {
+  auto values = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  loom::view::store(0.0f, values, 0);
+}
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void selected(const float* input, float* output) {
+  auto input_values = loom::buffer::view<1>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_values = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  float value = loom::view::load(input_values, 0);
+  loom::view::store(value, output_values, 0);
+}
+
+// ----
+#include <loomcxx/kernel.h>
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void selected(const float* input, float* output) {
+  auto input_values = loom::buffer::view<1>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_values = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  float value = loom::view::load(input_values, loom::type::index{0});
+  loom::view::store(value, output_values, loom::type::index{0});
+}

@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import replace
 
 from loom.format.cxx.context import (
     _memory_space,
@@ -1082,6 +1084,50 @@ class CxxRenderer(CxxExpressionRenderer):
         return "\n".join((*preamble, *self.writer.lines)) + "\n"
 
 
-def render_module(module: Module) -> str:
-    """Renders a supported High IR kernel module as standalone Loom C++."""
-    return CxxRenderer(module).render()
+def _select_kernel_roots(module: Module, roots: Sequence[str]) -> Module:
+    """Returns an immutable presentation of selected kernels and their targets."""
+
+    normalized_roots: list[str] = []
+    seen_roots: set[str] = set()
+    for root in roots:
+        name = root.removeprefix("@")
+        if not name:
+            raise CxxRenderError(None, "kernel root name is empty")
+        if name in seen_roots:
+            raise CxxRenderError(None, f"kernel root '@{name}' is repeated")
+        seen_roots.add(name)
+        normalized_roots.append(name)
+
+    symbols = {symbol.name: symbol for symbol in module.symbols}
+    selected_operation_ids: set[int] = set()
+    target_names: set[str] = set()
+    for name in normalized_roots:
+        symbol = symbols.get(name)
+        if symbol is None or symbol.op is None:
+            raise CxxRenderError(None, f"kernel root '@{name}' was not found")
+        if symbol.op.name != "kernel.def":
+            raise CxxRenderError(
+                symbol.op,
+                f"root '@{name}' is not a kernel definition",
+            )
+        selected_operation_ids.add(id(symbol.op))
+        target = symbol.op.attributes.get("target")
+        if isinstance(target, str):
+            target_names.add(target)
+
+    selected_operations = [
+        operation
+        for operation in module.body.ops
+        if id(operation) in selected_operation_ids
+        or (
+            operation.name.endswith(".target")
+            and operation.attributes.get("symbol") in target_names
+        )
+    ]
+    return replace(module, body=replace(module.body, ops=selected_operations))
+
+
+def render_module(module: Module, *, roots: Sequence[str] = ()) -> str:
+    """Renders supported High IR kernel roots as standalone Loom C++."""
+    projected_module = _select_kernel_roots(module, roots) if roots else module
+    return CxxRenderer(projected_module).render()

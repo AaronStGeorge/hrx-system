@@ -73,8 +73,16 @@ static iree_status_t loom_cxx_export_emit_provider_check_requirements(
     return iree_ok_status();
   }
   if (!iree_string_view_is_empty(target_options)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "cxx export does not accept options");
+    iree_string_view_t root = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(target_options, ' ', &root, &remaining);
+    if (!iree_string_view_consume_prefix(&root, IREE_SV("@")) ||
+        iree_string_view_is_empty(root) ||
+        !iree_string_view_is_empty(iree_string_view_trim(remaining))) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "cxx export accepts one optional kernel root "
+                              "in '@symbol' form");
+    }
   }
   return iree_ok_status();
 }
@@ -101,11 +109,14 @@ static iree_status_t loom_cxx_export_emit_provider_execute(
 
   loom_tool_process_result_t result = {0};
   if (iree_status_is_ok(status)) {
-    const iree_string_view_t arguments[] = {
-        loom_tool_temp_file_path(&input_file),
-        IREE_SV("--output=-"),
-    };
-    status = loom_cxx_export_run_tool(arguments, IREE_ARRAYSIZE(arguments),
+    iree_string_view_t arguments[4] = {loom_tool_temp_file_path(&input_file),
+                                       IREE_SV("--output=-")};
+    iree_host_size_t argument_count = 2;
+    if (!iree_string_view_is_empty(request->target_options)) {
+      arguments[argument_count++] = IREE_SV("--root");
+      arguments[argument_count++] = request->target_options;
+    }
+    status = loom_cxx_export_run_tool(arguments, argument_count,
                                       request->host_allocator, &result);
   }
   if (iree_status_is_ok(status) &&
