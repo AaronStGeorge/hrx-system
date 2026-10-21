@@ -49,6 +49,7 @@ TEST_F(ImmutableObjectsTest, RetainsEachReachedSourceObjectOnce) {
   auto first = objects.reference(table, table->initializer());
   auto second = objects.reference(table, table->initializer());
   EXPECT_EQ(first.symbol.symbol_id, second.symbol.symbol_id);
+  EXPECT_TRUE(iree_string_view_equal(first.name, IREE_SV("detail_table")));
   EXPECT_EQ(first.type, table->type());
   EXPECT_EQ(first.alignment, 4);
   objects.build(&builder_);

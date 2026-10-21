@@ -26,6 +26,8 @@ namespace loom::cxx_import {
 struct ImmutableObject {
   // Private symbol naming the emitted read-only payload.
   loom_symbol_ref_t symbol;
+  // Stable module-owned spelling shared with the private symbol.
+  iree_string_view_t name;
   // Complete source object type represented by the payload bytes.
   const cxx::Type* type;
   // Source ABI alignment, including an explicit stronger declaration.

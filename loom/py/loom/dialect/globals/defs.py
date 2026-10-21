@@ -184,9 +184,9 @@ global_rodata = Op(
         "power-of-two byte alignment requirement. Bank conflicts form a "
         "reciprocal relation between definitions that must occupy disjoint "
         "target-defined storage banks when retained by one resident function. "
-        "It is used for compiler-owned tables and metadata such as sanitizer "
-        "site records; user-visible value globals remain "
-        "global.constant/global.variable."
+        "It is used for storage-backed immutable source objects and "
+        "compiler-owned tables or metadata such as sanitizer site records. "
+        "Semantic SSA value globals remain global.constant/global.variable."
     ),
     traits=[SYMBOL_DEFINE],
     symbol_def=SymbolDefinition(

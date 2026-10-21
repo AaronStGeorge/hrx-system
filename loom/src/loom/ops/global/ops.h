@@ -78,7 +78,7 @@ iree_status_t loom_global_variable_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_GLOBAL_RODATA_DEF: Read-only executable data payload. This defines a named artifact symbol containing uninterpreted bytes, optionally with a stronger power-of-two byte alignment requirement. Bank conflicts form a reciprocal relation between definitions that must occupy disjoint target-defined storage banks when retained by one resident function. It is used for compiler-owned tables and metadata such as sanitizer site records; user-visible value globals remain global.constant/global.variable.
+// LOOM_OP_GLOBAL_RODATA_DEF: Read-only executable data payload. This defines a named artifact symbol containing uninterpreted bytes, optionally with a stronger power-of-two byte alignment requirement. Bank conflicts form a reciprocal relation between definitions that must occupy disjoint target-defined storage banks when retained by one resident function. It is used for storage-backed immutable source objects and compiler-owned tables or metadata such as sanitizer site records. Semantic SSA value globals remain global.constant/global.variable.
 // global.rodata.def @loom_sanitizer_sites = align(8) bytes("4c53495401000000")
 LOOM_DEFINE_ISA(loom_global_rodata_def_isa, LOOM_OP_GLOBAL_RODATA_DEF)
 LOOM_DEFINE_ATTR_SYMBOL(loom_global_rodata_def_symbol, 0)

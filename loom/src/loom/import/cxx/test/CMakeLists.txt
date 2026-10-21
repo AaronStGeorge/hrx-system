@@ -104,6 +104,8 @@ loom_check_test_suite(
     "function_declarations.cxx-test"
     "function_declarations_invalid.cxx-test"
     "functions.cxx-test"
+    "immutable_objects.cxx-test"
+    "immutable_objects_invalid.cxx-test"
     "index_views.cxx-test"
     "initializer_dependencies.cxx-test"
     "integer_intrinsics.cxx-test"
@@ -385,6 +387,62 @@ loom_execution_test(
     integer_intrinsics_test_execute_vm_reference_test
   MODULE
     "::integer_intrinsics_module"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+    "loom-execution-profile=vm_reference"
+    "loom-target-family=vm"
+    "loom-target-class=cpu"
+    "loom-executor=reference"
+)
+endif()
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+loom_test_module(
+  NAME
+    immutable_objects_test_module
+  SRCS
+    "immutable_objects.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_TARGET_ARCH_VM)
+loom_execution_test(
+  NAME
+    immutable_objects_test_execute_vm_reference_test
+  MODULE
+    "::immutable_objects_test_module"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+    "loom-execution-profile=vm_reference"
+    "loom-target-family=vm"
+    "loom-target-class=cpu"
+    "loom-executor=reference"
+)
+endif()
+endif()
+
+if(LOOM_IMPORT_CXX)
+loom_test_module(
+  NAME
+    immutable_object_link_module
+  SRCS
+    "immutable_object_link_left.cxx"
+    "immutable_object_link_right.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_TARGET_ARCH_VM)
+loom_execution_test(
+  NAME
+    immutable_object_link_test_execute_vm_reference_test
+  CORRECTNESS_ONLY
+  MODULE
+    "::immutable_object_link_module"
+  RUNNER_ARGS
+    "--case=immutable_object_link_identity"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
     "loom-execution-profile=vm_reference"

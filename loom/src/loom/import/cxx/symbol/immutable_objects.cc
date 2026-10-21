@@ -76,6 +76,10 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
     return definitions_[found->second].object;
   }
   auto* definition = canonical->resolvedDefinition();
+  if (!definition) {
+    diagnostics_.reject(unit_, owner,
+                        "immutable storage requires an object definition");
+  }
   auto traits = unit_.typeTraits();
   auto* source_type = definition->type();
   if (!cxx::symbol_cast<cxx::NamespaceSymbol>(definition->parent()) ||
@@ -120,6 +124,7 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
   check(loom_module_add_symbol(module_, name, &symbol));
   ImmutableObject object = {
       .symbol = {0, symbol},
+      .name = loom_string_table_get(&module_->strings, name),
       .type = source_type,
       .alignment = std::max<int64_t>(*natural_alignment,
                                      definition->explicitAlignment()),
