@@ -28,8 +28,8 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
-from loom.dialect.func.defs import Retain, Visibility
 from loom.dialect.memory import MemorySpace
+from loom.dialect.symbol import Retain, Visibility
 from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,

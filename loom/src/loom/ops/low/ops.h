@@ -56,7 +56,7 @@ enum {
   LOOM_OP_LOW_COUNT_ = 32,
 };
 
-// Function visibility. Absent (0) means private (module-internal).
+// Symbol visibility. Absent (0) means private (module-internal).
 typedef enum loom_low_visibility_e {
   LOOM_LOW_VISIBILITY_PUBLIC = 1,
   LOOM_LOW_VISIBILITY_COUNT_ = 2,

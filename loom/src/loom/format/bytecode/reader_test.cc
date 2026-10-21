@@ -904,6 +904,31 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateLinkOnceRodataModule() {
+    loom_module_t* module = CreateModule("reader_link_once_rodata");
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("lookup"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    const loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+    const uint8_t contents[] = {3, 1, 2, 0};
+    loom_op_t* rodata_op = nullptr;
+    IREE_CHECK_OK(loom_global_rodata_def_build(
+        &builder,
+        LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_VISIBILITY |
+            LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_LINKAGE |
+            LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT,
+        LOOM_GLOBAL_RODATA_DEF_VISIBILITY_PUBLIC, LOOM_SYMBOL_LINKAGE_LINK_ONCE,
+        symbol, /*alignment=*/4, loom_symbol_ref_array_empty(),
+        iree_make_const_byte_span(contents, IREE_ARRAYSIZE(contents)),
+        LOOM_LOCATION_UNKNOWN, &rodata_op));
+    return module;
+  }
+
   loom_module_t* CreateRegisterDeclModule(
       uint64_t carrier_payload1 = (uint64_t)4 << 16) {
     loom_module_t* module = CreateModule("reader_register_decl");
@@ -3636,6 +3661,73 @@ TEST_F(ReaderTest, RejectsPublicDefinitionWithoutExportFlag) {
   WriteU16LE(&bytes, flags_offset, flags & ~LOOM_BYTECODE_SYMBOL_FLAG_EXPORT);
 
   ExpectReadError(bytes, "ERR_BYTECODE_006");
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsVisibilityDisagreementWithPublicFlag) {
+  loom_module_t* module = CreateFunctionModule();
+  auto bytes = WriteModule(module);
+  const size_t flags_offset = FirstSymbolFlagsOffset(bytes);
+  ASSERT_EQ(bytes[flags_offset - 1], LOOM_BYTECODE_SYMBOL_VISIBILITY_PUBLIC);
+  bytes[flags_offset - 1] = LOOM_BYTECODE_SYMBOL_VISIBILITY_PRIVATE;
+
+  ExpectInvalidFieldFailureCode(bytes,
+                                "symbol_visibility_disagrees_with_public_flag");
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, PreservesLinkOnceRodataSymbolPolicy) {
+  loom_module_t* module = CreateLinkOnceRodataModule();
+  auto bytes = WriteModule(module);
+
+  iree_arena_allocator_t metadata_arena;
+  iree_arena_initialize(&block_pool_, &metadata_arena);
+  loom_bytecode_file_metadata_t metadata = {0};
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t metadata_result =
+      ReadIndex(bytes, &metadata_arena, &metadata, &error_ids);
+  EXPECT_EQ(metadata_result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_EQ(metadata.module_count, 1u);
+  ASSERT_EQ(metadata.modules[0].symbol_count, 1u);
+  const loom_bytecode_symbol_metadata_t& metadata_symbol =
+      metadata.modules[0].symbols[0];
+  EXPECT_TRUE(iree_all_bits_set(metadata_symbol.flags,
+                                LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC |
+                                    LOOM_BYTECODE_SYMBOL_FLAG_EXPORT |
+                                    LOOM_BYTECODE_SYMBOL_FLAG_LINK_ONCE));
+  iree_arena_deinitialize(&metadata_arena);
+
+  loom_module_t* read_module = nullptr;
+  loom_bytecode_read_result_t read_result =
+      ReadModule(bytes, &read_module, &error_ids, /*verify_module=*/true);
+  EXPECT_EQ(read_result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  const loom_symbol_t& symbol = read_module->symbols.entries[0];
+  EXPECT_TRUE(iree_all_bits_set(
+      symbol.flags, LOOM_SYMBOL_FLAG_PUBLIC | LOOM_SYMBOL_FLAG_LINK_ONCE));
+  ASSERT_NE(symbol.defining_op, nullptr);
+  ASSERT_TRUE(loom_global_rodata_def_isa(symbol.defining_op));
+  EXPECT_EQ(loom_global_rodata_def_visibility(symbol.defining_op),
+            LOOM_GLOBAL_RODATA_DEF_VISIBILITY_PUBLIC);
+  EXPECT_EQ(loom_global_rodata_def_linkage(symbol.defining_op),
+            LOOM_SYMBOL_LINKAGE_LINK_ONCE);
+  EXPECT_EQ(bytes, WriteModule(read_module));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsLinkOnceRecordWithoutLinkageAttribute) {
+  loom_module_t* module = CreateTestRecordWithFutureEnumOrdinal();
+  auto bytes = WriteModule(module);
+  const size_t flags_offset = FirstSymbolFlagsOffset(bytes);
+  const uint16_t flags = ReadU16LE(bytes, flags_offset);
+  WriteU16LE(&bytes, flags_offset, flags | LOOM_BYTECODE_SYMBOL_FLAG_LINK_ONCE);
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_006");
   loom_module_free(module);
 }
 

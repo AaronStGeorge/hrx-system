@@ -247,7 +247,8 @@ static iree_status_t loom_aie2p_array_resident_clone_read_only_data(
         }
         loom_op_t* target_definition = NULL;
         IREE_RETURN_IF_ERROR(loom_global_rodata_def_build(
-            &ir_builder, build_flags, target_ref,
+            &ir_builder, build_flags, /*visibility=*/0, /*linkage=*/0,
+            target_ref,
             has_alignment
                 ? loom_global_rodata_def_alignment(requirement->definition)
                 : 0,

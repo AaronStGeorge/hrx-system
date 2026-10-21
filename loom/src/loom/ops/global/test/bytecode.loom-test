@@ -13,6 +13,12 @@ global.rodata.def @empty_rodata = bytes("")
 
 // ====
 
+// Symbol visibility and link-once policy are carried by the common symbol
+// header and reconstructed on record materialization.
+global.rodata.def public linkonce @shared_rodata = align(4) bytes("03000000010000000200000000000000")
+
+// ====
+
 // Placement relations survive bytecode symbol remapping.
 global.rodata.def @lookup_ab = conflicts([@lookup_cd]) bytes("00112233")
 

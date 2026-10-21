@@ -33,7 +33,8 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
-from loom.dialect.func.defs import CallingConv, EffectContract, Retain, Temperature, Visibility
+from loom.dialect.func.defs import CallingConv, EffectContract, Temperature
+from loom.dialect.symbol import Retain, Visibility
 from loom.dsl import (
     ANY,
     ATTR_TYPE_PARAMETERIZED_ARRAY,

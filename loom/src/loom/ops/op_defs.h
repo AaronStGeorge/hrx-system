@@ -662,6 +662,26 @@ static inline uint8_t loom_symbol_definition_linkage_attr_index(
              : LOOM_ATTR_INDEX_NONE;
 }
 
+static inline uint8_t loom_symbol_definition_retain_attr_index(
+    const loom_symbol_definition_descriptor_t* descriptor) {
+  return descriptor && descriptor->retain_attr_index_plus_one
+             ? descriptor->retain_attr_index_plus_one - 1
+             : LOOM_ATTR_INDEX_NONE;
+}
+
+// Returns whether |attr_index| carries generic symbol policy serialized in the
+// common symbol header rather than a dialect-specific definition payload.
+static inline bool loom_symbol_definition_attr_is_policy(
+    const loom_symbol_definition_descriptor_t* descriptor, uint8_t attr_index) {
+  if (!descriptor) {
+    return false;
+  }
+  return attr_index ==
+             loom_symbol_definition_visibility_attr_index(descriptor) ||
+         attr_index == loom_symbol_definition_linkage_attr_index(descriptor) ||
+         attr_index == loom_symbol_definition_retain_attr_index(descriptor);
+}
+
 static inline bool loom_symbol_definition_has_value_contract(
     const loom_symbol_definition_descriptor_t* descriptor) {
   return descriptor && descriptor->value_contract_result_index_plus_one != 0;

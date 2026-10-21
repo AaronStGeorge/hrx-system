@@ -29,7 +29,7 @@ enum {
   LOOM_OP_TEMPLATE_COUNT_ = 6,
 };
 
-// Function visibility. Absent (0) means private (module-internal).
+// Symbol visibility. Absent (0) means private (module-internal).
 typedef enum loom_template_visibility_e {
   LOOM_TEMPLATE_VISIBILITY_PUBLIC = 1,
   LOOM_TEMPLATE_VISIBILITY_COUNT_ = 2,

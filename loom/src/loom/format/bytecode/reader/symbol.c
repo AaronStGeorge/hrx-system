@@ -799,6 +799,16 @@ loom_bytecode_symbol_decode(loom_bytecode_symbol_validator_t* reader,
         &reader->decoder, IREE_SV("symbol_visibility"), visibility,
         LOOM_BYTECODE_SYMBOL_VISIBILITY_COUNT_, kind_offset + 1);
   }
+  const bool public_visibility =
+      visibility == LOOM_BYTECODE_SYMBOL_VISIBILITY_PUBLIC;
+  const bool public_flag =
+      iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC);
+  if (public_visibility != public_flag) {
+    return loom_bytecode_reader_emit_invalid_field(
+        &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+        IREE_SV("visibility"), kind_offset + 1,
+        IREE_SV("symbol_visibility_disagrees_with_public_flag"));
+  }
   if (flags &
       ~(LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC | LOOM_BYTECODE_SYMBOL_FLAG_IMPORT |
         LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL |
@@ -828,13 +838,14 @@ loom_bytecode_symbol_decode(loom_bytecode_symbol_validator_t* reader,
         IREE_SV("predicates_flag_requires_function_symbol_kind"));
   }
   if (iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_LINK_ONCE) &&
-      (kind != LOOM_BYTECODE_SYMBOL_FUNC_DEF ||
+      ((kind != LOOM_BYTECODE_SYMBOL_FUNC_DEF &&
+        kind != LOOM_BYTECODE_SYMBOL_RECORD) ||
        iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_DECLARATION |
                                    LOOM_BYTECODE_SYMBOL_FLAG_IMPORT))) {
     return loom_bytecode_reader_emit_invalid_field(
         &reader->decoder, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
         IREE_SV("flags"), kind_offset + 2,
-        IREE_SV("link_once_flag_requires_concrete_function_definition"));
+        IREE_SV("link_once_flag_requires_concrete_definition"));
   }
   const bool is_import =
       iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_IMPORT);

@@ -142,7 +142,8 @@ void ImmutableObjects::build(loom_builder_t* builder) {
                      : 0;
     loom_op_t* op;
     check(loom_global_rodata_def_build(
-        builder, flags, definition.object.symbol, definition.object.alignment,
+        builder, flags, /*visibility=*/0, /*linkage=*/0,
+        definition.object.symbol, definition.object.alignment,
         loom_symbol_ref_array_empty(),
         iree_make_const_byte_span(definition.contents.data(),
                                   definition.contents.size()),

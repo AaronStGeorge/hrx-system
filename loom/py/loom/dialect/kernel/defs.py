@@ -42,7 +42,7 @@ from loom.dialect.atomic import AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.combining import CombiningKind
 from loom.dialect.memory import MemorySpace
-from loom.dialect.symbol import Linkage
+from loom.dialect.symbol import Linkage, Retain
 from loom.dialect.target.defs import ExportLinkage
 from loom.dsl import (
     ANY,
@@ -242,15 +242,6 @@ KernelWorkgroupScanDirection = EnumDef(
         ),
     ],
     doc="Workgroup scan workitem order.",
-)
-
-Retain = EnumDef(
-    "Retain",
-    [
-        # Value 0 is reserved for "absent" (ordinary DCE may erase).
-        EnumCase("retain", 1, doc="Preserve the symbol across ordinary DCE."),
-    ],
-    doc="Private symbol retention policy. Absent (0) permits ordinary DCE.",
 )
 
 # ============================================================================

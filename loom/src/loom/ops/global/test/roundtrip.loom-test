@@ -40,6 +40,11 @@ global.rodata.def @empty_rodata = bytes("")
 
 // ====
 
+// Public link-once read-only data preserves ordinary symbol policy.
+global.rodata.def public linkonce @shared_rodata = align(4) bytes("03000000010000000200000000000000")
+
+// ====
+
 // Read-only payload bank conflicts are explicit and reciprocal.
 global.rodata.def @lookup_ab = align(32) conflicts([@lookup_cd]) bytes("00112233")
 

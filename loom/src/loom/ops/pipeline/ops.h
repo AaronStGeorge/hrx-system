@@ -36,7 +36,7 @@ typedef enum loom_pipeline_scope_e {
   LOOM_PIPELINE_SCOPE_COUNT_ = 2,
 } loom_pipeline_scope_t;
 
-// Function visibility. Absent (0) means private (module-internal).
+// Symbol visibility. Absent (0) means private (module-internal).
 typedef enum loom_pipeline_visibility_e {
   LOOM_PIPELINE_VISIBILITY_PUBLIC = 1,
   LOOM_PIPELINE_VISIBILITY_COUNT_ = 2,

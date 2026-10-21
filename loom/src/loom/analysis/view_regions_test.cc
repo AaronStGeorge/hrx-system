@@ -583,7 +583,8 @@ TEST_P(GlobalStorageStabilityTest, LoadsDoNotInvalidateOtherStorage) {
   switch (GetParam()) {
     case GlobalStorageEffect::kRodataDefinition:
       IREE_ASSERT_OK(loom_global_rodata_def_build(
-          &module_builder, 0, symbol, 0, loom_symbol_ref_array_t{},
+          &module_builder, 0, /*visibility=*/0, /*linkage=*/0, symbol, 0,
+          loom_symbol_ref_array_t{},
           iree_make_const_byte_span("abcdefghijklmnop", 16),
           LOOM_LOCATION_UNKNOWN, &operation));
       break;

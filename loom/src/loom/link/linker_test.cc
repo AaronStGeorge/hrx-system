@@ -1582,6 +1582,40 @@ func.def public linkonce @identity(%x: i32) -> (i32) {
   EXPECT_EQ(linked, nullptr);
 }
 
+TEST_F(LinkerTest, CoalescesLinkOnceRodataDefinitions) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+global.rodata.def public linkonce @lookup = bytes("01")
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+global.rodata.def public linkonce @lookup = bytes("01")
+)"));
+
+  loom_module_t* linked = Link({first, second});
+  Verify(linked);
+
+  const std::string text = Print(linked);
+  const size_t definition =
+      text.find("global.rodata.def public linkonce @lookup");
+  EXPECT_NE(definition, std::string::npos);
+  EXPECT_EQ(
+      text.find("global.rodata.def public linkonce @lookup", definition + 1),
+      std::string::npos);
+}
+
+TEST_F(LinkerTest, RejectsMixedStrongAndLinkOnceRodataDefinitions) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+global.rodata.def public @lookup = bytes("01")
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+global.rodata.def public linkonce @lookup = bytes("01")
+)"));
+
+  loom_module_t* linked = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS,
+                        LinkStatus({first, second}, &linked));
+  EXPECT_EQ(linked, nullptr);
+}
+
 TEST_F(LinkerTest, CoalescesLinkOnceKernelDefinitions) {
   loom_module_t* first = Parse(IREE_SV(R"(
 kernel.def linkonce @copy() {

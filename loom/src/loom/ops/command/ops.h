@@ -30,7 +30,7 @@ enum {
   LOOM_OP_COMMAND_COUNT_ = 8,
 };
 
-// Function visibility. Absent (0) means private (module-internal).
+// Symbol visibility. Absent (0) means private (module-internal).
 typedef enum loom_command_visibility_e {
   LOOM_COMMAND_VISIBILITY_PUBLIC = 1,
   LOOM_COMMAND_VISIBILITY_COUNT_ = 2,

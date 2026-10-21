@@ -13,6 +13,7 @@
 #define LOOM_OPS_GLOBAL_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ir/ir.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +28,12 @@ enum {
   LOOM_OP_GLOBAL_RODATA_DECL = LOOM_OP_KIND(LOOM_DIALECT_GLOBAL, 5),
   LOOM_OP_GLOBAL_COUNT_ = 6,
 };
+
+// Symbol visibility. Absent (0) means private (module-internal).
+typedef enum loom_global_rodata_def_visibility_e {
+  LOOM_GLOBAL_RODATA_DEF_VISIBILITY_PUBLIC = 1,
+  LOOM_GLOBAL_RODATA_DEF_VISIBILITY_COUNT_ = 2,
+} loom_global_rodata_def_visibility_t;
 
 // LOOM_OP_GLOBAL_CONSTANT: Immutable global value with an optional inline scalar initializer. Declaration-local dim/encoding names in the type annotation express structural constraints. Predicates constrain dynamic dimensions and are propagated to every load site as value facts. Non-scalar or computed initialization is modeled by global.store in initializer functions; resource-backed artifact payloads belong in global.rodata.def instead of overloading inline attrs.
 // global.constant @pi : f32 = 3.14159265358979
@@ -82,17 +89,23 @@ iree_status_t loom_global_variable_verify(
 // global.rodata.def @loom_sanitizer_sites = align(8) bytes("4c53495401000000")
 LOOM_DEFINE_ISA(loom_global_rodata_def_isa, LOOM_OP_GLOBAL_RODATA_DEF)
 LOOM_DEFINE_ATTR_SYMBOL(loom_global_rodata_def_symbol, 0)
-LOOM_DEFINE_ATTR_BYTES(loom_global_rodata_def_contents, 1)
-LOOM_DEFINE_ATTR_I64(loom_global_rodata_def_alignment, 2)
-LOOM_DEFINE_ATTR_SYMBOL_SET(loom_global_rodata_def_bank_conflicts, 3)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_global_rodata_def_visibility, 1, loom_global_rodata_def_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_global_rodata_def_linkage, 2, loom_symbol_linkage_t)
+LOOM_DEFINE_ATTR_BYTES(loom_global_rodata_def_contents, 3)
+LOOM_DEFINE_ATTR_I64(loom_global_rodata_def_alignment, 4)
+LOOM_DEFINE_ATTR_SYMBOL_SET(loom_global_rodata_def_bank_conflicts, 5)
 enum loom_global_rodata_def_build_flag_bits_e {
-  LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT = 1u << 0,
-  LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_BANK_CONFLICTS = 1u << 1,
+  LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
+  LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_LINKAGE = 1u << 1,
+  LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_ALIGNMENT = 1u << 2,
+  LOOM_GLOBAL_RODATA_DEF_BUILD_FLAG_HAS_BANK_CONFLICTS = 1u << 3,
 };
 typedef uint32_t loom_global_rodata_def_build_flags_t;
 iree_status_t loom_global_rodata_def_build(
     loom_builder_t* builder,
     loom_global_rodata_def_build_flags_t build_flags,
+    loom_optional uint8_t visibility,
+    loom_optional uint8_t linkage,
     loom_symbol_ref_t symbol,
     loom_optional int64_t alignment,
     loom_optional loom_symbol_ref_array_t bank_conflicts,
