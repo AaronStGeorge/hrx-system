@@ -77,6 +77,14 @@ typedef struct iree_hal_amd_gpu_device_options_t {
 void iree_hal_amd_gpu_device_options_initialize(
     iree_hal_amd_gpu_device_options_t* out_options);
 
+// Queries whether a passive endpoint advertises a native queue family usable
+// by default device construction. Reads cached native descriptors without
+// creating a device, queue, event, or allocation. Native construction still
+// validates installed services and resource availability.
+iree_status_t iree_hal_amd_gpu_device_query_support(const amdf_api_t* api,
+                                                    amdf_endpoint_t* endpoint,
+                                                    bool* out_supported);
+
 // Creates a refcounted HAL device with provisioned queues, one completion
 // worker and one deferred publisher. Blocking allocation uses the fabric's
 // shared NUMA allocation owner; file I/O uses its proactor. Pools remain

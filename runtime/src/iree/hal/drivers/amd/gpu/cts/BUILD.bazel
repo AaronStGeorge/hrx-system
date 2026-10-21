@@ -277,6 +277,24 @@ iree_runtime_cc_benchmark(
 )
 
 iree_runtime_cc_test(
+    name = "driver_test",
+    srcs = ["driver_test.cc"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_amd": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":test_device",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/registration",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "native_test",
     srcs = [
         "dispatch_test.cc",

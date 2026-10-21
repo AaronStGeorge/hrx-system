@@ -52,7 +52,7 @@ iree_status_t iree_hal_amd_driver_create(amdf_native_lifetime_t native_lifetime,
 }
 
 // Schemes select execution implementations, independently of physical endpoint
-// enumeration. A driver never advertises devices it has no engine to execute.
+// enumeration. GPU schemes require usable native compute queue families.
 static iree_status_t iree_hal_amd_driver_select_engine(
     iree_string_view_t driver_name, amdf_engine_kind_t* out_engine_kind,
     amdf_gpu_architecture_t* out_architecture) {
@@ -72,8 +72,10 @@ static iree_status_t iree_hal_amd_driver_select_engine(
                           (int)driver_name.size, driver_name.data);
 }
 
-// Architecture qualification opens only a query handle. It creates no native
-// device, address space, queue, or event and never activates another engine.
+// Architecture and queue qualification open only a query handle, with UNKNOWN
+// architecture accepting any GPU architecture for an opaque device ID.
+// This creates no native device, address space, queue, or event and never
+// activates another engine.
 static iree_status_t iree_hal_amd_driver_match_endpoint(
     iree_hal_amd_fabric_t* fabric, const amdf_endpoint_summary_t* summary,
     amdf_engine_kind_t engine_kind, amdf_gpu_architecture_t architecture,
@@ -103,6 +105,13 @@ static iree_status_t iree_hal_amd_driver_match_endpoint(
   };
   iree_status_t status = IREE_HAL_AMD_STATUS_FROM_AMDF(
       gpu->endpoint_query_info(endpoint, &info), "gpu.endpoint_query_info");
+  bool supported = false;
+  if (iree_status_is_ok(status) &&
+      (architecture == AMDF_GPU_ARCHITECTURE_UNKNOWN ||
+       amdf_gpu_endpoint_architecture(&info) == architecture)) {
+    status = iree_hal_amd_gpu_device_query_support(fabric->api, endpoint,
+                                                   &supported);
+  }
   const amdf_status_t close_status = fabric->api->endpoint_close(endpoint);
   if (!amdf_status_is_ok(close_status)) {
     // The failed close preserves its endpoint. Keep its borrowed instance live
@@ -113,7 +122,7 @@ static iree_status_t iree_hal_amd_driver_match_endpoint(
         status, IREE_HAL_AMD_STATUS_FROM_AMDF(close_status, "endpoint_close"));
   }
   if (iree_status_is_ok(status)) {
-    *out_matches = amdf_gpu_endpoint_architecture(&info) == architecture;
+    *out_matches = supported;
   }
   return status;
 }
@@ -270,15 +279,11 @@ static iree_status_t iree_hal_amd_driver_create_gpu_device(
       host_allocator, out_device);
 }
 
-static iree_status_t iree_hal_amd_driver_create_device_by_id(
-    iree_hal_driver_t* base, iree_hal_device_id_t id,
+static iree_status_t iree_hal_amd_driver_create_device(
+    iree_hal_amd_driver_t* driver, const amdf_endpoint_summary_t* endpoint,
     iree_host_size_t param_count, const iree_string_pair_t* params,
     const iree_hal_device_create_params_t* create_params,
     iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
-  iree_hal_amd_driver_t* driver = (iree_hal_amd_driver_t*)base;
-  const amdf_endpoint_summary_t* endpoint = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_amd_driver_resolve_id(driver->fabric, id, &endpoint));
   if (endpoint->engine_kind == AMDF_ENGINE_KIND_GPU) {
     return iree_hal_amd_driver_create_gpu_device(
         driver->fabric, endpoint, param_count, params, create_params,
@@ -299,6 +304,30 @@ static iree_status_t iree_hal_amd_driver_create_device_by_id(
     iree_hal_amd_xdna_context_free(context);
   }
   return status;
+}
+
+static iree_status_t iree_hal_amd_driver_create_device_by_id(
+    iree_hal_driver_t* base, iree_hal_device_id_t id,
+    iree_host_size_t param_count, const iree_string_pair_t* params,
+    const iree_hal_device_create_params_t* create_params,
+    iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
+  iree_hal_amd_driver_t* driver = (iree_hal_amd_driver_t*)base;
+  const amdf_endpoint_summary_t* endpoint = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amd_driver_resolve_id(driver->fabric, id, &endpoint));
+  bool matches = false;
+  IREE_RETURN_IF_ERROR(iree_hal_amd_driver_match_endpoint(
+      driver->fabric, endpoint, endpoint->engine_kind,
+      AMDF_GPU_ARCHITECTURE_UNKNOWN, &matches));
+  if (!matches) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "AMD endpoint '%s' has no supported execution "
+                            "queue family",
+                            endpoint->name);
+  }
+  return iree_hal_amd_driver_create_device(driver, endpoint, param_count,
+                                           params, create_params,
+                                           host_allocator, out_device);
 }
 
 static bool iree_hal_amd_driver_parse_identity(iree_string_view_t path,
@@ -368,14 +397,24 @@ static iree_status_t iree_hal_amd_driver_create_device_by_path(
        device_id == IREE_HAL_DEVICE_ID_DEFAULT && iree_status_is_ok(status);
        ++i) {
     const amdf_endpoint_summary_t* endpoint = &driver->fabric->endpoints[i];
+    if (by_identity &&
+        !amdf_endpoint_id_is_equal(&endpoint->id, &endpoint_id)) {
+      continue;
+    }
     bool matches = false;
     status = iree_hal_amd_driver_match_endpoint(
         driver->fabric, endpoint, engine_kind, architecture, &matches);
     if (!matches) {
+      if (by_identity && iree_status_is_ok(status)) {
+        status = iree_make_status(
+            IREE_STATUS_UNAVAILABLE,
+            "AMD endpoint '%s' has no supported execution queue family for "
+            "scheme '%.*s'",
+            endpoint->name, (int)driver_name.size, driver_name.data);
+      }
       continue;
     }
-    if (by_identity ? amdf_endpoint_id_is_equal(&endpoint->id, &endpoint_id)
-                    : family_ordinal == ordinal) {
+    if (by_identity || family_ordinal == ordinal) {
       device_id = (iree_hal_device_id_t)i + 1;
     }
     ++family_ordinal;
@@ -386,9 +425,9 @@ static iree_status_t iree_hal_amd_driver_create_device_by_path(
         IREE_STATUS_NOT_FOUND,
         "no AMD endpoint matches the selected family and path");
   }
-  return iree_hal_amd_driver_create_device_by_id(base, device_id, param_count,
-                                                 params, create_params,
-                                                 host_allocator, out_device);
+  return iree_hal_amd_driver_create_device(
+      driver, &driver->fabric->endpoints[device_id - 1], param_count, params,
+      create_params, host_allocator, out_device);
 }
 
 static const iree_hal_driver_vtable_t iree_hal_amd_driver_vtable = {

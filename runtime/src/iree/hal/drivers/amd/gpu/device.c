@@ -158,6 +158,35 @@ static iree_string_view_t iree_hal_amd_gpu_device_id(iree_hal_device_t* base) {
   }
 }
 
+iree_status_t iree_hal_amd_gpu_device_query_support(const amdf_api_t* api,
+                                                    amdf_endpoint_t* endpoint,
+                                                    bool* out_supported) {
+  *out_supported = false;
+  amdf_endpoint_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
+      .structure_size = sizeof(info),
+  };
+  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
+      api->endpoint_query_info(endpoint, &info), "endpoint_query_info"));
+  iree_status_t status = iree_ok_status();
+  for (uint32_t i = 0; i < info.queue_family_count && !*out_supported &&
+                       iree_status_is_ok(status);
+       ++i) {
+    amdf_queue_family_info_t family = {
+        .type = AMDF_STRUCTURE_TYPE_QUEUE_FAMILY_INFO,
+        .structure_size = sizeof(family),
+    };
+    status = IREE_HAL_AMD_STATUS_FROM_AMDF(
+        api->endpoint_query_queue_family_info(endpoint, i, &family),
+        "endpoint_query_queue_family_info");
+    if (iree_status_is_ok(status)) {
+      *out_supported =
+          iree_hal_amd_gpu_pm4_queue_publication_modes(&family) != 0;
+    }
+  }
+  return status;
+}
+
 static iree_status_t iree_hal_amd_gpu_device_build_spec(
     iree_hal_amd_gpu_device_t* device, iree_string_view_t display_name,
     uint32_t queue_count,
