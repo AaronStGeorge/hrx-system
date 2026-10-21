@@ -176,3 +176,22 @@ py_test(
     main = "loom_binary_size_test.py",
     deps = [":github_api"],
 )
+
+test_suite(
+    name = "presubmit_tests",
+    tests = [
+        ":change_scope_test",
+        ":ci_core_common_test",
+        ":ci_core_linux_test",
+        ":ci_core_windows_test",
+        ":github_actions_triage_test",
+        ":github_actions_watch_test",
+        ":github_api_test",
+        ":loom_binary_size_test",
+        ":rocm_environment_test",
+        ":vulkan_environment_test",
+        ":windows_diagnostics_test",
+        ":windows_file_access_test",
+        ":windows_stl_asan_test",
+    ],
+)
