@@ -1955,6 +1955,7 @@ def test_native_sticky_updates_are_distinct_from_replacement_writes() -> None:
             assert OperandFlag.STATE_WRITE in operand.flags
             assert OperandFlag.STATE_READ not in operand.flags
             assert operand.write_event is not None
+            assert ".operand.sticky_update." in operand.write_event
         assert actual_fields == expected_fields
         seen_registers.update(native_updates)
     assert {"srF2BFlags", "srFPFlags"} <= seen_registers

@@ -33,6 +33,7 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     _REGISTER_ENDPOINTS,
     _SCHEDULE_CLASS_NAMES,
     _SLOT_RESOURCE_KINDS,
+    _STICKY_UPDATE_ENDPOINTS,
     AIE2P_CORE_DESCRIPTOR_SET,
     _bundle_exclusion_resource_name,
     _itinerary,
@@ -847,3 +848,55 @@ def test_physical_register_events_preserve_signed_observation_times() -> None:
         ]
         == 6
     )
+
+
+def test_sticky_status_updates_share_issue_cycles_and_preserve_observation() -> None:
+    separations = {
+        (row.producer_event, row.consumer_event): row.minimum_issue_separation_cycles
+        for row in AIE2P_CORE_DESCRIPTOR_SET.event_separations
+    }
+    for producer, consumer in product(_STICKY_UPDATE_ENDPOINTS, repeat=2):
+        assert (
+            separations[
+                _register_event_name("sticky_update", *producer),
+                _register_event_name("sticky_update", *consumer),
+            ]
+            == 0
+        )
+
+    for sticky, regular in product(_STICKY_UPDATE_ENDPOINTS, _REGISTER_ENDPOINTS):
+        sticky_cycle, sticky_bypass = sticky
+        regular_cycle, regular_bypass = regular
+        sticky_to_regular = sticky_cycle - regular_cycle
+        regular_to_sticky = -sticky_to_regular
+        sticky_forwarded = int(
+            sticky_bypass is not None and sticky_bypass == regular_bypass
+        )
+        assert (
+            separations[
+                _register_event_name("sticky_update", *sticky),
+                _register_event_name("read", *regular),
+            ]
+            == sticky_to_regular + 1 - sticky_forwarded
+        )
+        assert (
+            separations[
+                _register_event_name("sticky_update", *sticky),
+                _register_event_name("write", *regular),
+            ]
+            == sticky_to_regular + 1
+        )
+        assert (
+            separations[
+                _register_event_name("read", *regular),
+                _register_event_name("sticky_update", *sticky),
+            ]
+            == regular_to_sticky + sticky_forwarded
+        )
+        assert (
+            separations[
+                _register_event_name("write", *regular),
+                _register_event_name("sticky_update", *sticky),
+            ]
+            == regular_to_sticky + 1
+        )

@@ -20,6 +20,27 @@ coissued components: 4
 
 // ====
 
+// Independent A/B FIFO pops can occupy one native packet even though both
+// update the sticky FIFO-underflow status register. Returning both payloads
+// keeps their load results observable after that packet.
+// RUN: emit aie2p-leaf @parallel_fifo_pops report=emission
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @parallel_fifo_pops(%left_pointer: reg<aie2p.eps>, %left_fifo: reg<aie2p.eldfiforeg>, %left_position: reg<aie2p.erf2>, %right_pointer: reg<aie2p.eps>, %right_fifo: reg<aie2p.eldfiforeg>, %right_position: reg<aie2p.erf2>) -> (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) asm {
+  %left, %next_left_pointer, %next_left_fifo, %next_left_position = vlda.pop.512.i32x16 %left_pointer, %left_fifo, %left_position
+  %right, %next_right_pointer, %next_right_fifo, %next_right_position = vldb.pop.512.i32x16 %right_pointer, %right_fifo, %right_position
+  return %left, %right
+}
+
+// ----
+issue cycles: 8
+code bytes: 22
+coissued bundles: 1
+coissued components: 2
+
+// ====
+
 // Repeating the low half requires a generated register move. Its wait for the
 // loaded value and its own issue cycle consume the pending logical load gap.
 // RUN: emit aie2p-leaf @repeat_loaded_half report=emission
