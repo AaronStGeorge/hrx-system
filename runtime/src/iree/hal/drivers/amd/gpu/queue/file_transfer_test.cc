@@ -7,6 +7,7 @@
 #include "iree/hal/drivers/amd/gpu/queue/file_transfer.h"
 
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <thread>
 
@@ -25,6 +26,15 @@ namespace {
 // do. Transfers, host waits, captured ownership, and public completion all use
 // production code. Hardware execution is covered by the driver CTS.
 struct NativeQueue : iree_hal_queue_t {
+  // Accepted pipeline owners, independent of native packet completion.
+  std::atomic<int> host_owners{0};
+  static void Begin(iree_hal_queue_t* queue) {
+    ++static_cast<NativeQueue*>(queue)->host_owners;
+  }
+  static void End(iree_hal_queue_t* queue) {
+    --static_cast<NativeQueue*>(queue)->host_owners;
+  }
+
   // Public point must remain pending until submit relinquishes its arguments.
   iree_hal_semaphore_t* completion = nullptr;
   // Counts the native copy and final cache boundary separately.
@@ -192,6 +202,8 @@ class FileTransferTest : public ::testing::Test {
         .queue = &queue,
         .context = &context,
         .captures = &captures_,
+        .begin = NativeQueue::Begin,
+        .end = NativeQueue::End,
         .waits = &waits_,
         .barrier_size = sizeof(uint64_t),
         .submit = NativeQueue::Submit,
@@ -210,12 +222,13 @@ class FileTransferTest : public ::testing::Test {
     IREE_ASSERT_OK(iree_hal_amd_gpu_file_transfer_submit(
         &executor, {1, &dependency, &value}, {1, &completion_, &value}, file_,
         access, 5, buffer.get(), 5, 50, &before, &after));
-    iree_hal_device_release(device.get());
     if (deferred) {
       EXPECT_EQ(queue.submissions, 0u);
       EXPECT_FALSE(device.destroyed);
       IREE_ASSERT_OK(iree_hal_semaphore_signal(dependency, 1, nullptr));
     }
+    EXPECT_EQ(queue.host_owners.load(), 0);
+    iree_hal_device_release(device.get());
     EXPECT_TRUE(device.destroyed);
     EXPECT_EQ(failures, reject ? 1u : 0u);
     uint64_t completed_value = 0;
@@ -303,6 +316,8 @@ TEST_F(FileTransferTest, FailedNativeWorkRetainsFileUntilRetirement) {
       .queue = &queue,
       .context = &context,
       .captures = &captures_,
+      .begin = NativeQueue::Begin,
+      .end = NativeQueue::End,
       .waits = &waits_,
       .barrier_size = sizeof(uint64_t),
       .submit = NativeQueue::Submit,
@@ -315,7 +330,6 @@ TEST_F(FileTransferTest, FailedNativeWorkRetainsFileUntilRetirement) {
       IREE_HAL_MEMORY_ACCESS_READ, 5, buffer.get(), 5, 50, &before, &after));
   iree_hal_file_release(file_);
   file_ = nullptr;
-  iree_hal_device_release(device.get());
   EXPECT_EQ(queue.submissions, 1u);
   EXPECT_FALSE(file_released_);
   EXPECT_FALSE(device.destroyed);
@@ -336,6 +350,8 @@ TEST_F(FileTransferTest, FailedNativeWorkRetainsFileUntilRetirement) {
   callback.fn(callback.user_data, iree_status_from_code(IREE_STATUS_ABORTED),
               nullptr, true);
   EXPECT_TRUE(file_released_);
+  EXPECT_EQ(queue.host_owners.load(), 0);
+  iree_hal_device_release(device.get());
   EXPECT_TRUE(device.destroyed);
   EXPECT_EQ(queue.submissions, 1u);
   EXPECT_EQ(failures, 1u);

@@ -177,6 +177,11 @@ iree_status_t iree_hal_amd_fabric_asan_initialize(
 // join. False preserves the remaining graph after a native removal failure.
 bool iree_hal_amd_fabric_asan_deinitialize(iree_hal_amd_fabric_asan_t* state);
 
+// Releases retired quarantined backing before its borrowed native access
+// devices are destroyed. Live allocations and shadow mappings remain intact.
+void iree_hal_amd_fabric_asan_flush_quarantine(
+    iree_hal_amd_fabric_asan_t* state);
+
 // Samples quarantine and physical shadow accounting under their owning locks.
 void iree_hal_amd_fabric_asan_query_statistics(
     iree_hal_amd_fabric_asan_t* state,

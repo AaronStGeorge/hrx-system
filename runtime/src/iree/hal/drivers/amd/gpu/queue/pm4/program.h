@@ -120,7 +120,7 @@ typedef struct iree_hal_amd_gpu_pm4_program_queue_t {
 } iree_hal_amd_gpu_pm4_program_queue_t;
 
 // Resident program storage embedded in an independently retained sealed
-// command program. That owner retains the device while recordings separately
+// command program. That owner borrows the device while recordings separately
 // own their caller resources. Metadata selection/release is hot. Native backing
 // acquisition and release run outside the metadata mutex; last invocation
 // release never calls a driver.

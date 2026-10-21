@@ -186,7 +186,8 @@ iree_hal_device_group_device_count(const iree_hal_device_group_t* group);
 
 // Returns the device at |index| in the group.
 // The returned pointer is valid for the lifetime of the group. Callers must
-// retain the device if they need it to outlive the group.
+// retain the group to extend that lifetime, keeping its topology valid through
+// device destruction.
 IREE_API_EXPORT iree_hal_device_t* iree_hal_device_group_device_at(
     const iree_hal_device_group_t* group, iree_host_size_t index);
 

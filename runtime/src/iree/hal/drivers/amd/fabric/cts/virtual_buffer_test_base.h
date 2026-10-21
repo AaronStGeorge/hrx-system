@@ -36,7 +36,7 @@ namespace iree::hal::amd::fabric::cts {
 // The metadata-only GPU dependency borrows its native handles from the fixture.
 // Observe its actual final release before reclaiming those handles and facts.
 struct NativeDeviceLifetime {
-  // Retained by the mock device and indirectly by each real fabric provider.
+  // Retained by the mock device that borrows this fixture's native handles.
   iree_hal_resource_t resource;
   // Guards final-release publication to the fixture owner.
   std::mutex mutex;
@@ -391,11 +391,12 @@ class FabricVirtualBufferTest
     iree_hal_buffer_release(backing_);
     iree_hal_pool_release(pool_);
     iree_hal_semaphore_release(done_);
-    iree_hal_device_group_release(group_);
+    iree_hal_amd_fabric_allocation_queue_drain(allocation_queue_);
     iree_hal_device_release(device_);
+    iree_hal_device_release(cpu_);
+    iree_hal_device_group_release(group_);
     native_lifetime_.ReleaseAndAwait();
     iree_hal_amd_fabric_allocation_queue_release(allocation_queue_);
-    iree_hal_device_release(cpu_);
     iree_hal_allocator_release(cpu_allocator_);
     iree_task_executor_release(executor_);
     context_.Deinitialize();

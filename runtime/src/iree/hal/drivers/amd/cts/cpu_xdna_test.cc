@@ -78,8 +78,9 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
     }
     iree_hal_pool_release(memory_pool_);
     iree_hal_executable_release(executable_);
-    iree_hal_device_group_release(device_group_);
     iree_hal_device_release(device_);
+    iree_hal_device_release(cpu_device_);
+    iree_hal_device_group_release(device_group_);
     iree_async_proactor_pool_release(pool_);
     iree_hal_driver_release(driver_);
     iree_hal_driver_registry_free(registry_);
@@ -87,7 +88,6 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
       EXPECT_EQ(registration_release_count_, 1);
       iree_shm_close(&registered_storage_);
     }
-    iree_hal_device_release(cpu_device_);
     iree_async_proactor_pool_release(cpu_proactor_pool_);
     iree_hal_allocator_release(cpu_allocator_);
     iree_task_executor_release(cpu_executor_);

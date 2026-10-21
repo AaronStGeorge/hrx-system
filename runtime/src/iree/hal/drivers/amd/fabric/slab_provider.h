@@ -52,8 +52,6 @@ typedef struct iree_hal_amd_fabric_slab_provider_options_t {
   uint32_t trace_ordinal;
   // Qualified construction policy; the provider copies the access array.
   iree_hal_amd_fabric_memory_options_t memory;
-  // HAL owners parallel to memory.accesses, retained through native cleanup.
-  iree_hal_device_t* const* access_devices;
   // Optional distinct import access set, with memory.access_count entries.
   // ASAN-owned alias preparation must not constrain external registrations.
   const amdf_memory_device_access_t* import_accesses;
@@ -84,13 +82,11 @@ typedef struct iree_hal_amd_fabric_slab_provider_options_t {
 } iree_hal_amd_fabric_slab_provider_options_t;
 
 // Creates a provider that obtains one fully attached libamdf allocation per
-// slab. The provider copies the options arrays and retains |device|, every
-// access owner, and |allocation_queue| through native cleanup. Device-owned
-// ASAN quarantine retains cleanup facts without retaining its own device after
-// public provider teardown; that device drains quarantine before native
-// teardown. Peer devices stay retained until the quarantined backing is
-// released. These owners keep native instance/scopes/devices and progress
-// services alive. Explicit external imports and their native teardown remain
+// slab. The provider copies the options arrays and retains |allocation_queue|.
+// The application keeps placement and access devices alive through all pool,
+// provider, and native cleanup. Final provider destruction drains retired ASAN
+// quarantine backing before relinquishing those borrowed native dependencies.
+// Explicit external imports and their native teardown remain
 // synchronous; owned allocation/free batches execute on the native allocation
 // queue.
 iree_status_t iree_hal_amd_fabric_slab_provider_create(

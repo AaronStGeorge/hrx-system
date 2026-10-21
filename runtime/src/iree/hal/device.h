@@ -479,6 +479,12 @@ typedef struct iree_hal_device_t iree_hal_device_t;
 IREE_API_EXPORT void iree_hal_device_retain(iree_hal_device_t* device);
 
 // Releases the given |device| from the caller.
+// Final release destroys the device synchronously, including joining any
+// implementation-owned workers and cleanup callbacks. The application must
+// complete submitted work and release device-dependent resources first, and
+// keep borrowed host services alive through destruction. Implementation
+// children borrow the device; they do not extend its lifetime. Final release
+// must occur outside callbacks executing on behalf of the device.
 IREE_API_EXPORT void iree_hal_device_release(iree_hal_device_t* device);
 
 // Returns the device identifier.

@@ -9,7 +9,7 @@
 typedef struct iree_hal_amd_gpu_memory_mapping_t {
   // Completed native result, detached before terminal capture release.
   iree_atomic_slist_entry_t entry;
-  // Borrowed device metadata, dominated by the capture's device reference.
+  // Borrowed device metadata, live through native callback and publication.
   iree_hal_amd_gpu_memory_mapping_context_t* context;
   // Owns this capture, cloned lists, wait tracker, and mapping batch storage.
   iree_arena_allocator_t arena;
@@ -51,13 +51,11 @@ void iree_hal_amd_gpu_memory_mapping_context_deinitialize(
 
 static void iree_hal_amd_gpu_memory_mapping_free(
     iree_hal_amd_gpu_memory_mapping_t* operation) {
-  iree_hal_device_t* device = operation->context->device;
   iree_arena_allocator_t arena = operation->arena;
   iree_hal_memory_mapping_batch_release(operation->batch);
   iree_hal_semaphore_list_release(operation->waits);
   iree_hal_semaphore_list_release(operation->signals);
   iree_arena_deinitialize(&arena);
-  iree_hal_device_release(device);
 }
 
 static void iree_hal_amd_gpu_memory_mapping_complete(
@@ -121,8 +119,8 @@ static void iree_hal_amd_gpu_memory_mapping_mapped(void* user_data,
   iree_hal_amd_gpu_memory_mapping_context_t* context = operation->context;
   operation->status = status;
   // The context's native callback join protects source/notification storage
-  // even when publication completes and releases the final device reference
-  // before notify returns. No capture access follows its push.
+  // when publication completes before notify returns. No capture access follows
+  // its push.
   iree_atomic_slist_push(&context->ready, &operation->entry);
   iree_hal_amd_gpu_publication_notify(context->publication,
                                       context->publication_ordinal);
@@ -170,7 +168,6 @@ iree_status_t iree_hal_amd_gpu_queue_map(
   }
   *operation =
       (iree_hal_amd_gpu_memory_mapping_t){.context = context, .arena = arena};
-  iree_hal_device_retain(context->device);
   const iree_allocator_t allocator = iree_arena_allocator(&operation->arena);
   status = iree_hal_semaphore_list_clone(&waits, allocator, &operation->waits);
   if (iree_status_is_ok(status)) {

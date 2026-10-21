@@ -8,7 +8,6 @@
 #include <atomic>
 #include <barrier>
 #include <cstring>
-#include <semaphore>
 #include <thread>
 #include <vector>
 
@@ -33,9 +32,8 @@ enum class Barriers { kDefault, kExplicitEmpty };
 enum class Timing { kSubmit, kCompletion, kSampledSubmit };
 enum class Capture { kNone, kMetadata, kActive };
 
-// The allocator observes complete asynchronous device teardown so each row
-// starts after the previous row's workers and native owners have joined. Warm
-// dispatches reuse capture blocks; allocation counts report slow-path growth.
+// Warm dispatches reuse capture blocks; allocation counts report slow-path
+// growth. Final device release joins workers and native owners between rows.
 class NativeQueue {
  public:
   ~NativeQueue() {
@@ -45,11 +43,8 @@ class NativeQueue {
       iree_hal_buffer_release(lane.output);
     }
     iree_hal_pool_release(pool_);
+    iree_hal_device_release(device_);
     iree_hal_device_group_release(group_);
-    if (device_) {
-      iree_hal_device_release(device_);
-      reclaimed_.acquire();
-    }
     iree_hal_amd_gpu_context_free(context_);
     iree_async_frontier_tracker_release(tracker_);
     iree_async_proactor_pool_release(proactors_);
@@ -124,7 +119,6 @@ class NativeQueue {
     IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_device_create(
         context, IREE_SV("PM4 queue benchmark"), &options, &params,
         iree_allocator_t{this, Allocate}, &device_));
-    armed_.store(true);
     IREE_RETURN_IF_ERROR(iree_hal_device_group_create_from_device(
         device_, tracker_, iree_allocator_system(), &group_));
     queue_ = iree_hal_device_queue(device_, 0, 0);
@@ -543,9 +537,7 @@ class NativeQueue {
     IREE_RETURN_IF_ERROR(
         allocator.ctl(allocator.self, command, params, inout_pointer));
     if (command == IREE_ALLOCATOR_COMMAND_FREE && had_pointer) {
-      if (self->live_count_.fetch_sub(1) == 1 && self->armed_.load()) {
-        self->reclaimed_.release();
-      }
+      self->live_count_.fetch_sub(1);
     } else if (command != IREE_ALLOCATOR_COMMAND_FREE && !had_pointer) {
       self->live_count_.fetch_add(1);
       self->allocation_count_.fetch_add(1);
@@ -599,10 +591,6 @@ class NativeQueue {
   std::atomic<size_t> live_count_ = 0;
   // Total allocations since construction, sampled only outside timing.
   std::atomic<uint64_t> allocation_count_ = 0;
-  // Successful construction enables notification of final asynchronous free.
-  std::atomic<bool> armed_ = false;
-  // Joins final device allocator access before this fixture is destroyed.
-  std::binary_semaphore reclaimed_{0};
 };
 
 static void BM_Dispatch(benchmark::State& state, Arguments arguments,

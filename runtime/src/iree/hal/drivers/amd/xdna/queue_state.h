@@ -10,6 +10,7 @@
 
 #include "iree/async/event.h"
 #include "iree/base/threading/mutex.h"
+#include "iree/base/threading/notification.h"
 #include "iree/hal/drivers/amd/xdna/profile.h"
 #include "iree/hal/drivers/amd/xdna/queue.h"
 #include "iree/hal/drivers/amd/xdna/queue_operation.h"
@@ -87,8 +88,8 @@ struct iree_hal_amd_xdna_queue_t {
   iree_async_operation_t shutdown_operation;
   // Placed final handoff after terminal source unregistration.
   iree_async_operation_t finalization_operation;
-  // Device-owned terminal callback retained through finalization.
-  iree_hal_amd_xdna_queue_shutdown_callback_t shutdown_callback;
+  // Borrowed final-release notification, protected by state_mutex.
+  iree_notification_t* shutdown_notification;
   // Poll-owned persistent observer lifecycle.
   iree_hal_amd_xdna_observer_state_t observer_state;
   // True when shutdown arrived before observer registration completed.
@@ -121,6 +122,9 @@ struct iree_hal_amd_xdna_queue_t {
   bool services_shutdown;
   // True only while the device may release the queue and its parent graph.
   bool shutdown_complete;
+  // Failed observation or handoff left operations borrowing native parents.
+  // Set under state_mutex; their failure signals do not prove retirement.
+  bool operations_retained;
   // Placed native pending ring, sized to the provider's prepared capacity.
   struct {
     // Accepted invocations in native FIFO order.

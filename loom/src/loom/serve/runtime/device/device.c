@@ -280,10 +280,10 @@ iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group) {
     iree_hal_pool_release(device->storage_pool);
     loom_serve_execution_queues_release(device->execution_queues);
   }
-  iree_hal_device_group_release(group->handle);
   for (iree_host_size_t i = 0; i < group->device_count; ++i) {
     iree_hal_device_release(group->devices[i].handle);
   }
+  iree_hal_device_group_release(group->handle);
   iree_async_frontier_tracker_release(group->frontier_tracker);
   loom_serve_host_release(group->host);
   iree_allocator_free(group->host_allocator, group);

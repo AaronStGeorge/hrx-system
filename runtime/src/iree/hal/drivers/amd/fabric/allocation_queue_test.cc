@@ -205,6 +205,7 @@ class AllocationQueueTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    iree_hal_amd_fabric_allocation_queue_drain(queue_);
     iree_hal_amd_fabric_allocation_queue_release(queue_);
   }
 
@@ -265,11 +266,47 @@ TEST_F(AllocationQueueTest, FailedBatchRollsBackItsAcquiredPrefix) {
   iree_hal_amd_fabric_allocation_queue_acquire_memory(queue_, &acquire.request);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
                         acquire.completed.get_future().get());
+  iree_hal_amd_fabric_allocation_queue_drain(queue_);
   EXPECT_EQ(native_.allocate_count, 2u);
   EXPECT_EQ(native_.free_count, 1u);
   for (auto& memory : acquire.memories) {
     EXPECT_EQ(memory.handle, nullptr);
   }
+}
+
+TEST_F(AllocationQueueTest, DrainJoinsTheCompletionCallback) {
+  struct Callback {
+    // Controller observes callback entry before requesting the drain.
+    std::promise<void> entered;
+    // Controller releases the callback's final access.
+    std::shared_future<void> resume;
+    // Written at the callback tail and observed after drain returns.
+    bool finished = false;
+  } callback;
+  std::promise<void> resume;
+  callback.resume = resume.get_future().share();
+  iree_hal_amd_fabric_memory_map_request_t request = {
+      .completion =
+          {
+              .fn =
+                  [](void* user_data, iree_status_t status) {
+                    auto* callback = static_cast<Callback*>(user_data);
+                    IREE_EXPECT_OK(status);
+                    callback->entered.set_value();
+                    callback->resume.wait();
+                    callback->finished = true;
+                  },
+              .user_data = &callback,
+          },
+  };
+  iree_hal_amd_fabric_allocation_queue_map_memory(queue_, &request);
+  callback.entered.get_future().get();
+  std::thread teardown([&] {
+    iree_hal_amd_fabric_allocation_queue_drain(queue_);
+    EXPECT_TRUE(callback.finished);
+  });
+  resume.set_value();
+  teardown.join();
 }
 
 TEST_F(AllocationQueueTest, FailedPreparationReleasesItsNativeHandle) {
@@ -531,7 +568,6 @@ TEST_F(AllocationQueueTest, SlabsAndPrivateBackingShareOneNativeWorker) {
   IREE_ASSERT_OK(iree_hal_amd_fabric_slab_provider_create(
       device, &native_.api, iree_hal_device_event_sink_discard(), queue_,
       &provider_options, iree_allocator_system(), &provider));
-  iree_hal_device_release(device);
 
   std::promise<void> entered;
   std::promise<void> resume;
@@ -590,6 +626,8 @@ TEST_F(AllocationQueueTest, SlabsAndPrivateBackingShareOneNativeWorker) {
   iree_hal_slab_provider_release_slabs(provider, &release);
   released.get_future().get();
   iree_hal_slab_provider_release(provider);
+  iree_hal_amd_fabric_allocation_queue_drain(queue_);
+  iree_hal_device_release(device);
   EXPECT_EQ(native_.allocate_count, 7u);
   EXPECT_EQ(native_.free_count, 7u);
   for (auto thread : native_.threads) {

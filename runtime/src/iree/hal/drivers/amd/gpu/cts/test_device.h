@@ -23,15 +23,10 @@
 
 namespace iree::hal::amd::gpu::cts {
 
-// Observe actual resource reclamation, including both worker handles. Returning
-// from device_release alone does not prove asynchronous cleanup has finished.
+// Observe complete resource reclamation at synchronous final device release.
 struct DeviceAllocator {
   // Live allocations made by the concrete device and its children.
   std::atomic<size_t> live_count = 0;
-  // Set after successful construction, while the device still owns storage.
-  std::atomic<bool> armed = false;
-  // Final callback returns ownership of this test allocator to the test.
-  std::binary_semaphore reclaimed{0};
 
   iree_allocator_t allocator() { return {this, Control}; }
 

@@ -45,8 +45,6 @@ static bool iree_hal_amd_gpu_completion_observe(
 static int iree_hal_amd_gpu_completion_main(void* user_data) {
   iree_hal_amd_gpu_completion_t* completion = user_data;
   const iree_hal_amd_gpu_context_t* context = completion->context;
-  const iree_hal_amd_gpu_completion_exit_callback_t exit_callback =
-      completion->exit_callback;
   iree_time_t spin_deadline = IREE_TIME_INFINITE_PAST;
   while (iree_atomic_load(&completion->state, iree_memory_order_acquire) ==
          IREE_HAL_AMD_GPU_COMPLETION_RUNNING) {
@@ -104,17 +102,12 @@ static int iree_hal_amd_gpu_completion_main(void* user_data) {
   }
   iree_atomic_store(&completion->state, IREE_HAL_AMD_GPU_COMPLETION_STOPPED,
                     iree_memory_order_release);
-  if (exit_callback.fn) {
-    // This action may free completion, its sources, and the native context.
-    exit_callback.fn(exit_callback.user_data);
-  }
   return 0;
 }
 
 iree_status_t iree_hal_amd_gpu_completion_initialize(
     const iree_hal_amd_gpu_context_t* context, iree_host_size_t source_count,
     iree_hal_amd_gpu_completion_source_t* sources, iree_duration_t spin_ns,
-    iree_hal_amd_gpu_completion_exit_callback_t exit_callback,
     iree_thread_affinity_t affinity, iree_allocator_t host_allocator,
     iree_hal_amd_gpu_completion_t* out_completion) {
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -123,7 +116,6 @@ iree_status_t iree_hal_amd_gpu_completion_initialize(
   out_completion->source_count = source_count;
   out_completion->sources = sources;
   out_completion->spin_ns = spin_ns;
-  out_completion->exit_callback = exit_callback;
   const iree_thread_create_params_t params = {
       .name = IREE_SV("amd-gpu-retire"),
       .create_suspended = true,

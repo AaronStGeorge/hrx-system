@@ -400,7 +400,6 @@ class SlabProviderTest : public ::testing::Test {
     options.memory.profile.allocation.maximum_alignment = 4096;
     options.memory.access_count = 2;
     options.memory.accesses = accesses_;
-    options.access_devices = devices_;
     native_.required_flags = host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0;
     options.memory.required_flags = native_.required_flags;
     options.memory.host_access = host_access;

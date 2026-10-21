@@ -154,6 +154,7 @@ void iree_hal_amd_gpu_context_deinitialize_memory(
     return;
   }
   iree_hal_amd_gpu_context_join_memory(context);
+  iree_hal_amd_fabric_allocation_queue_drain(context->memory.queue);
   iree_hal_amd_fabric_allocation_queue_release(context->memory.queue);
   context->memory.queue = NULL;
   iree_notification_deinitialize(&context->memory.notification);

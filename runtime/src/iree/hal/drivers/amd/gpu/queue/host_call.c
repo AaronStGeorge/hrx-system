@@ -19,9 +19,9 @@ enum {
 typedef struct iree_hal_amd_gpu_host_call_t {
   // One terminal-chain reference plus each active boundary producer's borrow.
   iree_atomic_ref_count_t ref_count;
-  // Borrowed queue-owned services, dominated by the retained device.
+  // Borrowed queue-owned services, live through operation retirement.
   const iree_hal_amd_gpu_host_call_executor_t* executor;
-  // Retained parent through the final callback and native boundary.
+  // Borrowed parent, kept alive by the application through completion.
   iree_hal_device_t* device;
   // Owned extent returned to the reusable capture pool.
   iree_host_size_t allocation_size;
@@ -44,14 +44,14 @@ static void iree_hal_amd_gpu_host_call_join(
   if (iree_atomic_ref_count_dec(&operation->ref_count) != 1) {
     return;
   }
-  iree_hal_device_t* device = operation->device;
+  const iree_hal_amd_gpu_host_call_executor_t* executor = operation->executor;
   iree_hal_resource_release(operation->call.resource);
   iree_hal_semaphore_list_release(operation->signals);
   iree_hal_semaphore_release(operation->semaphore);
   iree_hal_amd_gpu_capture_pool_release(
       operation->executor->captures,
       iree_make_byte_span(operation, operation->allocation_size));
-  iree_hal_device_release(device);
+  executor->end(executor->queue);
 }
 
 static void iree_hal_amd_gpu_host_call_finish(
@@ -262,9 +262,9 @@ iree_status_t iree_hal_amd_gpu_host_call_submit(
       .call = call,
       .flags = flags,
   };
+  executor->begin(executor->queue);
   iree_atomic_ref_count_init(&operation->ref_count);
   memcpy(operation->arguments, arguments, sizeof(operation->arguments));
-  iree_hal_device_retain(operation->device);
   iree_hal_resource_retain(call.resource);
   for (iree_host_size_t i = 0; i < signals.count; ++i) {
     operation->signals.semaphores[i] = signals.semaphores[i];

@@ -81,14 +81,14 @@ void iree_hal_amd_gpu_device_options_initialize(
 // worker and one deferred publisher. Blocking allocation uses the fabric's
 // shared NUMA allocation owner; file I/O uses its proactor. Pools remain
 // explicit. Consumes the unique context on every outcome. Success returns one
-// device reference; failure leaves out_device NULL. Host cleanup is joined
-// unless a native stop wake fails; native rollback failure preserves ownership.
+// device reference; failure leaves out_device NULL. Native rollback failure
+// preserves ownership whose retirement cannot be proven.
 //
 // Families, queues, and resources borrow their parent device. The final device
-// release closes admission and transfers cleanup to its completion worker;
-// accepted operations retain their normal dependency semantics. An unresolved
-// external dependency may therefore keep the owner alive. Native failure never
-// permits releasing storage whose native uses have not been proven complete.
+// release joins workers and native cleanup on the releasing application thread.
+// The application completes work and releases child resources first. Native
+// failure never permits releasing storage whose uses have not been proven
+// complete.
 iree_status_t iree_hal_amd_gpu_device_create(
     iree_hal_amd_gpu_context_t* context, iree_string_view_t display_name,
     const iree_hal_amd_gpu_device_options_t* options,

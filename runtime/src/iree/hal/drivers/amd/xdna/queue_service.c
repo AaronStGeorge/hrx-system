@@ -32,7 +32,6 @@ static void iree_hal_amd_xdna_queue_service_handoff(
   iree_hal_amd_xdna_queue_service_item_t* item = service->active;
   iree_slim_mutex_unlock(&service->mutex);
   complete(callback_user_data, service, item, status);
-  // The completion callback may release the final owner of |service|.
   IREE_TRACE_ZONE_END(z0);
 }
 
@@ -53,6 +52,11 @@ static void iree_hal_amd_xdna_queue_service_abandon_all(
     item = next;
   }
   service->callbacks.abandon(service->user_data, active, status);
+  iree_slim_mutex_lock(&service->mutex);
+  if (service->idle_notification) {
+    iree_notification_post(service->idle_notification, IREE_ALL_WAITERS);
+  }
+  iree_slim_mutex_unlock(&service->mutex);
 }
 
 static int iree_hal_amd_xdna_queue_service_main(void* user_data) {
@@ -134,6 +138,35 @@ iree_status_t iree_hal_amd_xdna_queue_service_initialize(
   return status;
 }
 
+static bool iree_hal_amd_xdna_queue_service_is_idle(void* user_data) {
+  iree_hal_amd_xdna_queue_service_t* service = user_data;
+  iree_slim_mutex_lock(&service->mutex);
+  const bool idle =
+      (!service->active && !service->ready_head) ||
+      iree_atomic_load(&service->stopping, iree_memory_order_acquire);
+  iree_slim_mutex_unlock(&service->mutex);
+  return idle;
+}
+
+void iree_hal_amd_xdna_queue_service_await_idle(
+    iree_hal_amd_xdna_queue_service_t* service) {
+  if (!service->thread) {
+    return;
+  }
+  iree_notification_t notification;
+  iree_notification_initialize(&notification);
+  iree_slim_mutex_lock(&service->mutex);
+  service->idle_notification = &notification;
+  iree_slim_mutex_unlock(&service->mutex);
+  iree_notification_await(&notification,
+                          iree_hal_amd_xdna_queue_service_is_idle, service,
+                          iree_infinite_timeout());
+  iree_slim_mutex_lock(&service->mutex);
+  service->idle_notification = NULL;
+  iree_slim_mutex_unlock(&service->mutex);
+  iree_notification_deinitialize(&notification);
+}
+
 void iree_hal_amd_xdna_queue_service_deinitialize(
     iree_hal_amd_xdna_queue_service_t* service) {
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -180,6 +213,9 @@ void iree_hal_amd_xdna_queue_service_acknowledge(
   IREE_ASSERT(service->active == item);
   service->active = NULL;
   const bool should_wake = service->ready_head != NULL;
+  if (service->idle_notification && !should_wake) {
+    iree_notification_post(service->idle_notification, IREE_ALL_WAITERS);
+  }
   iree_slim_mutex_unlock(&service->mutex);
   if (should_wake) {
     iree_notification_post(&service->notification, 1);

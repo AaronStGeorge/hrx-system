@@ -87,15 +87,8 @@ typedef struct iree_hal_amd_gpu_device_t {
   uint64_t next_profile_session_id;
   // Retained placement-local process infrastructure, independent of the pool.
   iree_async_proactor_pool_entry_t* proactor_entry;
-  // Cold lifetime handoff; submission never accesses its mutex/notification.
-  struct {
-    // Joins the complete final-release wake before the worker frees its owner.
-    iree_slim_mutex_t mutex;
-    // Parks an already failed completion worker until public ownership ends.
-    iree_notification_t notification;
-    // Last public release has closed every provisioned queue.
-    iree_atomic_int32_t closing;
-  } shutdown;
+  // Final public release closes queue admission before joining completion.
+  iree_atomic_int32_t closing;
   // Native allocation policy and shared progress supplied to explicit pools.
   struct {
     // Shared queue-allocation captures and transient-root metadata.
@@ -382,7 +375,7 @@ static void iree_hal_amd_gpu_device_initialize_memory(
 
 static bool iree_hal_amd_gpu_device_is_closing(void* user_data) {
   iree_hal_amd_gpu_device_t* device = user_data;
-  return iree_atomic_load(&device->shutdown.closing, iree_memory_order_acquire);
+  return iree_atomic_load(&device->closing, iree_memory_order_acquire);
 }
 
 static bool iree_hal_amd_gpu_device_is_idle(iree_hal_amd_gpu_device_t* device) {
@@ -399,6 +392,9 @@ static bool iree_hal_amd_gpu_device_is_idle(iree_hal_amd_gpu_device_t* device) {
 // final context/event teardown stays on this original cold owner.
 static bool iree_hal_amd_gpu_device_release_children(
     iree_hal_amd_gpu_device_t* device) {
+  iree_hal_amd_gpu_context_join_memory(device->context);
+  iree_hal_amd_fabric_allocation_queue_drain(device->context->memory.queue);
+  iree_hal_amd_gpu_publication_deinitialize(&device->publication);
   if (device->context->cleanup_blocked) {
     // A failed child constructor may have kept native ownership without
     // returning a queue. Its borrowed construction facts must also stay live.
@@ -408,8 +404,6 @@ static bool iree_hal_amd_gpu_device_release_children(
     return false;
   }
   device->transfers.file_staging = NULL;
-  iree_hal_amd_gpu_context_join_memory(device->context);
-  iree_hal_amd_gpu_publication_deinitialize(&device->publication);
   const amdf_status_t transfer_status =
       iree_hal_amd_gpu_sdma_queue_free(device->transfers.queue);
   if (!amdf_status_is_ok(transfer_status)) {
@@ -474,35 +468,7 @@ static bool iree_hal_amd_gpu_device_release_children(
   iree_async_notification_release(device->memory.notification);
   iree_async_proactor_pool_entry_release(device->proactor_entry);
   iree_hal_device_spec_release(device->spec);
-  iree_notification_deinitialize(&device->shutdown.notification);
-  iree_slim_mutex_deinitialize(&device->shutdown.mutex);
   return true;
-}
-
-static void iree_hal_amd_gpu_device_completion_exit(void* user_data) {
-  iree_hal_amd_gpu_device_t* device = user_data;
-  // An early native wait failure cannot consume public construction ownership.
-  // The cold mutex also joins notification_post/event_signal's final accesses.
-  iree_notification_await(&device->shutdown.notification,
-                          iree_hal_amd_gpu_device_is_closing, device,
-                          iree_infinite_timeout());
-  iree_slim_mutex_lock(&device->shutdown.mutex);
-  iree_slim_mutex_unlock(&device->shutdown.mutex);
-  // The callback is the worker's final action. Releasing its handle detaches
-  // this already joined owner; no state is accessed by the thread afterward.
-  iree_thread_release(device->completion.thread);
-  device->completion.thread = NULL;
-  if (!iree_hal_amd_gpu_device_is_idle(device)) {
-    iree_hal_amd_gpu_context_report(
-        device->context, amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST),
-        "GPU observer exited with unproven native uses; preserving ownership");
-    return;
-  }
-  if (!iree_hal_amd_gpu_device_release_children(device)) {
-    return;
-  }
-  iree_hal_amd_gpu_context_free(device->context);
-  iree_allocator_free(device->host_allocator, device);
 }
 
 static bool iree_hal_amd_gpu_device_poll_shutdown(
@@ -538,19 +504,33 @@ static void iree_hal_amd_gpu_device_destroy(iree_hal_device_t* base) {
       return;
     }
   }
-  iree_slim_mutex_lock(&device->shutdown.mutex);
   for (uint32_t i = 0; i < device->queue_count; ++i) {
     iree_hal_amd_gpu_pm4_queue_close(device->queues[i]);
   }
-  iree_atomic_store(&device->shutdown.closing, 1, iree_memory_order_release);
-  iree_notification_post(&device->shutdown.notification, IREE_ALL_WAITERS);
+  iree_atomic_store(&device->closing, 1, iree_memory_order_release);
   amdf_status_t status = iree_hal_amd_gpu_context_signal(device->context);
   if (!amdf_status_is_ok(status)) {
     iree_hal_amd_gpu_context_report(device->context, status,
                                     "GPU shutdown event_signal");
   }
-  // The worker may reclaim device immediately after this final access.
-  iree_slim_mutex_unlock(&device->shutdown.mutex);
+  // Final release runs on the application owner. Completion observes closing
+  // after its final retirement round; joining includes every callback tail.
+  iree_thread_release(device->completion.thread);
+  device->completion.thread = NULL;
+  if (!iree_hal_amd_gpu_device_is_idle(device)) {
+    iree_hal_amd_gpu_context_join_memory(device->context);
+    iree_hal_amd_fabric_allocation_queue_drain(device->context->memory.queue);
+    iree_hal_amd_gpu_publication_deinitialize(&device->publication);
+    iree_hal_amd_gpu_context_report(
+        device->context, amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST),
+        "GPU observer exited with unproven native uses; preserving ownership");
+    return;
+  }
+  if (!iree_hal_amd_gpu_device_release_children(device)) {
+    return;
+  }
+  iree_hal_amd_gpu_context_free(device->context);
+  iree_allocator_free(device->host_allocator, device);
 }
 
 // Queue protocol and publication are native family properties, independent of
@@ -767,8 +747,6 @@ static iree_status_t iree_hal_amd_gpu_device_create_prepared(
   iree_hal_amd_gpu_memory_mapping_context_initialize(
       (iree_hal_device_t*)device, context, &device->publication,
       options->queue_count + 1, host_allocator, &device->memory.mappings);
-  iree_slim_mutex_initialize(&device->shutdown.mutex);
-  iree_notification_initialize(&device->shutdown.notification);
   snprintf(device->processor_name, sizeof(device->processor_name), "gfx%u%u%x",
            context->target_info.gfx_ip.major, context->target_info.gfx_ip.minor,
            context->target_info.gfx_ip.stepping);
@@ -935,12 +913,8 @@ static iree_status_t iree_hal_amd_gpu_device_create_prepared(
     }
     device->sources[source_count - 1] = (iree_hal_amd_gpu_completion_source_t){
         iree_hal_amd_gpu_device_poll_shutdown, device};
-    // The cold constructor retains the first reference through builtin upload.
-    // Its exit callback waits for the ordinary last-release handoff.
     status = iree_hal_amd_gpu_completion_initialize(
         context, source_count, device->sources, options->completion_spin_ns,
-        (iree_hal_amd_gpu_completion_exit_callback_t){
-            iree_hal_amd_gpu_device_completion_exit, device},
         affinity, host_allocator, &device->completion);
   }
   if (iree_status_is_ok(status)) {
@@ -976,22 +950,7 @@ iree_status_t iree_hal_amd_gpu_device_create(
   if (iree_status_is_ok(status)) {
     *out_device = base;
   } else {
-    // No public work exists. Join the observer's ordinary last-release cleanup
-    // before returning constructor failure to the allocator's owner. Failed
-    // native retirement preserves its backing/context through that same path.
-    iree_thread_t* thread = device->completion.thread;
-    iree_thread_retain(thread);
-    const amdf_status_t stop_status =
-        iree_hal_amd_gpu_completion_request_stop(&device->completion);
-    if (!amdf_status_is_ok(stop_status)) {
-      iree_hal_amd_gpu_context_report(context, stop_status,
-                                      "code upload failure stop wake");
-    }
     iree_hal_device_release(base);
-    if (amdf_status_is_ok(stop_status)) {
-      iree_thread_join(thread);
-    }
-    iree_thread_release(thread);
   }
   return status;
 }

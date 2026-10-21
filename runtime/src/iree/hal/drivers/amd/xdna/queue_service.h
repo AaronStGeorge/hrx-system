@@ -34,9 +34,9 @@ typedef struct iree_hal_amd_xdna_queue_service_item_t {
 typedef void (*iree_hal_amd_xdna_queue_service_execute_fn_t)(
     void* user_data, iree_hal_amd_xdna_queue_service_item_t* item);
 
-// Consumes one worker result on the proactor thread. The callback must call
-// iree_hal_amd_xdna_queue_service_acknowledge before it releases ownership that
-// may dominate |service|. Takes ownership of |status|.
+// Consumes one worker result on the proactor thread. The callback acknowledges
+// the item after committing queue state and before returning its capture.
+// Takes ownership of |status|; the application owns the enclosing device.
 typedef void (*iree_hal_amd_xdna_queue_service_complete_fn_t)(
     void* user_data, iree_hal_amd_xdna_queue_service_t* service,
     iree_hal_amd_xdna_queue_service_item_t* item, iree_status_t status);
@@ -70,6 +70,8 @@ struct iree_hal_amd_xdna_queue_service_t {
   iree_slim_mutex_t mutex;
   // Wakes the worker for admission, acknowledgement, and shutdown.
   iree_notification_t notification;
+  // Borrowed final-release waiter, protected by mutex; NULL during normal use.
+  iree_notification_t* idle_notification;
   // Set before final worker release or an unreturnable handoff.
   iree_atomic_int32_t stopping;
   // Owned worker thread, or NULL before successful initialization.
@@ -88,6 +90,12 @@ iree_status_t iree_hal_amd_xdna_queue_service_initialize(
     iree_hal_amd_xdna_queue_service_callbacks_t callbacks, void* user_data,
     iree_allocator_t host_allocator,
     iree_hal_amd_xdna_queue_service_t* out_service);
+
+// Joins admitted work while the application keeps proactor progress running.
+// Called outside the proactor/worker; the owner has stopped new admission.
+// A following placed proactor callback joins the acknowledgement callback tail.
+void iree_hal_amd_xdna_queue_service_await_idle(
+    iree_hal_amd_xdna_queue_service_t* service);
 
 // Stops and joins an idle service and releases its cold synchronization state.
 // The service owner guarantees that no item is admitted or active.

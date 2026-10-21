@@ -37,6 +37,13 @@ void iree_hal_amd_fabric_allocation_queue_retain(
 void iree_hal_amd_fabric_allocation_queue_release(
     iree_hal_amd_fabric_allocation_queue_t* queue);
 
+// Joins the accepted prefix of every priority, including rollback and the final
+// completion callback/provider release. The caller holds a queue reference and
+// has stopped submitting its own work. Other devices may continue submitting;
+// their later requests do not extend this join. Never called from this worker.
+void iree_hal_amd_fabric_allocation_queue_drain(
+    iree_hal_amd_fabric_allocation_queue_t* queue);
+
 // Enqueues a prepared native slab batch. Its fabric provider and complete
 // request remain live through completion. Submission allocates no storage and
 // performs no native calls. No dependency wait belongs in this queue.

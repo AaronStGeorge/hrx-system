@@ -105,7 +105,7 @@ void GpuNativeTest::PublishCode(uint32_t compute_family_ordinal,
       1, &publish_source, {}, iree_allocator_system(), &publication);
   if (iree_status_is_ok(status)) {
     status = iree_hal_amd_gpu_completion_initialize(
-        context_, 1, &completion_source, 0, {}, {}, iree_allocator_system(),
+        context_, 1, &completion_source, 0, {}, iree_allocator_system(),
         &completion);
   }
   if (iree_status_is_ok(status)) {
@@ -134,10 +134,7 @@ iree_status_t DeviceAllocator::Control(void* self_pointer,
     return status;
   }
   if (command == IREE_ALLOCATOR_COMMAND_FREE && had_pointer) {
-    if (self->live_count.fetch_sub(1) == 1 && self->armed.load()) {
-      // No access to self follows publication; the waiter may destroy it.
-      self->reclaimed.release();
-    }
+    self->live_count.fetch_sub(1);
   } else if (command != IREE_ALLOCATOR_COMMAND_FREE && !had_pointer) {
     self->live_count.fetch_add(1);
   }
@@ -417,11 +414,8 @@ void GpuNativeTest::SetUp() {
 }
 
 void GpuNativeTest::TearDown() {
+  iree_hal_device_release(device_);
   iree_hal_device_group_release(group_);
-  if (device_) {
-    iree_hal_device_release(device_);
-    allocator_.reclaimed.acquire();
-  }
   EXPECT_EQ(allocator_.live_count.load(), 0u);
   iree_hal_amd_gpu_context_free(context_);
   iree_async_frontier_tracker_release(tracker_);
@@ -439,7 +433,6 @@ void GpuNativeTest::Create(
   IREE_ASSERT_OK(iree_hal_amd_gpu_device_create(
       context, IREE_SV("PM4 native CTS"), &options_, &params,
       allocator_.allocator(), &device_));
-  allocator_.armed.store(true);
   IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
       device_, tracker_, iree_allocator_system(), &group_));
   queues_[0] = iree_hal_device_queue(device_, 0, 0);

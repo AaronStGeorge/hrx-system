@@ -934,30 +934,27 @@ TEST_F(GpuNativeTest, ManyFutureDependenciesUseOwnedWaitStorage) {
   iree_hal_semaphore_release(done);
 }
 
-TEST_F(GpuNativeTest, LastReleaseFromCallerWithAcceptedWork) {
+TEST_F(GpuNativeTest, FinalReleaseJoinsCompletedWorkAndCleanup) {
   Create();
   if (HasFatalFailure()) {
     return;
   }
   iree_hal_semaphore_t* done = nullptr;
-  iree_hal_semaphore_t* gate = nullptr;
   CreateSemaphore(&done);
-  CreateSemaphore(&gate);
   uint64_t value = 1;
-  IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {1, &gate, &value},
-                                        {1, &done, &value}, nullptr, 0));
+  IREE_ASSERT_OK(
+      iree_hal_queue_barrier(queues_[0], {}, {1, &done, &value}, nullptr, 0));
+  IREE_ASSERT_OK(
+      iree_hal_semaphore_wait(done, value, iree_infinite_timeout(), 0));
   iree_hal_semaphore_release(done);
-  iree_hal_device_group_release(group_);
-  group_ = nullptr;
   iree_hal_device_release(device_);
   device_ = nullptr;
-  // Closing the device preserves the normal dependency of accepted work.
-  IREE_ASSERT_OK(iree_hal_semaphore_signal(gate, value, nullptr));
-  iree_hal_semaphore_release(gate);
-  allocator_.reclaimed.acquire();
+  iree_hal_device_group_release(group_);
+  group_ = nullptr;
+  EXPECT_EQ(allocator_.live_count.load(), 0u);
 }
 
-TEST_F(GpuNativeTest, LastReleaseFromCallerWithFailedAcceptedWait) {
+TEST_F(GpuNativeTest, FinalReleaseAfterFailedAcceptedWait) {
   Create();
   if (HasFatalFailure()) {
     return;
@@ -969,12 +966,6 @@ TEST_F(GpuNativeTest, LastReleaseFromCallerWithFailedAcceptedWait) {
   uint64_t value = 1;
   IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {1, &gate, &value},
                                         {1, &done, &value}, nullptr, 0));
-  iree_hal_device_group_release(group_);
-  group_ = nullptr;
-  iree_hal_device_release(device_);
-  device_ = nullptr;
-  // Failure abandons accepted work on this signaling thread. Asynchronous
-  // device cleanup must join its final queue and notification accesses.
   iree_hal_semaphore_fail(gate, iree_make_status(IREE_STATUS_ABORTED,
                                                  "accepted dependency failed"));
   IREE_EXPECT_STATUS_IS(
@@ -982,7 +973,11 @@ TEST_F(GpuNativeTest, LastReleaseFromCallerWithFailedAcceptedWait) {
       iree_hal_semaphore_wait(done, value, iree_infinite_timeout(), 0));
   iree_hal_semaphore_release(gate);
   iree_hal_semaphore_release(done);
-  allocator_.reclaimed.acquire();
+  iree_hal_device_release(device_);
+  device_ = nullptr;
+  iree_hal_device_group_release(group_);
+  group_ = nullptr;
+  EXPECT_EQ(allocator_.live_count.load(), 0u);
 }
 
 TEST_F(GpuNativeTest, FailedQueueConstructionReleasesItsOwners) {
@@ -1081,7 +1076,7 @@ TEST_F(GpuNativeTest, NativeConsumerPreservesProducerRetirementFailure) {
   // Fixture teardown joins device ownership and checks complete reclamation.
 }
 
-TEST_F(GpuNativeTest, LastReleaseFromCompletionCallback) {
+TEST_F(GpuNativeTest, NonfinalReleaseFromCompletionCallback) {
   Create();
   if (HasFatalFailure()) {
     return;
@@ -1091,29 +1086,42 @@ TEST_F(GpuNativeTest, LastReleaseFromCompletionCallback) {
   CreateSemaphore(&gate);
   CreateSemaphore(&done);
   uint64_t value = 1;
+  struct Callback {
+    // Explicit application reference, subordinate to the outer device owner.
+    iree_hal_device_t* device;
+    // Joins the application's callback before returning its outer references.
+    std::binary_semaphore finished{0};
+  } callback{device_};
+  iree_hal_device_retain(device_);
   iree_async_semaphore_timepoint_t timepoint = {
       .callback =
           [](void* user_data, iree_async_semaphore_timepoint_t*,
              iree_status_t status) {
             IREE_CHECK_OK(status);
-            iree_hal_device_release(static_cast<iree_hal_device_t*>(user_data));
+            auto* callback = static_cast<Callback*>(user_data);
+            iree_hal_device_release(callback->device);
+            callback->finished.release();
           },
-      .user_data = device_,
+      .user_data = &callback,
   };
   IREE_ASSERT_OK(iree_async_semaphore_acquire_timepoint(
       reinterpret_cast<iree_async_semaphore_t*>(done), value, &timepoint));
   IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {1, &gate, &value},
                                         {1, &done, &value}, nullptr, 0));
-  iree_hal_device_group_release(group_);
-  group_ = nullptr;
-  device_ = nullptr;
-  iree_hal_semaphore_release(done);
   IREE_ASSERT_OK(iree_hal_semaphore_signal(gate, value, nullptr));
   iree_hal_semaphore_release(gate);
-  allocator_.reclaimed.acquire();
+  callback.finished.acquire();
+  iree_status_free(iree_hal_semaphore_wait(done, value, iree_infinite_timeout(),
+                                           IREE_ASYNC_WAIT_FLAG_NONE));
+  iree_hal_semaphore_release(done);
+  iree_hal_device_release(device_);
+  device_ = nullptr;
+  iree_hal_device_group_release(group_);
+  group_ = nullptr;
+  EXPECT_EQ(allocator_.live_count.load(), 0u);
 }
 
-TEST_F(GpuNativeTest, LastReleaseFromFailedDependencyCallback) {
+TEST_F(GpuNativeTest, NonfinalReleaseFromFailedDependencyCallback) {
   Create();
   if (HasFatalFailure()) {
     return;
@@ -1123,29 +1131,42 @@ TEST_F(GpuNativeTest, LastReleaseFromFailedDependencyCallback) {
   CreateSemaphore(&gate);
   CreateSemaphore(&done);
   uint64_t value = 1;
+  struct Callback {
+    // Explicit application reference, subordinate to the outer device owner.
+    iree_hal_device_t* device;
+    // Joins the application's callback before returning its outer references.
+    std::binary_semaphore finished{0};
+  } callback{device_};
+  iree_hal_device_retain(device_);
   iree_async_semaphore_timepoint_t timepoint = {
       .callback =
           [](void* user_data, iree_async_semaphore_timepoint_t*,
              iree_status_t status) {
             IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED, status);
-            iree_hal_device_release(static_cast<iree_hal_device_t*>(user_data));
+            auto* callback = static_cast<Callback*>(user_data);
+            iree_hal_device_release(callback->device);
+            callback->finished.release();
           },
-      .user_data = device_,
+      .user_data = &callback,
   };
   IREE_ASSERT_OK(iree_async_semaphore_acquire_timepoint(
       reinterpret_cast<iree_async_semaphore_t*>(done), value, &timepoint));
   IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {1, &gate, &value},
                                         {1, &done, &value}, nullptr, 0));
-  iree_hal_device_group_release(group_);
-  group_ = nullptr;
-  device_ = nullptr;
-  iree_hal_semaphore_release(done);
-  // Closing reenters from public failure delivery while the queue still owns
-  // its deferred capture and callback. Neither owns native execution credit.
+  // A callback may return an application reference while its outer owner
+  // keeps the device alive through cleanup.
   iree_hal_semaphore_fail(gate, iree_make_status(IREE_STATUS_ABORTED,
                                                  "accepted dependency failed"));
   iree_hal_semaphore_release(gate);
-  allocator_.reclaimed.acquire();
+  callback.finished.acquire();
+  iree_status_free(iree_hal_semaphore_wait(done, value, iree_infinite_timeout(),
+                                           IREE_ASYNC_WAIT_FLAG_NONE));
+  iree_hal_semaphore_release(done);
+  iree_hal_device_release(device_);
+  device_ = nullptr;
+  iree_hal_device_group_release(group_);
+  group_ = nullptr;
+  EXPECT_EQ(allocator_.live_count.load(), 0u);
 }
 
 class GpuNativeMemoryProgressTest : public GpuNativeAllocationTest {
@@ -1678,10 +1699,7 @@ class DriverTest : public ::testing::Test {
   void TearDown() override {
     for (size_t i = 0; i < devices_.size(); ++i) {
       iree_hal_semaphore_release(semaphores_[i]);
-      if (devices_[i]) {
-        iree_hal_device_release(devices_[i]);
-        allocators_[i].reclaimed.acquire();
-      }
+      iree_hal_device_release(devices_[i]);
       EXPECT_EQ(allocators_[i].live_count.load(), 0u);
     }
     iree_async_proactor_pool_release(proactors_);
@@ -1703,7 +1721,6 @@ class DriverTest : public ::testing::Test {
       GTEST_SKIP() << status.ToString();
     }
     IREE_ASSERT_OK(status);
-    allocators_[index].armed.store(true);
     EXPECT_TRUE(iree_string_view_equal(iree_hal_device_id(devices_[index]),
                                        IREE_SV("rdna")));
     ASSERT_NE(iree_hal_device_queue(devices_[index], 0, 0), nullptr);

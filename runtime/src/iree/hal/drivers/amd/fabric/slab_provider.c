@@ -18,14 +18,11 @@ typedef struct iree_hal_amd_fabric_slab_provider_t {
   // Public ownership plus device-owned quarantine entries retaining cleanup
   // facts.
   iree_atomic_ref_count_t body_ref_count;
-  // Retained HAL device owning placement, scope, and progress services.
+  // Borrowed HAL device owning placement, scope, and progress services.
   iree_hal_device_t* device;
-  // Borrowed ASAN owner. Public teardown releases its references before the
-  // quarantine drains; all other access devices remain retained by the body.
-  iree_hal_device_t* asan_device;
   // Native allocation domain shared by all engines on this NUMA node.
   iree_hal_amd_fabric_allocation_queue_t* allocation_queue;
-  // Borrowed native core API, dominated by retained device owners.
+  // Borrowed native core API, live through application-owned device lifetime.
   const amdf_api_t* api;
   // Borrowed diagnostic destination for native cleanup failures.
   iree_hal_device_event_sink_t event_sink;
@@ -155,7 +152,6 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
   *out_provider = NULL;
   iree_host_size_t total_size = 0;
   iree_host_size_t accesses_offset = 0;
-  iree_host_size_t access_devices_offset = 0;
   iree_host_size_t import_accesses_offset = 0;
   iree_host_size_t bindings_offset = 0;
   iree_host_size_t io_proactors_offset = 0;
@@ -178,8 +174,6 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
   }
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
       sizeof(iree_hal_amd_fabric_slab_provider_t), &total_size,
-      IREE_STRUCT_FIELD(options->memory.access_count, iree_hal_device_t*,
-                        &access_devices_offset),
       IREE_STRUCT_FIELD_ALIGNED(
           options->memory.access_count, amdf_memory_device_access_t,
           iree_alignof(amdf_memory_device_access_t), &accesses_offset),
@@ -207,19 +201,11 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
                                     host_allocator, &provider->base);
   iree_atomic_ref_count_init(&provider->body_ref_count);
   provider->device = device;
-  iree_hal_device_retain(device);
   provider->allocation_queue = allocation_queue;
   iree_hal_amd_fabric_allocation_queue_retain(allocation_queue);
   provider->api = api;
   provider->event_sink = event_sink;
   provider->options = *options;
-  iree_hal_device_t** access_devices =
-      (iree_hal_device_t**)((uint8_t*)provider + access_devices_offset);
-  for (uint32_t i = 0; i < options->memory.access_count; ++i) {
-    access_devices[i] = options->access_devices[i];
-    iree_hal_device_retain(access_devices[i]);
-  }
-  provider->options.access_devices = access_devices;
   amdf_memory_device_access_t* accesses =
       (amdf_memory_device_access_t*)((uint8_t*)provider + accesses_offset);
   if (options->memory.access_count) {
@@ -238,7 +224,6 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
     for (uint32_t i = 0; i < options->memory.access_count; ++i) {
       if (accesses[i].device == options->asan->device) {
         provider->asan_access_ordinal = i;
-        provider->asan_device = access_devices[i];
         break;
       }
     }
@@ -327,35 +312,20 @@ static void iree_hal_amd_fabric_slab_provider_release_body(
   if (iree_atomic_ref_count_dec(&provider->body_ref_count) != 1) {
     return;
   }
-  for (uint32_t i = 0; i < provider->options.memory.access_count; ++i) {
-    if (provider->options.access_devices[i] != provider->asan_device) {
-      iree_hal_device_release(provider->options.access_devices[i]);
-    }
-  }
-  iree_hal_device_t* device =
-      provider->device != provider->asan_device ? provider->device : NULL;
   iree_hal_amd_fabric_allocation_queue_t* queue = provider->allocation_queue;
   iree_allocator_free(provider->base.host_allocator, provider);
   iree_hal_amd_fabric_allocation_queue_release(queue);
-  iree_hal_device_release(device);
 }
 
 static void iree_hal_amd_fabric_slab_provider_destroy(
     iree_hal_slab_provider_t* base_provider) {
   iree_hal_amd_fabric_slab_provider_t* provider =
       iree_hal_amd_fabric_slab_provider_cast(base_provider);
-  // The device owns its quarantine and drains it before removing the native
-  // address domain. Keeping a public provider reference there would form a
-  // device -> quarantine -> provider -> device cycle. Quarantine entries keep
-  // only the cleanup body; ordinary slab operations retain the public owner.
-  // The public body's claim joins reentrant device/quarantine destruction.
-  for (uint32_t i = 0; i < provider->options.memory.access_count; ++i) {
-    if (provider->options.access_devices[i] == provider->asan_device) {
-      iree_hal_device_release(provider->options.access_devices[i]);
-    }
-  }
-  if (provider->device == provider->asan_device) {
-    iree_hal_device_release(provider->device);
+  // Retired sanitizer backing still borrows every native access device. Drain
+  // it while the application owns those devices, before provider teardown ends.
+  // The public body claim protects reentrant quarantine release callbacks.
+  if (provider->options.asan) {
+    iree_hal_amd_fabric_asan_flush_quarantine(provider->options.asan);
   }
   iree_hal_amd_fabric_slab_provider_release_body(provider);
 }
