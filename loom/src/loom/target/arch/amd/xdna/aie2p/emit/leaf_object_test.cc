@@ -82,6 +82,10 @@ TEST(Aie2pLeafObjectTest, EmitsPreparedProgramRepeatedlyWithoutMutation) {
       .bundle_index = 0,
       .read_only_data_ordinal = 0,
   };
+  const loom_aie2p_planned_code_address_fixup_t code_address_fixup = {
+      .bundle_index = 0,
+      .target_byte_offset = 4,
+  };
   loom_aie2p_leaf_program_plan_t plan = {
       .function_name = IREE_SV("kernel"),
       .storage_requirements = {},
@@ -103,6 +107,8 @@ TEST(Aie2pLeafObjectTest, EmitsPreparedProgramRepeatedlyWithoutMutation) {
       .storage_fixup_count = 0,
       .read_only_data_fixups = &read_only_data_fixup,
       .read_only_data_fixup_count = 1,
+      .code_address_fixups = &code_address_fixup,
+      .code_address_fixup_count = 1,
       .encoded_byte_length = 6,
       .register_writes = {},
   };
@@ -126,7 +132,7 @@ TEST(Aie2pLeafObjectTest, EmitsPreparedProgramRepeatedlyWithoutMutation) {
 
   ASSERT_EQ(first.object.section_count, 3u);
   ASSERT_EQ(first.object.symbol_count, 3u);
-  ASSERT_EQ(first.object.fixup_count, 1u);
+  ASSERT_EQ(first.object.fixup_count, 2u);
   EXPECT_TRUE(iree_string_view_equal(first.object.sections[0].section_name,
                                      IREE_SV(".text.kernel")));
   EXPECT_TRUE(iree_string_view_equal(first.object.sections[1].section_name,
@@ -157,6 +163,12 @@ TEST(Aie2pLeafObjectTest, EmitsPreparedProgramRepeatedlyWithoutMutation) {
             LOOM_AIE2P_NATIVE_RELOCATION_KIND_LOCAL_ADDRESS_ABSOLUTE);
   EXPECT_EQ(first.object.fixups[0].target_symbol_index, 1u);
   EXPECT_EQ(first.object.fixups[0].addend, 0);
+  EXPECT_EQ(first.object.fixups[1].section_contribution_index, 0u);
+  EXPECT_EQ(first.object.fixups[1].section_offset, 0u);
+  EXPECT_EQ(first.object.fixups[1].relocation_kind,
+            LOOM_AIE2P_NATIVE_RELOCATION_KIND_CORE_CODE_ADDRESS_ABSOLUTE);
+  EXPECT_EQ(first.object.fixups[1].target_symbol_index, 0u);
+  EXPECT_EQ(first.object.fixups[1].addend, 4);
 
   ASSERT_EQ(first.realization.read_only_data_count, 1u);
   EXPECT_EQ(first.realization.read_only_data[0].section_contribution_index, 1u);
