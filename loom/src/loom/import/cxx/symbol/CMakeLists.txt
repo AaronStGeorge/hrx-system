@@ -31,6 +31,56 @@ endif()
 if(LOOM_IMPORT_CXX)
 loom_cc_library(
   NAME
+    immutable_objects
+  CXX_STANDARD
+    23
+  CXX_FEATURES
+    "exceptions"
+    "rtti"
+  HDRS
+    "immutable_objects.h"
+  SRCS
+    "immutable_objects.cc"
+  DEPS
+    ::names
+    iree::third_party::cxx_parser
+    loom::import::cxx::source::error
+    loom::import::cxx::source::locations
+    loom::ir
+    loom::ops::global
+  PUBLIC
+)
+endif()
+
+if(LOOM_IMPORT_CXX)
+loom_cc_test(
+  NAME
+    immutable_objects_test
+  SRCS
+    "immutable_objects_test.cc"
+  CXX_STANDARD
+    23
+  CXX_FEATURES
+    "exceptions"
+    "rtti"
+  DEPS
+    ::immutable_objects
+    ::names
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::third_party::cxx_parser
+    loom::import::cxx::source::error
+    loom::import::cxx::source::locations
+    loom::import::cxx::value::builder_test
+    loom::ops::global
+  LABELS
+    "iree-build-requirement=loom.import.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX)
+loom_cc_library(
+  NAME
     functions
   CXX_STANDARD
     23
