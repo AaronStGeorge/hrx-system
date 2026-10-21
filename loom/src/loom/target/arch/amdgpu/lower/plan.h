@@ -687,6 +687,8 @@ typedef struct loom_amdgpu_vector_conversion_plan_t {
   loom_scalar_type_t source_element_type;
   // Result scalar element type.
   loom_scalar_type_t result_element_type;
+  // True when byte permutation can broadcast its exponent from an SGPR.
+  bool scalar_exponent;
   // Static source lane payload bit count.
   uint32_t source_bit_count;
   // Static result lane payload bit count.

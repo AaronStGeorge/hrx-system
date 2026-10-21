@@ -113,7 +113,7 @@ func.def target(@target) @exact_i8_to_f16_rdna(%input: vector<3xi8>) -> (vector<
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @exact_i8_to_f16_rdna(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %7 = v_mov_b32 1684300900
+  %7 = s_mov_b32 1684300900
   %8 = s_mov_b32 3833652352
   %9 = v_xor_b32_lit %input, 2155905152
   %10 = v_perm_b32_src2_lit %7, %9, 67175424
@@ -182,7 +182,7 @@ func.def target(@target) @unsigned_byte_to_half(%input: vector<5xi8>, %single: v
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @unsigned_byte_to_half(%input: reg<amdgpu.vgpr x2>, %single: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x3>, reg<amdgpu.vgpr>) asm {
-  %10 = v_mov_b32 1684300900
+  %10 = s_mov_b32 1684300900
   %11 = s_mov_b32 3825263616
   %12 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %13 = v_perm_b32_src2_lit %10, %12, 67175424

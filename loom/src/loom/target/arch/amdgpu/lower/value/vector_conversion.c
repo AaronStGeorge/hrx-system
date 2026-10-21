@@ -21,6 +21,7 @@
 #include "loom/target/arch/amdgpu/lower/mask.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/lower/value/scalar_conversion.h"
+#include "loom/target/arch/amdgpu/target_info_defs.h"
 
 static void loom_amdgpu_vector_extract_plan_from_accepted_op(
     const loom_module_t* module, const loom_op_t* source_op,
@@ -556,6 +557,10 @@ static bool loom_amdgpu_select_vector_conversion_plan_for_op(
         .convert_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_ADD_F16,
         .byte_permute = byte_permute,
         .sign_extend_source = is_signed,
+        .scalar_exponent = loom_amdgpu_descriptor_set_info_has_flags(
+            loom_amdgpu_target_info_descriptor_set_at(
+                descriptor_set->descriptor_set_ordinal),
+            LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_VOP3_TWO_SCALAR_SOURCES),
     };
     return true;
   }
@@ -930,14 +935,17 @@ static iree_status_t loom_amdgpu_lower_vector_conversion_packed_i8_to_f16(
   // in F16. Flipping signed bytes' sign bits adds 128 to their numeric value,
   // so subtracting 1152 instead recovers the signed value. Both subtraction
   // paths produce the exact integer, with positive zero in round-to-nearest.
-  // Keep the exponent in a VGPR: CDNA's register selector uses its constant
-  // bus.
-  loom_value_id_t exponent = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 0x64646464u,
-      lane_type, &exponent));
+  // Broadcast the exponent without occupying a per-lane register when the
+  // constant bus can also serve the selector. One-source targets dedicate
+  // their scalar operand to the selector and keep the exponent in a VGPR.
   loom_type_t scalar_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &scalar_type));
+  loom_value_id_t exponent = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op,
+      plan->scalar_exponent ? LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32
+                            : LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+      0x64646464u, plan->scalar_exponent ? scalar_type : lane_type, &exponent));
   loom_value_id_t bias = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
