@@ -2334,8 +2334,8 @@ static amdf_status_t iree_hal_amd_gpu_pm4_cleanup(
     iree_hal_amd_gpu_pm4_argument_storage_free(queue->context, arguments);
     arguments = next;
   }
-  iree_hal_amd_gpu_context_release_memory_sync(queue->context, 1,
-                                               &queue->control);
+  iree_hal_amd_fabric_memory_deinitialize(
+      queue->context->api, queue->context->event_sink, &queue->control);
   return AMDF_STATUS_OK;
 }
 

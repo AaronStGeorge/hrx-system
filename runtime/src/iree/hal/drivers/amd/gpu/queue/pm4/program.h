@@ -22,9 +22,10 @@ typedef struct iree_hal_amd_gpu_pm4_program_t iree_hal_amd_gpu_pm4_program_t;
 typedef struct iree_hal_amd_gpu_pm4_program_growth_t
     iree_hal_amd_gpu_pm4_program_growth_t;
 
-// Device-owned native program storage. Recorders prepare and register programs;
-// the fabric allocation domain owns native backing. Submission reads prepared
-// launches and placement facts. No worker belongs to this pool.
+// Device-owned native program storage. Recorders acquire backing and register
+// sealed programs on their callers. Invocation growth and retired releases use
+// the fabric allocation domain asynchronously. Submission reads prepared launch
+// and placement facts. No worker belongs to this pool.
 typedef struct iree_hal_amd_gpu_pm4_program_pool_t {
   // Borrowed native device dominated by the containing HAL device.
   iree_hal_amd_gpu_context_t* context;

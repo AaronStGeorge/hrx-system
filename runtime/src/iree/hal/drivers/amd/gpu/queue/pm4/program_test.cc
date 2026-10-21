@@ -489,7 +489,7 @@ TEST_P(ProgramLifetimeTest, UploadAvailabilityDoesNotPromiseLocalPlacement) {
 TEST_P(ProgramLifetimeTest, LastReleaseReturnsBeforeHeldNativeFree) {
   auto* program = new iree_hal_amd_gpu_pm4_program_t{};
   ASSERT_NO_FATAL_FAILURE(Record(program));
-  EXPECT_NE(allocation_thread_, std::this_thread::get_id());
+  EXPECT_EQ(allocation_thread_, std::this_thread::get_id());
   EXPECT_EQ(publication_thread_, std::this_thread::get_id());
   EXPECT_EQ(program->upload != nullptr, !PublishesLocalWrites());
   EXPECT_EQ(pool_.resident.scope, local_handle_);
@@ -507,7 +507,7 @@ TEST_P(ProgramLifetimeTest, LastReleaseReturnsBeforeHeldNativeFree) {
   resume.release();
   iree_hal_amd_gpu_context_join_memory(&context_);
   EXPECT_EQ(live_count_, BuiltinMemoryCount());
-  EXPECT_EQ(release_thread_, allocation_thread_);
+  EXPECT_NE(release_thread_, allocation_thread_);
 }
 
 TEST_P(ProgramLifetimeTest, RetiredInstanceNotifiesWhileCloneAllocationIsHeld) {

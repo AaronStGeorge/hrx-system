@@ -17,8 +17,9 @@ extern "C" {
 
 // Creates a recorder whose end operation seals device-resident native blocks.
 // The command buffer retains its device; the device-owned program pool provides
-// placement, trim, and the shared cold executor. UNRETAINED controls only the
-// caller's direct buffers/executables, not native program ownership.
+// placement and trim; native sealing allocations run on the caller. UNRETAINED
+// controls only the caller's direct buffers/executables, not native program
+// ownership.
 iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
     const iree_hal_queue_family_t* family,
     iree_hal_amd_gpu_pm4_program_pool_t* pool,

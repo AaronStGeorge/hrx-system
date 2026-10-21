@@ -20,6 +20,8 @@ extern "C" {
 // here, in that priority order. Acquisition/release reconsider priority between
 // slabs; native mapping vectors keep their publication boundary. An active
 // native call cannot be preempted. No execution or dependency wait runs here.
+// Synchronous construction calls the native memory APIs on its caller instead
+// of submitting here and waiting behind asynchronous allocation batches.
 typedef struct iree_hal_amd_fabric_allocation_queue_t
     iree_hal_amd_fabric_allocation_queue_t;
 

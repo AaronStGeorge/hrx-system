@@ -583,6 +583,40 @@ class ContextMemoryTest : public ContextTest {
     ContextTest::TearDown();
   }
 
+  // The fixture observes asynchronous completion before inspecting dependency
+  // state. Production construction calls the native allocator directly.
+  iree_status_t Acquire(iree_host_size_t count,
+                        const iree_hal_amd_fabric_memory_request_t* requests,
+                        iree_hal_amd_fabric_memory_t* memories) {
+    std::promise<iree::Status> completed;
+    iree_hal_amd_gpu_memory_acquire_t operation;
+    iree_hal_amd_gpu_context_acquire_memory(
+        context_, count, requests, memories,
+        {[](void* user_data, iree_status_t status) {
+           static_cast<std::promise<iree::Status>*>(user_data)->set_value(
+               iree::Status(std::move(status)));
+         },
+         &completed},
+        &operation);
+    auto status = completed.get_future().get();
+    iree_hal_amd_gpu_context_join_memory(context_);
+    return status.release();
+  }
+
+  void Release(iree_host_size_t count, iree_hal_amd_fabric_memory_t* memories) {
+    std::promise<void> completed;
+    iree_hal_amd_gpu_memory_release_t operation;
+    iree_hal_amd_gpu_context_release_memory(
+        context_, count, memories,
+        {[](void* user_data) {
+           static_cast<std::promise<void>*>(user_data)->set_value();
+         },
+         &completed},
+        &operation);
+    completed.get_future().get();
+    iree_hal_amd_gpu_context_join_memory(context_);
+  }
+
   // Native dependency outlives context cleanup and all worker callbacks.
   NativeBacking native_backing_;
   // Qualified native acquisition geometry borrowed by every request.
@@ -591,7 +625,7 @@ class ContextMemoryTest : public ContextTest {
   iree_hal_amd_gpu_context_t* context_ = nullptr;
 };
 
-TEST_F(ContextMemoryTest, ColdBatchesUseSharedNativeDomain) {
+TEST_F(ContextMemoryTest, AsyncBatchesUseSharedNativeDomain) {
   iree_hal_amd_fabric_allocation_queue_t* shared = nullptr;
   IREE_ASSERT_OK(iree_hal_amd_fabric_acquire_allocation_queue(
       fabric_, UINT32_MAX, &shared));
@@ -601,14 +635,12 @@ TEST_F(ContextMemoryTest, ColdBatchesUseSharedNativeDomain) {
   const iree_hal_amd_fabric_memory_request_t requests[] = {
       {&options_, 65, 16}, {&options_, 130, 16}, {&options_, 195, 16}};
   iree_hal_amd_fabric_memory_t memories[IREE_ARRAYSIZE(requests)] = {};
-  IREE_ASSERT_OK(iree_hal_amd_gpu_context_acquire_memory_sync(
-      context_, IREE_ARRAYSIZE(requests), requests, memories));
+  IREE_ASSERT_OK(Acquire(IREE_ARRAYSIZE(requests), requests, memories));
   for (size_t i = 0; i < IREE_ARRAYSIZE(requests); ++i) {
     EXPECT_NE(memories[i].handle, nullptr);
     EXPECT_EQ(memories[i].info.byte_length, 128u + 64u * i);
   }
-  iree_hal_amd_gpu_context_release_memory_sync(
-      context_, IREE_ARRAYSIZE(memories), memories);
+  Release(IREE_ARRAYSIZE(memories), memories);
   iree_hal_amd_gpu_context_join_memory(context_);
   EXPECT_EQ(native_backing_.allocate_count, 3u);
   EXPECT_EQ(native_backing_.free_count, 3u);
@@ -624,10 +656,8 @@ TEST_F(ContextMemoryTest, FailedBatchReturnsEveryPartialOwnerBeforeCompletion) {
   const iree_hal_amd_fabric_memory_request_t requests[] = {
       {&options_, 64, 64}, {&options_, 128, 64}, {&options_, 192, 64}};
   iree_hal_amd_fabric_memory_t memories[IREE_ARRAYSIZE(requests)] = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      iree_hal_amd_gpu_context_acquire_memory_sync(
-          context_, IREE_ARRAYSIZE(requests), requests, memories));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        Acquire(IREE_ARRAYSIZE(requests), requests, memories));
   iree_hal_amd_gpu_context_join_memory(context_);
   for (auto& memory : memories) {
     EXPECT_EQ(memory.handle, nullptr);
@@ -708,8 +738,7 @@ TEST_F(ContextMemoryTest, NativeTeardownJoinsReleaseOnItsOwnThread) {
   };
   auto* capture = new Capture{};
   const iree_hal_amd_fabric_memory_request_t request = {&options_, 64, 64};
-  IREE_ASSERT_OK(iree_hal_amd_gpu_context_acquire_memory_sync(
-      context_, 1, &request, &capture->memory));
+  IREE_ASSERT_OK(Acquire(1, &request, &capture->memory));
   std::promise<void> entered, resume;
   native_backing_.free_entered = &entered;
   native_backing_.free_resume = resume.get_future().share();
@@ -742,16 +771,15 @@ TEST_F(ContextMemoryTest, NativeTeardownJoinsReleaseOnItsOwnThread) {
   iree_hal_amd_fabric_allocation_queue_release(shared);
 }
 
-TEST_F(ContextMemoryTest, ConcurrentColdCallersJoinTheirOwnBatches) {
+TEST_F(ContextMemoryTest, ConcurrentCallersRetainAsyncBatchesUntilCompletion) {
   std::array<std::thread, 8> callers;
   for (auto& caller : callers) {
     caller = std::thread([&] {
       const iree_hal_amd_fabric_memory_request_t request = {&options_, 64, 64};
       for (uint32_t i = 0; i < 64; ++i) {
         iree_hal_amd_fabric_memory_t memory = {};
-        IREE_ASSERT_OK(iree_hal_amd_gpu_context_acquire_memory_sync(
-            context_, 1, &request, &memory));
-        iree_hal_amd_gpu_context_release_memory_sync(context_, 1, &memory);
+        IREE_ASSERT_OK(Acquire(1, &request, &memory));
+        Release(1, &memory);
         EXPECT_EQ(memory.handle, nullptr);
       }
     });
@@ -773,9 +801,8 @@ TEST_F(ContextMemoryTest, ConstructionRollbackCanReattachSharedDomain) {
   EXPECT_EQ(context_->memory.queue, shared);
   const iree_hal_amd_fabric_memory_request_t request = {&options_, 64, 64};
   iree_hal_amd_fabric_memory_t memory = {};
-  IREE_ASSERT_OK(iree_hal_amd_gpu_context_acquire_memory_sync(
-      context_, 1, &request, &memory));
-  iree_hal_amd_gpu_context_release_memory_sync(context_, 1, &memory);
+  IREE_ASSERT_OK(Acquire(1, &request, &memory));
+  Release(1, &memory);
 }
 
 }  // namespace

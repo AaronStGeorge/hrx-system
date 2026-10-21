@@ -29,10 +29,9 @@ iree_status_t iree_hal_amd_gpu_pm4_backing_allocate(
     const iree_hal_amd_fabric_memory_options_t* options, uint64_t length,
     uint64_t alignment, iree_hal_amd_fabric_memory_t* memory,
     uint64_t* out_address) {
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = options, .byte_length = length, .alignment = alignment};
-  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_acquire_memory_sync(
-      context, 1, &request, memory));
+  IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
+      context->api, options, length, alignment, context->event_sink, memory,
+      NULL));
   return iree_hal_amd_gpu_pm4_backing_query_address(context, memory,
                                                     out_address);
 }
@@ -69,10 +68,9 @@ iree_status_t iree_hal_amd_gpu_pm4_argument_storage_allocate(
   iree_hal_amd_gpu_pm4_argument_storage_t* storage = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_argument_storage_prepare(
       capacity, host_allocator, &storage));
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = options, .byte_length = capacity, .alignment = capacity};
-  iree_status_t status = iree_hal_amd_gpu_context_acquire_memory_sync(
-      context, 1, &request, &storage->memory);
+  iree_status_t status = iree_hal_amd_fabric_memory_allocate(
+      context->api, options, capacity, capacity, context->event_sink,
+      &storage->memory, NULL);
   if (iree_status_is_ok(status)) {
     status = iree_hal_amd_gpu_pm4_argument_storage_initialize(context, begin,
                                                               storage);
@@ -148,12 +146,9 @@ iree_status_t iree_hal_amd_gpu_pm4_signal_storage_allocate(
   iree_hal_amd_gpu_pm4_signal_storage_t* storage = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_signal_storage_prepare(
       capacity, queue_count, host_allocator, &storage));
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = options,
-      .byte_length = (uint64_t)capacity * sizeof(uint64_t),
-      .alignment = 8};
-  iree_status_t status = iree_hal_amd_gpu_context_acquire_memory_sync(
-      context, 1, &request, &storage->memory);
+  iree_status_t status = iree_hal_amd_fabric_memory_allocate(
+      context->api, options, (uint64_t)capacity * sizeof(uint64_t), 8,
+      context->event_sink, &storage->memory, NULL);
   if (iree_status_is_ok(status)) {
     status =
         iree_hal_amd_gpu_pm4_signal_storage_initialize(context, pool, storage);

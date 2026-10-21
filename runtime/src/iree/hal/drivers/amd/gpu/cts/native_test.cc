@@ -1155,6 +1155,85 @@ class GpuNativeMemoryProgressTest : public GpuNativeAllocationTest {
   iree::hal::amd::gpu::cts::NativeMemoryGate memory_gate_;
 };
 
+class GpuNativeRecordingProgressTest
+    : public GpuNativeMemoryProgressTest,
+      public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    if (GetParam()) {
+      memory_gate_.RequireCodeUpload();
+    }
+    GpuNativeMemoryProgressTest::SetUp();
+  }
+};
+
+TEST_P(GpuNativeRecordingProgressTest,
+       SealingAndExecutionCompleteWhileAllocationIsHeld) {
+  using iree::hal::cts::Ref;
+  const auto request = iree_hal_make_pool_reservation_request(4096, 4);
+  uint64_t one = 1, two = 2;
+  Ref<iree_hal_buffer_t> output, pending;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], {},
+                                       {1, &semaphores_[0], &one}, pool_, 1,
+                                       &request, output.out()));
+  Wait(semaphores_[0]);
+  {
+    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold hold(&memory_gate_);
+    IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], {},
+                                         {1, &semaphores_[3], &one}, pool_, 1,
+                                         &request, pending.out()));
+    hold.WaitEntered();
+    EXPECT_NE(memory_gate_.native_thread(), std::this_thread::get_id());
+
+    Ref<iree_hal_command_buffer_t> recording;
+    IREE_ASSERT_OK(iree_hal_command_buffer_create(
+        iree_hal_queue_family(queues_[1]), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+        IREE_HAL_COMMAND_CATEGORY_TRANSFER, 0, recording.out()));
+    IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording));
+    const uint32_t pattern = 0x1234CAFE;
+    IREE_ASSERT_OK(iree_hal_command_buffer_fill_buffer(
+        recording, iree_hal_make_buffer_ref(output, 0, 16), &pattern,
+        sizeof(pattern), 0));
+    const iree_hal_barrier_t release = {
+        .source_stage_mask = IREE_HAL_EXECUTION_STAGE_TRANSFER,
+        .target_stage_mask = IREE_HAL_EXECUTION_STAGE_COMMAND_RETIRE,
+        .flags = IREE_HAL_BARRIER_FLAG_RELEASE_SYSTEM_SCOPE,
+    };
+    IREE_ASSERT_OK(iree_hal_command_buffer_barrier(recording, &release));
+    // The worker cannot finish its native call until this scope exits. Sealing
+    // must allocate both resident and optional upload backing on this caller.
+    IREE_ASSERT_OK(iree_hal_command_buffer_end(recording));
+    IREE_ASSERT_OK(iree_hal_queue_execute(
+        queues_[1], {}, {1, &semaphores_[1], &one}, recording, {}, 0));
+    std::array<uint32_t, 4> observed = {};
+    const iree_hal_transfer_operation_t download = {
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+        .download =
+            {
+                .source_buffer = output,
+                .target = observed.data(),
+                .length = sizeof(observed),
+            },
+    };
+    IREE_ASSERT_OK(iree_hal_queue_transfer(
+        queues_[1], {1, &semaphores_[1], &one}, {1, &semaphores_[2], &one}, 1,
+        &download, nullptr));
+    Wait(semaphores_[2]);
+    for (uint32_t value : observed) {
+      EXPECT_EQ(value, pattern);
+    }
+  }
+  Wait(semaphores_[3]);
+  iree_hal_buffer_t* buffers[] = {output, pending};
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(queues_[1], {1, &semaphores_[2], &one},
+                                         {1, &semaphores_[2], &two},
+                                         IREE_ARRAYSIZE(buffers), buffers));
+  Wait(semaphores_[2], two);
+}
+
+INSTANTIATE_TEST_SUITE_P(LocalPublication, GpuNativeRecordingProgressTest,
+                         ::testing::Bool());
+
 TEST_F(GpuNativeMemoryProgressTest,
        HostCallbacksCompleteWhileAllocationIsHeld) {
   using iree::hal::cts::Ref;

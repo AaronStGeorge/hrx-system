@@ -447,8 +447,8 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_flush_barrier(
   return iree_ok_status();
 }
 
-// Native backing is acquired by the allocation domain. The recorder copies
-// directly into its upload view and seals the program on the recording caller.
+// Synchronous recording owns native acquisition, upload initialization, and
+// sealing on its caller, independently of queued asynchronous slab batches.
 static iree_status_t iree_hal_amd_gpu_pm4_command_seal(
     iree_hal_amd_gpu_pm4_command_buffer_t* buffer, uint32_t length) {
   iree_hal_amd_gpu_pm4_program_t* program = &buffer->program.resident;

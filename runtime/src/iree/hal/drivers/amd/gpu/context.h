@@ -92,8 +92,8 @@ iree_status_t iree_hal_amd_gpu_context_allocate(
     iree_hal_device_event_sink_t event_sink, iree_allocator_t host_allocator,
     iree_hal_amd_gpu_context_t** out_context);
 
-// Selects the existing shared native allocation domain before any backing is
-// acquired. Called once by device construction; UINT32_MAX is unspecified NUMA
+// Selects the shared native domain for asynchronous acquisition and release.
+// Called once by device construction; UINT32_MAX is unspecified worker NUMA
 // placement. Failure leaves no allocation domain attached to the context.
 iree_status_t iree_hal_amd_gpu_context_prepare_memory(
     iree_hal_amd_gpu_context_t* context, uint32_t node_id);
@@ -166,16 +166,6 @@ void iree_hal_amd_gpu_context_release_memory(
     iree_hal_amd_fabric_memory_t* memories,
     iree_hal_amd_fabric_memory_release_callback_t completion,
     iree_hal_amd_gpu_memory_release_t* operation);
-
-// Cold construction/destruction adapters. These wait only for their own native
-// batch and belong outside queue publication, retirement, and callback paths.
-iree_status_t iree_hal_amd_gpu_context_acquire_memory_sync(
-    iree_hal_amd_gpu_context_t* context, iree_host_size_t count,
-    const iree_hal_amd_fabric_memory_request_t* requests,
-    iree_hal_amd_fabric_memory_t* memories);
-void iree_hal_amd_gpu_context_release_memory_sync(
-    iree_hal_amd_gpu_context_t* context, iree_host_size_t count,
-    iree_hal_amd_fabric_memory_t* memories);
 
 // Cold ownership join after all producers have stopped and retired owners have
 // submitted their releases. Native callbacks may publish nested releases before

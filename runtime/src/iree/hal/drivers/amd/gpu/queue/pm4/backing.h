@@ -61,8 +61,8 @@ typedef struct iree_hal_amd_gpu_pm4_signal_storage_t {
 // Allocates coherent write-back storage for PM4 commands, arguments, or control
 // cells under the caller's admitted memory policy. A non-NULL out_address asks
 // for its GPU address at access ordinal zero. Failure may leave partial memory;
-// the caller always deinitializes it. This cold constructor waits for its typed
-// native acquisition and is never called by publication or retirement.
+// the caller always deinitializes it. Native allocation runs on this
+// constructor's caller, never on publication or retirement.
 iree_status_t iree_hal_amd_gpu_pm4_backing_allocate(
     iree_hal_amd_gpu_context_t* context,
     const iree_hal_amd_fabric_memory_options_t* options, uint64_t length,

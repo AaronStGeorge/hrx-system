@@ -208,7 +208,8 @@ class CodeTest : public ::testing::Test {
 
   void TearDown() override {
     iree_hal_amd_gpu_code_upload_free(&context_, upload_);
-    iree_hal_amd_gpu_context_release_memory_sync(&context_, 1, &code_);
+    iree_hal_amd_fabric_memory_deinitialize(context_.api, context_.event_sink,
+                                            &code_);
     iree_hal_amd_gpu_publication_deinitialize(&publication_);
     // Only the controlled native dependency can establish quiescence after an
     // accepted failure. The loader must leave both operands untouched until it.

@@ -90,7 +90,8 @@ void iree_hal_amd_gpu_pm4_program_pool_deinitialize(
   }
   IREE_ASSERT(!pool->head);
   iree_hal_amd_gpu_code_upload_free(pool->context, pool->code_upload);
-  iree_hal_amd_gpu_context_release_memory_sync(pool->context, 1, &pool->code);
+  iree_hal_amd_fabric_memory_deinitialize(
+      pool->context->api, pool->context->event_sink, &pool->code);
   iree_slim_mutex_deinitialize(&pool->registry_mutex);
   pool->context = NULL;
 }
@@ -158,13 +159,9 @@ static iree_status_t iree_hal_amd_gpu_pm4_program_instance_allocate(
     options.host_access = 0;
     options.required_flags &= ~AMDF_MEMORY_FLAG_HOST_VISIBLE;
   }
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = &options,
-      .byte_length = byte_length,
-      .alignment = program->alignment,
-  };
-  iree_status_t status = iree_hal_amd_gpu_context_acquire_memory_sync(
-      pool->context, 1, &request, &instance->memory);
+  iree_status_t status = iree_hal_amd_fabric_memory_allocate(
+      pool->context->api, &options, byte_length, program->alignment,
+      pool->context->event_sink, &instance->memory, NULL);
   if (iree_status_is_ok(status)) {
     status = IREE_HAL_AMD_STATUS_FROM_AMDF(
         pool->context->api->memory_query_address(instance->memory.handle, 0,
@@ -214,13 +211,9 @@ iree_status_t iree_hal_amd_gpu_pm4_program_initialize(
                                                sizeof(*out_program->upload),
                                                (void**)&out_program->upload));
     out_program->upload->host_allocator = pool->host_allocator;
-    const iree_hal_amd_fabric_memory_request_t request = {
-        .options = &pool->upload,
-        .byte_length = allocation_length,
-        .alignment = alignment,
-    };
-    IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_context_acquire_memory_sync(
-        pool->context, 1, &request, &out_program->upload->memory));
+    IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
+        pool->context->api, &pool->upload, allocation_length, alignment,
+        pool->context->event_sink, &out_program->upload->memory, NULL));
     out_program->contents = out_program->upload->memory.contents;
     IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
         pool->context->api->memory_query_address(

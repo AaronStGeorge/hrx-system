@@ -554,8 +554,8 @@ amdf_status_t iree_hal_amd_gpu_sdma_queue_free(
   if (!amdf_status_is_ok(status)) {
     return status;
   }
-  iree_hal_amd_gpu_context_release_memory_sync(queue->context, 1,
-                                               &queue->memory);
+  iree_hal_amd_fabric_memory_deinitialize(
+      queue->context->api, queue->context->event_sink, &queue->memory);
   iree_hal_amd_gpu_publisher_deinitialize(&queue->publisher);
   iree_allocator_free_aligned(queue->host_allocator, queue);
   return AMDF_STATUS_OK;
@@ -585,10 +585,9 @@ iree_status_t iree_hal_amd_gpu_sdma_queue_allocate(
           ? IREE_HAL_AMD_GPU_SDMA_CAPACITY *
                 IREE_HAL_AMD_GPU_SDMA_COMMAND_STRIDE
           : 0;
-  const iree_hal_amd_fabric_memory_request_t request = {
-      .options = control, .byte_length = command_length + 64, .alignment = 64};
-  iree_status_t status = iree_hal_amd_gpu_context_acquire_memory_sync(
-      context, 1, &request, &queue->memory);
+  iree_status_t status = iree_hal_amd_fabric_memory_allocate(
+      context->api, control, command_length + 64, 64, context->event_sink,
+      &queue->memory, NULL);
   uint64_t address = 0;
   if (iree_status_is_ok(status)) {
     status = IREE_HAL_AMD_STATUS_FROM_AMDF(
