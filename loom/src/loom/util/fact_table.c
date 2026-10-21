@@ -980,11 +980,9 @@ iree_status_t loom_value_fact_table_propagate_origins(
   IREE_RETURN_IF_ERROR(loom_value_fact_integer_relations_propagate_origins(
       table, module, op, traits, inout_changed));
   if (loom_traits_are_fact_identity(traits)) {
-    // Whole-region structured traversal intentionally omits change reporting;
-    // every visited identity belongs to the freshly populated scope.
-    // Incremental and cyclic traversal supplies a report pointer and only
-    // publishes newly changed identities so stable revisits do not duplicate
-    // observations.
+    // Region traversal also refreshes populated scopes. Identity inference
+    // retains change detection so stable visits do not republish relations
+    // that a consumer has already preserved.
     if (!inout_changed || *inout_changed) {
       IREE_RETURN_IF_ERROR(
           loom_value_fact_table_record_exact_relation(table, op, traits));

@@ -611,6 +611,19 @@ TEST_F(FactTableComputeTest,
   IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
 
   EXPECT_EQ(PendingExactRelations(table_), std::vector<loom_op_t*>({assume}));
+
+  // Consuming a relation removes it from the pending journal. Revisiting the
+  // same equation, directly or through a region refresh, must not publish it
+  // again unless its facts change.
+  loom_value_fact_table_clear_pending_exact_relations(&table_);
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
+  EXPECT_TRUE(PendingExactRelations(table_).empty());
+
+  loom_value_fact_table_clear_pending_exact_relations(&table_);
+  IREE_ASSERT_OK(loom_value_fact_table_compute_region_tree(
+      &table_, module_, loom_module_block(module_)->parent_region,
+      /*parent_op=*/nullptr));
+  EXPECT_TRUE(PendingExactRelations(table_).empty());
 }
 
 TEST_F(FactTableComputeTest, ExactRelationRetentionGrowsWithCandidates) {

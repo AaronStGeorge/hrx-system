@@ -1315,6 +1315,13 @@ static iree_status_t loom_value_fact_table_compute_ordinary_op(
 static iree_status_t loom_value_fact_table_compute_scoped_op(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_op_t* op, bool* out_changed) {
+  // Identities publish exact relations even when a caller does not need a
+  // change report. Retain change detection so a region refresh does not
+  // republish relations already consumed by a materializer.
+  bool publication_changed = false;
+  if (!out_changed && loom_traits_are_fact_identity(op->traits)) {
+    out_changed = &publication_changed;
+  }
   if (out_changed) {
     *out_changed = false;
   }

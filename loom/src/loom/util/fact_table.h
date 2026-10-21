@@ -138,8 +138,8 @@ struct loom_fact_context_t {
   } refine_operands;
 
   // Active change accumulator for auxiliary result facts published by the
-  // current inference callback. NULL during whole-scope population and
-  // outside an inference callback.
+  // current inference callback. NULL when publication needs no change report,
+  // and outside an inference callback.
   bool* result_facts_changed;
 };
 
