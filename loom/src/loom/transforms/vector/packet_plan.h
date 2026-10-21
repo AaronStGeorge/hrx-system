@@ -218,7 +218,8 @@ bool loom_vector_packet_memory_can_build_chunk_origins(
 
 iree_status_t loom_vector_packet_memory_build_chunk_origin(
     loom_target_legalization_context_t* context,
-    const loom_vector_memory_footprint_t* footprint, const loom_op_t* memory_op,
+    loom_value_slice_t source_dynamic_indices,
+    loom_attribute_t source_static_indices, const loom_op_t* memory_op,
     uint32_t lane_offset, const loom_value_id_t** out_dynamic_indices,
     iree_host_size_t* out_dynamic_index_count,
     const int64_t** out_static_indices,

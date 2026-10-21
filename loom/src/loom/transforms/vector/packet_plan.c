@@ -1087,32 +1087,33 @@ bool loom_vector_packet_memory_can_build_chunk_origins(
 
 iree_status_t loom_vector_packet_memory_build_chunk_origin(
     loom_target_legalization_context_t* context,
-    const loom_vector_memory_footprint_t* footprint, const loom_op_t* source_op,
+    loom_value_slice_t source_dynamic_indices,
+    loom_attribute_t source_static_indices, const loom_op_t* source_op,
     uint32_t chunk_lane_offset, const loom_value_id_t** out_dynamic_indices,
     iree_host_size_t* out_dynamic_index_count,
     const int64_t** out_static_indices,
     iree_host_size_t* out_static_index_count, bool* out_built) {
-  *out_dynamic_indices = footprint->dynamic_indices.values;
-  *out_dynamic_index_count = footprint->dynamic_indices.count;
-  *out_static_indices = footprint->static_indices.i64_array;
-  *out_static_index_count = footprint->static_indices.count;
+  *out_dynamic_indices = source_dynamic_indices.values;
+  *out_dynamic_index_count = source_dynamic_indices.count;
+  *out_static_indices = source_static_indices.i64_array;
+  *out_static_index_count = source_static_indices.count;
   *out_built = true;
   if (chunk_lane_offset == 0) {
     return iree_ok_status();
   }
-  if (footprint->static_indices.count == 0) {
+  if (source_static_indices.count == 0) {
     *out_built = false;
     return iree_ok_status();
   }
 
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      context->rewriter->builder.arena, footprint->static_indices.count,
+      context->rewriter->builder.arena, source_static_indices.count,
       sizeof(*static_indices), (void**)&static_indices));
-  memcpy(static_indices, footprint->static_indices.i64_array,
-         footprint->static_indices.count * sizeof(*static_indices));
+  memcpy(static_indices, source_static_indices.i64_array,
+         source_static_indices.count * sizeof(*static_indices));
 
-  const iree_host_size_t last_axis = footprint->static_indices.count - 1u;
+  const iree_host_size_t last_axis = source_static_indices.count - 1u;
   if (static_indices[last_axis] != INT64_MIN) {
     if (!iree_checked_add_i64(static_indices[last_axis],
                               (int64_t)chunk_lane_offset,
@@ -1126,17 +1127,17 @@ iree_status_t loom_vector_packet_memory_build_chunk_origin(
 
   iree_host_size_t dynamic_index = 0;
   if (!loom_vector_packet_memory_find_dynamic_axis_index(
-          footprint->static_indices, last_axis, &dynamic_index) ||
-      dynamic_index >= footprint->dynamic_indices.count) {
+          source_static_indices, last_axis, &dynamic_index) ||
+      dynamic_index >= source_dynamic_indices.count) {
     *out_built = false;
     return iree_ok_status();
   }
   loom_value_id_t* dynamic_indices = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      context->rewriter->builder.arena, footprint->dynamic_indices.count,
+      context->rewriter->builder.arena, source_dynamic_indices.count,
       sizeof(*dynamic_indices), (void**)&dynamic_indices));
-  memcpy(dynamic_indices, footprint->dynamic_indices.values,
-         footprint->dynamic_indices.count * sizeof(*dynamic_indices));
+  memcpy(dynamic_indices, source_dynamic_indices.values,
+         source_dynamic_indices.count * sizeof(*dynamic_indices));
 
   const loom_value_id_t dynamic_value = dynamic_indices[dynamic_index];
   const loom_type_t dynamic_type =

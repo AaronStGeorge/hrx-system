@@ -14,6 +14,7 @@
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/transforms/vector/packet_load.h"
 #include "loom/transforms/vector/packet_materialization.h"
 #include "loom/transforms/vector/packet_plan.h"
 
@@ -1124,61 +1125,19 @@ iree_status_t loom_vector_packet_legalize_table_lookup(
   return iree_ok_status();
 }
 
-iree_status_t loom_vector_packet_legalize_load_with_maximum_lane_count(
-    loom_target_legalization_context_t* context, loom_op_t* op,
-    const loom_target_vector_packet_policy_t* policy,
-    uint32_t maximum_lane_count, bool* out_rewritten) {
-  *out_rewritten = false;
-
-  loom_vector_memory_footprint_t footprint = {0};
-  if (!loom_vector_memory_footprint_describe(
-          loom_vector_packet_fact_context(context), context->module, op,
-          &footprint) ||
-      footprint.kind != LOOM_VECTOR_MEMORY_FOOTPRINT_DENSE) {
-    return iree_ok_status();
-  }
-  loom_vector_packet_shape_t shape = {0};
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  if (!loom_vector_packet_shape_from_type(context, policy,
-                                          footprint.vector_type, &shape)) {
-    uint32_t lane_count = 0;
-    if (maximum_lane_count == 0 ||
-        !loom_vector_packet_static_lane_count(footprint.vector_type,
-                                              &lane_count) ||
-        maximum_lane_count >= lane_count) {
-      return iree_ok_status();
-    }
-    shape = (loom_vector_packet_shape_t){
-        .lane_count = lane_count,
-        .chunk_lane_count = maximum_lane_count,
-        .chunk_count = (lane_count - 1u) / maximum_lane_count + 1u,
-    };
-  } else if (maximum_lane_count != 0 &&
-             maximum_lane_count < shape.chunk_lane_count) {
-    shape.chunk_lane_count = maximum_lane_count;
-    shape.chunk_count = (shape.lane_count - 1u) / shape.chunk_lane_count + 1u;
-  }
-  bool packet_supported = false;
-  IREE_RETURN_IF_ERROR(loom_vector_packet_memory_shape_constrain(
-      context, op, policy, footprint.vector_type, &shape, &packet_supported));
-  if (!packet_supported ||
-      !loom_vector_memory_cache_policy_from_op(context->module, op,
-                                               &cache_policy) ||
-      !loom_vector_packet_memory_can_build_chunk_origins(context, &footprint,
-                                                         &shape)) {
-    return iree_ok_status();
-  }
-
-  IREE_RETURN_IF_ERROR(loom_vector_packet_rewrite_memory_load_components(
-      context, op, policy, &footprint, &shape, cache_policy, out_rewritten));
-  return iree_ok_status();
-}
-
 iree_status_t loom_vector_packet_legalize_load(
     loom_target_legalization_context_t* context, loom_op_t* op,
     const loom_target_vector_packet_policy_t* policy, bool* out_rewritten) {
-  return loom_vector_packet_legalize_load_with_maximum_lane_count(
-      context, op, policy, /*maximum_lane_count=*/0, out_rewritten);
+  *out_rewritten = false;
+  loom_vector_packet_load_plan_t* plan = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_packet_load_plan_select(
+      context, op, policy, /*maximum_lane_count=*/0, &plan));
+  if (plan == NULL) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_vector_packet_load_plan_emit(context, plan));
+  *out_rewritten = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_vector_packet_store_lane_count_is_supported(
@@ -1364,9 +1323,9 @@ static iree_status_t loom_vector_packet_legalize_partition_store(
     iree_host_size_t static_index_count = 0;
     bool origin_built = false;
     IREE_RETURN_IF_ERROR(loom_vector_packet_memory_build_chunk_origin(
-        context, footprint, op, lane_offset, &dynamic_indices,
-        &dynamic_index_count, &static_indices, &static_index_count,
-        &origin_built));
+        context, footprint->dynamic_indices, footprint->static_indices, op,
+        lane_offset, &dynamic_indices, &dynamic_index_count, &static_indices,
+        &static_index_count, &origin_built));
     IREE_ASSERT_TRUE(origin_built);
     if (loom_type_is_scalar(component_type)) {
       loom_op_t* store_op = NULL;
