@@ -29,12 +29,10 @@ static iree_status_t loom_amdgpu_storage_layout_segment_size_ptr(
   }
 }
 
-static iree_status_t loom_amdgpu_storage_layout_project_reservation(
-    const loom_low_storage_layout_record_t* source_record,
+iree_status_t loom_amdgpu_storage_layout_project_reservation(
+    const loom_low_storage_layout_reservation_t* source_reservation,
     loom_amdgpu_storage_layout_segment_sizes_t* sizes,
-    loom_amdgpu_storage_layout_record_t* out_record) {
-  const loom_low_storage_layout_reservation_t* source_reservation =
-      &source_record->reservation;
+    loom_amdgpu_storage_layout_reservation_t* out_reservation) {
   uint64_t* segment_size = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_segment_size_ptr(
       sizes, source_reservation->space, &segment_size));
@@ -53,18 +51,23 @@ static iree_status_t loom_amdgpu_storage_layout_project_reservation(
         "AMDGPU storage layout fixed segment size overflows");
   }
 
-  *out_record = (loom_amdgpu_storage_layout_record_t){
-      .storage_value_id = source_record->storage_value_id,
-      .reservation =
-          {
-              .space = source_reservation->space,
-              .byte_offset = aligned_segment_size,
-              .byte_size = source_reservation->byte_size,
-              .byte_alignment = source_reservation->byte_alignment,
-          },
+  *out_reservation = (loom_amdgpu_storage_layout_reservation_t){
+      .space = source_reservation->space,
+      .byte_offset = aligned_segment_size,
+      .byte_size = source_reservation->byte_size,
+      .byte_alignment = source_reservation->byte_alignment,
   };
   *segment_size = next_segment_size;
   return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_storage_layout_project_record(
+    const loom_low_storage_layout_record_t* source_record,
+    loom_amdgpu_storage_layout_segment_sizes_t* sizes,
+    loom_amdgpu_storage_layout_record_t* out_record) {
+  out_record->storage_value_id = source_record->storage_value_id;
+  return loom_amdgpu_storage_layout_project_reservation(
+      &source_record->reservation, sizes, &out_record->reservation);
 }
 
 iree_status_t loom_amdgpu_storage_layout_build(
@@ -78,7 +81,7 @@ iree_status_t loom_amdgpu_storage_layout_build(
   }
   loom_amdgpu_storage_layout_segment_sizes_t sizes = {0};
   for (iree_host_size_t i = 0; i < source_layout->record_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_project_reservation(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_project_record(
         &source_layout->records[i], &sizes, &records[i]));
   }
   *out_layout = (loom_amdgpu_storage_layout_t){

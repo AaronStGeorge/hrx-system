@@ -167,6 +167,19 @@ TEST_F(AmdgpuStorageLayoutTest,
   ExpectReservation(layout, private0, LOOM_STORAGE_SPACE_PRIVATE, 8, 4, 4);
   ExpectReservation(layout, scratch1, LOOM_STORAGE_SPACE_SCRATCH, 16, 16, 16);
   ExpectReservation(layout, workgroup0, LOOM_STORAGE_SPACE_WORKGROUP, 0, 12, 4);
+
+  loom_low_storage_layout_reservation_t planned = {
+      .space = LOOM_STORAGE_SPACE_SCRATCH,
+      .byte_size = 8,
+      .byte_alignment = 32,
+  };
+  loom_amdgpu_storage_layout_reservation_t projected = {};
+  IREE_ASSERT_OK(loom_amdgpu_storage_layout_project_reservation(
+      &planned, &layout.segment_sizes, &projected));
+  EXPECT_EQ(projected.byte_offset, 32u);
+  EXPECT_EQ(projected.byte_size, 8u);
+  EXPECT_EQ(projected.byte_alignment, 32u);
+  EXPECT_EQ(layout.segment_sizes.private_segment_fixed_size, 40u);
 }
 
 TEST_F(AmdgpuStorageLayoutTest, ResolvesViewsAgainstProjectedOffsets) {
