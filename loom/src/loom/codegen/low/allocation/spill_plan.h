@@ -13,7 +13,6 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation/assignment.h"
 #include "loom/codegen/low/allocation/table.h"
-#include "loom/codegen/low/storage_layout.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -179,6 +178,12 @@ typedef struct loom_low_spill_materialization_record_t {
   uint64_t reload_bytes;
 } loom_low_spill_materialization_record_t;
 
+// Returns true when |record| retains traffic that requires spill storage.
+static inline bool loom_low_spill_materialization_record_has_traffic(
+    const loom_low_spill_materialization_record_t* record) {
+  return record->store_count != 0 || record->reload_count != 0;
+}
+
 // Immutable ordered realization of one selected spill-plan batch.
 typedef struct loom_low_spill_materialization_plan_t {
   // Actions in transformation order.
@@ -197,14 +202,28 @@ typedef struct loom_low_spill_materialization_plan_t {
   const loom_low_spill_materialization_record_t* records;
   // Number of records in |records|.
   iree_host_size_t record_count;
-  // Earliest plan sharing each spill reservation, or NULL when every plan has
-  // an independent reservation.
+  // Earliest traffic-producing plan sharing each spill reservation, or NULL
+  // when every traffic-producing plan has an independent reservation.
+  // Records without traffic map to themselves and require no reservation.
   const uint32_t* slot_representatives;
-  // Generic-space byte offsets indexed by input spill plan.
-  const uint64_t* slot_byte_offsets;
-  // Storage-space sizes after packing every distinct selected spill slot.
-  loom_low_storage_layout_space_sizes_t storage_sizes;
 } loom_low_spill_materialization_plan_t;
+
+typedef enum loom_low_spill_materialization_traffic_kind_e {
+  LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_STORE = 0,
+  LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_RELOAD = 1,
+} loom_low_spill_materialization_traffic_kind_t;
+
+// Target-independent access shape for one materialization action. This is a
+// transient query result; the ordered action remains the retained source of
+// structural mutation and value identity.
+typedef struct loom_low_spill_materialization_traffic_t {
+  // Store or reload traffic for the reported action.
+  loom_low_spill_materialization_traffic_kind_t kind;
+  // Complete register value transferred by the action.
+  loom_type_t value_type;
+  // Byte offset within the action's spill slot.
+  int64_t byte_offset;
+} loom_low_spill_materialization_traffic_t;
 
 enum {
   // Equal-byte full reloads are only worthwhile after removing enough reload
@@ -232,20 +251,19 @@ bool loom_low_allocation_spill_plan_use_full_slice_reload(
     uint32_t slice_count, uint64_t narrow_reload_bytes,
     uint32_t spill_byte_size);
 
-// Returns the canonical generic-space reservation for one selected spill.
-// |spill_plan_index| indexes both |plan| and |spill_plans|. Plans sharing one
-// reservation return the same byte offset and layout.
-loom_low_storage_layout_reservation_t
-loom_low_spill_materialization_plan_slot_reservation(
-    const loom_low_spill_materialization_plan_t* plan,
+// Resolves the traffic shape for one retained action in constant time. Target
+// planners use this instead of interpreting mutable IR or reconstructing action
+// result types. Returns false for structural-only actions.
+bool loom_low_spill_materialization_plan_query_traffic(
+    const loom_module_t* module,
     const loom_low_allocation_spill_plan_t* spill_plans,
-    iree_host_size_t spill_plan_index);
+    const loom_low_spill_materialization_plan_t* plan,
+    iree_host_size_t action_index,
+    loom_low_spill_materialization_traffic_t* out_traffic);
 
 // Builds the exact ordered actions for the selected spill batch. The source IR
-// and allocation snapshot remain immutable. Slot reservations extend the
-// snapshot's canonical storage layout in spill-plan order, including plans
-// whose traffic later becomes stale. All retained arrays are owned by |arena|;
-// branch and generated-use scratch is released before return.
+// and allocation snapshot remain immutable. All retained arrays are owned by
+// |arena|; branch and generated-use scratch is released before return.
 iree_status_t loom_low_spill_materialization_plan_build(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* spill_plans,

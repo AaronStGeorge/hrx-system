@@ -682,7 +682,6 @@ loom_cc_library(
     loom::codegen::low::allocation::packet_move
     loom::codegen::low::allocation::placement
     loom::codegen::low::allocation::search
-    loom::codegen::low::allocation::spill_plan
     loom::codegen::low::allocation::spill_traffic
     loom::codegen::low::allocation::storage
     loom::codegen::low::allocation::storage_lease

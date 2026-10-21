@@ -316,6 +316,9 @@ loom_cc_library(
     ::storage_layout
     iree::base
     iree::base::internal::arena
+    loom::codegen::low::allocation::spill_plan
+    loom::codegen::low::allocation::storage
+    loom::codegen::low::allocation_materialization
     loom::codegen::low::builder
     loom::codegen::low::descriptors
     loom::codegen::low::diagnostics

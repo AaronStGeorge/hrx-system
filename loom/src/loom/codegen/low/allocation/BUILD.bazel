@@ -438,11 +438,9 @@ loom_cc_library(
     deps = [
         ":assignment",
         ":spill_storage",
-        ":storage",
         ":table",
         "//loom/src/loom/analysis:liveness",
         "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/codegen/low:storage_layout",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",

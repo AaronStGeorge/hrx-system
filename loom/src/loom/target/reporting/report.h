@@ -687,13 +687,13 @@ typedef struct loom_target_compile_report_entry_t {
   uint64_t allocation_materialized_spill_storage_count;
   // Byte size of spill storage materialized before the final frame.
   uint64_t allocation_materialized_spill_storage_bytes;
-  // Number of low.spill stores materialized before the final frame.
+  // Number of spill stores materialized before the final frame.
   uint64_t allocation_materialized_spill_store_count;
-  // Byte traffic from low.spill stores materialized before the final frame.
+  // Byte traffic from spill stores materialized before the final frame.
   uint64_t allocation_materialized_spill_store_bytes;
-  // Number of low.reload ops materialized before the final frame.
+  // Number of spill reloads materialized before the final frame.
   uint64_t allocation_materialized_reload_count;
-  // Byte traffic from low.reload ops materialized before the final frame.
+  // Byte traffic from spill reloads materialized before the final frame.
   uint64_t allocation_materialized_reload_bytes;
   // Number of target storage-lease records.
   uint64_t allocation_storage_lease_count;
@@ -2007,13 +2007,13 @@ typedef struct loom_target_compile_report_t {
   uint64_t allocation_materialized_spill_storage_count;
   // Byte size of spill storage materialized before the final frame.
   uint64_t allocation_materialized_spill_storage_bytes;
-  // Number of low.spill stores materialized before the final frame.
+  // Number of spill stores materialized before the final frame.
   uint64_t allocation_materialized_spill_store_count;
-  // Byte traffic from low.spill stores materialized before the final frame.
+  // Byte traffic from spill stores materialized before the final frame.
   uint64_t allocation_materialized_spill_store_bytes;
-  // Number of low.reload ops materialized before the final frame.
+  // Number of spill reloads materialized before the final frame.
   uint64_t allocation_materialized_reload_count;
-  // Byte traffic from low.reload ops materialized before the final frame.
+  // Byte traffic from spill reloads materialized before the final frame.
   uint64_t allocation_materialized_reload_bytes;
   // Number of target storage-lease records.
   uint64_t allocation_storage_lease_count;

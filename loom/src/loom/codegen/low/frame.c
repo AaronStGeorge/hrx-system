@@ -33,13 +33,13 @@ typedef struct loom_low_emission_frame_materialization_summary_t {
   uint64_t spill_storage_bytes;
   // Strongest byte alignment required by materialized spill storage.
   uint64_t spill_storage_minimum_alignment;
-  // Cumulative low.spill stores materialized while building the final frame.
+  // Cumulative spill stores materialized while building the final frame.
   uint64_t spill_store_count;
-  // Cumulative materialized low.spill store byte traffic.
+  // Cumulative materialized spill-store byte traffic.
   uint64_t spill_store_bytes;
-  // Cumulative low.reload ops materialized while building the final frame.
+  // Cumulative spill reloads materialized while building the final frame.
   uint64_t reload_count;
-  // Cumulative materialized low.reload byte traffic.
+  // Cumulative materialized spill-reload byte traffic.
   uint64_t reload_bytes;
   // Cumulative materialized spill records retained for report detail rows.
   loom_low_allocation_materialized_spill_list_t spill_records;
@@ -1219,10 +1219,14 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
     // including target packets that replace the structural spill operations.
     repair_options.schedule_flags |=
         LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC;
+    const bool materialized_target_traffic =
+        materialization_options.plan_traffic != NULL;
     // Retain facts from the representation used by the next frame. A target
-    // callback replaces this traffic and publishes its own register helpers;
-    // incoming edge payloads remain independently spillable after that rewrite.
-    if (spill_free_options->lower_spill_traffic == NULL) {
+    // traffic plan emits its final representation during materialization;
+    // otherwise a lowering callback below replaces the generic traffic and
+    // publishes the replacement facts.
+    if (spill_free_options->lower_spill_traffic == NULL ||
+        materialized_target_traffic) {
       IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
           result.required_register_values.values,
           result.required_register_values.count, repair_arena,
@@ -1231,6 +1235,10 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
           result.per_user_placement_values.values,
           result.per_user_placement_values.count, repair_arena,
           &rematerialization.per_user_values));
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
+          result.expanded_execution_values.values,
+          result.expanded_execution_values.count, repair_arena,
+          &expanded_execution_values));
     }
     if (statistics != NULL) {
       ++statistics->repair.spill_materialization_batch_count;
@@ -1251,24 +1259,30 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
     loom_low_emission_frame_record_memory_high_water(
         frame_checkpoint, repair_arena, scratch_arena, statistics);
     iree_arena_reset(scratch_arena);
-    IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(
-        frame_options, spill_free_options, module, low_func_op,
-        &spill_lowering_result, scratch_arena, statistics));
-    if (spill_lowering_result.error_count != 0) {
-      return iree_ok_status();
+    if (materialized_target_traffic) {
+      if (statistics != NULL) {
+        ++statistics->repair.spill_traffic_lowering_count;
+      }
+    } else {
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(
+          frame_options, spill_free_options, module, low_func_op,
+          &spill_lowering_result, scratch_arena, statistics));
+      if (spill_lowering_result.error_count != 0) {
+        return iree_ok_status();
+      }
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
+          spill_lowering_result.required_register_value_ids,
+          spill_lowering_result.required_register_value_count, repair_arena,
+          &required_register_values));
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
+          spill_lowering_result.expanded_execution_value_ids,
+          spill_lowering_result.expanded_execution_value_count, repair_arena,
+          &expanded_execution_values));
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
+          spill_lowering_result.per_user_placement_value_ids,
+          spill_lowering_result.per_user_placement_value_count, repair_arena,
+          &rematerialization.per_user_values));
     }
-    IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
-        spill_lowering_result.required_register_value_ids,
-        spill_lowering_result.required_register_value_count, repair_arena,
-        &required_register_values));
-    IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
-        spill_lowering_result.expanded_execution_value_ids,
-        spill_lowering_result.expanded_execution_value_count, repair_arena,
-        &expanded_execution_values));
-    IREE_RETURN_IF_ERROR(loom_low_emission_frame_record_value_list(
-        spill_lowering_result.per_user_placement_value_ids,
-        spill_lowering_result.per_user_placement_value_count, repair_arena,
-        &rematerialization.per_user_values));
     loom_low_emission_frame_advance_repair_iteration(statistics);
     restore_frame_before_build = true;
   }

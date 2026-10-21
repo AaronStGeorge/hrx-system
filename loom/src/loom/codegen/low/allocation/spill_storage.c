@@ -145,10 +145,13 @@ static void loom_low_spill_storage_append(
 
 iree_status_t loom_low_allocation_spill_storage_plan(
     const loom_low_allocation_table_t* table,
-    const loom_low_allocation_spill_plan_t* plans, iree_host_size_t plan_count,
+    const loom_low_allocation_spill_plan_t* plans, iree_bitmap_t included_plans,
     iree_arena_allocator_t* arena, const uint32_t** out_representatives) {
   *out_representatives = NULL;
-  if (plan_count < 2 || table->liveness.block_count == 1) {
+  const iree_host_size_t plan_count = included_plans.bit_count;
+  const iree_host_size_t included_plan_count =
+      iree_bitmap_count(included_plans);
+  if (included_plan_count < 2 || table->liveness.block_count == 1) {
     return iree_ok_status();
   }
   loom_low_spill_storage_interval_t* intervals = NULL;
@@ -156,22 +159,26 @@ iree_status_t loom_low_allocation_spill_storage_plan(
   uint32_t* representatives = NULL;
   uint32_t* slot_representatives = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, plan_count, sizeof(*intervals), (void**)&intervals));
+      arena, included_plan_count, sizeof(*intervals), (void**)&intervals));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, plan_count, sizeof(*active), (void**)&active));
+      arena, included_plan_count, sizeof(*active), (void**)&active));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, plan_count, sizeof(*representatives), (void**)&representatives));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, plan_count, sizeof(*slot_representatives),
+      arena, included_plan_count, sizeof(*slot_representatives),
       (void**)&slot_representatives));
+  iree_host_size_t interval_count = 0;
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
-    intervals[i] =
-        loom_low_spill_storage_interval(table, &plans[i], (uint32_t)i);
+    representatives[i] = (uint32_t)i;
+    if (iree_bitmap_test(included_plans, i)) {
+      intervals[interval_count++] =
+          loom_low_spill_storage_interval(table, &plans[i], (uint32_t)i);
+    }
   }
-  loom_low_spill_storage_sort(intervals, plan_count);
+  loom_low_spill_storage_sort(intervals, interval_count);
   iree_host_size_t active_count = 0;
   uint32_t slot_count = 0;
-  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+  for (iree_host_size_t i = 0; i < interval_count; ++i) {
     const loom_low_spill_storage_interval_t* interval = &intervals[i];
     if (i > 0 && !loom_low_spill_storage_same_layout(intervals[i - 1].plan,
                                                      interval->plan)) {
@@ -194,9 +201,15 @@ iree_status_t loom_low_allocation_spill_storage_plan(
     }
     representatives[interval->plan_index] = slot_index;
   }
+  bool has_reused_slot = false;
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
-    representatives[i] = slot_representatives[representatives[i]];
+    if (iree_bitmap_test(included_plans, i)) {
+      representatives[i] = slot_representatives[representatives[i]];
+      has_reused_slot |= representatives[i] != i;
+    }
   }
-  *out_representatives = representatives;
+  if (has_reused_slot) {
+    *out_representatives = representatives;
+  }
   return iree_ok_status();
 }

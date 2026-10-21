@@ -10,9 +10,7 @@
 
 #include "iree/base/internal/math.h"
 #include "loom/codegen/low/allocation/spill_storage.h"
-#include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/storage_layout.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
@@ -156,12 +154,9 @@ typedef struct loom_low_spill_materialization_plan_builder_t {
   iree_host_size_t target_capacity;
   // Exact per-spill records under construction.
   loom_low_spill_materialization_record_t* records;
-  // Earliest plan sharing each reservation, or NULL for independent slots.
+  // Earliest traffic-producing plan sharing each reservation, or NULL when
+  // active plans have independent slots.
   uint32_t* slot_representatives;
-  // Generic-space byte offsets indexed by selected spill-plan ordinal.
-  uint64_t* slot_byte_offsets;
-  // Storage-space sizes after packing every distinct selected spill slot.
-  loom_low_storage_layout_space_sizes_t storage_sizes;
   // Generated-use list heads indexed by selected spill-plan ordinal.
   loom_low_spill_materialization_generated_use_list_t* generated_use_lists;
   // Generated action operands absent from the immutable source use lists.
@@ -182,20 +177,80 @@ typedef struct loom_low_spill_materialization_plan_builder_t {
   loom_low_spill_materialization_slice_group_t* slice_groups;
 } loom_low_spill_materialization_plan_builder_t;
 
-loom_low_storage_layout_reservation_t
-loom_low_spill_materialization_plan_slot_reservation(
-    const loom_low_spill_materialization_plan_t* plan,
+static loom_type_t loom_low_spill_materialization_action_result_type(
+    const loom_module_t* module,
     const loom_low_allocation_spill_plan_t* spill_plans,
-    iree_host_size_t spill_plan_index) {
+    const loom_low_spill_materialization_plan_t* plan, uint32_t action_index) {
+  IREE_ASSERT_LT(action_index, plan->action_count);
+  const loom_low_spill_materialization_action_t* action =
+      &plan->actions[action_index];
   const loom_low_allocation_spill_plan_t* spill_plan =
-      &spill_plans[spill_plan_index];
-  return (loom_low_storage_layout_reservation_t){
-      .space = loom_low_allocation_storage_space_for_spill_slot(
-          spill_plan->slot_space),
-      .byte_offset = plan->slot_byte_offsets[spill_plan_index],
-      .byte_size = spill_plan->byte_size,
-      .byte_alignment = spill_plan->byte_alignment,
+      &spill_plans[action->spill_plan_index];
+  switch (action->kind) {
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD:
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD:
+      return loom_module_value_type(module, spill_plan->value_id);
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD:
+      return loom_module_value_type(
+          module,
+          loom_low_slice_result(action->value.narrow_slice_reload.slice_op));
+    default:
+      IREE_ASSERT_UNREACHABLE(
+          "spill materialization action does not produce a value");
+      IREE_BUILTIN_UNREACHABLE();
+  }
+}
+
+bool loom_low_spill_materialization_plan_query_traffic(
+    const loom_module_t* module,
+    const loom_low_allocation_spill_plan_t* spill_plans,
+    const loom_low_spill_materialization_plan_t* plan,
+    iree_host_size_t action_index,
+    loom_low_spill_materialization_traffic_t* out_traffic) {
+  IREE_ASSERT_LT(action_index, plan->action_count);
+  const loom_low_spill_materialization_action_t* action =
+      &plan->actions[action_index];
+  const loom_low_allocation_spill_plan_t* spill_plan =
+      &spill_plans[action->spill_plan_index];
+  *out_traffic = (loom_low_spill_materialization_traffic_t){
+      .value_type = loom_type_none(),
   };
+  switch (action->kind) {
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_DEFINITION_STORE:
+      out_traffic->kind = LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_STORE;
+      out_traffic->value_type =
+          loom_module_value_type(module, spill_plan->value_id);
+      return true;
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_EDGE_STORE: {
+      out_traffic->kind = LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_STORE;
+      const loom_low_spill_materialization_value_ref_t source =
+          action->value.edge_store.source;
+      out_traffic->value_type =
+          source.action_index == UINT32_MAX
+              ? loom_module_value_type(module, source.value_id)
+              : loom_low_spill_materialization_action_result_type(
+                    module, spill_plans, plan, source.action_index);
+      return true;
+    }
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_OPERAND_RELOAD:
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_SHARED_SLICE_RELOAD:
+      out_traffic->kind = LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_RELOAD;
+      out_traffic->value_type =
+          loom_module_value_type(module, spill_plan->value_id);
+      return true;
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_NARROW_SLICE_RELOAD:
+      out_traffic->kind = LOOM_LOW_SPILL_MATERIALIZATION_TRAFFIC_RELOAD;
+      out_traffic->value_type =
+          loom_low_spill_materialization_action_result_type(
+              module, spill_plans, plan, (uint32_t)action_index);
+      out_traffic->byte_offset = action->value.narrow_slice_reload.byte_offset;
+      return true;
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BRANCH_ARGUMENT:
+    case LOOM_LOW_SPILL_MATERIALIZATION_ACTION_REMOVE_BLOCK_ARGUMENT:
+      return false;
+  }
+  IREE_ASSERT_UNREACHABLE("unknown spill materialization action kind");
+  IREE_BUILTIN_UNREACHABLE();
 }
 
 typedef struct loom_low_spill_materialization_instruction_sort_t {
@@ -1129,9 +1184,6 @@ static iree_status_t loom_low_spill_materialization_plan_copy(
       .target_count = builder->target_count,
       .records = builder->records,
       .record_count = builder->spill_plan_count,
-      .slot_representatives = builder->slot_representatives,
-      .slot_byte_offsets = builder->slot_byte_offsets,
-      .storage_sizes = builder->storage_sizes,
   };
   return iree_ok_status();
 }
@@ -1139,9 +1191,34 @@ static iree_status_t loom_low_spill_materialization_plan_copy(
 static iree_status_t loom_low_spill_materialization_plan_storage(
     loom_low_spill_materialization_plan_builder_t* builder,
     iree_arena_allocator_t* arena) {
+  iree_host_size_t included_plan_count = 0;
+  for (uint32_t i = 0; i < builder->spill_plan_count; ++i) {
+    included_plan_count +=
+        loom_low_spill_materialization_record_has_traffic(&builder->records[i]);
+  }
+  if (included_plan_count < 2 || builder->table->liveness.block_count == 1) {
+    return iree_ok_status();
+  }
+
+  const iree_host_size_t word_count =
+      iree_bitmap_calculate_words(builder->spill_plan_count);
+  iree_bitmap_t included_plans = {
+      .bit_count = builder->spill_plan_count,
+  };
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &builder->scratch_arena, word_count, sizeof(*included_plans.words),
+      (void**)&included_plans.words));
+  memset(included_plans.words, 0, word_count * sizeof(*included_plans.words));
+  for (uint32_t i = 0; i < builder->spill_plan_count; ++i) {
+    if (loom_low_spill_materialization_record_has_traffic(
+            &builder->records[i])) {
+      iree_bitmap_set(included_plans, i);
+    }
+  }
+
   const uint32_t* scratch_representatives = NULL;
   IREE_RETURN_IF_ERROR(loom_low_allocation_spill_storage_plan(
-      builder->table, builder->spill_plans, builder->spill_plan_count,
+      builder->table, builder->spill_plans, included_plans,
       &builder->scratch_arena, &scratch_representatives));
   if (scratch_representatives != NULL) {
     IREE_RETURN_IF_ERROR(
@@ -1151,27 +1228,6 @@ static iree_status_t loom_low_spill_materialization_plan_storage(
     memcpy(builder->slot_representatives, scratch_representatives,
            (iree_host_size_t)builder->spill_plan_count *
                sizeof(*builder->slot_representatives));
-  }
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, builder->spill_plan_count, sizeof(*builder->slot_byte_offsets),
-      (void**)&builder->slot_byte_offsets));
-  builder->storage_sizes = builder->table->storage_layout.space_sizes;
-  for (uint32_t i = 0; i < builder->spill_plan_count; ++i) {
-    if (builder->slot_representatives != NULL &&
-        builder->slot_representatives[i] != i) {
-      builder->slot_byte_offsets[i] =
-          builder->slot_byte_offsets[builder->slot_representatives[i]];
-      continue;
-    }
-    const loom_low_allocation_spill_plan_t* spill_plan =
-        &builder->spill_plans[i];
-    loom_low_storage_layout_reservation_t reservation;
-    IREE_RETURN_IF_ERROR(loom_low_storage_layout_pack_reservation(
-        loom_low_allocation_storage_space_for_spill_slot(
-            spill_plan->slot_space),
-        spill_plan->byte_size, spill_plan->byte_alignment,
-        &builder->storage_sizes, &reservation));
-    builder->slot_byte_offsets[i] = reservation.byte_offset;
   }
   return iree_ok_status();
 }
@@ -1199,15 +1255,13 @@ IREE_ATTRIBUTE_NOINLINE iree_status_t loom_low_spill_materialization_plan_build(
       .spill_plan_count = (uint32_t)spill_plan_count,
       .body = loom_low_function_const_body(table->function_op),
   };
+  loom_low_spill_materialization_plan_t plan = {0};
   loom_module_value_ordinal_scratch_acquire(table->module);
   builder.value_index = &table->module->scratch.values;
   iree_arena_initialize(arena->block_pool, &builder.scratch_arena);
   iree_status_t status = iree_arena_allocate_array(arena, spill_plan_count,
                                                    sizeof(*builder.records),
                                                    (void**)&builder.records);
-  if (iree_status_is_ok(status)) {
-    status = loom_low_spill_materialization_plan_storage(&builder, arena);
-  }
   if (iree_status_is_ok(status)) {
     memset(builder.records, 0, spill_plan_count * sizeof(*builder.records));
     status = loom_low_spill_materialization_initialize_branches(&builder);
@@ -1232,8 +1286,7 @@ IREE_ATTRIBUTE_NOINLINE iree_status_t loom_low_spill_materialization_plan_build(
     }
   }
   if (iree_status_is_ok(status)) {
-    status =
-        loom_low_spill_materialization_plan_copy(&builder, arena, out_plan);
+    status = loom_low_spill_materialization_plan_copy(&builder, arena, &plan);
   }
   for (uint32_t i = 0; i < builder.spill_plan_count; ++i) {
     loom_module_value_ordinal_scratch_clear(table->module,
@@ -1249,6 +1302,14 @@ IREE_ATTRIBUTE_NOINLINE iree_status_t loom_low_spill_materialization_plan_build(
     }
   }
   loom_module_value_ordinal_scratch_release(table->module);
+  if (iree_status_is_ok(status)) {
+    iree_arena_reset(&builder.scratch_arena);
+    status = loom_low_spill_materialization_plan_storage(&builder, arena);
+  }
+  if (iree_status_is_ok(status)) {
+    plan.slot_representatives = builder.slot_representatives;
+    *out_plan = plan;
+  }
   iree_arena_deinitialize(&builder.scratch_arena);
   return status;
 }

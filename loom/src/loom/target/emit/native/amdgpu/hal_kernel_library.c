@@ -720,6 +720,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel(
               .record_materialized_spills =
                   loom_target_compile_report_wants_details(
                       report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS),
+              .plan_traffic = loom_amdgpu_plan_spill_materialization_traffic,
               .emitter = frame_options.emitter,
           },
       .lower_spill_traffic = loom_amdgpu_hal_kernel_library_lower_spill_traffic,

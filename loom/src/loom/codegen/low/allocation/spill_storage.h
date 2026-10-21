@@ -10,6 +10,7 @@
 #define LOOM_CODEGEN_LOW_ALLOCATION_SPILL_STORAGE_H_
 
 #include "iree/base/api.h"
+#include "iree/base/bitmap.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation/table.h"
 
@@ -26,14 +27,17 @@ extern "C" {
 // Callable entry/result cells keep exclusive reservations for direct ABI
 // storage transport.
 //
-// Each result names the earliest plan sharing that reservation. Materialization
-// can therefore create reservations in plan order without forward references.
-// NULL denotes independent reservations, the allocation-free single-block or
-// single-plan case. Results belong to |arena| and are consumed before rewriting
-// this snapshot; reservations from previous repairs retain their placements.
+// |plans| contains |included_plans.bit_count| entries. Only selected plans
+// participate in coloring; excluded plans map to themselves and cannot occupy
+// a reservation. Each result names the earliest included plan sharing that
+// reservation. Materialization can therefore create reservations in plan order
+// without forward references. NULL denotes no shared reservations, the
+// allocation-free single-block case, or fewer than two included plans. Results
+// belong to |arena| and are consumed before rewriting this snapshot;
+// reservations from previous repairs retain their placements.
 iree_status_t loom_low_allocation_spill_storage_plan(
     const loom_low_allocation_table_t* table,
-    const loom_low_allocation_spill_plan_t* plans, iree_host_size_t plan_count,
+    const loom_low_allocation_spill_plan_t* plans, iree_bitmap_t included_plans,
     iree_arena_allocator_t* arena, const uint32_t** out_representatives);
 
 #ifdef __cplusplus

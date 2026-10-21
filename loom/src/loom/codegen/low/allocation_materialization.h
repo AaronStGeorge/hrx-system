@@ -8,10 +8,10 @@
 //
 // Allocation tables keep physical placement and spill decisions outside the
 // SSA program. This layer turns selected table decisions back into explicit
-// low IR when later emission needs real storage traffic. The materialized IR
-// remains ordinary Loom SSA: spill stores consume virtual register values,
-// reloads define new virtual register values, and only the table describes
-// final physical placement.
+// low IR when later emission needs real storage traffic. Generic targets
+// receive structural low.spill/low.reload operations; a target planner may
+// instead select and emit its final traffic recipe from the same immutable
+// materialization plan.
 
 #ifndef LOOM_CODEGEN_LOW_ALLOCATION_MATERIALIZATION_H_
 #define LOOM_CODEGEN_LOW_ALLOCATION_MATERIALIZATION_H_
@@ -26,6 +26,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct loom_builder_t loom_builder_t;
+typedef struct loom_low_spill_materialization_plan_t
+    loom_low_spill_materialization_plan_t;
 
 typedef uint32_t loom_low_allocation_materialized_spill_flags_t;
 
@@ -53,13 +57,13 @@ typedef struct loom_low_allocation_materialized_spill_t {
   uint64_t byte_size;
   // Required slot alignment in bytes.
   uint64_t byte_alignment;
-  // Number of low.spill stores inserted for this value.
+  // Number of spill stores materialized for this value.
   uint64_t store_count;
-  // Byte traffic from low.spill stores inserted for this value.
+  // Byte traffic from spill stores materialized for this value.
   uint64_t store_bytes;
-  // Number of low.reload ops inserted for this value.
+  // Number of spill reloads materialized for this value.
   uint64_t reload_count;
-  // Byte traffic from low.reload ops inserted for this value.
+  // Byte traffic from spill reloads materialized for this value.
   uint64_t reload_bytes;
 } loom_low_allocation_materialized_spill_t;
 
@@ -88,6 +92,63 @@ typedef struct loom_low_allocation_materialized_value_list_t {
   iree_host_size_t count;
 } loom_low_allocation_materialized_value_list_t;
 
+typedef uint8_t loom_low_spill_materialized_value_flags_t;
+
+enum {
+  // The value is defined outside the surrounding program point's semantic
+  // execution domain and must acquire storage at its own definition.
+  LOOM_LOW_SPILL_MATERIALIZED_VALUE_FLAG_EXPANDED_EXECUTION = 1u << 0,
+  // The value is private setup for one recipe-local consumer and may use
+  // per-user placement.
+  LOOM_LOW_SPILL_MATERIALIZED_VALUE_FLAG_PRIVATE_TO_CONSUMER = 1u << 1,
+};
+
+typedef struct loom_low_spill_materialized_value_t {
+  // Register value emitted while realizing one planned traffic action.
+  loom_value_id_t value_id;
+  // Placement facts established by the retained traffic recipe.
+  loom_low_spill_materialized_value_flags_t flags;
+} loom_low_spill_materialized_value_t;
+
+// Concrete result of applying one planned spill traffic action.
+typedef struct loom_low_spill_materialized_action_t {
+  // Exported reload result, or LOOM_VALUE_ID_INVALID for a store action.
+  loom_value_id_t value_id;
+  // Arena-owned register values created by this action's traffic recipe.
+  const loom_low_spill_materialized_value_t* emitted_values;
+  // Number of entries in |emitted_values|.
+  iree_host_size_t emitted_value_count;
+} loom_low_spill_materialized_action_t;
+
+// Emits the already-selected traffic recipe for |instruction_index| at
+// |builder|'s current insertion point. Store actions receive a valid
+// |source_value_id|; reload actions return one exported value. The callback
+// performs no IR discovery or recipe selection.
+typedef iree_status_t (*loom_low_spill_materialization_emit_traffic_fn_t)(
+    void* user_data, iree_host_size_t instruction_index,
+    loom_builder_t* builder, loom_value_id_t storage_value_id,
+    loom_value_id_t source_value_id, loom_location_id_t location,
+    iree_arena_allocator_t* arena,
+    loom_low_spill_materialized_action_t* out_action);
+
+typedef struct loom_low_spill_materialization_traffic_plan_t {
+  // Target-owned immutable plan passed to |emit|.
+  void* user_data;
+  // Traffic emitter for every retained execution-order instruction.
+  loom_low_spill_materialization_emit_traffic_fn_t emit;
+} loom_low_spill_materialization_traffic_plan_t;
+
+// Selects target traffic recipes from one immutable generic materialization
+// plan before any storage or traffic IR is created. The returned plan and its
+// payload are owned by |arena| and consumed during the same materialization.
+typedef iree_status_t (*loom_low_spill_materialization_plan_traffic_fn_t)(
+    void* user_data, const loom_low_allocation_table_t* table,
+    const loom_low_allocation_spill_plan_t* spill_plans,
+    iree_host_size_t spill_plan_count,
+    const loom_low_spill_materialization_plan_t* materialization_plan,
+    iree_arena_allocator_t* arena,
+    loom_low_spill_materialization_traffic_plan_t* out_plan);
+
 typedef struct loom_low_allocation_materialization_options_t {
   // True when |supported_storage_spaces| names the complete target lowering
   // capability for newly generated spill storage.
@@ -109,6 +170,11 @@ typedef struct loom_low_allocation_materialization_options_t {
   // Materialization clears values whose users it changes, preserving placement
   // for other producers across the next schedule rebuild. May be empty.
   iree_bitmap_t per_user_placement_values;
+  // Optional target traffic planner. When absent, materialization emits the
+  // generic low.spill/low.reload representation.
+  loom_low_spill_materialization_plan_traffic_fn_t plan_traffic;
+  // Caller-owned data passed to |plan_traffic|.
+  void* plan_traffic_user_data;
   // Structured diagnostic emitter for materialized allocation feedback.
   iree_diagnostic_emitter_t emitter;
 } loom_low_allocation_materialization_options_t;
@@ -116,28 +182,30 @@ typedef struct loom_low_allocation_materialization_options_t {
 typedef struct loom_low_allocation_materialization_result_t {
   // Number of error diagnostics emitted before mutating the low function.
   uint32_t error_count;
-  // Register requirements while the generated low.spill/low.reload ops survive.
-  // Includes reload results and values newly consumed by spills. Target
-  // lowering that replaces these ops supplies the replacement representation's
-  // facts.
+  // Register values required by the materialized traffic representation.
+  // Includes generic reload results and values consumed by generic stores, or
+  // the helper values published by a directly emitted target recipe.
   loom_low_allocation_materialized_value_list_t required_register_values;
-  // Single-consumer low.reload results private to their consumer setup chain
-  // while the generated reloads survive.
+  // Single-consumer reload results and recipe helpers private to their
+  // consumer setup chain.
   loom_low_allocation_materialized_value_list_t per_user_placement_values;
+  // Fresh register values defined outside their surrounding semantic execution
+  // domain by a target traffic recipe.
+  loom_low_allocation_materialized_value_list_t expanded_execution_values;
   // Number of distinct low.storage.reserve ops created after lifetime reuse.
   uint32_t storage_count;
-  // Number of low.spill stores inserted.
+  // Number of spill stores materialized.
   uint32_t spill_count;
-  // Number of low.reload ops inserted.
+  // Number of spill reloads materialized.
   uint32_t reload_count;
   // Byte size of the distinct reservations, excluding inter-reservation
   // padding.
   uint64_t storage_bytes;
   // Strongest byte alignment required by the created spill storage.
   uint64_t storage_minimum_alignment;
-  // Byte traffic from low.spill stores inserted.
+  // Byte traffic from spill stores materialized.
   uint64_t spill_bytes;
-  // Byte traffic from low.reload ops inserted.
+  // Byte traffic from spill reloads materialized.
   uint64_t reload_bytes;
   // Materialized spill records owned by the caller-provided arena.
   const loom_low_allocation_materialized_spill_t* materialized_spills;
@@ -145,8 +213,8 @@ typedef struct loom_low_allocation_materialization_result_t {
   iree_host_size_t materialized_spill_count;
 } loom_low_allocation_materialization_result_t;
 
-// Materializes the selected |spill_plans| from |table| into
-// low.storage.reserve, low.spill, and low.reload ops. The allocation snapshot
+// Materializes the selected |spill_plans| from |table| into storage
+// reservations and generic or target-planned traffic. The allocation snapshot
 // remains immutable; callers may omit plans whose values were reconstructed
 // without storage. Existing entry-block storage reservations are moved to its
 // prefix after ABI live-in/resource imports without changing their relative
