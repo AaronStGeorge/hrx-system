@@ -84,10 +84,13 @@ TEST(AqlBarrierTest, LocalDependenciesStayAtAgentScope) {
 }
 
 TEST(AqlBarrierTest, ExternalAccessPreservesDirection) {
-  for (auto scope :
-       {IREE_HAL_ACCESS_SCOPE_HOST_READ, IREE_HAL_ACCESS_SCOPE_HOST_WRITE,
-        IREE_HAL_ACCESS_SCOPE_MEMORY_READ,
-        IREE_HAL_ACCESS_SCOPE_MEMORY_WRITE}) {
+  const iree_hal_access_scope_t scopes[] = {
+      IREE_HAL_ACCESS_SCOPE_HOST_READ,
+      IREE_HAL_ACCESS_SCOPE_HOST_WRITE,
+      IREE_HAL_ACCESS_SCOPE_MEMORY_READ,
+      IREE_HAL_ACCESS_SCOPE_MEMORY_WRITE,
+  };
+  for (auto scope : scopes) {
     const iree_hal_memory_barrier_t acquire = {
         scope, IREE_HAL_ACCESS_SCOPE_DISPATCH_READ};
     const iree_hal_memory_barrier_t release = {

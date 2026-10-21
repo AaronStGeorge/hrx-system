@@ -165,7 +165,7 @@ TEST_P(AqlSubmissionTest, DependencyReadersJoinProducerHostRetirement) {
   iree_hal_amd_gpu_signal_pool_t signals;
   iree_hal_amd_gpu_signal_pool_initialize({}, &signals);
   iree_hal_amd_gpu_aql_signal_t native;
-  iree_hal_amd_gpu_signal_t owner;
+  iree_hal_amd_gpu_signal_t owner = {};
   uint64_t frontier[2 + 1];
   iree_hal_amd_gpu_signal_block_t block;
   const amdf_gpu_event_info_t event = {};

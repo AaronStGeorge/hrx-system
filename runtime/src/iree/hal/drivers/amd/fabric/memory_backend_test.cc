@@ -1883,10 +1883,12 @@ TEST_F(MemoryBackendTest, AtomicWaitAndStoreAcceptOneWayUsage) {
   for (const auto usage : {IREE_HAL_BUFFER_USAGE_STORAGE_READ,
                            IREE_HAL_BUFFER_USAGE_STORAGE_WRITE}) {
     SCOPED_TRACE(usage);
+    const iree_hal_atomic_operation_flags_t operation =
+        usage == IREE_HAL_BUFFER_USAGE_STORAGE_READ
+            ? IREE_HAL_ATOMIC_OPERATION_FLAG_WAIT
+            : IREE_HAL_ATOMIC_OPERATION_FLAG_STORE;
     const iree_hal_atomic_operation_capabilities_t required = {
-        .system_scope_32 = usage == IREE_HAL_BUFFER_USAGE_STORAGE_READ
-                               ? IREE_HAL_ATOMIC_OPERATION_FLAG_WAIT
-                               : IREE_HAL_ATOMIC_OPERATION_FLAG_STORE,
+        .system_scope_32 = operation,
     };
     iree_hal_pool_t* pool = nullptr;
     IREE_ASSERT_OK(

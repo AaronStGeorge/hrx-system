@@ -296,9 +296,9 @@ iree_status_t iree_hal_amd_gpu_queue_membership_acquire(
                                                                  ordinal + 1);
   }
   if (iree_status_is_ok(status) && !slot) {
-    status =
-        iree_allocator_malloc_aligned(membership->host_allocator, sizeof(*slot),
-                                      iree_alignof(*slot), 0, (void**)&slot);
+    status = iree_allocator_malloc_aligned(
+        membership->host_allocator, sizeof(*slot),
+        iree_alignof(iree_hal_amd_gpu_queue_slot_t), 0, (void**)&slot);
     if (iree_status_is_ok(status)) {
       slot->membership = membership;
       slot->ordinal = ordinal;

@@ -20,7 +20,7 @@ TEST(AqlSignalTest, InitializesNativeAbiAndRecyclesOnlyAfterReadersRetire) {
   constexpr uint64_t kBaseAddress = 0x123456780000;
   std::array<iree_hal_amd_gpu_aql_signal_t, 2> native;
   std::memset(native.data(), 0xa5, sizeof(native));
-  std::array<iree_hal_amd_gpu_signal_t, 2> metadata;
+  std::array<iree_hal_amd_gpu_signal_t, 2> metadata = {};
   std::array<uint64_t, 2 + 4> frontiers;
   iree_hal_amd_gpu_signal_pool_t pool;
   iree_hal_amd_gpu_signal_block_t block;
@@ -86,7 +86,7 @@ TEST(AqlSignalTest, SemaphoreCacheDoesNotOwnTheLastDependentReader) {
   IREE_ASSERT_OK(iree_hal_amd_gpu_semaphore_create(
       proactor, nullptr, 0, 2, iree_allocator_system(), &semaphore));
   iree_hal_amd_gpu_aql_signal_t native;
-  iree_hal_amd_gpu_signal_t metadata;
+  iree_hal_amd_gpu_signal_t metadata = {};
   uint64_t frontier[2 + 1];
   iree_hal_amd_gpu_signal_pool_t pool;
   iree_hal_amd_gpu_signal_block_t block;
@@ -127,7 +127,7 @@ TEST(AqlSignalTest, SemaphoreCacheDoesNotOwnTheLastDependentReader) {
 TEST(AqlSignalTest, AttachesAcquiredBackingWithExactDescriptorOperands) {
   std::array<iree_hal_amd_gpu_aql_signal_t, 2> native;
   std::memset(native.data(), 0xa5, sizeof(native));
-  std::array<iree_hal_amd_gpu_signal_t, 2> signals;
+  std::array<iree_hal_amd_gpu_signal_t, 2> signals = {};
   std::array<uint64_t, 2 + 4> frontiers;
   const amdf_api_t api = {
       .memory_query_address =
