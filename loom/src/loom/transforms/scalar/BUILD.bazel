@@ -19,6 +19,7 @@ loom_cc_library(
     deps = [
         ":narrowing",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/rewrite:pattern_registry",
         "//loom/src/loom/rewrite:rewriter",

@@ -192,16 +192,16 @@ func.def target(@target) @vector_sitofp_i8x4_to_fp8(%input: vector<4xi8>) -> (ve
 
 // ----
 low.func.def target<amdgpu.cdna4.core>(@target) abi(hal_kernel) @vector_sitofp_i8x4_to_fp8(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {
-  %6 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
-  %9 = v_cvt_f32_i32 %8
-  %10 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
-  %11 = v_cvt_f32_i32 %10
-  %12 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 3, src0_sext = 1}
-  %13 = v_cvt_f32_i32 %12
-  %19 = v_cvt_pk_fp8_f32_low %7, %9
-  %converted = v_cvt_pk_fp8_f32_high %19, %11, %13
+  %9 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
+  %12 = v_cvt_f32_i32 %11
+  %13 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
+  %14 = v_cvt_f32_i32 %13
+  %15 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 3, src0_sext = 1}
+  %16 = v_cvt_f32_i32 %15
+  %22 = v_cvt_pk_fp8_f32_low %10, %12
+  %converted = v_cvt_pk_fp8_f32_high %22, %14, %16
   return %converted
 }
 
@@ -217,9 +217,9 @@ func.def target(@target) @scalar_sitofp_i8_to_fp8(%input: i8) -> (f8E4M3) {
 
 // ----
 low.func.def target<amdgpu.cdna4.core>(@target) abi(hal_kernel) @scalar_sitofp_i8_to_fp8(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {
-  %6 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
-  %float = v_cvt_f32_i32 %6
-  %converted = v_cvt_pk_fp8_f32_low %float, %float
-  %9 = v_bfe_u32_offset_0_width_inline_low16 %converted
-  return %9
+  %9 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
+  %10 = v_cvt_f32_i32 %9
+  %converted = v_cvt_pk_fp8_f32_low %10, %10
+  %12 = v_bfe_u32_offset_0_width_inline_low16 %converted
+  return %12
 }

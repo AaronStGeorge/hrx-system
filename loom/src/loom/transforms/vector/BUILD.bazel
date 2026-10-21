@@ -37,6 +37,7 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops/index:comparison",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",

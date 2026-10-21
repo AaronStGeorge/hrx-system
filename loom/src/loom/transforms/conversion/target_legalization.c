@@ -6,10 +6,12 @@
 
 #include "loom/transforms/conversion/target_legalization.h"
 
+#include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/util/fact_table.h"
 
 // Staged conversions are attribute-free one-operand, one-result operations.
 // Float extension/truncation flags remain zero because staging preserves the
@@ -121,13 +123,25 @@ static bool loom_conversion_match_integer_to_float(
   }
   // I1/I8/I16 are exact in F32. Wider integers are not: e.g. 16842753 rounds
   // to BF16 0x4b81 directly, but to 0x4b80 through F32. Keep those
-  // conversions single-rounded.
+  // conversions single-rounded unless source facts prove an exact F32 stage.
   const loom_scalar_type_t input_element = loom_type_element_type(
       loom_module_value_type(context->module, loom_op_operands(op)[0]));
   const bool narrow_input = loom_scalar_type_set_contains(
       LOOM_SCALAR_TYPE_SET_I1 | LOOM_SCALAR_TYPE_SET_I8 |
           LOOM_SCALAR_TYPE_SET_I16,
       input_element);
+  if (!narrow_input && result_element == LOOM_SCALAR_TYPE_BF16) {
+    const loom_value_id_t input = loom_op_const_operands(op)[0];
+    const loom_float_integer_conversion_kind_t kind =
+        op->kind == LOOM_OP_SCALAR_SITOFP || op->kind == LOOM_OP_VECTOR_SITOFP
+            ? LOOM_FLOAT_INTEGER_CONVERSION_SIGNED
+            : LOOM_FLOAT_INTEGER_CONVERSION_UNSIGNED;
+    return loom_scalar_type_set_contains(
+        loom_value_facts_integer_exact_float_types(
+            input_element, kind,
+            loom_value_fact_table_lookup(context->fact_table, input)),
+        LOOM_SCALAR_TYPE_F32);
+  }
   return narrow_input && (result_element == LOOM_SCALAR_TYPE_BF16 ||
                           result_element == LOOM_SCALAR_TYPE_F32 ||
                           result_element == LOOM_SCALAR_TYPE_F64);

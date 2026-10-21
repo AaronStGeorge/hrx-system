@@ -222,6 +222,15 @@ void loom_value_facts_eval_float_to_integer(
     const loom_value_facts_t* source_facts,
     loom_value_facts_t* out_result_facts);
 
+// Returns the float formats that represent every integer in |source_facts|
+// exactly, using the declared source width and signed/unsigned interpretation.
+// Unlike exact-format facts on a rounded float result, this proves that the
+// integer conversion itself loses no information. Integer ranges and known
+// divisibility apply equally to scalar values and vector element envelopes.
+loom_scalar_type_set_t loom_value_facts_integer_exact_float_types(
+    loom_scalar_type_t source_type, loom_float_integer_conversion_kind_t kind,
+    loom_value_facts_t source_facts);
+
 // Converts an integer fact interval to a floating-point interval. The source
 // interval is first constrained to its declared bit width. Unsigned conversion
 // interprets negative integer facts as raw two's-complement payloads and falls

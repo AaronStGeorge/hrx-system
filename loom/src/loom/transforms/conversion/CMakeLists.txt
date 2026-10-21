@@ -43,10 +43,12 @@ loom_cc_library(
   DEPS
     iree::base
     loom::ir
+    loom::ir::facts
     loom::ops::scalar
     loom::ops::vector
     loom::rewrite::rewriter
     loom::target::legalization
+    loom::util::fact_table
   PUBLIC
 )
 

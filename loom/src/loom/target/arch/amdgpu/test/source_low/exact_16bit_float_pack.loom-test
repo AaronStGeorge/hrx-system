@@ -10,15 +10,15 @@ func.def target(@target) @exact_i8_to_bf16(%input: vector<3xi8>) -> (vector<3xbf
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @exact_i8_to_bf16(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %6 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 8}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_bfe_i32_offset_width_inline %input {offset = 8, width = 8}
-  %9 = v_cvt_f32_i32 %8
-  %10 = v_bfe_i32_offset_width_inline %input {offset = 16, width = 8}
-  %11 = v_cvt_f32_i32 %10
-  %15 = v_perm_b32_src2_lit %7, %9, 50464518
-  %17 = v_lshrrev_b32_src0_inline %11, 16
-  %narrow = concat(%15, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %9 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 8}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_bfe_i32_offset_width_inline %input {offset = 8, width = 8}
+  %12 = v_cvt_f32_i32 %11
+  %13 = v_bfe_i32_offset_width_inline %input {offset = 16, width = 8}
+  %14 = v_cvt_f32_i32 %13
+  %18 = v_perm_b32_src2_lit %10, %12, 50464518
+  %20 = v_lshrrev_b32_src0_inline %14, 16
+  %narrow = concat(%18, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 
@@ -34,17 +34,17 @@ func.def target(@target) @exact_i8_to_bf16_without_literal_permute(%input: vecto
 
 // ----
 low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @exact_i8_to_bf16_without_literal_permute(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %6 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
-  %9 = v_cvt_f32_i32 %8
-  %10 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
-  %11 = v_cvt_f32_i32 %10
-  %15 = v_lshrrev_b32_src0_inline %7, 16
-  %16 = v_and_b32_lit %9, 4294901760
-  %17 = v_or_b32 %15, %16
-  %19 = v_lshrrev_b32_src0_inline %11, 16
-  %narrow = concat(%17, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %9 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
+  %12 = v_cvt_f32_i32 %11
+  %13 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
+  %14 = v_cvt_f32_i32 %13
+  %18 = v_lshrrev_b32_src0_inline %10, 16
+  %19 = v_and_b32_lit %12, 4294901760
+  %20 = v_or_b32 %18, %19
+  %22 = v_lshrrev_b32_src0_inline %14, 16
+  %narrow = concat(%20, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 
@@ -60,19 +60,19 @@ func.def target(@target) @rounded_i16_to_bf16(%input: vector<2xi16>) -> (vector<
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @rounded_i16_to_bf16(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {
-  %6 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 16}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_ashrrev_i32_src0_inline %input, 16
-  %9 = v_cvt_f32_i32 %8
-  %13 = v_lshrrev_b32_src0_inline %7, 16
-  %14 = v_and_b32_src0_inline %13, 1
-  %15 = v_add3_u32_src2_lit %7, %14, 32767
-  %16 = v_lshrrev_b32_src0_inline %15, 16
-  %17 = v_lshrrev_b32_src0_inline %9, 16
-  %18 = v_and_b32_src0_inline %17, 1
-  %19 = v_add3_u32_src2_lit %9, %18, 32767
-  %20 = v_lshrrev_b32_src0_inline %19, 16
-  %narrow = v_cvt_pk_u16_u32 %16, %20
+  %9 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 16}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_ashrrev_i32_src0_inline %input, 16
+  %12 = v_cvt_f32_i32 %11
+  %16 = v_lshrrev_b32_src0_inline %10, 16
+  %17 = v_and_b32_src0_inline %16, 1
+  %18 = v_add3_u32_src2_lit %10, %17, 32767
+  %19 = v_lshrrev_b32_src0_inline %18, 16
+  %20 = v_lshrrev_b32_src0_inline %12, 16
+  %21 = v_and_b32_src0_inline %20, 1
+  %22 = v_add3_u32_src2_lit %12, %21, 32767
+  %23 = v_lshrrev_b32_src0_inline %22, 16
+  %narrow = v_cvt_pk_u16_u32 %19, %23
   return %narrow
 }
 
@@ -88,16 +88,16 @@ func.def target(@target) @native_exact_i8_to_bf16(%input: vector<3xi8>) -> (vect
 
 // ----
 low.func.def target<amdgpu.cdna4.core>(@target) abi(hal_kernel) @native_exact_i8_to_bf16(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %6 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
-  %9 = v_cvt_f32_i32 %8
-  %10 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
-  %11 = v_cvt_f32_i32 %10
-  %15 = v_cvt_pk_bf16_f32 %7, %9
-  %17 = v_mov_b32 0
-  %18 = v_cvt_pk_bf16_f32 %11, %17
-  %narrow = concat(%15, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %9 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
+  %12 = v_cvt_f32_i32 %11
+  %13 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
+  %14 = v_cvt_f32_i32 %13
+  %18 = v_cvt_pk_bf16_f32 %10, %12
+  %20 = v_mov_b32 0
+  %21 = v_cvt_pk_bf16_f32 %14, %20
+  %narrow = concat(%18, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 
@@ -113,15 +113,15 @@ func.def target(@target) @exact_i8_to_f16_rdna(%input: vector<3xi8>) -> (vector<
 
 // ----
 low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @exact_i8_to_f16_rdna(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %6 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 8}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_bfe_i32_offset_width_inline %input {offset = 8, width = 8}
-  %9 = v_cvt_f32_i32 %8
-  %10 = v_bfe_i32_offset_width_inline %input {offset = 16, width = 8}
-  %11 = v_cvt_f32_i32 %10
-  %15 = v_cvt_pk_rtz_f16_f32 %7, %9
-  %17 = v_cvt_pk_rtz_f16_f32 %11, %11
-  %narrow = concat(%15, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %9 = v_bfe_i32_offset_width_inline %input {offset = 0, width = 8}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_bfe_i32_offset_width_inline %input {offset = 8, width = 8}
+  %12 = v_cvt_f32_i32 %11
+  %13 = v_bfe_i32_offset_width_inline %input {offset = 16, width = 8}
+  %14 = v_cvt_f32_i32 %13
+  %18 = v_cvt_pk_rtz_f16_f32 %10, %12
+  %20 = v_cvt_pk_rtz_f16_f32 %14, %14
+  %narrow = concat(%18, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 
@@ -137,15 +137,15 @@ func.def target(@target) @exact_i8_to_f16_cdna(%input: vector<3xi8>) -> (vector<
 
 // ----
 low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @exact_i8_to_f16_cdna(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %6 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
-  %7 = v_cvt_f32_i32 %6
-  %8 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
-  %9 = v_cvt_f32_i32 %8
-  %10 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
-  %11 = v_cvt_f32_i32 %10
-  %15 = v_cvt_pkrtz_f16_f32 %7, %9
-  %17 = v_cvt_pkrtz_f16_f32 %11, %11
-  %narrow = concat(%15, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %9 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
+  %10 = v_cvt_f32_i32 %9
+  %11 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
+  %12 = v_cvt_f32_i32 %11
+  %13 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
+  %14 = v_cvt_f32_i32 %13
+  %18 = v_cvt_pkrtz_f16_f32 %10, %12
+  %20 = v_cvt_pkrtz_f16_f32 %14, %14
+  %narrow = concat(%18, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %narrow
 }
 

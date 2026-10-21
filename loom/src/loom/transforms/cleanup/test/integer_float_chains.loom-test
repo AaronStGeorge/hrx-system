@@ -1,0 +1,103 @@
+// RUN: pass combine
+
+// Ordinary casts retain the integer input through an exact intermediate.
+func.def @scalar_exact_conversions(%byte: i8, %halfword: i16, %word: i32) -> (f16, bf16, f8E4M3, f32) {
+  %signed = scalar.sitofp %byte : i8 to f32
+  %half = scalar.fptrunc %signed : f32 to f16
+  %unsigned = scalar.uitofp %halfword : i16 to f32
+  %bfloat = scalar.fptrunc %unsigned : f32 to bf16
+  %wide = scalar.uitofp %word : i32 to f64
+  %small = scalar.fptrunc %wide : f64 to f8E4M3
+  %narrow = scalar.uitofp %byte : i8 to bf16
+  %extended = scalar.extf %narrow : bf16 to f32
+  func.return %half, %bfloat, %small, %extended : f16, bf16, f8E4M3, f32
+}
+
+// ----
+func.def @scalar_exact_conversions(%byte: i8, %halfword: i16, %word: i32) -> (f16, bf16, f8E4M3, f32) {
+  %half = scalar.sitofp %byte : i8 to f16
+  %bfloat = scalar.uitofp %halfword : i16 to bf16
+  %small = scalar.uitofp %word : i32 to f8E4M3
+  %extended = scalar.uitofp %byte : i8 to f32
+  func.return %half, %bfloat, %small, %extended : f16, bf16, f8E4M3, f32
+}
+
+// ====
+
+func.def @vector_exact_conversions(%bytes: vector<5xi8>, %words: vector<3xi32>) -> (vector<5xf16>, vector<3xf32>, vector<5xf64>) {
+  %signed = vector.sitofp %bytes : vector<5xi8> to vector<5xf32>
+  %half = vector.fptrunc %signed : vector<5xf32> to vector<5xf16>
+  %wide = vector.uitofp %words : vector<3xi32> to vector<3xf64>
+  %single = vector.fptrunc %wide : vector<3xf64> to vector<3xf32>
+  %narrow = vector.uitofp %bytes : vector<5xi8> to vector<5xf16>
+  %extended = vector.extf %narrow : vector<5xf16> to vector<5xf64>
+  func.return %half, %single, %extended : vector<5xf16>, vector<3xf32>, vector<5xf64>
+}
+
+// ----
+func.def @vector_exact_conversions(%bytes: vector<5xi8>, %words: vector<3xi32>) -> (vector<5xf16>, vector<3xf32>, vector<5xf64>) {
+  %half = vector.sitofp %bytes : vector<5xi8> to vector<5xf16>
+  %single = vector.uitofp %words : vector<3xi32> to vector<3xf32>
+  %extended = vector.uitofp %bytes : vector<5xi8> to vector<5xf64>
+  func.return %half, %single, %extended : vector<5xf16>, vector<3xf32>, vector<5xf64>
+}
+
+// ====
+
+// Range and divisibility are established by the existing fact analysis.
+func.def @bounded_conversions(%word: i32, %wide: i64) -> (bf16, f16) {
+  %bounded = scalar.assume %word [range(%word, -16777216, 16777216)] : i32
+  %single = scalar.sitofp %bounded : i32 to f32
+  %bfloat = scalar.fptrunc %single : f32 to bf16
+  %aligned = scalar.assume %wide [range(%wide, 0, 33554432), multiple_of(%wide, 2)] : i64
+  %aligned_single = scalar.uitofp %aligned : i64 to f32
+  %half = scalar.fptrunc %aligned_single : f32 to f16
+  func.return %bfloat, %half : bf16, f16
+}
+
+// ----
+func.def @bounded_conversions(%word: i32, %wide: i64) -> (bf16, f16) {
+  %bounded = scalar.assume %word [range(%word, -16777216, 16777216)] : i32
+  %bfloat = scalar.sitofp %bounded : i32 to bf16
+  %aligned = scalar.assume %wide [range(%wide, 0, 33554432), multiple_of(%wide, 2)] : i64
+  %half = scalar.uitofp %aligned : i64 to f16
+  func.return %bfloat, %half : bf16, f16
+}
+
+// ====
+
+// Rounding in the intermediate remains observable even if its result is exact
+// in its own format. These chains cannot be replaced with a direct conversion.
+func.def @rounded_intermediates(%word: i32, %wide: vector<3xi64>, %halfword: i16) -> (bf16, vector<3xf32>, f64) {
+  %single = scalar.sitofp %word : i32 to f32
+  %bfloat = scalar.fptrunc %single : f32 to bf16
+  %double = vector.uitofp %wide : vector<3xi64> to vector<3xf64>
+  %narrow = vector.fptrunc %double : vector<3xf64> to vector<3xf32>
+  %rounded = scalar.uitofp %halfword : i16 to f16
+  %extended = scalar.extf %rounded : f16 to f64
+  func.return %bfloat, %narrow, %extended : bf16, vector<3xf32>, f64
+}
+
+// ====
+
+// Universal cleanup preserves the reference decomposition selected by a target.
+// RUN: pass canonicalize,canonicalize
+func.def @legalized_conversions(%byte: i8, %bytes: vector<5xi8>) -> (f16, vector<5xf16>) {
+  %wide = scalar.sitofp %byte : i8 to f32
+  %half = scalar.fptrunc %wide : f32 to f16
+  %vector_wide = vector.uitofp %bytes : vector<5xi8> to vector<5xf32>
+  %vector_half = vector.fptrunc %vector_wide : vector<5xf32> to vector<5xf16>
+  func.return %half, %vector_half : f16, vector<5xf16>
+}
+
+// ====
+
+// Explicit float-conversion policies remain attached to their authored stage.
+// RUN: pass combine
+func.def @explicit_conversion_policy(%byte: i8, %bytes: vector<3xi8>) -> (f16, vector<3xbf16>) {
+  %wide = scalar.sitofp %byte : i8 to f32
+  %half = scalar.fptrunc<ftz> %wide : f32 to f16
+  %vector_wide = vector.uitofp %bytes : vector<3xi8> to vector<3xf32>
+  %bfloat = vector.fptrunc<daz> %vector_wide : vector<3xf32> to vector<3xbf16>
+  func.return %half, %bfloat : f16, vector<3xbf16>
+}

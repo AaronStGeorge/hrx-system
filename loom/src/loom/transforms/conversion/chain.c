@@ -14,10 +14,22 @@ static const loom_conversion_chain_match_t
         [LOOM_CONVERSION_EXTF] =
             {
                 [LOOM_CONVERSION_EXTF] = {.candidate = LOOM_CONVERSION_EXTF},
+                [LOOM_CONVERSION_SITOFP] =
+                    {.candidate = LOOM_CONVERSION_SITOFP,
+                     .flags = LOOM_CONVERSION_CHAIN_FLAG_EXACT_INTEGER},
+                [LOOM_CONVERSION_UITOFP] =
+                    {.candidate = LOOM_CONVERSION_UITOFP,
+                     .flags = LOOM_CONVERSION_CHAIN_FLAG_EXACT_INTEGER},
             },
         [LOOM_CONVERSION_FPTRUNC] =
             {
                 [LOOM_CONVERSION_EXTF] = {.candidate = LOOM_CONVERSION_EXTF},
+                [LOOM_CONVERSION_SITOFP] =
+                    {.candidate = LOOM_CONVERSION_SITOFP,
+                     .flags = LOOM_CONVERSION_CHAIN_FLAG_EXACT_INTEGER},
+                [LOOM_CONVERSION_UITOFP] =
+                    {.candidate = LOOM_CONVERSION_UITOFP,
+                     .flags = LOOM_CONVERSION_CHAIN_FLAG_EXACT_INTEGER},
             },
         [LOOM_CONVERSION_EXTSI] =
             {
@@ -55,7 +67,9 @@ loom_conversion_kind_t loom_conversion_chain_resolve(
     loom_conversion_kind_t candidate, loom_type_t input_type,
     loom_type_t result_type) {
   if (candidate == LOOM_CONVERSION_EXTRACT_SIGNED ||
-      candidate == LOOM_CONVERSION_EXTRACT_UNSIGNED) {
+      candidate == LOOM_CONVERSION_EXTRACT_UNSIGNED ||
+      candidate == LOOM_CONVERSION_SITOFP ||
+      candidate == LOOM_CONVERSION_UITOFP) {
     return candidate;
   }
   if (loom_type_equal(input_type, result_type)) {
