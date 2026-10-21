@@ -482,8 +482,10 @@ iree_cc_test(
     iree::base
     iree::hal
     iree::hal::drivers::amd::registration
+    iree::hal::drivers::amd::status
     iree::testing::gtest
     iree::testing::gtest_main
+    libamdf::cts::util::native_identity
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
@@ -556,6 +558,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::queue::sdma::queue
     iree::hal::drivers::amd::status
     iree::testing::gtest
+    libamdf::cts::util::native_identity
   TESTONLY
   PUBLIC
 )
