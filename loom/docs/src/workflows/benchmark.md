@@ -1,6 +1,6 @@
 # Benchmark checked work
 
-`iree-benchmark-loom` measures workloads selected by
+`loom-benchmark` measures workloads selected by
 [`check.benchmark`](../reference/dialects/check/ops/benchmark.md). Each benchmark
 row names a [`check.case`](../reference/dialects/check/ops/case.md) or
 `check.scenario`. Case benchmarks may bind runtime parameters; scenario
@@ -17,7 +17,7 @@ Planning catches selection, parameter, requirement, and deduplication mistakes
 without compiling or touching a device:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --dry-run \
   --output=plan.json
@@ -41,7 +41,7 @@ The default `auto` policy resolves a `check.case` benchmark to
 `case_end_to_end` and measures the executable case program as one operation:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --output=results.json
@@ -57,7 +57,7 @@ for controlled comparisons that must hold compilation constant across
 compatible devices:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --target=amdgpu:gfx11-generic \
@@ -73,7 +73,7 @@ Kernel tuning usually needs the prepared HAL launch schedule rather than the
 whole check program:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --measure=dispatch_complete \
@@ -110,7 +110,7 @@ read results back for correctness. Results report `correctness.state` as
 For occasional validation or a release gate, enable the authored checks:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --scenario-correctness=true \
@@ -128,7 +128,7 @@ across the timing ring.
 Oracle preparation and execution add to total tool latency even though they are
 outside the measured window. On realistic model shapes, a serial CPU/VM oracle
 can dominate the run. `--scenario-correctness=false` explicitly restores the
-default for benchmark suites. `iree-test-loom` remains the dedicated correctness
+default for benchmark suites. `loom-test` remains the dedicated correctness
 tool.
 
 This flag applies to `check.scenario`, not `check.case`. Case benchmarks
@@ -155,7 +155,7 @@ When the selected case expands into several samples, one ordinal can be
 isolated explicitly:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_shapes \
   --sample=1 \
   --dry-run
@@ -196,7 +196,7 @@ owned reachable ranges without being reported as authored input storage.
 count. A deliberate hot-reuse experiment states that choice directly:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --measure=dispatch_complete \
@@ -215,7 +215,7 @@ Final-batch profiling records and executes a separate metadata-retaining replay
 of the same logical workload after the measured window:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --measure=dispatch_complete \
@@ -253,7 +253,7 @@ Interleaved execution controls for drift that would otherwise contaminate two
 independent benchmark processes:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --device=amdgpu \
   --compare=@baseline,@variant \
   --interleave=ABABA \
@@ -273,7 +273,7 @@ Scenario comparisons likewise select one concrete configuration and trial per
 candidate:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --device=amdgpu \
   --compare=@baseline_scenario,@variant_scenario \
   --sample=3 \
@@ -334,7 +334,7 @@ An artifact bundle captures the result, command line, source identity, device
 identity, fixtures, and requested compiler or profile evidence:
 
 ```shell
-iree-benchmark-loom program.loom \
+loom-benchmark program.loom \
   --benchmark=@decode_4096 \
   --device=amdgpu \
   --measure=dispatch_complete \

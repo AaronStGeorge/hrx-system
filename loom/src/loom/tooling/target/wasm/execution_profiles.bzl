@@ -22,7 +22,7 @@ WASM_HOSTED_PROFILE = loom_execution_profile(
         EMIT_WASM,
     ],
     executor = "hosted",
-    runner = "//loom/src/loom/tools/iree-test-loom:iree-test-loom-wasi",
+    runner = "//loom/src/loom/tools/loom-test:loom-test-wasi",
     target_class = "cpu",
     target_family = "wasm",
 )

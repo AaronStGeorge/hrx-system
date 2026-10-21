@@ -36,7 +36,7 @@ iree_execution_test_suite(
         "//loom/config/target/arch:vm",
     ]),
     tools = {
-        "iree-test-loom": "//loom/src/loom/tools/iree-test-loom",
         "loom-link": "//loom/src/loom/tools/loom-link",
+        "loom-test": "//loom/src/loom/tools/loom-test",
     },
 )

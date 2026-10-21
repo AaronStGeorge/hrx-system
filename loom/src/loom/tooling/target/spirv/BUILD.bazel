@@ -200,7 +200,7 @@ loom_test(
 
 iree_executable_test(
     name = "aliased_entry_test",
-    src = "//loom/src/loom/tools/iree-run-loom",
+    src = "//loom/src/loom/tools/loom-run",
     args = [
         "$(rootpath test/multiple_entries.loom)",
         "--device=vulkan",

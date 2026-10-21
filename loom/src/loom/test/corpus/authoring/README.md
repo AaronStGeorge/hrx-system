@@ -12,15 +12,15 @@ integration contract they test even when the fixture itself is written in Loom.
 
 The examples are tested through production-facing tools:
 
-- `iree-test-loom --device=<device>` compiles and executes `check.case`
+- `loom-test --device=<device>` compiles and executes `check.case`
   correctness samples through the selected target provider.
-- `iree-benchmark-loom --device=<device>` reuses the same checked cases for
+- `loom-benchmark --device=<device>` reuses the same checked cases for
   deliberate performance experiments with queue and device timing.
 
 Target providers compose these source modules into physical execution suites;
 the corpus itself does not choose a device. Iteration counts, warmups,
 profiling, compile-time measurement, and soak runs belong to explicit
-`iree-benchmark-loom` invocations or embedding APIs.
+`loom-benchmark` invocations or embedding APIs.
 
 ## Source Map
 
@@ -80,7 +80,7 @@ Start with the host-only planner when editing source shape, check parameters,
 or benchmark rows:
 
 ```bash
-iree-benchmark-loom \
+loom-benchmark \
   loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom \
   --dry-run \
   --output=/tmp/loom-q6q8-plan.json
@@ -271,11 +271,11 @@ manifests, and compile reports for target emission evidence.
 
 Standalone `loom-compile` emits the artifact, manifest, and compile report. To
 keep target-owned assembly/listing text with benchmark evidence, run
-`iree-benchmark-loom` with a debug or full artifact bundle on an AMDGPU-capable
+`loom-benchmark` with a debug or full artifact bundle on an AMDGPU-capable
 build:
 
 ```bash
-iree-benchmark-loom \
+loom-benchmark \
   loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom \
   --device=amdgpu \
   --measure=dispatch_complete \

@@ -174,12 +174,12 @@ Run the ordinary Loom gates against every carrier and semantic cut:
 ```shell
 loom-format --check kernel.loom
 
-iree-test-loom kernel.loom \
+loom-test kernel.loom \
   --case=@raw_gguf_differential \
   --device=amdgpu \
   --sanitizer=access
 
-iree-benchmark-loom kernel.loom \
+loom-benchmark kernel.loom \
   --benchmark=@production_bucket \
   --dry-run \
   --output=plan.json

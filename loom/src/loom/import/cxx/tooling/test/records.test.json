@@ -4,7 +4,7 @@
     {
       "name": "attributes a failed nested record field to its C++ assertion",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/../../test/check_records.cxx",
           "--input-options=cxx:D=CHECK_RECORD_EXPECTED=41u"
@@ -39,7 +39,7 @@
         },
         {
           "run": {
-            "tool": "iree-test-loom",
+            "tool": "loom-test",
             "args": [
               "{tmp}/records.loombc"
             ]

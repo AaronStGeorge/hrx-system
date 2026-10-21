@@ -23,7 +23,7 @@ iree_native_test(
     "--max-batches=1"
     "--stable-p90-to-p50-ppm=0"
   SRC
-    loom::tools::iree-benchmark-loom
+    loom::tools::loom-benchmark
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/x86_approximate_roots.loom"
 )
@@ -36,7 +36,7 @@ iree_execution_test_suite(
   MANIFESTS
     "test/benchmark_scenario_correctness.test.json"
   TOOLS
-    "benchmark=loom::tools::iree-benchmark-loom"
+    "benchmark=loom::tools::loom-benchmark"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/benchmark_scenarios.loom"
@@ -123,7 +123,7 @@ iree_native_test(
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/bit_count.loom}}"
     "--device=task"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/bit_count.loom"
 )
@@ -138,7 +138,7 @@ iree_native_test(
     "--device=task"
     "--task_topology_max_group_count=2"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/exponent.loom"
 )
@@ -153,7 +153,7 @@ iree_native_test(
     "--device=task"
     "--task_topology_max_group_count=2"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/reciprocal.loom"
 )
@@ -169,7 +169,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@ranked_exchange_packet_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/memory/view/scalar_exchange.loom"
 )
@@ -185,7 +185,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@scalar_loop_state_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/control/loop/scalar_state.loom"
 )
@@ -201,7 +201,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@scalar_i32_arithmetic_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/scalar_observations.loom"
 )
@@ -217,7 +217,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@portable_index_arithmetic_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/scalar_observations.loom"
 )
@@ -233,7 +233,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@portable_index_bitwise_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/scalar_observations.loom"
 )
@@ -249,7 +249,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@scalar_i32_bitfield_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/scalar_observations.loom"
 )
@@ -265,7 +265,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@bitfield_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/bitfield.loom"
 )
@@ -281,7 +281,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@integer_rotation_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/rotation.loom"
 )
@@ -297,7 +297,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@scalar_integer_float_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/conversion.loom"
 )
@@ -313,7 +313,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@wide_integer_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/vector/conversion.loom"
 )
@@ -329,7 +329,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@packed_f32_to_f64_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/narrow_widening.loom"
 )
@@ -345,7 +345,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@packed_f64_to_f32_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/narrow_widening.loom"
 )
@@ -361,7 +361,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@f32_half_packet_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/f32_narrowing.loom"
 )
@@ -377,7 +377,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@float16_to_f64_all_bits"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/narrow_widening.loom"
 )
@@ -393,7 +393,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@float16_to_f32_all_bits"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/narrow_widening.loom"
 )
@@ -409,7 +409,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@packet_concatenation_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/vector/concatenation.loom"
 )
@@ -425,7 +425,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@bfloat_to_f32_all_bits"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/narrow_widening.loom"
 )
@@ -441,7 +441,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@bfloat_extrema_narrowing_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/f32_narrowing.loom"
 )
@@ -457,7 +457,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@bfloat_to_f64_all_bits"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/narrow_widening.loom"
 )
@@ -473,7 +473,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@uniform_word_shift_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/vector/integer_bitwise.loom"
 )
@@ -489,7 +489,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@uniform_dword_shift_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/vector/integer_bitwise.loom"
 )
@@ -505,7 +505,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@uniform_qword_shift_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/vector/integer_bitwise.loom"
 )
@@ -521,7 +521,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@x86_native_i16_count_carrier_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/x86_native_i16_count_carriers.loom"
 )
@@ -537,7 +537,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@rodata_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/function/rodata.loom"
 )
@@ -553,7 +553,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@constant_scalar_quotient_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/constant_division.loom"
 )
@@ -569,7 +569,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@root_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/roots.loom"
 )
@@ -585,7 +585,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@x86_root_approximate_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/x86_approximate_roots.loom"
 )
@@ -601,7 +601,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@root_f64_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/roots.loom"
 )
@@ -617,7 +617,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@x86_root_f64_approximate_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/x86_approximate_roots.loom"
 )
@@ -633,7 +633,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@x86_root_approximate_guard_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/x86_approximate_roots.loom"
 )
@@ -649,7 +649,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@exponential_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/exponential.loom"
 )
@@ -665,7 +665,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@f64_narrowing_matrix_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/float_narrowing_matrix.loom"
 )
@@ -681,7 +681,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@integer_floating_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/integer_floating.loom"
 )
@@ -697,7 +697,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@wide_integer_floating_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/integer_floating.loom"
 )
@@ -713,7 +713,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@double_integer_floating_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/cpu/test/x86_integer_floating_f64.loom"
 )
@@ -729,7 +729,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@loop_carried_floating_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/integer_floating.loom"
 )
@@ -745,7 +745,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@floating_integer_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/integer_floating.loom"
 )
@@ -761,7 +761,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@wide_floating_integer_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/conversion/integer_floating.loom"
 )
@@ -777,7 +777,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@turn_approximate_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/turns.loom"
 )
@@ -793,7 +793,7 @@ iree_native_test(
     "--task_topology_max_group_count=2"
     "--case=@activation_core_values"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/activations.loom"
 )

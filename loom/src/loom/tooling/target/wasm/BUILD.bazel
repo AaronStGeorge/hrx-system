@@ -60,7 +60,7 @@ loom_cc_library(
     name = "testbench",
     srcs = ["testbench.c"],
     hdrs = ["testbench.h"],
-    visibility = ["//loom/src/loom/tools/iree-test-loom:__pkg__"],
+    visibility = ["//loom/src/loom/tools/loom-test:__pkg__"],
     deps = [
         ":host",
         "//loom/binding/c:loomc",

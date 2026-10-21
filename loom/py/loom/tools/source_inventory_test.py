@@ -92,7 +92,7 @@ def test_check_families_preserve_source_and_build_policy_coverage():
     [
         "loom/src/loom/serve/runtime/program/testdata/compilation/invalid.loom",
         "loom/src/loom/tooling/target/amdgpu/test/amdgpu_bad_return.loom",
-        "loom/src/loom/tools/iree-benchmark-loom/testdata/duplicate_symbol.loom",
+        "loom/src/loom/tools/loom-benchmark/testdata/duplicate_symbol.loom",
     ],
 )
 def test_negative_fixtures_retain_lint_coverage_without_canonical_formatting(path):

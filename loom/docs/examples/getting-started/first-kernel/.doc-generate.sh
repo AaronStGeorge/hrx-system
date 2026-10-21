@@ -23,17 +23,17 @@ if [[ -n "${RUNFILES_DIR:-}" ]]; then
   repo_root="${RUNFILES_DIR}/${workspace}"
   export LOOM_FORMAT="${repo_root}/loom/src/loom/tools/loom-format/loom-format"
   export LOOM_COMPILE="${repo_root}/loom/src/loom/tools/loom-compile/loom-compile"
-  export IREE_BENCHMARK_LOOM="${repo_root}/loom/src/loom/tools/iree-benchmark-loom/iree-benchmark-loom"
+  export LOOM_BENCHMARK="${repo_root}/loom/src/loom/tools/loom-benchmark/loom-benchmark"
 else
   repo_root="$(cd -- "${script_dir}/../../../../.." && pwd -P)"
   "${repo_root}/build_tools/bin/iree-bazel-build" \
     --config=asan \
     //loom/src/loom/tools/loom-format:loom-format \
     //loom/src/loom/tools/loom-compile:loom-compile \
-    //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom
+    //loom/src/loom/tools/loom-benchmark:loom-benchmark
   export LOOM_FORMAT="${repo_root}/bazel-bin/loom/src/loom/tools/loom-format/loom-format"
   export LOOM_COMPILE="${repo_root}/bazel-bin/loom/src/loom/tools/loom-compile/loom-compile"
-  export IREE_BENCHMARK_LOOM="${repo_root}/bazel-bin/loom/src/loom/tools/iree-benchmark-loom/iree-benchmark-loom"
+  export LOOM_BENCHMARK="${repo_root}/bazel-bin/loom/src/loom/tools/loom-benchmark/loom-benchmark"
 fi
 
 source_file="${script_dir}/saxpy.loom"

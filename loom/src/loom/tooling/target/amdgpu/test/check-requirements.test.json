@@ -4,7 +4,7 @@
     {
       "name": "runs scalar cases and skips unavailable device requirements",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/check_requirements.loom"
         ]
@@ -25,7 +25,7 @@
     {
       "name": "skips benchmarks whose device requirement is unavailable",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/check_requirements.loom",
           "--iterations=1",
@@ -43,7 +43,7 @@
     {
       "name": "missing target",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/check_requirements_invalid.loom",
           "--case=@missing_target"
@@ -59,7 +59,7 @@
     {
       "name": "wrong target type",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/check_requirements_invalid.loom",
           "--case=@wrong_target_type"
@@ -75,7 +75,7 @@
     {
       "name": "unknown target",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/check_requirements_invalid.loom",
           "--case=@unknown_target"
@@ -91,7 +91,7 @@
     {
       "name": "invalid feature",
       "run": {
-        "tool": "iree-test-loom",
+        "tool": "loom-test",
         "args": [
           "{srcdir}/check_requirements_invalid.loom",
           "--case=@invalid_feature"

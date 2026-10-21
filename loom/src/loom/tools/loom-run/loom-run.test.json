@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "loom-run",
+        "args": ["--agents_md"]
+      },
+      "stdout": {
+        "non_empty": true
+      }
+    },
+    {
+      "name": "documents the one-kernel public surface",
+      "run": {
+        "tool": "loom-run",
+        "args": ["--help"]
+      },
+      "stdout": {
+        "contains": ["--root=", "--compile-report-output="],
+        "not_contains": [
+          "--function=",
+          "--emit-target-artifact=",
+          "--emit-hal-executable=",
+          "--emit-only=",
+          "--probe-hal="
+        ]
+      }
+    },
+    {
+      "name": "requires one explicit device",
+      "run": {
+        "tool": "loom-run"
+      },
+      "stdin": {"text": ""},
+      "exit": 1,
+      "stderr": {
+        "contains": ["requires exactly one --device= flag; got 0"]
+      }
+    },
+    {
+      "name": "rejects heterogeneous device requests",
+      "run": {
+        "tool": "loom-run",
+        "args": ["--device=first", "--device=second"]
+      },
+      "stdin": {"text": ""},
+      "exit": 1,
+      "stderr": {
+        "contains": ["requires exactly one --device= flag; got 2"]
+      }
+    },
+    {
+      "name": "requires an explicit root for multiple kernels",
+      "run": {
+        "tool": "loom-run",
+        "args": ["--device=unavailable"]
+      },
+      "stdin": {
+        "text": "kernel.def @first() {\n  %one = index.constant 1 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index\n} launch() {\n  kernel.return\n}\n\nkernel.def @second() {\n  %one = index.constant 1 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index\n} launch() {\n  kernel.return\n}\n"
+      },
+      "exit": 1,
+      "stderr": {
+        "contains": [
+          "requires exactly one kernel when --root is omitted; found 2"
+        ]
+      }
+    },
+    {
+      "name": "reserves stdout for kernel output",
+      "run": {
+        "tool": "loom-run",
+        "args": [
+          "--device=unavailable",
+          "--compile-report=summary",
+          "--compile-report-output=-"
+        ]
+      },
+      "stdin": {"text": ""},
+      "exit": 1,
+      "stderr": {
+        "contains": [
+          "--compile-report-output must name stderr or a file"
+        ]
+      }
+    }
+  ]
+}

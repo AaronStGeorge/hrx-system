@@ -1,0 +1,376 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_select",
+    "loom_cc_binary",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_AMDGPU_TARGET_COPTS = iree_select({
+    "//loom/config/execute:amdgpu_hal": [
+        "-DLOOM_BENCHMARK_HAVE_AMDGPU=1",
+    ],
+    "//conditions:default": [],
+})
+
+_AMDGPU_TARGET_DEPS = iree_select({
+    "//loom/config/execute:amdgpu_hal": [
+        "//loom/binding/c/target/amdgpu:iree_hal",
+        "//loom/src/loom/tooling/target/amdgpu:testbench_requirements",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_VULKAN_TARGET_COPTS = iree_select({
+    "//loom/config/execute:spirv_vulkan_hal": [
+        "-DLOOM_BENCHMARK_HAVE_SPIRV=1",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_VULKAN_TARGET_DEPS = iree_select({
+    "//loom/config/execute:spirv_vulkan_hal": [
+        "//loom/binding/c/target/spirv:iree_hal",
+        "//loom/src/loom/tooling/target/spirv:testbench_requirements",
+    ],
+    "//conditions:default": [],
+})
+
+_XDNA_TARGET_COPTS = iree_select({
+    "//loom/config/execute:xdna_hal": ["-DLOOM_BENCHMARK_HAVE_XDNA=1"],
+    "//conditions:default": [],
+})
+
+_XDNA_TARGET_DEPS = iree_select({
+    "//loom/config/execute:xdna_hal": ["//loom/binding/c/target/amd/xdna:iree_hal"],
+    "//conditions:default": [],
+})
+
+_TASK_TARGET_COPTS = iree_select({
+    "//loom/config/execute:task_hal": ["-DLOOM_BENCHMARK_HAVE_TASK=1"],
+    "//conditions:default": [],
+})
+
+_TASK_TARGET_DEPS = iree_select({
+    "//loom/config/execute:task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
+    "//conditions:default": [],
+})
+
+_VM_TARGET_COPTS = iree_select({
+    "//loom/config/target/arch:vm": ["-DLOOM_BENCHMARK_HAVE_VM=1"],
+    "//conditions:default": [],
+})
+
+_VM_TARGET_DEPS = iree_select({
+    "//loom/config/target/arch:vm": [
+        "//loom/src/loom/tooling/target/vm:testbench",
+    ],
+    "//conditions:default": [],
+})
+
+_LOOM_BENCHMARK_TARGET_COPTS = (
+    _AMDGPU_TARGET_COPTS +
+    _SPIRV_VULKAN_TARGET_COPTS +
+    _TASK_TARGET_COPTS +
+    _VM_TARGET_COPTS +
+    _XDNA_TARGET_COPTS
+)
+
+_LOOM_BENCHMARK_TARGET_DEPS = (
+    _AMDGPU_TARGET_DEPS +
+    _SPIRV_VULKAN_TARGET_DEPS +
+    _TASK_TARGET_DEPS +
+    _VM_TARGET_DEPS +
+    _XDNA_TARGET_DEPS
+)
+
+loom_cc_library(
+    name = "main",
+    srcs = [
+        "case_execution.c",
+        "case_request.c",
+        "comparison_execution.c",
+        "compile_requests.c",
+        "context.c",
+        "device_spec_report.c",
+        "diagnostics.c",
+        "dispatch_benchmark.c",
+        "event.c",
+        "hal_actual.c",
+        "hal_setup.c",
+        "help.c",
+        "input_ring.c",
+        "launch_evidence.c",
+        "main.c",
+        "manifest.c",
+        "module_query.c",
+        "options.c",
+        "output.c",
+        "output_sink.c",
+        "profile_report.c",
+        "report.c",
+        "run.c",
+        "scenario_execution.c",
+        "snapshot.c",
+        "testbench.c",
+        "timing.c",
+        "work_execution.c",
+        "work_plan.c",
+    ],
+    hdrs = [
+        "case_execution.h",
+        "case_request.h",
+        "comparison_execution.h",
+        "compile_requests.h",
+        "configuration.h",
+        "context.h",
+        "device_spec_report.h",
+        "diagnostics.h",
+        "dispatch_benchmark.h",
+        "event.h",
+        "hal_actual.h",
+        "hal_setup.h",
+        "help.h",
+        "input_ring.h",
+        "launch_evidence.h",
+        "main.h",
+        "manifest.h",
+        "model.h",
+        "module_query.h",
+        "options.h",
+        "output.h",
+        "output_sink.h",
+        "profile_report.h",
+        "report.h",
+        "run.h",
+        "scenario_execution.h",
+        "snapshot.h",
+        "testbench.h",
+        "timing.h",
+        "work_execution.h",
+        "work_plan.h",
+    ],
+    deps = [
+        "//loom/binding/c:interop",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/cmd",
+        "//loom/binding/c/target/iree_hal",
+        "//loom/src/loom/config:text_binding",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:json_sink",
+        "//loom/src/loom/error:renderer",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops:special_values",
+        "//loom/src/loom/ops/check",
+        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/tooling/cli:help",
+        "//loom/src/loom/tooling/cli:loomc_diagnostic_json",
+        "//loom/src/loom/tooling/cli:loomc_options",
+        "//loom/src/loom/tooling/cli:loomc_result",
+        "//loom/src/loom/tooling/config:input",
+        "//loom/src/loom/tooling/execution:benchmark",
+        "//loom/src/loom/tooling/execution/hal:artifact",
+        "//loom/src/loom/tooling/execution/hal:benchmark",
+        "//loom/src/loom/tooling/execution/hal:invocation",
+        "//loom/src/loom/tooling/execution/hal:runtime",
+        "//loom/src/loom/tooling/execution/hal:scenario_profile",
+        "//loom/src/loom/tooling/execution/hal:testbench_actual",
+        "//loom/src/loom/tooling/input",
+        "//loom/src/loom/tooling/input:flags",
+        "//loom/src/loom/tooling/input:loomc",
+        "//loom/src/loom/tooling/io:file",
+        "//loom/src/loom/tooling/testbench",
+        "//loom/src/loom/tooling/testbench:api",
+        "//loom/src/loom/tooling/testbench:case_command_program",
+        "//loom/src/loom/tooling/testbench:compiled_provider",
+        "//loom/src/loom/tooling/testbench:device_event",
+        "//loom/src/loom/tooling/testbench:executor",
+        "//loom/src/loom/tooling/testbench:invocation",
+        "//loom/src/loom/tooling/testbench:issue_report",
+        "//loom/src/loom/tooling/testbench:reference",
+        "//loom/src/loom/tooling/testbench:requirements",
+        "//loom/src/loom/tooling/testbench:source_report",
+        "//loom/src/loom/tooling/testbench:value_materializer",
+        "//loom/src/loom/tooling/testbench/scenario:entropy",
+        "//loom/src/loom/tooling/testbench/scenario:executor",
+        "//loom/src/loom/tooling/testbench/scenario:values",
+        "//loom/src/loom/util:adaptive_sort",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/base/internal:path",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/tooling:device_flags",
+        "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/tooling/profile:counter",
+        "//runtime/src/iree/tooling/profile:summary",
+    ],
+)
+
+loom_cc_test(
+    name = "case_execution_test",
+    srcs = ["case_execution_test.cc"],
+    deps = [
+        ":main",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/check",
+        "//loom/src/loom/tooling/testbench",
+        "//loom/src/loom/tooling/testbench:executor",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "case_request_test",
+    srcs = ["case_request_test.cc"],
+    deps = [
+        ":main",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/cmd",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "event_test",
+    srcs = ["event_test.cc"],
+    deps = [
+        ":main",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+loom_cc_test(
+    name = "input_ring_test",
+    srcs = ["input_ring_test.cc"],
+    deps = [
+        ":main",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "work_plan_test",
+    srcs = ["work_plan_test.cc"],
+    deps = [
+        ":main",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/check",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/tooling/testbench",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "snapshot_test",
+    srcs = ["snapshot_test.cc"],
+    deps = [
+        ":main",
+        "//loom/binding/c:interop",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "report_test",
+    srcs = ["report_test.cc"],
+    deps = [
+        ":main",
+        "//loom/binding/c:interop",
+        "//loom/binding/c:loomc",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+loom_cc_test(
+    name = "run_test",
+    srcs = ["run_test.cc"],
+    data = ["testdata/planning_error.loom"],
+    env = {
+        "LOOM_BENCHMARK_PLANNING_SOURCE": "$(rootpath testdata/planning_error.loom)",
+    },
+    deps = [
+        ":main",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+loom_cc_binary(
+    name = "loom-benchmark",
+    srcs = ["loom-benchmark.c"],
+    copts = _LOOM_BENCHMARK_TARGET_COPTS,
+    deps = [
+        ":main",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/configured",
+        "//loom/src/loom/tooling/execution/hal:testbench_actual",
+        "//loom/src/loom/tooling/input:configured",
+        "//loom/src/loom/tooling/input:loomc_configured",
+        "//runtime/src/iree/base",
+    ] + _LOOM_BENCHMARK_TARGET_DEPS,
+)
+
+iree_execution_test_suite(
+    name = "execution_test",
+    data = [
+        "testdata/device_events.loom",
+        "testdata/dispatch_benchmarks.loom",
+        "testdata/scalar_benchmarks.loom",
+        "//loom/src/loom/tooling/testbench:testdata/requirements.loom",
+    ],
+    manifests = ["loom-benchmark.test.json"],
+    tags = ["hostonly"],
+    tools = {
+        "loom-benchmark": ":loom-benchmark",
+    },
+)

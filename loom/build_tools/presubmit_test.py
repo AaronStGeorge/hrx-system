@@ -515,7 +515,7 @@ class LoomPresubmitTest(unittest.TestCase):
         )
         self.assertFalse(
             self.presubmit.is_format_source_path(
-                "loom/src/loom/tools/iree-benchmark-loom/testdata/duplicate_symbol.loom"
+                "loom/src/loom/tools/loom-benchmark/testdata/duplicate_symbol.loom"
             )
         )
 

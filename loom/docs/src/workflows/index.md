@@ -69,8 +69,8 @@ exact selected program, workload, tool identity, and evidence boundary.
 
 ## Correctness and performance
 
-`iree-test-loom` executes `check.case` and `check.scenario` records and emits
-structured correctness results. `iree-benchmark-loom` plans `check.benchmark`
+`loom-test` executes `check.case` and `check.scenario` records and emits
+structured correctness results. `loom-benchmark` plans `check.benchmark`
 records, gates timing on the selected case or scenario correctness, and records
 measurement evidence. Keeping those tasks separate prevents a fast incorrect
 candidate from becoming a performance result.

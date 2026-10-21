@@ -618,7 +618,7 @@ iree_native_test(
     "--expected-kernel-buffer=1xi32=10"
     "--expected-kernel-buffer=1xi32=25"
   SRC
-    loom::tools::iree-run-loom
+    loom::tools::loom-run
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/spirv/test/multiple_entries.loom"
   LABELS

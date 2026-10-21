@@ -16,7 +16,7 @@ iree_execution_test_suite(
   MANIFESTS
     "benchmark_scenario_correctness.test.json"
   TOOLS
-    "benchmark=loom::tools::iree-benchmark-loom"
+    "benchmark=loom::tools::loom-benchmark"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/benchmark_device_events.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/benchmark_scenarios.loom"
@@ -35,7 +35,7 @@ iree_execution_test_suite(
   MANIFESTS
     "benchmark_profile_policy.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/benchmark_profile_policy.loom"
   LABELS
@@ -80,7 +80,7 @@ iree_execution_test_suite(
   MANIFESTS
     "loom-compile-amdgpu.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
     "loom-compile=loom::tools::loom-compile"
     "loom-compile-report=loom::py::loom::tools::loom-compile-report"
     "loom-format=loom::tools::loom-format"
@@ -1757,8 +1757,8 @@ iree_execution_test_suite(
   MANIFESTS
     "check-requirements.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
-    "iree-test-loom=loom::tools::iree-test-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
+    "loom-test=loom::tools::loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/check_requirements.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/check_requirements_invalid.loom"
@@ -1774,8 +1774,8 @@ iree_execution_test_suite(
   MANIFESTS
     "check-target-requirements.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
-    "iree-test-loom=loom::tools::iree-test-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
+    "loom-test=loom::tools::loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/check_target_requirements.loom"
   LABELS

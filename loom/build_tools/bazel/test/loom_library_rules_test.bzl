@@ -38,7 +38,7 @@ SERIALIZED_REFERENCE_PROFILE = loom_execution_profile(
 EXPLICIT_RUNNER_PROFILE = loom_execution_profile(
     name = "explicit_runner",
     executor = "hosted",
-    runner = "//loom/src/loom/tools/iree-test-loom",
+    runner = "//loom/src/loom/tools/loom-test",
     runner_args = ["--max-samples-per-case=1"],
     target_class = "cpu",
     target_family = "test",
@@ -297,7 +297,7 @@ def _test_execution_profile_contract_impl(env, target):
         "profiled_module.loombc",
     )
     env.expect.that_str(info.profile_name).equals("reference")
-    if not info.test_runner.basename.startswith("iree-test-loom"):
+    if not info.test_runner.basename.startswith("loom-test"):
         env.fail("unexpected correctness runner %r" % info.test_runner)
     if info.test_runner_args != [
         "--max-samples-per-case=1",
@@ -305,7 +305,7 @@ def _test_execution_profile_contract_impl(env, target):
         "--sample=0",
     ]:
         env.fail("unexpected correctness runner args %r" % info.test_runner_args)
-    if not info.benchmark_runner.basename.startswith("iree-benchmark-loom"):
+    if not info.benchmark_runner.basename.startswith("loom-benchmark"):
         env.fail("unexpected benchmark runner %r" % info.benchmark_runner)
     if info.benchmark_runner_args != [
         "--iterations=1",
@@ -360,7 +360,7 @@ def _test_correctness_only_profile_omits_benchmark_runner_impl(env, target):
     runfiles = target[DefaultInfo].default_runfiles.files.to_list()
     _expect_basename(env, runfiles, info.test_runner.basename)
     for file in runfiles:
-        if file.basename.startswith("iree-benchmark-loom"):
+        if file.basename.startswith("loom-benchmark"):
             env.fail("correctness-only execution retained benchmark runfile %r" % file)
 
 def _test_resource_profile_preserves_direct_execution(name, **kwargs):
@@ -403,7 +403,7 @@ def _test_explicit_runner_owns_profile_execution(name, **kwargs):
 
 def _test_explicit_runner_owns_profile_execution_impl(env, target):
     info = target[IreeExecutableInfo]
-    env.expect.that_str(str(info.src)).contains("iree-test-loom")
+    env.expect.that_str(str(info.src)).contains("loom-test")
     arguments = target[IreeRunfilesArgumentsInfo].arguments
     if not arguments[0].endswith("profiled_module.loombc"):
         env.fail("unexpected explicit runner module argument %r" % arguments[0])
@@ -426,7 +426,7 @@ def _test_explicit_runner_owns_profile_execution_impl(env, target):
                 (expected_tag, target[TestingAspectInfo].attrs.tags),
             )
     for file in runfiles:
-        if file.basename.startswith("iree-benchmark-loom"):
+        if file.basename.startswith("loom-benchmark"):
             env.fail("explicit profile runner retained benchmark runfile %r" % file)
 
 def _test_grouped_execution_root_sources(name, **kwargs):

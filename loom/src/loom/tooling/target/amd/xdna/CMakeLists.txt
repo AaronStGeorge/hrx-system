@@ -46,8 +46,8 @@ iree_execution_test_suite(
   MANIFESTS
     "test/hal_execution.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
-    "iree-test-loom=loom::tools::iree-test-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
+    "loom-test=loom::tools::loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/channel_lifetime.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/dma_reuse.loom"
@@ -67,7 +67,7 @@ iree_execution_test_suite(
   MANIFESTS
     "test/channel_fanout.test.json"
   TOOLS
-    "iree-test-loom=loom::tools::iree-test-loom"
+    "loom-test=loom::tools::loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/channel_fanout.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/channel_sram.loom"

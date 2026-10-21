@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "plans scenario dispatches in a snapshot without a device",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/dispatch_benchmarks.loom",
+          "--benchmark=@increment_scenario_latency",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "\"dry_run\":true",
+            "\"device\":{\"device_uri\":\"\",\"driver\":\"\",\"state\":\"planned\"}",
+            "\"work_item_count\":2",
+            "\"measure\":\"dispatch_complete\""
+          ]
+        },
+        "not_contains": [
+          "\"device_spec\"",
+          "\"state\":\"created\""
+        ]
+      }
+    },
+    {
+      "name": "plans case dispatches as JSONL without a device",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/dispatch_benchmarks.loom",
+          "--benchmark=@increment_case_latency",
+          "--measure=dispatch_complete",
+          "--output-format=jsonl",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"row\":\"run\"",
+          "\"row\":\"plan\"",
+          "\"measure\":\"dispatch_complete\"",
+          "\"row\":\"device\"",
+          "\"state\":\"planned\"",
+          "\"row\":\"summary\""
+        ],
+        "not_contains": [
+          "\"row\":\"compile\"",
+          "\"row\":\"sample\"",
+          "\"device_spec\""
+        ]
+      }
+    },
+    {
+      "name": "writes dry-run output file",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--output-format=jsonl",
+          "--benchmark=@scalar_equal_latency",
+          "--dry-run",
+          "--output={tmp}/dry_run.jsonl"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/dry_run.jsonl",
+          "non_empty": true
+        }
+      ]
+    },
+    {
+      "name": "writes dry-run artifact bundle",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--output-format=jsonl",
+          "--benchmark=@scalar_equal_latency",
+          "--dry-run",
+          "--artifact-bundle-dir={tmp}/bundle"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/bundle/results.jsonl",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/bundle/manifest.json",
+          "non_empty": true
+        }
+      ]
+    },
+    {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "--agents_md"
+        ]
+      },
+      "stdout": {
+        "non_empty": true
+      }
+    },
+    {
+      "name": "prints help",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "--help"
+        ]
+      },
+      "stdout": {
+        "non_empty": true
+      }
+    },
+    {
+      "name": "rejects an unavailable explicit device",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--benchmark=@scalar_equal_latency",
+          "--device=loom-unavailable",
+          "--dry-run"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": [
+          "--device=loom-unavailable",
+          "not available in this Loom installation",
+          "no linked LoomC target adapter"
+        ]
+      }
+    },
+    {
+      "name": "runs correctness without absence assertions",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/device_events.loom",
+          "--benchmark=@clean_benchmark",
+          "--iterations=1",
+          "--warmup-iterations=0",
+          "--output-format=jsonl"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"passed\":true",
+          "\"failed_sample_count\":0"
+        ]
+      }
+    },
+    {
+      "name": "rejects benchmark correctness when an expected event is missing",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/testdata/device_events.loom",
+          "--benchmark=@missing_event_benchmark",
+          "--iterations=1",
+          "--warmup-iterations=0",
+          "--output-format=jsonl"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stdout": {
+        "contains": [
+          "\"passed\":false",
+          "\"failed_sample_count\":1"
+        ]
+      }
+    },
+    {
+      "name": "skips requirements before preparing cases or scenarios",
+      "run": {
+        "tool": "loom-benchmark",
+        "args": [
+          "{srcdir}/../../tooling/testbench/testdata/requirements.loom",
+          "--iterations=1",
+          "--warmup-iterations=0",
+          "--output-format=jsonl"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"benchmark_result\":{\"benchmark\":\"missing_case\",\"case\":\"missing_provider_requirement\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"skip_case\",\"case\":\"missing_provider_skip_if\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"missing_scenario\",\"scenario\":\"missing_scenario_requirement\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"missing_scenario_alias\",\"scenario\":\"missing_scenario_requirement\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"skip_scenario\",\"scenario\":\"missing_scenario_skip_if\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"host\",\"case\":\"admitted_host\",\"state\":\"ok\"",
+          "\"selected_benchmark_count\":6,\"logical_sample_count\":13,\"work_item_count\":9",
+          "\"failed_benchmark_count\":0",
+          "\"correctness\":{\"sample_count\":1,\"failed_sample_count\":0}"
+        ]
+      }
+    }
+  ]
+}

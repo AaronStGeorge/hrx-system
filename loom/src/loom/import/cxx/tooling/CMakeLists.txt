@@ -130,9 +130,9 @@ iree_execution_test_suite(
   MANIFESTS
     "execution.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
-    "iree-test-loom=loom::tools::iree-test-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
     "loom-link=loom::tools::loom-link"
+    "loom-test=loom::tools::loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_cases.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_cases.h"

@@ -1,0 +1,282 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/tools/loom-benchmark/hal_actual.h"
+
+#include <string.h>
+
+#include "loom/tools/loom-benchmark/diagnostics.h"
+#include "loom/tools/loom-benchmark/module_query.h"
+#include "loom/util/adaptive_sort.h"
+
+static bool loom_benchmark_compile_entry_less(
+    const loom_benchmark_hal_actual_sequence_t* sequence,
+    const iree_host_size_t* lhs, const iree_host_size_t* rhs) {
+  const uint16_t lhs_symbol =
+      sequence->providers[*lhs].execution.invocation->callee_ref.symbol_id;
+  const uint16_t rhs_symbol =
+      sequence->providers[*rhs].execution.invocation->callee_ref.symbol_id;
+  return lhs_symbol != rhs_symbol ? lhs_symbol < rhs_symbol : *lhs < *rhs;
+}
+
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT(
+    loom_benchmark_sort_compile_entries, iree_host_size_t,
+    const loom_benchmark_hal_actual_sequence_t*,
+    loom_benchmark_compile_entry_less)
+
+// All providers in a sequence compile the same immutable module, configuration,
+// pass program, and target request. Only the root varies; workload arguments
+// are evaluated at execution time. Retain the first call as report owner so
+// consumers never need to rediscover equivalence or copy reports per call.
+static iree_status_t loom_benchmark_index_compile_entries(
+    loom_benchmark_hal_actual_sequence_t* sequence) {
+  iree_host_size_t* indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+      sequence->host_allocator, sequence->provider_count, sizeof(*indices),
+      (void**)&indices));
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    indices[i] = i;
+  }
+  loom_benchmark_sort_compile_entries(sequence, indices,
+                                      sequence->provider_count);
+  uint16_t previous_symbol = LOOM_SYMBOL_ID_INVALID;
+  iree_host_size_t entry_index = 0;
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    loom_benchmark_hal_actual_provider_t* provider =
+        &sequence->providers[indices[i]];
+    const uint16_t symbol =
+        provider->execution.invocation->callee_ref.symbol_id;
+    if (symbol != previous_symbol) {
+      entry_index = indices[i];
+      previous_symbol = symbol;
+    }
+    provider->compile_entry_index = entry_index;
+  }
+  iree_allocator_free(sequence->host_allocator, indices);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_benchmark_hal_actual_observe_result(
+    void* user_data, const loomc_result_t* result) {
+  return loom_benchmark_diagnostic_capture_loomc_result(
+      (loom_benchmark_diagnostic_capture_t*)user_data, result);
+}
+
+void loom_benchmark_hal_provider_options_initialize(
+    loom_benchmark_hal_context_t* context,
+    const loom_benchmark_hal_compilation_options_t* compilation_options,
+    const loom_testbench_invocation_plan_t* invocation,
+    loom_testbench_compile_result_callback_t result_callback,
+    loom_run_hal_testbench_actual_provider_options_t* out_options) {
+  loomc_emit_artifact_flags_t artifact_flags = 0;
+  if (context->artifact_bundle != NULL && context->artifact_bundle->enabled &&
+      context->artifact_bundle->policy >=
+          LOOM_BENCHMARK_ARTIFACT_BUNDLE_POLICY_DEBUG) {
+    artifact_flags |= LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING;
+  }
+  *out_options = (loom_run_hal_testbench_actual_provider_options_t){
+      .context = &context->execution,
+      .compilation = compilation_options->compilation,
+      .module = compilation_options->compilation->module,
+      .native_module = compilation_options->native_module,
+      .pass_program = compilation_options->pass_program,
+      .requested_target_profile = compilation_options->requested_target_profile,
+      .sanitizer = compilation_options->sanitizer,
+      .invocation = invocation,
+      .result_callback = result_callback,
+      .compile_report = compilation_options->compile_report,
+      .artifact_manifest = compilation_options->artifact_manifest,
+      .emit_artifact_flags = artifact_flags,
+  };
+}
+
+void loom_benchmark_hal_actual_provider_initialize(
+    loom_benchmark_hal_context_t* context,
+    const loom_benchmark_hal_compilation_options_t* compilation_options,
+    const loom_testbench_invocation_plan_t* kernel_launch,
+    iree_string_view_t artifact_path_suffix,
+    loom_benchmark_hal_actual_provider_t* out_provider) {
+  *out_provider = (loom_benchmark_hal_actual_provider_t){
+      .context = context,
+      .artifact_path_suffix = artifact_path_suffix,
+  };
+  iree_allocator_t host_allocator = context->execution.host_allocator;
+  loom_benchmark_diagnostic_capture_initialize(host_allocator,
+                                               &out_provider->diagnostics);
+  loom_run_hal_testbench_actual_provider_options_t provider_options;
+  loom_benchmark_hal_provider_options_initialize(
+      context, compilation_options, kernel_launch,
+      (loom_testbench_compile_result_callback_t){
+          .fn = loom_benchmark_hal_actual_observe_result,
+          .user_data = &out_provider->diagnostics,
+      },
+      &provider_options);
+  loom_run_hal_testbench_actual_provider_initialize(&provider_options,
+                                                    &out_provider->execution);
+}
+
+void loom_benchmark_hal_actual_provider_deinitialize(
+    loom_benchmark_hal_actual_provider_t* provider) {
+  if (provider == NULL) {
+    return;
+  }
+  if (provider->context == NULL) {
+    *provider = (loom_benchmark_hal_actual_provider_t){0};
+    return;
+  }
+  loom_run_hal_testbench_actual_provider_deinitialize(&provider->execution);
+  iree_allocator_t host_allocator = provider->context->execution.host_allocator;
+  iree_allocator_free(host_allocator, provider->hal_executable_path_storage);
+  iree_allocator_free(host_allocator, provider->target_artifact_path_storage);
+  iree_allocator_free(host_allocator, provider->target_listing_path_storage);
+  iree_allocator_free(host_allocator,
+                      provider->compile_report_artifact_path_storage);
+  iree_allocator_free(host_allocator, provider->artifact_manifest_path_storage);
+  loom_benchmark_diagnostic_capture_deinitialize(&provider->diagnostics);
+  *provider = (loom_benchmark_hal_actual_provider_t){0};
+}
+
+iree_status_t loom_benchmark_hal_actual_sequence_initialize(
+    loom_benchmark_hal_context_t* context,
+    const loom_benchmark_hal_compilation_options_t* compilation_options,
+    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t execution_sample_count,
+    loom_benchmark_hal_actual_sequence_t* out_sequence) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(case_plan);
+  IREE_ASSERT_ARGUMENT(out_sequence);
+  iree_allocator_t host_allocator = context->execution.host_allocator;
+  *out_sequence = (loom_benchmark_hal_actual_sequence_t){
+      .host_allocator = host_allocator,
+  };
+
+  iree_host_size_t kernel_launch_count = 0;
+  iree_status_t status = loom_run_hal_testbench_count_kernel_launches(
+      case_plan, &kernel_launch_count);
+  if (iree_status_is_ok(status) && kernel_launch_count == 0) {
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL actual sequence requires at least one kernel launch in check.case "
+        "`%.*s`",
+        (int)case_plan->name.size, case_plan->name.data);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(host_allocator, kernel_launch_count,
+                                         sizeof(*out_sequence->providers),
+                                         (void**)&out_sequence->providers);
+  }
+  if (iree_status_is_ok(status)) {
+    memset(out_sequence->providers, 0,
+           kernel_launch_count * sizeof(*out_sequence->providers));
+  }
+
+  iree_host_size_t provider_index = 0;
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < case_plan->kernel_launch_count; ++i) {
+    const loom_testbench_invocation_plan_t* invocation =
+        case_plan->kernel_launches[i];
+    iree_string_view_t artifact_path_suffix = iree_string_view_empty();
+    if (kernel_launch_count > 1) {
+      status = loom_benchmark_module_symbol_name_from_ref(
+          compilation_options->native_module, invocation->callee_ref,
+          &artifact_path_suffix);
+    }
+    if (iree_status_is_ok(status)) {
+      loom_benchmark_hal_actual_provider_initialize(
+          context, compilation_options, invocation, artifact_path_suffix,
+          &out_sequence->providers[provider_index]);
+      out_sequence->provider_count = ++provider_index;
+    }
+  }
+  loom_run_hal_testbench_actual_provider_t** execution_providers = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(
+        host_allocator, out_sequence->provider_count,
+        sizeof(*execution_providers), (void**)&execution_providers);
+  }
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < out_sequence->provider_count; ++i) {
+    execution_providers[i] = &out_sequence->providers[i].execution;
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_testbench_actual_sequence_execution_allocate(
+        case_plan, execution_sample_count, out_sequence->provider_count,
+        execution_providers, host_allocator, &out_sequence->execution);
+  }
+  iree_allocator_free(host_allocator, execution_providers);
+  if (iree_status_is_ok(status)) {
+    status = loom_benchmark_index_compile_entries(out_sequence);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_benchmark_hal_actual_sequence_deinitialize(out_sequence);
+  }
+  return status;
+}
+
+void loom_benchmark_hal_actual_sequence_deinitialize(
+    loom_benchmark_hal_actual_sequence_t* sequence) {
+  if (sequence == NULL) {
+    return;
+  }
+  loom_run_hal_testbench_actual_sequence_execution_free(sequence->execution);
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    loom_benchmark_hal_actual_provider_deinitialize(&sequence->providers[i]);
+  }
+  iree_allocator_free(sequence->host_allocator, sequence->providers);
+  *sequence = (loom_benchmark_hal_actual_sequence_t){0};
+}
+
+iree_status_t loom_benchmark_hal_actual_provider_compile(
+    loom_benchmark_hal_actual_provider_t* provider) {
+  return loom_run_hal_testbench_actual_provider_compile(&provider->execution);
+}
+
+void loom_benchmark_benchmark_result_set_compile_rejection(
+    const loom_benchmark_hal_actual_provider_t* provider,
+    loom_benchmark_benchmark_result_t* out_result) {
+  memset(out_result, 0, sizeof(*out_result));
+  out_result->state = IREE_SV("compile_failed");
+  out_result->has_failure = true;
+  out_result->failure_entry =
+      provider->execution.invocation_options.function_name;
+  out_result->failure_stage = provider->execution.compile_failure_stage;
+  out_result->failure_kind = provider->execution.compile_failure_kind;
+  out_result->failure_message = provider->execution.compile_failure_message;
+  out_result->diagnostic_error_count = provider->diagnostics.error_count;
+  out_result->diagnostic_warning_count = provider->diagnostics.warning_count;
+  out_result->diagnostic_remark_count = provider->diagnostics.remark_count;
+  out_result->diagnostic_json =
+      loom_benchmark_diagnostic_capture_json(&provider->diagnostics);
+  out_result->compile_report = provider->execution.artifacts.compile_report;
+  out_result->compile_report_artifact_path =
+      provider->compile_report_artifact_path;
+  out_result->artifact_manifest_path = provider->artifact_manifest_path;
+  out_result->target_artifact_path = provider->target_artifact_path;
+  out_result->target_listing_path = provider->target_listing_path;
+  out_result->hal_executable_path = provider->hal_executable_path;
+}
+
+iree_status_t loom_benchmark_hal_actual_sequence_compile(
+    loom_benchmark_hal_actual_sequence_t* sequence) {
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_benchmark_hal_actual_provider_compile(&sequence->providers[i]));
+  }
+  return iree_ok_status();
+}
+
+const loom_benchmark_hal_actual_provider_t*
+loom_benchmark_hal_actual_sequence_first_rejection(
+    const loom_benchmark_hal_actual_sequence_t* sequence) {
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    const loom_benchmark_hal_actual_provider_t* provider =
+        &sequence->providers[i];
+    if (provider->execution.compile_rejected) {
+      return provider;
+    }
+  }
+  return NULL;
+}

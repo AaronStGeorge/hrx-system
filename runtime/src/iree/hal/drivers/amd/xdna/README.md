@@ -12,7 +12,7 @@ Loom product already includes XDNA emission and the VM reference target:
 
 ```sh
 python dev.py bazel configure -DIREE_HAL_DRIVER_AMD=ON
-python dev.py bazel run //loom/src/loom/tools/iree-test-loom -- \
+python dev.py bazel run //loom/src/loom/tools/loom-test -- \
   loom/src/loom/tooling/target/amd/xdna/test/hal_execution.loom --device=xdna
 ```
 
@@ -179,7 +179,7 @@ before running it:
 ```sh
 python dev.py bazel build --config=opt \
   --//runtime/config/base/tracing:provider=tracy \
-  //loom/src/loom/tools/iree-benchmark-loom
+  //loom/src/loom/tools/loom-benchmark
 tracy-capture -a 127.0.0.1 -p 18086 -o xdna.tracy -m 5
 ```
 
@@ -187,7 +187,7 @@ In another terminal, run the just-built executable:
 
 ```sh
 TRACY_PORT=18086 TRACY_NO_EXIT=1 \
-  bazel-bin/loom/src/loom/tools/iree-benchmark-loom/iree-benchmark-loom \
+  bazel-bin/loom/src/loom/tools/loom-benchmark/loom-benchmark \
   loom/src/loom/tooling/target/amd/xdna/test/hal_execution.loom \
   --device=xdna --benchmark=@serial_array_latency --batch-size=6 \
   --iterations=8 --warmup-iterations=2 --profile-final-batch=false
@@ -230,7 +230,7 @@ The ordinary benchmark tool uses the same XDNA provider as correctness tests:
 
 ```sh
 python dev.py bazel run --config=opt \
-  //loom/src/loom/tools/iree-benchmark-loom -- \
+  //loom/src/loom/tools/loom-benchmark -- \
   loom/src/loom/tooling/target/amd/xdna/test/hal_execution.loom \
   --device=xdna --benchmark=@serial_array_latency --batch-size=64 \
   --profile-data=queue-events,host-execution,counters

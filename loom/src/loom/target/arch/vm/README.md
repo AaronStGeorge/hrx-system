@@ -165,7 +165,7 @@ VM expectations specify the target's selected representation.
 
 The [semantic correctness corpus](../../../test/corpus/) contains target-neutral
 programs and their `check.case` inputs and expectations. The target-owned VM
-suite links and executes each source independently through `iree-test-loom`,
+suite links and executes each source independently through `loom-test`,
 using the [VM testbench](../../../tooling/target/vm/testbench.h). The testbench
 compiles one module for all cases in that source, releases the compiler copy and
 scratch before loading the emitted bytes, and reuses a runtime process and

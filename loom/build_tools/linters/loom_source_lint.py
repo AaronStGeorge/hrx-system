@@ -102,13 +102,13 @@ TARGET_EXECUTION_DEP_LABEL_PATTERN = re.compile(
 )
 TARGET_PHYSICAL_TEST_SRC_PATTERN = re.compile(
     r'\bsrc\s*=\s*"(?P<label>//loom/src/loom/tools/'
-    r'(?:iree-test-loom|iree-benchmark-loom)(?::[^"]*)?)"'
+    r'(?:loom-test|loom-benchmark)(?::[^"]*)?)"'
 )
 TARGET_EXECUTION_BAZEL_TOOLS_PATTERN = re.compile(
     r"\btools\s*=\s*\{(?P<body>.*?)\}", re.DOTALL
 )
 TARGET_PHYSICAL_TEST_TOOL_LABEL_PATTERN = re.compile(
-    r"//loom/src/loom/tools/(?:iree-test-loom|iree-benchmark-loom)(?::|\")"
+    r"//loom/src/loom/tools/(?:loom-test|loom-benchmark)(?::|\")"
 )
 TARGET_EXECUTION_BAZEL_DEPS_PATTERN = re.compile(
     r"\b(?:deps|implementation_deps)\s*=\s*\[(?P<body>.*?)\]", re.DOTALL
@@ -731,19 +731,19 @@ def _run_self_tests() -> int:
     ok &= _expect_target_execution_self_test(
         "provider-owned qualification package passes",
         "loom/src/loom/tooling/target/amdgpu/test/corpus/BUILD.bazel",
-        'src = "//loom/src/loom/tools/iree-test-loom"\n',
+        'src = "//loom/src/loom/tools/loom-test"\n',
         (),
     )
     ok &= _expect_target_execution_self_test(
         "target-owned qualification package fails",
         "loom/src/loom/target/arch/amdgpu/test/BUILD.bazel",
-        'src = "//loom/src/loom/tools/iree-test-loom"\n',
+        'src = "//loom/src/loom/tools/loom-test"\n',
         ("target packages must not own physical execution tests",),
     )
     ok &= _expect_target_execution_self_test(
         "target-owned qualification tool fails",
         "loom/src/loom/target/arch/amdgpu/test/BUILD.bazel",
-        ('tools = {"iree-test-loom": "//loom/src/loom/tools/iree-test-loom"}\n'),
+        ('tools = {"loom-test": "//loom/src/loom/tools/loom-test"}\n'),
         ("target packages must not own physical execution tests",),
     )
     ok &= _expect_target_execution_self_test(
@@ -751,7 +751,7 @@ def _run_self_tests() -> int:
         "loom/src/loom/target/arch/amdgpu/BUILD.bazel",
         (
             "_PROVIDER_VISIBILITY = [\n    "
-            '"//loom/src/loom/tools/iree-test-loom:__pkg__",\n]\n'
+            '"//loom/src/loom/tools/loom-test:__pkg__",\n]\n'
         ),
         (),
     )

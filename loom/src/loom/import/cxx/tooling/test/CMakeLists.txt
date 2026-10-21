@@ -66,8 +66,8 @@ iree_execution_test_suite(
   MANIFESTS
     "records.test.json"
   TOOLS
-    "iree-test-loom=loom::tools::iree-test-loom"
     "loom-link=loom::tools::loom-link"
+    "loom-test=loom::tools::loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/check_records.cxx"
 )

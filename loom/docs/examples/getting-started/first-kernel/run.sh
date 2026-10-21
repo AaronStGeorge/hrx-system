@@ -35,15 +35,15 @@ output_dir="$(cd -- "${output_dir}" && pwd -P)"
 
 loom_format="${LOOM_FORMAT:-loom-format}"
 loom_compile="${LOOM_COMPILE:-loom-compile}"
-iree_benchmark_loom="${IREE_BENCHMARK_LOOM:-iree-benchmark-loom}"
+loom_benchmark="${LOOM_BENCHMARK:-loom-benchmark}"
 
 loom_example_require_tool "${loom_format}"
 loom_example_require_tool "${loom_compile}"
-loom_example_require_tool "${iree_benchmark_loom}"
+loom_example_require_tool "${loom_benchmark}"
 
 if [[ -z "${mode}" ]]; then
-  iree_test_loom="${IREE_TEST_LOOM:-iree-test-loom}"
-  loom_example_require_tool "${iree_test_loom}"
+  loom_test="${LOOM_TEST:-loom-test}"
+  loom_example_require_tool "${loom_test}"
 fi
 
 cd -- "${script_dir}"
@@ -52,7 +52,7 @@ loom_example_section "Check the authored source"
 loom_example_run_tool loom-format "${loom_format}" --check saxpy.loom
 
 loom_example_section "Plan the named benchmark workload"
-loom_example_run_tool iree-benchmark-loom "${iree_benchmark_loom}" \
+loom_example_run_tool loom-benchmark "${loom_benchmark}" \
   saxpy.loom \
   --benchmark=@saxpy_f32_64k \
   --dry-run \
@@ -68,13 +68,13 @@ loom_example_run_tool loom-compile "${loom_compile}" \
 
 if [[ -z "${mode}" ]]; then
   loom_example_section "Execute every correctness sample on AMDGPU"
-  printf '  $ iree-test-loom saxpy.loom --device=amdgpu > %q\n' \
+  printf '  $ loom-test saxpy.loom --device=amdgpu > %q\n' \
     "${output_dir}/saxpy-test.json"
-  "${iree_test_loom}" saxpy.loom --device=amdgpu \
+  "${loom_test}" saxpy.loom --device=amdgpu \
     >"${output_dir}/saxpy-test.json"
 
   loom_example_section "Benchmark the proven 64K workload"
-  loom_example_run_tool iree-benchmark-loom "${iree_benchmark_loom}" \
+  loom_example_run_tool loom-benchmark "${loom_benchmark}" \
     saxpy.loom \
     --device=amdgpu \
     --benchmark=@saxpy_f32_64k \

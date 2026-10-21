@@ -17,7 +17,7 @@ iree_native_test(
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom}}"
     "--device=task"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom"
 )
@@ -31,7 +31,7 @@ iree_native_test(
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_specializations.loom}}"
     "--device=task"
   SRC
-    loom::tools::iree-test-loom
+    loom::tools::loom-test
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_specializations.loom"
 )
@@ -173,7 +173,7 @@ iree_native_test(
     "--profile-final-batch=true"
     "--profile-data=dispatch-events"
   SRC
-    loom::tools::iree-benchmark-loom
+    loom::tools::loom-benchmark
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/scenario_compare_hal_vm.loom"
   LABELS
@@ -206,7 +206,7 @@ iree_native_test(
     "--profile-final-batch=true"
     "--profile-data=dispatch-events"
   SRC
-    loom::tools::iree-benchmark-loom
+    loom::tools::loom-benchmark
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/scenario_compare_hal_vm.loom"
   LABELS

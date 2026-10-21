@@ -1,7 +1,7 @@
 # AMDGPU Execution Corpus
 
 This package composes complete Loom cases into capability-coherent modules and
-executes them through the AMDGPU HAL with `iree-test-loom`. Generic corpus
+executes them through the AMDGPU HAL with `loom-test`. Generic corpus
 packages own target-independent semantics; this provider package owns device
 selection, architecture qualification, and physical execution.
 

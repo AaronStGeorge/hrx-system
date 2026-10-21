@@ -69,7 +69,7 @@ not select a valid case sample.
 Run the checked program directly:
 
 ```shell
-iree-test-loom saxpy.loom --device=amdgpu >saxpy-test.json
+loom-test saxpy.loom --device=amdgpu >saxpy-test.json
 ```
 
 The runner discovers `@saxpy_f32_case`, plans its six parameter assignments,
@@ -85,7 +85,7 @@ authored definition and six executions; a failure records the exact
 Select one sample while editing without changing the source:
 
 ```shell
-iree-test-loom saxpy.loom \
+loom-test saxpy.loom \
   --device=amdgpu \
   --case=@saxpy_f32_case \
   --sample=3
@@ -99,7 +99,7 @@ parameter plan rather than hidden random state.
 Measure the named 64K dispatch workload:
 
 ```shell
-iree-benchmark-loom saxpy.loom \
+loom-benchmark saxpy.loom \
   --device=amdgpu \
   --benchmark=@saxpy_f32_64k \
   --measure=dispatch_complete \
@@ -158,7 +158,7 @@ bazel test :saxpy_test
 benchmark without a device, emits and inspects the generic gfx11 deployment
 artifact, executes all correctness cases on AMDGPU, and runs every benchmark
 once with no warmups as a smoke test. Full repeated timing remains the explicit
-`iree-benchmark-loom` command above; CI should prove that the workload remains
+`loom-benchmark` command above; CI should prove that the workload remains
 correct and executable without turning shared runners into performance
 laboratories.
 

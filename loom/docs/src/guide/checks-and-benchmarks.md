@@ -97,9 +97,9 @@ reusable modules, while their sibling `test/` packages own grouped test
 modules, cases, and benchmark records. The public Bazel `loom_test` rule merges
 its `srcs`, retains all tests and benchmarks they own, and links the definitions
 they reach through `deps`. Tests and benchmarks declared by dependencies are
-not part of the resulting test module. `iree-test-loom` executes each selected
+not part of the resulting test module. `loom-test` executes each selected
 case sample once for correctness. The test then runs each benchmark through
-`iree-benchmark-loom` with one measured iteration and no warmup repetitions;
+`loom-benchmark` with one measured iteration and no warmup repetitions;
 full performance measurement remains an explicit benchmark workflow.
 
 ## Parameters define the sample space
@@ -204,7 +204,7 @@ not the oracle: checked source still states how success is decided.
 check.file.write.npy value(%output) path("nested/actual.npy") mode(always) : tensor<1024xf32>
 ```
 
-`iree-test-loom module.loom --file-output-root=artifacts` writes that value to
+`loom-test module.loom --file-output-root=artifacts` writes that value to
 `artifacts/nested/actual.npy`, creating missing parent directories. The output
 root is required only when a write is performed, so a passing case with only
 `mode(on_failure)` writes needs no root. The test tool never chooses an implicit
@@ -428,7 +428,7 @@ inputs.
 | A benchmark has a number but correctness failed | The harness timed work without enforcing the case gate. |
 
 [Test correctness](../workflows/test-correctness.md) gives the concise
-`iree-test-loom` commands for case and sample selection, devices, sanitizers,
+`loom-test` commands for case and sample selection, devices, sanitizers,
 and structured reports. [Benchmark checked work](../workflows/benchmark.md)
 covers dry-run planning, end-to-end and dispatch-completion measurement,
 interleaved comparisons, profiling, and artifact bundles.

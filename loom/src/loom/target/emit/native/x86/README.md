@@ -167,7 +167,7 @@ The shared scenario runner selects its native profile from CPU facts published
 by the task device. For example, on an x86-64 task device:
 
 ```sh
-iree-test-loom loom/src/loom/test/corpus/control/loop/scalar_state.loom --device=task
+loom-test loom/src/loom/test/corpus/control/loop/scalar_state.loom --device=task
 ```
 
 The runner compiles and executes the subject through the public task loader and compares

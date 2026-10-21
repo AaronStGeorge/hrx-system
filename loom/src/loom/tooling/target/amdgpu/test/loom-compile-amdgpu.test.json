@@ -213,7 +213,7 @@
     {
       "name": "rejects correctness execution during compile-only capture",
       "run": {
-        "tool": "iree-benchmark-loom",
+        "tool": "loom-benchmark",
         "args": [
           "{srcdir}/compile_requests.loom",
           "--compile-only",
@@ -239,7 +239,7 @@
         {
           "name": "capture",
           "run": {
-            "tool": "iree-benchmark-loom",
+            "tool": "loom-benchmark",
             "args": [
               "{srcdir}/compile_requests.loom",
               "--compile-only",

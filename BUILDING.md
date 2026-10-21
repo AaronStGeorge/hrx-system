@@ -364,7 +364,7 @@ $env:BAZEL_LLVM = 'C:\Program Files\LLVM'
 python dev.py bazel setup --venv
 python dev.py bazel configure
 python dev.py bazel build `
-  //loom/src/loom/tools/iree-run-loom `
+  //loom/src/loom/tools/loom-run `
   //loom/src/loom/tools/loom-compile `
   //loom/binding/c:loomc
 ```
@@ -376,7 +376,7 @@ Neither native command needs `--config=windows-x86_64`:
 
 ```powershell
 python dev.py bazel build `
-  //loom/src/loom/tools/iree-run-loom `
+  //loom/src/loom/tools/loom-run `
   //loom/src/loom/tools/loom-compile `
   //loom/binding/c:loomc `
   --config=windows-msvc

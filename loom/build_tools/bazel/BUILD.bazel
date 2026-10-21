@@ -13,7 +13,7 @@ package(default_visibility = ["//visibility:public"])
 # but never opens a native HAL device. Keep that exact provider set in its WASI
 # binary regardless of the developer's native build configuration.
 platform(
-    name = "iree_test_loom_wasm32_wasi",
+    name = "loom_test_wasm32_wasi",
     constraint_values = [
         "@platforms//cpu:wasm32",
         "@platforms//os:wasi",
@@ -53,10 +53,10 @@ toolchain_type(name = "test_toolchain_type")
 
 loom_tools_toolchains(
     name = "source_tools",
-    benchmark_tool = "//loom/src/loom/tools/iree-benchmark-loom",
+    benchmark_tool = "//loom/src/loom/tools/loom-benchmark",
     compile_tool = "//loom/src/loom/tools/loom-compile",
     format_tool = "//loom/src/loom/tools/loom-format",
     link_tool = "//loom/src/loom/tools/loom-link",
     lint_tool = "//loom/py/loom/tools:loom-lint",
-    test_tool = "//loom/src/loom/tools/iree-test-loom",
+    test_tool = "//loom/src/loom/tools/loom-test",
 )

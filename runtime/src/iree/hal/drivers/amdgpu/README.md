@@ -19,7 +19,7 @@ Build tools with the AMDGPU runtime driver registered and with device artifacts
 compiled for your local GPU architecture:
 
 ```sh
-iree-bazel-build //loom/src/loom/tools/iree-run-loom \
+iree-bazel-build //loom/src/loom/tools/loom-run \
   --//runtime/config/hal:drivers=amdgpu,task \
   --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx1100
 ```
@@ -52,17 +52,17 @@ Use `amdgpu` to specify devices at runtime:
 
 ```sh
 # Single logical device with all available physical devices:
-iree-run-loom --device=amdgpu --probe-hal
+loom-run --device=amdgpu --probe-hal
 # Device ordinal 0 (danger, this may change across reboots):
-iree-run-loom --device=amdgpu:0 --probe-hal
+loom-run --device=amdgpu:0 --probe-hal
 # Device with a stable UUID for a device:
-iree-run-loom --device=amdgpu://GPU-0e12865a3bf5b7ab --probe-hal
+loom-run --device=amdgpu://GPU-0e12865a3bf5b7ab --probe-hal
 # Single logical device with the two devices given by their UUIDs:
-iree-run-loom \
+loom-run \
   --device=amdgpu://GPU-0e12865a3bf5b7ab,GPU-89e8bdf59a10cf6d \
   --probe-hal
 # Single logical device with physical devices with ordinals 2 and 3:
-ROCR_VISIBLE_DEVICES=2,3 iree-run-loom \
+ROCR_VISIBLE_DEVICES=2,3 loom-run \
   --device=amdgpu --probe-hal
 ```
 
@@ -71,7 +71,7 @@ that submit independent workloads can request a fixed inventory at device
 creation:
 
 ```sh
-iree-run-loom --device='amdgpu://0?queue_count=2' --probe-hal
+loom-run --device='amdgpu://0?queue_count=2' --probe-hal
 ```
 
 `queue_count` is a positive decimal integer per selected GPU. The total across
@@ -84,7 +84,7 @@ the HAL queue-family interface.
 Compile and run a Loom kernel with the AMDGPU HAL driver:
 
 ```sh
-iree-run-loom /tmp/kernel.loom \
+loom-run /tmp/kernel.loom \
   --device=amdgpu \
   --function=main \
   --kernel-input-buffer=1024xf32=0
@@ -110,7 +110,7 @@ Then run with the Tracy provider selected:
 ```sh
 TRACY_PORT=18086 TRACY_NO_EXIT=1 build_tools/bin/iree-bazel-run --config=opt \
   --//runtime/config/base/tracing:provider=tracy \
-  //loom/src/loom/tools/iree-run-loom \
+  //loom/src/loom/tools/loom-run \
   --//runtime/config/hal:drivers=amdgpu,task \
   --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx1100 \
   -- \

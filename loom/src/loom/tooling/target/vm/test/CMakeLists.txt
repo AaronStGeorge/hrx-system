@@ -146,9 +146,9 @@ iree_execution_test_suite(
   MANIFESTS
     "vm.test.json"
   TOOLS
-    "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
-    "iree-test-loom=loom::tools::iree-test-loom"
+    "loom-benchmark=loom::tools::loom-benchmark"
     "loom-compile=loom::tools::loom-compile"
+    "loom-test=loom::tools::loom-test"
     "vm-dis=iree::tools::vm::vm-dis"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/vm/test/duplicate_exports.loom"

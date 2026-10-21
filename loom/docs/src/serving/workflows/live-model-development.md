@@ -150,9 +150,9 @@ oracle and declares `production_cut` and `production_bucket`:
 
 ```sh
 loom-format --check candidate/cut.loom
-iree-test-loom candidate/cut.loom --case=@production_cut --device=amdgpu \
+loom-test candidate/cut.loom --case=@production_cut --device=amdgpu \
   >candidate.test.json
-iree-benchmark-loom candidate/cut.loom \
+loom-benchmark candidate/cut.loom \
   --benchmark=@production_bucket --device=amdgpu \
   --measure=dispatch_complete --output=candidate.benchmark.json
 ```

@@ -69,7 +69,7 @@ iree_execution_test_suite(
         "//loom/config/execute:amdgpu_hal",
         "//loom/config/target/arch:vm",
     ]),
-    tools = {"benchmark": "//loom/src/loom/tools/iree-benchmark-loom"},
+    tools = {"benchmark": "//loom/src/loom/tools/loom-benchmark"},
 )
 
 iree_execution_test_suite(
@@ -86,7 +86,7 @@ iree_execution_test_suite(
         "//loom/config/target/arch:vm",
         "//runtime/config/hal:driver_amdgpu",
     ]),
-    tools = {"iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom"},
+    tools = {"loom-benchmark": "//loom/src/loom/tools/loom-benchmark"},
 )
 
 iree_py_test(
@@ -121,7 +121,7 @@ iree_execution_test_suite(
     tags = ["hostonly"],
     target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
     tools = {
-        "iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom",
+        "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
         "loom-compile": "//loom/src/loom/tools/loom-compile",
         "loom-compile-report": "//loom/py/loom/tools:loom-compile-report",
         "loom-format": "//loom/src/loom/tools/loom-format",
@@ -462,8 +462,8 @@ iree_execution_test_suite(
     tags = ["hostonly"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/execute:amdgpu_hal"]),
     tools = {
-        "iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom",
-        "iree-test-loom": "//loom/src/loom/tools/iree-test-loom",
+        "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
+        "loom-test": "//loom/src/loom/tools/loom-test",
     },
 )
 
@@ -478,7 +478,7 @@ iree_execution_test_suite(
     ],
     target_compatible_with = loom_config_compatible_with(["//loom/config/execute:amdgpu_hal"]),
     tools = {
-        "iree-benchmark-loom": "//loom/src/loom/tools/iree-benchmark-loom",
-        "iree-test-loom": "//loom/src/loom/tools/iree-test-loom",
+        "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
+        "loom-test": "//loom/src/loom/tools/loom-test",
     },
 )
