@@ -22,7 +22,8 @@ loom_cc_library(
     loom::binding::c::interop
     loom::binding::c::loomc
     loom::binding::c::target::amdgpu::iree_hal
-    loom::target::arch::amdgpu::profile
+    loom::target::arch::amdgpu::artifact_key
+    loom::target::arch::amdgpu::profile_types
     loom::target::arch::amdgpu::target_identity
     loom::target::arch::amdgpu::target_info_defs
     loom::tooling::execution::hal::testbench_actual

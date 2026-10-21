@@ -98,7 +98,6 @@ loom_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::check
-    loom::ops::special_values
     loom::sanitizer::options
     loom::tooling::cli::help
     loom::tooling::cli::loomc_diagnostic_json

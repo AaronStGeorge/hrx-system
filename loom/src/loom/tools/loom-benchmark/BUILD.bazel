@@ -175,7 +175,6 @@ loom_cc_library(
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
-        "//loom/src/loom/ops:special_values",
         "//loom/src/loom/ops/check",
         "//loom/src/loom/sanitizer:options",
         "//loom/src/loom/tooling/cli:help",
