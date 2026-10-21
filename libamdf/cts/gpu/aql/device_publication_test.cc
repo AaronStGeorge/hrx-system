@@ -6,12 +6,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <string>
 
 #include "libamdf/cts/gpu/aql/dispatch_fixture.h"
 #include "libamdf/cts/gpu/kernels/aql_publish.h"
 #include "libamdf/cts/gpu/kernels/aql_publish_kernels.h"
+#include "libamdf/cts/gpu/kernels/byte_copy_unaligned.h"
+#include "libamdf/cts/gpu/kernels/byte_copy_unaligned_kernels.h"
 #include "libamdf/cts/gpu/kernels/transform.h"
 #include "libamdf/cts/gpu/kernels/transform_kernels.h"
 
@@ -39,8 +42,13 @@ TEST_P(AqlDevicePublicationTest,
       kernels::aql_publish::kKernels.Find(gpu_endpoint_info_);
   const auto* transform_kernel =
       kernels::transform::kKernels.Find(gpu_endpoint_info_);
+  const auto* copy_kernel =
+      kernels::byte_copy_unaligned::kKernels.Find(gpu_endpoint_info_);
   ASSERT_NE(publish_kernel, nullptr);
   ASSERT_NE(transform_kernel, nullptr);
+  ASSERT_NE(copy_kernel, nullptr);
+  ASSERT_EQ(copy_kernel->private_segment_byte_length, 0u);
+  ASSERT_LE(copy_kernel->arguments.byte_length, 64u);
   ASSERT_EQ(publish_kernel->private_segment_byte_length, 0u);
   ASSERT_EQ(publish_kernel->workgroup_size(), 1u);
   const bool device_doorbell = GetParam() == Publication::kDeviceDoorbell;
@@ -50,25 +58,23 @@ TEST_P(AqlDevicePublicationTest,
   const amdf_memory_device_access_t attachment = {
       device_,
       {
-          .access = AMDF_MEMORY_ACCESS_READ,
+          .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
           .flags = AMDF_MEMORY_FLAG_DEVICE_ADDRESS,
       }};
   amdf_memory_create_info_t creation = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_CREATE_INFO,
       .structure_size = sizeof(creation),
       .access_count = 1,
-      .required_flags =
-          AMDF_MEMORY_FLAG_DEVICE_LOCAL | AMDF_MEMORY_FLAG_HOST_VISIBLE,
+      .required_flags = AMDF_MEMORY_FLAG_DEVICE_LOCAL,
       .byte_length = 4096,
       .minimum_alignment = 4096,
       .accesses = &attachment,
   };
   creation.memory_profile_ordinal = FindMemoryProfileOrdinal(
-      local_scope_,
-      AMDF_MEMORY_PROFILE_ROLE_CREATE | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP,
-      creation.required_flags, attachment.requirements);
+      local_scope_, AMDF_MEMORY_PROFILE_ROLE_CREATE, creation.required_flags,
+      attachment.requirements);
   if (creation.memory_profile_ordinal == AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN) {
-    GTEST_SKIP() << "GPU has no host-visible local program profile";
+    GTEST_SKIP() << "GPU has no local program profile";
   }
   GpuMemory* program = nullptr;
   ASSERT_NO_FATAL_FAILURE(CreateMemory(local_scope_, creation, &program));
@@ -124,6 +130,9 @@ TEST_P(AqlDevicePublicationTest,
   if (!device_doorbell) {
     consumer_index = producer_index;
   }
+  uint64_t copy_descriptor = 0;
+  ASSERT_NO_FATAL_FAILURE(PublishKernel(*consumer, *copy_kernel, "upload",
+                                        &consumer_index, &copy_descriptor));
 
   constexpr uint32_t kWordCount = 1024;
   constexpr uint32_t kGuard = 0xa59c710fu;
@@ -148,9 +157,37 @@ TEST_P(AqlDevicePublicationTest,
       transform_kernel->group_segment_byte_length, target_descriptor,
       arguments->device_address + 64,
       completion->device_address + sizeof(aql::Signal));
-  std::memcpy(program->host.pointer, target.data(), sizeof(target));
-  ASSERT_NO_FATAL_FAILURE(program->TransferHostCache(
-      api_, family_.ordinal, AMDF_HOST_CACHE_OPERATION_FLUSH));
+  // CPU visibility of local memory does not imply a host cache-publication
+  // path. Upload through the GPU from coherent system staging instead.
+  constexpr uint32_t kUploadOffset = 1024;
+  const uint16_t copy_width = copy_kernel->workgroup_size();
+  const kernels::byte_copy_unaligned::Arguments copy_arguments = {
+      control->device_address + kUploadOffset,
+      program->device_address,
+      sizeof(target),
+      copy_width,
+      1,
+      copy_width};
+  std::memcpy(static_cast<uint8_t*>(control->host.pointer) + kUploadOffset,
+              target.data(), sizeof(target));
+  std::memcpy(
+      argument_bytes + 128, &copy_arguments,
+      offsetof(kernels::byte_copy_unaligned::Arguments, workgroup_size_x) +
+          sizeof(uint32_t));
+  signals[0].value = 1;
+  const auto upload = aql::Dispatch(
+      aql::HeaderBarrier::kDisabled,
+      {1, {copy_width, 1, 1}, {copy_width, 1, 1}},
+      copy_kernel->private_segment_byte_length,
+      copy_kernel->group_segment_byte_length, copy_descriptor,
+      arguments->device_address + 128, completion->device_address);
+  GpuStoreRelease(consumer->host.write_index_address, consumer_index + 1);
+  ASSERT_TRUE(aql::Publish(*consumer, consumer_index++, upload));
+  ASSERT_NO_FATAL_FAILURE(
+      WaitCompletionAndConsumption(*consumer, signals[0], consumer_index));
+  if (!device_doorbell) {
+    producer_index = consumer_index;
+  }
 
   const uint64_t capacity =
       consumer->host.ring_byte_length / sizeof(aql::Packet);
