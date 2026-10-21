@@ -10,7 +10,7 @@
 #define LOOM_TOOLS_LOOM_BENCHMARK_CONFIGURATION_H_
 
 #include "iree/base/api.h"
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 #include "loom/tooling/input/loomc.h"
 #include "loom/tooling/testbench/compiled_provider.h"
 #include "loom/tooling/testbench/requirements.h"
@@ -40,8 +40,8 @@ typedef struct loom_benchmark_populate_requirement_providers_callback_t {
 } loom_benchmark_populate_requirement_providers_callback_t;
 
 typedef struct loom_benchmark_configuration_t {
-  // Borrowed optional source importers selected by the final application.
-  loom_input_provider_list_t input_providers;
+  // Borrowed optional source formats selected by the final application.
+  loom_input_format_list_t input_formats;
   // Null-terminated executable name used in help and diagnostics.
   const char* tool_name;
   // Public target environment composed from linked compiler providers.

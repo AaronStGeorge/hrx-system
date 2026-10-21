@@ -112,8 +112,8 @@ loom_cc_library(
     loom::tooling::execution::hal::runtime
     loom::tooling::execution::hal::scenario_profile
     loom::tooling::execution::hal::testbench_actual
-    loom::tooling::input
     loom::tooling::input::flags
+    loom::tooling::input::format
     loom::tooling::input::loomc
     loom::tooling::io::file
     loom::tooling::testbench
@@ -311,7 +311,6 @@ loom_cc_binary(
     loom::binding::c::loomc
     loom::binding::c::target::configured
     loom::tooling::execution::hal::testbench_actual
-    loom::tooling::input::configured
     loom::tooling::input::loomc_configured
     ${_loom_benchmark_platform_deps}
 )

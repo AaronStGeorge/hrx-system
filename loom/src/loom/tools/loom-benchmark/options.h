@@ -14,7 +14,7 @@
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "loom/sanitizer/options.h"
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 #include "loom/util/stream.h"
 
 #ifdef __cplusplus

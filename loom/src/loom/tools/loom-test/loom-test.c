@@ -10,7 +10,6 @@
 #include <stdio.h>
 
 #include "loom/tooling/execution/hal/testbench_actual.h"
-#include "loom/tooling/input/configured.h"
 #include "loom/tooling/input/loomc_configured.h"
 #include "loom/tools/loom-test/main.h"
 #include "loomc/iree.h"
@@ -165,7 +164,7 @@ int main(int argc, char** argv) {
   };
 #endif  // LOOM_TEST_HAVE_ANY_DEVICE_PROVIDER
   loom_test_configuration_t configuration = {
-      .input_providers = loom_configured_input_providers(),
+      .input_formats = loom_configured_input_loomc_formats(),
       .tool_name = "loom-test",
       .target_environment = target_environment,
       .import = loom_configured_input_loomc_importer(),
