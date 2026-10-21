@@ -551,6 +551,7 @@ loom_cc_library(
     "stages.h"
     "state.h"
     "variant.h"
+    "warmup.h"
   SRCS
     "control.c"
     "epoch_plan.c"
@@ -560,6 +561,7 @@ loom_cc_library(
     "stages.c"
     "state.c"
     "variant.c"
+    "warmup.c"
   DEPS
     ::capture
     ::chat
@@ -568,6 +570,7 @@ loom_cc_library(
     iree::async
     iree::async::util::proactor_pool
     iree::base
+    iree::base::threading
     iree::hal
     iree::module::hal::types
     iree::tokenizer

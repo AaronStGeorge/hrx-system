@@ -470,6 +470,7 @@ loom_cc_library(
         "stages.c",
         "state.c",
         "variant.c",
+        "warmup.c",
     ],
     hdrs = [
         "control.h",
@@ -481,6 +482,7 @@ loom_cc_library(
         "stages.h",
         "state.h",
         "variant.h",
+        "warmup.h",
     ],
     deps = [
         ":capture",
@@ -514,6 +516,7 @@ loom_cc_library(
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/module/hal:types",
         "//runtime/src/iree/tokenizer",

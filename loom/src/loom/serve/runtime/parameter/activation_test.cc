@@ -150,6 +150,60 @@ TEST_P(ActivationTest, FailedReadinessJoinsTheCallbackAndPreservesFailure) {
   activation_ = nullptr;
 }
 
+TEST_P(ActivationTest, CompletedReadinessNotifiesReplacementObserver) {
+  IREE_ASSERT_OK(loom_serve_activation_advance(activation_, 0, &phase_));
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
+  AwaitWake();
+  // Detachment joins the old callback. Its payload can now be replaced even
+  // though the owner has not consumed the completed operation yet.
+  loom_serve_activation_set_observer(activation_, nullptr, nullptr);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ready_ = false;
+  }
+  loom_serve_activation_set_observer(activation_, Wake, this);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    EXPECT_TRUE(ready_);
+  }
+  IREE_ASSERT_OK(loom_serve_activation_advance(activation_, 0, &phase_));
+  EXPECT_EQ(phase_, LOOM_SERVE_ACTIVATION_COMPLETE);
+}
+
+TEST_P(ActivationTest, PendingReadinessUsesReplacementObserver) {
+  IREE_ASSERT_OK(loom_serve_activation_advance(activation_, 0, &phase_));
+  loom_serve_activation_set_observer(activation_, nullptr, nullptr);
+  struct Observer {
+    // Synchronizes the replacement owner's completion predicate.
+    std::mutex mutex;
+    // Wakes the outer test thread, never a task worker.
+    std::condition_variable condition;
+    // Published only by the new observer, under its mutex.
+    bool ready = false;
+  } observer;
+  loom_serve_activation_set_observer(
+      activation_,
+      [](void* payload) {
+        auto* observer = static_cast<Observer*>(payload);
+        std::lock_guard<std::mutex> lock(observer->mutex);
+        observer->ready = true;
+        observer->condition.notify_one();
+      },
+      &observer);
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
+  {
+    std::unique_lock<std::mutex> lock(observer.mutex);
+    observer.condition.wait(lock, [&observer] { return observer.ready; });
+  }
+  loom_serve_activation_set_observer(activation_, nullptr, nullptr);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    EXPECT_FALSE(ready_);
+  }
+  IREE_ASSERT_OK(loom_serve_activation_advance(activation_, 0, &phase_));
+  EXPECT_EQ(phase_, LOOM_SERVE_ACTIVATION_COMPLETE);
+}
+
 INSTANTIATE_TEST_SUITE_P(Workers, ActivationTest, ::testing::Values(1u, 4u));
 
 }  // namespace

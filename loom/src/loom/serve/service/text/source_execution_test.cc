@@ -41,7 +41,9 @@ TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
     loom_serve_text_load_free(load);
     const auto parameters =
         loom_serve_residency_snapshot(loom_serve_text_model_residency(model));
-    EXPECT_EQ(parameters.active, flags != 0);
+    // Warmup owns an independent invocation. Preparation does not import its
+    // weight-ready dependency into the mutable-state execution timeline.
+    EXPECT_FALSE(parameters.active);
     EXPECT_EQ(parameters.pin_count, 0u);
     EXPECT_EQ(parameters.activity.activations, flags ? 1u : 0u);
     auto* row = loom_serve_text_model_row(model, 0);
@@ -51,6 +53,9 @@ TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
     reference.Consume("a");
     EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
     EXPECT_EQ(loom_serve_text_model_weight_activity(model).activations, 1u);
+    loom_serve_text_warmup_poll(loom_serve_text_model_warmup(model));
+    IREE_ASSERT_OK(
+        loom_serve_text_warmup_status(loom_serve_text_model_warmup(model)));
     IREE_ASSERT_OK(loom_serve_text_model_free(model));
     iree_notification_deinitialize(&notification);
     const auto after = loom_serve_device_memory_statistics(device_);
