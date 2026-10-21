@@ -285,6 +285,42 @@ typedef iree_status_t (*loom_serve_text_state_admit_fn_t)(
     uint64_t value, loom_serve_memory_admission_t* out_admission,
     loom_serve_memory_operation_t** out_operation);
 
+// A prepared continuation owns its selected logical IDs without changing the
+// row, mapping backing, or submitting work. The row and optional checkpoint
+// remain borrowed and immutable until submission or cancellation; other rows
+// may execute, but state compaction waits for prepared continuations to retire.
+typedef struct loom_serve_text_state_reservation_t
+    loom_serve_text_state_reservation_t;
+
+// Uses the same KV/COW planner as immediate reservation. NULL means logical-ID
+// capacity is unavailable; no row/checkpoint changes or device work occur.
+// The caller supplies the validated extent and a successfully retired row.
+iree_status_t loom_serve_text_state_row_prepare_reserve(
+    loom_serve_text_state_row_t* row, loom_serve_text_reserve_mode_t mode,
+    loom_serve_text_state_checkpoint_t* checkpoint, iree_host_size_t extent,
+    loom_serve_text_state_reservation_t** out_reservation);
+
+// Exact source-described backing union, borrowed through reservation lifetime.
+// These ranges describe the continuation, not a second estimate or admission.
+const loom_serve_memory_range_t* loom_serve_text_state_reservation_ranges(
+    const loom_serve_text_state_reservation_t* reservation,
+    iree_host_size_t* out_count);
+
+// Commits the prepared union and installs its selected IDs on success. Denial
+// keeps the plan intact for retry. The owner excludes concurrent state edits
+// and joins prior backing work before submission. Native failure is terminal;
+// state keeps any installed ownership through ordinary retirement.
+iree_status_t loom_serve_text_state_reservation_submit(
+    loom_serve_text_state_reservation_t* reservation,
+    loom_serve_text_state_admit_fn_t admit, void* user_data,
+    loom_serve_memory_admission_t* out_admission);
+
+// Before submission, returns the prepared logical ownership without changing
+// the row/checkpoint. After successful submission, only host planning storage
+// remains here; the row/checkpoint retain accepted device work. NULL is valid.
+void loom_serve_text_state_reservation_free(
+    loom_serve_text_state_reservation_t* reservation);
+
 // Starts at a successfully retired row boundary.
 // Extent and starting frontier have passed model validation. Denial changes no
 // selected row or checkpoint contents/ownership. Success installs ownership

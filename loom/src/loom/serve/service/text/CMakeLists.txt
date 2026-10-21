@@ -203,8 +203,15 @@ loom_cc_library(
     checkpoint_tests
   SRCS
     "checkpoint_test.cc"
+    "state_reservation_test.cc"
   DEPS
+    ::model
     ::source_service_fixture
+    iree::base
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::host
+    loom::serve::runtime::storage::memory
   TESTONLY
   ALWAYSLINK
   PUBLIC
