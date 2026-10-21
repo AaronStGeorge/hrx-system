@@ -9,9 +9,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
-from loom.dsl import FuncLikeInterface
+from loom.dsl import ATTR_TYPE_FLAGS, AttrDef, EnumCase, FuncLikeInterface
+
+
+@dataclass(frozen=True, slots=True)
+class InstanceFlagsDescriptor:
+    """Wire projection for one operation's descriptor-backed flag field."""
+
+    attr_def: AttrDef
+    bit_cases: tuple[EnumCase, ...]
+    mask: int
 
 
 def default_op_decls() -> tuple[Any, ...]:
@@ -75,6 +85,86 @@ def build_op_decl_map(op_decls: Iterable[Any] | None = None) -> dict[str, Any]:
     for op_decl in default_op_decls() if op_decls is None else op_decls:
         result[op_decl.name] = op_decl
     return result
+
+
+def build_instance_flags_descriptor_map(
+    op_decls_by_name: Mapping[str, Any],
+) -> dict[str, InstanceFlagsDescriptor]:
+    """Return the byte-backed flags field declared by each operation."""
+    result: dict[str, InstanceFlagsDescriptor] = {}
+    for op_name, op_decl in op_decls_by_name.items():
+        flag_attrs = tuple(
+            attr_def
+            for attr_def in getattr(op_decl, "attrs", ())
+            if attr_def.attr_type == ATTR_TYPE_FLAGS
+        )
+        if len(flag_attrs) > 1:
+            raise ValueError(
+                f"operation {op_name!r} declares multiple instance-flags fields"
+            )
+        if not flag_attrs:
+            continue
+
+        attr_def = flag_attrs[0]
+        enum_def = attr_def.enum_def
+        if enum_def is None:
+            raise ValueError(
+                f"operation {op_name!r} instance-flags field "
+                f"{attr_def.name!r} has no enum declaration"
+            )
+        bit_cases = tuple(
+            sorted(
+                (
+                    case
+                    for case in enum_def.cases
+                    if case.value and (case.value & (case.value - 1)) == 0
+                ),
+                key=lambda case: case.value,
+            )
+        )
+        mask = 0
+        for case in bit_cases:
+            mask |= case.value
+        for case in enum_def.cases:
+            unknown_bits = case.value & ~mask
+            if unknown_bits:
+                raise ValueError(
+                    f"operation {op_name!r} instance flag {case.keyword!r} "
+                    f"contains bits 0x{unknown_bits:02x} without individual "
+                    "spellings"
+                )
+        result[op_name] = InstanceFlagsDescriptor(attr_def, bit_cases, mask)
+    return result
+
+
+def encode_instance_flags(descriptor: InstanceFlagsDescriptor, value: Any) -> int:
+    """Encode a symbolic flags field into its canonical wire bitset."""
+    if not isinstance(value, str) or not value:
+        raise TypeError(
+            f"instance-flags field {descriptor.attr_def.name!r} must be a "
+            f"non-empty string, got {value!r}"
+        )
+    enum_def = descriptor.attr_def.enum_def
+    assert enum_def is not None
+    flags = 0
+    for keyword in value.split("|"):
+        flags |= enum_def.case(keyword).value
+    return flags
+
+
+def decode_instance_flags(
+    descriptor: InstanceFlagsDescriptor, flags: int
+) -> str | None:
+    """Decode wire bits into stable individual flag spellings."""
+    unknown_bits = flags & ~descriptor.mask
+    if unknown_bits:
+        raise ValueError(
+            f"instance-flags field {descriptor.attr_def.name!r} contains "
+            f"undeclared bits 0x{unknown_bits:02x}"
+        )
+    if flags == 0:
+        return None
+    return "|".join(case.keyword for case in descriptor.bit_cases if flags & case.value)
 
 
 def build_parameterized_attr_def_map(

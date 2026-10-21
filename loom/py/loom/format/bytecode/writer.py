@@ -28,7 +28,9 @@ from loom.format.block_order import ordered_blocks
 from loom.format.bytecode.encoding import ByteBuffer
 from loom.format.bytecode.op_decls import (
     attr_def_for_op,
+    build_instance_flags_descriptor_map,
     build_op_decl_map,
+    encode_instance_flags,
     func_like_interface_for_op,
     symbol_def_for_op,
 )
@@ -357,6 +359,9 @@ class BytecodeWriter:
         self._module = module
         self._location_mode = location_mode
         self._op_decls_by_name = build_op_decl_map(op_decls)
+        self._instance_flags_by_op = build_instance_flags_descriptor_map(
+            self._op_decls_by_name
+        )
         self._ctx = NumberingContext()
         # Indexed binding facts for each reachable type/attribute graph node.
         self._binding_facts: dict[int, bool] = {}
@@ -683,7 +688,13 @@ class BytecodeWriter:
             self._number_type(value.type)
 
         # Attributes.
+        flags_descriptor = self._instance_flags_by_op.get(op.name)
+        flags_attr_name = (
+            flags_descriptor.attr_def.name if flags_descriptor is not None else None
+        )
         for key, value in op.attributes.items():
+            if key == flags_attr_name:
+                continue
             self._ctx.intern_string(key)
             self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
@@ -1405,7 +1416,19 @@ class BytecodeWriter:
     ) -> None:
         """Write a single operation."""
         buf.write_varint(self._ctx.ops[op.name] + 1)
-        buf.write_u8(0)  # flags
+        flags_descriptor = self._instance_flags_by_op.get(op.name)
+        flags_attr_name = (
+            flags_descriptor.attr_def.name if flags_descriptor is not None else None
+        )
+        instance_flags = 0
+        if flags_attr_name is not None and flags_attr_name in op.attributes:
+            try:
+                instance_flags = encode_instance_flags(
+                    flags_descriptor, op.attributes[flags_attr_name]
+                )
+            except (TypeError, ValueError) as exc:
+                raise type(exc)(f"operation {op.name!r} {exc}") from exc
+        buf.write_u8(instance_flags)
         location_id = (
             0 if self._location_mode == LOCATION_MODE_NO_LOCATIONS else op.location_id
         )
@@ -1463,10 +1486,15 @@ class BytecodeWriter:
             buf.write_varint(tied.operand_index)
 
         # Attributes.
-        buf.write_varint(len(op.attributes))
+        payload_attrs = [
+            (key, value)
+            for key, value in op.attributes.items()
+            if key != flags_attr_name
+        ]
+        buf.write_varint(len(payload_attrs))
         # Operation attributes are canonicalized at IR construction time, so
         # emit the stored order directly.
-        for key, value in op.attributes.items():
+        for key, value in payload_attrs:
             buf.write_varint(self._ctx.strings[key])
             self._write_attr_value(
                 buf,
