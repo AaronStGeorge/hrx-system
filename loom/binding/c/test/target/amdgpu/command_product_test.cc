@@ -439,6 +439,100 @@ INSTANTIATE_TEST_SUITE_P(
                                          CommandSource::kModule),
                        ::testing::Bool()));
 
+class AmdgpuCommandTargetLivenessTest
+    : public ::testing::TestWithParam<CommandSource> {
+ protected:
+  void SetUp() override {
+    target_environment_ = CreateAmdgpuTargetEnvironment();
+    context_ = CreateAmdgpuContext(target_environment_.get());
+    workspace_ = CreateWorkspace();
+    profile_ = CreateTargetProfile(target_environment_.get(), "gfx942");
+    source_ = CreateCommandProfileSource("conditional_target.loom");
+    ASSERT_NE(source_, nullptr);
+    if (GetParam() != CommandSource::kText) {
+      ModulePtr module =
+          DeserializeModule(context_.get(), workspace_.get(), source_.get());
+      source_ = SerializeModule(module.get(), LOOMC_SOURCE_FORMAT_BYTECODE);
+    }
+    index_ = CreateLinkIndex(context_.get(), source_.get());
+  }
+
+  void Build(const char* use_rdna, KernelRequestCapture* capture,
+             ProductPtr* out_product, ResultPtr* out_result) {
+    const loomc_config_binding_t config_binding = {
+        .key = loomc_make_cstring_view("test.use_rdna"),
+        .value = loomc_make_cstring_view(use_rdna),
+    };
+    const loomc_cmd_program_product_options_t options = {
+        .link_index = index_.get(),
+        .flags = LOOMC_CMD_PROGRAM_PRODUCT_FLAG_INCLUDE_INPUT_EXPORTS,
+        .config =
+            {
+                .bindings = &config_binding,
+                .binding_count = 1,
+                .flags = LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED,
+            },
+        .target_profile = profile_.get(),
+        .request_sink = {CaptureKernelRequest, capture},
+    };
+    loomc_product_t* product = nullptr;
+    loomc_result_t* result = nullptr;
+    LOOMC_ASSERT_OK(BuildCommandProduct(context_.get(), workspace_.get(),
+                                        source_.get(), options, GetParam(),
+                                        &product, &result));
+    out_product->reset(product);
+    out_result->reset(result);
+  }
+
+  TargetEnvironmentPtr target_environment_;
+  ContextPtr context_;
+  WorkspacePtr workspace_;
+  TargetProfilePtr profile_;
+  SourcePtr source_;
+  LinkIndexPtr index_;
+};
+
+TEST_P(AmdgpuCommandTargetLivenessTest,
+       IgnoresIncompatibleKernelRemovedBySpecialization) {
+  KernelRequestCapture capture;
+  ProductPtr product;
+  ResultPtr result;
+  Build("0", &capture, &product, &result);
+  ExpectSucceededResult(result.get());
+  ASSERT_NE(product.get(), nullptr);
+  ASSERT_EQ(capture.requests.size(), 1u);
+  ASSERT_EQ(loomc_request_binding_count(capture.requests[0].get()), 1u);
+
+  loomc_request_binding_t request_binding = {};
+  ASSERT_TRUE(
+      loomc_request_binding_at(capture.requests[0].get(), 0, &request_binding));
+  loomc_cmd_entry_requirement_t requirement = {};
+  ASSERT_TRUE(loomc_cmd_program_product_entry_requirement_at(
+      product.get(), request_binding.requirement_ordinal, &requirement));
+  EXPECT_EQ(ToString(requirement.symbol), "write_cdna");
+}
+
+TEST_P(AmdgpuCommandTargetLivenessTest,
+       RejectsIncompatibleKernelRetainedBySpecialization) {
+  KernelRequestCapture capture;
+  ProductPtr product;
+  ResultPtr result;
+  Build("1", &capture, &product, &result);
+  EXPECT_EQ(product, nullptr);
+  ASSERT_NE(result, nullptr);
+  EXPECT_FALSE(loomc_result_succeeded(result.get()));
+  EXPECT_TRUE(capture.requests.empty());
+  ASSERT_EQ(loomc_result_diagnostic_count(result.get()), 1u);
+  EXPECT_EQ(ToString(loomc_result_diagnostic_at(result.get(), 0)->code),
+            "TARGET/052");
+}
+
+INSTANTIATE_TEST_SUITE_P(ProductAdmissionPaths, AmdgpuCommandTargetLivenessTest,
+                         ::testing::Values(CommandSource::kText,
+                                           CommandSource::kBytecode,
+                                           CommandSource::kRequest,
+                                           CommandSource::kModule));
+
 class AmdgpuCommandTargetPolicyTest
     : public ::testing::TestWithParam<CommandSource> {};
 

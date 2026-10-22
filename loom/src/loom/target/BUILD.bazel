@@ -172,8 +172,11 @@ loom_cc_library(
     srcs = ["module_specialization.c"],
     hdrs = ["module_specialization.h"],
     deps = [
+        ":facts",
         ":function_version_projection",
+        ":profile",
         ":specialization",
+        "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",

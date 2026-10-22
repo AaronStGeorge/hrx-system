@@ -333,7 +333,8 @@ static void RunProgramPlanBenchmark(benchmark::State& state,
     loom_cmd_program_plan_t program_plan = {};
     CheckStatus(loom_cmd_program_plan_build_from_materialization(
         &materialization, &root_ref, /*program_count=*/1,
-        /*kernel_source=*/nullptr, loom_pass_builtin_registry(),
+        /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+        loom_pass_builtin_registry(),
         loom_cleanup_configured_pattern_provider_set(),
         /*diagnostic_emitter=*/{}, fixture.block_pool(), &valid, &program_plan,
         iree_allocator_system()));

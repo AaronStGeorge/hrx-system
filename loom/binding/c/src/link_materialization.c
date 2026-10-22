@@ -345,12 +345,17 @@ static iree_status_t loomc_link_materialization_prepare_module(
       .user_data = &capture,
   };
   if (deployment_profile != NULL) {
-    status =
-        loomc_status_from_iree(loom_target_specialize_module_deployment_entries(
-            target_environment,
-            loomc_target_profile_loom_target_profile(deployment_profile),
-            diagnostic_emitter, block_pool, allocator, inout_module,
-            &error_count));
+    const loom_target_profile_t* profile =
+        loomc_target_profile_loom_target_profile(deployment_profile);
+    status = loomc_status_from_iree(
+        state->specialization.deployment_phase ==
+                LOOMC_LINK_DEPLOYMENT_SPECIALIZATION_PHASE_COMMAND_PROJECTION
+            ? loom_target_specialize_module_command_projection_entries(
+                  target_environment, profile, diagnostic_emitter, block_pool,
+                  allocator, inout_module, &error_count)
+            : loom_target_specialize_module_deployment_entries(
+                  target_environment, profile, diagnostic_emitter, block_pool,
+                  allocator, inout_module, &error_count));
   } else {
     iree_arena_allocator_t arena;
     iree_arena_initialize(block_pool, &arena);
@@ -386,6 +391,55 @@ static iree_status_t loomc_link_materialization_prepare_module(
   loomc_result_set_status_code(state->diagnostics.result,
                                LOOMC_STATUS_FAILED_PRECONDITION);
   return iree_status_from_code(IREE_STATUS_INVALID_ARGUMENT);
+}
+
+iree_status_t loomc_link_materialization_validate_command_kernel_entries(
+    void* user_data, loom_module_t* module,
+    const loom_symbol_ref_t* kernel_refs, iree_host_size_t kernel_count,
+    bool* out_valid) {
+  IREE_ASSERT_ARGUMENT(user_data);
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(kernel_refs || kernel_count == 0);
+  IREE_ASSERT_ARGUMENT(out_valid);
+  *out_valid = false;
+  loomc_link_materialization_state_t* state =
+      (loomc_link_materialization_state_t*)user_data;
+  const loomc_target_profile_t* deployment_profile =
+      state->specialization.deployment_profile;
+  if (deployment_profile == NULL) {
+    *out_valid = true;
+    return iree_ok_status();
+  }
+
+  const loom_target_environment_t* target_environment =
+      loomc_target_environment_loom_target_environment(
+          loomc_context_target_environment(state->composition.context));
+  const loomc_target_pass_environment_t* pass_environment =
+      loomc_context_target_pass_environment(state->composition.context);
+  loomc_diagnostic_capture_t capture;
+  loomc_diagnostic_capture_initialize(
+      state->diagnostics.result, /*source=*/NULL, module,
+      (loom_source_resolver_t){0}, LOOM_EMITTER_PASS,
+      pass_environment ? &pass_environment->diagnostic_type_print_options
+                       : NULL,
+      &capture);
+  const iree_diagnostic_emitter_t diagnostic_emitter = {
+      .fn = loomc_diagnostic_capture_emission,
+      .user_data = &capture,
+  };
+  uint32_t error_count = 0;
+  IREE_RETURN_IF_ERROR(loom_target_validate_module_deployment_kernel_entry_refs(
+      target_environment, module, kernel_refs, kernel_count,
+      loomc_target_profile_loom_target_profile(deployment_profile),
+      diagnostic_emitter,
+      loomc_workspace_block_pool(state->composition.workspace), &error_count));
+  if (error_count != 0) {
+    loomc_result_set_status_code(state->diagnostics.result,
+                                 LOOMC_STATUS_FAILED_PRECONDITION);
+    return iree_ok_status();
+  }
+  *out_valid = true;
+  return iree_ok_status();
 }
 
 void loomc_link_materialization_state_initialize(

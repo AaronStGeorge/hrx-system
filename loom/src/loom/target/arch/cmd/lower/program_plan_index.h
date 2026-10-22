@@ -36,6 +36,10 @@ typedef struct loom_cmd_program_plan_index_options_t {
     void* user_data;
   } verification;
 
+  // Optional validation of the exact kernel entries retained by command
+  // normalization. This runs before any kernel request is published.
+  loom_cmd_program_live_kernel_entry_validator_t live_kernel_entry_validator;
+
   // Sink enabling indexed and generated kernel request publication. A NULL
   // callback permits body-blind plans whose launch counts are already directly
   // or statically representable; storage-backed launch arithmetic requires a
@@ -51,6 +55,7 @@ static inline void loom_cmd_program_plan_index_options_initialize(
     loom_cmd_program_plan_index_options_t* options) {
   *options = (loom_cmd_program_plan_index_options_t){
       /*.verification=*/{},
+      /*.live_kernel_entry_validator=*/{},
       /*.kernel_request_sink=*/{},
       /*.kernel_class_collection=*/
       loom_kernel_class_collection_options_default(),

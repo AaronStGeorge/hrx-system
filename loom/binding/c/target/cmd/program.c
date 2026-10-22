@@ -641,6 +641,14 @@ static loomc_status_t loomc_cmd_program_product_build_indexed(
   loom_cmd_program_plan_index_options_initialize(&plan_options);
   plan_options.verification.fn = loomc_cmd_program_product_verify_module;
   plan_options.verification.user_data = &invocation;
+  loomc_link_materialization_state_t* materialization_state =
+      (loomc_link_materialization_state_t*)
+          materialization_environment->user_data;
+  if (materialization_state->specialization.deployment_profile != NULL) {
+    plan_options.live_kernel_entry_validator.fn =
+        loomc_link_materialization_validate_command_kernel_entries;
+    plan_options.live_kernel_entry_validator.user_data = materialization_state;
+  }
   if (request_sink.publish != NULL) {
     plan_options.kernel_request_sink = (loom_cmd_program_kernel_request_sink_t){
         .publish = loomc_cmd_program_product_publish_kernel_request,
@@ -740,6 +748,8 @@ loomc_status_t loomc_cmd_program_product_build(
         &scratch_arena, allocator, &materialization_state);
     materialization_state.specialization.deployment_profile =
         options->target_profile;
+    materialization_state.specialization.deployment_phase =
+        LOOMC_LINK_DEPLOYMENT_SPECIALIZATION_PHASE_COMMAND_PROJECTION;
     const loom_link_plan_materialization_environment_t
         materialization_environment =
             loomc_link_materialization_state_environment(
@@ -832,6 +842,8 @@ loomc_status_t loomc_cmd_program_product_build_module(
         result, &scratch_arena, allocator, &materialization_state);
     materialization_state.specialization.deployment_profile =
         options->target_profile;
+    materialization_state.specialization.deployment_phase =
+        LOOMC_LINK_DEPLOYMENT_SPECIALIZATION_PHASE_COMMAND_PROJECTION;
     const loom_link_plan_materialization_environment_t
         materialization_environment =
             loomc_link_materialization_state_environment(
@@ -897,6 +909,8 @@ loomc_status_t loomc_cmd_program_product_build_request(
         allocator, &materialization_state);
     materialization_state.specialization.deployment_profile =
         options->target_profile;
+    materialization_state.specialization.deployment_phase =
+        LOOMC_LINK_DEPLOYMENT_SPECIALIZATION_PHASE_COMMAND_PROJECTION;
     const loom_link_plan_materialization_environment_t
         materialization_environment =
             loomc_link_materialization_state_environment(

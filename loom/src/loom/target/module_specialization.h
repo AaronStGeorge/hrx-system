@@ -53,6 +53,37 @@ iree_status_t loom_target_specialize_module_deployment_entries(
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_module_t** inout_module, uint32_t* out_error_count);
 
+// Specializes the deployment entries needed to normalize a command program.
+//
+// Declaration-targeted functions, targetless kernel entries, and concrete
+// kernel entries compatible with |target_profile| are specialized exactly as
+// in loom_target_specialize_module_deployment_entries. A concrete kernel entry
+// incompatible with the profile remains in its authored target context because
+// command specialization may remove every launch reaching it. Callers must
+// pair this with loom_target_validate_module_deployment_kernel_entry_refs after
+// command normalization and before publishing kernel requests.
+iree_status_t loom_target_specialize_module_command_projection_entries(
+    const loom_target_environment_t* environment,
+    const loom_target_profile_t* target_profile,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_module_t** inout_module, uint32_t* out_error_count);
+
+// Validates live command-projection kernel entries against |target_profile|.
+//
+// |kernel_refs| names distinct live kernel entries retained after command
+// normalization. Concrete target incompatibilities deferred by
+// loom_target_specialize_module_command_projection_entries emit the canonical
+// target-specialization diagnostic and increment |out_error_count|. Compatible
+// entries require no second specialization. Allocation and diagnostic sink
+// failures return a status.
+iree_status_t loom_target_validate_module_deployment_kernel_entry_refs(
+    const loom_target_environment_t* environment, loom_module_t* module,
+    const loom_symbol_ref_t* kernel_refs, iree_host_size_t kernel_count,
+    const loom_target_profile_t* target_profile,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    iree_arena_block_pool_t* block_pool, uint32_t* out_error_count);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
