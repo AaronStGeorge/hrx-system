@@ -42,6 +42,10 @@ class ValueRefsTest : public ::testing::Test {
     const loom_op_vtable_t* const* vtables = loom_test_dialect_vtables(&count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_TEST, vtables, static_cast<uint16_t>(count)));
+    IREE_ASSERT_OK(loom_context_register_parameterized_types(
+        &context_, LOOM_DIALECT_TEST,
+        loom_test_type_registry_parameterized_descriptors,
+        loom_test_type_registry_parameterized_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("references"),
                                         &pool_, nullptr,

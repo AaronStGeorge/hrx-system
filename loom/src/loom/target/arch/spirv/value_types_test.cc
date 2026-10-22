@@ -21,6 +21,10 @@ class SpirvValueTypesTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_context_register_parameterized_types(
+        &context_, LOOM_DIALECT_SPIRV,
+        loom_spirv_type_registry_parameterized_descriptors,
+        loom_spirv_type_registry_parameterized_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,

@@ -13,9 +13,132 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/test/types.h"
+#include "loom/ops/type_registry.h"
 
 namespace loom {
 namespace {
+
+class GeneratedTypeConstructionTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    schema_ = loom_channel_type_parameterized_descriptor;
+    descriptor_ = *schema_.type_descriptor;
+    schema_.type_descriptor = &descriptor_;
+    descriptor_.parameterized = &schema_;
+    unkeyed_descriptor_ = descriptor_;
+    unkeyed_schema_ = schema_;
+    unkeyed_schema_.kind = LOOM_PARAMETERIZED_TYPE_KIND_NONE;
+    unkeyed_descriptor_.parameterized = &unkeyed_schema_;
+    unkeyed_schema_.type_descriptor = &unkeyed_descriptor_;
+    families_[0] = &schema_;
+    families_[1] = &loom_read_type_parameterized_descriptor;
+    families_[2] = &loom_write_type_parameterized_descriptor;
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_context_register_parameterized_types(
+        &context_, LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, families_,
+        IREE_ARRAYSIZE(families_)));
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
+    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("types"), &pool_,
+                                        nullptr, iree_allocator_system(),
+                                        &module_));
+    IREE_ASSERT_OK(loom_module_intern_type_id(
+        module_, loom_type_scalar(LOOM_SCALAR_TYPE_F16), &payload_));
+  }
+
+  void TearDown() override {
+    loom_module_free(module_);
+    iree_arena_block_pool_deinitialize(&pool_);
+    loom_context_deinitialize(&context_);
+  }
+
+  // Independent metadata owner with the same generated schema as the client.
+  loom_type_descriptor_t descriptor_ = {};
+  // The schema and its owning descriptor refer to each other.
+  loom_parameterized_type_descriptor_t schema_ = {};
+  // Handwritten descriptors remain alive through module destruction as well.
+  loom_type_descriptor_t unkeyed_descriptor_ = {};
+  // Unkeyed schema exercises the explicit-descriptor construction contract.
+  loom_parameterized_type_descriptor_t unkeyed_schema_ = {};
+  // Borrowed family bindings retained until the context is destroyed.
+  const loom_parameterized_type_descriptor_t* families_[3] = {};
+  // Context uses the independent owner's metadata, not the client's global.
+  loom_context_t context_ = {};
+  // Pool owns the module's interned parameter storage.
+  iree_arena_block_pool_t pool_ = {};
+  // Module under construction.
+  loom_module_t* module_ = nullptr;
+  // Canonical module-local child type ID.
+  loom_type_id_t payload_ = LOOM_TYPE_ID_INVALID;
+};
+
+TEST_F(GeneratedTypeConstructionTest, UsesOwnerForConstructionAndNameLookup) {
+  loom_type_t generated;
+  IREE_ASSERT_OK(loom_channel_type_make(module_, payload_, &generated));
+  EXPECT_TRUE(loom_channel_type_isa(generated));
+  EXPECT_EQ(loom_channel_type_payload(generated), payload_);
+  EXPECT_EQ(loom_type_parameterized_descriptor(generated), &schema_);
+  EXPECT_NE(loom_type_parameterized_descriptor(generated),
+            &loom_channel_type_parameterized_descriptor);
+  const auto* parsed_descriptor =
+      loom_type_registry_lookup(&context_, IREE_SV("channel"));
+  ASSERT_EQ(parsed_descriptor, &descriptor_);
+
+  const loom_attribute_t parameter = loom_attr_type(payload_);
+  loom_type_t explicit_type;
+  IREE_ASSERT_OK(loom_module_make_parameterized_type(
+      module_, parsed_descriptor->parameterized, &parameter, 1, &explicit_type,
+      nullptr));
+  EXPECT_TRUE(loom_type_equal(generated, explicit_type));
+  EXPECT_EQ(loom_type_parameterized_parameters(generated),
+            loom_type_parameterized_parameters(explicit_type));
+}
+
+TEST_F(GeneratedTypeConstructionTest, MissingFamilyDoesNotUseClientMetadata) {
+  const auto count = module_->types.count;
+  loom_type_t type;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_test_array_type_make(module_, 0, payload_, 0,
+                                loom_named_attr_slice_empty(), &type));
+  EXPECT_EQ(module_->types.count, count);
+}
+
+TEST_F(GeneratedTypeConstructionTest, RejectsWrongOrderAndDuplicateBindings) {
+  const loom_parameterized_type_descriptor_t* reversed[] = {
+      families_[2], families_[1], families_[0]};
+  loom_context_t context;
+  loom_context_initialize(iree_allocator_system(), &context);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_context_register_parameterized_types(
+                            &context, LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE,
+                            reversed, IREE_ARRAYSIZE(reversed)));
+  EXPECT_EQ(loom_context_resolve_parameterized_type(
+                &context, LOOM_PARAMETERIZED_TYPE_CHANNEL),
+            nullptr);
+  IREE_EXPECT_OK(loom_context_register_parameterized_types(
+      &context, LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, families_,
+      IREE_ARRAYSIZE(families_)));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS,
+                        loom_context_register_parameterized_types(
+                            &context, LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE,
+                            families_, IREE_ARRAYSIZE(families_)));
+  EXPECT_EQ(loom_context_resolve_parameterized_type(
+                &context, LOOM_PARAMETERIZED_TYPE_CHANNEL),
+            &schema_);
+  loom_context_deinitialize(&context);
+}
+
+TEST_F(GeneratedTypeConstructionTest, ExplicitDescriptorsNeedNoFamilyKey) {
+  const loom_attribute_t parameter = loom_attr_type(payload_);
+  loom_type_t type;
+  IREE_ASSERT_OK(loom_module_make_parameterized_type(
+      module_, &unkeyed_schema_, &parameter, 1, &type, nullptr));
+  EXPECT_EQ(loom_type_parameterized_descriptor(type), &unkeyed_schema_);
+  EXPECT_EQ(loom_type_parameterized_kind(type),
+            LOOM_PARAMETERIZED_TYPE_KIND_NONE);
+  EXPECT_FALSE(loom_channel_type_isa(type));
+}
 
 class TypeImportTest : public ::testing::Test {
  protected:
@@ -679,7 +802,8 @@ TEST_P(TypeInternerFailureTest, GenericInternOwnsCanonicalParameterPayload) {
                                    loom_attr_i64(GetParam().type_count),
                                    loom_attr_absent()};
   const loom_type_t temporary_type =
-      loom_type_parameterized(&loom_test_array_type_parameterized_descriptor,
+      loom_type_parameterized(LOOM_PARAMETERIZED_TYPE_TEST_ARRAY,
+                              &loom_test_array_type_parameterized_descriptor,
                               IREE_ARRAYSIZE(parameters), parameters);
   loom_type_id_t type_id = LOOM_TYPE_ID_INVALID;
   IREE_ASSERT_OK(loom_module_intern_type_id(module_, temporary_type, &type_id));

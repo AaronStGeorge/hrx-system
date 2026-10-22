@@ -18,6 +18,15 @@ extern "C" {
 
 typedef struct loom_module_t loom_module_t;
 
+// Exact-build family keys; serialized types use their public names.
+enum {
+  LOOM_PARAMETERIZED_TYPE_TEST_SCOPE = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_DIALECT_TEST, 0),
+  LOOM_PARAMETERIZED_TYPE_TEST_MATRIX = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_DIALECT_TEST, 1),
+  LOOM_PARAMETERIZED_TYPE_TEST_COMPACT_MATRIX = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_DIALECT_TEST, 2),
+  LOOM_PARAMETERIZED_TYPE_TEST_ARRAY = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_DIALECT_TEST, 3),
+  LOOM_PARAMETERIZED_TYPE_TEST_VARIANT_SET = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_DIALECT_TEST, 4),
+};
+
 // Synthetic scope for parameterized value coverage.
 typedef enum loom_test_scope_type_scope_e {
   LOOM_TEST_SCOPE_TYPE_SCOPE_WORKGROUP = 1,
@@ -27,7 +36,7 @@ typedef enum loom_test_scope_type_scope_e {
 
 extern const loom_parameterized_type_descriptor_t loom_test_scope_type_parameterized_descriptor;
 static inline bool loom_test_scope_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_test_scope_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_SCOPE;
 }
 enum { LOOM_TEST_SCOPE_TYPE_SCOPE_PARAMETER_INDEX = 0 };
 static inline loom_test_scope_type_scope_t loom_test_scope_type_scope(loom_type_t type) {
@@ -52,7 +61,7 @@ enum loom_test_matrix_type_build_flag_bits_e {
 typedef uint32_t loom_test_matrix_type_build_flags_t;
 
 static inline bool loom_test_matrix_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_test_matrix_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_MATRIX;
 }
 enum { LOOM_TEST_MATRIX_TYPE_ELEMENT_TYPE_PARAMETER_INDEX = 0 };
 static inline loom_type_id_t loom_test_matrix_type_element_type(loom_type_t type) {
@@ -91,7 +100,7 @@ typedef enum loom_test_compact_matrix_type_scope_e {
 
 extern const loom_parameterized_type_descriptor_t loom_test_compact_matrix_type_parameterized_descriptor;
 static inline bool loom_test_compact_matrix_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_test_compact_matrix_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_COMPACT_MATRIX;
 }
 enum { LOOM_TEST_COMPACT_MATRIX_TYPE_ROWS_PARAMETER_INDEX = 0 };
 static inline int64_t loom_test_compact_matrix_type_rows(loom_type_t type) {
@@ -125,7 +134,7 @@ enum loom_test_array_type_build_flag_bits_e {
 typedef uint32_t loom_test_array_type_build_flags_t;
 
 static inline bool loom_test_array_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_test_array_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_ARRAY;
 }
 enum { LOOM_TEST_ARRAY_TYPE_ELEMENT_TYPE_PARAMETER_INDEX = 0 };
 static inline loom_type_id_t loom_test_array_type_element_type(loom_type_t type) {
@@ -160,7 +169,7 @@ enum loom_test_variant_set_type_build_flag_bits_e {
 typedef uint32_t loom_test_variant_set_type_build_flags_t;
 
 static inline bool loom_test_variant_set_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_test_variant_set_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_VARIANT_SET;
 }
 enum { LOOM_TEST_VARIANT_SET_TYPE_VALUES_PARAMETER_INDEX = 0 };
 static inline loom_parameterized_attr_array_t loom_test_variant_set_type_values(loom_type_t type) {
@@ -183,6 +192,9 @@ iree_status_t loom_test_variant_set_type_make(
 // Generated type descriptors owned by this dialect.
 extern const loom_type_registry_entry_t loom_test_type_registry_entries[];
 extern const iree_host_size_t loom_test_type_registry_entry_count;
+// Immutable indirect type-family bindings, in generated key order.
+extern const loom_parameterized_type_descriptor_t* const loom_test_type_registry_parameterized_descriptors[];
+extern const iree_host_size_t loom_test_type_registry_parameterized_count;
 
 #ifdef __cplusplus
 }

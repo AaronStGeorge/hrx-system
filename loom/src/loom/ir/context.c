@@ -265,6 +265,39 @@ iree_status_t loom_context_register_parameterized_attrs(
   return iree_ok_status();
 }
 
+iree_status_t loom_context_register_parameterized_types(
+    loom_context_t* context, uint8_t namespace_id,
+    const loom_parameterized_type_descriptor_t* const* descriptors,
+    iree_host_size_t descriptor_count) {
+  if (namespace_id >= LOOM_DIALECT_BUILTIN_COUNT_ || descriptor_count == 0 ||
+      descriptor_count > UINT8_MAX || descriptors == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "parameterized type registration requires a valid "
+                            "namespace and 1..255 descriptors");
+  }
+  loom_dialect_parameterized_types_t* families =
+      &context->parameterized_types[namespace_id];
+  if (families->entries != NULL) {
+    return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                            "type namespace %u is already registered",
+                            (unsigned)namespace_id);
+  }
+  for (iree_host_size_t i = 0; i < descriptor_count; ++i) {
+    const loom_parameterized_type_descriptor_t* descriptor = descriptors[i];
+    if (descriptor == NULL || descriptor->type_descriptor == NULL ||
+        descriptor->ir_kind != LOOM_TYPE_PARAMETERIZED ||
+        descriptor->kind != LOOM_PARAMETERIZED_TYPE_KIND(namespace_id, i)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "type namespace %u family %" PRIhsz
+                              " does not match its generated identity",
+                              (unsigned)namespace_id, i);
+    }
+  }
+  families->count = (uint8_t)descriptor_count;
+  families->entries = descriptors;
+  return iree_ok_status();
+}
+
 iree_status_t loom_context_register_type_descriptors(
     loom_context_t* context, const loom_type_registry_entry_t* entries,
     iree_host_size_t entry_count) {
@@ -773,6 +806,22 @@ loom_context_resolve_parameterized_attr(const loom_context_t* context,
     return NULL;
   }
   return &dialect->entries[family_index];
+}
+
+const loom_parameterized_type_descriptor_t*
+loom_context_resolve_parameterized_type(const loom_context_t* context,
+                                        loom_parameterized_type_kind_t kind) {
+  const uint8_t namespace_id = (uint8_t)(kind >> 8);
+  const uint8_t ordinal = (uint8_t)kind;
+  if (namespace_id >= LOOM_DIALECT_BUILTIN_COUNT_ || ordinal == 0) {
+    return NULL;
+  }
+  const loom_dialect_parameterized_types_t* families =
+      &context->parameterized_types[namespace_id];
+  if (ordinal > families->count) {
+    return NULL;
+  }
+  return families->entries[ordinal - 1];
 }
 
 const loom_parameterized_attr_descriptor_t*

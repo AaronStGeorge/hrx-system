@@ -437,7 +437,9 @@ TEST_F(PrintOpTest, ParameterizedTypeUsesOwnerMetadata) {
   schema.type_descriptor = &owner;
   const loom_attribute_t parameter =
       loom_attr_enum(LOOM_TEST_SCOPE_TYPE_SCOPE_WORKGROUP);
-  const loom_type_t type = loom_type_parameterized(&schema, 1, &parameter);
+  const loom_type_t type =
+      loom_type_parameterized(schema.kind, &schema, 1, &parameter);
+  EXPECT_TRUE(loom_test_scope_type_isa(type));
   EXPECT_EQ(print_type(type, module_), "test.scope<workgroup>");
   // This type has no module-owned parameters and needs no registry to print.
   EXPECT_EQ(print_type(type), "test.scope<workgroup>");

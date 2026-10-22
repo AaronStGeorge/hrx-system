@@ -87,6 +87,12 @@ def type_descriptor_symbol(type_def: TypeDef) -> str:
     return f"{type_api_prefix(type_def)}_parameterized_descriptor"
 
 
+def type_kind_c_name(type_def: TypeDef) -> str:
+    """Returns the generated indirect family identity constant."""
+
+    return "LOOM_PARAMETERIZED_TYPE_" + type_def.name.replace(".", "_").upper()
+
+
 def _parameter_prefix(type_def: TypeDef, parameter: AttrDef) -> str:
     return f"{type_api_prefix(type_def)}_{parameter.name}"
 
@@ -111,10 +117,20 @@ def _function_parameters(type_def: TypeDef) -> list[str]:
     )
 
 
-def generate_header_lines(types: Sequence[TypeDef]) -> list[str]:
+def generate_header_lines(types: Sequence[TypeDef], namespace: str = "LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE") -> list[str]:
     """Generates typed constructors and fixed-slot accessors."""
 
     lines: list[str] = []
+    families = indirect_parameterized_type_defs(types)
+    if len(families) > 255:
+        raise ValueError("an indirect type namespace supports at most 255 families")
+    if families:
+        lines.append("// Exact-build family keys; serialized types use their public names.")
+        lines.append("enum {")
+        for index, type_def in enumerate(families):
+            lines.append(f"  {type_kind_c_name(type_def)} = LOOM_PARAMETERIZED_TYPE_KIND({namespace}, {index}),")
+        lines.append("};")
+        lines.append("")
     for type_def in parameterized_type_defs(types):
         prefix = type_api_prefix(type_def)
         descriptor_symbol = type_descriptor_symbol(type_def)
@@ -168,7 +184,7 @@ def generate_header_lines(types: Sequence[TypeDef]) -> list[str]:
             lines.append("")
 
         lines.append(f"static inline bool {prefix}_isa(loom_type_t type) {{")
-        lines.append(f"  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &{descriptor_symbol};")
+        lines.append(f"  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == {type_kind_c_name(type_def)};")
         lines.append("}")
         for index, parameter in enumerate(type_def.params):
             parameter_prefix = _parameter_prefix(type_def, parameter)
@@ -205,8 +221,8 @@ def generate_source_lines(types: Sequence[TypeDef]) -> list[str]:
             suffix = "," if index + 1 < len(function_parameters) else ") {"
             lines.append(f"{declaration}{suffix}")
         append_parameter_slot_initializers(lines, type_def.name, prefix, type_def.params)
-        lines.append("  return loom_module_make_parameterized_type(")
-        lines.append(f"      module, &{type_descriptor_symbol(type_def)}, slots, {len(type_def.params)}, out_type, /*out_type_id=*/NULL);")
+        lines.append("  return loom_module_make_parameterized_type_by_kind(")
+        lines.append(f"      module, {type_kind_c_name(type_def)}, slots, {len(type_def.params)}, out_type, /*out_type_id=*/NULL);")
         lines.append("}")
         lines.append("")
     return lines
@@ -272,6 +288,8 @@ def generate_metadata_lines(types: Sequence[TypeDef]) -> list[str]:
         type_ident = type_def.name.replace(".", "_")
         lines.append(f"    .type_descriptor = &loom_type_{type_ident}_descriptor,")
         lines.append(f"    .ir_kind = {type_ir_kind_c_name(type_def)},")
+        if not type_def.uses_inline_enum_parameter:
+            lines.append(f"    .kind = {type_kind_c_name(type_def)},")
         type_flags = inline_type_flags_c_expr(type_def)
         if type_flags is not None:
             lines.append(f"    .type_flags = {type_flags},")

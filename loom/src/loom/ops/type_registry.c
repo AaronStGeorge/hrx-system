@@ -18,6 +18,14 @@ const loom_type_registry_entry_t* loom_type_registry_entries(void) {
   return loom_type_registry_entries_storage;
 }
 
+iree_status_t loom_type_registry_register_common_types(
+    loom_context_t* context) {
+  return loom_context_register_parameterized_types(
+      context, LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE,
+      loom_type_registry_parameterized_descriptors,
+      loom_type_registry_parameterized_count);
+}
+
 iree_status_t loom_type_registry_register_types(
     loom_context_t* context, const loom_type_registry_entry_t* entries,
     iree_host_size_t entry_count) {
@@ -57,7 +65,15 @@ const loom_type_descriptor_t* loom_type_registry_lookup(
     } else if (comparison > 0) {
       high = mid;
     } else {
-      return loom_type_registry_entries_storage[mid].descriptor;
+      const loom_type_descriptor_t* descriptor =
+          loom_type_registry_entries_storage[mid].descriptor;
+      if (context != NULL && descriptor->ir_kind == LOOM_TYPE_PARAMETERIZED) {
+        const loom_parameterized_type_descriptor_t* owner =
+            loom_context_resolve_parameterized_type(
+                context, descriptor->parameterized->kind);
+        return owner != NULL ? owner->type_descriptor : NULL;
+      }
+      return descriptor;
     }
   }
   return context != NULL ? loom_context_lookup_type_by_name(context, name)

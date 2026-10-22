@@ -75,6 +75,15 @@ typedef struct loom_parameterized_attr_registry_t {
   loom_dialect_parameterized_attrs_t dialects[LOOM_DIALECT_BUILTIN_COUNT_];
 } loom_parameterized_attr_registry_t;
 
+// One namespace's immutable generated indirect type-family bindings.
+typedef struct loom_dialect_parameterized_types_t {
+  // Number of descriptors, addressed by the family key's one-based low byte.
+  uint8_t count;
+  // Borrowed descriptor pointers, in generated family order. Both the array
+  // and descriptors outlive the context and every module using its types.
+  const loom_parameterized_type_descriptor_t* const* entries;
+} loom_dialect_parameterized_types_t;
+
 // Mutable descriptor list populated by dialect registration before context
 // finalization.
 typedef struct loom_registered_type_list_t {
@@ -213,6 +222,10 @@ struct loom_context_t {
 
   // Stable dialect-owned type lookup used at public format boundaries.
   loom_type_name_table_t type_name_table;
+
+  // Owner-bound type metadata indexed by namespace then family ordinal.
+  loom_dialect_parameterized_types_t
+      parameterized_types[LOOM_DIALECT_BUILTIN_COUNT_];
 };
 
 // Initializes a context with the given host allocator. After initialization,
@@ -272,6 +285,15 @@ iree_status_t loom_context_register_parameterized_attrs(
     const loom_parameterized_attr_descriptor_t* descriptors,
     iree_host_size_t descriptor_count);
 
+// Binds generated indirect type families to their owning context. Namespace
+// zero contains common types; other namespaces use dialect IDs. Arrays and
+// descriptors are borrowed for the context lifetime and must be in generated
+// family order. Register before finalization, at most once per namespace.
+iree_status_t loom_context_register_parameterized_types(
+    loom_context_t* context, uint8_t namespace_id,
+    const loom_parameterized_type_descriptor_t* const* descriptors,
+    iree_host_size_t descriptor_count);
+
 // Registers generated dialect-owned type descriptors with the context.
 //
 // Entry and descriptor storage must remain valid for the context lifetime.
@@ -324,6 +346,12 @@ const loom_op_vtable_t* loom_context_lookup_op_by_name(
 const loom_parameterized_attr_descriptor_t*
 loom_context_resolve_parameterized_attr(const loom_context_t* context,
                                         loom_parameterized_attr_kind_t kind);
+
+// Resolves a generated family key to this context's descriptor, or NULL when
+// absent. Explicit unkeyed descriptors are not context registry entries.
+const loom_parameterized_type_descriptor_t*
+loom_context_resolve_parameterized_type(const loom_context_t* context,
+                                        loom_parameterized_type_kind_t kind);
 
 // Looks up a parameterized attribute family by its stable dotted public name.
 // The context must be finalized.

@@ -22,6 +22,13 @@ extern "C" {
 typedef struct loom_module_t loom_module_t;
 typedef struct loom_context_t loom_context_t;
 
+// Exact-build family keys; serialized types use their public names.
+enum {
+  LOOM_PARAMETERIZED_TYPE_CHANNEL = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, 0),
+  LOOM_PARAMETERIZED_TYPE_READ = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, 1),
+  LOOM_PARAMETERIZED_TYPE_WRITE = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, 2),
+};
+
 extern const loom_parameterized_type_descriptor_t loom_encoding_type_parameterized_descriptor;
 static inline iree_string_view_t loom_encoding_type_role_name(loom_encoding_role_t value) {
   loom_bstring_t name = loom_attr_descriptor_enum_case_name(
@@ -40,7 +47,7 @@ static inline bool loom_encoding_type_role_parse(iree_string_view_t name, loom_e
 
 extern const loom_parameterized_type_descriptor_t loom_channel_type_parameterized_descriptor;
 static inline bool loom_channel_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_channel_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_CHANNEL;
 }
 enum { LOOM_CHANNEL_TYPE_PAYLOAD_PARAMETER_INDEX = 0 };
 static inline loom_type_id_t loom_channel_type_payload(loom_type_t type) {
@@ -64,7 +71,7 @@ enum loom_read_type_build_flag_bits_e {
 typedef uint32_t loom_read_type_build_flags_t;
 
 static inline bool loom_read_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_read_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_READ;
 }
 enum { LOOM_READ_TYPE_PAYLOAD_PARAMETER_INDEX = 0 };
 static inline loom_type_id_t loom_read_type_payload(loom_type_t type) {
@@ -86,7 +93,7 @@ iree_status_t loom_read_type_make(
 
 extern const loom_parameterized_type_descriptor_t loom_write_type_parameterized_descriptor;
 static inline bool loom_write_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_descriptor(type) == &loom_write_type_parameterized_descriptor;
+  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_WRITE;
 }
 enum { LOOM_WRITE_TYPE_PAYLOAD_PARAMETER_INDEX = 0 };
 static inline loom_type_id_t loom_write_type_payload(loom_type_t type) {
@@ -112,6 +119,9 @@ static inline bool loom_low_storage_type_space_parse(iree_string_view_t name, lo
   *out_value = (loom_storage_space_t)value;
   return true;
 }
+
+// Binds common indirect type families to their context owner before finalization.
+iree_status_t loom_type_registry_register_common_types(loom_context_t* context);
 
 // Returns the number of entries in the common type registry.
 iree_host_size_t loom_type_registry_count(void);

@@ -46,10 +46,14 @@ typedef struct loom_parameterized_type_descriptor_t {
 
   // Text and representation behavior bits.
   loom_parameterized_type_flags_t flags;
+
+  // Exact-build generated indirect family identity, or NONE for compact
+  // representations and handwritten descriptors without a generated family.
+  loom_parameterized_type_kind_t kind;
 } loom_parameterized_type_descriptor_t;
 
 static_assert(sizeof(loom_parameterized_type_descriptor_t) ==
-                  (IREE_PTR_SIZE == 8 ? 32 : 16),
+                  (IREE_PTR_SIZE == 8 ? 32 : 20),
               "parameterized type descriptor must remain compact");
 
 #ifdef __cplusplus

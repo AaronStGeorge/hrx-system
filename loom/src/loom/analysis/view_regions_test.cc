@@ -39,6 +39,7 @@ class ViewRegionsTest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &analysis_arena_);
 
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_type_registry_register_common_types(&context_));
     RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_CHANNEL, loom_channel_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);

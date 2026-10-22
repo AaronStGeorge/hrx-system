@@ -69,6 +69,10 @@ class ModuleTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_register_parameterized_attrs(
         &context_, LOOM_DIALECT_TEST, parameterized_attrs,
         parameterized_attr_count));
+    IREE_ASSERT_OK(loom_context_register_parameterized_types(
+        &context_, LOOM_DIALECT_TEST,
+        loom_test_type_registry_parameterized_descriptors,
+        loom_test_type_registry_parameterized_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 

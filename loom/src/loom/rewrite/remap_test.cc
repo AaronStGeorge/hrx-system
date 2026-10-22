@@ -193,6 +193,71 @@ TEST_F(RemapTest, RemapsTypesNestedInParameterizedTypeSlots) {
   EXPECT_EQ(loom_type_dim_value_id_at(target_vector_type, 0), target_dim);
 }
 
+class OwnedTypeRemapTest : public RemapTest {
+ protected:
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(RemapTest::SetUp());
+    schema_ = loom_test_array_type_parameterized_descriptor;
+    descriptor_ = *schema_.type_descriptor;
+    schema_.type_descriptor = &descriptor_;
+    descriptor_.parameterized = &schema_;
+    families_.assign(loom_test_type_registry_parameterized_descriptors,
+                     loom_test_type_registry_parameterized_descriptors +
+                         loom_test_type_registry_parameterized_count);
+    families_[(LOOM_PARAMETERIZED_TYPE_TEST_ARRAY & UINT8_MAX) - 1] = &schema_;
+    loom_context_initialize(iree_allocator_system(), &target_context_);
+    IREE_ASSERT_OK(loom_context_register_parameterized_types(
+        &target_context_, LOOM_DIALECT_TEST, families_.data(),
+        families_.size()));
+    IREE_ASSERT_OK(loom_context_finalize(&target_context_));
+    loom_module_free(target_);
+    target_ = nullptr;
+    IREE_ASSERT_OK(loom_module_allocate(&target_context_, IREE_SV("target"),
+                                        &block_pool_, nullptr,
+                                        iree_allocator_system(), &target_));
+  }
+
+  void TearDown() override {
+    RemapTest::TearDown();
+    loom_context_deinitialize(&target_context_);
+  }
+
+  // Independent owner for the destination's generated array family.
+  loom_type_descriptor_t descriptor_ = {};
+  // Schema points back to its owning full descriptor.
+  loom_parameterized_type_descriptor_t schema_ = {};
+  // Borrowed registry entries retained through context and module cleanup.
+  std::vector<const loom_parameterized_type_descriptor_t*> families_;
+  // Destination metadata owner differs from the source's owner.
+  loom_context_t target_context_ = {};
+};
+
+TEST_F(OwnedTypeRemapTest, NestedFamiliesBindToDestinationOwner) {
+  loom_type_t source_type = loom_type_scalar(LOOM_SCALAR_TYPE_F16);
+  for (int i = 0; i < 2; ++i) {
+    loom_type_id_t child;
+    IREE_ASSERT_OK(loom_module_intern_type_id(source_, source_type, &child));
+    IREE_ASSERT_OK(loom_test_array_type_make(
+        source_, 0, child, 0, loom_named_attr_slice_empty(), &source_type));
+  }
+  auto remap = InitializeRemap();
+  loom_type_t remapped;
+  IREE_ASSERT_OK(loom_ir_remap_type(&remap, source_type, &remapped));
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_TRUE(loom_test_array_type_isa(remapped));
+    EXPECT_EQ(loom_type_parameterized_descriptor(remapped), &schema_);
+    const auto child = loom_test_array_type_element_type(remapped);
+    loom_type_t native;
+    IREE_ASSERT_OK(loom_test_array_type_make(
+        target_, 0, child, 0, loom_named_attr_slice_empty(), &native));
+    EXPECT_EQ(loom_type_parameterized_parameters(remapped),
+              loom_type_parameterized_parameters(native));
+    remapped = loom_type_table_get(&target_->types, child);
+  }
+  EXPECT_TRUE(
+      loom_type_equal(remapped, loom_type_scalar(LOOM_SCALAR_TYPE_F16)));
+}
+
 TEST_F(RemapTest, SharedMixedTypeGraphUsesCallScopedScratch) {
   const auto index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   const auto source_dimension = DefineValue(source_, index);

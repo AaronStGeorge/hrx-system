@@ -549,6 +549,24 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_benchmark(
+  NAME
+    value_types_benchmark
+  SRCS
+    "value_types_benchmark.cc"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    iree::testing::benchmark_main
+    loom::ir
+    loom::target::arch::spirv::ops
+  TESTONLY
+  LABELS
+    "iree-build-requirement=loom.target.arch.spirv"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_test(
   NAME
     registers_test
