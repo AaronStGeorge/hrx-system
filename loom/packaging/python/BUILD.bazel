@@ -8,6 +8,7 @@
 
 load("@rules_python//python:packaging.bzl", "py_package")
 load(":defs.bzl", "loom_python_wheel")
+load(":native.bzl", "loom_native_files")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,6 +16,29 @@ exports_files([
     "README.md",
     "defs.bzl",
 ])
+
+[
+    config_setting(
+        name = name,
+        constraint_values = constraints,
+    )
+    for name, constraints in {
+        "linux_aarch64": [
+            "@platforms//os:linux",
+            "@platforms//cpu:aarch64",
+        ],
+        "linux_x86_64": [
+            "@platforms//os:linux",
+            "@platforms//cpu:x86_64",
+        ],
+        "windows_x86_64": [
+            "@platforms//os:windows",
+            "@platforms//cpu:x86_64",
+        ],
+    }.items()
+]
+
+loom_native_files(name = "native")
 
 filegroup(
     name = "schemas",
@@ -34,6 +58,9 @@ py_package(
         "//loom/py/loom/format/text",
         "//loom/py/loom/model:documentation",
         "//loom/py/loom/model:fetch_cli",
+        "//loom/py/loom/tools:compile_report",
+        "//loom/py/loom/tools:export_cxx",
+        "//loom/py/loom/tools:source_lint",
     ],
 )
 

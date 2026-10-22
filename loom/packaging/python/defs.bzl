@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Python SDK packaging with an explicit compatible model-catalog association."""
+"""Loom SDK wheels with Python APIs and native commands from the same build."""
 
 load("@rules_python//python:packaging.bzl", "py_wheel")
 
@@ -34,7 +34,13 @@ def loom_python_wheel(name, version, catalog = "", testonly = False):
         testonly = testonly,
         description_file = Label("//loom/packaging/python:README.md"),
         distribution = "hrx-loom",
-        entry_points = {"console_scripts": ["loom-fetch = loom.model.fetch_main:main"]},
+        data_files = {Label("//loom/packaging/python:native"): "scripts/"},
+        entry_points = {"console_scripts": [
+            "loom-compile-report = loom.tools.compile_report:main",
+            "loom-export-cxx = loom.tools.export_cxx:main",
+            "loom-fetch = loom.model.fetch_main:main",
+            "loom-lint = loom.tools.source_lint:main",
+        ]},
         extra_distinfo_files = {
             Label("//:LICENSE"): "licenses/LICENSE",
             ":" + name + "_metadata": "loom.json",
@@ -42,11 +48,16 @@ def loom_python_wheel(name, version, catalog = "", testonly = False):
         extra_requires = {"hf": ["huggingface_hub>=2.2,<3"]},
         homepage = "https://github.com/ROCm/hrx-system",
         license = "Apache-2.0 WITH LLVM-exception",
+        platform = select({
+            Label("//loom/packaging/python:linux_x86_64"): "linux_x86_64",
+            Label("//loom/packaging/python:linux_aarch64"): "linux_aarch64",
+            Label("//loom/packaging/python:windows_x86_64"): "win_amd64",
+        }),
         python_requires = ">=3.12",
         python_tag = "py3",
         stamp = 0,
         strip_path_prefixes = ["loom/py"],
-        summary = "Loom Python authoring tools and portable model acquisition",
+        summary = "Loom compiler, serving and authoring tools, and Python SDK",
         twine_binary = None,
         version = version,
         deps = [

@@ -350,11 +350,9 @@ loom_py_test(
     args = [
         "$(rootpath //loom/packaging/python:wheel)",
         "$(rootpath //loom/packaging/python/test:associated_wheel)",
-        "$(rootpath :loom-serve-test-tool)",
         "$(rootpath //loom/src/loom/serve/fixture/text:card_model_mixed)",
     ],
     data = [
-        ":loom-serve-test-tool",
         "//loom/packaging/python:wheel",
         "//loom/packaging/python/test:associated_wheel",
         "//loom/src/loom/serve/fixture/text:card_model_mixed",

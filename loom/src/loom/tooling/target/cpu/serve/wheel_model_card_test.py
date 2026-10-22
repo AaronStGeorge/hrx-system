@@ -4,13 +4,14 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Installs the Python SDK and serves a model acquired by its console command."""
+"""Installs the SDK and serves a fetched model with its packaged native tools."""
 
 import functools
 import http.server
 import json
 import os
 import selectors
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -66,13 +67,21 @@ def pick_model(arguments, environment, output):
         os.close(slave)
 
 
-def main(wheel, associated_wheel, server, deployment):
+def main(wheel, associated_wheel, deployment):
     wheel = Path(wheel).absolute()
     associated_wheel = Path(associated_wheel).absolute()
-    server = Path(server).absolute()
     deployment = Path(deployment).absolute()
     environment = {
-        key: value for key, value in os.environ.items() if not key.startswith("PYTHON")
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("PYTHON")
+        and key
+        not in (
+            "LD_LIBRARY_PATH",
+            "LD_PRELOAD",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_INSERT_LIBRARIES",
+        )
     }
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     with tempfile.TemporaryDirectory() as temporary:
@@ -92,6 +101,7 @@ def main(wheel, associated_wheel, server, deployment):
 
         run(sys.executable, "-I", "-m", "venv", directory / "venv")
         scripts = directory / "venv" / ("Scripts" if os.name == "nt" else "bin")
+        environment["PATH"] = str(scripts) + os.pathsep + os.defpath
         python = scripts / ("python.exe" if os.name == "nt" else "python")
         fetch = scripts / ("loom-fetch.exe" if os.name == "nt" else "loom-fetch")
         run(
@@ -106,6 +116,36 @@ def main(wheel, associated_wheel, server, deployment):
             "--no-compile",
             wheel,
         )
+        assert shutil.which("bazel", path=environment["PATH"]) is None
+        assert shutil.which("bazelisk", path=environment["PATH"]) is None
+        for command in (
+            "loom-benchmark",
+            "loom-check",
+            "loom-compile",
+            "loom-compile-report",
+            "loom-export-cxx",
+            "loom-fetch",
+            "loom-format",
+            "loom-import-cxx",
+            "loom-link",
+            "loom-lint",
+            "loom-opt",
+            "loom-run",
+            "loom-serve",
+            "loom-test",
+        ):
+            executable = shutil.which(command, path=environment["PATH"])
+            assert executable and Path(executable).parent == scripts, command
+            run(command, "--help")
+        source = directory / "program.cxx"
+        source.write_text(
+            "#include <loomcxx/math.h>\n"
+            "float twice(float value) { return value + value; }\n"
+        )
+        module = directory / "program.loombc"
+        run("loom-import-cxx", "--to=bc", "--output=" + str(module), source)
+        text = run("loom-format", "--from=bc", "--to=text", module)
+        assert "@twice" in text and "scalar.addf" in text, text
         run(
             python,
             "-I",
@@ -281,7 +321,8 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
         serving["model"]["path"] = str(catalog_installation / "model.json")
         selected = directory / "serve.json"
         selected.write_text(json.dumps(serving))
-        check_model(str(server), str(selected), "abab")
+        server = shutil.which("loom-serve", path=environment["PATH"])
+        check_model(str(server), str(selected), "abab", environment=environment)
 
 
 if __name__ == "__main__":

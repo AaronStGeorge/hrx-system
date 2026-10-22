@@ -227,7 +227,7 @@ def collect_events(client, models, stopped, record, *, ready=None):
 
 
 @contextlib.contextmanager
-def running_server(command, log_path, on_event=None, *, cwd=None):
+def running_server(command, log_path, on_event=None, *, cwd=None, environment=None):
     """Own a child and optional independent HTTP capture through joined shutdown.
 
     log_path holds cold stdout/stderr diagnostics. Its .events.jsonl sibling
@@ -236,11 +236,13 @@ def running_server(command, log_path, on_event=None, *, cwd=None):
     a pull endpoint whose lifetime ends with the server.
     An explicit cwd selects the child's deployment root without changing the
     client's working directory or interpreting its catalog paths.
+    An explicit environment isolates installed tools from developer search paths.
     """
     with log_path.open("x") as log, ThreadPoolExecutor(max_workers=2) as readers:
         process = subprocess.Popen(
             command,
             cwd=cwd,
+            env=environment,
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.PIPE,

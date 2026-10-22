@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from loom_serve_testing.http_harness import control, running_server
 
 
-def check_model(server, model, expected, *provider_encodings):
+def check_model(server, model, expected, *provider_encodings, environment=None):
     server = str(Path(server).absolute())
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
@@ -39,6 +39,7 @@ def check_model(server, model, expected, *provider_encodings):
             ],
             log,
             cwd=directory,
+            environment=environment,
         ) as (process, bound_address):
             assert bound_address is not None, log.read_text()
             address = urlsplit("http://" + bound_address)
