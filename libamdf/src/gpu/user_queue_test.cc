@@ -172,6 +172,35 @@ class GpuUserQueueTest : public ::testing::Test {
   amdf_user_queue_mapping_t* mapping_ = nullptr;
 };
 
+TEST_F(GpuUserQueueTest, RequiresAdvertisedPlacementAndReportsAchievement) {
+  auto create = MakeCreateInfo();
+  create.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
+  EXPECT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
+  EXPECT_EQ(consumer_state_.create_call_count, 0u);
+  EXPECT_EQ(queue_, nullptr);
+  current_family.placement_capabilities =
+      AMDF_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL;
+  ASSERT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(consumer_state_.observed_create.placement, create.placement);
+  amdf_user_queue_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_USER_QUEUE_INFO,
+      .structure_size = sizeof(info),
+  };
+  ASSERT_EQ(amdf_user_queue_query_info(queue_, &info), AMDF_STATUS_OK);
+  EXPECT_EQ(info.placement, create.placement);
+}
+
+TEST_F(GpuUserQueueTest, RejectsUnknownPlacementBeforeNativeCreation) {
+  auto create = MakeCreateInfo();
+  create.placement = UINT32_MAX;
+  EXPECT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  EXPECT_EQ(consumer_state_.create_call_count, 0u);
+  EXPECT_EQ(queue_, nullptr);
+}
+
 TEST_F(GpuUserQueueTest, RetainsQueueAcrossRejectedDestruction) {
   const amdf_gpu_user_queue_create_info_t create_info = MakeCreateInfo();
   ASSERT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create_info, &queue_),
@@ -649,6 +678,9 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
       .queue_id = {.words = {19, 23}},
       .capabilities = AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER |
                       AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER,
+      .placement = create_info->placement == AMDF_QUEUE_PLACEMENT_DEFAULT
+                       ? AMDF_QUEUE_PLACEMENT_HOST_LOCAL
+                       : create_info->placement,
       .ring_byte_length = create_info->ring_byte_length == 0
                               ? UINT64_C(4096)
                               : create_info->ring_byte_length,

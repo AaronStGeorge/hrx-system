@@ -34,6 +34,7 @@ namespace aql {
   auto* slot = reinterpret_cast<uint32_t*>(queue.host.ring_address) +
                (index & (capacity - 1)) * 16;
   std::memcpy(slot + 1, packet.data() + 1, sizeof(Packet) - sizeof(uint32_t));
+  GpuPublishFence(queue.host);
   GpuStoreRelease(reinterpret_cast<uintptr_t>(slot), packet[0]);
   GpuRingDoorbell(queue.host.doorbell_address, index);
   return ::testing::AssertionSuccess();
@@ -63,6 +64,7 @@ inline void PublishBatch(const GpuUserQueue& queue, uint64_t begin,
   const uint64_t capacity = queue.host.ring_byte_length / sizeof(Packet);
   auto* ring = reinterpret_cast<Packet*>(queue.host.ring_address);
   GpuStoreRelease(queue.host.write_index_address, begin + packets.size());
+  GpuPublishFence(queue.host);
   GpuStoreRelease(
       reinterpret_cast<uintptr_t>(ring[begin & (capacity - 1)].data()),
       packets.front()[0]);

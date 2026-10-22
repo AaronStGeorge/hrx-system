@@ -42,6 +42,8 @@ typedef struct amdf_gpu_umd_user_queue_create_info_t {
   uint32_t format_version;
   // Requested native scheduling priority.
   amdf_queue_priority_t priority;
+  // Required primary-ring locality, or DEFAULT for the native policy.
+  amdf_queue_placement_t placement;
   // Selected reservation protocol.
   amdf_queue_producer_mode_t producer_mode;
   // Enables native dispatch timestamps in each AQL completion signal.
@@ -66,6 +68,8 @@ typedef struct amdf_gpu_umd_user_queue_result_t {
   amdf_queue_id_t queue_id;
   // Direct producer operations achieved by this queue.
   amdf_user_queue_capabilities_t capabilities;
+  // Achieved primary-ring locality guarantee.
+  amdf_queue_placement_t placement;
   // Actual primary ring capacity in bytes.
   uint64_t ring_byte_length;
   // Actual metadata sidecar capacity in bytes, or zero when absent.
@@ -86,6 +90,8 @@ typedef struct amdf_gpu_umd_user_queue_mapping_result_t {
   uint32_t index_bits;
   // Atomic write width of the notification aperture.
   uint32_t doorbell_bits;
+  // Host fence required before publishing a valid header or producer index.
+  amdf_host_cache_fence_t host_publish_fence;
   // Producer-local base address of the writable metadata ring.
   uint64_t metadata_ring_address;
 } amdf_gpu_umd_user_queue_mapping_result_t;

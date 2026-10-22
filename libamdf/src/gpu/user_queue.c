@@ -120,6 +120,7 @@ static amdf_status_t amdf_gpu_user_queue_map(
     mapping->base.info.doorbell_address = result.doorbell_address;
     mapping->base.info.index_bits = result.index_bits;
     mapping->base.info.doorbell_bits = result.doorbell_bits;
+    mapping->base.info.host_publish_fence = result.host_publish_fence;
     mapping->base.info.metadata_ring_address = result.metadata_ring_address;
     *out_mapping = &mapping->base;
   } else {
@@ -257,6 +258,7 @@ amdf_status_t AMDF_CALL amdf_gpu_user_queue_create(
   if ((create_info->flags & ~(amdf_gpu_user_queue_flags_t)
                                 AMDF_GPU_USER_QUEUE_FLAG_DISPATCH_TIMESTAMPS) !=
           0 ||
+      create_info->placement > AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL ||
       (create_info->priority != AMDF_QUEUE_PRIORITY_LOW &&
        create_info->priority != AMDF_QUEUE_PRIORITY_NORMAL &&
        create_info->priority != AMDF_QUEUE_PRIORITY_HIGH) ||
@@ -282,6 +284,9 @@ amdf_status_t AMDF_CALL amdf_gpu_user_queue_create(
   }
   if ((create_info->required_capabilities &
        ~family_info.user_queue_capabilities) != 0 ||
+      (create_info->placement != AMDF_QUEUE_PLACEMENT_DEFAULT &&
+       (family_info.placement_capabilities & (1u << create_info->placement)) ==
+           0) ||
       (family_info.producer_modes & (1u << create_info->producer_mode)) == 0 ||
       (family_info.priority_capabilities & (1u << create_info->priority)) ==
           0) {
@@ -350,6 +355,7 @@ amdf_status_t AMDF_CALL amdf_gpu_user_queue_create(
       .command_type = family_info.command_type,
       .format_version = family_info.format_version,
       .priority = create_info->priority,
+      .placement = create_info->placement,
       .producer_mode = create_info->producer_mode,
       .dispatch_timestamps = dispatch_timestamps,
       .scratch_service = scratch_service != NULL,
@@ -377,6 +383,7 @@ amdf_status_t AMDF_CALL amdf_gpu_user_queue_create(
   if (amdf_status_is_ok(status)) {
     queue->base.info.queue_id = result.queue_id;
     queue->base.info.capabilities = result.capabilities;
+    queue->base.info.placement = result.placement;
     queue->base.info.ring_byte_length = result.ring_byte_length;
     queue->base.info.metadata_ring_byte_length =
         result.metadata_ring_byte_length;

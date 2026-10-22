@@ -21,6 +21,8 @@ struct RingCapacityCase {
   uint64_t byte_length;
   // Stable case suffix independent of endpoint identity.
   const char* name;
+  // Required primary-ring locality, or the native default.
+  amdf_queue_placement_t placement = AMDF_QUEUE_PLACEMENT_DEFAULT;
 };
 
 GpuQueueRequirements RingRequirements(amdf_queue_command_type_t command_type) {
@@ -72,6 +74,10 @@ class GpuUserQueueCapacityTest
 
 TEST_P(GpuUserQueueCapacityTest, CopiesAcrossWrapAndRetiredReuse) {
   const auto& test = GetParam();
+  if (test.placement != AMDF_QUEUE_PLACEMENT_DEFAULT &&
+      !(family_.placement_capabilities & (1u << test.placement))) {
+    GTEST_SKIP() << "family does not support requested ring placement";
+  }
   if (test.byte_length != 0 &&
       (test.byte_length < family_.minimum_ring_byte_length ||
        test.byte_length > family_.maximum_ring_byte_length ||
@@ -81,7 +87,8 @@ TEST_P(GpuUserQueueCapacityTest, CopiesAcrossWrapAndRetiredReuse) {
   GpuUserQueue* queue = nullptr;
   ASSERT_NO_FATAL_FAILURE(
       CreateQueue(family_, &queue, AMDF_QUEUE_PRODUCER_MODE_SINGLE, {},
-                  AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER, test.byte_length));
+                  AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER, test.byte_length, 0,
+                  nullptr, test.placement));
   const uint64_t capacity = queue->info.ring_byte_length;
   if (test.byte_length != 0) {
     ASSERT_EQ(capacity, test.byte_length);
@@ -217,6 +224,14 @@ TEST_P(GpuUserQueueCapacityTest, CopiesAcrossWrapAndRetiredReuse) {
 }
 
 constexpr RingCapacityCase kRingCases[] = {
+    {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 4096, "Pm4HostLocal",
+     AMDF_QUEUE_PLACEMENT_HOST_LOCAL},
+    {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 4096, "Pm4DeviceLocal",
+     AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL},
+    {AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA, 4096, "SdmaHostLocal",
+     AMDF_QUEUE_PLACEMENT_HOST_LOCAL},
+    {AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA, 4096, "SdmaDeviceLocal",
+     AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL},
     {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 0, "Pm4Default"},
     {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 4096, "Pm4FourKiB"},
     {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 16384, "Pm4SixteenKiB"},

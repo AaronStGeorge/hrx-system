@@ -22,6 +22,10 @@ typedef struct amdf_gpu_kfd_user_queue_plan_t {
   uint32_t native_queue_type;
   // Primary and optional coupled metadata ring storage.
   struct {
+    // Achieved locality of the primary command storage.
+    amdf_queue_placement_t placement;
+    // Host ordering between packet stores and header/index publication.
+    amdf_host_cache_fence_t host_publish_fence;
     // Complete allocation containing both ring regions.
     amdf_gpu_kfd_buffer_create_info_t storage;
     // Byte offset of the primary ring within `storage`.

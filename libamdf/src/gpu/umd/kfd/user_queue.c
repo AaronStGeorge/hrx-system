@@ -297,11 +297,26 @@ static bool amdf_gpu_kfd_user_queue_select_plan(
         (family->producer_modes & (1u << create_info->producer_mode)) != 0 &&
         (create_info->required_capabilities &
          ~family->user_queue_capabilities) == 0 &&
+        (create_info->placement == AMDF_QUEUE_PLACEMENT_DEFAULT ||
+         (create_info->placement <= AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL &&
+          (family->placement_capabilities & (1u << create_info->placement)) !=
+              0)) &&
         create_info->roles == family->roles &&
         (create_info->ring_byte_length == 0 ||
          (create_info->ring_byte_length >= family->minimum_ring_byte_length &&
           create_info->ring_byte_length <= family->maximum_ring_byte_length))) {
       *out_plan = *plan;
+      if (create_info->placement == AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL) {
+        out_plan->ring.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
+        if (!device->topology.integrated) {
+          out_plan->ring.storage.native_flags =
+              (out_plan->ring.storage.native_flags &
+               ~KFD_IOC_ALLOC_MEM_FLAGS_GTT) |
+              KFD_IOC_ALLOC_MEM_FLAGS_VRAM | KFD_IOC_ALLOC_MEM_FLAGS_PUBLIC |
+              KFD_IOC_ALLOC_MEM_FLAGS_UNCACHED;
+          out_plan->ring.host_publish_fence = AMDF_HOST_CACHE_FENCE_X86_SFENCE;
+        }
+      }
       if (create_info->ring_byte_length != 0) {
         out_plan->ring.primary_byte_length = create_info->ring_byte_length;
         out_plan->ring.storage.byte_length = create_info->ring_byte_length;
@@ -500,6 +515,7 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
                         (queue->device_doorbell.native != NULL
                              ? AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER
                              : 0),
+        .placement = queue->plan.ring.placement,
         .ring_byte_length = queue->plan.ring.primary_byte_length,
         .metadata_ring_byte_length = queue->plan.ring.metadata_byte_length,
     };
@@ -544,6 +560,9 @@ amdf_status_t amdf_gpu_umd_user_queue_map(
                                           : (uintptr_t)queue->doorbell,
       .index_bits = queue->plan.control.index_bit_count,
       .doorbell_bits = queue->plan.doorbell.bit_count,
+      .host_publish_fence = device_producer
+                                ? AMDF_HOST_CACHE_FENCE_NONE
+                                : queue->plan.ring.host_publish_fence,
       .metadata_ring_address =
           queue->plan.ring.metadata_byte_length == 0
               ? 0

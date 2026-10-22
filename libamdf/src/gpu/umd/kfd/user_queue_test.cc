@@ -208,7 +208,11 @@ struct FakeNativeState {
     EXPECT_EQ(doorbell, reinterpret_cast<amdf_gpu_kfd_doorbell_t*>(
                             &self->device_doorbell));
     EXPECT_EQ(self->queue_destroy_count, 1);
-    EXPECT_EQ(self->destroyed_buffer_indices, (std::vector<size_t>{2}));
+    // The retirement-flush buffer is created last and released before the
+    // device doorbell; ring and control storage remain live until afterward.
+    EXPECT_EQ(self->destroyed_buffer_indices,
+              (std::vector<size_t>{
+                  static_cast<size_t>(self->buffer_create_count - 1)}));
     ++self->device_doorbell.destroy_count;
     if (amdf_status_is_ok(self->device_doorbell.destroy_status)) {
       self->device_doorbell.live = false;
@@ -482,6 +486,79 @@ class KfdUserQueueTest : public ::testing::Test {
   amdf_gpu_umd_user_queue_result_t queue_result_ = {};
   amdf_gpu_umd_user_queue_mapping_result_t mapping_result_ = {};
 };
+
+class KfdQueuePlacementTest
+    : public KfdUserQueueTest,
+      public ::testing::WithParamInterface<amdf_queue_command_type_t> {};
+
+TEST_P(KfdQueuePlacementTest, LocalRingKeepsCoherentControlAndProducerAccess) {
+  if (GetParam() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL) {
+    SelectAqlTopology();
+  }
+  device_.topology.vram.total_byte_length = UINT64_C(1) << 30;
+  device_.topology.vram.visible_byte_length = UINT64_C(1) << 30;
+  auto create = MakeCreateInfo(GetParam());
+  create.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
+  const bool device_producer = GetParam() != AMDF_QUEUE_COMMAND_TYPE_GPU_PM4;
+  if (device_producer) {
+    create.required_capabilities |= AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER;
+  }
+  ASSERT_EQ(amdf_gpu_umd_user_queue_create(&device_, &create, &queue_,
+                                           &queue_result_),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(queue_result_.placement, AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL);
+  const auto ring_flags = native_state_.buffers[0].create_info.native_flags;
+  EXPECT_NE(ring_flags & KFD_IOC_ALLOC_MEM_FLAGS_VRAM, 0u);
+  EXPECT_NE(ring_flags & KFD_IOC_ALLOC_MEM_FLAGS_PUBLIC, 0u);
+  EXPECT_NE(ring_flags & KFD_IOC_ALLOC_MEM_FLAGS_UNCACHED, 0u);
+  EXPECT_EQ(ring_flags & KFD_IOC_ALLOC_MEM_FLAGS_GTT, 0u);
+  EXPECT_NE(native_state_.buffers[1].create_info.native_flags &
+                KFD_IOC_ALLOC_MEM_FLAGS_GTT,
+            0u);
+  ASSERT_EQ(
+      amdf_gpu_umd_user_queue_map(queue_, nullptr, &mapping_, &mapping_result_),
+      AMDF_STATUS_OK);
+  EXPECT_EQ(mapping_result_.host_publish_fence,
+            AMDF_HOST_CACHE_FENCE_X86_SFENCE);
+  if (device_producer) {
+    ASSERT_EQ(amdf_gpu_umd_user_queue_mapping_destroy(mapping_),
+              AMDF_STATUS_OK);
+    mapping_ = nullptr;
+    ASSERT_EQ(amdf_gpu_umd_user_queue_map(queue_, &device_, &mapping_,
+                                          &mapping_result_),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(mapping_result_.host_publish_fence, AMDF_HOST_CACHE_FENCE_NONE);
+    EXPECT_EQ(mapping_result_.ring_address,
+              native_state_.buffers[0].device_address);
+    EXPECT_EQ(mapping_result_.read_index_address,
+              native_state_.observed_create.read_pointer_address);
+  }
+}
+
+TEST_P(KfdQueuePlacementTest, UnifiedLocalRingUsesSystemBacking) {
+  if (GetParam() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL) {
+    SelectAqlTopology();
+  }
+  device_.topology.integrated = true;
+  auto create = MakeCreateInfo(GetParam());
+  create.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
+  ASSERT_EQ(amdf_gpu_umd_user_queue_create(&device_, &create, &queue_,
+                                           &queue_result_),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(queue_result_.placement, AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL);
+  EXPECT_NE(native_state_.buffers[0].create_info.native_flags &
+                KFD_IOC_ALLOC_MEM_FLAGS_GTT,
+            0u);
+  ASSERT_EQ(
+      amdf_gpu_umd_user_queue_map(queue_, nullptr, &mapping_, &mapping_result_),
+      AMDF_STATUS_OK);
+  EXPECT_EQ(mapping_result_.host_publish_fence, AMDF_HOST_CACHE_FENCE_NONE);
+}
+
+INSTANTIATE_TEST_SUITE_P(Formats, KfdQueuePlacementTest,
+                         ::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                                           AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                                           AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA));
 
 TEST_F(KfdUserQueueTest, ConstructionDependenciesPublishOnlyOnSuccess) {
   const amdf_gpu_umd_user_queue_create_info_t create_info = MakeCreateInfo();

@@ -31,6 +31,35 @@ static amdf_gpu_kfd_topology_t MakeTopology() {
   return topology;
 }
 
+TEST(KfdTargetUserQueueTest, DiscoversPlacementWithoutAnAddressDomain) {
+  auto topology = MakeTopology();
+  amdf_gpu_kfd_user_queue_plans_t plans;
+  for (unsigned mode = 0; mode < 3; ++mode) {
+    SCOPED_TRACE(mode);
+    topology.integrated = mode == 1;
+    topology.vram.total_byte_length = mode == 2 ? UINT64_C(1) << 30 : 0;
+    topology.vram.visible_byte_length = topology.vram.total_byte_length;
+    amdf_gpu_kfd_target_user_queue_plans_initialize(&topology, 4096, 64,
+                                                    &plans);
+    ASSERT_EQ(plans.count, 3u);
+    for (uint32_t i = 0; i < plans.count; ++i) {
+      EXPECT_EQ(plans.values[i].family.placement_capabilities,
+                AMDF_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL |
+                    (mode ? AMDF_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL : 0));
+      EXPECT_EQ(plans.values[i].ring.placement,
+                AMDF_QUEUE_PLACEMENT_HOST_LOCAL);
+      EXPECT_EQ(plans.values[i].ring.host_publish_fence,
+                AMDF_HOST_CACHE_FENCE_NONE);
+    }
+  }
+  topology.vram.visible_byte_length /= 2;
+  amdf_gpu_kfd_target_user_queue_plans_initialize(&topology, 4096, 64, &plans);
+  for (uint32_t i = 0; i < plans.count; ++i) {
+    EXPECT_EQ(plans.values[i].family.placement_capabilities,
+              AMDF_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL);
+  }
+}
+
 TEST(KfdTargetUserQueueTest, KeepsSupportedPlansDense) {
   amdf_gpu_kfd_topology_t topology = MakeTopology();
   amdf_gpu_kfd_user_queue_plans_t plans;

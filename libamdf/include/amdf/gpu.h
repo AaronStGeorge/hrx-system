@@ -246,8 +246,9 @@ typedef struct amdf_gpu_device_info_t {
 /// the consumed frontier is W - ((W - R) & (capacity - 1)). Status and wait
 /// operations expand the native counter to this monotonic frontier; the raw
 /// mapping continues to expose the native ring-relative read index.
-/// After storing complete commands, the producer release-stores the new write
-/// index, executes a host-to-device store fence (SFENCE on x86-64), then stores
+/// After storing complete commands, the host producer executes the mapping's
+/// host_publish_fence, then release-stores the new write index, executes a
+/// host-to-device store fence (SFENCE on x86-64), then stores
 /// the same value to the write-only 64-bit MMIO doorbell. A C/C++ release store
 /// alone does not supply that fence. Consumption proves ring storage can be
 /// reused; command completion requires a separate fence.
@@ -310,7 +311,8 @@ enum amdf_gpu_pm4_format_feature_bits_e {
 /// write indices are naturally aligned 64-bit monotonic byte counts; each
 /// index selects storage modulo `ring_byte_length`. A producer never advances
 /// more than that capacity beyond the acquired read index. After storing
-/// complete packets into the ring, the producer performs a release store of
+/// complete packets into the ring, a host producer executes the mapping's
+/// host_publish_fence. The producer then performs a release store of
 /// the new write index. A host producer then executes a host-to-device store
 /// fence (SFENCE on x86-64) before storing the same value to the write-only
 /// 64-bit MMIO doorbell; a C/C++ release store alone does not supply that
@@ -421,7 +423,9 @@ enum amdf_gpu_sdma_format_feature_bits_e {
 /// through the write index (atomic fetch-add for MULTI), wait until the
 /// reserved slot is below acquired read_index + ring_byte_length / 64, and
 /// write the packet body before release-storing its header/setup dword. A host
-/// producer then executes a host-to-device store fence (SFENCE on x86-64)
+/// producer executes the mapping's host_publish_fence before the header store;
+/// this orders write-combined ring stores even while firmware polls that slot.
+/// It then executes a host-to-device store fence (SFENCE on x86-64)
 /// before storing the packet's reservation index to the write-only 64-bit
 /// MMIO doorbell. A C/C++ release store alone does not supply that fence.
 /// MULTI producers may notify out of order; an unpublished earlier slot blocks
@@ -637,6 +641,9 @@ typedef struct amdf_gpu_user_queue_create_info_t {
   uint32_t queue_family_ordinal;
   /// Requested scheduling priority.
   amdf_queue_priority_t priority;
+  /// Required primary-ring locality, or DEFAULT for provider policy. An
+  /// unsupported explicit placement fails; producer access is unchanged.
+  amdf_queue_placement_t placement;
   /// Required producer reservation protocol.
   amdf_queue_producer_mode_t producer_mode;
   /// Initial queue options. Unknown bits are invalid.

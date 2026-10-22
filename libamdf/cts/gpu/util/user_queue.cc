@@ -15,13 +15,14 @@ void GpuUserQueue::Initialize(
     const amdf_gpu_queue_scratch_t& scratch,
     amdf_user_queue_capabilities_t required_capabilities,
     uint64_t ring_byte_length, amdf_gpu_user_queue_flags_t flags,
-    const void* next) {
+    const void* next, amdf_queue_placement_t placement) {
   amdf_gpu_user_queue_create_info_t create = {
       .type = AMDF_STRUCTURE_TYPE_GPU_USER_QUEUE_CREATE_INFO,
       .structure_size = sizeof(create),
       .next = next,
       .queue_family_ordinal = family.ordinal,
       .priority = AMDF_QUEUE_PRIORITY_NORMAL,
+      .placement = placement,
       .producer_mode = producer_mode,
       .flags = flags,
       .required_capabilities = required_capabilities,
@@ -39,6 +40,9 @@ void GpuUserQueue::Initialize(
   ASSERT_EQ(info.format_features, family.format_features);
   ASSERT_EQ(info.producer_mode, producer_mode);
   ASSERT_EQ(info.priority, AMDF_QUEUE_PRIORITY_NORMAL);
+  if (placement != AMDF_QUEUE_PLACEMENT_DEFAULT) {
+    ASSERT_EQ(info.placement, placement);
+  }
   ASSERT_EQ(info.capabilities & required_capabilities, required_capabilities);
   ASSERT_EQ(api->user_queue_map(queue, nullptr, &mapping), AMDF_STATUS_OK);
   host.type = AMDF_STRUCTURE_TYPE_USER_QUEUE_MAPPING_INFO;
@@ -52,6 +56,9 @@ void GpuUserQueue::Initialize(
   ASSERT_EQ(host.ring_byte_length, info.ring_byte_length);
   ASSERT_EQ(host.index_bits, 64u);
   ASSERT_EQ(host.doorbell_bits, 64u);
+  ASSERT_TRUE(host.host_publish_fence == AMDF_HOST_CACHE_FENCE_NONE ||
+              host.host_publish_fence == AMDF_HOST_CACHE_FENCE_X86_SFENCE ||
+              host.host_publish_fence == AMDF_HOST_CACHE_FENCE_X86_MFENCE);
   ASSERT_EQ(host.metadata_ring_byte_length, 0u);
   ASSERT_NE(host.ring_address, 0u);
   ASSERT_NE(host.read_index_address, 0u);
@@ -125,6 +132,7 @@ bool GpuUserQueue::Release(const amdf_api_t* api) {
 
 void GpuUserQueue::PublishStream(uint64_t producer_index) {
   ASSERT_NE(info.command_type, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL);
+  GpuPublishFence(host);
   GpuStoreRelease(host.write_index_address, producer_index);
   GpuRingDoorbell(host.doorbell_address, producer_index);
 }
