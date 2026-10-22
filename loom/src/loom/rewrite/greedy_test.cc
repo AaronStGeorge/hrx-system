@@ -473,6 +473,125 @@ INSTANTIATE_TEST_SUITE_P(
                       ObservationBoundary::kBeforeWorklist,
                       ObservationBoundary::kRewriteOperation));
 
+TEST_F(GreedyRewriteTest, FactIndependentRewritesPublishAsOneBatch) {
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* lhs = nullptr;
+  loom_op_t* rhs = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), type,
+                                          LOOM_LOCATION_UNKNOWN, &lhs));
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(3), type,
+                                          LOOM_LOCATION_UNKNOWN, &rhs));
+  loom_op_t* sum = nullptr;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, loom_test_constant_result(lhs),
+                                      loom_test_constant_result(rhs), type,
+                                      LOOM_LOCATION_UNKNOWN, &sum));
+  const loom_value_id_t sum_result = loom_test_addi_result(sum);
+  loom_op_t* use = nullptr;
+  loom_op_t* terminator = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &sum_result, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &terminator));
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_pass_value_fact_owner_t owner;
+  loom_pass_value_fact_owner_initialize(&block_pool_, &owner);
+  loom_value_fact_table_t* facts = nullptr;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+      &owner, module_, loom_pass_value_fact_scope_function(function_), &facts));
+  loom_greedy_rewrite_driver_t driver;
+  loom_greedy_rewrite_driver_initialize(module_, &arena, facts, &driver);
+  struct State {
+    loom_op_t* lhs;
+    loom_op_t* rhs;
+    loom_op_t* sum;
+    uint32_t mutation_count = 0;
+    uint32_t before_worklist_count = 0;
+    uint32_t observed_count = 0;
+  } state = {lhs, rhs, sum};
+  loom_greedy_rewrite_callbacks_t callbacks = {
+      .user_data = &state,
+      .before_worklist =
+          [](void* user_data, loom_greedy_rewrite_driver_t* driver,
+             loom_region_t*, loom_greedy_rewrite_result_t*, bool* out_changed) {
+            auto* state = static_cast<State*>(user_data);
+            *out_changed = false;
+            EXPECT_EQ(state->mutation_count, 2u);
+            int64_t value = 0;
+            EXPECT_TRUE(loom_value_facts_as_exact_i64(
+                loom_rewriter_value_facts(&driver->rewriter,
+                                          loom_test_addi_result(state->sum)),
+                &value));
+            EXPECT_EQ(value, 18);
+            ++state->before_worklist_count;
+            return iree_ok_status();
+          },
+      .rewrite_op_without_facts =
+          [](void* user_data, loom_greedy_rewrite_driver_t* driver,
+             loom_op_t* op, loom_greedy_rewrite_result_t* result,
+             bool* out_changed) {
+            auto* state = static_cast<State*>(user_data);
+            *out_changed = false;
+            loom_attribute_t replacement = {};
+            if (op == state->lhs) {
+              replacement = loom_attr_i64(7);
+              state->lhs = nullptr;
+            } else if (op == state->rhs) {
+              replacement = loom_attr_i64(11);
+              state->rhs = nullptr;
+            } else {
+              return iree_ok_status();
+            }
+            EXPECT_EQ(state->observed_count, 0u);
+#ifndef NDEBUG
+            if (state->mutation_count != 0) {
+              EXPECT_TRUE(driver->fact_table->observation.pending);
+            }
+#endif
+            IREE_RETURN_IF_ERROR(loom_test_constant_rewrite_value(
+                &driver->rewriter, op, replacement));
+            ++state->mutation_count;
+            loom_greedy_rewrite_result_record_change(
+                result, &driver->rewriter,
+                LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+            *out_changed = true;
+            return iree_ok_status();
+          },
+      .rewrite_op =
+          [](void* user_data, loom_greedy_rewrite_driver_t* driver,
+             loom_op_t* op, loom_greedy_rewrite_result_t*, bool* out_changed) {
+            auto* state = static_cast<State*>(user_data);
+            *out_changed = false;
+            if (op != state->sum) {
+              return iree_ok_status();
+            }
+            EXPECT_EQ(state->mutation_count, 2u);
+            int64_t value = 0;
+            EXPECT_TRUE(loom_value_facts_as_exact_i64(
+                loom_rewriter_value_facts(&driver->rewriter,
+                                          loom_test_addi_result(op)),
+                &value));
+            EXPECT_EQ(value, 18);
+            ++state->observed_count;
+            return iree_ok_status();
+          },
+  };
+  loom_greedy_rewrite_result_t result;
+  IREE_ASSERT_OK(loom_greedy_rewrite_run_region(
+      &driver, function_, loom_func_like_body(function_), function_.op,
+      /*options=*/nullptr, &callbacks, &result));
+  EXPECT_EQ(state.mutation_count, 2u);
+  EXPECT_GT(state.before_worklist_count, 0u);
+  EXPECT_GT(state.observed_count, 0u);
+  EXPECT_TRUE(result.changed);
+  EXPECT_TRUE(result.facts_changed);
+
+  loom_greedy_rewrite_driver_deinitialize(&driver);
+  loom_pass_value_fact_owner_deinitialize(&owner);
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(GreedyRewriteTest, MutationTrackingDoesNotRequireAWorklist) {
   const loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_op_t* original = nullptr;

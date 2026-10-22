@@ -6638,6 +6638,8 @@ class Op:
         requires a policy; zero disables generic eager execution.
     structural_materialization: Whether a descriptor-free operation may emit
         target register packets while materializing its results.
+    canonicalize_without_facts: Whether the canonicalization callback depends
+        only on IR structure and may run before pending facts are published.
     legacy_formats: Legacy textual formats accepted by migration tooling.
     examples: List of example IR strings for documentation.
 
@@ -6662,6 +6664,7 @@ class Op:
     effects: tuple[Effect, ...] = ()
     ownership_effects: tuple[OperandOwnershipEffect | ResultOwnershipEffect, ...] = ()
     canonicalize: str = ""  # C function name for canonicalization, or "".
+    canonicalize_without_facts: bool = False
     effective_traits: str = (
         ""  # C function name for per-instance trait computation, or "".
     )
@@ -6704,6 +6707,7 @@ class Op:
         ownership_effects: list[OperandOwnershipEffect | ResultOwnershipEffect]
         | tuple[OperandOwnershipEffect | ResultOwnershipEffect, ...] = (),
         canonicalize: str = "",
+        canonicalize_without_facts: bool = False,
         effective_traits: str = "",
         facts: str = "",
         type_transfer: str = "",
@@ -6748,6 +6752,13 @@ class Op:
         object.__setattr__(self, "effects", frozen_effects)
         object.__setattr__(self, "ownership_effects", frozen_ownership_effects)
         object.__setattr__(self, "canonicalize", canonicalize)
+        if canonicalize_without_facts and not canonicalize:
+            raise ValueError(
+                f"{name}: canonicalize_without_facts requires a canonicalize callback"
+            )
+        object.__setattr__(
+            self, "canonicalize_without_facts", canonicalize_without_facts
+        )
         object.__setattr__(self, "effective_traits", effective_traits)
         object.__setattr__(self, "facts", facts)
         object.__setattr__(self, "type_transfer", type_transfer)

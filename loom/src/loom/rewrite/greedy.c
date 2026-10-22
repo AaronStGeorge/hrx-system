@@ -123,6 +123,43 @@ iree_status_t loom_greedy_rewrite_run_region(
     }
 
     bool any_changed = false;
+    if (callbacks && callbacks->rewrite_op_without_facts) {
+      loom_op_t* op = NULL;
+      while ((op = loom_rewriter_pop(&driver->rewriter)) != NULL) {
+        bool changed = false;
+        status = callbacks->rewrite_op_without_facts(
+            callbacks->user_data, driver, op, &result, &changed);
+        if (!iree_status_is_ok(status)) {
+          break;
+        }
+        if (changed) {
+          any_changed = true;
+          if (callbacks->changed) {
+            callbacks->changed(callbacks->user_data, driver);
+          }
+        }
+      }
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+      status = loom_rewriter_propagate_value_facts(&driver->rewriter);
+      loom_greedy_rewrite_result_record_rewriter_flags(&result,
+                                                       &driver->rewriter);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+      // Fact propagation schedules affected operations, but the complete
+      // region rescan below supersedes that incremental work. Drain it first
+      // so solver publication order cannot perturb the deterministic region
+      // order seen by fact-observing rewrites.
+      while (loom_rewriter_pop(&driver->rewriter) != NULL) {
+      }
+      status = loom_rewriter_seed_region(&driver->rewriter, region);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+    }
+
     if (callbacks && callbacks->before_worklist) {
       bool changed = false;
       status = loom_rewriter_propagate_value_facts(&driver->rewriter);

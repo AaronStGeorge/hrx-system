@@ -652,6 +652,63 @@ static iree_status_t loom_canonicalize_begin_iteration(
   return iree_ok_status();
 }
 
+static iree_status_t loom_canonicalize_try_erase_dead(
+    loom_canonicalize_rewrite_state_t* state, loom_rewriter_t* rewriter,
+    loom_op_t* op, loom_greedy_rewrite_result_t* result, bool* out_changed) {
+  *out_changed = false;
+  // Mini-DCE: erase trivially dead ops before fold/canonicalize. Source combine
+  // may retain a same-typed fact identity on a reusable producer for its
+  // adjacent CSE phase: an equivalent later expression can make the refined
+  // result live even when no source use names it directly. Ordinary universal
+  // canonicalization retains its eager dead-code contract.
+  rewriter->flags = 0;
+  if (loom_rewriter_is_trivially_dead(rewriter, op) &&
+      (!state->preserve_cse_fact_identities ||
+       !loom_canonicalize_fact_identity_refines_cse_expression(rewriter->module,
+                                                               op))) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_NONE);
+    *out_changed = true;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_canonicalize_rewrite_op_without_facts(
+    void* user_data, loom_greedy_rewrite_driver_t* driver, loom_op_t* op,
+    loom_greedy_rewrite_result_t* result, bool* out_changed) {
+  loom_canonicalize_rewrite_state_t* state =
+      (loom_canonicalize_rewrite_state_t*)user_data;
+  loom_rewriter_t* rewriter = &driver->rewriter;
+  *out_changed = false;
+  // Fact identities may carry pending relations that the iteration hook must
+  // first preserve as explicit SSA refinements. Ordinary mini-DCE handles
+  // them after publication; all other dead structure can leave this batch.
+  if (!loom_traits_are_fact_identity(op->traits)) {
+    IREE_RETURN_IF_ERROR(loom_canonicalize_try_erase_dead(state, rewriter, op,
+                                                          result, out_changed));
+  }
+  if (*out_changed) {
+    return iree_ok_status();
+  }
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(driver->module, op);
+  if (!vtable || !vtable->canonicalize ||
+      !iree_any_bit_set(vtable->vtable_flags,
+                        LOOM_OP_VTABLE_CANONICALIZE_WITHOUT_FACTS)) {
+    return iree_ok_status();
+  }
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(vtable->canonicalize(op, rewriter));
+  loom_greedy_rewrite_result_record_rewriter_flags(result, rewriter);
+  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_CHANGED)) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_canonicalize_rewrite_op(
     void* user_data, loom_greedy_rewrite_driver_t* driver, loom_op_t* op,
     loom_greedy_rewrite_result_t* result, bool* out_changed) {
@@ -659,25 +716,9 @@ static iree_status_t loom_canonicalize_rewrite_op(
   loom_canonicalize_rewrite_state_t* state =
       (loom_canonicalize_rewrite_state_t*)user_data;
   loom_rewriter_t* rewriter = &driver->rewriter;
-
-  // Mini-DCE: erase trivially dead ops before fold/canonicalize. Source combine
-  // may retain a same-typed fact identity on a reusable producer for its
-  // adjacent CSE phase: an equivalent later expression can make the refined
-  // result live even when no source use names it directly. Ordinary universal
-  // canonicalization retains its eager dead-code contract.
-  bool erased = false;
-  rewriter->flags = 0;
-  if (loom_rewriter_is_trivially_dead(rewriter, op) &&
-      (!state->preserve_cse_fact_identities ||
-       !loom_canonicalize_fact_identity_refines_cse_expression(rewriter->module,
-                                                               op))) {
-    IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));
-    erased = true;
-  }
-  if (erased) {
-    loom_greedy_rewrite_result_record_change(
-        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_NONE);
-    *out_changed = true;
+  IREE_RETURN_IF_ERROR(loom_canonicalize_try_erase_dead(state, rewriter, op,
+                                                        result, out_changed));
+  if (*out_changed) {
     return iree_ok_status();
   }
 
@@ -773,7 +814,9 @@ static iree_status_t loom_canonicalize_rewrite_op(
   }
 
   // Structural canonicalization patterns.
-  if (vtable && vtable->canonicalize) {
+  if (vtable && vtable->canonicalize &&
+      !iree_any_bit_set(vtable->vtable_flags,
+                        LOOM_OP_VTABLE_CANONICALIZE_WITHOUT_FACTS)) {
     rewriter->flags = 0;
     IREE_RETURN_IF_ERROR(vtable->canonicalize(op, rewriter));
     if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_CHANGED)) {
@@ -853,6 +896,7 @@ static iree_status_t loom_canonicalizer_run_precomputed_region(
       .prepare_region = loom_canonicalize_prepare_region,
       .cleanup_region = loom_canonicalize_cleanup_region,
       .before_worklist = loom_canonicalize_begin_iteration,
+      .rewrite_op_without_facts = loom_canonicalize_rewrite_op_without_facts,
       .rewrite_op = loom_canonicalize_rewrite_op,
       .changed = loom_canonicalize_reset_symbolic_context,
   };

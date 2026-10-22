@@ -715,6 +715,7 @@ low_func_call = Op(
     ],
     effective_traits="loom_low_func_call_effective_traits",
     canonicalize="loom_low_func_call_canonicalize",
+    canonicalize_without_facts=True,
     verify="loom_low_func_call_verify",
     format=[
         OptionalGroup([Attr("effect_contract")], anchor="effect_contract"),
@@ -1397,6 +1398,7 @@ low_slice = Op(
         SameRegisterClass("source", "result"),
     ],
     canonicalize="loom_low_slice_canonicalize",
+    canonicalize_without_facts=True,
     verify="loom_low_slice_verify",
     facts="loom_low_slice_facts",
     format=[
@@ -1743,6 +1745,7 @@ low_invoke = Op(
     ],
     effective_traits="loom_low_invoke_effective_traits",
     canonicalize="loom_low_invoke_canonicalize",
+    canonicalize_without_facts=True,
     verify="loom_low_invoke_verify",
     format=[
         OptionalGroup([Attr("effect_contract")], anchor="effect_contract"),
