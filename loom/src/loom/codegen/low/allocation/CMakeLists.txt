@@ -826,6 +826,7 @@ loom_cc_library(
     "physical_domains.c"
   DEPS
     ::live_range
+    ::target_constraints
     ::unit_liveness
     iree::base
     iree::base::internal

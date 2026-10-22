@@ -336,12 +336,14 @@ static iree_status_t loom_low_physical_components_merge(
 }
 
 static iree_status_t loom_low_physical_domains_build_preferences(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_target_constraints_t* target_constraints,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_unit_liveness_t* unit_liveness,
     const loom_low_placement_table_t* placement, iree_host_size_t scalar_count,
     iree_arena_allocator_t* arena, uint32_t* offsets, uint64_t* penalty_words,
     uint64_t* affinity_words, uint64_t* reservation_words) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      target_constraints->target->descriptor_set;
   const iree_host_size_t word_count =
       iree_bitmap_calculate_words(descriptor_set->physical_register_count);
   const iree_host_size_t atomic_word_count =
@@ -412,6 +414,10 @@ static iree_status_t loom_low_physical_domains_build_preferences(
              atomic_word_count * sizeof(uint64_t));
       const loom_low_reg_class_t* reg_class =
           &descriptor_set->reg_classes[class_id];
+      loom_low_allocation_class_capacity_t class_capacity;
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_reg_class_capacity(
+              target_constraints, class_id, &class_capacity));
       // Both factors are uint16, so their product fits every supported
       // iree_host_size_t representation.
       const iree_host_size_t candidate_unit_count =
@@ -421,12 +427,21 @@ static iree_status_t loom_low_physical_domains_build_preferences(
           arena, candidate_unit_count,
           sizeof(*candidate_units_by_class[class_id]),
           (void**)&candidate_units_by_class[class_id]));
-      candidate_unit_counts_by_class[class_id] = candidate_unit_count;
       iree_host_size_t candidate_unit_index = 0;
       for (uint16_t r = 0; r < reg_class->allocatable_count; ++r) {
         const uint32_t physical_register_id =
             loom_low_descriptor_set_physical_register_candidate(descriptor_set,
                                                                 class_id, r);
+        if (!loom_low_allocation_target_constraints_location_range_fits_capacity(
+                descriptor_set, &class_capacity,
+                LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+                physical_register_id, 1) ||
+            loom_low_allocation_target_constraints_reserved_range_conflicts(
+                target_constraints, class_id,
+                LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+                physical_register_id, 1)) {
+          continue;
+        }
         loom_low_physical_bits_set(class_words[class_id], physical_register_id);
         const loom_low_physical_register_t* physical_register =
             &descriptor_set->physical_registers[physical_register_id];
@@ -443,9 +458,9 @@ static iree_status_t loom_low_physical_domains_build_preferences(
               };
         }
       }
-      IREE_ASSERT_EQ(candidate_unit_index, candidate_unit_count);
+      candidate_unit_counts_by_class[class_id] = candidate_unit_index;
       loom_low_physical_candidate_unit_sort(candidate_units_by_class[class_id],
-                                            candidate_unit_count);
+                                            candidate_unit_index);
       for (iree_host_size_t c = 0;
            c < used_class_count && !has_overlapping_domains; ++c) {
         uint64_t shared = 0;
@@ -932,6 +947,13 @@ static iree_status_t loom_low_physical_domains_build_preferences(
         uint16_t general_candidate_count = 0;
         for (uint16_t candidate = 0; candidate < reg_class->allocatable_count;
              ++candidate) {
+          const uint32_t physical_register_id =
+              loom_low_descriptor_set_physical_register_candidate(
+                  descriptor_set, class_id, candidate);
+          if (!loom_low_physical_bits_test(class_words[class_id],
+                                           physical_register_id)) {
+            continue;
+          }
           const uint64_t bit = UINT64_C(1) << (candidate % 64);
           const iree_host_size_t word =
               offsets[interval_index] + candidate / 64;
@@ -1025,11 +1047,13 @@ loom_low_allocation_physical_domains_for_interval(
 }
 
 iree_status_t loom_low_allocation_physical_domains_build(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_target_constraints_t* target_constraints,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_unit_liveness_t* unit_liveness,
     const loom_low_placement_table_t* placement, iree_arena_allocator_t* arena,
     loom_low_allocation_physical_domains_t* out_domains) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      target_constraints->target->descriptor_set;
   *out_domains = (loom_low_allocation_physical_domains_t){0};
   if (descriptor_set->physical_register_count == 0) {
     return iree_ok_status();
@@ -1072,8 +1096,8 @@ iree_status_t loom_low_allocation_physical_domains_build(
   memset(reservation_words, 0, word_count * sizeof(*reservation_words));
   const iree_arena_checkpoint_t checkpoint = iree_arena_checkpoint_save(arena);
   iree_status_t status = loom_low_physical_domains_build_preferences(
-      descriptor_set, liveness, unit_liveness, placement, scalar_count, arena,
-      offsets, penalty_words, affinity_words, reservation_words);
+      target_constraints, liveness, unit_liveness, placement, scalar_count,
+      arena, offsets, penalty_words, affinity_words, reservation_words);
   iree_arena_checkpoint_restore(&checkpoint);
   if (iree_status_is_ok(status)) {
     *out_domains = (loom_low_allocation_physical_domains_t){

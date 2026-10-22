@@ -1634,9 +1634,8 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
       context->preferences, state->scratch_arena,
       &state->preference_workspace));
   IREE_RETURN_IF_ERROR(loom_low_allocation_physical_domains_build(
-      context->target->descriptor_set, context->liveness,
-      context->unit_liveness, context->placement, state->scratch_arena,
-      &state->physical_domains));
+      context->target_constraints, context->liveness, context->unit_liveness,
+      context->placement, state->scratch_arena, &state->physical_domains));
   if (context->search_strategy ==
       LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_scalar_packing_build(

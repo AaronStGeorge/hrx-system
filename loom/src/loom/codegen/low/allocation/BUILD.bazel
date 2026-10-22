@@ -733,6 +733,7 @@ loom_cc_library(
     hdrs = ["physical_domains.h"],
     deps = [
         ":live_range",
+        ":target_constraints",
         ":unit_liveness",
         "//loom/src/loom/analysis:liveness",
         "//loom/src/loom/codegen/low:descriptors",
