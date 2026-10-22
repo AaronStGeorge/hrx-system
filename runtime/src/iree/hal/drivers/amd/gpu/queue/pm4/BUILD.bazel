@@ -568,6 +568,7 @@ iree_runtime_cc_library(
     hdrs = ["ring.h"],
     deps = [
         ":commands",
+        "//libamdf:headers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
     ],

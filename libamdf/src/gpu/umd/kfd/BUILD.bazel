@@ -198,6 +198,7 @@ amdf_cc_library(
     srcs = ["hdp.c"],
     hdrs = ["hdp.h"],
     target_compatible_with = KFD_COMPATIBILITY,
+    visibility = ["//libamdf/src/gpu/umd/kfd/target:__pkg__"],
     deps = [
         ":device_state",
         "//libamdf/src:allocator",
@@ -311,6 +312,7 @@ amdf_cc_library(
         ":buffer",
         ":device_state",
         ":doorbell",
+        ":hdp",
         "//libamdf/src/platform/linux:file",
         "//third_party:linux_amdgpu_uapi",
         "//third_party:linux_kfd_uapi",
@@ -517,7 +519,11 @@ amdf_cc_library(
 
 amdf_cc_test(
     name = "user_queue_test",
-    srcs = ["user_queue_test.cc"],
+    srcs = [
+        "user_queue_publication_test.cc",
+        "user_queue_test.cc",
+        "user_queue_test_fixture.h",
+    ],
     target_compatible_with = KFD_COMPATIBILITY,
     deps = [
         ":aql",

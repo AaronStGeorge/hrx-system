@@ -193,13 +193,19 @@ TEST(KfdHdpPolicyTest, QualifiesExactPublicationFamilies) {
         Topology(12, 0, 0), Topology(9, 5, 0), Topology(12, 0, 1),
         Topology(12, 5, 0), Topology(12, 5, 3), Topology(11, 0, 0),
         Topology(11, 0, 3), Topology(11, 5, 0), Topology(11, 5, 1)}) {
-    EXPECT_TRUE(amdf_gpu_kfd_hdp_supports_host_publication(&topology));
+    EXPECT_EQ(amdf_gpu_kfd_hdp_host_publication(&topology),
+              AMDF_QUEUE_HOST_PUBLICATION_FLAG_KNOWN |
+                  AMDF_QUEUE_HOST_PUBLICATION_FLAG_DEVICE_READ |
+                  (topology.properties.gfx_ip.major == 11
+                       ? AMDF_QUEUE_HOST_PUBLICATION_FLAG_KERNEL_CALL
+                       : 0));
   }
   for (const auto& topology :
        {Topology(9, 0, 9), Topology(9, 0, 11), Topology(9, 4, 3),
         Topology(9, 5, 3), Topology(10, 3, 0), Topology(11, 1, 0),
         Topology(11, 6, 0), Topology(12, 1, 0), Topology(12, 6, 0)}) {
-    EXPECT_FALSE(amdf_gpu_kfd_hdp_supports_host_publication(&topology));
+    EXPECT_EQ(amdf_gpu_kfd_hdp_host_publication(&topology),
+              AMDF_QUEUE_HOST_PUBLICATION_FLAG_UNKNOWN);
   }
 }
 

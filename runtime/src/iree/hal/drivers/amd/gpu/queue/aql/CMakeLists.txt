@@ -435,8 +435,10 @@ iree_cc_library(
     "ring.c"
   DEPS
     ::packet
+    amdf::headers
     iree::base::internal
     iree::hal
+    iree::hal::drivers::amd::gpu::queue::user_queue
   PUBLIC
 )
 
@@ -820,6 +822,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::code
     iree::hal::drivers::amd::gpu::queue::blit
     iree::hal::drivers::amd::gpu::queue::program
+    iree::hal::drivers::amd::gpu::queue::user_queue
     iree::hal::drivers::amd::status
   PUBLIC
 )

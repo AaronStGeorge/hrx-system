@@ -742,6 +742,7 @@ iree_cc_library(
     "ring.c"
   DEPS
     ::commands
+    amdf::headers
     iree::base
     iree::hal
   PUBLIC

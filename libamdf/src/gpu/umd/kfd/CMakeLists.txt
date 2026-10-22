@@ -402,6 +402,7 @@ iree_cc_library(
     ::buffer
     ::device_state
     ::doorbell
+    ::hdp
     amdf::headers
     libamdf::src::platform::linux::file
   PUBLIC
@@ -667,7 +668,9 @@ iree_cc_test(
   NAME
     user_queue_test
   SRCS
+    "user_queue_publication_test.cc"
     "user_queue_test.cc"
+    "user_queue_test_fixture.h"
   DEPS
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
     ::aql

@@ -159,8 +159,10 @@ iree_runtime_cc_library(
     hdrs = ["ring.h"],
     deps = [
         ":packet",
+        "//libamdf:headers",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:user_queue",
     ],
 )
 
@@ -528,5 +530,6 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amd/gpu:code",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:blit",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:user_queue",
     ],
 )
