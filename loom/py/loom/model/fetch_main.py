@@ -19,6 +19,7 @@ from loom.model.fetch import check_output, install, plan_fetch
 from loom.model.fetch_catalog import installed_catalog, load_catalog
 from loom.model.fetch_console import AccessWaiter, display_text
 from loom.model.fetch_hf import AccessRequired
+from loom.model.fetch_picker import Picker
 from loom.model.fetch_source import FetchError, document_location
 from loom.model.fetch_storage import ContentCache
 
@@ -47,7 +48,9 @@ def _overrides(values: list[str]) -> dict[str, str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="loom-fetch", description="Acquire a portable Loom model's selected files."
+        prog="loom-fetch",
+        description="Acquire a portable Loom model's selected files. "
+        "Without a card or model ID, an interactive terminal opens the model picker.",
     )
     parser.add_argument(
         "card", nargs="?", help="local model JSON or a raw HTTP(S) model-card URL"
@@ -125,19 +128,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.card is not None and (args.model is not None or args.catalog is not None):
         parser.error("a direct card cannot be combined with --model or --catalog")
-    if args.card is None and args.model is None and not args.list:
+    interactive = (
+        not args.no_input
+        and not args.json
+        and sys.stdin.isatty()
+        and sys.stderr.isatty()
+    )
+    if args.card is None and args.model is None and not args.list and not interactive:
         parser.error("select a card or --model=ID; --list shows the available catalog")
-    if not args.list and args.output is None:
+    if not args.list and args.output is None and not interactive:
         parser.error("--output is required for acquisition or --dry-run")
     if args.no_lock and args.lockfile:
         parser.error("--no-lock cannot be combined with --lockfile")
     try:
-        interactive = (
-            not args.no_input
-            and not args.json
-            and sys.stdin.isatty()
-            and sys.stderr.isatty()
-        )
+        picker = Picker(sys.stdin, sys.stderr) if interactive else None
         wait = (
             AccessWaiter(interactive=interactive, input=sys.stdin, output=sys.stderr)
             if interactive or args.wait_for_access
@@ -149,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             snapshot = load_catalog(
                 args.catalog or installed_catalog(), cache, offline=args.offline
             )
-            if args.model is None:
+            if args.model is None and args.list:
                 listing = snapshot.catalog.document
                 if args.json:
                     sys.stdout.write(
@@ -166,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
                             f"{display_text(identity)}\t{display_text(entry['name'])}\n"
                         )
                 return 0
+            if args.model is None:
+                args.model = picker.model(snapshot.catalog.document)
             document, card = snapshot.read_model(
                 args.model, cache, offline=args.offline
             )
@@ -189,12 +195,19 @@ def main(argv: list[str] | None = None) -> int:
                         + "\n"
                     )
             return 0
-        selection = card.select(
+        select = (
+            card.select
+            if picker is None
+            else lambda **values: picker.selection(card, **values)
+        )
+        selection = select(
             configuration=args.configuration,
             service=args.service,
             variant=args.variant,
             programs=args.programs,
         )
+        if args.output is None:
+            args.output = picker.directory()
         plan = plan_fetch(
             document,
             selection,

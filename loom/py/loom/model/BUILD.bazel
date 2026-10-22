@@ -125,10 +125,23 @@ iree_py_library(
 
 iree_py_library(
     name = "fetch_console",
-    srcs = ["fetch_console.py"],
+    srcs = [
+        "fetch_console.py",
+        "fetch_windows.py",
+    ],
     deps = [
         ":fetch_hf",
         ":fetch_source",
+    ],
+)
+
+iree_py_library(
+    name = "fetch_picker",
+    srcs = ["fetch_picker.py"],
+    deps = [
+        ":fetch_console",
+        ":fetch_source",
+        ":manifest",
     ],
 )
 
@@ -140,6 +153,7 @@ iree_py_library(
         ":fetch_catalog",
         ":fetch_console",
         ":fetch_hf",
+        ":fetch_picker",
         ":fetch_source",
         ":fetch_storage",
         ":manifest",
@@ -151,6 +165,34 @@ iree_py_binary(
     srcs = ["fetch_main.py"],
     main = "fetch_main.py",
     deps = [":fetch_cli"],
+)
+
+iree_py_test(
+    name = "picker_test",
+    srcs = [
+        "picker_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.picker_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":catalog",
+        ":fetch_cli",
+        ":fetch_picker",
+        ":fetch_source",
+        ":manifest",
+    ],
+)
+
+iree_py_test(
+    name = "windows_console_test",
+    srcs = [
+        "windows_console_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.windows_console_test"],
+    main = "pytest_style_runner.py",
+    deps = [":fetch_console"],
 )
 
 iree_py_test(

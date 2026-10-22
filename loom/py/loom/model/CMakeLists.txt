@@ -146,9 +146,21 @@ iree_py_library(
     fetch_console
   SRCS
     "fetch_console.py"
+    "fetch_windows.py"
   DEPS
     loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_source
+)
+
+iree_py_library(
+  NAME
+    fetch_picker
+  SRCS
+    "fetch_picker.py"
+  DEPS
+    loom::py::loom::model::fetch_console
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::manifest
 )
 
 iree_py_library(
@@ -161,6 +173,7 @@ iree_py_library(
     loom::py::loom::model::fetch_catalog
     loom::py::loom::model::fetch_console
     loom::py::loom::model::fetch_hf
+    loom::py::loom::model::fetch_picker
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::manifest
@@ -175,6 +188,46 @@ iree_py_library(
     "fetch_main.py"
   DEPS
     loom::py::loom::model::fetch_cli
+)
+
+iree_py_test(
+  NAME
+    picker_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "picker_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.picker_test"
+  DEPS
+    loom::py::loom::model::catalog
+    loom::py::loom::model::fetch_cli
+    loom::py::loom::model::fetch_picker
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_test(
+  NAME
+    windows_console_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "windows_console_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.windows_console_test"
+  DEPS
+    loom::py::loom::model::fetch_console
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
 )
 
 iree_py_test(

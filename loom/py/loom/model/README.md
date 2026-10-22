@@ -106,6 +106,19 @@ loom-fetch model.json --configuration=streaming --output=./installed --dry-run
 loom-fetch model.json --configuration=streaming --output=./installed
 ```
 
+On Windows and Unix terminals, missing selections open a keyboard picker. Type
+to filter, use arrows or Home/End/Page Up/Page Down to move, and press Enter to
+select. Ctrl-U clears the filter; Escape or Ctrl-C cancels. Service, configuration,
+variant, and program choices come from the selected card. Explicit flags constrain
+the choices, and canonical configurations supply highlighted defaults.
+
+The picker asks for an installation directory when `--output` is absent. Screen
+controls and input modes are restored on completion or cancellation. Unsupported
+terminals use named line input, including `/text` filtering and `/cancel`.
+`--no-input`, `--json`, or redirected input/status output resolve choices from
+flags and card defaults. They require `--output` for acquisition and never open
+the picker.
+
 The acquisition path requires a complete matching `model.json.lock`, or an
 explicit `--lockfile` path/URL. A publication lock may cover more variants;
 fetch reads only the selected files. `--update-lock` computes a new exact set,

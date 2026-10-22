@@ -44,6 +44,8 @@ may share a tag when the publication is qualified for each consumer. The
 association is stored in the wheel's `loom.json` distribution metadata.
 
 With an association, `loom-fetch --list` discovers the current compatible models.
+Bare `loom-fetch` opens the terminal picker; `loom-fetch --catalog=./catalog.json`
+opens a local publication. Both ask for the selections and installation directory.
 Without one, discovery requires an explicit `--catalog`; direct card URLs remain
 usable. The development wheel carries no default tag. See the
 [catalog workflow](../../py/loom/model/README.md#catalog-discovery) for generation,

@@ -10,6 +10,7 @@ import functools
 import http.server
 import json
 import os
+import selectors
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,52 @@ import threading
 from pathlib import Path
 
 from model_card_test import check_model
+
+
+def pick_model(arguments, environment, output):
+    """Drives the installed command through a real terminal and restores it."""
+    import pty
+    import termios
+
+    master, slave = pty.openpty()
+    original = termios.tcgetattr(slave)
+    termios.tcsetwinsize(slave, (24, 100))
+    try:
+        with subprocess.Popen(
+            [str(value) for value in arguments],
+            stdin=slave,
+            stderr=slave,
+            stdout=subprocess.PIPE,
+            env=dict(environment, TERM="xterm-256color"),
+        ) as process:
+            try:
+                with selectors.DefaultSelector() as selector:
+                    selector.register(master, selectors.EVENT_READ, "terminal")
+                    selector.register(process.stdout, selectors.EVENT_READ, "result")
+                    for marker, response in (
+                        (b"Enter: select", b"\r"),
+                        (
+                            b"Install directory (Ctrl-C cancels): ",
+                            str(output).encode() + b"\n",
+                        ),
+                    ):
+                        content = b""
+                        while marker not in content:
+                            for key, _ in selector.select():
+                                data = os.read(key.fd, 65536)
+                                assert data and key.data == "terminal", (content, data)
+                                content += data
+                        os.write(master, response)
+                result, _ = process.communicate()
+                assert process.returncode == 0, result
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+        assert termios.tcgetattr(slave) == original
+    finally:
+        os.close(master)
+        os.close(slave)
 
 
 def main(wheel, associated_wheel, server, deployment):
@@ -193,6 +240,25 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
         receipt = json.loads((catalog_installation / ".loom-fetch.json").read_text())
         assert receipt["catalog"] == listing["snapshot"]
         assert receipt["card"]["location"] == str(installed / "model.json")
+        if os.name != "nt":
+            catalog_installation = directory / "picker-installed"
+            pick_model(
+                [
+                    fetch,
+                    "--catalog",
+                    catalog,
+                    "--configuration=check",
+                    "--offline",
+                    "--cache",
+                    directory / "cache",
+                ],
+                environment,
+                catalog_installation,
+            )
+            receipt = json.loads(
+                (catalog_installation / ".loom-fetch.json").read_text()
+            )
+            assert receipt["catalog"] == listing["snapshot"]
         serving = json.loads(deployment.read_text())
         serving["model"]["path"] = str(catalog_installation / "model.json")
         selected = directory / "serve.json"

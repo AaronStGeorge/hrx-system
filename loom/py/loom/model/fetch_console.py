@@ -8,10 +8,12 @@
 
 from __future__ import annotations
 
+import codecs
 import os
 import threading
 import time
 import webbrowser
+from contextlib import contextmanager
 from typing import TextIO
 
 from .fetch_hf import AccessRequired
@@ -34,18 +36,18 @@ class TerminalInput:
         self.stream = stream
         # POSIX attributes restored on success, cancellation, or exception.
         self.saved_mode = None
-        # Windows CRT key functions, loaded only on that platform.
+        # Windows console events, loaded only on that platform.
         self.windows = None
-        # Extended Windows keys have a prefix followed by a scan code.
-        self.extended_key = False
+        # POSIX reads may split a UTF-8 character across input events.
+        self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
     def __enter__(self):
         if not self.stream.isatty():
             raise FetchError("interactive input requires a terminal; use --no-input")
         if os.name == "nt":
-            import msvcrt
+            from .fetch_windows import ConsoleInput
 
-            self.windows = msvcrt
+            self.windows = ConsoleInput(self.stream)
         else:
             import termios
             import tty
@@ -60,23 +62,18 @@ class TerminalInput:
 
             termios.tcsetattr(self.stream.fileno(), termios.TCSANOW, self.saved_mode)
 
-    def read(self, timeout: float, cancelled: threading.Event) -> str | None:
+    def _read_character(self, timeout: float, cancelled: threading.Event) -> str | None:
         deadline = time.monotonic() + timeout
         while not cancelled.is_set():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return None
             if self.windows is not None:
-                if self.windows.kbhit():
-                    key = self.windows.getwch()
-                    if self.extended_key:
-                        self.extended_key = False
-                    elif key in ("\0", "\xe0"):
-                        self.extended_key = True
-                    elif key in ("\x03", "\x1a"):
+                key = self.windows.read()
+                if key is not None:
+                    if key in ("\x03", "\x1a"):
                         raise KeyboardInterrupt
-                    else:
-                        return key
+                    return key
                 cancelled.wait(min(remaining, 0.1))
             else:
                 import select
@@ -88,8 +85,108 @@ class TerminalInput:
                     key = os.read(self.stream.fileno(), 1)
                     if not key or key in (b"\x03", b"\x04"):
                         raise KeyboardInterrupt
-                    return key.decode("ascii", errors="replace")
+                    character = self.decoder.decode(key)
+                    if character:
+                        return character
         return None
+
+    def read(self, timeout: float, cancelled: threading.Event) -> str | None:
+        """Reads text or a named navigation key; cancellation always interrupts."""
+        key = self._read_character(timeout, cancelled)
+        if key != "\x1b" or self.windows is not None:
+            return key
+        # Escape is also a key. This short inter-character window disambiguates
+        # it from a terminal's CSI/SS3 sequences without blocking an operation.
+        suffix = self._read_character(0.1, cancelled)
+        if suffix is None:
+            return key
+        if suffix not in ("[", "O"):
+            return "<ignored>"
+        sequence = suffix
+        for _ in range(32):
+            suffix = self._read_character(0.1, cancelled)
+            if suffix is None or len(suffix) != 1:
+                return "<ignored>"
+            sequence += suffix
+            if "@" <= suffix <= "~":
+                return {
+                    "[A": "<up>",
+                    "OA": "<up>",
+                    "[B": "<down>",
+                    "OB": "<down>",
+                    "[C": "<right>",
+                    "OC": "<right>",
+                    "[D": "<left>",
+                    "OD": "<left>",
+                    "[H": "<home>",
+                    "OH": "<home>",
+                    "[1~": "<home>",
+                    "[F": "<end>",
+                    "OF": "<end>",
+                    "[4~": "<end>",
+                    "[5~": "<page-up>",
+                    "[6~": "<page-down>",
+                    "[3~": "<delete>",
+                }.get(sequence, "<ignored>")
+        return "<ignored>"
+
+
+@contextmanager
+def terminal_screen(output: TextIO):
+    """Enables an alternate VT screen, or yields False for plain line input."""
+    restore = None
+    supported = output.isatty() and os.environ.get("TERM") != "dumb"
+    if supported and os.name == "nt":
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetConsoleMode.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel.GetConsoleMode.restype = wintypes.BOOL
+        kernel.SetConsoleMode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel.SetConsoleMode.restype = wintypes.BOOL
+        handle = msvcrt.get_osfhandle(output.fileno())
+        mode = wintypes.DWORD()
+        supported = bool(kernel.GetConsoleMode(handle, ctypes.byref(mode)))
+        if supported:
+            # ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING.
+            supported = bool(kernel.SetConsoleMode(handle, mode.value | 0x5))
+            if supported:
+
+                def restore():
+                    if not kernel.SetConsoleMode(handle, mode.value):
+                        raise ctypes.WinError(ctypes.get_last_error())
+    elif supported:
+        supported = os.environ.get("TERM", "").startswith(
+            (
+                "xterm",
+                "screen",
+                "tmux",
+                "vt",
+                "ansi",
+                "linux",
+                "rxvt",
+                "alacritty",
+                "foot",
+            )
+        )
+    try:
+        if supported:
+            output.write("\x1b[?1049h\x1b[?25l")
+            output.flush()
+        yield supported
+    finally:
+        try:
+            if supported:
+                output.write("\x1b[0m\x1b[?25h\x1b[?1049l")
+                output.flush()
+        finally:
+            if restore is not None:
+                restore()
 
 
 class AccessWaiter:
