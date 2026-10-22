@@ -304,13 +304,9 @@ class MemoryLossTest : public ::testing::Test {
   }
 
   void ExpectLoss(iree_status_t status) {
-    char text[2048];
-    iree_host_size_t length = 0;
-    EXPECT_TRUE(iree_status_format(status, sizeof(text), text, &length));
-    EXPECT_NE(std::string(text, length).find("native section release"),
-              std::string::npos);
-    EXPECT_NE(std::string(text, length).find("physical admission"),
-              std::string::npos);
+    const std::string text = iree::Status::ToString(status);
+    EXPECT_NE(text.find("native section release"), std::string::npos);
+    EXPECT_NE(text.find("physical admission"), std::string::npos);
     IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, status);
   }
 
