@@ -820,6 +820,51 @@ low.func.def target<test.low.core> @caller(%value: reg<test.pressure.alias32>) -
   EXPECT_EQ(frame.allocation.spill_count, 1u);
 }
 
+TEST_F(LowEmissionFrameTest, CallPressureAccountsForSharedPackingCapacity) {
+  ModulePtr module = ParseModule(R"(
+low.func.decl pure target<test.low.core> @callee()
+
+low.func.def target<test.low.core> @caller(%narrow: reg<test.packed.narrow>, %wide: reg<test.packed.wide>) -> (reg<test.i32>, reg<test.packed.wide>) asm {
+  low.func.call pure @callee() : ()
+  %released = copy %narrow : reg<test.packed.narrow> -> reg<test.i32>
+  return %released, %wide
+}
+)");
+  const loom_low_call_clobber_t clobber = {
+      .register_class = TEST_LOW_CORE_REG_CLASS_ID_TEST_PACKED_NARROW,
+      .location = 0,
+      .count = 1,
+  };
+  loom_low_call_contract_t contract = {
+      .clobbers = {&clobber, 1},
+  };
+  loom_low_planning_statistics_t statistics = {};
+  loom_low_emission_frame_options_t options = {
+      .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
+      .statistics = &statistics,
+  };
+  options.call_contracts.query = [](void* user_data, loom_symbol_ref_t callee) {
+    (void)callee;
+    return static_cast<const loom_low_call_contract_t*>(user_data);
+  };
+  options.call_contracts.user_data = &contract;
+
+  loom_low_emission_frame_t frame = {};
+  bool accepted = false;
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module.get(), loom_block_op(loom_module_block(module.get()), 1), &options,
+      &arena_, &frame, &accepted));
+
+  ASSERT_TRUE(accepted);
+  ASSERT_EQ(frame.schedule.error_count, 0u);
+  ASSERT_EQ(frame.allocation.error_count, 0u);
+  EXPECT_EQ(statistics.frame_build_count, 1u);
+  EXPECT_LT(frame.schedule.nodes[1].scheduled_ordinal,
+            frame.schedule.nodes[0].scheduled_ordinal);
+}
+
 TEST_F(LowEmissionFrameTest, ReusedRegisterWaitsForPreviousPhysicalRead) {
   const auto strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY;
   ModulePtr module = ParseModule(R"(
