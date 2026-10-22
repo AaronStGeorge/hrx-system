@@ -8,6 +8,8 @@ load("//build_tools/bazel:cc.bzl", "iree_cc_library")
 
 package(default_visibility = ["//visibility:private"])
 
+exports_files(["threaded_cache_reads.patch"])
+
 iree_cc_library(
     name = "libbacktrace_linux",
     hdrs = ["iree_libbacktrace.h"],

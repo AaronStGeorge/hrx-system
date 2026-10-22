@@ -1,0 +1,317 @@
+diff --git a/atomic.c b/atomic.c
+index 3d5cbcc..b99bb7a 100644
+--- a/atomic.c
++++ b/atomic.c
+@@ -66,6 +66,19 @@ backtrace_atomic_load_int (int *p)
+   return i;
+ }
+
++/* Do an atomic load of a size_t value.  */
++
++size_t
++backtrace_atomic_load_size_t (size_t *p)
++{
++  size_t v;
++
++  v = *p;
++  while (!__sync_bool_compare_and_swap (p, v, v))
++    v = *p;
++  return v;
++}
++
+ /* Do an atomic store of a pointer.  */
+
+ void
+diff --git a/dwarf.c b/dwarf.c
+index e70f5ea..1ebdfbb 100644
+--- a/dwarf.c
++++ b/dwarf.c
+@@ -660,8 +660,6 @@ struct unit
+   const char *filename;
+   /* Compilation command working directory.  */
+   const char *comp_dir;
+-  /* Absolute file name, only set if needed.  */
+-  const char *abs_filename;
+   /* The abbreviations for this unit.  */
+   struct abbrevs abbrevs;
+
+@@ -670,6 +668,8 @@ struct unit
+      as needed, and therefore require care, as different threads may
+      try to initialize them simultaneously.  */
+
++  /* Absolute file name, only set if needed.  */
++  const char *abs_filename;
+   /* PC to line number mapping.  This is NULL if the values have not
+      been read.  This is (struct line *) -1 if there was an error
+      reading the values.  */
+@@ -4176,6 +4176,9 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+   struct unit *u;
+   int new_data;
+   struct line *lines;
++  size_t lines_count;
++  struct function_addrs *function_addrs;
++  size_t function_addrs_count;
+   struct line *ln;
+   struct function_addrs *p;
+   struct function_addrs *fmatch;
+@@ -4236,7 +4239,10 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+      simultaneously.  */
+
+   u = entry->u;
+-  lines = u->lines;
++  if (!state->threaded)
++    lines = u->lines;
++  else
++    lines = backtrace_atomic_load_pointer (&u->lines);
+
+   /* Skip units with no useful line number information by walking
+      backward.  Useless line number information is marked by setting
+@@ -4244,27 +4250,22 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+   while (entry > ddata->addrs
+ 	 && pc >= (entry - 1)->low
+ 	 && pc < (entry - 1)->high)
+     {
+-      if (state->threaded)
+-	lines = (struct line *) backtrace_atomic_load_pointer (&u->lines);
+-
+       if (lines != (struct line *) (uintptr_t) -1)
+ 	break;
+
+       --entry;
+
+       u = entry->u;
+-      lines = u->lines;
++      if (!state->threaded)
++	lines = u->lines;
++      else
++	lines = backtrace_atomic_load_pointer (&u->lines);
+     }
+
+-  if (state->threaded)
+-    lines = backtrace_atomic_load_pointer (&u->lines);
+-
+   new_data = 0;
+   if (lines == NULL)
+     {
+-      struct function_addrs *function_addrs;
+-      size_t function_addrs_count;
+       struct line_header lhdr;
+       size_t count;
+
+@@ -4316,6 +4321,25 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+ 	}
+     }
+
++  /* Load a self-consistent view of the lazy fields.  In threaded mode
++     another initializer may still publish an equivalent data set after
++     lines becomes non-NULL, so every shared field must remain atomic.  */
++  if (!state->threaded)
++    {
++      lines = u->lines;
++      lines_count = u->lines_count;
++      function_addrs = u->function_addrs;
++      function_addrs_count = u->function_addrs_count;
++    }
++  else
++    {
++      lines = backtrace_atomic_load_pointer (&u->lines);
++      lines_count = backtrace_atomic_load_size_t (&u->lines_count);
++      function_addrs = backtrace_atomic_load_pointer (&u->function_addrs);
++      function_addrs_count =
++	backtrace_atomic_load_size_t (&u->function_addrs_count);
++    }
++
+   /* Now all fields of U have been initialized.  */
+
+   if (lines == (struct line *) (uintptr_t) -1)
+@@ -4330,8 +4350,8 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+
+   /* Search for PC within this unit.  */
+
+-  ln = (struct line *) bsearch (&pc, lines, entry->u->lines_count,
+-				sizeof (struct line), line_search);
++  ln = (struct line *) bsearch (&pc, lines, lines_count, sizeof (struct line),
++				line_search);
+   if (ln == NULL)
+     {
+       /* The PC is between the low_pc and high_pc attributes of the
+@@ -4339,11 +4359,14 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+ 	 compilation unit, but no entry in the line table covers it.
+ 	 This implies that the start of the compilation unit has no
+ 	 line number information.  */
+
+-      if (entry->u->abs_filename == NULL)
++      if (!state->threaded)
++	filename = u->abs_filename;
++      else
++	filename = backtrace_atomic_load_pointer (&u->abs_filename);
++
++      if (filename == NULL)
+ 	{
+-	  const char *filename;
+-
+ 	  filename = entry->u->filename;
+ 	  if (filename != NULL
+ 	      && !IS_ABSOLUTE_PATH (filename)
+@@ -4369,20 +4392,23 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+ 	      memcpy (s + dir_len + 1, filename, filename_len + 1);
+ 	      filename = s;
+ 	    }
+-	  entry->u->abs_filename = filename;
++	  if (!state->threaded)
++	    u->abs_filename = filename;
++	  else
++	    backtrace_atomic_store_pointer (&u->abs_filename,
++					    (void *) filename);
+ 	}
+
+-      return callback (data, pc, entry->u->abs_filename, 0, NULL);
++      return callback (data, pc, filename, 0, NULL);
+     }
+
+   /* Search for function name within this unit.  */
+
+-  if (entry->u->function_addrs_count == 0)
++  if (function_addrs_count == 0)
+     return callback (data, pc, ln->filename, ln->lineno, NULL);
+
+   p = ((struct function_addrs *)
+-       bsearch (&pc, entry->u->function_addrs,
+-		entry->u->function_addrs_count,
++       bsearch (&pc, function_addrs, function_addrs_count,
+ 		sizeof (struct function_addrs),
+ 		function_addrs_search));
+   if (p == NULL)
+@@ -4403,7 +4429,7 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+ 	  fmatch = p;
+ 	  break;
+ 	}
+-      if (p == entry->u->function_addrs)
++      if (p == function_addrs)
+ 	break;
+       if ((p - 1)->low < p->low)
+ 	break;
+diff --git a/elf.c b/elf.c
+index 5ca03f1..f1290cb 100644
+--- a/elf.c
++++ b/elf.c
+@@ -572,7 +572,14 @@ elf_nodebug (struct backtrace_state *state, uintptr_t pc,
+ 	     backtrace_full_callback callback,
+ 	     backtrace_error_callback error_callback, void *data)
+ {
+-  if (state->syminfo_fn != NULL && state->syminfo_fn != elf_nosyms)
++  syminfo syminfo_fn;
++
++  if (!state->threaded)
++    syminfo_fn = state->syminfo_fn;
++  else
++    syminfo_fn = backtrace_atomic_load_pointer (&state->syminfo_fn);
++
++  if (syminfo_fn != NULL && syminfo_fn != elf_nosyms)
+     {
+       struct backtrace_call_full bdata;
+
+@@ -584,8 +591,8 @@ elf_nodebug (struct backtrace_state *state, uintptr_t pc,
+       bdata.full_error_callback = error_callback;
+       bdata.full_data = data;
+       bdata.ret = 0;
+-      state->syminfo_fn (state, pc, backtrace_syminfo_to_full_callback,
+-			 backtrace_syminfo_to_full_error_callback, &bdata);
++      syminfo_fn (state, pc, backtrace_syminfo_to_full_callback,
++		  backtrace_syminfo_to_full_error_callback, &bdata);
+       return bdata.ret;
+     }
+
+diff --git a/fileline.c b/fileline.c
+index 62aaf5e..db76b3b 100644
+--- a/fileline.c
++++ b/fileline.c
+@@ -388,12 +388,27 @@ backtrace_pcinfo (struct backtrace_state *state, uintptr_t pc,
+ 		  backtrace_error_callback error_callback, void *data)
+ {
++  int failed;
++  fileline fileline_fn;
++
+   if (!fileline_initialize (state, error_callback, data))
+     return 0;
+
+-  if (state->fileline_initialization_failed)
++  if (!state->threaded)
++    {
++      failed = state->fileline_initialization_failed;
++      fileline_fn = state->fileline_fn;
++    }
++  else
++    {
++      failed =
++	backtrace_atomic_load_int (&state->fileline_initialization_failed);
++      fileline_fn = backtrace_atomic_load_pointer (&state->fileline_fn);
++    }
++
++  if (failed)
+     return 0;
+
+-  return state->fileline_fn (state, pc, callback, error_callback, data);
++  return fileline_fn (state, pc, callback, error_callback, data);
+ }
+
+ /* Given a PC, find the symbol for it, and its value.  */
+@@ -404,12 +419,27 @@ backtrace_syminfo (struct backtrace_state *state, uintptr_t pc,
+ 		   backtrace_error_callback error_callback, void *data)
+ {
++  int failed;
++  syminfo syminfo_fn;
++
+   if (!fileline_initialize (state, error_callback, data))
+     return 0;
+
+-  if (state->fileline_initialization_failed)
++  if (!state->threaded)
++    {
++      failed = state->fileline_initialization_failed;
++      syminfo_fn = state->syminfo_fn;
++    }
++  else
++    {
++      failed =
++	backtrace_atomic_load_int (&state->fileline_initialization_failed);
++      syminfo_fn = backtrace_atomic_load_pointer (&state->syminfo_fn);
++    }
++
++  if (failed)
+     return 0;
+
+-  state->syminfo_fn (state, pc, callback, error_callback, data);
++  syminfo_fn (state, pc, callback, error_callback, data);
+   return 1;
+ }
+
+diff --git a/internal.h b/internal.h
+index 58bad6c..b148630 100644
+--- a/internal.h
++++ b/internal.h
+@@ -87,6 +87,8 @@
+     __atomic_load_n ((p), __ATOMIC_ACQUIRE)
+ #define backtrace_atomic_load_int(p) \
+     __atomic_load_n ((p), __ATOMIC_ACQUIRE)
++#define backtrace_atomic_load_size_t(p) \
++    __atomic_load_n ((p), __ATOMIC_ACQUIRE)
+ #define backtrace_atomic_store_pointer(p, v) \
+     __atomic_store_n ((p), (v), __ATOMIC_RELEASE)
+ #define backtrace_atomic_store_size_t(p, v) \
+@@ -102,6 +104,7 @@
+
+ extern void *backtrace_atomic_load_pointer (void *);
+ extern int backtrace_atomic_load_int (int *);
++extern size_t backtrace_atomic_load_size_t (size_t *);
+ extern void backtrace_atomic_store_pointer (void *, void *);
+ extern void backtrace_atomic_store_size_t (size_t *, size_t);
+ extern void backtrace_atomic_store_int (int *, int);
+@@ -113,6 +116,7 @@ extern void backtrace_atomic_store_int (int *, int);
+
+ #define backtrace_atomic_load_pointer(p) (abort(), (void *) NULL)
+ #define backtrace_atomic_load_int(p) (abort(), 0)
++#define backtrace_atomic_load_size_t(p) (abort(), (size_t) 0)
+ #define backtrace_atomic_store_pointer(p, v) abort()
+ #define backtrace_atomic_store_size_t(p, v) abort()
+ #define backtrace_atomic_store_int(p, v) abort()

@@ -212,6 +212,20 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_test(
+    name = "status_stack_trace_test",
+    srcs = [
+        "status_stack_trace_test.cc",
+        "status_stack_trace_test_helper.cc",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "string_builder_test",
     srcs = ["string_builder_test.cc"],
     deps = [
