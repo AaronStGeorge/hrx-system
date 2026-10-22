@@ -112,6 +112,9 @@ def _loom_model_documentation_impl(ctx):
     arguments.add("--card", ctx.file.card)
     arguments.add("--output", output)
     inputs = [ctx.file.card]
+    if ctx.file.overview:
+        arguments.add("--overview", ctx.file.overview)
+        inputs.append(ctx.file.overview)
     if ctx.file.lockfile:
         arguments.add("--lockfile", ctx.file.lockfile)
         inputs.append(ctx.file.lockfile)
@@ -134,6 +137,7 @@ loom_model_documentation = rule(
         "card": attr.label(mandatory = True, allow_single_file = [".json"]),
         "card_url": attr.string(doc = "Published card URL used to resolve card-relative source links."),
         "lockfile": attr.label(allow_single_file = True, doc = "Optional lock covering all card choices, supplying immutable source revisions and output commitments."),
+        "overview": attr.label(allow_single_file = [".md"], doc = "Publisher-authored Markdown overview included before the generated contract. Use absolute publication links so the result stands alone."),
         "_renderer": attr.label(default = Label("//loom/py/loom/model:documentation_generate"), executable = True, cfg = "exec"),
     },
 )

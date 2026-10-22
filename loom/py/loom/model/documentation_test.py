@@ -319,3 +319,81 @@ def test_cli_is_utf8_metadata_only_and_retains_output_on_invalid_input(
     card.write_text("{broken")
     assert main(["--card", str(card), "--output", str(output)]) == 2
     assert output.read_bytes() == expected
+
+
+def test_standalone_overview_and_upstream_links_precede_generated_contract(tmp_path):
+    document = _card().document
+    document["model"]["origin"] = {
+        "kind": "hf",
+        "repository": "org/trained",
+        "revision": "model/v1",
+    }
+    overview = "## Run this model\n\nEnglish transcription. [Upstream](https://example.org/model).\n\n```sh\nloom-fetch model.json --configuration=check --output=./installed\n```\n"
+    card = tmp_path / "model.json"
+    card.write_text(json.dumps(document))
+    introduction = tmp_path / "OVERVIEW.md"
+    introduction.write_text(overview)
+    output = tmp_path / "reference.md"
+    assert (
+        main(
+            [
+                "--card",
+                str(card),
+                "--overview",
+                str(introduction),
+                "--card-url",
+                "https://example.org/release/model.json",
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    introduction.unlink()
+    rendered = output.read_text()
+    assert overview.strip() in rendered
+    assert rendered.index("## Run this model") < rendered.index("## Model contract")
+    assert "(<https://example.org/release/model.json>)" in rendered
+    assert "(<https://huggingface.co/org/trained>)" in rendered
+    assert "(<https://huggingface.co/org/trained/tree/model%2Fv1>)" in rendered
+    assert "(<https://example.invalid/release/>)" in rendered
+    assert str(tmp_path) not in rendered
+    assert "parameters.dit" in rendered and "## Services" in rendered
+
+
+def test_overview_is_an_explicit_input_and_cannot_be_overwritten(tmp_path, capsys):
+    card = tmp_path / "model.json"
+    card.write_text(json.dumps(_card().document))
+    overview = tmp_path / "overview.md"
+    overview.write_text("A publisher-authored overview.\n")
+    assert (
+        main(
+            [
+                "--card",
+                str(card),
+                "--overview",
+                str(overview),
+                "--output",
+                str(overview),
+            ]
+        )
+        == 2
+    )
+    assert "must not overwrite" in capsys.readouterr().err
+    assert overview.read_text() == "A publisher-authored overview.\n"
+    output = tmp_path / "reference.md"
+    output.write_text("previous publication")
+    assert (
+        main(
+            [
+                "--card",
+                str(card),
+                "--overview",
+                str(tmp_path / "missing.md"),
+                "--output",
+                str(output),
+            ]
+        )
+        == 2
+    )
+    assert output.read_text() == "previous publication"

@@ -139,13 +139,19 @@ def _uses(selection: Selection) -> tuple[dict[str, list[str]], dict]:
 
 
 def render_markdown(
-    card: ModelCard, *, lock: ModelLock | None = None, card_url: str | None = None
+    card: ModelCard,
+    *,
+    lock: ModelLock | None = None,
+    card_url: str | None = None,
+    overview: str | None = None,
 ) -> str:
     """Renders every compatible choice without acquisition or payload access.
 
     A supplied lock must cover every displayed choice. Its immutable revisions
     and output commitments are displayed, without verifying any bytes. Relative
     sources become absolute links only when a publication card URL is supplied.
+    An optional publisher-authored Markdown overview is included verbatim before
+    the generated contract. It owns user guidance and uses publication-safe links.
     """
     if card_url is not None:
         _url(card_url, "card_url")
@@ -164,8 +170,39 @@ def render_markdown(
         "",
     ]
     if "license" in model:
-        lines += ["License: " + _text(model["license"]) + ".", ""]
+        lines += ["Model license: " + _text(model["license"]) + ".", ""]
+    if card_url:
+        lines += ["Model card: " + _link("model.json", card_url) + ".", ""]
+    sources = []
+    if "origin" in model:
+        sources.append(("Original model", model["origin"], None))
+    for name, origin in document.get("origins", {}).items():
+        resolved = lock.origins.get(name, {}).get("resolved", {}) if lock else {}
+        sources.append((name, origin, resolved.get("revision")))
+    for name, origin, resolved_revision in sources:
+        if origin["kind"] == "hf":
+            url = "https://huggingface.co/" + quote(origin["repository"], safe="/")
+            source = _link(origin["repository"], url)
+            revision = resolved_revision or origin.get("revision")
+            if revision:
+                source += (
+                    " ("
+                    + _link(
+                        revision,
+                        url + "/tree/" + quote(revision, safe=""),
+                    )
+                    + ")"
+                )
+        elif origin["kind"] == "url":
+            source = _link(origin["url"], origin["url"])
+        else:
+            source = _code(origin["path"]) + " (local source)"
+        lines += [_text(name) + ": " + source + ".", ""]
+    if overview:
+        lines += [overview.strip(), ""]
     lines += [
+        "## Model contract",
+        "",
         "This reference describes the card's declared choices. "
         "Execution qualification belongs to the model's published checks.",
         "",
@@ -305,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
         "--card-url", help="Publication URL for resolving card-relative source links"
     )
     parser.add_argument(
+        "--overview",
+        type=Path,
+        help="Publisher-authored Markdown included before the generated contract",
+    )
+    parser.add_argument(
         "--output", type=Path, help="UTF-8 Markdown output (default: stdout)"
     )
     args = parser.parse_args(argv)
@@ -314,18 +356,21 @@ def main(argv: list[str] | None = None) -> int:
             and args.output.exists()
             and any(
                 args.output.samefile(path)
-                for path in (args.card, args.lockfile)
+                for path in (args.card, args.lockfile, args.overview)
                 if path
             )
         ):
-            raise ManifestError("output must not overwrite the input card or lock")
+            raise ManifestError("output must not overwrite an input document")
         card = ModelCard.parse(args.card.read_text(encoding="utf-8"))
         lock = (
             ModelLock.parse(args.lockfile.read_text(encoding="utf-8"))
             if args.lockfile
             else None
         )
-        result = render_markdown(card, lock=lock, card_url=args.card_url)
+        overview = args.overview.read_text(encoding="utf-8") if args.overview else None
+        result = render_markdown(
+            card, lock=lock, card_url=args.card_url, overview=overview
+        )
         if args.output:
             args.output.write_text(result, encoding="utf-8", newline="\n")
         else:

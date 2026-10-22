@@ -148,10 +148,14 @@ compare activation bytes with a dense arithmetic oracle.
 
 ## Generated references
 
-The SDK generates a model reference directly from its card:
+The SDK combines a publisher-authored overview with generated card facts to
+produce a standalone model reference. The overview carries intended use,
+supported behavior, limitations, licensing, and an installed-tool workflow;
+repository build and migration notes stay in developer documentation.
 
 ```sh
-python -m loom.model.documentation --card model.json --output model.md
+python -m loom.model.documentation --card model.json --overview OVERVIEW.md \
+  --output model.md
 python -m loom.model.documentation --card model.json --lockfile model.json.lock \
   --card-url=https://example.org/models/speech/model.json --output model.md
 ```
@@ -166,8 +170,13 @@ A supplied lock must cover every displayed choice. Its immutable repository
 revisions determine source links, and its sizes and SHA-256 values describe
 output files. Without a lock, links retain the card's authored revisions.
 Card-relative sources remain labelled relative paths unless `--card-url` supplies
-the publication URL. Rendering reads only the card and optional lock; it does
-not acquire files, verify payloads, compile programs, or establish qualification.
+the publication URL. Rendering reads only the card, optional overview, and
+optional lock; it does not acquire files, verify payloads, compile programs,
+or establish qualification.
+Upstream Hugging Face repositories and HTTP origins are clickable links. The
+overview is publisher-authored Markdown, included verbatim in the result;
+absolute links keep it independent of a source checkout or neighboring README.
+The publisher owns Markdown/HTML sanitization when hosting the generated page.
 
 The same operation is available as `render_markdown` in
 `loom.model.documentation`, or as the public Bazel rule:
@@ -178,11 +187,13 @@ load("@hrx//loom/build_tools/bazel:defs.bzl", "loom_model_documentation")
 loom_model_documentation(
     name = "reference",
     card = "model.json",
+    overview = "OVERVIEW.md",
 )
 ```
 
 This produces `reference.md` using only declared metadata inputs. Optional
-`lockfile` and `card_url` attributes have the same meanings as the CLI flags.
+`overview`, `lockfile`, and `card_url` attributes have the same meanings as the
+CLI flags.
 No weight or provider targets belong in this rule's dependency closure.
 
 ## Acquisition
