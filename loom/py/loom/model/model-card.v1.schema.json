@@ -532,6 +532,10 @@
         "partition": {
           "$ref": "#/$defs/name",
           "description": "One partition of the selected variant. Omitted only when the variant has no named partitions or a single choice."
+        },
+        "memory": {
+          "$ref": "#/$defs/memory",
+          "description": "Optional author estimates for this exact selection and assumed workload. Informational only; not a scheduler or hardware-fit contract."
         }
       },
       "additionalProperties": false
@@ -698,6 +702,43 @@
           "description": "Select these complete named tensors. Omission preserves all tensors."
         }
       },
+      "additionalProperties": false
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "workload"
+      ],
+      "properties": {
+        "weights_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615,
+          "description": "Approximate resident prepared-parameter bytes. Omit when unknown."
+        },
+        "transient_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615,
+          "description": "Approximate additional request/state/workspace bytes for the stated workload. Omit when unknown."
+        },
+        "workload": {
+          "$ref": "#/$defs/name",
+          "description": "Assumptions and coverage of these estimates, including excluded overhead."
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "weights_bytes"
+          ]
+        },
+        {
+          "required": [
+            "transient_bytes"
+          ]
+        }
+      ],
       "additionalProperties": false
     }
   }

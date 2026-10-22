@@ -133,6 +133,14 @@ Checkpoint paths, tokenizer paths, providers, and asset directories belong to
 the card and cannot be overridden through the deployment definition. Image
 adapters are selected per request, independently of the base model card.
 
+Canonical configurations may include informational `memory` estimates:
+`weights_bytes` for resident prepared parameters, `transient_bytes` for additional
+request/state/workspace storage, and a required `workload` description stating
+assumptions and coverage. Unknown counts are omitted. The fetch picker and
+generated model reference display this guidance; native serving uses its actual
+allocation and scheduling contracts. Changing the selected variant, partition,
+service, or program set drops the estimate from a fetched or built card.
+
 A partitioned variant declares `partitions` instead of `services`. Each named
 partition supplies its own complete service, provider, configuration, and asset
 choices. The deployment's `model.partition` selects one, overriding a canonical

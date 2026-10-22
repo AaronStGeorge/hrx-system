@@ -92,6 +92,7 @@ def main():
                 assert len(json.loads(dry_run.stdout)["files"]) == len(
                     card.select(configuration="check", programs="source").files
                 )
+                assert json.loads(dry_run.stdout)["memory"]["weights_bytes"] == 4
                 assert not (root / "preview").exists()
                 assert requests == ["/model.json", "/model.json", "/model.json.lock"]
                 for programs in ("source", "archive", "mixed"):
@@ -102,9 +103,17 @@ def main():
                         text=True,
                     )
                     assert result.returncode == 0, result.stderr
-                    assert json.loads(result.stdout)["card"] == str(
-                        output / "model.json"
-                    )
+                    summary = json.loads(result.stdout)
+                    assert summary["card"] == str(output / "model.json")
+                    installed = ModelCard.parse(
+                        (output / "model.json").read_text()
+                    ).select("check")
+                    if programs == "source":
+                        assert summary["memory"] == installed.settings["memory"]
+                        assert summary["memory"]["weights_bytes"] == 4
+                    else:
+                        assert "memory" not in summary
+                        assert "memory" not in installed.settings
                     outputs.append(output)
                 assert os.path.samefile(
                     outputs[0] / "bias.data", outputs[1] / "bias.data"

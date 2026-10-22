@@ -170,6 +170,19 @@ TEST_F(CardTest, CompatibleOverrideRetainsVariantFacts) {
   EXPECT_EQ(String(selection->config), R"({"width":8,"dtype":"f32"})");
 }
 
+TEST_F(CardTest, InformationalMemoryHasNoSchedulingAuthority) {
+  IREE_ASSERT_OK(Parse(Replace(
+      "\"execution\": {\"rows\": 2}",
+      "\"memory\": {\"weights_bytes\": 180000000, "
+      "\"workload\": \"One average request; runtime overhead excluded.\"}, "
+      "\"execution\": {\"rows\": 2}")));
+  const auto* selection = loom_model_card_selection(card_);
+  EXPECT_EQ(String(selection->execution), R"({"rows": 2})");
+  EXPECT_EQ(String(selection->config),
+            R"({"quantized":false,"width":8,"dtype":"f32"})");
+  ASSERT_EQ(selection->parameter_count, 1u);
+}
+
 TEST_F(CardTest, IncompatibleCanonicalProgramRequiresExplicitOverride) {
   const loom_model_selector_t selector = {
       .configuration = IREE_SV("check"),

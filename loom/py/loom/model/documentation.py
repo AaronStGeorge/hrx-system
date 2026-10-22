@@ -19,6 +19,7 @@ from urllib.parse import quote, urljoin
 
 from loom.model.lock import FileIdentity, ModelLock
 from loom.model.manifest import ManifestError, ModelCard, ModelFile, Selection, _url
+from loom.model.memory import describe_memory
 
 
 def _text(value: object) -> str:
@@ -196,6 +197,12 @@ def render_markdown(
             + " |"
         )
     lines += ["", "## Canonical configurations", ""]
+    for name, configuration in document.get("configurations", {}).items():
+        if "memory" in configuration:
+            lines += [
+                _code(name) + ": " + _text(describe_memory(configuration["memory"])),
+                "",
+            ]
     lines += (
         _json(document["configurations"])
         if document.get("configurations")

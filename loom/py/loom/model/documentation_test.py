@@ -284,6 +284,19 @@ def test_real_model_lists_checkpoint_tokenizer_and_development_abi():
     assert '"sample_rate": 16000' in rendered
 
 
+def test_configuration_guidance_keeps_assumptions_and_unknown_components():
+    document = _card().document
+    document["configurations"]["check"]["memory"] = {
+        "weights_bytes": 180000000,
+        "workload": "Original F32; history and runtime pools excluded.",
+    }
+    rendered = render_markdown(ModelCard(document))
+    assert "Estimated memory: weights 171.7 MiB; transients unknown." in rendered
+    assert "Original F32; history and runtime pools excluded." in rendered
+    assert '"weights_bytes": 180000000' in rendered
+    assert '"transient_bytes"' not in rendered
+
+
 def test_cli_is_utf8_metadata_only_and_retains_output_on_invalid_input(
     tmp_path, capsys
 ):

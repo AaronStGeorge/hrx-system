@@ -155,6 +155,10 @@
         "pool_capacity": 256,
         "prefill_capacity": 32,
         "max_tokens": 16
+      },
+      "memory": {
+        "weights_bytes": 4,
+        "workload": "One resident I32 bias; unused metadata, tokenization, state, workspace, and allocator overhead excluded."
       }
     },
     "encode": {

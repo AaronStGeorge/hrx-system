@@ -22,6 +22,7 @@ from loom.model.fetch_hf import AccessRequired
 from loom.model.fetch_picker import Picker
 from loom.model.fetch_source import FetchError, document_location
 from loom.model.fetch_storage import ContentCache
+from loom.model.memory import describe_memory
 
 
 def _cache_directory() -> Path:
@@ -73,6 +74,26 @@ def _update_publication_lock(args, document, card, cache, snapshot):
     else:
         sys.stdout.write(display_text(str(publication.path)) + "\n")
     return 0
+
+
+def _list_card(card: ModelCard, *, json_output: bool) -> None:
+    listing = card.document
+    if json_output:
+        sys.stdout.write(json.dumps(listing, indent=2) + "\n")
+        return
+    sys.stdout.write(display_text(listing["model"]["name"]) + "\n")
+    for section in ("configurations", "variants", "services", "programs"):
+        sys.stdout.write(
+            f"{section}: "
+            + ", ".join(display_text(value) for value in listing.get(section, {}))
+            + "\n"
+        )
+    for name, configuration in listing.get("configurations", {}).items():
+        if "memory" in configuration:
+            sys.stdout.write(
+                display_text(name + ": " + describe_memory(configuration["memory"]))
+                + "\n"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -256,19 +277,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             card = ModelCard.parse(document.text)
         if args.list:
-            listing = card.document
-            if args.json:
-                sys.stdout.write(json.dumps(listing, indent=2) + "\n")
-            else:
-                sys.stdout.write(display_text(listing["model"]["name"]) + "\n")
-                for section in ("configurations", "variants", "services", "programs"):
-                    sys.stdout.write(
-                        f"{section}: "
-                        + ", ".join(
-                            display_text(value) for value in listing.get(section, {})
-                        )
-                        + "\n"
-                    )
+            _list_card(card, json_output=args.json)
             return 0
         if args.all_variants:
             return _update_publication_lock(args, document, card, cache, snapshot)
@@ -299,6 +308,8 @@ def main(argv: list[str] | None = None) -> int:
             catalog=snapshot.summary() if snapshot else None,
         )
         result = plan.summary()
+        if "memory" in result and not args.json:
+            sys.stderr.write(display_text(describe_memory(result["memory"])) + "\n")
         if plan.unverified_parameters and not args.json:
             sys.stderr.write(
                 "Skipping publisher parameter expectations: "

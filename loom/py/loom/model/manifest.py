@@ -292,6 +292,18 @@ def _config(value: Any, path: str) -> None:
             _fail(path + "." + name, "expected a scalar compiler value")
 
 
+def _memory(value: Any, path: str) -> None:
+    _object(value, path, ("workload",), ("weights_bytes", "transient_bytes"))
+    _string(value["workload"], path + ".workload")
+    if not ({"weights_bytes", "transient_bytes"} & value.keys()):
+        _fail(path, "requires at least one memory estimate")
+    for key in ("weights_bytes", "transient_bytes"):
+        if key in value and (
+            type(value[key]) is not int or not 0 <= value[key] < 2**64
+        ):
+            _fail(path + "." + key, "expected integer bytes in [0, 2^64-1]")
+
+
 @dataclass(frozen=True)
 class ModelFile:
     """One destination with explicit source intent and all selected consumers."""
@@ -452,12 +464,14 @@ class ModelCard:
                 configuration,
                 path,
                 ("service", "variant", "programs"),
-                ("options", "execution", "request", "workload", "partition"),
+                ("options", "execution", "request", "workload", "partition", "memory"),
             )
             for key in ("options", "execution", "request", "workload"):
                 _mapping(configuration.get(key, {}), path + "." + key, empty=True)
             if "partition" in configuration:
                 _string(configuration["partition"], path + ".partition")
+            if "memory" in configuration:
+                _memory(configuration["memory"], path + ".memory")
             self.select(name)
         _object(doc.get("qualification", {}), "$.qualification")
 
@@ -697,6 +711,16 @@ class ModelCard:
                 "description"
             ]
         settings = copy.deepcopy(settings)
+        if any(
+            settings.get(key, value) != value
+            for key, value in (
+                ("variant", variant),
+                ("partition", partition),
+                ("service", service),
+                ("programs", programs),
+            )
+        ):
+            settings.pop("memory", None)
         settings.update(service=service, variant=variant, programs=programs)
         if partition is not None:
             settings["partition"] = partition

@@ -83,6 +83,11 @@ class FetchPlan:
             if self.locked
             else "none",
             "unverified_parameters": sorted(self.unverified_parameters),
+            **(
+                {"memory": copy.deepcopy(self.selection.settings["memory"])}
+                if "memory" in self.selection.settings
+                else {}
+            ),
             "files": [
                 {
                     "path": path,

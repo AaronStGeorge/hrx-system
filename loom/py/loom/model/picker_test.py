@@ -80,6 +80,33 @@ def test_plain_named_choices_filter_and_escape_metadata():
     assert "\x1b" not in output.getvalue()
 
 
+def test_configuration_picker_displays_informational_memory_and_assumptions():
+    document = _card()
+    selection = {"variant": "small", "programs": "source", "service": "chat"}
+    document["configurations"] = {
+        "average": selection
+        | {"memory": {"weights_bytes": 1073741824, "workload": "One average request."}},
+        "empty": selection
+        | {
+            "memory": {
+                "weights_bytes": 0,
+                "transient_bytes": 2**64 - 1,
+                "workload": "Count boundaries.",
+            }
+        },
+    }
+    output = io.StringIO()
+    selected = Picker(io.StringIO("average\n"), output).selection(ModelCard(document))
+    assert selected.settings["memory"]["weights_bytes"] == 1073741824
+    assert (
+        "Estimated memory: weights 1.0 GiB; transients unknown. One average request."
+        in output.getvalue()
+    )
+    assert (
+        "Estimated memory: weights 0 bytes; transients 16.0 EiB." in output.getvalue()
+    )
+
+
 def test_picker_selects_named_partition_from_the_same_compatible_choices():
     document = _card()
     scope = document["variants"].pop("small")

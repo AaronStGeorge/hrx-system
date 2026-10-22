@@ -92,6 +92,14 @@ iree_py_library(
   DEPS
     loom::py::loom::model::lock
     loom::py::loom::model::manifest
+    loom::py::loom::model::memory
+)
+
+iree_py_library(
+  NAME
+    memory
+  SRCS
+    "memory.py"
 )
 
 iree_py_library(
@@ -227,6 +235,7 @@ iree_py_library(
     loom::py::loom::model::fetch_console
     loom::py::loom::model::fetch_source
     loom::py::loom::model::manifest
+    loom::py::loom::model::memory
 )
 
 iree_py_library(
@@ -243,6 +252,7 @@ iree_py_library(
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::manifest
+    loom::py::loom::model::memory
 )
 
 iree_py_library(

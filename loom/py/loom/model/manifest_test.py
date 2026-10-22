@@ -26,6 +26,88 @@ def _service(document):
     return document["variants"]["fixture"]["services"]["chat"]
 
 
+def test_memory_estimate_survives_exact_selection_and_projection():
+    card = ModelCard(_document())
+    selected = card.select("check")
+    assert selected.settings["memory"]["weights_bytes"] == 4
+    assert "transient_bytes" not in selected.settings["memory"]
+    assert ModelCard(selected.document).select("check").settings == selected.settings
+    selected.settings["memory"]["weights_bytes"] = 999
+    assert card.select("check").settings["memory"]["weights_bytes"] == 4
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"programs": "archive"},
+        {"service": "development"},
+        {"variant": "different"},
+        {"partition": "other side"},
+    ],
+)
+def test_changed_selection_drops_estimate_in_settings_and_projected_card(override):
+    document = _document()
+    document["variants"]["different"] = copy.deepcopy(document["variants"]["fixture"])
+    if "partition" in override:
+        scope = document["variants"]["fixture"]
+        document["variants"]["fixture"] = {
+            "partitions": {"node-0": scope, "other side": copy.deepcopy(scope)}
+        }
+        for settings in document["configurations"].values():
+            settings["partition"] = "node-0"
+    card = ModelCard(document)
+    selected = card.select("check", **override)
+    assert "memory" not in selected.settings
+    assert "memory" not in selected.document["configurations"]["check"]
+    assert card.select("check").settings["memory"]["weights_bytes"] == 4
+
+
+def test_implicit_single_partition_keeps_matching_estimate():
+    document = _document()
+    document["variants"]["fixture"] = {
+        "partitions": {"only": document["variants"]["fixture"]}
+    }
+    selected = ModelCard(document).select("check", partition="only")
+    assert selected.settings["memory"]["weights_bytes"] == 4
+
+
+@pytest.mark.parametrize("field", ["weights_bytes", "transient_bytes"])
+@pytest.mark.parametrize("value", [-1, 2**64, 1.5, True, "8", None])
+def test_memory_counts_are_optional_unsigned_integer_bytes(field, value):
+    document = _document()
+    document["configurations"]["check"]["memory"][field] = value
+    with pytest.raises(ManifestError, match="integer bytes"):
+        ModelCard(document)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {},
+        {"workload": "one request"},
+        {"weights_bytes": 0},
+        {"workload": "", "weights_bytes": 1},
+        {"workload": "one request", "weights_bytes": 1, "device": "gpu"},
+    ],
+)
+def test_memory_estimates_require_assumptions_and_counts_only(value):
+    document = _document()
+    document["configurations"]["check"]["memory"] = value
+    with pytest.raises(ManifestError):
+        ModelCard(document)
+
+
+def test_memory_zero_and_uint64_max_are_explicit_values():
+    document = _document()
+    memory = {
+        "workload": "Count boundaries",
+        "weights_bytes": 0,
+        "transient_bytes": 2**64 - 1,
+    }
+    document["configurations"]["check"]["memory"] = memory
+    assert ModelCard(document).select("check").settings["memory"] == memory
+
+
 def test_partition_selection_preserves_one_complete_closure():
     document = _document()
     services = document["variants"]["fixture"].pop("services")

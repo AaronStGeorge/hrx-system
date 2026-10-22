@@ -77,7 +77,13 @@ iree_py_library(
     deps = [
         ":lock",
         ":manifest",
+        ":memory",
     ],
+)
+
+iree_py_library(
+    name = "memory",
+    srcs = ["memory.py"],
 )
 
 iree_py_binary(
@@ -195,6 +201,7 @@ iree_py_library(
         ":fetch_console",
         ":fetch_source",
         ":manifest",
+        ":memory",
     ],
 )
 
@@ -210,6 +217,7 @@ iree_py_library(
         ":fetch_source",
         ":fetch_storage",
         ":manifest",
+        ":memory",
     ],
 )
 

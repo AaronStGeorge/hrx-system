@@ -18,6 +18,7 @@ from typing import TextIO
 from .fetch_console import TerminalInput, display_text, terminal_screen
 from .fetch_source import FetchError
 from .manifest import ManifestError, ModelCard, Selection
+from .memory import describe_memory
 
 
 @dataclass(frozen=True)
@@ -287,7 +288,18 @@ class Picker:
         compatible = [choice for choice in compatible if choice["service"] == service]
         if configuration is None:
             choices = [
-                Choice(name, name, value["variant"] + " / " + value["programs"])
+                Choice(
+                    name,
+                    name,
+                    value["variant"]
+                    + " / "
+                    + value["programs"]
+                    + (
+                        "; " + describe_memory(value["memory"])
+                        if "memory" in value
+                        else ""
+                    ),
+                )
                 for name, value in configurations.items()
                 if value["service"] == service
             ]

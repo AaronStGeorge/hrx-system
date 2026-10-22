@@ -53,6 +53,30 @@ filename. Both accept strings or explicit file descriptors. Variant `config`
 scalars override program defaults and reach preparation and native JITs.
 Canonical `options` may use only names accepted by the selected service.
 
+A canonical configuration can carry coarse guidance in its optional `memory`
+object:
+
+```json
+{
+  "weights_bytes": 180000000,
+  "workload": "Original F32 parameters; state, workspace, and runtime overhead excluded."
+}
+```
+
+`weights_bytes` estimates resident prepared parameters. `transient_bytes`, when
+known, estimates additional request, retained state, and workspace storage for
+the stated workload. At least one count and a nonempty `workload` description
+are required. Counts are unsigned 64-bit integer bytes; omitted components are
+unknown. These author estimates identify no device, predict no hardware fit,
+and have no scheduling authority. They are independent of download sizes and
+acquisition locks.
+
+The picker, list output, fetch plans, and generated reference display the same
+guidance. Selecting a different variant, partition, service, or program set
+drops it from the selected settings and projected card. Origin overrides and
+host execution changes do not turn published estimates into new measurements;
+the stated workload and coverage still apply.
+
 A variant declares either `services` directly or `partitions`, whose named
 entries each contain their own complete `services` map. Partition names are
 arbitrary: `node-0` and `other side` in the

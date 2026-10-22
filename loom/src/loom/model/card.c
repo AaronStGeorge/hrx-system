@@ -603,7 +603,8 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   loom_model_json_object_t configuration;
   IREE_RETURN_IF_ERROR(loom_model_object(
       card, configuration_json,
-      "service variant programs partition options execution request workload",
+      "service variant programs partition options execution request workload "
+      "memory",
       &configuration));
   loom_model_selector_t defaults = {0};
   IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "service", false,

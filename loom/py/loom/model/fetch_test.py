@@ -140,6 +140,58 @@ def _lock(files):
     )
 
 
+def test_memory_guidance_is_owned_metadata_in_listing_and_fetch_plan(tmp_path, capsys):
+    document = _card()
+    memory = {
+        "weights_bytes": 7,
+        "workload": "Original parameter payload; overhead excluded.",
+    }
+    document["configurations"]["check"]["memory"] = memory
+    path = tmp_path / "model.json"
+    path.write_text(json.dumps(document))
+    assert main([str(path), "--list"]) == 0
+    assert (
+        "Estimated memory: weights 7 bytes; transients unknown."
+        in capsys.readouterr().out
+    )
+    assert main([str(path), "--list", "--json"]) == 0
+    assert (
+        json.loads(capsys.readouterr().out)["configurations"]["check"]["memory"]
+        == memory
+    )
+    for name, content in (
+        ("code.loom", b"code"),
+        ("weights.data", b"weights"),
+        ("large.data", b"alternate"),
+    ):
+        (tmp_path / name).write_bytes(content)
+    result = main(
+        [
+            str(path),
+            "--configuration=check",
+            "--no-lock",
+            "--no-input",
+            "--dry-run",
+            "--output=" + str(tmp_path / "preview"),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert result == 0, captured.err
+    assert "overhead excluded" in captured.err
+    cache = ContentCache(tmp_path / "cache")
+    source = Document(str(path), path.read_text())
+    card = ModelCard(document)
+    plan = plan_fetch(source, card.select(), cache, no_lock=True)
+    summary = plan.summary()
+    assert summary["memory"] == memory
+    summary["memory"]["weights_bytes"] = 999
+    assert plan.selection.settings["memory"] == memory
+    changed = plan_fetch(
+        source, card.select("check", variant="unused"), cache, no_lock=True
+    )
+    assert "memory" not in changed.summary()
+
+
 @contextmanager
 def _server(card, files, *, parallel=False):
     requests = []
