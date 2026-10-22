@@ -10,6 +10,7 @@ import hashlib
 import http.server
 import json
 import os
+import sys
 import threading
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -49,6 +50,24 @@ class Hub:
             "repository": self.repository,
             "revision": revision or self.revision,
             "path": path,
+        }
+
+    def environment(self):
+        """Isolates an actual CLI subprocess's provider, credentials, and cache."""
+        return {
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(sys.path),
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "HF_ENDPOINT": self.endpoint,
+            "HF_HUB_CACHE": str(self.cache_dir),
+            "HF_TOKEN_PATH": str(self.credentials),
+            "HF_TOKEN": "",
+            "HUGGING_FACE_HUB_TOKEN": "",
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN": "0",
+            "HF_HUB_OFFLINE": "0",
+            "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+            "HF_HUB_DISABLE_TELEMETRY": "1",
         }
 
 

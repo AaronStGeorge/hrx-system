@@ -75,16 +75,37 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    fetch_console
+  SRCS
+    "fetch_console.py"
+  DEPS
+    loom::py::loom::model::fetch_hf
+    loom::py::loom::model::fetch_source
+)
+
+iree_py_library(
+  NAME
+    fetch_cli
+  SRCS
+    "fetch_main.py"
+  DEPS
+    loom::py::loom::model::fetch
+    loom::py::loom::model::fetch_console
+    loom::py::loom::model::fetch_hf
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
     loom-fetch
   MAIN
     "fetch_main.py"
   SRCS
     "fetch_main.py"
   DEPS
-    loom::py::loom::model::fetch
-    loom::py::loom::model::fetch_source
-    loom::py::loom::model::fetch_storage
-    loom::py::loom::model::manifest
+    loom::py::loom::model::fetch_cli
 )
 
 iree_py_test(

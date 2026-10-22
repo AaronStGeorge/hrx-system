@@ -69,16 +69,33 @@ iree_py_library(
     ],
 )
 
-iree_py_binary(
-    name = "loom-fetch",
+iree_py_library(
+    name = "fetch_console",
+    srcs = ["fetch_console.py"],
+    deps = [
+        ":fetch_hf",
+        ":fetch_source",
+    ],
+)
+
+iree_py_library(
+    name = "fetch_cli",
     srcs = ["fetch_main.py"],
-    main = "fetch_main.py",
     deps = [
         ":fetch",
+        ":fetch_console",
+        ":fetch_hf",
         ":fetch_source",
         ":fetch_storage",
         ":manifest",
     ],
+)
+
+iree_py_binary(
+    name = "loom-fetch",
+    srcs = ["fetch_main.py"],
+    main = "fetch_main.py",
+    deps = [":fetch_cli"],
 )
 
 iree_py_test(

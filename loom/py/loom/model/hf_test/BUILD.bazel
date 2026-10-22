@@ -58,3 +58,17 @@ iree_py_test(
         "//loom/py/loom/model:manifest",
     ],
 )
+
+iree_py_test(
+    name = "cli_test",
+    srcs = [
+        "cli_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.hf_test.cli_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":fixture",
+        "//loom/py/loom/model:fetch_cli",
+    ],
+)

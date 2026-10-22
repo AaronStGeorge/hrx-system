@@ -9,14 +9,13 @@
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from loom.model import ModelCard
-from loom.model.fetch import install, plan_fetch
 from loom.model.fetch_hf import HuggingFace
-from loom.model.fetch_storage import ContentCache
 from loom.model.hf_test.hub import running_hub
 from loom.model.lock import FileIdentity, ModelLock
 from model_card_test import check_model
@@ -42,46 +41,66 @@ def main():
         outputs = []
         with running_hub(root, files) as hub:
             hub.credentials.write_text("fixture-first")
-            actions = []
-
-            def wait(action, delay, cancelled):
-                assert action.reason == "gate"
-                assert action.account == "first"
-                actions.append(action)
-                hub.approved = True
-
             provider = HuggingFace(
                 endpoint=hub.endpoint,
                 cache_dir=hub.cache_dir,
-                wait_for_access=wait,
             )
-            cache = ContentCache(root / "cache", huggingface=provider)
             url = hub.endpoint + "/fixture/model/blob/main/model.json"
-            document = cache.read_document(url, offline=False)
+            common = [
+                sys.executable,
+                "-m",
+                "loom.model.fetch_main",
+                url,
+                "--cache=" + str(root / "cache"),
+                "--configuration=check",
+                "--no-input",
+                "--json",
+            ]
             for programs in ("source", "archive", "mixed"):
-                selection = ModelCard.parse(document.text).select(
-                    configuration="check", programs=programs
-                )
-                plan = plan_fetch(document, selection, cache)
                 output = root / programs
-                install(plan, cache, output)
+                with subprocess.Popen(
+                    [
+                        *common,
+                        "--programs=" + programs,
+                        "--output=" + str(output),
+                        "--wait-for-access",
+                    ],
+                    env=hub.environment(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                ) as process:
+                    try:
+                        if not hub.approved:
+                            for line in process.stderr:
+                                if "Waiting for access" in line:
+                                    hub.approved = True
+                                    break
+                            else:
+                                raise AssertionError(
+                                    "CLI exited before its access wait"
+                                )
+                        result, error = process.communicate()
+                        assert process.returncode == 0, error
+                        assert json.loads(result)["card"] == str(output / "model.json")
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
                 outputs.append(output)
                 assert os.path.samefile(
                     output / "bias.data", provider.cached_file(hub.source("bias.data"))
                 )
-            assert len(actions) == 1
-            assert not (cache.root / "blob").exists()
+            assert not (root / "cache/blob").exists()
             requests = list(hub.requests)
             hub.approved = False
-            offline = cache.read_document(url, offline=True)
-            plan = plan_fetch(
-                offline,
-                ModelCard.parse(offline.text).select(configuration="check"),
-                cache,
-                offline=True,
-            )
             output = root / "offline"
-            install(plan, cache, output)
+            result = subprocess.run(
+                [*common, "--offline", "--output=" + str(output)],
+                env=hub.environment(),
+                capture_output=True,
+                text=True,
+            )
+            assert result.returncode == 0, result.stderr
             outputs.append(output)
             assert hub.requests == requests
 

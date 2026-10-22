@@ -16,6 +16,8 @@ from pathlib import Path
 
 from loom.model import ManifestError, ModelCard
 from loom.model.fetch import check_output, install, plan_fetch
+from loom.model.fetch_console import AccessWaiter
+from loom.model.fetch_hf import AccessRequired
 from loom.model.fetch_source import FetchError, document_location
 from loom.model.fetch_storage import ContentCache
 
@@ -54,6 +56,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--json", action="store_true", help="emit structured JSON on stdout"
+    )
+    parser.add_argument(
+        "--no-input",
+        action="store_true",
+        help="disable terminal and browser interaction",
+    )
+    parser.add_argument(
+        "--wait-for-access",
+        action="store_true",
+        help="wait and recheck provider access even without an interactive terminal",
     )
     parser.add_argument("--configuration", help="named canonical configuration")
     parser.add_argument("--service", help="named service")
@@ -107,7 +119,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_lock and args.lockfile:
         parser.error("--no-lock cannot be combined with --lockfile")
     try:
-        cache = ContentCache(args.cache)
+        interactive = (
+            not args.no_input
+            and not args.json
+            and sys.stdin.isatty()
+            and sys.stderr.isatty()
+        )
+        wait = (
+            AccessWaiter(interactive=interactive, input=sys.stdin, output=sys.stderr)
+            if interactive or args.wait_for_access
+            else None
+        )
+        cache = ContentCache(args.cache, wait_for_access=wait)
         document = cache.read_document(
             document_location(args.card), offline=args.offline
         )
@@ -162,10 +185,21 @@ def main(argv: list[str] | None = None) -> int:
         else:
             sys.stdout.write(result["card"] + "\n")
         return 0
+    except AccessRequired as error:
+        if args.json:
+            sys.stdout.write(json.dumps(error.document(), indent=2) + "\n")
+        sys.stderr.write(f"loom-fetch: {error}\n")
+        return 1
     except (ManifestError, FetchError, OSError) as error:
+        if args.json:
+            sys.stdout.write(
+                json.dumps({"kind": "error", "message": str(error)}) + "\n"
+            )
         sys.stderr.write(f"loom-fetch: {error}\n")
         return 1
     except KeyboardInterrupt:
+        if args.json:
+            sys.stdout.write(json.dumps({"kind": "cancelled"}) + "\n")
         sys.stderr.write("loom-fetch: cancelled\n")
         return 130
 

@@ -142,6 +142,19 @@ page and effective account; it never accepts terms or requests approval itself.
 One coordinator refreshes credentials and waits across all shard workers. Generic
 permission and inaccessible-repository failures retain their distinct meanings.
 
+On an interactive terminal, `loom-fetch` displays the approval URL and effective
+account, then waits and rechecks with backoff. `o` opens the page, Enter checks
+again, and `q` or Ctrl-C cancels. An approval on the website resumes the selected
+command; the downloader reloads saved credentials between checks. An environment
+token still overrides that saved login, so changing it requires restarting the
+command with the variable updated or unset.
+
+`--no-input` and `--json` disable terminal interaction. A gate returns a nonzero
+status immediately; JSON mode emits an `action_required` record containing the
+repository, reason, URL, account, and credential source name. Explicit
+`--wait-for-access` enables automatic rechecking in these modes, with status on
+stderr and the final result on stdout. Offline operation never checks access.
+
 Files stream into verified content storage with bounded buffers and concurrent
 transfers. The default `--materialize=share` links cache or local-source files
 into the installation, so changing only configuration does not copy weights.
