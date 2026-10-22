@@ -14,6 +14,7 @@
 // Buffer/chunk invariance tests verify that tokenizer produces identical
 // output across different transform buffer sizes and chunk feeding patterns.
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -77,7 +78,8 @@ static StatusOr<std::vector<iree_tokenizer_token_id_t>> EncodeOneShot(
 // Encodes text using streaming API with specified transform buffer size.
 static StatusOr<std::vector<iree_tokenizer_token_id_t>> EncodeStreaming(
     iree_tokenizer_t* tokenizer, iree_string_view_t text,
-    iree_host_size_t buffer_size, iree_host_size_t chunk_size = 0) {
+    iree_host_size_t buffer_size, iree_host_size_t chunk_size = 0,
+    iree_host_size_t output_capacity = 256) {
   iree_host_size_t state_size = 0;
   IREE_RETURN_IF_ERROR(
       iree_tokenizer_encode_state_calculate_size(tokenizer, &state_size));
@@ -95,16 +97,20 @@ static StatusOr<std::vector<iree_tokenizer_token_id_t>> EncodeStreaming(
       &state));
 
   std::vector<iree_tokenizer_token_id_t> all_ids;
-  std::vector<iree_tokenizer_token_id_t> batch_ids(256);
+  std::vector<iree_tokenizer_token_id_t> batch_ids(output_capacity);
   iree_host_size_t offset = 0;
+  iree_host_size_t available = 0;
+  if (chunk_size == 0) {
+    chunk_size = text.size;
+  }
 
   while (offset < text.size) {
-    iree_host_size_t remaining = text.size - offset;
-    iree_host_size_t feed_size =
-        (chunk_size > 0 && chunk_size < remaining) ? chunk_size : remaining;
+    if (available == offset) {
+      available += std::min(chunk_size, text.size - available);
+    }
 
     iree_string_view_t chunk =
-        iree_make_string_view(text.data + offset, feed_size);
+        iree_make_string_view(text.data + offset, available - offset);
 
     iree_host_size_t consumed = 0;
     iree_host_size_t produced = 0;
@@ -123,10 +129,15 @@ static StatusOr<std::vector<iree_tokenizer_token_id_t>> EncodeStreaming(
     }
     offset += consumed;
 
-    if (consumed == 0 && produced == 0 && feed_size > 0) {
-      iree_tokenizer_encode_state_deinitialize(state);
-      return iree_make_status(IREE_STATUS_INTERNAL, "no progress at offset %zu",
-                              offset);
+    if (consumed == 0 && produced == 0) {
+      if (available < text.size) {
+        // Preserve incomplete UTF-8 and append the next transport chunk.
+        available += std::min(chunk_size, text.size - available);
+      } else {
+        iree_tokenizer_encode_state_deinitialize(state);
+        return iree_make_status(IREE_STATUS_INTERNAL,
+                                "no progress at offset %zu", offset);
+      }
     }
   }
 
@@ -145,7 +156,12 @@ static StatusOr<std::vector<iree_tokenizer_token_id_t>> EncodeStreaming(
     for (iree_host_size_t i = 0; i < finalize_count; ++i) {
       all_ids.push_back(batch_ids[i]);
     }
-  } while (finalize_count == batch_ids.size());
+    if (!finalize_count && iree_tokenizer_encode_state_has_pending(state)) {
+      iree_tokenizer_encode_state_deinitialize(state);
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "finalization retained work without progress");
+    }
+  } while (iree_tokenizer_encode_state_has_pending(state));
 
   iree_tokenizer_encode_state_deinitialize(state);
   return all_ids;
@@ -378,6 +394,97 @@ TEST_F(BPEByteLevelTest, EmptyChunks) {
 // Post-normalization special tokens have normalized=true and are matched AFTER
 // the normalizer runs. This test suite verifies correct behavior when these
 // tokens appear in various positions and streaming scenarios.
+
+TEST(AddedTokenSearchTest, RejectedPrefixesPreserveLaterMatches) {
+  // Normalized token search must find the earliest viable start, including
+  // starts inside a rejected or incomplete longer candidate. The sequence
+  // pre-tokenizer also borrows an input view while expanding a large parent
+  // span; output backpressure must preserve that view's added-token boundary.
+  const char* json = R"({
+    "model": {
+      "type": "BPE",
+      "vocab": {"<":0,"x":1,"k":2,"e":3,"y":4,"a":5,"b":6,
+                "c":7,"d":8,"f":9,"z":10,"Ġ":11},
+      "merges": []
+    },
+    "added_tokens": [
+      {"id":12,"content":"<tag>","normalized":true,"special":false,
+       "single_word":false,"lstrip":false,"rstrip":false},
+      {"id":13,"content":"key","normalized":true,"special":false,
+       "single_word":false,"lstrip":false,"rstrip":false},
+      {"id":14,"content":"｜call｜","normalized":true,"special":false,
+       "single_word":false,"lstrip":false,"rstrip":false},
+      {"id":15,"content":"abcdef","normalized":true,"special":true,
+       "single_word":false,"lstrip":false,"rstrip":false},
+      {"id":16,"content":"bc","normalized":true,"special":false,
+       "single_word":false,"lstrip":false,"rstrip":false},
+      {"id":17,"content":"xyz","normalized":true,"special":true,
+       "single_word":false,"lstrip":false,"rstrip":false}
+    ],
+    "pre_tokenizer": {"type":"Sequence","pretokenizers":[
+      {"type":"Split","pattern":{"Regex":"[0-9]+"},
+       "behavior":"Isolated","invert":false},
+      {"type":"ByteLevel","add_prefix_space":false,
+       "trim_offsets":false,"use_regex":true}
+    ]}
+  })";
+  iree_tokenizer_t* tokenizer = nullptr;
+  IREE_ASSERT_OK(iree_tokenizer_from_huggingface_json(
+      iree_make_cstring_view(json), iree_allocator_system(), &tokenizer));
+  ScopedTokenizer owner(tokenizer);
+  struct Case {
+    // Complete UTF-8 input, with no implicit chunk boundaries.
+    std::string text;
+    // Exact token IDs from the vocabulary and added-token precedence.
+    std::vector<int32_t> expected;
+  };
+  std::vector<Case> cases = {{"key", {13}},
+                             {"<key", {0, 13}},
+                             {"x<key", {1, 0, 13}},
+                             {"<｜call｜", {0, 14}},
+                             {"x<｜call｜", {1, 0, 14}},
+                             {"abcxyz", {5, 16, 17}},
+                             {"abckey", {5, 16, 13}},
+                             {"abc", {5, 16}},
+                             {"abcde", {5, 16, 8, 3}},
+                             {"abcdef", {15}},
+                             {"<keykey", {0, 13, 13}},
+                             {"x<", {1, 0}}};
+  for (size_t prefix_count : {63, 64, 65, 97, 127, 128, 129, 257}) {
+    std::string prefix;
+    std::vector<int32_t> expected;
+    for (size_t i = 0; i < prefix_count; ++i) {
+      prefix += "x ";
+      expected.insert(expected.end(), {1, 11});
+    }
+    expected.insert(expected.end(), {0, 14});
+    cases.push_back({prefix + "<｜call｜", expected});
+  }
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.text);
+    iree_string_view_t text =
+        iree_make_string_view(test.text.data(), test.text.size());
+    std::vector<int32_t> direct(text.size + 1);
+    iree_host_size_t count = 0;
+    IREE_ASSERT_OK(iree_tokenizer_encode(
+        tokenizer, text, IREE_TOKENIZER_ENCODE_FLAG_NONE,
+        iree_tokenizer_make_token_output(direct.data(), nullptr, nullptr,
+                                         direct.size()),
+        iree_allocator_system(), &count));
+    direct.resize(count);
+    EXPECT_EQ(direct, test.expected);
+    for (iree_host_size_t chunk_size : {1, 2, 7, 256, 257}) {
+      SCOPED_TRACE(chunk_size);
+      for (iree_host_size_t output_capacity : {1, 17, 256}) {
+        SCOPED_TRACE(output_capacity);
+        IREE_ASSERT_OK_AND_ASSIGN(
+            auto streamed, EncodeStreaming(tokenizer, text, 4096, chunk_size,
+                                           output_capacity));
+        EXPECT_EQ(streamed, test.expected);
+      }
+    }
+  }
+}
 
 class PostNormSpecialTokenTest : public ::testing::Test {
  protected:
