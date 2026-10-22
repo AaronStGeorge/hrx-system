@@ -60,7 +60,7 @@ void loom_serve_text_pending_cancel_failed(loom_serve_text_service_t* service,
   }
 }
 
-// Reclaim completed ownership before trying the next physical reservation.
+// Reclaim completed ownership at an epoch boundary or after admission denial.
 // Compaction itself admits its temporary destinations and may leave a sparse
 // map when moving would exceed the shared physical budget.
 iree_status_t loom_serve_text_submit_trim(loom_serve_text_service_t* service) {
@@ -156,11 +156,8 @@ static iree_status_t loom_serve_text_reclaim_idle(
                  : LOOM_SERVE_TEXT_RESERVE_FRESH;
   iree_status_t status = iree_ok_status();
   while (iree_status_is_ok(status)) {
-    status = loom_serve_text_submit_trim(service);
-    if (!iree_status_is_ok(status) ||
-        service->completion.work != TEXT_WORK_NONE) {
-      break;
-    }
+    // Sparse backing is already valid for admission. Fitting requests retain
+    // their completion credit while maintenance accumulates across the cohort.
     loom_serve_text_reserve_result_t admission;
     loom_serve_execution_frontier_t frontier;
     loom_serve_text_pending_continuation_t* continuation =
@@ -179,6 +176,7 @@ static iree_status_t loom_serve_text_reclaim_idle(
       *out_result = admission == LOOM_SERVE_TEXT_RESERVE_DEFERRED
                         ? TEXT_ADMISSION_QUEUED
                         : TEXT_ADMISSION_CAPACITY;
+      status = loom_serve_text_submit_trim(service);
       break;
     }
     *out_result = TEXT_ADMISSION_STATE_CAPACITY;
@@ -202,6 +200,13 @@ static iree_status_t loom_serve_text_reclaim_idle(
       }
     }
     if (!iree_status_is_ok(status) || *out_result == TEXT_ADMISSION_READY) {
+      break;
+    }
+    // Pending local maintenance contributes to shared reclamation readiness.
+    // Submit it before parking, or this request could wait on its own trim.
+    status = loom_serve_text_submit_trim(service);
+    if (!iree_status_is_ok(status) ||
+        service->completion.work != TEXT_WORK_NONE) {
       break;
     }
     if (loom_serve_residency_cache_is_reclaiming(loom_serve_residency_cache(
