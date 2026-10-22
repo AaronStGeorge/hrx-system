@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
 )
@@ -37,8 +38,14 @@ loom_generated_cc_library(
         "types.h",
     ],
     args = ["--dialect=test"],
-    extra_output_flags = ["--ops-include"],
-    extra_outputs = ["ops.inc"],
+    extra_output_flags = [
+        "--ops-include",
+        "--type-builders",
+    ],
+    extra_outputs = [
+        "ops.inc",
+        "type_builders.c",
+    ],
     generated_src_flags = [
         "--builders",
         "--tables",
@@ -52,6 +59,7 @@ loom_generated_cc_library(
     generator = "//loom/py/loom/gen/ops:c_tables_test_generator",
     textual_hdrs = ["ops.inc"],
     deps = [
+        ":type_builders",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -68,6 +76,16 @@ loom_generated_cc_library(
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/test:target_record_table",
         "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "type_builders",
+    srcs = ["type_builders.c"],
+    hdrs = ["type_builders.h"],
+    deps = [
+        "//loom/src/loom/ir:builders",
         "//runtime/src/iree/base",
     ],
 )

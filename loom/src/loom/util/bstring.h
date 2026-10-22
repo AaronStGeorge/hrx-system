@@ -73,6 +73,22 @@ static inline bool loom_bstring_equal(loom_bstring_t bstring,
   return length == 0 || memcmp(view.data, bstring + 1, length) == 0;
 }
 
+// Finds the first matching string in a small immutable table, skipping NULL
+// slots. On a miss, leaves |out_index| unchanged. A zero-length table may be
+// NULL.
+static inline bool loom_bstring_table_find(const loom_bstring_t* table,
+                                           iree_host_size_t count,
+                                           iree_string_view_t value,
+                                           iree_host_size_t* out_index) {
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    if (table[i] && loom_bstring_equal(table[i], value)) {
+      *out_index = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // Literal helpers
 //===----------------------------------------------------------------------===//

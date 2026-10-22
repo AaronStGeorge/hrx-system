@@ -12,7 +12,7 @@
 #include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/ops/type_registry.h"
+#include "loom/ops/type_builders.h"
 #include "loom/rewrite/rewriter.h"
 
 iree_host_size_t loom_low_storage_space_set_names(

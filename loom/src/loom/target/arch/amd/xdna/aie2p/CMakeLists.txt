@@ -638,7 +638,7 @@ loom_cc_library(
     loom::ops::kernel
     loom::ops::op_defs
     loom::ops::pipeline
-    loom::ops::type_registry
+    loom::ops::type_builders
     loom::pass::registry
     loom::pass::types
     loom::pass::value_facts

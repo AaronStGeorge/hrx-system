@@ -414,7 +414,7 @@ loom_cc_library(
     loom::analysis::storage_layout
     loom::ir
     loom::ops::low
-    loom::ops::type_registry
+    loom::ops::type_builders
     loom::rewrite::rewriter
   PUBLIC
 )

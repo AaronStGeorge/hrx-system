@@ -38,9 +38,12 @@ loom_generated_cc_library(
     "--dialect=spirv"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--type-builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "type_builders.c"
   DEPS
+    ::type_builders
     iree::base
     loom::error::error_defs
     loom::ir
@@ -53,6 +56,23 @@ loom_generated_cc_library(
     loom::target::arch::spirv::scalar_types
     loom::target::resolved_target
     loom::target::types
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_library(
+  NAME
+    type_builders
+  HDRS
+    "type_builders.h"
+  SRCS
+    "type_builders.c"
+  DEPS
+    iree::base
+    loom::ir::builders
+    loom::target::arch::spirv::isa
+    loom::target::arch::spirv::scalar_types
+  PUBLIC
 )
 endif()
 

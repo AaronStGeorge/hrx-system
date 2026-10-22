@@ -15,10 +15,12 @@ from loom.gen.ops.c_metadata_tables import (
     generate_tables_c,
     generate_tables_h,
 )
+from loom.gen.ops.c_names import c_dialect_enum, c_dialect_path
 from loom.gen.ops.c_names import c_dialect_include_path as _c_dialect_include_path
 from loom.gen.ops.c_ops_header import generate_ops_h, generate_ops_inc
+from loom.gen.ops.c_parameterized_types import parameterized_type_defs
 from loom.gen.ops.model import DialectGeneration
-from loom.gen.ops.type_registry import generate_dialect_type_registry
+from loom.gen.ops.type_registry import generate_dialect_type_registry, generate_type_builders
 
 __all__ = [
     "generate_dialect_contents",
@@ -81,4 +83,8 @@ def generate_dialect_contents(generation: DialectGeneration) -> dict[str, str]:
         types_header, types_source = generate_dialect_type_registry(dialect, generation.types)
         contents["types.h"] = types_header
         contents["types.c"] = types_source
+        if parameterized_type_defs(generation.types):
+            builders_header, builders_source = generate_type_builders(generation.types, path=c_dialect_path(dialect), namespace=c_dialect_enum(dialect.name))
+            contents["type_builders.h"] = builders_header
+            contents["type_builders.c"] = builders_source
     return contents

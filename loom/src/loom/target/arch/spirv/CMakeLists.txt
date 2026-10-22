@@ -142,8 +142,8 @@ loom_cc_library(
     ::isa
     ::scalar_types
     iree::base
-    loom::ir
-    loom::target::arch::spirv::ops
+    loom::ir::types
+    loom::target::arch::spirv::ops::type_builders
   PUBLIC
 )
 endif()

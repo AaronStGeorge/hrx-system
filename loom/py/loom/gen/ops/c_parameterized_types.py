@@ -133,7 +133,6 @@ def generate_header_lines(types: Sequence[TypeDef], namespace: str = "LOOM_PARAM
         lines.append("")
     for type_def in parameterized_type_defs(types):
         prefix = type_api_prefix(type_def)
-        descriptor_symbol = type_descriptor_symbol(type_def)
         for parameter in type_def.params:
             enum_def = parameter.enum_def
             if parameter.attr_type not in ("enum", "enum_array", "signed_enum_set") or enum_def is None or enum_def.c_type is not None:
@@ -156,21 +155,24 @@ def generate_header_lines(types: Sequence[TypeDef], namespace: str = "LOOM_PARAM
             lines.append("")
 
         optional = optional_parameters(type_def.params)
-        lines.append(f"extern const loom_parameterized_type_descriptor_t {descriptor_symbol};")
         if type_def.uses_inline_enum_parameter:
             parameter = type_def.params[0]
             assert isinstance(parameter, AttrDef)
             c_type = _parameter_c_type(type_def, parameter)
             parameter_prefix = _parameter_prefix(type_def, parameter)
+            assert parameter.enum_def is not None
+            case_count = max(case.value for case in parameter.enum_def.cases) + 1
+            enum_names = f"{parameter_prefix}_enum_names"
+            lines.append(f"extern const loom_bstring_t {enum_names}[{case_count}];")
             lines.append(f"static inline iree_string_view_t {parameter_prefix}_name({c_type} value) {{")
-            lines.append("  loom_bstring_t name = loom_attr_descriptor_enum_case_name(")
-            lines.append(f"      &{descriptor_symbol}.parameter_descriptors[0], (uint8_t)value);")
+            lines.append("  uint8_t index = (uint8_t)value;")
+            lines.append(f"  loom_bstring_t name = index < IREE_ARRAYSIZE({enum_names}) ? {enum_names}[index] : NULL;")
             lines.append("  return name ? loom_bstring_view(name) : iree_string_view_empty();")
             lines.append("}")
             lines.append(f"static inline bool {parameter_prefix}_parse(iree_string_view_t name, {c_type}* out_value) {{")
-            lines.append("  uint8_t value = 0;")
-            lines.append("  if (!loom_attr_descriptor_find_enum_case(")
-            lines.append(f"          &{descriptor_symbol}.parameter_descriptors[0], name, &value)) {{")
+            lines.append("  iree_host_size_t value = 0;")
+            lines.append("  if (!loom_bstring_table_find(")
+            lines.append(f"          {enum_names}, IREE_ARRAYSIZE({enum_names}), name, &value)) {{")
             lines.append("    return false;")
             lines.append("  }")
             lines.append(f"  *out_value = ({c_type})value;")
@@ -210,9 +212,13 @@ def generate_header_lines(types: Sequence[TypeDef], namespace: str = "LOOM_PARAM
 
 
 def generate_source_lines(types: Sequence[TypeDef]) -> list[str]:
-    """Generates typed constructor implementations."""
+    """Generates typed constructors and context-free enum spelling tables."""
 
     lines: list[str] = []
+    for type_def in parameterized_type_defs(types):
+        if type_def.uses_inline_enum_parameter:
+            lines.extend(_enum_names_lines(type_def, type_def.params[0], linkage=""))
+            lines.append("")
     for type_def in indirect_parameterized_type_defs(types):
         prefix = type_api_prefix(type_def)
         lines.append(f"iree_status_t {prefix}_make(")
@@ -235,6 +241,20 @@ def _bstring(value: str) -> str:
     return f'LOOM_BSTRING_REF({value_length}, "{value}")'
 
 
+def _enum_names_lines(type_def: TypeDef, parameter: AttrDef, *, linkage: str) -> list[str]:
+    assert parameter.enum_def is not None
+    cases_by_value = {case.value: case.keyword for case in parameter.enum_def.cases}
+    lines = [f"{linkage}const loom_bstring_t {_parameter_prefix(type_def, parameter)}_enum_names[] = {{"]
+    lines.extend(f"    {_bstring(keyword) if (keyword := cases_by_value.get(value)) is not None else 'NULL'}," for value in range(max(cases_by_value) + 1))
+    lines.append("};")
+    return lines
+
+
+def generate_metadata_header_lines(types: Sequence[TypeDef]) -> list[str]:
+    """Declares the canonical schemas independently of construction APIs."""
+    return [f"extern const loom_parameterized_type_descriptor_t {type_descriptor_symbol(type_def)};" for type_def in parameterized_type_defs(types)]
+
+
 def generate_metadata_lines(types: Sequence[TypeDef]) -> list[str]:
     """Generates static parameter schemas and family descriptors."""
 
@@ -242,13 +262,8 @@ def generate_metadata_lines(types: Sequence[TypeDef]) -> list[str]:
     for type_def in parameterized_type_defs(types):
         prefix = type_api_prefix(type_def)
         for parameter in type_def.params:
-            if parameter.attr_type in ("enum", "enum_array", "signed_enum_set"):
-                assert parameter.enum_def is not None
-                cases_by_value = {case.value: case.keyword for case in parameter.enum_def.cases}
-                max_value = max(cases_by_value)
-                lines.append(f"static const loom_bstring_t {prefix}_{parameter.name}_enum_names[] = {{")
-                lines.extend(f"    {_bstring(keyword) if (keyword := cases_by_value.get(value)) is not None else 'NULL'}," for value in range(max_value + 1))
-                lines.append("};")
+            if parameter.attr_type in ("enum", "enum_array", "signed_enum_set") and not type_def.uses_inline_enum_parameter:
+                lines.extend(_enum_names_lines(type_def, parameter, linkage="static "))
             if parameter.symbol_ref is not None:
                 c_symbols.append_symbol_reference_descriptor(
                     lines,
