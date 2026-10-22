@@ -231,7 +231,7 @@ static void BM_QueryAtomicOperations(benchmark::State& state) {
   }
   for (auto _ : state) {
     for (iree_host_size_t i = 0; i < count; ++i) {
-      const auto operations =
+      auto operations =
           iree_hal_buffer_query_atomic_operations(&buffers[i], scope);
       benchmark::DoNotOptimize(operations);
     }

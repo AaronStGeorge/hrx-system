@@ -47,13 +47,14 @@ iree_status_t iree_hal_amd_gpu_user_queue_initialize(
               context->api->user_queue_query_info(out_storage->queue, &info),
               "user_queue_query_info"));
   // These ABI vocabularies intentionally use identical locality values.
-  static_assert((int)AMDF_QUEUE_PLACEMENT_DEFAULT ==
-                        (int)IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
-                    (int)AMDF_QUEUE_PLACEMENT_HOST_LOCAL ==
-                        (int)IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL &&
-                    (int)AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL ==
-                        (int)IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL,
-                "native and HAL queue locality values agree");
+  static_assert(
+      (iree_hal_queue_placement_t)AMDF_QUEUE_PLACEMENT_DEFAULT ==
+              IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
+          (iree_hal_queue_placement_t)AMDF_QUEUE_PLACEMENT_HOST_LOCAL ==
+              IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL &&
+          (iree_hal_queue_placement_t)AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL ==
+              IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL,
+      "native and HAL queue locality values agree");
   out_storage->placement = (iree_hal_queue_placement_t)info.placement;
   amdf_user_queue_mapping_info_t mapping_info;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
