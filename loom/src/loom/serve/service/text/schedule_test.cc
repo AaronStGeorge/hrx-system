@@ -140,4 +140,18 @@ TEST(TextScheduleTest, CompletionReservationCoversLegalWriteHighWater) {
   }
 }
 
+TEST(TextScheduleTest, CompletionReservationHandlesWideSourcePages) {
+  for (iree_host_size_t page :
+       {iree_host_size_t{1}, iree_host_size_t{3}, iree_host_size_t{262143},
+        iree_host_size_t{UINT32_MAX}}) {
+    for (iree_host_size_t extent : {1u, 3u, 262143u, 262144u}) {
+      SCOPED_TRACE(page);
+      SCOPED_TRACE(extent);
+      const uint64_t expected = ((uint64_t{extent} + page - 1) / page) * page;
+      EXPECT_EQ(loom_serve_text_request_reservation(262144, extent, 1, 0, page),
+                expected);
+    }
+  }
+}
+
 }  // namespace

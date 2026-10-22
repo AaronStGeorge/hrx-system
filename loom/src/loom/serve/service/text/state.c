@@ -57,8 +57,9 @@ iree_status_t loom_serve_text_state_allocate(
         (uint32_t)(state->cache.capacity / state->storage.block_size),
         state->host_allocator, &state->cache.pool));
     IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-        state->host_allocator, state->row_count * state->storage.blocks_per_row,
-        sizeof(*state->cache.maps), (void**)&state->cache.maps));
+        state->host_allocator, state->row_count,
+        state->storage.blocks_per_row * sizeof(*state->cache.maps),
+        (void**)&state->cache.maps));
     IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
         state->host_allocator, state->cache.pool.capacity,
         sizeof(*state->cache.destinations),
@@ -214,9 +215,9 @@ iree_status_t loom_serve_text_state_allocate(
     }
     if (iree_status_is_ok(status)) {
       status = iree_allocator_malloc_array(
-          state->host_allocator,
-          state->checkpoints.capacity * state->storage.blocks_per_row,
-          sizeof(*state->checkpoints.maps), (void**)&state->checkpoints.maps);
+          state->host_allocator, state->checkpoints.capacity,
+          state->storage.blocks_per_row * sizeof(*state->checkpoints.maps),
+          (void**)&state->checkpoints.maps);
     }
     for (uint32_t i = 0;
          i < state->checkpoints.capacity && iree_status_is_ok(status); ++i) {
@@ -527,9 +528,8 @@ static void loom_serve_text_plan_compaction_copies(
     if (row->snapshot) {
       continue;
     }
-    const uint32_t count =
-        (uint32_t)((row->position + state->storage.block_size - 1) /
-                   state->storage.block_size);
+    const uint32_t count = (uint32_t)iree_host_size_ceil_div(
+        row->position, state->storage.block_size);
     const uint32_t* blocks =
         state->cache.maps + i * state->storage.blocks_per_row;
     for (uint32_t j = 0; j < count; ++j) {
@@ -695,10 +695,8 @@ void loom_serve_text_state_row_trim(loom_serve_text_state_row_t* row) {
   if (!state->cache.capacity) {
     return;
   }
-  const uint32_t keep =
-      (uint32_t)((iree_max(row->position, row->reserved_extent) +
-                  state->storage.block_size - 1) /
-                 state->storage.block_size);
+  const uint32_t keep = (uint32_t)iree_host_size_ceil_div(
+      iree_max(row->position, row->reserved_extent), state->storage.block_size);
   const iree_host_size_t row_index = (iree_host_size_t)(row - state->rows);
   loom_serve_block_pool_release(
       &state->cache.pool, row->block_count - keep,
@@ -870,9 +868,8 @@ iree_status_t loom_serve_text_state_row_try_resume(
     return iree_ok_status();
   }
   loom_serve_text_state_t* state = row->owner;
-  const uint32_t needed =
-      (uint32_t)((row->position + state->storage.block_size - 1) /
-                 state->storage.block_size);
+  const uint32_t needed = (uint32_t)iree_host_size_ceil_div(
+      row->position, state->storage.block_size);
   if (needed > state->cache.pool.available) {
     return iree_ok_status();
   }
@@ -989,9 +986,8 @@ iree_status_t loom_serve_text_state_row_submit_pin(
   checkpoint->recurrent_slot = row->recurrent.anchor != UINT32_MAX
                                    ? row->recurrent.anchor
                                    : row->recurrent.slot;
-  checkpoint->block_count =
-      (uint32_t)((row->position + state->storage.block_size - 1) /
-                 state->storage.block_size);
+  checkpoint->block_count = (uint32_t)iree_host_size_ceil_div(
+      row->position, state->storage.block_size);
   const iree_host_size_t row_index = (iree_host_size_t)(row - state->rows);
   memcpy(checkpoint->blocks,
          state->cache.maps + row_index * state->storage.blocks_per_row,
@@ -1119,9 +1115,8 @@ static iree_status_t loom_serve_text_checkpoint_try_resume(
     const loom_serve_text_state_row_t* row, bool* out_resumed) {
   *out_resumed = false;
   loom_serve_text_state_t* state = checkpoint->owner;
-  const uint32_t needed =
-      (uint32_t)((checkpoint->position + state->storage.block_size - 1) /
-                 state->storage.block_size);
+  const uint32_t needed = (uint32_t)iree_host_size_ceil_div(
+      checkpoint->position, state->storage.block_size);
   if (needed > state->cache.pool.available) {
     return iree_ok_status();
   }
@@ -1268,9 +1263,8 @@ static bool loom_serve_text_row_has_shared_tail(
 uint32_t loom_serve_text_state_row_growth(
     const loom_serve_text_state_row_t* row, uint32_t extent) {
   const loom_serve_text_state_t* state = row->owner;
-  const uint32_t needed =
-      (uint32_t)((row->position + extent + state->storage.block_size - 1) /
-                 state->storage.block_size);
+  const uint32_t needed = (uint32_t)iree_host_size_ceil_div(
+      row->position + extent, state->storage.block_size);
   return iree_max(needed, row->block_count) - row->block_count +
          loom_serve_text_row_has_shared_tail(row);
 }
@@ -1430,14 +1424,12 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
                                        : 0;
   const bool cold = checkpoint && checkpoint->snapshot;
   const bool pooled = state->cache.capacity != 0;
-  const uint32_t prefix =
-      pooled ? (uint32_t)((position + state->storage.block_size - 1) /
-                          state->storage.block_size)
-             : 0;
-  const uint32_t count =
-      pooled ? (uint32_t)((extent + state->storage.block_size - 1) /
-                          state->storage.block_size)
-             : 0;
+  const uint32_t prefix = pooled ? (uint32_t)iree_host_size_ceil_div(
+                                       position, state->storage.block_size)
+                                 : 0;
+  const uint32_t count = pooled ? (uint32_t)iree_host_size_ceil_div(
+                                      extent, state->storage.block_size)
+                                : 0;
   const bool fork_tail =
       prefix && position % state->storage.block_size &&
       (checkpoint || loom_serve_text_row_has_shared_tail(row));
@@ -1807,9 +1799,8 @@ iree_status_t loom_serve_text_state_grow(loom_serve_text_state_t* state,
     if (!state->cache.capacity) {
       continue;
     }
-    const uint32_t needed = (uint32_t)((row->position + extents[i] +
-                                        state->storage.block_size - 1) /
-                                       state->storage.block_size);
+    const uint32_t needed = (uint32_t)iree_host_size_ceil_div(
+        row->position + extents[i], state->storage.block_size);
     uint32_t first = row->block_count;
     const iree_host_size_t row_map =
         span->row_index * state->storage.blocks_per_row;

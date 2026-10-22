@@ -72,15 +72,16 @@ iree_status_t loom_serve_text_storage_initialize(
   const uint64_t carry_stride = iree_unaligned_load_le_u64(geometry + 16);
   const uint64_t feedback_split = iree_unaligned_load_le_u64(geometry + 24);
   if (!block_size || block_size > UINT32_MAX || pool_capacity % block_size ||
-      map_origin > INT64_MAX || carry_stride > INT64_MAX / row_count ||
-      !feedback_split || feedback_split > INT64_MAX) {
+      pool_capacity / block_size > UINT32_MAX || map_origin > INT64_MAX ||
+      carry_stride > INT64_MAX / row_count || !feedback_split ||
+      feedback_split > INT64_MAX) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source cache geometry cannot represent this pool");
   }
   out_storage->block_size = (iree_host_size_t)block_size;
   out_storage->map_origin = map_origin;
   out_storage->blocks_per_row =
-      (context_capacity + block_size - 1) / block_size;
+      iree_host_size_ceil_div(context_capacity, (iree_host_size_t)block_size);
   out_storage->carry_stride = carry_stride;
   out_storage->feedback_split = feedback_split;
   const uint64_t slot_origin = iree_unaligned_load_le_u64(geometry + 32);

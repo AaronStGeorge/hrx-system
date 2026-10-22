@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <atomic>
+
 #include "loom/serve/service/text/service_test_fixture.h"
 
 namespace {
@@ -216,7 +218,23 @@ TEST_F(SourceTextServiceTest, MissingCheckpointRetiresPublishedLayouts) {
   EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
 }
 
-TEST_F(SourceTextServiceTest, ChunkingRowsAndForksMatchDenseOracle) {
+class PooledTextServiceTest
+    : public SourceTextServiceTest,
+      public ::testing::WithParamInterface<iree_host_size_t> {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.pool_capacity = GetParam();
+    return options;
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(PoolCapacity, PooledTextServiceTest,
+                         ::testing::Values(iree_host_size_t{256},
+                                           iree_host_size_t{4194308},
+                                           iree_host_size_t{32 * 1024 * 1024}));
+
+TEST_P(PooledTextServiceTest, ChunkingRowsAndForksMatchDenseOracle) {
   const std::string prompt = "abxabbaaxbabx";
   std::vector<int32_t> tokens;
   for (char character : prompt) {
@@ -269,10 +287,10 @@ TEST_F(SourceTextServiceTest, ChunkingRowsAndForksMatchDenseOracle) {
     IREE_ASSERT_OK(
         loom_serve_text_row_reset(loom_serve_text_model_row(model_, i)));
   }
-  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 256u);
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, GetParam());
 }
 
-TEST_F(SourceTextServiceTest, KnownInputCheckpointsPreserveNoPrediction) {
+TEST_P(PooledTextServiceTest, KnownInputCheckpointsPreserveNoPrediction) {
   const std::string prompt = "abxabbaaxba";
   std::vector<int32_t> tokens;
   for (char character : prompt) {
@@ -333,7 +351,21 @@ TEST_F(SourceTextServiceTest, KnownInputCheckpointsPreserveNoPrediction) {
   loom_serve_text_checkpoint_release(checkpoint);
   IREE_ASSERT_OK(loom_serve_text_row_reset(row));
   IREE_ASSERT_OK(loom_serve_text_row_reset(fork));
-  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 256u);
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, GetParam());
+}
+
+TEST_F(SourceTextServiceTest, RejectsPoolOutsideSourceIntegerRepresentation) {
+  if (sizeof(iree_host_size_t) < sizeof(uint64_t)) {
+    GTEST_SKIP() << "host token counts already fit signed i64";
+  }
+  auto options = ModelOptions();
+  options.pool_capacity =
+      static_cast<iree_host_size_t>(uint64_t{INT64_MAX} + 1);
+  loom_serve_text_model_t* rejected = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_serve_text_model_allocate(
+                            device_, &options, host_allocator_, &rejected));
+  EXPECT_EQ(rejected, nullptr);
 }
 
 TEST_F(SourceTextServiceTest, WideSourceEpochsRetainExactHttpHistory) {
@@ -450,6 +482,86 @@ TEST_F(SourceTextServiceTest,
       Content(Read(Send(Request(Message("user", prompt)))));
   EXPECT_EQ(actual, Oracle::Complete(prompt, 16, 7));
   EXPECT_NE(actual, Oracle::Complete(prompt, 16, 2));
+}
+
+TEST_F(SourceTextServiceTest, CheckpointMapExtentFailureRetiresTheLoad) {
+  struct Allocations {
+    // Oversized byte extent rejected without allocating its payload.
+    std::atomic<uint64_t> rejected_bytes = 0;
+    // Successful allocations still owned by the native model load.
+    std::atomic<int64_t> live_count = 0;
+  } allocations;
+  const iree_allocator_t allocator = {
+      &allocations,
+      [](void* user_data, iree_allocator_command_t command, const void* params,
+         void** inout_pointer) -> iree_status_t {
+        auto* allocations = static_cast<Allocations*>(user_data);
+        if (command != IREE_ALLOCATOR_COMMAND_FREE) {
+          const auto length =
+              static_cast<const iree_allocator_alloc_params_t*>(params)
+                  ->byte_length;
+          if (length > 64 * 1024 * 1024) {
+            allocations->rejected_bytes.store(length);
+            return iree_status_from_code(IREE_STATUS_RESOURCE_EXHAUSTED);
+          }
+        }
+        const bool had_pointer = (command == IREE_ALLOCATOR_COMMAND_FREE ||
+                                  command == IREE_ALLOCATOR_COMMAND_REALLOC) &&
+                                 *inout_pointer != nullptr;
+        const auto delegate = iree_allocator_system();
+        iree_status_t status =
+            delegate.ctl(delegate.self, command, params, inout_pointer);
+        if (iree_status_is_ok(status)) {
+          if (command == IREE_ALLOCATOR_COMMAND_FREE) {
+            allocations->live_count.fetch_sub(had_pointer ? 1 : 0);
+          } else if (command != IREE_ALLOCATOR_COMMAND_REALLOC ||
+                     !had_pointer) {
+            allocations->live_count.fetch_add(*inout_pointer ? 1 : 0);
+          }
+        }
+        return status;
+      },
+  };
+  auto options = ModelOptions();
+  options.context_capacity = 262144;
+  options.pool_capacity = 262144;
+  // Four-token pages require 65536 map entries per checkpoint. Cover byte
+  // extent overflow, element-count wrap to zero, and a wrapped nonzero count.
+  for (const iree_host_size_t count : {16384u, 65536u, 65537u}) {
+    SCOPED_TRACE(count);
+    options.checkpoint_capacity = count;
+    allocations.rejected_bytes.store(0);
+    loom_serve_text_model_t* rejected = nullptr;
+    const auto expected_status = sizeof(iree_host_size_t) == 4
+                                     ? IREE_STATUS_OUT_OF_RANGE
+                                     : IREE_STATUS_RESOURCE_EXHAUSTED;
+    IREE_EXPECT_STATUS_IS(expected_status,
+                          loom_serve_text_model_allocate(device_, &options,
+                                                         allocator, &rejected));
+    EXPECT_EQ(rejected, nullptr);
+    IREE_EXPECT_OK(loom_serve_text_model_free(rejected));
+    EXPECT_EQ(allocations.rejected_bytes.load(),
+              sizeof(iree_host_size_t) == 4
+                  ? 0
+                  : uint64_t{count} * 65536 * sizeof(uint32_t));
+    EXPECT_EQ(allocations.live_count.load(), 0);
+  }
+
+  // Failure leaves the native device and allocator available for another
+  // load. The same long-context source works with a representable map count.
+  options.checkpoint_capacity = 2;
+  loom_serve_text_model_t* recovered = nullptr;
+  IREE_ASSERT_OK(
+      loom_serve_text_model_allocate(device_, &options, allocator, &recovered));
+  const int32_t tokens[] = {0, 1, 2, 0};
+  auto* row = loom_serve_text_model_row(recovered, 0);
+  IREE_EXPECT_OK(
+      loom_serve_text_row_prefill(row, IREE_ARRAYSIZE(tokens), tokens));
+  Oracle reference;
+  reference.Consume("abxa");
+  EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
+  IREE_EXPECT_OK(loom_serve_text_model_free(recovered));
+  EXPECT_EQ(allocations.live_count.load(), 0);
 }
 
 TEST_F(SourceTextServiceTest, RejectsImagesWithoutProjection) {

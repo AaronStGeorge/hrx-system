@@ -87,7 +87,7 @@ file. Native capacity fields are:
 | --- | --- | --- |
 | `rows` | `4` | Concurrent execution rows, from 1 through 16. |
 | `context_capacity` | `16384` | Per-row logical context limit in token positions, at most 262144. |
-| `pool_capacity` | `65536` | Shared logical cache token positions, at most 4194304. |
+| `pool_capacity` | `65536` | Shared logical cache token positions, in whole source-defined pages. |
 | `prefill_capacity` | `512` | Largest automatically specialized packed token shape; not a prompt-length limit. |
 | `checkpoint_capacity` | `0` | Explicit pinned endpoint slots, independent of execution rows. |
 | `session_cache_capacity` | `0` | Evictable idle endpoints beyond execution rows; nonzero values also reserve one admission-exchange endpoint. |
@@ -102,6 +102,13 @@ exceed context capacity and must fit an anchor plus every draft proposal.
 Two-epoch continuation requires nonzero draft depth. A source can impose tighter
 shape limits or reject unsupported drafting modes. Endpoint capacities are
 nonnegative and their combined native index space must fit signed 32-bit indices.
+
+The shared pool can grow independently of the per-session context limit and
+prefill shape. Its token count must fit both host indexing and a signed 64-bit
+integer. Source preparation declares the page size and storage layout; the
+resulting pool must contain at most 4,294,967,295 physical pages, and each region
+must fit its declared allocation. These representation limits do not guarantee
+that every page can be backed within the server's physical memory budget.
 
 Logical capacity is not eagerly committed physical storage under elastic
 backing. Sessions grow by blocks; admission reserves their requested completion

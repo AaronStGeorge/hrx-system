@@ -51,7 +51,7 @@ iree_status_t loom_serve_text_reservation_prepare(
   *out_reservation = (loom_serve_text_reservation_t){0};
   const iree_host_size_t block_size = row->model->state.storage.block_size;
   const iree_host_size_t maximum =
-      ((row->model->context_capacity + block_size - 1) / block_size) *
+      iree_host_size_ceil_div(row->model->context_capacity, block_size) *
       block_size;
   if ((mode != LOOM_SERVE_TEXT_RESERVE_FRESH &&
        mode != LOOM_SERVE_TEXT_RESERVE_CONTINUE &&

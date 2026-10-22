@@ -462,6 +462,37 @@ TEST_F(ConfigurationTest, ImageDefaultsAndSpecializations) {
   EXPECT_EQ(model_.pending_requests, 3u);
 }
 
+TEST_F(ConfigurationTest, SharedPoolCapacityPreservesTheSourceCount) {
+  const uint64_t maximum =
+      iree_min(uint64_t{IREE_HOST_SIZE_MAX}, uint64_t{INT64_MAX});
+  for (const char* kind : {"text", "sequence"}) {
+    for (uint64_t capacity : {uint64_t{4194305}, uint64_t{29360128},
+                              uint64_t{UINT32_MAX}, maximum}) {
+      SCOPED_TRACE(kind);
+      SCOPED_TRACE(capacity);
+      const std::string fields = R"(,"weights":"model.irpa","pool_capacity":)" +
+                                 std::to_string(capacity);
+      IREE_ASSERT_OK(Parse(
+          Document(kind, fields + (std::string(kind) == "text"
+                                       ? R"(,"tokenizer":"tokenizer.json")"
+                                       : ""))));
+      EXPECT_EQ(model_.text.pool_capacity, capacity);
+      EXPECT_EQ(model_.text.context_capacity, 16384u);
+      EXPECT_EQ(model_.text.prefill_capacity, 512u);
+    }
+    for (const std::string& capacity :
+         {std::string("0"), std::string("-1"), std::to_string(maximum + 1)}) {
+      IREE_EXPECT_STATUS_IS(
+          IREE_STATUS_INVALID_ARGUMENT,
+          Parse(Document(kind, R"(,"weights":"model.irpa","pool_capacity":)" +
+                                   capacity +
+                                   (std::string(kind) == "text"
+                                        ? R"(,"tokenizer":"tokenizer.json")"
+                                        : ""))));
+    }
+  }
+}
+
 TEST_F(ConfigurationTest, VariantCapacityAppliesToEveryService) {
   for (unsigned capacity : {0u, 1u, 8u}) {
     const auto field = ",\"variant_capacity\":" + std::to_string(capacity);

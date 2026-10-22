@@ -71,7 +71,8 @@ typedef struct loom_serve_text_storage_t {
 
 // Moves bootstrap results into storage and validates the external model
 // records. Origin payload contents and record widths are source-owned; native
-// code only uploads them before the separate page-map extent. Partial
+// code only uploads them before the separate page-map extent. Pool capacity
+// must describe whole pages and at most UINT32_MAX physical page IDs. Partial
 // initialization remains safe to deinitialize on failure.
 iree_status_t loom_serve_text_storage_initialize(
     const iree_vm_ref_types_t* types, iree_vm_variant_t* results,

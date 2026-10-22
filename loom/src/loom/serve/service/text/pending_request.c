@@ -23,7 +23,7 @@ iree_status_t loom_serve_text_pending_request_prepare(
     const iree_host_size_t extent =
         request->input.retained_count + request->input.count;
     const iree_host_size_t reservation =
-        ((extent + geometry->block_size - 1) / geometry->block_size) *
+        iree_host_size_ceil_div(extent, geometry->block_size) *
         geometry->block_size;
     if (geometry->capacity && reservation > geometry->capacity) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
