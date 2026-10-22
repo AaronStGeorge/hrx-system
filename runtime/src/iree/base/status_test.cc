@@ -63,6 +63,14 @@ std::ostream& operator<<(std::ostream& os, const Status& x) {
 using ::iree::testing::status::StatusIs;
 using ::testing::HasSubstr;
 
+static std::string MakePatternedStatusText(size_t length) {
+  std::string text(length, '\0');
+  for (size_t i = 0; i < length; ++i) {
+    text[i] = (char)('a' + (i % 26));
+  }
+  return text;
+}
+
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
 #define CHECK_STATUS_MESSAGE(status, message_substr)         \
   EXPECT_THAT(status.ToString(),                             \
@@ -311,6 +319,33 @@ static void ExpectStatusFormatFitsExactly(const iree_status_t& status) {
   }
 }
 
+TEST(StatusClone, OwnsCompleteFormattedDiagnostic) {
+  std::string file = "producer.c";
+  std::string message = "original failure";
+  std::string annotation = "additional context";
+  iree_status_t status = iree_status_allocate(
+      IREE_STATUS_UNAVAILABLE, file.c_str(), 42,
+      iree_make_string_view(message.data(), message.size()));
+  status = iree_status_annotate(
+      status, iree_make_string_view(annotation.data(), annotation.size()));
+  const std::string expected = FormatStatusBuffer(status);
+
+  iree_status_t cloned_status = iree_status_clone(status);
+  iree_status_free(status);
+  file.assign(file.size(), 'x');
+  message.assign(message.size(), 'x');
+  annotation.assign(annotation.size(), 'x');
+
+#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
+  EXPECT_TRUE(iree_string_view_equal(iree_status_message(cloned_status),
+                                     IREE_SV("original failure")));
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
+  EXPECT_TRUE(FormatStatusBuffer(cloned_status) == expected);
+  EXPECT_TRUE(FormatStatusTo(cloned_status) == expected);
+  ExpectStatusFormatFitsExactly(cloned_status);
+  iree_status_free(cloned_status);
+}
+
 TEST(StatusFreeze, StorageFreeIsIdentity) {
   EXPECT_EQ(iree_status_freeze(iree_ok_status()), iree_ok_status());
   iree_status_t status =
@@ -396,6 +431,20 @@ TEST(StatusFormatTo, CodeOnlyExactFit) {
 
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
 
+TEST(StatusJoin, PreservesLongSecondaryDiagnostic) {
+  const std::string secondary_message = MakePatternedStatusText(30001);
+  iree_status_t secondary = iree_status_allocate_copy(
+      IREE_STATUS_RESOURCE_EXHAUSTED, IREE_SV("remote.cc"), 42,
+      iree_make_string_view(secondary_message.data(),
+                            secondary_message.size()));
+  iree_status_t status = iree_status_join(
+      iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "primary failure"),
+      secondary);
+
+  EXPECT_NE(FormatStatusTo(status).find(secondary_message), std::string::npos);
+  iree_status_free(status);
+}
+
 TEST(StatusFormatTo, WithMessage) {
   iree_status_t status =
       iree_status_allocate(IREE_STATUS_NOT_FOUND, NULL, 0,
@@ -405,6 +454,40 @@ TEST(StatusFormatTo, WithMessage) {
   EXPECT_EQ(cb_result, buffer_result);
   EXPECT_THAT(cb_result, HasSubstr("NOT_FOUND"));
   EXPECT_THAT(cb_result, HasSubstr("something missing"));
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, PreservesLongCopiedMessageAndFreeze) {
+  const std::string message = MakePatternedStatusText(30001);
+  iree_status_t status = iree_status_allocate_copy(
+      IREE_STATUS_DATA_LOSS, IREE_SV("producer.cc"), 42,
+      iree_make_string_view(message.data(), message.size()));
+  const iree_string_view_t stored_message = iree_status_message(status);
+  EXPECT_TRUE(iree_string_view_equal(
+      stored_message, iree_make_string_view(message.data(), message.size())));
+
+  const std::string expected = FormatStatusTo(status);
+  EXPECT_NE(expected.find(message), std::string::npos);
+  EXPECT_TRUE(FormatStatusBuffer(status) == expected);
+  ExpectStatusFormatFitsExactly(status);
+
+  status = iree_status_freeze(status);
+  EXPECT_TRUE(FormatStatusTo(status) == expected);
+  EXPECT_TRUE(FormatStatusBuffer(status) == expected);
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, CopiedAnnotationOutlivesLongSource) {
+  std::string annotation = MakePatternedStatusText(30001);
+  const std::string expected_annotation = annotation;
+  iree_status_t status = iree_status_annotate_copy(
+      iree_make_status(IREE_STATUS_INTERNAL, "primary failure"),
+      iree_make_string_view(annotation.data(), annotation.size()));
+  annotation.assign(annotation.size(), 'x');
+
+  const std::string formatted = FormatStatusTo(status);
+  EXPECT_NE(formatted.find(expected_annotation), std::string::npos);
+  EXPECT_TRUE(FormatStatusBuffer(status) == formatted);
   iree_status_free(status);
 }
 

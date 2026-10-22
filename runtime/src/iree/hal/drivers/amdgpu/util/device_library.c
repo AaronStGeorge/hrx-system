@@ -163,9 +163,8 @@ static iree_status_t iree_hal_amdgpu_device_library_select_file(
           iree_string_builder_append_string(&builder, IREE_SV("]"));
     }
     if (iree_status_is_ok(annotation_status)) {
-      status = iree_status_annotate_f(status, "%.*s",
-                                      (int)iree_string_builder_size(&builder),
-                                      iree_string_builder_buffer(&builder));
+      status =
+          iree_status_annotate_copy(status, iree_string_builder_view(&builder));
     } else {
       status = iree_status_join(status, annotation_status);
     }

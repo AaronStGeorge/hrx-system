@@ -1132,15 +1132,9 @@ TEST_F(SlabPoolTest, NativeLossWakesAcceptedWaitAndPreservesFullCause) {
   EXPECT_EQ(Stats(pools_[0]).bytes_abandoned, 4096u);
   EXPECT_EQ(Stats(pools_[0]).slab_count, 0u);
   iree_status_t cause = iree_hal_pool_query_abandonment_status(pools_[0]);
-  char diagnostic[1024];
-  iree_host_size_t diagnostic_length = 0;
-  EXPECT_TRUE(iree_status_format(cause, sizeof(diagnostic), diagnostic,
-                                 &diagnostic_length));
-  EXPECT_NE(
-      std::string(diagnostic, diagnostic_length).find("native slab release"),
-      std::string::npos);
-  EXPECT_NE(std::string(diagnostic, diagnostic_length).find("libamdf API"),
-            std::string::npos);
+  const std::string diagnostic = iree::Status::ToString(cause);
+  EXPECT_NE(diagnostic.find("native slab release"), std::string::npos);
+  EXPECT_NE(diagnostic.find("libamdf API"), std::string::npos);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, cause);
   EXPECT_EQ(Stats(pools_[1]).bytes_abandoned, 0u);
   IREE_EXPECT_OK(iree_hal_pool_query_abandonment_status(pools_[1]));

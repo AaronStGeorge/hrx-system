@@ -12,6 +12,17 @@
 
 #include "iree/io/stdio_util.h"
 
+static iree_status_t iree_io_stdio_stream_error_status(int error_number,
+                                                       const char* message) {
+  if (error_number == 0) {
+    return iree_make_status(IREE_STATUS_UNKNOWN,
+                            "%s without a reported stdio error", message);
+  }
+  return iree_make_status(iree_status_code_from_errno(error_number),
+                          "%s (%d: %s)", message, error_number,
+                          strerror(error_number));
+}
+
 //===----------------------------------------------------------------------===//
 // iree_io_stdio_stream_t
 //===----------------------------------------------------------------------===//
@@ -157,8 +168,10 @@ IREE_API_EXPORT iree_status_t iree_io_stdio_stream_open_fd(
   // position. The initial position will be preserved.
   int dup_fd = iree_dup(fd);
   if (dup_fd == -1) {
+    const int dup_error = errno;
     IREE_TRACE_ZONE_END(z0);
-    return iree_make_stdio_status(
+    return iree_io_stdio_stream_error_status(
+        dup_error,
         "unable to duplicate file descriptor; possibly out of file descriptors "
         "(see ulimit)");
   }
@@ -179,8 +192,9 @@ IREE_API_EXPORT iree_status_t iree_io_stdio_stream_open_fd(
   iree_status_t status = iree_ok_status();
   FILE* handle = iree_fdopen(dup_fd, fopen_mode);
   if (handle == NULL) {
-    status = iree_make_stdio_statusf(
-        "unable to open file descriptor with mode %d", mode);
+    const int open_error = errno;
+    status = iree_io_stdio_stream_error_status(
+        open_error, "unable to open file descriptor");
   }
 
   // Ownership of the handle (and the dup_fd backing it) is transferred.
@@ -313,7 +327,8 @@ static iree_status_t iree_io_stdio_stream_seek(
 
   if (iree_status_is_ok(status)) {
     if (iree_fseek(stream->handle, seek_offset, origin) != 0) {
-      status = iree_make_stdio_status("failed to seek");
+      const int seek_error = errno;
+      status = iree_io_stdio_stream_error_status(seek_error, "failed to seek");
     }
   }
 
@@ -341,9 +356,11 @@ static iree_status_t iree_io_stdio_stream_read(
   while (bytes_read < buffer_capacity) {
     const iree_host_size_t chunk_size =
         iree_min(buffer_capacity - bytes_read, INT_MAX);
+    errno = 0;
     const iree_host_size_t read_size =
         fread((uint8_t*)buffer + bytes_read, 1, chunk_size, stream->handle);
     if (read_size != chunk_size) {
+      const int read_error = errno;
       // Failed to read chunk - may have reached EOF.
       if (feof(stream->handle)) {
         if (out_buffer_length) {
@@ -354,7 +371,7 @@ static iree_status_t iree_io_stdio_stream_read(
                                     "end-of-file encountered during read");
         }
       } else {
-        status = iree_make_stdio_status("read failed");
+        status = iree_io_stdio_stream_error_status(read_error, "read failed");
       }
       break;
     }
@@ -385,11 +402,14 @@ static iree_status_t iree_io_stdio_stream_write(iree_io_stream_t* base_stream,
   while (bytes_written < buffer_length) {
     iree_host_size_t chunk_size =
         iree_min(buffer_length - bytes_written, INT_MAX);
+    errno = 0;
     iree_host_size_t write_size =
         fwrite((uint8_t*)buffer + bytes_written, 1, chunk_size, stream->handle);
     if (write_size != chunk_size) {
+      const int write_error = errno;
       // Failed to write chunk; likely exhausted disk space.
-      status = iree_make_stdio_status(
+      status = iree_io_stdio_stream_error_status(
+          write_error,
           "write failed, possibly out of disk space or device lost");
       break;
     }
@@ -402,11 +422,11 @@ static iree_status_t iree_io_stdio_stream_write(iree_io_stream_t* base_stream,
 
 static iree_status_t iree_io_stdio_stream_flush(iree_io_stream_t* base_stream) {
   iree_io_stdio_stream_t* stream = iree_io_stdio_stream_cast(base_stream);
+  errno = 0;
   if (fflush(stream->handle) != 0) {
     const int flush_error = errno;
-    return iree_make_status(iree_status_code_from_errno(flush_error),
-                            "failed to flush stream (%d: %s)", flush_error,
-                            strerror(flush_error));
+    return iree_io_stdio_stream_error_status(flush_error,
+                                             "failed to flush stream");
   }
   return iree_ok_status();
 }
@@ -426,8 +446,11 @@ static iree_status_t iree_io_stdio_stream_fill(
   // we just bash fwrite. We could buffer up a reasonable size (4096 etc) of the
   // pattern repeating but this shouldn't be performance critical.
   for (iree_io_stream_pos_t i = 0; i < count; ++i) {
+    errno = 0;
     if (fwrite(pattern, pattern_length, 1, stream->handle) != 1) {
-      status = iree_make_stdio_status(
+      const int write_error = errno;
+      status = iree_io_stdio_stream_error_status(
+          write_error,
           "write failed, possibly out of disk space or device lost");
       break;
     }

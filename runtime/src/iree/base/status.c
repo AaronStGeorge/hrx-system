@@ -644,36 +644,18 @@ iree_status_allocate_copy(iree_status_code_t code, iree_string_view_t file,
 #endif  // has any IREE_STATUS_FEATURES
 }
 
+#if IREE_STATUS_FEATURES != 0
+static iree_status_t iree_status_snapshot(iree_status_t status,
+                                          bool preserve_primary_message);
+#endif  // has IREE_STATUS_FEATURES
+
 IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t
 iree_status_clone(iree_status_t status) {
 #if IREE_STATUS_FEATURES == 0
   // Statuses are just codes; nothing to do.
   return status;
 #else
-  iree_status_storage_t* storage = iree_status_storage(status);
-  if (!storage) {
-    return status;
-  }
-
-  iree_string_view_t file = iree_string_view_empty();
-  uint32_t line = 0;
-#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_SOURCE_LOCATION) != 0
-  if (storage->file) {
-    file = iree_make_cstring_view(storage->file);
-  }
-  line = storage->line;
-#endif  // has IREE_STATUS_FEATURE_SOURCE_LOCATION
-
-  iree_string_view_t message = iree_string_view_empty();
-#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
-  message = storage->message;
-#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
-
-  // Copy both file and message into self-contained storage. The original
-  // status may borrow these pointers from rodata (__FILE__) or from
-  // trailing storage that will be freed, so we always copy.
-  return iree_status_allocate_copy(iree_status_code(status), file, line,
-                                   message);
+  return iree_status_snapshot(status, /*preserve_primary_message=*/true);
 #endif  // has no IREE_STATUS_FEATURES
 }
 
@@ -702,6 +684,12 @@ IREE_API_EXPORT iree_status_t iree_status_ignore(iree_status_t status) {
   return iree_ok_status();
 }
 
+#if IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS
+static iree_status_t iree_status_annotate_copy_parts(
+    iree_status_t base_status, iree_string_view_t prefix,
+    iree_string_view_t message);
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
+
 IREE_API_EXPORT iree_status_t iree_status_join(iree_status_t base_status,
                                                iree_status_t new_status) {
   if (!iree_status_is_ok(base_status)) {
@@ -712,9 +700,9 @@ IREE_API_EXPORT iree_status_t iree_status_join(iree_status_t base_status,
       iree_host_size_t message_length = 0;
       if (iree_status_to_string(new_status, &allocator, &message,
                                 &message_length)) {
-        base_status =
-            iree_status_annotate_f(base_status, "additional failure: %.*s",
-                                   (int)message_length, message);
+        base_status = iree_status_annotate_copy_parts(
+            base_status, iree_make_cstring_view("additional failure: "),
+            iree_make_string_view(message, message_length));
         iree_allocator_free(allocator, message);
       } else {
         base_status = iree_status_annotate_f(
@@ -780,14 +768,83 @@ iree_status_annotate(iree_status_t base_status, iree_string_view_t message) {
                                     (iree_status_payload_t*)payload);
 }
 
+static iree_status_t iree_status_annotate_copy_parts(
+    iree_status_t base_status, iree_string_view_t prefix,
+    iree_string_view_t message) {
+  if (iree_status_is_ok(base_status) || (iree_string_view_is_empty(prefix) &&
+                                         iree_string_view_is_empty(message))) {
+    return base_status;
+  }
+
+  iree_status_storage_t* storage = iree_status_storage(base_status);
+  if (!storage && iree_string_view_is_empty(prefix)) {
+    return iree_status_allocate_copy(iree_status_code(base_status),
+                                     iree_string_view_empty(), 0, message);
+  }
+
+  iree_host_size_t message_length = 0;
+  if (!iree_host_size_checked_add(prefix.size, message.size, &message_length)) {
+    return base_status;
+  }
+  iree_host_size_t message_storage_size = 0;
+  if (!iree_host_size_checked_add(message_length, 1, &message_storage_size)) {
+    return base_status;
+  }
+  iree_host_size_t allocation_size = 0;
+  iree_host_size_t message_offset = 0;
+  iree_status_t layout_status = IREE_STRUCT_LAYOUT(
+      iree_sizeof_struct(iree_status_payload_message_t), &allocation_size,
+      IREE_STRUCT_FIELD(message_storage_size, char, &message_offset));
+  if (!iree_status_is_ok(layout_status)) {
+    iree_status_ignore(layout_status);
+    return base_status;
+  }
+
+  iree_allocator_t allocator = iree_allocator_system();
+  iree_status_payload_message_t* payload = NULL;
+  iree_status_ignore(
+      iree_allocator_malloc(allocator, allocation_size, (void**)&payload));
+  if (IREE_UNLIKELY(!payload)) {
+    return base_status;
+  }
+  memset(payload, 0, sizeof(*payload));
+  payload->header.type = IREE_STATUS_PAYLOAD_TYPE_MESSAGE;
+  payload->header.allocator = allocator;
+  payload->header.formatter = iree_status_payload_message_formatter;
+  char* message_storage = (char*)payload + message_offset;
+  if (!iree_string_view_is_empty(prefix)) {
+    memcpy(message_storage, prefix.data, prefix.size);
+  }
+  if (!iree_string_view_is_empty(message)) {
+    memcpy(message_storage + prefix.size, message.data, message.size);
+  }
+  message_storage[message_length] = 0;
+  payload->message = iree_make_string_view(message_storage, message_length);
+
+  if (!storage) {
+    iree_status_t copied_status = iree_status_allocate_copy(
+        iree_status_code(base_status), iree_string_view_empty(), 0,
+        payload->message);
+    iree_allocator_free(allocator, payload);
+    return copied_status;
+  }
+  return iree_status_append_payload(base_status, storage,
+                                    (iree_status_payload_t*)payload);
+}
+
+IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t iree_status_annotate_copy(
+    iree_status_t base_status, iree_string_view_t message) {
+  return iree_status_annotate_copy_parts(base_status, iree_string_view_empty(),
+                                         message);
+}
+
 IREE_MUST_USE_RESULT static iree_status_t iree_status_annotate_vf(
     iree_status_t base_status, const char* format, va_list varargs) {
   if (iree_status_is_ok(base_status)) {
     return base_status;
   }
 
-  // If there's no storage yet we can just reuse normal allocation. Both that
-  // and this do not copy |message|.
+  // If there's no storage yet we can reuse the primary-message allocator.
   iree_status_storage_t* storage = iree_status_storage(base_status);
   if (!storage) {
     return iree_status_allocate_vf(iree_status_code(base_status), NULL, 0,
@@ -860,11 +917,55 @@ IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t IREE_PRINTF_ATTRIBUTE(2, 3)
 
 #endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
 
+#if IREE_STATUS_FEATURES != 0
+// Appends |value| to a bounded status output while retaining the complete
+// required length. |inout_buffer| becomes NULL after truncation so later
+// fields are measured without writing past the caller's capacity.
+static bool iree_status_format_append(iree_string_view_t value,
+                                      iree_host_size_t buffer_capacity,
+                                      char** inout_buffer,
+                                      iree_host_size_t* inout_buffer_length) {
+  iree_host_size_t new_buffer_length = 0;
+  if (!iree_host_size_checked_add(*inout_buffer_length, value.size,
+                                  &new_buffer_length)) {
+    *inout_buffer = NULL;
+    *inout_buffer_length = IREE_HOST_SIZE_MAX;
+    return false;
+  }
+
+  char* buffer = *inout_buffer;
+  bool is_buffer_sufficient = true;
+  if (buffer) {
+    const iree_host_size_t remaining_capacity =
+        *inout_buffer_length < buffer_capacity
+            ? buffer_capacity - *inout_buffer_length
+            : 0;
+    const iree_host_size_t copy_length =
+        remaining_capacity > 0 ? iree_min(value.size, remaining_capacity - 1)
+                               : 0;
+    if (copy_length > 0) {
+      memcpy(buffer + *inout_buffer_length, value.data, copy_length);
+    }
+    if (remaining_capacity > 0) {
+      buffer[*inout_buffer_length + copy_length] = 0;
+    }
+    if (copy_length != value.size) {
+      *inout_buffer = NULL;
+      is_buffer_sufficient = false;
+    }
+  }
+
+  *inout_buffer_length = new_buffer_length;
+  return is_buffer_sufficient;
+}
+#endif  // has IREE_STATUS_FEATURES
+
 static bool iree_status_format_message(iree_status_t status,
                                        iree_host_size_t buffer_capacity,
                                        char* buffer,
                                        iree_host_size_t* out_buffer_length,
-                                       bool has_prefix) {
+                                       bool has_prefix,
+                                       bool include_primary_message) {
   *out_buffer_length = 0;
   bool is_buffer_sufficient = true;
 
@@ -880,22 +981,15 @@ static bool iree_status_format_message(iree_status_t status,
 
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
   // Append base storage message.
-  if (storage && !iree_string_view_is_empty(storage->message)) {
-    iree_host_size_t remaining_capacity =
-        buffer && buffer_length < buffer_capacity
-            ? buffer_capacity - buffer_length
-            : 0;
-    int n =
-        iree_snprintf(remaining_capacity > 0 ? buffer + buffer_length : NULL,
-                      remaining_capacity, has_prefix ? "; %.*s" : "%.*s",
-                      (int)storage->message.size, storage->message.data);
-    if (IREE_UNLIKELY(n < 0)) {
-      return false;
-    } else if (buffer && (iree_host_size_t)n >= remaining_capacity) {
-      buffer = NULL;
-      is_buffer_sufficient = false;
+  if (include_primary_message && storage &&
+      !iree_string_view_is_empty(storage->message)) {
+    if (has_prefix) {
+      is_buffer_sufficient &=
+          iree_status_format_append(iree_make_cstring_view("; "),
+                                    buffer_capacity, &buffer, &buffer_length);
     }
-    buffer_length += n;
+    is_buffer_sufficient &= iree_status_format_append(
+        storage->message, buffer_capacity, &buffer, &buffer_length);
     has_prefix = true;
   }
 #endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
@@ -911,28 +1005,18 @@ static bool iree_status_format_message(iree_status_t status,
     }
 
     // Separate this payload from a preceding message or payload.
-    iree_host_size_t remaining_capacity =
-        buffer && buffer_length < buffer_capacity
-            ? buffer_capacity - buffer_length
-            : 0;
     if (has_prefix) {
-      if (buffer) {
-        if (remaining_capacity <= 2) {
-          buffer = NULL;
-          is_buffer_sufficient = false;
-        } else {
-          buffer[buffer_length] = ';';
-          buffer[buffer_length + 1] = ' ';
-        }
-      }
-      buffer_length += 2;  // '; '
+      is_buffer_sufficient &=
+          iree_status_format_append(iree_make_cstring_view("; "),
+                                    buffer_capacity, &buffer, &buffer_length);
     }
 
     // Append payload via custom formatter callback.
     iree_host_size_t payload_buffer_length = 0;
-    remaining_capacity = buffer && buffer_length < buffer_capacity
-                             ? buffer_capacity - buffer_length
-                             : 0;
+    iree_host_size_t remaining_capacity =
+        buffer && buffer_length < buffer_capacity
+            ? buffer_capacity - buffer_length
+            : 0;
     payload->formatter(payload, remaining_capacity,
                        remaining_capacity > 0 ? buffer + buffer_length : NULL,
                        &payload_buffer_length);
@@ -940,7 +1024,12 @@ static bool iree_status_format_message(iree_status_t status,
       buffer = NULL;
       is_buffer_sufficient = false;
     }
-    buffer_length += payload_buffer_length;
+    if (!iree_host_size_checked_add(buffer_length, payload_buffer_length,
+                                    &buffer_length)) {
+      buffer = NULL;
+      buffer_length = IREE_HOST_SIZE_MAX;
+      is_buffer_sufficient = false;
+    }
     has_prefix = true;
 
     payload = payload->next;
@@ -997,8 +1086,12 @@ IREE_API_EXPORT bool iree_status_format(iree_status_t status,
       status, remaining_capacity,
       remaining_capacity > 0 ? buffer + prefix_buffer_length : NULL,
       &message_buffer_length,
-      /*has_prefix=*/true);
-  *out_buffer_length = prefix_buffer_length + message_buffer_length;
+      /*has_prefix=*/true, /*include_primary_message=*/true);
+  if (!iree_host_size_checked_add(prefix_buffer_length, message_buffer_length,
+                                  out_buffer_length)) {
+    *out_buffer_length = IREE_HOST_SIZE_MAX;
+    return false;
+  }
   return is_buffer_sufficient && ret;
 }
 
@@ -1148,63 +1241,90 @@ IREE_API_EXPORT bool iree_status_format_to(iree_status_t status,
 }
 
 //===----------------------------------------------------------------------===//
-// Status freeze
+// Status snapshots
 //===----------------------------------------------------------------------===//
 
-#if IREE_STATUS_FEATURES == 0
-IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t
-iree_status_freeze(iree_status_t status) {
-  // Statuses are just codes; nothing to do.
-  return status;
-}
-#else
-IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t
-iree_status_freeze(iree_status_t status) {
+#if IREE_STATUS_FEATURES != 0
+// Snapshots all printable diagnostic state into independently owned storage.
+// Payloads can point to arbitrary owner-defined state and have no generic copy
+// operation, so their formatted text is retained instead of their structure.
+// Clones preserve the primary-message boundary for structured consumers while
+// freezes intentionally flatten it with the payload diagnostics.
+static iree_status_t iree_status_snapshot(iree_status_t status,
+                                          bool preserve_primary_message) {
   iree_status_storage_t* storage = iree_status_storage(status);
   if (!storage) {
     return status;
   }
   iree_status_code_t code = iree_status_code(status);
 
-  // Get the size of the formatted message alone. Source file annotations are
-  // handled separately.
-  iree_host_size_t message_buffer_size = 0;
+#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
+  const iree_string_view_t primary_message = storage->message;
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
+
+  // Measure either all message text for a freeze or only payload text for a
+  // clone that retains the primary message separately.
+  iree_host_size_t diagnostic_length = 0;
   if (IREE_UNLIKELY(!iree_status_format_message(
           status, /*buffer_capacity=*/0,
-          /*buffer=*/NULL, &message_buffer_size, /*has_prefix=*/false))) {
-    iree_status_free(status);
+          /*buffer=*/NULL, &diagnostic_length, /*has_prefix=*/false,
+          /*include_primary_message=*/!preserve_primary_message))) {
     return iree_status_from_code(code);
   }
-  message_buffer_size++;  // NUL
+  iree_host_size_t diagnostic_storage_size = 0;
+  if (diagnostic_length > 0 &&
+      !iree_host_size_checked_add(diagnostic_length, 1,
+                                  &diagnostic_storage_size)) {
+    return iree_status_from_code(code);
+  }
+
+  iree_host_size_t primary_message_storage_size = 0;
+#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
+  if (preserve_primary_message && !iree_string_view_is_empty(primary_message) &&
+      !iree_host_size_checked_add(primary_message.size, 1,
+                                  &primary_message_storage_size)) {
+    return iree_status_from_code(code);
+  }
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
 
   // Compute the storage size for the status with additional room to store the
-  // formatted message and source file location if present.
+  // source file location and independently owned diagnostic text.
   const char* file = NULL;
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_SOURCE_LOCATION) != 0
   file = storage->file;
 #endif  // has IREE_STATUS_FEATURE_SOURCE_LOCATION
-  iree_host_size_t file_storage_size = file ? strlen(file) + 1 : 0;
+  iree_host_size_t file_storage_size = 0;
+  if (file &&
+      !iree_host_size_checked_add(strlen(file), 1, &file_storage_size)) {
+    return iree_status_from_code(code);
+  }
 
-  // Without annotation storage, retain formatted payloads in an embedded
-  // message payload. Ordinary statuses keep their feature-dependent footprint.
-  iree_host_size_t message_payload_count = 0;
+  // Clones retain formatted payloads separately from their primary message.
+  // Builds without primary-message storage also require an embedded payload.
+  bool diagnostic_is_payload = preserve_primary_message;
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) == 0
-  message_payload_count = message_buffer_size > 1 ? 1 : 0;
+  diagnostic_is_payload = true;
 #endif  // !has IREE_STATUS_FEATURE_ANNOTATIONS
+  iree_host_size_t message_payload_count = 0;
+  if (diagnostic_is_payload && diagnostic_length > 0) {
+    message_payload_count = 1;
+  }
 
   iree_host_size_t unaligned_storage_size = 0;
   iree_host_size_t message_payload_offset = 0;
-  iree_host_size_t message_offset = 0;
+  iree_host_size_t primary_message_offset = 0;
+  iree_host_size_t diagnostic_offset = 0;
   iree_host_size_t file_offset = 0;
   iree_status_t layout_status = IREE_STRUCT_LAYOUT(
       iree_sizeof_struct(iree_status_storage_t), &unaligned_storage_size,
       IREE_STRUCT_FIELD(message_payload_count, iree_status_payload_message_t,
                         &message_payload_offset),
-      IREE_STRUCT_FIELD(message_buffer_size, char, &message_offset),
+      IREE_STRUCT_FIELD(primary_message_storage_size, char,
+                        &primary_message_offset),
+      IREE_STRUCT_FIELD(diagnostic_storage_size, char, &diagnostic_offset),
       IREE_STRUCT_FIELD(file_storage_size, char, &file_offset));
   if (!iree_status_is_ok(layout_status)) {
     iree_status_ignore(layout_status);
-    iree_status_free(status);
     return iree_status_from_code(code);
   }
 
@@ -1212,37 +1332,46 @@ iree_status_freeze(iree_status_t status) {
   iree_host_size_t storage_size = 0;
   if (!iree_host_size_checked_align(unaligned_storage_size, storage_alignment,
                                     &storage_size)) {
-    iree_status_free(status);
     return iree_status_from_code(code);
   }
   iree_status_storage_t* new_storage =
       (iree_status_storage_t*)iree_aligned_alloc_raw(storage_alignment,
                                                      storage_size);
   if (IREE_UNLIKELY(!new_storage)) {
-    iree_status_free(status);
     return iree_status_from_code(code);
   }
   memset(new_storage, 0, sizeof(*new_storage));
 
-  char* message_data = (char*)new_storage + message_offset;
-  message_data[0] = 0;
-  iree_host_size_t message_length = 0;
-  // Format the status message directly into the region allocated for it.
-  bool ret =
-      iree_status_format_message(status, message_buffer_size, message_data,
-                                 &message_length, /*has_prefix=*/false);
   iree_status_t new_status =
       (iree_status_t)((uintptr_t)new_storage | (code & IREE_STATUS_CODE_MASK));
 
-  if (IREE_UNLIKELY(!ret)) {
-    iree_status_free(new_status);
-    iree_status_free(status);
-    return iree_status_from_code(code);
+  char* diagnostic_data = NULL;
+  if (diagnostic_storage_size > 0) {
+    diagnostic_data = (char*)new_storage + diagnostic_offset;
+    iree_host_size_t formatted_length = 0;
+    bool ret = iree_status_format_message(
+        status, diagnostic_storage_size, diagnostic_data, &formatted_length,
+        /*has_prefix=*/false,
+        /*include_primary_message=*/!preserve_primary_message);
+    if (IREE_UNLIKELY(!ret || formatted_length != diagnostic_length)) {
+      iree_status_free(new_status);
+      return iree_status_from_code(code);
+    }
   }
 
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
-  new_storage->message = iree_make_string_view(message_data, message_length);
-#else
+  if (preserve_primary_message && primary_message_storage_size > 0) {
+    char* primary_message_data = (char*)new_storage + primary_message_offset;
+    memcpy(primary_message_data, primary_message.data, primary_message.size);
+    primary_message_data[primary_message.size] = 0;
+    new_storage->message =
+        iree_make_string_view(primary_message_data, primary_message.size);
+  } else if (!preserve_primary_message && diagnostic_storage_size > 0) {
+    new_storage->message =
+        iree_make_string_view(diagnostic_data, diagnostic_length);
+  }
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
+
   if (message_payload_count) {
     iree_status_payload_message_t* payload =
         (iree_status_payload_message_t*)((uint8_t*)new_storage +
@@ -1252,11 +1381,11 @@ iree_status_freeze(iree_status_t status) {
     // The outer status allocation owns both the payload and its text.
     payload->header.allocator = iree_allocator_null();
     payload->header.formatter = iree_status_payload_message_formatter;
-    payload->message = iree_make_string_view(message_data, message_length);
+    payload->message =
+        iree_make_string_view(diagnostic_data, diagnostic_length);
     new_status =
         iree_status_append_payload(new_status, new_storage, &payload->header);
   }
-#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
 
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_SOURCE_LOCATION) != 0
   if (file) {
@@ -1268,10 +1397,22 @@ iree_status_freeze(iree_status_t status) {
   new_storage->line = storage->line;
 #endif  // has IREE_STATUS_FEATURE_SOURCE_LOCATION
 
-  iree_status_free(status);
   return new_status;
 }
-#endif  // has any IREE_STATUS_FEATURES
+#endif  // has IREE_STATUS_FEATURES
+
+IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t
+iree_status_freeze(iree_status_t status) {
+#if IREE_STATUS_FEATURES == 0
+  // Statuses are just codes; nothing to do.
+  return status;
+#else
+  iree_status_t frozen_status =
+      iree_status_snapshot(status, /*preserve_primary_message=*/false);
+  iree_status_free(status);
+  return frozen_status;
+#endif  // has no IREE_STATUS_FEATURES
+}
 
 // Callback that appends chunks to a string builder, returning false on
 // allocation failure to short-circuit formatting.

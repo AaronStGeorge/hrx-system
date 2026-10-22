@@ -155,6 +155,26 @@ TEST(StatusWireTest, ResultOwnsSourceMessageAndAnnotations) {
   iree_status_free(result);
 }
 
+TEST(StatusWireTest, PreservesLongMessageAndAnnotation) {
+  std::string message(12001, 'm');
+  std::string annotation(15001, 'a');
+  std::vector<uint8_t> wire =
+      BuildWire(IREE_STATUS_DATA_LOSS,
+                {{IREE_NET_STATUS_WIRE_ENTRY_TYPE_MESSAGE, 0, message},
+                 {IREE_NET_STATUS_WIRE_ENTRY_TYPE_ANNOTATION, 0, annotation}});
+
+  iree_status_t result = Deserialize(wire);
+#if IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS
+  const iree_string_view_t stored_message = iree_status_message(result);
+  EXPECT_TRUE(iree_string_view_equal(
+      stored_message, iree_make_string_view(message.data(), message.size())));
+  const std::string formatted = FormatStatus(result);
+  EXPECT_NE(formatted.find(message), std::string::npos);
+  EXPECT_NE(formatted.find(annotation), std::string::npos);
+#endif  // IREE_STATUS_FEATURE_ANNOTATIONS
+  iree_status_free(result);
+}
+
 TEST(StatusWireTest, LeavesExcessOutputCapacityUnmodified) {
   iree_host_size_t required_size = 0;
   IREE_ASSERT_OK(

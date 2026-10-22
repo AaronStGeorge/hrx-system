@@ -247,12 +247,14 @@ iree_status_t loom_run_hal_testbench_require_successful_result(
         !loomc_string_view_is_empty(diagnostic->message)) {
       const iree_string_view_t message =
           iree_string_view_from_loomc(diagnostic->message);
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION, "%.*s",
-                              (int)message.size, message.data);
+      return iree_status_allocate_copy(IREE_STATUS_FAILED_PRECONDITION,
+                                       iree_make_cstring_view(__FILE__),
+                                       __LINE__, message);
     }
   }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION, "%.*s",
-                          (int)fallback_message.size, fallback_message.data);
+  return iree_status_allocate_copy(IREE_STATUS_FAILED_PRECONDITION,
+                                   iree_make_cstring_view(__FILE__), __LINE__,
+                                   fallback_message);
 }
 
 static iree_status_t loom_run_hal_testbench_validate_kernel_launch(

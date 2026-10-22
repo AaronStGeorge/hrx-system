@@ -497,7 +497,8 @@ iree_status_t iree_net_status_wire_deserialize(iree_const_byte_span_t data,
         type == IREE_NET_STATUS_WIRE_ENTRY_TYPE_STACK_TRACE) {
       const char* text =
           (const char*)entry + IREE_NET_STATUS_WIRE_ENTRY_HEADER_SIZE;
-      result = iree_status_annotate_f(result, "%.*s", (int)text_length, text);
+      result = iree_status_annotate_copy(
+          result, iree_make_string_view(text, text_length));
     }
     offset += entry_size;
   }

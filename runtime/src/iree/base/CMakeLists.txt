@@ -226,6 +226,20 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+if(IREE_ENABLE_LIBBACKTRACE)
+  iree_cc_test(
+    NAME
+      status_stack_trace_test
+    SRCS
+      "status_stack_trace_test.cc"
+      "status_stack_trace_test_helper.cc"
+    DEPS
+      ::base
+      iree::testing::gtest
+      iree::testing::gtest_main
+  )
+endif()
+
 iree_cc_test(
   NAME
     string_builder_test

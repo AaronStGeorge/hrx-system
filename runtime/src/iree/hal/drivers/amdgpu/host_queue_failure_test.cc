@@ -6,9 +6,12 @@
 
 #include <cstdint>
 #include <cstring>
+#include <future>
 #include <string>
 #include <thread>
+#include <utility>
 
+#include "iree/async/frontier_tracker.h"
 #include "iree/base/internal/atomics.h"
 #include "iree/base/threading/notification.h"
 #include "iree/hal/api.h"
@@ -382,6 +385,10 @@ TEST_F(HostQueueFailureTest, DeferredOperationReportsRecordedQueueFailure) {
 // Submitted notification entries report the same recorded failure the deferred
 // operations above do.
 TEST_F(HostQueueFailureTest, SubmittedEntryReportsRecordedQueueFailure) {
+  std::promise<iree::Status> frontier_completion;
+  auto frontier_result = frontier_completion.get_future();
+  iree_async_single_frontier_t frontier;
+  iree_async_frontier_waiter_t frontier_waiter;
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.preallocate_pools = 0;
@@ -420,8 +427,25 @@ TEST_F(HostQueueFailureTest, SubmittedEntryReportsRecordedQueueFailure) {
       /*barriers=*/NULL, IREE_HAL_FILL_FLAG_NONE));
   EXPECT_FALSE(HostQueueHasPendingOps(queue));
 
-  iree_hal_amdgpu_host_queue_record_failure(
-      queue, iree_make_status(kInjectedFailureCode, "injected queue failure"));
+  // Register an independent causal consumer before the queue fails. It must
+  // receive the same complete diagnostic as the queue retained.
+  iree_async_single_frontier_initialize(
+      &frontier, queue->axis, queue->notification_ring.epoch.next_submission);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      queue->frontier_tracker,
+      iree_async_single_frontier_as_frontier(&frontier),
+      +[](void* user_data, iree_status_t status) {
+        static_cast<std::promise<iree::Status>*>(user_data)->set_value(
+            iree::Status(std::move(status)));
+      },
+      &frontier_completion, &frontier_waiter));
+
+  iree::Status failure(iree_status_annotate_f(
+      iree_make_status(kInjectedFailureCode, "injected queue failure"),
+      "queue diagnostic context"));
+  const std::string expected = failure.ToString();
+  iree_hal_amdgpu_host_queue_record_failure(queue,
+                                            iree_status_clone(failure.get()));
 
   // Release the hardware queue only after the failure is recorded so the fill
   // cannot have signalled its semaphore before the terminal transition began.
@@ -431,6 +455,10 @@ TEST_F(HostQueueFailureTest, SubmittedEntryReportsRecordedQueueFailure) {
                         iree_hal_semaphore_wait(signal_semaphore, signal_value,
                                                 iree_infinite_timeout(),
                                                 IREE_ASYNC_WAIT_FLAG_NONE));
+
+  iree::Status frontier_status = frontier_result.get();
+  EXPECT_EQ(frontier_status.ToString(), expected);
+  EXPECT_EQ(frontier_status.code(), iree::StatusCode::kDataLoss);
 
   WaitForSubmittedEpoch(&libhsa_, queue);
   IREE_EXPECT_OK(

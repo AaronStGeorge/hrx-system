@@ -1967,7 +1967,7 @@ iree_status_t loom_builder_copy_signed_enum_set_attr_storage(
   iree_status_t status =
       loom_signed_enum_set_canonical_word_count(set, &canonical_word_count);
   if (!iree_status_is_ok(status)) {
-    return iree_status_annotate_f(status, "%.*s", (int)label.size, label.data);
+    return iree_status_annotate_copy(status, label);
   }
   if (canonical_word_count == 0) {
     return iree_ok_status();
