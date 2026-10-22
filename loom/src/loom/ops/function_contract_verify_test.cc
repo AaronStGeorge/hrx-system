@@ -14,6 +14,7 @@
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/func/ops.h"
 #include "loom/testing/diagnostic_matchers.h"
 

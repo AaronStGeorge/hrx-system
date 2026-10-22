@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/value_refs.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/math_policy.h"

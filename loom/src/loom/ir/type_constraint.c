@@ -7,7 +7,6 @@
 #include "loom/ir/type_constraint.h"
 
 #include "iree/base/api.h"
-#include "loom/ir/ir.h"
 #include "loom/ir/scalar_type.h"
 
 const char* loom_type_constraint_name(loom_type_constraint_t constraint) {

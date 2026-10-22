@@ -10,12 +10,26 @@ load(
     "//build_tools/bazel:cc.bzl",
     "iree_cc_binary",
     "iree_cc_library",
+    "iree_cc_library_group",
 )
 load(
     "//loom/requirements:package_policy.bzl",
     "apply_loom_target_policy",
 )
 load(":cc_attrs.bzl", "loom_cc_attrs")
+
+def _loom_cc_library_group_impl(name, visibility, **kwargs):
+    iree_cc_library_group(
+        name = name,
+        visibility = visibility,
+        **apply_loom_target_policy(kwargs, name = name)
+    )
+
+loom_cc_library_group = macro(
+    doc = "Aggregates Loom library capabilities without adding build actions.",
+    implementation = _loom_cc_library_group_impl,
+    inherit_attrs = iree_cc_library_group,
+)
 
 def _loom_cc_library_impl(
         name,

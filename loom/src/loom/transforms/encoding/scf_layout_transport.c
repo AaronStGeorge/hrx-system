@@ -9,6 +9,7 @@
 
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/index/ops.h"

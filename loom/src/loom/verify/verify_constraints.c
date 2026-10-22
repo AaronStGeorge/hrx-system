@@ -8,6 +8,7 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/ir/type_refs.h"
 #include "loom/target/registers.h"
 #include "loom/verify/verify_diagnostics.h"
 #include "loom/verify/verify_structure.h"

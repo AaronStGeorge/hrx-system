@@ -10,6 +10,7 @@
 #include "loom/error/parameter.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/value_replacement.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/condition.h"

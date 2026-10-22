@@ -26,7 +26,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::error::emitter
-    loom::ir
+    loom::ir::builders
     loom::util::adaptive_sort
     loom::util::bstring
   PUBLIC
@@ -44,7 +44,7 @@ loom_cc_library(
     "format.c"
   DEPS
     iree::base
-    loom::ir
+    loom::ir::builders
     loom::util::bstring
   PUBLIC
 )

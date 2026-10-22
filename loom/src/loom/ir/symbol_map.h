@@ -25,7 +25,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "loom/ir/ir.h"
+#include "loom/ir/attribute.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,16 +38,21 @@ extern "C" {
   ((loom_string_id_t)(LOOM_STRING_ID_INVALID - 1))
 
 typedef struct loom_symbol_map_entry_t {
-  loom_string_id_t
-      name_id;  // LOOM_STRING_ID_INVALID = empty, TOMBSTONE = erased.
+  // Interned name; LOOM_STRING_ID_INVALID is empty and TOMBSTONE is erased.
+  loom_string_id_t name_id;
+  // Module-local identity associated with the interned name.
   uint16_t symbol_id;
 } loom_symbol_map_entry_t;
 
 typedef struct loom_symbol_map_t {
+  // Arena-owned open-addressed entries, or NULL before the first insertion.
   loom_symbol_map_entry_t* entries;
-  iree_host_size_t capacity;         // Power of 2. 0 = unallocated.
-  iree_host_size_t count;            // Live entries (excludes tombstones).
-  iree_host_size_t tombstone_count;  // Erased entries still occupying slots.
+  // Power-of-two entry capacity; zero before allocation.
+  iree_host_size_t capacity;
+  // Live entry count, excluding tombstones.
+  iree_host_size_t count;
+  // Erased entries that still occupy probe slots.
+  iree_host_size_t tombstone_count;
 } loom_symbol_map_t;
 
 // Looks up a symbol by interned name ID.

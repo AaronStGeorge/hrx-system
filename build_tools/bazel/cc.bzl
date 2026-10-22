@@ -13,6 +13,8 @@ project.
 """
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 
 # rules_cc currently exposes only its macro publicly. Rule inheritance needs
 # the underlying rule object so ctx.super() can preserve its full behavior.
@@ -40,6 +42,35 @@ cc_binary = rule(
     attrs = cc_execution_attrs,
     initializer = cc_execution_initializer,
     parent = rules_cc_binary,
+)
+
+def _iree_cc_library_group_impl(ctx):
+    return [
+        cc_common.merge_cc_infos(direct_cc_infos = [dep[CcInfo] for dep in ctx.attr.deps]),
+        DefaultInfo(
+            files = depset(transitive = [dep[DefaultInfo].files for dep in ctx.attr.deps]),
+            default_runfiles = ctx.runfiles().merge_all([dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps]),
+            data_runfiles = ctx.runfiles().merge_all([dep[DefaultInfo].data_runfiles for dep in ctx.attr.deps]),
+        ),
+        coverage_common.instrumented_files_info(ctx, dependency_attributes = ["deps"]),
+    ]
+
+iree_cc_library_group = rule(
+    doc = """Aggregates existing C/C++ libraries without introducing an implementation.
+
+    Direct dependency headers remain direct headers of the group, including under
+    Clang layering checks. Linker inputs retain their original owners. The group
+    adds no compilation, archive, or module-map actions; narrower consumers can
+    depend on its components directly.
+    """,
+    implementation = _iree_cc_library_group_impl,
+    attrs = {
+        "deps": attr.label_list(
+            providers = [CcInfo],
+            doc = "Libraries whose public headers and implementations are re-exported.",
+        ),
+    },
+    provides = [CcInfo],
 )
 
 def _iree_cc_library_impl(

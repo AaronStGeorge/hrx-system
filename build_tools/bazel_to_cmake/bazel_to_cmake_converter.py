@@ -1840,6 +1840,9 @@ class BuildFileFunctions(object):
     def iree_cc_library(self, **kwargs):
         self.cc_library(**kwargs)
 
+    def iree_cc_library_group(self, **kwargs):
+        self.cc_library(**kwargs)
+
     def iree_compiler_register_plugin(self, plugin_id, target):
         plugin_id_block = self._convert_string_arg_block(
             "PLUGIN_ID", plugin_id, quote=False

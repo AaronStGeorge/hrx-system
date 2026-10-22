@@ -200,7 +200,7 @@ loom_cc_library(
     ],
     hdrs = ["remap.h"],
     deps = [
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
@@ -360,7 +360,6 @@ loom_cc_library(
         ":rewriter",
         "//loom/src/loom/analysis:type_refinement",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ir:type_refinement",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/util:cfg_graph",

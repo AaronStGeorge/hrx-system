@@ -1842,7 +1842,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::ir
-    loom::ir::type_refinement
     loom::ops::encoding
     loom::util::fact_table
   PUBLIC
@@ -1860,7 +1859,6 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
     loom::ir::facts
-    loom::ir::type_refinement
     loom::util::fact_table
 )
 

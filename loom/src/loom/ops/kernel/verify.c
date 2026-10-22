@@ -10,6 +10,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/cache.h"
 #include "loom/ops/callable_effects.h"
 #include "loom/ops/combining.h"

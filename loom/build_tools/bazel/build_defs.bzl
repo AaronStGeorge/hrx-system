@@ -19,7 +19,7 @@ load(
     "//loom/requirements:package_policy.bzl",
     "apply_loom_target_policy",
 )
-load(":cc.bzl", _loom_cc_binary = "loom_cc_binary", _loom_cc_library = "loom_cc_library")
+load(":cc.bzl", _loom_cc_binary = "loom_cc_binary", _loom_cc_library = "loom_cc_library", _loom_cc_library_group = "loom_cc_library_group")
 load(":cc_benchmark.bzl", _loom_cc_benchmark = "loom_cc_benchmark")
 load(":cc_fuzz.bzl", _loom_cc_fuzz = "loom_cc_fuzz")
 load(":cc_test.bzl", _loom_cc_test = "loom_cc_test")
@@ -32,6 +32,7 @@ loom_cc_benchmark = _loom_cc_benchmark
 loom_cc_binary = _loom_cc_binary
 loom_cc_fuzz = _loom_cc_fuzz
 loom_cc_library = _loom_cc_library
+loom_cc_library_group = _loom_cc_library_group
 loom_cc_test = _loom_cc_test
 
 def _loom_bazel_generator_args(args):

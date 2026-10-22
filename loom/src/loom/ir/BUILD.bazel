@@ -4,12 +4,32 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark", "loom_cc_library", "loom_cc_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark", "loom_cc_library", "loom_cc_library_group", "loom_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+# Complete IR API, including construction, structural queries, and value facts.
+loom_cc_library_group(
+    name = "ir",
+    deps = [
+        ":builders",
+        ":facts",
+    ],
+)
+
+# Construction uses caller-owned module/context state, without fact propagation
+# or compiler pipelines. The group re-exports the component headers.
+loom_cc_library_group(
+    name = "builders",
+    deps = [
+        ":storage",
+        ":symbol_map",
+        ":types",
+    ],
 )
 
 loom_cc_library(
@@ -25,7 +45,7 @@ loom_cc_library(
         "float_facts.h",
     ],
     deps = [
-        ":ir",
+        ":types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/math",
@@ -91,10 +111,9 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "ir",
+    name = "storage",
     srcs = [
         "ancestry.c",
-        "attribute.c",
         "context.c",
         "encoding.c",
         "function_version.c",
@@ -104,18 +123,15 @@ loom_cc_library(
         "module.c",
         "module_record.c",
         "module_source.c",
-        "scalar_type.c",
-        "type_constraint.c",
         "type_dependencies.c",
         "type_identity.c",
         "type_import.c",
-        "types.c",
+        "type_refs.c",
         "value_refs.c",
         "value_replacement.c",
     ],
     hdrs = [
         "ancestry.h",
-        "attribute.h",
         "attribute_schema.h",
         "context.h",
         "encoding.h",
@@ -124,31 +140,28 @@ loom_cc_library(
         "ir.h",
         "local_value_domain.h",
         "location.h",
-        "memory_space.h",
         "module.h",
         "module_record.h",
         "module_source.h",
         "parameterized_attr.h",
         "parameterized_type.h",
-        "scalar_type.h",
         "semantics.h",
         "string_table.h",
-        "structural_hash.h",
-        "type_constraint.h",
         "type_dependencies.h",
         "type_descriptor.h",
         "type_identity.h",
         "type_import.h",
+        "type_refs.h",
         "type_table.h",
-        "types.h",
         "value_refs.h",
         "value_replacement.h",
     ],
     textual_hdrs = [
         "location_tag_table.inc",
-        "scalar_type_table.inc",
     ],
+    visibility = ["//visibility:private"],
     deps = [
+        ":types",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/util:adaptive_sort",
         "//loom/src/loom/util:bstring",
@@ -161,11 +174,25 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "type_refinement",
-    srcs = ["type_refinement.c"],
-    hdrs = ["type_refinement.h"],
+    name = "types",
+    srcs = [
+        "attribute.c",
+        "scalar_type.c",
+        "type_constraint.c",
+        "type_refinement.c",
+        "types.c",
+    ],
+    hdrs = [
+        "attribute.h",
+        "memory_space.h",
+        "scalar_type.h",
+        "structural_hash.h",
+        "type_constraint.h",
+        "type_refinement.h",
+        "types.h",
+    ],
+    textual_hdrs = ["scalar_type_table.inc"],
     deps = [
-        ":ir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -210,8 +237,7 @@ loom_cc_test(
     name = "type_refinement_test",
     srcs = ["type_refinement_test.cc"],
     deps = [
-        ":ir",
-        ":type_refinement",
+        ":types",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -222,7 +248,7 @@ loom_cc_test(
     name = "attribute_test",
     srcs = ["attribute_test.cc"],
     deps = [
-        ":ir",
+        ":types",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -317,7 +343,7 @@ loom_cc_library(
     srcs = ["symbol_map.c"],
     hdrs = ["symbol_map.h"],
     deps = [
-        ":ir",
+        ":types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -327,7 +353,7 @@ loom_cc_test(
     name = "scalar_type_test",
     srcs = ["scalar_type_test.cc"],
     deps = [
-        ":ir",
+        ":types",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -11,6 +11,7 @@
 #include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
 #include "loom/ir/type_identity.h"
+#include "loom/ir/type_refs.h"
 
 //===----------------------------------------------------------------------===//
 // Completed canonical substitutions

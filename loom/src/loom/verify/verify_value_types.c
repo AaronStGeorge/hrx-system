@@ -7,6 +7,7 @@
 #include "loom/verify/verify_value_types.h"
 
 #include "loom/error/error_catalog.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/value_replacement.h"
 #include "loom/ops/op_defs.h"
 #include "loom/verify/verify_diagnostics.h"

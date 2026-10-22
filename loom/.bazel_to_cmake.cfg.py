@@ -807,6 +807,10 @@ class LoomBuildFileFunctions(
             ),
         )
 
+    def loom_cc_library_group(self, **kwargs):
+        # The existing dependency-only CMake library is an INTERFACE target.
+        self.cc_library(**self._apply_loom_cmake_policy(kwargs))
+
     def loom_cc_binary(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
         self._emit_rewritten_cmake_rule(
