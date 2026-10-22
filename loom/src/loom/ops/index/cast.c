@@ -61,6 +61,29 @@ loom_value_facts_t loom_index_cast_transfer_facts(
   return loom_value_facts_make(result_lo, result_hi, 1);
 }
 
+bool loom_index_cast_transfer_preserves_value(loom_scalar_type_t input_type,
+                                              loom_scalar_type_t result_type,
+                                              loom_value_facts_t input_facts) {
+  int64_t input_lo = 0;
+  int64_t input_hi = 0;
+  int64_t result_lo = 0;
+  int64_t result_hi = 0;
+  if (!loom_value_facts_scalar_type_domain(input_type, &input_lo, &input_hi) ||
+      !loom_value_facts_scalar_type_domain(result_type, &result_lo,
+                                           &result_hi)) {
+    return false;
+  }
+
+  const int32_t input_bitwidth = loom_scalar_type_bitwidth(input_type);
+  const loom_value_facts_t facts =
+      loom_value_facts_clamp_domain(input_facts, input_lo, input_hi);
+  if (loom_index_cast_to_offset_zero_extends_source(input_type, result_type,
+                                                    input_bitwidth)) {
+    return facts.range_lo >= 0;
+  }
+  return facts.range_lo >= result_lo && facts.range_hi <= result_hi;
+}
+
 bool loom_index_cast_roundtrip_preserves_value(
     loom_scalar_type_t address_type, loom_scalar_type_t payload_type,
     loom_value_facts_t source_facts) {

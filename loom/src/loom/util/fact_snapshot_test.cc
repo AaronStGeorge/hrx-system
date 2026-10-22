@@ -54,6 +54,9 @@ class FactOriginSnapshotTest : public FactSnapshotTest,
       case LOOM_VALUE_FACT_ORIGIN_EXACT_LANE:
         return loom_value_fact_table_define_exact_lane_origin(&table_, 7,
                                                               {source, 1, 2});
+      case LOOM_VALUE_FACT_ORIGIN_EXACT_SCALAR:
+        return loom_value_fact_table_define_exact_scalar_origin(&table_, 7,
+                                                                {source});
       case LOOM_VALUE_FACT_ORIGIN_UNIFORM_SCALE:
         return loom_value_fact_table_define_uniform_scale_origin(&table_, 7,
                                                                  {source, 5});
@@ -102,6 +105,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(LOOM_VALUE_FACT_ORIGIN_UNIFORM_ELEMENT,
                       LOOM_VALUE_FACT_ORIGIN_STATIC_LANE,
                       LOOM_VALUE_FACT_ORIGIN_EXACT_LANE,
+                      LOOM_VALUE_FACT_ORIGIN_EXACT_SCALAR,
                       LOOM_VALUE_FACT_ORIGIN_UNIFORM_SCALE,
                       LOOM_VALUE_FACT_ORIGIN_CONTEXTUAL_QUERY,
                       LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES));

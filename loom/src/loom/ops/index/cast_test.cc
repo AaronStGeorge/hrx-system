@@ -1,0 +1,63 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/ops/index/cast.h"
+
+#include "iree/testing/gtest.h"
+
+namespace loom {
+namespace {
+
+TEST(IndexCastTest, IdentifiesValuePreservingIntegerAddressCasts) {
+  struct TestCase {
+    loom_scalar_type_t input_type;
+    loom_scalar_type_t result_type;
+    loom_value_facts_t input_facts;
+    bool preserves_value;
+  };
+  const loom_value_facts_t unknown = loom_value_facts_unknown();
+  const TestCase test_cases[] = {
+      {LOOM_SCALAR_TYPE_I1, LOOM_SCALAR_TYPE_INDEX, unknown, true},
+      {LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_INDEX, unknown, true},
+      {LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_INDEX, unknown, true},
+      {LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_INDEX, unknown, true},
+      {LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_INDEX, unknown, true},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_I64, unknown, true},
+      {LOOM_SCALAR_TYPE_OFFSET, LOOM_SCALAR_TYPE_INDEX, unknown, true},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_OFFSET, unknown, false},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_OFFSET,
+       loom_value_facts_make(0, INT32_MAX, 1), true},
+      {LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_OFFSET, unknown, false},
+      {LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_OFFSET,
+       loom_value_facts_make(0, INT32_MAX, 1), true},
+      {LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_OFFSET,
+       loom_value_facts_exact_i64(-1), false},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_I32, unknown, false},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_I32,
+       loom_value_facts_make(INT32_MIN, INT32_MAX, 1), true},
+      {LOOM_SCALAR_TYPE_OFFSET, LOOM_SCALAR_TYPE_I32, unknown, false},
+      {LOOM_SCALAR_TYPE_OFFSET, LOOM_SCALAR_TYPE_I32,
+       loom_value_facts_make(0, INT32_MAX, 1), true},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_I8,
+       loom_value_facts_make(INT8_MIN, INT8_MAX, 1), true},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_I8,
+       loom_value_facts_make(INT8_MIN, INT8_MAX + 1, 1), false},
+      {LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_INDEX, unknown, false},
+      {LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_F32, unknown, false},
+  };
+
+  for (const auto& test_case : test_cases) {
+    EXPECT_EQ(
+        loom_index_cast_transfer_preserves_value(
+            test_case.input_type, test_case.result_type, test_case.input_facts),
+        test_case.preserves_value)
+        << loom_scalar_type_name(test_case.input_type) << " -> "
+        << loom_scalar_type_name(test_case.result_type);
+  }
+}
+
+}  // namespace
+}  // namespace loom

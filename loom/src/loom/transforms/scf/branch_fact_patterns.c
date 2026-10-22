@@ -441,64 +441,21 @@ typedef struct loom_branch_facts_region_use_scan_t {
   loom_branch_facts_edge_assume_set_t* assume_set;
 } loom_branch_facts_region_use_scan_t;
 
-static bool loom_branch_facts_index_cast_preserves_value(
-    const loom_module_t* module, const loom_op_t* op) {
-  loom_value_id_t input = loom_index_cast_input(op);
-  loom_value_id_t result = loom_index_cast_result(op);
-  if (input == LOOM_VALUE_ID_INVALID || result == LOOM_VALUE_ID_INVALID ||
-      input >= module->values.count || result >= module->values.count) {
-    return false;
-  }
-  loom_type_t input_type = loom_module_value_type(module, input);
-  loom_type_t result_type = loom_module_value_type(module, result);
-  if (!loom_type_is_scalar(input_type) || !loom_type_is_scalar(result_type)) {
-    return false;
-  }
-  loom_scalar_type_t input_scalar_type = loom_type_element_type(input_type);
-  loom_scalar_type_t result_scalar_type = loom_type_element_type(result_type);
-  if (result_scalar_type == LOOM_SCALAR_TYPE_OFFSET &&
-      input_scalar_type != LOOM_SCALAR_TYPE_OFFSET) {
-    return false;
-  }
-  int32_t input_bitwidth = loom_scalar_type_bitwidth(input_scalar_type);
-  int32_t result_bitwidth = loom_scalar_type_bitwidth(result_scalar_type);
-  return input_bitwidth > 0 && result_bitwidth > 0 &&
-         input_bitwidth <= result_bitwidth;
-}
-
 static bool loom_branch_facts_value_preserves_condition_value(
-    const loom_module_t* module, loom_value_id_t value_id,
+    const loom_rewriter_t* rewriter, loom_value_id_t value_id,
     loom_value_id_t condition_value_id) {
-  if (!module) {
+  if (!rewriter->module || !rewriter->fact_table) {
     return false;
   }
-  iree_host_size_t remaining_steps = module->values.count;
-  loom_value_id_t current_value = value_id;
-  while (remaining_steps-- > 0) {
-    if (current_value == condition_value_id) {
-      return true;
-    }
-    if (current_value >= module->values.count) {
-      return false;
-    }
-    const loom_value_t* value = loom_module_value(module, current_value);
-    if (loom_value_is_block_arg(value)) {
-      return false;
-    }
-    const loom_op_t* defining_op = loom_value_def_op(value);
-    if (!defining_op) {
-      return false;
-    }
-    if (loom_index_cast_isa(defining_op)) {
-      if (!loom_branch_facts_index_cast_preserves_value(module, defining_op)) {
-        return false;
-      }
-      current_value = loom_index_cast_input(defining_op);
-      continue;
-    }
+  loom_value_fact_exact_scalar_origin_t origin;
+  if (!loom_value_fact_table_query_exact_scalar_origin(
+          rewriter->fact_table, rewriter->module, value_id, &origin)) {
     return false;
   }
-  return false;
+  return loom_value_fact_table_query_identity(rewriter->fact_table,
+                                              origin.source_value_id) ==
+         loom_value_fact_table_query_identity(rewriter->fact_table,
+                                              condition_value_id);
 }
 
 static iree_status_t
@@ -516,14 +473,14 @@ loom_branch_facts_edge_assume_set_append_relation_for_value(
   if (relation->left.kind == LOOM_CONDITION_INTEGER_OPERAND_VALUE &&
       value_id != relation->left.value_id &&
       loom_branch_facts_value_preserves_condition_value(
-          rewriter->module, value_id, relation->left.value_id)) {
+          rewriter, value_id, relation->left.value_id)) {
     mapped_relation.left.value_id = value_id;
     matched = true;
   }
   if (relation->right.kind == LOOM_CONDITION_INTEGER_OPERAND_VALUE &&
       value_id != relation->right.value_id &&
       loom_branch_facts_value_preserves_condition_value(
-          rewriter->module, value_id, relation->right.value_id)) {
+          rewriter, value_id, relation->right.value_id)) {
     mapped_relation.right.value_id = value_id;
     matched = true;
   }

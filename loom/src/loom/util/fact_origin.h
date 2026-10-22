@@ -27,6 +27,7 @@ enum loom_value_fact_origin_bits_t {
   LOOM_VALUE_FACT_ORIGIN_UNIFORM_SCALE = 1u << 3,
   LOOM_VALUE_FACT_ORIGIN_CONTEXTUAL_QUERY = 1u << 4,
   LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES = 1u << 5,
+  LOOM_VALUE_FACT_ORIGIN_EXACT_SCALAR = 1u << 6,
 };
 
 // One ordinary operation's complete origin publication. Definitions replace
@@ -103,6 +104,14 @@ typedef struct loom_value_fact_exact_lane_origin_t {
   uint32_t source_lane_stride;
 } loom_value_fact_exact_lane_origin_t;
 
+// Scalar source preserving the represented numeric value exactly. Source and
+// result types may differ when a conversion changes representation without
+// changing any value admitted by the source facts.
+typedef struct loom_value_fact_exact_scalar_origin_t {
+  // Scalar value whose represented numeric value is preserved.
+  loom_value_id_t source_value_id;
+} loom_value_fact_exact_scalar_origin_t;
+
 // Uniform scalar scale applied lanewise to one aggregate value. Result lane N
 // is source lane N multiplied by scale_value_id.
 typedef struct loom_value_fact_uniform_scale_origin_t {
@@ -137,8 +146,10 @@ typedef struct loom_value_fact_origin_snapshot_t {
   loom_value_fact_uniform_element_origin_t uniform_element;
   // Source-lane provenance, independent of element representation.
   loom_value_fact_static_lane_origin_t static_lane;
-  // Source-lane provenance preserving represented scalar values.
-  loom_value_fact_exact_lane_origin_t exact_lane;
+  // Exact value provenance. Aggregate values use the strided lane mapping;
+  // scalar values use only source_value_id. A value's stable type makes the
+  // two representations mutually exclusive across one solve.
+  loom_value_fact_exact_lane_origin_t exact_value;
   // Aggregate source and its uniform scalar multiplier.
   loom_value_fact_uniform_scale_origin_t uniform_scale;
   // Contextual query descriptor with its module-owned projection key.
@@ -226,6 +237,20 @@ iree_status_t loom_value_fact_table_define_exact_lane_origin(
 bool loom_value_fact_table_query_exact_lane_origin(
     const loom_value_fact_table_t* table, const loom_module_t* module,
     loom_value_id_t value_id, loom_value_fact_exact_lane_origin_t* out_origin);
+
+// Defines the exact scalar value source for |value_id|. The producer must have
+// proved that every value admitted by its current source facts survives the
+// complete conversion unchanged. An INVALID source withdraws the proof.
+iree_status_t loom_value_fact_table_define_exact_scalar_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_exact_scalar_origin_t origin);
+
+// Returns the exact scalar value source for |value_id|. The query validates
+// that both values are scalar; their representation types may differ.
+bool loom_value_fact_table_query_exact_scalar_origin(
+    const loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_value_id_t value_id,
+    loom_value_fact_exact_scalar_origin_t* out_origin);
 
 // Defines a value as the lanewise multiplication of |origin.source_value_id|
 // and scalar |origin.scale_value_id|. The relation is a materialization proof
