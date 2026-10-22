@@ -40,7 +40,9 @@ loom_cc_library(
     hdrs = ["pattern_registry.h"],
     deps = [
         "//loom/src/loom/ir",
+        "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

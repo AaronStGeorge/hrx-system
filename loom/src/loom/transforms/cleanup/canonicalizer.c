@@ -69,6 +69,7 @@ loom_canonicalizer_pattern_registries_from_cleanup_registry(
     return (loom_canonicalizer_pattern_registries_t){0};
   }
   return (loom_canonicalizer_pattern_registries_t){
+      .fact_independent = registry->fact_independent,
       .region_initialization = registry->region_initialization,
       .pre_fold = registry->universal_pre_fold,
       .post_type = registry->universal_post_type,
@@ -692,6 +693,13 @@ static iree_status_t loom_canonicalize_rewrite_op_without_facts(
     return iree_ok_status();
   }
 
+  IREE_RETURN_IF_ERROR(
+      loom_canonicalize_apply_patterns(state, state->patterns.fact_independent,
+                                       op, rewriter, result, out_changed));
+  if (*out_changed) {
+    return iree_ok_status();
+  }
+
   const loom_op_vtable_t* vtable = loom_op_vtable(driver->module, op);
   if (!vtable || !vtable->canonicalize ||
       !iree_any_bit_set(vtable->vtable_flags,
@@ -875,6 +883,7 @@ static iree_status_t loom_canonicalizer_run_precomputed_region(
                                 ? options->max_iterations
                                 : LOOM_CANONICALIZER_DEFAULT_MAX_ITERATIONS;
   loom_greedy_rewrite_options_t rewrite_options = {
+      .prepared_patterns = state.patterns.fact_independent,
       .max_iterations = max_iterations,
       .materialize_constant =
           canonicalizer->special_value_policy

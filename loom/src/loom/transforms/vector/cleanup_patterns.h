@@ -13,6 +13,10 @@
 extern "C" {
 #endif
 
+// Prepared coordinates and fact-independent construction/projection cleanup.
+extern const loom_rewrite_pattern_provider_t
+    loom_vector_fact_independent_pattern_provider;
+
 // Universal pre-fold cleanup patterns contributed by the vector dialect.
 extern const loom_rewrite_pattern_provider_t
     loom_vector_universal_pre_fold_pattern_provider;

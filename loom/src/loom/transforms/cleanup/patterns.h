@@ -6,8 +6,11 @@
 
 // Cleanup rewrite pattern composition.
 //
-// Cleanup has four ordering-sensitive pattern phases. Region-initialization
-// patterns run once in region preorder before the first worklist is processed.
+// Cleanup separates fact-independent rewrites from four observing phases.
+// Fact-independent patterns may prepare root-local actions from coherent facts
+// once, then run structural callbacks in the driver's non-observing batch.
+// Region-initialization patterns run once in region preorder before the first
+// worklist is processed.
 // Universal pre-fold patterns run before constant folding, universal post-type
 // patterns run after type propagation, and source-combine patterns run after
 // structural canonicalization only while source representations remain legal.
@@ -40,6 +43,8 @@ typedef struct loom_cleanup_pattern_context_t {
 
 // Ordered provider lists selected by one compiler composition.
 typedef struct loom_cleanup_pattern_provider_set_t {
+  // Structural patterns with optional initial read-only preparation.
+  loom_rewrite_pattern_provider_list_t fact_independent;
   // Patterns applied once in outer-to-inner order before worklist processing.
   loom_rewrite_pattern_provider_list_t region_initialization;
   // Universal patterns applied before fact-backed constant folding.
@@ -56,6 +61,8 @@ typedef struct loom_cleanup_pattern_provider_set_t {
 
 // Indexed pattern registries prepared for one compiler invocation.
 typedef struct loom_cleanup_pattern_registry_t {
+  // Structural patterns with optional initial read-only preparation.
+  const loom_rewrite_pattern_registry_t* fact_independent;
   // Patterns applied once in outer-to-inner order before worklist processing.
   const loom_rewrite_pattern_registry_t* region_initialization;
   // Universal patterns applied before fact-backed constant folding.
@@ -70,9 +77,11 @@ typedef struct loom_cleanup_pattern_registry_t {
   const loom_fact_refinement_policy_t* fact_refinement_policy;
 } loom_cleanup_pattern_registry_t;
 
-// Owned storage for the four indexed cleanup pattern registries. Provider
+// Owned storage for the indexed cleanup pattern registries. Provider
 // descriptors and callback data remain borrowed.
 typedef struct loom_cleanup_pattern_registry_storage_t {
+  // Storage for the fact-independent registry.
+  loom_rewrite_pattern_registry_storage_t fact_independent_storage;
   // Storage for the region-initialization registry.
   loom_rewrite_pattern_registry_storage_t region_initialization_storage;
   // Storage for the universal pre-fold registry.
@@ -81,7 +90,7 @@ typedef struct loom_cleanup_pattern_registry_storage_t {
   loom_rewrite_pattern_registry_storage_t universal_post_type_storage;
   // Storage for the source-combine registry.
   loom_rewrite_pattern_registry_storage_t source_combine_storage;
-  // Borrowed registry view over the three storage fields.
+  // Borrowed registry view over the storage fields.
   loom_cleanup_pattern_registry_t registry;
 } loom_cleanup_pattern_registry_storage_t;
 

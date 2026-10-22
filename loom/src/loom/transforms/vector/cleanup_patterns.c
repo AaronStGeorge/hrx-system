@@ -8,6 +8,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/special_values.h"
+#include "loom/ops/vector/construction.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/rewrite/rewriter.h"
 
@@ -128,4 +129,39 @@ const loom_rewrite_pattern_provider_t
         .name = IREE_SVL("vector"),
         .patterns = kVectorUniversalPreFoldPatterns,
         .pattern_count = IREE_ARRAYSIZE(kVectorUniversalPreFoldPatterns),
+};
+
+static iree_status_t loom_vector_prepare_coordinate_pattern(
+    const loom_rewrite_pattern_t* pattern, const loom_module_t* module,
+    const loom_value_fact_table_t* facts, const loom_op_t* op,
+    iree_arena_allocator_t* arena, loom_rewrite_action_t** out_action) {
+  (void)pattern;
+  return loom_vector_prepare_coordinates(module, facts, op, arena, out_action);
+}
+
+static iree_status_t loom_vector_structure_pattern(
+    const loom_rewrite_pattern_t* pattern, void* context, loom_op_t* op,
+    loom_rewriter_t* rewriter, bool* out_changed) {
+  (void)pattern;
+  (void)context;
+  return loom_vector_project_structure(op, rewriter, out_changed);
+}
+
+static const loom_rewrite_pattern_t kVectorFactIndependentPatterns[] = {
+    {.root_kind = LOOM_OP_VECTOR_EXTRACT,
+     .match_and_rewrite = loom_vector_structure_pattern,
+     .prepare = loom_vector_prepare_coordinate_pattern},
+    {.root_kind = LOOM_OP_VECTOR_INSERT,
+     .match_and_rewrite = loom_vector_structure_pattern,
+     .prepare = loom_vector_prepare_coordinate_pattern},
+    {.root_kind = LOOM_OP_VECTOR_SLICE,
+     .match_and_rewrite = loom_vector_structure_pattern,
+     .prepare = loom_vector_prepare_coordinate_pattern},
+};
+
+const loom_rewrite_pattern_provider_t
+    loom_vector_fact_independent_pattern_provider = {
+        .name = IREE_SVL("vector"),
+        .patterns = kVectorFactIndependentPatterns,
+        .pattern_count = IREE_ARRAYSIZE(kVectorFactIndependentPatterns),
 };

@@ -160,7 +160,17 @@ static const loom_rewrite_pattern_provider_t* const
         &loom_vector_source_combine_pattern_provider,
 };
 
+static const loom_rewrite_pattern_provider_t* const
+    kConfiguredFactIndependentPatternProviders[] = {
+        &loom_vector_fact_independent_pattern_provider,
+};
+
 static const loom_cleanup_pattern_provider_set_t kConfiguredPatternProviders = {
+    .fact_independent =
+        {
+            .count = IREE_ARRAYSIZE(kConfiguredFactIndependentPatternProviders),
+            .values = kConfiguredFactIndependentPatternProviders,
+        },
     .region_initialization =
         {
             .count =
