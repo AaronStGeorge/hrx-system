@@ -733,6 +733,7 @@ iree_cc_library(
 )
 endif()
 
+if(AMDF_BUILD)
 iree_cc_library(
   NAME
     ring
@@ -747,7 +748,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_test(
   NAME
     ring_test
@@ -759,7 +762,9 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
+if(AMDF_BUILD)
 iree_cc_binary_benchmark(
   NAME
     ring_benchmark
@@ -771,6 +776,7 @@ iree_cc_binary_benchmark(
     iree::third_party::google_benchmark
   TESTONLY
 )
+endif()
 
 if(AMDF_BUILD)
 iree_cc_test(
