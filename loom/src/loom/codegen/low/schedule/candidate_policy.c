@@ -244,6 +244,18 @@ static uint32_t loom_low_schedule_candidate_unspillable_completion_capacity(
                   score->opened_unspillable_completion_capacity);
 }
 
+// Direct storage progress and setup that exposes a storage descriptor are
+// equivalent at this decision point.
+static bool loom_low_schedule_candidate_advances_storage(
+    const loom_low_schedule_candidate_score_t* score) {
+  const uint16_t descriptor_setup_flags =
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP |
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR;
+  return iree_any_bit_set(score->flags,
+                          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE) ||
+         iree_all_bits_set(score->flags, descriptor_setup_flags);
+}
+
 static int loom_low_schedule_compare_candidate_pressure(
     const loom_low_schedule_candidate_score_t* lhs,
     const loom_low_schedule_candidate_score_t* rhs) {
@@ -428,6 +440,44 @@ static bool loom_low_schedule_candidate_score_less(
           rhs->active_unspillable_completion_domain_id &&
       lhs->effective_stall_cycles != rhs->effective_stall_cycles) {
     return lhs->effective_stall_cycles < rhs->effective_stall_cycles;
+  }
+  // Under pressure, an unspillable path with the same risk and no greater
+  // physical cliff cost already owns its live footprint. Advance a neutral
+  // storage handoff when it issues no later than the alternative so that
+  // footprint can reach its consumer and drain. A zero-unit setup owns no
+  // footprint yet, so it only wins when it fills an actual issue gap;
+  // otherwise running setup early can overlap later storage lifetimes without
+  // making room.
+  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+      compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT &&
+      lhs->pressure_risk == rhs->pressure_risk &&
+      iree_any_bit_set(
+          lhs->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION) &&
+      iree_any_bit_set(
+          rhs->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION)) {
+    const bool lhs_advances_storage =
+        loom_low_schedule_candidate_advances_storage(lhs);
+    const bool rhs_advances_storage =
+        loom_low_schedule_candidate_advances_storage(rhs);
+    if (lhs_advances_storage != rhs_advances_storage) {
+      const loom_low_schedule_candidate_score_t* storage_candidate =
+          lhs_advances_storage ? lhs : rhs;
+      const loom_low_schedule_candidate_score_t* alternative =
+          lhs_advances_storage ? rhs : lhs;
+      const bool fills_issue_gap = storage_candidate->effective_stall_cycles <
+                                   alternative->effective_stall_cycles;
+      if (storage_candidate->produced_live_units ==
+              storage_candidate->killed_live_units &&
+          storage_candidate->pressure_cliff_penalty <=
+              alternative->pressure_cliff_penalty &&
+          storage_candidate->effective_stall_cycles <=
+              alternative->effective_stall_cycles &&
+          (storage_candidate->produced_live_units != 0 || fills_issue_gap)) {
+        return lhs_advances_storage;
+      }
+    }
   }
   // Once hard-capacity feasibility ties, advance the tighter full bank's
   // pending completion. Waiting until both candidates exceed capacity lets

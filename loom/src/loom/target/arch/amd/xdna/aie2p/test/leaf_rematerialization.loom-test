@@ -729,8 +729,8 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @retained_scale_select(%record
 }
 
 // ----
-issue cycles: 164
-code bytes: 750
+issue cycles: 163
+code bytes: 746
 coissued bundles: 40
 coissued components: 80
 
