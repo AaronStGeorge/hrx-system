@@ -12,7 +12,7 @@ load("@rules_cc//cc/common:debug_package_info.bzl", "DebugPackageInfo")
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
 load("@rules_testing//lib:truth.bzl", "matching")
 load("@rules_testing//lib:util.bzl", "TestingAspectInfo", "util")
-load("//build_tools/bazel:cc.bzl", "iree_cc_binary", "iree_cc_library")
+load("//build_tools/bazel:cc.bzl", "iree_cc_binary", "iree_cc_library", "iree_cc_library_group")
 load("//build_tools/bazel:cc_test.bzl", "iree_cc_test")
 load(
     "//build_tools/bazel:runfiles.bzl",
@@ -23,6 +23,62 @@ load(
 )
 
 _TEST_DYNAMIC_LIBRARY_ENVIRONMENT = "IREE_TEST_DYNAMIC_LIBRARY_PATH"
+
+def _test_cc_library_group_preserves_components(name, **kwargs):
+    util.helper_target(
+        iree_cc_library,
+        name = name + "_private",
+        hdrs = [name + "_private.h"],
+        srcs = [name + "_private.c"],
+    )
+    for component in ["first", "second"]:
+        util.helper_target(
+            iree_cc_library,
+            name = name + "_" + component,
+            hdrs = [name + "_" + component + ".h"],
+            srcs = [name + "_" + component + ".c"],
+            data = [name + "_" + component + ".txt"],
+            defines = [component.upper()],
+            deps = [":" + name + "_private"],
+        )
+    util.helper_target(
+        iree_cc_library_group,
+        name = name + "_nested",
+        deps = [":" + name + "_first", ":" + name + "_second"],
+    )
+    util.helper_target(
+        iree_cc_library_group,
+        name = name + "_subject",
+        deps = [":" + name + "_nested"],
+    )
+    analysis_test(
+        name = name,
+        impl = _test_cc_library_group_preserves_components_impl,
+        target = name + "_subject",
+        **kwargs
+    )
+
+def _test_cc_library_group_preserves_components_impl(env, target):
+    name = target.label.name.removesuffix("_subject")
+    context = target[CcInfo].compilation_context
+    env.expect.that_collection([file.basename for file in context.direct_headers]).contains_exactly([
+        name + "_first.h",
+        name + "_second.h",
+    ])
+    env.expect.that_collection(context.defines.to_list()).contains_exactly(["FIRST", "SECOND"])
+    owners = [input.owner.name for input in target[CcInfo].linking_context.linker_inputs.to_list()]
+    env.expect.that_collection(owners).contains_exactly([
+        name + "_first",
+        name + "_second",
+        name + "_private",
+    ])
+    env.expect.that_collection(target[TestingAspectInfo].actions).contains_exactly([])
+    for component in ["first", "second"]:
+        _expect_file_basename(env, target[DefaultInfo].default_runfiles.files.to_list(), name + "_" + component + ".txt")
+    env.expect.that_collection([file.owner.name for file in target[DefaultInfo].files.to_list()]).contains_at_least([
+        name + "_first",
+        name + "_second",
+    ])
 
 def _execution_platform_runner(ctx, binary_info, processed_environment, runner_name):
     return [
@@ -626,6 +682,7 @@ def cc_rules_test_suite(name):
     test_suite(
         name = name,
         tests = [
+            _test_cc_library_group_preserves_components,
             _test_cc_binary_merges_dependency_suppressions,
             _test_cc_library_preserves_system_include_inputs,
             _test_cc_library_preserves_language_compile_options,

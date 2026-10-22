@@ -27,6 +27,20 @@ class _PythonBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
 
 
 class ConfigTest(unittest.TestCase):
+    def test_cc_library_group_preserves_interface_dependencies(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+        functions.iree_cc_library_group(name="aggregate", deps=[":first", ":second"])
+        self.assertEqual(
+            converter.body,
+            "iree_cc_library(\n  NAME\n    aggregate\n  DEPS\n    ::first\n    ::second\n  PUBLIC\n)\n\n",
+        )
+
     def test_project_conditions_reach_other_project_consumers(self):
         repo_cfg = SimpleNamespace(
             REPO_MAP={"@hrx": ""},
