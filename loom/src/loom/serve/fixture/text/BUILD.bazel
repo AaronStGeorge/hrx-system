@@ -126,10 +126,10 @@ loom_model(
         ":bias.data": "bias.data",
         ":metadata.safetensors": "metadata.safetensors",
         "tokenizer.json": "tokenizer.json",
-        "weights.loom": "weights.loom",
     },
     card = "native.card.json",
     configuration = "check",
+    data = {"weights.loom": "weights.loom"},
     files = {
         "advance.loom": "advance.loom",
         "control.loom": "control.loom",
@@ -160,10 +160,10 @@ loom_generated_file(
             ":alternate.data": "bias.data",
             ":metadata.safetensors": "metadata.safetensors",
             "tokenizer.json": "tokenizer.json",
-            "weights.loom": "weights.loom",
         },
         card = "partition.card.json",
         configuration = "check",
+        data = {"weights.loom": "weights.loom"},
         encoding = encoding,
         files = {
             "advance.loom": "advance.loom",
@@ -188,10 +188,10 @@ loom_model(
         ":bias.data": "bias.data",
         ":metadata.safetensors": "metadata.safetensors",
         "tokenizer.json": "tokenizer.json",
-        "weights.loom": "weights.loom",
     },
     card = "native.card.json",
     configuration = "check",
+    data = {"weights.loom": "weights.loom"},
     encoding = "preserve",
     files = {
         ":advance_module": "advance_module.loombc",
@@ -211,10 +211,10 @@ loom_model(
         assets = {
             ":bias.data": "bias.data",
             ":metadata.safetensors": "metadata.safetensors",
-            "weights.loom": "weights.loom",
         },
         card = "native.card.json",
         configuration = "encode",
+        data = {"weights.loom": "weights.loom"},
         encoding = encoding,
         files = {
             "advance.loom": "advance.loom",
@@ -229,5 +229,36 @@ loom_model(
     for encoding in [
         "text",
         "bc",
+    ]
+]
+
+# Publish compiler artifacts without bringing runtime parameters into the build.
+[
+    loom_model(
+        name = "fetch_model_" + name,
+        card = "native.card.json",
+        configuration = "check",
+        data = {"weights.loom": "weights.loom"},
+        encoding = encoding,
+        files = {
+            ":advance_module": "advance_module.loombc",
+            ":control_module": "control_module.loombc",
+            "prepare.loom": "prepare.loom",
+            "service.loom": "service.loom",
+        } if programs == "mixed" else {
+            "advance.loom": "advance.loom",
+            "control.loom": "control.loom",
+            "prepare.loom": "prepare.loom",
+            "service.loom": "service.loom",
+        },
+        model_name = "fixture-text",
+        programs = programs,
+        tags = ["skip-bazel_to_cmake"],
+        visibility = ["//visibility:public"],
+    )
+    for name, encoding, programs in [
+        ("source", "preserve", "source"),
+        ("archive", "bc", "source"),
+        ("mixed", "preserve", "mixed"),
     ]
 ]

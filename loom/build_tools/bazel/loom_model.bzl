@@ -16,11 +16,13 @@ def _loom_model_impl(ctx):
     runfiles = [card, deployment]
     inputs = [ctx.file.card]
     files = {}
+    data = {}
     assets = {}
     names = {}
-    if len(ctx.attr.files | ctx.attr.assets) != len(ctx.attr.files) + len(ctx.attr.assets):
-        fail("files and assets must have disjoint targets")
-    for target, name in (ctx.attr.files | ctx.attr.assets).items():
+    declarations = ctx.attr.files | ctx.attr.data | ctx.attr.assets
+    if len(declarations) != len(ctx.attr.files) + len(ctx.attr.data) + len(ctx.attr.assets):
+        fail("files, data, and assets must have disjoint targets")
+    for target, name in declarations.items():
         if not name or any([part in ["", ".", ".."] for part in name.split("/")]) or "\\" in name or ":" in name:
             fail("expected normalized relative model path: %s" % name)
         if name.split("/")[0] in ["model.json", "serve.json"] or name in names:
@@ -34,7 +36,7 @@ def _loom_model_impl(ctx):
         # Importers resolve auxiliary inputs relative to the provider's physical
         # path. Staging preserves the card namespace without copying input bytes.
         staged = artifact
-        if not preserve:
+        if not preserve and target not in ctx.attr.assets:
             staged = ctx.actions.declare_file(ctx.label.name + ".input/" + name)
             ctx.actions.symlink(output = staged, target_file = artifact)
             inputs.append(staged)
@@ -48,12 +50,16 @@ def _loom_model_impl(ctx):
                 outputs.append(output)
         else:
             ctx.actions.symlink(output = output, target_file = artifact)
-            assets[name] = output.path
+            if target in ctx.attr.data:
+                data[name] = output.path
+            else:
+                assets[name] = output.path
     plan = ctx.actions.declare_file(ctx.label.name + ".plan.json")
     ctx.actions.write(plan, json.encode({
         "assets": assets,
         "card": ctx.file.card.path,
         "configuration": ctx.attr.configuration,
+        "data": data,
         "encoding": ctx.attr.encoding,
         "files": files,
         "input_root": card.dirname + ".input",
@@ -86,9 +92,10 @@ def _loom_model_impl(ctx):
 loom_model = rule(
     implementation = _loom_model_impl,
     attrs = {
-        "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Non-index files (parameters, tokenizers, and provider data) mapped to card paths; materialized as symlinks."),
+        "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Optional runtime assets, such as small fixture parameters or tokenizers, mapped to card paths. Omitted assets retain their acquisition descriptors for loom-fetch. Supplied assets are runfiles, never linker inputs."),
         "card": attr.label(mandatory = True, allow_single_file = [".json"]),
         "configuration": attr.string(mandatory = True),
+        "data": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected providers' auxiliary files, mapped to card paths. These are compiler inputs and runtime runfiles, separate from parameter/tokenizer acquisition."),
         "encoding": attr.string(default = "bc", values = ["text", "bc", "preserve"], doc = "Normalize providers to Loom text/bytecode, or preserve their bytes, formats, and import options."),
         "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; preserved as symlinks or normalized with the configured linker."),
         "model_name": attr.string(mandatory = True),

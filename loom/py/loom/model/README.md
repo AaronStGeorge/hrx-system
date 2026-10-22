@@ -105,24 +105,33 @@ checks. Native support is documented in the
 `loom_model`, exported by `//loom/build_tools/bazel:defs.bzl`, takes a card,
 canonical configuration, optional provider-set and partition overrides, output
 encoding, and explicit Bazel inputs. `files` maps targets to the selected linker-provider
-paths. `assets` maps targets to all remaining selected paths, including provider
-auxiliary data, parameters, and tokenizers. Each target supplies exactly one
-file; missing, extra, overlapping, and conflicting declarations fail.
+paths. `data` maps exactly their auxiliary inputs. `assets` optionally supplies
+runtime parameters or tokenizers, principally for small fixtures and swatches.
+Each target supplies exactly one file; missing compiler inputs, extra,
+overlapping, and conflicting declarations fail. Runtime assets omitted from
+`assets` keep their acquisition origins and transforms in the generated card.
+Full model checkpoints belong to `loom-fetch`, outside Bazel's repository,
+action, remote execution, and output caches.
 
 The rule performs no acquisition. With `encoding="text"` or `encoding="bc"`, it
 normalizes each provider through the configured public `loom-link` toolchain,
 preserving provider order and roles. With `encoding="preserve"`, it links each
 declared provider into the package unchanged, retaining mixed formats and
 importer options without running `loom-link`.
-It does not choose service roots or specialize model geometry. Auxiliary files
-and weights appear at their declared paths as symlink artifacts. Provider
-importers see the same relative namespace during compilation.
+It does not choose service roots or specialize model geometry. Providers and
+auxiliary data enter compilation under the card's relative namespace. Supplied
+runtime fixtures appear as symlink artifacts and test runfiles; their bytes
+never become linker inputs.
 
 The output contains the selected portable `model.json`, normalized providers,
 assets, and a separate `serve.json` referencing that card. The default output is
 `serve.json`; the `model_card` and `model_files` output groups expose the card
-and complete package for publication. The input card and staged source files
-are action inputs, not runtime dependencies of the resulting package.
+and built files for publication. A package with external runtime assets is
+completed by `loom-fetch` before serving. For local development, acquire from
+the built card with `--update-lock`, then use a deployment referencing the
+installed `model.json`. Public releases supply the corresponding lock. The
+input card and staged source files are action inputs, not runtime dependencies
+of the resulting package.
 
 Tests consume the emitted package and their runner. Normal Bazel content
 identity determines reuse: a build rerun that produces identical outputs does

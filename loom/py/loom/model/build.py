@@ -6,8 +6,9 @@
 
 """Builds a declared provider closure and emits a portable model card.
 
-Bazel owns file placement, including zero-copy asset symlinks. This action owns
-selection and compilation. It never acquires files or invents service roots.
+Bazel owns providers and their auxiliary inputs, plus any explicitly supplied
+runtime fixtures. Unsupplied runtime assets retain their acquisition descriptors
+for loom-fetch. This action never acquires files or invents service roots.
 """
 
 from __future__ import annotations
@@ -29,8 +30,11 @@ def build(plan: dict, linker: str | None = None) -> None:
     providers = {
         name for name, file in selection.files.items() if "program" in file.roles
     }
-    assets = set(selection.files) - providers
-    for role, expected in (("files", providers), ("assets", assets)):
+    data = {
+        name for name, file in selection.files.items() if "auxiliary" in file.roles
+    } - providers
+    assets = set(selection.files) - providers - data
+    for role, expected in (("files", providers), ("data", data)):
         supplied = set(plan[role])
         if supplied != expected:
             raise ManifestError(
@@ -38,6 +42,12 @@ def build(plan: dict, linker: str | None = None) -> None:
                 f"missing {sorted(expected - supplied)}, "
                 f"unused {sorted(supplied - expected)}"
             )
+    unused_assets = set(plan["assets"]) - assets
+    if unused_assets:
+        raise ManifestError(
+            f"assets contain unused runtime files: {sorted(unused_assets)}"
+        )
+    materialized = providers | data | set(plan["assets"])
     reserved = {"model.json", "serve.json"}
     for path in selection.files:
         if path.split("/", 1)[0] in reserved:
@@ -48,15 +58,32 @@ def build(plan: dict, linker: str | None = None) -> None:
     if encoding != "preserve" and not linker:
         raise ManifestError("provider normalization requires --linker")
 
-    # Selection is already owned. Removing acquisition metadata describes the
-    # materialized outputs, whose bytes may differ from the authored providers.
+    # Only produced files change identity. Runtime assets that remain outside
+    # the build keep their logical sources, formats, and acquisition transforms.
     document = selection.document
-    document.pop("origins", None)
+    aliases = {
+        file.origin[1:].split("/", 1)[0]
+        for name, file in selection.files.items()
+        if name not in materialized
+        and isinstance(file.origin, str)
+        and file.origin.startswith("@")
+    }
+    if aliases:
+        document["origins"] = {
+            name: origin
+            for name, origin in document["origins"].items()
+            if name in aliases
+        }
+    else:
+        document.pop("origins", None)
     document.pop("$schema", None)
     program = document["programs"][selection.programs]
     program.pop("origin", None)
 
-    def local_file(value):
+    def output_file(value):
+        record = {"path": value} if isinstance(value, str) else value
+        if record["path"] not in materialized:
+            return record | {"origin": selection.files[record["path"]].origin}
         if isinstance(value, str):
             return value
         return {key: value[key] for key in ("path", "format") if key in value}
@@ -73,7 +100,7 @@ def build(plan: dict, linker: str | None = None) -> None:
                     if key in provider
                 }
                 if provider.get("data"):
-                    result["data"] = [local_file(item) for item in provider["data"]]
+                    result["data"] = [output_file(item) for item in provider["data"]]
                 normalized.append(result)
                 continue
             binding = plan["files"][name]
@@ -104,7 +131,7 @@ def build(plan: dict, linker: str | None = None) -> None:
                 "format": "loombc" if plan["encoding"] == "bc" else "loom",
             }
             if provider.get("data"):
-                result["data"] = [local_file(item) for item in provider["data"]]
+                result["data"] = [output_file(item) for item in provider["data"]]
             normalized.append(result)
         program[role] = normalized
     scope = document["variants"][selection.variant]
@@ -113,9 +140,10 @@ def build(plan: dict, linker: str | None = None) -> None:
     variant = scope["services"][selection.service_name]
     for parameter in variant.get("parameters", {}).values():
         parameter.pop("origin", None)
-        parameter["files"] = [local_file(item) for item in parameter["files"]]
+        parameter["files"] = [output_file(item) for item in parameter["files"]]
     variant["tokenizers"] = {
-        name: local_file(value) for name, value in variant.get("tokenizers", {}).items()
+        name: output_file(value)
+        for name, value in variant.get("tokenizers", {}).items()
     }
     Path(plan["output_card"]).write_text(
         json.dumps(document, indent=2) + "\n", encoding="utf-8"
