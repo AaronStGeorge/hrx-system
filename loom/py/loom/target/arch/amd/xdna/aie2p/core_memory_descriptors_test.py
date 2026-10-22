@@ -73,6 +73,28 @@ def test_address_add_forms_write_rematerializable_indices_without_carry() -> Non
             assert not descriptor.immediates
 
 
+def test_modifier_moves_preserve_pure_move_family_contracts() -> None:
+    descriptors = {
+        descriptor.key: descriptor
+        for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
+    }
+    for source, destination in (("er", "em"), ("em", "er"), ("em", "em")):
+        descriptor = descriptors[f"amd.xdna.aie2p.move.{source}.to.{destination}"]
+        assert not descriptor.effects
+        assert DescriptorFlag.SAFE_TO_SPECULATE in descriptor.flags
+        rematerializable = (
+            Constraint(
+                ConstraintKind.REMATERIALIZABLE,
+                0,
+            )
+            in descriptor.constraints
+        )
+        assert rematerializable is (source != destination)
+        assert (DescriptorFlag.ALLOCATION_MOVE in descriptor.flags) is (
+            source == destination
+        )
+
+
 def test_lookup_loads_preserve_address_vectors_and_memory_effects() -> None:
     descriptors = {
         descriptor.key: descriptor

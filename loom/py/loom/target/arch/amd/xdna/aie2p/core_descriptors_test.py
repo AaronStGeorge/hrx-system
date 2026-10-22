@@ -22,6 +22,7 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptor_specs import (
     _DESCRIPTOR_SPECS,
     _LOCK_EFFECT,
     _MACHINE_FORMS,
+    _STATE_FREE_SCALAR_REMATERIALIZABLE_KEYS,
 )
 from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     AIE2P_CORE_DESCRIPTOR_SET,
@@ -1195,6 +1196,7 @@ def test_vector_predicates_use_one_partially_addressable_el_value() -> None:
         descriptor.key: descriptor
         for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
     }
+    rematerializable = Constraint(ConstraintKind.REMATERIALIZABLE, 0)
     low_constant = descriptors["amd.xdna.aie2p.constant.i32.predicate.low32"]
     assert low_constant.op_kind is DescriptorOpKind.CONST
     assert low_constant.operands[0].reg_alts[0].reg_class == "aie2p.elpredicate"
@@ -1249,7 +1251,16 @@ def test_vector_predicates_use_one_partially_addressable_el_value() -> None:
         )
         assert select.operands[-1].encoding_adapter_id != 0
 
-    rematerializable = Constraint(ConstraintKind.REMATERIALIZABLE, 0)
+    for width in (8, 16, 32):
+        suffix = ".el.low32" if width != 8 else ""
+        for relation in ("lt", "ge"):
+            for signedness in ("signed", "unsigned"):
+                compare = descriptors[
+                    f"amd.xdna.aie2p.cmp.{relation}.{signedness}."
+                    f"i{width}x{512 // width}{suffix}"
+                ]
+                assert rematerializable in compare.constraints
+
     for word, register_part in (
         ("low32", "aie2p.elpredicate.low32"),
         ("high32", "aie2p.elpredicate.high32"),
@@ -2176,6 +2187,40 @@ def test_no_carry_additions_avoid_sticky_state() -> None:
         )
         assert DescriptorFlag.SAFE_TO_SPECULATE in descriptor.flags
         assert bool(descriptor.immediates) is has_immediate
+
+
+def test_state_free_scalar_leaf_family_can_rematerialize() -> None:
+    descriptors = {
+        descriptor.key: descriptor
+        for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
+    }
+    specifications = {spec.key: spec for spec in _DESCRIPTOR_SPECS}
+    rematerializable = Constraint(ConstraintKind.REMATERIALIZABLE, 0)
+    for key in _STATE_FREE_SCALAR_REMATERIALIZABLE_KEYS:
+        descriptor = descriptors[key]
+        specification = specifications[key]
+        form = _MACHINE_FORMS[specification.form_name]
+        assert not form.implicit_defs
+        assert not form.implicit_uses
+        assert not form.ties
+        assert not specification.implicit_outputs
+        assert not specification.implicit_inputs
+        assert not specification.effects
+        assert rematerializable in descriptor.constraints
+        assert DescriptorFlag.SAFE_TO_SPECULATE in descriptor.flags
+
+    # Native add, subtract, and absolute-value forms overwrite sticky carry;
+    # multiply-accumulate and division update tied architectural state.
+    for suffix in (
+        "add.i32",
+        "sub.i32",
+        "abs.i32",
+        "madd.i32",
+        "divide.step.unsigned.i32",
+    ):
+        descriptor = descriptors[f"amd.xdna.aie2p.{suffix}"]
+        assert rematerializable not in descriptor.constraints
+        assert DescriptorFlag.SAFE_TO_SPECULATE not in descriptor.flags
 
 
 def test_packed_scalar_conversion_producers_are_rematerializable() -> None:

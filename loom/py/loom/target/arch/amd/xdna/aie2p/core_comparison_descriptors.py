@@ -260,6 +260,7 @@ PREDICATE_DESCRIPTOR_SPECS = (
             encoding_adapter_overrides=(
                 (("cmp", "LOOM_eL_low32"),) if width != 8 else ()
             ),
+            rematerializable=True,
         )
         for width in (8, 16, 32)
         for relation in ("lt", "ge")
