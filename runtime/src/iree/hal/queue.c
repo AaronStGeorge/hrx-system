@@ -93,6 +93,16 @@ static iree_status_t iree_hal_queue_validate_params(
         params->features & ~family_spec->supported_queue_features);
   }
 
+  if (IREE_UNLIKELY((uint32_t)params->placement >
+                        IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL ||
+                    (params->placement != IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
+                     !(family_spec->placement_capabilities &
+                       (1u << params->placement))))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "queue placement %u is not supported by the family",
+                            (uint32_t)params->placement);
+  }
+
   const iree_hal_queue_execution_resource_list_t resources =
       params->execution_resources;
   if (IREE_UNLIKELY(resources.count && !resources.ordinals)) {
@@ -169,7 +179,9 @@ static iree_hal_queue_params_t iree_hal_queue_canonicalize_params(
 static bool iree_hal_queue_params_equal(const iree_hal_queue_params_t* expected,
                                         const iree_hal_queue_t* actual) {
   if (expected->priority != iree_hal_queue_priority(actual) ||
-      expected->features != iree_hal_queue_features(actual)) {
+      expected->features != iree_hal_queue_features(actual) ||
+      (expected->placement != IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
+       expected->placement != iree_hal_queue_placement(actual))) {
     return false;
   }
   const iree_hal_queue_execution_resource_list_t actual_resources =
@@ -237,6 +249,12 @@ IREE_API_EXPORT iree_hal_queue_priority_t
 iree_hal_queue_priority(const iree_hal_queue_t* queue) {
   IREE_ASSERT_ARGUMENT(queue);
   return queue->priority;
+}
+
+IREE_API_EXPORT iree_hal_queue_placement_t
+iree_hal_queue_placement(const iree_hal_queue_t* queue) {
+  IREE_ASSERT_ARGUMENT(queue);
+  return queue->placement;
 }
 
 IREE_API_EXPORT iree_hal_queue_feature_flags_t
@@ -1451,6 +1469,7 @@ IREE_API_EXPORT void iree_hal_queue_initialize(
   iree_hal_resource_initialize(vtable, &out_queue->resource);
   out_queue->queue_family = queue_family;
   out_queue->priority = params->priority;
+  out_queue->placement = params->placement;
   out_queue->features = params->features;
   out_queue->execution_resources = params->execution_resources;
 }

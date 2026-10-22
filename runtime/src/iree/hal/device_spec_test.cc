@@ -140,6 +140,8 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
       .execution_resource_groups = kQueueExecutionResourceGroups,
       .execution_resource_count = IREE_ARRAYSIZE(kQueueExecutionResources),
       .execution_resources = kQueueExecutionResources,
+      .placement_capabilities =
+          IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL,
       .supported_queue_features =
           IREE_HAL_QUEUE_FEATURE_FLAG_COOPERATIVE_DISPATCH,
       .timestamp_valid_bits = 64,
@@ -426,6 +428,8 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
   EXPECT_EQ(parsed_family->execution_resources[2].first_execution_unit_ordinal,
             6u);
   EXPECT_EQ(parsed_family->execution_resources[2].execution_unit_count, 1u);
+  EXPECT_EQ(parsed_family->placement_capabilities,
+            IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL);
   EXPECT_EQ(parsed_family->supported_queue_features,
             IREE_HAL_QUEUE_FEATURE_FLAG_COOPERATIVE_DISPATCH);
   EXPECT_TRUE(

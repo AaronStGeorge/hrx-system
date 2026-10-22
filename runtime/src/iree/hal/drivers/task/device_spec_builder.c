@@ -281,6 +281,9 @@ IREE_API_EXPORT iree_status_t iree_hal_task_device_spec_create(
       .provisioned_queue_count = (uint32_t)params->queue_count,
       .priority_count = IREE_ARRAYSIZE(queue_priorities),
       .priorities = queue_priorities,
+      .placement_capabilities =
+          IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL |
+          IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL,
       .physical_device_affinity = 1ull,
       .role_flags = queue_role_flags,
       .atomic_capabilities = params->atomic_capabilities,

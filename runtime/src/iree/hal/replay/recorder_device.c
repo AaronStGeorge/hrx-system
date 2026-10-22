@@ -234,6 +234,7 @@ static iree_status_t iree_hal_replay_device_acquire_queue(
   const iree_hal_replay_dynamic_queue_object_payload_t payload = {
       .family_ordinal = family_ordinal,
       .priority = params->priority,
+      .placement = params->placement,
       .features = params->features,
       .execution_resource_count = params->execution_resources.count,
   };

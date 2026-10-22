@@ -19,10 +19,9 @@ extern "C" {
 // Magic header bytes for IREE HAL replay files: "IRRP".
 #define IREE_HAL_REPLAY_FILE_MAGIC 0x50525249u
 
-// Major version of the IREE HAL replay file format. Version 14 captures
-// independent host, queue-command, and program atomic requirements in pool
-// and virtual-buffer construction.
-#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 14u
+// Major version of the IREE HAL replay file format. Version 15 preserves
+// required command-storage placement in dynamic queue acquisition.
+#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 15u
 
 // Minor version of the IREE HAL replay file format. Scoped host mappings have
 // independent identities in related_object_id: map creates the identity,
@@ -779,13 +778,17 @@ typedef struct iree_hal_replay_dynamic_queue_object_payload_t {
   uint32_t family_ordinal;
   // Exact signed queue priority.
   int32_t priority;
+  // Required primary command-storage locality.
+  uint32_t placement;
+  // Reserved for future queue properties; must be zero.
+  uint32_t reserved0;
   // Exact immutable queue feature bits.
   uint64_t features;
   // Number of uint32_t execution-resource ordinals following this header.
   uint64_t execution_resource_count;
 } iree_hal_replay_dynamic_queue_object_payload_t;
-static_assert(sizeof(iree_hal_replay_dynamic_queue_object_payload_t) == 24,
-              "dynamic queue replay payload must be 24 bytes");
+static_assert(sizeof(iree_hal_replay_dynamic_queue_object_payload_t) == 32,
+              "dynamic queue replay payload must be 32 bytes");
 
 // Payload describing a captured file object followed by file reference bytes.
 typedef struct iree_hal_replay_file_object_payload_t {

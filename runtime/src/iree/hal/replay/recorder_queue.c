@@ -1996,6 +1996,7 @@ void iree_hal_replay_recorder_queue_initialize(
   IREE_ASSERT_ARGUMENT(out_queue);
   const iree_hal_queue_params_t queue_params = {
       .priority = iree_hal_queue_priority(base_queue),
+      .placement = iree_hal_queue_placement(base_queue),
       .features = iree_hal_queue_features(base_queue),
       .execution_resources = iree_hal_queue_execution_resources(base_queue),
   };

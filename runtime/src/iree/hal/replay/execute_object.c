@@ -106,6 +106,11 @@ static iree_status_t iree_hal_replay_executor_parse_dynamic_queue_payload(
       record, IREE_HAL_REPLAY_PAYLOAD_TYPE_DYNAMIC_QUEUE_OBJECT,
       sizeof(payload)));
   memcpy(&payload, record->payload.data, sizeof(payload));
+  if (IREE_UNLIKELY(payload.reserved0 != 0)) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "replay dynamic queue reserved fields must be zero");
+  }
   if (IREE_UNLIKELY(payload.execution_resource_count > IREE_HOST_SIZE_MAX)) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
@@ -171,6 +176,7 @@ static iree_status_t iree_hal_replay_executor_create_dynamic_queue(
   if (iree_status_is_ok(status)) {
     const iree_hal_queue_params_t params = {
         .priority = (iree_hal_queue_priority_t)payload.priority,
+        .placement = (iree_hal_queue_placement_t)payload.placement,
         .features = (iree_hal_queue_feature_flags_t)payload.features,
         .execution_resources =
             {

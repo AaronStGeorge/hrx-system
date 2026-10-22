@@ -459,6 +459,9 @@ struct iree_hal_queue_family_spec_t {
   iree_host_size_t execution_resource_count;
   // Independently selectable resources in canonical ordinal order.
   const iree_hal_queue_execution_resource_spec_t* execution_resources;
+  // Explicit command-storage localities that queue acquisition can require.
+  // Zero exposes only implementation-selected DEFAULT placement.
+  iree_hal_queue_placement_capabilities_t placement_capabilities;
   // Union of immutable feature bits available on queues in this family.
   iree_hal_queue_feature_flags_t supported_queue_features;
   // Number of low bits defined in a tick captured on this family's queues.
