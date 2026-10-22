@@ -494,6 +494,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::ir
     loom::ops::cfg
+    loom::ops::index::cast
     loom::ops::op_defs
     loom::util::dominance
     loom::util::fact_table
@@ -511,6 +512,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
     loom::ops::cfg
+    loom::ops::index
     loom::ops::scalar
     loom::ops::scf
     loom::ops::test
@@ -540,6 +542,7 @@ loom_cc_benchmark(
     iree::testing::benchmark_main
     loom::ir
     loom::ops::func
+    loom::ops::index
     loom::ops::scalar
     loom::ops::scf
     loom::pass::value_facts

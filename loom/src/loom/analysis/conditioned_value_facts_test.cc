@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/test/ops.h"
@@ -26,6 +27,7 @@ class ConditionedValueFactsTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -101,6 +103,22 @@ class ConditionedValueFactsTest : public ::testing::Test {
         &builder_, &value, 1, /*predicates=*/nullptr,
         /*predicates_count=*/0, &i32_, 1, LOOM_LOCATION_UNKNOWN, &op));
     return loom_op_const_results(op)[0];
+  }
+
+  loom_value_id_t IndexCast(loom_value_id_t value, loom_type_t input_type,
+                            loom_type_t result_type) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_index_cast_build(
+        &builder_, value, input_type, result_type, LOOM_LOCATION_UNKNOWN, &op));
+    return loom_index_cast_result(op);
+  }
+
+  loom_value_id_t IndexIdentity(loom_value_id_t value, loom_type_t type) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_index_assume_build(
+        &builder_, &value, 1, /*predicates=*/nullptr,
+        /*predicates_count=*/0, &type, 1, LOOM_LOCATION_UNKNOWN, &op));
+    return loom_index_assume_results(op).values[0];
   }
 
   loom_value_id_t RangeLow(loom_value_id_t value) {
@@ -193,6 +211,10 @@ class ConditionedValueFactsTest : public ::testing::Test {
   const loom_type_t i1_ = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
   // Scalar result type used by exact fact-inspection operations.
   const loom_type_t i64_ = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  // Narrow signed integer used to reject lossy scalar conversions.
+  const loom_type_t i8_ = loom_type_scalar(LOOM_SCALAR_TYPE_I8);
+  // Target-independent address index widened from fixed-width inputs.
+  const loom_type_t index_ = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
 };
 
 TEST_F(ConditionedValueFactsTest,
@@ -270,6 +292,62 @@ TEST_F(ConditionedValueFactsTest, FactAliasesShareIndexedGuardRefinement) {
   const auto* table = Acquire(LOOM_PASS_VALUE_FACT_SCOPE_CONDITIONED_FUNCTION);
   ExpectRange(table, live_high, 14, 14);
   ExpectRange(table, empty_low, 15, 15);
+}
+
+TEST_F(ConditionedValueFactsTest,
+       ValuePreservingCastAliasesShareIndexedGuardRefinement) {
+  const auto consumed_value =
+      IndexIdentity(IndexCast(input_, i32_, index_), index_);
+  const auto bound = Constant(15);
+  loom_op_t* compare = nullptr;
+  IREE_ASSERT_OK(
+      loom_scalar_cmpi_build(&builder_, LOOM_SCALAR_CMPI_PREDICATE_SGT, bound,
+                             input_, LOOM_LOCATION_UNKNOWN, &compare));
+  auto* live = AppendBlock();
+  auto* empty = AppendBlock();
+  auto* join = AppendBlock();
+  loom_op_t* branch = nullptr;
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&builder_,
+                                        loom_scalar_cmpi_result(compare), live,
+                                        empty, LOOM_LOCATION_UNKNOWN, &branch));
+  SetBlock(live);
+  const auto live_high = RangeHigh(consumed_value);
+  Branch(join);
+  SetBlock(empty);
+  const auto empty_low = RangeLow(consumed_value);
+  Branch(join);
+  SetBlock(join);
+  YieldBlock();
+
+  const auto* table = Acquire(LOOM_PASS_VALUE_FACT_SCOPE_CONDITIONED_FUNCTION);
+  ExpectRange(table, live_high, 14, 14);
+  ExpectRange(table, empty_low, 15, 15);
+}
+
+TEST_F(ConditionedValueFactsTest, NarrowingCastDoesNotImportGuardRefinement) {
+  const auto narrowed = IndexCast(input_, i32_, i8_);
+  const auto bound = Constant(15);
+  loom_op_t* compare = nullptr;
+  IREE_ASSERT_OK(
+      loom_scalar_cmpi_build(&builder_, LOOM_SCALAR_CMPI_PREDICATE_SLT, input_,
+                             bound, LOOM_LOCATION_UNKNOWN, &compare));
+  auto* live = AppendBlock();
+  auto* empty = AppendBlock();
+  auto* join = AppendBlock();
+  loom_op_t* branch = nullptr;
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&builder_,
+                                        loom_scalar_cmpi_result(compare), live,
+                                        empty, LOOM_LOCATION_UNKNOWN, &branch));
+  SetBlock(live);
+  const auto live_high = RangeHigh(narrowed);
+  Branch(join);
+  SetBlock(empty);
+  Branch(join);
+  SetBlock(join);
+  YieldBlock();
+
+  const auto* table = Acquire(LOOM_PASS_VALUE_FACT_SCOPE_CONDITIONED_FUNCTION);
+  ExpectRange(table, live_high, 127, 127);
 }
 
 TEST_F(ConditionedValueFactsTest, BackedgeKeepsItsGuardOnTheCurrentIteration) {

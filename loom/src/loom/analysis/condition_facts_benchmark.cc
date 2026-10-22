@@ -22,6 +22,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/pass/value_facts.h"
@@ -347,13 +348,21 @@ static void BM_QueryConditionEdgeProjection(benchmark::State& state) {
 }
 BENCHMARK(BM_QueryConditionEdgeProjection)->Apply(ProjectionWidths);
 
+enum class NestedValueMode {
+  kNone,
+  kScalarAliases,
+  kCastAliases,
+};
+
 class NestedStructuredBranchFactsBenchmark {
  public:
-  explicit NestedStructuredBranchFactsBenchmark(int64_t depth) : depth_(depth) {
+  NestedStructuredBranchFactsBenchmark(int64_t depth, NestedValueMode mode)
+      : depth_(depth), mode_(mode) {
     iree_arena_block_pool_initialize(65536, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
     IREE_CHECK_OK(loom_context_finalize(&context_));
@@ -399,6 +408,39 @@ class NestedStructuredBranchFactsBenchmark {
       loom_op_t* count = nullptr;
       IREE_CHECK_OK(loom_scalar_cttzi_build(&builder, input, i32,
                                             LOOM_LOCATION_UNKNOWN, &count));
+      if (mode_ == NestedValueMode::kScalarAliases) {
+        loom_op_t* first_alias = nullptr;
+        IREE_CHECK_OK(loom_scalar_assume_build(
+            &builder, &input, 1, /*predicates=*/nullptr,
+            /*predicates_count=*/0, &i32, 1, LOOM_LOCATION_UNKNOWN,
+            &first_alias));
+        const loom_value_id_t first_value =
+            loom_scalar_assume_results(first_alias).values[0];
+        loom_op_t* second_alias = nullptr;
+        IREE_CHECK_OK(loom_scalar_assume_build(
+            &builder, &first_value, 1, /*predicates=*/nullptr,
+            /*predicates_count=*/0, &i32, 1, LOOM_LOCATION_UNKNOWN,
+            &second_alias));
+        loom_op_t* sum = nullptr;
+        IREE_CHECK_OK(loom_scalar_addi_build(
+            &builder, /*instance_flags=*/0,
+            loom_scalar_assume_results(second_alias).values[0], first_value,
+            i32, LOOM_LOCATION_UNKNOWN, &sum));
+      } else if (mode_ == NestedValueMode::kCastAliases) {
+        const loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+        loom_op_t* cast = nullptr;
+        IREE_CHECK_OK(loom_index_cast_build(&builder, input, i32, index,
+                                            LOOM_LOCATION_UNKNOWN, &cast));
+        const loom_value_id_t converted = loom_index_cast_result(cast);
+        loom_op_t* alias = nullptr;
+        IREE_CHECK_OK(loom_index_assume_build(
+            &builder, &converted, 1, /*predicates=*/nullptr,
+            /*predicates_count=*/0, &index, 1, LOOM_LOCATION_UNKNOWN, &alias));
+        loom_op_t* sum = nullptr;
+        IREE_CHECK_OK(loom_index_add_build(
+            &builder, loom_index_assume_results(alias).values[0], converted,
+            index, LOOM_LOCATION_UNKNOWN, &sum));
+      }
       loom_op_t* bound = nullptr;
       IREE_CHECK_OK(loom_scalar_constant_build(&builder, loom_attr_i64(i), i32,
                                                LOOM_LOCATION_UNKNOWN, &bound));
@@ -460,6 +502,10 @@ class NestedStructuredBranchFactsBenchmark {
     iree_arena_block_pool_statistics_t pool_statistics = {};
     iree_arena_block_pool_query_statistics(&block_pool_, &pool_statistics);
     state.counters["branch_depth"] = (double)depth_;
+    state.counters["cast_aliases"] =
+        mode_ == NestedValueMode::kCastAliases ? 1.0 : 0.0;
+    state.counters["scalar_aliases"] =
+        mode_ == NestedValueMode::kScalarAliases ? 1.0 : 0.0;
     state.counters["pool_system_allocation_bytes"] =
         (double)(pool_statistics.block_system_allocation_bytes +
                  pool_statistics.oversized_allocation_bytes);
@@ -479,6 +525,7 @@ class NestedStructuredBranchFactsBenchmark {
   }
 
   int64_t depth_;
+  NestedValueMode mode_;
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
@@ -492,7 +539,8 @@ static void StructuredBranchDepths(::benchmark::Benchmark* benchmark) {
 
 static void BM_AcquireOrdinaryNestedStructuredBranchFacts(
     benchmark::State& state) {
-  NestedStructuredBranchFactsBenchmark fixture(state.range(0));
+  NestedStructuredBranchFactsBenchmark fixture(state.range(0),
+                                               NestedValueMode::kNone);
   for (auto _ : state) {
     fixture.Acquire(LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION);
   }
@@ -504,7 +552,8 @@ BENCHMARK(BM_AcquireOrdinaryNestedStructuredBranchFacts)
 
 static void BM_AcquireConditionedNestedStructuredBranchFacts(
     benchmark::State& state) {
-  NestedStructuredBranchFactsBenchmark fixture(state.range(0));
+  NestedStructuredBranchFactsBenchmark fixture(state.range(0),
+                                               NestedValueMode::kNone);
   for (auto _ : state) {
     fixture.Acquire(LOOM_PASS_VALUE_FACT_SCOPE_CONDITIONED_FUNCTION);
   }
@@ -512,6 +561,32 @@ static void BM_AcquireConditionedNestedStructuredBranchFacts(
   state.SetItemsProcessed(state.iterations() * state.range(0));
 }
 BENCHMARK(BM_AcquireConditionedNestedStructuredBranchFacts)
+    ->Apply(StructuredBranchDepths);
+
+static void BM_AcquireConditionedNestedStructuredScalarAliasFacts(
+    benchmark::State& state) {
+  NestedStructuredBranchFactsBenchmark fixture(state.range(0),
+                                               NestedValueMode::kScalarAliases);
+  for (auto _ : state) {
+    fixture.Acquire(LOOM_PASS_VALUE_FACT_SCOPE_CONDITIONED_FUNCTION);
+  }
+  fixture.SetCounters(state);
+  state.SetItemsProcessed(state.iterations() * state.range(0));
+}
+BENCHMARK(BM_AcquireConditionedNestedStructuredScalarAliasFacts)
+    ->Apply(StructuredBranchDepths);
+
+static void BM_AcquireConditionedNestedStructuredCastAliasFacts(
+    benchmark::State& state) {
+  NestedStructuredBranchFactsBenchmark fixture(state.range(0),
+                                               NestedValueMode::kCastAliases);
+  for (auto _ : state) {
+    fixture.Acquire(LOOM_PASS_VALUE_FACT_SCOPE_CONDITIONED_FUNCTION);
+  }
+  fixture.SetCounters(state);
+  state.SetItemsProcessed(state.iterations() * state.range(0));
+}
+BENCHMARK(BM_AcquireConditionedNestedStructuredCastAliasFacts)
     ->Apply(StructuredBranchDepths);
 
 }  // namespace
