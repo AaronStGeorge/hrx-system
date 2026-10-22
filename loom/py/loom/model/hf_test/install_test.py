@@ -184,6 +184,18 @@ def test_streaming_transform_reuses_hub_auth_without_downloading_parent(tmp_path
         with pytest.raises(ManifestError, match="transformed parameter"):
             install(plan, fresh, tmp_path / "rejected")
         assert not (tmp_path / "rejected/model.json").exists()
+        # The developer exception still resolves the publisher's immutable
+        # source revision before dropping only the expected parameter bytes.
+        developer = _cache(tmp_path / "developer", hub)
+        plan = plan_fetch(document, selection, developer, no_verify_parameters=True)
+        assert plan.sources["weights.data"].transport["revision"] == hub.revision
+        assert plan.unverified_parameters == {"weights.data"}
+        install(plan, developer, tmp_path / "experiment")
+        assert (tmp_path / "experiment/weights.data").read_bytes()[-4:] == struct.pack(
+            "<i", 3
+        )
+        receipt = json.loads((tmp_path / "experiment/.loom-fetch.json").read_text())
+        assert receipt["unverified_parameters"] == ["weights.data"]
 
 
 def test_publication_resolves_one_snapshot_and_checks_each_shared_source_once(tmp_path):

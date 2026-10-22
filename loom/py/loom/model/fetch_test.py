@@ -200,6 +200,73 @@ def _publication_card():
     return document
 
 
+def test_developer_parameters_keep_code_lock_and_record_observed_bytes(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(_card(), files) as (base, _, resources):
+        original_lock = resources["/model.json.lock"]
+        resources["/weights.data"] = b"developer values of a different size"
+        cache = ContentCache(tmp_path / "cache")
+        plan = _remote_plan(base, cache, no_verify_parameters=True)
+        assert plan.unverified_parameters == {"weights.data"}
+        assert set(plan.identities) == {"code.loom"}
+        output = tmp_path / "installed"
+        install(plan, cache, output)
+        assert (output / "weights.data").read_bytes() == resources["/weights.data"]
+        installed_card = ModelCard.parse((output / "model.json").read_text())
+        lock = ModelLock.parse((output / "model.json.lock").read_text())
+        for name, identity in lock.cover(installed_card.select()).items():
+            identity.verify(output / name)
+        receipt = json.loads((output / ".loom-fetch.json").read_text())
+        assert receipt["unverified_parameters"] == ["weights.data"]
+        assert resources["/model.json.lock"] == original_lock
+        assert plan.summary()["unverified_parameters"] == ["weights.data"]
+        with pytest.raises(FetchError, match=r"another output|existing destination"):
+            install(plan, cache, output)
+        strict = ContentCache(tmp_path / "strict")
+        with pytest.raises(
+            (ManifestError, FetchError), match=r"size|byte count|SHA-256"
+        ):
+            install(_remote_plan(base, strict), strict, tmp_path / "rejected")
+        assert not (tmp_path / "rejected/model.json").exists()
+
+
+@pytest.mark.parametrize("role", ["inputs", "libraries", "auxiliary", "tokenizer"])
+def test_parameter_exception_cannot_weaken_another_role_at_another_path(tmp_path, role):
+    card = _card()
+    shared = {"path": "other-name.data", "origin": "weights.data"}
+    if role in ("inputs", "libraries"):
+        card["programs"]["p"][role].append(shared)
+    elif role == "auxiliary":
+        card["programs"]["p"]["inputs"] = [{"path": "code.loom", "data": [shared]}]
+    else:
+        card["variants"]["v"]["services"]["text"]["tokenizers"] = {"text": shared}
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(card, files) as (base, _, resources):
+        resources["/weights.data"] = b"changed"
+        cache = ContentCache(tmp_path / "cache")
+        plan = _remote_plan(base, cache, no_verify_parameters=True)
+        assert not plan.unverified_parameters
+        assert set(plan.identities) == {"code.loom", "weights.data", "other-name.data"}
+        with pytest.raises(ManifestError, match="SHA-256"):
+            install(plan, cache, tmp_path / "output")
+        assert not (tmp_path / "output/model.json").exists()
+
+
+@pytest.mark.parametrize("conflict", ["no_lock", "update_lock"])
+def test_parameter_verification_exception_does_not_compose_with_other_lock_modes(
+    tmp_path, conflict
+):
+    cache = ContentCache(tmp_path / "cache")
+    with pytest.raises(ManifestError, match="ordinary locked acquisition"):
+        plan_fetch(
+            Document(str(tmp_path / "model.json"), json.dumps(_card())),
+            ModelCard(_card()).select(),
+            cache,
+            no_verify_parameters=True,
+            **{conflict: True},
+        )
+
+
 def test_publication_lock_unions_sources_without_merging_destinations(tmp_path):
     files = {
         "code.loom": b"code",

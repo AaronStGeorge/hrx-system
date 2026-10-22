@@ -52,7 +52,7 @@ class FetchPlan:
     selection: Selection
     # Effective sources, with transport overrides already applied.
     sources: dict[str, Source]
-    # Required byte identities; empty only for an explicit update or no-lock.
+    # Required byte identities after any explicit parameter verification exception.
     identities: dict[str, FileIdentity]
     # Selected logical roots and their immutable resolutions, never mirrors.
     origins: dict
@@ -62,8 +62,10 @@ class FetchPlan:
     locked: bool
     # Explicit author's lock update destination; absent for ordinary acquisition.
     update_path: Path | None
-    # Acquisition receipt owned by this plan, absent for direct-card operations.
+    # Acquisition provenance for catalog or developer verification selections.
     provenance: dict | None = None
+    # Parameter-only paths whose publisher byte expectations are explicitly skipped.
+    unverified_parameters: frozenset[str] = frozenset()
 
     def summary(self) -> dict:
         """Machine-readable acquisition facts; unknown sizes remain null."""
@@ -80,6 +82,7 @@ class FetchPlan:
             else "update"
             if self.locked
             else "none",
+            "unverified_parameters": sorted(self.unverified_parameters),
             "files": [
                 {
                     "path": path,
@@ -109,12 +112,18 @@ def plan_fetch(
     offline: bool = False,
     no_lock: bool = False,
     update_lock: bool = False,
+    no_verify_parameters: bool = False,
     catalog: dict | None = None,
 ) -> FetchPlan:
     """Checks selected lock coverage and resolves sources before payload transfer."""
     if no_lock and (update_lock or lock_location is not None):
         raise ManifestError(
             "--no-lock cannot be combined with --update-lock or --lockfile"
+        )
+    if no_verify_parameters and (no_lock or update_lock):
+        raise ManifestError(
+            "--no-verify-parameters requires ordinary locked acquisition; "
+            "it cannot be combined with --no-lock or --update-lock"
         )
     for path in selection.files:
         if PurePosixPath(path).parts[0] in _RESERVED_PATHS:
@@ -149,6 +158,22 @@ def plan_fetch(
     sources = {
         path: resolver.resolve(file.origin, identities.get(path))
         for path, file in selection.files.items()
+    }
+    protected = {
+        file_key(file.origin, file.transform)
+        for file in selection.files.values()
+        if file.roles - {"parameter"}
+    }
+    unverified_parameters = frozenset(
+        path
+        for path, file in selection.files.items()
+        if no_verify_parameters
+        and file_key(file.origin, file.transform) not in protected
+    )
+    identities = {
+        path: identity
+        for path, identity in identities.items()
+        if path not in unverified_parameters
     }
     sources = _prepare_sources(
         sources,
@@ -187,9 +212,15 @@ def plan_fetch(
                 "sha256": hashlib.sha256(document.text.encode("utf-8")).hexdigest(),
             },
             "catalog": copy.deepcopy(catalog),
+            **(
+                {"unverified_parameters": sorted(unverified_parameters)}
+                if unverified_parameters
+                else {}
+            ),
         }
-        if catalog is not None
+        if catalog is not None or unverified_parameters
         else None,
+        unverified_parameters,
     )
 
 
@@ -540,6 +571,11 @@ def _check_lock_output(plan: FetchPlan, directory: Path, relocated: dict, roots:
     path = directory / "model.json.lock"
     if not plan.locked or not path.exists():
         return
+    if plan.unverified_parameters:
+        raise FetchError(
+            "choose another output for --no-verify-parameters; "
+            "this installation already records parameter identities"
+        )
     if not plan.identities:
         raise FetchError(
             "an installation lock already exists; choose another output "
@@ -599,7 +635,7 @@ def install(
     materialize: str = "share",
     preserve_sources: bool = False,
 ) -> Path:
-    """Publishes a card only after all selected bytes satisfy their commitments."""
+    """Publishes a card only after its complete selected acquisition succeeds."""
     if cache.cancelled.is_set():
         raise FetchError("model acquisition cancelled")
     if materialize not in ("share", "copy"):
@@ -675,7 +711,7 @@ def install(
                         share_file(path, destination)
                     published.append(destination)
                 # The complete card is the publication boundary. No runtime ever
-                # sees a card advertising a partially verified closure.
+                # sees a card advertising a partially acquired closure.
                 metadata = {
                     "model.json.lock": installation_lock_document,
                     ".loom-fetch.json": plan.provenance,

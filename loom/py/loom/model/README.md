@@ -154,6 +154,26 @@ forbids network access, including document requests; cached documents and locked
 payloads remain usable. A floating mutable URL without a lock needs a local
 override in offline mode because a historical payload is not a fresh resolution.
 
+For developer swatches, `--no-verify-parameters` skips comparison with the
+publisher's parameter byte expectations. It still requires a complete matching
+lock and retains its origin revisions. Programs, libraries, auxiliary inputs,
+and tokenizers keep their ordinary checks, including a logical source also used
+as a parameter at another local path. Format validity and exact range bounds
+remain enforced. This mode conflicts with `--no-lock` and `--update-lock`.
+
+Use a new installation directory for this mode. The source lock stays unchanged;
+the installed lock records the bytes actually acquired, and `.loom-fetch.json`
+lists `unverified_parameters`. JSON output exposes that same list; terminal
+output identifies the skipped expectations. Content storage still hashes bytes
+as they stream, so the local result has a reproducible identity without another
+pass over a remote parent checkpoint. For example, a compact mirror can supply
+different swatch values while keeping the publisher's code:
+
+```sh
+loom-fetch model.json --configuration=swatch --origin=checkpoint=./fixture \
+  --offline --no-verify-parameters --output=./experiment
+```
+
 Authors can publish a lock covering every declared compatible variant, partition,
 service, and program set with `--update-lock --all-variants`. This operation
 acquires each unique output once and replaces the lock after every read succeeds.

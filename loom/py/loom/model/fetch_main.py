@@ -167,7 +167,17 @@ def main(argv: list[str] | None = None) -> int:
         help="retain acquired transform input ranges; "
         "existing local/HF cache files remain shared",
     )
+    parser.add_argument(
+        "--no-verify-parameters",
+        action="store_true",
+        help="developer mode: skip publisher parameter expectations while retaining "
+        "code and other input checks; requires a new installation",
+    )
     args = parser.parse_args(argv)
+    if args.no_verify_parameters and (args.no_lock or args.update_lock):
+        parser.error(
+            "--no-verify-parameters cannot be combined with --no-lock or --update-lock"
+        )
     if args.all_variants:
         if not args.update_lock:
             parser.error("--all-variants requires --update-lock")
@@ -285,9 +295,18 @@ def main(argv: list[str] | None = None) -> int:
             offline=args.offline,
             no_lock=args.no_lock,
             update_lock=args.update_lock,
+            no_verify_parameters=args.no_verify_parameters,
             catalog=snapshot.summary() if snapshot else None,
         )
         result = plan.summary()
+        if plan.unverified_parameters and not args.json:
+            sys.stderr.write(
+                "Skipping publisher parameter expectations: "
+                + ", ".join(
+                    display_text(path) for path in sorted(plan.unverified_parameters)
+                )
+                + "\n"
+            )
         if snapshot is not None:
             result["catalog"] = snapshot.summary()
         result["output"] = str(args.output.absolute())

@@ -113,7 +113,7 @@ def main(fetch, serve, fixture):
                         }
                     )
                 )
-                deployments.append(deployment)
+                deployments.append((deployment, "abab"))
                 return output
 
             try:
@@ -156,14 +156,33 @@ def main(fetch, serve, fixture):
                     subset / "bias.data"
                 ).read_bytes()
                 shutil.copyfile(subset / "serve.json", root / "compact/serve.json")
-                deployments.append(root / "compact/serve.json")
+                deployments.append((root / "compact/serve.json", "abab"))
+                # A developer mirror can change parameter values while code and
+                # other inputs retain the publisher's expectations.
+                changed = archive(0)[:-4] + struct.pack("<i", 3)
+                (mirror / "source.safetensors").write_bytes(changed)
+                developer = root / "developer"
+                run(
+                    "--configuration=check",
+                    "--origin=checkpoint=" + str(mirror),
+                    "--cache=" + str(root / "developer-cache"),
+                    "--output=" + str(developer),
+                    "--no-verify-parameters",
+                )
+                receipt = json.loads((developer / ".loom-fetch.json").read_text())
+                assert receipt["unverified_parameters"] == [
+                    "bias.data",
+                    "metadata.safetensors",
+                ]
+                shutil.copyfile(subset / "serve.json", developer / "serve.json")
+                deployments.append((developer / "serve.json", "xbbx"))
             finally:
                 server.shutdown()
                 thread.join()
         install("offline", "swatch", base, "--offline", "--preserve-sources")
         assert os.path.samefile(subset / "bias.data", root / "offline/bias.data")
-        for deployment in deployments:
-            check_model(serve, deployment, "abab")
+        for deployment, expected in deployments:
+            check_model(serve, deployment, expected)
 
 
 if __name__ == "__main__":
