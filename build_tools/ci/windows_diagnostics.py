@@ -311,6 +311,59 @@ def capture_application_control(
     capture.tool(["CiTool.exe", "-lp", "-json"], cwd, "application-control-policies")
 
 
+def capture_resource_exhaustion(
+    capture: Capture, cwd: Path, output: str, started_at: dt.datetime
+) -> None:
+    # Win32 memory, system-resource, and commit-limit failures do not identify
+    # the exhausted resource. Preserve native evidence before attributing them
+    # to a compiler or choosing a different build concurrency limit.
+    if not re.search(r"(?:error:\s*|\[WinError\s+)(?:8|14|1450|1455)\b", output):
+        return
+    timestamp = (
+        started_at.astimezone(dt.UTC)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+    query = (
+        "*[System[Provider[@Name='Microsoft-Windows-Resource-Exhaustion-Detector']"
+        f" and EventID=2004 and TimeCreated[@SystemTime >= '{timestamp}']]]"
+    )
+    capture.tool(
+        [
+            "wevtutil.exe",
+            "qe",
+            "System",
+            "/q:" + query,
+            "/rd:true",
+            "/c:32",
+            "/f:xml",
+            "/e:Events",
+            "/uni:true",
+        ],
+        cwd,
+        "resource-exhaustion-events",
+    )
+    capture.tool(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$ErrorActionPreference='Stop'; "
+            "@{observed_at=[DateTime]::UtcNow.ToString('o'); "
+            "memory=(Get-CimInstance Win32_OperatingSystem | Select-Object "
+            "TotalVisibleMemorySize,FreePhysicalMemory,TotalVirtualMemorySize,"
+            "FreeVirtualMemory,SizeStoredInPagingFiles,FreeSpaceInPagingFiles,"
+            "NumberOfProcesses); "
+            "processes=@(Get-Process | Sort-Object PrivateMemorySize64 -Descending | "
+            "Select-Object -First 32 Id,ProcessName,PrivateMemorySize64,"
+            "WorkingSet64,HandleCount)} | ConvertTo-Json -Depth 4",
+        ],
+        cwd,
+        "resource-snapshot",
+    )
+
+
 def capture_failure(
     directory: Path,
     cwd: Path,
@@ -331,6 +384,7 @@ def capture_failure(
     output = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", output)
     try:
         capture_application_control(capture, cwd, output, started_at)
+        capture_resource_exhaustion(capture, cwd, output, started_at)
         capture_access_failures(capture, cwd, output)
         cache = capture_cmake(capture, build_dir, output) if build_dir else {}
         tool = symbol_tool(environment, cache)

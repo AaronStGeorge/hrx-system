@@ -248,6 +248,91 @@ class WindowsDiagnosticsTest(unittest.TestCase):
                 "capture byte limit exceeded",
             )
 
+    def test_resource_capture_preserves_failure_when_event_access_is_denied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def native_tool(argv, **kwargs):
+                if argv[0] == "wevtutil.exe":
+                    kwargs["stdout"].write(b"Access is denied.\n")
+                    return subprocess.CompletedProcess(argv, 5)
+                kwargs["stdout"].write(b'{"memory": {}, "processes": []}\n')
+                return subprocess.CompletedProcess(argv, 0)
+
+            for error_code in (8, 14, 1450, 1455):
+                with (
+                    self.subTest(error_code=error_code),
+                    mock.patch.object(subprocess, "run", side_effect=native_tool),
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    artifacts = root / str(error_code)
+                    result = diagnostics.run(
+                        [
+                            sys.executable,
+                            "-c",
+                            "import sys; "
+                            f"print('CreateProcessW failed (error: {error_code})'); "
+                            "sys.exit(34)",
+                        ],
+                        cwd=root,
+                        env=None,
+                        artifact_dir=artifacts,
+                        label="resource failure",
+                    )
+                    self.assertEqual(result, 34)
+                    phase = next(artifacts.iterdir())
+                    manifest = json.loads((phase / "manifest.json").read_text())
+                    events, snapshot = manifest["tools"]
+                    self.assertEqual(events["returncode"], 5)
+                    self.assertEqual(snapshot["returncode"], 0)
+                    self.assertIn(
+                        "Access is denied", (phase / events["output"]).read_text()
+                    )
+                    self.assertEqual(
+                        json.loads((phase / snapshot["output"]).read_text())[
+                            "processes"
+                        ],
+                        [],
+                    )
+                    command = json.loads((phase / "command.json").read_text())
+                    timestamp = (
+                        dt.datetime.fromisoformat(command["started_at"])
+                        .isoformat(timespec="milliseconds")
+                        .replace("+00:00", "Z")
+                    )
+                    self.assertIn(
+                        f"TimeCreated[@SystemTime >= '{timestamp}']", events["argv"][3]
+                    )
+
+    @unittest.skipUnless(os.name == "nt", "requires native Windows resource queries")
+    def test_native_resource_snapshot_preserves_process_launch_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = diagnostics.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys; "
+                        "print('CreateProcessW failed (error: 8)'); sys.exit(34)",
+                    ],
+                    cwd=root,
+                    env=None,
+                    artifact_dir=root / "artifacts",
+                    label="resource failure",
+                )
+            self.assertEqual(result, 34)
+            phase = next((root / "artifacts").iterdir())
+            manifest = json.loads((phase / "manifest.json").read_text())
+            events, snapshot = manifest["tools"]
+            self.assertEqual(events["returncode"], 0, events)
+            self.assertEqual(snapshot["returncode"], 0, snapshot)
+            state = json.loads((phase / snapshot["output"]).read_text())
+            self.assertGreater(int(state["memory"]["TotalVisibleMemorySize"]), 0)
+            self.assertGreater(len(state["processes"]), 0)
+            self.assertLessEqual(len(state["processes"]), 32)
+            self.assertTrue(all(process["Id"] >= 0 for process in state["processes"]))
+
     def test_native_diagnostic_failure_keeps_output_and_status(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
