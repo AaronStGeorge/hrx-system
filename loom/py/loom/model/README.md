@@ -87,3 +87,58 @@ The weighted text fixture checks an actual response through this path. The
 recognition fixture checks activity and transcription as independent services
 sharing one provider universe, including concurrent streams and both bytecode
 and text build outputs.
+
+## Acquisition
+
+`//loom/py/loom/model:loom-fetch` installs the selected closure from a local card
+or raw HTTP(S) card URL. The Python API exposes `plan_fetch` and `install`;
+`ContentCache` owns document reads and verified payload storage. Listing reads
+only the card. Named maps remain available to ordinary JSON tools:
+
+```sh
+loom-fetch model.json --list --json | jq '.variants | keys[]'
+loom-fetch model.json --configuration=streaming --output=./installed --dry-run
+loom-fetch model.json --configuration=streaming --output=./installed
+```
+
+The acquisition path requires a complete matching `model.json.lock`, or an
+explicit `--lockfile` path/URL. A publication lock may cover more variants;
+fetch reads only the selected files. `--update-lock` computes a new exact set,
+replacing the local card's sibling lock or an explicit local `--lockfile`.
+For a remote card without an explicit local lock destination, the new lock is
+written only beside the installed card. `--no-lock` neither reads nor writes
+locks and conflicts with lock update or an explicit lockfile. `--offline`
+forbids network access, including document requests; cached documents and locked
+payloads remain usable. A floating mutable URL without a lock needs a local
+override in offline mode because a historical payload is not a fresh resolution.
+
+Locks use a separate [versioned editor schema](model-lock.v1.schema.json).
+`origins` records requested roots and resolved repository commits. Each `files`
+record contains its logical `origin`, whole-file `size`, and `sha256`. A file's
+destination name, parameter scope, and JIT configuration are independent of that
+identity. `--origin=checkpoint=/local/mirror` replaces transport while retaining
+the original lock identity; it never falls back to the original host. Unknown
+aliases, missing local files, and mismatched locked bytes fail explicitly.
+
+Whole-file acquisition supports HTTP(S), local, and inline sources. An HF origin
+can be satisfied by an explicit local/HTTP override without importing an HF
+package. Direct HF transport currently reports that its optional provider is
+required. HTTP transfers validate status, framing, byte count, and locked hash;
+the redirect destination never replaces the logical source coordinate.
+
+Files stream into verified content storage with bounded buffers and concurrent
+transfers. The default `--materialize=share` links cache or local-source files
+into the installation, so changing only configuration does not copy weights.
+Filesystems without sharing require an explicit `--materialize=copy` choice.
+Shared files remain shared: editing one view can alter another, and a later
+locked fetch detects that modification. Verified existing destinations can be
+reused; conflicts fail before payload transfer. Fetch never prunes an output.
+
+The selected `model.json` is published after the complete closure verifies.
+An installation lock is a projection of those verified commitments. Relative
+runtime paths are retained, while original card-relative acquisition sources
+are anchored to a document origin. A serving deployment references the local
+card separately; native serving performs no network access or lock processing.
+The fetch-to-serve fixture checks source, bytecode, mixed, and offline packages
+against the same weighted response, and rejects substituted code before
+publication.

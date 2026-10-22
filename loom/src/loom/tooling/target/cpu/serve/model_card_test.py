@@ -15,12 +15,11 @@ from urllib.parse import urlsplit
 from loom_serve_testing.http_harness import control, running_server
 
 
-def main():
-    server = str(Path(sys.argv[1]).absolute())
+def check_model(server, model, expected):
+    server = str(Path(server).absolute())
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
-    model = str(Path(sys.argv[2]).absolute())
-    expected = sys.argv[3]
+    model = str(Path(model).absolute())
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)
         log = directory / "server.log"
@@ -66,4 +65,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    check_model(*sys.argv[1:])

@@ -19,6 +19,143 @@ iree_py_library(
     "../.."
 )
 
+iree_py_library(
+  NAME
+    lock
+  SRCS
+    "lock.py"
+  DEPS
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
+    fetch_source
+  SRCS
+    "fetch_source.py"
+  DEPS
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
+    fetch_storage
+  SRCS
+    "fetch_storage.py"
+  DEPS
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
+    fetch
+  SRCS
+    "fetch.py"
+  DEPS
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
+    loom-fetch
+  MAIN
+    "fetch_main.py"
+  SRCS
+    "fetch_main.py"
+  DEPS
+    loom::py::loom::model::fetch
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::manifest
+)
+
+iree_py_test(
+  NAME
+    fetch_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "fetch_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.fetch_test"
+  DEPS
+    loom::py::loom::model::fetch
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_test(
+  NAME
+    fetch_storage_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "fetch_storage_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.fetch_storage_test"
+  DEPS
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_test(
+  NAME
+    lock_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "lock_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.lock_test"
+  DEPS
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_test(
+  NAME
+    fetch_source_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "fetch_source_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.fetch_source_test"
+  DEPS
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
 iree_py_test(
   NAME
     manifest_test

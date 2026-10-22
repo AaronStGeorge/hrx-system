@@ -1,0 +1,174 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""loom-fetch command entry point; acquisition is also available as a Python API."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+from loom.model import ManifestError, ModelCard
+from loom.model.fetch import check_output, install, plan_fetch
+from loom.model.fetch_source import FetchError, document_location
+from loom.model.fetch_storage import ContentCache
+
+
+def _cache_directory() -> Path:
+    if "LOOM_CACHE_HOME" in os.environ:
+        return Path(os.environ["LOOM_CACHE_HOME"])
+    if os.name == "nt":
+        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return root / "loom"
+
+
+def _overrides(values: list[str]) -> dict[str, str]:
+    result = {}
+    for value in values:
+        name, separator, location = value.partition("=")
+        if not separator or not name or not location:
+            raise ManifestError("--origin requires NAME=LOCAL_DIRECTORY_OR_URL")
+        if name in result:
+            raise ManifestError(f"duplicate --origin for {name!r}")
+        result[name] = location
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="loom-fetch", description="Acquire a portable Loom model's selected files."
+    )
+    parser.add_argument("card", help="local model JSON or a raw HTTP(S) model-card URL")
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="list declared choices without acquiring payloads",
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="emit structured JSON on stdout"
+    )
+    parser.add_argument("--configuration", help="named canonical configuration")
+    parser.add_argument("--service", help="named service")
+    parser.add_argument("--variant", help="named parameter variant")
+    parser.add_argument(
+        "--programs", help="named program set (independent of file format)"
+    )
+    parser.add_argument(
+        "--origin",
+        action="append",
+        default=[],
+        metavar="NAME=ROOT",
+        help="replace one source root with a local directory or HTTP(S) directory",
+    )
+    parser.add_argument("--output", type=Path, help="installation directory")
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        default=_cache_directory(),
+        help="shared content and document cache",
+    )
+    parser.add_argument(
+        "--lockfile", help="explicit lock path or URL; defaults to CARD.lock"
+    )
+    parser.add_argument(
+        "--offline", action="store_true", help="forbid all network requests"
+    )
+    locking = parser.add_mutually_exclusive_group()
+    locking.add_argument(
+        "--no-lock", action="store_true", help="neither read nor write locks"
+    )
+    locking.add_argument(
+        "--update-lock",
+        action="store_true",
+        help="replace the lock with exactly the selected verified sources",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="resolve and show the plan without acquiring payloads",
+    )
+    parser.add_argument(
+        "--materialize",
+        choices=("share", "copy"),
+        default="share",
+        help="share source/cache files or explicitly create independent copies",
+    )
+    args = parser.parse_args(argv)
+    if not args.list and args.output is None:
+        parser.error("--output is required for acquisition or --dry-run")
+    if args.no_lock and args.lockfile:
+        parser.error("--no-lock cannot be combined with --lockfile")
+    try:
+        cache = ContentCache(args.cache)
+        document = cache.read_document(
+            document_location(args.card), offline=args.offline
+        )
+        card = ModelCard.parse(document.text)
+        if args.list:
+            listing = card.document
+            if args.json:
+                sys.stdout.write(json.dumps(listing, indent=2) + "\n")
+            else:
+                sys.stdout.write(listing["model"]["name"] + "\n")
+                for section in ("configurations", "variants", "services", "programs"):
+                    sys.stdout.write(
+                        f"{section}: " + ", ".join(listing.get(section, {})) + "\n"
+                    )
+            return 0
+        selection = card.select(
+            configuration=args.configuration,
+            service=args.service,
+            variant=args.variant,
+            programs=args.programs,
+        )
+        plan = plan_fetch(
+            document,
+            selection,
+            cache,
+            overrides=_overrides(args.origin),
+            lock_location=args.lockfile,
+            offline=args.offline,
+            no_lock=args.no_lock,
+            update_lock=args.update_lock,
+        )
+        result = plan.summary()
+        result["output"] = str(args.output.absolute())
+        if args.dry_run:
+            check_output(plan, args.output)
+        else:
+            result["card"] = str(
+                install(plan, cache, args.output, materialize=args.materialize)
+            )
+        if args.json:
+            sys.stdout.write(json.dumps(result, indent=2) + "\n")
+        elif args.dry_run:
+            sys.stdout.write(
+                f"{selection.model_id}: {selection.variant} / "
+                f"{selection.programs} / {selection.service_name}\n"
+            )
+            for file in result["files"]:
+                size = (
+                    "unknown size" if file["size"] is None else f"{file['size']} bytes"
+                )
+                sys.stdout.write(f"  {file['path']} ({size})\n")
+        else:
+            sys.stdout.write(result["card"] + "\n")
+        return 0
+    except (ManifestError, FetchError, OSError) as error:
+        sys.stderr.write(f"loom-fetch: {error}\n")
+        return 1
+    except KeyboardInterrupt:
+        sys.stderr.write("loom-fetch: cancelled\n")
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
