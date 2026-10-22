@@ -1,6 +1,6 @@
 // clang-format off
 // RUN: with-checks emit source-low @qwen38_iq4xs_gate_up_swiglu target=amdgpu:gfx942 output=low
-// INPUT: cxx I=.
+// INPUT: cxx I=../../../../../test/corpus/authoring/cxx
 #include "iq4xs_gate_up.cxx"
 
 [[loom::config("qwen38.iq4xs.async_staging")]]
@@ -27,7 +27,7 @@ CHECK-NOT: *ds_write*
 
 // ====
 
-// INPUT: cxx I=.
+// INPUT: cxx I=../../../../../test/corpus/authoring/cxx
 #include "iq4xs_gate_up.cxx"
 
 [[loom::config("qwen38.iq4xs.async_staging")]]

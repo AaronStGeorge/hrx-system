@@ -16,18 +16,11 @@ load(
     "LOOM_AMDGPU_SUPPORTED_TARGETS",
 )
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
-load("//loom/build_tools/bazel:defs.bzl", "loom_test", "loom_test_module")
+load("//loom/build_tools/bazel:defs.bzl", "loom_test")
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test")
 load("//loom/target/amdgpu:execution_profiles.bzl", "amdgpu_execution_profile")
 
 package(default_visibility = ["//visibility:public"])
-
-exports_files([
-    "nvfp4_matrix.h",
-    "q8s32_specialization.h",
-    "q8s32_specialization_providers.loom",
-    "q8s32_specialization_providers.cxx",
-])
 
 _AMDGPU_EXECUTION_PROFILE = amdgpu_execution_profile(
     name = "amdgpu",
@@ -61,7 +54,6 @@ _CDNA3_COMPATIBLE_WITH = loom_config_compatible_with([
 # Qualification is explicit: publishing a source module does not imply support
 # for its operations on every target.
 _MODULES = [
-    "aiter_swiglu_f16",
     "assumptions",
     "atomics",
     "barrier_helpers",
@@ -75,7 +67,6 @@ _MODULES = [
     "flash_attention",
     "increment_values",
     "integer_increment",
-    "llama_rms_norm",
     "mxfp_group_dot",
     "packed_byte_arithmetic",
     "packed_float16_conversion",
@@ -104,6 +95,10 @@ _MODULES = [
     "workload_configuration",
 ]
 
+_AUTHORING_MODULES = {
+    "flash_attention": "//loom/src/loom/test/corpus/authoring/cxx:flash_attention_module",
+}
+
 _XFAILS = {
     "vector_values": {},
 }
@@ -112,7 +107,10 @@ _XFAILS = {
     loom_test(
         name = module + "_test",
         execution_profiles = _EXECUTION_PROFILES,
-        module = "//loom/src/loom/import/cxx/test:" + module + "_module",
+        module = _AUTHORING_MODULES.get(
+            module,
+            "//loom/src/loom/import/cxx/test:" + module + "_module",
+        ),
         target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     )
     for module in _MODULES
@@ -130,7 +128,10 @@ _XFAILS = {
             for record in sorted(_XFAILS[module])
         ],
         execution_profiles = _EXECUTION_PROFILES,
-        module = "//loom/src/loom/import/cxx/test:" + module + "_module",
+        module = _AUTHORING_MODULES.get(
+            module,
+            "//loom/src/loom/import/cxx/test:" + module + "_module",
+        ),
         target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     )
     for module in _MODULES
@@ -289,58 +290,42 @@ loom_test(
 
 loom_test(
     name = "nvfp4_matrix_test",
-    srcs = [
-        "nvfp4_matrix.cxx",
-        "nvfp4_matrix_providers.cxx",
-    ],
     benchmark_smoke = False,
     compile_targets = [
         "//loom/target/amdgpu:gfx942",
         "//loom/target/amdgpu:gfx1100",
     ],
-    data = ["nvfp4_matrix.h"],
     execution_profiles = _EXECUTION_PROFILES,
+    module = "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix_module",
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
 )
 
 loom_test(
     name = "nvfp4_matrix_loom_providers_test",
-    srcs = [
-        "nvfp4_matrix.cxx",
-        "nvfp4_matrix_providers.loom",
-    ],
     benchmark_smoke = False,
     compile_targets = [
         "//loom/target/amdgpu:gfx942",
         "//loom/target/amdgpu:gfx1100",
     ],
-    data = ["nvfp4_matrix.h"],
     execution_profiles = _EXECUTION_PROFILES,
+    module = "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix_loom_providers_module",
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
 )
 
 loom_test(
     name = "q8s32_specialization_test",
-    srcs = [
-        "q8s32_specialization.cxx",
-        "q8s32_specialization_providers.cxx",
-    ],
     benchmark_smoke = False,
-    data = ["q8s32_specialization.h"],
     execution_profiles = _EXECUTION_PROFILES,
+    module = "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization_module",
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     variants = _Q8S32_VARIANTS,
 )
 
 loom_test(
     name = "q8s32_specialization_loom_providers_test",
-    srcs = [
-        "q8s32_specialization.cxx",
-        "q8s32_specialization_providers.loom",
-    ],
     benchmark_smoke = False,
-    data = ["q8s32_specialization.h"],
     execution_profiles = [_AMDGPU_EXECUTION_PROFILE],
+    module = "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization_loom_providers_module",
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     variants = _Q8S32_VARIANTS,
 )
@@ -360,7 +345,7 @@ loom_check_test(
 loom_check_test(
     name = "iq4xs_gate_up_async_lowering",
     src = "iq4xs_gate_up_async_lowering.cxx-test",
-    data = ["iq4xs_gate_up.cxx"],
+    data = ["//loom/src/loom/test/corpus/authoring/cxx:iq4xs_gate_up.cxx"],
     runner = "//loom/src/loom/tools/loom-check",
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/import:cxx",
@@ -384,9 +369,9 @@ loom_check_test(
     name = "nvfp4_matrix_lowering",
     src = "nvfp4_matrix_lowering.cxx-test",
     data = [
-        "nvfp4_matrix.cxx",
-        "nvfp4_matrix.h",
-        "nvfp4_matrix_providers.cxx",
+        "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix.cxx",
+        "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix.h",
+        "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix_providers.cxx",
     ],
     runner = "//loom/src/loom/tools/loom-check",
     target_compatible_with = loom_config_compatible_with([
@@ -511,18 +496,12 @@ loom_test(
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
 )
 
-loom_test_module(
-    name = "iq4xs_gate_up_module",
-    srcs = ["iq4xs_gate_up.cxx"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
-)
-
 loom_test(
     name = "iq4xs_gate_up_test",
     case = "iq4xs_gate_up_values",
     configs = _IQ4XS_GATE_UP_SYNC_CONFIGS,
     execution_profiles = _EXECUTION_PROFILES,
-    module = ":iq4xs_gate_up_module",
+    module = "//loom/src/loom/test/corpus/authoring/cxx:iq4xs_gate_up_module",
     tags = ["manual"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     variants = _IQ4XS_GATE_UP_BUFFERING_VARIANTS,
@@ -534,7 +513,7 @@ loom_test(
     compile_targets = ["//loom/target/amdgpu:gfx942"],
     configs = _IQ4XS_GATE_UP_ASYNC_CONFIGS,
     execution_profiles = _EXECUTION_PROFILES,
-    module = ":iq4xs_gate_up_module",
+    module = "//loom/src/loom/test/corpus/authoring/cxx:iq4xs_gate_up_module",
     tags = ["manual"],
     target_compatible_with = _CDNA3_COMPATIBLE_WITH,
     variants = _IQ4XS_GATE_UP_BUFFERING_VARIANTS,
@@ -542,9 +521,9 @@ loom_test(
 
 loom_test(
     name = "q4k_q8_swiglu_test",
-    srcs = ["q4k_q8_swiglu.cxx"],
     benchmark_smoke = False,
     execution_profiles = _EXECUTION_PROFILES,
+    module = "//loom/src/loom/test/corpus/authoring/cxx:q4k_q8_swiglu_module",
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     variants = _Q4K_Q8_VARIANTS,
 )
@@ -590,11 +569,11 @@ iree_execution_test_suite(
 iree_execution_test_suite(
     name = "q8s32_specialization_link_test",
     data = [
-        "q8s32_specialization.cxx",
-        "q8s32_specialization.h",
         "q8s32_specialization_ambiguous_provider.cxx",
-        "q8s32_specialization_providers.cxx",
-        "q8s32_specialization_providers.loom",
+        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization.cxx",
+        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization.h",
+        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization_providers.cxx",
+        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization_providers.loom",
     ],
     manifests = ["q8s32_specialization.test.json"],
     tags = ["hostonly"],

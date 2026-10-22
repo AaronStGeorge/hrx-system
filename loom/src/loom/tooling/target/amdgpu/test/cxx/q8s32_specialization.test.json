@@ -9,7 +9,8 @@
           "run": {
             "tool": "loom-import-cxx",
             "args": [
-              "{srcdir}/q8s32_specialization_providers.cxx",
+              "{srcdir}/../../../../../test/corpus/authoring/cxx/q8s32_specialization_providers.cxx",
+              "--I={srcdir}/../../../../../test/corpus/authoring/cxx",
               "--to=bc",
               "--output={tmp}/providers.loombc"
             ]
@@ -23,7 +24,8 @@
           "run": {
             "tool": "loom-import-cxx",
             "args": [
-              "{srcdir}/q8s32_specialization.cxx",
+              "{srcdir}/../../../../../test/corpus/authoring/cxx/q8s32_specialization.cxx",
+              "--I={srcdir}/../../../../../test/corpus/authoring/cxx",
               "--to=bc",
               "--output={tmp}/root.loombc"
             ]
@@ -36,6 +38,7 @@
             "tool": "loom-import-cxx",
             "args": [
               "{srcdir}/q8s32_specialization_ambiguous_provider.cxx",
+              "--I={srcdir}/../../../../../test/corpus/authoring/cxx",
               "--to=bc",
               "--output={tmp}/ambiguous-provider.loombc"
             ]
@@ -186,7 +189,7 @@
             "tool": "loom-link",
             "args": [
               "{tmp}/root.loombc",
-              "--library={srcdir}/q8s32_specialization_providers.loom",
+              "--library={srcdir}/../../../../../test/corpus/authoring/cxx/q8s32_specialization_providers.loom",
               "--root=@q8s32_specialize",
               "--target=amdgpu:gfx942",
               "--config=model.q8s32.input_capacity=768",

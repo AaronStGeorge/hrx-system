@@ -85,9 +85,6 @@ JSON fixtures under
 
 | Source | Numerical coverage | Provenance |
 | --- | --- | --- |
-| `flash_attention.cxx` | Online softmax, shared key/value tiles, shuffle reductions, partial query/key tiles, and large score differences. | Original standalone f32 attention implementation, head dimension 64 and 16-key tiles. |
-| `llama_rms_norm.cxx` | Two 32-lane reductions, shared reduction storage, and columns of length 1, 33, and 129. | [llama.cpp norm.cu](https://github.com/ggml-org/llama.cpp/blob/972d2313bc0bf0a45f634f77d95c9fb03aeab12c/ggml/src/ggml-cuda/norm.cu), MIT. |
-| `aiter_swiglu_f16.cxx` | FP16 storage with f32 arithmetic, clamp extremes, reciprocal/exponential calls, and columns of length 1, 31, 65, and 129. | [aiter activation_kernels.cu](https://github.com/ROCm/aiter/blob/df95f04b703bfd7c520f072fcf2560092ec9d5ac/csrc/kernels/activation_kernels.cu), MIT. |
 | `constant_loops.cxx` | Constant-expression bounds, unsigned edge conditions, wrapped constants, mutable bounds and scheduled loop templates execute in 29 function trials with 55 exact observations on VM and AMDGPU. Thirteen native trials check all 64 lanes, complete guarded outputs and unchanged inputs under normal and access-instrumented execution. | Original source constant-loop witness. |
 | `control_flow.cxx` | Pre-test, post-test, and nested loops; final scalar values and effectful helper calls in conditions. Seven trip counts including zero are checked bitwise. | Original source-language semantics witness. |
 | `scheduled_sum.cxx` | Unroll factors 1/3 and pipeline depths 1/2 with linear ordering. Exact integer sums for 0, 1, 2, 5, 17, and 33 columns cover startup, tails, and drain under all four schedules. | Original scheduling-contract witness. |
@@ -116,28 +113,9 @@ JSON fixtures under
 | `atomics.cxx` | Contended device and workgroup ticket allocation, signed and unsigned combining operations, and CAS success/failure with exact old values, final storage and guards. The VM exercises every integer kind at 32 and 64 bits; native cases select the target's implemented widths and kinds, normally and with access sanitization. Interior and volatile pointers retain their storage identity. | Original source atomic-memory witness. |
 | `atomic_builtins.cxx` | GCC exchange, old/new fetch results, signed wraparound, and 32/64-bit CAS. Independent argument counters and aliased expected storage expose duplicate evaluation or an erroneous store on successful CAS. VM and native execution check results, expected storage, and guards; native also runs with access sanitization. | Header-free integer atomic witness. |
 
-The llama.cpp extraction specializes `rms_norm_f32`, `block_reduce<SUM>` and
-`warp_reduce_sum` for contiguous rows, one channel/sample, block size 64, and
-no multiply/add fusion. Two shared values replace dynamic shared allocation.
-The HIP PDL hooks are empty and omitted. A 64-bit row displacement forms input
-and output row pointers before the reduction and normalization loops. The source
-states the reduction loop's `offset < 32` invariant explicitly for subgroup index
-analysis.
-
-The aiter extraction specializes `swiglu_act_and_mul_kernel` for scalar vector
-width and equal input/output types. It keeps the original clamp/arithmetic
-order, AMD reciprocal, and OCML exponential spellings. `_Float16` storage and
-explicit casts retain the input/output rounding points. This extraction uses
-unsigned flat element indices; surrounding framework dispatch and vector memory
-wrappers are omitted from both extractions. Launch annotations
-supply the Loom configuration contract. The upstream licenses are included
-beside the source files.
-
-Quantized scenarios generate serialized Q4_K, Q8_1, and IQ4_XS records in their
-owning C++ sources. Their scalar oracles use logical scales and codes or decode
-records without sharing the kernels' vector addressing and reduction
-algorithms. This keeps the physical format and full workload geometry under
-test without generated Loom modules or NPY payloads.
+Complete kernels and multi-source authoring examples live in
+`//loom/src/loom/test/corpus/authoring/cxx`. This package retains focused
+source-language semantics, importer diagnostics, and frontend lowering tests.
 
 The integer references use unbounded integer multiplication/division and
 explicit modular conversion into the source width. Shift counts remain within

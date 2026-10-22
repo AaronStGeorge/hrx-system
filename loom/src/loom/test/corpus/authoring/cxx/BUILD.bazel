@@ -1,0 +1,98 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:defs.bzl", "loom_test_module")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+# This is an admission-controlled authoring corpus. Keep every source explicit
+# so adding a program requires choosing and documenting the concept it owns.
+exports_files([
+    "flash_attention.cxx",
+    "iq4xs_gate_up.cxx",
+    "nvfp4_matrix.cxx",
+    "nvfp4_matrix.h",
+    "nvfp4_matrix_providers.cxx",
+    "nvfp4_matrix_providers.loom",
+    "q4k_q8_swiglu.cxx",
+    "q8s32_specialization.cxx",
+    "q8s32_specialization.h",
+    "q8s32_specialization_providers.cxx",
+    "q8s32_specialization_providers.loom",
+])
+
+_CXX_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/import:cxx",
+])
+
+[
+    loom_test_module(
+        name = source + "_module",
+        srcs = [source + ".cxx"],
+        inputopts = ["cxx:fp-model=fast"],
+        target_compatible_with = _CXX_COMPATIBLE_WITH,
+    )
+    for source in [
+        "flash_attention",
+    ]
+]
+
+loom_test_module(
+    name = "q4k_q8_swiglu_module",
+    srcs = ["q4k_q8_swiglu.cxx"],
+    target_compatible_with = _CXX_COMPATIBLE_WITH,
+)
+
+loom_test_module(
+    name = "iq4xs_gate_up_module",
+    srcs = ["iq4xs_gate_up.cxx"],
+    target_compatible_with = _CXX_COMPATIBLE_WITH,
+)
+
+loom_test_module(
+    name = "nvfp4_matrix_module",
+    srcs = [
+        "nvfp4_matrix.cxx",
+        "nvfp4_matrix_providers.cxx",
+    ],
+    data = ["nvfp4_matrix.h"],
+    target_compatible_with = _CXX_COMPATIBLE_WITH,
+)
+
+loom_test_module(
+    name = "nvfp4_matrix_loom_providers_module",
+    srcs = [
+        "nvfp4_matrix.cxx",
+        "nvfp4_matrix_providers.loom",
+    ],
+    data = ["nvfp4_matrix.h"],
+    target_compatible_with = _CXX_COMPATIBLE_WITH,
+)
+
+loom_test_module(
+    name = "q8s32_specialization_module",
+    srcs = [
+        "q8s32_specialization.cxx",
+        "q8s32_specialization_providers.cxx",
+    ],
+    data = ["q8s32_specialization.h"],
+    target_compatible_with = _CXX_COMPATIBLE_WITH,
+)
+
+loom_test_module(
+    name = "q8s32_specialization_loom_providers_module",
+    srcs = [
+        "q8s32_specialization.cxx",
+        "q8s32_specialization_providers.loom",
+    ],
+    data = ["q8s32_specialization.h"],
+    target_compatible_with = _CXX_COMPATIBLE_WITH,
+)

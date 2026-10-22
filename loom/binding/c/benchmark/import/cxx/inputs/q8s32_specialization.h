@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef LOOM_TOOLING_TARGET_AMDGPU_TEST_CXX_Q8S32_SPECIALIZATION_H_
-#define LOOM_TOOLING_TARGET_AMDGPU_TEST_CXX_Q8S32_SPECIALIZATION_H_
+#ifndef LOOM_BINDING_C_BENCHMARK_IMPORT_CXX_INPUTS_Q8S32_SPECIALIZATION_H_
+#define LOOM_BINDING_C_BENCHMARK_IMPORT_CXX_INPUTS_Q8S32_SPECIALIZATION_H_
 
 #include <loomcxx/kernel.h>
 #include <loomcxx/predicate.h>
@@ -25,4 +25,4 @@ LOOM_DEVICE LOOM_TEMPLATE_DECL("model.q8s32.project") float q8s32_project(
     [[loom::where(loom::predicate::range(input_capacity, 256u, 32768u) &&
                   loom::predicate::multiple_of(input_capacity, 256u))]];
 
-#endif  // LOOM_TOOLING_TARGET_AMDGPU_TEST_CXX_Q8S32_SPECIALIZATION_H_
+#endif  // LOOM_BINDING_C_BENCHMARK_IMPORT_CXX_INPUTS_Q8S32_SPECIALIZATION_H_

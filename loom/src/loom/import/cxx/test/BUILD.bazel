@@ -15,12 +15,9 @@ package(
 )
 
 exports_files([
-    "aiter_swiglu_f16.cxx",
     "array_records_kernel.cxx",
     "check_records.cxx",
     "configured_workgroup_storage.cxx",
-    "flash_attention.cxx",
-    "llama_rms_norm.cxx",
     "mxfp_group_dot.cxx",
     "paged_online_softmax_loop_f32.cxx",
     "packed_memory.cxx",
@@ -709,15 +706,6 @@ loom_test_module(
     ]
 ]
 
-# A source file and its independent reference cases form one test module.
-# Kernel names, launch configuration, and schedule variants belong to those files.
-# Target packages select applicable modules and own their execution policy.
-_FAST_MATH_KERNEL_SOURCES = [
-    "aiter_swiglu_f16",
-    "flash_attention",
-    "llama_rms_norm",
-]
-
 _AUTHORED_CXX_KERNEL_SOURCES = [
     "scheduled_sum",
     "vector_initializers",
@@ -730,16 +718,6 @@ _AUTHORED_SPLIT_KERNEL_SOURCES = [
     "structured_continue",
     "typed_views",
     "vector_values",
-]
-
-[
-    loom_test_module(
-        name = source + "_module",
-        srcs = [source + ".cxx"],
-        inputopts = ["cxx:fp-model=fast"],
-        target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
-    )
-    for source in _FAST_MATH_KERNEL_SOURCES
 ]
 
 [

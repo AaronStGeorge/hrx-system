@@ -25,24 +25,38 @@ _AMDGPU_COMPATIBLE_WITH = _IMPORT_COMPATIBLE_WITH + loom_config_compatible_with(
     "//loom/config/emit:amdgpu",
 ])
 
+_KERNEL_SOURCES = [
+    "inputs/collective_scans.cxx",
+    "inputs/configured_workgroup_storage.cxx",
+    "inputs/flash_attention.cxx",
+    "inputs/iq4xs_gate_up.cxx",
+    "inputs/mxfp_group_dot.cxx",
+    "inputs/nvfp4_matrix.cxx",
+    "inputs/nvfp4_matrix.h",
+    "inputs/nvfp4_matrix_benchmark.cxx",
+    "inputs/nvfp4_matrix_providers.cxx",
+    "inputs/paged_online_softmax_loop_f32.cxx",
+    "inputs/q4k_q8_swiglu.cxx",
+]
+
+_Q8S32_SOURCES = [
+    "inputs/q8s32_specialization.cxx",
+    "inputs/q8s32_specialization.h",
+    "inputs/q8s32_specialization_providers.cxx",
+    "inputs/q8s32_specialization_providers.loom",
+]
+
+# Timed translation units are private, controlled inputs. Tests and authoring
+# examples must not depend on their snapshots.
+exports_files(
+    _KERNEL_SOURCES + _Q8S32_SOURCES,
+    visibility = ["//visibility:private"],
+)
+
 iree_c_embed_data(
     name = "kernels",
     testonly = True,
-    srcs = [
-        ":nvfp4_matrix_benchmark.cxx",
-        "//loom/src/loom/import/cxx/test:aiter_swiglu_f16.cxx",
-        "//loom/src/loom/import/cxx/test:collective_scans.cxx",
-        "//loom/src/loom/import/cxx/test:configured_workgroup_storage.cxx",
-        "//loom/src/loom/import/cxx/test:flash_attention.cxx",
-        "//loom/src/loom/import/cxx/test:llama_rms_norm.cxx",
-        "//loom/src/loom/import/cxx/test:mxfp_group_dot.cxx",
-        "//loom/src/loom/import/cxx/test:paged_online_softmax_loop_f32.cxx",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:iq4xs_gate_up.cxx",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:nvfp4_matrix.cxx",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:nvfp4_matrix.h",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:nvfp4_matrix_providers.cxx",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:q4k_q8_swiglu.cxx",
-    ],
+    srcs = _KERNEL_SOURCES,
     c_file_output = "kernels.c",
     flatten = True,
     h_file_output = "kernels.h",
@@ -53,12 +67,7 @@ iree_c_embed_data(
 iree_c_embed_data(
     name = "q8s32_sources",
     testonly = True,
-    srcs = [
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:q8s32_specialization.cxx",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:q8s32_specialization.h",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:q8s32_specialization_providers.cxx",
-        "//loom/src/loom/tooling/target/amdgpu/test/cxx:q8s32_specialization_providers.loom",
-    ],
+    srcs = _Q8S32_SOURCES,
     c_file_output = "q8s32_sources.c",
     flatten = True,
     h_file_output = "q8s32_sources.h",

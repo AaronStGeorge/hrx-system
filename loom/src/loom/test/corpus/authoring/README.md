@@ -26,6 +26,7 @@ profiling, compile-time measurement, and soak runs belong to explicit
 
 | Pattern | Checked source |
 | --- | --- |
+| Readable C++ kernels and libraries | `cxx/README.md` catalogs complete C++ programs with checks, schedules, target/config templates, and provider composition. |
 | Concrete helper call | `ffn_gate_up_swiglu_q6q8.loom` calls `@q6_signed_pack_dot4i` with `func.call` because it is exact bit manipulation. |
 | Dynamic extent byte fill | `memset_i8.loom` keeps a 64-bit pattern argument and narrows it at the byte store, matching runtime-style ABI pressure without runtime-specific names. |
 | Loaded row-index gather | `indexed_row_gather_f32.loom` guards loaded i32 row ids before `index.cast` and uses real dynamic view extents instead of sentinel shapes. |

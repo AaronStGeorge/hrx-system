@@ -1552,39 +1552,6 @@ endif()
 if(LOOM_IMPORT_CXX)
 loom_test_module(
   NAME
-    aiter_swiglu_f16_module
-  SRCS
-    "aiter_swiglu_f16.cxx"
-  INPUTOPTS
-    "cxx:fp-model=fast"
-)
-endif()
-
-if(LOOM_IMPORT_CXX)
-loom_test_module(
-  NAME
-    flash_attention_module
-  SRCS
-    "flash_attention.cxx"
-  INPUTOPTS
-    "cxx:fp-model=fast"
-)
-endif()
-
-if(LOOM_IMPORT_CXX)
-loom_test_module(
-  NAME
-    llama_rms_norm_module
-  SRCS
-    "llama_rms_norm.cxx"
-  INPUTOPTS
-    "cxx:fp-model=fast"
-)
-endif()
-
-if(LOOM_IMPORT_CXX)
-loom_test_module(
-  NAME
     scheduled_sum_module
   SRCS
     "scheduled_sum.cxx"

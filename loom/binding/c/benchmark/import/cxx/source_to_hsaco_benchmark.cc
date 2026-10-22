@@ -412,16 +412,12 @@ void SourceToHsacoColdWorkspace(::benchmark::State& state,
 
 constexpr CxxKernel kFlashAttention = {"flash_attention.cxx", "flash_attention",
                                        "gfx1151"};
-constexpr CxxKernel kRmsNorm = {"llama_rms_norm.cxx", "llama_rms_norm",
-                                "gfx1151"};
 constexpr CxxKernel kPagedOnlineSoftmax = {
     .source = "paged_online_softmax_loop_f32.cxx",
     .root = "paged_online_softmax_loop_f32",
     .target = "gfx1151",
     .fp_model = LOOMC_CXX_FP_MODEL_PRECISE,
 };
-constexpr CxxKernel kSwiGlu = {"aiter_swiglu_f16.cxx", "aiter_swiglu_f16",
-                               "gfx1151"};
 constexpr CxxKernel kCollectiveScanNativeU32 = {"collective_scans.cxx",
                                                 "scan_u32", "gfx1151"};
 constexpr CxxKernel kCollectiveScanFallbackU64 = {"collective_scans.cxx",
@@ -533,7 +529,7 @@ void RegisterCxxJitPhaseBenchmarks(const char* kernel_name,
   // Additional kernels retain their authoritative end-to-end measurements
   // below without multiplying frontend and prepared-module setup across every
   // cumulative phase.
-  RegisterCxxJitPhaseBenchmarks("RmsNorm", &kRmsNorm);
+  RegisterCxxJitPhaseBenchmarks("FlashAttention", &kFlashAttention);
   RegisterCxxJitPhaseBenchmarks("PagedOnlineSoftmax", &kPagedOnlineSoftmax);
   RegisterCxxJitPhaseBenchmarks("Mxfp8Gfx1250", &kMxfp8);
   return true;
@@ -541,11 +537,7 @@ void RegisterCxxJitPhaseBenchmarks(const char* kernel_name,
 
 BENCHMARK_CAPTURE(SourceToHsaco, FlashAttention, &kFlashAttention)
     ->Unit(::benchmark::kMicrosecond);
-BENCHMARK_CAPTURE(SourceToHsaco, RmsNorm, &kRmsNorm)
-    ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToHsaco, PagedOnlineSoftmax, &kPagedOnlineSoftmax)
-    ->Unit(::benchmark::kMicrosecond);
-BENCHMARK_CAPTURE(SourceToHsaco, SwiGluF16, &kSwiGlu)
     ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToHsaco, CollectiveScanNativeU32,
                   &kCollectiveScanNativeU32)
@@ -577,10 +569,8 @@ BENCHMARK_CAPTURE(SourceToHsaco, NvFp4Gfx942, &kNvFp4Gfx942)
 
 BENCHMARK_CAPTURE(PreambleToHsaco, FlashAttention, &kFlashAttention)
     ->Unit(::benchmark::kMicrosecond);
-BENCHMARK_CAPTURE(PreambleToHsaco, RmsNorm, &kRmsNorm)
-    ->Unit(::benchmark::kMicrosecond);
 
-BENCHMARK_CAPTURE(SourceToHsacoColdWorkspace, RmsNorm, &kRmsNorm)
+BENCHMARK_CAPTURE(SourceToHsacoColdWorkspace, FlashAttention, &kFlashAttention)
     ->Unit(::benchmark::kMicrosecond)
     ->Iterations(1);
 BENCHMARK_CAPTURE(SourceToHsacoColdWorkspace, Mxfp8Gfx1250, &kMxfp8)
