@@ -173,6 +173,18 @@ iree_hal_streaming_device_t* iree_hal_streaming_device_entry(
 iree_status_t iree_hal_streaming_device_select_primary_queue(
     iree_hal_streaming_device_t* device, iree_hal_queue_t** out_queue);
 
+// Streaming submits primarily from the CPU. Selects HOST_LOCAL when the
+// family exposes it, or DEFAULT when host-local placement is not selectable.
+iree_hal_queue_placement_t iree_hal_streaming_queue_family_select_placement(
+    const iree_hal_queue_family_t* family);
+
+// Acquires the primary streaming queue, preferring host-local command storage.
+// Reuses a suitable provisioned queue; otherwise acquires from its family when
+// dynamic acquisition supports the preference. The caller owns one reference
+// and keeps the device alive. Allocation failures propagate without fallback.
+iree_status_t iree_hal_streaming_device_acquire_primary_queue(
+    iree_hal_streaming_device_t* device, iree_hal_queue_t** out_queue);
+
 // Synchronization: none (queries device properties).
 iree_status_t iree_hal_streaming_device_name(
     iree_hal_streaming_device_ordinal_t ordinal, char* name,

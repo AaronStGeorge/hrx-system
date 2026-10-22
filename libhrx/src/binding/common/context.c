@@ -145,8 +145,8 @@ iree_status_t iree_hal_streaming_context_create(
   iree_hal_pool_release(timestamp_memory_pool);
 
   if (iree_status_is_ok(status)) {
-    status = iree_hal_streaming_device_select_primary_queue(device_entry,
-                                                            &context->queue);
+    status = iree_hal_streaming_device_acquire_primary_queue(device_entry,
+                                                             &context->queue);
   }
 
   // Create the context-wide event record timeline. Resource-partitioned
@@ -323,6 +323,7 @@ static void iree_hal_streaming_context_destroy(
 
   iree_status_ignore(context->loop_status);
   iree_hal_allocator_release(context->device_allocator);
+  iree_hal_queue_release(context->queue);
   iree_hal_device_release(context->device);
 
   // Deinitialize synchronization.
