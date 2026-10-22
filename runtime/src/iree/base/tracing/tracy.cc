@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <atomic>
+
 #include "iree/base/tracing.h"
 
 // Textually include the Tracy implementation.
@@ -303,7 +305,36 @@ void iree_tracing_mutex_after_unlock(uint32_t lock_id) {
 }
 
 #if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+static tracy::TracyMutex iree_tracing_reallocation_mutex;
+static std::atomic<bool> iree_tracing_reallocation_active{false};
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+
 void* iree_tracing_obscure_ptr(void* ptr) { return ptr; }
+
+void iree_tracing_allocation_wait_for_reallocations(void) {
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+  if (iree_tracing_reallocation_active.load(std::memory_order_acquire)) {
+    iree_tracing_reallocation_mutex.lock();
+    iree_tracing_reallocation_mutex.unlock();
+  }
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+}
+
+void iree_tracing_reallocation_begin(void) {
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+  iree_tracing_reallocation_mutex.lock();
+  iree_tracing_reallocation_active.store(true, std::memory_order_release);
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+}
+
+void iree_tracing_reallocation_end(void) {
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+  iree_tracing_reallocation_active.store(false, std::memory_order_release);
+  iree_tracing_reallocation_mutex.unlock();
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+}
 #endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
 
 //===----------------------------------------------------------------------===//

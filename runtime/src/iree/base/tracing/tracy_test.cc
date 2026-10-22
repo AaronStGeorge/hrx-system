@@ -4,10 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <thread>
+#include <vector>
 
+#include "iree/base/api.h"
 #include "iree/base/tracing.h"
 #include "iree/testing/gtest.h"
 
@@ -71,6 +74,7 @@ TEST(TracyTracingTest, ZoneContextsAndEventFamilies) {
 
   void* allocation = malloc(16);
   EXPECT_NE(allocation, nullptr);
+  IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS();
   IREE_TRACE_ALLOC(allocation, 16);
   IREE_TRACE_FREE(allocation);
   IREE_TRACE_ALLOC_NAMED("pool", allocation, 16);
@@ -87,6 +91,40 @@ TEST(TracyTracingTest, ZoneContextsAndEventFamilies) {
   IREE_TRACE_FRAME_MARK_BEGIN_NAMED("intervals");
   IREE_TRACE_FRAME_MARK_END_NAMED("intervals");
   IREE_TRACE_ZONE_END(outer);
+}
+
+TEST(TracyTracingTest, ConcurrentSystemReallocations) {
+  std::atomic<bool> failed{false};
+  auto worker = [&failed] {
+    for (iree_host_size_t i = 0; i < 512; ++i) {
+      void* allocation = nullptr;
+      iree_status_t status = iree_allocator_malloc_uninitialized(
+          iree_allocator_system(), 32 + i % 64, &allocation);
+      if (!iree_status_is_ok(status)) {
+        iree_status_ignore(status);
+        failed.store(true, std::memory_order_relaxed);
+        return;
+      }
+      status = iree_allocator_realloc(iree_allocator_system(), 4096 + i % 256,
+                                      &allocation);
+      if (!iree_status_is_ok(status)) {
+        iree_status_ignore(status);
+        iree_allocator_free(iree_allocator_system(), allocation);
+        failed.store(true, std::memory_order_relaxed);
+        return;
+      }
+      iree_allocator_free(iree_allocator_system(), allocation);
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 8; ++i) {
+    threads.emplace_back(worker);
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  EXPECT_FALSE(failed.load(std::memory_order_relaxed));
 }
 
 }  // namespace

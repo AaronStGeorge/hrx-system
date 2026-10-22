@@ -26,4 +26,10 @@ TEST(DisabledTracingTest, SectionsDoNotEvaluateArguments) {
   EXPECT_EQ(calls, 0);
 }
 
+TEST(DisabledTracingTest, AllocationCoordinationIsErased) {
+  IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS();
+  IREE_TRACE_REALLOC_BEGIN();
+  IREE_TRACE_REALLOC_END();
+}
+
 }  // namespace

@@ -348,6 +348,7 @@ iree_status_t iree_aligned_alloc(iree_host_size_t alignment,
                             " bytes aligned to %" PRIhsz,
                             size, alignment);
   }
+  IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS();
   IREE_TRACE_ALLOC(ptr, size);
   *out_ptr = ptr;
   return iree_ok_status();

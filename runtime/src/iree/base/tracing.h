@@ -357,7 +357,10 @@ IREE_ATTRIBUTE_UNUSED static inline void* iree_tracing_obscure_ptr(void* ptr) {
 // Traces a new memory allocation with host |ptr| and the given |size|.
 // A balanced IREE_TRACE_FREE on the same |ptr| is required for proper memory
 // tracking. Allocations will be attributed to their parent zone.
-// Reallocations must be recorded as an IREE_TRACE_ALLOC/IREE_TRACE_FREE pair.
+// Fresh host allocator implementations call
+// IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS after acquiring storage and before
+// this event. Reallocations bracket the physical operation and successful
+// FREE/ALLOC pair with IREE_TRACE_REALLOC_BEGIN/IREE_TRACE_REALLOC_END.
 #define IREE_TRACE_ALLOC(ptr, size)
 
 // Traces a free of an existing allocation traced with IREE_TRACE_ALLOC.
@@ -375,6 +378,32 @@ IREE_ATTRIBUTE_UNUSED static inline void* iree_tracing_obscure_ptr(void* ptr) {
 // Traces a free of an existing allocation traced with IREE_TRACE_ALLOC_NAMED.
 // Note that the |name_literal| must be the same pointer as passed to the alloc.
 #define IREE_TRACE_FREE_NAMED(name_literal, ptr)
+
+#endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+
+#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+
+// Waits for any active reallocation to publish the retirement of its old
+// address. Fresh allocation paths call this after acquiring storage and before
+// IREE_TRACE_ALLOC so that an address reused by a concurrent moving realloc
+// cannot be reported twice. Allocators synchronize release and acquisition of
+// the same storage, so the post-acquisition check only waits when that reuse
+// can collide; unrelated fresh allocations remain parallel.
+#define IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS() \
+  iree_tracing_allocation_wait_for_reallocations()
+
+// Serializes a physical reallocation with its ownership trace events. The
+// scope begins before calling the backing realloc routine and ends after either
+// publishing the successful FREE/ALLOC pair or observing failure without
+// publishing any ownership change.
+#define IREE_TRACE_REALLOC_BEGIN() iree_tracing_reallocation_begin()
+#define IREE_TRACE_REALLOC_END() iree_tracing_reallocation_end()
+
+#else
+
+#define IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS()
+#define IREE_TRACE_REALLOC_BEGIN()
+#define IREE_TRACE_REALLOC_END()
 
 #endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
 

@@ -107,6 +107,12 @@ void iree_tracing_memory_alloc(const char* name, size_t name_length, void* ptr,
                                size_t size);
 void iree_tracing_memory_free(const char* name, size_t name_length, void* ptr);
 
+#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+void iree_tracing_allocation_wait_for_reallocations(void);
+void iree_tracing_reallocation_begin(void);
+void iree_tracing_reallocation_end(void);
+#endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+
 #endif  // IREE_TRACING_FEATURES
 
 #ifdef __cplusplus

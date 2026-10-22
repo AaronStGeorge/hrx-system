@@ -55,12 +55,13 @@ static iree_status_t iree_allocator_mimalloc_malloc(
   void* new_ptr = mi_malloc(byte_length);
   iree_status_t status = iree_ok_status();
   if (new_ptr) {
+    IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS();
+    IREE_TRACE_ALLOC(new_ptr, byte_length);
     *inout_ptr = new_ptr;
   } else {
     status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "mimalloc allocator failed the request");
   }
-  IREE_TRACE_ALLOC(new_ptr, byte_length);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
@@ -80,7 +81,13 @@ static iree_status_t iree_allocator_mimalloc_realloc(
   void* existing_ptr = *inout_ptr;
   void* existing_ptr_value = iree_tracing_obscure_ptr(existing_ptr);
   (void)existing_ptr_value;
+  IREE_TRACE_REALLOC_BEGIN();
   void* new_ptr = mi_realloc(existing_ptr, byte_length);
+  if (new_ptr) {
+    IREE_TRACE_FREE(existing_ptr_value);
+    IREE_TRACE_ALLOC(new_ptr, byte_length);
+  }
+  IREE_TRACE_REALLOC_END();
   iree_status_t status = iree_ok_status();
   if (new_ptr) {
     *inout_ptr = new_ptr;
@@ -88,8 +95,6 @@ static iree_status_t iree_allocator_mimalloc_realloc(
     status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "mimalloc allocator failed the request");
   }
-  IREE_TRACE_FREE(existing_ptr_value);
-  IREE_TRACE_ALLOC(new_ptr, byte_length);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
@@ -107,12 +112,13 @@ static iree_status_t iree_allocator_mimalloc_calloc(
   void* new_ptr = mi_calloc(1, byte_length);
   iree_status_t status = iree_ok_status();
   if (new_ptr) {
+    IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS();
+    IREE_TRACE_ALLOC(new_ptr, byte_length);
     *inout_ptr = new_ptr;
   } else {
     status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "mimalloc allocator failed the request");
   }
-  IREE_TRACE_ALLOC(new_ptr, byte_length);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
