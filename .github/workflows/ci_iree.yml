@@ -1029,8 +1029,8 @@ jobs:
           uname -a
           timeout --kill-after=5s 15s dmesg --ctime --level=err,warn 2>&1 | tail -n 200
 
-      - name: Upload failed test results
-        if: ${{ always() && steps.iree_cmake_ci.outcome == 'failure' }}
+      - name: Upload test results
+        if: ${{ always() && (steps.iree_cmake_ci.outcome == 'failure' || (matrix.kind != 'cpu' && steps.iree_cmake_ci.outcome == 'success')) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ctest-results-${{ matrix.command }}-attempt-${{ github.run_attempt }}
