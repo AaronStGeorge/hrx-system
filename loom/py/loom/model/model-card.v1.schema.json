@@ -456,9 +456,6 @@
     },
     "variant": {
       "type": "object",
-      "required": [
-        "services"
-      ],
       "properties": {
         "description": {
           "type": "string"
@@ -472,9 +469,32 @@
           "additionalProperties": {
             "$ref": "#/$defs/serviceVariant"
           }
+        },
+        "partitions": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/partition"
+          },
+          "description": "Arbitrary named executable partitions. Each owns a complete service closure; names imply no machine, device, or scheduling policy."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "services"
+          ]
+        },
+        {
+          "required": [
+            "partitions"
+          ]
+        }
+      ]
     },
     "configuration": {
       "type": "object",
@@ -508,6 +528,10 @@
         "workload": {
           "type": "object",
           "description": "Canonical check/scenario/benchmark workload settings."
+        },
+        "partition": {
+          "$ref": "#/$defs/name",
+          "description": "One partition of the selected variant. Omitted only when the variant has no named partitions or a single choice."
         }
       },
       "additionalProperties": false
@@ -572,6 +596,28 @@
           "number"
         ]
       }
+    },
+    "partition": {
+      "type": "object",
+      "required": [
+        "services"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "services": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/serviceVariant"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

@@ -22,7 +22,9 @@ from loom.model import ManifestError, ModelCard
 
 def build(plan: dict, linker: str | None = None) -> None:
     selection = ModelCard.parse(Path(plan["card"]).read_text(encoding="utf-8")).select(
-        plan["configuration"], programs=plan.get("programs")
+        plan["configuration"],
+        programs=plan.get("programs"),
+        partition=plan.get("partition"),
     )
     providers = {
         name for name, file in selection.files.items() if "program" in file.roles
@@ -105,9 +107,10 @@ def build(plan: dict, linker: str | None = None) -> None:
                 result["data"] = [local_file(item) for item in provider["data"]]
             normalized.append(result)
         program[role] = normalized
-    variant = document["variants"][selection.variant]["services"][
-        selection.service_name
-    ]
+    scope = document["variants"][selection.variant]
+    if selection.partition is not None:
+        scope = scope["partitions"][selection.partition]
+    variant = scope["services"][selection.service_name]
     for parameter in variant.get("parameters", {}).values():
         parameter.pop("origin", None)
         parameter["files"] = [local_file(item) for item in parameter["files"]]

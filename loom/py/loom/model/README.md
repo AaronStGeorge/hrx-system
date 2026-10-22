@@ -2,8 +2,9 @@
 
 A model card describes a published model independently of its host application.
 `ModelCard.parse` validates plain JSON, and `select` resolves one service,
-variant, and provider set. Neither operation reads weights, invokes a compiler,
-or performs network access. The native `loom-serve` consumer reads the same
+variant, optional named partition, and provider set. Neither operation reads
+weights, invokes a compiler, or performs network access. The native `loom-serve`
+consumer reads the same
 selected facts through a deployment document's `model` reference.
 
 | Section | Meaning |
@@ -52,6 +53,22 @@ filename. Both accept strings or explicit file descriptors. Variant `config`
 scalars override program defaults and reach preparation and native JITs.
 Canonical `options` may use only names accepted by the selected service.
 
+A variant declares either `services` directly or `partitions`, whose named
+entries each contain their own complete `services` map. Partition names are
+arbitrary: `node-0` and `other side` in the
+[partitioned fixture](../../../src/loom/serve/fixture/text/partition.card.json)
+select distinct weights at the same local path while sharing program files.
+Programs, scoped parameters, tokenizers, and JIT values come entirely from the
+selected partition; there is no inheritance or automatic union. Machine
+assignment and communication between partitions belong to the application.
+
+Canonical configurations can name a `partition`. An explicit `--partition`
+overrides it; an ambiguous partition requires a choice. Selection preserves only
+that partition in the fetched or built card. `ModelCard.choices()` enumerates
+the compatible variant, partition, service, and program combinations without
+reading files. An all-variant publication lock covers all these combinations;
+ordinary acquisition still reads only one selected closure.
+
 A service's kind and version define exported roles, such as `text_prepare_v1`.
 An omitted version selects development names such as `text_prepare`; it does
 not select the latest ABI. Several services and revisions may share a provider
@@ -62,8 +79,8 @@ checks. Native support is documented in the
 ## Bazel integration
 
 `loom_model`, exported by `//loom/build_tools/bazel:defs.bzl`, takes a card,
-canonical configuration, optional provider-set override, output encoding, and
-explicit Bazel inputs. `files` maps targets to the selected linker-provider
+canonical configuration, optional provider-set and partition overrides, output
+encoding, and explicit Bazel inputs. `files` maps targets to the selected linker-provider
 paths. `assets` maps targets to all remaining selected paths, including provider
 auxiliary data, parameters, and tokenizers. Each target supplies exactly one
 file; missing, extra, overlapping, and conflicting declarations fail.
@@ -109,13 +126,15 @@ only the card. Named maps remain available to ordinary JSON tools:
 loom-fetch model.json --list --json | jq '.variants | keys[]'
 loom-fetch model.json --configuration=streaming --output=./installed --dry-run
 loom-fetch model.json --configuration=streaming --output=./installed
+loom-fetch partitioned.json --configuration=check --partition=node-0 --output=./node-0
 ```
 
 On Windows and Unix terminals, missing selections open a keyboard picker. Type
 to filter, use arrows or Home/End/Page Up/Page Down to move, and press Enter to
 select. Ctrl-U clears the filter; Escape or Ctrl-C cancels. Service, configuration,
-variant, and program choices come from the selected card. Explicit flags constrain
-the choices, and canonical configurations supply highlighted defaults.
+variant, partition, and program choices come from the selected card. Explicit
+flags constrain the choices, and canonical configurations supply highlighted
+defaults.
 
 The picker asks for an installation directory when `--output` is absent. Screen
 controls and input modes are restored on completion or cancellation. Unsupported
@@ -135,7 +154,8 @@ forbids network access, including document requests; cached documents and locked
 payloads remain usable. A floating mutable URL without a lock needs a local
 override in offline mode because a historical payload is not a fresh resolution.
 
-Authors can publish a lock covering every declared compatible variant, service,
+Authors can publish a lock covering every declared compatible variant, partition,
+service,
 and program set with `--update-lock --all-variants`. This operation acquires each
 unique source once and replaces the lock after every read succeeds. It creates
 no installation and accepts no selection or output flags. Ordinary fetches still

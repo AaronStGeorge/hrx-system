@@ -240,32 +240,37 @@ class Picker:
         service=None,
         variant=None,
         programs=None,
+        partition=None,
     ) -> Selection:
         document = card.document
         configurations = document.get("configurations", {})
+        declared = card.choices()
         tables = {
             "configuration": configurations,
             "service": document["services"],
             "variant": document["variants"],
             "programs": document["programs"],
+            "partition": {
+                choice["partition"] for choice in declared if "partition" in choice
+            },
         }
-        for label, requested in (
-            ("configuration", configuration),
-            ("service", service),
-            ("variant", variant),
-            ("programs", programs),
-        ):
-            if requested is not None and requested not in tables[label]:
-                raise ManifestError(f"{label}: unknown name {requested!r}")
+        requested = dict(
+            service=service, variant=variant, programs=programs, partition=partition
+        )
+        for label, value in dict(requested, configuration=configuration).items():
+            if value is not None and value not in tables[label]:
+                raise ManifestError(f"{label}: unknown name {value!r}")
+        compatible = [
+            choice
+            for choice in declared
+            if all(
+                value is None or choice.get(key) == value
+                for key, value in requested.items()
+            )
+        ]
         settings = configurations.get(configuration, {})
-        services = {
-            name
-            for identity, value in document["variants"].items()
-            if variant is None or identity == variant
-            for name, value_service in value["services"].items()
-            if programs is None or programs in value_service["programs"]
-        }
         if service is None:
+            services = {choice["service"] for choice in compatible}
             service = self.choose(
                 "Service",
                 [
@@ -279,6 +284,7 @@ class Picker:
                 ],
                 default=settings.get("service"),
             )
+        compatible = [choice for choice in compatible if choice["service"] == service]
         if configuration is None:
             choices = [
                 Choice(name, name, value["variant"] + " / " + value["programs"])
@@ -289,30 +295,48 @@ class Picker:
                 configuration = self.choose("Configuration", choices)
                 settings = configurations[configuration]
         if variant is None:
+            variants = {choice["variant"] for choice in compatible}
             variant = self.choose(
                 "Variant",
                 [
                     Choice(name, name, value.get("description", ""))
                     for name, value in document["variants"].items()
-                    if service in value["services"]
-                    and (
-                        programs is None
-                        or programs in value["services"][service]["programs"]
-                    )
+                    if name in variants
                 ],
                 default=settings.get("variant"),
             )
+        compatible = [choice for choice in compatible if choice["variant"] == variant]
+        if partition is None and "partitions" in document["variants"][variant]:
+            partitions = {choice["partition"] for choice in compatible}
+            partition = self.choose(
+                "Partition",
+                [
+                    Choice(name, name, value.get("description", ""))
+                    for name, value in document["variants"][variant][
+                        "partitions"
+                    ].items()
+                    if name in partitions
+                ],
+                default=settings.get("partition"),
+            )
+        compatible = [
+            choice for choice in compatible if choice.get("partition") == partition
+        ]
         if programs is None:
-            supported = document["variants"][variant]["services"].get(service)
-            if supported is None:
-                raise ManifestError(
-                    f"variant {variant!r} does not provide service {service!r}"
-                )
             programs = self.choose(
                 "Programs",
-                [Choice(name, name) for name in supported["programs"]],
+                [
+                    Choice(name, name)
+                    for name in dict.fromkeys(
+                        choice["programs"] for choice in compatible
+                    )
+                ],
                 default=settings.get("programs"),
             )
         return card.select(
-            configuration, service=service, variant=variant, programs=programs
+            configuration,
+            service=service,
+            variant=variant,
+            programs=programs,
+            partition=partition,
         )

@@ -26,6 +26,54 @@ def _service(document):
     return document["variants"]["fixture"]["services"]["chat"]
 
 
+def test_partition_selection_preserves_one_complete_closure():
+    document = _document()
+    services = document["variants"]["fixture"].pop("services")
+    document["variants"]["fixture"]["partitions"] = {
+        "node-0": {"services": services},
+        "other side": {
+            "description": "Second closure",
+            "services": copy.deepcopy(services),
+        },
+    }
+    for settings in document["configurations"].values():
+        settings["partition"] = "node-0"
+    other = document["variants"]["fixture"]["partitions"]["other side"]["services"][
+        "chat"
+    ]
+    other["parameters"]["model"]["files"] = [
+        {"path": "second.data", "format": "safetensors"}
+    ]
+    other["config"]["fixture.bias_delta"] = 3
+    card = ModelCard(document)
+    selected = card.select("check", partition="other side")
+    assert selected.partition == "other side"
+    assert selected.config["fixture.bias_delta"] == 3
+    assert "second.data" in selected.files and "bias.data" not in selected.files
+    assert list(selected.document["variants"]["fixture"]["partitions"]) == [
+        "other side"
+    ]
+    assert ModelCard(selected.document).select().files == selected.files
+    assert len(card.choices()) == 18
+    with pytest.raises(ManifestError, match="select explicitly"):
+        card.select(variant="fixture", service="chat", programs="source")
+    with pytest.raises(ManifestError, match="unknown reference"):
+        card.select("check", partition="missing")
+    document["variants"]["fixture"]["services"] = services
+    with pytest.raises(ManifestError, match="exactly one"):
+        ModelCard(document)
+
+
+def test_partition_choices_require_names_and_supported_shape():
+    with pytest.raises(ManifestError, match="unpartitioned"):
+        ModelCard(_document()).select("check", partition="node-0")
+    for value in ({}, [], None, {"node-0": {"services": {}}}):
+        document = _document()
+        document["variants"]["fixture"] = {"partitions": value}
+        with pytest.raises(ManifestError):
+            ModelCard(document)
+
+
 def test_native_selected_closure():
     selected = ModelCard(_document()).select("check")
     assert selected.service == {"kind": "text", "version": 1}

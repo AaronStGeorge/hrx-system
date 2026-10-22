@@ -160,4 +160,20 @@ loom_generated_file(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_VM)
+loom_generated_file(
+  NAME
+    partition_bias_shard
+  GENERATOR
+    ::parameters
+  OUTPUT
+    "alternate.data"
+  OUTPUT_FLAG
+    "--output="
+  ARGS
+    "--key=bias"
+    "--value=3"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

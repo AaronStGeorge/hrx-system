@@ -111,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--configuration", help="named canonical configuration")
     parser.add_argument("--service", help="named service")
     parser.add_argument("--variant", help="named parameter variant")
+    parser.add_argument("--partition", help="named executable partition of the variant")
     parser.add_argument(
         "--programs", help="named program set (independent of file format)"
     )
@@ -147,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         "--all-variants",
         action="store_true",
         help="with --update-lock, publish a lock for every declared variant, "
-        "service, and program set without creating an installation",
+        "partition, service, and program set without creating an installation",
     )
     parser.add_argument(
         "--dry-run",
@@ -164,7 +165,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.all_variants:
         if not args.update_lock:
             parser.error("--all-variants requires --update-lock")
-        if any((args.configuration, args.service, args.variant, args.programs)):
+        if any(
+            (
+                args.configuration,
+                args.service,
+                args.variant,
+                args.programs,
+                args.partition,
+            )
+        ):
             parser.error("--all-variants cannot be combined with selection flags")
         if args.output is not None or args.materialize != "share" or args.list:
             parser.error(
@@ -256,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
             configuration=args.configuration,
             service=args.service,
             variant=args.variant,
+            partition=args.partition,
             programs=args.programs,
         )
         if args.output is None:

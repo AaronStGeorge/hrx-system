@@ -551,6 +551,9 @@ void loom_serve_model_configuration_deinitialize(
                         (void*)model->sources.reference.selector.variant.data);
     iree_allocator_free(host_allocator,
                         (void*)model->sources.reference.selector.programs.data);
+    iree_allocator_free(
+        host_allocator,
+        (void*)model->sources.reference.selector.partition.data);
   }
   iree_allocator_free(host_allocator, (void*)model->options.data);
   if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT ||
@@ -616,17 +619,20 @@ static iree_status_t loom_serve_model_configuration_model_parse(
         {"configuration", IREE_JSON_VALUE_TYPE_STRING},
         {"service", IREE_JSON_VALUE_TYPE_STRING},
         {"variant", IREE_JSON_VALUE_TYPE_STRING},
-        {"programs", IREE_JSON_VALUE_TYPE_STRING}};
+        {"programs", IREE_JSON_VALUE_TYPE_STRING},
+        {"partition", IREE_JSON_VALUE_TYPE_STRING}};
     loom_serve_model_configuration_fields_t reference_context = {
         IREE_ARRAYSIZE(reference_fields), reference_fields};
     IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
         fields[5].value, loom_serve_model_configuration_field_visit,
         &reference_context));
     loom_model_reference_t* reference = &out_model->sources.reference;
-    iree_string_view_t* destinations[] = {
-        &reference->path, &reference->selector.configuration,
-        &reference->selector.service, &reference->selector.variant,
-        &reference->selector.programs};
+    iree_string_view_t* destinations[] = {&reference->path,
+                                          &reference->selector.configuration,
+                                          &reference->selector.service,
+                                          &reference->selector.variant,
+                                          &reference->selector.programs,
+                                          &reference->selector.partition};
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(reference_fields); ++i) {
       if (i == 0 || reference_fields[i].value.data) {
         IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(

@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import copy
 import io
 import json
 import os
@@ -77,6 +78,29 @@ def test_plain_named_choices_filter_and_escape_metadata():
     assert "Choose one of the displayed names" in output.getvalue()
     assert "\\u001b]52;secret\\u0007" in output.getvalue()
     assert "\x1b" not in output.getvalue()
+
+
+def test_picker_selects_named_partition_from_the_same_compatible_choices():
+    document = _card()
+    scope = document["variants"].pop("small")
+    document["variants"]["small"] = {
+        "partitions": {
+            "node-0": scope,
+            "other side": copy.deepcopy(scope),
+        }
+    }
+    selected = Picker(io.StringIO("other side\n"), io.StringIO()).selection(
+        ModelCard(document)
+    )
+    assert selected.partition == "other side"
+    selected = Picker(io.StringIO(""), io.StringIO()).selection(
+        ModelCard(document), partition="node-0"
+    )
+    assert selected.partition == "node-0"
+    with pytest.raises(ManifestError, match="unknown name"):
+        Picker(io.StringIO(""), io.StringIO()).selection(
+            ModelCard(document), partition="absent"
+        )
 
 
 def test_empty_directory_does_not_accept_an_implicit_destination():

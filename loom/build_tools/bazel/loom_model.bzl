@@ -60,6 +60,7 @@ def _loom_model_impl(ctx):
         "name": ctx.attr.model_name,
         "output_card": card.path,
         "output_deployment": deployment.path,
+        "partition": ctx.attr.partition if ctx.attr.partition else None,
         "programs": ctx.attr.programs if ctx.attr.programs else None,
     }))
     arguments = ["--plan", plan.path]
@@ -91,6 +92,7 @@ loom_model = rule(
         "encoding": attr.string(default = "bc", values = ["text", "bc", "preserve"], doc = "Normalize providers to Loom text/bytecode, or preserve their bytes, formats, and import options."),
         "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; preserved as symlinks or normalized with the configured linker."),
         "model_name": attr.string(mandatory = True),
+        "partition": attr.string(doc = "Executable partition override within the selected variant."),
         "programs": attr.string(),
         "_builder": attr.label(default = Label("//loom/py/loom/model:build"), executable = True, cfg = "exec"),
     },

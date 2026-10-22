@@ -271,6 +271,8 @@ class Selection:
     service_name: str
     # Parameter/configuration variant identity.
     variant: str
+    # Arbitrary named executable partition, or None for an unpartitioned variant.
+    partition: str | None
     # Provider-set identity with no encoding semantics.
     programs: str
     # Selected service contract.
@@ -392,55 +394,7 @@ class ModelCard:
             _strings(service.get("options", []), path + ".options")
             for key in ("interface", "constraints"):
                 _mapping(service.get(key, {}), path + "." + key, empty=True)
-        variants = _mapping(doc["variants"], "$.variants")
-        for name, variant in variants.items():
-            path = "$.variants." + name
-            _object(variant, path, ("services",), ("description",))
-            if "description" in variant and not isinstance(variant["description"], str):
-                _fail(path + ".description", "expected a string")
-            for service_name, variant_service in _mapping(
-                variant["services"], path + ".services"
-            ).items():
-                current = path + ".services." + service_name
-                _reference(service_name, services, current)
-                _object(
-                    variant_service,
-                    current,
-                    ("programs",),
-                    ("config", "parameters", "tokenizers"),
-                )
-                for program in _strings(
-                    variant_service["programs"], current + ".programs", empty=False
-                ):
-                    _reference(program, programs, current + ".programs")
-                _config(variant_service.get("config", {}), current + ".config")
-                for scope, parameter in _mapping(
-                    variant_service.get("parameters", {}),
-                    current + ".parameters",
-                    empty=True,
-                ).items():
-                    scope_path = current + ".parameters." + scope
-                    _object(parameter, scope_path, ("files",), ("origin",))
-                    if "origin" in parameter:
-                        _origin(
-                            parameter["origin"],
-                            origins,
-                            scope_path + ".origin",
-                            group=True,
-                        )
-                    if (
-                        not isinstance(parameter["files"], list)
-                        or not parameter["files"]
-                    ):
-                        _fail(scope_path + ".files", "expected a nonempty shard array")
-                    for index, item in enumerate(parameter["files"]):
-                        _file(item, origins, f"{scope_path}.files[{index}]")
-                for identity, tokenizer in _mapping(
-                    variant_service.get("tokenizers", {}),
-                    current + ".tokenizers",
-                    empty=True,
-                ).items():
-                    _file(tokenizer, origins, current + ".tokenizers." + identity)
+        self._validate_variants(origins, services, programs)
         for name, configuration in _mapping(
             doc.get("configurations", {}), "$.configurations", empty=True
         ).items():
@@ -449,12 +403,106 @@ class ModelCard:
                 configuration,
                 path,
                 ("service", "variant", "programs"),
-                ("options", "execution", "request", "workload"),
+                ("options", "execution", "request", "workload", "partition"),
             )
             for key in ("options", "execution", "request", "workload"):
                 _mapping(configuration.get(key, {}), path + "." + key, empty=True)
+            if "partition" in configuration:
+                _string(configuration["partition"], path + ".partition")
             self.select(name)
         _object(doc.get("qualification", {}), "$.qualification")
+
+    def _validate_variants(self, origins: dict, services: dict, programs: dict):
+        doc = self._document
+        variants = _mapping(doc["variants"], "$.variants")
+        for name, variant in variants.items():
+            path = "$.variants." + name
+            _object(variant, path, (), ("description", "services", "partitions"))
+            if ("services" in variant) == ("partitions" in variant):
+                _fail(path, "declare exactly one of services or partitions")
+            if "description" in variant and not isinstance(variant["description"], str):
+                _fail(path + ".description", "expected a string")
+            scopes = variant.get("partitions", {None: variant})
+            if "partitions" in variant:
+                _mapping(scopes, path + ".partitions")
+            for partition, partition_definition in scopes.items():
+                partition_path = path
+                if partition is not None:
+                    partition_path += ".partitions." + partition
+                    _object(
+                        partition_definition,
+                        partition_path,
+                        ("services",),
+                        ("description",),
+                    )
+                    if "description" in partition_definition and not isinstance(
+                        partition_definition["description"], str
+                    ):
+                        _fail(partition_path + ".description", "expected a string")
+                for service_name, variant_service in _mapping(
+                    partition_definition["services"], partition_path + ".services"
+                ).items():
+                    current = partition_path + ".services." + service_name
+                    _reference(service_name, services, current)
+                    _object(
+                        variant_service,
+                        current,
+                        ("programs",),
+                        ("config", "parameters", "tokenizers"),
+                    )
+                    for program in _strings(
+                        variant_service["programs"], current + ".programs", empty=False
+                    ):
+                        _reference(program, programs, current + ".programs")
+                    _config(variant_service.get("config", {}), current + ".config")
+                    for scope, parameter in _mapping(
+                        variant_service.get("parameters", {}),
+                        current + ".parameters",
+                        empty=True,
+                    ).items():
+                        scope_path = current + ".parameters." + scope
+                        _object(parameter, scope_path, ("files",), ("origin",))
+                        if "origin" in parameter:
+                            _origin(
+                                parameter["origin"],
+                                origins,
+                                scope_path + ".origin",
+                                group=True,
+                            )
+                        if (
+                            not isinstance(parameter["files"], list)
+                            or not parameter["files"]
+                        ):
+                            _fail(
+                                scope_path + ".files", "expected a nonempty shard array"
+                            )
+                        for index, item in enumerate(parameter["files"]):
+                            _file(item, origins, f"{scope_path}.files[{index}]")
+                    for identity, tokenizer in _mapping(
+                        variant_service.get("tokenizers", {}),
+                        current + ".tokenizers",
+                        empty=True,
+                    ).items():
+                        _file(tokenizer, origins, current + ".tokenizers." + identity)
+
+    def choices(self) -> list[dict[str, str]]:
+        """Enumerates declared compatible choices without reading any payload."""
+        choices = []
+        for variant, definition in self._document["variants"].items():
+            for partition, scope in definition.get(
+                "partitions", {None: definition}
+            ).items():
+                for service, supported in scope["services"].items():
+                    for programs in supported["programs"]:
+                        choice = {
+                            "variant": variant,
+                            "service": service,
+                            "programs": programs,
+                        }
+                        if partition is not None:
+                            choice["partition"] = partition
+                        choices.append(choice)
+        return choices
 
     def select(
         self,
@@ -463,6 +511,7 @@ class ModelCard:
         service: str | None = None,
         variant: str | None = None,
         programs: str | None = None,
+        partition: str | None = None,
     ) -> Selection:
         doc = self._document
 
@@ -476,7 +525,7 @@ class ModelCard:
         configurations = doc.get("configurations", {})
         if (
             configuration is None
-            and all(value is None for value in (service, variant, programs))
+            and all(value is None for value in (service, variant, programs, partition))
             and len(configurations) == 1
         ):
             configuration = next(iter(configurations))
@@ -489,7 +538,18 @@ class ModelCard:
             variant if variant is not None else settings.get("variant"),
             "variant",
         )
-        choices = doc["variants"][variant]["services"]
+        variant_scope = doc["variants"][variant]
+        requested_partition = (
+            partition if partition is not None else settings.get("partition")
+        )
+        if "partitions" in variant_scope:
+            partition = choose(
+                variant_scope["partitions"], requested_partition, "partition"
+            )
+            variant_scope = variant_scope["partitions"][partition]
+        elif requested_partition is not None:
+            _fail("partition", "selected variant is unpartitioned")
+        choices = variant_scope["services"]
         service = choose(
             choices,
             service if service is not None else settings.get("service"),
@@ -564,21 +624,27 @@ class ModelCard:
         projected["services"] = {service: copy.deepcopy(service_definition)}
         projected_variant_service = copy.deepcopy(variant_service)
         projected_variant_service["programs"] = [programs]
-        projected["variants"] = {
-            variant: {"services": {service: projected_variant_service}}
-        }
+        projected_scope = {"services": {service: projected_variant_service}}
+        if partition is not None:
+            if "description" in variant_scope:
+                projected_scope["description"] = variant_scope["description"]
+            projected_scope = {"partitions": {partition: projected_scope}}
+        projected["variants"] = {variant: projected_scope}
         if "description" in doc["variants"][variant]:
             projected["variants"][variant]["description"] = doc["variants"][variant][
                 "description"
             ]
         settings = copy.deepcopy(settings)
         settings.update(service=service, variant=variant, programs=programs)
+        if partition is not None:
+            settings["partition"] = partition
         projected["configurations"] = {configuration: settings} if configuration else {}
         return Selection(
             model_id=doc["model"]["id"],
             configuration=configuration,
             service_name=service,
             variant=variant,
+            partition=partition,
             programs=programs,
             service=copy.deepcopy(service_definition),
             program=copy.deepcopy(program),

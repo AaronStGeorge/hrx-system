@@ -133,6 +133,12 @@ Checkpoint paths, tokenizer paths, providers, and asset directories belong to
 the card and cannot be overridden through the deployment definition. Image
 adapters are selected per request, independently of the base model card.
 
+A partitioned variant declares `partitions` instead of `services`. Each named
+partition supplies its own complete service, provider, configuration, and asset
+choices. The deployment's `model.partition` selects one, overriding a canonical
+configuration when specified. Names carry no host or device assignment; the
+application owns communication and placement between separately loaded models.
+
 Admission records the reference without opening the card. Preparation resolves
 it on a worker before constructing the native model. The server reads local
 files and does not fetch origins or inspect integrity locks. Acquisition and
@@ -144,7 +150,7 @@ materialization happen before registration.
 | --- | --- |
 | `name` | Required nonempty visible-ASCII routing alias, independent of source symbols. |
 | `definition` | Required object specifying a modality, programs, assets and capacities. |
-| `model` | Optional local card reference with `path` and optional `configuration`, `service`, `variant`, and `programs` selectors. Programs and assets then come from the card. |
+| `model` | Optional local card reference with `path` and optional `configuration`, `service`, `variant`, `partition`, and `programs` selectors. Programs and assets then come from the card. |
 | `admission` | `"open"` by default; `"drained"` registers metadata without reading programs, loading weights or allocating model storage. |
 | `device` | Nonnegative index into the ordered CLI device group; required when the group has more than one member. |
 | `base_directory` | Optional local file base; relative values resolve from the containing document. |

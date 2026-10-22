@@ -313,6 +313,7 @@ def test_publication_cli_dry_run_and_offline_exact_update(tmp_path, capsys):
         ["--all-variants"],
         ["--all-variants", "--no-lock"],
         ["--all-variants", "--update-lock", "--variant=v"],
+        ["--all-variants", "--update-lock", "--partition=node-0"],
         ["--all-variants", "--update-lock", "--output=installed"],
         ["--all-variants", "--update-lock", "--list"],
         ["--all-variants", "--update-lock", "--materialize=copy"],

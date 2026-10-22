@@ -18,6 +18,7 @@ exports_files(
         "tokenizer_merging.json",
         "service.loom",
         "native.card.json",
+        "partition.card.json",
         "native.source.json",
         "native.archive.json",
         "native.mixed.json",
@@ -138,6 +139,47 @@ loom_model(
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )
+
+loom_generated_file(
+    name = "partition_bias_shard",
+    args = [
+        "--key=bias",
+        "--value=3",
+    ],
+    generator = ":parameters",
+    output = "alternate.data",
+    output_flag = "--output=",
+    visibility = ["//visibility:public"],
+)
+
+[
+    loom_model(
+        name = "partition_model_" + encoding,
+        assets = {
+            ":alternate.data": "bias.data",
+            ":metadata.safetensors": "metadata.safetensors",
+            "tokenizer.json": "tokenizer.json",
+            "weights.loom": "weights.loom",
+        },
+        card = "partition.card.json",
+        configuration = "check",
+        encoding = encoding,
+        files = {
+            "advance.loom": "advance.loom",
+            "control.loom": "control.loom",
+            "prepare.loom": "prepare.loom",
+            "service.loom": "service.loom",
+        },
+        model_name = "fixture-text",
+        partition = "other side",
+        tags = ["skip-bazel_to_cmake"],
+        visibility = ["//visibility:public"],
+    )
+    for encoding in [
+        "text",
+        "bc",
+    ]
+]
 
 loom_model(
     name = "card_model_mixed",

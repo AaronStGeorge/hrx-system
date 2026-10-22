@@ -122,6 +122,14 @@ TEST_F(ConfigurationTest, SequenceRequiresWeightsButNoTokenizerOrSampler) {
   }
 }
 
+TEST_F(ConfigurationTest, CardReferenceOwnsItsPartitionSelection) {
+  std::string json = R"({"name":"part","model":{"path":"model.json",
+    "variant":"small","partition":"node-1"},"definition":{"kind":"text"}})";
+  IREE_ASSERT_OK(Parse(json));
+  json.assign(json.size(), 'x');
+  EXPECT_EQ(String(model_.sources.reference.selector.partition), "node-1");
+}
+
 TEST_F(ConfigurationTest, ImageCardRejectsDeploymentAssetAndAdapterPaths) {
   const std::string prefix =
       R"({"name":"pixels","model":{"path":"model.json"},

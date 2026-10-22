@@ -584,7 +584,8 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   iree_string_view_t configuration_json = IREE_SV("{}");
   if (selector->configuration.size ||
       (!selector->service.size && !selector->variant.size &&
-       !selector->programs.size && configurations.count == 1)) {
+       !selector->programs.size && !selector->partition.size &&
+       configurations.count == 1)) {
     IREE_RETURN_IF_ERROR(loom_model_choose(
         &configurations, selector->configuration, "configuration",
         &selection->selector.configuration, &configuration_json));
@@ -592,7 +593,7 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   loom_model_json_object_t configuration;
   IREE_RETURN_IF_ERROR(loom_model_object(
       card, configuration_json,
-      "service variant programs options execution request workload",
+      "service variant programs partition options execution request workload",
       &configuration));
   loom_model_selector_t defaults = {0};
   IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "service", false,
@@ -601,6 +602,8 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
                                                &defaults.variant));
   IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "programs",
                                                false, &defaults.programs));
+  IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "partition",
+                                               false, &defaults.partition));
   loom_model_json_object_t variants;
   IREE_RETURN_IF_ERROR(
       loom_model_object_field(&root, "variants", true, NULL, &variants));
@@ -609,8 +612,35 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
       &variants, selector->variant.size ? selector->variant : defaults.variant,
       "variant", &selection->selector.variant, &variant_json));
   loom_model_json_object_t variant, service_variants;
-  IREE_RETURN_IF_ERROR(
-      loom_model_object(card, variant_json, "description services", &variant));
+  IREE_RETURN_IF_ERROR(loom_model_object(
+      card, variant_json, "description services partitions", &variant));
+  iree_string_view_t partition_json, services_json;
+  IREE_RETURN_IF_ERROR(loom_model_value(&variant, "partitions",
+                                        IREE_JSON_VALUE_TYPE_OBJECT, false,
+                                        &partition_json));
+  IREE_RETURN_IF_ERROR(loom_model_value(&variant, "services",
+                                        IREE_JSON_VALUE_TYPE_OBJECT, false,
+                                        &services_json));
+  if (!!partition_json.data == !!services_json.data) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "model variant requires exactly one of services or partitions");
+  }
+  iree_string_view_t partition_name =
+      selector->partition.size ? selector->partition : defaults.partition;
+  if (partition_json.data) {
+    loom_model_json_object_t partitions;
+    IREE_RETURN_IF_ERROR(
+        loom_model_object(card, partition_json, NULL, &partitions));
+    IREE_RETURN_IF_ERROR(
+        loom_model_choose(&partitions, partition_name, "partition",
+                          &selection->selector.partition, &partition_json));
+    IREE_RETURN_IF_ERROR(loom_model_object(card, partition_json,
+                                           "description services", &variant));
+  } else if (partition_name.size) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "selected model variant is unpartitioned");
+  }
   IREE_RETURN_IF_ERROR(loom_model_object_field(&variant, "services", true, NULL,
                                                &service_variants));
   iree_string_view_t service_variant_json;

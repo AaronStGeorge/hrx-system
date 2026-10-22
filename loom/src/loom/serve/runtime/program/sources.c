@@ -37,7 +37,8 @@ iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
                                       sources->reference.selector.configuration,
                                       sources->reference.selector.service,
                                       sources->reference.selector.variant,
-                                      sources->reference.selector.programs};
+                                      sources->reference.selector.programs,
+                                      sources->reference.selector.partition};
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(paths) && representable;
        ++i) {
     representable = iree_host_size_checked_add(size, paths[i].size, &size);
@@ -71,6 +72,8 @@ iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
       sources->reference.selector.variant, &cursor);
   copy->reference.selector.programs = loom_serve_sources_copy_string(
       sources->reference.selector.programs, &cursor);
+  copy->reference.selector.partition = loom_serve_sources_copy_string(
+      sources->reference.selector.partition, &cursor);
   copy->count = sources->count;
   copy->values = sources->count ? values : NULL;
   for (iree_host_size_t i = 0; i < sources->count; ++i) {

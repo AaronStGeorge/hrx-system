@@ -78,6 +78,54 @@ class CardTest : public ::testing::Test {
   loom_model_card_t* card_ = nullptr;
 };
 
+constexpr char kPartitionCard[] = R"json({
+  "schema_version": 1,
+  "model": {"id": "fixture/split", "name": "Partitioned fixture"},
+  "programs": {"source": {"inputs": ["prepare.loom"], "libraries": []}},
+  "services": {"chat": {"kind": "text", "version": 1}},
+  "variants": {"small": {"partitions": {
+    "node-0": {"services": {"chat": {"programs": ["source"],
+      "parameters": {"model": {"files": ["first.irpa"]}}, "config": {"part": 0}}}},
+    "other side": {"services": {"chat": {"programs": ["source"],
+      "parameters": {"model": {"files": ["second.irpa"]}}, "config": {"part": 1}}}}
+  }}},
+  "configurations": {"check": {"variant": "small", "service": "chat",
+    "programs": "source", "partition": "node-0"}}
+})json";
+
+TEST_F(CardTest, NamedPartitionOwnsItsCompleteClosure) {
+  IREE_ASSERT_OK(Parse(kPartitionCard));
+  EXPECT_EQ(String(loom_model_card_selection(card_)->selector.partition),
+            "node-0");
+  const loom_model_selector_t selector = {
+      .configuration = IREE_SV("check"),
+      .partition = IREE_SV("other side"),
+  };
+  std::string json = kPartitionCard;
+  IREE_ASSERT_OK(Parse(json, &selector));
+  json.assign(json.size(), 'x');
+  const auto* selection = loom_model_card_selection(card_);
+  EXPECT_EQ(String(selection->selector.partition), "other side");
+  EXPECT_EQ(String(selection->config), R"({"part":1})");
+  ASSERT_EQ(selection->parameter_count, 1u);
+  ASSERT_EQ(selection->parameters[0].files.count, 1u);
+  EXPECT_EQ(String(selection->parameters[0].files.values[0].path),
+            "second.irpa");
+}
+
+TEST_F(CardTest, PartitionChoiceIsExplicitAndNeverFiltersAnUnpartitionedModel) {
+  loom_model_selector_t selector = {.variant = IREE_SV("small")};
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse(kPartitionCard, &selector));
+  selector.partition = IREE_SV("absent");
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        Parse(kPartitionCard, &selector));
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(kCard, &selector));
+  std::string mixed = kPartitionCard;
+  mixed.insert(mixed.find("\"partitions\""), "\"services\":{},");
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(mixed));
+}
+
 TEST_F(CardTest, SelectionOwnsMixedProvidersAndScopedInputs) {
   std::string json = kCard;
   IREE_ASSERT_OK(Parse(json));

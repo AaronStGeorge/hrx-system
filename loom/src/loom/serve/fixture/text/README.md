@@ -17,6 +17,15 @@ tokenizer. `sequence_card_model_text` and `sequence_card_model_bc` build runnabl
 packages whose CPU checks append known token IDs to a retained session and
 compare every returned activation against the dense recurrence below.
 
+The [partitioned card](partition.card.json) gives the same variant two named
+executable partitions, `node-0` and `other side`. Each selects a complete text
+service with its own checkpoint source. Their effective bias values are 3 and
+4, producing `abab` and `xbbx` for prompt `a`. Acquisition checks that each
+installation fetches only its selected weights; native checks consume those
+installations after their HTTP origin shuts down. The `partition_model_text`
+and `partition_model_bc` targets check an explicit partition override through
+the ordinary model build rule.
+
 ## Definition and independent oracle
 
 Token IDs are `a=0`, `b=1`, `x=2`, `#=3`. `#` is the terminal token and the

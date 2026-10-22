@@ -72,6 +72,7 @@ class FetchPlan:
             "configuration": self.selection.configuration,
             "service": self.selection.service_name,
             "variant": self.selection.variant,
+            "partition": self.selection.partition,
             "programs": self.selection.programs,
             "offline": self.offline,
             "lock": "verify"
@@ -238,19 +239,15 @@ def plan_lock(
         ),
     )
     sources = {}
-    selections = []
-    for variant, variant_definition in authored["variants"].items():
-        for service, service_definition in variant_definition["services"].items():
-            for programs in service_definition["programs"]:
-                choice = {"variant": variant, "service": service, "programs": programs}
-                selected = card.select(**choice)
-                selections.append(choice)
-                for name, file in selected.files.items():
-                    if PurePosixPath(name).parts[0] in _RESERVED_PATHS:
-                        raise ManifestError(f"reserved installation path {name!r}")
-                    key = origin_key(file.origin)
-                    if key not in sources:
-                        sources[key] = resolver.resolve(file.origin, None)
+    selections = card.choices()
+    for choice in selections:
+        selected = card.select(**choice)
+        for name, file in selected.files.items():
+            if PurePosixPath(name).parts[0] in _RESERVED_PATHS:
+                raise ManifestError(f"reserved installation path {name!r}")
+            key = origin_key(file.origin)
+            if key not in sources:
+                sources[key] = resolver.resolve(file.origin, None)
     sources = _prepare_sources(sources, {}, cache, offline=offline)
     _check_lock_sources(path, document, sources)
     return LockPlan(
@@ -394,7 +391,12 @@ def _installation_card(plan: FetchPlan) -> tuple[dict, dict[str, str | dict], di
         for role in ("inputs", "libraries"):
             program[role] = [file(value) for value in program[role]]
     for variant in document["variants"].values():
-        for service in variant["services"].values():
+        scope = (
+            variant["partitions"][plan.selection.partition]
+            if plan.selection.partition is not None
+            else variant
+        )
+        for service in scope["services"].values():
             for parameter in service.get("parameters", {}).values():
                 parameter.pop("origin", None)
                 parameter["files"] = [file(value) for value in parameter["files"]]

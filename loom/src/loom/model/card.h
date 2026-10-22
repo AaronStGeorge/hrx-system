@@ -71,6 +71,8 @@ typedef struct loom_model_selector_t {
   iree_string_view_t variant;
   // Optional provider set override; names imply no encoding.
   iree_string_view_t programs;
+  // Optional executable partition; names imply no host or device assignment.
+  iree_string_view_t partition;
 } loom_model_selector_t;
 
 // Unresolved local card reference. Resolution belongs to a cold I/O worker;
