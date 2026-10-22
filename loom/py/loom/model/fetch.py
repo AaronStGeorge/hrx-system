@@ -14,10 +14,12 @@ import os
 import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from urllib.parse import urljoin
 
+from .fetch_hf import AccessRequired
 from .fetch_source import (
     Document,
     FetchError,
@@ -118,6 +120,8 @@ def plan_fetch(
     if not no_lock and not update_lock:
         try:
             lock = ModelLock.parse(cache.read_document(location, offline=offline).text)
+        except AccessRequired:
+            raise
         except (OSError, FetchError) as error:
             raise FetchError(
                 f"cannot read model lock: {error}; provide --lockfile, "
@@ -125,11 +129,22 @@ def plan_fetch(
             ) from error
     identities = lock.cover(selection) if lock else {}
     resolver = SourceResolver(
-        document, selection, overrides or {}, lock, pin_revisions=not no_lock
+        document,
+        selection,
+        overrides or {},
+        lock,
+        pin_revisions=not no_lock,
+        revision_resolver=lambda root: cache.huggingface.resolve_revision(
+            root, offline=offline
+        ),
     )
     sources = {
         path: resolver.resolve(file.origin, identities.get(path))
         for path, file in selection.files.items()
+    }
+    sources = {
+        path: cache.prepare_source(source, identities.get(path), offline=offline)
+        for path, source in sources.items()
     }
     for source in sources.values():
         if source.transport["kind"] == "local":
@@ -327,9 +342,19 @@ def _check_lock_output(plan: FetchPlan, directory: Path, relocated: dict, roots:
 
 
 def _probe_sharing(plan: FetchPlan, cache: ContentCache, directory: Path) -> None:
-    cache.root.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=cache.root) as cached:
-        sources = {Path(cached.name)}
+    roots = {cache.root}
+    if any(source.transport["kind"] == "hf" for source in plan.sources.values()):
+        roots.add(cache.huggingface.cache_directory)
+    with ExitStack() as stack:
+        sources = set()
+        for root in roots:
+            root.mkdir(parents=True, exist_ok=True)
+            temporary = stack.enter_context(
+                tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=root)
+            )
+            path = Path(temporary) / "probe"
+            path.write_bytes(b"")
+            sources.add(path)
         sources.update(
             Path(source.transport["path"])
             for source in plan.sources.values()
@@ -389,6 +414,7 @@ def install(
                 for future in as_completed(names):
                     acquired[names[future]] = future.result()
             except BaseException:
+                cache.cancel()
                 for future in unique.values():
                     future.cancel()
                 raise

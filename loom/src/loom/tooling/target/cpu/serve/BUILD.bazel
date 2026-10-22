@@ -257,6 +257,47 @@ loom_py_test(
     ],
 )
 
+# Optional HF SDK acquisition shares its cache through the native runtime boundary.
+loom_py_test(
+    name = "hf_model_card_test",
+    size = "small",
+    srcs = [
+        "hf_model_card_test.py",
+        "model_card_test.py",
+    ],
+    args = [
+        "$(rootpath :loom-serve-test-tool)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:native.card.json)",
+    ],
+    data = [
+        ":loom-serve-test-tool",
+        "//loom/src/loom/serve/fixture/text:native.card.json",
+        "//loom/src/loom/serve/fixture/text:native_archive_files",
+        "//loom/src/loom/serve/fixture/text:native_mixed_files",
+        "//loom/src/loom/serve/fixture/text:native_source_files",
+    ],
+    imports = ["."],
+    main = "hf_model_card_test.py",
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//loom/py/loom/model:fetch",
+        "//loom/py/loom/model:fetch_hf",
+        "//loom/py/loom/model:fetch_storage",
+        "//loom/py/loom/model:lock",
+        "//loom/py/loom/model:manifest",
+        "//loom/py/loom/model/hf_test:fixture",
+        "//loom/src/loom/serve/testing:http",
+    ],
+)
+
 # JITs an external source package and executes its command program through the
 # task HAL using the exact CPU serving composition.
 loom_py_test(

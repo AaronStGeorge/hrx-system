@@ -27,3 +27,17 @@ http_archive(
     sha256 = "1f17587abc9d0d355cf6f65bdba7496838b4e8313922769199689615c434965c",
     urls = ["https://gpuopen.com/download/AMD_GPU_MR_ISA_XML_2026_03_05.zip"],
 )
+
+# Only provider integration tests import this SDK. The production fetch package
+# loads an optional user-installed provider and has no mandatory pip closure.
+model_test_pip = use_extension(
+    "@rules_python//python/extensions:pip.bzl",
+    "pip",
+    dev_dependency = True,
+)
+model_test_pip.parse(
+    hub_name = "loom_model_test_pip",
+    python_version = "3.12",
+    requirements_lock = "//loom/py/loom/model/hf_test:requirements.lock.txt",
+)
+use_repo(model_test_pip, "loom_model_test_pip")

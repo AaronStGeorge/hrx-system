@@ -10,15 +10,17 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import json
 import os
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .fetch_hf import HuggingFace, hf_url_source
 from .fetch_source import Document, FetchError, Source, document_source, open_source
 from .lock import FileIdentity, file_digest
-from .manifest import ManifestError
+from .manifest import ManifestError, parse_json
 
 # Document limits protect the public metadata boundary; payloads stream instead.
 _DOCUMENT_LIMIT = 16 * 1024 * 1024
@@ -123,8 +125,56 @@ class AcquiredFile:
 class ContentCache:
     """Whole files are shared by verified content, not by model/configuration name."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, huggingface=None, wait_for_access=None):
+        # Loom-owned document/content storage, independent of the Hub's cache.
         self.root = root.absolute()
+        # Optional per-operation provider, constructed only when HF is needed.
+        self._huggingface = huggingface
+        # Human interaction belongs to the caller, including plain or visual modes.
+        self.wait_for_access = wait_for_access
+
+    @property
+    def huggingface(self):
+        if self._huggingface is None:
+            self._huggingface = HuggingFace(wait_for_access=self.wait_for_access)
+        return self._huggingface
+
+    def _hf_url(self, location: str):
+        endpoint = self._huggingface.api.endpoint if self._huggingface else None
+        return hf_url_source(location, endpoint=endpoint)
+
+    def cancel(self):
+        """Wakes provider approval waits before joining in-flight acquisitions."""
+        if self._huggingface is not None:
+            self._huggingface.cancelled.set()
+
+    def prepare_source(
+        self, source: Source, identity: FileIdentity | None, *, offline: bool
+    ) -> Source:
+        """Reuses local content or checks selected repository access before transfer."""
+        if source.transport["kind"] == "url":
+            recognized = self._hf_url(source.transport["url"])
+            if recognized is not None:
+                transport, _ = recognized
+                transport["revision"] = self.huggingface.resolve_revision(
+                    transport, offline=offline
+                )
+                source = replace(source, transport=transport)
+        if source.transport["kind"] != "hf":
+            return source
+        cached = self.blob_path(identity.sha256) if identity else None
+        if cached is None or not cached.is_file():
+            cached = self.huggingface.cached_file(source.transport)
+        if cached is not None and cached.is_file():
+            return replace(source, transport={"kind": "local", "path": str(cached)})
+        if offline:
+            raise FetchError("--offline Hugging Face source is not cached")
+        metadata = self.huggingface.metadata(source.transport)
+        if metadata.commit_hash != source.transport["revision"]:
+            raise FetchError("Hugging Face file metadata changed the pinned revision")
+        if identity is not None and metadata.size != identity.size:
+            raise FetchError("Hugging Face file size does not match its lock")
+        return source
 
     def blob_path(self, digest: str) -> Path:
         return self.root / "blob" / "sha256" / digest
@@ -141,12 +191,46 @@ class ContentCache:
         remote = source.transport["kind"] == "url"
         key = hashlib.sha256(location.encode("utf-8")).hexdigest()
         cached = self.root / "document" / key
-        if remote and offline:
-            if not cached.is_file():
-                raise FetchError(
-                    "--offline document is not cached; provide a local card/lock"
-                )
-            source = document_source(str(cached))
+        if remote and offline and cached.is_file():
+            # Cache the resolved document coordinate together with its bytes:
+            # relative files and the sibling lock must keep the same snapshot.
+            with cached.open("rb") as stream:
+                encoded = stream.read(_DOCUMENT_LIMIT * 7 + 1)
+            if len(encoded) > _DOCUMENT_LIMIT * 7:
+                raise FetchError("cached model/lock document exceeds its size limit")
+            try:
+                record = parse_json(encoded.decode("utf-8"))
+                if (
+                    not isinstance(record, dict)
+                    or set(record) != {"location", "text"}
+                    or not all(isinstance(value, str) for value in record.values())
+                    or len(record["text"].encode("utf-8")) > _DOCUMENT_LIMIT
+                    or not Document(record["location"], "").remote
+                ):
+                    raise ValueError("invalid cached document")
+                return Document(**record)
+            except (UnicodeError, ManifestError, ValueError) as error:
+                raise FetchError("cached model/lock document is invalid") from error
+        recognized = self._hf_url(location) if remote else None
+        if recognized is not None:
+            transport, endpoint = recognized
+            transport["revision"] = self.huggingface.resolve_revision(
+                transport, offline=offline
+            )
+            path = self.huggingface.cached_file(transport)
+            if path is None:
+                if offline:
+                    raise FetchError("--offline Hugging Face document is not cached")
+                metadata = self.huggingface.metadata(transport)
+                if metadata.commit_hash != transport["revision"]:
+                    raise FetchError("Hugging Face changed the document revision")
+                if metadata.size is None or not 0 <= metadata.size <= _DOCUMENT_LIMIT:
+                    raise FetchError(
+                        "model/lock document requires a declared size within 16 MiB"
+                    )
+                path = self.huggingface.download(transport, offline=False)
+            source = document_source(str(path))
+            location = self.huggingface.file_url(transport, endpoint=endpoint)
         with open_source(source, offline=offline) as (stream, size):
             if size is not None and size > _DOCUMENT_LIMIT:
                 raise FetchError(
@@ -164,14 +248,22 @@ class ContentCache:
         except UnicodeDecodeError as error:
             raise ManifestError("model/lock documents must use UTF-8") from error
         if remote and not offline:
-            atomic_write(cached, content)
+            atomic_write(
+                cached,
+                json.dumps({"location": location, "text": text}).encode("utf-8"),
+            )
         return Document(location, text)
 
     def acquire(
         self, source: Source, identity: FileIdentity | None, *, offline: bool
     ) -> AcquiredFile:
-        if source.transport["kind"] == "local":
-            path = Path(source.transport["path"])
+        kind = source.transport["kind"]
+        if kind in ("local", "hf"):
+            path = (
+                Path(source.transport["path"])
+                if kind == "local"
+                else self.huggingface.download(source.transport, offline=offline)
+            )
             size, digest = file_digest(path)
             observed = FileIdentity(source.origin, size, digest, source.resolved)
             if identity is not None and (size, digest) != (

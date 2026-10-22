@@ -1,0 +1,149 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""A controlled Hub HTTP dependency for tests of the real optional SDK."""
+
+import hashlib
+import http.server
+import json
+import os
+import threading
+from contextlib import contextmanager
+from unittest.mock import patch
+from urllib.parse import unquote, urlsplit
+
+import huggingface_hub.constants as hf_constants
+
+
+class Hub:
+    def __init__(self, root, files):
+        # Tiny caller-owned payloads served by the fixture, keyed by repository path.
+        self.files = files
+        # Repository identity accepted by the HTTP fixture.
+        self.repository = "fixture/model"
+        # Immutable snapshot advertised by metadata and download responses.
+        self.revision = "a" * 40
+        # Publisher approval is changed explicitly by each test's user action.
+        self.approved = False
+        # Denial response, retaining the provider's explicit gate error code.
+        self.denial = (403, "GatedRepo")
+        # Optional synchronization of concurrent denied shard requests.
+        self.denial_barrier = None
+        # Provider retry guidance supplied with denial responses.
+        self.retry_after = None
+        # Selected request sequence; credentials are deliberately not recorded.
+        self.requests = []
+        # SDK token file isolated from the executing user's credentials.
+        self.credentials = root / "token"
+        # SDK cache isolated from real models and retained only for the test.
+        self.cache_dir = root / "hf-cache"
+        # Bound loopback endpoint, populated by the serving context.
+        self.endpoint = ""
+
+    def source(self, path="code.loom", revision=None):
+        return {
+            "kind": "hf",
+            "repository": self.repository,
+            "revision": revision or self.revision,
+            "path": path,
+        }
+
+
+@contextmanager
+def running_hub(root, files=None):
+    state = Hub(
+        root,
+        files
+        if files is not None
+        else {"code.loom": b"code", "weights.data": b"weights"},
+    )
+    with (
+        patch.dict(os.environ, {"HF_TOKEN": "", "HUGGING_FACE_HUB_TOKEN": ""}),
+        patch.object(hf_constants, "HF_TOKEN_PATH", str(state.credentials)),
+        patch.object(hf_constants, "HF_HUB_DISABLE_IMPLICIT_TOKEN", False),
+        patch.object(hf_constants, "HF_HUB_DISABLE_PROGRESS_BARS", True),
+    ):
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def response(
+                self, status, content=b"", error="", *, metadata=False, head=False
+            ):
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(content)))
+                if error:
+                    self.send_header("X-Error-Code", error)
+                if status >= 400 and state.retry_after:
+                    self.send_header("Retry-After", state.retry_after)
+                if metadata:
+                    self.send_header("X-Repo-Commit", state.revision)
+                    self.send_header(
+                        "ETag", '"' + hashlib.sha256(content).hexdigest() + '"'
+                    )
+                self.end_headers()
+                if not head:
+                    self.wfile.write(content)
+
+            def serve_request(self, *, head=False):
+                state.requests.append(("HEAD" if head else "GET", self.path))
+                path = urlsplit(self.path).path
+                token = self.headers.get("Authorization", "")
+                valid = token in ("Bearer fixture-first", "Bearer fixture-second")
+                if path == "/api/whoami-v2":
+                    if not valid:
+                        self.response(401, b'{"error":"invalid credentials"}')
+                    else:
+                        account = "first" if token.endswith("first") else "second"
+                        self.response(200, json.dumps({"name": account}).encode())
+                    return
+                if not state.approved or not valid:
+                    status, error = state.denial
+                    if state.denial_barrier is not None and "/resolve/" in path:
+                        state.denial_barrier.wait()
+                    self.response(status, error=error, head=head)
+                    return
+                if path.endswith("/auth-check"):
+                    self.response(200, b"{}")
+                elif path.startswith("/api/models/"):
+                    self.response(
+                        200,
+                        json.dumps(
+                            {"id": state.repository, "sha": state.revision}
+                        ).encode(),
+                    )
+                elif "/resolve/" in path:
+                    revision, _, filename = path.split("/resolve/", 1)[1].partition("/")
+                    if unquote(revision) not in ("main", state.revision):
+                        self.response(404, error="RevisionNotFound", head=head)
+                    elif unquote(filename) not in state.files:
+                        self.response(404, error="EntryNotFound", head=head)
+                    else:
+                        self.response(
+                            200,
+                            state.files[unquote(filename)],
+                            metadata=True,
+                            head=head,
+                        )
+                else:
+                    self.response(404, head=head)
+
+            def do_GET(self):
+                self.serve_request()
+
+            def do_HEAD(self):
+                self.serve_request(head=True)
+
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            state.endpoint = f"http://127.0.0.1:{server.server_port}"
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                yield state
+            finally:
+                server.shutdown()
+                thread.join()

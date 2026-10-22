@@ -16,6 +16,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -158,6 +159,7 @@ class SourceResolver:
         lock: ModelLock | None,
         *,
         pin_revisions: bool,
+        revision_resolver: Callable[[dict], str] | None = None,
     ):
         self.document = document
         self.roots = selection.document.get("origins", {})
@@ -182,6 +184,8 @@ class SourceResolver:
                 }
         self.lock = lock
         self.pin_revisions = pin_revisions
+        # Optional provider callback, invoked only for a non-overridden floating root.
+        self.revision_resolver = revision_resolver
         # Only selected roots are resolved or retained in an update snapshot.
         self.origins: dict[str, dict] = {}
 
@@ -203,6 +207,8 @@ class SourceResolver:
                 "mirror; pin the card revision before --update-lock or use a "
                 "matching lock"
             )
+        if self.revision_resolver is not None:
+            return self.revision_resolver(requested)
         raise FetchError(
             "resolving a Hugging Face revision requires the optional provider"
         )

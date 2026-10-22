@@ -120,11 +120,27 @@ identity. `--origin=checkpoint=/local/mirror` replaces transport while retaining
 the original lock identity; it never falls back to the original host. Unknown
 aliases, missing local files, and mismatched locked bytes fail explicitly.
 
-Whole-file acquisition supports HTTP(S), local, and inline sources. An HF origin
-can be satisfied by an explicit local/HTTP override without importing an HF
-package. Direct HF transport currently reports that its optional provider is
-required. HTTP transfers validate status, framing, byte count, and locked hash;
-the redirect destination never replaces the logical source coordinate.
+Whole-file acquisition supports HTTP(S), local, inline, and Hugging Face sources.
+HF support is loaded only when needed and requires the optional
+`huggingface_hub>=2.2,<3` package. An explicit local/HTTP origin override needs no
+HF package or upstream access check. HF downloads use the SDK's ordinary cache;
+Loom verifies and shares those bytes without another payload cache. HTTP transfers
+validate status, framing, byte count, and locked hash; redirect destinations never
+replace logical source coordinates.
+
+HF `blob` and `resolve` model-card URLs resolve one immutable repository snapshot.
+The sibling lock and card-relative files retain that snapshot, including cached
+offline reads. Named floating HF origins resolve once per operation, and lock
+updates record the selected immutable revisions. Cached files avoid authentication
+requests. Missing content checks repository access and selected file metadata
+before payload transfer.
+
+The Python provider accepts a `wait_for_access(action, delay, cancelled)` policy.
+Without it, confirmed gates and credential/permission/rate-limit failures return
+`AccessRequired` with structured remediation. A confirmed gate supplies the model
+page and effective account; it never accepts terms or requests approval itself.
+One coordinator refreshes credentials and waits across all shard workers. Generic
+permission and inaccessible-repository failures retain their distinct meanings.
 
 Files stream into verified content storage with bounded buffers and concurrent
 transfers. The default `--materialize=share` links cache or local-source files

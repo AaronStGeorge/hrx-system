@@ -40,10 +40,21 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    fetch_hf
+  SRCS
+    "fetch_hf.py"
+  DEPS
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
     fetch_storage
   SRCS
     "fetch_storage.py"
   DEPS
+    loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_source
     loom::py::loom::model::lock
     loom::py::loom::model::manifest
@@ -55,6 +66,7 @@ iree_py_library(
   SRCS
     "fetch.py"
   DEPS
+    loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::lock

@@ -1,0 +1,178 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+import hashlib
+import json
+import os
+
+import pytest
+
+from loom.model import ManifestError, ModelCard
+from loom.model.fetch import install, plan_fetch
+from loom.model.fetch_hf import HuggingFace
+from loom.model.fetch_source import FetchError
+from loom.model.fetch_storage import ContentCache
+from loom.model.hf_test.hub import running_hub
+from loom.model.lock import FileIdentity, ModelLock
+
+
+def _card():
+    return {
+        "schema_version": 1,
+        "model": {"id": "fixture/fetch", "name": "HF fetch fixture"},
+        "programs": {"p": {"inputs": ["code.loom"], "libraries": []}},
+        "services": {"text": {"kind": "text", "version": 1}},
+        "variants": {
+            "v": {
+                "services": {
+                    "text": {
+                        "programs": ["p"],
+                        "parameters": {"scope": {"files": ["weights.data"]}},
+                    }
+                }
+            }
+        },
+        "configurations": {
+            "check": {"variant": "v", "service": "text", "programs": "p"}
+        },
+    }
+
+
+def _publication(hub):
+    files = {
+        path: FileIdentity(path, len(content), hashlib.sha256(content).hexdigest())
+        for path, content in hub.files.items()
+    }
+    hub.files["model.json"] = json.dumps(_card()).encode()
+    hub.files["model.json.lock"] = json.dumps(
+        ModelLock.snapshot({}, list(files.values()))
+    ).encode()
+
+
+def _cache(root, hub, wait=None):
+    return ContentCache(
+        root / "cache",
+        huggingface=HuggingFace(
+            endpoint=hub.endpoint, cache_dir=hub.cache_dir, wait_for_access=wait
+        ),
+    )
+
+
+def test_hf_document_pins_its_closure_and_reuses_shared_cache(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _publication(hub)
+        hub.credentials.write_text("fixture-first")
+        actions = []
+
+        def wait(action, delay, cancelled):
+            actions.append(action)
+            hub.approved = True
+
+        cache = _cache(tmp_path, hub, wait)
+        url = hub.endpoint + "/fixture/model/blob/main/model.json?download=true"
+        document = cache.read_document(url, offline=False)
+        assert document.location == (
+            hub.endpoint + f"/fixture/model/resolve/{hub.revision}/model.json"
+        )
+        selection = ModelCard.parse(document.text).select()
+        plan = plan_fetch(document, selection, cache)
+        assert not any(
+            method == "GET" and path.endswith(("code.loom", "weights.data"))
+            for method, path in hub.requests
+        )
+        first = install(plan, cache, tmp_path / "first")
+        assert len(actions) == 1
+        assert not (cache.root / "blob").exists()
+        for filename in ("code.loom", "weights.data"):
+            cached = cache.huggingface.cached_file(hub.source(filename))
+            assert os.path.samefile(first.parent / filename, cached)
+        before = list(hub.requests)
+        hub.approved = False
+        # A fresh operation keeps the document's resolved snapshot while offline.
+        cache = _cache(tmp_path, hub)
+        offline_document = cache.read_document(url, offline=True)
+        assert offline_document == document
+        offline = plan_fetch(offline_document, selection, cache, offline=True)
+        second = install(offline, cache, tmp_path / "second")
+        assert os.path.samefile(
+            first.parent / "weights.data", second.parent / "weights.data"
+        )
+        assert hub.requests == before
+        assert sum("/revision/main" in path for _, path in hub.requests) == 1
+
+
+def test_hf_origin_update_records_revision_and_only_selected_files(tmp_path):
+    with running_hub(tmp_path) as hub:
+        hub.approved = True
+        hub.credentials.write_text("fixture-first")
+        card = _card()
+        root = {"kind": "hf", "repository": hub.repository, "revision": "main"}
+        card["origins"] = {"hub": root}
+        card["programs"]["p"]["origin"] = "@hub/"
+        card["variants"]["v"]["services"]["text"]["parameters"]["scope"]["origin"] = (
+            "@hub/"
+        )
+        hub.files["unused.data"] = b"unused"
+        authored = tmp_path / "card.json"
+        authored.write_text(json.dumps(card))
+        cache = _cache(tmp_path, hub)
+        document = cache.read_document(str(authored), offline=False)
+        selection = ModelCard.parse(document.text).select()
+        plan = plan_fetch(document, selection, cache, update_lock=True)
+        installed = install(plan, cache, tmp_path / "installed")
+        lock = ModelLock.parse((tmp_path / "card.json.lock").read_text())
+        assert lock.origins == {
+            "hub": {"requested": root, "resolved": {"revision": hub.revision}}
+        }
+        assert len(lock.cover(selection)) == 2
+        assert not any("unused.data" in path for _, path in hub.requests)
+        assert (installed.parent / "weights.data").read_bytes() == b"weights"
+
+
+def test_hf_mismatched_size_fails_before_weight_transfer(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _publication(hub)
+        hub.approved = True
+        hub.credentials.write_text("fixture-first")
+        hub.files["weights.data"] = b"wrong size"
+        cache = _cache(tmp_path, hub)
+        document = cache.read_document(
+            hub.endpoint + "/fixture/model/resolve/main/model.json", offline=False
+        )
+        with pytest.raises(FetchError, match="size does not match"):
+            plan_fetch(document, ModelCard.parse(document.text).select(), cache)
+        assert not any(
+            method == "GET" and path.endswith("weights.data")
+            for method, path in hub.requests
+        )
+
+
+def test_hf_cached_content_is_verified_before_publication(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _publication(hub)
+        hub.approved = True
+        hub.credentials.write_text("fixture-first")
+        cache = _cache(tmp_path, hub)
+        document = cache.read_document(
+            hub.endpoint + "/fixture/model/resolve/main/model.json", offline=False
+        )
+        cached = cache.huggingface.download(hub.source("weights.data"), offline=False)
+        cached.write_bytes(b"changed")
+        plan = plan_fetch(document, ModelCard.parse(document.text).select(), cache)
+        with pytest.raises(ManifestError, match="integrity mismatch"):
+            install(plan, cache, tmp_path / "output")
+        assert not (tmp_path / "output/model.json").exists()
+
+
+def test_hf_offline_document_miss_never_checks_access(tmp_path):
+    with running_hub(tmp_path) as hub:
+        cache = _cache(tmp_path, hub)
+        with pytest.raises(FetchError, match="--offline"):
+            cache.read_document(
+                hub.endpoint + f"/fixture/model/resolve/{hub.revision}/model.json",
+                offline=True,
+            )
+        assert hub.requests == []

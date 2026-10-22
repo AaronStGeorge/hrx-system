@@ -38,9 +38,19 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "fetch_hf",
+    srcs = ["fetch_hf.py"],
+    deps = [
+        ":fetch_source",
+        ":manifest",
+    ],
+)
+
+iree_py_library(
     name = "fetch_storage",
     srcs = ["fetch_storage.py"],
     deps = [
+        ":fetch_hf",
         ":fetch_source",
         ":lock",
         ":manifest",
@@ -51,6 +61,7 @@ iree_py_library(
     name = "fetch",
     srcs = ["fetch.py"],
     deps = [
+        ":fetch_hf",
         ":fetch_source",
         ":fetch_storage",
         ":lock",
