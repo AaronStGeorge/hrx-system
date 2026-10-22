@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <future>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "iree/async/frontier_tracker.h"
@@ -86,6 +88,50 @@ class TaskQueueTest : public ::testing::TestWithParam<iree_host_size_t> {
   // Proactor pool shared by each short-lived device in the test.
   iree_async_proactor_pool_t* proactor_pool_ = nullptr;
 };
+
+TEST_P(TaskQueueTest, FailurePreservesFrontierDiagnostic) {
+  iree_hal_device_group_t* device_group = nullptr;
+  IREE_ASSERT_OK(CreateDeviceGroup(&device_group));
+  iree_hal_device_t* device = iree_hal_device_group_device_at(device_group, 0);
+  iree_hal_queue_t* queue =
+      iree_hal_device_queue(device, /*family_ordinal=*/0, /*queue_ordinal=*/0);
+  auto* task_queue = reinterpret_cast<iree_hal_task_queue_t*>(queue);
+
+  iree_async_single_frontier_t frontier;
+  iree_async_single_frontier_initialize(&frontier, task_queue->axis, 1);
+  std::promise<iree::Status> completion;
+  auto result = completion.get_future();
+  iree_async_frontier_waiter_t waiter;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      task_queue->frontier_tracker,
+      iree_async_single_frontier_as_frontier(&frontier),
+      +[](void* user_data, iree_status_t status) {
+        static_cast<std::promise<iree::Status>*>(user_data)->set_value(
+            iree::Status(std::move(status)));
+      },
+      &completion, &waiter));
+
+  // A callback failure must reach independent causal consumers of this queue,
+  // even when the operation has no signal semaphores.
+  iree::Status failure(iree_status_annotate_f(
+      iree_make_status(IREE_STATUS_DATA_LOSS, "queue operation failed"),
+      "operation diagnostic context"));
+  const std::string expected = failure.ToString();
+  auto call = iree_hal_make_host_call(
+      +[](void* user_data, const uint64_t[4], iree_hal_host_call_context_t*) {
+        return iree_status_clone(static_cast<iree::Status*>(user_data)->get());
+      },
+      &failure);
+  uint64_t args[4] = {};
+  IREE_ASSERT_OK(iree_hal_queue_host_call(
+      queue, iree_hal_semaphore_list_empty(), iree_hal_semaphore_list_empty(),
+      call, args, IREE_HAL_HOST_CALL_FLAG_NONE));
+
+  iree::Status status = result.get();
+  iree_hal_device_group_release(device_group);
+  EXPECT_EQ(status.ToString(), expected);
+  EXPECT_EQ(status.code(), iree::StatusCode::kDataLoss);
+}
 
 // Native memory dependency with deliberately separate CPU and device views.
 // The actual Task recorder, dependency scheduler and cache executor are tested.

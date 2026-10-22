@@ -769,8 +769,7 @@ void iree_hal_task_queue_op_fail(iree_hal_task_queue_op_t* operation,
   iree_hal_task_queue_debug_record_fail(operation->queue, operation);
 
   iree_async_frontier_tracker_fail_axis(
-      operation->frontier_tracker, operation->axis,
-      iree_status_from_code(iree_status_code(status)));
+      operation->frontier_tracker, operation->axis, iree_status_clone(status));
   iree_hal_task_queue_op_destroy(operation, status);
 }
 
@@ -1573,13 +1572,11 @@ static iree_status_t iree_hal_task_queue_drain_host_call(
         1;
     iree_async_frontier_tracker_advance(operation->frontier_tracker,
                                         operation->axis, epoch);
+    iree_hal_task_queue_op_destroy(operation, status);
   } else {
-    iree_async_frontier_tracker_fail_axis(
-        operation->frontier_tracker, operation->axis,
-        iree_status_from_code(iree_status_code(status)));
+    iree_hal_task_queue_op_fail(operation, status);
   }
 
-  iree_hal_task_queue_op_destroy(operation, status);
   return iree_ok_status();
 }
 
