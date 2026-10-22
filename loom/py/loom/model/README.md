@@ -68,8 +68,11 @@ paths. `assets` maps targets to all remaining selected paths, including provider
 auxiliary data, parameters, and tokenizers. Each target supplies exactly one
 file; missing, extra, overlapping, and conflicting declarations fail.
 
-The rule performs no acquisition. It normalizes each provider through the
-configured public `loom-link` toolchain, preserving provider order and roles.
+The rule performs no acquisition. With `encoding="text"` or `encoding="bc"`, it
+normalizes each provider through the configured public `loom-link` toolchain,
+preserving provider order and roles. With `encoding="preserve"`, it links each
+declared provider into the package unchanged, retaining mixed formats and
+importer options without running `loom-link`.
 It does not choose service roots or specialize model geometry. Auxiliary files
 and weights appear at their declared paths as symlink artifacts. Provider
 importers see the same relative namespace during compilation.
@@ -90,6 +93,8 @@ and text build outputs.
 
 ## Acquisition
 
+The [Python SDK wheel](../../../packaging/python/README.md) installs the
+`loom-fetch` command and includes an optional `hf` provider extra.
 `//loom/py/loom/model:loom-fetch` installs the selected closure from a local card
 or raw HTTP(S) card URL. The Python API exposes `plan_fetch` and `install`;
 `ContentCache` owns document reads and verified payload storage. Listing reads

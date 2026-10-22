@@ -297,6 +297,37 @@ loom_py_test(
     ],
 )
 
+loom_py_test(
+    name = "wheel_model_card_test",
+    size = "small",
+    srcs = [
+        "model_card_test.py",
+        "wheel_model_card_test.py",
+    ],
+    args = [
+        "$(rootpath //loom/packaging/python:wheel)",
+        "$(rootpath :loom-serve-test-tool)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:card_model_mixed)",
+    ],
+    data = [
+        ":loom-serve-test-tool",
+        "//loom/packaging/python:wheel",
+        "//loom/src/loom/serve/fixture/text:card_model_mixed",
+    ],
+    imports = ["."],
+    main = "wheel_model_card_test.py",
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["//loom/src/loom/serve/testing:http"],
+)
+
 # JITs an external source package and executes its command program through the
 # task HAL using the exact CPU serving composition.
 loom_py_test(
