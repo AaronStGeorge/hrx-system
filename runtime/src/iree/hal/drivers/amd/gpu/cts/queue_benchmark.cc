@@ -130,22 +130,17 @@ class NativeQueue {
   bool Initialize(benchmark::State& state, size_t producer_count = 1,
                   size_t buffer_length = 2 * sizeof(uint32_t),
                   iree_hal_atomic_operation_flags_t atomic_operations = 0) {
-    iree::Status status =
-        InitializeDevice(producer_count, buffer_length, atomic_operations);
+    iree::Status status = InitializeDevice(state, producer_count, buffer_length,
+                                           atomic_operations);
     if (!status.ok()) {
       state.SkipWithError(status.ToString().c_str());
       return false;
     }
-    if (!device_) {
-      state.SkipWithMessage(
-          "No native AMD GPU endpoint with the requested packet family");
-      return false;
-    }
-    return true;
+    return !state.skipped();
   }
 
   iree_status_t InitializeDevice(
-      size_t producer_count, size_t buffer_length,
+      benchmark::State& state, size_t producer_count, size_t buffer_length,
       iree_hal_atomic_operation_flags_t atomic_operations) {
     lanes_.resize(producer_count);
     static ProcessFabric shared;
@@ -198,6 +193,8 @@ class NativeQueue {
       }
     }
     if (!context_) {
+      state.SkipWithMessage(
+          "No native AMD GPU endpoint with the requested packet family");
       return iree_ok_status();
     }
     const auto gfxip = context_->target_info.gfx_ip;
@@ -221,6 +218,22 @@ class NativeQueue {
         device_, tracker_, iree_allocator_system(), &group_));
     const auto* family =
         iree_hal_queue_family(iree_hal_device_queue(device_, 0, 0));
+    const auto* family_spec = iree_hal_queue_family_spec(family);
+    if (placement_ != IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
+        !(family_spec->placement_capabilities & (1u << placement_))) {
+      state.SkipWithMessage(
+          "Queue family does not support the requested ring "
+          "placement");
+      return iree_ok_status();
+    }
+    if (!iree_all_bits_set(
+            family_spec->atomic_capabilities.operations.system_scope_32,
+            atomic_operations)) {
+      state.SkipWithMessage(
+          "Queue family does not support the requested atomic "
+          "operations");
+      return iree_ok_status();
+    }
     if (placement_ == IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
       queue_ = iree_hal_device_queue(device_, 0, 0);
       iree_hal_queue_retain(queue_);
@@ -248,8 +261,16 @@ class NativeQueue {
     };
     iree_hal_slab_pool_options_t pool_options;
     iree_hal_slab_pool_options_initialize(&pool_options);
-    IREE_RETURN_IF_ERROR(iree_hal_slab_pool_create(
-        group_, scope, &pool_options, iree_allocator_system(), &pool_));
+    iree_status_t status = iree_hal_slab_pool_create(
+        group_, scope, &pool_options, iree_allocator_system(), &pool_);
+    if (atomic_operations && iree_status_is_unavailable(status)) {
+      iree_status_ignore(status);
+      state.SkipWithMessage(
+          "No native memory route supports the requested "
+          "atomic operations");
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(status);
     iree_hal_memory_scope_t program_scope;
     IREE_RETURN_IF_ERROR(iree_hal_device_group_resolve_memory_scope(
         group_, {IREE_HAL_MEMORY_SITE_PROGRAM, family}, &program_scope));
