@@ -1755,8 +1755,8 @@ void loom_low_schedule_pressure_score_candidate(
   bool has_per_user_placement = false;
   bool short_replayable_register_move = iree_any_bit_set(
       node->flags, LOOM_LOW_SCHEDULE_NODE_FLAG_SHORT_REGISTER_MOVE);
-  bool rematerializable_leaf =
-      node->descriptor != NULL && node->operand_count == 0 &&
+  bool rematerializable_setup =
+      node->descriptor != NULL &&
       !iree_any_bit_set(node->traits, LOOM_TRAIT_OBSERVABLE_EFFECT);
   const uint16_t storage_relation_count = node->storage_relation_count;
 
@@ -1859,17 +1859,16 @@ void loom_low_schedule_pressure_score_candidate(
     loom_low_schedule_required_pressure_adjust_candidate(
         state, pressure_state, value, unit_count, false);
     if (unit_count != 0) {
-      // Repair retained this result's private consumer placement. Keep that
-      // placement for input-free clones too; the ready policy can still
-      // advance them to complete live storage groups.
+      // Repair may retain this result's private consumer placement. Input-free
+      // clones remain replayable without a retained placement fact.
       const loom_value_id_t value_id =
           state->value_domain->value_ids[result_ordinals[result_index]];
       has_per_user_placement |=
           value_id < per_user_placement_values.bit_count &&
           iree_bitmap_test(per_user_placement_values, value_id);
       ++produced_live_value_count;
-      rematerializable_leaf =
-          rematerializable_leaf &&
+      rematerializable_setup =
+          rematerializable_setup &&
           loom_low_descriptor_result_can_rematerialize(
               state->target.descriptor_set, node->descriptor, result_index);
       if (short_replayable_register_move) {
@@ -1985,8 +1984,9 @@ void loom_low_schedule_pressure_score_candidate(
           (short_replayable_register_move && produced_live_value_count != 0
                ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_SHORT_REPLAYABLE_REGISTER_MOVE
                : 0) |
-          (rematerializable_leaf && produced_live_value_count != 0
-               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF
+          (rematerializable_setup && produced_live_value_count != 0 &&
+                   (node->operand_count == 0 || has_per_user_placement)
+               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_SETUP
                : 0),
   };
   loom_low_schedule_target_pressure_score_candidate(state, pressure_state,

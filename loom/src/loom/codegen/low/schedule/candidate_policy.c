@@ -128,7 +128,7 @@ static bool loom_low_schedule_candidate_advances_retained_unspillable_value(
          iree_all_bits_set(score->flags, retained_unspillable_flags) &&
          !iree_any_bit_set(
              score->flags,
-             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF);
+             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_SETUP);
 }
 
 // Returns true when |score| establishes a new live storage value without
@@ -153,7 +153,7 @@ static bool loom_low_schedule_candidate_defers_storage_setup(
   const bool advances_completion =
       (iree_any_bit_set(
            score->flags,
-           LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF) &&
+           LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_SETUP) &&
        loom_low_schedule_candidate_advances_pinned_completion(score)) ||
       (score->killed_live_units != 0 &&
        iree_any_bit_set(
@@ -165,11 +165,12 @@ static bool loom_low_schedule_candidate_defers_storage_setup(
          !advances_retained_unspillable_value && !advances_completion;
 }
 
-// A pinned completion can require several leaves before its consumer is ready.
-// Preserve that progress while their physical bank has headroom. Once a leaf
-// grows its bank beyond capacity, cone membership alone is insufficient: memory
-// or target-state ordering can still block its consumer behind earlier work.
-static bool loom_low_schedule_candidate_defers_rematerializable_leaf(
+// A pinned completion can require several replayable setup operations before
+// its consumer is ready. Preserve that progress while their physical bank has
+// headroom. Once setup grows its bank beyond capacity, cone membership alone is
+// insufficient: memory or target-state ordering can still block its consumer
+// behind earlier work.
+static bool loom_low_schedule_candidate_defers_rematerializable_setup(
     loom_low_schedule_candidate_compare_mode_t compare_mode,
     const loom_low_schedule_candidate_score_t* score) {
   if (compare_mode == LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT ||
@@ -179,7 +180,7 @@ static bool loom_low_schedule_candidate_defers_rematerializable_leaf(
   uint16_t actionable_flags =
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR |
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXACT_PACKING_COMPLETION;
-  // A private repair leaf can expose another setup without making its final
+  // Private replayable setup can expose another setup without making its final
   // consumer ready. Completion-path membership does not justify opening that
   // live range when it incurs debt; retain its demand-driven placement.
   if (score->pressure_risk != LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT ||
@@ -191,7 +192,7 @@ static bool loom_low_schedule_candidate_defers_rematerializable_leaf(
          score->killed_live_units == 0 &&
          iree_any_bit_set(
              score->flags,
-             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF) &&
+             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_SETUP) &&
          !iree_any_bit_set(score->flags, actionable_flags);
 }
 
@@ -215,8 +216,8 @@ loom_low_schedule_candidate_defers_materialization(
     loom_low_schedule_candidate_compare_mode_t compare_mode,
     const loom_low_schedule_candidate_score_t* score) {
   return loom_low_schedule_candidate_defers_storage_setup(score) ||
-         loom_low_schedule_candidate_defers_rematerializable_leaf(compare_mode,
-                                                                  score);
+         loom_low_schedule_candidate_defers_rematerializable_setup(compare_mode,
+                                                                   score);
 }
 
 static bool loom_low_schedule_candidate_unlocks_descriptor(
