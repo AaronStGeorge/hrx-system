@@ -7,6 +7,7 @@
 #ifndef LOOMC_INTEROP_H_
 #define LOOMC_INTEROP_H_
 
+#include "loom/error/renderer.h"
 #include "loom/error/source.h"
 #include "loom/ir/module.h"
 #include "loom/pass/registry.h"
@@ -35,15 +36,22 @@ extern "C" {
 /// Read-only native projection of a structurally verified LoomC module.
 ///
 /// @lifetime
-/// Both pointers borrow from the public module that produced the view and
-/// remain valid until that module is mutated or released. Native consumers may
-/// inspect but must not mutate the projected module or source table.
+/// All members borrow from the public module that produced the view and remain
+/// valid until that module is mutated or released. Native consumers may inspect
+/// but must not mutate the projected module or source table.
 typedef struct loomc_module_interop_view_t {
   /// Native module owned by the public module handle.
   const loom_module_t* module;
 
   /// Exact source snapshots indexed by native module source ID.
   const loom_source_table_resolver_t* source_table;
+
+  /// Formats native types using the module's strings and descriptors without
+  /// requiring consumers to link the native text printer. The callback is
+  /// non-NULL on successful projection, writes synchronously to the supplied
+  /// stream, and propagates output failures. It uses diagnostic type spelling,
+  /// including raw register identities rather than target assembly aliases.
+  loom_type_formatter_t type_formatter;
 } loomc_module_interop_view_t;
 
 /// Mutable native projection of a LoomC module for exact-version producers.

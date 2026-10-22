@@ -24,7 +24,7 @@
 #ifndef LOOM_OPS_BUILDER_MACROS_H_
 #define LOOM_OPS_BUILDER_MACROS_H_
 
-#include "loom/ops/op_defs.h"
+#include "loom/ops/builder.h"
 
 // Defines a builder for a binary op: 2 operands, 1 result, no attrs/regions.
 // Pattern: %result = op %lhs, %rhs : type

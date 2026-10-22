@@ -16,7 +16,7 @@
 
 #include "iree/base/api.h"
 #include "loom/analysis/availability.h"
-#include "loom/ops/op_defs.h"
+#include "loom/ops/builder.h"
 #include "loom/rewrite/remap.h"
 
 #ifdef __cplusplus

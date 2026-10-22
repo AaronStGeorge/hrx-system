@@ -18,6 +18,7 @@
 #include "loomc/compile.h"
 #include "loomc/config.h"
 #include "loomc/context.h"
+#include "loomc/interop.h"
 #include "loomc/module.h"
 #include "loomc/pass.h"
 #include "loomc/target.h"
@@ -40,8 +41,9 @@ typedef struct loom_benchmark_compile_request_export_options_t {
   const loomc_pass_program_t* pass_program;
   // Verified source module cloned by each case-sample capture.
   loomc_module_t* module;
-  // Exact-version source module referenced by |module_plan| and provenance.
-  const loom_module_t* native_module;
+  // Borrowed source view supplying |module_plan|, provenance, and type
+  // spelling.
+  const loomc_module_interop_view_t* module_view;
   // Testbench plan owning every case and benchmark referenced by |work_plan|.
   const loom_testbench_module_plan_t* module_plan;
   // Selected benchmark windows to capture in authored order.

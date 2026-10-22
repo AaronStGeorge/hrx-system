@@ -223,6 +223,7 @@ loomc_interop_headers(
   NAME
     interop_headers
   DEPS
+    loom::error::renderer
     loom::error::source
     loom::ir
     loom::pass::registry

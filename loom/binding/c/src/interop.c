@@ -7,6 +7,7 @@
 #include "loomc/interop.h"
 
 #include "context.h"
+#include "loom/format/text/printer.h"
 #include "loom/pass/builtin_registry.h"
 #include "loomc/iree.h"
 #include "module.h"
@@ -34,6 +35,13 @@ loomc_status_t loomc_target_environment_get_native_pass_registry(
           environment ? loom_target_environment_pass_registry(environment)
                       : NULL,
           out_storage));
+}
+
+static iree_status_t loomc_module_interop_format_type(
+    loom_type_t type, void* user_data, loom_output_stream_t* stream) {
+  const loomc_module_t* module = user_data;
+  return loom_text_print_type(type, loomc_module_const_loom_module(module),
+                              stream);
 }
 
 loomc_status_t loomc_module_get_interop_view(
@@ -71,6 +79,11 @@ loomc_status_t loomc_module_get_interop_view(
       *out_view = (loomc_module_interop_view_t){
           .module = loomc_module_const_loom_module(module),
           .source_table = loomc_module_source_table(module),
+          .type_formatter =
+              {
+                  .fn = loomc_module_interop_format_type,
+                  .user_data = module,
+              },
       };
     }
     *out_result = result;

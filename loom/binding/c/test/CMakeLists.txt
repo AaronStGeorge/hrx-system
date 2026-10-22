@@ -65,9 +65,11 @@ loom_cc_test(
     loom::binding::c::interop
     loom::binding::c::loomc
     loom::error::parameter
+    loom::ir
     loom::pass::registry
     loom::pass::report
     loom::target::math_policy
+    loom::util::stream
 )
 
 loom_cc_test(

@@ -14,6 +14,7 @@ loom_cc_library(
     op_defs
   HDRS
     "attribute_accessors.h"
+    "builder.h"
     "builder_macros.h"
     "op_defs.h"
     "use_list.h"
