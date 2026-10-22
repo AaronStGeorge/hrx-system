@@ -674,6 +674,44 @@ TEST_P(QueueAllocaTest, PluralSmallLargeAndAlignedTransaction) {
   EXPECT_EQ(0u, stats.reservation_count);
 }
 
+TEST_P(QueueAllocaTest, ManyBuffersOneTransaction) {
+  // Model activation can commit thousands of slabs in one queue operation.
+  // Small buffers exercise the same plural ownership without large backing.
+  constexpr size_t kBufferCount = 2048;
+  constexpr iree_device_size_t kBufferSize = 256;
+  Ref<iree_hal_pool_t> pool;
+  IREE_ASSERT_OK(CreateTLSFPool(/*range_length=*/2 * 1024 * 1024, pool.out()));
+  std::vector<iree_hal_pool_reservation_request_t> requests(
+      kBufferCount, MakeRequest(kBufferSize));
+  std::vector<iree_hal_buffer_t*> raw_buffers(kBufferCount, nullptr);
+  SemaphoreList allocated(device_, {0}, {1});
+  IREE_ASSERT_OK(iree_hal_queue_alloca(
+      transfer_queue_, iree_hal_semaphore_list_empty(), allocated, pool,
+      requests.size(), requests.data(), raw_buffers.data()));
+  std::vector<Ref<iree_hal_buffer_t>> buffers;
+  buffers.reserve(kBufferCount);
+  for (iree_hal_buffer_t* buffer : raw_buffers) {
+    buffers.emplace_back(buffer);
+  }
+  Wait(allocated);
+  for (const auto& buffer : buffers) {
+    ASSERT_NE(buffer.get(), nullptr);
+    EXPECT_NE(iree_hal_buffer_memory_view(buffer).backing, nullptr);
+    EXPECT_EQ(iree_hal_buffer_byte_length(buffer), kBufferSize);
+  }
+  for (size_t index : {size_t{0}, kBufferCount / 2, kBufferCount - 1}) {
+    const uint32_t pattern = 0x11000000u + static_cast<uint32_t>(index);
+    FillAndWait(transfer_queue_, buffers[index], pattern);
+    for (uint32_t value : ReadBufferData<uint32_t>(buffers[index])) {
+      EXPECT_EQ(value, pattern);
+    }
+  }
+  DeallocaAndWait(transfer_queue_, raw_buffers.size(), raw_buffers.data());
+  iree_hal_pool_stats_t stats;
+  iree_hal_pool_query_stats(pool, &stats);
+  EXPECT_EQ(stats.reservation_count, 0u);
+}
+
 TEST_P(QueueAllocaTest, WaitDependencyControlsReadiness) {
   Ref<iree_hal_pool_t> pool;
   IREE_ASSERT_OK(CreateSlabPool(pool.out()));

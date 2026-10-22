@@ -163,6 +163,49 @@ TEST_P(WeightsTest, EmptyFirstFileDoesNotHideLaterParameters) {
   Run(0, 70);
 }
 
+TEST_P(WeightsTest, UnreferencedCheckpointEntriesStayCold) {
+  // The archive can contain much more data than the model's active roots or
+  // elastic budget. This key's policy names an unavailable preparer, so even
+  // preparing unused entries would fail instead of being invisible here.
+  constexpr size_t kColdBytes = 4 * kSlabBytes;
+  const std::string header = "{\"missing\":{\"dtype\":\"U8\",\"shape\":[" +
+                             std::to_string(kColdBytes) +
+                             "],\"data_offsets\":[0," +
+                             std::to_string(kColdBytes) + "]}}";
+  std::ofstream file(adapter_path_.path(), std::ios::binary);
+  for (unsigned i = 0; i < 8; ++i) {
+    file.put(
+        static_cast<char>(static_cast<uint64_t>(header.size()) >> (8 * i)));
+  }
+  file.write(header.data(), header.size());
+  std::array<char, 4096> payload;
+  payload.fill(0x5A);
+  for (size_t i = 0; i < kColdBytes / payload.size(); ++i) {
+    file.write(payload.data(), payload.size());
+  }
+  file.close();
+  ASSERT_TRUE(file.good());
+
+  IREE_ASSERT_OK(Compile(0, "target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_OK(
+      CreateRoots(0, 1, &root, {adapter_path_.path(), path_.path()}));
+  // One consumer and the two preparations of its reflected parameters.
+  EXPECT_EQ(compilation_.commands, 3u);
+  EXPECT_EQ(loom_serve_weights_activity(plans_[0]).read_bytes, 0u);
+  EXPECT_EQ(loom_serve_weights_activity(plans_[0]).prepared_bytes, 0u);
+
+  IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0]));
+  IREE_ASSERT_OK(loom_serve_weights_import_readiness(plans_[0], execution_));
+  IREE_ASSERT_OK(loom_serve_weights_await(plans_[0]));
+  Run(0, 70);
+  const auto activity = loom_serve_weights_activity(plans_[0]);
+  EXPECT_EQ(activity.activations, 1u);
+  EXPECT_EQ(activity.read_bytes, 3 * 8 * sizeof(int32_t));
+  EXPECT_EQ(activity.prepared_bytes, 2 * 8 * sizeof(int32_t));
+  EXPECT_EQ(compilation_.commands, 3u);
+}
+
 TEST_P(WeightsTest, OneWorkerActivatesAndConsumesThroughAsyncTimelineWait) {
   IREE_ASSERT_OK(Compile(0, "target"));
   const auto root = Root(0, 0);

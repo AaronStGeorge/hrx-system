@@ -29,7 +29,9 @@ extern "C" {
 // part of a gather or scatter are allowed to be in-flight at a time. A lower
 // number can reduce system resource requirements during the operation (less
 // transient memory required, etc) while increasing latency (lower I/O
-// utilization).
+// utilization). IREE_HOST_SIZE_MAX permits every span in a group to be
+// in flight. The limit applies independently to each synchronized group in
+// gather_batch/scatter_batch; one group's waits never gate another group.
 IREE_API_EXPORT iree_status_t iree_io_parameter_index_provider_create(
     iree_string_view_t scope, iree_io_parameter_index_t* index,
     iree_host_size_t max_concurrent_operations, iree_allocator_t host_allocator,
