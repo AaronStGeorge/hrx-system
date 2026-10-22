@@ -173,7 +173,7 @@ jobs:
 
       - name: Install CMake host tools
         run: |
-          "${HRX_PYTHON}" -m pip install --upgrade cmake==3.31.6 ninja
+          "${HRX_PYTHON}" -m pip install --upgrade cmake==4.4.4 ninja
           echo "${HRX_OUTPUT_DIR}/python/bin" >> "${GITHUB_PATH}"
 
       - name: Check tool versions

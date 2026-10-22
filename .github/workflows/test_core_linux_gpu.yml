@@ -128,7 +128,7 @@ jobs:
           python3 --version
           mkdir -p "${HRX_OUTPUT_DIR}"
           python3 -m venv "${HRX_OUTPUT_DIR}/python"
-          "${HRX_PYTHON}" -m pip install --upgrade pip cmake==3.31.6 zstandard
+          "${HRX_PYTHON}" -m pip install --upgrade pip cmake==4.4.4 zstandard
           echo "${HRX_OUTPUT_DIR}/python/bin" >> "${GITHUB_PATH}"
           "${HRX_OUTPUT_DIR}/python/bin/ctest" --version
 
