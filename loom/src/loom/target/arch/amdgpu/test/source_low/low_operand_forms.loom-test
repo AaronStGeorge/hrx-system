@@ -377,6 +377,29 @@ low.func.def target<amdgpu.rdna3.core>(@target) @sop2_rhs_inline_add(%position: 
 
 // ====
 
+// Replacing the first add changes its result ID. The assumption retains its
+// semantic fact so the second add can consume the preplanned immediate form.
+amdgpu.target<gfx1100> @target
+
+low.func.def target<amdgpu.rdna3.core>(@target) @sop2_dependent_fact_matches(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
+  %step = s_mov_b32 3
+  %adjusted = s_add_u32 %value, %step
+  %fixed = low.assume %adjusted [eq(%adjusted, 4)] : reg<amdgpu.sgpr>
+  %result = s_add_u32 %value, %fixed
+  return %adjusted, %result
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target<amdgpu.rdna3.core>(@target) @sop2_dependent_fact_matches(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
+  %adjusted = s_add_u32_rhs_inline %value, 3
+  %result = s_add_u32_rhs_inline %value, 4
+  return %adjusted, %result
+}
+
+// ====
+
 amdgpu.target<gfx1100> @target
 
 low.func.def target<amdgpu.rdna3.core>(@target) @sop2_rhs_inline_add_cses_write_only_scc_state(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {

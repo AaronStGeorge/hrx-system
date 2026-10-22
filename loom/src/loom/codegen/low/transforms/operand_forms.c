@@ -175,8 +175,6 @@ typedef struct loom_low_select_operand_forms_state_t {
   const loom_op_t* function_op;
   // Resolved target for the low function.
   const loom_low_resolved_target_t* target;
-  // Scoped function facts used to match descriptor operand-form predicates.
-  loom_value_fact_table_t* value_facts;
   // Reusable consumed-value query for the currently inspected region.
   loom_consumption_region_query_t consumption_query;
   // True once |consumption_query| has been initialized.
@@ -186,6 +184,34 @@ typedef struct loom_low_select_operand_forms_state_t {
   // True once this pass has rewritten at least one packet.
   bool changed;
 } loom_low_select_operand_forms_state_t;
+
+// One operand form whose complete fact predicate matched before rewriting.
+typedef struct loom_low_operand_form_match_plan_t {
+  // Original operation whose form matched.
+  loom_op_t* op;
+  // Matched descriptor form.
+  const loom_low_operand_form_t* form;
+  // Exact value captured for the form's immediate action.
+  int64_t matched_value;
+} loom_low_operand_form_match_plan_t;
+
+// Immutable fact-dependent decisions consumed by the mutation phase.
+typedef struct loom_low_operand_form_plan_t {
+  // Matched forms grouped by operation in function traversal order.
+  loom_low_operand_form_match_plan_t* matches;
+  // Number of initialized entries in |matches|.
+  iree_host_size_t match_count;
+  // Maximum entries allocated in |matches|.
+  iree_host_size_t match_capacity;
+} loom_low_operand_form_plan_t;
+
+// Allocation bounds established while detecting applicable work.
+typedef struct loom_low_operand_form_plan_bounds_t {
+  // Sum of declared forms across operations that expose them.
+  iree_host_size_t match_capacity;
+  // Whether forms, tie materialization, or select folding may apply.
+  bool has_candidate;
+} loom_low_operand_form_plan_bounds_t;
 
 static bool loom_low_select_operand_form_matches(
     const loom_value_fact_table_t* value_facts, loom_value_id_t value_id,
@@ -365,13 +391,13 @@ static iree_status_t loom_low_select_operand_forms_try_fold_select_packet(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_select_operand_forms_function_has_candidate(
-    loom_module_t* module, loom_func_like_t function,
-    const loom_low_resolved_target_t* target, bool* out_has_candidate) {
-  *out_has_candidate = false;
+static loom_low_operand_form_plan_bounds_t
+loom_low_select_operand_forms_plan_bounds(
+    loom_func_like_t function, const loom_low_resolved_target_t* target) {
+  loom_low_operand_form_plan_bounds_t bounds = {0};
   loom_region_t* body = loom_func_like_body(function);
   if (!body) {
-    return iree_ok_status();
+    return bounds;
   }
   for (uint16_t block_index = 0; block_index < body->block_count;
        ++block_index) {
@@ -383,18 +409,101 @@ static iree_status_t loom_low_select_operand_forms_function_has_candidate(
       loom_low_descriptor_packet_t packet = {0};
       loom_low_descriptor_packet_initialize(target->descriptor_set, op,
                                             &packet);
-      if (loom_low_packet_has_operand_forms(target->descriptor_set, &packet) ||
-          loom_low_operand_ties_need_materialization(target->descriptor_set,
-                                                     op) ||
-          (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_OP &&
-           loom_low_descriptor_is_select(target->descriptor_set,
-                                         packet.descriptor))) {
-        *out_has_candidate = true;
-        return iree_ok_status();
+      if (loom_low_packet_has_operand_forms(target->descriptor_set, &packet)) {
+        const loom_low_descriptor_layout_t* descriptor_layout =
+            loom_low_descriptor_layout(target->descriptor_set,
+                                       packet.descriptor);
+        bounds.match_capacity += descriptor_layout->operand_form_count;
+        bounds.has_candidate = true;
+      } else if (loom_low_operand_ties_need_materialization(
+                     target->descriptor_set, op) ||
+                 (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_OP &&
+                  loom_low_descriptor_is_select(target->descriptor_set,
+                                                packet.descriptor))) {
+        bounds.has_candidate = true;
       }
     }
   }
+  return bounds;
+}
+
+static iree_status_t loom_low_select_operand_forms_plan_initialize(
+    loom_pass_t* pass, loom_low_operand_form_plan_bounds_t bounds,
+    loom_low_operand_form_plan_t* out_plan) {
+  *out_plan = (loom_low_operand_form_plan_t){
+      .match_capacity = bounds.match_capacity,
+  };
+  if (bounds.match_capacity != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        pass->arena, bounds.match_capacity, sizeof(*out_plan->matches),
+        (void**)&out_plan->matches));
+  }
   return iree_ok_status();
+}
+
+static void loom_low_select_operand_forms_build_plan(
+    loom_func_like_t function, const loom_low_resolved_target_t* target,
+    const loom_value_fact_table_t* value_facts,
+    loom_low_operand_form_plan_t* plan) {
+  if (!value_facts) {
+    return;
+  }
+  loom_region_t* body = loom_func_like_body(function);
+  if (!body) {
+    return;
+  }
+  const loom_low_descriptor_set_t* descriptor_set = target->descriptor_set;
+  for (uint16_t block_index = 0; block_index < body->block_count;
+       ++block_index) {
+    loom_block_t* block = body->blocks[block_index];
+    for (loom_op_t* op = block->first_op; op != NULL; op = op->next_op) {
+      if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+        continue;
+      }
+      loom_low_descriptor_packet_t packet = {0};
+      loom_low_descriptor_packet_initialize(descriptor_set, op, &packet);
+      if (!loom_low_packet_has_operand_forms(descriptor_set, &packet)) {
+        continue;
+      }
+
+      const loom_low_descriptor_layout_t* descriptor_layout =
+          loom_low_descriptor_layout(descriptor_set, packet.descriptor);
+      for (uint16_t i = 0; i < descriptor_layout->operand_form_count; ++i) {
+        const loom_low_operand_form_t* form =
+            &descriptor_set
+                 ->operand_forms[descriptor_layout->operand_form_start + i];
+        int64_t matched_value = 0;
+        bool matched = true;
+        for (uint16_t match_index = 0; match_index < form->match_count;
+             ++match_index) {
+          const loom_low_operand_form_match_t* match =
+              &descriptor_set
+                   ->operand_form_matches[form->match_start + match_index];
+          const loom_value_id_t value_id =
+              loom_op_operands(op)[match->source_packet_operand_index];
+          int64_t candidate_value = 0;
+          if (!loom_low_select_operand_form_matches(value_facts, value_id,
+                                                    match, &candidate_value)) {
+            matched = false;
+            break;
+          }
+          if (match_index == form->immediate_match_index) {
+            matched_value = candidate_value;
+          }
+        }
+        if (!matched) {
+          continue;
+        }
+        IREE_ASSERT(plan->match_count < plan->match_capacity);
+        plan->matches[plan->match_count++] =
+            (loom_low_operand_form_match_plan_t){
+                .op = op,
+                .form = form,
+                .matched_value = matched_value,
+            };
+      }
+    }
+  }
 }
 
 typedef struct loom_low_select_operand_form_destructive_info_t {
@@ -1277,8 +1386,8 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
 
 static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
     loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
-    loom_op_t* op) {
-  IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(rewriter));
+    loom_op_t* op, const loom_low_operand_form_match_plan_t* matches,
+    iree_host_size_t match_count) {
   loom_low_descriptor_packet_t packet = {0};
   loom_low_descriptor_packet_initialize(state->target->descriptor_set, op,
                                         &packet);
@@ -1313,42 +1422,18 @@ static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
   if (folded) {
     return iree_ok_status();
   }
+  if (match_count == 0) {
+    return iree_ok_status();
+  }
 
-  const loom_low_descriptor_set_t* descriptor_set =
-      state->target->descriptor_set;
-  const loom_low_descriptor_layout_t* descriptor_layout =
-      loom_low_descriptor_layout(descriptor_set, packet.descriptor);
-  for (uint16_t i = 0; i < descriptor_layout->operand_form_count; ++i) {
-    const loom_low_operand_form_t* form =
-        &descriptor_set
-             ->operand_forms[descriptor_layout->operand_form_start + i];
-    int64_t matched_value = 0;
-    bool matched = true;
-    for (uint16_t match_index = 0; match_index < form->match_count;
-         ++match_index) {
-      const loom_low_operand_form_match_t* match =
-          &descriptor_set
-               ->operand_form_matches[form->match_start + match_index];
-      const loom_value_id_t value_id =
-          loom_op_operands(op)[match->source_packet_operand_index];
-      int64_t candidate_value = 0;
-      if (!loom_low_select_operand_form_matches(state->value_facts, value_id,
-                                                match, &candidate_value)) {
-        matched = false;
-        break;
-      }
-      if (match_index == form->immediate_match_index) {
-        matched_value = candidate_value;
-      }
-    }
-    if (matched) {
-      bool rewrote = false;
-      IREE_RETURN_IF_ERROR(loom_low_select_operand_form_rewrite_packet(
-          state, rewriter, op, packet.descriptor, form, matched_value,
-          &rewrote));
-      if (rewrote) {
-        return iree_ok_status();
-      }
+  for (iree_host_size_t i = 0; i < match_count; ++i) {
+    const loom_low_operand_form_match_plan_t* match = &matches[i];
+    bool rewrote = false;
+    IREE_RETURN_IF_ERROR(loom_low_select_operand_form_rewrite_packet(
+        state, rewriter, op, packet.descriptor, match->form,
+        match->matched_value, &rewrote));
+    if (rewrote) {
+      return iree_ok_status();
     }
   }
   return iree_ok_status();
@@ -1370,25 +1455,28 @@ static iree_status_t loom_low_select_operand_forms_function(
     return iree_ok_status();
   }
 
-  bool has_candidate = false;
-  IREE_RETURN_IF_ERROR(loom_low_select_operand_forms_function_has_candidate(
-      module, function, &target, &has_candidate));
-  if (!has_candidate) {
+  const loom_low_operand_form_plan_bounds_t plan_bounds =
+      loom_low_select_operand_forms_plan_bounds(function, &target);
+  if (!plan_bounds.has_candidate) {
     return iree_ok_status();
   }
 
   loom_value_fact_table_t* value_facts = NULL;
-  if (target.descriptor_set->operand_form_count != 0) {
+  if (plan_bounds.match_capacity != 0) {
     IREE_RETURN_IF_ERROR(loom_pass_value_facts_acquire(
         pass, module,
         loom_pass_value_fact_scope_function_for_target(function,
                                                        target.target_facts),
         &value_facts));
   }
+  loom_low_operand_form_plan_t plan;
+  IREE_RETURN_IF_ERROR(
+      loom_low_select_operand_forms_plan_initialize(pass, plan_bounds, &plan));
+  loom_low_select_operand_forms_build_plan(function, &target, value_facts,
+                                           &plan);
 
   loom_rewriter_t rewriter;
   loom_rewriter_initialize(&rewriter, module, pass->arena);
-  loom_rewriter_attach_value_facts(&rewriter, value_facts);
   const loom_low_select_operand_forms_pass_state_t* pass_state =
       (const loom_low_select_operand_forms_pass_state_t*)pass->state;
   loom_low_select_operand_forms_state_t state = {
@@ -1397,25 +1485,35 @@ static iree_status_t loom_low_select_operand_forms_function(
       .module = module,
       .function_op = function.op,
       .target = &target,
-      .value_facts = value_facts,
       .emit_operand_form_diagnostics =
           pass_state && pass_state->emit_operand_form_diagnostics,
   };
 
   loom_region_t* body = loom_func_like_body(function);
   iree_status_t status = iree_ok_status();
+  iree_host_size_t next_match = 0;
   for (uint16_t block_index = 0;
        iree_status_is_ok(status) && block_index < body->block_count;
        ++block_index) {
     loom_block_t* block = body->blocks[block_index];
     for (loom_op_t* op = block->first_op; iree_status_is_ok(status) && op;) {
       loom_op_t* next_op = op->next_op;
+      const iree_host_size_t match_start = next_match;
+      while (next_match < plan.match_count &&
+             plan.matches[next_match].op == op) {
+        ++next_match;
+      }
+      const loom_low_operand_form_match_plan_t* op_matches =
+          next_match != match_start ? &plan.matches[match_start] : NULL;
       if (!iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
         status = loom_low_select_operand_forms_try_rewrite_packet(
-            &state, &rewriter, op);
+            &state, &rewriter, op, op_matches, next_match - match_start);
       }
       op = next_op;
     }
+  }
+  if (iree_status_is_ok(status)) {
+    IREE_ASSERT(next_match == plan.match_count);
   }
   loom_rewriter_deinitialize(&rewriter);
   if (state.changed) {
