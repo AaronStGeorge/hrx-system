@@ -1916,6 +1916,13 @@ class PresubmitTest(unittest.TestCase):
                 [presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET],
             ),
             (
+                [".github/workflows/ci_iree.yml"],
+                [
+                    presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET,
+                    presubmit.CI_PRESUBMIT_TEST_TARGET,
+                ],
+            ),
+            (
                 [".github/workflows/presubmit.yml"],
                 [
                     presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET,
@@ -1925,6 +1932,10 @@ class PresubmitTest(unittest.TestCase):
             (
                 ["build_tools/lefthook/presubmit.py"],
                 [presubmit.LEFTHOOK_PRESUBMIT_TEST_TARGET],
+            ),
+            (
+                ["build_tools/ci/github_actions_watch.py"],
+                [presubmit.CI_PRESUBMIT_TEST_TARGET],
             ),
             (
                 [presubmit.SEMGREP_CONFIG],
@@ -1983,40 +1994,30 @@ class PresubmitTest(unittest.TestCase):
                     expected_targets,
                 )
 
-    def test_vulkan_environment_tests_follow_changed_inputs_on_linux(self):
-        for path in (
+    def test_ci_presubmit_tests_follow_changed_inputs_on_linux(self):
+        cases = (
+            "build_tools/ci/github_actions_watch.py",
+            "build_tools/ci/github_actions_watch_test.py",
+            "build_tools/ci/BUILD.bazel",
+            ".github/scripts/check_rocm_environment.sh",
             ".github/scripts/check_vulkan_hardware_environment.sh",
             ".github/workflows/ci_iree.yml",
-            "build_tools/ci/vulkan_environment.py",
-            "build_tools/ci/vulkan_environment_test.py",
-            "build_tools/ci/BUILD.bazel",
-        ):
+        )
+        for path in cases:
             for host_platform in ("linux", "win32", "darwin"):
                 with self.subTest(path=path, platform=host_platform):
                     with mock.patch.object(presubmit.sys, "platform", host_platform):
                         targets = presubmit.repository_tool_test_targets([path])
                     self.assertEqual(
-                        presubmit.VULKAN_ENVIRONMENT_TEST_TARGET in targets,
+                        presubmit.CI_PRESUBMIT_TEST_TARGET in targets,
                         host_platform == "linux",
                     )
-
-    def test_change_scope_test_follows_changed_inputs_on_linux(self):
-        cases = (
-            ("build_tools/ci/change_scope.py", True),
-            ("build_tools/ci/change_scope_test.py", True),
-            ("build_tools/ci/BUILD.bazel", True),
-            ("build_tools/ci/windows_diagnostics.py", False),
-            (".github/workflows/docs.yml", False),
-        )
-        for path, owns_test in cases:
-            for host_platform in ("linux", "win32", "darwin"):
-                with self.subTest(path=path, platform=host_platform):
-                    with mock.patch.object(presubmit.sys, "platform", host_platform):
-                        targets = presubmit.repository_tool_test_targets([path])
-                    self.assertEqual(
-                        presubmit.CHANGE_SCOPE_TEST_TARGET in targets,
-                        owns_test and host_platform == "linux",
-                    )
+        for path in (".github/workflows/docs.yml", "build_tools/README.md"):
+            with self.subTest(path=path):
+                self.assertNotIn(
+                    presubmit.CI_PRESUBMIT_TEST_TARGET,
+                    presubmit.repository_tool_test_targets([path]),
+                )
 
     def test_existing_project_scripts_include_all_projects(self):
         self.assertEqual(

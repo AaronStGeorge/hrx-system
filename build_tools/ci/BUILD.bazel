@@ -7,7 +7,54 @@
 # CI orchestration has no CMake target surface.
 # bazel-to-cmake: skip
 
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+py_library(
+    name = "github_api",
+    srcs = ["github_api.py"],
+)
+
+py_test(
+    name = "github_api_test",
+    size = "small",
+    srcs = ["github_api_test.py"],
+    deps = [":github_api"],
+)
+
+py_library(
+    name = "github_actions_triage",
+    srcs = ["github_actions_triage.py"],
+)
+
+py_test(
+    name = "github_actions_triage_test",
+    size = "small",
+    srcs = ["github_actions_triage_test.py"],
+    deps = [":github_actions_triage"],
+)
+
+py_binary(
+    name = "github_actions_watch",
+    srcs = ["github_actions_watch.py"],
+    deps = [
+        ":github_actions_triage",
+        ":github_api",
+    ],
+)
+
+py_test(
+    name = "github_actions_watch_test",
+    size = "small",
+    srcs = [
+        "github_actions_watch.py",
+        "github_actions_watch_test.py",
+    ],
+    main = "github_actions_watch_test.py",
+    deps = [
+        ":github_actions_triage",
+        ":github_api",
+    ],
+)
 
 py_test(
     name = "change_scope_test",
@@ -121,9 +168,30 @@ py_test(
 
 py_test(
     name = "loom_binary_size_test",
+    size = "small",
     srcs = [
         "loom_binary_size.py",
         "loom_binary_size_test.py",
     ],
     main = "loom_binary_size_test.py",
+    deps = [":github_api"],
+)
+
+test_suite(
+    name = "presubmit_tests",
+    tests = [
+        ":change_scope_test",
+        ":ci_core_common_test",
+        ":ci_core_linux_test",
+        ":ci_core_windows_test",
+        ":github_actions_triage_test",
+        ":github_actions_watch_test",
+        ":github_api_test",
+        ":loom_binary_size_test",
+        ":rocm_environment_test",
+        ":vulkan_environment_test",
+        ":windows_diagnostics_test",
+        ":windows_file_access_test",
+        ":windows_stl_asan_test",
+    ],
 )

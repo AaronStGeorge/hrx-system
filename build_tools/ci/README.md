@@ -6,6 +6,27 @@ repository root after the [developer tool setup](../../BUILDING.md#quick-start).
 Ordinary development uses the build and test commands in that guide; CI profiles
 also select feature sets, test resources, and exclusions for a particular job.
 
+## Watch and classify a Loom workflow
+
+`github_actions_watch.py` reports the current Loom workflow for a pull request,
+groups the same failure across configurations, and distinguishes exact external
+infrastructure failures from repository failures and explicitly tracked flakes.
+It is read-only: it does not retry, cancel, or otherwise mutate GitHub state.
+
+```bash
+python -m build_tools.ci.github_actions_watch 2198
+python -m build_tools.ci.github_actions_watch 2198 --watch
+python -m build_tools.ci.github_actions_watch run:39665280602 --json
+```
+
+The command authenticates with `GH_TOKEN`, `GITHUB_TOKEN`, or the current `gh`
+login. A snapshot exits 3 while work remains. Terminal repository or unknown
+failures exit 1, tool/API errors exit 2, and exact infrastructure or tracked
+failures exit 4. Clean and proven-obsolete runs exit 0. While watching, output
+appears on state changes and as a five-minute heartbeat for long runner queues.
+The human view expands the four oldest active jobs and summarizes the rest;
+`--json` retains every active job and failure link.
+
 ## Find the job's configuration
 
 The workflow is the source of truth for its command, compiler environment,

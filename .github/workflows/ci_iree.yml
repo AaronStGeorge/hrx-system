@@ -464,13 +464,13 @@ jobs:
           if [[ -n "${CURRENT_MAIN_SHA}" ]]; then
             args+=(--exclude-commit "${CURRENT_MAIN_SHA}")
           fi
-          python3 build_tools/ci/loom_binary_size.py fetch-history "${args[@]}"
+          python3 -m build_tools.ci.loom_binary_size fetch-history "${args[@]}"
 
       - name: Build and measure Loom products
         env:
           SIZE_WORK_DIR: build/iree-bazel-binary-analysis/loom-size/work
         run: |
-          python3 build_tools/ci/loom_binary_size.py collect \
+          python3 -m build_tools.ci.loom_binary_size collect \
             --repo-root "$PWD" \
             --output-dir "${SIZE_WORK_DIR}" \
             --llvm-bin "${HRX_ROCM_ROOT}/lib/llvm/bin" \
@@ -494,7 +494,7 @@ jobs:
           if [[ -n "${UPDATE_MAIN}" ]]; then
             args+=(--update-main)
           fi
-          python3 build_tools/ci/loom_binary_size.py report "${args[@]}"
+          python3 -m build_tools.ci.loom_binary_size report "${args[@]}"
           cat "${SIZE_RECORD_DIR}/summary.md" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload Loom product-size record
