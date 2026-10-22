@@ -16,6 +16,7 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/program/parameter_layout.h"
 #include "loom/serve/runtime/program/program.h"
+#include "loomc/iree.h"
 
 typedef struct loom_serve_preparation_parameter_storage_t {
   // Allocated source-list capacity for this fixed binding.
@@ -42,6 +43,8 @@ typedef struct loom_serve_preparation_stage_storage_t {
 struct loom_serve_preparation_t {
   // Allocator owning the catalog and every copied string.
   iree_allocator_t host_allocator;
+  // Retained model configuration supplying immutable defaults to every stage.
+  loom_model_card_t* card;
   // Requested owned bytes, accumulated where each allocation is established.
   iree_host_size_t storage_size;
   // Number of initialized stages, including partial declarations on failure.
@@ -61,6 +64,8 @@ typedef struct loom_serve_preparation_module_t {
   iree_vm_module_descriptor_t descriptor;
   // Canonical VM buffer type borrowed from the environment.
   iree_vm_ref_type_t buffer_type;
+  // Retained model facts for named parameter declarations and stage config.
+  loom_model_card_t* card;
   // One serialized source invocation's declaration capability.
   struct {
     // Only an explicitly scoped invocation may declare or configure stages.
@@ -111,9 +116,11 @@ void loom_serve_preparation_free(loom_serve_preparation_t* preparation) {
       const loom_serve_preparation_parameter_t* parameter =
           &stage->parameters[j];
       for (uint32_t s = 0; s < parameter->source_count; ++s) {
-        const iree_string_view_list_t paths = parameter->sources[s];
+        const loom_model_file_list_t paths = parameter->sources[s];
         for (iree_host_size_t p = 0; p < paths.count; ++p) {
-          iree_allocator_free(host_allocator, (void*)paths.values[p].data);
+          iree_allocator_free(host_allocator, (void*)paths.values[p].path.data);
+          iree_allocator_free(host_allocator,
+                              (void*)paths.values[p].format.data);
         }
         iree_allocator_free(host_allocator, (void*)paths.values);
       }
@@ -128,6 +135,7 @@ void loom_serve_preparation_free(loom_serve_preparation_t* preparation) {
     iree_allocator_free(host_allocator, stage->parameter_storage);
   }
   iree_allocator_free(host_allocator, preparation->stages);
+  loom_model_card_release(preparation->card);
   iree_allocator_free(host_allocator, preparation);
 }
 
@@ -196,6 +204,10 @@ static iree_status_t loom_serve_preparation_add_stage(
   stage->declaration.kind = kind;
   stage->declaration.tag = (int64_t)iree_vm_call_value_argument_load(call, 0);
   stage->declaration.config.flags = LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED;
+  if (preparation->card) {
+    stage->declaration.config.json_object = loomc_string_view_from_iree(
+        loom_model_card_selection(preparation->card)->config);
+  }
   IREE_RETURN_IF_ERROR(loom_serve_preparation_copy_string(
       preparation, root, &stage->declaration.root));
   iree_vm_call_value_result_store(call, 0, first_stage + index);
@@ -230,26 +242,17 @@ static iree_status_t loom_serve_preparation_add_config(
   return iree_ok_status();
 }
 
-static iree_status_t loom_serve_preparation_add_parameter(
+static iree_status_t loom_serve_preparation_append_parameter(
     loom_serve_preparation_t* preparation,
-    loom_serve_preparation_stage_storage_t* stage,
-    const iree_vm_call_packet_t* call) {
+    loom_serve_preparation_stage_storage_t* stage, uint32_t binding,
+    int32_t source, iree_string_view_t directory, loom_model_file_t file,
+    iree_string_view_t policy) {
   if (stage->declaration.kind != LOOM_SERVE_PREPARATION_STAGE_COMMAND) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "parameter placement requires a command reflection contract");
   }
-  iree_string_view_t directory = iree_string_view_empty();
-  iree_string_view_t path = iree_string_view_empty();
-  iree_string_view_t policy = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_serve_preparation_string_argument(call, 0, &directory));
-  IREE_RETURN_IF_ERROR(loom_serve_preparation_string_argument(call, 1, &path));
-  IREE_RETURN_IF_ERROR(
-      loom_serve_preparation_string_argument(call, 2, &policy));
-  const uint32_t binding = (uint32_t)iree_vm_call_value_argument_load(call, 1);
-  const int32_t source = (int32_t)iree_vm_call_value_argument_load(call, 2);
-  if ((!directory.size && !path.size) || !policy.size ||
+  if ((!directory.size && !file.path.size) || !policy.size ||
       binding == UINT32_MAX || source < 0 || source == INT32_MAX) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -296,8 +299,7 @@ static iree_status_t loom_serve_preparation_add_parameter(
         IREE_STATUS_INVALID_ARGUMENT,
         "parameter source ordinals must be dense from zero");
   }
-  iree_string_view_list_t* sources =
-      (iree_string_view_list_t*)parameter->sources;
+  loom_model_file_list_t* sources = (loom_model_file_list_t*)parameter->sources;
   if ((uint32_t)source == parameter->source_count) {
     if (parameter->source_count == storage->source_capacity) {
       const iree_host_size_t previous_capacity = storage->source_capacity;
@@ -313,12 +315,12 @@ static iree_status_t loom_serve_preparation_add_parameter(
           (storage->source_capacity - previous_capacity) *
           sizeof(*storage->path_capacities);
     }
-    sources[source] = (iree_string_view_list_t){0};
+    sources[source] = (loom_model_file_list_t){0};
     storage->path_capacities[source] = 0;
     ++parameter->source_count;
   }
-  iree_string_view_list_t* files = &sources[source];
-  iree_string_view_t* paths = (iree_string_view_t*)files->values;
+  loom_model_file_list_t* files = &sources[source];
+  loom_model_file_t* paths = (loom_model_file_t*)files->values;
   if (files->count == storage->path_capacities[source]) {
     IREE_RETURN_IF_ERROR(loom_serve_preparation_grow_array(
         preparation, files->count + 1, sizeof(*paths),
@@ -327,10 +329,73 @@ static iree_status_t loom_serve_preparation_add_parameter(
   }
   char* joined = NULL;
   IREE_RETURN_IF_ERROR(iree_file_path_join(
-      directory, path, preparation->host_allocator, &joined));
-  paths[files->count++] = iree_make_cstring_view(joined);
-  preparation->storage_size += paths[files->count - 1].size + 1;
+      directory, file.path, preparation->host_allocator, &joined));
+  loom_model_file_t* copied = &paths[files->count++];
+  *copied = (loom_model_file_t){.path = iree_make_cstring_view(joined)};
+  preparation->storage_size += copied->path.size + 1;
+  if (file.format.size) {
+    IREE_RETURN_IF_ERROR(loom_serve_preparation_copy_string(
+        preparation, file.format, &copied->format));
+  }
   return iree_ok_status();
+}
+
+static iree_status_t loom_serve_preparation_add_parameter(
+    loom_serve_preparation_t* preparation,
+    loom_serve_preparation_stage_storage_t* stage,
+    const iree_vm_call_packet_t* call, bool scoped) {
+  const uint32_t binding = (uint32_t)iree_vm_call_value_argument_load(call, 1);
+  const int32_t source = (int32_t)iree_vm_call_value_argument_load(call, 2);
+  iree_string_view_t directory = iree_string_view_empty();
+  iree_string_view_t policy = iree_string_view_empty();
+  if (!scoped) {
+    if (preparation->card) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "card-backed parameters require parameter_scope");
+    }
+    loom_model_file_t file = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_serve_preparation_string_argument(call, 0, &directory));
+    IREE_RETURN_IF_ERROR(
+        loom_serve_preparation_string_argument(call, 1, &file.path));
+    IREE_RETURN_IF_ERROR(
+        loom_serve_preparation_string_argument(call, 2, &policy));
+    return loom_serve_preparation_append_parameter(
+        preparation, stage, binding, source, directory, file, policy);
+  }
+  iree_string_view_t scope;
+  IREE_RETURN_IF_ERROR(loom_serve_preparation_string_argument(call, 0, &scope));
+  IREE_RETURN_IF_ERROR(
+      loom_serve_preparation_string_argument(call, 1, &policy));
+  if (!preparation->card) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "parameter_scope requires a selected model card");
+  }
+  const loom_model_selection_t* model =
+      loom_model_card_selection(preparation->card);
+  const loom_model_parameter_t* parameter =
+      loom_model_selection_parameter(model, scope);
+  if (!parameter) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "unknown parameter scope '%.*s'", (int)scope.size,
+                            scope.data);
+  }
+  if (!policy.size) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "parameter_scope requires a preparation policy");
+  }
+  char* policy_path = NULL;
+  IREE_RETURN_IF_ERROR(iree_file_path_join(
+      model->directory, policy, preparation->host_allocator, &policy_path));
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < parameter->files.count && iree_status_is_ok(status); ++i) {
+    status = loom_serve_preparation_append_parameter(
+        preparation, stage, binding, source, directory,
+        parameter->files.values[i], iree_make_cstring_view(policy_path));
+  }
+  iree_allocator_free(preparation->host_allocator, policy_path);
+  return status;
 }
 
 bool loom_serve_preparation_parameter_equal(
@@ -341,13 +406,14 @@ bool loom_serve_preparation_parameter_equal(
     return false;
   }
   for (uint32_t s = 0; s < lhs->source_count; ++s) {
-    const iree_string_view_list_t a = lhs->sources[s];
-    const iree_string_view_list_t b = rhs->sources[s];
+    const loom_model_file_list_t a = lhs->sources[s];
+    const loom_model_file_list_t b = rhs->sources[s];
     if (a.count != b.count) {
       return false;
     }
     for (iree_host_size_t i = 0; i < a.count; ++i) {
-      if (!iree_string_view_equal(a.values[i], b.values[i])) {
+      if (!iree_string_view_equal(a.values[i].path, b.values[i].path) ||
+          !iree_string_view_equal(a.values[i].format, b.values[i].format)) {
         return false;
       }
     }
@@ -394,6 +460,8 @@ static iree_status_t loom_serve_preparation_module_start(
       IREE_RETURN_IF_ERROR(iree_allocator_malloc(
           module->host_allocator, sizeof(*preparation), (void**)&preparation));
       preparation->host_allocator = module->host_allocator;
+      preparation->card = module->card;
+      loom_model_card_retain(preparation->card);
       preparation->storage_size = sizeof(*preparation);
       module->capture.preparation = preparation;
     }
@@ -410,7 +478,7 @@ static iree_status_t loom_serve_preparation_module_start(
     }
     loom_serve_preparation_stage_storage_t* stage =
         &preparation->stages[index - module->capture.first_stage];
-    if (params->function_ordinal == 3) {
+    if (params->function_ordinal == 3 || params->function_ordinal == 6) {
       if (!iree_any_bit_set(module->capture.flags,
                             LOOM_SERVE_PREPARATION_FLAG_PARAMETERS)) {
         return iree_make_status(
@@ -418,7 +486,8 @@ static iree_status_t loom_serve_preparation_module_start(
             "parameter declarations are unavailable in this preparation "
             "capture");
       }
-      status = loom_serve_preparation_add_parameter(preparation, stage, call);
+      status = loom_serve_preparation_add_parameter(
+          preparation, stage, call, params->function_ordinal == 6);
     } else if (params->function_ordinal == 5) {
       status = loom_serve_preparation_set_workspace_limit(stage, call);
     } else {
@@ -470,6 +539,13 @@ static const iree_vm_module_signature_type_t preparation_parameter_arguments[] =
      {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0},
      {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0}};
 
+static const iree_vm_module_signature_type_t preparation_scope_arguments[] = {
+    {IREE_VM_SCALAR_TYPE_I32, 0},
+    {IREE_VM_SCALAR_TYPE_I32, 0},
+    {IREE_VM_SCALAR_TYPE_I32, 0},
+    {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0},
+    {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0}};
+
 static const iree_vm_module_callable_type_declaration_t
     preparation_callables[] = {
         {.signature = {.arguments = {preparation_workspace_limit_arguments, 2,
@@ -480,6 +556,7 @@ static const iree_vm_module_callable_type_declaration_t
                                      0}}},
         {.signature = {.arguments = {preparation_config_arguments, 3, 1, 2,
                                      0}}},
+        {.signature = {.arguments = {preparation_scope_arguments, 5, 3, 2, 0}}},
         {.signature = {.arguments = {preparation_parameter_arguments, 6, 3, 3,
                                      0}}},
 };
@@ -495,8 +572,11 @@ static const iree_vm_module_export_declaration_t preparation_exports[] = {
      .callable_type_ordinal = 1,
      .function_ordinal = 4},
     {.export_name = IREE_SVL("parameter"),
-     .callable_type_ordinal = 4,
+     .callable_type_ordinal = 5,
      .function_ordinal = 3},
+    {.export_name = IREE_SVL("parameter_scope"),
+     .callable_type_ordinal = 4,
+     .function_ordinal = 6},
     {.export_name = IREE_SVL("stage"),
      .callable_type_ordinal = 1,
      .function_ordinal = 0},
@@ -509,6 +589,7 @@ static void loom_serve_preparation_module_destroy(iree_vm_module_t* base) {
   loom_serve_preparation_module_t* module =
       (loom_serve_preparation_module_t*)base;
   loom_serve_preparation_free(module->capture.preparation);
+  loom_model_card_release(module->card);
   iree_allocator_free(module->host_allocator, module);
 }
 
@@ -551,8 +632,8 @@ static const iree_vm_module_vtable_t preparation_module_vtable = {
 };
 
 iree_status_t loom_serve_preparation_module_create(
-    iree_vm_environment_t* environment, iree_allocator_t host_allocator,
-    iree_vm_module_t** out_module) {
+    iree_vm_environment_t* environment, loom_model_card_t* card,
+    iree_allocator_t host_allocator, iree_vm_module_t** out_module) {
   *out_module = NULL;
   iree_vm_ref_types_t types = {0};
   IREE_RETURN_IF_ERROR(iree_vm_ref_types_resolve(
@@ -562,21 +643,24 @@ iree_status_t loom_serve_preparation_module_create(
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*module), (void**)&module));
   module->host_allocator = host_allocator;
+  module->card = card;
+  loom_model_card_retain(card);
   module->buffer_type = types.buffer;
   module->descriptor = (iree_vm_module_descriptor_t){
       .name = IREE_SVL("prepare"),
       .flags = IREE_VM_MODULE_FLAG_LINKABLE,
       .ref_types = {&module->buffer_type, 1},
-      .counts = {.function_count = 6,
-                 .callable_type_count = 5,
-                 .export_count = 6,
-                 .callable_fields = {.value_count = 10, .ref_count = 7}},
+      .counts = {.function_count = 7,
+                 .callable_type_count = 6,
+                 .export_count = 7,
+                 .callable_fields = {.value_count = 13, .ref_count = 9}},
   };
   iree_status_t status = iree_vm_module_initialize(
       &preparation_module_vtable, &module->descriptor, &module->base);
   if (iree_status_is_ok(status)) {
     *out_module = &module->base;
   } else {
+    loom_model_card_release(module->card);
     iree_allocator_free(host_allocator, module);
   }
   return status;
@@ -593,7 +677,7 @@ iree_status_t loom_serve_preparation_allocate(
   *out_preparation = NULL;
   iree_vm_module_t* library = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_preparation_module_create(
-      environment, host_allocator, &library));
+      environment, sources->card, host_allocator, &library));
   loom_serve_preparation_module_begin(library, 0,
                                       LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
   loom_serve_program_t* program = NULL;
@@ -605,7 +689,7 @@ iree_status_t loom_serve_preparation_allocate(
     for (iree_host_size_t i = 0; i < libraries.count; ++i) {
       linked[i + 1] = libraries.data[i];
     }
-    status = loom_serve_program_allocate(
+    status = loom_serve_program_allocate_service(
         target_environment, environment, sources, source_path, 1, &entry,
         (iree_vm_module_span_t){linked, libraries.count + 1}, report,
         host_allocator, &program);
@@ -613,9 +697,7 @@ iree_status_t loom_serve_preparation_allocate(
   iree_allocator_free(host_allocator, linked);
   if (iree_status_is_ok(status)) {
     iree_vm_function_t function = {0};
-    status =
-        iree_vm_process_lookup_function(loom_serve_program_process(program),
-                                        IREE_SV("model"), entry, &function);
+    status = loom_serve_program_lookup(program, entry, &function);
     if (iree_status_is_ok(status)) {
       status = iree_vm_invoke(loom_serve_program_invocation(program), function,
                               arguments, results);
@@ -642,6 +724,11 @@ iree_host_size_t loom_serve_preparation_stage_count(
   return preparation->stage_count;
 }
 
+loom_model_card_t* loom_serve_preparation_card(
+    const loom_serve_preparation_t* preparation) {
+  return preparation->card;
+}
+
 iree_host_size_t loom_serve_preparation_storage_size(
     const loom_serve_preparation_t* preparation) {
   return preparation ? preparation->storage_size : 0;
@@ -652,7 +739,10 @@ static bool loom_serve_preparation_stage_code_equal(
     const loom_serve_preparation_stage_t* b) {
   if (a->kind != b->kind || !iree_string_view_equal(a->root, b->root) ||
       a->config.flags != b->config.flags ||
-      a->config.binding_count != b->config.binding_count) {
+      a->config.binding_count != b->config.binding_count ||
+      !iree_string_view_equal(
+          iree_string_view_from_loomc(a->config.json_object),
+          iree_string_view_from_loomc(b->config.json_object))) {
     return false;
   }
   for (iree_host_size_t i = 0; i < a->config.binding_count; ++i) {

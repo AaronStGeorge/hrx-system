@@ -216,16 +216,21 @@ typedef enum loom_serve_model_definition_field_e {
 
 static iree_status_t loom_serve_model_configuration_text(
     const loom_serve_model_configuration_field_t* fields, bool encodes,
-    loom_serve_text_configuration_t* text, iree_allocator_t host_allocator) {
+    const loom_serve_sources_t* sources, loom_serve_text_configuration_t* text,
+    iree_allocator_t host_allocator) {
+  const bool pending = sources->reference.path.size != 0;
+  const bool card = sources->card || pending;
   *text = (loom_serve_text_configuration_t){.rows = 4,
                                             .context_capacity = 16384,
                                             .pool_capacity = 65536,
                                             .prefill_capacity = 512,
                                             .max_tokens = encodes ? 0 : 512,
                                             .continuation_epochs = 1};
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[DEFINITION_WEIGHTS], host_allocator, &text->weights));
-  if (!encodes) {
+  if (!card) {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[DEFINITION_WEIGHTS], host_allocator, &text->weights));
+  }
+  if (!encodes && !card) {
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
         &fields[DEFINITION_TOKENIZER], host_allocator, &text->tokenizer));
   }
@@ -245,7 +250,9 @@ static iree_status_t loom_serve_model_configuration_text(
   IREE_RETURN_IF_ERROR(
       loom_serve_model_configuration_size(&fields[DEFINITION_PREFILL_CAPACITY],
                                           1, 262144, &text->prefill_capacity));
-  if (text->prefill_capacity > text->context_capacity) {
+  // Cross-field checks require the canonical defaults from the selected card.
+  // Individual authored field bounds are already checked during admission.
+  if (!pending && text->prefill_capacity > text->context_capacity) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "prefill capacity exceeds context capacity");
   }
@@ -272,8 +279,8 @@ static iree_status_t loom_serve_model_configuration_text(
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[DEFINITION_CONTINUATION_EPOCHS], 1, 2,
       &text->continuation_epochs));
-  if (text->prefill_capacity < text->draft_depth + 1 ||
-      (text->continuation_epochs == 2 && !text->draft_depth)) {
+  if (!pending && (text->prefill_capacity < text->draft_depth + 1 ||
+                   (text->continuation_epochs == 2 && !text->draft_depth))) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "drafting requires capacity for an anchor and "
                             "every proposal; two-epoch continuation requires "
@@ -396,6 +403,41 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                                                      fields};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
       value, loom_serve_model_configuration_field_visit, &context));
+  const bool card = model->sources.card || model->sources.reference.path.size;
+  if (model->sources.card) {
+    const loom_model_selection_t* selection =
+        loom_model_card_selection(model->sources.card);
+    loom_serve_model_configuration_field_t defaults[IREE_ARRAYSIZE(fields)];
+    memcpy(defaults, fields, sizeof(fields));
+    for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(defaults); ++i) {
+      defaults[i].value = iree_string_view_empty();
+    }
+    loom_serve_model_configuration_fields_t default_context = {
+        IREE_ARRAYSIZE(defaults), defaults};
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
+        selection->execution, loom_serve_model_configuration_field_visit,
+        &default_context));
+    const int facts[] = {
+        DEFINITION_KIND,    DEFINITION_PREPARE,    DEFINITION_CONTROL,
+        DEFINITION_SOURCES, DEFINITION_WEIGHTS,    DEFINITION_TOKENIZER,
+        DEFINITION_ASSETS,  DEFINITION_CHECKPOINT, DEFINITION_ADAPTER};
+    for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(facts); ++i) {
+      if (defaults[facts[i]].value.data) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "canonical execution cannot redefine model "
+                                "field '%s'",
+                                defaults[facts[i]].name);
+      }
+    }
+    for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(fields); ++i) {
+      if (!fields[i].value.data) {
+        fields[i].value = defaults[i].value;
+      }
+    }
+    if (!fields[DEFINITION_OPTIONS].value.data) {
+      fields[DEFINITION_OPTIONS].value = selection->options;
+    }
+  }
   if (!loom_serve_model_kind_parse(fields[DEFINITION_KIND].value,
                                    &model->kind)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -413,23 +455,42 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                               fields[DEFINITION_KIND].value.data);
     }
   }
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[DEFINITION_PREPARE], host_allocator, &model->sources.prepare));
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[DEFINITION_CONTROL], host_allocator, &model->sources.control));
-  IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
-      fields[DEFINITION_SOURCES].value,
-      loom_serve_model_configuration_source_count, &model->sources.count));
-  if (!model->sources.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "model requires at least one source provider");
+  if (card) {
+    if (model->kind != LOOM_SERVE_MODEL_KIND_TEXT) {
+      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                              "this host supports portable model cards for "
+                              "the text service");
+    }
+    const int facts[] = {DEFINITION_PREPARE,   DEFINITION_CONTROL,
+                         DEFINITION_SOURCES,   DEFINITION_WEIGHTS,
+                         DEFINITION_TOKENIZER, DEFINITION_ASSETS,
+                         DEFINITION_CHECKPOINT};
+    for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(facts); ++i) {
+      if (fields[facts[i]].value.data) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "'%s' belongs to the referenced model card",
+                                fields[facts[i]].name);
+      }
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[DEFINITION_PREPARE], host_allocator, &model->sources.prepare));
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[DEFINITION_CONTROL], host_allocator, &model->sources.control));
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
+        fields[DEFINITION_SOURCES].value,
+        loom_serve_model_configuration_source_count, &model->sources.count));
+    if (!model->sources.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "model requires at least one source provider");
+    }
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+        host_allocator, model->sources.count, sizeof(*model->sources.values),
+        (void**)&model->sources.values));
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
+        fields[DEFINITION_SOURCES].value, loom_serve_model_configuration_source,
+        model));
   }
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      host_allocator, model->sources.count, sizeof(*model->sources.values),
-      (void**)&model->sources.values));
-  IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
-      fields[DEFINITION_SOURCES].value, loom_serve_model_configuration_source,
-      model));
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[DEFINITION_PENDING_REQUESTS], 1, IREE_HOST_SIZE_MAX,
       &model->pending_requests));
@@ -443,8 +504,8 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
   if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT ||
       model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE) {
     return loom_serve_model_configuration_text(
-        fields, model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE, &model->text,
-        host_allocator);
+        fields, model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE, &model->sources,
+        &model->text, host_allocator);
   }
   if (model->kind == LOOM_SERVE_MODEL_KIND_IMAGE ||
       model->kind == LOOM_SERVE_MODEL_KIND_EMBEDDING ||
@@ -465,16 +526,32 @@ void loom_serve_model_configuration_deinitialize(
     loom_serve_model_configuration_t* model) {
   const iree_allocator_t host_allocator = model->host_allocator;
   iree_allocator_free(host_allocator, (void*)model->name.data);
-  iree_allocator_free(host_allocator,
-                      (void*)model->sources.base_directory.data);
-  iree_allocator_free(host_allocator, (void*)model->sources.prepare.data);
-  iree_allocator_free(host_allocator, (void*)model->sources.control.data);
-  loom_serve_package_release(model->sources.package);
-  for (iree_host_size_t i = 0;
-       model->sources.values && i < model->sources.count; ++i) {
-    iree_allocator_free(host_allocator, (void*)model->sources.values[i].data);
+  iree_allocator_free(host_allocator, (void*)model->document.data);
+  if (model->resolved_sources) {
+    loom_serve_sources_free(model->resolved_sources, host_allocator);
+  } else {
+    iree_allocator_free(host_allocator,
+                        (void*)model->sources.base_directory.data);
+    iree_allocator_free(host_allocator, (void*)model->sources.prepare.data);
+    iree_allocator_free(host_allocator, (void*)model->sources.control.data);
+    loom_serve_package_release(model->sources.package);
+    for (iree_host_size_t i = 0;
+         model->sources.values && i < model->sources.count; ++i) {
+      iree_allocator_free(host_allocator, (void*)model->sources.values[i].data);
+    }
+    iree_allocator_free(host_allocator, (void*)model->sources.values);
+    iree_allocator_free(host_allocator,
+                        (void*)model->sources.reference.path.data);
+    iree_allocator_free(
+        host_allocator,
+        (void*)model->sources.reference.selector.configuration.data);
+    iree_allocator_free(host_allocator,
+                        (void*)model->sources.reference.selector.service.data);
+    iree_allocator_free(host_allocator,
+                        (void*)model->sources.reference.selector.variant.data);
+    iree_allocator_free(host_allocator,
+                        (void*)model->sources.reference.selector.programs.data);
   }
-  iree_allocator_free(host_allocator, (void*)model->sources.values);
   iree_allocator_free(host_allocator, (void*)model->options.data);
   if (model->kind == LOOM_SERVE_MODEL_KIND_TEXT ||
       model->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE) {
@@ -495,14 +572,22 @@ void loom_serve_model_configuration_deinitialize(
 
 static iree_status_t loom_serve_model_configuration_model_parse(
     iree_string_view_t json, iree_string_view_t document_directory,
-    loom_serve_package_t* package, iree_allocator_t host_allocator,
+    loom_serve_package_t* package, const loom_serve_sources_t* resolved_sources,
+    iree_allocator_t host_allocator,
     loom_serve_model_configuration_t* out_model) {
   *out_model =
       (loom_serve_model_configuration_t){.host_allocator = host_allocator,
                                          .device_index = IREE_HOST_SIZE_MAX,
                                          .pending_requests = 32};
-  out_model->sources.package = package;
-  loom_serve_package_retain(package);
+  if (resolved_sources) {
+    IREE_RETURN_IF_ERROR(loom_serve_sources_clone(
+        resolved_sources, host_allocator, &out_model->resolved_sources));
+    out_model->sources = *out_model->resolved_sources;
+  } else {
+    out_model->sources.package = package;
+    loom_serve_package_retain(package);
+  }
+  const iree_string_view_t document = json;
   iree_string_view_t object;
   IREE_RETURN_IF_ERROR(iree_json_consume_object(&json, &object));
   IREE_RETURN_IF_ERROR(iree_json_consume_insignificant(&json));
@@ -515,7 +600,8 @@ static iree_status_t loom_serve_model_configuration_model_parse(
       {"definition", IREE_JSON_VALUE_TYPE_OBJECT},
       {"admission", IREE_JSON_VALUE_TYPE_STRING},
       {"base_directory", IREE_JSON_VALUE_TYPE_STRING},
-      {"device", IREE_JSON_VALUE_TYPE_NUMBER}};
+      {"device", IREE_JSON_VALUE_TYPE_NUMBER},
+      {"model", IREE_JSON_VALUE_TYPE_OBJECT}};
   loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
                                                      fields};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
@@ -524,6 +610,34 @@ static iree_status_t loom_serve_model_configuration_model_parse(
       &fields[0], host_allocator, &out_model->name));
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[4], 0, IREE_HOST_SIZE_MAX - 1, &out_model->device_index));
+  if (fields[5].value.data && !resolved_sources) {
+    loom_serve_model_configuration_field_t reference_fields[] = {
+        {"path", IREE_JSON_VALUE_TYPE_STRING},
+        {"configuration", IREE_JSON_VALUE_TYPE_STRING},
+        {"service", IREE_JSON_VALUE_TYPE_STRING},
+        {"variant", IREE_JSON_VALUE_TYPE_STRING},
+        {"programs", IREE_JSON_VALUE_TYPE_STRING}};
+    loom_serve_model_configuration_fields_t reference_context = {
+        IREE_ARRAYSIZE(reference_fields), reference_fields};
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
+        fields[5].value, loom_serve_model_configuration_field_visit,
+        &reference_context));
+    loom_model_reference_t* reference = &out_model->sources.reference;
+    iree_string_view_t* destinations[] = {
+        &reference->path, &reference->selector.configuration,
+        &reference->selector.service, &reference->selector.variant,
+        &reference->selector.programs};
+    for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(reference_fields); ++i) {
+      if (i == 0 || reference_fields[i].value.data) {
+        IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+            &reference_fields[i], host_allocator, destinations[i]));
+      }
+    }
+    const loom_serve_model_configuration_field_t document_field = {
+        .value = document};
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_options(
+        &document_field, host_allocator, &out_model->document));
+  }
   for (iree_host_size_t i = 0; i < out_model->name.size; ++i) {
     const uint8_t c = (uint8_t)out_model->name.data[i];
     if (c < 0x21 || c > 0x7e) {
@@ -540,7 +654,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
                               "admission must be open or drained");
     }
   }
-  if (fields[3].value.data) {
+  if (!resolved_sources && fields[3].value.data) {
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
         &fields[3], host_allocator, &out_model->sources.base_directory));
     if (!loom_serve_path_is_absolute(out_model->sources.base_directory)) {
@@ -552,7 +666,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
                           (void*)out_model->sources.base_directory.data);
       out_model->sources.base_directory = iree_make_cstring_view(base);
     }
-  } else if (document_directory.size) {
+  } else if (!resolved_sources && document_directory.size) {
     char* base = NULL;
     IREE_RETURN_IF_ERROR(iree_file_path_join(
         document_directory, iree_string_view_empty(), host_allocator, &base));
@@ -584,6 +698,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   // Without a document base, every native-owned locator must stand alone.
   // Source-declared checkpoint/policy paths are checked when they are bound.
   const iree_string_view_t paths[] = {
+      out_model->sources.reference.path,
       out_model->sources.prepare,
       out_model->sources.control,
       retained ? out_model->text.weights
@@ -623,8 +738,56 @@ iree_status_t loom_serve_model_configuration_initialize(
     loom_serve_package_t* package, iree_allocator_t host_allocator,
     loom_serve_model_configuration_t* out_model) {
   iree_status_t status = loom_serve_model_configuration_model_parse(
-      json, document_directory, package, host_allocator, out_model);
+      json, document_directory, package, NULL, host_allocator, out_model);
   if (!iree_status_is_ok(status)) {
+    loom_serve_model_configuration_deinitialize(out_model);
+  }
+  return status;
+}
+
+iree_status_t loom_serve_model_configuration_resolve(
+    const loom_serve_model_configuration_t* model,
+    iree_allocator_t host_allocator,
+    loom_serve_model_configuration_t* out_model) {
+  *out_model = (loom_serve_model_configuration_t){0};
+  loom_serve_sources_t* sources = NULL;
+  IREE_RETURN_IF_ERROR(loom_serve_sources_resolve(
+      &model->sources,
+      iree_make_cstring_view(loom_serve_model_kind_name(model->kind)), 1,
+      host_allocator, &sources));
+  iree_status_t status = loom_serve_model_configuration_model_parse(
+      model->document, iree_string_view_empty(), NULL, sources, host_allocator,
+      out_model);
+  loom_serve_sources_free(sources, host_allocator);
+  if (iree_status_is_ok(status) && model->kind == LOOM_SERVE_MODEL_KIND_TEXT) {
+    const loom_model_tokenizer_t* tokenizer = loom_model_selection_tokenizer(
+        loom_model_card_selection(out_model->sources.card), IREE_SV("text"));
+    if (!tokenizer) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "text service requires tokenizers.text");
+    } else if ((tokenizer->file.format.size &&
+                !iree_string_view_equal(tokenizer->file.format,
+                                        IREE_SV("huggingface-json"))) ||
+               (!tokenizer->file.format.size &&
+                !iree_string_view_ends_with(tokenizer->file.path,
+                                            IREE_SV(".json")))) {
+      status = iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                                "text service requires a huggingface-json "
+                                "tokenizer; specify format for a renamed file");
+    } else {
+      char* path = NULL;
+      status = iree_allocator_clone(
+          host_allocator,
+          iree_make_const_byte_span(tokenizer->file.path.data,
+                                    tokenizer->file.path.size),
+          (void**)&path);
+      out_model->text.tokenizer =
+          iree_make_string_view(path, tokenizer->file.path.size);
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    out_model->device_index = model->device_index;
+  } else {
     loom_serve_model_configuration_deinitialize(out_model);
   }
   return status;

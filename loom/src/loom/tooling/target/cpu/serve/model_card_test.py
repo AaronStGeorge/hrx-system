@@ -19,7 +19,9 @@ def main():
     server = str(Path(sys.argv[1]).absolute())
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
-    model = str(Path(sys.argv[2]).absolute() / "serve.json")
+    model_path = Path(sys.argv[2]).absolute()
+    model = str(model_path / "serve.json" if model_path.is_dir() else model_path)
+    expected = sys.argv[3] if len(sys.argv) > 3 else "bbaa"
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)
         log = directory / "server.log"
@@ -37,22 +39,28 @@ def main():
         ) as (process, bound_address):
             assert bound_address is not None, log.read_text()
             address = urlsplit("http://" + bound_address)
-            response = control(
-                address,
-                "POST",
-                "/v1/chat/completions",
-                200,
-                headers={"Content-Type": "application/json"},
-                body=json.dumps(
-                    {
-                        "model": "fixture-text",
-                        "messages": [{"role": "user", "content": "a"}],
-                        "max_tokens": 4,
-                    }
-                ),
-            )
-            # The text fixture's independent dense oracle with checkpoint bias 2.
-            assert response["choices"][0]["message"]["content"] == "bbaa", response
+            try:
+                response = control(
+                    address,
+                    "POST",
+                    "/v1/chat/completions",
+                    200,
+                    headers={"Content-Type": "application/json"},
+                    body=json.dumps(
+                        {
+                            "model": "fixture-text",
+                            "messages": [{"role": "user", "content": "a"}],
+                            "max_tokens": 4,
+                        }
+                    ),
+                )
+            except RuntimeError as error:
+                status = control(address, "GET", "/v1/status", 200)
+                raise RuntimeError(
+                    f"{error}\nmodel status: {json.dumps(status)}"
+                ) from error
+            # Independent dense oracle: checkpoint bias 2, plus the selected JIT delta.
+            assert response["choices"][0]["message"]["content"] == expected, response
             assert response["usage"]["prompt_tokens"] == 1, response
             assert response["usage"]["completion_tokens"] == 4, response
         assert process.returncode == 0, log.read_text()

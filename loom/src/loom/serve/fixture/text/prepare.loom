@@ -1,3 +1,5 @@
+config.def @fixture.card = false : i1
+
 func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
 func.decl import("json") @members(%json: buffer) -> (buffer, i32, i64)
@@ -7,6 +9,10 @@ func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
 func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %source: i32, %directory: buffer, %path: buffer, %policy: buffer)
+
+func.decl import("prepare") @parameter_scope(%stage: i32, %binding: i32, %source: i32, %scope: buffer, %policy: buffer)
+
+global.rodata.def @model_scope = bytes("6d6f64656c")
 
 global.rodata.def @root = bytes("616476616e6365")
 
@@ -81,8 +87,15 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
   func.call @config_i64(%media_stage, %media_key, %c1_i64) : (i32, buffer, i64)
   %empty = global.load @empty : buffer
   %policy = global.load @policy : buffer
-  func.call @parameter(%stage, %c0_i32, %c0_source, %empty, %weights, %policy) : (i32, i32, i32, buffer, buffer, buffer)
-  func.call @parameter(%media_stage, %c0_i32, %c0_source, %empty, %weights, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  %card = config.get @fixture.card : i1
+  scf.if %card {
+    %scope = global.load @model_scope : buffer
+    func.call @parameter_scope(%stage, %c0_i32, %c0_source, %scope, %policy) : (i32, i32, i32, buffer, buffer)
+    func.call @parameter_scope(%media_stage, %c0_i32, %c0_source, %scope, %policy) : (i32, i32, i32, buffer, buffer)
+  } else {
+    func.call @parameter(%stage, %c0_i32, %c0_source, %empty, %weights, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+    func.call @parameter(%media_stage, %c0_i32, %c0_source, %empty, %weights, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  }
   %state_bytes = index.constant 8 : offset
   %state = buffer.alloca<private> align(4) %state_bytes : buffer
   %state_view = buffer.view %state[%origin] : buffer -> view<2xi32>

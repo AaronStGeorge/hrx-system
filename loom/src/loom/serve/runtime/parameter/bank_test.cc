@@ -36,8 +36,8 @@ class ParameterBankTest : public WeightsTest {
   iree_status_t PrepareBank(loom_serve_parameter_bank_t* bank, size_t index,
                             const char* path) {
     const std::string policy = directory_ + "/policy.loom";
-    const auto file = iree_make_cstring_view(path);
-    const iree_string_view_list_t source = {1, &file};
+    const loom_model_file_t file = {iree_make_cstring_view(path), {}};
+    const loom_model_file_list_t source = {1, &file};
     loom_serve_test_weight_preparation_t preparation;
     preparation.weights = loom_serve_parameter_bank_weights(bank, index);
     preparation.host = loom_serve_device_host(device_owner_);

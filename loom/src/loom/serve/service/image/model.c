@@ -420,7 +420,9 @@ static iree_status_t loom_serve_image_create_control(
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_preparation_module_create(
-        model->control.environment, host_allocator, &native_modules[3]);
+        model->control.environment,
+        loom_serve_preparation_card(model->preparation), host_allocator,
+        &native_modules[3]);
     model->control.preparation = native_modules[3];
     iree_vm_module_retain(model->control.preparation);
   }

@@ -1084,6 +1084,8 @@ loom_serve_registration_factory_t loom_serve_model_registration_factory(
                (1u << LOOM_SERVE_MODEL_KIND_SEQUENCE) |
                (1u << LOOM_SERVE_MODEL_KIND_TEXT),
       .device_count = loom_serve_device_group_count(options->device_group),
+      .resolution_sink = loom_serve_host_compiler_sink(loom_serve_device_host(
+          loom_serve_device_group_at(options->device_group, 0))),
       .create = loom_serve_model_registration_create,
       .query_status = loom_serve_model_registration_query_status};
 }

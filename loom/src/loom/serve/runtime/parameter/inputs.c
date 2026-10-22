@@ -55,15 +55,16 @@ iree_status_t loom_serve_weight_inputs_allocate(
     loom_serve_weight_source_t* source = &inputs->sources[s];
     ++inputs->source_count;
     status = iree_io_parameter_index_create(host_allocator, &source->index);
-    const iree_string_view_list_t paths = parameter->sources[s];
+    const loom_model_file_list_t paths = parameter->sources[s];
     for (iree_host_size_t p = 0; p < paths.count && iree_status_is_ok(status);
          ++p) {
       char* path = NULL;
-      status = loom_serve_path_resolve(sources->base_directory, paths.values[p],
-                                       host_allocator, &path);
+      status = loom_serve_path_resolve(
+          sources->base_directory, paths.values[p].path, host_allocator, &path);
       if (iree_status_is_ok(status)) {
-        status = iree_tooling_append_parameter_file_to_index(
-            iree_make_cstring_view(path), source->index, host_allocator);
+        status = iree_tooling_append_parameter_file_to_index_with_format(
+            iree_make_cstring_view(path), paths.values[p].format, source->index,
+            host_allocator);
       }
       iree_allocator_free(host_allocator, path);
     }

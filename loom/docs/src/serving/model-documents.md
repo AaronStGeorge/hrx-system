@@ -1,9 +1,13 @@
 # Serving model documents
 
-A model package is one JSON document plus the programs and assets it references.
-The same object is accepted by `--model=path/model.json` and
-`POST /v1/models/register`. Registration requires no model-specific native code
-or server rebuild.
+A deployment document gives a model its server name, device, admission policy,
+and execution capacities. The same object is accepted by
+`--model=path/serve.json` and `POST /v1/models/register`. Registration requires
+no model-specific native code or server rebuild.
+
+A deployment can describe its programs directly or reference a portable model
+card. A card owns model identity, services, program sets, parameter variants,
+and canonical configurations independently of the server.
 
 This document describes the arithmetic embedding package in the
 [serving walkthrough](workflows/serve-models.md):
@@ -23,12 +27,114 @@ This document describes the arithmetic embedding package in the
 }
 ```
 
+## Portable model cards
+
+A text deployment can select a local card and override its execution defaults:
+
+```json
+{
+  "name": "chat",
+  "model": {
+    "path": "model.json",
+    "configuration": "interactive",
+    "programs": "mixed"
+  },
+  "definition": {"kind": "text", "rows": 2}
+}
+```
+
+The referenced `model.json` can contain:
+
+```json
+{
+  "schema_version": 1,
+  "model": {"id": "example/model", "name": "Example model"},
+  "programs": {
+    "mixed": {
+      "inputs": ["prepare.loom", "control.loombc"],
+      "libraries": ["kernel.loombc"],
+      "config": {"model.width": 64}
+    }
+  },
+  "services": {"chat": {"kind": "text", "version": 1}},
+  "variants": {
+    "small": {
+      "services": {
+        "chat": {
+          "programs": ["mixed"],
+          "config": {"model.width": 32},
+          "parameters": {
+            "model": {
+              "files": [
+                "weights-00001.safetensors",
+                {"path": "weights-00002.data", "format": "safetensors"}
+              ]
+            }
+          },
+          "tokenizers": {
+            "text": {"path": "vocabulary.data", "format": "huggingface-json"}
+          }
+        }
+      }
+    }
+  },
+  "configurations": {
+    "interactive": {
+      "service": "chat",
+      "variant": "small",
+      "programs": "mixed",
+      "execution": {"rows": 4, "context_capacity": 128, "prefill_capacity": 32}
+    }
+  }
+}
+```
+
+These programs implement the text service ABI, including `text_prepare_v1` and
+the corresponding `text_<role>_v1` control exports. Service `version` is
+independent of `schema_version` and the bytecode encoding version. Omitting it
+selects the unversioned development names, `text_<role>`. A missing versioned
+export is an error; bare exports are not substituted. Several services and ABI
+revisions can coexist in one provider set. The host checks the selected service.
+Native card execution currently supports text service ABI 1 and its unversioned
+development contract.
+
+Program set names are opaque: `mixed` could be renamed `source` without changing
+its contents. Each input and library contributes to the link index with its
+declared role. A provider object can specify `path`, `format`, importer
+`options`, and auxiliary `data` files outside the link index. The native loader
+accepts Loom text and bytecode providers; unsupported importer formats or
+options fail explicitly. File names are relative to the card directory,
+including parameter shards and tokenizer assets. `directory`, when present on
+a program set, supplies the source program's execution context and does not
+rebase the declared file paths.
+
+Each `parameters` key names an independent parameter index. Source preparation
+uses `prepare.parameter_scope(stage, binding, source, scope, policy)` to select
+that index; its ordered files populate the same scope. Text service uses the
+`text` tokenizer identity. File names need not identify their role or encoding:
+an explicit `format` supports renamed assets, while shorthand strings use the
+loader's format inference. Ambiguous or unsupported encodings fail.
+
+Variant `config` values override program defaults and reach both preparation
+and generated native stages. Values are compiler scalars: booleans, finite
+numbers, or strings. Source preparation may specialize individual stage keys.
+Canonical configurations supply execution defaults and optional source-owned
+`options`; accepted option names are declared by the service. A deployment's
+explicit settings override canonical defaults. Explicit service, variant, and
+program selections must remain compatible; an ambiguous selection fails.
+
+Admission records the reference without opening the card. Preparation resolves
+it on a worker before constructing the native model. The server reads local
+files and does not fetch origins or inspect integrity locks. Acquisition and
+materialization happen before registration.
+
 ## Deployment fields
 
 | Field | Contract |
 | --- | --- |
 | `name` | Required nonempty visible-ASCII routing alias, independent of source symbols. |
 | `definition` | Required object specifying a modality, programs, assets and capacities. |
+| `model` | Optional local card reference with `path` and optional `configuration`, `service`, `variant`, and `programs` selectors. Programs and assets then come from the card. |
 | `admission` | `"open"` by default; `"drained"` registers metadata without reading programs, loading weights or allocating model storage. |
 | `device` | Nonnegative index into the ordered CLI device group; required when the group has more than one member. |
 | `base_directory` | Optional local file base; relative values resolve from the containing document. |
@@ -46,8 +152,8 @@ activation can prepare a model while its admission stays closed.
 
 ## Programs and dependencies
 
-Every definition contains `kind`, `prepare`, `control` and a nonempty `sources`
-array. Kinds are `text`, `sequence`, `image`, `embedding`, `decision`, `speech`,
+Every direct definition contains `kind`, `prepare`, `control` and a nonempty
+`sources` array. Kinds are `text`, `sequence`, `image`, `embedding`, `decision`, `speech`,
 `recognition`, and `activity`.
 
 | Field | Role |
@@ -80,8 +186,9 @@ model packages can define sampling defaults without native per-model flags.
 
 ## Text definitions
 
-Text requires `weights`, a checkpoint file, and `tokenizer`, a tokenizer JSON
-file. Native capacity fields are:
+Direct text definitions require `weights`, a checkpoint file, and `tokenizer`,
+a tokenizer JSON file. Card references supply their typed inputs instead.
+Native capacity fields are:
 
 | Field | Default | Meaning |
 | --- | --- | --- |

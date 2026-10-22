@@ -219,6 +219,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::path
     loom::binding::c::loomc
+    loom::model::card
   PUBLIC
 )
 endif()
@@ -334,6 +335,7 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/binding.loom"
   DEPS
     ::input
+    ::package
     ::program
     iree::base
     iree::base::tooling::flags
@@ -343,6 +345,7 @@ loom_cc_test(
     iree::vm
     loom::binding::c::loomc
     loom::binding::c::target::vm
+    loom::model::card
   ARGS
     "--binding_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/binding.loom}}"
   LABELS

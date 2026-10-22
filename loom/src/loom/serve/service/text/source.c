@@ -218,13 +218,13 @@ iree_status_t loom_serve_text_source_initialize(
                                                IREE_SVL("request_defaults"),
                                                IREE_SVL("request_options")};
   const bool encodes = options->mode == LOOM_SERVE_TEXT_MODE_ENCODE;
-  return loom_serve_program_compile(target_environment, out_source->environment,
-                                    &options->sources, options->sources.control,
-                                    encodes ? IREE_ARRAYSIZE(encoding_roots)
-                                            : IREE_ARRAYSIZE(generation_roots),
-                                    encodes ? encoding_roots : generation_roots,
-                                    &out_source->compilation, host_allocator,
-                                    &out_source->module);
+  return loom_serve_program_compile_service(
+      target_environment, out_source->environment, &options->sources,
+      options->sources.control,
+      encodes ? IREE_ARRAYSIZE(encoding_roots)
+              : IREE_ARRAYSIZE(generation_roots),
+      encodes ? encoding_roots : generation_roots, &out_source->compilation,
+      host_allocator, &out_source->module);
 }
 
 void loom_serve_text_source_deinitialize(loom_serve_text_source_t* source) {

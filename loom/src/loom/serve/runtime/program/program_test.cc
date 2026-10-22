@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstring>
+#include <memory>
 #include <utility>
 
 #include "iree/base/tooling/flags.h"
@@ -16,7 +17,9 @@
 #include "iree/testing/status_matchers.h"
 #include "iree/vm/buffer.h"
 #include "iree/vm/sync.h"
+#include "loom/model/card.h"
 #include "loom/serve/runtime/program/input.h"
+#include "loom/serve/runtime/program/package.h"
 #include "loomc/iree.h"
 #include "loomc/target/vm.h"
 
@@ -104,6 +107,54 @@ class ProgramTest : public ::testing::Test {
   // Last successful binding; failed binding must leave it untouched.
   iree_vm_function_t function_ = {};
 };
+
+TEST_F(ProgramTest, CardRolesNeverFallBackToBareExports) {
+  constexpr char card_json[] = R"json({
+    "schema_version": 1,
+    "model": {"id": "fixture/text", "name": "Text fixture"},
+    "programs": {"source": {"inputs": ["prepare.loom"], "libraries": []}},
+    "services": {"chat": {"kind": "text", "version": 1}},
+    "variants": {"small": {"services": {"chat": {"programs": ["source"]}}}}
+  })json";
+  constexpr char source[] = "func.def public @prepare() { func.return }";
+  const loom_serve_package_file_t file = {
+      IREE_SV("prepare.loom"),
+      iree_make_const_byte_span(source, sizeof(source) - 1)};
+  loom_serve_package_t* package = nullptr;
+  IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model.json"), 1, &file,
+                                           host_allocator_, &package));
+  std::unique_ptr<loom_serve_package_t, decltype(&loom_serve_package_release)>
+      package_owner(package, loom_serve_package_release);
+  loom_model_card_t* card = nullptr;
+  IREE_ASSERT_OK(loom_model_card_parse(iree_make_cstring_view(card_json),
+                                       nullptr, host_allocator_, &card));
+  std::unique_ptr<loom_model_card_t, decltype(&loom_model_card_release)>
+      card_owner(card, loom_model_card_release);
+  const loom_serve_sources_t card_sources = {.package = package, .card = card};
+  const iree_string_view_t role = IREE_SV("prepare");
+  iree_vm_module_t* module = nullptr;
+  // The exact-name API proves the bare export exists in this same provider set.
+  IREE_ASSERT_OK(loom_serve_program_compile(
+      target_environment_, environment_, &card_sources, {}, 1, &role,
+      &compilation_, host_allocator_, &module));
+  std::unique_ptr<iree_vm_module_t, decltype(&iree_vm_module_release)>
+      module_owner(module, iree_vm_module_release);
+  loom_serve_program_t* program = nullptr;
+  IREE_ASSERT_OK(loom_serve_program_link_service(
+      module, card, iree_vm_module_span_empty(), host_allocator_, &program));
+  iree_vm_function_t function = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        loom_serve_program_lookup(program, role, &function));
+  loom_serve_program_free(program);
+  module_owner.reset();
+  module = nullptr;
+  iree::Status status = loom_serve_program_compile_service(
+      target_environment_, environment_, &card_sources, {}, 1, &role,
+      &compilation_, host_allocator_, &module);
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(module, nullptr);
+  iree_vm_module_release(module);
+}
 
 TEST_F(ProgramTest, ExactScalarFamiliesMatchOnBothSides) {
   const std::array types = {

@@ -134,12 +134,12 @@ TEST_F(PreparationTest, CatalogGrowthPreservesEveryDeclaration) {
       ASSERT_EQ(parameter.source_count, 1);
       ASSERT_EQ(parameter.sources[0].count, 3);
       const auto* paths = parameter.sources[0].values;
-      EXPECT_EQ(std::string(paths[0].data, paths[0].size),
+      EXPECT_EQ(std::string(paths[0].path.data, paths[0].path.size),
                 "/checkpoints/model.safetensors");
-      EXPECT_EQ(std::string(paths[1].data, paths[1].size),
+      EXPECT_EQ(std::string(paths[1].path.data, paths[1].path.size),
                 std::string(j < 10 ? "/checkpoints/k0" : "/checkpoints/k") +
                     std::to_string(j));
-      EXPECT_EQ(std::string(paths[2].data, paths[2].size),
+      EXPECT_EQ(std::string(paths[2].path.data, paths[2].path.size),
                 "/checkpoints/weights.loom");
       EXPECT_EQ(std::string(parameter.policy.data, parameter.policy.size),
                 "weights.loom");
@@ -148,21 +148,21 @@ TEST_F(PreparationTest, CatalogGrowthPreservesEveryDeclaration) {
 }
 
 TEST_F(PreparationTest, CheckpointIdentityIncludesEveryFileAndPolicy) {
-  const iree_string_view_t files[] = {IREE_SV("first.gguf"),
-                                      IREE_SV("second.gguf")};
-  const iree_string_view_list_t sources[] = {{IREE_ARRAYSIZE(files), files}};
+  const loom_model_file_t files[] = {{IREE_SV("first.gguf"), {}},
+                                     {IREE_SV("second.gguf"), {}}};
+  const loom_model_file_list_t sources[] = {{IREE_ARRAYSIZE(files), files}};
   const loom_serve_preparation_parameter_t base = {0, 1, sources,
                                                    IREE_SV("weights.loom")};
   auto peer = base;
   peer.binding = 1;
   EXPECT_TRUE(loom_serve_preparation_parameter_equal(&base, &peer));
-  const iree_string_view_t different[] = {files[0], IREE_SV("other.gguf")};
-  iree_string_view_list_t peer_sources[] = {{2, different}, {1, files}};
+  const loom_model_file_t different[] = {files[0], {IREE_SV("other.gguf"), {}}};
+  loom_model_file_list_t peer_sources[] = {{2, different}, {1, files}};
   peer.sources = peer_sources;
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
   peer_sources[0] = {1, files};
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
-  const iree_string_view_t reversed[] = {files[1], files[0]};
+  const loom_model_file_t reversed[] = {files[1], files[0]};
   peer_sources[0] = {2, reversed};
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
   peer_sources[0] = sources[0];
@@ -187,10 +187,12 @@ TEST_F(PreparationTest, IndependentSourcesPreserveShardOrderAndDuplicateNames) {
   for (uint32_t s = 0; s < parameter.source_count; ++s) {
     const auto& source = parameter.sources[s];
     ASSERT_EQ(source.count, 2);
-    EXPECT_EQ(std::string(source.values[0].data, source.values[0].size),
-              "/checkpoints/model.safetensors");
-    EXPECT_EQ(std::string(source.values[1].data, source.values[1].size),
-              "/checkpoints/weights.loom");
+    EXPECT_EQ(
+        std::string(source.values[0].path.data, source.values[0].path.size),
+        "/checkpoints/model.safetensors");
+    EXPECT_EQ(
+        std::string(source.values[1].path.data, source.values[1].path.size),
+        "/checkpoints/weights.loom");
   }
 }
 
@@ -248,7 +250,7 @@ class PreparationCaptureTest : public PreparationTest {
   void SetUp() override {
     PreparationTest::SetUp();
     IREE_ASSERT_OK(loom_serve_preparation_module_create(
-        environment, host_allocator, &module));
+        environment, nullptr, host_allocator, &module));
     const iree_string_view_t roots[] = {
         IREE_SV("request_stages"), IREE_SV("configure_cold_stage"),
         IREE_SV("conflicting_parameter_policy"), IREE_SV("no_stages")};

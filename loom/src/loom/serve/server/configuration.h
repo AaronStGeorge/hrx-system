@@ -98,6 +98,12 @@ typedef struct loom_serve_model_configuration_t {
   // Owned program paths, provider array/strings, local directory base, and
   // retained source package when registration supplied one.
   loom_serve_sources_t sources;
+  // Owned namespace after cold card resolution; sources borrows this value.
+  // NULL while a local card reference is pending or for direct declarations.
+  loom_serve_sources_t* resolved_sources;
+  // Owned deployment JSON while a card reference awaits cold resolution.
+  // Retains authored overrides until canonical defaults are available.
+  iree_string_view_t document;
   // Owned JSON object interpreted by the source prepare program.
   iree_string_view_t options;
   // Bounded host request credit. Text/speech/recognition exclude active model
@@ -123,9 +129,12 @@ typedef struct loom_serve_model_configuration_t {
   };
 } loom_serve_model_configuration_t;
 
-// Parses a complete {name, definition, device?, admission?, base_directory?}
-// model document. The definition owns kind, prepare/control paths, sources
-// array, modality-specific inputs/capacities, and source-owned options.
+// Parses a deployment with name, definition, optional model reference, device,
+// admission, and base_directory. A model reference selects a local portable
+// card. Its definition supplies kind and deployment overrides; cold resolution
+// supplies the program and asset closure and canonical configuration defaults.
+// Direct definitions supply their own prepare/control paths, sources array,
+// modality-specific inputs/capacities, and source-owned options.
 // Unknown, duplicate, wrong-kind and invalid fields reject before any model
 // I/O. Admission defaults to "open"; "drained" defers preparation. Device
 // selection is a nonnegative group ordinal; membership is resolved separately.
@@ -143,6 +152,15 @@ iree_status_t loom_serve_model_configuration_initialize(
     loom_serve_model_configuration_t* out_model);
 void loom_serve_model_configuration_deinitialize(
     loom_serve_model_configuration_t* model);
+
+// Resolves a pending local card on a preparation worker, then reapplies the
+// authored deployment over its canonical execution defaults. Returns a wholly
+// independent declaration. The original remains owned by its registration.
+// Device binding is preserved; no device resources are created here.
+iree_status_t loom_serve_model_configuration_resolve(
+    const loom_serve_model_configuration_t* model,
+    iree_allocator_t host_allocator,
+    loom_serve_model_configuration_t* out_model);
 
 // Reads one model document and supplies its directory to the shared parser.
 // This cold file-I/O entry belongs on a startup thread or preparation worker,

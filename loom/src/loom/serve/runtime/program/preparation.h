@@ -27,8 +27,8 @@ typedef struct loom_serve_preparation_parameter_t {
   uint32_t binding;
   // Number of independently indexed input checkpoints, in source order.
   uint32_t source_count;
-  // Owned resolved shard paths per source, independent of the bootstrap VM.
-  const iree_string_view_list_t* sources;
+  // Owned typed shards per source, independent of the bootstrap VM/card.
+  const loom_model_file_list_t* sources;
   // Owned preparation-policy path, relative to the bootstrap source directory.
   iree_string_view_t policy;
 } loom_serve_preparation_parameter_t;
@@ -67,12 +67,19 @@ typedef struct loom_serve_preparation_stage_t {
 // Declarations with no device or VM ownership after construction.
 typedef struct loom_serve_preparation_t loom_serve_preparation_t;
 
+// Borrowed selected model facts retained independently by these declarations.
+// NULL for direct program callers without a card.
+loom_model_card_t* loom_serve_preparation_card(
+    const loom_serve_preparation_t* preparation);
+
 // Creates the source-facing "prepare" declaration capability. The caller
 // serializes begin/take with VM invocation and retains the module while linked.
 // No declaration storage is allocated until source code declares a stage.
+// An optional retained card supplies named parameter scopes and fixed JIT
+// configuration; captured declarations retain it independently of the module.
 iree_status_t loom_serve_preparation_module_create(
-    iree_vm_environment_t* environment, iree_allocator_t host_allocator,
-    iree_vm_module_t** out_module);
+    iree_vm_environment_t* environment, loom_model_card_t* card,
+    iree_allocator_t host_allocator, iree_vm_module_t** out_module);
 
 enum loom_serve_preparation_flag_bits_e {
   // Allows checkpoint declarations when the caller owns parameter resolution.
@@ -105,15 +112,20 @@ loom_serve_preparation_t* loom_serve_preparation_module_take(
 //   parameter(i32 stage, i32 binding, i32 source, buffer directory, buffer
 //   path,
 //             buffer policy)
+//   parameter_scope(i32 stage, i32 binding, i32 source, buffer scope,
+//                   buffer policy)
 // All string buffers exclude NUL bytes. Config values use the public loomc
 // textual value syntax; config_i64 formats signed decimal values. Parameter
-// paths join directory and path in the server filesystem namespace. Repeated
-// parameter calls for the same binding and source append shards to one index.
+// paths join directory and path in the server filesystem namespace for direct
+// programs. Card-backed programs use parameter_scope, expanding the selected
+// scope's typed files into one index. Repeated calls for the same binding and
+// source append shards to that index.
 // Distinct sources may contain identical tensor names. Source ordinals are
 // declared densely from zero, and all sources for a binding name one policy.
 // File order is preserved within each index. Policy paths resolve through the
-// source environment. Declarations
-// copy their strings and retain no references to arguments, source mappings,
+// source environment. A card supplies stage configuration defaults; explicit
+// source declarations override individual keys. Declarations copy their strings
+// and retain no references to arguments, source mappings,
 // or the VM environment.
 // Additional caller libraries are linked beside the prepare module. Results
 // are ordinary VM variants owned by the caller; the environment must outlive
