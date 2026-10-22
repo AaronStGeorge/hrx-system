@@ -17,8 +17,8 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
-    loom::ir
-    loom::ops::check
+    loom::ir::builders
+    loom::ops::check::op_defs
   PUBLIC
 )
 
@@ -29,7 +29,7 @@ loom_cc_library(
     "operation_plan.c"
   DEPS
     ::api
-    loom::ir
+    loom::ir::builders
   PUBLIC
 )
 
@@ -43,8 +43,8 @@ loom_cc_library(
     ::operation_plan
     iree::base
     iree::base::internal::arena
-    loom::ir
-    loom::ops::kernel
+    loom::ir::builders
+    loom::ops::kernel::op_defs
     loom::ops::op_defs
     loom::tooling::testbench::scenario::plan
   PUBLIC
@@ -62,13 +62,13 @@ loom_cc_library(
     ::testbench
     iree::base
     iree::base::internal::arena
-    loom::ir
-    loom::ops::buffer
-    loom::ops::command
-    loom::ops::index
-    loom::ops::kernel
+    loom::ir::builders
+    loom::ops::buffer::builders
+    loom::ops::command::builders
+    loom::ops::index::builders
+    loom::ops::kernel::builders
     loom::ops::op_defs
-    loom::ops::scalar
+    loom::ops::scalar::builders
     loom::rewrite::remap
   PUBLIC
 )
@@ -82,7 +82,7 @@ loom_cc_library(
     "source_report.c"
   DEPS
     iree::base
-    loom::ir
+    loom::ir::builders
     loom::util::json
   PUBLIC
 )
@@ -99,7 +99,7 @@ loom_cc_library(
     ::source_report
     ::testbench
     iree::base
-    loom::ir
+    loom::ir::builders
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -122,7 +122,7 @@ loom_cc_library(
     iree::io::stream
     iree::tooling::numpy_io
     iree::tooling::value_io
-    loom::ir
+    loom::ir::builders
     loom::tooling::testbench::scenario::entropy
   PUBLIC
 )
@@ -156,7 +156,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::error::source
-    loom::ir
+    loom::ir::builders
   PUBLIC
 )
 
@@ -189,7 +189,7 @@ loom_cc_library(
     iree::hal
     iree::tooling::buffer_view_matchers
     loom::error::error_defs
-    loom::ir
+    loom::ir::builders
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -210,7 +210,7 @@ loom_cc_library(
     ::value_materializer
     iree::base
     iree::base::internal::arena
-    loom::ir
+    loom::ir::builders
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -228,8 +228,8 @@ loom_cc_library(
     ::testbench
     iree::base
     iree::base::internal::arena
-    loom::ir
-    loom::ops::check
+    loom::ir::builders
+    loom::ops::check::op_defs
     loom::util::json
   PUBLIC
 )

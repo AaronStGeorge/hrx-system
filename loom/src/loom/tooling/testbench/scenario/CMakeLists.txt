@@ -19,7 +19,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
-    loom::ir
+    loom::ir::builders
     loom::ops::op_defs
     loom::tooling::testbench::api
     loom::tooling::testbench::operation_plan
