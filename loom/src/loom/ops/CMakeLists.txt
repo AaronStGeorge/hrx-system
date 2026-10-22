@@ -282,11 +282,13 @@ loom_generated_file_family(
     "op_registry_tables.h"
     "type_registry_tables.c"
     "type_registry_tables.h"
+    "type_builders.c"
   OUTPUT_FLAGS
     "--op-registry-tables"
     "--op-registry-tables-header"
     "--type-registry-tables"
     "--type-registry-tables-header"
+    "--type-builders"
   ARGS
     "--registry"
 )
@@ -351,6 +353,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    type_builders
+  HDRS
+    "type_builders.h"
+  SRCS
+    "type_builders.c"
+  DEPS
+    iree::base
+    loom::ir::builders
+    loom::util::bstring
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     type_registry
   HDRS
     "type_registry.h"
@@ -361,6 +377,7 @@ loom_cc_library(
   DEPS
     ::op_defs
     ::storage_facts
+    ::type_builders
     iree::base
     loom::ir
     loom::ops::buffer
@@ -369,6 +386,17 @@ loom_cc_library(
     loom::ops::view
     loom::util::fact_table
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    type_builders_test
+  SRCS
+    "type_builders_test.cc"
+  DEPS
+    ::type_builders
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

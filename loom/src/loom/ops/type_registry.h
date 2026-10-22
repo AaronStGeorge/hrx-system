@@ -13,7 +13,7 @@
 #include "iree/base/api.h"
 #include "loom/ir/type_descriptor.h"
 #include "loom/ops/op_defs.h"
-#include "loom/ir/types.h"
+#include "loom/ops/type_builders.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,103 +22,11 @@ extern "C" {
 typedef struct loom_module_t loom_module_t;
 typedef struct loom_context_t loom_context_t;
 
-// Exact-build family keys; serialized types use their public names.
-enum {
-  LOOM_PARAMETERIZED_TYPE_CHANNEL = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, 0),
-  LOOM_PARAMETERIZED_TYPE_READ = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, 1),
-  LOOM_PARAMETERIZED_TYPE_WRITE = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, 2),
-};
-
 extern const loom_parameterized_type_descriptor_t loom_encoding_type_parameterized_descriptor;
-static inline iree_string_view_t loom_encoding_type_role_name(loom_encoding_role_t value) {
-  loom_bstring_t name = loom_attr_descriptor_enum_case_name(
-      &loom_encoding_type_parameterized_descriptor.parameter_descriptors[0], (uint8_t)value);
-  return name ? loom_bstring_view(name) : iree_string_view_empty();
-}
-static inline bool loom_encoding_type_role_parse(iree_string_view_t name, loom_encoding_role_t* out_value) {
-  uint8_t value = 0;
-  if (!loom_attr_descriptor_find_enum_case(
-          &loom_encoding_type_parameterized_descriptor.parameter_descriptors[0], name, &value)) {
-    return false;
-  }
-  *out_value = (loom_encoding_role_t)value;
-  return true;
-}
-
 extern const loom_parameterized_type_descriptor_t loom_channel_type_parameterized_descriptor;
-static inline bool loom_channel_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_CHANNEL;
-}
-enum { LOOM_CHANNEL_TYPE_PAYLOAD_PARAMETER_INDEX = 0 };
-static inline loom_type_id_t loom_channel_type_payload(loom_type_t type) {
-  return loom_attr_as_type_id(loom_type_parameterized_parameters(type)[LOOM_CHANNEL_TYPE_PAYLOAD_PARAMETER_INDEX]);
-}
-iree_status_t loom_channel_type_make(
-    loom_module_t* module,
-    loom_type_id_t payload,
-    loom_type_t* out_type);
-
-// Permission on an owned consuming access; absence means immutable reading.
-typedef enum loom_read_type_mode_e {
-  LOOM_READ_TYPE_MODE_MUTABLE = 1,
-  LOOM_READ_TYPE_MODE_COUNT_ = 2,
-} loom_read_type_mode_t;
-
 extern const loom_parameterized_type_descriptor_t loom_read_type_parameterized_descriptor;
-enum loom_read_type_build_flag_bits_e {
-  LOOM_READ_TYPE_BUILD_FLAG_HAS_MODE = 1u << 0,
-};
-typedef uint32_t loom_read_type_build_flags_t;
-
-static inline bool loom_read_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_READ;
-}
-enum { LOOM_READ_TYPE_PAYLOAD_PARAMETER_INDEX = 0 };
-static inline loom_type_id_t loom_read_type_payload(loom_type_t type) {
-  return loom_attr_as_type_id(loom_type_parameterized_parameters(type)[LOOM_READ_TYPE_PAYLOAD_PARAMETER_INDEX]);
-}
-enum { LOOM_READ_TYPE_MODE_PARAMETER_INDEX = 1 };
-static inline bool loom_read_type_has_mode(loom_type_t type) {
-  return !loom_attr_is_absent(loom_type_parameterized_parameters(type)[LOOM_READ_TYPE_MODE_PARAMETER_INDEX]);
-}
-static inline loom_read_type_mode_t loom_read_type_mode(loom_type_t type) {
-  return (loom_read_type_mode_t)loom_attr_as_enum(loom_type_parameterized_parameters(type)[LOOM_READ_TYPE_MODE_PARAMETER_INDEX]);
-}
-iree_status_t loom_read_type_make(
-    loom_module_t* module,
-    loom_read_type_build_flags_t build_flags,
-    loom_type_id_t payload,
-    loom_read_type_mode_t mode,
-    loom_type_t* out_type);
-
 extern const loom_parameterized_type_descriptor_t loom_write_type_parameterized_descriptor;
-static inline bool loom_write_type_isa(loom_type_t type) {
-  return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_WRITE;
-}
-enum { LOOM_WRITE_TYPE_PAYLOAD_PARAMETER_INDEX = 0 };
-static inline loom_type_id_t loom_write_type_payload(loom_type_t type) {
-  return loom_attr_as_type_id(loom_type_parameterized_parameters(type)[LOOM_WRITE_TYPE_PAYLOAD_PARAMETER_INDEX]);
-}
-iree_status_t loom_write_type_make(
-    loom_module_t* module,
-    loom_type_id_t payload,
-    loom_type_t* out_type);
-
 extern const loom_parameterized_type_descriptor_t loom_low_storage_type_parameterized_descriptor;
-static inline iree_string_view_t loom_low_storage_type_space_name(loom_storage_space_t value) {
-  loom_bstring_t name = loom_attr_descriptor_enum_case_name(
-      &loom_low_storage_type_parameterized_descriptor.parameter_descriptors[0], (uint8_t)value);
-  return name ? loom_bstring_view(name) : iree_string_view_empty();
-}
-static inline bool loom_low_storage_type_space_parse(iree_string_view_t name, loom_storage_space_t* out_value) {
-  uint8_t value = 0;
-  if (!loom_attr_descriptor_find_enum_case(
-          &loom_low_storage_type_parameterized_descriptor.parameter_descriptors[0], name, &value)) {
-    return false;
-  }
-  *out_value = (loom_storage_space_t)value;
-  return true;
-}
 
 // Binds common indirect type families to their context owner before finalization.
 iree_status_t loom_type_registry_register_common_types(loom_context_t* context);

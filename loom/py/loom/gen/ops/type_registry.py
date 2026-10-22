@@ -25,6 +25,9 @@ from loom.gen.ops.c_parameterized_types import (
     generate_header_lines as _generate_parameterized_type_header_lines,
 )
 from loom.gen.ops.c_parameterized_types import (
+    generate_metadata_header_lines as _generate_parameterized_type_metadata_header_lines,
+)
+from loom.gen.ops.c_parameterized_types import (
     generate_metadata_lines as _generate_parameterized_type_metadata_lines,
 )
 from loom.gen.ops.c_parameterized_types import (
@@ -234,7 +237,7 @@ def _type_enum_includes(all_types: Sequence[Any]) -> list[str]:
 
 
 def _append_type_definition_source(source: list[str], all_types: Sequence[Any]) -> None:
-    """Appends descriptor metadata and typed constructor definitions."""
+    """Appends compiler-owned descriptor metadata."""
 
     nested_attr_headers = sorted(
         {
@@ -313,8 +316,6 @@ def _append_type_definition_source(source: list[str], all_types: Sequence[Any]) 
         source.append("};")
         source.append("")
 
-    source.extend(_generate_parameterized_type_source_lines(all_types))
-
 
 def _append_parameterized_registry(source: list[str], symbol_prefix: str, all_types: Sequence[Any]) -> None:
     families = indirect_parameterized_type_defs(all_types)
@@ -325,6 +326,22 @@ def _append_parameterized_registry(source: list[str], symbol_prefix: str, all_ty
     source.append("};")
     source.append(f"const iree_host_size_t {symbol_prefix}_parameterized_count = {len(families)};")
     source.append("")
+
+
+def generate_type_builders(all_types: Sequence[Any], *, path: str = "ops", namespace: str = "LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE") -> tuple[str, str]:
+    """Generates construction APIs without compiler metadata dependencies."""
+    guard = f"LOOM_{path.replace('/', '_').upper()}_TYPE_BUILDERS_H_"
+    includes = {"iree/base/api.h", "loom/ir/attribute.h", "loom/ir/types.h", "loom/util/bstring.h", *_type_enum_includes(all_types)}
+    if namespace != "LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE":
+        includes.add("loom/ir/ir.h")
+    header = [GENERATED_HEADER, f"#ifndef {guard}", f"#define {guard}", ""]
+    header.extend(f'#include "{include}"' for include in sorted(includes))
+    header.extend(["", "#ifdef __cplusplus", 'extern "C" {', "#endif", "", "typedef struct loom_module_t loom_module_t;", ""])
+    header.extend(_generate_parameterized_type_header_lines(all_types, namespace))
+    header.extend(["#ifdef __cplusplus", "}", "#endif", "", f"#endif  // {guard}", ""])
+    source = [GENERATED_HEADER, f'#include "loom/{path}/type_builders.h"', '#include "loom/ir/module.h"', ""]
+    source.extend(_generate_parameterized_type_source_lines(all_types))
+    return "\n".join(header), "\n".join(source)
 
 
 def generate_type_registry(
@@ -339,10 +356,9 @@ def generate_type_registry(
         "iree/base/api.h",
         "loom/ir/type_descriptor.h",
         "loom/ops/op_defs.h",
+        "loom/ops/type_builders.h",
     )
     header.extend(f'#include "{include}"' for include in base_includes)
-    enum_includes = sorted(set(_type_enum_includes(all_types)) - set(base_includes))
-    header.extend(f'#include "{include}"' for include in enum_includes)
     header.append("")
     header.append("#ifdef __cplusplus")
     header.append('extern "C" {')
@@ -351,7 +367,8 @@ def generate_type_registry(
     header.append("typedef struct loom_module_t loom_module_t;")
     header.append("typedef struct loom_context_t loom_context_t;")
     header.append("")
-    header.extend(_generate_parameterized_type_header_lines(all_types))
+    header.extend(_generate_parameterized_type_metadata_header_lines(all_types))
+    header.append("")
     header.append("// Binds common indirect type families to their context owner before finalization.")
     header.append("iree_status_t loom_type_registry_register_common_types(loom_context_t* context);")
     header.append("")
@@ -398,7 +415,6 @@ def generate_type_registry(
 
     source = [GENERATED_HEADER]
     source.append('#include "loom/ops/type_registry_tables.h"')
-    source.append('#include "loom/ir/module.h"')
     _append_type_definition_source(source, all_types)
     _append_parameterized_registry(source, "loom_type_registry", all_types)
 
@@ -444,6 +460,8 @@ def generate_dialect_type_registry(dialect: Any, all_types: Sequence[Any]) -> tu
     header.append("typedef struct loom_module_t loom_module_t;")
     header.append("")
     header.extend(_generate_parameterized_type_header_lines(all_types, c_dialect_enum(dialect.name)))
+    header.extend(_generate_parameterized_type_metadata_header_lines(all_types))
+    header.append("")
     symbol_prefix = f"loom_{dialect.name}_type_registry"
     header.append("// Generated type descriptors owned by this dialect.")
     header.append(f"extern const loom_type_registry_entry_t {symbol_prefix}_entries[];")
@@ -464,6 +482,7 @@ def generate_dialect_type_registry(dialect: Any, all_types: Sequence[Any]) -> tu
     source.append(f'#include "loom/{path}/types.h"')
     source.append('#include "loom/ir/module.h"')
     _append_type_definition_source(source, all_types)
+    source.extend(_generate_parameterized_type_source_lines(all_types))
     _append_parameterized_registry(source, symbol_prefix, all_types)
     source.append(f"const loom_type_registry_entry_t {symbol_prefix}_entries[] = {{")
     for type_def in sorted(all_types, key=lambda value: value.name):

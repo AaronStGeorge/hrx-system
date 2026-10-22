@@ -39,6 +39,8 @@ def test_checked_in_file_set_separates_public_artifacts_from_build_outputs() -> 
     assert "loom/src/loom/ops/artifact_test/ops.h" in generated_file_set.output_paths
     assert "loom/src/loom/ops/build_generated_test/ops.h" in generated_file_set.obsolete_paths
     assert "loom/src/loom/ops/op_registry.h" in generated_file_set.output_paths
+    assert "loom/src/loom/ops/type_builders.h" in generated_file_set.output_paths
+    assert "loom/src/loom/ops/type_builders.c" in generated_file_set.obsolete_paths
     assert "loom/src/loom/ir/scalar_type_table.inc" in generated_file_set.output_paths
     assert "loom/src/loom/ops/artifact_test/ops.inc" in generated_file_set.obsolete_paths
     assert "loom/src/loom/ops/build_generated_test/ops.inc" in generated_file_set.obsolete_paths

@@ -413,7 +413,7 @@ loom_cc_library(
         ":function",
         "//loom/src/loom/analysis:storage_layout",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/ops:type_builders",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",

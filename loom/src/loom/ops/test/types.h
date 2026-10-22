@@ -34,7 +34,6 @@ typedef enum loom_test_scope_type_scope_e {
   LOOM_TEST_SCOPE_TYPE_SCOPE_COUNT_ = 3,
 } loom_test_scope_type_scope_t;
 
-extern const loom_parameterized_type_descriptor_t loom_test_scope_type_parameterized_descriptor;
 static inline bool loom_test_scope_type_isa(loom_type_t type) {
   return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_SCOPE;
 }
@@ -54,7 +53,6 @@ typedef enum loom_test_matrix_type_scope_e {
   LOOM_TEST_MATRIX_TYPE_SCOPE_COUNT_ = 3,
 } loom_test_matrix_type_scope_t;
 
-extern const loom_parameterized_type_descriptor_t loom_test_matrix_type_parameterized_descriptor;
 enum loom_test_matrix_type_build_flag_bits_e {
   LOOM_TEST_MATRIX_TYPE_BUILD_FLAG_HAS_TARGET = 1u << 0,
 };
@@ -98,7 +96,6 @@ typedef enum loom_test_compact_matrix_type_scope_e {
   LOOM_TEST_COMPACT_MATRIX_TYPE_SCOPE_COUNT_ = 3,
 } loom_test_compact_matrix_type_scope_t;
 
-extern const loom_parameterized_type_descriptor_t loom_test_compact_matrix_type_parameterized_descriptor;
 static inline bool loom_test_compact_matrix_type_isa(loom_type_t type) {
   return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_TEST_COMPACT_MATRIX;
 }
@@ -126,7 +123,6 @@ iree_status_t loom_test_compact_matrix_type_make(
     loom_test_compact_matrix_type_scope_t scope,
     loom_type_t* out_type);
 
-extern const loom_parameterized_type_descriptor_t loom_test_array_type_parameterized_descriptor;
 enum loom_test_array_type_build_flag_bits_e {
   LOOM_TEST_ARRAY_TYPE_BUILD_FLAG_HAS_ALIGNMENT = 1u << 0,
   LOOM_TEST_ARRAY_TYPE_BUILD_FLAG_HAS_METADATA = 1u << 1,
@@ -162,7 +158,6 @@ iree_status_t loom_test_array_type_make(
     loom_named_attr_slice_t metadata,
     loom_type_t* out_type);
 
-extern const loom_parameterized_type_descriptor_t loom_test_variant_set_type_parameterized_descriptor;
 enum loom_test_variant_set_type_build_flag_bits_e {
   LOOM_TEST_VARIANT_SET_TYPE_BUILD_FLAG_HAS_ALTERNATIVES = 1u << 0,
 };
@@ -188,6 +183,12 @@ iree_status_t loom_test_variant_set_type_make(
     loom_parameterized_attr_array_t values,
     loom_parameterized_attr_array_t alternatives,
     loom_type_t* out_type);
+
+extern const loom_parameterized_type_descriptor_t loom_test_scope_type_parameterized_descriptor;
+extern const loom_parameterized_type_descriptor_t loom_test_matrix_type_parameterized_descriptor;
+extern const loom_parameterized_type_descriptor_t loom_test_compact_matrix_type_parameterized_descriptor;
+extern const loom_parameterized_type_descriptor_t loom_test_array_type_parameterized_descriptor;
+extern const loom_parameterized_type_descriptor_t loom_test_variant_set_type_parameterized_descriptor;
 
 // Generated type descriptors owned by this dialect.
 extern const loom_type_registry_entry_t loom_test_type_registry_entries[];

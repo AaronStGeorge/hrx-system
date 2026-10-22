@@ -25,7 +25,6 @@ enum {
   LOOM_PARAMETERIZED_TYPE_SPIRV_COOPERATIVE_MATRIX = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_DIALECT_SPIRV, 0),
 };
 
-extern const loom_parameterized_type_descriptor_t loom_spirv_cooperative_matrix_type_parameterized_descriptor;
 static inline bool loom_spirv_cooperative_matrix_type_isa(loom_type_t type) {
   return loom_type_is_parameterized(type) && loom_type_parameterized_kind(type) == LOOM_PARAMETERIZED_TYPE_SPIRV_COOPERATIVE_MATRIX;
 }
@@ -57,6 +56,8 @@ iree_status_t loom_spirv_cooperative_matrix_type_make(
     loom_spirv_scope_t scope,
     loom_spirv_cooperative_matrix_use_t use,
     loom_type_t* out_type);
+
+extern const loom_parameterized_type_descriptor_t loom_spirv_cooperative_matrix_type_parameterized_descriptor;
 
 // Generated type descriptors owned by this dialect.
 extern const loom_type_registry_entry_t loom_spirv_type_registry_entries[];

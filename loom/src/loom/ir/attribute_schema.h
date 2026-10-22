@@ -212,14 +212,13 @@ static inline bool loom_attr_descriptor_find_enum_case(
     uint8_t* out_value) {
   const iree_host_size_t case_span =
       loom_attr_descriptor_enum_case_span(descriptor);
-  for (iree_host_size_t i = 0; i < case_span; ++i) {
-    loom_bstring_t case_name = descriptor->enum_case_names[i];
-    if (case_name && loom_bstring_equal(case_name, keyword)) {
-      *out_value = (uint8_t)i;
-      return true;
-    }
+  iree_host_size_t index = 0;
+  if (!loom_bstring_table_find(descriptor ? descriptor->enum_case_names : NULL,
+                               case_span, keyword, &index)) {
+    return false;
   }
-  return false;
+  *out_value = (uint8_t)index;
+  return true;
 }
 
 // Returns the attribute name as a string view.

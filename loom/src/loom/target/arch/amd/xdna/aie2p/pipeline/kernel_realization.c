@@ -21,7 +21,7 @@
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/pipeline/ops.h"
-#include "loom/ops/type_registry.h"
+#include "loom/ops/type_builders.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/target/arch/amd/xdna/aie2p/facts.h"

@@ -103,27 +103,33 @@ TEST(BString, ArrayTableLookup) {
       kHello,
       kIterArgs,
   };
-  // Simulate a parser token scan: find "step" in the table.
-  iree_string_view_t token = IREE_SV("step");
-  int found = -1;
-  for (int i = 0; i < 4; ++i) {
-    if (loom_bstring_equal(keywords[i], token)) {
-      found = i;
-      break;
-    }
-  }
-  EXPECT_EQ(found, 1);
+  iree_host_size_t index = 99;
+  EXPECT_TRUE(loom_bstring_table_find(keywords, IREE_ARRAYSIZE(keywords),
+                                      IREE_SV("step"), &index));
+  EXPECT_EQ(index, 1u);
+  EXPECT_FALSE(loom_bstring_table_find(keywords, IREE_ARRAYSIZE(keywords),
+                                       IREE_SV("missing"), &index));
+  EXPECT_EQ(index, 1u);
+}
 
-  // Verify miss.
-  token = IREE_SV("missing");
-  found = -1;
-  for (int i = 0; i < 4; ++i) {
-    if (loom_bstring_equal(keywords[i], token)) {
-      found = i;
-      break;
-    }
-  }
-  EXPECT_EQ(found, -1);
+TEST(BString, SparseTablePreservesOrdinalsAndMatchesEmptyStrings) {
+  static const loom_bstring_t keywords[] = {nullptr, kEmpty, kHello,
+                                            nullptr, kHello, kStep};
+  iree_host_size_t index = 99;
+  EXPECT_TRUE(loom_bstring_table_find(keywords, IREE_ARRAYSIZE(keywords),
+                                      IREE_SV(""), &index));
+  EXPECT_EQ(index, 1u);
+  EXPECT_TRUE(loom_bstring_table_find(keywords, IREE_ARRAYSIZE(keywords),
+                                      IREE_SV("hello"), &index));
+  EXPECT_EQ(index, 2u);
+  EXPECT_TRUE(loom_bstring_table_find(keywords, IREE_ARRAYSIZE(keywords),
+                                      IREE_SV("step"), &index));
+  EXPECT_EQ(index, 5u);
+  EXPECT_FALSE(loom_bstring_table_find(keywords, IREE_ARRAYSIZE(keywords),
+                                       IREE_SV("hell"), &index));
+  EXPECT_EQ(index, 5u);
+  EXPECT_FALSE(loom_bstring_table_find(nullptr, 0, IREE_SV(""), &index));
+  EXPECT_EQ(index, 5u);
 }
 
 TEST(BString, InlineReferenceLiteral) {

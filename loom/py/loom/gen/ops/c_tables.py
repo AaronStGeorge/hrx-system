@@ -56,6 +56,7 @@ from loom.gen.ops.model import (
 )
 from loom.gen.ops.type_registry import (
     generate_dialect_type_registry,
+    generate_type_builders,
     generate_type_registry,
 )
 from loom.gen.support.files import write_text_file as _write_file
@@ -123,6 +124,7 @@ def _production_dialects(
 def _generate_registry_contents(model: GenerationModel) -> dict[str, str]:
     op_reg_h, op_reg_tables_h, op_reg_tables_c = c_registry.generate_op_registry(_production_dialects(model))
     type_reg_h, type_reg_tables_h, type_reg_tables_c = generate_type_registry(model.types)
+    type_builders_h, type_builders_c = generate_type_builders(model.types)
     return {
         "op_registry.h": op_reg_h,
         "op_registry_tables.h": op_reg_tables_h,
@@ -130,6 +132,8 @@ def _generate_registry_contents(model: GenerationModel) -> dict[str, str]:
         "type_registry.h": type_reg_h,
         "type_registry_tables.h": type_reg_tables_h,
         "type_registry_tables.c": type_reg_tables_c,
+        "type_builders.h": type_builders_h,
+        "type_builders.c": type_builders_c,
         "keyword_enum.inc": generate_keyword_enum_inc(),
         "keyword_table.inc": generate_keyword_table_inc(),
     }
@@ -162,6 +166,7 @@ def checked_in_file_set(model: GenerationModel | None = None) -> GeneratedFileSe
         if filename in (
             "op_registry.h",
             "type_registry.h",
+            "type_builders.h",
             "keyword_enum.inc",
             "keyword_table.inc",
         ):
@@ -239,6 +244,8 @@ def _main_build_output_mode(parser: argparse.ArgumentParser, args: argparse.Name
     _set_output(parser, outputs, "type_registry.h", args.type_registry_header)
     _set_output(parser, outputs, "type_registry_tables.h", args.type_registry_tables_header)
     _set_output(parser, outputs, "type_registry_tables.c", args.type_registry_tables)
+    _set_output(parser, outputs, "type_builders.h", args.type_builders_header)
+    _set_output(parser, outputs, "type_builders.c", args.type_builders)
     _set_output(parser, outputs, "keyword_enum.inc", args.keyword_enum)
     _set_output(parser, outputs, "keyword_table.inc", args.keyword_table)
     model = load_generation_model()
@@ -287,6 +294,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--type-registry-header", type=Path, help="Generated type_registry.h path.")
     parser.add_argument("--type-registry-tables", type=Path, help="Generated type_registry_tables.c path.")
     parser.add_argument("--type-registry-tables-header", type=Path, help="Generated type_registry_tables.h path.")
+    parser.add_argument("--type-builders-header", type=Path, help="Generated type_builders.h path.")
+    parser.add_argument("--type-builders", type=Path, help="Generated type_builders.c path.")
     parser.add_argument("--keyword-enum", type=Path, help="Generated keyword_enum.inc path.")
     parser.add_argument("--keyword-table", type=Path, help="Generated keyword_table.inc path.")
     args = parser.parse_args(argv)
