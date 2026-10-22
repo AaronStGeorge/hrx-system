@@ -225,13 +225,9 @@ AMD_GPU_WINDOWS_TEST_TAG_FILTERS = ("-requires-amd-gpu-feedback",)
 # Native CTS binaries embed images for every supported execution family. Their
 # compiler descriptors must remain enabled even on a single-family runner.
 AMD_GPU_BINARY_TARGETS = ("gfx90a", "gfx9-4-generic", "gfx11-generic", "gfx12-generic")
-AMD_GPU_LOOM_TARGETS = (
-    "iree_hal",
-    *AMD_GPU_BINARY_TARGETS,
-    "gfx110X-all",
-    "gfx115X-all",
-    "gfx120X-all",
-)
+# Compiler-only fixtures cover the complete supported target vocabulary, even
+# when hardware execution uses one family and native CTS embeds a smaller set.
+AMD_GPU_LOOM_TARGETS = ("loom_defaults",)
 AMD_GPU_BAZEL_OPTIONS = (
     "--//runtime/src/iree/hal/drivers/amd/gpu:targets="
     + ",".join(AMD_GPU_BINARY_TARGETS),
