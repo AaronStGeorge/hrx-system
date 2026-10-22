@@ -48,6 +48,7 @@ loom_generated_cc_library(
     "canonicalize.c"
     "facts.c"
     "location.c"
+    "source_abi.c"
     "verify.c"
   TEXTUAL_HDRS
     "ops.inc"
@@ -58,6 +59,7 @@ loom_generated_cc_library(
   HDRS
     "location.h"
     "ops.h"
+    "source_abi.h"
   ARGS
     "--dialect=func"
   EXTRA_OUTPUT_FLAGS
@@ -68,7 +70,9 @@ loom_generated_cc_library(
     "builders.c"
   DEPS
     ::builders
+    iree::base
     iree::base::core_headers
+    loom::error::emitter
     loom::error::error_defs
     loom::error::parameter
     loom::format::location

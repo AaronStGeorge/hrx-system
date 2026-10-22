@@ -62,10 +62,10 @@ class ChannelCompletionTest : public ::testing::Test {
                                      loom_type_scalar(LOOM_SCALAR_TYPE_I1)};
     IREE_ASSERT_OK(loom_func_def_build(
         &builder_, 0, 0, /*linkage=*/0, 0, 0, 0, 0, 0, loom_symbol_ref_null(),
-        0, loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
-        loom_named_attr_slice_empty(), {0, symbol}, arguments,
-        IREE_ARRAYSIZE(arguments), nullptr, 0, nullptr, 0, nullptr, 0,
-        LOOM_LOCATION_UNKNOWN, &function_));
+        /*source_abi=*/loom_attr_absent(), 0, loom_named_attr_slice_empty(),
+        LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), {0, symbol},
+        arguments, IREE_ARRAYSIZE(arguments), nullptr, 0, nullptr, 0, nullptr,
+        0, LOOM_LOCATION_UNKNOWN, &function_));
     region_ = loom_func_def_body(function_);
     loom_builder_enter_region(&builder_, function_, region_);
     const auto* argument_ids = loom_region_entry_block(region_)->arg_ids;

@@ -54,6 +54,8 @@ loom_check_test_suite(
     "buffer_alloca_invalid.cxx-test"
     "buffer_memory_space.cxx-test"
     "buffer_memory_space_invalid.cxx-test"
+    "c_abi.cxx-test"
+    "c_abi_invalid.cxx-test"
     "callable_effects.cxx-test"
     "check.cxx-test"
     "check_close.cxx-test"

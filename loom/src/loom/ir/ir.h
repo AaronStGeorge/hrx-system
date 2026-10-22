@@ -1259,6 +1259,10 @@ typedef struct loom_func_like_vtable_t {
   // Index of the optional target ABI enum attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t abi_attr_index;
 
+  // Index of the optional source-language ABI contract. LOOM_ATTR_INDEX_NONE
+  // if the callable has no retained source boundary.
+  uint8_t source_abi_attr_index;
+
   // Index of the optional target ABI payload dict. LOOM_ATTR_INDEX_NONE if
   // absent.
   uint8_t abi_attrs_attr_index;

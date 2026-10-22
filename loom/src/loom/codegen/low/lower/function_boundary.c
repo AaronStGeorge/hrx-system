@@ -156,6 +156,16 @@ static iree_status_t loom_low_lower_initialize_argument_map(
 
 iree_status_t loom_low_lower_function_boundary_validate(
     loom_low_lower_context_t* context) {
+  if (!loom_attr_is_absent(
+          loom_func_like_source_abi(context->source_function))) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("source ABI projection")),
+    };
+    return loom_low_lower_emit_target_context_error(
+        context, context->source_function.op, LOOM_ERR_TARGET_032, params,
+        IREE_ARRAYSIZE(params));
+  }
+
   IREE_RETURN_IF_ERROR(loom_low_lower_initialize_argument_map(context));
 
   const uint16_t result_count = context->source_function.op->result_count;

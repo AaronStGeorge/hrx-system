@@ -76,11 +76,13 @@ loom_generated_cc_library(
         "canonicalize.c",
         "facts.c",
         "location.c",
+        "source_abi.c",
         "verify.c",
     ],
     hdrs = [
         "location.h",
         "ops.h",
+        "source_abi.h",
     ],
     args = ["--dialect=func"],
     extra_output_flags = [
@@ -98,6 +100,7 @@ loom_generated_cc_library(
     visibility = _FUNC_VISIBILITY,
     deps = [
         ":builders",
+        "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:parameter",
         "//loom/src/loom/format:location",
@@ -109,6 +112,7 @@ loom_generated_cc_library(
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/target:types",
         "//loom/src/loom/util:fact_table_api",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/base:core_headers",
     ],
 )

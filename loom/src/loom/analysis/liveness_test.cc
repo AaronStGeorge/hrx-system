@@ -496,11 +496,11 @@ class LivenessStorageTest : public LivenessTest {
                                    loom_type_scalar(LOOM_SCALAR_TYPE_I32));
     loom_op_t* function = nullptr;
     IREE_ASSERT_OK(loom_func_def_build(
-        &builder, 0, 0, /*linkage=*/0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
-        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
-        loom_named_attr_slice_empty(), {0, symbol_id}, types.data(),
-        argument_count, types.data(), result_count, nullptr, 0, nullptr, 0,
-        LOOM_LOCATION_UNKNOWN, &function));
+        &builder, 0, 0, /*linkage=*/0, 0, 0, 0, 0, 0, loom_symbol_ref_null(),
+        /*source_abi=*/loom_attr_absent(), 0, loom_named_attr_slice_empty(),
+        LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), {0, symbol_id},
+        types.data(), argument_count, types.data(), result_count, nullptr, 0,
+        nullptr, 0, LOOM_LOCATION_UNKNOWN, &function));
     body_ = loom_func_like_body(loom_func_like_cast(module, function));
     body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
     loom_block_t* entry = loom_region_entry_block(body_);
