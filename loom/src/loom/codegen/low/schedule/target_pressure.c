@@ -1033,6 +1033,7 @@ static void loom_low_schedule_score_active_unspillable_completions(
               LOOM_LOW_SCHEDULE_COMPLETION_SELECTION_FINAL,
               completion_domain_id, candidate_node)) {
         score->active_unspillable_completion_capacity = capacity;
+        score->active_unspillable_completion_domain_id = completion_domain_id;
       }
     }
     if (loom_low_schedule_target_pressure_unspillable_transaction_units(
@@ -1053,6 +1054,7 @@ static void loom_low_schedule_score_active_unspillable_completions(
     }
     if (can_improve_active) {
       score->active_unspillable_completion_capacity = capacity;
+      score->active_unspillable_completion_domain_id = completion_domain_id;
     }
     if (can_improve_transaction_final) {
       const uint32_t final_sink =

@@ -1886,7 +1886,7 @@ void loom_low_schedule_pressure_score_candidate(
   const bool retains_pre_spill_placement =
       has_per_user_placement &&
       !iree_any_bit_set(state->options->flags,
-                        LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC);
+                        LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC);
   uint32_t data_ready_stall_cycles = 0;
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       state->node_ready_issue_cycles != NULL && !is_storage_setup) {
@@ -1947,6 +1947,7 @@ void loom_low_schedule_pressure_score_candidate(
       .active_unspillable_transaction_final_capacity = UINT32_MAX,
       .opened_unspillable_completion_capacity = UINT32_MAX,
       .active_register_packing_completion_capacity = UINT32_MAX,
+      .active_unspillable_completion_domain_id = UINT16_MAX,
       .source_ordinal = node_index,
       .flags =
           (uint16_t)pressure_demand.candidate_flags |

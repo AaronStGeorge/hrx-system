@@ -645,7 +645,7 @@ block 0 order: 0, 3
 // Once allocation repair has materialized spill traffic, mandatory helpers can
 // intervene before the retained placement's consumer. Keep the placement
 // demand driven so it cannot recursively exhaust the same register bank.
-// RUN: emit low-schedule-query @resource_stall_defers_retained_spill_setup strategy=resource-stall materialized-spill-traffic test.i32=2 per-user-placement-values=%private required-register-values=%physical order=3,0
+// RUN: emit low-schedule-query @resource_stall_defers_retained_spill_setup strategy=resource-stall lowered-spill-traffic test.i32=2 per-user-placement-values=%private required-register-values=%physical order=3,0
 
 test.target<low_core> @test_target
 

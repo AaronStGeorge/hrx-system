@@ -332,6 +332,9 @@ typedef struct loom_low_schedule_candidate_score_t {
   // Physical descriptor selected for this candidate, or
   // LOOM_LOW_DESCRIPTOR_ORDINAL_NONE for structural nodes.
   uint32_t selected_descriptor_ordinal;
+  // Unspillable domain corresponding to active_unspillable_completion_capacity,
+  // or UINT16_MAX when the candidate advances no active completion.
+  uint16_t active_unspillable_completion_domain_id;
   // Maximum latency of same-block SSA producers consumed by the candidate.
   uint16_t dependency_latency_cycles;
   // Descriptor latency for the candidate itself.

@@ -34,6 +34,8 @@ typedef struct loom_low_spill_materialization_traffic_plan_t
 typedef struct loom_amdgpu_spill_lowering_result_t {
   // Number of user-facing diagnostics emitted while lowering spill traffic.
   uint32_t error_count;
+  // True when lowering replaced at least one spill or reload operation.
+  bool lowered_traffic;
   // Scratch-arena-owned helper value IDs created by spill lowering
   // that must remain in registers during subsequent allocation rounds.
   const loom_value_id_t* required_register_value_ids;

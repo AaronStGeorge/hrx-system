@@ -178,8 +178,10 @@ scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
 
 // ====
 
-// The held payload must survive to a later store, but each load can release
-// its required storage through arithmetic before that store becomes ready.
+// The held payload must survive to a later store. Once the second load issues,
+// its arithmetic consumer is latency-stalled while the store can immediately
+// retire another required owner in the same full bank. Fill that latency slot
+// without increasing peak pressure.
 // RUN: emit low-schedule-query @required_memory_completion_after_fence strategy=resource-stall test.i32=12 required-register-values=%payload,%first,%second order=* scheduled-pressure=test.i32
 
 test.target<low_core> @target
@@ -193,6 +195,30 @@ low.func.def target<test.low.core>(@target) @required_memory_completion_after_fe
   test.store.v4i32 %address, %payload
   %result = test.add.v4i32 %second, %released
   return %result
+}
+
+// ----
+block 0 order: 0, 1, 2, 3, 4, 5, 6, 7
+scheduled pressure test.i32: peak-live-units=12 peak-live-values=3
+
+// ====
+
+// Equal capacities do not identify the same physical register domain. The
+// float store cannot borrow readiness priority from the full integer domain;
+// preserving its independent completion keeps integer pressure at 12 units.
+// RUN: emit low-schedule-query @distinct_completion_domains strategy=resource-stall test.i32=12 test.f32=12 required-register-values=%payload,%first,%second,%f_payload,%f_held0,%f_held1 order=* scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @distinct_completion_domains(%address: reg<test.ptr>, %held: reg<test.i32 x4>, %seed: reg<test.i32 x4>, %f_payload: reg<test.f32 x4>, %f_held0: reg<test.f32 x4>, %f_held1: reg<test.f32 x4>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.f32 x4>, reg<test.f32 x4>) asm {
+  %payload = test.add.v4i32 %seed, %seed
+  low.schedule.fence
+  %first = test.load.v4i32 %address
+  %released = test.add.v4i32 %first, %held
+  %second = test.load.v4i32 %address
+  test.store.v4f32 %address, %f_payload
+  %result = test.add.v4i32 %second, %released
+  return %result, %payload, %f_held0, %f_held1
 }
 
 // ----

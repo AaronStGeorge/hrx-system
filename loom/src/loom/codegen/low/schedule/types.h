@@ -191,10 +191,10 @@ enum loom_low_schedule_flag_bits_e {
   LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP = 1u << 7,
   // Retains every raw dependency row for complete schedule inspection.
   LOOM_LOW_SCHEDULE_FLAG_RETAIN_DEPENDENCIES = 1u << 8,
-  // Indicates that allocation repair has materialized spill traffic in the
-  // scheduled function. Retained private placements remain demand driven once
-  // mandatory spill helpers can intervene before their consumers.
-  LOOM_LOW_SCHEDULE_FLAG_HAS_MATERIALIZED_SPILL_TRAFFIC = 1u << 9,
+  // Indicates that target lowering has replaced authored or materialized spill
+  // traffic in the scheduled function. Mandatory helper chains and retained
+  // private placements remain demand driven around their consumers.
+  LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC = 1u << 9,
   // Reconciles private setup ownership after required-register exhaustion.
   LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP = 1u << 10,
 };

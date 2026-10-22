@@ -414,6 +414,21 @@ static bool loom_low_schedule_candidate_score_less(
       }
     }
   }
+  // Candidates advancing active completions in the same full unspillable
+  // domain compete for the same physical storage. Issue ready progress in that
+  // domain while an older candidate is stalled; source order cannot make room
+  // sooner by leaving the machine idle. Lowered spill helper chains retain
+  // their demand order so setup cannot run ahead of its transfer.
+  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+      compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT &&
+      !iree_any_bit_set(state->options->flags,
+                        LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC) &&
+      lhs->active_unspillable_completion_domain_id != UINT16_MAX &&
+      lhs->active_unspillable_completion_domain_id ==
+          rhs->active_unspillable_completion_domain_id &&
+      lhs->effective_stall_cycles != rhs->effective_stall_cycles) {
+    return lhs->effective_stall_cycles < rhs->effective_stall_cycles;
+  }
   // Once hard-capacity feasibility ties, advance the tighter full bank's
   // pending completion. Waiting until both candidates exceed capacity lets
   // other chains consume the temporary storage that completion still needs.

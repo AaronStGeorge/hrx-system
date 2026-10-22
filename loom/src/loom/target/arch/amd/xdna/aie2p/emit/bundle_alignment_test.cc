@@ -1,0 +1,153 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/arch/amd/xdna/aie2p/emit/bundle_alignment.h"
+
+#include <array>
+
+#include "iree/base/internal/arena.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/target/arch/amd/xdna/aie2p/encoding/encoding.h"
+
+namespace loom {
+namespace {
+
+class Aie2pBundleAlignmentTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  // Backing pool for alignment scratch allocations.
+  iree_arena_block_pool_t block_pool_;
+  // Scratch arena presented to the alignment component.
+  iree_arena_allocator_t arena_;
+};
+
+TEST_F(Aie2pBundleAlignmentTest, SelectsLatestOptimalExactWidening) {
+  // A two-byte prefix and 106 four-byte store packets leave the endpoint six
+  // bytes short of its next 16-byte boundary. Every store can supply that
+  // exact widening at the same minimum slot cost.
+  constexpr iree_host_size_t kRegionPacketCount = 106;
+  constexpr iree_host_size_t kBundleCount = kRegionPacketCount + 1;
+  constexpr iree_host_size_t kSlotCapacity = kBundleCount + 1;
+
+  const loom_aie2p_slot_t nop_slot = LOOM_AIE2P_SLOT_NOP;
+  const loom_aie2p_bundle_format_id_t nop_format =
+      loom_aie2p_encoding_find_bundle_format_for_slots(&nop_slot, 1);
+  ASSERT_NE(nop_format, LOOM_AIE2P_BUNDLE_FORMAT_ID_INVALID);
+  loom_aie2p_bundle_format_info_t nop_format_info;
+  ASSERT_TRUE(loom_aie2p_encoding_query_bundle_format_info(nop_format,
+                                                           &nop_format_info));
+  ASSERT_EQ(nop_format_info.bit_count, 16u);
+
+  const loom_aie2p_slot_t store_slot = LOOM_AIE2P_SLOT_ST;
+  const loom_aie2p_bundle_format_id_t store_format =
+      loom_aie2p_encoding_find_bundle_format_for_slots(&store_slot, 1);
+  ASSERT_NE(store_format, LOOM_AIE2P_BUNDLE_FORMAT_ID_INVALID);
+  loom_aie2p_bundle_format_info_t store_format_info;
+  ASSERT_TRUE(loom_aie2p_encoding_query_bundle_format_info(store_format,
+                                                           &store_format_info));
+  ASSERT_EQ(store_format_info.bit_count, 32u);
+
+  std::array<loom_aie2p_planned_bundle_t, kBundleCount> bundles = {};
+  std::array<loom_aie2p_planned_slot_t, kSlotCapacity> slots = {};
+  std::array<loom_aie2p_slot_realization_t, kSlotCapacity> realizations = {};
+  bundles[0] = {
+      .issue_cycle = 0,
+      .block_index = 0,
+      .logical_issue_cycle = 0,
+      .byte_offset = 0,
+      .slot_start = 0,
+      .format = nop_format,
+      .slot_count = 1,
+  };
+  slots[0] = {
+      .encoded_slot = {LOOM_AIE2P_SLOT_NOP, 0},
+      .scheduled_packet_index = LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE,
+      .flags = LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP,
+  };
+  for (iree_host_size_t packet_index = 0; packet_index < kRegionPacketCount;
+       ++packet_index) {
+    const iree_host_size_t bundle_index = packet_index + 1;
+    bundles[bundle_index] = {
+        .issue_cycle = (uint32_t)bundle_index,
+        .block_index = 0,
+        .logical_issue_cycle = (uint32_t)bundle_index,
+        .byte_offset = (uint32_t)(2 + packet_index * 4),
+        .slot_start = (uint32_t)bundle_index,
+        .format = store_format,
+        .slot_count = 1,
+    };
+    slots[bundle_index] = {
+        .encoded_slot = {LOOM_AIE2P_SLOT_ST, 0},
+        .scheduled_packet_index = (uint32_t)packet_index,
+        .flags = 0,
+    };
+  }
+
+  loom_aie2p_bundle_alignment_storage_t storage = {
+      .scratch_arena = &arena_,
+      .bundles = bundles.data(),
+      .bundle_count = bundles.size(),
+      .slots = slots.data(),
+      .slot_capacity = slots.size(),
+      .slot_count = kBundleCount,
+      .slot_realizations = realizations.data(),
+      .encoded_byte_length = 2 + kRegionPacketCount * 4,
+      .trailing_nop_byte_length = 0,
+  };
+  bool aligned = false;
+  IREE_ASSERT_OK(loom_aie2p_bundle_alignment_try_loop_boundary(
+      &storage, /*region_bundle_start=*/1,
+      /*boundary_bundle_index=*/storage.bundle_count, &aligned));
+
+  ASSERT_TRUE(aligned);
+  EXPECT_EQ(storage.encoded_byte_length, 432u);
+  EXPECT_EQ(storage.slot_count, kSlotCapacity);
+  EXPECT_EQ(storage.trailing_nop_byte_length, 0u);
+  for (iree_host_size_t packet_index = 0; packet_index + 1 < kRegionPacketCount;
+       ++packet_index) {
+    const loom_aie2p_planned_bundle_t& bundle = bundles[packet_index + 1];
+    EXPECT_EQ(bundle.format, store_format);
+    EXPECT_EQ(bundle.slot_count, 1u);
+    EXPECT_EQ(bundle.byte_offset, 2u + packet_index * 4u);
+  }
+
+  const loom_aie2p_planned_bundle_t& widened_bundle = bundles.back();
+  loom_aie2p_bundle_format_info_t widened_format_info;
+  ASSERT_TRUE(loom_aie2p_encoding_query_bundle_format_info(
+      widened_bundle.format, &widened_format_info));
+  EXPECT_EQ(widened_bundle.byte_offset, 422u);
+  EXPECT_EQ(widened_format_info.bit_count, 80u);
+  ASSERT_EQ(widened_bundle.slot_count, 2u);
+  uint32_t store_slot_count = 0;
+  uint32_t synthetic_slot_count = 0;
+  for (uint8_t slot_offset = 0; slot_offset < widened_bundle.slot_count;
+       ++slot_offset) {
+    const loom_aie2p_planned_slot_t& slot =
+        slots[widened_bundle.slot_start + slot_offset];
+    store_slot_count += slot.encoded_slot.slot == LOOM_AIE2P_SLOT_ST;
+    synthetic_slot_count += iree_any_bit_set(
+        slot.flags, LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP);
+    if (slot.encoded_slot.slot == LOOM_AIE2P_SLOT_ST) {
+      EXPECT_EQ(slot.scheduled_packet_index, kRegionPacketCount - 1u);
+    }
+  }
+  EXPECT_EQ(store_slot_count, 1u);
+  EXPECT_EQ(synthetic_slot_count, 1u);
+}
+
+}  // namespace
+}  // namespace loom
