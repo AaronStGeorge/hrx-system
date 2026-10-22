@@ -319,6 +319,33 @@ static void ExpectStatusFormatFitsExactly(const iree_status_t& status) {
   }
 }
 
+TEST(StatusClone, OwnsCompleteFormattedDiagnostic) {
+  std::string file = "producer.c";
+  std::string message = "original failure";
+  std::string annotation = "additional context";
+  iree_status_t status = iree_status_allocate(
+      IREE_STATUS_UNAVAILABLE, file.c_str(), 42,
+      iree_make_string_view(message.data(), message.size()));
+  status = iree_status_annotate(
+      status, iree_make_string_view(annotation.data(), annotation.size()));
+  const std::string expected = FormatStatusBuffer(status);
+
+  iree_status_t cloned_status = iree_status_clone(status);
+  iree_status_free(status);
+  file.assign(file.size(), 'x');
+  message.assign(message.size(), 'x');
+  annotation.assign(annotation.size(), 'x');
+
+#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
+  EXPECT_TRUE(iree_string_view_equal(iree_status_message(cloned_status),
+                                     IREE_SV("original failure")));
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
+  EXPECT_TRUE(FormatStatusBuffer(cloned_status) == expected);
+  EXPECT_TRUE(FormatStatusTo(cloned_status) == expected);
+  ExpectStatusFormatFitsExactly(cloned_status);
+  iree_status_free(cloned_status);
+}
+
 TEST(StatusFreeze, StorageFreeIsIdentity) {
   EXPECT_EQ(iree_status_freeze(iree_ok_status()), iree_ok_status());
   iree_status_t status =
