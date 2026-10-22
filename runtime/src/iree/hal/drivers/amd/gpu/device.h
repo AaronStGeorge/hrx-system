@@ -55,6 +55,8 @@ typedef struct iree_hal_amd_gpu_device_options_t {
     iree_host_size_t capture_block_count;
   } queue;
   // Provisioning used when the device's runtime features enable ASAN.
+  // GPU ASAN is unsupported in CPU ThreadSanitizer builds because their
+  // shadow address-space reservations are incompatible.
   struct {
     // Placement of physical shadow backing; reservations consume only VA.
     iree_hal_amd_gpu_asan_shadow_backing_t shadow_backing;

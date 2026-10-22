@@ -199,6 +199,12 @@ Sanitizer shadows use local storage when available and qualified system storage
 on devices without a separate local heap. Ordinary devices allocate none of this
 sanitizer state.
 
+GPU ASAN is unsupported when the host runtime is built with CPU ThreadSanitizer:
+their large virtual-address reservations compete for the same process address
+space. Device creation rejects that combination before provisioning GPU sanitizer
+resources. CPU ThreadSanitizer can still exercise ordinary GPU execution and GPU
+TSAN, whose workgroup shadows use bounded per-queue allocations.
+
 The shared producer requires native shader-triggered events. The current Windows
 provider exposes submission completion but lacks that shader event producer, so
 feedback/ASAN/TSAN device creation is rejected there. Enabling those services

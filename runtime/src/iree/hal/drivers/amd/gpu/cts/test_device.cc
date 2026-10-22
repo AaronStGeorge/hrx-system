@@ -555,9 +555,15 @@ void GpuNativeTest::Create(
   params.runtime_features = runtime_features;
   auto* context = context_;
   context_ = nullptr;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_device_create(
+  iree::Status status = iree_hal_amd_gpu_device_create(
       context, IREE_SV("AMD GPU native CTS"), &options_, &params,
-      allocator_.allocator(), &device_));
+      allocator_.allocator(), &device_);
+  if (iree_any_bit_set(runtime_features,
+                       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN) &&
+      status.code() == iree::StatusCode::kUnimplemented) {
+    GTEST_SKIP() << status.ToString();
+  }
+  IREE_ASSERT_OK(status);
   IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
       device_, tracker_, iree_allocator_system(), &group_));
   queues_[0] = iree_hal_device_queue(device_, 0, 0);

@@ -48,7 +48,7 @@ class GpuAsanTest : public GpuNativeTest,
             ? IREE_HAL_AMD_GPU_ASAN_SHADOW_BACKING_HOST_LOCAL
             : IREE_HAL_AMD_GPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL;
     Create(IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN);
-    if (HasFatalFailure()) {
+    if (HasFatalFailure() || IsSkipped()) {
       return;
     }
     const auto* family = iree_hal_queue_family(queues_[0]);

@@ -874,6 +874,16 @@ static iree_status_t iree_hal_amd_gpu_device_create_prepared(
       create_params, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK |
                          IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN |
                          IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN));
+#if defined(IREE_SANITIZER_THREAD)
+  // Both sanitizers reserve large intervals in the process address space.
+  if (iree_any_bit_set(create_params->runtime_features,
+                       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "GPU ASAN is unavailable in a CPU ThreadSanitizer build: their "
+        "shadow address-space reservations are incompatible");
+  }
+#endif  // IREE_SANITIZER_THREAD
   const bool asan_enabled =
       iree_any_bit_set(create_params->runtime_features,
                        IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN);
