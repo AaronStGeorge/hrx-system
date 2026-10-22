@@ -31,11 +31,16 @@ void loom_serve_text_state_initialize(const loom_serve_text_options_t* options,
 static iree_hal_buffer_t** loom_serve_text_allocation(
     loom_serve_text_state_t* state, iree_host_size_t index) {
   iree_hal_buffer_t** allocations[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT] = {
-      &state->residual,         &state->row_arena,
-      &state->epoch.buffers[1], &state->epoch.buffers[2],
-      &state->epoch.buffers[4], &state->epoch.buffers[5],
-      &state->draft.carry,      &state->draft.committed,
-      &state->draft.results,    &state->draft.cache,
+      &state->residual,
+      &state->row_arena,
+      &state->epoch.buffers[1],
+      &state->epoch.buffers[2],
+      &state->epoch.buffers[4],
+      &state->epoch.buffers[5],
+      &state->carry,
+      &state->draft.committed,
+      &state->draft.results,
+      &state->draft.cache,
       &state->draft.row_table,
   };
   return allocations[index];
@@ -44,6 +49,11 @@ static iree_hal_buffer_t** loom_serve_text_allocation(
 iree_status_t loom_serve_text_state_allocate(
     loom_serve_text_state_t* state, loom_serve_device_t* device,
     loom_serve_execution_t* execution) {
+  if (state->storage.carry_stride &&
+      !iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_PACKED)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source carry requires packed epochs");
+  }
   state->device = loom_serve_device_handle(device);
   state->execution = execution;
   state->memory.pool = loom_serve_device_memory_pool(device);
@@ -91,13 +101,21 @@ iree_status_t loom_serve_text_state_allocate(
     const uint64_t length = iree_unaligned_load_le_u64(record);
     const uint64_t alignment = iree_unaligned_load_le_u64(record + 8);
     const uint64_t clear_length = iree_unaligned_load_le_u64(record + 16);
+    // Carry belongs to the source's retained state, not the drafting policy.
+    // Speculative feedback and optional draft cache roots still require
+    // drafting.
     const bool required =
-        i < 2 || (i < 6 ? iree_any_bit_set(state->flags,
-                                           LOOM_SERVE_TEXT_STATE_FLAG_PACKED)
-                        : iree_any_bit_set(state->flags,
-                                           LOOM_SERVE_TEXT_STATE_FLAG_DRAFT) &&
-                              (i != 6 || state->storage.carry_stride));
-    if ((length != 0) != required || clear_length > length ||
+        i < 2 ||
+        (i < 6
+             ? iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_PACKED)
+         : i == 6
+             ? state->storage.carry_stride != 0
+             : i < 9 && iree_any_bit_set(state->flags,
+                                         LOOM_SERVE_TEXT_STATE_FLAG_DRAFT));
+    const bool optional =
+        i >= 9 &&
+        iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT);
+    if (((length != 0) != required && !optional) || clear_length > length ||
         length > INT64_MAX || !alignment ||
         !iree_is_power_of_two_uint64(alignment)) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -273,8 +291,7 @@ iree_status_t loom_serve_text_state_allocate(
         IREE_HAL_WHOLE_BUFFER, state->host_allocator,
         &state->draft.next_results);
   }
-  if (iree_status_is_ok(status) &&
-      iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT)) {
+  if (iree_status_is_ok(status) && state->draft.row_table) {
     const iree_const_byte_span_t origins =
         state->storage.bytes[LOOM_SERVE_TEXT_STORAGE_DRAFT_ORIGINS];
     if (origins.data_length) {
@@ -638,10 +655,7 @@ static iree_status_t loom_serve_text_submit_compaction(
     };
     uint64_t completion = 0;
     status = loom_serve_execution_transfer(
-        state->execution,
-        iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT) ? 2
-                                                                         : 1,
-        uploads, &completion);
+        state->execution, state->draft.row_table ? 2 : 1, uploads, &completion);
   }
   iree_allocator_free(state->host_allocator, copy_destinations);
   return status;
@@ -779,7 +793,7 @@ static iree_status_t loom_serve_text_row_initialize(
   if (iree_status_is_ok(status) && row->owner->storage.carry_stride) {
     const iree_hal_transfer_operation_t clear_carry = {
         .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
-        .fill = {.target_buffer = row->owner->draft.carry,
+        .fill = {.target_buffer = row->owner->carry,
                  .target_offset = (uint64_t)(row - row->owner->rows) *
                                   row->owner->storage.carry_stride,
                  .length = row->owner->storage.carry_stride,
@@ -839,8 +853,7 @@ iree_status_t loom_serve_text_state_row_suspend(
   iree_host_size_t range_count = 0;
   loom_serve_snapshot_range_t* ranges = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_text_storage_plan_snapshot(
-      &state->storage, index, &row->buffers[TEXT_CONTROL],
-      iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT),
+      &state->storage, index, &row->buffers[TEXT_CONTROL], true,
       row->block_count, blocks, state->host_allocator, &range_count, &ranges));
   iree_hal_buffer_t* buffers[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(buffers); ++i) {
@@ -883,9 +896,8 @@ iree_status_t loom_serve_text_state_row_try_resume(
   iree_host_size_t range_count = 0;
   loom_serve_snapshot_range_t* ranges = NULL;
   iree_status_t status = loom_serve_text_storage_plan_snapshot(
-      &state->storage, index, &row->buffers[TEXT_CONTROL],
-      iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT), needed,
-      blocks, state->host_allocator, &range_count, &ranges);
+      &state->storage, index, &row->buffers[TEXT_CONTROL], true, needed, blocks,
+      state->host_allocator, &range_count, &ranges);
   loom_serve_memory_range_t* commitments = NULL;
   if (iree_status_is_ok(status)) {
     status =
@@ -931,10 +943,7 @@ iree_status_t loom_serve_text_state_row_try_resume(
     };
     uint64_t completion = 0;
     status = loom_serve_execution_transfer(
-        state->execution,
-        iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT) ? 2
-                                                                         : 1,
-        uploads, &completion);
+        state->execution, state->draft.row_table ? 2 : 1, uploads, &completion);
     status =
         iree_status_join(status, loom_serve_execution_drain(state->execution));
   }
@@ -960,9 +969,9 @@ static iree_status_t loom_serve_text_copy_carry(loom_serve_text_state_t* state,
   }
   const iree_hal_transfer_operation_t copy = {
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_COPY,
-      .copy = {.source_buffer = state->draft.carry,
+      .copy = {.source_buffer = state->carry,
                .source_offset = source * state->storage.carry_stride,
-               .target_buffer = state->draft.carry,
+               .target_buffer = state->carry,
                .target_offset = target * state->storage.carry_stride,
                .length = state->storage.carry_stride}};
   uint64_t completion = 0;
@@ -1046,10 +1055,8 @@ static iree_status_t loom_serve_text_checkpoint_plan_snapshot(
   const iree_host_size_t carry_index =
       state->row_count + (checkpoint - state->checkpoints.values);
   return loom_serve_text_storage_plan_snapshot(
-      &state->storage, carry_index, views,
-      iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT),
-      checkpoint->block_count, checkpoint->blocks, state->host_allocator,
-      out_count, out_ranges);
+      &state->storage, carry_index, views, true, checkpoint->block_count,
+      checkpoint->blocks, state->host_allocator, out_count, out_ranges);
 }
 
 iree_status_t loom_serve_text_state_checkpoint_submit_suspend(
@@ -1234,10 +1241,7 @@ iree_status_t loom_serve_text_state_row_try_restore(
   uint64_t completion = 0;
   if (iree_status_is_ok(status)) {
     status = loom_serve_execution_transfer(
-        state->execution,
-        iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT) ? 2
-                                                                         : 1,
-        uploads, &completion);
+        state->execution, state->draft.row_table ? 2 : 1, uploads, &completion);
   }
   status =
       iree_status_join(status, loom_serve_execution_drain(state->execution));
@@ -1532,9 +1536,8 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
   loom_serve_snapshot_range_t* ranges = NULL;
   loom_serve_snapshot_range_t* restore_ranges = NULL;
   iree_status_t status = loom_serve_text_storage_plan_snapshot(
-      &state->storage, index, views,
-      iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT), count,
-      blocks, state->host_allocator, &range_count, &ranges);
+      &state->storage, index, views, true, count, blocks, state->host_allocator,
+      &range_count, &ranges);
   if (iree_status_is_ok(status) && cold) {
     // The carry index belongs to the real endpoint record, not the temporary
     // plan object. Only recurrent and KV ownership differs during planning.
@@ -1544,10 +1547,8 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
     status = loom_serve_text_storage_plan_snapshot(
         &state->storage,
         state->row_count + (checkpoint - state->checkpoints.values),
-        checkpoint_views,
-        iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT),
-        prefix, restored.blocks, state->host_allocator, &restore_count,
-        &restore_ranges);
+        checkpoint_views, true, prefix, restored.blocks, state->host_allocator,
+        &restore_count, &restore_ranges);
   }
   loom_serve_memory_range_t* commitments = NULL;
   if (iree_status_is_ok(status) && state->memory.pool) {
@@ -1690,11 +1691,9 @@ iree_status_t loom_serve_text_state_reservation_submit(
                       .length = count * sizeof(*blocks)}},
       };
       uint64_t completion = 0;
-      status = loom_serve_execution_transfer(
-          state->execution,
-          iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT) ? 2
-                                                                           : 1,
-          uploads, &completion);
+      status = loom_serve_execution_transfer(state->execution,
+                                             state->draft.row_table ? 2 : 1,
+                                             uploads, &completion);
     }
   }
   if (iree_status_is_ok(status)) {
@@ -1849,7 +1848,7 @@ iree_status_t loom_serve_text_state_grow(loom_serve_text_state_t* state,
                        state->storage.map_origin + map_index * sizeof(*blocks),
                    .length = count * sizeof(*blocks)},
     };
-    if (iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT)) {
+    if (state->draft.row_table) {
       uploads[upload_count] = uploads[upload_count - 1];
       uploads[upload_count++].upload.target_buffer = state->draft.row_table;
     }

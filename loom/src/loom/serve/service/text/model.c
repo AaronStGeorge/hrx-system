@@ -1318,7 +1318,7 @@ iree_status_t loom_serve_text_model_submit_epoch(
       model->state.row_arena,
       device_input,
       model->state.epoch.buffers[5],
-      model->state.draft.carry,
+      model->state.carry,
       model->state.draft.committed,
       model->state.draft.results,
       model->state.draft.cache,

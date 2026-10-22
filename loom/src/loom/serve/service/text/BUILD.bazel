@@ -245,12 +245,20 @@ loom_cc_library(
     srcs = [
         "capture_execution_test.cc",
         "source_execution_test.cc",
+        "state_test.cc",
     ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     visibility = ["//loom/src/loom/serve:implementation"],
     deps = [
         ":capture",
+        ":model",
         ":source_service_fixture",
+        ":storage",
+        "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/execution",
+        "//loom/src/loom/serve/testing:service_application",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/vm",
     ],
     alwayslink = True,
 )

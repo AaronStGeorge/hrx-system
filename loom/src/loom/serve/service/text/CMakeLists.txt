@@ -284,9 +284,17 @@ loom_cc_library(
   SRCS
     "capture_execution_test.cc"
     "source_execution_test.cc"
+    "state_test.cc"
   DEPS
     ::capture
+    ::model
     ::source_service_fixture
+    ::storage
+    iree::testing::gtest
+    iree::vm
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::testing::service_application
   TESTONLY
   ALWAYSLINK
   PUBLIC

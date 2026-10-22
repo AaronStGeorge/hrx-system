@@ -181,24 +181,27 @@ struct loom_serve_text_state_t {
   iree_hal_buffer_t* row_arena;
   // Model-wide residual storage serialized by the execution timeline.
   iree_hal_buffer_t* residual;
+  // Optional source-defined committed state indexed by retained row or
+  // endpoint. Presence follows the source carry stride, independently of draft
+  // scheduling.
+  iree_hal_buffer_t* carry;
   // Packed bindings; slots 1, 2, 4 and 5 are owned, others borrow roots.
   struct {
     // Residual, metadata, origins, arena, inputs and outputs.
     iree_hal_buffer_t* buffers[TEXT_BINDING_COUNT];
   } epoch;
-  // Optional retained draft state and speculative proposal/feedback storage.
+  // Optional speculative proposal, cache, and feedback storage.
   struct {
-    // Committed target hidden state indexed by retained row.
-    iree_hal_buffer_t* carry;
     // Accepted span metadata consumed by draft catch-up.
     iree_hal_buffer_t* committed;
     // Source-defined feedback records.
     iree_hal_buffer_t* results;
     // Owned view of the second result bank and original-span tags.
     iree_hal_buffer_t* next_results;
-    // Draft attention cache with source-defined pooled planes.
+    // Optional draft attention cache with source-defined pooled planes.
     iree_hal_buffer_t* cache;
-    // Draft row origins and logical-to-physical block maps.
+    // Optional draft row origins and logical-to-physical block maps. Presence
+    // is independent of a separate cache: source may reuse the target arena.
     iree_hal_buffer_t* row_table;
   } draft;
 };
