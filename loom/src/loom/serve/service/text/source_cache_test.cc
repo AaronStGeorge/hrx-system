@@ -654,6 +654,134 @@ TEST_F(SourceTextServiceTest, CancelledRowExchangePreservesDetachedHistory) {
   CheckRetentionCancellation(OverlapAction::kDisconnect);
 }
 
+class BpeHistoryServiceTest : public RegisteredSourceTextServiceTest,
+                              public ::testing::WithParamInterface<bool> {};
+
+TEST_P(BpeHistoryServiceTest, RetainedHistoriesPreserveGeneratedIds) {
+  const bool end_on_eos = GetParam();
+  const size_t output_limit = end_on_eos ? 16 : 5;
+  tokenizer_ = directory_ + "/tokenizer_merging.json";
+  StartManaged();
+  const auto declaration = Declaration("fixture-text", directory_, "open",
+                                       R"(,"session_cache_capacity":8)");
+  ASSERT_EQ(
+      Read(Send(declaration, "", "/v1/models/register")).find("HTTP/1.1 202"),
+      0u);
+
+  const auto generate = [](const std::vector<int32_t>& input, size_t count) {
+    Oracle oracle;
+    for (int32_t token : input) {
+      oracle.Consume(token);
+    }
+    std::vector<int32_t> result;
+    for (size_t i = 0; i < count; ++i) {
+      const int32_t token = oracle.Predict();
+      result.push_back(token);
+      if (token == 3) {
+        break;
+      }
+      oracle.Consume(token);
+    }
+    return result;
+  };
+  const auto decode = [](const std::vector<int32_t>& tokens) {
+    const char* spellings[] = {"a", "b", "ab", ""};
+    std::string text;
+    for (int32_t token : tokens) {
+      text += spellings[token];
+    }
+    return text;
+  };
+
+  // Sampling need not produce a canonical BPE encoding of its decoded text.
+  // The first answer contains separate a,b IDs; re-encoding merges them, and
+  // also merges the original prompt's a with the answer's initial b.
+  const auto generated = generate({0}, output_limit);
+  ASSERT_EQ(generated,
+            end_on_eos ? (std::vector<int32_t>{1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 3})
+                       : (std::vector<int32_t>{1, 1, 0, 0, 1}));
+  const auto reply = decode(generated);
+  ASSERT_EQ(reply, end_on_eos ? "bbaabbabbb" : "bbaab");
+  std::vector<int32_t> retained_input = {0};
+  retained_input.insert(retained_input.end(), generated.begin(),
+                        generated.end());
+  if (!end_on_eos) {
+    retained_input.push_back(3);
+  }
+  retained_input.push_back(1);
+  const auto replay_input =
+      end_on_eos ? (std::vector<int32_t>{2, 1, 0, 2, 1, 2, 1, 1, 3, 1})
+                 : (std::vector<int32_t>{2, 1, 0, 2, 3, 1});
+  const auto continued = decode(generate(retained_input, 2));
+  const auto replayed = decode(generate(replay_input, 2));
+  ASSERT_EQ(continued, end_on_eos ? "aab" : "ab");
+  ASSERT_EQ(replayed, end_on_eos ? "a" : "aa");
+  ASSERT_NE(continued, replayed);
+  const auto tokenized =
+      Read(Send("{\"model\":\"fixture-text\",\"content\":\"a" + reply + "#b\"}",
+                "", "/tokenize"));
+  ASSERT_NE(tokenized.find(end_on_eos ? R"({"tokens":[2,1,0,2,1,2,1,1,3,1]})"
+                                      : R"({"tokens":[2,1,0,2,3,1]})"),
+            std::string::npos)
+      << tokenized;
+
+  for (const char* name : {"hot", "cold"}) {
+    const auto response =
+        Read(Send(Request(Message("user", "a"), output_limit),
+                  std::string("X-Loom-Session: ") + name + "\r\n"));
+    ASSERT_EQ(Content(response), reply);
+    EXPECT_NE(response.find(end_on_eos ? R"("finish_reason":"stop")"
+                                       : R"("finish_reason":"length")"),
+              std::string::npos);
+  }
+  const auto pinned =
+      Read(Send("", "X-Loom-Session: cold\r\n", "/v1/checkpoints/original"));
+  ASSERT_EQ(pinned.find("HTTP/1.1 201"), 0u) << pinned;
+  const auto history = Message("user", "a") + "," +
+                       Message("assistant", reply) + "," + Message("user", "b");
+  const auto check_continuation = [&](const std::string& headers) {
+    const auto response = Read(Send(Request(history, 2), headers));
+    EXPECT_EQ(Content(response), continued);
+    // The prompt and all but the final prediction have been consumed. That
+    // exact pending ID must arrive once, whether ordinary text or EOS.
+    EXPECT_NE(response.find("\"cached_tokens\":" +
+                            std::to_string(generated.size()) + "}"),
+              std::string::npos)
+        << response;
+  };
+  check_continuation("X-Loom-Session: hot\r\n");
+
+  // Force row reuse through ordinary requests, then require inventory evidence
+  // that the untouched conversation actually moved to the detached cache.
+  for (size_t i = 0; i < 4; ++i) {
+    EXPECT_EQ(Content(Read(Send(
+                  Request(Message("user", "a"), 1),
+                  "X-Loom-Session: pressure" + std::to_string(i) + "\r\n"))),
+              "b");
+  }
+  const auto inventory =
+      Read(Send("", "X-Loom-Model: fixture-text\r\n", "/v1/sessions", "GET"));
+  ASSERT_NE(
+      inventory.find(R"("name":"cold","request":null,"storage":"cache",)"),
+      std::string::npos)
+      << inventory;
+  check_continuation("X-Loom-Session: cold\r\n");
+  // The immutable pin still names the original endpoint after its automatic
+  // owner has resumed and advanced, so this must fork the old raw history.
+  check_continuation("X-Loom-Checkpoint: original\r\n");
+
+  const auto fresh =
+      Read(Send(Request(history, 2), "X-Loom-Session: fresh\r\n"));
+  EXPECT_EQ(Content(fresh), replayed);
+  EXPECT_NE(fresh.find(R"("cached_tokens":0})"), std::string::npos) << fresh;
+}
+
+INSTANTIATE_TEST_SUITE_P(CompletionBoundaries, BpeHistoryServiceTest,
+                         ::testing::Bool(),
+                         [](const ::testing::TestParamInfo<bool>& info) {
+                           return info.param ? "EndOfSequence" : "OutputLimit";
+                         });
+
 TEST_F(RegisteredSourceTextServiceTest,
        InventoryTracksRetainedLifetimesAcrossRowReuse) {
   StartManaged();

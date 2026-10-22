@@ -703,7 +703,9 @@ loom_cc_test(
 
 loom_cc_test(
     name = "source_text_cache_test",
-    data = TEXT_SOURCES,
+    data = TEXT_SOURCES + [
+        "//loom/src/loom/serve/fixture/text:tokenizer_merging.json",
+    ],
     env = {
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
