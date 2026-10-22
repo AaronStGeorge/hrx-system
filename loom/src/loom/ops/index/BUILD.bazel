@@ -52,6 +52,17 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "builders",
+    srcs = ["builders.c"],
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    deps = [
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+    ],
+)
+
 loom_generated_cc_library(
     name = "index",
     srcs = [
@@ -66,19 +77,20 @@ loom_generated_cc_library(
         "ops.h",
     ],
     args = ["--dialect=index"],
-    extra_output_flags = ["--ops-include"],
-    extra_outputs = ["ops.inc"],
-    generated_src_flags = [
+    extra_output_flags = [
+        "--ops-include",
         "--builders",
-        "--tables",
     ],
-    generated_srcs = [
+    extra_outputs = [
+        "ops.inc",
         "builders.c",
-        "tables.c",
     ],
+    generated_src_flags = ["--tables"],
+    generated_srcs = ["tables.c"],
     generator = "//loom/py/loom/gen/ops:c_tables_index_generator",
     textual_hdrs = ["ops.inc"],
     deps = [
+        ":builders",
         ":cast",
         ":comparison",
         ":op_defs",

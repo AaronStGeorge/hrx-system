@@ -31,6 +31,18 @@ loom_generated_source(
 )
 
 loom_cc_library(
+    name = "record_defs",
+    hdrs = ["target_records.h"],
+    textual_hdrs = [":target_profiles.inl"],
+    visibility = _X86_TARGET_RECORDS_VISIBILITY,
+    deps = [
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/x86:feature_bits",
+        "//runtime/src/iree/base:cpu_data",
+    ],
+)
+
+loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],

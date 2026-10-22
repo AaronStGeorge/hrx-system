@@ -10,20 +10,12 @@
 #define LOOM_TARGET_ARCH_SPIRV_FACTS_H_
 
 #include "loom/target/arch/spirv/cooperative_properties.h"
+#include "loom/target/arch/spirv/records/target_records.h"
 #include "loom/target/facts.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// SPIR-V target row selected by spirv.target and structured profiles.
-typedef uint8_t loom_spirv_target_kind_t;
-enum loom_spirv_target_kind_e {
-  // Unknown or absent SPIR-V target row.
-  LOOM_SPIRV_TARGET_KIND_UNKNOWN = 0,
-  // Vulkan 1.3 logical SPIR-V module row.
-  LOOM_SPIRV_TARGET_KIND_VULKAN1_3 = 1,
-};
 
 // Compute subgroup capabilities, independent of a selected execution width.
 // Zero denotes an unknown observation. Every width is a power of two.

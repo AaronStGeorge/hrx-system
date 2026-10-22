@@ -381,15 +381,15 @@ loom_cc_library(
     loom::error::diagnostic
     loom::error::error_defs
     loom::error::source
-    loom::ir
-    loom::ops::buffer
-    loom::ops::command
-    loom::ops::func
-    loom::ops::index
-    loom::ops::kernel
+    loom::ir::builders
+    loom::ops::buffer::builders
+    loom::ops::command::builders
+    loom::ops::func::builders
+    loom::ops::index::builders
+    loom::ops::kernel::builders
     loom::ops::op_defs
-    loom::ops::scalar
-    loom::ops::view
+    loom::ops::scalar::builders
+    loom::ops::view::builders
     loom::target::arch::cmd::hal_command_buffer
     loom::target::arch::cmd::program
     loom::tooling::execution::benchmark

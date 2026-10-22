@@ -44,6 +44,16 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    record_defs
+  HDRS
+    "target_records.h"
+  DEPS
+    loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_record_table
   HDRS
     "target_records.h"
@@ -53,6 +63,7 @@ loom_cc_library(
     iree::base
     loom::target::facts
     loom::target::facts_builder
+    loom::target::types
   PUBLIC
 )
 

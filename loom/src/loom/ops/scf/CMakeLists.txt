@@ -92,6 +92,22 @@ loom_cc_test(
     loom::testing::diagnostic_matchers
 )
 
+loom_cc_library(
+  NAME
+    builders
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  SRCS
+    "builders.c"
+  DEPS
+    loom::ir::builders
+    loom::ops::op_defs
+    loom::rewrite::remap
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     scf
@@ -108,10 +124,8 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
   HDRS
     "canonicalize.h"
@@ -122,9 +136,12 @@ loom_generated_cc_library(
     "--dialect=scf"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::builders
     iree::base::internal
     iree::base::internal::arena
     loom::analysis::availability

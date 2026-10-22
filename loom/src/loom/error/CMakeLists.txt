@@ -209,7 +209,7 @@ loom_cc_library(
     ::emitter
     ::error_defs
     iree::base
-    loom::ir
+    loom::ir::types
   PUBLIC
 )
 

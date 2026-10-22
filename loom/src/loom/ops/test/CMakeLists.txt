@@ -9,6 +9,44 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ir::builders
+    loom::ops::op_defs
+    loom::target::test::record_defs
+    loom::target::types
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
+    builders
+  DEPS
+    ::op_builders
+    ::op_defs
+    ::type_builders
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    op_builders
+  SRCS
+    "builders.c"
+  DEPS
+    ::op_defs
+    loom::ir::builders
+    loom::ops::op_defs
+    loom::rewrite::remap
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     test
@@ -24,11 +62,9 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
     "--types"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
     "types.c"
   HDRS
@@ -41,10 +77,13 @@ loom_generated_cc_library(
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
     "--type-builders"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
     "type_builders.c"
+    "builders.c"
   DEPS
+    ::builders
     ::type_builders
     iree::base
     loom::analysis::symbol_facts

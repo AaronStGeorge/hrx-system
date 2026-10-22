@@ -87,6 +87,18 @@ loom_cc_test(
     ],
 )
 
+loom_cc_library(
+    name = "builders",
+    srcs = ["builders.c"],
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    deps = [
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/rewrite:remap",
+    ],
+)
+
 loom_generated_cc_library(
     name = "scf",
     srcs = [
@@ -105,19 +117,20 @@ loom_generated_cc_library(
         "selectify_facts.h",
     ],
     args = ["--dialect=scf"],
-    extra_output_flags = ["--ops-include"],
-    extra_outputs = ["ops.inc"],
-    generated_src_flags = [
+    extra_output_flags = [
+        "--ops-include",
         "--builders",
-        "--tables",
     ],
-    generated_srcs = [
+    extra_outputs = [
+        "ops.inc",
         "builders.c",
-        "tables.c",
     ],
+    generated_src_flags = ["--tables"],
+    generated_srcs = ["tables.c"],
     generator = "//loom/py/loom/gen/ops:c_tables_scf_generator",
     textual_hdrs = ["ops.inc"],
     deps = [
+        ":builders",
         "//loom/src/loom/analysis:availability",
         "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/analysis:execution_condition",

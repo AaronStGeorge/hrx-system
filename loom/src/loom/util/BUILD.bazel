@@ -135,7 +135,7 @@ loom_cc_library(
     srcs = ["numeric_format.c"],
     hdrs = ["numeric_format.h"],
     deps = [
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
     ],

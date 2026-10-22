@@ -355,7 +355,7 @@ loom_cc_library(
     "registers.h"
   DEPS
     iree::base
-    loom::ir
+    loom::ir::types
   PUBLIC
 )
 

@@ -245,6 +245,7 @@ loom_cc_library(
   DEPS
     ::cooperative_properties
     iree::base
+    loom::target::arch::spirv::records::record_defs
     loom::target::facts
     loom::target::facts_builder
   PUBLIC

@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_TEST_TARGET_RECORDS_H_
 #define LOOM_TARGET_TEST_TARGET_RECORDS_H_
 
-#include "loom/target/facts.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {

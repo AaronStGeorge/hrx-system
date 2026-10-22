@@ -4,10 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_generated_cc_library",
-)
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_generated_cc_library")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -27,6 +24,30 @@ _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
 _AMDGPU_BINDING_VISIBILITY = ["//loom/binding/c/target/amdgpu:__pkg__"]
 
+loom_cc_library(
+    name = "op_defs",
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/target:types",
+    ],
+)
+
+loom_cc_library(
+    name = "builders",
+    srcs = ["builders.c"],
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/target:types",
+    ],
+)
+
 loom_generated_cc_library(
     name = "ops",
     srcs = [
@@ -40,16 +61,16 @@ loom_generated_cc_library(
         "target.h",
     ],
     args = ["--dialect=amdgpu"],
-    extra_output_flags = ["--ops-include"],
-    extra_outputs = ["ops.inc"],
-    generated_src_flags = [
+    extra_output_flags = [
+        "--ops-include",
         "--builders",
-        "--tables",
     ],
-    generated_srcs = [
+    extra_outputs = [
+        "ops.inc",
         "builders.c",
-        "tables.c",
     ],
+    generated_src_flags = ["--tables"],
+    generated_srcs = ["tables.c"],
     generator = "//loom/py/loom/gen/ops:c_tables_amdgpu_generator",
     textual_hdrs = ["ops.inc"],
     visibility = (
@@ -61,6 +82,7 @@ loom_generated_cc_library(
         _AMDGPU_BINDING_VISIBILITY
     ),
     deps = [
+        ":builders",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",

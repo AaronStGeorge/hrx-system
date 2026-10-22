@@ -31,6 +31,17 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "builders",
+    srcs = ["builders.c"],
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    deps = [
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+    ],
+)
+
 loom_generated_cc_library(
     name = "scalar",
     srcs = [
@@ -48,10 +59,15 @@ loom_generated_cc_library(
         "tables.h",
     ],
     args = ["--dialect=scalar"],
-    extra_output_flags = ["--ops-include"],
-    extra_outputs = ["ops.inc"],
-    generated_src_flags = [
+    extra_output_flags = [
+        "--ops-include",
         "--builders",
+    ],
+    extra_outputs = [
+        "ops.inc",
+        "builders.c",
+    ],
+    generated_src_flags = [
         "--tables",
         "--table-shard=analysis",
         "--table-shard=arithmetic",
@@ -61,7 +77,6 @@ loom_generated_cc_library(
         "--table-shard=math",
     ],
     generated_srcs = [
-        "builders.c",
         "tables.c",
         "tables/analysis.c",
         "tables/arithmetic.c",
@@ -73,6 +88,7 @@ loom_generated_cc_library(
     generator = "//loom/py/loom/gen/ops:c_tables_scalar_generator",
     textual_hdrs = ["ops.inc"],
     deps = [
+        ":builders",
         ":comparison",
         ":op_defs",
         "//loom/src/loom/error:emitter",

@@ -159,7 +159,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal
-    loom::ir
+    loom::ir::types
   PUBLIC
 )
 

@@ -10,6 +10,48 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ops::op_defs
+    loom::target::arch::spirv::records::record_defs
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
+iree_cc_library(
+  NAME
+    builders
+  DEPS
+    ::op_builders
+    ::op_defs
+    ::type_builders
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_library(
+  NAME
+    op_builders
+  SRCS
+    "builders.c"
+  DEPS
+    ::op_defs
+    loom::ir::builders
+    loom::ops::op_defs
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_generated_cc_library(
   NAME
     ops
@@ -22,11 +64,9 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
     "--types"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
     "types.c"
   HDRS
@@ -39,10 +79,13 @@ loom_generated_cc_library(
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
     "--type-builders"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
     "type_builders.c"
+    "builders.c"
   DEPS
+    ::builders
     ::type_builders
     iree::base
     loom::error::error_defs

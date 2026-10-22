@@ -13,7 +13,7 @@
 #define LOOM_OPS_SPIRV_OPS_H_
 
 #include "loom/ops/op_defs.h"
-#include "loom/target/arch/spirv/facts.h"
+#include "loom/target/arch/spirv/records/target_records.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
