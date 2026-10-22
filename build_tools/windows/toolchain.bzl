@@ -3,11 +3,9 @@
 
 """Windows MSVC-ABI actions using a locally provisioned Linux LLVM toolchain."""
 
-# Reuse the same action/feature vocabulary as the native Windows toolchain.
-# buildifier: disable=bzl-visibility
-load("@rules_cc//cc/private/toolchain:windows_cc_toolchain_config.bzl", "cc_toolchain_config")
 load("@rules_cc//cc/toolchains:cc_toolchain.bzl", "cc_toolchain")
 load(":cc_toolchain.bzl", "windows_cc_toolchain")
+load(":toolchain_config.bzl", "windows_cross_toolchain_config")
 
 def windows_cross_toolchain(name, repository_path, execution_architecture, msvc_version):
     """Defines the x86-64 Windows compiler and its action-specific file inputs.
@@ -60,7 +58,7 @@ def windows_cross_toolchain(name, repository_path, execution_architecture, msvc_
     library_directories = [repository_path + "/lib/" + component for component in ["crt", "ucrt", "um"]] + [
         repository_path + "/runtime",
     ]
-    cc_toolchain_config(
+    windows_cross_toolchain_config(
         name = "config",
         cpu = "x64_windows",
         compiler = "clang-cl",
@@ -109,7 +107,6 @@ def windows_cross_toolchain(name, repository_path, execution_architecture, msvc_
         dbg_mode_debug_flag = "/DEBUG",
         fastbuild_mode_debug_flag = "/DEBUG",
         supports_parse_showincludes = True,
-        supports_windows_export_all_symbols = False,
     )
     cc_toolchain(
         name = "cc_toolchain",
