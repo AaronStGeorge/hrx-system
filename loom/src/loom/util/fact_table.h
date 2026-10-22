@@ -298,6 +298,15 @@ struct loom_value_fact_table_t {
     iree_host_size_t capacity;
   } exact_lane_origins;
 
+  // Exact scalar numeric origins keyed by result value ID. Direct entries are
+  // allocated lazily when a function first publishes a preserving conversion.
+  struct {
+    // Source value IDs indexed relative to range.first_value_id.
+    loom_value_id_t* entries;
+    // Value-ID range covered by the direct entries.
+    loom_value_fact_range_t range;
+  } exact_scalar_origins;
+
   // Uniform scalar-scale origins keyed by aggregate value ID. An entry with
   // source_value_id == LOOM_VALUE_ID_INVALID has no known scaled origin.
   struct {

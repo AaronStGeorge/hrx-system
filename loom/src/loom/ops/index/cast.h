@@ -23,6 +23,13 @@ loom_value_facts_t loom_index_cast_transfer_facts(
     loom_scalar_type_t input_type, loom_scalar_type_t result_type,
     loom_value_facts_t input_facts);
 
+// Returns true when applying index.cast to every value in |input_facts|
+// preserves its represented numeric value exactly. Representation changes that
+// truncate, reinterpret a negative value as unsigned, or may wrap return false.
+bool loom_index_cast_transfer_preserves_value(loom_scalar_type_t input_type,
+                                              loom_scalar_type_t result_type,
+                                              loom_value_facts_t input_facts);
+
 // Returns true when an address -> fixed-width payload -> same address
 // roundtrip preserves every value described by |source_facts|. Roundtrips from
 // index require signed fit, roundtrips from offset require unsigned fit, and i1

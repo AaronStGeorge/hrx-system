@@ -98,6 +98,16 @@ loom_generated_cc_library(
 )
 
 loom_cc_test(
+    name = "cast_test",
+    srcs = ["cast_test.cc"],
+    deps = [
+        ":cast",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "carrier_test",
     srcs = ["carrier_test.cc"],
     deps = [

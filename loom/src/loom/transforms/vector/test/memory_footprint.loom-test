@@ -1013,6 +1013,66 @@ func.def @guarded_unsigned_widening_proves_dynamic_unit_axis(%buffer: buffer, %b
 // ====
 
 // RUN: pass canonicalize,vector-memory-footprint
+
+// A scalar guard bounds the fixed-width count before its index representation
+// and a broader alias. The edge proof must reach the loop bound so its inner
+// full-packet guard proves both memory operations safe.
+func.def @guarded_packet_cast_alias(%count: i32, %rank: i32, %start0: index, %source: buffer, %output: buffer, %base: offset) {
+  %start = index.assume %start0 [range(%start0, 0, 4095)] : index
+  %c16 = index.constant 16 : index
+  %step = index.constant 4096 : index
+  %limit = scalar.constant 4096 : i32
+  %fits = scalar.cmpi ule, %count, %limit : i32
+  %partial = scalar.cmpi ne, %rank, %count : i32
+  %compact = scalar.andi %fits, %partial : i1
+  %count_value = index.cast %count : i32 to index
+  %complete = index.assume %count_value [range(%count_value, 1, 65536)] : index
+  %input = buffer.view %source[%base] : buffer -> view<4096xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<4096xi32>
+  scf.if %compact {
+    scf.for %begin = [%start to %complete step %step] {
+      %end = index.add %begin, %c16 : index
+      %full = index.cmp ule, %end, %complete : index
+      scf.if %full {
+        %values = vector.load %input[%begin] : view<4096xi32> -> vector<16xi32>
+        vector.store %values, %destination[%begin] : vector<16xi32>, view<4096xi32>
+      }
+    }
+  }
+  func.return
+}
+
+// ----
+func.def @guarded_packet_cast_alias(%count: i32, %rank: i32, %start0: index, %source: buffer, %output: buffer, %base: offset) {
+  %start = index.assume %start0 [range(%start0, 0, 4095)] : index
+  %c16 = index.constant 16 : index
+  %step = index.constant 4096 : index
+  %limit = scalar.constant 4096 : i32
+  %fits = scalar.cmpi ule, %count, %limit : i32
+  %partial = scalar.cmpi ne, %rank, %count : i32
+  %compact = scalar.andi %fits, %partial : i1
+  %count_value = index.cast %count : i32 to index
+  %complete = index.assume %count_value [range(%count_value, 1, 65536)] : index
+  %input = buffer.view %source[%base] : buffer -> view<4096xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<4096xi32>
+  scf.if %compact {
+    %21 = index.assume %complete [le(%complete, 4096), ne(%complete, %rank)] : index
+    scf.for %begin = [%start to %21 step %step] {
+      %end = index.add %begin, %c16 : index
+      %full = index.cmp ule, %end, %21 : index
+      scf.if %full {
+        %22 = index.assume %begin [le(%begin, 4080)] : index
+        %values = vector.load %input[%22] : view<4096xi32> -> vector<16xi32>
+        vector.store %values, %destination[%22] : vector<16xi32>, view<4096xi32>
+      }
+    }
+  }
+  func.return
+}
+
+// ====
+
+// RUN: pass canonicalize,vector-memory-footprint
 func.def @guarded_loaded_i32_precast_index_proves_unit_axis(%ids: buffer, %payload: buffer, %base: offset, %row_count: i32) {
   %layout = encoding.layout.dense : encoding<layout>
   %id_view = buffer.view %ids[%base] : buffer -> view<1xi32, %layout>

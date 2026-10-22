@@ -210,6 +210,55 @@ TEST_F(FactOriginStorageTest, ExactLaneOriginsAreSparseAndScopeLocal) {
   EXPECT_EQ(table.exact_lane_origins.count, 1u);
 }
 
+TEST_F(FactOriginStorageTest, ExactScalarOriginsAreDirectAndScopeLocal) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 1024));
+
+  EXPECT_EQ(table.exact_scalar_origins.entries, nullptr);
+  EXPECT_EQ(table.exact_scalar_origins.range.capacity, 0u);
+  IREE_ASSERT_OK(loom_value_fact_table_define_exact_scalar_origin(
+      &table, 900, {.source_value_id = 12}));
+  IREE_ASSERT_OK(loom_value_fact_table_define_exact_scalar_origin(
+      &table, 900, {.source_value_id = 20}));
+  IREE_ASSERT_OK(loom_value_fact_table_define_exact_scalar_origin(
+      &table, 7, {.source_value_id = 3}));
+
+  EXPECT_TRUE(
+      loom_value_fact_range_contains(table.exact_scalar_origins.range, 900));
+  EXPECT_TRUE(
+      loom_value_fact_range_contains(table.exact_scalar_origins.range, 7));
+  EXPECT_EQ(table.touched_count, 2u);
+  EXPECT_EQ(table.exact_scalar_origins.entries[loom_value_fact_range_offset(
+                table.exact_scalar_origins.range, 900)],
+            20u);
+  EXPECT_EQ(table.exact_scalar_origins.entries[loom_value_fact_range_offset(
+                table.exact_scalar_origins.range, 7)],
+            3u);
+
+  loom_value_id_t* const entries = table.exact_scalar_origins.entries;
+  const loom_value_fact_range_t range = table.exact_scalar_origins.range;
+  loom_value_fact_table_clear_scope(&table);
+
+  EXPECT_EQ(table.exact_scalar_origins.entries, entries);
+  EXPECT_EQ(table.exact_scalar_origins.range.first_value_id,
+            range.first_value_id);
+  EXPECT_EQ(table.exact_scalar_origins.range.capacity, range.capacity);
+  EXPECT_EQ(table.touched_count, 0u);
+  EXPECT_EQ(table.exact_scalar_origins.entries[loom_value_fact_range_offset(
+                table.exact_scalar_origins.range, 900)],
+            LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(table.exact_scalar_origins.entries[loom_value_fact_range_offset(
+                table.exact_scalar_origins.range, 7)],
+            LOOM_VALUE_ID_INVALID);
+
+  IREE_ASSERT_OK(loom_value_fact_table_define_exact_scalar_origin(
+      &table, 7, {.source_value_id = 2}));
+  EXPECT_EQ(table.exact_scalar_origins.entries, entries);
+  EXPECT_EQ(table.exact_scalar_origins.entries[loom_value_fact_range_offset(
+                table.exact_scalar_origins.range, 7)],
+            2u);
+}
+
 TEST_F(FactOriginStorageTest, ContextualQueryOriginsAreSparseAndScopeLocal) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 1024));
@@ -431,6 +480,32 @@ TEST_F(FactOriginStorageTest, CloneValuesCopiesExactLaneOrigins) {
   iree_arena_deinitialize(&target_arena);
 }
 
+TEST_F(FactOriginStorageTest, CloneValuesCopiesExactScalarOrigins) {
+  loom_value_fact_table_t source = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 8));
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&source, 7, loom_value_facts_unknown()));
+  IREE_ASSERT_OK(loom_value_fact_table_define_exact_scalar_origin(
+      &source, 7, {.source_value_id = 2}));
+
+  iree_arena_allocator_t target_arena;
+  iree_arena_initialize(&block_pool_, &target_arena);
+  loom_value_fact_table_t target = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 8));
+  IREE_ASSERT_OK(loom_value_fact_table_clone_values(
+      &target, {&source, source.touched_values, source.touched_count},
+      nullptr));
+
+  ASSERT_TRUE(
+      loom_value_fact_range_contains(target.exact_scalar_origins.range, 7));
+  EXPECT_EQ(target.exact_scalar_origins.entries[loom_value_fact_range_offset(
+                target.exact_scalar_origins.range, 7)],
+            2u);
+
+  iree_arena_deinitialize(&target_arena);
+}
+
 TEST_F(FactOriginStorageTest, CloneValuesCopiesContextualQueryOrigins) {
   loom_value_fact_table_t source = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 8));
@@ -577,7 +652,8 @@ class FactOriginTest : public ::testing::Test {
                                  vector_type_,
                                  index_type_,
                                  index_type_,
-                                 loom_type_scalar(LOOM_SCALAR_TYPE_I1)};
+                                 loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+                                 loom_type_scalar(LOOM_SCALAR_TYPE_I32)};
     loom_op_t* function = nullptr;
     IREE_ASSERT_OK(loom_test_func_build(
         &rewriter_.builder, 0, 0, 0, {.module_id = 0, .symbol_id = symbol},
@@ -643,8 +719,9 @@ class FactOriginTest : public ::testing::Test {
   loom_rewriter_t rewriter_ = {};
   // Materialization proof owner borrowed by the rewriter.
   loom_value_fact_table_t table_ = {};
-  // Dynamic scalar, vector, and index pairs followed by a loop condition.
-  loom_value_id_t inputs_[7];
+  // Dynamic scalar, vector, and index pairs followed by a loop condition and
+  // one fixed-width integer conversion source.
+  loom_value_id_t inputs_[8];
   // Scalar element type used by the vector fixtures.
   const loom_type_t scalar_type_ = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   // Four-lane aggregate used by the vector fixtures.
@@ -681,6 +758,59 @@ TEST_F(FactOriginTest, RetargetedAliasMaterializesTheCurrentScalar) {
       loom_module_value(module_, loom_op_const_operands(use)[0]));
   ASSERT_TRUE(loom_vector_splat_isa(replacement));
   EXPECT_EQ(loom_vector_splat_scalar(replacement), inputs_[1]);
+}
+
+TEST_F(FactOriginTest, ExactScalarCastOriginsFlattenThroughAliases) {
+  const loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  const loom_type_t i64_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+
+  loom_op_t* index_cast = nullptr;
+  IREE_ASSERT_OK(loom_index_cast_build(&rewriter_.builder, inputs_[7], i32_type,
+                                       index_type_, LOOM_LOCATION_UNKNOWN,
+                                       &index_cast));
+  EXPECT_FALSE(Compute(index_cast));
+  const loom_value_id_t index_value = loom_index_cast_result(index_cast);
+  loom_value_fact_exact_scalar_origin_t origin;
+  ASSERT_TRUE(loom_value_fact_table_query_exact_scalar_origin(
+      &table_, module_, index_value, &origin));
+  EXPECT_EQ(origin.source_value_id, inputs_[7]);
+
+  loom_op_t* alias = nullptr;
+  IREE_ASSERT_OK(loom_index_assume_build(
+      &rewriter_.builder, &index_value, 1, /*predicates=*/nullptr,
+      /*predicates_count=*/0, &index_type_, 1, LOOM_LOCATION_UNKNOWN, &alias));
+  EXPECT_FALSE(Compute(alias));
+  const loom_value_id_t alias_value =
+      loom_index_assume_results(alias).values[0];
+  ASSERT_TRUE(loom_value_fact_table_query_exact_scalar_origin(
+      &table_, module_, alias_value, &origin));
+  EXPECT_EQ(origin.source_value_id, inputs_[7]);
+
+  loom_op_t* i64_cast = nullptr;
+  IREE_ASSERT_OK(loom_index_cast_build(&rewriter_.builder, alias_value,
+                                       index_type_, i64_type,
+                                       LOOM_LOCATION_UNKNOWN, &i64_cast));
+  EXPECT_FALSE(Compute(i64_cast));
+  ASSERT_TRUE(loom_value_fact_table_query_exact_scalar_origin(
+      &table_, module_, loom_index_cast_result(i64_cast), &origin));
+  EXPECT_EQ(origin.source_value_id, inputs_[7]);
+
+  loom_op_t* narrowing_cast = nullptr;
+  IREE_ASSERT_OK(loom_index_cast_build(&rewriter_.builder, inputs_[4],
+                                       index_type_, i32_type,
+                                       LOOM_LOCATION_UNKNOWN, &narrowing_cast));
+  EXPECT_FALSE(Compute(narrowing_cast));
+  EXPECT_FALSE(loom_value_fact_table_query_exact_scalar_origin(
+      &table_, module_, loom_index_cast_result(narrowing_cast), &origin));
+
+  loom_op_t* unsigned_cast = nullptr;
+  IREE_ASSERT_OK(loom_index_cast_build(&rewriter_.builder, inputs_[7], i32_type,
+                                       offset_type, LOOM_LOCATION_UNKNOWN,
+                                       &unsigned_cast));
+  EXPECT_FALSE(Compute(unsigned_cast));
+  EXPECT_FALSE(loom_value_fact_table_query_exact_scalar_origin(
+      &table_, module_, loom_index_cast_result(unsigned_cast), &origin));
 }
 
 TEST_F(FactOriginTest, CyclicPublicationRefreshesOutsideMaterialization) {

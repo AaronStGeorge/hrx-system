@@ -102,6 +102,17 @@ loom_generated_cc_library(
 
 loom_cc_test(
   NAME
+    cast_test
+  SRCS
+    "cast_test.cc"
+  DEPS
+    ::cast
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     carrier_test
   SRCS
     "carrier_test.cc"

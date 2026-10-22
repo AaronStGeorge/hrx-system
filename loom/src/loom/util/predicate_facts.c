@@ -353,6 +353,87 @@ static bool loom_value_fact_table_range_bound_implies(
       conclusion_argument);
 }
 
+static bool loom_value_fact_table_range_bound_strictly_implies(
+    loom_predicate_arg_tag_t premise_tag, int64_t premise_argument,
+    loom_predicate_arg_tag_t conclusion_tag, int64_t conclusion_argument,
+    bool is_lower_bound) {
+  return premise_tag == LOOM_PRED_ARG_CONST &&
+         conclusion_tag == LOOM_PRED_ARG_CONST &&
+         (is_lower_bound ? premise_argument > conclusion_argument
+                         : premise_argument < conclusion_argument);
+}
+
+static bool loom_value_fact_table_range_implies_relation(
+    const loom_value_fact_table_t* table, const loom_predicate_t* premise,
+    const loom_predicate_t* conclusion) {
+  if (premise->kind != LOOM_PREDICATE_RANGE || premise->arg_count != 3 ||
+      conclusion->arg_count != 2) {
+    return false;
+  }
+  loom_symbolic_integer_relation_t relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+  if (!loom_symbolic_integer_relation_from_predicate_kind(conclusion->kind,
+                                                          &relation)) {
+    return false;
+  }
+
+  uint8_t bound_index = 0;
+  if (loom_value_fact_table_predicate_arguments_equal(
+          table, (loom_predicate_arg_tag_t)premise->arg_tags[0],
+          premise->args[0], (loom_predicate_arg_tag_t)conclusion->arg_tags[0],
+          conclusion->args[0])) {
+    bound_index = 1;
+  } else if (loom_value_fact_table_predicate_arguments_equal(
+                 table, (loom_predicate_arg_tag_t)premise->arg_tags[0],
+                 premise->args[0],
+                 (loom_predicate_arg_tag_t)conclusion->arg_tags[1],
+                 conclusion->args[1])) {
+    relation = loom_symbolic_integer_relation_swap(relation);
+  } else {
+    return false;
+  }
+
+  const loom_predicate_arg_tag_t bound_tag =
+      (loom_predicate_arg_tag_t)conclusion->arg_tags[bound_index];
+  const int64_t bound = conclusion->args[bound_index];
+  const loom_predicate_arg_tag_t lower_tag =
+      (loom_predicate_arg_tag_t)premise->arg_tags[1];
+  const int64_t lower = premise->args[1];
+  const loom_predicate_arg_tag_t upper_tag =
+      (loom_predicate_arg_tag_t)premise->arg_tags[2];
+  const int64_t upper = premise->args[2];
+  switch (relation) {
+    case LOOM_SYMBOLIC_INTEGER_RELATION_EQ:
+      return loom_value_fact_table_range_bound_implies(
+                 table, lower_tag, lower, bound_tag, bound,
+                 /*is_lower_bound=*/true) &&
+             loom_value_fact_table_range_bound_implies(
+                 table, upper_tag, upper, bound_tag, bound,
+                 /*is_lower_bound=*/false);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_NE:
+      return loom_value_fact_table_range_bound_strictly_implies(
+                 lower_tag, lower, bound_tag, bound,
+                 /*is_lower_bound=*/true) ||
+             loom_value_fact_table_range_bound_strictly_implies(
+                 upper_tag, upper, bound_tag, bound,
+                 /*is_lower_bound=*/false);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_LT:
+      return loom_value_fact_table_range_bound_strictly_implies(
+          upper_tag, upper, bound_tag, bound, /*is_lower_bound=*/false);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_LE:
+      return loom_value_fact_table_range_bound_implies(
+          table, upper_tag, upper, bound_tag, bound,
+          /*is_lower_bound=*/false);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_GT:
+      return loom_value_fact_table_range_bound_strictly_implies(
+          lower_tag, lower, bound_tag, bound, /*is_lower_bound=*/true);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_GE:
+      return loom_value_fact_table_range_bound_implies(table, lower_tag, lower,
+                                                       bound_tag, bound,
+                                                       /*is_lower_bound=*/true);
+  }
+  return false;
+}
+
 bool loom_value_fact_table_predicate_implies(
     const loom_value_fact_table_t* table, const loom_predicate_t* premise,
     const loom_predicate_t* conclusion) {
@@ -365,6 +446,11 @@ bool loom_value_fact_table_predicate_implies(
 
   if (loom_value_fact_table_relation_predicate_implies(table, premise,
                                                        conclusion)) {
+    return true;
+  }
+
+  if (loom_value_fact_table_range_implies_relation(table, premise,
+                                                   conclusion)) {
     return true;
   }
 

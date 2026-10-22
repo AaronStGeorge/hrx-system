@@ -680,3 +680,48 @@ func.def @switch_exclusions(%input: index) -> (index) {
   }
   func.return %result : index
 }
+
+// ====
+
+// RUN: pass canonicalize
+
+// A cast alias inherits a condition whose lower bound is already proven by an
+// earlier range carrier. The edge carrier must converge while adding the two
+// remaining predicates.
+func.decl @observe(%value: index) -> (index)
+
+func.def @partial_carrier_cast_alias(%count: i32, %rank: i32) -> (index) {
+  %limit = scalar.constant 4096 : i32
+  %fits = scalar.cmpi ule, %count, %limit : i32
+  %partial = scalar.cmpi ne, %rank, %count : i32
+  %compact = scalar.andi %fits, %partial : i1
+  %count_value = index.cast %count : i32 to index
+  %complete = index.assume %count_value [range(%count_value, 1, 65536)] : index
+  %result = scf.if %compact -> (index) {
+    %observed = func.call @observe(%complete) : (index) -> (index)
+    scf.yield %observed : index
+  } else {
+    scf.yield %complete : index
+  }
+  func.return %result : index
+}
+
+// ----
+func.decl @observe(%value: index) -> (index)
+
+func.def @partial_carrier_cast_alias(%count: i32, %rank: i32) -> (index) {
+  %limit = scalar.constant 4096 : i32
+  %fits = scalar.cmpi ule, %count, %limit : i32
+  %partial = scalar.cmpi ne, %rank, %count : i32
+  %compact = scalar.andi %fits, %partial : i1
+  %count_value = index.cast %count : i32 to index
+  %complete = index.assume %count_value [range(%count_value, 1, 65536)] : index
+  %result = scf.if %compact -> (index) {
+    %13 = index.assume %complete [le(%complete, 4096), ne(%complete, %rank)] : index
+    %observed = func.call @observe(%13) : (index) -> (index)
+    scf.yield %observed : index
+  } else {
+    scf.yield %complete : index
+  }
+  func.return %result : index
+}

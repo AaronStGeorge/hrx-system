@@ -11,6 +11,7 @@
 #include "loom/analysis/cfg_value_identity.h"
 #include "loom/analysis/condition_fact_scope.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/index/cast.h"
 #include "loom/ops/op_defs.h"
 
 typedef struct loom_conditioned_value_facts_region_t {
@@ -355,6 +356,24 @@ static void loom_conditioned_value_facts_apply_active_refinement(
   inout_facts->flags |= retained_flags;
 }
 
+static void loom_conditioned_value_facts_refine_canonical_value(
+    const loom_conditioned_value_facts_t* state,
+    const loom_conditioned_value_facts_region_t* entry,
+    const loom_value_fact_table_t* table, loom_value_id_t canonical,
+    loom_value_facts_t* inout_facts) {
+  if (state->active_updates) {
+    const loom_value_ordinal_t ordinal =
+        loom_local_value_domain_try_ordinal(&state->domain, canonical);
+    if (ordinal != LOOM_VALUE_ORDINAL_INVALID &&
+        state->active_updates[ordinal]) {
+      loom_conditioned_value_facts_apply_active_refinement(
+          &state->active_updates[ordinal]->facts, inout_facts);
+    }
+  }
+  loom_condition_fact_scope_apply_to_value_facts(entry->projected_scope, table,
+                                                 canonical, inout_facts);
+}
+
 static void loom_conditioned_value_facts_refine_operands(
     void* user_data, const loom_value_fact_table_t* table, const loom_op_t* op,
     loom_value_facts_t* operands) {
@@ -381,17 +400,38 @@ static void loom_conditioned_value_facts_refine_operands(
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     const loom_value_id_t canonical =
         loom_cfg_value_identity_table_lookup(&state->identities, values[i]);
-    if (state->active_updates) {
-      const loom_value_ordinal_t ordinal =
-          loom_local_value_domain_try_ordinal(&state->domain, canonical);
-      if (ordinal != LOOM_VALUE_ORDINAL_INVALID &&
-          state->active_updates[ordinal]) {
-        loom_conditioned_value_facts_apply_active_refinement(
-            &state->active_updates[ordinal]->facts, &operands[i]);
-      }
+    loom_conditioned_value_facts_refine_canonical_value(
+        state, entry, table, canonical, &operands[i]);
+  }
+  if (!table->exact_scalar_origins.entries) {
+    return;
+  }
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    const loom_value_id_t canonical =
+        loom_cfg_value_identity_table_lookup(&state->identities, values[i]);
+    // Value-preserving scalar conversions retain their source so a guard on
+    // the source can refine the represented value without rediscovering its
+    // producer chain from every use. The retained relation is transitively
+    // flattened by the cast producer, keeping this lookup bounded.
+    loom_value_fact_exact_scalar_origin_t origin;
+    if (!loom_value_fact_table_query_exact_scalar_origin(table, state->module,
+                                                         canonical, &origin)) {
+      continue;
     }
-    loom_condition_fact_scope_apply_to_value_facts(
-        entry->projected_scope, table, canonical, &operands[i]);
+    const loom_value_id_t source = loom_cfg_value_identity_table_lookup(
+        &state->identities, origin.source_value_id);
+    loom_value_facts_t source_facts =
+        loom_value_fact_table_lookup(table, source);
+    loom_conditioned_value_facts_refine_canonical_value(state, entry, table,
+                                                        source, &source_facts);
+    const loom_scalar_type_t source_type =
+        loom_type_element_type(loom_module_value_type(state->module, source));
+    const loom_scalar_type_t result_type = loom_type_element_type(
+        loom_module_value_type(state->module, canonical));
+    const loom_value_facts_t transferred =
+        loom_index_cast_transfer_facts(source_type, result_type, source_facts);
+    loom_conditioned_value_facts_apply_active_refinement(&transferred,
+                                                         &operands[i]);
   }
 }
 

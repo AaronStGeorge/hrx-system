@@ -516,6 +516,51 @@ TEST(PredicateFactsImplicationTest, PreservesPredicateDomainSemantics) {
   EXPECT_FALSE(loom_value_fact_table_predicate_implies(
       /*table=*/nullptr, &conclusion, &premise));
 
+  conclusion = MakeBinaryPredicate(LOOM_PREDICATE_GE, 1, 0);
+  conclusion.arg_tags[1] = LOOM_PRED_ARG_CONST;
+  conclusion.args[1] = 4;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.kind = LOOM_PREDICATE_GT;
+  EXPECT_FALSE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.args[1] = 3;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+
+  conclusion = MakeBinaryPredicate(LOOM_PREDICATE_LE, 1, 0);
+  conclusion.arg_tags[1] = LOOM_PRED_ARG_CONST;
+  conclusion.args[1] = 32;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.kind = LOOM_PREDICATE_LT;
+  EXPECT_FALSE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.args[1] = 33;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+
+  conclusion = MakeBinaryPredicate(LOOM_PREDICATE_LE, 0, 1);
+  conclusion.arg_tags[0] = LOOM_PRED_ARG_CONST;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.kind = LOOM_PREDICATE_ULE;
+  EXPECT_FALSE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+
+  premise.args[2] = 4;
+  conclusion = MakeBinaryPredicate(LOOM_PREDICATE_EQ, 1, 0);
+  conclusion.arg_tags[1] = LOOM_PRED_ARG_CONST;
+  conclusion.args[1] = 4;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.kind = LOOM_PREDICATE_NE;
+  EXPECT_FALSE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+  conclusion.args[1] = 3;
+  EXPECT_TRUE(loom_value_fact_table_predicate_implies(
+      /*table=*/nullptr, &premise, &conclusion));
+
   premise = {
       .kind = LOOM_PREDICATE_MULTIPLE_OF,
       .arg_count = 2,

@@ -86,12 +86,29 @@ iree_status_t loom_index_cast_facts(loom_fact_context_t* context,
       !loom_index_cast_scalar_type(module, loom_index_cast_result(op),
                                    &result_scalar_type)) {
     result_facts[0] = loom_value_facts_unknown();
-    return iree_ok_status();
+    return loom_value_fact_table_define_exact_scalar_origin(
+        context->table, loom_index_cast_result(op),
+        (loom_value_fact_exact_scalar_origin_t){
+            .source_value_id = LOOM_VALUE_ID_INVALID,
+        });
   }
 
   result_facts[0] = loom_index_cast_transfer_facts(
       input_scalar_type, result_scalar_type, operand_facts[0]);
-  return iree_ok_status();
+  loom_value_fact_exact_scalar_origin_t exact_origin = {
+      .source_value_id = LOOM_VALUE_ID_INVALID,
+  };
+  if (loom_index_cast_transfer_preserves_value(
+          input_scalar_type, result_scalar_type, operand_facts[0])) {
+    const loom_value_id_t input = loom_index_cast_input(op);
+    if (!loom_value_fact_table_query_exact_scalar_origin(
+            context->table, module, input, &exact_origin)) {
+      exact_origin.source_value_id =
+          loom_value_fact_table_query_identity(context->table, input);
+    }
+  }
+  return loom_value_fact_table_define_exact_scalar_origin(
+      context->table, loom_index_cast_result(op), exact_origin);
 }
 
 iree_status_t loom_index_assume_facts(loom_fact_context_t* context,
