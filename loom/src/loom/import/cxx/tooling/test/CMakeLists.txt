@@ -59,18 +59,4 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
-iree_execution_test_suite(
-  NAME
-    record_execution_test
-  MANIFESTS
-    "records.test.json"
-  TOOLS
-    "loom-link=loom::tools::loom-link"
-    "loom-test=loom::tools::loom-test"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/check_records.cxx"
-)
-endif()
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

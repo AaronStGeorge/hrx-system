@@ -124,29 +124,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
-iree_execution_test_suite(
-  NAME
-    execution_test
-  MANIFESTS
-    "execution.test.json"
-  TOOLS
-    "loom-benchmark=loom::tools::loom-benchmark"
-    "loom-link=loom::tools::loom-link"
-    "loom-test=loom::tools::loom-test"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_cases.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_cases.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_library.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/dependency_input.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/record_input.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/record_library.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/source_input.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/source_input.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/source_input.loom"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
 loom_test_module(
   NAME
     source_test_module

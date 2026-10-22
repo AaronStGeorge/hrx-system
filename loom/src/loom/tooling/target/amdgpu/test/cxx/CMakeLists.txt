@@ -13,58 +13,6 @@ if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDG
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
-    aiter_swiglu_f16_test_execute_amdgpu_test
-  MODULE
-    "loom::import::cxx::test::aiter_swiglu_f16_module"
-  RUNNER_ARGS
-    "--device=amdgpu"
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
-    "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-    "loom-execution-profile=amdgpu"
-    "loom-target-family=amdgpu"
-    "loom-target-class=gpu"
-    "loom-executor=hardware"
-  RESOURCE_GROUP
-    "gpu-device"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
-loom_execution_test(
-  NAME
-    aiter_swiglu_f16_test_execute_amdgpu_access_test
-  MODULE
-    "loom::import::cxx::test::aiter_swiglu_f16_module"
-  RUNNER_ARGS
-    "--device=amdgpu"
-    "--sanitizer=access"
-    "--sanitizer-reporting=report-only"
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
-    "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-    "loom-execution-profile=amdgpu_access"
-    "loom-target-family=amdgpu"
-    "loom-target-class=gpu"
-    "loom-executor=hardware"
-  RESOURCE_GROUP
-    "gpu-device"
-)
-endif()
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
-loom_execution_test(
-  NAME
     assumptions_test_execute_amdgpu_test
   MODULE
     "loom::import::cxx::test::assumptions_module"
@@ -587,7 +535,7 @@ loom_execution_test(
   NAME
     flash_attention_test_execute_amdgpu_test
   MODULE
-    "loom::import::cxx::test::flash_attention_module"
+    "loom::test::corpus::authoring::cxx::flash_attention_module"
   RUNNER_ARGS
     "--device=amdgpu"
   LABELS
@@ -611,7 +559,7 @@ loom_execution_test(
   NAME
     flash_attention_test_execute_amdgpu_access_test
   MODULE
-    "loom::import::cxx::test::flash_attention_module"
+    "loom::test::corpus::authoring::cxx::flash_attention_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -716,58 +664,6 @@ loom_execution_test(
     integer_increment_test_execute_amdgpu_access_test
   MODULE
     "loom::import::cxx::test::integer_increment_module"
-  RUNNER_ARGS
-    "--device=amdgpu"
-    "--sanitizer=access"
-    "--sanitizer-reporting=report-only"
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
-    "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-    "loom-execution-profile=amdgpu_access"
-    "loom-target-family=amdgpu"
-    "loom-target-class=gpu"
-    "loom-executor=hardware"
-  RESOURCE_GROUP
-    "gpu-device"
-)
-endif()
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
-loom_execution_test(
-  NAME
-    llama_rms_norm_test_execute_amdgpu_test
-  MODULE
-    "loom::import::cxx::test::llama_rms_norm_module"
-  RUNNER_ARGS
-    "--device=amdgpu"
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
-    "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-    "loom-execution-profile=amdgpu"
-    "loom-target-family=amdgpu"
-    "loom-target-class=gpu"
-    "loom-executor=hardware"
-  RESOURCE_GROUP
-    "gpu-device"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
-loom_execution_test(
-  NAME
-    llama_rms_norm_test_execute_amdgpu_access_test
-  MODULE
-    "loom::import::cxx::test::llama_rms_norm_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -2958,25 +2854,13 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-loom_test_module(
-  NAME
-    nvfp4_matrix_test_module
-  SRCS
-    "nvfp4_matrix.cxx"
-    "nvfp4_matrix_providers.cxx"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix.h"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     nvfp4_matrix_test_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::nvfp4_matrix_test_module"
+    "loom::test::corpus::authoring::cxx::nvfp4_matrix_module"
   RUNNER_ARGS
     "--device=amdgpu"
   LABELS
@@ -3001,7 +2885,7 @@ loom_execution_test(
     nvfp4_matrix_test_execute_amdgpu_access_test
   CORRECTNESS_ONLY
   MODULE
-    "::nvfp4_matrix_test_module"
+    "loom::test::corpus::authoring::cxx::nvfp4_matrix_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -3026,22 +2910,10 @@ loom_check_compile_tests(
   NAME
     "nvfp4_matrix_test"
   SRC
-    "::nvfp4_matrix_test_module"
+    "loom::test::corpus::authoring::cxx::nvfp4_matrix_module"
   TARGETS
     loom::target::amdgpu::gfx1100
     loom::target::amdgpu::gfx942
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-loom_test_module(
-  NAME
-    nvfp4_matrix_loom_providers_test_module
-  SRCS
-    "nvfp4_matrix.cxx"
-    "nvfp4_matrix_providers.loom"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix.h"
 )
 endif()
 
@@ -3052,7 +2924,7 @@ loom_execution_test(
     nvfp4_matrix_loom_providers_test_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::nvfp4_matrix_loom_providers_test_module"
+    "loom::test::corpus::authoring::cxx::nvfp4_matrix_loom_providers_module"
   RUNNER_ARGS
     "--device=amdgpu"
   LABELS
@@ -3077,7 +2949,7 @@ loom_execution_test(
     nvfp4_matrix_loom_providers_test_execute_amdgpu_access_test
   CORRECTNESS_ONLY
   MODULE
-    "::nvfp4_matrix_loom_providers_test_module"
+    "loom::test::corpus::authoring::cxx::nvfp4_matrix_loom_providers_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -3102,22 +2974,10 @@ loom_check_compile_tests(
   NAME
     "nvfp4_matrix_loom_providers_test"
   SRC
-    "::nvfp4_matrix_loom_providers_test_module"
+    "loom::test::corpus::authoring::cxx::nvfp4_matrix_loom_providers_module"
   TARGETS
     loom::target::amdgpu::gfx1100
     loom::target::amdgpu::gfx942
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-loom_test_module(
-  NAME
-    q8s32_specialization_test_module
-  SRCS
-    "q8s32_specialization.cxx"
-    "q8s32_specialization_providers.cxx"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization.h"
 )
 endif()
 
@@ -3128,7 +2988,7 @@ loom_execution_test(
     q8s32_specialization_test_values16_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=model.q8s32.input_capacity=768"
@@ -3155,7 +3015,7 @@ loom_execution_test(
     q8s32_specialization_test_values16_execute_amdgpu_access_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -3184,7 +3044,7 @@ loom_execution_test(
     q8s32_specialization_test_values32_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=model.q8s32.input_capacity=512"
@@ -3211,7 +3071,7 @@ loom_execution_test(
     q8s32_specialization_test_values32_execute_amdgpu_access_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -3240,7 +3100,7 @@ loom_execution_test(
     q8s32_specialization_test_values8_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=model.q8s32.input_capacity=1280"
@@ -3267,7 +3127,7 @@ loom_execution_test(
     q8s32_specialization_test_values8_execute_amdgpu_access_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -3292,25 +3152,13 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-loom_test_module(
-  NAME
-    q8s32_specialization_loom_providers_test_module
-  SRCS
-    "q8s32_specialization.cxx"
-    "q8s32_specialization_providers.loom"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization.h"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     q8s32_specialization_loom_providers_test_values16_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_loom_providers_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_loom_providers_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=model.q8s32.input_capacity=768"
@@ -3337,7 +3185,7 @@ loom_execution_test(
     q8s32_specialization_loom_providers_test_values32_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_loom_providers_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_loom_providers_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=model.q8s32.input_capacity=512"
@@ -3364,7 +3212,7 @@ loom_execution_test(
     q8s32_specialization_loom_providers_test_values8_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q8s32_specialization_loom_providers_test_module"
+    "loom::test::corpus::authoring::cxx::q8s32_specialization_loom_providers_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=model.q8s32.input_capacity=1280"
@@ -3397,56 +3245,6 @@ iree_native_test(
     loom::tools::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/async_gather.cxx"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "iq4xs_gate_up_async_lowering"
-  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
-  ARGS
-    "{{${CMAKE_CURRENT_SOURCE_DIR}/iq4xs_gate_up_async_lowering.cxx-test}}"
-  SRC
-    loom::tools::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/iq4xs_gate_up.cxx"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "mxfp_group_dot_lowering"
-  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
-  ARGS
-    "{{${CMAKE_CURRENT_SOURCE_DIR}/mxfp_group_dot.cxx-test}}"
-  SRC
-    loom::tools::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/mxfp_group_dot.cxx"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "nvfp4_matrix_lowering"
-  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
-  ARGS
-    "{{${CMAKE_CURRENT_SOURCE_DIR}/nvfp4_matrix_lowering.cxx-test}}"
-  SRC
-    loom::tools::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix_providers.cxx"
   LABELS
     "loom-check"
 )
@@ -4176,21 +3974,12 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-loom_test_module(
-  NAME
-    iq4xs_gate_up_module
-  SRCS
-    "iq4xs_gate_up.cxx"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     iq4xs_gate_up_test_double_buffered_execute_amdgpu_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=qwen38.iq4xs.async_staging=false"
@@ -4221,7 +4010,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_test_double_buffered_execute_amdgpu_access_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -4254,7 +4043,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_test_single_buffered_execute_amdgpu_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=qwen38.iq4xs.async_staging=false"
@@ -4285,7 +4074,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_test_single_buffered_execute_amdgpu_access_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -4320,7 +4109,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_async_test_double_buffered_execute_amdgpu_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=qwen38.iq4xs.async_staging=true"
@@ -4351,7 +4140,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_async_test_double_buffered_execute_amdgpu_access_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -4383,7 +4172,7 @@ loom_check_compile_tests(
   NAME
     "iq4xs_gate_up_async_test_double_buffered"
   SRC
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   TARGETS
     loom::target::amdgpu::gfx942
   ARGS
@@ -4401,7 +4190,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_async_test_single_buffered_execute_amdgpu_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=qwen38.iq4xs.async_staging=true"
@@ -4432,7 +4221,7 @@ loom_execution_test(
   NAME
     iq4xs_gate_up_async_test_single_buffered_execute_amdgpu_access_test
   MODULE
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -4464,7 +4253,7 @@ loom_check_compile_tests(
   NAME
     "iq4xs_gate_up_async_test_single_buffered"
   SRC
-    "::iq4xs_gate_up_module"
+    "loom::test::corpus::authoring::cxx::iq4xs_gate_up_module"
   TARGETS
     loom::target::amdgpu::gfx942
   ARGS
@@ -4479,22 +4268,13 @@ loom_check_compile_tests(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-loom_test_module(
-  NAME
-    q4k_q8_swiglu_test_module
-  SRCS
-    "q4k_q8_swiglu.cxx"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     q4k_q8_swiglu_test_input512_execute_amdgpu_test
   CORRECTNESS_ONLY
   MODULE
-    "::q4k_q8_swiglu_test_module"
+    "loom::test::corpus::authoring::cxx::q4k_q8_swiglu_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--config=ffn_routed_gate_up.input_size=512"
@@ -4521,7 +4301,7 @@ loom_execution_test(
     q4k_q8_swiglu_test_input512_execute_amdgpu_access_test
   CORRECTNESS_ONLY
   MODULE
-    "::q4k_q8_swiglu_test_module"
+    "loom::test::corpus::authoring::cxx::q4k_q8_swiglu_module"
   RUNNER_ARGS
     "--device=amdgpu"
     "--sanitizer=access"
@@ -4604,61 +4384,6 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_execution_test_suite(
-  NAME
-    source_locations_test
-  MANIFESTS
-    "source_locations.test.json"
-  TOOLS
-    "loom-compile=loom::tools::loom-compile"
-    "loom-import-cxx=loom::tools::loom-import-cxx"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/source_locations.cxx"
-  LABELS
-    "hostonly"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_execution_test_suite(
-  NAME
-    configured_workgroup_storage_specialization_test
-  MANIFESTS
-    "configured_workgroup_storage.test.json"
-  TOOLS
-    "loom-compile=loom::tools::loom-compile"
-    "loom-format=loom::tools::loom-format"
-    "loom-import-cxx=loom::tools::loom-import-cxx"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/configured_workgroup_storage.cxx"
-  LABELS
-    "hostonly"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_execution_test_suite(
-  NAME
-    q8s32_specialization_link_test
-  MANIFESTS
-    "q8s32_specialization.test.json"
-  TOOLS
-    "loom-compile=loom::tools::loom-compile"
-    "loom-import-cxx=loom::tools::loom-import-cxx"
-    "loom-link=loom::tools::loom-link"
-    "loom-opt=loom::tools::loom-opt"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization_ambiguous_provider.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization_providers.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization_providers.loom"
-  LABELS
-    "hostonly"
-)
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)

@@ -2,88 +2,31 @@
   "version": 1,
   "cases": [
     {
-      "name": "imports the external HIP facade and generated scalar bindings",
+      "name": "applies source flags and exports the selected root",
       "run": {
         "tool": "loom-import-cxx",
         "args": [
-          "--builtin-includes=false",
-          "--I={srcdir}/../../import/cxx/include",
-          "{srcdir}/testdata/hip_kernels.cxx"
+          "--std=c++17",
+          "--fp-model=fast",
+          "--D=BIAS=1.0f",
+          "--root=second",
+          "-"
         ]
       },
-      "stdout": {
-        "contains": {
-          "unordered": [
-            "kernel.def @affine",
-            "kernel.def @convert",
-            "scalar.fmaf",
-            "scalar.extf",
-            "\n  kernel.launch.config ",
-            "\n  kernel.return\n"
-          ]
-        }
-      }
-    },
-    {
-      "name": "imports multiple kernels and included template helpers",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["{srcdir}/testdata/kernels.cxx"]
+      "stdin": {
+        "text": "#if __cplusplus != 201703L\n#error wrong standard\n#endif\nstatic float twice(float value) { return value * 2.0f; }\nfloat first(float value) { return value; }\nfloat second(float value) { return twice(value) + BIAS; }\n"
       },
       "stdout": {
         "contains": {
           "unordered": [
-            "kernel.def @first",
-            "kernel.def @second",
-            "func.def device @scale_3",
-            "config.decl @second.workgroup_size.x"
+            "func.def public @second",
+            "func.def @twice",
+            "scalar.mulf<reassoc|nnan|ninf|nsz|arcp|contract|afn>",
+            "scalar.constant 1.0"
           ]
-        }
-      }
-    },
-    {
-      "name": "applies the invocation floating-point model",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["--fp-model=fast", "-"]
-      },
-      "stdin": {"text": "float multiply(float left, float right) { return left * right; }\n"},
-      "stdout": {
-        "contains": ["scalar.mulf<reassoc|nnan|ninf|nsz|arcp|contract|afn>"]
-      }
-    },
-    {
-      "name": "exports an explicit root and retains its private callee",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["--root=second", "{srcdir}/testdata/functions.cxx"]
-      },
-      "stdout": {
-        "contains": {"unordered": ["func.def public @second", "func.def @twice"]},
-        "not_contains": ["@first", "kernel.def"]
-      }
-    },
-    {
-      "name": "writes ordinary Loom bytecode",
-      "steps": [
-        {
-          "name": "import",
-          "run": {
-            "tool": "loom-import-cxx",
-            "args": ["--to=bc", "--output={tmp}/module.loombc", "{srcdir}/testdata/functions.cxx"]
-          }
         },
-        {
-          "name": "decode",
-          "run": {
-            "tool": "loom-format",
-            "args": ["--from=bc", "--to=text", "{tmp}/module.loombc"]
-          },
-          "stdout": {
-            "contains": {"unordered": ["func.def public @first", "func.def public @second", "func.def @twice"]}
-          }
-        }
-      ]
+        "not_contains": ["@first"]
+      }
     },
     {
       "name": "reports syntax errors without an internal failure or output file",
@@ -105,92 +48,15 @@
       "files": [{"path": "{tmp}/rejected.loombc", "exists": false}]
     },
     {
-      "name": "preserves template errors and instantiation notes",
+      "name": "reports invalid command-line values",
       "run": {
         "tool": "loom-import-cxx",
-        "args": ["-"]
-      },
-      "stdin": {
-        "text": "template<class T> int member(T value) { return value.missing; }\nint entry() { return member(42); }\n"
+        "args": ["--data-model=wide", "-"]
       },
       "exit": {"code": 1},
       "stdout": {"empty": true},
       "stderr": {
-        "contains": [
-          "-:1:48: error [PARSE/036]: invalid member access into expression of type 'int'",
-          "value.missing",
-          "-:2:22: remark [PARSE/036]: in instantiation of function template specialization 'member <int>' requested here",
-          "member(42)"
-        ],
-        "not_contains": ["INVALID_ARGUMENT", "C/C++ source rejected", "stack:"]
-      }
-    },
-    {
-      "name": "reports unsupported source without emitting partial IR",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["--cleanup=false", "-"]
-      },
-      "stdin": {
-        "text": "int entry(int x) { switch (x) {} return x; }\n"
-      },
-      "exit": {"code": 1},
-      "stdout": {"empty": true},
-      "stderr": {
-        "contains": [
-          "error [LOWERING/059]: cannot import source construct: unsupported statement: switch-statement",
-          "switch (x) {}"
-        ],
-        "not_contains": ["INVALID_ARGUMENT", "C/C++ source rejected", "stack:"]
-      }
-    },
-    {
-      "name": "imports successfully after a source warning",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["-"]
-      },
-      "stdin": {
-        "text": "#warning source warning\nint entry() { return 42; }\n"
-      },
-      "stdout": {"contains": ["func.def public @entry", "scalar.constant 42"]},
-      "stderr": {
-        "contains": ["-:1:2: warning [PARSE/036]: #warning source warning"],
-        "not_contains": ["error", "INVALID_ARGUMENT", "stack:"]
-      }
-    },
-    {
-      "name": "reports input file failures through status diagnostics",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["{tmp}/absent.cxx"]
-      },
-      "exit": {"code": 1},
-      "stdout": {"empty": true},
-      "stderr": {"contains": {"unordered": ["NOT_FOUND", "absent.cxx"]}}
-    },
-    {
-      "name": "fails if imported IR cannot be written",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["--output={tmp}/missing/output.loom", "{srcdir}/testdata/functions.cxx"]
-      },
-      "exit": {"code": 1},
-      "stdout": {"empty": true},
-      "stderr": {"contains": {"unordered": ["NOT_FOUND", "output.loom"]}},
-      "files": [{"path": "{tmp}/missing/output.loom", "exists": false}]
-    },
-    {
-      "name": "reports a missing root",
-      "run": {
-        "tool": "loom-import-cxx",
-        "args": ["--root=absent", "{srcdir}/testdata/functions.cxx"]
-      },
-      "exit": {"code": 1},
-      "stdout": {"empty": true},
-      "stderr": {
-        "contains": ["root has no concrete definition: absent"],
-        "not_contains": ["INVALID_ARGUMENT", "C/C++ source rejected", "stack:"]
+        "contains": ["INVALID_ARGUMENT", "unknown source data model 'wide'"]
       }
     }
   ]

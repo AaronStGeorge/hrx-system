@@ -14,19 +14,17 @@ iree_c_embed_data(
   NAME
     kernels
   SRCS
-    "${PROJECT_SOURCE_DIR}/loom/binding/c/benchmark/import/cxx/nvfp4_matrix_benchmark.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/aiter_swiglu_f16.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/collective_scans.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/configured_workgroup_storage.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/flash_attention.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/llama_rms_norm.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/mxfp_group_dot.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/paged_online_softmax_loop_f32.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/iq4xs_gate_up.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/nvfp4_matrix_providers.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q4k_q8_swiglu.cxx"
+    "inputs/collective_scans.cxx"
+    "inputs/configured_workgroup_storage.cxx"
+    "inputs/flash_attention.cxx"
+    "inputs/iq4xs_gate_up.cxx"
+    "inputs/mxfp_group_dot.cxx"
+    "inputs/nvfp4_matrix.cxx"
+    "inputs/nvfp4_matrix.h"
+    "inputs/nvfp4_matrix_benchmark.cxx"
+    "inputs/nvfp4_matrix_providers.cxx"
+    "inputs/paged_online_softmax_loop_f32.cxx"
+    "inputs/q4k_q8_swiglu.cxx"
   C_FILE_OUTPUT
     "kernels.c"
   H_FILE_OUTPUT
@@ -44,10 +42,10 @@ iree_c_embed_data(
   NAME
     q8s32_sources
   SRCS
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization_providers.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization_providers.loom"
+    "inputs/q8s32_specialization.cxx"
+    "inputs/q8s32_specialization.h"
+    "inputs/q8s32_specialization_providers.cxx"
+    "inputs/q8s32_specialization_providers.loom"
   C_FILE_OUTPUT
     "q8s32_sources.c"
   H_FILE_OUTPUT

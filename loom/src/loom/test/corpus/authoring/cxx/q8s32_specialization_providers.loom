@@ -1,0 +1,67 @@
+// Authored-Loom control for q8s32_specialization_providers.cxx. The imported
+// C++ root links against either provider library so target/config selection,
+// target lowering, and execution exercise the same production paths.
+func.def public inline @q8s32_scaled_weights(%weights: vector<16xi8>, %scale: bf16) -> (vector<16xbf16>) {
+  %wide_weights = vector.sitofp %weights : vector<16xi8> to vector<16xf32>
+  %wide_scale = scalar.extf %scale : bf16 to f32
+  %scale_vector = vector.splat %wide_scale : vector<16xf32>
+  %scaled_weights = vector.mulf %wide_weights, %scale_vector : vector<16xf32>
+  %result = vector.fptrunc %scaled_weights : vector<16xf32> to vector<16xbf16>
+  func.return %result : vector<16xbf16>
+}
+
+func.def public inline @q8s32_lane_dot_combined(%weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) {
+  %initial_accumulator = vector.constant 0.0 : vector<8xf32>
+  %scaled_low = func.call pure @q8s32_scaled_weights(%weights_low, %scale) : (vector<16xi8>, bf16) -> (vector<16xbf16>)
+  %low = vector.dot2f %scaled_low, %activations_low, %initial_accumulator : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  %scaled_high = func.call pure @q8s32_scaled_weights(%weights_high, %scale) : (vector<16xi8>, bf16) -> (vector<16xbf16>)
+  %combined = vector.dot2f %scaled_high, %activations_high, %low : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  %reduction_identity = scalar.constant 0.0 : f32
+  %result = vector.reduce<addf> %combined, %reduction_identity : vector<8xf32>, f32
+  func.return %result : f32
+}
+
+func.def public inline @q8s32_lane_dot_split(%weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) {
+  %initial_accumulator = vector.constant 0.0 : vector<8xf32>
+  %scaled_low = func.call pure @q8s32_scaled_weights(%weights_low, %scale) : (vector<16xi8>, bf16) -> (vector<16xbf16>)
+  %low = vector.dot2f %scaled_low, %activations_low, %initial_accumulator : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  %scaled_high = func.call pure @q8s32_scaled_weights(%weights_high, %scale) : (vector<16xi8>, bf16) -> (vector<16xbf16>)
+  %high = vector.dot2f %scaled_high, %activations_high, %initial_accumulator : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  %reduction_identity = scalar.constant 0.0 : f32
+  %low_sum = vector.reduce<addf> %low, %reduction_identity : vector<8xf32>, f32
+  %high_sum = vector.reduce<addf> %high, %reduction_identity : vector<8xf32>, f32
+  %result = scalar.addf %low_sum, %high_sum : f32
+  func.return %result : f32
+}
+
+template.decl device @model.q8s32.project(%input_capacity: i32, %weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) where [range(%input_capacity, 256, 32768), multiple_of(%input_capacity, 256)]
+
+template.def<@model.q8s32.project> device requires [#target.subgroup.size<32>] priority(40) @q8s32_wave32_values32(%input_capacity: i32, %weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) where [multiple_of(%input_capacity, 512)] {
+  %lane_sum = func.call pure @q8s32_lane_dot_combined(%weights_low, %weights_high, %activations_low, %activations_high, %scale) : (vector<16xi8>, vector<16xi8>, vector<16xbf16>, vector<16xbf16>, bf16) -> (f32)
+  %result = kernel.subgroup.reduce<addf> %lane_sum {cluster_size = 32} : f32
+  template.return %result : f32
+}
+
+template.def<@model.q8s32.project> device requires [#target.subgroup.size<32>] priority(30) @q8s32_wave32_values16(%input_capacity: i32, %weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) where [multiple_of(%input_capacity, 768)] {
+  %lane_sum = func.call pure @q8s32_lane_dot_combined(%weights_low, %weights_high, %activations_low, %activations_high, %scale) : (vector<16xi8>, vector<16xi8>, vector<16xbf16>, vector<16xbf16>, bf16) -> (f32)
+  %result = kernel.subgroup.reduce<addf> %lane_sum {cluster_size = 16} : f32
+  template.return %result : f32
+}
+
+template.def<@model.q8s32.project> device requires [#target.subgroup.size<64>] priority(40) @q8s32_wave64_values32(%input_capacity: i32, %weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) where [multiple_of(%input_capacity, 512)] {
+  %lane_sum = func.call pure @q8s32_lane_dot_split(%weights_low, %weights_high, %activations_low, %activations_high, %scale) : (vector<16xi8>, vector<16xi8>, vector<16xbf16>, vector<16xbf16>, bf16) -> (f32)
+  %result = kernel.subgroup.reduce<addf> %lane_sum {cluster_size = 32} : f32
+  template.return %result : f32
+}
+
+template.def<@model.q8s32.project> device requires [#target.subgroup.size<64>] priority(30) @q8s32_wave64_values16(%input_capacity: i32, %weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) where [multiple_of(%input_capacity, 768)] {
+  %lane_sum = func.call pure @q8s32_lane_dot_split(%weights_low, %weights_high, %activations_low, %activations_high, %scale) : (vector<16xi8>, vector<16xi8>, vector<16xbf16>, vector<16xbf16>, bf16) -> (f32)
+  %result = kernel.subgroup.reduce<addf> %lane_sum {cluster_size = 16} : f32
+  template.return %result : f32
+}
+
+template.def<@model.q8s32.project> device priority(1) @q8s32_generic_lanes8(%input_capacity: i32, %weights_low: vector<16xi8>, %weights_high: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: bf16) -> (f32) where [range(%input_capacity, 256, 2048)] {
+  %lane_sum = func.call pure @q8s32_lane_dot_split(%weights_low, %weights_high, %activations_low, %activations_high, %scale) : (vector<16xi8>, vector<16xi8>, vector<16xbf16>, vector<16xbf16>, bf16) -> (f32)
+  %result = kernel.subgroup.reduce<addf> %lane_sum {cluster_size = 8} : f32
+  template.return %result : f32
+}

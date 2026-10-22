@@ -866,7 +866,7 @@ class CiTest(unittest.TestCase):
             "//loom/src/loom/tooling/target/cpu:run_cxx_input_test", steps[6].argv
         )
         self.assertIn(
-            "//loom/src/loom/import/cxx/tooling:execution_test", steps[6].argv
+            "//loom/src/loom/import/cxx/test:export_roundtrip_test", steps[6].argv
         )
         self.assertIn("//loom/src/loom/tooling/target/cpu/serve:all", steps[6].argv)
         for tool in ("loom-check", "loom-test", "loom-benchmark"):
@@ -1919,10 +1919,6 @@ fi
             self.assertIn(tool, steps[configure_index + 1].argv)
         for tool in ("loom-check", "loom-test", "loom-benchmark"):
             self.assertIn(tool, steps[-1].argv[steps[-1].argv.index("-R") + 1])
-        self.assertIn(
-            "loom_import_cxx_tooling_execution_test_test_deps",
-            steps[configure_index + 1].argv,
-        )
         self.assertIn("loom-link", steps[-1].argv[steps[-1].argv.index("-R") + 1])
         self.assertIn("loom-format", steps[-1].argv[steps[-1].argv.index("-R") + 1])
         self.assertIn("loom-run", steps[-1].argv[steps[-1].argv.index("-R") + 1])

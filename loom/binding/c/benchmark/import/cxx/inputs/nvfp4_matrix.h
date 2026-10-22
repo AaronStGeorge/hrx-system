@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef LOOM_TOOLING_TARGET_AMDGPU_TEST_CXX_NVFP4_MATRIX_H_
-#define LOOM_TOOLING_TARGET_AMDGPU_TEST_CXX_NVFP4_MATRIX_H_
+#ifndef LOOM_BINDING_C_BENCHMARK_IMPORT_CXX_INPUTS_NVFP4_MATRIX_H_
+#define LOOM_BINDING_C_BENCHMARK_IMPORT_CXX_INPUTS_NVFP4_MATRIX_H_
 
 #include <loomcxx/kernel.h>
 
@@ -22,4 +22,4 @@ LOOM_DEVICE LOOM_TEMPLATE_DECL(
                                                       NvFp4Scale rhs_scale,
                                                       float* output);
 
-#endif  // LOOM_TOOLING_TARGET_AMDGPU_TEST_CXX_NVFP4_MATRIX_H_
+#endif  // LOOM_BINDING_C_BENCHMARK_IMPORT_CXX_INPUTS_NVFP4_MATRIX_H_

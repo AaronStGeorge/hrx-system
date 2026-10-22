@@ -1,5 +1,4 @@
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
-load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:defs.bzl", "loom_test")
 load("//loom/target/vm:execution_profiles.bzl", "VM_REFERENCE_PROFILE")
@@ -98,31 +97,6 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
-)
-
-iree_execution_test_suite(
-    name = "execution_test",
-    data = [
-        "check_cases.cxx",
-        "check_cases.h",
-        "check_library.cxx",
-        "dependency_input.cxx",
-        "record_input.loom",
-        "record_library.cxx",
-        "source_input.cxx",
-        "source_input.h",
-        "source_input.loom",
-    ],
-    manifests = ["execution.test.json"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target/arch:vm",
-    ]),
-    tools = {
-        "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
-        "loom-link": "//loom/src/loom/tools/loom-link",
-        "loom-test": "//loom/src/loom/tools/loom-test",
-    },
 )
 
 loom_test(

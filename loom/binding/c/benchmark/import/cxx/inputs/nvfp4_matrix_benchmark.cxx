@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The benchmark imports one translation unit while retaining the same source
-// files used by the multi-module execution tests. The source provider serves
-// these includes from immutable embedded storage.
+// The benchmark imports one translation unit assembled from its controlled
+// source snapshots. The source provider serves these includes from immutable
+// embedded storage.
 #include "nvfp4_matrix.cxx"
 #include "nvfp4_matrix_providers.cxx"
