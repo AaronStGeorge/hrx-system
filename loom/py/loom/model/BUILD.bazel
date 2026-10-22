@@ -205,6 +205,7 @@ iree_py_test(
     main = "pytest_style_runner.py",
     deps = [
         ":fetch",
+        ":fetch_cli",
         ":fetch_source",
         ":fetch_storage",
         ":lock",

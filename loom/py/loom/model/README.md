@@ -126,7 +126,7 @@ the picker.
 
 The acquisition path requires a complete matching `model.json.lock`, or an
 explicit `--lockfile` path/URL. A publication lock may cover more variants;
-fetch reads only the selected files. `--update-lock` computes a new exact set,
+fetch reads only the selected files. `--update-lock` computes a new exact selected set,
 replacing the local card's sibling lock or an explicit local `--lockfile`.
 For a remote card without an explicit local lock destination, the new lock is
 written only beside the installed card. `--no-lock` neither reads nor writes
@@ -134,6 +134,25 @@ locks and conflicts with lock update or an explicit lockfile. `--offline`
 forbids network access, including document requests; cached documents and locked
 payloads remain usable. A floating mutable URL without a lock needs a local
 override in offline mode because a historical payload is not a fresh resolution.
+
+Authors can publish a lock covering every declared compatible variant, service,
+and program set with `--update-lock --all-variants`. This operation acquires each
+unique source once and replaces the lock after every read succeeds. It creates
+no installation and accepts no selection or output flags. Ordinary fetches still
+download only their selected files, even when variants place different sources
+at the same local path. Previously recorded sources outside the current card
+are removed from the replacement lock.
+
+```sh
+loom-fetch model.json --update-lock --all-variants --dry-run
+loom-fetch model.json --update-lock --all-variants
+loom-fetch https://example.org/model.json --update-lock --all-variants --lockfile=publication.lock
+```
+
+Publication reads and hashes the complete source union, using the normal cache;
+`--dry-run` resolves metadata without downloading payloads or changing the lock.
+A remote card requires an explicit local `--lockfile` destination. Origin
+overrides and `--offline` apply to both publication and selected installation.
 
 Locks use a separate [versioned editor schema](model-lock.v1.schema.json).
 `origins` records requested roots and resolved repository commits. Each `files`

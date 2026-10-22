@@ -15,7 +15,8 @@ from unittest.mock import patch
 import pytest
 
 from loom.model import ManifestError, ModelCard
-from loom.model.fetch import check_output, install, plan_fetch
+from loom.model.fetch import check_output, install, plan_fetch, plan_lock, update_lock
+from loom.model.fetch_main import main
 from loom.model.fetch_source import Document, FetchError
 from loom.model.fetch_storage import ContentCache
 from loom.model.lock import FileIdentity, ModelLock
@@ -183,6 +184,153 @@ def _remote_plan(base, cache, **kwargs):
     return plan_fetch(
         document, ModelCard.parse(document.text).select(), cache, **kwargs
     )
+
+
+def _publication_card():
+    document = _card()
+    document["programs"]["alternate"] = {
+        "inputs": [{"path": "renamed.loom", "origin": "code.loom"}],
+        "libraries": [],
+    }
+    for variant in document["variants"].values():
+        variant["services"]["text"]["programs"].append("alternate")
+    document["variants"]["unused"]["services"]["text"]["parameters"]["scope"][
+        "files"
+    ] = [{"path": "weights.data", "origin": "alternate.data"}]
+    return document
+
+
+def test_publication_lock_unions_sources_without_merging_destinations(tmp_path):
+    files = {
+        "code.loom": b"code",
+        "weights.data": b"weights",
+        "alternate.data": b"different weights",
+    }
+    with _server(_publication_card(), files, parallel=True) as (
+        base,
+        requests,
+        resources,
+    ):
+        cache = ContentCache(tmp_path / "cache")
+        document = cache.read_document(base + "/model.json", offline=False)
+        card = ModelCard.parse(document.text)
+        lock_path = tmp_path / "publication.json.lock"
+        lock_path.write_text('{"stale":"record"}')
+        plan = plan_lock(document, card, cache, lock_location=str(lock_path))
+        assert requests == ["/model.json"]
+        assert len(plan.selections) == 4
+        assert len(plan.sources) == 3
+        assert update_lock(plan, cache) == lock_path
+        assert set(requests) == {"/model.json", *("/" + name for name in files)}
+        assert len(requests) == 4
+        lock = ModelLock.parse(lock_path.read_text())
+        for choice in plan.selections:
+            selected = card.select(**choice)
+            assert set(lock.cover(selected)) == set(selected.files)
+        # A clean client reads the broad publication lock but acquires one choice.
+        resources["/model.json.lock"] = lock_path.read_bytes()
+        requests.clear()
+        client = ContentCache(tmp_path / "client-cache")
+        selected = _remote_plan(base, client)
+        install(selected, client, tmp_path / "installed")
+        assert "/alternate.data" not in requests
+        assert (tmp_path / "installed/weights.data").read_bytes() == b"weights"
+        assert not (tmp_path / "installed/renamed.loom").exists()
+
+
+def test_publication_lock_failure_preserves_the_previous_snapshot(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(_publication_card(), files) as (base, _, _):
+        cache = ContentCache(tmp_path / "cache")
+        document = cache.read_document(base + "/model.json", offline=False)
+        path = tmp_path / "model.json.lock"
+        before = json.dumps(_lock(files))
+        path.write_text(before)
+        plan = plan_lock(
+            document, ModelCard.parse(document.text), cache, lock_location=str(path)
+        )
+        with pytest.raises(FetchError, match="HTTP 404"):
+            update_lock(plan, cache)
+        assert path.read_text() == before
+        assert not list((tmp_path / "cache/temporary").iterdir())
+
+
+def test_publication_lock_cancellation_never_changes_previous_bytes(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights", "alternate.data": b"w"}
+    with _server(_publication_card(), files) as (base, requests, _):
+        cache = ContentCache(tmp_path / "cache")
+        document = cache.read_document(base + "/model.json", offline=False)
+        path = tmp_path / "model.json.lock"
+        path.write_text("previous bytes")
+        plan = plan_lock(
+            document, ModelCard.parse(document.text), cache, lock_location=str(path)
+        )
+        cache.cancel()
+        with pytest.raises(FetchError, match="cancelled"):
+            update_lock(plan, cache)
+        assert path.read_text() == "previous bytes"
+        assert requests == ["/model.json"]
+
+
+def test_publication_preflight_checks_every_source_against_the_lock_path(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights", "alternate.data": b"w"}
+    for name, content in files.items():
+        (tmp_path / name).write_bytes(content)
+    document = Document(str(tmp_path / "model.json"), json.dumps(_publication_card()))
+    for name in ("code.loom", "weights.data", "alternate.data", "model.json"):
+        with pytest.raises(ManifestError, match="overlaps a source file"):
+            plan_lock(
+                document,
+                ModelCard.parse(document.text),
+                ContentCache(tmp_path / "cache"),
+                lock_location=str(tmp_path / name),
+                offline=True,
+            )
+    for name, content in files.items():
+        assert (tmp_path / name).read_bytes() == content
+
+
+def test_publication_cli_dry_run_and_offline_exact_update(tmp_path, capsys):
+    card = tmp_path / "model.json"
+    card.write_text(json.dumps(_publication_card()))
+    for name in ("code.loom", "weights.data", "alternate.data"):
+        (tmp_path / name).write_bytes(name.encode())
+    arguments = [str(card), "--update-lock", "--all-variants", "--offline", "--json"]
+    assert main([*arguments, "--dry-run"]) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert len(summary["files"]) == 3
+    assert not (tmp_path / "model.json.lock").exists()
+    assert main(arguments) == 0
+    assert json.loads(capsys.readouterr().out)["lockfile"] == str(card) + ".lock"
+    lock = ModelLock.parse((tmp_path / "model.json.lock").read_text())
+    assert len(lock.files) == 3
+    assert json.loads(card.read_text()) == _publication_card()
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--all-variants"],
+        ["--all-variants", "--no-lock"],
+        ["--all-variants", "--update-lock", "--variant=v"],
+        ["--all-variants", "--update-lock", "--output=installed"],
+        ["--all-variants", "--update-lock", "--list"],
+        ["--all-variants", "--update-lock", "--materialize=copy"],
+    ],
+)
+def test_publication_cli_rejects_ambiguous_modes_before_io(arguments):
+    with pytest.raises(SystemExit) as error:
+        main(["unopened.json", *arguments])
+    assert error.value.code == 2
+
+
+def test_remote_publication_requires_local_lock_destination_before_payload_io(tmp_path):
+    with _server(_publication_card(), {}) as (base, requests, _):
+        cache = ContentCache(tmp_path / "cache")
+        document = cache.read_document(base + "/model.json", offline=False)
+        with pytest.raises(ManifestError, match="local --lockfile"):
+            plan_lock(document, ModelCard.parse(document.text), cache)
+        assert requests == ["/model.json"]
 
 
 def test_cancelled_operation_does_not_publish_an_installation(tmp_path):

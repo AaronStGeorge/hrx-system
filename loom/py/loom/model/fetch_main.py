@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from loom.model import ManifestError, ModelCard
-from loom.model.fetch import check_output, install, plan_fetch
+from loom.model.fetch import check_output, install, plan_fetch, plan_lock, update_lock
 from loom.model.fetch_catalog import installed_catalog, load_catalog
 from loom.model.fetch_console import AccessWaiter, display_text
 from loom.model.fetch_hf import AccessRequired
@@ -44,6 +44,35 @@ def _overrides(values: list[str]) -> dict[str, str]:
             raise ManifestError(f"duplicate --origin for {name!r}")
         result[name] = location
     return result
+
+
+def _update_publication_lock(args, document, card, cache, snapshot):
+    publication = plan_lock(
+        document,
+        card,
+        cache,
+        overrides=_overrides(args.origin),
+        lock_location=args.lockfile,
+        offline=args.offline,
+    )
+    result = publication.summary()
+    if snapshot is not None:
+        result["catalog"] = snapshot.summary()
+    if not args.dry_run:
+        update_lock(publication, cache)
+    if args.json:
+        sys.stdout.write(json.dumps(result, indent=2) + "\n")
+    elif args.dry_run:
+        sys.stdout.write(
+            f"{display_text(publication.model_id)}: "
+            f"{len(publication.selections)} choices, "
+            f"{len(publication.sources)} unique sources\n"
+        )
+        for source in publication.sources.values():
+            sys.stdout.write("  " + display_text(json.dumps(source.origin)) + "\n")
+    else:
+        sys.stdout.write(display_text(str(publication.path)) + "\n")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -115,6 +144,12 @@ def main(argv: list[str] | None = None) -> int:
         help="replace the lock with exactly the selected verified sources",
     )
     parser.add_argument(
+        "--all-variants",
+        action="store_true",
+        help="with --update-lock, publish a lock for every declared variant, "
+        "service, and program set without creating an installation",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="resolve and show the plan without acquiring payloads",
@@ -126,6 +161,16 @@ def main(argv: list[str] | None = None) -> int:
         help="share source/cache files or explicitly create independent copies",
     )
     args = parser.parse_args(argv)
+    if args.all_variants:
+        if not args.update_lock:
+            parser.error("--all-variants requires --update-lock")
+        if any((args.configuration, args.service, args.variant, args.programs)):
+            parser.error("--all-variants cannot be combined with selection flags")
+        if args.output is not None or args.materialize != "share" or args.list:
+            parser.error(
+                "--all-variants publishes only a lock; "
+                "--output, --materialize=copy, and --list do not apply"
+            )
     if args.card is not None and (args.model is not None or args.catalog is not None):
         parser.error("a direct card cannot be combined with --model or --catalog")
     interactive = (
@@ -136,7 +181,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.card is None and args.model is None and not args.list and not interactive:
         parser.error("select a card or --model=ID; --list shows the available catalog")
-    if not args.list and args.output is None and not interactive:
+    if (
+        not args.list
+        and not args.all_variants
+        and args.output is None
+        and not interactive
+    ):
         parser.error("--output is required for acquisition or --dry-run")
     if args.no_lock and args.lockfile:
         parser.error("--no-lock cannot be combined with --lockfile")
@@ -195,6 +245,8 @@ def main(argv: list[str] | None = None) -> int:
                         + "\n"
                     )
             return 0
+        if args.all_variants:
+            return _update_publication_lock(args, document, card, cache, snapshot)
         select = (
             card.select
             if picker is None

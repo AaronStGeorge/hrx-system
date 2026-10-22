@@ -23,7 +23,7 @@ from pathlib import Path
 from urllib.parse import quote, urljoin, urlsplit
 
 from .lock import FileIdentity, ModelLock
-from .manifest import ManifestError, Selection, _url
+from .manifest import ManifestError, _url
 
 
 class FetchError(RuntimeError):
@@ -149,12 +149,12 @@ def sibling_lock(location: str) -> str:
 
 
 class SourceResolver:
-    """Resolves one selected closure, keeping lock and mirror coordinates separate."""
+    """Resolves declared origins, keeping lock and mirror coordinates separate."""
 
     def __init__(
         self,
         document: Document,
-        selection: Selection,
+        roots: dict,
         overrides: dict[str, str],
         lock: ModelLock | None,
         *,
@@ -162,7 +162,7 @@ class SourceResolver:
         revision_resolver: Callable[[dict], str] | None = None,
     ):
         self.document = document
-        self.roots = selection.document.get("origins", {})
+        self.roots = roots
         unknown = overrides.keys() - self.roots.keys()
         if unknown:
             raise ManifestError(

@@ -180,12 +180,30 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
             thread = threading.Thread(target=origin.serve_forever)
             thread.start()
             try:
+                published_lock = directory / "publication.json.lock"
+                publication = json.loads(
+                    run(
+                        fetch,
+                        f"http://127.0.0.1:{origin.server_port}/model.json",
+                        "--update-lock",
+                        "--all-variants",
+                        "--lockfile",
+                        published_lock,
+                        "--no-input",
+                        "--json",
+                        "--cache",
+                        directory / "cache",
+                    )
+                )
+                assert publication["lockfile"] == str(published_lock)
+                assert len(publication["selections"]) == 1
                 result = json.loads(
                     run(
                         fetch,
                         f"http://127.0.0.1:{origin.server_port}/model.json",
                         "--configuration=check",
-                        "--update-lock",
+                        "--lockfile",
+                        published_lock,
                         "--no-input",
                         "--json",
                         "--cache",

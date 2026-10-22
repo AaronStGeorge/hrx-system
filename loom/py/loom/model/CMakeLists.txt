@@ -242,6 +242,7 @@ iree_py_test(
     "loom.model.fetch_test"
   DEPS
     loom::py::loom::model::fetch
+    loom::py::loom::model::fetch_cli
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::lock

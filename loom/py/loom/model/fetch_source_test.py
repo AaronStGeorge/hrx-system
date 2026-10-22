@@ -122,7 +122,7 @@ def test_remote_card_cannot_name_host_local_sources(tmp_path):
     selected = _selection({"kind": "local", "path": str(tmp_path)})
     resolver = SourceResolver(
         Document("https://example.org/model.json", ""),
-        selected,
+        selected.document["origins"],
         {},
         None,
         pin_revisions=False,
@@ -138,7 +138,7 @@ def test_override_uses_local_bytes_without_hf_dependency_or_network(tmp_path):
     (tmp_path / "main.loom").write_bytes(b"code")
     resolver = SourceResolver(
         Document("https://example.org/model.json", ""),
-        selected,
+        selected.document["origins"],
         {"library": str(tmp_path)},
         None,
         pin_revisions=False,
@@ -155,7 +155,7 @@ def test_missing_override_never_falls_back(tmp_path):
     selected = _selection({"kind": "url", "url": "https://example.org/"})
     resolver = SourceResolver(
         Document(str(tmp_path / "model.json"), ""),
-        selected,
+        selected.document["origins"],
         {"library": str(tmp_path)},
         None,
         pin_revisions=False,
@@ -169,7 +169,7 @@ def test_lock_update_cannot_invent_revision_through_mirror(tmp_path):
     selected = _selection({"kind": "hf", "repository": "org/model", "revision": "main"})
     resolver = SourceResolver(
         Document(str(tmp_path / "model.json"), ""),
-        selected,
+        selected.document["origins"],
         {"library": str(tmp_path)},
         None,
         pin_revisions=True,
@@ -183,7 +183,7 @@ def test_unknown_alias_fails_before_io(tmp_path):
     with pytest.raises(ManifestError, match="unknown origin overrides"):
         SourceResolver(
             Document(str(tmp_path / "model.json"), ""),
-            selected,
+            selected.document["origins"],
             {"typo": str(tmp_path)},
             None,
             pin_revisions=False,

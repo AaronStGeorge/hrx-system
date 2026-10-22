@@ -37,7 +37,7 @@ from .fetch_storage import (
     share_file,
 )
 from .lock import FileIdentity, ModelLock, file_digest, origin_key
-from .manifest import ManifestError, Selection, parse_json
+from .manifest import ManifestError, ModelCard, Selection, parse_json
 
 _RESERVED_PATHS = frozenset(
     {"model.json", "model.json.lock", ".loom-fetch.lock", ".loom-fetch.json"}
@@ -136,7 +136,7 @@ def plan_fetch(
     identities = lock.cover(selection) if lock else {}
     resolver = SourceResolver(
         document,
-        selection,
+        selection.document.get("origins", {}),
         overrides or {},
         lock,
         pin_revisions=not no_lock,
@@ -148,15 +148,7 @@ def plan_fetch(
         path: resolver.resolve(file.origin, identities.get(path))
         for path, file in selection.files.items()
     }
-    sources = {
-        path: cache.prepare_source(source, identities.get(path), offline=offline)
-        for path, source in sources.items()
-    }
-    for source in sources.values():
-        if source.transport["kind"] == "local":
-            path = Path(source.transport["path"])
-            if not path.is_file():
-                raise FetchError(f"local source is missing or not a file: {path}")
+    sources = _prepare_sources(sources, identities, cache, offline=offline)
     update_path = None
     if update_lock:
         if "://" in location:
@@ -166,22 +158,7 @@ def plan_fetch(
                 )
         else:
             update_path = Path(location)
-            protected = [Path(document.location)] if not document.remote else []
-            protected += [
-                Path(source.transport["path"])
-                for source in sources.values()
-                if source.transport["kind"] == "local"
-            ]
-            if any(
-                update_path == path
-                or (
-                    update_path.exists()
-                    and path.exists()
-                    and os.path.samefile(update_path, path)
-                )
-                for path in protected
-            ):
-                raise ManifestError("lock update destination overlaps a source file")
+            _check_lock_sources(update_path, document, sources)
     return FetchPlan(
         document,
         selection,
@@ -202,6 +179,167 @@ def plan_fetch(
         if catalog is not None
         else None,
     )
+
+
+@dataclass(frozen=True)
+class LockPlan:
+    # Training-source model identity shared by all included choices.
+    model_id: str
+    # Explicit compatible variant/service/program selections, without execution.
+    selections: list[dict[str, str]]
+    # One source per logical origin, independent of installation destinations.
+    sources: dict[str, Source]
+    # Selected authored roots and their immutable repository resolutions.
+    origins: dict
+    # Caller-owned local publication lock destination.
+    path: Path
+    # Network prohibition retained across planning and acquisition.
+    offline: bool
+
+    def summary(self) -> dict:
+        return {
+            "model": self.model_id,
+            "lock": "update-all-variants",
+            "lockfile": str(self.path),
+            "offline": self.offline,
+            "selections": copy.deepcopy(self.selections),
+            "files": [
+                {"origin": copy.deepcopy(source.origin), "transport": source.transport}
+                for source in self.sources.values()
+            ],
+        }
+
+
+def plan_lock(
+    document: Document,
+    card: ModelCard,
+    cache: ContentCache,
+    *,
+    overrides: dict[str, str] | None = None,
+    lock_location: str | None = None,
+    offline: bool = False,
+) -> LockPlan:
+    """Resolves an explicit publication union without merging local destinations."""
+    location = document_location(lock_location or sibling_lock(document.location))
+    if "://" in location:
+        raise ManifestError("publication lock updates require a local --lockfile")
+    path = Path(location)
+    if path.name == ".loom-fetch.lock" or (path.exists() and not path.is_file()):
+        raise ManifestError("publication lock destination must be an ordinary file")
+    authored = card.document
+    resolver = SourceResolver(
+        document,
+        authored.get("origins", {}),
+        overrides or {},
+        None,
+        pin_revisions=True,
+        revision_resolver=lambda root: cache.huggingface.resolve_revision(
+            root, offline=offline
+        ),
+    )
+    sources = {}
+    selections = []
+    for variant, variant_definition in authored["variants"].items():
+        for service, service_definition in variant_definition["services"].items():
+            for programs in service_definition["programs"]:
+                choice = {"variant": variant, "service": service, "programs": programs}
+                selected = card.select(**choice)
+                selections.append(choice)
+                for name, file in selected.files.items():
+                    if PurePosixPath(name).parts[0] in _RESERVED_PATHS:
+                        raise ManifestError(f"reserved installation path {name!r}")
+                    key = origin_key(file.origin)
+                    if key not in sources:
+                        sources[key] = resolver.resolve(file.origin, None)
+    sources = _prepare_sources(sources, {}, cache, offline=offline)
+    _check_lock_sources(path, document, sources)
+    return LockPlan(
+        authored["model"]["id"], selections, sources, resolver.origins, path, offline
+    )
+
+
+def _prepare_sources(
+    sources: dict[str, Source],
+    identities: dict[str, FileIdentity],
+    cache: ContentCache,
+    *,
+    offline: bool,
+) -> dict[str, Source]:
+    sources = {
+        name: cache.prepare_source(source, identities.get(name), offline=offline)
+        for name, source in sources.items()
+    }
+    for source in sources.values():
+        if source.transport["kind"] == "local":
+            path = Path(source.transport["path"])
+            if not path.is_file():
+                raise FetchError(f"local source is missing or not a file: {path}")
+    return sources
+
+
+def _check_lock_sources(path: Path, document: Document, sources: dict[str, Source]):
+    protected = [Path(document.location)] if not document.remote else []
+    protected += [
+        Path(source.transport["path"])
+        for source in sources.values()
+        if source.transport["kind"] == "local"
+    ]
+    if any(
+        path == source
+        or (path.exists() and source.exists() and os.path.samefile(path, source))
+        for source in protected
+    ):
+        raise ManifestError("lock update destination overlaps a source file")
+
+
+def _acquire_sources(
+    sources: dict[str, Source],
+    identities: dict[str, FileIdentity],
+    cache: ContentCache,
+    *,
+    offline: bool,
+    present: dict[str, AcquiredFile] | None = None,
+) -> dict[str, AcquiredFile]:
+    """Joins a bounded transfer batch, deduplicated by logical source identity."""
+    acquired = dict(present or {})
+    unique = {}
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="loom-fetch") as executor:
+        try:
+            for name, source in sources.items():
+                key = origin_key(source.origin)
+                if key not in unique and key not in acquired:
+                    unique[key] = executor.submit(
+                        cache.acquire, source, identities.get(name), offline=offline
+                    )
+            names = {future: key for key, future in unique.items()}
+            pending = set(names)
+            while pending:
+                # Windows Python before 3.14 cannot interrupt an indefinite lock
+                # wait. Return to Python to deliver Ctrl-C and join the writers.
+                completed, pending = wait(
+                    pending, timeout=0.1, return_when=FIRST_COMPLETED
+                )
+                for future in completed:
+                    acquired[names[future]] = future.result()
+        except BaseException:
+            cache.cancel()
+            for future in unique.values():
+                future.cancel()
+            raise
+    return acquired
+
+
+def update_lock(plan: LockPlan, cache: ContentCache) -> Path:
+    """Atomically replaces one publication lock after all source reads succeed."""
+    with installation_lock(plan.path.parent):
+        acquired = _acquire_sources(plan.sources, {}, cache, offline=plan.offline)
+        document = ModelLock.snapshot(
+            plan.origins, [item.identity for item in acquired.values()]
+        )
+        if cache.cancelled.is_set():
+            raise FetchError("model acquisition cancelled")
+        atomic_write(plan.path, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
+    return plan.path
 
 
 def _installation_card(plan: FetchPlan) -> tuple[dict, dict[str, str | dict], dict]:
@@ -411,40 +549,16 @@ def install(
         _check_lock_output(plan, directory, relocated, roots)
         if materialize == "share":
             _probe_sharing(plan, cache, directory)
-        # Several destinations can name the same source; one future owns that read.
-        unique = {}
-        acquired = {
-            origin_key(plan.sources[name].origin): item
-            for name, item in present.items()
-        }
-        with ThreadPoolExecutor(
-            max_workers=4, thread_name_prefix="loom-fetch"
-        ) as executor:
-            for name, source in plan.sources.items():
-                key = origin_key(source.origin)
-                if key not in unique and key not in acquired:
-                    unique[key] = executor.submit(
-                        cache.acquire,
-                        source,
-                        plan.identities.get(name),
-                        offline=plan.offline,
-                    )
-            names = {future: key for key, future in unique.items()}
-            try:
-                pending = set(names)
-                while pending:
-                    # Windows Python versions before 3.14 cannot interrupt an
-                    # indefinite lock wait. Return to Python to deliver Ctrl-C.
-                    completed, pending = wait(
-                        pending, timeout=0.1, return_when=FIRST_COMPLETED
-                    )
-                    for future in completed:
-                        acquired[names[future]] = future.result()
-            except BaseException:
-                cache.cancel()
-                for future in unique.values():
-                    future.cancel()
-                raise
+        acquired = _acquire_sources(
+            plan.sources,
+            plan.identities,
+            cache,
+            offline=plan.offline,
+            present={
+                origin_key(plan.sources[name].origin): item
+                for name, item in present.items()
+            },
+        )
         identities = [
             replace(
                 acquired[origin_key(source.origin)].identity, origin=relocated[name]

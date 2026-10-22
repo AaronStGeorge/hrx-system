@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import copy
 import hashlib
 import json
 import os
@@ -11,7 +12,7 @@ import os
 import pytest
 
 from loom.model import ManifestError, ModelCard
-from loom.model.fetch import install, plan_fetch
+from loom.model.fetch import install, plan_fetch, plan_lock, update_lock
 from loom.model.fetch_hf import HuggingFace
 from loom.model.fetch_source import FetchError
 from loom.model.fetch_storage import ContentCache
@@ -59,6 +60,67 @@ def _cache(root, hub, wait=None):
             endpoint=hub.endpoint, cache_dir=hub.cache_dir, wait_for_access=wait
         ),
     )
+
+
+def test_publication_resolves_one_snapshot_and_checks_each_shared_source_once(tmp_path):
+    with running_hub(tmp_path) as hub:
+        hub.approved = True
+        hub.credentials.write_text("fixture-first")
+        hub.files["alternate.data"] = b"other weights"
+        authored = _card()
+        authored["origins"] = {
+            "checkpoint": {
+                "kind": "hf",
+                "repository": hub.repository,
+                "revision": "main",
+            }
+        }
+        authored["programs"]["p"]["origin"] = "@checkpoint/"
+        authored["programs"]["alias"] = {
+            "inputs": [{"path": "renamed.loom", "origin": "@checkpoint/code.loom"}],
+            "libraries": [],
+        }
+        service = authored["variants"]["v"]["services"]["text"]
+        service["programs"].append("alias")
+        service["parameters"]["scope"]["origin"] = "@checkpoint/"
+        authored["variants"]["alternate"] = copy.deepcopy(authored["variants"]["v"])
+        alternate = authored["variants"]["alternate"]["services"]["text"]
+        alternate["parameters"]["scope"]["files"] = [
+            {"path": "weights.data", "origin": "@checkpoint/alternate.data"}
+        ]
+        card_path = tmp_path / "model.json"
+        card_path.write_text(json.dumps(authored))
+        cache = _cache(tmp_path, hub)
+        document = cache.read_document(str(card_path), offline=False)
+        card = ModelCard.parse(document.text)
+        plan = plan_lock(document, card, cache)
+        assert len(plan.selections) == 4
+        assert len(plan.sources) == 3
+        assert sum("/revision/main" in path for _, path in hub.requests) == 1
+        for name in ("code.loom", "weights.data", "alternate.data"):
+            assert (
+                hub.requests.count(
+                    ("HEAD", f"/fixture/model/resolve/{hub.revision}/{name}")
+                )
+                == 1
+            )
+        update_lock(plan, cache)
+        for name in ("code.loom", "weights.data", "alternate.data"):
+            assert (
+                hub.requests.count(
+                    ("GET", f"/fixture/model/resolve/{hub.revision}/{name}")
+                )
+                == 1
+            )
+        lock = ModelLock.parse(plan.path.read_text())
+        assert lock.origins["checkpoint"]["resolved"] == {"revision": hub.revision}
+        before = list(hub.requests)
+        selected = plan_fetch(document, card.select("check"), cache, offline=True)
+        installed = install(selected, cache, tmp_path / "selected")
+        assert hub.requests == before
+        assert not (installed.parent / "alternate.data").exists()
+        cached = cache.huggingface.cached_file(hub.source("weights.data"))
+        assert (installed.parent / "weights.data").samefile(cached)
 
 
 def test_hf_document_pins_its_closure_and_reuses_shared_cache(tmp_path):
