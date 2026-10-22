@@ -14,6 +14,15 @@
 extern "C" {
 #endif
 
+// SPIR-V target row selected by spirv.target and structured profiles.
+typedef uint8_t loom_spirv_target_kind_t;
+enum loom_spirv_target_kind_e {
+  // Unknown or absent SPIR-V target row.
+  LOOM_SPIRV_TARGET_KIND_UNKNOWN = 0,
+  // Vulkan 1.3 logical SPIR-V module row.
+  LOOM_SPIRV_TARGET_KIND_VULKAN1_3 = 1,
+};
+
 // Target bundle table consumed by the generated spirv.target op.
 extern const loom_target_bundle_table_t loom_spirv_target_bundles;
 

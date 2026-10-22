@@ -68,7 +68,7 @@ loom_cc_library(
     ],
     visibility = _LOW_DESCRIPTOR_VISIBILITY,
     deps = [
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//loom/src/loom/target:types",
         "//loom/src/loom/util:stable_id",
         "//loom/src/loom/util:string_pool",
@@ -98,7 +98,7 @@ loom_cc_library(
     hdrs = ["descriptor_traits.h"],
     deps = [
         ":descriptors",
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//runtime/src/iree/base",
     ],
 )
@@ -172,8 +172,8 @@ loom_cc_library(
         ":descriptor_traits",
         ":descriptors",
         ":immediates",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops/low:op_defs",
         "//loom/src/loom/target:registers",
         "//runtime/src/iree/base",
     ],
@@ -202,7 +202,7 @@ loom_cc_library(
     hdrs = ["immediates.h"],
     deps = [
         ":descriptors",
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -260,13 +260,12 @@ loom_cc_library(
     ],
     visibility = _LOW_FORMAT_CODEC_VISIBILITY,
     deps = [
-        ":builder",
         ":descriptors",
         ":repr",
         "//loom/src/loom/format/text:low_asm",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/low:builders",
         "//loom/src/loom/target:low_asm_diagnostics",
         "//loom/src/loom/target:registers",
         "//runtime/src/iree/base",

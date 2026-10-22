@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_generated_cc_library")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_library_group", "loom_generated_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -38,6 +38,43 @@ _LOW_OPS_VISIBILITY = [
     "//loom/src/loom/verify:__pkg__",
 ]
 
+# Native IR clients can inspect and construct Low operations without owning the
+# dialect's verification, inference, or rewriting implementation.
+loom_cc_library(
+    name = "op_defs",
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    deps = [
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/target:types",
+    ],
+)
+
+# Descriptor-backed operations retain their handwritten constructors alongside
+# the generated structural builders. Both consume caller-owned module state.
+loom_cc_library_group(
+    name = "builders",
+    deps = [
+        ":op_builders",
+        ":op_defs",
+        "//loom/src/loom/codegen/low:builder",
+    ],
+)
+
+loom_cc_library(
+    name = "op_builders",
+    srcs = ["builders.c"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/util:stable_id",
+    ],
+)
+
 loom_generated_cc_library(
     name = "low",
     srcs = [
@@ -55,20 +92,21 @@ loom_generated_cc_library(
         "schedule_scope.h",
     ],
     args = ["--dialect=low"],
-    extra_output_flags = ["--ops-include"],
-    extra_outputs = ["ops.inc"],
-    generated_src_flags = [
+    extra_output_flags = [
+        "--ops-include",
         "--builders",
-        "--tables",
     ],
-    generated_srcs = [
+    extra_outputs = [
+        "ops.inc",
         "builders.c",
-        "tables.c",
     ],
+    generated_src_flags = ["--tables"],
+    generated_srcs = ["tables.c"],
     generator = "//loom/py/loom/gen/ops:c_tables_low_generator",
     textual_hdrs = ["ops.inc"],
     visibility = _LOW_OPS_VISIBILITY,
     deps = [
+        ":op_builders",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:parameter",

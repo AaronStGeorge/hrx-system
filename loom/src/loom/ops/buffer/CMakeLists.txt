@@ -9,6 +9,37 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ir::types
+    loom::ops::atomic
+    loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    builders
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  SRCS
+    "builders.c"
+  DEPS
+    loom::ir::builders
+    loom::ir::types
+    loom::ops::atomic
+    loom::ops::op_defs
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     buffer
@@ -20,10 +51,8 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
   HDRS
     "ops.h"
@@ -31,9 +60,12 @@ loom_generated_cc_library(
     "--dialect=buffer"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::builders
     iree::base::internal
     loom::error::emitter
     loom::error::error_defs

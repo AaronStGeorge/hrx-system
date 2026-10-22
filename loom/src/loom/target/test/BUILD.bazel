@@ -59,12 +59,19 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "record_defs",
+    hdrs = ["target_records.h"],
+    deps = ["//loom/src/loom/target:types"],
+)
+
+loom_cc_library(
     name = "target_record_table",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
     deps = [
         "//loom/src/loom/target:facts",
         "//loom/src/loom/target:facts_builder",
+        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
 )

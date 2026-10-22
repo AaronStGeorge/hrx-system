@@ -24,6 +24,44 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ir::builders
+    loom::ir::types
+    loom::ops::atomic
+    loom::ops::cache
+    loom::ops::combining
+    loom::ops::op_defs
+    loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    builders
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  SRCS
+    "builders.c"
+  DEPS
+    loom::ir::builders
+    loom::ir::types
+    loom::ops::atomic
+    loom::ops::cache
+    loom::ops::combining
+    loom::ops::op_defs
+    loom::target::types
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     kernel
@@ -39,10 +77,8 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
   HDRS
     "launch_config.h"
@@ -53,9 +89,12 @@ loom_generated_cc_library(
     "--dialect=kernel"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::builders
     ::launch_config_dependence
     iree::base
     iree::base::internal

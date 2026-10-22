@@ -25,6 +25,16 @@ _SPIRV_TARGET_RECORDS_VISIBILITY = [
 ]
 
 loom_cc_library(
+    name = "record_defs",
+    hdrs = ["target_records.h"],
+    visibility = _SPIRV_TARGET_RECORDS_VISIBILITY,
+    deps = [
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv:features",
+    ],
+)
+
+loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],

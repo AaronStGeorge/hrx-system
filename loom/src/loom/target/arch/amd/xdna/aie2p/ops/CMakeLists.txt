@@ -10,6 +10,41 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ops::op_defs
+    loom::target::arch::amd::xdna::aie2p::record_defs
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_library(
+  NAME
+    builders
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  SRCS
+    "builders.c"
+  DEPS
+    loom::ir::builders
+    loom::ops::op_defs
+    loom::target::arch::amd::xdna::aie2p::record_defs
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
 loom_generated_cc_library(
   NAME
     ops
@@ -22,11 +57,9 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
     "--types"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
     "types.c"
   HDRS
@@ -43,9 +76,12 @@ loom_generated_cc_library(
     "--dialect=aie2p"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::builders
     iree::base
     loom::error::emitter
     loom::error::error_defs

@@ -34,6 +34,21 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    builders
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  SRCS
+    "builders.c"
+  DEPS
+    loom::ir::builders
+    loom::ops::op_defs
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     scalar
@@ -49,7 +64,6 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
     "--table-shard=analysis"
     "--table-shard=arithmetic"
@@ -58,7 +72,6 @@ loom_generated_cc_library(
     "--table-shard=conversion"
     "--table-shard=math"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
     "tables/analysis.c"
     "tables/arithmetic.c"
@@ -75,9 +88,12 @@ loom_generated_cc_library(
     "--dialect=scalar"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::builders
     ::comparison
     ::op_defs
     iree::base::internal

@@ -12,6 +12,19 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
+    record_defs
+  HDRS
+    "target_records.h"
+  DEPS
+    loom::target::arch::spirv::features
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_library(
+  NAME
     target_records
   HDRS
     "target_records.h"

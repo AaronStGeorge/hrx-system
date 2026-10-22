@@ -13,8 +13,8 @@
 #define LOOM_OPS_KERNEL_OPS_H_
 
 #include "loom/ops/op_defs.h"
-#include "loom/ir/facts.h"
 #include "loom/ir/ir.h"
+#include "loom/ir/memory_space.h"
 #include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
 #include "loom/ops/combining.h"

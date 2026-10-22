@@ -230,6 +230,7 @@ loom_cc_library(
         ":cooperative_properties",
         "//loom/src/loom/target:facts",
         "//loom/src/loom/target:facts_builder",
+        "//loom/src/loom/target/arch/spirv/records:record_defs",
         "//runtime/src/iree/base",
     ],
 )

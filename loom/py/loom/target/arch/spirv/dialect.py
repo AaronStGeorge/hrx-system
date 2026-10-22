@@ -39,7 +39,7 @@ SpirvTargetKind = EnumDef(
     doc="SPIR-V target row selected by spirv.target.",
     c_type="loom_spirv_target_kind_t",
     c_const_prefix="LOOM_SPIRV_TARGET_KIND",
-    c_include="loom/target/arch/spirv/facts.h",
+    c_include="loom/target/arch/spirv/records/target_records.h",
 )
 
 SpirvScalarType = EnumDef(

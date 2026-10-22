@@ -384,6 +384,13 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "record_defs",
+    hdrs = ["records/target_records.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:__subpackages__"],
+    deps = ["//loom/src/loom/target:types"],
+)
+
+loom_cc_library(
     name = "target_records",
     srcs = ["records/target_records.c"],
     hdrs = ["records/target_records.h"],

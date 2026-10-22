@@ -460,6 +460,18 @@ endif()
 if(LOOM_TARGET_ARCH_XDNA)
 loom_cc_library(
   NAME
+    record_defs
+  HDRS
+    "records/target_records.h"
+  DEPS
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_library(
+  NAME
     target_records
   HDRS
     "records/target_records.h"

@@ -4,9 +4,11 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/bazel:query.bzl", "iree_assert_dependency_boundary")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
+    "loom_cc_library_group",
     "loom_cc_test",
     "loom_generated_source_family",
 )
@@ -222,7 +224,7 @@ loom_cc_library(
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:parameter",
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//runtime/src/iree/base",
     ],
 )
@@ -232,7 +234,7 @@ loom_cc_library(
     srcs = ["combining.c"],
     hdrs = ["combining.h"],
     deps = [
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:types",
         "//runtime/src/iree/base",
     ],
 )
@@ -400,4 +402,94 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+# One configured closure check covers construction across the dialect family.
+# The aggregate is test-only: native callers select the dialects they construct.
+_CONSTRUCTION_DIALECTS = [
+    "buffer",
+    "cfg",
+    "channel",
+    "check",
+    "command",
+    "config",
+    "encoding",
+    "func",
+    "global",
+    "group",
+    "index",
+    "kernel",
+    "low",
+    "pass",
+    "pipeline",
+    "pool",
+    "sanitizer",
+    "scalar",
+    "scf",
+    "target",
+    "template",
+    "test",
+    "vector",
+    "view",
+]
+
+loom_cc_library_group(
+    name = "construction_boundary_deps",
+    testonly = True,
+    visibility = ["//visibility:private"],
+    deps = [":type_builders"] + [
+        "//loom/src/loom/ops/%s:builders" % dialect
+        for dialect in _CONSTRUCTION_DIALECTS
+    ] + select({
+        "//loom/config/target/arch:amdgpu": ["//loom/src/loom/target/arch/amdgpu/ops:builders"],
+        "//conditions:default": [],
+    }) + select({
+        "//loom/config/target/arch:spirv": ["//loom/src/loom/target/arch/spirv/ops:builders"],
+        "//conditions:default": [],
+    }) + select({
+        "//loom/config/target/arch:vm": ["//loom/src/loom/target/arch/vm/ops:builders"],
+        "//conditions:default": [],
+    }) + select({
+        "//loom/config/target/arch:wasm": ["//loom/src/loom/target/arch/wasm/ops:builders"],
+        "//conditions:default": [],
+    }) + select({
+        "//loom/config/target/arch:x86": ["//loom/src/loom/target/arch/x86/ops:builders"],
+        "//conditions:default": [],
+    }) + select({
+        "//loom/config/target/arch:xdna": ["//loom/src/loom/target/arch/amd/xdna/aie2p/ops:builders"],
+        "//conditions:default": [],
+    }),
+)
+
+iree_assert_dependency_boundary(
+    name = "construction_dependency_boundary",
+    allowed_dependencies = ["//loom/src/loom/rewrite:remap"],
+    forbidden_dependencies = [
+        ":op_registry",
+        ":type_registry",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_records",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/ops",
+        "//loom/src/loom/target/arch/amdgpu/ops",
+        "//loom/src/loom/target/arch/spirv/ops",
+        "//loom/src/loom/target/arch/spirv/records:target_records",
+        "//loom/src/loom/target/arch/vm/ops",
+        "//loom/src/loom/target/arch/wasm/ops",
+        "//loom/src/loom/target/arch/x86/ops",
+        "//loom/src/loom/target/arch/x86/records:target_records",
+        "//loom/src/loom/target/test:target_record_table",
+    ] + [
+        "//loom/src/loom/ops/%s" % dialect
+        for dialect in _CONSTRUCTION_DIALECTS
+    ],
+    forbidden_subtrees = [
+        "//loom/src/loom/analysis/...",
+        "//loom/src/loom/format/...",
+        "//loom/src/loom/pass/...",
+        "//loom/src/loom/rewrite/...",
+        "//loom/src/loom/transforms/...",
+        "//loom/src/loom/verify/...",
+    ],
+    target = ":construction_boundary_deps",
 )

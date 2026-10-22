@@ -9,6 +9,44 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ir::builders
+    loom::ops::op_defs
+    loom::target::types
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
+    builders
+  DEPS
+    ::op_builders
+    ::op_defs
+    loom::codegen::low::builder
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    op_builders
+  SRCS
+    "builders.c"
+  DEPS
+    ::op_defs
+    loom::ir::builders
+    loom::ops::op_defs
+    loom::rewrite::remap
+    loom::util::stable_id
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     low
@@ -24,10 +62,8 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
   HDRS
     "capture.h"
@@ -38,9 +74,12 @@ loom_generated_cc_library(
     "--dialect=low"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::op_builders
     iree::base
     iree::base::internal::arena
     loom::error::emitter

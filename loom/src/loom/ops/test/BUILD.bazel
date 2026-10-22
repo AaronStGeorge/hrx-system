@@ -4,12 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_cc_library",
-    "loom_cc_test",
-    "loom_generated_cc_library",
-)
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_library_group", "loom_cc_test", "loom_generated_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -20,6 +15,39 @@ package(
 #===------------------------------------------------------------------------===#
 # Synthetic test dialect
 #===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "op_defs",
+    hdrs = ["ops.h"],
+    textual_hdrs = ["ops.inc"],
+    deps = [
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/test:record_defs",
+    ],
+)
+
+loom_cc_library_group(
+    name = "builders",
+    deps = [
+        ":op_builders",
+        ":op_defs",
+        ":type_builders",
+    ],
+)
+
+loom_cc_library(
+    name = "op_builders",
+    srcs = ["builders.c"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/rewrite:remap",
+    ],
+)
 
 loom_generated_cc_library(
     name = "test",
@@ -41,24 +69,25 @@ loom_generated_cc_library(
     extra_output_flags = [
         "--ops-include",
         "--type-builders",
+        "--builders",
     ],
     extra_outputs = [
         "ops.inc",
         "type_builders.c",
+        "builders.c",
     ],
     generated_src_flags = [
-        "--builders",
         "--tables",
         "--types",
     ],
     generated_srcs = [
-        "builders.c",
         "tables.c",
         "types.c",
     ],
     generator = "//loom/py/loom/gen/ops:c_tables_test_generator",
     textual_hdrs = ["ops.inc"],
     deps = [
+        ":builders",
         ":type_builders",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:emitter",

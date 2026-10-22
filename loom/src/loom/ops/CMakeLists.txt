@@ -244,7 +244,7 @@ loom_cc_library(
     loom::error::emitter
     loom::error::error_defs
     loom::error::parameter
-    loom::ir
+    loom::ir::builders
   PUBLIC
 )
 
@@ -257,7 +257,7 @@ loom_cc_library(
     "combining.c"
   DEPS
     iree::base
-    loom::ir
+    loom::ir::types
   PUBLIC
 )
 
@@ -433,6 +433,59 @@ loom_cc_test(
     loom::ops::test
     loom::ops::vector
     loom::util::fact_table
+)
+
+set(_construction_boundary_deps_platform_deps "")
+if(LOOM_TARGET_ARCH_AMDGPU)
+  list(APPEND _construction_boundary_deps_platform_deps loom::target::arch::amdgpu::ops::builders)
+endif()
+if(LOOM_TARGET_ARCH_SPIRV)
+  list(APPEND _construction_boundary_deps_platform_deps loom::target::arch::spirv::ops::builders)
+endif()
+if(LOOM_TARGET_ARCH_VM)
+  list(APPEND _construction_boundary_deps_platform_deps loom::target::arch::vm::ops::builders)
+endif()
+if(LOOM_TARGET_ARCH_WASM)
+  list(APPEND _construction_boundary_deps_platform_deps loom::target::arch::wasm::ops::builders)
+endif()
+if(LOOM_TARGET_ARCH_X86)
+  list(APPEND _construction_boundary_deps_platform_deps loom::target::arch::x86::ops::builders)
+endif()
+if(LOOM_TARGET_ARCH_XDNA)
+  list(APPEND _construction_boundary_deps_platform_deps loom::target::arch::amd::xdna::aie2p::ops::builders)
+endif()
+iree_cc_library(
+  NAME
+    construction_boundary_deps
+  DEPS
+    ::type_builders
+    loom::ops::buffer::builders
+    loom::ops::cfg::builders
+    loom::ops::channel::builders
+    loom::ops::check::builders
+    loom::ops::command::builders
+    loom::ops::config::builders
+    loom::ops::encoding::builders
+    loom::ops::func::builders
+    loom::ops::global::builders
+    loom::ops::group::builders
+    loom::ops::index::builders
+    loom::ops::kernel::builders
+    loom::ops::low::builders
+    loom::ops::pass::builders
+    loom::ops::pipeline::builders
+    loom::ops::pool::builders
+    loom::ops::sanitizer::builders
+    loom::ops::scalar::builders
+    loom::ops::scf::builders
+    loom::ops::target::builders
+    loom::ops::template::builders
+    loom::ops::test::builders
+    loom::ops::vector::builders
+    loom::ops::view::builders
+    ${_construction_boundary_deps_platform_deps}
+  TESTONLY
+  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

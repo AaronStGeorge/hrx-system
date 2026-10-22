@@ -25,6 +25,22 @@ endif()
 if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
+    record_defs
+  HDRS
+    "target_records.h"
+  TEXTUAL_HDRS
+    "target_profiles.inl"
+  DEPS
+    iree::base::cpu_data
+    loom::target::arch::x86::feature_bits
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86)
+loom_cc_library(
+  NAME
     target_records
   HDRS
     "target_records.h"

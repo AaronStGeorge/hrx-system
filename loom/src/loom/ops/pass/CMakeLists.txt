@@ -9,6 +9,33 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    op_defs
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  DEPS
+    loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    builders
+  HDRS
+    "ops.h"
+  TEXTUAL_HDRS
+    "ops.inc"
+  SRCS
+    "builders.c"
+  DEPS
+    loom::ir::builders
+    loom::ops::op_defs
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     pass
@@ -17,10 +44,8 @@ loom_generated_cc_library(
   TEXTUAL_HDRS
     "ops.inc"
   GENERATED_SRC_FLAGS
-    "--builders"
     "--tables"
   GENERATED_SRCS
-    "builders.c"
     "tables.c"
   HDRS
     "ops.h"
@@ -28,9 +53,12 @@ loom_generated_cc_library(
     "--dialect=pass"
   EXTRA_OUTPUT_FLAGS
     "--ops-include"
+    "--builders"
   EXTRA_OUTPUTS
     "ops.inc"
+    "builders.c"
   DEPS
+    ::builders
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
