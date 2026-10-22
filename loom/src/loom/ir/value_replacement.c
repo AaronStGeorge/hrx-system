@@ -514,6 +514,7 @@ static iree_status_t loom_replacement_finish_type(
     if (loom_type_kind(type) == LOOM_TYPE_PARAMETERIZED) {
       if (loom_remap_is_lookup(context)) {
         const loom_type_t result_type = loom_type_parameterized(
+            loom_type_parameterized_kind(type),
             loom_type_parameterized_descriptor(type), (uint8_t)frame->count,
             frame->children.attributes);
         result = loom_module_lookup_type_id(context->module, result_type);

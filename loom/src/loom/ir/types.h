@@ -127,7 +127,7 @@
 // payload fields as a register-class identity plus contiguous unit count.
 //
 // Generic parameterized types use dims[0] for an immutable array of attribute
-// parameter slots and dims[1] for their static family descriptor. Compact
+// parameter slots and dims[1] for their borrowed family descriptor. Compact
 // descriptor-backed built-ins may instead carry one enum parameter in the
 // header payload byte. Their public text layout is declarative metadata and
 // does not affect storage identity.
@@ -182,6 +182,18 @@ typedef uint16_t loom_symbol_id_t;
 // Types are deduplicated: structurally identical types share the same ID.
 typedef uint32_t loom_type_id_t;
 #define LOOM_TYPE_ID_INVALID ((loom_type_id_t)UINT32_MAX)
+
+// Exact-build identity of a generated indirect type family. The high byte
+// names its dialect (zero for common types); the low byte is a one-based
+// family ordinal. Text and bytecode carry public names, never this key.
+typedef uint16_t loom_parameterized_type_kind_t;
+
+// Explicit handwritten descriptors need no generated family identity.
+#define LOOM_PARAMETERIZED_TYPE_KIND_NONE ((loom_parameterized_type_kind_t)0)
+#define LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE 0
+#define LOOM_PARAMETERIZED_TYPE_KIND(dialect_id, family_index)      \
+  ((loom_parameterized_type_kind_t)(((uint16_t)(dialect_id) << 8) | \
+                                    ((uint16_t)(family_index) + 1)))
 
 //===----------------------------------------------------------------------===//
 // Dims and enums
@@ -367,10 +379,14 @@ typedef struct loom_type_t {
   //   [24:31] view access alignment override in bytes (0 = natural)
   uint32_t header;
 
-  // Index into the module's encoding table (1-based, 0 = no encoding).
-  // When encoding_flags has LOOM_ENCODING_FLAG_SSA set, this is instead
-  // a value_id referencing an SSA value of type LOOM_TYPE_ENCODING.
-  uint16_t encoding_id;
+  union {
+    // Shaped-type encoding table index (1-based, zero for no encoding), or
+    // an SSA value ID when LOOM_ENCODING_FLAG_SSA is set.
+    uint16_t encoding_id;
+    // Generated family key for LOOM_TYPE_PARAMETERIZED; zero for unkeyed
+    // explicit descriptors. The descriptor still owns schema and lifetime.
+    loom_parameterized_type_kind_t parameterized_kind;
+  };
 
   // Encoding interpretation flags. Zero for most types.
   loom_encoding_flags_t encoding_flags;
@@ -1065,20 +1081,29 @@ static inline const loom_type_t* loom_type_dialect_params(loom_type_t type) {
 //===----------------------------------------------------------------------===//
 
 // Creates a descriptor-backed generic type from immutable parameter slots.
-// The descriptor and slot array must outlive the type.
+// The descriptor and slot array must outlive the type. |kind| is the key
+// carried by the descriptor, or NONE for an unkeyed explicit descriptor.
 static inline loom_type_t loom_type_parameterized(
+    loom_parameterized_type_kind_t kind,
     const loom_parameterized_type_descriptor_t* descriptor,
     uint8_t parameter_count, const struct loom_attribute_t* parameters) {
   loom_type_t type = {0};
   type.header = loom_type_make_raw_header(LOOM_TYPE_PARAMETERIZED, 0, 0,
                                           LOOM_TYPE_FLAG_INLINE_DIMS);
+  type.parameterized_kind = kind;
   type.encoding_flags = parameter_count;
   type.dims[0] = (uint64_t)(uintptr_t)parameters;
   type.dims[1] = (uint64_t)(uintptr_t)descriptor;
   return type;
 }
 
-// Returns the static family descriptor.
+// Returns the generated family key without accessing descriptor storage.
+static inline loom_parameterized_type_kind_t loom_type_parameterized_kind(
+    loom_type_t type) {
+  return type.parameterized_kind;
+}
+
+// Returns the type's borrowed immutable family descriptor.
 static inline const loom_parameterized_type_descriptor_t*
 loom_type_parameterized_descriptor(loom_type_t type) {
   return (const loom_parameterized_type_descriptor_t*)(uintptr_t)type.dims[1];

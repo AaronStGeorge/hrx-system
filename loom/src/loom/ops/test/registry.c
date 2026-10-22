@@ -47,6 +47,10 @@ iree_status_t loom_test_dialect_register(loom_context_t* context) {
         context, LOOM_DIALECT_TEST, parameterized_attrs,
         parameterized_attr_count));
   }
+  IREE_RETURN_IF_ERROR(loom_context_register_parameterized_types(
+      context, LOOM_DIALECT_TEST,
+      loom_test_type_registry_parameterized_descriptors,
+      loom_test_type_registry_parameterized_count));
   return loom_type_registry_register_types(context,
                                            loom_test_type_registry_entries,
                                            loom_test_type_registry_entry_count);

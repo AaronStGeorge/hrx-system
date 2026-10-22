@@ -10,6 +10,7 @@
 
 #include "loom/ops/encoding/families.h"
 #include "loom/ops/op_registry_tables.h"
+#include "loom/ops/type_registry.h"
 
 static iree_status_t loom_op_registry_register_dialect(
     loom_context_t* context,
@@ -58,6 +59,7 @@ static iree_status_t loom_op_registry_register_dialect(
 }
 
 iree_status_t loom_op_registry_register_all_dialects(loom_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_type_registry_register_common_types(context));
   for (iree_host_size_t i = 0; i < loom_op_registry_dialect_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_op_registry_register_dialect(
         context, &loom_op_registry_dialects[i]));

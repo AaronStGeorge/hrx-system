@@ -27,6 +27,23 @@ def test_parameterized_channel_types_retain_their_fact_domain(type_def: TypeDef)
     assert ".fact_domain = &loom_view_fact_domain," in descriptor
 
 
+def test_indirect_family_keys_follow_declaration_order_not_name_order() -> None:
+    header, _, source = generate_type_registry([view_type, read_type, channel_type, write_type])
+    for index, name in enumerate(("read", "channel", "write")):
+        key = f"LOOM_PARAMETERIZED_TYPE_{name.upper()}"
+        assert f"{key} = LOOM_PARAMETERIZED_TYPE_KIND(LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE, {index})" in header
+        assert f"loom_type_parameterized_kind(type) == {key}" in header
+        assert f".kind = {key}," in source
+        assert f"loom_module_make_parameterized_type_by_kind(\n      module, {key}," in source
+    registry = source.split("loom_type_registry_parameterized_descriptors[] = {", 1)[1].split("};", 1)[0]
+    assert registry.split() == [
+        "&loom_read_type_parameterized_descriptor,",
+        "&loom_channel_type_parameterized_descriptor,",
+        "&loom_write_type_parameterized_descriptor,",
+    ]
+    assert "LOOM_PARAMETERIZED_TYPE_VIEW" not in header
+
+
 def _compact_tensor_type_def(name: str) -> TypeDef:
     return TypeDef(
         name=name,

@@ -27,6 +27,7 @@ class ChannelPlanTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
     iree_arena_initialize(&pool_, &arena_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_type_registry_register_common_types(&context_));
     Register(LOOM_DIALECT_CHANNEL, loom_channel_dialect_vtables);
     Register(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     Register(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);

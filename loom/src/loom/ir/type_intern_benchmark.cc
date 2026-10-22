@@ -22,6 +22,7 @@ class TypeInternBenchmark {
     iree_arena_block_pool_initialize(65536, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_CHECK_OK(loom_type_registry_register_common_types(&context_));
     IREE_CHECK_OK(loom_context_finalize(&context_));
     IREE_CHECK_OK(loom_module_allocate(&context_, IREE_SV("type_intern"),
                                        &block_pool_, nullptr,

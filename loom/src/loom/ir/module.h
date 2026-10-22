@@ -421,15 +421,26 @@ iree_status_t loom_module_make_parameterized_attr_array(
 // Builds a descriptor-backed type in |module|.
 //
 // |parameters| is indexed by |descriptor| and may point to temporary storage.
-// Required fields must be present and optional fields use LOOM_ATTR_ABSENT.
-// Generic parameter arrays are recursively copied and interned. A compact
-// inline enum is packed directly into the returned type without allocating
-// when |out_type_id| is NULL. When |out_type_id| is provided, both
-// representations are interned and their canonical module ID is returned
-// alongside |out_type|.
+// The explicit descriptor is borrowed, is not rebound through the context,
+// and must outlive the module. Generated constructors use the keyed entry
+// below. Required fields must be present and optional fields use
+// LOOM_ATTR_ABSENT. Generic parameter arrays are recursively copied and
+// interned. A compact inline enum is packed directly into the returned type
+// without allocating when |out_type_id| is NULL. When |out_type_id| is
+// provided, both representations are interned and their canonical module ID is
+// returned alongside |out_type|.
 iree_status_t loom_module_make_parameterized_type(
     loom_module_t* module,
     const loom_parameterized_type_descriptor_t* descriptor,
+    const loom_attribute_t* parameters, iree_host_size_t parameter_count,
+    loom_type_t* out_type, loom_type_id_t* out_type_id);
+
+// Constructs and interns a generated indirect type using the module context's
+// registered descriptor. Parameter and output conventions match explicit
+// descriptor construction above. An absent family is an invalid API request;
+// construction never substitutes a caller-local descriptor.
+iree_status_t loom_module_make_parameterized_type_by_kind(
+    loom_module_t* module, loom_parameterized_type_kind_t kind,
     const loom_attribute_t* parameters, iree_host_size_t parameter_count,
     loom_type_t* out_type, loom_type_id_t* out_type_id);
 

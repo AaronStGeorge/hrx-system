@@ -17,6 +17,10 @@ class CooperativeMatrixBenchmark {
   CooperativeMatrixBenchmark() {
     iree_arena_block_pool_initialize(65536, iree_allocator_system(), &pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_CHECK_OK(loom_context_register_parameterized_types(
+        &context_, LOOM_DIALECT_SPIRV,
+        loom_spirv_type_registry_parameterized_descriptors,
+        loom_spirv_type_registry_parameterized_count));
     IREE_CHECK_OK(loom_type_registry_register_types(
         &context_, loom_spirv_type_registry_entries,
         loom_spirv_type_registry_entry_count));

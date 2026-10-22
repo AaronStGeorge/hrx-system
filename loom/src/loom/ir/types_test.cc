@@ -470,8 +470,8 @@ TEST_F(ModuleTypesTest, RepeatedTypeAttributesReuseMappedQueries) {
   const loom_attribute_t mismatched_parameters[] = {
       loom_attr_type(target_child_id), loom_attr_type(scalar_id)};
   const loom_type_t mismatched_target = loom_type_parameterized(
-      &kRepeatedTypeDescriptor, IREE_ARRAYSIZE(mismatched_parameters),
-      mismatched_parameters);
+      LOOM_PARAMETERIZED_TYPE_KIND_NONE, &kRepeatedTypeDescriptor,
+      IREE_ARRAYSIZE(mismatched_parameters), mismatched_parameters);
   EXPECT_FALSE(loom_type_equal_after_value_remap(module_, source,
                                                  mismatched_target, &remap));
 
@@ -533,14 +533,14 @@ TEST_F(ModuleTypesTest, NestedDictReusePreservesMappedTypeQueries) {
       loom_make_canonical_attr_dict(mismatched_entries,
                                     IREE_ARRAYSIZE(mismatched_entries))};
   const loom_type_t source = loom_type_parameterized(
-      &kRepeatedDictDescriptor, IREE_ARRAYSIZE(source_parameters),
-      source_parameters);
+      LOOM_PARAMETERIZED_TYPE_KIND_NONE, &kRepeatedDictDescriptor,
+      IREE_ARRAYSIZE(source_parameters), source_parameters);
   const loom_type_t target = loom_type_parameterized(
-      &kRepeatedDictDescriptor, IREE_ARRAYSIZE(target_parameters),
-      target_parameters);
+      LOOM_PARAMETERIZED_TYPE_KIND_NONE, &kRepeatedDictDescriptor,
+      IREE_ARRAYSIZE(target_parameters), target_parameters);
   const loom_type_t mismatched_target = loom_type_parameterized(
-      &kRepeatedDictDescriptor, IREE_ARRAYSIZE(mismatched_parameters),
-      mismatched_parameters);
+      LOOM_PARAMETERIZED_TYPE_KIND_NONE, &kRepeatedDictDescriptor,
+      IREE_ARRAYSIZE(mismatched_parameters), mismatched_parameters);
   const loom_type_value_remap_t remap = {
       .source_values = &source_value,
       .target_values = &target_value,

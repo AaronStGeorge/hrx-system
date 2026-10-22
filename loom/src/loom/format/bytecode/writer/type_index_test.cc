@@ -242,7 +242,8 @@ TEST_F(TypeIndexTest, ParameterAttributesRetainTypeDependencyIdentity) {
     IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
         module_, loom_make_named_attr_slice(&entry, 1), &metadata));
     parent_ids[i] =
-        Intern(loom_type_parameterized(&descriptor.parameters, 1, &metadata));
+        Intern(loom_type_parameterized(LOOM_PARAMETERIZED_TYPE_KIND_NONE,
+                                       &descriptor.parameters, 1, &metadata));
   }
   ASSERT_NE(parent_ids[0], parent_ids[1]);
   loom_bytecode_type_index_t index;

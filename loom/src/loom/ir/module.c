@@ -3821,8 +3821,8 @@ static iree_status_t loom_module_clone_parameterized_type_payload(
           /*depth=*/1, &canonical_parameters[i]));
     }
   }
-  *out_type = loom_type_parameterized(descriptor, parameter_count,
-                                      canonical_parameters);
+  *out_type = loom_type_parameterized(descriptor->kind, descriptor,
+                                      parameter_count, canonical_parameters);
   return iree_ok_status();
 }
 
@@ -4289,6 +4289,21 @@ iree_status_t loom_module_intern_type_id(loom_module_t* module,
   loom_type_t interned_type = {0};
   return loom_module_intern_type_with_dependencies(module, type, &interned_type,
                                                    out_type_id);
+}
+
+iree_status_t loom_module_make_parameterized_type_by_kind(
+    loom_module_t* module, loom_parameterized_type_kind_t kind,
+    const loom_attribute_t* parameters, iree_host_size_t parameter_count,
+    loom_type_t* out_type, loom_type_id_t* out_type_id) {
+  const loom_parameterized_type_descriptor_t* descriptor =
+      loom_context_resolve_parameterized_type(module->context, kind);
+  if (descriptor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "parameterized type family kind %u is not registered", (unsigned)kind);
+  }
+  return loom_module_make_parameterized_type(
+      module, descriptor, parameters, parameter_count, out_type, out_type_id);
 }
 
 iree_status_t loom_module_make_parameterized_type(

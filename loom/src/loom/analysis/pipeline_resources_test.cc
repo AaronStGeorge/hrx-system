@@ -105,6 +105,7 @@ class PipelineConstructionTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(), &blocks_);
     iree_arena_initialize(&blocks_, &arena_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_type_registry_register_common_types(&context_));
     Register(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
     Register(LOOM_DIALECT_CHANNEL, loom_channel_dialect_vtables);
     Register(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);

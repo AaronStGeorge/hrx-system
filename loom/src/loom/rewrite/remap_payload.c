@@ -689,9 +689,17 @@ static iree_status_t loom_payload_finish_type(loom_payload_walk_t* walk) {
   loom_type_t type = frame->source.type;
   switch (loom_type_kind(type)) {
     case LOOM_TYPE_PARAMETERIZED: {
-      IREE_RETURN_IF_ERROR(loom_module_make_parameterized_type(
-          target, loom_type_parameterized_descriptor(type),
-          frame->children.attributes, frame->count, &type, &frame->result));
+      const loom_parameterized_type_kind_t kind =
+          loom_type_parameterized_kind(type);
+      if (kind != LOOM_PARAMETERIZED_TYPE_KIND_NONE) {
+        IREE_RETURN_IF_ERROR(loom_module_make_parameterized_type_by_kind(
+            target, kind, frame->children.attributes, frame->count, &type,
+            &frame->result));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_module_make_parameterized_type(
+            target, loom_type_parameterized_descriptor(type),
+            frame->children.attributes, frame->count, &type, &frame->result));
+      }
       break;
     }
     case LOOM_TYPE_DIALECT:

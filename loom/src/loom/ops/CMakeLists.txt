@@ -302,6 +302,7 @@ loom_cc_library(
     "op_registry_tables.c"
   DEPS
     ::op_defs
+    ::type_registry
     iree::base
     loom::ir
     loom::ops::buffer
