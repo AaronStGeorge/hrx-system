@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from .fetch_source import FetchError
+from .fetch_transfer import run_transfer
 from .manifest import _origin_object, _url
 
 _INSTALL = (
@@ -68,6 +69,57 @@ class AccessRequired(FetchError):
 AccessWait = Callable[[AccessRequired, float, threading.Event], None]
 
 
+class _ResponseFailure(FetchError):
+    """Provider failure facts safe to carry across a transfer process boundary."""
+
+    def __init__(self, kind: str, status: int, retry_after: str):
+        super().__init__(kind, status, retry_after)
+        # SDK-established distinction between gate, missing file/revision, or HTTP.
+        self.kind = kind
+        # Actual HTTP response status, independent of the exception's message.
+        self.status = status
+        # Provider minimum retry guidance, parsed by the access coordinator.
+        self.retry_after = retry_after
+
+
+def _response_failure(error, errors) -> _ResponseFailure:
+    kind = "http"
+    for error_type, candidate in (
+        (errors.RemoteEntryNotFoundError, "file"),
+        (errors.RevisionNotFoundError, "revision"),
+        (errors.GatedRepoError, "gate"),
+    ):
+        if isinstance(error, error_type):
+            kind = candidate
+            break
+    return _ResponseFailure(
+        kind, error.response.status_code, error.response.headers.get("Retry-After", "")
+    )
+
+
+def _hub_request(operation: str, options: dict):
+    import httpx2
+    import huggingface_hub as hub
+    from huggingface_hub import errors
+
+    try:
+        if operation == "download":
+            return hub.hf_hub_download(**options)
+        if operation == "metadata":
+            return hub.get_hf_file_metadata(**options)
+        api = hub.HfApi(
+            endpoint=options.pop("endpoint"),
+            library_name=options.pop("library_name"),
+        )
+        return getattr(api, operation)(**options)
+    except errors.HfHubHTTPError as error:
+        raise _response_failure(error, errors) from None
+    except errors.LocalEntryNotFoundError:
+        raise FetchError("Hugging Face could not retrieve the selected file") from None
+    except httpx2.HTTPError:
+        raise FetchError(f"Hugging Face {operation} transport failed") from None
+
+
 def hf_url_source(
     location: str, *, endpoint: str | None = None
 ) -> tuple[dict, str] | None:
@@ -115,9 +167,9 @@ class HuggingFace:
         endpoint: str | None = None,
         cache_dir: Path | None = None,
         wait_for_access: AccessWait | None = None,
+        cancelled: threading.Event | None = None,
     ):
         try:
-            import httpx2
             import huggingface_hub as hub
             import huggingface_hub.constants as constants
             import huggingface_hub.errors as errors
@@ -131,24 +183,22 @@ class HuggingFace:
             raise FetchError("unsupported huggingface_hub version; " + _INSTALL)
         # SDK module and errors are loaded only when this provider is constructed.
         self.hub = hub
-        # The actual SDK exception family, including its gated/not-found hierarchy.
+        # SDK cache exceptions used by offline revision lookup.
         self.errors = errors
         # The provider owns repository spelling validation at its public boundary.
         self.validate_repository = validate_repo_id
         # SDK environment-derived authentication and cache policy.
         self.constants = constants
-        # Transport failures are reported without SDK request URLs or credentials.
-        self.transport_error = httpx2.HTTPError
         # SDK-owned cache root; downloaded payloads stay here without a Loom copy.
         self.cache_dir = cache_dir
-        # Endpoint and user agent follow the SDK's normal environment defaults.
         endpoint = (endpoint or constants.ENDPOINT).rstrip("/")
         _url(endpoint, "Hugging Face endpoint")
-        self.api = hub.HfApi(endpoint=endpoint, library_name="loom-fetch")
+        # Validated provider root follows the SDK's environment default.
+        self.endpoint = endpoint
         # Caller-supplied interaction policy; None fails immediately with remediation.
         self.wait_for_access = wait_for_access
-        # Cancellation wakes approval waits shared by all selected repositories.
-        self.cancelled = threading.Event()
+        # Operation cancellation covers approval waits and owned transfer processes.
+        self.cancelled = cancelled if cancelled is not None else threading.Event()
         # One coordinator owns credential checks and human interaction across workers.
         self.access_lock = threading.RLock()
         # Positive checks apply only to the same effective credential in this operation.
@@ -164,6 +214,16 @@ class HuggingFace:
         if self.constants.HF_HUB_DISABLE_IMPLICIT_TOKEN:
             return None
         return self.hub.get_token()
+
+    def _call(self, operation: str, **options):
+        return run_transfer(
+            _hub_request,
+            (
+                operation,
+                {"endpoint": self.endpoint, "library_name": "loom-fetch", **options},
+            ),
+            self.cancelled,
+        )
 
     def _repository(self, repository: str):
         try:
@@ -188,37 +248,35 @@ class HuggingFace:
         if self.cancelled.is_set():
             raise FetchError("Hugging Face acquisition cancelled")
 
-    def _action(self, repository: str, error, token: str | None) -> AccessRequired:
-        status = error.response.status_code
-        if isinstance(error, self.errors.RemoteEntryNotFoundError):
+    def _action(
+        self, repository: str, error: _ResponseFailure, token: str | None
+    ) -> AccessRequired:
+        status = error.status
+        if error.kind == "file":
             raise FetchError(
                 f"selected Hugging Face file does not exist in {repository}"
             ) from error
-        if isinstance(error, self.errors.RevisionNotFoundError):
+        if error.kind == "revision":
             raise FetchError(
                 f"selected Hugging Face revision does not exist in {repository}"
             ) from error
         account = None
-        if token and (isinstance(error, self.errors.GatedRepoError) or status == 401):
+        if token and (error.kind == "gate" or status == 401):
             if token not in self.accounts:
                 try:
-                    result = self.api.whoami(token=token)
-                except self.errors.HfHubHTTPError as account_error:
-                    if account_error.response.status_code != 401:
+                    result = self._call("whoami", token=token)
+                except _ResponseFailure as account_error:
+                    if account_error.status != 401:
                         raise FetchError(
                             "Hugging Face account lookup failed"
                         ) from account_error
                     return AccessRequired(
                         repository,
                         "credentials",
-                        self.api.endpoint + "/" + repository,
+                        self.endpoint + "/" + repository,
                         None,
                         self._credential_source(),
                     )
-                except self.transport_error as account_error:
-                    raise FetchError(
-                        "Hugging Face account lookup failed"
-                    ) from account_error
                 name = result.get("name")
                 if not isinstance(name, str) or not re.fullmatch(
                     r"[A-Za-z0-9_.-]{1,256}", name
@@ -226,7 +284,7 @@ class HuggingFace:
                     raise FetchError("Hugging Face returned an invalid account name")
                 self.accounts[token] = name
             account = self.accounts[token]
-        if isinstance(error, self.errors.GatedRepoError):
+        if error.kind == "gate":
             reason = "gate"
         elif status == 401:
             reason = "credentials"
@@ -242,7 +300,7 @@ class HuggingFace:
             raise FetchError(
                 f"Hugging Face returned HTTP {status} for {repository}"
             ) from error
-        delay = error.response.headers.get("Retry-After", "")
+        delay = error.retry_after
         if delay:
             try:
                 delay = (
@@ -257,7 +315,7 @@ class HuggingFace:
         return AccessRequired(
             repository,
             reason,
-            self.api.endpoint + "/" + repository,
+            self.endpoint + "/" + repository,
             account,
             self._credential_source(),
             delay or 0,
@@ -290,15 +348,11 @@ class HuggingFace:
                 self._check_cancelled()
                 token = self._credential()
                 try:
-                    self.api.auth_check(repository, token=token or False)
-                except self.errors.HfHubHTTPError as error:
+                    self._call("auth_check", repo_id=repository, token=token or False)
+                except _ResponseFailure as error:
                     self._wait(self._action(repository, error, token), delay)
                     delay = min(delay * 2, 60)
                     continue
-                except self.transport_error as error:
-                    raise FetchError(
-                        f"Hugging Face access check failed for {repository}"
-                    ) from error
                 self.admitted[repository] = token
                 self.access_epochs[repository] = (
                     self.access_epochs.get(repository, 0) + 1
@@ -313,7 +367,7 @@ class HuggingFace:
                 epoch = self.access_epochs.get(repository, 0)
             try:
                 return operation(credential or False)
-            except self.errors.HfHubHTTPError as error:
+            except _ResponseFailure as error:
                 with self.access_lock:
                     # Another shard may have completed the same approval wait.
                     # Its successful check admits this retry without another prompt.
@@ -324,15 +378,6 @@ class HuggingFace:
                         self.ensure_access(repository)
                     else:
                         self.ensure_access(repository, denied=error)
-            except self.errors.LocalEntryNotFoundError as error:
-                raise FetchError(
-                    "Hugging Face could not retrieve the selected file for "
-                    f"{repository}"
-                ) from error
-            except self.transport_error as error:
-                raise FetchError(
-                    f"Hugging Face transport failed for {repository}"
-                ) from error
 
     def resolve_revision(self, requested: dict, *, offline: bool) -> str:
         repository, revision = (
@@ -372,8 +417,12 @@ class HuggingFace:
                 self.ensure_access(repository)
                 resolved = self._request(
                     repository,
-                    lambda token: self.api.model_info(
-                        repository, revision=revision, expand=["sha"], token=token
+                    lambda token: self._call(
+                        "model_info",
+                        repo_id=repository,
+                        revision=revision,
+                        expand=["sha"],
+                        token=token,
                     ),
                 ).sha
             if not isinstance(resolved, str) or not re.fullmatch(
@@ -399,16 +448,15 @@ class HuggingFace:
             source["repository"],
             source["path"],
             revision=source["revision"],
-            endpoint=self.api.endpoint,
+            endpoint=self.endpoint,
         )
         return self._request(
             source["repository"],
-            lambda token: self.hub.get_hf_file_metadata(
-                url, token=token, endpoint=self.api.endpoint, library_name="loom-fetch"
-            ),
+            lambda token: self._call("metadata", url=url, token=token),
         )
 
     def download(self, source: dict, *, offline: bool) -> Path:
+        self._check_cancelled()
         cached = self.cached_file(source)
         if cached is not None:
             return cached
@@ -421,21 +469,20 @@ class HuggingFace:
         return Path(
             self._request(
                 source["repository"],
-                lambda token: self.hub.hf_hub_download(
-                    source["repository"],
-                    source["path"],
+                lambda token: self._call(
+                    "download",
+                    repo_id=source["repository"],
+                    filename=source["path"],
                     revision=source["revision"],
-                    cache_dir=self.cache_dir,
-                    endpoint=self.api.endpoint,
+                    cache_dir=str(self.cache_directory),
                     token=token,
-                    library_name="loom-fetch",
                 ),
             )
         )
 
     def file_url(self, source: dict, *, endpoint: str | None = None) -> str:
         return (
-            (endpoint or self.api.endpoint)
+            (endpoint or self.endpoint)
             + "/"
             + source["repository"]
             + "/resolve/"

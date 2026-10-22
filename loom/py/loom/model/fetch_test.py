@@ -106,6 +106,19 @@ def _remote_plan(base, cache, **kwargs):
     )
 
 
+def test_cancelled_operation_does_not_publish_an_installation(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(_card(), files) as (base, requests, _):
+        cache = ContentCache(tmp_path / "cache")
+        plan = _remote_plan(base, cache)
+        before = list(requests)
+        cache.cancel()
+        with pytest.raises(FetchError, match="cancelled"):
+            install(plan, cache, tmp_path / "output")
+        assert requests == before
+        assert not (tmp_path / "output").exists()
+
+
 def test_parallel_verified_install_and_offline_reuse(tmp_path):
     cache = ContentCache(tmp_path / "cache")
     output = tmp_path / "first"

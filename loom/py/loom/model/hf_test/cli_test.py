@@ -10,6 +10,7 @@ import selectors
 import signal
 import subprocess
 import sys
+import threading
 import unittest
 from contextlib import contextmanager
 
@@ -136,6 +137,47 @@ def test_offline_does_not_enter_an_explicit_access_wait(tmp_path):
         assert "--offline" in result.stderr
         assert "Waiting" not in result.stderr
         assert hub.requests == []
+
+
+def test_interrupt_stops_a_held_transfer_before_publication(tmp_path):
+    if os.name == "nt":
+        raise unittest.SkipTest("console control events require a Windows console")
+    with running_hub(tmp_path) as hub:
+        _publish(hub)
+        hub.approved = True
+        hub.held_file = "code.loom"
+        output = tmp_path / "output"
+        with subprocess.Popen(
+            _arguments(
+                hub, "--no-lock", "--json", "--no-input", "--output=" + str(output)
+            ),
+            env=hub.environment(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ) as process:
+
+            def exited():
+                process.wait()
+                hub.body_started.set()
+
+            watcher = threading.Thread(target=exited)
+            watcher.start()
+            try:
+                hub.body_started.wait()
+                assert process.poll() is None, process.communicate()
+                process.send_signal(signal.SIGINT)
+                result, error = process.communicate()
+                assert process.returncode == 130, error
+                assert json.loads(result) == {"kind": "cancelled"}
+                assert not hub.release_body.is_set()
+                assert not (output / "model.json").exists()
+                assert not (output / "code.loom").exists()
+            finally:
+                hub.release_body.set()
+                if process.poll() is None:
+                    process.kill()
+                watcher.join()
 
 
 @contextmanager

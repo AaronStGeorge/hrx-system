@@ -155,6 +155,12 @@ repository, reason, URL, account, and credential source name. Explicit
 `--wait-for-access` enables automatic rechecking in these modes, with status on
 stderr and the final result on stdout. Offline operation never checks access.
 
+Ctrl-C also stops active metadata requests and file transfers. Cancellation joins
+the operation's writers before releasing the installation, keeps completed cache
+files reusable, and removes its incomplete ordinary HTTP staging files. Hugging
+Face retains ownership of its cache and resumable partial downloads. The Python
+API exposes the same operation cancellation through `ContentCache.cancel()`.
+
 Files stream into verified content storage with bounded buffers and concurrent
 transfers. The default `--materialize=share` links cache or local-source files
 into the installation, so changing only configuration does not copy weights.

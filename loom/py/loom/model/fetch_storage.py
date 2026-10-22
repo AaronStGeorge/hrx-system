@@ -13,12 +13,14 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .fetch_hf import HuggingFace, hf_url_source
 from .fetch_source import Document, FetchError, Source, document_source, open_source
+from .fetch_transfer import run_transfer
 from .lock import FileIdentity, file_digest
 from .manifest import ManifestError, parse_json
 
@@ -122,6 +124,52 @@ class AcquiredFile:
     identity: FileIdentity
 
 
+def _copy_source(
+    source: Source, identity: FileIdentity | None, offline: bool, temporary: Path
+) -> tuple[int, str]:
+    with open_source(
+        source, offline=offline, size=identity.size if identity else None
+    ) as (input_stream, transport_size):
+        expected_size = identity.size if identity else transport_size
+        digest = hashlib.sha256()
+        size = 0
+        with temporary.open("wb") as output:
+            while True:
+                limit = (
+                    _CHUNK_SIZE
+                    if expected_size is None
+                    else min(_CHUNK_SIZE, expected_size - size + 1)
+                )
+                chunk = input_stream.read(limit)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if expected_size is not None and size > expected_size:
+                    raise FetchError("source exceeded its declared byte count")
+                digest.update(chunk)
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+    if expected_size is not None and size != expected_size:
+        raise FetchError("source transfer ended before its declared byte count")
+    digest = digest.hexdigest()
+    if identity is not None and digest != identity.sha256:
+        raise ManifestError("source SHA-256 does not match its lock")
+    return size, digest
+
+
+def _read_document_bytes(source: Source, offline: bool) -> bytes:
+    with open_source(source, offline=offline) as (stream, size):
+        if size is not None and size > _DOCUMENT_LIMIT:
+            raise FetchError("model/lock document exceeds the 16 MiB metadata limit")
+        content = stream.read(_DOCUMENT_LIMIT + 1)
+        if len(content) > _DOCUMENT_LIMIT:
+            raise FetchError("model/lock document exceeds the 16 MiB metadata limit")
+        if size is not None and len(content) != size:
+            raise FetchError("document transfer ended before its declared length")
+        return content
+
+
 class ContentCache:
     """Whole files are shared by verified content, not by model/configuration name."""
 
@@ -132,21 +180,26 @@ class ContentCache:
         self._huggingface = huggingface
         # Human interaction belongs to the caller, including plain or visual modes.
         self.wait_for_access = wait_for_access
+        # Shared operation lifetime across local hashing and every transfer provider.
+        self.cancelled = (
+            huggingface.cancelled if huggingface is not None else threading.Event()
+        )
 
     @property
     def huggingface(self):
         if self._huggingface is None:
-            self._huggingface = HuggingFace(wait_for_access=self.wait_for_access)
+            self._huggingface = HuggingFace(
+                wait_for_access=self.wait_for_access, cancelled=self.cancelled
+            )
         return self._huggingface
 
     def _hf_url(self, location: str):
-        endpoint = self._huggingface.api.endpoint if self._huggingface else None
+        endpoint = self._huggingface.endpoint if self._huggingface else None
         return hf_url_source(location, endpoint=endpoint)
 
     def cancel(self):
-        """Wakes provider approval waits before joining in-flight acquisitions."""
-        if self._huggingface is not None:
-            self._huggingface.cancelled.set()
+        """Requests cancellation of owned IO, hashing, and approval waits."""
+        self.cancelled.set()
 
     def prepare_source(
         self, source: Source, identity: FileIdentity | None, *, offline: bool
@@ -183,10 +236,12 @@ class ContentCache:
         path = self.blob_path(identity.sha256)
         if not path.exists():
             return None
-        identity.verify(path)
+        identity.verify(path, cancelled=self.cancelled)
         return path
 
     def read_document(self, location: str, *, offline: bool) -> Document:
+        if self.cancelled.is_set():
+            raise FetchError("model acquisition cancelled")
         source = document_source(location)
         remote = source.transport["kind"] == "url"
         key = hashlib.sha256(location.encode("utf-8")).hexdigest()
@@ -231,18 +286,11 @@ class ContentCache:
                 path = self.huggingface.download(transport, offline=False)
             source = document_source(str(path))
             location = self.huggingface.file_url(transport, endpoint=endpoint)
-        with open_source(source, offline=offline) as (stream, size):
-            if size is not None and size > _DOCUMENT_LIMIT:
-                raise FetchError(
-                    "model/lock document exceeds the 16 MiB metadata limit"
-                )
-            content = stream.read(_DOCUMENT_LIMIT + 1)
-            if len(content) > _DOCUMENT_LIMIT:
-                raise FetchError(
-                    "model/lock document exceeds the 16 MiB metadata limit"
-                )
-            if size is not None and len(content) != size:
-                raise FetchError("document transfer ended before its declared length")
+        content = (
+            run_transfer(_read_document_bytes, (source, offline), self.cancelled)
+            if source.transport["kind"] == "url" and not offline
+            else _read_document_bytes(source, offline)
+        )
         try:
             text = content.decode("utf-8")
         except UnicodeDecodeError as error:
@@ -257,6 +305,8 @@ class ContentCache:
     def acquire(
         self, source: Source, identity: FileIdentity | None, *, offline: bool
     ) -> AcquiredFile:
+        if self.cancelled.is_set():
+            raise FetchError("model acquisition cancelled")
         kind = source.transport["kind"]
         if kind in ("local", "hf"):
             path = (
@@ -264,7 +314,7 @@ class ContentCache:
                 if kind == "local"
                 else self.huggingface.download(source.transport, offline=offline)
             )
-            size, digest = file_digest(path)
+            size, digest = file_digest(path, cancelled=self.cancelled)
             observed = FileIdentity(source.origin, size, digest, source.resolved)
             if identity is not None and (size, digest) != (
                 identity.size,
@@ -278,39 +328,16 @@ class ContentCache:
                 return AcquiredFile(cached, identity)
         temporary_directory = self.root / "temporary"
         temporary_directory.mkdir(parents=True, exist_ok=True)
-        temporary = None
+        descriptor, temporary_name = tempfile.mkstemp(dir=temporary_directory)
+        os.close(descriptor)
+        temporary = Path(temporary_name)
         try:
-            with open_source(
-                source, offline=offline, size=identity.size if identity else None
-            ) as (input_stream, transport_size):
-                expected_size = identity.size if identity else transport_size
-                digest = hashlib.sha256()
-                size = 0
-                with tempfile.NamedTemporaryFile(
-                    dir=temporary_directory, delete=False
-                ) as output:
-                    temporary = Path(output.name)
-                    while True:
-                        limit = (
-                            _CHUNK_SIZE
-                            if expected_size is None
-                            else min(_CHUNK_SIZE, expected_size - size + 1)
-                        )
-                        chunk = input_stream.read(limit)
-                        if not chunk:
-                            break
-                        size += len(chunk)
-                        if expected_size is not None and size > expected_size:
-                            raise FetchError("source exceeded its declared byte count")
-                        digest.update(chunk)
-                        output.write(chunk)
-                    output.flush()
-                    os.fsync(output.fileno())
-            if expected_size is not None and size != expected_size:
-                raise FetchError("source transfer ended before its declared byte count")
-            digest = digest.hexdigest()
-            if identity is not None and digest != identity.sha256:
-                raise ManifestError("source SHA-256 does not match its lock")
+            arguments = (source, identity, offline, temporary)
+            size, digest = (
+                run_transfer(_copy_source, arguments, self.cancelled)
+                if kind == "url" and not offline
+                else _copy_source(*arguments)
+            )
             observed = FileIdentity(source.origin, size, digest, source.resolved)
             path = self.blob_path(digest)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -319,5 +346,4 @@ class ContentCache:
             os.replace(temporary, path)
             return AcquiredFile(path, observed)
         finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)

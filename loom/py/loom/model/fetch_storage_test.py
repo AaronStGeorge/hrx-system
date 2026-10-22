@@ -6,7 +6,14 @@
 
 import base64
 import hashlib
+import http.server
 import os
+import subprocess
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, suppress
+from pathlib import Path
 
 import pytest
 
@@ -50,6 +57,106 @@ def test_local_file_is_not_copied_into_another_cache(tmp_path):
     )
     assert acquired.path == source
     assert not cache.root.exists()
+
+
+@contextmanager
+def _held_http_body():
+    started, release = threading.Event(), threading.Event()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", "4")
+            self.end_headers()
+            started.set()
+            release.wait()
+            # Cancellation deliberately closes the client before release.
+            with suppress(
+                BrokenPipeError, ConnectionResetError, ConnectionAbortedError
+            ):
+                self.wfile.write(b"code")
+
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_port}/code", started, release
+        finally:
+            release.set()
+            server.shutdown()
+            thread.join()
+
+
+def test_cancel_releases_http_reader_and_removes_its_temporary_file(tmp_path):
+    with _held_http_body() as (url, started, release):
+        cache = ContentCache(tmp_path / "cache")
+        source = Source("program.loom", {"kind": "url", "url": url})
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            try:
+                future = executor.submit(
+                    cache.acquire, source, _identity(b"code"), offline=False
+                )
+                future.add_done_callback(lambda _: started.set())
+                started.wait()
+                assert not future.done(), future.result()
+                cache.cancel()
+                with pytest.raises(FetchError, match="cancelled"):
+                    future.result()
+                assert not release.is_set()
+                assert list((cache.root / "temporary").iterdir()) == []
+                assert not cache.blob_path(_identity(b"code").sha256).exists()
+            finally:
+                cache.cancel()
+                release.set()
+        result = ContentCache(cache.root).acquire(
+            source, _identity(b"code"), offline=False
+        )
+        assert result.path.read_bytes() == b"code"
+
+
+def test_programmatic_caller_needs_no_process_entrypoint_guard(tmp_path):
+    caller = tmp_path / "caller.py"
+    caller.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "from loom.model.fetch_source import Source\n"
+        "from loom.model.fetch_storage import ContentCache\n"
+        "source = Source('code', {'kind': 'url', 'url': sys.argv[1]})\n"
+        "result = ContentCache(Path(sys.argv[2])).acquire(source, None, offline=False)\n"
+        "print(result.path.read_bytes().decode())\n"
+    )
+    with _held_http_body() as (url, _, release):
+        release.set()
+        result = subprocess.run(
+            [sys.executable, str(caller), url, str(tmp_path / "cache")],
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "code"
+
+
+def test_cancel_stops_document_fetch_without_publishing_metadata(tmp_path):
+    with _held_http_body() as (url, started, release):
+        cache = ContentCache(tmp_path / "cache")
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            try:
+                future = executor.submit(cache.read_document, url, offline=False)
+                future.add_done_callback(lambda _: started.set())
+                started.wait()
+                assert not future.done(), future.result()
+                cache.cancel()
+                with pytest.raises(FetchError, match="cancelled"):
+                    future.result()
+                assert not release.is_set()
+                assert not cache.root.exists()
+            finally:
+                cache.cancel()
+                release.set()
 
 
 @pytest.mark.parametrize("content", [b"wrong contents", b"short", b"a longer payload"])
@@ -107,7 +214,7 @@ def test_share_follows_relative_snapshot_links(tmp_path):
     blob.write_bytes(b"weights")
     snapshot = tmp_path / "snapshot"
     snapshot.mkdir()
-    (snapshot / "weights").symlink_to("../blob")
+    (snapshot / "weights").symlink_to(Path("..") / "blob")
     output = tmp_path / "installed/package"
     output.mkdir(parents=True)
     share_file(snapshot / "weights", output / "weights")

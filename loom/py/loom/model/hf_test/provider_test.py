@@ -147,6 +147,120 @@ def test_cancelled_gate_stops_before_payload(tmp_path):
         assert hub.requests == [("GET", "/api/models/fixture/model/auth-check")]
 
 
+@pytest.mark.parametrize("second_reader", [False, True])
+def test_cancel_releases_body_and_sdk_cache_waiters(tmp_path, second_reader):
+    with running_hub(tmp_path) as hub:
+        hub.credentials.write_text("fixture-first")
+        hub.approved = True
+        hub.held_file = "code.loom"
+        provider = HuggingFace(endpoint=hub.endpoint, cache_dir=hub.cache_dir)
+        second_metadata = threading.Event()
+
+        def observe(method, path):
+            if method == "HEAD" and sum(m == "HEAD" for m, _ in hub.requests) == 2:
+                second_metadata.set()
+
+        hub.request_observer = observe
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            try:
+                first = executor.submit(provider.download, hub.source(), offline=False)
+                first.add_done_callback(lambda _: hub.body_started.set())
+                hub.body_started.wait()
+                assert not first.done(), first.result()
+                futures = [first]
+                if second_reader:
+                    second = executor.submit(
+                        provider.download, hub.source(), offline=False
+                    )
+                    second.add_done_callback(lambda _: second_metadata.set())
+                    second_metadata.wait()
+                    assert not second.done(), second.result()
+                    futures.append(second)
+                provider.cancelled.set()
+                for future in futures:
+                    with pytest.raises(FetchError, match="cancelled"):
+                        future.result()
+                assert not hub.release_body.is_set()
+                assert provider.cached_file(hub.source()) is None
+            finally:
+                provider.cancelled.set()
+                hub.release_body.set()
+        # A new operation can reuse the exact SDK cache after its writers stop.
+        replacement = HuggingFace(endpoint=hub.endpoint, cache_dir=hub.cache_dir)
+        path = replacement.download(hub.source(), offline=False)
+        assert path.read_bytes() == b"code"
+
+
+def test_transfer_process_preserves_gate_semantics(tmp_path):
+    with running_hub(tmp_path) as hub:
+        hub.credentials.write_text("fixture-first")
+        hub.approved = True
+        actions = []
+
+        def revoke(method, path):
+            if method == "HEAD":
+                hub.approved = False
+                hub.request_observer = None
+
+        def approve(action, delay, cancelled):
+            actions.append(action.document())
+            hub.approved = True
+
+        hub.request_observer = revoke
+        provider = HuggingFace(
+            endpoint=hub.endpoint, cache_dir=hub.cache_dir, wait_for_access=approve
+        )
+        assert provider.download(hub.source(), offline=False).read_bytes() == b"code"
+        assert len(actions) == 1
+        assert actions[0]["reason"] == "gate"
+        assert actions[0]["account"] == "first"
+        assert "fixture-first" not in json.dumps(actions)
+
+
+@pytest.mark.parametrize("operation", ["access", "account", "revision", "metadata"])
+def test_cancel_stops_metadata_and_identity_requests(tmp_path, operation):
+    with running_hub(tmp_path) as hub:
+        hub.credentials.write_text("fixture-first")
+        hub.approved = operation != "account"
+        started, release = threading.Event(), threading.Event()
+
+        def hold(method, path):
+            selected = {
+                "access": path.endswith("/auth-check"),
+                "account": path == "/api/whoami-v2",
+                "revision": "/revision/main" in path,
+                "metadata": method == "HEAD",
+            }[operation]
+            if selected:
+                hub.allow_disconnect = True
+                started.set()
+                release.wait()
+
+        hub.request_observer = hold
+        provider = HuggingFace(endpoint=hub.endpoint, cache_dir=hub.cache_dir)
+        call = {
+            "access": lambda: provider.ensure_access(hub.repository),
+            "account": lambda: provider.ensure_access(hub.repository),
+            "revision": lambda: provider.resolve_revision(
+                {"repository": hub.repository, "revision": "main"}, offline=False
+            ),
+            "metadata": lambda: provider.metadata(hub.source()),
+        }[operation]
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            try:
+                future = executor.submit(call)
+                future.add_done_callback(lambda _: started.set())
+                started.wait()
+                assert not future.done(), future.result()
+                provider.cancelled.set()
+                with pytest.raises(FetchError, match="cancelled"):
+                    future.result()
+                assert not release.is_set()
+            finally:
+                provider.cancelled.set()
+                release.set()
+
+
 def test_offline_miss_does_not_check_access(tmp_path):
     with running_hub(tmp_path) as hub:
         provider = HuggingFace(endpoint=hub.endpoint, cache_dir=hub.cache_dir)

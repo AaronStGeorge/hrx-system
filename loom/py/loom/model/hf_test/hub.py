@@ -37,6 +37,16 @@ class Hub:
         self.retry_after = None
         # Selected request sequence; credentials are deliberately not recorded.
         self.requests = []
+        # Optional observer of actual requests for deterministic transfer races.
+        self.request_observer = None
+        # A selected body can be held until the test exercises cancellation.
+        self.held_file = None
+        # Signals that headers have been sent and the selected body is held.
+        self.body_started = threading.Event()
+        # Explicit release, also set during fixture teardown.
+        self.release_body = threading.Event()
+        # Controlled cancellation may disconnect before headers or body complete.
+        self.allow_disconnect = False
         # SDK token file isolated from the executing user's credentials.
         self.credentials = root / "token"
         # SDK cache isolated from real models and retained only for the test.
@@ -87,11 +97,27 @@ def running_hub(root, files=None):
     ):
 
         class Handler(http.server.BaseHTTPRequestHandler):
+            def handle(self):
+                try:
+                    super().handle()
+                except (ConnectionResetError, ConnectionAbortedError):
+                    # Cancellation can also close an SDK connection before it
+                    # sends its next request, outside the held body's writer.
+                    if not state.allow_disconnect:
+                        raise
+
             def log_message(self, *_):
                 pass
 
             def response(
-                self, status, content=b"", error="", *, metadata=False, head=False
+                self,
+                status,
+                content=b"",
+                error="",
+                *,
+                metadata=False,
+                head=False,
+                hold=False,
             ):
                 self.send_response(status)
                 self.send_header("Content-Length", str(len(content)))
@@ -106,10 +132,24 @@ def running_hub(root, files=None):
                     )
                 self.end_headers()
                 if not head:
-                    self.wfile.write(content)
+                    if hold:
+                        state.allow_disconnect = True
+                        state.body_started.set()
+                        state.release_body.wait()
+                    try:
+                        self.wfile.write(content)
+                    except (
+                        BrokenPipeError,
+                        ConnectionResetError,
+                        ConnectionAbortedError,
+                    ):
+                        if not state.allow_disconnect:
+                            raise
 
             def serve_request(self, *, head=False):
                 state.requests.append(("HEAD" if head else "GET", self.path))
+                if state.request_observer is not None:
+                    state.request_observer("HEAD" if head else "GET", self.path)
                 path = urlsplit(self.path).path
                 token = self.headers.get("Authorization", "")
                 valid = token in ("Bearer fixture-first", "Bearer fixture-second")
@@ -147,6 +187,7 @@ def running_hub(root, files=None):
                             state.files[unquote(filename)],
                             metadata=True,
                             head=head,
+                            hold=unquote(filename) == state.held_file,
                         )
                 else:
                     self.response(404, head=head)
@@ -164,5 +205,6 @@ def running_hub(root, files=None):
             try:
                 yield state
             finally:
+                state.release_body.set()
                 server.shutdown()
                 thread.join()

@@ -13,7 +13,7 @@ import json
 import os
 import shutil
 import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
@@ -376,6 +376,8 @@ def install(
     plan: FetchPlan, cache: ContentCache, output: Path, *, materialize: str = "share"
 ) -> Path:
     """Publishes a card only after all selected bytes satisfy their commitments."""
+    if cache.cancelled.is_set():
+        raise FetchError("model acquisition cancelled")
     if materialize not in ("share", "copy"):
         raise ManifestError("materialize must be 'share' or 'copy'")
     directory = output.absolute()
@@ -411,8 +413,15 @@ def install(
                     )
             names = {future: key for key, future in unique.items()}
             try:
-                for future in as_completed(names):
-                    acquired[names[future]] = future.result()
+                pending = set(names)
+                while pending:
+                    # Windows Python versions before 3.14 cannot interrupt an
+                    # indefinite lock wait. Return to Python to deliver Ctrl-C.
+                    completed, pending = wait(
+                        pending, timeout=0.1, return_when=FIRST_COMPLETED
+                    )
+                    for future in completed:
+                        acquired[names[future]] = future.result()
             except BaseException:
                 cache.cancel()
                 for future in unique.values():
@@ -436,6 +445,8 @@ def install(
             ) as temporary:
                 staging = Path(temporary)
                 for name, source in plan.sources.items():
+                    if cache.cancelled.is_set():
+                        raise FetchError("model acquisition cancelled")
                     if name in present:
                         continue
                     destination = directory / name
@@ -456,6 +467,8 @@ def install(
                     "model.json": card,
                 }
                 for name, document in metadata.items():
+                    if cache.cancelled.is_set():
+                        raise FetchError("model acquisition cancelled")
                     destination = directory / name
                     if document is None or destination.exists():
                         continue

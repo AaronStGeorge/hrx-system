@@ -6,6 +6,7 @@
 
 import copy
 import hashlib
+import threading
 
 import pytest
 
@@ -132,3 +133,13 @@ def test_byte_verification_detects_same_length_substitution(tmp_path):
     path.write_bytes(b"evil")
     with pytest.raises(ManifestError, match="integrity mismatch"):
         identity.verify(path)
+
+
+def test_verification_observes_cancelled_operation(tmp_path):
+    path = tmp_path / "weights.data"
+    path.write_bytes(b"weights")
+    cancelled = threading.Event()
+    cancelled.set()
+    identity = FileIdentity("weights.data", 7, hashlib.sha256(b"weights").hexdigest())
+    with pytest.raises(InterruptedError, match="verification cancelled"):
+        identity.verify(path, cancelled=cancelled)

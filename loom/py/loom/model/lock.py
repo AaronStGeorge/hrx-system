@@ -14,6 +14,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 
 from .manifest import (
     ManifestError,
@@ -33,12 +34,16 @@ def origin_key(origin: str | dict) -> str:
     return json.dumps(origin, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
-def file_digest(path: Path) -> tuple[int, str]:
+def file_digest(path: Path, *, cancelled: Event | None = None) -> tuple[int, str]:
     """Hashes bytes with bounded working storage, including empty inputs."""
+    if cancelled is not None and cancelled.is_set():
+        raise InterruptedError("file verification cancelled")
     size = 0
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            if cancelled is not None and cancelled.is_set():
+                raise InterruptedError("file verification cancelled")
             size += len(chunk)
             digest.update(chunk)
     return size, digest.hexdigest()
@@ -62,8 +67,8 @@ class FileIdentity:
     # Immutable revision for an explicitly described repository file, if any.
     resolved: dict | None = None
 
-    def verify(self, path: Path) -> None:
-        size, digest = file_digest(path)
+    def verify(self, path: Path, *, cancelled: Event | None = None) -> None:
+        size, digest = file_digest(path, cancelled=cancelled)
         if size != self.size or digest != self.sha256:
             raise ManifestError(
                 f"integrity mismatch for {path}: expected {self.size} bytes / "
