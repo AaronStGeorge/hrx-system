@@ -378,7 +378,7 @@ class ModelCard:
             doc,
             "$",
             ("schema_version", "model", "programs", "services", "variants"),
-            ("$schema", "origins", "configurations", "qualification"),
+            ("$schema", "origins", "configurations"),
         )
         if "$schema" in doc:
             _string(doc["$schema"], "$.$schema")
@@ -473,7 +473,6 @@ class ModelCard:
             if "memory" in configuration:
                 _memory(configuration["memory"], path + ".memory")
             self.select(name)
-        _object(doc.get("qualification", {}), "$.qualification")
 
     def _validate_variants(self, origins: dict, services: dict, programs: dict):
         doc = self._document

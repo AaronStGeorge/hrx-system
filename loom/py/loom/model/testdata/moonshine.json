@@ -158,7 +158,6 @@
       "service": "transcription"
     }
   },
-  "qualification": {},
   "origins": {
     "checkpoint": {
       "kind": "hf",

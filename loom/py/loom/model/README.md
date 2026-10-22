@@ -20,9 +20,9 @@ selected facts through a deployment document's `model` reference.
 `$schema` associates it with an editor; consumers never download that URI to
 validate a card. JSON comments, duplicate object keys, nonfinite numbers,
 unknown structural fields, missing references, incompatible selections, and
-escaping destination paths are errors. The initial qualification field permits
-only an empty object. The Moonshine metadata example declares inputs and service
-geometry; it makes no executable qualification claim.
+escaping destination paths are errors. The Moonshine metadata example declares
+inputs and service geometry; execution evidence belongs to the model
+implementation and its tests.
 
 Provider-set names have no encoding semantics. A set named `source` may include
 bytecode libraries. `inputs` and `libraries` are arrays of path strings or

@@ -578,7 +578,7 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   IREE_RETURN_IF_ERROR(loom_model_check_fields(
       &root,
       "$schema schema_version model origins programs services variants "
-      "configurations qualification"));
+      "configurations"));
   loom_model_selection_t* selection = &card->selection;
   loom_model_json_object_t metadata;
   IREE_RETURN_IF_ERROR(loom_model_object_field(

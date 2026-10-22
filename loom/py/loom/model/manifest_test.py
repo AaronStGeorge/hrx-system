@@ -218,7 +218,6 @@ def test_moonshine_metadata_is_not_a_qualification_claim():
     )
     assert selected.files["asset/text-vocabulary.data"].format == "huggingface-json"
     assert "asset/config.json" not in selected.files
-    assert document["qualification"] == {}
 
 
 def test_origins_separate_acquisition_from_placement():
