@@ -165,12 +165,13 @@ TEST_F(FactPropagationTest, OperandMutationRequeuesUsersWhenFactsRemainEqual) {
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(7), i32,
                                           LOOM_LOCATION_UNKNOWN, &second));
   loom_op_t* producer = nullptr;
-  IREE_ASSERT_OK(loom_test_neg_build(&builder_,
-                                     loom_test_constant_result(first), i32,
-                                     LOOM_LOCATION_UNKNOWN, &producer));
+  IREE_ASSERT_OK(loom_test_addi_build(
+      &builder_, loom_test_constant_result(first),
+      loom_test_constant_result(first), i32, LOOM_LOCATION_UNKNOWN, &producer));
   loom_op_t* user = nullptr;
-  IREE_ASSERT_OK(loom_test_neg_build(&builder_, loom_test_neg_result(producer),
-                                     i32, LOOM_LOCATION_UNKNOWN, &user));
+  IREE_ASSERT_OK(loom_test_addi_build(
+      &builder_, loom_test_addi_result(producer),
+      loom_test_constant_result(first), i32, LOOM_LOCATION_UNKNOWN, &user));
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
@@ -186,12 +187,13 @@ TEST_F(FactPropagationTest, OperandMutationRequeuesUsersWhenFactsRemainEqual) {
   loom_rewriter_attach_value_facts(&rewriter, facts);
 
   const loom_value_facts_t before =
-      loom_rewriter_value_facts(&rewriter, loom_test_neg_result(producer));
+      loom_rewriter_value_facts(&rewriter, loom_test_addi_result(producer));
+  EXPECT_EQ(before.range_lo, 14);
   IREE_ASSERT_OK(loom_rewriter_set_operand(&rewriter, producer, 0,
                                            loom_test_constant_result(second)));
   EXPECT_TRUE(loom_value_fact_table_facts_equal_for_type(
       module_, i32, facts, before, facts,
-      loom_rewriter_value_facts(&rewriter, loom_test_neg_result(producer))));
+      loom_rewriter_value_facts(&rewriter, loom_test_addi_result(producer))));
 
   bool saw_producer = false;
   bool saw_user = false;
@@ -1300,6 +1302,141 @@ TEST_F(FactPropagationTest, NonEquationEditsPreserveCyclicFacts) {
   loom_pass_value_fact_owner_deinitialize(&owner);
   iree_arena_deinitialize(&arena);
 }
+
+enum class BranchResultDependency { kNoResult, kIndependent, kChangedValue };
+
+class BranchFactDependencyTest
+    : public FactPropagationTest,
+      public ::testing::WithParamInterface<BranchResultDependency> {};
+
+TEST_P(BranchFactDependencyTest, BodyEditsPublishThroughYieldedValues) {
+  const bool has_result = GetParam() != BranchResultDependency::kNoResult;
+  const bool yields_changed_value =
+      GetParam() == BranchResultDependency::kChangedValue;
+  const auto i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* constants[3] = {};
+  const int64_t values[] = {1, 2, 9};
+  for (int i = 0; i < 3; ++i) {
+    IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(values[i]),
+                                            i32, LOOM_LOCATION_UNKNOWN,
+                                            &constants[i]));
+  }
+  loom_op_t* branch = nullptr;
+  IREE_ASSERT_OK(loom_test_branch_build(
+      &builder_, loom_test_constant_result(constants[0]), &i32,
+      has_result ? 1 : 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &branch));
+  loom_op_t* producers[2] = {};
+  for (int i = 0; i < 2; ++i) {
+    loom_region_t* region = loom_op_regions(branch)[i];
+    loom_builder_t nested = builder_;
+    loom_builder_enter_region(&nested, branch, region);
+    loom_builder_set_block(&nested, loom_region_entry_block(region));
+    IREE_ASSERT_OK(
+        loom_test_addi_build(&nested, loom_test_constant_result(constants[1]),
+                             loom_test_constant_result(constants[1]), i32,
+                             LOOM_LOCATION_UNKNOWN, &producers[i]));
+    const auto value = loom_test_addi_result(producers[i]);
+    loom_op_t* use = nullptr;
+    IREE_ASSERT_OK(
+        loom_test_use_build(&nested, &value, 1, LOOM_LOCATION_UNKNOWN, &use));
+    const auto yielded =
+        yields_changed_value ? value : loom_test_constant_result(constants[1]);
+    loom_op_t* yield = nullptr;
+    IREE_ASSERT_OK(loom_test_yield_build(&nested, &yielded, has_result ? 1 : 0,
+                                         LOOM_LOCATION_UNKNOWN, &yield));
+  }
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &return_op));
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_pass_value_fact_owner_t owner;
+  loom_pass_value_fact_owner_initialize(&block_pool_, &owner);
+  loom_value_fact_table_t* facts = nullptr;
+  const auto scope = loom_pass_value_fact_scope_function(function_);
+  IREE_ASSERT_OK(
+      loom_pass_value_fact_owner_acquire(&owner, module_, scope, &facts));
+  loom_rewriter_t rewriter;
+  loom_rewriter_initialize(&rewriter, module_, &arena);
+  IREE_ASSERT_OK(loom_rewriter_enable_worklist(&rewriter));
+  loom_rewriter_attach_value_facts(&rewriter, facts);
+  struct SummaryObserver {
+    // Original production listener retained for queue coalescing.
+    decltype(facts->summary_computed) previous;
+    // Number of summaries completed since the last mutation.
+    size_t count = 0;
+  } observer{facts->summary_computed};
+  facts->summary_computed = {
+      .user_data = &observer,
+      .fn =
+          [](void* user_data, const loom_op_t* op) {
+            auto* observer = static_cast<SummaryObserver*>(user_data);
+            ++observer->count;
+            observer->previous.fn(observer->previous.user_data, op);
+          },
+  };
+  auto publish = [&](bool expects_summary) {
+    IREE_ASSERT_OK(loom_rewriter_propagate_value_facts(&rewriter));
+    EXPECT_EQ(observer.count != 0, expects_summary);
+    observer.count = 0;
+    // Rewrite policy still sees the parent in every case.
+    bool visited_branch = false;
+    while (auto* op = loom_rewriter_pop(&rewriter)) {
+      visited_branch |= op == branch;
+    }
+    EXPECT_TRUE(visited_branch);
+    loom_pass_value_fact_owner_t fresh_owner;
+    loom_pass_value_fact_owner_initialize(&block_pool_, &fresh_owner);
+    loom_value_fact_table_t* fresh = nullptr;
+    IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(&fresh_owner, module_,
+                                                      scope, &fresh));
+    for (auto* op : {producers[0], producers[1], branch}) {
+      for (uint16_t i = 0; i < op->result_count; ++i) {
+        const auto value = loom_op_results(op)[i];
+        EXPECT_TRUE(loom_value_fact_table_facts_equal_for_type(
+            module_, i32, facts, loom_value_fact_table_lookup(facts, value),
+            fresh, loom_value_fact_table_lookup(fresh, value)));
+      }
+    }
+    loom_pass_value_fact_owner_deinitialize(&fresh_owner);
+  };
+  // Local body consumers do not change an enclosing branch's result equation.
+  // A yielded value does, even when the branch's selector remains unchanged.
+  IREE_ASSERT_OK(loom_rewriter_set_operand(
+      &rewriter, producers[0], 0, loom_test_constant_result(constants[2])));
+  publish(yields_changed_value);
+  EXPECT_EQ(
+      loom_rewriter_value_facts(&rewriter, loom_test_addi_result(producers[0]))
+          .range_lo,
+      11);
+  // Replacing a terminator publishes its payload, but an empty branch yield
+  // has no outward equation to solve.
+  auto* old_yield =
+      loom_region_entry_block(loom_op_regions(branch)[0])->last_op;
+  loom_builder_set_before(&rewriter.builder, old_yield);
+  const auto yielded = yields_changed_value
+                           ? loom_test_addi_result(producers[0])
+                           : loom_test_constant_result(constants[1]);
+  loom_op_t* replacement = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&rewriter.builder, &yielded,
+                                       has_result ? 1 : 0,
+                                       LOOM_LOCATION_UNKNOWN, &replacement));
+  IREE_ASSERT_OK(loom_rewriter_erase(&rewriter, old_yield));
+  publish(has_result);
+  // Direct selector edits still refresh execution facts in both nested bodies.
+  IREE_ASSERT_OK(loom_test_constant_rewrite_value(&rewriter, constants[0],
+                                                  loom_attr_i64(0)));
+  publish(true);
+  loom_rewriter_deinitialize(&rewriter);
+  loom_pass_value_fact_owner_deinitialize(&owner);
+  iree_arena_deinitialize(&arena);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ResultDependencies, BranchFactDependencyTest,
+    ::testing::Values(BranchResultDependency::kNoResult,
+                      BranchResultDependency::kIndependent,
+                      BranchResultDependency::kChangedValue));
 
 class ConditionInductionFactsRewriteTest
     : public FactPropagationTest,
