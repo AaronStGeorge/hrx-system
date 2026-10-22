@@ -109,11 +109,15 @@ static iree_status_t loom_serve_text_load_prepare(
   loom_serve_text_model_t* model = load->model;
   const loom_serve_text_options_t* options = &load->options;
   if (options->mode == LOOM_SERVE_TEXT_MODE_GENERATE) {
-    IREE_RETURN_IF_ERROR(loom_serve_tokenizer_load_start(
+    IREE_RETURN_IF_ERROR((options->sources.card
+                              ? loom_serve_tokenizer_load_start_named
+                              : loom_serve_tokenizer_load_start)(
         loom_serve_host_compiler_sink(
             loom_serve_device_host(model->device_owner)),
-        &options->sources, options->tokenizer_path, load->event.wake,
-        load->event.user_data, model->host_allocator, &load->tokenizer_load));
+        &options->sources,
+        options->sources.card ? IREE_SV("text") : options->tokenizer_path,
+        load->event.wake, load->event.user_data, model->host_allocator,
+        &load->tokenizer_load));
   }
   model->shape_count = options->epoch_count;
   model->context_capacity = options->context_capacity;

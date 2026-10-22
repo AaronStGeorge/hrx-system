@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../../../py/loom/model/model-card.v1.schema.json",
   "schema_version": 1,
   "model": {
     "id": "loom-fixture/text",

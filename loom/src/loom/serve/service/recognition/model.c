@@ -464,16 +464,19 @@ static iree_status_t loom_serve_recognition_prepare(
   }
   if (iree_status_is_ok(status) && metadata[0].data_length) {
     char* path = NULL;
-    status = loom_serve_path_resolve(
-        options->asset_directory,
-        iree_make_string_view((const char*)metadata[0].data,
-                              metadata[0].data_length),
-        host_allocator, &path);
+    iree_string_view_t tokenizer = iree_make_string_view(
+        (const char*)metadata[0].data, metadata[0].data_length);
+    if (!options->sources.card) {
+      status = loom_serve_path_resolve(options->asset_directory, tokenizer,
+                                       host_allocator, &path);
+      tokenizer = iree_make_cstring_view(path);
+    }
     if (iree_status_is_ok(status)) {
-      status = loom_serve_tokenizer_load_start(
+      status = (options->sources.card ? loom_serve_tokenizer_load_start_named
+                                      : loom_serve_tokenizer_load_start)(
           loom_serve_host_compiler_sink(loom_serve_device_host(model->owner)),
-          &options->sources, iree_make_cstring_view(path), wake, user_data,
-          host_allocator, out_tokenizer_load);
+          &options->sources, tokenizer, wake, user_data, host_allocator,
+          out_tokenizer_load);
     }
     iree_allocator_free(host_allocator, path);
   }
@@ -601,9 +604,10 @@ static iree_status_t loom_serve_recognition_create_control(
                                            host_allocator, &native_modules[2]);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_program_link(module,
-                                     (iree_vm_module_span_t){native_modules, 3},
-                                     host_allocator, &model->control.program);
+    status = loom_serve_program_link_service(
+        module, loom_serve_preparation_card(model->preparation),
+        (iree_vm_module_span_t){native_modules, 3}, host_allocator,
+        &model->control.program);
   }
   iree_vm_module_release(native_modules[0]);
   iree_vm_module_release(native_modules[1]);
@@ -884,7 +888,7 @@ static iree_status_t loom_serve_recognition_load_prepare(
   const iree_string_view_t roots[] = {
       IREE_SVL("prepare_request"), IREE_SVL("prepare_work"),
       IREE_SVL("prepare_batch"), IREE_SVL("generate"), IREE_SVL("complete")};
-  iree_status_t status = loom_serve_program_compile(
+  iree_status_t status = loom_serve_program_compile_service(
       loom_serve_host_target_environment(loom_serve_device_host(model->owner)),
       model->control.environment, &load->options.sources,
       load->options.sources.control, IREE_ARRAYSIZE(roots), roots,

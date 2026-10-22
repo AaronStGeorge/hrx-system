@@ -111,9 +111,7 @@ TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   EXPECT_EQ(resolved.text.context_capacity, 64u);
   EXPECT_EQ(resolved.text.prefill_capacity, 32u);
   EXPECT_EQ(resolved.text.max_tokens, 4u);
-  EXPECT_EQ(
-      std::string(resolved.text.tokenizer.data, resolved.text.tokenizer.size),
-      "vocabulary.data");
+  EXPECT_EQ(resolved.text.tokenizer.size, 0u);
   EXPECT_EQ(std::string(resolved.sources.package_directory.data,
                         resolved.sources.package_directory.size),
             "cards");

@@ -456,10 +456,12 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
     }
   }
   if (card) {
-    if (model->kind != LOOM_SERVE_MODEL_KIND_TEXT) {
+    if (model->kind != LOOM_SERVE_MODEL_KIND_TEXT &&
+        model->kind != LOOM_SERVE_MODEL_KIND_RECOGNITION &&
+        model->kind != LOOM_SERVE_MODEL_KIND_ACTIVITY) {
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "this host supports portable model cards for "
-                              "the text service");
+                              "the text, recognition, and activity services");
     }
     const int facts[] = {DEFINITION_PREPARE,   DEFINITION_CONTROL,
                          DEFINITION_SOURCES,   DEFINITION_WEIGHTS,
@@ -517,6 +519,9 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
   if (model->kind == LOOM_SERVE_MODEL_KIND_IMAGE) {
     return loom_serve_model_configuration_image(fields, &model->image,
                                                 host_allocator);
+  }
+  if (card) {
+    return iree_ok_status();
   }
   return loom_serve_model_configuration_string(&fields[DEFINITION_ASSETS],
                                                host_allocator, &model->assets);
@@ -759,32 +764,6 @@ iree_status_t loom_serve_model_configuration_resolve(
       model->document, iree_string_view_empty(), NULL, sources, host_allocator,
       out_model);
   loom_serve_sources_free(sources, host_allocator);
-  if (iree_status_is_ok(status) && model->kind == LOOM_SERVE_MODEL_KIND_TEXT) {
-    const loom_model_tokenizer_t* tokenizer = loom_model_selection_tokenizer(
-        loom_model_card_selection(out_model->sources.card), IREE_SV("text"));
-    if (!tokenizer) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "text service requires tokenizers.text");
-    } else if ((tokenizer->file.format.size &&
-                !iree_string_view_equal(tokenizer->file.format,
-                                        IREE_SV("huggingface-json"))) ||
-               (!tokenizer->file.format.size &&
-                !iree_string_view_ends_with(tokenizer->file.path,
-                                            IREE_SV(".json")))) {
-      status = iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                                "text service requires a huggingface-json "
-                                "tokenizer; specify format for a renamed file");
-    } else {
-      char* path = NULL;
-      status = iree_allocator_clone(
-          host_allocator,
-          iree_make_const_byte_span(tokenizer->file.path.data,
-                                    tokenizer->file.path.size),
-          (void**)&path);
-      out_model->text.tokenizer =
-          iree_make_string_view(path, tokenizer->file.path.size);
-    }
-  }
   if (iree_status_is_ok(status)) {
     out_model->device_index = model->device_index;
   } else {

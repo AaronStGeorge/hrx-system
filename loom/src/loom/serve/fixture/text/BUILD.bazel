@@ -14,7 +14,6 @@ package(default_visibility = ["//visibility:private"])
 
 exports_files(
     SOURCE_FILES + [
-        "card.json",
         "portable_chat.loom",
         "tokenizer_merging.json",
         "service.loom",
@@ -119,31 +118,21 @@ loom_generated_file(
     visibility = ["//visibility:public"],
 )
 
-loom_generated_file(
-    name = "card_weights",
-    args = [
-        "--card=$(rootpath :card.json)",
-        "--file=weights.safetensors",
-    ],
-    generator = "//loom/py/loom/model:inline_file",
-    inputs = ["card.json"],
-    output = "weights.safetensors",
-    output_flag = "--output=",
-)
-
 loom_model(
     name = "card_model",
     assets = {
-        ":weights.safetensors": "weights.safetensors",
+        ":bias.data": "bias.data",
+        ":metadata.safetensors": "metadata.safetensors",
         "tokenizer.json": "tokenizer.json",
+        "weights.loom": "weights.loom",
     },
-    card = "card.json",
-    configuration = "default",
+    card = "native.card.json",
+    configuration = "check",
     files = {
-        "advance.loom": "program/advance.loom",
-        "control.loom": "program/control.loom",
-        "prepare.loom": "program/prepare.loom",
-        "weights.loom": "program/weights.loom",
+        "advance.loom": "advance.loom",
+        "control.loom": "control.loom",
+        "prepare.loom": "prepare.loom",
+        "service.loom": "service.loom",
     },
     model_name = "fixture-text",
     tags = ["skip-bazel_to_cmake"],

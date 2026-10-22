@@ -17,12 +17,26 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--card", type=Path, required=True)
     parser.add_argument("--file", required=True)
+    parser.add_argument("--configuration")
+    parser.add_argument("--service")
+    parser.add_argument("--variant")
+    parser.add_argument("--programs")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    files = ModelCard.parse(args.card.read_text()).document["files"]
-    if args.file not in files or files[args.file]["origin"]["kind"] != "inline":
+    files = (
+        ModelCard.parse(args.card.read_text(encoding="utf-8"))
+        .select(
+            args.configuration,
+            service=args.service,
+            variant=args.variant,
+            programs=args.programs,
+        )
+        .files
+    )
+    origin = files[args.file].origin if args.file in files else None
+    if not isinstance(origin, dict) or origin.get("kind") != "inline":
         raise ManifestError(f"{args.file!r} is not a declared inline file")
-    args.output.write_bytes(base64.b64decode(files[args.file]["origin"]["base64"]))
+    args.output.write_bytes(base64.b64decode(origin["base64"], validate=True))
 
 
 if __name__ == "__main__":

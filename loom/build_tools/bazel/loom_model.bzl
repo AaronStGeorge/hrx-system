@@ -4,39 +4,57 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Model-card selected program linking and native deployment artifacts."""
+"""Model-card selected providers and native deployment artifacts."""
 
 _LINK_TOOLCHAIN = Label("//loom/build_tools/bazel:link_toolchain_type")
 
 def _loom_model_impl(ctx):
-    output = ctx.actions.declare_directory(ctx.label.name)
-    files = {}
+    card = ctx.actions.declare_file(ctx.label.name + "/model.json")
+    deployment = ctx.actions.declare_file(ctx.label.name + "/serve.json")
+    outputs = [card, deployment]
+    runfiles = [card, deployment]
     inputs = [ctx.file.card]
-    assets = []
+    files = {}
+    assets = {}
+    names = {}
+    if len(ctx.attr.files | ctx.attr.assets) != len(ctx.attr.files) + len(ctx.attr.assets):
+        fail("files and assets must have disjoint targets")
     for target, name in (ctx.attr.files | ctx.attr.assets).items():
+        if not name or any([part in ["", ".", ".."] for part in name.split("/")]) or "\\" in name or ":" in name:
+            fail("expected normalized relative model path: %s" % name)
+        if name.split("/")[0] in ["model.json", "serve.json"] or name in names:
+            fail("conflicting model path: %s" % name)
+        names[name] = True
         artifacts = target[DefaultInfo].files.to_list()
-        if len(artifacts) != 1:
+        if len(artifacts) != 1 or artifacts[0].is_directory:
             fail("%s must supply exactly one file for %s" % (target.label, name))
-        if name in files:
-            fail("duplicate logical file %s" % name)
         artifact = artifacts[0]
-        files[name] = {"path": artifact.path, "runtime_path": artifact.short_path}
-        inputs.append(artifact)
-        if target in ctx.attr.assets:
-            assets.append(artifact)
-    if len(ctx.attr.files) + len(ctx.attr.assets) != len(files):
-        fail("files and assets must have disjoint bindings")
+
+        # Importers resolve auxiliary inputs relative to the provider's physical
+        # path. Staging preserves the card namespace without copying input bytes.
+        staged = ctx.actions.declare_file(ctx.label.name + ".input/" + name)
+        ctx.actions.symlink(output = staged, target_file = artifact)
+        inputs.append(staged)
+        output = ctx.actions.declare_file(ctx.label.name + "/" + name)
+        runfiles.append(output)
+        if target in ctx.attr.files:
+            files[name] = {"input": staged.path, "output": output.path}
+            outputs.append(output)
+        else:
+            ctx.actions.symlink(output = output, target_file = artifact)
+            assets[name] = output.path
     plan = ctx.actions.declare_file(ctx.label.name + ".plan.json")
     ctx.actions.write(plan, json.encode({
-        "assets": ctx.attr.assets.values(),
+        "assets": assets,
         "card": ctx.file.card.path,
         "configuration": ctx.attr.configuration,
         "encoding": ctx.attr.encoding,
         "files": files,
+        "input_root": card.dirname + ".input",
         "name": ctx.attr.model_name,
-        "output": output.path,
+        "output_card": card.path,
+        "output_deployment": deployment.path,
         "programs": ctx.attr.programs if ctx.attr.programs else None,
-        "runtime_output": output.short_path,
     }))
     linker = ctx.toolchains[_LINK_TOOLCHAIN].tool
     ctx.actions.run(
@@ -44,23 +62,23 @@ def _loom_model_impl(ctx):
         arguments = ["--plan", plan.path, "--linker", linker.files_to_run.executable.path],
         inputs = depset(inputs + [plan]),
         tools = [linker.files_to_run],
-        outputs = [output],
+        outputs = outputs,
         mnemonic = "LoomModel",
-        progress_message = "Linking model configuration %s" % ctx.label,
+        progress_message = "Building model configuration %s" % ctx.label,
     )
-    return [DefaultInfo(
-        files = depset([output]),
-        runfiles = ctx.runfiles(files = assets + [output]),
-    )]
+    return [
+        DefaultInfo(files = depset([deployment]), runfiles = ctx.runfiles(files = runfiles)),
+        OutputGroupInfo(model_card = depset([card]), model_files = depset(runfiles)),
+    ]
 
 loom_model = rule(
     implementation = _loom_model_impl,
     attrs = {
-        "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Runtime asset files mapped to logical model-card paths."),
+        "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Non-index files (parameters, tokenizers, and provider data) mapped to card paths; materialized as symlinks."),
         "card": attr.label(mandatory = True, allow_single_file = [".json"]),
         "configuration": attr.string(mandatory = True),
         "encoding": attr.string(default = "bc", values = ["text", "bc"]),
-        "files": attr.label_keyed_string_dict(allow_files = True, doc = "Declared files mapped to logical model-card paths."),
+        "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; normalized with the configured linker."),
         "model_name": attr.string(mandatory = True),
         "programs": attr.string(),
         "_builder": attr.label(default = Label("//loom/py/loom/model:build"), executable = True, cfg = "exec"),

@@ -30,6 +30,15 @@ iree_status_t loom_serve_tokenizer_load_start(
     iree_string_view_t locator, void (*wake)(void* user_data), void* user_data,
     iree_allocator_t host_allocator, loom_serve_tokenizer_load_t** out_load);
 
+// Resolves a code-facing tokenizer identity from sources->card and starts the
+// same owned load. The card must already be selected. Missing identities and
+// unsupported formats fail before submission and owe no wake. Explicit formats
+// permit arbitrary file names; inference accepts the .json encoding only.
+iree_status_t loom_serve_tokenizer_load_start_named(
+    loomc_task_sink_t sink, const loom_serve_sources_t* sources,
+    iree_string_view_t name, void (*wake)(void* user_data), void* user_data,
+    iree_allocator_t host_allocator, loom_serve_tokenizer_load_t** out_load);
+
 // Returns false without modifying arguments while construction is pending.
 // Otherwise joins the result into status, transfers tokenizer ownership, and
 // frees and clears the operation. A NULL operation is already joined and leaves

@@ -11,7 +11,11 @@ load(":sources.bzl", "SOURCE_FILES")
 package(default_visibility = ["//visibility:private"])
 
 exports_files(
-    SOURCE_FILES + ["card.json"],
+    SOURCE_FILES + [
+        "activity.json",
+        "card.json",
+        "service.loom",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -28,6 +32,7 @@ loom_model(
         ":generate_module": "generate.loombc",
         "control.loom": "control.loom",
         "prepare.loom": "prepare.loom",
+        "service.loom": "service.loom",
     },
     model_name = "recognition",
     tags = ["skip-bazel_to_cmake"],
@@ -43,8 +48,41 @@ loom_model(
         ":generate_module": "generate.loombc",
         "control.loom": "control.loom",
         "prepare.loom": "prepare.loom",
+        "service.loom": "service.loom",
     },
     model_name = "recognition",
+    tags = ["skip-bazel_to_cmake"],
+    visibility = ["//visibility:public"],
+)
+
+loom_model(
+    name = "card_activity",
+    card = "card.json",
+    configuration = "activity",
+    encoding = "bc",
+    files = {
+        ":generate_module": "generate.loombc",
+        "control.loom": "control.loom",
+        "prepare.loom": "prepare.loom",
+        "service.loom": "service.loom",
+    },
+    model_name = "activity",
+    tags = ["skip-bazel_to_cmake"],
+    visibility = ["//visibility:public"],
+)
+
+loom_model(
+    name = "card_activity_text",
+    card = "card.json",
+    configuration = "activity",
+    encoding = "text",
+    files = {
+        ":generate_module": "generate.loombc",
+        "control.loom": "control.loom",
+        "prepare.loom": "prepare.loom",
+        "service.loom": "service.loom",
+    },
+    model_name = "activity",
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )

@@ -6,6 +6,6 @@
 
 """Portable model descriptions and explicit program/asset selections."""
 
-from .manifest import ManifestError, ModelCard, Selection
+from .manifest import ManifestError, ModelCard, ModelFile, Selection
 
-__all__ = ["ManifestError", "ModelCard", "Selection"]
+__all__ = ["ManifestError", "ModelCard", "ModelFile", "Selection"]

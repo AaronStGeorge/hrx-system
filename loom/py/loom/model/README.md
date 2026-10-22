@@ -1,87 +1,89 @@
 # Model cards
 
-A model card describes a published model independently of the application that
-hosts it. `ModelCard.parse` validates the JSON and `select` resolves a canonical
-configuration to one exact program and asset closure. Neither operation reads
-weights, invokes a compiler, or performs network access.
-
-The card separates these sections:
+A model card describes a published model independently of its host application.
+`ModelCard.parse` validates plain JSON, and `select` resolves one service,
+variant, and provider set. Neither operation reads weights, invokes a compiler,
+or performs network access. The native `loom-serve` consumer reads the same
+selected facts through a deployment document's `model` reference.
 
 | Section | Meaning |
 | --- | --- |
-| `model` | Original model identity and implementation provenance. |
-| `files` | Package-relative file names, acquisition origins, and optional size and SHA-256 identities. |
-| `entrypoints` | Callable kind, named root groups, and named sets of linker inputs and libraries. |
-| `variants` | Compatible program selections, parameter bindings, and model-owned options. |
-| `configurations` | Named selections and canonical execution, request, and workload settings. |
-| `qualification` (optional) | Explicit configurations and variant/program overrides for checks and benchmarks. |
+| `model` | Original training-source identity and implementation provenance. |
+| `origins` | Shared acquisition roots, referenced as `@name/path`. |
+| `programs` | Named sets of linker inputs, libraries, auxiliary data, and default JIT configuration. |
+| `services` | Named service contracts with independent ABI versions. |
+| `variants` | Compatible provider sets, fixed JIT configuration, scoped parameters, and named tokenizers. |
+| `configurations` | Canonical selections with execution, request, workload, and preparation options. |
 
-`schema_version` is `1`. Unknown structural fields, duplicate JSON object keys,
-missing references, incompatible selections, and escaping package paths are
-errors. Model-specific interface, constraint, workload, and option values retain
-their JSON types; the implementing model or workload owns their interpretation.
+`schema_version: 1` selects the bundled [editor schema](model-card.v1.schema.json).
+`$schema` associates it with an editor; consumers never download that URI to
+validate a card. JSON comments, duplicate object keys, nonfinite numbers,
+unknown structural fields, missing references, incompatible selections, and
+escaping destination paths are errors. The initial qualification field permits
+only an empty object. The Moonshine metadata example declares inputs and service
+geometry; it makes no executable qualification claim.
 
-Program selection names have no format semantics. A selection named `source`
-can contain bytecode libraries. Every selection has arrays of `inputs` and
-`libraries`; a provider is a file name or an object with `file`, optional
-`format`, importer `options`, and auxiliary `data` file names. Format detection
-and importer options use the public linker's contract. Files describe content;
-root groups describe what the selected program provides. `directory` names the
-program context for source-declared relative paths. Provider `data` includes
-files opened during preparation, such as a weight policy that is absent from
-the linker index. A linked bytecode file
-still contains IR for runtime linking and specialization.
+Provider-set names have no encoding semantics. A set named `source` may include
+bytecode libraries. `inputs` and `libraries` are arrays of path strings or
+objects with `path`, optional `format`, importer `options`, and auxiliary `data`.
+Auxiliary files remain outside the linker index. A program's `directory` names
+its execution context without rebasing the card's file paths.
 
-A variant states which program selections it supports for each entrypoint.
-Bindings refer to one file or to a directory with an explicit member inventory.
-A directory is never an implicit download wildcard. Components have their own
-root groups, program inputs, and bindings, and participate in the selected file
-closure. Component program selection uses the containing selection's name.
+Every file path describes local placement relative to the card. Its `origin`
+describes acquisition separately. For example:
 
-Variant options describe model facts. A configuration may override only option
-names explicitly declared by its entrypoint. This prevents a generic command
-line from silently replacing fixed model geometry. The native model still
-validates the option values it understands.
+```json
+{
+  "path": "vocabulary.data",
+  "origin": "@checkpoint/tokenizer/tokenizer.json",
+  "format": "huggingface-json"
+}
+```
 
-Origins describe local authoring files, pinned Hugging Face files, HTTPS files,
-inline content, or declared build outputs. `build` records require a producer;
-they do not imply an uploaded release exists. The Moonshine example in
-`testdata/moonshine.json` records its experimental implementation and exact
-checkpoint inputs; its empty qualification table makes no execution claim.
+A program set or parameter scope can declare an origin directory such as
+`@checkpoint/`. Entries without an explicit origin append their destination path
+exactly once. Without either declaration, a file's origin is its card-relative
+path. Model provenance is never an implicit acquisition default. Hashes and
+resolved source identities belong to acquisition locks, outside the model card.
 
-## Bazel serving integration
+`parameters.<scope>.files` is an ordered shard list populating one parameter
+index. `tokenizers.<identity>` declares a tokenizer, independently of its
+filename. Both accept strings or explicit file descriptors. Variant `config`
+scalars override program defaults and reach preparation and native JITs.
+Canonical `options` may use only names accepted by the selected service.
 
-`loom_model` is exported by `//loom/build_tools/bazel:defs.bzl`. It takes a card,
-a configuration name, an optional program selection, an output encoding, and
-Bazel targets mapped to logical file names. `files` supplies program and
-auxiliary build inputs; `assets` supplies the selected runtime file bindings.
-These targets supply already
-materialized inputs; this rule performs no downloads or weight transformations.
-All selected files must be declared, including files whose published origin is
-inline or remote. Directory bindings require the declared files to preserve the
-model's member layout under one root.
+A service's kind and version define exported roles, such as `text_prepare_v1`.
+An omitted version selects development names such as `text_prepare`; it does
+not select the latest ABI. Several services and revisions may share a provider
+set. Schema, service, and bytecode revisions have independent compatibility
+checks. Native support is documented in the
+[serving model contract](../../../docs/src/serving/model-documents.md).
 
-The configured public `loom-link` toolchain links each root group, retains the
-provider universe needed by dynamically declared stages, and emits a directory
-containing programs and `serve.json`. `serve.json` is the current native serving
-configuration and refers to asset runfiles without copying them. The native
-adapter requires `prepare` and `control` root groups. It does not make the
-portable card itself a native `loom-serve --model` input.
+## Bazel integration
 
-Program files and their auxiliary data retain their declared relative namespace
-in the output. Runtime asset bindings refer to runfiles without copying weights.
-The input card and original program inputs are build dependencies, but are not
-test runfiles. Documentation
-changes that leave selected outputs unchanged can reuse test results. Tests
-still depend on the declared inputs, generated deployment, linked programs, and
-runner. A cached build action alone does not establish a cached test result.
+`loom_model`, exported by `//loom/build_tools/bazel:defs.bzl`, takes a card,
+canonical configuration, optional provider-set override, output encoding, and
+explicit Bazel inputs. `files` maps targets to the selected linker-provider
+paths. `assets` maps targets to all remaining selected paths, including provider
+auxiliary data, parameters, and tokenizers. Each target supplies exactly one
+file; missing, extra, overlapping, and conflicting declarations fail.
 
-The recognition fixture exercises mixed text/bytecode providers with both
-bytecode and linked text outputs through native serving, including concurrent
-streams. Model publication actions use Bazel runfiles; their fixture targets
-carry `skip-bazel_to_cmake`. The existing native deployment fixtures also retain
-CMake coverage.
+The rule performs no acquisition. It normalizes each provider through the
+configured public `loom-link` toolchain, preserving provider order and roles.
+It does not choose service roots or specialize model geometry. Auxiliary files
+and weights appear at their declared paths as symlink artifacts. Provider
+importers see the same relative namespace during compilation.
 
-The weighted text fixture also consumes an inline checkpoint through normal
-parameter activation, including a source-declared weight policy. Its server
-runs from a different working directory to check document-relative binding.
+The output contains the selected portable `model.json`, normalized providers,
+assets, and a separate `serve.json` referencing that card. The default output is
+`serve.json`; the `model_card` and `model_files` output groups expose the card
+and complete package for publication. The input card and staged source files
+are action inputs, not runtime dependencies of the resulting package.
+
+Tests consume the emitted package and their runner. Normal Bazel content
+identity determines reuse: a build rerun that produces identical outputs does
+not itself invalidate a test; a changed executable, selected card, or asset does.
+The weighted text fixture checks an actual response through this path. The
+recognition fixture checks activity and transcription as independent services
+sharing one provider universe, including concurrent streams and both bytecode
+and text build outputs.

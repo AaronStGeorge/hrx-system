@@ -8,6 +8,8 @@ load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_library", "ire
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["model-card.v1.schema.json"])
+
 iree_py_library(
     name = "manifest",
     srcs = [
@@ -24,7 +26,10 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.manifest_test"],
-    data = ["testdata/moonshine.json"],
+    data = [
+        "testdata/moonshine.json",
+        "//loom/src/loom/serve/fixture/text:native.card.json",
+    ],
     main = "pytest_style_runner.py",
     deps = [":manifest"],
 )
@@ -40,5 +45,18 @@ iree_py_binary(
     name = "build",
     srcs = ["build.py"],
     main = "build.py",
+    deps = [":manifest"],
+)
+
+iree_py_test(
+    name = "build_test",
+    srcs = [
+        "build.py",
+        "build_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.build_test"],
+    data = ["//loom/src/loom/serve/fixture/text:native.card.json"],
+    main = "pytest_style_runner.py",
     deps = [":manifest"],
 )

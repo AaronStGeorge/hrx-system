@@ -35,7 +35,8 @@ loom_cc_test(
     srcs = ["activity_test_main.c"],
     args = [
         "--fixture=true",
-        "--model=$(rootpath //loom/src/loom/serve/fixture/recognition:model.json)",
+        "--model=$(rootpath //loom/src/loom/serve/fixture/recognition:activity.json)",
+        "--transcription_model=$(rootpath //loom/src/loom/serve/fixture/recognition:model.json)",
         "--device=task",
         "--pool_backing=fixed",
         "--workers=8",
@@ -43,7 +44,7 @@ loom_cc_test(
         "--device=amdgpu",
         "--fixture_transcription_device=1",
     ],
-    data = RECOGNITION_SOURCES,
+    data = RECOGNITION_SOURCES + ["//loom/src/loom/serve/fixture/recognition:activity.json"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _ROCR_TEST_TAGS,
     target_compatible_with = loom_config_compatible_with([

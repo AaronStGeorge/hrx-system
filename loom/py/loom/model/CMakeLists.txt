@@ -31,6 +31,7 @@ iree_py_test(
     "loom.model.manifest_test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/py/loom/model/testdata/moonshine.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/native.card.json"
   DEPS
     loom::py::loom::model::manifest
   PACKAGE_DIRS
@@ -59,6 +60,27 @@ iree_py_library(
     "build.py"
   DEPS
     loom::py::loom::model::manifest
+)
+
+iree_py_test(
+  NAME
+    build_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "build.py"
+    "build_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.build_test"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/native.card.json"
+  DEPS
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -95,8 +95,8 @@ independent of `schema_version` and the bytecode encoding version. Omitting it
 selects the unversioned development names, `text_<role>`. A missing versioned
 export is an error; bare exports are not substituted. Several services and ABI
 revisions can coexist in one provider set. The host checks the selected service.
-Native card execution currently supports text service ABI 1 and its unversioned
-development contract.
+Native card execution supports text, recognition, and activity service ABI 1
+and their unversioned development contracts.
 
 Program set names are opaque: `mixed` could be renamed `source` without changing
 its contents. Each input and library contributes to the link index with its
@@ -111,7 +111,9 @@ rebase the declared file paths.
 Each `parameters` key names an independent parameter index. Source preparation
 uses `prepare.parameter_scope(stage, binding, source, scope, policy)` to select
 that index; its ordered files populate the same scope. Text service uses the
-`text` tokenizer identity. File names need not identify their role or encoding:
+`text` tokenizer identity. Recognition and activity preparation return a
+tokenizer identity when they require tokenization, or an empty string when they
+do not. File names need not identify their role or encoding:
 an explicit `format` supports renamed assets, while shorthand strings use the
 loader's format inference. Ambiguous or unsupported encodings fail.
 

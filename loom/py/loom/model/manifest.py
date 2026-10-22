@@ -4,21 +4,16 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Model-card parsing and selection, without compiler, network, or host state.
-
-Files describe content and origins. Named program sets describe linker inputs;
-their names carry no encoding semantics. Entrypoints own callable root bindings,
-variants own compatible parameter inputs, and configurations select an instance.
-The compiler and model implementation own symbol and model-option validation.
-"""
+"""Portable model selection, independent of compilation, acquisition, and hosts."""
 
 from __future__ import annotations
 
 import base64
 import copy
-import hashlib
 import json
-from dataclasses import dataclass
+import math
+import re
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
@@ -73,7 +68,7 @@ def _path(value: Any, path: str, *, directory: bool = False) -> str:
         or str(parsed) != value
         or (value == "." and not directory)
     ):
-        _fail(path, "expected a normalized package-relative path")
+        _fail(path, "expected a normalized relative path")
     return value
 
 
@@ -94,10 +89,27 @@ def _reference(value: Any, table: dict, path: str) -> str:
     return value
 
 
-def _uint(value: Any, path: str) -> int:
-    if type(value) is not int or not 0 <= value <= 0xFFFFFFFFFFFFFFFF:
-        _fail(path, "expected an unsigned 64-bit integer")
-    return value
+def _json_value(value: Any, path: str) -> None:
+    """Reject values that cannot cross the JSON/UTF-8 public boundary."""
+    if value is None or type(value) in (bool, int):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            _fail(path, "numbers must be finite")
+    elif isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            _fail(path, "expected valid UTF-8")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _json_value(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _string(key, path)
+            _json_value(item, path + "." + key)
+    else:
+        _fail(path, "expected a JSON value")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict:
@@ -109,349 +121,473 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict:
     return result
 
 
-def _provider(value: Any, files: dict, path: str) -> dict:
-    provider = {"file": value} if isinstance(value, str) else value
-    _object(provider, path, ("file",), ("format", "options", "data"))
-    _reference(provider["file"], files, path + ".file")
-    if "format" in provider:
-        _string(provider["format"], path + ".format")
-    if "options" in provider:
-        _strings(provider["options"], path + ".options")
-    for filename in _strings(provider.get("data", []), path + ".data"):
-        _reference(filename, files, path + ".data")
-    return provider
+def parse_json(source: str) -> Any:
+    """Reads plain finite JSON, rejecting duplicate keys and JSONC extensions."""
 
+    def reject_constant(value):
+        _fail("$", f"non-JSON numeric constant {value}")
 
-def _file(record: dict, path: str) -> None:
-    _object(record, path, ("origin",), ("size", "sha256", "description"))
-    origin = _mapping(record["origin"], path + ".origin")
-    kind = _string(origin.get("kind"), path + ".origin.kind")
-    fields = {
-        "local": (("kind", "path"), ()),
-        "url": (("kind", "url"), ()),
-        "hf": (("kind", "repository", "revision", "path"), ("git_blob",)),
-        "inline": (("kind", "base64"), ()),
-        "build": (("kind", "target"), ()),
-    }
-    if kind not in fields:
-        _fail(path + ".origin.kind", f"unsupported file origin {kind!r}")
-    required, optional = fields[kind]
-    _object(origin, path + ".origin", required, optional)
-    for key, value in origin.items():
-        if key != "base64":
-            _string(value, path + ".origin." + key)
-    if kind == "local":
-        _path(origin["path"], path + ".origin.path")
-    elif kind == "url":
-        try:
-            url = urlsplit(origin["url"])
-        except ValueError:
-            _fail(path + ".origin.url", "invalid HTTPS URL")
-        if url.scheme != "https" or not url.netloc or url.username or url.password:
-            _fail(path + ".origin.url", "expected an HTTPS URL without credentials")
-    elif kind == "hf":
-        _path(origin["path"], path + ".origin.path")
-        revision = origin["revision"]
-        if len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
-            _fail(path + ".origin.revision", "expected an immutable commit identity")
-    if "size" in record:
-        _uint(record["size"], path + ".size")
-    if "sha256" in record:
-        digest = _string(record["sha256"], path + ".sha256")
-        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-            _fail(path + ".sha256", "expected a lowercase SHA-256 digest")
-    if kind == "inline":
-        try:
-            data = base64.b64decode(origin["base64"], validate=True)
-        except (ValueError, TypeError):
-            _fail(path + ".origin.base64", "invalid base64 content")
-        if record.get("size", len(data)) != len(data):
-            _fail(path + ".size", "does not match inline content")
-        digest = hashlib.sha256(data).hexdigest()
-        if record.get("sha256", digest) != digest:
-            _fail(path + ".sha256", "does not match inline content")
-
-
-def _entrypoint(value: dict, files: dict, path: str) -> None:
-    _object(
-        value,
-        path,
-        ("kind", "roots", "programs"),
-        (
-            "interface",
-            "constraints",
-            "components",
-            "description",
-            "options",
-            "directory",
-        ),
-    )
-    _string(value["kind"], path + ".kind")
-    _path(value.get("directory", "."), path + ".directory", directory=True)
-    _strings(value.get("options", []), path + ".options")
-    for role, roots in _mapping(value["roots"], path + ".roots").items():
-        _strings(roots, path + ".roots." + role, empty=False)
-    for name, program in _mapping(value["programs"], path + ".programs").items():
-        current = path + ".programs." + name
-        _object(program, current, ("inputs", "libraries"))
-        seen = set()
-        for role in ("inputs", "libraries"):
-            if not isinstance(program[role], list):
-                _fail(current + "." + role, "expected an array")
-            for index, item in enumerate(program[role]):
-                provider = _provider(item, files, f"{current}.{role}[{index}]")
-                if provider["file"] in seen:
-                    _fail(current, f"duplicate provider {provider['file']!r}")
-                seen.add(provider["file"])
-        if not seen:
-            _fail(current, "requires at least one provider")
-    for field in ("interface", "constraints"):
-        if field in value:
-            _mapping(value[field], path + "." + field, empty=True)
-    for name, component in _mapping(
-        value.get("components", {}), path + ".components", empty=True
-    ).items():
-        _entrypoint(component, files, path + ".components." + name)
-
-
-def _assets(value: dict, entrypoint: dict, files: dict, path: str) -> None:
-    _object(value, path, ("programs", "bindings"), ("options", "components"))
-    for name in _strings(value["programs"], path + ".programs", empty=False):
-        _reference(name, entrypoint["programs"], path + ".programs")
-    _mapping(value.get("options", {}), path + ".options", empty=True)
-    for name, binding in _mapping(
-        value["bindings"], path + ".bindings", empty=True
-    ).items():
-        current = path + ".bindings." + name
-        _mapping(binding, current)
-        if "file" in binding:
-            _object(binding, current, ("file",))
-            _reference(binding["file"], files, current + ".file")
-        else:
-            _object(binding, current, ("directory", "files"))
-            directory = _path(
-                binding["directory"], current + ".directory", directory=True
-            )
-            for filename in _strings(binding["files"], current + ".files"):
-                _reference(filename, files, current + ".files")
-                if directory != "." and not filename.startswith(directory + "/"):
-                    _fail(current, f"file {filename!r} is outside the directory")
-    for name, component in _mapping(
-        value.get("components", {}), path + ".components", empty=True
-    ).items():
-        _reference(name, entrypoint.get("components", {}), path + ".components")
-        _assets(
-            component,
-            entrypoint["components"][name],
-            files,
-            path + ".components." + name,
+    try:
+        value = json.loads(
+            source, object_pairs_hook=_unique_object, parse_constant=reject_constant
         )
+    except json.JSONDecodeError as error:
+        raise ManifestError(f"$: {error}") from error
+    _json_value(value, "$")
+    return value
+
+
+def _url(value: Any, path: str) -> None:
+    _string(value, path)
+    if any(ord(character) <= 32 or ord(character) == 127 for character in value):
+        _fail(path, "URL whitespace and control characters must be escaped")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        _fail(path, "invalid HTTP(S) URL")
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or port == 0
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        _fail(path, "expected an HTTP(S) URL without credentials or fragment")
+
+
+def _origin_object(value: Any, path: str, *, root: bool) -> dict:
+    _mapping(value, path)
+    kind = value.get("kind")
+    fields = {
+        "hf": (("kind", "repository"), ("revision",) if root else ("revision", "path")),
+        "url": (("kind", "url"), ()),
+        "local": (("kind", "path"), ()),
+    }
+    if not root:
+        fields["inline"] = (("kind", "base64"), ())
+    if not isinstance(kind, str) or kind not in fields:
+        _fail(path + ".kind", f"unsupported origin {kind!r}")
+    _object(value, path, *fields[kind])
+    if kind == "hf":
+        _path(value["repository"], path + ".repository")
+        if "revision" in value:
+            _string(value["revision"], path + ".revision")
+        if not root:
+            _path(value.get("path"), path + ".path")
+    elif kind == "url":
+        _url(value["url"], path + ".url")
+        if root and urlsplit(value["url"]).query:
+            _fail(path + ".url", "directory origins cannot contain a query")
+    elif kind == "local":
+        # Acquisition knows if host-local coordinates came from a local caller
+        # or an untrusted remote document; parsing alone cannot authorize them.
+        _string(value["path"], path + ".path")
+    else:
+        try:
+            base64.b64decode(value["base64"], validate=True)
+        except (TypeError, ValueError):
+            _fail(path + ".base64", "invalid base64 content")
+    return value
+
+
+def _origin(value: Any, roots: dict, path: str, *, group: bool = False) -> None:
+    if isinstance(value, dict):
+        if group:
+            _fail(path, "group origins require a directory locator")
+        _origin_object(value, path, root=False)
+        return
+    _string(value, path)
+    if value.startswith("@"):
+        name, separator, suffix = value[1:].partition("/")
+        _reference(name, roots, path)
+        if not separator or (not suffix and not group):
+            _fail(path, "origin aliases require @name/path")
+        if suffix:
+            _path(suffix.removesuffix("/") if group else suffix, path)
+    elif "://" in value:
+        _url(value, path)
+        if group and urlsplit(value).query:
+            _fail(path, "directory origins cannot contain a query")
+    else:
+        _path(value.removesuffix("/") if group else value, path, directory=group)
+    if group and not value.endswith("/"):
+        _fail(path, "group origin must end with '/'")
+
+
+def _file(value: Any, roots: dict, path: str, *, provider: bool = False) -> dict:
+    record = {"path": value} if isinstance(value, str) else value
+    _object(
+        record,
+        path,
+        ("path",),
+        ("origin", "format", "options", "data") if provider else ("origin", "format"),
+    )
+    _path(record["path"], path + ".path")
+    if "format" in record:
+        _string(record["format"], path + ".format")
+    if "origin" in record:
+        _origin(record["origin"], roots, path + ".origin")
+    if provider:
+        _strings(record.get("options", []), path + ".options")
+        data = record.get("data", [])
+        if not isinstance(data, list):
+            _fail(path + ".data", "expected an array")
+        for index, item in enumerate(data):
+            _file(item, roots, f"{path}.data[{index}]")
+    return record
+
+
+def _config(value: Any, path: str) -> None:
+    for name, item in _mapping(value, path, empty=True).items():
+        if type(item) not in (str, bool, int, float):
+            _fail(path + "." + name, "expected a scalar compiler value")
+
+
+@dataclass(frozen=True)
+class ModelFile:
+    """One destination with explicit source intent and all selected consumers."""
+
+    # Normalized relative destination under the card directory.
+    path: str
+    # Logical locator or provider descriptor, independent of destination naming.
+    origin: str | dict
+    # Role-specific explicit encoding, or None for inference.
+    format: str | None
+    # Consumers determine integrity requirements; any code role remains code.
+    roles: frozenset[str]
 
 
 @dataclass(frozen=True)
 class Selection:
-    """Resolved declaration; contained values are independent owned snapshots."""
+    """One owned dependency closure with no compiler, device, or network state."""
 
-    # Published logical model identity.
+    # Original training-source identity.
     model_id: str
-    # Selected canonical configuration name.
-    configuration: str
-    # Selected runnable entrypoint name.
-    entrypoint_name: str
-    # Selected parameter-content variant name.
+    # Canonical configuration name, or None for explicit choices.
+    configuration: str | None
+    # Service identity, separate from its contract kind and version.
+    service_name: str
+    # Parameter/configuration variant identity.
     variant: str
-    # Selected provider-set name, without format semantics.
+    # Provider-set identity with no encoding semantics.
     programs: str
-    # Callable contract and indexed program declarations.
-    entrypoint: dict
-    # Compatible asset bindings and model-owned source options.
-    assets: dict
-    # Canonical instance/workload settings.
+    # Selected service contract.
+    service: dict
+    # Selected provider set with ordered input/library roles.
+    program: dict
+    # Variant-over-program fixed JIT configuration.
+    config: dict
+    # Code-facing parameter index declarations.
+    parameters: dict
+    # Code-facing tokenizer declarations.
+    tokenizers: dict
+    # Canonical execution, request, workload, and preparation options.
     settings: dict
-    # Selected files in deterministic dependency order.
-    files: dict
+    # Deduplicated destinations with resolved group-origin inheritance.
+    files: dict[str, ModelFile]
+    # Portable card containing only this selection, preserving source intent.
+    document: dict
 
 
 class ModelCard:
-    """An owned, structurally validated model publication."""
+    """An owned, validated model publication with independent service revisions."""
 
     def __init__(self, document: dict):
         self._document = copy.deepcopy(document)
+        _json_value(self._document, "$")
         self._validate()
 
     @classmethod
     def parse(cls, source: str) -> ModelCard:
-        def reject_constant(value):
-            _fail("$", f"non-JSON numeric constant {value}")
-
-        try:
-            value = json.loads(
-                source, object_pairs_hook=_unique_object, parse_constant=reject_constant
-            )
-        except json.JSONDecodeError as error:
-            raise ManifestError(f"$: {error}") from error
-        return cls(value)
+        return cls(parse_json(source))
 
     @property
     def document(self) -> dict:
         return copy.deepcopy(self._document)
 
     def _validate(self) -> None:
-        doc = _object(
-            self._document,
+        doc = _mapping(self._document, "$")
+        if type(doc.get("schema_version")) is not int or doc["schema_version"] != 1:
+            _fail("$.schema_version", "unsupported model-card version; supported: 1")
+        _object(
+            doc,
             "$",
-            (
-                "schema_version",
-                "model",
-                "files",
-                "entrypoints",
-                "variants",
-                "configurations",
-            ),
-            ("qualification",),
+            ("schema_version", "model", "programs", "services", "variants"),
+            ("$schema", "origins", "configurations", "qualification"),
         )
-        if type(doc["schema_version"]) is not int or doc["schema_version"] != 1:
-            _fail("$.schema_version", "unsupported model-card version")
+        if "$schema" in doc:
+            _string(doc["$schema"], "$.$schema")
         model = _object(
             doc["model"],
             "$.model",
             ("id", "name"),
-            ("description", "origin", "license", "implementation"),
+            ("description", "license", "origin", "implementation"),
         )
-        _string(model["id"], "$.model.id")
-        _string(model["name"], "$.model.name")
-        files = _mapping(doc["files"], "$.files", empty=True)
-        for name, record in files.items():
-            _path(name, "$.files")
-            _file(record, "$.files." + name)
-        entries = _mapping(doc["entrypoints"], "$.entrypoints")
-        for name, entry in entries.items():
-            _entrypoint(entry, files, "$.entrypoints." + name)
-        for name, variant in _mapping(doc["variants"], "$.variants").items():
-            current = "$.variants." + name
-            _object(variant, current, ("entrypoints",), ("description",))
-            for entry_name, assets in _mapping(
-                variant["entrypoints"], current + ".entrypoints"
-            ).items():
-                _reference(entry_name, entries, current + ".entrypoints")
-                _assets(
-                    assets,
-                    entries[entry_name],
-                    files,
-                    current + ".entrypoints." + entry_name,
+        for key in ("id", "name"):
+            _string(model[key], "$.model." + key)
+        for key in ("description", "license"):
+            if key in model and not isinstance(model[key], str):
+                _fail("$.model." + key, "expected a string")
+        if "origin" in model:
+            _origin_object(model["origin"], "$.model.origin", root=True)
+        if "implementation" in model:
+            implementation = _object(
+                model["implementation"],
+                "$.model.implementation",
+                ("repository", "revision", "path"),
+            )
+            for key in ("repository", "revision"):
+                _string(implementation[key], "$.model.implementation." + key)
+            _path(implementation["path"], "$.model.implementation.path")
+        origins = _mapping(doc.get("origins", {}), "$.origins", empty=True)
+        for name, origin in origins.items():
+            if "/" in name or name.startswith("@"):
+                _fail("$.origins", "alias names cannot contain '/' or start with '@'")
+            _origin_object(origin, "$.origins." + name, root=True)
+        programs = _mapping(doc["programs"], "$.programs")
+        for name, program in programs.items():
+            path = "$.programs." + name
+            _object(
+                program,
+                path,
+                ("inputs", "libraries"),
+                ("directory", "origin", "config"),
+            )
+            _path(program.get("directory", "."), path + ".directory", directory=True)
+            if "origin" in program:
+                _origin(program["origin"], origins, path + ".origin", group=True)
+            _config(program.get("config", {}), path + ".config")
+            seen = set()
+            for role in ("inputs", "libraries"):
+                if not isinstance(program[role], list):
+                    _fail(path + "." + role, "expected an array")
+                for index, item in enumerate(program[role]):
+                    provider = _file(
+                        item, origins, f"{path}.{role}[{index}]", provider=True
+                    )
+                    if provider["path"] in seen:
+                        _fail(path, f"duplicate provider {provider['path']!r}")
+                    seen.add(provider["path"])
+            if not program["inputs"]:
+                _fail(path + ".inputs", "requires at least one input")
+        services = _mapping(doc["services"], "$.services")
+        for name, service in services.items():
+            path = "$.services." + name
+            _object(
+                service,
+                path,
+                ("kind",),
+                ("version", "options", "interface", "constraints"),
+            )
+            kind = _string(service["kind"], path + ".kind")
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", kind):
+                _fail(path + ".kind", "expected a service symbol identifier")
+            version = service.get("version", 1)
+            if type(version) is not int or not 1 <= version <= 0xFFFFFFFF:
+                _fail(
+                    path + ".version", "expected a service ABI version in [1, 2^32-1]"
                 )
+            _strings(service.get("options", []), path + ".options")
+            for key in ("interface", "constraints"):
+                _mapping(service.get(key, {}), path + "." + key, empty=True)
+        variants = _mapping(doc["variants"], "$.variants")
+        for name, variant in variants.items():
+            path = "$.variants." + name
+            _object(variant, path, ("services",), ("description",))
+            if "description" in variant and not isinstance(variant["description"], str):
+                _fail(path + ".description", "expected a string")
+            for service_name, variant_service in _mapping(
+                variant["services"], path + ".services"
+            ).items():
+                current = path + ".services." + service_name
+                _reference(service_name, services, current)
+                _object(
+                    variant_service,
+                    current,
+                    ("programs",),
+                    ("config", "parameters", "tokenizers"),
+                )
+                for program in _strings(
+                    variant_service["programs"], current + ".programs", empty=False
+                ):
+                    _reference(program, programs, current + ".programs")
+                _config(variant_service.get("config", {}), current + ".config")
+                for scope, parameter in _mapping(
+                    variant_service.get("parameters", {}),
+                    current + ".parameters",
+                    empty=True,
+                ).items():
+                    scope_path = current + ".parameters." + scope
+                    _object(parameter, scope_path, ("files",), ("origin",))
+                    if "origin" in parameter:
+                        _origin(
+                            parameter["origin"],
+                            origins,
+                            scope_path + ".origin",
+                            group=True,
+                        )
+                    if (
+                        not isinstance(parameter["files"], list)
+                        or not parameter["files"]
+                    ):
+                        _fail(scope_path + ".files", "expected a nonempty shard array")
+                    for index, item in enumerate(parameter["files"]):
+                        _file(item, origins, f"{scope_path}.files[{index}]")
+                for identity, tokenizer in _mapping(
+                    variant_service.get("tokenizers", {}),
+                    current + ".tokenizers",
+                    empty=True,
+                ).items():
+                    _file(tokenizer, origins, current + ".tokenizers." + identity)
         for name, configuration in _mapping(
-            doc["configurations"], "$.configurations"
+            doc.get("configurations", {}), "$.configurations", empty=True
         ).items():
-            current = "$.configurations." + name
+            path = "$.configurations." + name
             _object(
                 configuration,
-                current,
-                ("entrypoint", "variant", "programs"),
-                (
-                    "execution",
-                    "request",
-                    "options",
-                    "workload",
-                    "requires",
-                    "description",
-                ),
+                path,
+                ("service", "variant", "programs"),
+                ("options", "execution", "request", "workload"),
             )
-            for field in ("execution", "request", "options", "workload", "requires"):
-                _mapping(
-                    configuration.get(field, {}), current + "." + field, empty=True
-                )
+            for key in ("options", "execution", "request", "workload"):
+                _mapping(configuration.get(key, {}), path + "." + key, empty=True)
             self.select(name)
-        for name, row in _mapping(
-            doc.get("qualification", {}), "$.qualification", empty=True
-        ).items():
-            current = "$.qualification." + name
-            _object(
-                row,
-                current,
-                ("configuration",),
-                (
-                    "variant",
-                    "programs",
-                    "requires",
-                    "checks",
-                    "benchmarks",
-                    "description",
-                ),
-            )
-            self.select(
-                row["configuration"],
-                variant=row.get("variant"),
-                programs=row.get("programs"),
-            )
+        _object(doc.get("qualification", {}), "$.qualification")
 
     def select(
         self,
-        configuration: str,
+        configuration: str | None = None,
         *,
+        service: str | None = None,
         variant: str | None = None,
         programs: str | None = None,
     ) -> Selection:
         doc = self._document
-        _reference(configuration, doc["configurations"], "configuration")
-        settings = doc["configurations"][configuration]
-        name = _reference(settings["entrypoint"], doc["entrypoints"], "entrypoint")
+
+        def choose(table, requested, label):
+            if requested is None:
+                if len(table) != 1:
+                    _fail(label, f"select explicitly ({len(table)} choices)")
+                return next(iter(table))
+            return _reference(requested, table, label)
+
+        configurations = doc.get("configurations", {})
+        if (
+            configuration is None
+            and all(value is None for value in (service, variant, programs))
+            and len(configurations) == 1
+        ):
+            configuration = next(iter(configurations))
+        settings = {}
+        if configuration is not None:
+            _reference(configuration, configurations, "configuration")
+            settings = configurations[configuration]
+        variant = choose(
+            doc["variants"],
+            variant if variant is not None else settings.get("variant"),
+            "variant",
+        )
+        choices = doc["variants"][variant]["services"]
+        service = choose(
+            choices,
+            service if service is not None else settings.get("service"),
+            "service",
+        )
+        variant_service = choices[service]
+        programs = choose(
+            dict.fromkeys(variant_service["programs"]),
+            programs if programs is not None else settings.get("programs"),
+            "programs",
+        )
+        service_definition = doc["services"][service]
         unknown_options = settings.get("options", {}).keys() - set(
-            doc["entrypoints"][name].get("options", [])
+            service_definition.get("options", [])
         )
         if unknown_options:
             _fail(
                 "options",
                 "undeclared model options: " + ", ".join(sorted(unknown_options)),
             )
-        selected_variant = settings["variant"] if variant is None else variant
-        _reference(selected_variant, doc["variants"], "variant")
-        variant_entries = doc["variants"][selected_variant]["entrypoints"]
-        _reference(name, variant_entries, "variant.entrypoints")
-        assets = variant_entries[name]
-        selected_programs = settings["programs"] if programs is None else programs
-        _reference(selected_programs, doc["entrypoints"][name]["programs"], "programs")
-        if selected_programs not in assets["programs"]:
-            _fail("programs", "not supported by the selected asset variant")
-        selected_files = {}
+        program = doc["programs"][programs]
+        files = {}
 
-        def add_file(filename):
-            selected_files[filename] = doc["files"][filename]
-
-        def collect(entry, inputs, program_name):
-            program = entry["programs"][program_name]
-            for role in ("inputs", "libraries"):
-                for value in program[role]:
-                    provider = {"file": value} if isinstance(value, str) else value
-                    add_file(provider["file"])
-                    for filename in provider.get("data", []):
-                        add_file(filename)
-            for binding in inputs["bindings"].values():
-                for filename in (
-                    [binding["file"]] if "file" in binding else binding["files"]
+        def add(value, role, group_origin=""):
+            record = {"path": value} if isinstance(value, str) else value
+            name = record["path"]
+            origin = record.get(
+                "origin", ("" if group_origin == "./" else group_origin) + name
+            )
+            candidate = ModelFile(
+                name, copy.deepcopy(origin), record.get("format"), frozenset({role})
+            )
+            if name in files:
+                previous = files[name]
+                if previous.origin != candidate.origin or (
+                    previous.format
+                    and candidate.format
+                    and previous.format != candidate.format
                 ):
-                    add_file(filename)
-            for component_name, component_inputs in inputs.get(
-                "components", {}
-            ).items():
-                component = entry["components"][component_name]
-                if program_name not in component_inputs["programs"]:
-                    _fail(
-                        "programs",
-                        f"component {component_name!r} does not support selection",
-                    )
-                collect(component, component_inputs, program_name)
+                    _fail("files." + name, "conflicting selected file declarations")
+                candidate = replace(
+                    previous,
+                    roles=previous.roles | candidate.roles,
+                    format=previous.format or candidate.format,
+                )
+            files[name] = candidate
 
-        entrypoint = doc["entrypoints"][name]
-        collect(entrypoint, assets, selected_programs)
+        for role in ("inputs", "libraries"):
+            for value in program[role]:
+                add(value, "program", program.get("origin", ""))
+                provider = {"path": value} if isinstance(value, str) else value
+                for auxiliary in provider.get("data", []):
+                    add(auxiliary, "auxiliary", program.get("origin", ""))
+        for parameter in variant_service.get("parameters", {}).values():
+            for value in parameter["files"]:
+                add(value, "parameter", parameter.get("origin", ""))
+        for value in variant_service.get("tokenizers", {}).values():
+            add(value, "tokenizer")
+        paths = set(files)
+        for path in paths:
+            if any(str(parent) in paths for parent in PurePosixPath(path).parents):
+                _fail(
+                    "files." + path,
+                    "destination collides with another file's directory",
+                )
+        projected = {
+            key: copy.deepcopy(doc[key])
+            for key in ("$schema", "schema_version", "model", "origins")
+            if key in doc
+        }
+        projected["programs"] = {programs: copy.deepcopy(program)}
+        projected["services"] = {service: copy.deepcopy(service_definition)}
+        projected_variant_service = copy.deepcopy(variant_service)
+        projected_variant_service["programs"] = [programs]
+        projected["variants"] = {
+            variant: {"services": {service: projected_variant_service}}
+        }
+        if "description" in doc["variants"][variant]:
+            projected["variants"][variant]["description"] = doc["variants"][variant][
+                "description"
+            ]
+        settings = copy.deepcopy(settings)
+        settings.update(service=service, variant=variant, programs=programs)
+        projected["configurations"] = {configuration: settings} if configuration else {}
         return Selection(
-            doc["model"]["id"],
-            configuration,
-            name,
-            selected_variant,
-            selected_programs,
-            copy.deepcopy(entrypoint),
-            copy.deepcopy(assets),
-            copy.deepcopy(settings),
-            copy.deepcopy(selected_files),
+            model_id=doc["model"]["id"],
+            configuration=configuration,
+            service_name=service,
+            variant=variant,
+            programs=programs,
+            service=copy.deepcopy(service_definition),
+            program=copy.deepcopy(program),
+            config=copy.deepcopy(
+                program.get("config", {}) | variant_service.get("config", {})
+            ),
+            parameters=copy.deepcopy(variant_service.get("parameters", {})),
+            tokenizers=copy.deepcopy(variant_service.get("tokenizers", {})),
+            settings=settings,
+            files=files,
+            document=projected,
         )

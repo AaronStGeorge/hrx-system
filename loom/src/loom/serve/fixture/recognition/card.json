@@ -1,51 +1,64 @@
 {
+  "$schema": "../../../../../py/loom/model/model-card.v1.schema.json",
   "schema_version": 1,
   "model": {
     "id": "loom-fixture/recognition",
     "name": "Continuing recognition fixture"
   },
-  "files": {
-    "prepare.loom": {"origin": {"kind": "local", "path": "prepare.loom"}},
-    "control.loom": {"origin": {"kind": "local", "path": "control.loom"}},
-    "generate.loombc": {
-      "origin": {"kind": "build", "target": ":generate_module"}
+  "programs": {
+    "development": {
+      "inputs": [
+        "prepare.loom",
+        "control.loom",
+        "service.loom"
+      ],
+      "libraries": [
+        "generate.loombc"
+      ]
     }
   },
-  "entrypoints": {
-    "recognition": {
+  "services": {
+    "transcription": {
       "kind": "recognition",
-      "roots": {
-        "prepare": ["prepare"],
-        "control": [
-          "prepare_request", "prepare_work", "prepare_batch", "generate", "complete"
-        ]
-      },
-      "programs": {
-        "development": {
-          "inputs": ["prepare.loom", "control.loom"],
-          "libraries": ["generate.loombc"]
-        }
-      }
+      "version": 1
+    },
+    "activity": {
+      "kind": "activity",
+      "version": 1
     }
   },
   "variants": {
     "fixture": {
-      "entrypoints": {
-        "recognition": {
-          "programs": ["development"],
-          "bindings": {"assets": {"directory": ".", "files": []}},
-          "options": {}
+      "services": {
+        "transcription": {
+          "programs": [
+            "development"
+          ]
+        },
+        "activity": {
+          "programs": [
+            "development"
+          ]
         }
       }
     }
   },
   "configurations": {
     "default": {
-      "entrypoint": "recognition",
+      "service": "transcription",
       "variant": "fixture",
       "programs": "development",
-      "execution": {"pending_requests": 4}
+      "execution": {
+        "pending_requests": 4
+      }
+    },
+    "activity": {
+      "service": "activity",
+      "variant": "fixture",
+      "programs": "development",
+      "execution": {
+        "pending_requests": 4
+      }
     }
-  },
-  "qualification": {}
+  }
 }

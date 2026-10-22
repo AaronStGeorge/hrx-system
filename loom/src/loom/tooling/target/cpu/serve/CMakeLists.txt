@@ -16,6 +16,7 @@ loom_cc_test(
   SRCS
     "activity_test_main.c"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/activity.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json"
@@ -28,7 +29,8 @@ loom_cc_test(
     loom::tools::loom-serve::activity_tests
   ARGS
     "--fixture=true"
-    "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
+    "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/activity.json}}"
+    "--transcription_model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
     "--device=task"
     "--pool_backing=fixed"
     "--workers=1"
@@ -44,6 +46,7 @@ loom_cc_test(
   SRCS
     "activity_test_main.c"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/activity.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json"
@@ -56,7 +59,8 @@ loom_cc_test(
     loom::tools::loom-serve::activity_tests
   ARGS
     "--fixture=true"
-    "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
+    "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/activity.json}}"
+    "--transcription_model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
     "--device=task"
     "--pool_backing=fixed"
     "--workers=8"

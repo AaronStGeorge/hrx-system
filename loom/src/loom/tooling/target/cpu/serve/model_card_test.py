@@ -19,9 +19,8 @@ def main():
     server = str(Path(sys.argv[1]).absolute())
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
-    model_path = Path(sys.argv[2]).absolute()
-    model = str(model_path / "serve.json" if model_path.is_dir() else model_path)
-    expected = sys.argv[3] if len(sys.argv) > 3 else "bbaa"
+    model = str(Path(sys.argv[2]).absolute())
+    expected = sys.argv[3]
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)
         log = directory / "server.log"

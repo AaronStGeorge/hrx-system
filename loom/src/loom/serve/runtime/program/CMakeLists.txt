@@ -386,6 +386,7 @@ loom_cc_library(
     iree::tokenizer
     iree::tokenizer::format::huggingface::tokenizer_json
     loom::binding::c::loomc
+    loom::model::card
   PUBLIC
 )
 endif()
@@ -406,6 +407,7 @@ loom_cc_test(
     iree::tokenizer
     iree::tokenizer::vocab
     loom::binding::c::loomc
+    loom::model::card
     loom::serve::runtime::host
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
