@@ -116,12 +116,12 @@ def test_invalid_commitments_fail(field, value):
         ModelLock(lock)
 
 
-def test_duplicate_json_and_duplicate_sources_fail():
+def test_duplicate_json_and_duplicate_outputs_fail():
     with pytest.raises(ManifestError, match="duplicate object key"):
         ModelLock.parse('{"schema_version":1,"schema_version":1}')
     lock = _lock()
     lock["files"].append(copy.deepcopy(lock["files"][0]))
-    with pytest.raises(ManifestError, match="duplicate logical source"):
+    with pytest.raises(ManifestError, match="duplicate logical output"):
         ModelLock(lock)
 
 

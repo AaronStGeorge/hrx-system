@@ -10,6 +10,7 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import sys
 import threading
 from contextlib import contextmanager
@@ -37,6 +38,10 @@ class Hub:
         self.retry_after = None
         # Selected request sequence; credentials are deliberately not recorded.
         self.requests = []
+        # Actual byte-range requests, with no credential or signed redirect data.
+        self.range_requests = []
+        # Optional GET-only CDN redirects; metadata remains owned by the Hub.
+        self.redirects = {}
         # Optional observer of actual requests for deterministic transfer races.
         self.request_observer = None
         # A selected body can be held until the test exercises cancellation.
@@ -118,18 +123,25 @@ def running_hub(root, files=None):
                 metadata=False,
                 head=False,
                 hold=False,
+                interval=None,
             ):
+                digest = hashlib.sha256(content).hexdigest()
+                total = len(content)
+                if interval is not None:
+                    first, last = interval
+                    content = content[first : last + 1]
+                    status = 206
                 self.send_response(status)
                 self.send_header("Content-Length", str(len(content)))
+                if interval is not None:
+                    self.send_header("Content-Range", f"bytes {first}-{last}/{total}")
                 if error:
                     self.send_header("X-Error-Code", error)
                 if status >= 400 and state.retry_after:
                     self.send_header("Retry-After", state.retry_after)
                 if metadata:
                     self.send_header("X-Repo-Commit", state.revision)
-                    self.send_header(
-                        "ETag", '"' + hashlib.sha256(content).hexdigest() + '"'
-                    )
+                    self.send_header("ETag", '"' + digest + '"')
                 self.end_headers()
                 if not head:
                     if hold:
@@ -181,13 +193,29 @@ def running_hub(root, files=None):
                         self.response(404, error="RevisionNotFound", head=head)
                     elif unquote(filename) not in state.files:
                         self.response(404, error="EntryNotFound", head=head)
+                    elif not head and unquote(filename) in state.redirects:
+                        self.send_response(302)
+                        self.send_header("Location", state.redirects[unquote(filename)])
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
                     else:
+                        interval = None
+                        if not head and self.headers.get("Range"):
+                            match = re.fullmatch(
+                                r"bytes=(\d+)-(\d+)", self.headers["Range"]
+                            )
+                            if match is None:
+                                self.response(416)
+                                return
+                            interval = tuple(map(int, match.groups()))
+                            state.range_requests.append((unquote(filename), *interval))
                         self.response(
                             200,
                             state.files[unquote(filename)],
                             metadata=True,
                             head=head,
                             hold=unquote(filename) == state.held_file,
+                            interval=interval,
                         )
                 else:
                     self.response(404, head=head)

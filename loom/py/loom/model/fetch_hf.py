@@ -103,6 +103,11 @@ def _hub_request(operation: str, options: dict):
     from huggingface_hub import errors
 
     try:
+        if operation == "repack":
+            from .fetch_safetensors import repack
+
+            options.pop("library_name")
+            return repack(**options)
         if operation == "download":
             return hub.hf_hub_download(**options)
         if operation == "metadata":
@@ -478,6 +483,23 @@ class HuggingFace:
                     token=token,
                 ),
             )
+        )
+
+    def repack(self, source, transform, destination, preserve):
+        """Runs streaming IO under the same credential and approval ownership."""
+        repository = source.transport["repository"]
+        self.ensure_access(repository)
+        return self._request(
+            repository,
+            lambda token: self._call(
+                "repack",
+                source=source,
+                transform=transform,
+                destination=destination,
+                preserve=preserve,
+                endpoint=self.endpoint,
+                token=token,
+            ),
         )
 
     def file_url(self, source: dict, *, endpoint: str | None = None) -> str:

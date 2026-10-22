@@ -216,19 +216,66 @@ def _origin(value: Any, roots: dict, path: str, *, group: bool = False) -> None:
         _fail(path, "group origin must end with '/'")
 
 
-def _file(value: Any, roots: dict, path: str, *, provider: bool = False) -> dict:
+def _transform(value: Any, path: str) -> dict:
+    _object(value, path, ("kind", "version"), ("alignment", "tensors"))
+    if (
+        value["kind"] != "safetensors"
+        or type(value["version"]) is not int
+        or value["version"] != 1
+    ):
+        _fail(path, "supported transform: safetensors version 1")
+    alignment = value.get("alignment", 8)
+    if (
+        type(alignment) is not int
+        or not 8 <= alignment <= 1024 * 1024
+        or alignment & (alignment - 1)
+    ):
+        _fail(path + ".alignment", "expected a power of two from 8 through 1048576")
+    result = {"kind": "safetensors", "version": 1, "alignment": alignment}
+    if "tensors" in value:
+        tensors = value["tensors"]
+        if (
+            not isinstance(tensors, list)
+            or not tensors
+            or any(not isinstance(name, str) for name in tensors)
+            or len(set(tensors)) != len(tensors)
+        ):
+            _fail(path + ".tensors", "expected a nonempty array of unique tensor names")
+        result["tensors"] = sorted(value["tensors"])
+    return result
+
+
+def _file(
+    value: Any,
+    roots: dict,
+    path: str,
+    *,
+    provider: bool = False,
+    parameter: bool = False,
+) -> dict:
     record = {"path": value} if isinstance(value, str) else value
     _object(
         record,
         path,
         ("path",),
-        ("origin", "format", "options", "data") if provider else ("origin", "format"),
+        ("origin", "format", "options", "data")
+        if provider
+        else ("origin", "format", "transform")
+        if parameter
+        else ("origin", "format"),
     )
     _path(record["path"], path + ".path")
     if "format" in record:
         _string(record["format"], path + ".format")
     if "origin" in record:
         _origin(record["origin"], roots, path + ".origin")
+    if "transform" in record:
+        record["transform"] = _transform(record["transform"], path + ".transform")
+        if record.get("format") != "safetensors":
+            _fail(
+                path + ".format",
+                "safetensors transform requires explicit format 'safetensors'",
+            )
     if provider:
         _strings(record.get("options", []), path + ".options")
         data = record.get("data", [])
@@ -257,6 +304,8 @@ class ModelFile:
     format: str | None
     # Consumers determine integrity requirements; any code role remains code.
     roles: frozenset[str]
+    # Normalized acquisition operation; absent for an unchanged source file.
+    transform: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -477,7 +526,12 @@ class ModelCard:
                                 scope_path + ".files", "expected a nonempty shard array"
                             )
                         for index, item in enumerate(parameter["files"]):
-                            _file(item, origins, f"{scope_path}.files[{index}]")
+                            _file(
+                                item,
+                                origins,
+                                f"{scope_path}.files[{index}]",
+                                parameter=True,
+                            )
                     for identity, tokenizer in _mapping(
                         variant_service.get("tokenizers", {}),
                         current + ".tokenizers",
@@ -580,14 +634,22 @@ class ModelCard:
                 "origin", ("" if group_origin == "./" else group_origin) + name
             )
             candidate = ModelFile(
-                name, copy.deepcopy(origin), record.get("format"), frozenset({role})
+                name,
+                copy.deepcopy(origin),
+                record.get("format"),
+                frozenset({role}),
+                copy.deepcopy(record.get("transform")),
             )
             if name in files:
                 previous = files[name]
-                if previous.origin != candidate.origin or (
-                    previous.format
-                    and candidate.format
-                    and previous.format != candidate.format
+                if (
+                    previous.origin != candidate.origin
+                    or previous.transform != candidate.transform
+                    or (
+                        previous.format
+                        and candidate.format
+                        and previous.format != candidate.format
+                    )
                 ):
                     _fail("files." + name, "conflicting selected file declarations")
                 candidate = replace(

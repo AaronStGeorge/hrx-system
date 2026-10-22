@@ -106,10 +106,32 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    fetch_range
+  SRCS
+    "fetch_range.py"
+  DEPS
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
+    fetch_safetensors
+  SRCS
+    "fetch_safetensors.py"
+  DEPS
+    loom::py::loom::model::fetch_range
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
     fetch_hf
   SRCS
     "fetch_hf.py"
   DEPS
+    loom::py::loom::model::fetch_safetensors
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_transfer
     loom::py::loom::model::manifest
@@ -122,6 +144,7 @@ iree_py_library(
     "fetch_storage.py"
   DEPS
     loom::py::loom::model::fetch_hf
+    loom::py::loom::model::fetch_safetensors
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_transfer
     loom::py::loom::model::lock
@@ -243,6 +266,28 @@ iree_py_test(
   DEPS
     loom::py::loom::model::fetch
     loom::py::loom::model::fetch_cli
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_test(
+  NAME
+    repack_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "repack_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.repack_test"
+  DEPS
+    loom::py::loom::model::fetch_safetensors
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::lock

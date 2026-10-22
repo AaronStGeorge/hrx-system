@@ -59,14 +59,14 @@ def _update_publication_lock(args, document, card, cache, snapshot):
     if snapshot is not None:
         result["catalog"] = snapshot.summary()
     if not args.dry_run:
-        update_lock(publication, cache)
+        update_lock(publication, cache, preserve_sources=args.preserve_sources)
     if args.json:
         sys.stdout.write(json.dumps(result, indent=2) + "\n")
     elif args.dry_run:
         sys.stdout.write(
             f"{display_text(publication.model_id)}: "
             f"{len(publication.selections)} choices, "
-            f"{len(publication.sources)} unique sources\n"
+            f"{len(publication.sources)} unique outputs\n"
         )
         for source in publication.sources.values():
             sys.stdout.write("  " + display_text(json.dumps(source.origin)) + "\n")
@@ -160,6 +160,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("share", "copy"),
         default="share",
         help="share source/cache files or explicitly create independent copies",
+    )
+    parser.add_argument(
+        "--preserve-sources",
+        action="store_true",
+        help="retain acquired transform input ranges; "
+        "existing local/HF cache files remain shared",
     )
     args = parser.parse_args(argv)
     if args.all_variants:
@@ -289,7 +295,13 @@ def main(argv: list[str] | None = None) -> int:
             check_output(plan, args.output)
         else:
             result["card"] = str(
-                install(plan, cache, args.output, materialize=args.materialize)
+                install(
+                    plan,
+                    cache,
+                    args.output,
+                    materialize=args.materialize,
+                    preserve_sources=args.preserve_sources,
+                )
             )
         if args.json:
             sys.stdout.write(json.dumps(result, indent=2) + "\n")

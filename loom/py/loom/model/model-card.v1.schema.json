@@ -410,7 +410,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/file"
+            "$ref": "#/$defs/parameterFile"
           },
           "description": "Ordered files/shards loaded into this one parameter scope."
         }
@@ -615,6 +615,87 @@
           "additionalProperties": {
             "$ref": "#/$defs/serviceVariant"
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "parameterFile": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/file"
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "format",
+            "transform"
+          ],
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/path"
+            },
+            "origin": {
+              "$ref": "#/$defs/fileOrigin"
+            },
+            "format": {
+              "const": "safetensors"
+            },
+            "transform": {
+              "$ref": "#/$defs/transform"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "transform": {
+      "type": "object",
+      "required": [
+        "kind",
+        "version"
+      ],
+      "properties": {
+        "kind": {
+          "const": "safetensors"
+        },
+        "version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "alignment": {
+          "type": "integer",
+          "enum": [
+            8,
+            16,
+            32,
+            64,
+            128,
+            256,
+            512,
+            1024,
+            2048,
+            4096,
+            8192,
+            16384,
+            32768,
+            65536,
+            131072,
+            262144,
+            524288,
+            1048576
+          ],
+          "default": 8,
+          "description": "Align the payload base by padding header whitespace; tensor bytes are unchanged."
+        },
+        "tensors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "description": "Select these complete named tensors. Omission preserves all tensors."
         }
       },
       "additionalProperties": false

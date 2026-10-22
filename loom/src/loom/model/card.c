@@ -257,6 +257,7 @@ static iree_status_t loom_model_path(iree_string_view_t path) {
 static iree_status_t loom_model_file(loom_model_card_t* card,
                                      iree_json_value_type_t type,
                                      iree_string_view_t value, bool provider,
+                                     bool parameter,
                                      loom_model_json_object_t* out_object,
                                      loom_model_file_t* out_file) {
   *out_file = (loom_model_file_t){0};
@@ -264,10 +265,12 @@ static iree_status_t loom_model_file(loom_model_card_t* card,
   if (type == IREE_JSON_VALUE_TYPE_STRING) {
     IREE_RETURN_IF_ERROR(loom_model_string(card, value, &out_file->path));
   } else if (type == IREE_JSON_VALUE_TYPE_OBJECT) {
-    IREE_RETURN_IF_ERROR(loom_model_object(
-        card, value,
-        provider ? "path origin format options data" : "path origin format",
-        out_object));
+    IREE_RETURN_IF_ERROR(
+        loom_model_object(card, value,
+                          provider    ? "path origin format options data"
+                          : parameter ? "path origin format transform"
+                                      : "path origin format",
+                          out_object));
     IREE_RETURN_IF_ERROR(
         loom_model_string_field(out_object, "path", true, &out_file->path));
     IREE_RETURN_IF_ERROR(loom_model_string_field(out_object, "format", false,
@@ -284,6 +287,8 @@ typedef struct loom_model_files_parse_t {
   loom_model_card_t* card;
   // Preallocated ordered output file array.
   loom_model_file_t* files;
+  // Parameter files may retain acquisition operations ignored by runtime IO.
+  bool parameter;
 } loom_model_files_parse_t;
 
 static iree_status_t loom_model_file_visit(void* self, iree_host_size_t index,
@@ -291,12 +296,13 @@ static iree_status_t loom_model_file_visit(void* self, iree_host_size_t index,
                                            iree_string_view_t value) {
   loom_model_files_parse_t* parse = self;
   loom_model_json_object_t object;
-  return loom_model_file(parse->card, type, value, false, &object,
-                         &parse->files[index]);
+  return loom_model_file(parse->card, type, value, false, parse->parameter,
+                         &object, &parse->files[index]);
 }
 
 static iree_status_t loom_model_files(const loom_model_json_object_t* object,
                                       const char* key, bool required,
+                                      bool parameter,
                                       loom_model_file_list_t* out_files) {
   iree_string_view_t json;
   IREE_RETURN_IF_ERROR(loom_model_value(object, key, IREE_JSON_VALUE_TYPE_ARRAY,
@@ -310,7 +316,10 @@ static iree_status_t loom_model_files(const loom_model_json_object_t* object,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "model '%s' requires at least one file", key);
   }
-  loom_model_files_parse_t parse = {.card = object->card};
+  loom_model_files_parse_t parse = {
+      .card = object->card,
+      .parameter = parameter,
+  };
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate_array(&object->card->arena, out_files->count,
                                 sizeof(*parse.files), (void**)&parse.files));
@@ -369,11 +378,11 @@ static iree_status_t loom_model_provider_visit(void* self,
   loom_model_providers_parse_t* parse = self;
   loom_model_provider_t* provider = &parse->values[index];
   loom_model_json_object_t object;
-  IREE_RETURN_IF_ERROR(loom_model_file(parse->card, type, value, true, &object,
-                                       &provider->file));
+  IREE_RETURN_IF_ERROR(loom_model_file(parse->card, type, value, true, false,
+                                       &object, &provider->file));
   IREE_RETURN_IF_ERROR(
       loom_model_strings(&object, "options", false, &provider->options));
-  return loom_model_files(&object, "data", false, &provider->data);
+  return loom_model_files(&object, "data", false, false, &provider->data);
 }
 
 static iree_status_t loom_model_providers(
@@ -417,7 +426,8 @@ static iree_status_t loom_model_parameters(
       status = loom_model_object(variant->card, field->value, "origin files",
                                  &index);
       if (iree_status_is_ok(status)) {
-        status = loom_model_files(&index, "files", true, &values[i].files);
+        status =
+            loom_model_files(&index, "files", true, true, &values[i].files);
       }
     }
   }
@@ -443,7 +453,7 @@ static iree_status_t loom_model_tokenizers(
     values[i].name = field->key;
     loom_model_json_object_t file;
     status = loom_model_file(variant->card, field->type, field->value, false,
-                             &file, &values[i].file);
+                             false, &file, &values[i].file);
   }
   return status;
 }

@@ -90,9 +90,29 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "fetch_range",
+    srcs = ["fetch_range.py"],
+    deps = [
+        ":fetch_source",
+        ":manifest",
+    ],
+)
+
+iree_py_library(
+    name = "fetch_safetensors",
+    srcs = ["fetch_safetensors.py"],
+    deps = [
+        ":fetch_range",
+        ":fetch_source",
+        ":manifest",
+    ],
+)
+
+iree_py_library(
     name = "fetch_hf",
     srcs = ["fetch_hf.py"],
     deps = [
+        ":fetch_safetensors",
         ":fetch_source",
         ":fetch_transfer",
         ":manifest",
@@ -104,6 +124,7 @@ iree_py_library(
     srcs = ["fetch_storage.py"],
     deps = [
         ":fetch_hf",
+        ":fetch_safetensors",
         ":fetch_source",
         ":fetch_transfer",
         ":lock",
@@ -206,6 +227,23 @@ iree_py_test(
     deps = [
         ":fetch",
         ":fetch_cli",
+        ":fetch_source",
+        ":fetch_storage",
+        ":lock",
+        ":manifest",
+    ],
+)
+
+iree_py_test(
+    name = "repack_test",
+    srcs = [
+        "repack_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.repack_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":fetch_safetensors",
         ":fetch_source",
         ":fetch_storage",
         ":lock",

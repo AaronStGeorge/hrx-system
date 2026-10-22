@@ -26,6 +26,13 @@ installations after their HTTP origin shuts down. The `partition_model_text`
 and `partition_model_bc` targets check an explicit partition override through
 the ordinary model build rule.
 
+The [swatch card](swatch.card.json) selects the `bias` tensor from a larger
+safetensors checkpoint and aligns the local archive's payload base to 4096
+bytes. The acquisition test serves both the complete and selected archives
+through the native server and checks `abab` after shutting down the origin.
+It checks exact HTTP ranges, optional source preservation, a compact local
+mirror, and offline reuse without requiring external model weights.
+
 ## Definition and independent oracle
 
 Token IDs are `a=0`, `b=1`, `x=2`, `#=3`. `#` is the terminal token and the

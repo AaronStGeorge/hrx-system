@@ -36,7 +36,7 @@ from .fetch_storage import (
     installation_lock,
     share_file,
 )
-from .lock import FileIdentity, ModelLock, file_digest, origin_key
+from .lock import FileIdentity, ModelLock, file_digest, file_key
 from .manifest import ManifestError, ModelCard, Selection, parse_json
 
 _RESERVED_PATHS = frozenset(
@@ -86,6 +86,7 @@ class FetchPlan:
                     "origin": source.origin,
                     "transport": source.transport,
                     "roles": sorted(self.selection.files[path].roles),
+                    "transform": self.selection.files[path].transform,
                     "size": self.identities[path].size
                     if path in self.identities
                     else None,
@@ -149,7 +150,17 @@ def plan_fetch(
         path: resolver.resolve(file.origin, identities.get(path))
         for path, file in selection.files.items()
     }
-    sources = _prepare_sources(sources, identities, cache, offline=offline)
+    sources = _prepare_sources(
+        sources,
+        identities,
+        cache,
+        offline=offline,
+        transforms={
+            path: file.transform
+            for path, file in selection.files.items()
+            if file.transform is not None
+        },
+    )
     update_path = None
     if update_lock:
         if "://" in location:
@@ -188,8 +199,10 @@ class LockPlan:
     model_id: str
     # Explicit compatible variant/service/program selections, without execution.
     selections: list[dict[str, str]]
-    # One source per logical origin, independent of installation destinations.
+    # One source per origin/transform pair, independent of installation paths.
     sources: dict[str, Source]
+    # Fixed operations included in each unique output's identity.
+    transforms: dict[str, dict]
     # Selected authored roots and their immutable repository resolutions.
     origins: dict
     # Caller-owned local publication lock destination.
@@ -205,8 +218,12 @@ class LockPlan:
             "offline": self.offline,
             "selections": copy.deepcopy(self.selections),
             "files": [
-                {"origin": copy.deepcopy(source.origin), "transport": source.transport}
-                for source in self.sources.values()
+                {
+                    "origin": copy.deepcopy(source.origin),
+                    "transport": source.transport,
+                    "transform": self.transforms.get(key),
+                }
+                for key, source in self.sources.items()
             ],
         }
 
@@ -239,19 +256,30 @@ def plan_lock(
         ),
     )
     sources = {}
+    transforms = {}
     selections = card.choices()
     for choice in selections:
         selected = card.select(**choice)
         for name, file in selected.files.items():
             if PurePosixPath(name).parts[0] in _RESERVED_PATHS:
                 raise ManifestError(f"reserved installation path {name!r}")
-            key = origin_key(file.origin)
+            key = file_key(file.origin, file.transform)
             if key not in sources:
                 sources[key] = resolver.resolve(file.origin, None)
-    sources = _prepare_sources(sources, {}, cache, offline=offline)
+                if file.transform is not None:
+                    transforms[key] = file.transform
+    sources = _prepare_sources(
+        sources, {}, cache, offline=offline, transforms=transforms
+    )
     _check_lock_sources(path, document, sources)
     return LockPlan(
-        authored["model"]["id"], selections, sources, resolver.origins, path, offline
+        authored["model"]["id"],
+        selections,
+        sources,
+        transforms,
+        resolver.origins,
+        path,
+        offline,
     )
 
 
@@ -261,13 +289,16 @@ def _prepare_sources(
     cache: ContentCache,
     *,
     offline: bool,
+    transforms: dict[str, dict],
 ) -> dict[str, Source]:
     sources = {
-        name: cache.prepare_source(source, identities.get(name), offline=offline)
+        name: source
+        if name in transforms
+        else cache.prepare_source(source, identities.get(name), offline=offline)
         for name, source in sources.items()
     }
-    for source in sources.values():
-        if source.transport["kind"] == "local":
+    for name, source in sources.items():
+        if source.transport["kind"] == "local" and name not in transforms:
             path = Path(source.transport["path"])
             if not path.is_file():
                 raise FetchError(f"local source is missing or not a file: {path}")
@@ -295,6 +326,8 @@ def _acquire_sources(
     cache: ContentCache,
     *,
     offline: bool,
+    transforms: dict[str, dict],
+    preserve_sources: bool = False,
     present: dict[str, AcquiredFile] | None = None,
 ) -> dict[str, AcquiredFile]:
     """Joins a bounded transfer batch, deduplicated by logical source identity."""
@@ -303,10 +336,22 @@ def _acquire_sources(
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix="loom-fetch") as executor:
         try:
             for name, source in sources.items():
-                key = origin_key(source.origin)
+                transform = transforms.get(name)
+                key = file_key(source.origin, transform)
                 if key not in unique and key not in acquired:
-                    unique[key] = executor.submit(
-                        cache.acquire, source, identities.get(name), offline=offline
+                    unique[key] = (
+                        executor.submit(
+                            cache.acquire_transformed,
+                            source,
+                            transform,
+                            identities.get(name),
+                            offline=offline,
+                            preserve_sources=preserve_sources,
+                        )
+                        if transform is not None
+                        else executor.submit(
+                            cache.acquire, source, identities.get(name), offline=offline
+                        )
                     )
             names = {future: key for key, future in unique.items()}
             pending = set(names)
@@ -326,10 +371,19 @@ def _acquire_sources(
     return acquired
 
 
-def update_lock(plan: LockPlan, cache: ContentCache) -> Path:
+def update_lock(
+    plan: LockPlan, cache: ContentCache, *, preserve_sources: bool = False
+) -> Path:
     """Atomically replaces one publication lock after all source reads succeed."""
     with installation_lock(plan.path.parent):
-        acquired = _acquire_sources(plan.sources, {}, cache, offline=plan.offline)
+        acquired = _acquire_sources(
+            plan.sources,
+            {},
+            cache,
+            offline=plan.offline,
+            transforms=plan.transforms,
+            preserve_sources=preserve_sources,
+        )
         document = ModelLock.snapshot(
             plan.origins, [item.identity for item in acquired.values()]
         )
@@ -457,8 +511,10 @@ def _check_outputs(
             continue
         identity = plan.identities.get(name)
         if identity is None:
-            if source.transport["kind"] != "local" or not os.path.samefile(
-                source.transport["path"], destination
+            if (
+                plan.selection.files[name].transform is not None
+                or source.transport["kind"] != "local"
+                or not os.path.samefile(source.transport["path"], destination)
             ):
                 raise FetchError(
                     f"cannot verify existing destination {destination} "
@@ -501,7 +557,11 @@ def _check_lock_output(plan: FetchPlan, directory: Path, relocated: dict, roots:
 
 def _probe_sharing(plan: FetchPlan, cache: ContentCache, directory: Path) -> None:
     roots = {cache.root}
-    if any(source.transport["kind"] == "hf" for source in plan.sources.values()):
+    if any(
+        source.transport["kind"] == "hf"
+        and plan.selection.files[name].transform is None
+        for name, source in plan.sources.items()
+    ):
         roots.add(cache.huggingface.cache_directory)
     with ExitStack() as stack:
         sources = set()
@@ -515,8 +575,9 @@ def _probe_sharing(plan: FetchPlan, cache: ContentCache, directory: Path) -> Non
             sources.add(path)
         sources.update(
             Path(source.transport["path"])
-            for source in plan.sources.values()
+            for name, source in plan.sources.items()
             if source.transport["kind"] == "local"
+            and plan.selection.files[name].transform is None
         )
         with tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=directory) as probe:
             destination = Path(probe) / "shared"
@@ -531,7 +592,12 @@ def _probe_sharing(plan: FetchPlan, cache: ContentCache, directory: Path) -> Non
 
 
 def install(
-    plan: FetchPlan, cache: ContentCache, output: Path, *, materialize: str = "share"
+    plan: FetchPlan,
+    cache: ContentCache,
+    output: Path,
+    *,
+    materialize: str = "share",
+    preserve_sources: bool = False,
 ) -> Path:
     """Publishes a card only after all selected bytes satisfy their commitments."""
     if cache.cancelled.is_set():
@@ -556,14 +622,26 @@ def install(
             plan.identities,
             cache,
             offline=plan.offline,
+            transforms={
+                name: file.transform
+                for name, file in plan.selection.files.items()
+                if file.transform is not None
+            },
+            preserve_sources=preserve_sources,
             present={
-                origin_key(plan.sources[name].origin): item
+                file_key(
+                    plan.sources[name].origin, plan.selection.files[name].transform
+                ): item
                 for name, item in present.items()
+                if not preserve_sources or plan.selection.files[name].transform is None
             },
         )
         identities = [
             replace(
-                acquired[origin_key(source.origin)].identity, origin=relocated[name]
+                acquired[
+                    file_key(source.origin, plan.selection.files[name].transform)
+                ].identity,
+                origin=relocated[name],
             )
             for name, source in plan.sources.items()
         ]
@@ -585,7 +663,9 @@ def install(
                         continue
                     destination = directory / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    path = acquired[origin_key(source.origin)].path
+                    path = acquired[
+                        file_key(source.origin, plan.selection.files[name].transform)
+                    ].path
                     if materialize == "copy":
                         copied = staging / "payload"
                         shutil.copyfile(path, copied)

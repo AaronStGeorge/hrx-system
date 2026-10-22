@@ -6,15 +6,19 @@
 
 import copy
 import hashlib
+import http.server
 import json
 import os
+import re
+import struct
+import threading
 
 import pytest
 
 from loom.model import ManifestError, ModelCard
 from loom.model.fetch import install, plan_fetch, plan_lock, update_lock
 from loom.model.fetch_hf import HuggingFace
-from loom.model.fetch_source import FetchError
+from loom.model.fetch_source import FetchError, Source
 from loom.model.fetch_storage import ContentCache
 from loom.model.hf_test.hub import running_hub
 from loom.model.lock import FileIdentity, ModelLock
@@ -60,6 +64,126 @@ def _cache(root, hub, wait=None):
             endpoint=hub.endpoint, cache_dir=hub.cache_dir, wait_for_access=wait
         ),
     )
+
+
+def test_range_redirect_strips_credentials_and_never_persists_signed_url(tmp_path):
+    header = b'{"bias":{"dtype":"I32","shape":[1],"data_offsets":[0,4]}}'
+    content = struct.pack("<Q", len(header)) + header + b"abcd"
+    credentials = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            credentials.append(self.headers.get("Authorization") is not None)
+            first, last = map(
+                int, re.fullmatch(r"bytes=(\d+)-(\d+)", self.headers["Range"]).groups()
+            )
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {first}-{last}/{len(content)}")
+            self.send_header("Content-Length", str(last - first + 1))
+            self.end_headers()
+            self.wfile.write(content[first : last + 1])
+
+        def log_message(self, *_):
+            pass
+
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            with running_hub(tmp_path, {"weights.data": content}) as hub:
+                hub.approved = True
+                hub.credentials.write_text("fixture-first")
+                hub.redirects["weights.data"] = (
+                    f"http://127.0.0.1:{server.server_port}/payload?signature=private-fixture-value"
+                )
+                cache = _cache(tmp_path, hub)
+                source = Source("weights.data", hub.source("weights.data"))
+                result = cache.acquire_transformed(
+                    source,
+                    {"kind": "safetensors", "version": 1, "alignment": 4096},
+                    None,
+                    offline=False,
+                    preserve_sources=True,
+                )
+                assert result.identity.size == 4100
+                assert credentials == [False, False, False]
+                receipt = next((cache.root / "preserved").iterdir()).read_text()
+                assert "signature" not in receipt and "fixture-first" not in receipt
+        finally:
+            server.shutdown()
+            thread.join()
+
+
+def test_streaming_transform_reuses_hub_auth_without_downloading_parent(tmp_path):
+    unused = 64 * 1024
+    header = json.dumps(
+        {
+            "unused": {"dtype": "U8", "shape": [unused], "data_offsets": [0, unused]},
+            "bias": {
+                "dtype": "I32",
+                "shape": [1],
+                "data_offsets": [unused, unused + 4],
+            },
+        },
+        separators=(",", ":"),
+    ).encode()
+    content = (
+        struct.pack("<Q", len(header)) + header + b"x" * unused + struct.pack("<i", 2)
+    )
+    with running_hub(tmp_path, {"code.loom": b"code", "weights.data": content}) as hub:
+        hub.approved = True
+        hub.credentials.write_text("fixture-first")
+        authored = _card()
+        authored["origins"] = {
+            "checkpoint": {
+                "kind": "hf",
+                "repository": hub.repository,
+                "revision": "main",
+            }
+        }
+        authored["programs"]["p"]["origin"] = "@checkpoint/"
+        scope = authored["variants"]["v"]["services"]["text"]["parameters"]["scope"]
+        scope["origin"] = "@checkpoint/"
+        scope["files"] = [
+            {
+                "path": "weights.data",
+                "format": "safetensors",
+                "transform": {
+                    "kind": "safetensors",
+                    "version": 1,
+                    "alignment": 4096,
+                    "tensors": ["bias"],
+                },
+            }
+        ]
+        card_path = tmp_path / "model.json"
+        card_path.write_text(json.dumps(authored))
+        cache = _cache(tmp_path, hub)
+        document = cache.read_document(str(card_path), offline=False)
+        selection = ModelCard.parse(document.text).select()
+        plan = plan_fetch(document, selection, cache, update_lock=True)
+        install(plan, cache, tmp_path / "first", preserve_sources=True)
+        assert hub.range_requests == [
+            ("weights.data", 0, 7),
+            ("weights.data", 8, 7 + len(header)),
+            ("weights.data", len(content) - 4, len(content) - 1),
+        ]
+        assert cache.huggingface.cached_file(hub.source("weights.data")) is None
+        result = (tmp_path / "first/weights.data").read_bytes()
+        assert len(result) == 4100 and result[-4:] == struct.pack("<i", 2)
+        count = len(hub.requests)
+        offline = plan_fetch(document, selection, cache, offline=True)
+        install(offline, cache, tmp_path / "second", preserve_sources=True)
+        assert len(hub.requests) == count
+        assert os.path.samefile(
+            tmp_path / "first/weights.data", tmp_path / "second/weights.data"
+        )
+        hub.files["weights.data"] = content[:-4] + struct.pack("<i", 3)
+        fresh = ContentCache(tmp_path / "fresh", huggingface=cache.huggingface)
+        plan = plan_fetch(document, selection, fresh)
+        with pytest.raises(ManifestError, match="transformed parameter"):
+            install(plan, fresh, tmp_path / "rejected")
+        assert not (tmp_path / "rejected/model.json").exists()
 
 
 def test_publication_resolves_one_snapshot_and_checks_each_shared_source_once(tmp_path):

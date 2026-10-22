@@ -19,9 +19,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .fetch_hf import HuggingFace, hf_url_source
+from .fetch_safetensors import repack
 from .fetch_source import Document, FetchError, Source, document_source, open_source
 from .fetch_transfer import run_transfer
-from .lock import FileIdentity, file_digest
+from .lock import FileIdentity, file_digest, file_key
 from .manifest import ManifestError, parse_json
 
 # Document limits protect the public metadata boundary; payloads stream instead.
@@ -239,6 +240,131 @@ class ContentCache:
         identity.verify(path, cancelled=self.cancelled)
         return path
 
+    def _publish(self, temporary: Path, identity: FileIdentity) -> Path:
+        path = self.blob_path(identity.sha256)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            # Keep the existing shared inode: replacing it would leave two whole
+            # copies alive when an installation still links the older inode.
+            identity.verify(path, cancelled=self.cancelled)
+        return path
+
+    def acquire_transformed(
+        self,
+        source: Source,
+        transform: dict,
+        identity: FileIdentity | None,
+        *,
+        offline: bool,
+        preserve_sources: bool,
+    ) -> AcquiredFile:
+        if self.cancelled.is_set():
+            raise FetchError("model acquisition cancelled")
+        key = hashlib.sha256(file_key(source.transport, transform).encode()).hexdigest()
+        receipt = self.root / "preserved" / (key + ".json")
+        cached = None
+        if identity is not None:
+            cached = self.find(identity)
+            if cached is not None:
+                if (
+                    not preserve_sources
+                    or source.transport["kind"] == "inline"
+                    or (
+                        source.transport["kind"] == "local"
+                        and Path(source.transport["path"]).is_file()
+                    )
+                ):
+                    return AcquiredFile(cached, identity)
+                if receipt.is_file():
+                    record = parse_json(receipt.read_text(encoding="utf-8"))
+                    if record["output_sha256"] == identity.sha256:
+                        for interval in record["ranges"]:
+                            retained = FileIdentity(
+                                source.origin, interval["length"], interval["sha256"]
+                            )
+                            retained.verify(
+                                self.blob_path(retained.sha256),
+                                cancelled=self.cancelled,
+                            )
+                        return AcquiredFile(cached, identity)
+        source = self.prepare_source(source, None, offline=offline)
+        kind = source.transport["kind"]
+        if cached is not None and kind in ("local", "inline"):
+            return AcquiredFile(cached, identity)
+        if offline and kind not in ("local", "inline"):
+            raise FetchError(
+                "--offline requires a materialized result or local transform source"
+            )
+        temporary_root = self.root / "temporary"
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as temporary:
+            directory = Path(temporary)
+            destination = directory / "result" if cached is None else None
+            preserve = (
+                directory / "source"
+                if preserve_sources and kind in ("url", "hf")
+                else None
+            )
+            result = (
+                self.huggingface.repack(source, transform, destination, preserve)
+                if kind == "hf"
+                else run_transfer(
+                    repack, (source, transform, destination, preserve), self.cancelled
+                )
+            )
+            observed = FileIdentity(
+                source.origin,
+                result["size"],
+                result["sha256"],
+                source.resolved,
+                transform,
+            )
+            if identity is not None and (observed.size, observed.sha256) != (
+                identity.size,
+                identity.sha256,
+            ):
+                raise ManifestError(
+                    "transformed parameter bytes do not match their lock"
+                )
+            if self.cancelled.is_set():
+                raise FetchError("model acquisition cancelled")
+            if preserve is not None:
+                records = []
+                for interval in result["ranges"]:
+                    retained = FileIdentity(
+                        source.origin, interval["length"], interval["sha256"]
+                    )
+                    self._publish(preserve / interval["path"], retained)
+                    records.append(
+                        {
+                            name: value
+                            for name, value in interval.items()
+                            if name != "path"
+                        }
+                    )
+                atomic_write(
+                    receipt,
+                    (
+                        json.dumps(
+                            {
+                                "source": source.transport,
+                                "size": result["source_size"],
+                                "transform": transform,
+                                "output_sha256": observed.sha256,
+                                "ranges": records,
+                            },
+                            indent=2,
+                        )
+                        + "\n"
+                    ).encode(),
+                )
+            path = (
+                cached if cached is not None else self._publish(destination, observed)
+            )
+            return AcquiredFile(path, observed)
+
     def read_document(self, location: str, *, offline: bool) -> Document:
         if self.cancelled.is_set():
             raise FetchError("model acquisition cancelled")
@@ -339,11 +465,7 @@ class ContentCache:
                 else _copy_source(*arguments)
             )
             observed = FileIdentity(source.origin, size, digest, source.resolved)
-            path = self.blob_path(digest)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # A concurrent publisher can create the same immutable content.
-            # Replacing its directory entry does not rewrite an existing inode.
-            os.replace(temporary, path)
+            path = self._publish(temporary, observed)
             return AcquiredFile(path, observed)
         finally:
             temporary.unlink(missing_ok=True)

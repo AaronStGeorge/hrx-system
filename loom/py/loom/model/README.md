@@ -155,13 +155,12 @@ payloads remain usable. A floating mutable URL without a lock needs a local
 override in offline mode because a historical payload is not a fresh resolution.
 
 Authors can publish a lock covering every declared compatible variant, partition,
-service,
-and program set with `--update-lock --all-variants`. This operation acquires each
-unique source once and replaces the lock after every read succeeds. It creates
-no installation and accepts no selection or output flags. Ordinary fetches still
-download only their selected files, even when variants place different sources
-at the same local path. Previously recorded sources outside the current card
-are removed from the replacement lock.
+service, and program set with `--update-lock --all-variants`. This operation
+acquires each unique output once and replaces the lock after every read succeeds.
+It creates no installation and accepts no selection or output flags. Ordinary
+fetches still download only their selected files, even when variants place
+different sources at the same local path. Previously recorded sources outside
+the current card are removed from the replacement lock.
 
 ```sh
 loom-fetch model.json --update-lock --all-variants --dry-run
@@ -169,16 +168,18 @@ loom-fetch model.json --update-lock --all-variants
 loom-fetch https://example.org/model.json --update-lock --all-variants --lockfile=publication.lock
 ```
 
-Publication reads and hashes the complete source union, using the normal cache;
+Publication acquires and hashes the complete output union, using the normal cache;
 `--dry-run` resolves metadata without downloading payloads or changing the lock.
 A remote card requires an explicit local `--lockfile` destination. Origin
 overrides and `--offline` apply to both publication and selected installation.
 
 Locks use a separate [versioned editor schema](model-lock.v1.schema.json).
 `origins` records requested roots and resolved repository commits. Each `files`
-record contains its logical `origin`, whole-file `size`, and `sha256`. A file's
-destination name, parameter scope, and JIT configuration are independent of that
-identity. `--origin=checkpoint=/local/mirror` replaces transport while retaining
+record contains its logical `origin`, final whole-file `size`, and `sha256`.
+Transformed parameter records also contain the normalized `transform`; the hash
+identifies the resulting archive, without requiring a read of unused source bytes.
+A file's destination name, parameter scope, and JIT configuration are independent
+of that identity. `--origin=checkpoint=/local/mirror` replaces transport while retaining
 the original lock identity; it never falls back to the original host. Unknown
 aliases, missing local files, and mismatched locked bytes fail explicitly.
 
@@ -239,6 +240,65 @@ card separately; native serving performs no network access or lock processing.
 The fetch-to-serve fixture checks source, bytecode, mixed, and offline packages
 against the same weighted response, and rejects substituted code before
 publication.
+
+## Streaming parameter materialization
+
+A parameter file can select complete tensors from a safetensors checkpoint and
+align the resulting archive's payload base during acquisition:
+
+```json
+{
+  "path": "weights.data",
+  "format": "safetensors",
+  "origin": "@checkpoint/model.safetensors",
+  "transform": {
+    "kind": "safetensors",
+    "version": 1,
+    "alignment": 4096,
+    "tensors": ["encoder.layers.0.weight", "encoder.layers.0.bias"]
+  }
+}
+```
+
+This descriptor belongs in `parameters.<scope>.files`. Its explicit `format`
+identifies the local archive consumed by the runtime. The operation preserves
+tensor names, dtypes, shapes, bytes, and string metadata. Omit `tensors` to retain
+the complete checkpoint. Alignment defaults to 8 and accepts powers of two
+through 1048576; it aligns the payload base by padding the JSON header. Individual
+tensors retain the format's contiguous layout. Partial tensors, quantization,
+and arbitrary conversion commands are not part of this operation.
+
+For a selected tensor set, acquisition reads the eight-byte prefix, bounded
+header, and exactly the named tensor ranges. Each HTTP response must honor the
+range with status 206, matching byte coordinates, and identity encoding. A
+server rejecting ranges fails with a diagnostic; no whole-file retry occurs.
+A full repack reads the payload in one streaming range, preserving its order.
+Both paths use 1 MiB transfer chunks and a 16 MiB header limit per worker, with
+at most four acquisition workers. An uncached HF transform uses the optional
+SDK's HTTP client, authentication, and gate handling without placing the whole
+checkpoint in the HF cache.
+
+By default, only the resulting archive is retained. `--preserve-sources` also
+retains the remote intervals actually read, with their offsets in an acquisition
+receipt. It does not fetch omitted tensors. Existing local files and complete HF
+cache entries are reused in place and remain owned by their original storage.
+An existing verified result is shared across configurations; adding preservation
+reads the missing source intervals without writing a second result archive.
+Preservation requires additional storage for the selected source bytes.
+
+```sh
+loom-fetch model.json --configuration=swatch --output=./swatch
+loom-fetch model.json --configuration=swatch --output=./swatch --preserve-sources
+loom-fetch model.json --configuration=swatch --output=./another --offline
+```
+
+The logical acquisition identity includes the origin and normalized transform,
+independently of local placement or JIT configuration. A compact local
+`--origin` override with the same selected tensor facts, bytes, and string metadata
+produces the same locked result even when its source offsets differ. Matching
+cached results avoid source access. Native serving reads only the resulting `path` and `format`;
+the Bazel model rule likewise consumes already materialized assets. Neither
+executes acquisition transforms.
 
 ## Catalog discovery
 

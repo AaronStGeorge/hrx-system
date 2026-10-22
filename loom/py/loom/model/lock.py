@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Selected source commitments, independent of placement and runtime settings."""
+"""Selected output commitments, independent of placement and runtime settings."""
 
 from __future__ import annotations
 
@@ -25,13 +25,15 @@ from .manifest import (
     _origin,
     _origin_object,
     _string,
+    _transform,
     parse_json,
 )
 
 
-def origin_key(origin: str | dict) -> str:
-    """Stable identity of an admitted logical source, not its transport override."""
-    return json.dumps(origin, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+def file_key(origin: str | dict, transform: dict | None = None) -> str:
+    """Logical output identity, independent of placement and transport override."""
+    value = {"origin": origin, "transform": transform} if transform else origin
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def file_digest(path: Path, *, cancelled: Event | None = None) -> tuple[int, str]:
@@ -60,12 +62,14 @@ def _resolved(value: dict, path: str) -> None:
 class FileIdentity:
     # Logical authored origin, independent of destination and effective mirror.
     origin: str | dict
-    # Exact whole-file byte count.
+    # Exact output byte count, after any declared acquisition transform.
     size: int
     # Lowercase SHA-256 of the entire file.
     sha256: str
     # Immutable revision for an explicitly described repository file, if any.
     resolved: dict | None = None
+    # Normalized operation producing these bytes from the authored origin.
+    transform: dict | None = None
 
     def verify(self, path: Path, *, cancelled: Event | None = None) -> None:
         size, digest = file_digest(path, cancelled=cancelled)
@@ -83,6 +87,8 @@ class FileIdentity:
         }
         if self.resolved is not None:
             result["resolved"] = copy.deepcopy(self.resolved)
+        if self.transform is not None:
+            result["transform"] = copy.deepcopy(self.transform)
         return result
 
 
@@ -120,7 +126,14 @@ class ModelLock:
         self.files: dict[str, FileIdentity] = {}
         for index, record in enumerate(doc["files"]):
             path = f"lock.files[{index}]"
-            _object(record, path, ("origin", "size", "sha256"), ("resolved",))
+            _object(
+                record, path, ("origin", "size", "sha256"), ("resolved", "transform")
+            )
+            transform = (
+                _transform(record["transform"], path + ".transform")
+                if "transform" in record
+                else None
+            )
             _origin(record["origin"], self.origins, path + ".origin")
             if type(record["size"]) is not int or not 0 <= record["size"] < 2**64:
                 raise ManifestError(
@@ -143,11 +156,15 @@ class ModelLock:
                 raise ManifestError(
                     f"{path}: repository file requires a resolved revision"
                 )
-            key = origin_key(record["origin"])
+            key = file_key(record["origin"], transform)
             if key in self.files:
-                raise ManifestError(f"{path}: duplicate logical source")
+                raise ManifestError(f"{path}: duplicate logical output")
             self.files[key] = FileIdentity(
-                record["origin"], record["size"], digest, record.get("resolved")
+                record["origin"],
+                record["size"],
+                digest,
+                record.get("resolved"),
+                transform,
             )
 
     @classmethod
@@ -169,7 +186,7 @@ class ModelLock:
                         f"lock does not match origin {alias!r}; "
                         "use --update-lock or --no-lock"
                     )
-            identity = self.files.get(origin_key(file.origin))
+            identity = self.files.get(file_key(file.origin, file.transform))
             if identity is None:
                 raise ManifestError(
                     f"lock does not cover {name!r}; use --update-lock or --no-lock"
@@ -183,7 +200,7 @@ class ModelLock:
         files = {}
         used_origins = set()
         for identity in identities:
-            key = origin_key(identity.origin)
+            key = file_key(identity.origin, identity.transform)
             if key in files and files[key] != identity:
                 raise ManifestError(
                     "selected sources have conflicting content identities"
