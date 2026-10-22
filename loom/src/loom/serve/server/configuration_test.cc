@@ -122,6 +122,21 @@ TEST_F(ConfigurationTest, SequenceRequiresWeightsButNoTokenizerOrSampler) {
   }
 }
 
+TEST_F(ConfigurationTest, ImageCardRejectsDeploymentAssetAndAdapterPaths) {
+  const std::string prefix =
+      R"({"name":"pixels","model":{"path":"model.json"},
+        "definition":{"kind":"image")";
+  IREE_ASSERT_OK(Parse(prefix + "}}"));
+  EXPECT_EQ(model_.image.checkpoint.size, 0u);
+  EXPECT_EQ(model_.image.adapter.size, 0u);
+  for (const char* field :
+       {R"(,"checkpoint":"weights")", R"(,"adapter":"adapter.safetensors")"}) {
+    SCOPED_TRACE(field);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          Parse(prefix + field + "}}"));
+  }
+}
+
 TEST_F(ConfigurationTest, ContinuingRecognitionOwnsAssetsAndSourceOptions) {
   for (const char* kind : {"recognition", "activity"}) {
     SCOPED_TRACE(kind);

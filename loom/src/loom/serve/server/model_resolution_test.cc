@@ -42,7 +42,8 @@ class ModelResolutionTest : public ::testing::Test {
  protected:
   void SetUp() override { Initialize(kCard); }
 
-  void Initialize(const std::string& card) {
+  void Initialize(const std::string& card,
+                  const std::string& deployment = kDeployment) {
     loom_serve_model_configuration_deinitialize(&configuration_);
     const loom_serve_package_file_t file = {
         IREE_SV("deployment/cards/model.json"),
@@ -51,7 +52,7 @@ class ModelResolutionTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("deployment/serve.json"),
                                              1, &file, allocator_, &package));
     auto status = loom_serve_model_configuration_initialize(
-        iree_make_cstring_view(kDeployment), {}, package, allocator_,
+        iree_make_cstring_view(deployment.c_str()), {}, package, allocator_,
         &configuration_);
     loom_serve_package_release(package);
     IREE_ASSERT_OK(status);
@@ -85,9 +86,13 @@ class ModelResolutionTest : public ::testing::Test {
     loomc_task_execute(task, 0);
   }
 
+  // Allocator owning each declaration and its asynchronous result.
   iree_allocator_t allocator_ = iree_allocator_system();
+  // Authored declaration retained until the resolution task is joined.
   loom_serve_model_configuration_t configuration_ = {};
+  // Accepted task borrowed from the resolution owner until execution.
   loomc_task_t* task_ = nullptr;
+  // Number of completion notifications received by the owner.
   int wakes_ = 0;
 };
 
@@ -121,11 +126,45 @@ TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   loom_serve_model_configuration_deinitialize(&resolved);
 }
 
-TEST_F(ModelResolutionTest, UnsupportedServiceVersionFailsBeforeProgramIo) {
-  std::string card = kCard;
-  card.replace(card.find("\"version\": 1"), strlen("\"version\": 1"),
-               "\"version\": 2");
-  Initialize(card);
+class ServiceCardResolutionTest
+    : public ModelResolutionTest,
+      public ::testing::WithParamInterface<const char*> {
+ protected:
+  void InitializeService(int version) {
+    const std::string kind = GetParam();
+    const std::string card =
+        R"({"schema_version":1,"model":{"id":"fixture","name":"Fixture"},
+          "programs":{"source":{"inputs":["unopened.loom"],"libraries":[]}},
+          "services":{"serve":{"kind":")" +
+        kind + R"(","version":)" + std::to_string(version) +
+        R"(}},"variants":{"fixture":{"services":{"serve":{
+          "programs":["source"]}}}}})";
+    const std::string deployment =
+        R"({"name":"fixture","model":{"path":"cards/model.json"},
+          "definition":{"kind":")" +
+        kind + R"("}})";
+    Initialize(card, deployment);
+  }
+};
+
+TEST_P(ServiceCardResolutionTest, SupportedVersionResolvesWithoutProgramIo) {
+  InitializeService(1);
+  loom_serve_model_resolution_t* resolution = nullptr;
+  IREE_ASSERT_OK(loom_serve_model_resolution_start(
+      Sink(), &configuration_, Observer(), allocator_, &resolution));
+  Execute();
+  loom_serve_model_configuration_t resolved = {};
+  iree_status_t status = iree_ok_status();
+  ASSERT_TRUE(
+      loom_serve_model_resolution_take(&resolution, &status, &resolved));
+  IREE_EXPECT_OK(status);
+  EXPECT_NE(resolved.sources.card, nullptr);
+  EXPECT_EQ(resolved.kind, configuration_.kind);
+  loom_serve_model_configuration_deinitialize(&resolved);
+}
+
+TEST_P(ServiceCardResolutionTest, UnsupportedVersionFailsBeforeProgramIo) {
+  InitializeService(2);
   loom_serve_model_resolution_t* resolution = nullptr;
   IREE_ASSERT_OK(loom_serve_model_resolution_start(
       Sink(), &configuration_, Observer(), allocator_, &resolution));
@@ -138,6 +177,11 @@ TEST_F(ModelResolutionTest, UnsupportedServiceVersionFailsBeforeProgramIo) {
   EXPECT_EQ(resolved.sources.card, nullptr);
   loom_serve_model_configuration_deinitialize(&resolved);
 }
+
+INSTANTIATE_TEST_SUITE_P(NativeServices, ServiceCardResolutionTest,
+                         ::testing::Values("text", "sequence", "image",
+                                           "embedding", "decision", "speech",
+                                           "recognition", "activity"));
 
 TEST_F(ModelResolutionTest, RejectedSubmissionOwesNoWakeOrBorrow) {
   const loomc_task_sink_t sink = {

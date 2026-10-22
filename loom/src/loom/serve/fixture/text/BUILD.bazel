@@ -161,3 +161,30 @@ loom_model(
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )
+
+[
+    loom_model(
+        name = "sequence_card_model_" + encoding,
+        assets = {
+            ":bias.data": "bias.data",
+            ":metadata.safetensors": "metadata.safetensors",
+            "weights.loom": "weights.loom",
+        },
+        card = "native.card.json",
+        configuration = "encode",
+        encoding = encoding,
+        files = {
+            "advance.loom": "advance.loom",
+            "control.loom": "control.loom",
+            "prepare.loom": "prepare.loom",
+            "service.loom": "service.loom",
+        },
+        model_name = "fixture-sequence",
+        tags = ["skip-bazel_to_cmake"],
+        visibility = ["//visibility:public"],
+    )
+    for encoding in [
+        "text",
+        "bc",
+    ]
+]

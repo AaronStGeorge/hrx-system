@@ -240,3 +240,48 @@ func.def public @text_epoch_v1(%control_state: buffer, %shape: i32, %proposes: i
   %result_0 = func.call @epoch(%control_state, %shape, %proposes, %verifies, %span_count, %output_count, %epoch_count, %continuation_shape, %continuation_proposes, %first_media_count, %next_media_count, %residual, %metadata, %origins, %state, %tokens, %outputs, %carry, %committed, %results, %draft_cache, %draft_origins, %next_results) : (buffer, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer) -> (i64)
   func.return %result_0 : i64
 }
+
+func.def public @sequence_prepare_v1(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %pins: i64, %draft_depth: i32, %shapes: buffer, %shape_count: i64, %weights: buffer, %options: buffer) -> (i64, i32, buffer, buffer, buffer, buffer, buffer, buffer, buffer) {
+  %result_0, %result_1, %result_2, %result_3, %result_4, %result_5, %result_6, %result_7, %result_8 = func.call @prepare(%prefill, %context, %pool, %rows, %pins, %draft_depth, %shapes, %shape_count, %weights, %options) : (i64, i64, i64, i64, i64, i32, buffer, i64, buffer, buffer) -> (i64, i32, buffer, buffer, buffer, buffer, buffer, buffer, buffer)
+  func.return %result_0, %result_1, %result_2, %result_3, %result_4, %result_5, %result_6, %result_7, %result_8 : i64, i32, buffer, buffer, buffer, buffer, buffer, buffer, buffer
+}
+
+func.def public @sequence_epoch_v1(%control_state: buffer, %shape: i32, %proposes: i32, %verifies: i32, %span_count: i32, %output_count: i32, %epoch_count: i32, %continuation_shape: i32, %continuation_proposes: i32, %first_media_count: i32, %next_media_count: i32, %residual: hal.buffer, %metadata: hal.buffer, %origins: hal.buffer, %state: hal.buffer, %tokens: hal.buffer, %outputs: hal.buffer, %carry: hal.buffer, %committed: hal.buffer, %results: hal.buffer, %draft_cache: hal.buffer, %draft_origins: hal.buffer, %next_results: hal.buffer) -> (i64) {
+  %result_0 = func.call @epoch(%control_state, %shape, %proposes, %verifies, %span_count, %output_count, %epoch_count, %continuation_shape, %continuation_proposes, %first_media_count, %next_media_count, %residual, %metadata, %origins, %state, %tokens, %outputs, %carry, %committed, %results, %draft_cache, %draft_origins, %next_results) : (buffer, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer, hal.buffer) -> (i64)
+  func.return %result_0 : i64
+}
+
+func.def public @sequence_encode_epoch_v1(%control_state: buffer, %plan: buffer, %inputs: buffer, %media_plan: buffer, %first_count: i32, %next_count: i32, %input_count: i32, %first_media_count: i32, %next_media_count: i32, %first_packet_capacity: i32, %next_packet_capacity: i32, %eos: i32, %metadata: buffer, %tokens: buffer) -> (i32) {
+  %result_0 = func.call @encode_epoch(%control_state, %plan, %inputs, %media_plan, %first_count, %next_count, %input_count, %first_media_count, %next_media_count, %first_packet_capacity, %next_packet_capacity, %eos, %metadata, %tokens) : (buffer, buffer, buffer, buffer, i32, i32, i32, i32, i32, i32, i32, i32, buffer, buffer) -> (i32)
+  func.return %result_0 : i32
+}
+
+func.def public @sequence_publish_epoch_v1(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative_mask: i32, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
+  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative_mask, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer)
+  func.return
+}
+
+func.def public @sequence_encode_state_v1(%bindings: buffer, %count: i32, %origins: buffer) {
+  func.call @encode_state(%bindings, %count, %origins) : (buffer, i32, buffer)
+  func.return
+}
+
+func.def public @sequence_bind_request_v1(%state: buffer, %row: i32, %options: buffer) {
+  func.call @bind_request(%state, %row, %options) : (buffer, i32, buffer)
+  func.return
+}
+
+func.def public @sequence_capture_epoch_v1(%state: buffer, %shape: i32, %count: i32, %plan: buffer) -> (buffer) {
+  %result_0 = func.call @capture_epoch(%state, %shape, %count, %plan) : (buffer, i32, i32, buffer) -> (buffer)
+  func.return %result_0 : buffer
+}
+
+func.def public @sequence_request_defaults_v1(%options: buffer) -> (buffer) {
+  %result_0 = func.call @request_defaults(%options) : (buffer) -> (buffer)
+  func.return %result_0 : buffer
+}
+
+func.def public @sequence_request_options_v1(%defaults: buffer, %request: buffer, %nonce: i64) -> (buffer) {
+  %result_0 = func.call @request_options(%defaults, %request, %nonce) : (buffer, buffer, i64) -> (buffer)
+  func.return %result_0 : buffer
+}

@@ -47,6 +47,21 @@ def test_native_selected_closure():
     assert ModelCard(selected.document).select().files == selected.files
 
 
+def test_shared_providers_keep_distinct_service_selections():
+    card = ModelCard(_document())
+    with pytest.raises(ManifestError, match="select explicitly"):
+        card.select()
+    text = card.select("check")
+    sequence = card.select("encode")
+    assert sequence.service == {"kind": "sequence", "version": 1}
+    assert sequence.program == text.program
+    assert sequence.parameters == text.parameters
+    assert sequence.config == {"fixture.card": True, "fixture.bias_delta": 0}
+    assert sequence.tokenizers == {}
+    assert set(sequence.files) == set(text.files) - {"tokenizer.json"}
+    assert ModelCard(sequence.document).select().service == sequence.service
+
+
 def test_source_and_bytecode_names_are_opaque():
     document = _document()
     document["programs"]["textual"] = document["programs"].pop("archive")
@@ -82,7 +97,7 @@ def test_origins_separate_acquisition_from_placement():
     parameters = _service(document)["parameters"]["model"]
     parameters["origin"] = "@checkpoint/"
     parameters["files"][1]["origin"] = "@checkpoint/some/stupid/name.tensor"
-    selected = ModelCard(document).select()
+    selected = ModelCard(document).select("check")
     assert (
         selected.files["metadata.safetensors"].origin
         == "@checkpoint/metadata.safetensors"
@@ -94,21 +109,21 @@ def test_origins_separate_acquisition_from_placement():
 def test_owned_snapshots():
     document = _document()
     card = ModelCard(document)
-    selected = card.select()
+    selected = card.select("check")
     document.clear()
     selected.settings["execution"]["rows"] = 77
     selected.document["programs"].clear()
-    assert card.select().settings["execution"]["rows"] == 4
-    assert card.select().document["programs"]
+    assert card.select("check").settings["execution"]["rows"] == 4
+    assert card.select("check").document["programs"]
 
 
 def test_independent_service_versions():
     document = _document()
     document["services"]["future"] = {"kind": "image", "version": 54}
     _service(document)["programs"] = ["source"]
-    assert ModelCard(document).select().service["version"] == 1
+    assert ModelCard(document).select("check").service["version"] == 1
     document["services"]["chat"].pop("version")
-    assert "version" not in ModelCard(document).select().service
+    assert "version" not in ModelCard(document).select("check").service
 
 
 def test_explicit_selection_without_canonical_configuration():
@@ -132,7 +147,10 @@ def test_same_destination_combines_roles_but_not_conflicting_sources():
     parameter = _service(document)["parameters"]["model"]
     parameter["files"].append("weights.loom")
     card = ModelCard(document)
-    assert card.select().files["weights.loom"].roles == {"auxiliary", "parameter"}
+    assert card.select("check").files["weights.loom"].roles == {
+        "auxiliary",
+        "parameter",
+    }
     parameter["files"][-1] = {"path": "weights.loom", "origin": "other.loom"}
     with pytest.raises(ManifestError, match="conflicting selected"):
         ModelCard(document)
@@ -142,7 +160,8 @@ def test_options_preserve_types_but_require_declared_names():
     document = _document()
     document["services"]["chat"]["options"] = ["voice"]
     document["configurations"]["check"]["options"] = {"voice": {"tokens": [1, 2]}}
-    assert ModelCard(document).select().settings["options"]["voice"]["tokens"] == [1, 2]
+    selected = ModelCard(document).select("check")
+    assert selected.settings["options"]["voice"]["tokens"] == [1, 2]
     document["configurations"]["check"]["options"]["layers"] = 17
     with pytest.raises(ManifestError, match="undeclared model options"):
         ModelCard(document)

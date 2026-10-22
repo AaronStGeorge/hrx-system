@@ -90,6 +90,11 @@ The weighted text fixture checks an actual response through this path. The
 recognition fixture checks activity and transcription as independent services
 sharing one provider universe, including concurrent streams and both bytecode
 and text build outputs.
+Image, embedding, decision, and speech fixtures check complete HTTP outputs from
+both encodings, including explicitly typed tokenizer files named
+`vocabulary.data`. The weighted text card also exposes an independent sequence
+service through the same providers; its checks append to retained sessions and
+compare activation bytes with a dense arithmetic oracle.
 
 ## Acquisition
 

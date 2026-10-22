@@ -30,8 +30,10 @@ class TokenizerLoadTest : public ::testing::Test {
          iree_make_const_byte_span(json.data, json.size)},
         {IREE_SV("vocabulary.data"),
          iree_make_const_byte_span(json.data, json.size)},
+        {IREE_SV("asset/tokenizer.json"),
+         iree_make_const_byte_span(json.data, json.size)},
     };
-    IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model.json"), 2, files,
+    IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model.json"), 3, files,
                                              iree_allocator_system(),
                                              &sources_.package));
   }
@@ -59,9 +61,10 @@ class TokenizerLoadTest : public ::testing::Test {
     return loomc_ok_status();
   }
 
-  iree_status_t Start(iree_string_view_t locator = IREE_SV("tokenizer.json")) {
+  iree_status_t Start(iree_string_view_t locator = IREE_SV("tokenizer.json"),
+                      iree_string_view_t directory = iree_string_view_empty()) {
     return loom_serve_tokenizer_load_start(
-        {Submit, this}, &sources_, locator,
+        {Submit, this}, &sources_, directory, locator,
         [](void* self) { ++static_cast<TokenizerLoadTest*>(self)->wakes_; },
         this, iree_allocator_system(), &load_);
   }
@@ -79,8 +82,8 @@ class TokenizerLoadTest : public ::testing::Test {
   }
 
   iree_status_t StartNamed(iree_string_view_t name = IREE_SV("vocabulary")) {
-    return loom_serve_tokenizer_load_start_named(
-        {Submit, this}, &sources_, name,
+    return loom_serve_tokenizer_load_start(
+        {Submit, this}, &sources_, IREE_SV("ignored-for-card"), name,
         [](void* self) { ++static_cast<TokenizerLoadTest*>(self)->wakes_; },
         this, iree_allocator_system(), &load_);
   }
@@ -123,6 +126,12 @@ class TokenizerLoadTest : public ::testing::Test {
   // Number of terminal notifications received by the serialized owner.
   int wakes_ = 0;
 };
+
+TEST_F(TokenizerLoadTest, LegacyPathResolvesAgainstItsDeclaredDirectory) {
+  IREE_ASSERT_OK(Start(IREE_SV("tokenizer.json"), IREE_SV("asset")));
+  RunQueued();
+  CheckResult();
+}
 
 TEST_F(TokenizerLoadTest, NamedTokenizerUsesExplicitFormatAndIndependentPath) {
   IREE_ASSERT_OK(SelectTokenizer(
@@ -238,7 +247,8 @@ void TokenizerLoadTest::CheckSingleWorker() {
             reinterpret_cast<loom_serve_test_tokenizer_load_parent_t*>(task);
         auto* test = parent->test;
         test->status_ = loom_serve_tokenizer_load_start(
-            parent->sink, &test->sources_, IREE_SV("tokenizer.json"),
+            parent->sink, &test->sources_, iree_string_view_empty(),
+            IREE_SV("tokenizer.json"),
             [](void* data) {
               iree_notification_post(static_cast<iree_notification_t*>(data),
                                      IREE_ALL_WAITERS);

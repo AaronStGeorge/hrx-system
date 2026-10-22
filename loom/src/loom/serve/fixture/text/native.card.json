@@ -60,6 +60,10 @@
     },
     "development": {
       "kind": "text"
+    },
+    "encode": {
+      "kind": "sequence",
+      "version": 1
     }
   },
   "variants": {
@@ -114,6 +118,28 @@
           "tokenizers": {
             "text": "tokenizer.json"
           }
+        },
+        "encode": {
+          "programs": [
+            "source",
+            "archive",
+            "mixed"
+          ],
+          "config": {
+            "fixture.card": true,
+            "fixture.bias_delta": 0
+          },
+          "parameters": {
+            "model": {
+              "files": [
+                "metadata.safetensors",
+                {
+                  "path": "bias.data",
+                  "format": "safetensors"
+                }
+              ]
+            }
+          }
         }
       }
     }
@@ -129,6 +155,19 @@
         "pool_capacity": 256,
         "prefill_capacity": 32,
         "max_tokens": 16
+      }
+    },
+    "encode": {
+      "service": "encode",
+      "variant": "fixture",
+      "programs": "source",
+      "execution": {
+        "rows": 4,
+        "context_capacity": 96,
+        "pool_capacity": 256,
+        "prefill_capacity": 32,
+        "checkpoint_capacity": 4,
+        "session_cache_capacity": 4
       }
     }
   }

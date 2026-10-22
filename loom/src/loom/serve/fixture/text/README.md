@@ -9,6 +9,14 @@ This is deterministic arithmetic, not learned language generation or a
 throughput proxy. It makes retained-session failures observable without a model
 download. Other modalities have their own [source fixtures](../README.md).
 
+The [portable card](native.card.json) names independent text and sequence
+services backed by the same provider set. [service.loom](service.loom) exports
+their distinct ABI names. The `encode` configuration selects sequence requests,
+the ordered checkpoint shards, and zero JIT bias adjustment; it requires no
+tokenizer. `sequence_card_model_text` and `sequence_card_model_bc` build runnable
+packages whose CPU checks append known token IDs to a retained session and
+compare every returned activation against the dense recurrence below.
+
 ## Definition and independent oracle
 
 Token IDs are `a=0`, `b=1`, `x=2`, `#=3`. `#` is the terminal token and the

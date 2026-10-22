@@ -330,6 +330,49 @@ loom_py_test(
     deps = ["//loom/src/loom/serve/testing:http"],
 )
 
+# Exercises independently namespaced services from text and bytecode packages.
+[
+    loom_py_test(
+        name = kind + "_model_card_" + encoding + "_test",
+        size = "small",
+        srcs = ["service_model_card_test.py"],
+        args = [
+            "$(rootpath :loom-serve-test-tool)",
+            kind,
+            "$(rootpath " + fixture + encoding + ")",
+        ],
+        data = [
+            ":loom-serve-test-tool",
+            fixture + encoding,
+        ],
+        main = "service_model_card_test.py",
+        tags = ["skip-bazel_to_cmake"],
+        target_compatible_with = loom_config_compatible_with([
+            "//loom/config/target/arch:x86",
+            "//runtime/config/hal:driver_task",
+            "//runtime/config/hal:executable_loader_embedded_elf",
+        ]) + ["@platforms//cpu:x86_64"] + select({
+            "@platforms//os:linux": [],
+            "//conditions:default": ["@platforms//:incompatible"],
+        }),
+        deps = [
+            "//loom/src/loom/serve/server:catalog_test_util",
+            "//loom/src/loom/serve/testing:http",
+        ],
+    )
+    for kind, fixture in [
+        ("image", "//loom/src/loom/serve/fixture/image:card_model_"),
+        ("embedding", "//loom/src/loom/serve/fixture/embedding:card_model_"),
+        ("decision", "//loom/src/loom/serve/fixture/decision:card_model_"),
+        ("speech", "//loom/src/loom/serve/fixture/speech:card_model_"),
+        ("sequence", "//loom/src/loom/serve/fixture/text:sequence_card_model_"),
+    ]
+    for encoding in [
+        "text",
+        "bc",
+    ]
+]
+
 # JITs an external source package and executes its command program through the
 # task HAL using the exact CPU serving composition.
 loom_py_test(

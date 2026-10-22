@@ -294,10 +294,12 @@ static iree_status_t loom_serve_model_configuration_text(
 }
 
 static iree_status_t loom_serve_model_configuration_image(
-    const loom_serve_model_configuration_field_t* fields,
+    const loom_serve_model_configuration_field_t* fields, bool card,
     loom_serve_image_configuration_t* image, iree_allocator_t host_allocator) {
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[DEFINITION_CHECKPOINT], host_allocator, &image->checkpoint));
+  if (!card) {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[DEFINITION_CHECKPOINT], host_allocator, &image->checkpoint));
+  }
   if (fields[DEFINITION_ADAPTER].value.data) {
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
         &fields[DEFINITION_ADAPTER], host_allocator, &image->adapter));
@@ -456,17 +458,10 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
     }
   }
   if (card) {
-    if (model->kind != LOOM_SERVE_MODEL_KIND_TEXT &&
-        model->kind != LOOM_SERVE_MODEL_KIND_RECOGNITION &&
-        model->kind != LOOM_SERVE_MODEL_KIND_ACTIVITY) {
-      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                              "this host supports portable model cards for "
-                              "the text, recognition, and activity services");
-    }
-    const int facts[] = {DEFINITION_PREPARE,   DEFINITION_CONTROL,
-                         DEFINITION_SOURCES,   DEFINITION_WEIGHTS,
-                         DEFINITION_TOKENIZER, DEFINITION_ASSETS,
-                         DEFINITION_CHECKPOINT};
+    const int facts[] = {DEFINITION_PREPARE,    DEFINITION_CONTROL,
+                         DEFINITION_SOURCES,    DEFINITION_WEIGHTS,
+                         DEFINITION_TOKENIZER,  DEFINITION_ASSETS,
+                         DEFINITION_CHECKPOINT, DEFINITION_ADAPTER};
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(facts); ++i) {
       if (fields[facts[i]].value.data) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -517,7 +512,7 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
         &model->specialization_cache));
   }
   if (model->kind == LOOM_SERVE_MODEL_KIND_IMAGE) {
-    return loom_serve_model_configuration_image(fields, &model->image,
+    return loom_serve_model_configuration_image(fields, card, &model->image,
                                                 host_allocator);
   }
   if (card) {

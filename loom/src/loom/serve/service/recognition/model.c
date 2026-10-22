@@ -463,22 +463,12 @@ static iree_status_t loom_serve_recognition_prepare(
         "source initial conditioning exceeds declared storage");
   }
   if (iree_status_is_ok(status) && metadata[0].data_length) {
-    char* path = NULL;
-    iree_string_view_t tokenizer = iree_make_string_view(
-        (const char*)metadata[0].data, metadata[0].data_length);
-    if (!options->sources.card) {
-      status = loom_serve_path_resolve(options->asset_directory, tokenizer,
-                                       host_allocator, &path);
-      tokenizer = iree_make_cstring_view(path);
-    }
-    if (iree_status_is_ok(status)) {
-      status = (options->sources.card ? loom_serve_tokenizer_load_start_named
-                                      : loom_serve_tokenizer_load_start)(
-          loom_serve_host_compiler_sink(loom_serve_device_host(model->owner)),
-          &options->sources, tokenizer, wake, user_data, host_allocator,
-          out_tokenizer_load);
-    }
-    iree_allocator_free(host_allocator, path);
+    status = loom_serve_tokenizer_load_start(
+        loom_serve_host_compiler_sink(loom_serve_device_host(model->owner)),
+        &options->sources, options->asset_directory,
+        iree_make_string_view((const char*)metadata[0].data,
+                              metadata[0].data_length),
+        wake, user_data, host_allocator, out_tokenizer_load);
   }
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
