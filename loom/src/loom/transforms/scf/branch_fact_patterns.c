@@ -140,9 +140,20 @@ static iree_status_t loom_branch_facts_edge_assume_set_append_predicate(
     return iree_ok_status();
   }
 
-  // The existing input carrier already makes this predicate durable. Creating
-  // another copy would oppose redundant-identity cleanup and requeue this
-  // branch indefinitely. Ambient edge facts do not establish this contract.
+  // The rewrite table excludes conditioned results, so a proven predicate is
+  // durable producer evidence instead of the edge fact being materialized.
+  // Consult the cumulative value and relation facts before the immediate
+  // carrier: a chain of explicit identities may divide the complete predicate
+  // set across carriers, and alternating those partial sets would requeue this
+  // branch indefinitely.
+  if (loom_value_fact_table_evaluate_predicate(
+          rewriter->fact_table, &predicate) == LOOM_DECISION_TRUTH_TRUE) {
+    return iree_ok_status();
+  }
+
+  // The existing input carrier may retain a predicate that its scalar summary
+  // cannot represent. Creating another copy would oppose redundant-identity
+  // cleanup. Only its immediate definition is inspected here.
   const loom_value_t* value = loom_module_value(rewriter->module, source);
   if (!loom_value_is_block_arg(value) &&
       loom_value_fact_table_carrier_implies_predicate(
