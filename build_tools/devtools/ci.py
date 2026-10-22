@@ -834,8 +834,10 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
         options = ci_config.AMD_CLIENT_WINDOWS_BAZEL_OPTIONS
         default_targets = ci_config.AMD_CLIENT_WINDOWS_BAZEL_TARGETS
         resources = ci_config.AMD_CLIENT_WINDOWS_RESOURCES
-        test_tag_filters += ci_config.VULKAN_BAZEL_TEST_TAG_FILTERS + (
-            ci_config.AMD_GPU_RUN_REQUIREMENT_TAG,
+        test_tag_filters += (
+            ci_config.VULKAN_BAZEL_TEST_TAG_FILTERS
+            + (ci_config.AMD_GPU_RUN_REQUIREMENT_TAG,)
+            + ci_config.AMD_GPU_WINDOWS_TEST_TAG_FILTERS
         )
         native_options = (
             ci_config.AMD_GPU_BAZEL_OPTIONS + amd_gpu_device_compiler_options()
@@ -982,6 +984,7 @@ def amdgpu_windows_steps(
             f"Test IREE / Windows AMDGPU{config_name}",
             targets or ci_config.AMDGPU_WINDOWS_BAZEL_TARGETS,
             config=config,
+            test_tag_filters=ci_config.AMD_GPU_WINDOWS_TEST_TAG_FILTERS,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
             test_env=amd_test_env(),
             bazel_options=options + ("--test_env=GTEST_FAIL_FAST=1",),

@@ -1489,11 +1489,6 @@ class CiTest(unittest.TestCase):
             step for step in steps if step.name == "Test IREE / Windows AMDGPU / ASAN"
         )
         self.assert_native_gpu_image_targets(test_step.argv)
-        self.assertIn(
-            "//loom/src/loom/tooling/target/amdgpu/test:"
-            "amd_gpu_hal_tests_execute_amd_gpu_hardware_test",
-            test_step.argv,
-        )
 
     def test_bazel_amdgpu_single_sanitizer_command_runs_one_configuration(self):
         args = ci.parse_arguments(

@@ -211,12 +211,17 @@ AMD_CLIENT_WINDOWS_BAZEL_OPTIONS = AMD_CLIENT_BAZEL_OPTIONS + (
 AMD_GPU_BAZEL_TARGETS = (
     "//runtime/src/iree/hal/drivers/amd/...",
     "//loom/src/loom/tooling/target/amdgpu/serve/...",
-    "//loom/src/loom/tooling/target/amdgpu/test:amd_gpu_hal_tests_execute_amd_gpu_hardware_test",
+    "//loom/src/loom/tooling/target/amdgpu/test/...",
+    "//loom/src/loom/target/emit/native/amdgpu/...",
+    "//loom/target/amdgpu/test/...",
+    "//loom/docs/examples/getting-started/first-kernel/...",
+    "//loom/docs/examples/guide/functions-and-control/...",
 )
 AMD_GPU_WEIGHTS_TARGET = "//loom/src/loom/tooling/target/amdgpu/serve:gpu_weights_test"
 # The complete weights suite exercises shader assertions. Windows runs its
 # streaming cases separately without requesting the unavailable feedback service.
 AMD_GPU_WINDOWS_BAZEL_TARGETS = AMD_GPU_BAZEL_TARGETS + ("-" + AMD_GPU_WEIGHTS_TARGET,)
+AMD_GPU_WINDOWS_TEST_TAG_FILTERS = ("-requires-amd-gpu-feedback",)
 # Native CTS binaries embed images for every supported execution family. Their
 # compiler descriptors must remain enabled even on a single-family runner.
 AMD_GPU_BINARY_TARGETS = ("gfx90a", "gfx9-4-generic", "gfx11-generic", "gfx12-generic")

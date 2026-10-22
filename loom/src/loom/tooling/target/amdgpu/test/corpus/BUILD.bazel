@@ -17,7 +17,7 @@ load(
 )
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:defs.bzl", "loom_module", "loom_test", "loom_test_module")
-load("//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_ACCESS_PROFILE", "AMDGPU_HARDWARE_PROFILE")
+load("//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_ACCESS_PROFILE", "AMDGPU_HARDWARE_PROFILE", "AMD_GPU_HARDWARE_PROFILE")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -38,7 +38,6 @@ _EXECUTION_TAGS = [
 
 _GENERIC_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
-    "//runtime/config/hal:driver_amdgpu",
 ])
 
 _AMDGPU_SOURCE_COMPATIBLE_WITH = loom_config_compatible_with([
@@ -85,6 +84,7 @@ loom_test(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
+        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
     target_compatible_with = _GENERIC_COMPATIBLE_WITH,
@@ -111,14 +111,19 @@ iree_executable_test(
     data = [":generic_test_module"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _EXECUTION_TAGS,
-    target_compatible_with = _GENERIC_COMPATIBLE_WITH,
+    target_compatible_with = _GENERIC_COMPATIBLE_WITH + loom_config_compatible_with([
+        "//runtime/config/hal:driver_amdgpu",
+    ]),
 )
 
 loom_test(
     name = "gfx11_wave64_reductions_test",
     srcs = ["gfx11/wave64_reductions.loom"],
     compile_targets = ["//loom/target/amdgpu:gfx1151"],
-    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
+    execution_profiles = [
+        AMDGPU_HARDWARE_PROFILE,
+        AMD_GPU_HARDWARE_PROFILE,
+    ],
     target_compatible_with = _GFX11_COMPATIBLE_WITH,
 )
 
@@ -147,7 +152,9 @@ iree_executable_test(
     data = [":gfx11_test_module"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _EXECUTION_TAGS,
-    target_compatible_with = _GFX11_COMPATIBLE_WITH,
+    target_compatible_with = _GFX11_COMPATIBLE_WITH + loom_config_compatible_with([
+        "//runtime/config/hal:driver_amdgpu",
+    ]),
 )
 
 loom_module(
@@ -171,7 +178,9 @@ iree_executable_test(
     data = [":gfx11_loop_entry_module"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _EXECUTION_TAGS + ["notsan"],
-    target_compatible_with = _GFX11_COMPATIBLE_WITH,
+    target_compatible_with = _GFX11_COMPATIBLE_WITH + loom_config_compatible_with([
+        "//runtime/config/hal:driver_amdgpu",
+    ]),
 )
 
 loom_module(
@@ -190,7 +199,9 @@ iree_executable_test(
     data = [":gfx1100_test_module"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _EXECUTION_TAGS + ["manual"],
-    target_compatible_with = _GENERIC_COMPATIBLE_WITH,
+    target_compatible_with = _GENERIC_COMPATIBLE_WITH + loom_config_compatible_with([
+        "//runtime/config/hal:driver_amdgpu",
+    ]),
 )
 
 loom_module(
@@ -209,7 +220,9 @@ iree_executable_test(
     data = [":gfx9_4_test_module"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _EXECUTION_TAGS + ["manual"],
-    target_compatible_with = _GENERIC_COMPATIBLE_WITH,
+    target_compatible_with = _GENERIC_COMPATIBLE_WITH + loom_config_compatible_with([
+        "//runtime/config/hal:driver_amdgpu",
+    ]),
 )
 
 loom_test_module(
@@ -228,6 +241,7 @@ loom_test(
     name = "gfx950_v4_lds_shared_qk_execution_test",
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
+        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
     module = ":gfx950_v4_lds_shared_qk_module",
