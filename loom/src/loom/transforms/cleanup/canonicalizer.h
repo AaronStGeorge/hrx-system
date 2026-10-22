@@ -33,6 +33,8 @@ typedef struct loom_cleanup_pattern_registry_t loom_cleanup_pattern_registry_t;
 // is optional and runs at the named ordering point in the shared fixed-point
 // driver.
 typedef struct loom_canonicalizer_pattern_registries_t {
+  // Initial prepared actions followed by fact-independent structural rewrites.
+  const loom_rewrite_pattern_registry_t* fact_independent;
   // Patterns applied once in region preorder before worklist processing.
   const loom_rewrite_pattern_registry_t* region_initialization;
   // Patterns applied after mini-DCE and before built-in poison/fold rules.

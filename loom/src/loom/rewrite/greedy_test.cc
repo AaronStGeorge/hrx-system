@@ -202,6 +202,199 @@ static void initialize_pattern_registry(
       iree_allocator_system(), out_storage));
 }
 
+enum class PreparationCase { kApply, kNoMatch, kAllocationFailure };
+
+class PreparedRewriteTest
+    : public GreedyRewriteTest,
+      public ::testing::WithParamInterface<PreparationCase> {};
+
+TEST_P(PreparedRewriteTest, CollectsBeforeMutatingAndPublishesBeforeObserving) {
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* source = nullptr;
+  loom_op_t* increment = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(7), type,
+                                          LOOM_LOCATION_UNKNOWN, &source));
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(GetParam() == PreparationCase::kNoMatch ? 1 : 0),
+      type, LOOM_LOCATION_UNKNOWN, &increment));
+  // Storage order differs from dominance order. Reverse-preorder application
+  // replaces the producer first, so the consumer must read its updated operand.
+  loom_region_t* body = loom_func_like_body(function_);
+  body->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_block_t* consumer = nullptr;
+  loom_block_t* producer = nullptr;
+  IREE_ASSERT_OK(loom_region_append_block(module_, body, &consumer));
+  IREE_ASSERT_OK(loom_region_append_block(module_, body, &producer));
+  loom_op_t* branch = nullptr;
+  IREE_ASSERT_OK(loom_cfg_br_build(&builder_, producer, nullptr, 0,
+                                   LOOM_LOCATION_UNKNOWN, &branch));
+  loom_builder_set_block(&builder_, producer);
+  loom_op_t* first = nullptr;
+  loom_op_t* second = nullptr;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_,
+                                      loom_test_constant_result(source),
+                                      loom_test_constant_result(increment),
+                                      type, LOOM_LOCATION_UNKNOWN, &first));
+  IREE_ASSERT_OK(loom_cfg_br_build(&builder_, consumer, nullptr, 0,
+                                   LOOM_LOCATION_UNKNOWN, &branch));
+  loom_builder_set_block(&builder_, consumer);
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, loom_test_addi_result(first),
+                                      loom_test_constant_result(increment),
+                                      type, LOOM_LOCATION_UNKNOWN, &second));
+  const loom_value_id_t original_result = loom_test_addi_result(second);
+  loom_op_t* use = nullptr;
+  loom_op_t* terminator = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &original_result, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &terminator));
+
+  struct State {
+    // Injection controls the dependency's preparation failure, not the driver.
+    PreparationCase test_case;
+    // Number of fully collected actions.
+    uint32_t prepared = 0;
+    // Number of actions already applied.
+    uint32_t applied = 0;
+    // Number of mutation notifications from the shared driver.
+    uint32_t notifications = 0;
+    // Ordinary observer visits after publication.
+    uint32_t observations = 0;
+    struct Action {
+      // Shared action header; no captured operand IDs.
+      loom_rewrite_action_t action;
+      // Test instrumentation shared across matching and application.
+      State* state;
+    };
+    static iree_status_t Prepare(const loom_rewrite_pattern_t* pattern,
+                                 const loom_module_t*,
+                                 const loom_value_fact_table_t* facts,
+                                 const loom_op_t* op,
+                                 iree_arena_allocator_t* arena,
+                                 loom_rewrite_action_t** out_action) {
+      auto* state =
+          const_cast<State*>(static_cast<const State*>(pattern->user_data));
+      *out_action = nullptr;
+      EXPECT_EQ(state->applied, 0u);
+      EXPECT_EQ(
+          arena->used_allocation_size,
+          state->prepared * iree_host_align(sizeof(Action), iree_max_align_t));
+      int64_t rhs = 0;
+      if (!loom_value_facts_as_exact_i64(
+              loom_value_fact_table_lookup(facts,
+                                           loom_op_const_operands(op)[1]),
+              &rhs) ||
+          rhs != 0) {
+        return iree_ok_status();
+      }
+      if (state->test_case == PreparationCase::kAllocationFailure &&
+          state->prepared == 1) {
+        return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "injected plan allocation failure");
+      }
+      Action* action = nullptr;
+      IREE_RETURN_IF_ERROR(iree_arena_allocate(
+          arena, sizeof(Action), reinterpret_cast<void**>(&action)));
+      action->action.apply = [](const loom_rewrite_action_t* action,
+                                loom_rewriter_t* rewriter) {
+        auto* state = reinterpret_cast<const Action*>(action)->state;
+        EXPECT_EQ(state->prepared, 2u);
+        EXPECT_EQ(state->observations, 0u);
+#ifndef NDEBUG
+        if (state->applied) {
+          EXPECT_TRUE(rewriter->fact_table->observation.pending);
+        }
+#endif
+        const loom_value_id_t replacement =
+            loom_op_const_operands(action->root)[0];
+        IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+            rewriter, action->root, &replacement, 1));
+        ++state->applied;
+        return iree_ok_status();
+      };
+      action->state = state;
+      *out_action = &action->action;
+      ++state->prepared;
+      return iree_ok_status();
+    }
+  } state = {GetParam()};
+  const loom_rewrite_pattern_t patterns[] = {{
+      .root_kind = LOOM_OP_TEST_ADDI,
+      .match_and_rewrite = pattern_two_no_match,
+      .user_data = &state,
+      .prepare = State::Prepare,
+  }};
+  loom_rewrite_pattern_registry_storage_t registry = {};
+  initialize_pattern_registry(patterns, IREE_ARRAYSIZE(patterns), &registry);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_pass_value_fact_owner_t owner;
+  loom_pass_value_fact_owner_initialize(&block_pool_, &owner);
+  loom_value_fact_table_t* facts = nullptr;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+      &owner, module_, loom_pass_value_fact_scope_function(function_), &facts));
+  loom_greedy_rewrite_driver_t driver;
+  loom_greedy_rewrite_driver_initialize(module_, &arena, facts, &driver);
+  const loom_greedy_rewrite_options_t options = {
+      .prepared_patterns = &registry.registry,
+  };
+  const loom_greedy_rewrite_callbacks_t callbacks = {
+      .user_data = &state,
+      .rewrite_op =
+          [](void* user_data, loom_greedy_rewrite_driver_t* driver,
+             loom_op_t* op, loom_greedy_rewrite_result_t*, bool* changed) {
+            auto* state = static_cast<State*>(user_data);
+            *changed = false;
+            if (!loom_test_use_isa(op)) {
+              return iree_ok_status();
+            }
+            EXPECT_EQ(state->applied, state->prepared);
+            int64_t value = 0;
+            EXPECT_TRUE(loom_value_facts_as_exact_i64(
+                loom_rewriter_value_facts(&driver->rewriter,
+                                          loom_op_const_operands(op)[0]),
+                &value));
+            EXPECT_EQ(value,
+                      state->test_case == PreparationCase::kNoMatch ? 9 : 7);
+            ++state->observations;
+            return iree_ok_status();
+          },
+      .changed =
+          [](void* user_data, loom_greedy_rewrite_driver_t*) {
+            ++static_cast<State*>(user_data)->notifications;
+          },
+  };
+  loom_greedy_rewrite_result_t result;
+  iree_status_t status = loom_greedy_rewrite_run_region(
+      &driver, function_, loom_func_like_body(function_), function_.op,
+      &options, &callbacks, &result);
+  if (GetParam() == PreparationCase::kAllocationFailure) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+    EXPECT_EQ(state.applied, 0u);
+    EXPECT_EQ(state.observations, 0u);
+    EXPECT_EQ(loom_op_const_operands(use)[0], original_result);
+  } else {
+    IREE_EXPECT_OK(status);
+    EXPECT_EQ(result.changed, GetParam() == PreparationCase::kApply);
+    EXPECT_EQ(result.ops_modified, state.applied);
+    EXPECT_EQ(state.observations, 1u);
+    if (GetParam() == PreparationCase::kApply) {
+      EXPECT_EQ(loom_op_const_operands(use)[0],
+                loom_test_constant_result(source));
+    }
+  }
+  EXPECT_EQ(state.notifications, state.applied);
+  loom_greedy_rewrite_driver_deinitialize(&driver);
+  loom_pass_value_fact_owner_deinitialize(&owner);
+  iree_arena_deinitialize(&arena);
+  loom_rewrite_pattern_registry_storage_deinitialize(&registry);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Preparation, PreparedRewriteTest,
+    ::testing::Values(PreparationCase::kApply, PreparationCase::kNoMatch,
+                      PreparationCase::kAllocationFailure));
+
 TEST_F(GreedyRewriteTest, ChainedPatternsReachFixedPoint) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 

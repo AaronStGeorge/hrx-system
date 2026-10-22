@@ -78,6 +78,33 @@ void loom_greedy_rewrite_result_record_change(
   }
 }
 
+static iree_status_t loom_greedy_rewrite_apply_prepared(
+    loom_greedy_rewrite_driver_t* driver, loom_region_t* region,
+    const loom_rewrite_pattern_registry_t* patterns,
+    const loom_greedy_rewrite_callbacks_t* callbacks,
+    loom_greedy_rewrite_result_t* result) {
+  IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(&driver->rewriter));
+  loom_greedy_rewrite_result_record_rewriter_flags(result, &driver->rewriter);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(driver->scratch_arena->block_pool, &arena);
+  loom_rewrite_action_t* actions = NULL;
+  iree_status_t status = loom_rewrite_pattern_registry_prepare_region(
+      patterns, driver->module, driver->fact_table, region, &arena, &actions);
+  for (loom_rewrite_action_t* action = actions;
+       iree_status_is_ok(status) && action; action = action->next) {
+    driver->rewriter.flags = 0;
+    status = action->apply(action, &driver->rewriter);
+    loom_greedy_rewrite_result_record_change(
+        result, &driver->rewriter,
+        LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    if (callbacks && callbacks->changed) {
+      callbacks->changed(callbacks->user_data, driver);
+    }
+  }
+  iree_arena_deinitialize(&arena);
+  return status;
+}
+
 iree_status_t loom_greedy_rewrite_run_region(
     loom_greedy_rewrite_driver_t* driver, loom_func_like_t function,
     loom_region_t* region, loom_op_t* parent_op,
@@ -113,6 +140,11 @@ iree_status_t loom_greedy_rewrite_run_region(
     prepare_region_called = true;
     status = callbacks->prepare_region(callbacks->user_data, driver, function,
                                        region, parent_op);
+  }
+  if (iree_status_is_ok(status) && options && options->prepared_patterns &&
+      options->prepared_patterns->pattern_count) {
+    status = loom_greedy_rewrite_apply_prepared(
+        driver, region, options->prepared_patterns, callbacks, &result);
   }
 
   for (uint32_t iteration = 0;

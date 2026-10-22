@@ -857,18 +857,21 @@ void loom_rewriter_invalidate_cfg_forwarding(loom_rewriter_t* rewriter,
       .dirty = true;
 }
 
-// Structured parents own the summaries of their regions. Inserting or erasing
-// an unused definition does not change an equation in its own CFG component.
+// Body edits can enable a parent rewrite without changing its value equations.
+// Facts reach enclosing summaries through terminators; ordinary intermediate
+// values publish through their indexed users instead of lexical containment.
 iree_status_t loom_rewriter_add_parent_summary_ops_to_worklist(
     loom_rewriter_t* rewriter, loom_op_t* op) {
   if (!rewriter->worklist_chunk && !rewriter->fact_table) {
     return iree_ok_status();
   }
+  const bool changes_summary =
+      op && iree_any_bit_set(op->traits, LOOM_TRAIT_TERMINATOR);
   bool has_cfg_facts =
       rewriter->fact_table && rewriter->fact_table->regions.cfg_count;
   for (loom_op_t* parent = op ? op->parent_op : NULL; parent;
        parent = parent->parent_op) {
-    if (has_cfg_facts) {
+    if (changes_summary && has_cfg_facts) {
       IREE_RETURN_IF_ERROR(loom_rewriter_add_cfg_summary_to_worklist(
           rewriter, parent->parent_block, /*arguments_changed=*/false));
     }
@@ -883,8 +886,15 @@ iree_status_t loom_rewriter_add_parent_summary_ops_to_worklist(
           !loom_loop_like_condition_region(loop) &&
           loom_loop_like_iter_args(loop).count == 0;
       if (!independent_counted_body) {
-        IREE_RETURN_IF_ERROR(
-            loom_rewriter_add_fact_user_to_worklist(rewriter, parent));
+        // Resultless branches have no outward value equation. Direct selector
+        // edits still queue the owner and refresh its nested execution facts.
+        if (changes_summary &&
+            (!vtable->region_branch || parent->result_count)) {
+          IREE_RETURN_IF_ERROR(
+              loom_rewriter_add_fact_user_to_worklist(rewriter, parent));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, parent));
+        }
       }
     }
   }

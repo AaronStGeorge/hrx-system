@@ -7,11 +7,33 @@
 #ifndef LOOM_OPS_VECTOR_CONSTRUCTION_H_
 #define LOOM_OPS_VECTOR_CONSTRUCTION_H_
 
+#include "loom/rewrite/pattern_registry.h"
 #include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Plans in-bounds constant coordinate conversion for extract, insert, or slice.
+// Only exact coordinates are retained; dynamic operand IDs are read when
+// applied.
+iree_status_t loom_vector_prepare_coordinates(
+    const loom_module_t* module, const loom_value_fact_table_t* facts,
+    const loom_op_t* op, iree_arena_allocator_t* arena,
+    loom_rewrite_action_t** out_action);
+
+// Resolves newly exposed coordinates during ordinary observing rewrites. Shares
+// the same proof and application code as batch preparation; no-match allocates
+// nothing. The caller provides coherent facts.
+iree_status_t loom_vector_normalize_coordinates(loom_op_t* op,
+                                                loom_rewriter_t* rewriter,
+                                                bool* out_changed);
+
+// Folds extract/insert/slice through their direct structural producers without
+// querying facts. Suitable both for observing rewrites and unpublished batches.
+iree_status_t loom_vector_project_structure(loom_op_t* op,
+                                            loom_rewriter_t* rewriter,
+                                            bool* out_changed);
 
 // Projects a static rank-one slice or scalar extraction into one retained
 // regular vector component. The indexed partition preserves the component's
@@ -52,6 +74,21 @@ iree_status_t loom_vector_from_elements_combine_lanes(loom_op_t* op,
 iree_status_t loom_vector_insert_combine_elements(loom_op_t* op,
                                                   loom_rewriter_t* rewriter,
                                                   bool* out_changed);
+
+// Forwards the sole result to an existing value and erases the construction.
+iree_status_t loom_vector_replace_single_result_with_value(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t replacement);
+
+// Builds a splat, transfers the result name, and replaces the construction.
+iree_status_t loom_vector_replace_single_result_with_splat(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t scalar,
+    loom_type_t result_type);
+
+// Transfers the result name only onto newly built values, then replaces the
+// old construction with the sole result of the replacement operation.
+iree_status_t loom_vector_replace_single_result_with_new_op(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* new_op,
+    loom_value_id_t value_checkpoint);
 
 #ifdef __cplusplus
 }

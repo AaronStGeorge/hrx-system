@@ -213,55 +213,6 @@ static bool loom_vector_facts_to_constant_attr(loom_value_facts_t facts,
 // IR helpers
 //===----------------------------------------------------------------------===//
 
-static bool loom_vector_index_value_as_static_index(
-    const loom_rewriter_t* rewriter, loom_value_id_t value_id,
-    loom_type_t source_type, uint16_t axis, int64_t* out_static_index) {
-  int64_t static_index = 0;
-  if (!loom_value_facts_as_exact_i64(
-          loom_rewriter_value_facts(rewriter, value_id), &static_index) ||
-      static_index < 0) {
-    return false;
-  }
-  if (loom_type_is_vector(source_type) && axis < loom_type_rank(source_type) &&
-      !loom_type_dim_is_dynamic_at(source_type, (uint8_t)axis) &&
-      static_index >=
-          loom_type_dim_static_size_at(source_type, (uint8_t)axis)) {
-    return false;
-  }
-  *out_static_index = static_index;
-  return true;
-}
-
-static bool loom_vector_slice_offset_value_as_static_offset(
-    const loom_rewriter_t* rewriter, loom_value_id_t value_id,
-    loom_type_t source_type, loom_type_t result_type, uint16_t axis,
-    int64_t* out_static_offset) {
-  int64_t static_offset = 0;
-  if (!loom_value_facts_as_exact_i64(
-          loom_rewriter_value_facts(rewriter, value_id), &static_offset) ||
-      static_offset < 0) {
-    return false;
-  }
-  if (axis < loom_type_rank(source_type) &&
-      !loom_type_dim_is_dynamic_at(source_type, (uint8_t)axis)) {
-    const int64_t bound =
-        loom_type_dim_static_size_at(source_type, (uint8_t)axis);
-    if (static_offset > bound) {
-      return false;
-    }
-    if (axis < loom_type_rank(result_type) &&
-        !loom_type_dim_is_dynamic_at(result_type, (uint8_t)axis)) {
-      const int64_t extent =
-          loom_type_dim_static_size_at(result_type, (uint8_t)axis);
-      if (extent > bound || static_offset > bound - extent) {
-        return false;
-      }
-    }
-  }
-  *out_static_offset = static_offset;
-  return true;
-}
-
 static bool loom_vector_static_ordinal_from_indices(
     loom_type_t type, const int64_t* indices, iree_host_size_t* out_ordinal) {
   iree_host_size_t ordinal = 0;
@@ -281,12 +232,6 @@ static bool loom_vector_static_ordinal_from_indices(
   }
   *out_ordinal = ordinal;
   return true;
-}
-
-static iree_status_t loom_vector_replace_single_result_with_value(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t replacement) {
-  return loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement,
-                                                  1);
 }
 
 static iree_status_t loom_vector_replace_single_result_with_constant_attr(
@@ -315,22 +260,6 @@ static iree_status_t loom_vector_replace_single_result_with_constant_facts(
   }
   return loom_vector_replace_single_result_with_constant_attr(
       op, rewriter, result_type, attr);
-}
-
-static iree_status_t loom_vector_replace_single_result_with_splat(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t scalar,
-    loom_type_t result_type) {
-  loom_builder_set_before(&rewriter->builder, op);
-  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-
-  loom_op_t* splat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_splat_build(
-      &rewriter->builder, scalar, result_type, op->location, &splat_op));
-  loom_value_id_t replacement = loom_vector_splat_result(splat_op);
-  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
-      rewriter, op, &replacement, 1, value_checkpoint));
-  return loom_vector_replace_single_result_with_value(op, rewriter,
-                                                      replacement);
 }
 
 static iree_status_t loom_vector_replace_single_result_with_negf(
@@ -471,17 +400,6 @@ static iree_status_t loom_vector_replace_single_result_with_integer_zero(
       op, rewriter, result_type, attr);
 }
 
-static iree_status_t loom_vector_replace_single_result_with_new_op(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* new_op,
-    loom_value_id_t value_checkpoint) {
-  IREE_ASSERT_EQ(new_op->result_count, 1u);
-  loom_value_id_t replacement = loom_op_const_results(new_op)[0];
-  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
-      rewriter, op, &replacement, 1, value_checkpoint));
-  return loom_vector_replace_single_result_with_value(op, rewriter,
-                                                      replacement);
-}
-
 //===----------------------------------------------------------------------===//
 // Generic vector fact materialization
 //===----------------------------------------------------------------------===//
@@ -526,68 +444,6 @@ static iree_status_t loom_vector_canonicalize_uniform_result(
 // Construction and access
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_vector_canonicalize_slice_static_offsets(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_type_t source_type,
-    loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  const loom_attribute_t old_static_offsets =
-      loom_vector_slice_static_offsets(op);
-  if (old_static_offsets.kind != LOOM_ATTR_I64_ARRAY ||
-      old_static_offsets.count == 0) {
-    return iree_ok_status();
-  }
-
-  const loom_value_slice_t old_offsets = loom_vector_slice_offsets(op);
-  if (old_offsets.count == 0) {
-    return iree_ok_status();
-  }
-
-  int64_t new_static_offsets[LOOM_TYPE_MAX_RANK];
-  loom_value_id_t new_offsets[LOOM_TYPE_MAX_RANK];
-
-  bool changed = false;
-  uint16_t old_dynamic_offset = 0;
-  uint16_t new_dynamic_offset = 0;
-  for (uint16_t axis = 0; axis < old_static_offsets.count; ++axis) {
-    int64_t static_offset = old_static_offsets.i64_array[axis];
-    if (static_offset != INT64_MIN) {
-      new_static_offsets[axis] = static_offset;
-      continue;
-    }
-    if (old_dynamic_offset >= old_offsets.count) {
-      return iree_ok_status();
-    }
-
-    const loom_value_id_t dynamic_offset =
-        old_offsets.values[old_dynamic_offset++];
-    if (loom_vector_slice_offset_value_as_static_offset(
-            rewriter, dynamic_offset, source_type, result_type, axis,
-            &static_offset)) {
-      new_static_offsets[axis] = static_offset;
-      changed = true;
-    } else {
-      new_static_offsets[axis] = INT64_MIN;
-      new_offsets[new_dynamic_offset++] = dynamic_offset;
-    }
-  }
-  if (old_dynamic_offset != old_offsets.count || !changed) {
-    return iree_ok_status();
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  const loom_value_id_t value_checkpoint =
-      loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_slice_build(
-      &rewriter->builder, loom_vector_slice_source(op), new_offsets,
-      new_dynamic_offset, new_static_offsets, old_static_offsets.count,
-      result_type, op->location, &replacement_op));
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-      op, rewriter, replacement_op, value_checkpoint));
-  *out_changed = true;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_vector_canonicalize_slice(loom_op_t* op,
                                                     loom_rewriter_t* rewriter,
                                                     bool* out_changed) {
@@ -611,8 +467,8 @@ static iree_status_t loom_vector_canonicalize_slice(loom_op_t* op,
       loom_type_rank(source_type) != loom_type_rank(result_type)) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_vector_canonicalize_slice_static_offsets(
-      op, rewriter, source_type, result_type, out_changed));
+  IREE_RETURN_IF_ERROR(
+      loom_vector_normalize_coordinates(op, rewriter, out_changed));
   if (*out_changed || loom_vector_slice_offsets(op).count != 0) {
     return iree_ok_status();
   }
@@ -623,98 +479,7 @@ static iree_status_t loom_vector_canonicalize_slice(loom_op_t* op,
     return iree_ok_status();
   }
 
-  loom_op_t* source_def_op = loom_rewriter_value_defining_op(rewriter, source);
-  if (!source_def_op || !loom_vector_concat_isa(source_def_op)) {
-    return iree_ok_status();
-  }
-
-  if (!loom_type_is_all_static(source_type) ||
-      !loom_type_is_all_static(result_type)) {
-    return iree_ok_status();
-  }
-
-  const uint8_t rank = loom_type_rank(source_type);
-  if (rank == 0 || loom_type_rank(result_type) != rank) {
-    return iree_ok_status();
-  }
-  const int64_t axis = loom_vector_concat_axis(source_def_op);
-  if (axis < 0 || axis >= rank) {
-    return iree_ok_status();
-  }
-
-  const loom_attribute_t static_offsets = loom_vector_slice_static_offsets(op);
-  if (static_offsets.count != rank) {
-    return iree_ok_status();
-  }
-  for (uint8_t i = 0; i < rank; ++i) {
-    if (static_offsets.i64_array[i] < 0) {
-      return iree_ok_status();
-    }
-  }
-
-  const int64_t slice_offset = static_offsets.i64_array[axis];
-  const int64_t slice_extent =
-      loom_type_dim_static_size_at(result_type, (uint8_t)axis);
-  int64_t slice_end = 0;
-  if (slice_extent <= 0 ||
-      !iree_checked_add_i64(slice_offset, slice_extent, &slice_end)) {
-    return iree_ok_status();
-  }
-
-  int64_t input_start = 0;
-  const loom_value_slice_t inputs = loom_vector_concat_inputs(source_def_op);
-  for (uint16_t i = 0; i < inputs.count; ++i) {
-    const loom_value_id_t input = inputs.values[i];
-    const loom_type_t input_type =
-        loom_module_value_type(rewriter->module, input);
-    if (!loom_type_is_vector(input_type) ||
-        !loom_type_is_all_static(input_type) ||
-        loom_type_rank(input_type) != rank) {
-      return iree_ok_status();
-    }
-
-    const int64_t input_extent =
-        loom_type_dim_static_size_at(input_type, (uint8_t)axis);
-    int64_t input_end = 0;
-    if (!iree_checked_add_i64(input_start, input_extent, &input_end)) {
-      return iree_ok_status();
-    }
-    if (slice_offset < input_start || slice_end > input_end) {
-      input_start = input_end;
-      continue;
-    }
-
-    int64_t adjusted_offsets[LOOM_TYPE_MAX_RANK];
-    bool all_offsets_are_zero = true;
-    for (uint8_t j = 0; j < rank; ++j) {
-      adjusted_offsets[j] = static_offsets.i64_array[j];
-    }
-    adjusted_offsets[axis] -= input_start;
-    for (uint8_t j = 0; j < rank; ++j) {
-      all_offsets_are_zero &= adjusted_offsets[j] == 0;
-    }
-
-    if (all_offsets_are_zero && loom_type_equal(input_type, result_type)) {
-      IREE_RETURN_IF_ERROR(
-          loom_vector_replace_single_result_with_value(op, rewriter, input));
-      *out_changed = true;
-      return iree_ok_status();
-    }
-
-    loom_builder_set_before(&rewriter->builder, op);
-    const loom_value_id_t value_checkpoint =
-        loom_rewriter_value_checkpoint(rewriter);
-    loom_op_t* replacement_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_vector_slice_build(
-        &rewriter->builder, input, /*offsets=*/NULL, /*offsets_count=*/0,
-        adjusted_offsets, rank, result_type, op->location, &replacement_op));
-    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-        op, rewriter, replacement_op, value_checkpoint));
-    *out_changed = true;
-    return iree_ok_status();
-  }
-
-  return iree_ok_status();
+  return loom_vector_project_structure(op, rewriter, out_changed);
 }
 
 static loom_type_t loom_vector_concat_type_with_static_axis_extent(
@@ -1010,157 +775,6 @@ static iree_status_t loom_vector_canonicalize_iota(loom_op_t* op,
   return iree_ok_status();
 }
 
-static bool loom_vector_static_indices_are_proven_in_bounds(
-    loom_type_t source_type, loom_attribute_t static_indices) {
-  if (!loom_type_is_all_static(source_type)) {
-    return false;
-  }
-  if (static_indices.count > loom_type_rank(source_type)) {
-    return false;
-  }
-  for (uint16_t i = 0; i < static_indices.count; ++i) {
-    int64_t static_index = static_indices.i64_array[i];
-    if (static_index < 0 || static_index == INT64_MIN) {
-      return false;
-    }
-    if (static_index >= loom_type_dim_static_size_at(source_type, i)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-static iree_status_t loom_vector_canonicalize_extract_from_splat(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
-    loom_type_t source_type, loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  loom_attribute_t static_indices = loom_vector_extract_static_indices(op);
-  if (!loom_vector_static_indices_are_proven_in_bounds(source_type,
-                                                       static_indices)) {
-    return iree_ok_status();
-  }
-
-  loom_value_id_t scalar = loom_vector_splat_scalar(source_def_op);
-  if (loom_type_is_scalar(result_type)) {
-    IREE_RETURN_IF_ERROR(
-        loom_vector_replace_single_result_with_value(op, rewriter, scalar));
-  } else if (loom_type_is_vector(result_type)) {
-    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_splat(
-        op, rewriter, scalar, result_type));
-  } else {
-    return iree_ok_status();
-  }
-  *out_changed = true;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_canonicalize_extract_from_broadcast(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
-    loom_type_t source_type, loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  loom_value_id_t broadcast_source =
-      loom_vector_broadcast_source(source_def_op);
-  loom_type_t broadcast_source_type =
-      loom_module_value_type(rewriter->module, broadcast_source);
-  if (!loom_type_is_vector(source_type) ||
-      !loom_type_is_vector(broadcast_source_type) ||
-      !loom_type_equal(broadcast_source_type, result_type)) {
-    return iree_ok_status();
-  }
-
-  uint8_t source_rank = loom_type_rank(source_type);
-  uint8_t broadcast_source_rank = loom_type_rank(broadcast_source_type);
-  loom_attribute_t static_indices = loom_vector_extract_static_indices(op);
-  if (source_rank < broadcast_source_rank ||
-      static_indices.count != source_rank - broadcast_source_rank ||
-      loom_vector_extract_indices(op).count != 0 ||
-      !loom_vector_static_indices_are_proven_in_bounds(source_type,
-                                                       static_indices)) {
-    return iree_ok_status();
-  }
-
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_value(
-      op, rewriter, broadcast_source));
-  *out_changed = true;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_canonicalize_extract_from_elements(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
-    loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  if (!loom_type_is_scalar(result_type)) {
-    return iree_ok_status();
-  }
-
-  loom_attribute_t static_indices = loom_vector_extract_static_indices(op);
-  if (static_indices.count != 1 || static_indices.i64_array[0] < 0 ||
-      static_indices.i64_array[0] == INT64_MIN) {
-    return iree_ok_status();
-  }
-  loom_value_slice_t elements =
-      loom_vector_from_elements_elements(source_def_op);
-  iree_host_size_t lane = (iree_host_size_t)static_indices.i64_array[0];
-  if (lane >= elements.count) {
-    return iree_ok_status();
-  }
-
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_value(
-      op, rewriter, elements.values[lane]));
-  *out_changed = true;
-  return iree_ok_status();
-}
-
-// Composes a scalar extraction with the static offsets of its source slice.
-// Scalar results consume every source axis, so no trailing slice extent needs
-// to be preserved in the replacement.
-static iree_status_t loom_vector_canonicalize_extract_from_slice(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
-    loom_type_t source_type, loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  if (!loom_type_is_scalar(result_type)) {
-    return iree_ok_status();
-  }
-
-  const uint8_t rank = loom_type_rank(source_type);
-  const loom_attribute_t extract_indices =
-      loom_vector_extract_static_indices(op);
-  const loom_attribute_t slice_offsets =
-      loom_vector_slice_static_offsets(source_def_op);
-  if (loom_vector_extract_indices(op).count != 0 ||
-      loom_vector_slice_offsets(source_def_op).count != 0 ||
-      extract_indices.kind != LOOM_ATTR_I64_ARRAY ||
-      slice_offsets.kind != LOOM_ATTR_I64_ARRAY ||
-      extract_indices.count != rank || slice_offsets.count != rank) {
-    return iree_ok_status();
-  }
-
-  int64_t combined_indices[LOOM_TYPE_MAX_RANK] = {0};
-  for (uint8_t axis = 0; axis < rank; ++axis) {
-    const int64_t extract_index = extract_indices.i64_array[axis];
-    const int64_t slice_offset = slice_offsets.i64_array[axis];
-    if (extract_index < 0 || extract_index == INT64_MIN || slice_offset < 0 ||
-        slice_offset == INT64_MIN ||
-        !iree_checked_add_i64(slice_offset, extract_index,
-                              &combined_indices[axis])) {
-      return iree_ok_status();
-    }
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  const loom_value_id_t value_checkpoint =
-      loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_extract_build(
-      &rewriter->builder, loom_vector_slice_source(source_def_op),
-      /*indices=*/NULL, /*indices_count=*/0, combined_indices, rank,
-      result_type, op->location, &replacement_op));
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-      op, rewriter, replacement_op, value_checkpoint));
-  *out_changed = true;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_vector_canonicalize_extract_from_iota(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
     loom_type_t source_type, loom_type_t result_type, bool* out_changed) {
@@ -1350,178 +964,6 @@ static iree_status_t loom_vector_canonicalize_extract_from_load(
   return iree_ok_status();
 }
 
-static iree_status_t loom_vector_canonicalize_extract_static_indices(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_type_t source_type,
-    loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  loom_attribute_t old_static_indices = loom_vector_extract_static_indices(op);
-  if (old_static_indices.kind != LOOM_ATTR_I64_ARRAY ||
-      old_static_indices.count == 0) {
-    return iree_ok_status();
-  }
-
-  loom_value_slice_t old_indices = loom_vector_extract_indices(op);
-  if (old_indices.count == 0) {
-    return iree_ok_status();
-  }
-
-  int64_t* new_static_indices = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      rewriter->arena, old_static_indices.count, sizeof(*new_static_indices),
-      (void**)&new_static_indices));
-  loom_value_id_t* new_indices = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(rewriter->arena, old_indices.count,
-                                sizeof(*new_indices), (void**)&new_indices));
-
-  bool changed = false;
-  uint16_t old_dynamic_index = 0;
-  uint16_t new_dynamic_index = 0;
-  for (uint16_t axis = 0; axis < old_static_indices.count; ++axis) {
-    int64_t static_index = old_static_indices.i64_array[axis];
-    if (static_index != INT64_MIN) {
-      new_static_indices[axis] = static_index;
-      continue;
-    }
-    if (old_dynamic_index >= old_indices.count) {
-      return iree_ok_status();
-    }
-
-    loom_value_id_t dynamic_index = old_indices.values[old_dynamic_index++];
-    if (loom_vector_index_value_as_static_index(
-            rewriter, dynamic_index, source_type, axis, &static_index)) {
-      new_static_indices[axis] = static_index;
-      changed = true;
-    } else {
-      new_static_indices[axis] = INT64_MIN;
-      new_indices[new_dynamic_index++] = dynamic_index;
-    }
-  }
-  if (old_dynamic_index != old_indices.count || !changed) {
-    return iree_ok_status();
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_extract_build(
-      &rewriter->builder, loom_vector_extract_source(op), new_indices,
-      new_dynamic_index, new_static_indices, old_static_indices.count,
-      result_type, op->location, &replacement_op));
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-      op, rewriter, replacement_op, value_checkpoint));
-  *out_changed = true;
-  return iree_ok_status();
-}
-
-typedef enum loom_vector_static_index_relation_e {
-  LOOM_VECTOR_STATIC_INDEX_RELATION_UNKNOWN = 0,
-  LOOM_VECTOR_STATIC_INDEX_RELATION_EXACT,
-  LOOM_VECTOR_STATIC_INDEX_RELATION_LEFT_PREFIX,
-  LOOM_VECTOR_STATIC_INDEX_RELATION_RIGHT_PREFIX,
-  LOOM_VECTOR_STATIC_INDEX_RELATION_DISJOINT,
-} loom_vector_static_index_relation_t;
-
-static loom_vector_static_index_relation_t loom_vector_classify_static_indices(
-    loom_attribute_t left_static_indices, loom_value_slice_t left_indices,
-    loom_attribute_t right_static_indices, loom_value_slice_t right_indices) {
-  if (left_indices.count != 0 || right_indices.count != 0 ||
-      left_static_indices.kind != LOOM_ATTR_I64_ARRAY ||
-      right_static_indices.kind != LOOM_ATTR_I64_ARRAY ||
-      left_static_indices.count == 0 || right_static_indices.count == 0 ||
-      !left_static_indices.i64_array || !right_static_indices.i64_array) {
-    return LOOM_VECTOR_STATIC_INDEX_RELATION_UNKNOWN;
-  }
-  for (uint16_t i = 0; i < left_static_indices.count; ++i) {
-    if (left_static_indices.i64_array[i] < 0 ||
-        left_static_indices.i64_array[i] == INT64_MIN) {
-      return LOOM_VECTOR_STATIC_INDEX_RELATION_UNKNOWN;
-    }
-  }
-  for (uint16_t i = 0; i < right_static_indices.count; ++i) {
-    if (right_static_indices.i64_array[i] < 0 ||
-        right_static_indices.i64_array[i] == INT64_MIN) {
-      return LOOM_VECTOR_STATIC_INDEX_RELATION_UNKNOWN;
-    }
-  }
-  const uint16_t shared_rank =
-      iree_min(left_static_indices.count, right_static_indices.count);
-  for (uint16_t i = 0; i < shared_rank; ++i) {
-    const int64_t left_index = left_static_indices.i64_array[i];
-    const int64_t right_index = right_static_indices.i64_array[i];
-    if (left_index != right_index) {
-      return LOOM_VECTOR_STATIC_INDEX_RELATION_DISJOINT;
-    }
-  }
-  if (left_static_indices.count == right_static_indices.count) {
-    return LOOM_VECTOR_STATIC_INDEX_RELATION_EXACT;
-  }
-  if (left_static_indices.count < right_static_indices.count) {
-    return LOOM_VECTOR_STATIC_INDEX_RELATION_LEFT_PREFIX;
-  }
-  return LOOM_VECTOR_STATIC_INDEX_RELATION_RIGHT_PREFIX;
-}
-
-static iree_status_t loom_vector_canonicalize_extract_from_insert(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* insert_op,
-    loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  loom_attribute_t extract_static_indices =
-      loom_vector_extract_static_indices(op);
-  loom_value_slice_t extract_indices = loom_vector_extract_indices(op);
-  loom_attribute_t insert_static_indices =
-      loom_vector_insert_static_indices(insert_op);
-  loom_value_slice_t insert_indices = loom_vector_insert_indices(insert_op);
-  const loom_vector_static_index_relation_t relation =
-      loom_vector_classify_static_indices(
-          extract_static_indices, extract_indices, insert_static_indices,
-          insert_indices);
-  if (relation == LOOM_VECTOR_STATIC_INDEX_RELATION_EXACT) {
-    loom_value_id_t inserted_value = loom_vector_insert_value(insert_op);
-    if (!loom_type_equal(
-            loom_module_value_type(rewriter->module, inserted_value),
-            result_type)) {
-      return iree_ok_status();
-    }
-    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_value(
-        op, rewriter, inserted_value));
-    *out_changed = true;
-    return iree_ok_status();
-  }
-  if (relation == LOOM_VECTOR_STATIC_INDEX_RELATION_RIGHT_PREFIX) {
-    loom_builder_set_before(&rewriter->builder, op);
-    loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-    loom_op_t* replacement_op = NULL;
-    const uint16_t suffix_rank =
-        extract_static_indices.count - insert_static_indices.count;
-    IREE_RETURN_IF_ERROR(loom_vector_extract_build(
-        &rewriter->builder, loom_vector_insert_value(insert_op),
-        /*indices=*/NULL, /*indices_count=*/0,
-        extract_static_indices.i64_array + insert_static_indices.count,
-        suffix_rank, result_type, op->location, &replacement_op));
-    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-        op, rewriter, replacement_op, value_checkpoint));
-    *out_changed = true;
-    return iree_ok_status();
-  }
-  if (relation != LOOM_VECTOR_STATIC_INDEX_RELATION_DISJOINT) {
-    return iree_ok_status();
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_extract_build(
-      &rewriter->builder, loom_vector_insert_dest(insert_op),
-      /*indices=*/NULL, /*indices_count=*/0, extract_static_indices.i64_array,
-      extract_static_indices.count, result_type, op->location,
-      &replacement_op));
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-      op, rewriter, replacement_op, value_checkpoint));
-  *out_changed = true;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_vector_canonicalize_extract(loom_op_t* op,
                                                       loom_rewriter_t* rewriter,
                                                       bool* out_changed) {
@@ -1534,8 +976,8 @@ static iree_status_t loom_vector_canonicalize_extract(loom_op_t* op,
     return iree_ok_status();
   }
 
-  IREE_RETURN_IF_ERROR(loom_vector_canonicalize_extract_static_indices(
-      op, rewriter, source_type, result_type, out_changed));
+  IREE_RETURN_IF_ERROR(
+      loom_vector_normalize_coordinates(op, rewriter, out_changed));
   if (*out_changed) {
     return iree_ok_status();
   }
@@ -1551,21 +993,10 @@ static iree_status_t loom_vector_canonicalize_extract(loom_op_t* op,
     return iree_ok_status();
   }
 
-  if (loom_vector_broadcast_isa(source_def_op)) {
-    return loom_vector_canonicalize_extract_from_broadcast(
-        op, rewriter, source_def_op, source_type, result_type, out_changed);
-  }
-  if (loom_vector_splat_isa(source_def_op)) {
-    return loom_vector_canonicalize_extract_from_splat(
-        op, rewriter, source_def_op, source_type, result_type, out_changed);
-  }
-  if (loom_vector_from_elements_isa(source_def_op)) {
-    return loom_vector_canonicalize_extract_from_elements(
-        op, rewriter, source_def_op, result_type, out_changed);
-  }
-  if (loom_vector_slice_isa(source_def_op)) {
-    return loom_vector_canonicalize_extract_from_slice(
-        op, rewriter, source_def_op, source_type, result_type, out_changed);
+  IREE_RETURN_IF_ERROR(
+      loom_vector_project_structure(op, rewriter, out_changed));
+  if (*out_changed) {
+    return iree_ok_status();
   }
   if (loom_vector_iota_isa(source_def_op)) {
     return loom_vector_canonicalize_extract_from_iota(
@@ -1575,137 +1006,18 @@ static iree_status_t loom_vector_canonicalize_extract(loom_op_t* op,
     return loom_vector_canonicalize_extract_from_load(
         op, rewriter, source_def_op, source_type, result_type, out_changed);
   }
-  if (loom_vector_insert_isa(source_def_op)) {
-    return loom_vector_canonicalize_extract_from_insert(
-        op, rewriter, source_def_op, result_type, out_changed);
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_canonicalize_insert_static_indices(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_type_t dest_type,
-    loom_type_t result_type, bool* out_changed) {
-  *out_changed = false;
-  loom_attribute_t old_static_indices = loom_vector_insert_static_indices(op);
-  if (old_static_indices.kind != LOOM_ATTR_I64_ARRAY ||
-      old_static_indices.count == 0) {
-    return iree_ok_status();
-  }
-
-  loom_value_slice_t old_indices = loom_vector_insert_indices(op);
-  if (old_indices.count == 0) {
-    return iree_ok_status();
-  }
-
-  int64_t* new_static_indices = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      rewriter->arena, old_static_indices.count, sizeof(*new_static_indices),
-      (void**)&new_static_indices));
-  loom_value_id_t* new_indices = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(rewriter->arena, old_indices.count,
-                                sizeof(*new_indices), (void**)&new_indices));
-
-  bool changed = false;
-  uint16_t old_dynamic_index = 0;
-  uint16_t new_dynamic_index = 0;
-  for (uint16_t axis = 0; axis < old_static_indices.count; ++axis) {
-    int64_t static_index = old_static_indices.i64_array[axis];
-    if (static_index != INT64_MIN) {
-      new_static_indices[axis] = static_index;
-      continue;
-    }
-    if (old_dynamic_index >= old_indices.count) {
-      return iree_ok_status();
-    }
-
-    loom_value_id_t dynamic_index = old_indices.values[old_dynamic_index++];
-    if (loom_vector_index_value_as_static_index(
-            rewriter, dynamic_index, dest_type, axis, &static_index)) {
-      new_static_indices[axis] = static_index;
-      changed = true;
-    } else {
-      new_static_indices[axis] = INT64_MIN;
-      new_indices[new_dynamic_index++] = dynamic_index;
-    }
-  }
-  if (old_dynamic_index != old_indices.count || !changed) {
-    return iree_ok_status();
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_insert_build(
-      &rewriter->builder, loom_vector_insert_value(op),
-      loom_vector_insert_dest(op), new_indices, new_dynamic_index,
-      new_static_indices, old_static_indices.count, result_type, op->location,
-      &replacement_op));
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-      op, rewriter, replacement_op, value_checkpoint));
-  *out_changed = true;
   return iree_ok_status();
 }
 
 static iree_status_t loom_vector_canonicalize_insert(loom_op_t* op,
                                                      loom_rewriter_t* rewriter,
                                                      bool* out_changed) {
-  *out_changed = false;
-  loom_value_id_t value = loom_vector_insert_value(op);
-  loom_value_id_t dest = loom_vector_insert_dest(op);
-  loom_type_t result_type = {0};
-  if (!loom_vector_get_single_result_type(rewriter, op, &result_type)) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(loom_vector_canonicalize_insert_static_indices(
-      op, rewriter, loom_module_value_type(rewriter->module, dest), result_type,
-      out_changed));
+  IREE_RETURN_IF_ERROR(
+      loom_vector_normalize_coordinates(op, rewriter, out_changed));
   if (*out_changed) {
     return iree_ok_status();
   }
-
-  loom_attribute_t static_indices = loom_vector_insert_static_indices(op);
-  loom_value_slice_t indices = loom_vector_insert_indices(op);
-
-  loom_op_t* value_def_op = loom_rewriter_value_defining_op(rewriter, value);
-  if (value_def_op && loom_vector_extract_isa(value_def_op) &&
-      loom_type_equal(
-          loom_module_value_type(rewriter->module,
-                                 loom_vector_extract_source(value_def_op)),
-          result_type) &&
-      loom_vector_extract_source(value_def_op) == dest &&
-      loom_vector_classify_static_indices(
-          static_indices, indices,
-          loom_vector_extract_static_indices(value_def_op),
-          loom_vector_extract_indices(value_def_op)) ==
-          LOOM_VECTOR_STATIC_INDEX_RELATION_EXACT) {
-    IREE_RETURN_IF_ERROR(
-        loom_vector_replace_single_result_with_value(op, rewriter, dest));
-    *out_changed = true;
-    return iree_ok_status();
-  }
-
-  loom_op_t* dest_def_op = loom_rewriter_value_defining_op(rewriter, dest);
-  if (!dest_def_op || !loom_vector_insert_isa(dest_def_op) ||
-      loom_vector_classify_static_indices(
-          static_indices, indices,
-          loom_vector_insert_static_indices(dest_def_op),
-          loom_vector_insert_indices(dest_def_op)) !=
-          LOOM_VECTOR_STATIC_INDEX_RELATION_EXACT) {
-    return iree_ok_status();
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_insert_build(
-      &rewriter->builder, value, loom_vector_insert_dest(dest_def_op),
-      /*indices=*/NULL, /*indices_count=*/0, static_indices.i64_array,
-      static_indices.count, result_type, op->location, &replacement_op));
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
-      op, rewriter, replacement_op, value_checkpoint));
-  *out_changed = true;
-  return iree_ok_status();
+  return loom_vector_project_structure(op, rewriter, out_changed);
 }
 
 static iree_status_t loom_vector_canonicalize_shuffle(loom_op_t* op,

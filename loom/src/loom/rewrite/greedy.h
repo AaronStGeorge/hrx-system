@@ -51,6 +51,10 @@ typedef struct loom_greedy_rewrite_options_t {
 
   // Resolved target bundle paired with |math_policy|.
   const struct loom_target_bundle_t* math_target_bundle;
+
+  // Optional rooted patterns prepared once from coherent facts, then applied
+  // as a batch before fixed-point rewriting. Plans are released immediately.
+  const loom_rewrite_pattern_registry_t* prepared_patterns;
 } loom_greedy_rewrite_options_t;
 
 // Summary of one greedy rewrite run.

@@ -576,8 +576,8 @@ func.def @extract_from_elements_dynamic_exact_lane() -> (i32) {
 }
 // ----
 func.def @extract_from_elements_dynamic_exact_lane() -> (i32) {
-  %r = scalar.constant 5 : i32
-  func.return %r : i32
+  %lane1 = scalar.constant 5 : i32
+  func.return %lane1 : i32
 }
 
 // ====
@@ -1336,8 +1336,8 @@ func.def @extract_from_elements_to_operand() -> (i32) {
 }
 // ----
 func.def @extract_from_elements_to_operand() -> (i32) {
-  %r = scalar.constant 2 : i32
-  func.return %r : i32
+  %c1 = scalar.constant 2 : i32
+  func.return %c1 : i32
 }
 
 // ====
@@ -1847,4 +1847,73 @@ func.def @atomic_reduce_mask_all_true_to_atomic_reduce(%buffer: buffer, %offset:
   %view = buffer.view %buffer[%offset] : buffer -> view<16xf32>
   vector.atomic.reduce<addf, noftz> %value, %view[0][%offsets] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = workgroup} : vector<4xf32>, view<16xf32>, vector<4xindex>
   func.return
+}
+
+// ====
+
+// Coordinate plans may depend on other planned roots. Their surviving dynamic
+// operands must follow SSA replacement instead of retaining the erased value.
+func.def @planned_coordinate_chain(%indices: vector<2x2xindex>, %source: vector<4x4x4xi32>) -> (vector<1x1xi32>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %row = vector.extract %indices[%c0, %c1] : vector<2x2xindex> -> index
+  %plane = vector.extract %source[%row] : vector<4x4x4xi32> -> vector<4x4xi32>
+  %result = vector.slice %plane[%c1, %row] : vector<4x4xi32> -> vector<1x1xi32>
+  func.return %result : vector<1x1xi32>
+}
+// ----
+func.def @planned_coordinate_chain(%indices: vector<2x2xindex>, %source: vector<4x4x4xi32>) -> (vector<1x1xi32>) {
+  %row = vector.extract %indices[0, 1] : vector<2x2xindex> -> index
+  %plane = vector.extract %source[%row] : vector<4x4x4xi32> -> vector<4x4xi32>
+  %result = vector.slice %plane[1, %row] : vector<4x4xi32> -> vector<1x1xi32>
+  func.return %result : vector<1x1xi32>
+}
+
+// ====
+
+// Three independent coordinate plans expose a tail-vector forwarding chain.
+func.def @planned_tail_projection(%source: vector<2x3x4xbf16>, %value: vector<4xbf16>) -> (bf16) {
+  %row = index.constant 1 : index
+  %column = index.constant 2 : index
+  %lane = index.constant 3 : index
+  %updated = vector.insert %value into %source[%row, %column] : vector<4xbf16>, vector<2x3x4xbf16>
+  %tail = vector.extract %updated[%row, %column] : vector<2x3x4xbf16> -> vector<4xbf16>
+  %result = vector.extract %tail[%lane] : vector<4xbf16> -> bf16
+  func.return %result : bf16
+}
+// ----
+func.def @planned_tail_projection(%source: vector<2x3x4xbf16>, %value: vector<4xbf16>) -> (bf16) {
+  %result = vector.extract %value[3] : vector<4xbf16> -> bf16
+  func.return %result : bf16
+}
+
+// ====
+
+// A zero-length slice can start exactly at the source endpoint.
+func.def @planned_empty_endpoint(%source: vector<4xi8>) -> (vector<0xi8>) {
+  %end = index.constant 4 : index
+  %result = vector.slice %source[%end] : vector<4xi8> -> vector<0xi8>
+  func.return %result : vector<0xi8>
+}
+// ----
+func.def @planned_empty_endpoint(%source: vector<4xi8>) -> (vector<0xi8>) {
+  %result = vector.empty : vector<0xi8>
+  func.return %result : vector<0xi8>
+}
+
+// ====
+
+// Exact-but-out-of-range coordinates cannot become invalid static attributes.
+func.def @planned_out_of_range(%source: vector<4xi8>, %value: i8) -> (i8, vector<4xi8>) {
+  %end = index.constant 4 : index
+  %read = vector.extract %source[%end] : vector<4xi8> -> i8
+  %write = vector.insert %value into %source[%end] : i8, vector<4xi8>
+  func.return %read, %write : i8, vector<4xi8>
+}
+// ----
+func.def @planned_out_of_range(%source: vector<4xi8>, %value: i8) -> (i8, vector<4xi8>) {
+  %end = index.constant 4 : index
+  %read = vector.extract %source[%end] : vector<4xi8> -> i8
+  %write = vector.insert %value into %source[%end] : i8, vector<4xi8>
+  func.return %read, %write : i8, vector<4xi8>
 }

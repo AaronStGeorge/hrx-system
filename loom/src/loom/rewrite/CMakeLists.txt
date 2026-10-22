@@ -39,7 +39,9 @@ loom_cc_library(
     "pattern_registry.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     loom::ir
+    loom::util::walk
   PUBLIC
 )
 

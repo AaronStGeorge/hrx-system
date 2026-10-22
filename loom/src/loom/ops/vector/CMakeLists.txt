@@ -118,6 +118,7 @@ loom_generated_cc_library(
     loom::ops::scalar
     loom::ops::scf
     loom::ops::view
+    loom::rewrite::pattern_registry
     loom::rewrite::rewriter
     loom::rewrite::type_propagation
     loom::util::fact_table
