@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import shutil
@@ -38,7 +39,9 @@ from .fetch_storage import (
 from .lock import FileIdentity, ModelLock, file_digest, origin_key
 from .manifest import ManifestError, Selection, parse_json
 
-_RESERVED_PATHS = frozenset({"model.json", "model.json.lock", ".loom-fetch.lock"})
+_RESERVED_PATHS = frozenset(
+    {"model.json", "model.json.lock", ".loom-fetch.lock", ".loom-fetch.json"}
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,8 @@ class FetchPlan:
     locked: bool
     # Explicit author's lock update destination; absent for ordinary acquisition.
     update_path: Path | None
+    # Acquisition receipt owned by this plan, absent for direct-card operations.
+    provenance: dict | None = None
 
     def summary(self) -> dict:
         """Machine-readable acquisition facts; unknown sizes remain null."""
@@ -102,6 +107,7 @@ def plan_fetch(
     offline: bool = False,
     no_lock: bool = False,
     update_lock: bool = False,
+    catalog: dict | None = None,
 ) -> FetchPlan:
     """Checks selected lock coverage and resolves sources before payload transfer."""
     if no_lock and (update_lock or lock_location is not None):
@@ -185,6 +191,16 @@ def plan_fetch(
         offline,
         not no_lock,
         update_path,
+        {
+            "schema_version": 1,
+            "card": {
+                "location": document.location,
+                "sha256": hashlib.sha256(document.text.encode("utf-8")).hexdigest(),
+            },
+            "catalog": copy.deepcopy(catalog),
+        }
+        if catalog is not None
+        else None,
     )
 
 
@@ -292,6 +308,8 @@ def _check_outputs(
 ) -> dict[str, AcquiredFile]:
     _check_document(_destination(directory, "model.json"), card)
     _destination(directory, "model.json.lock")
+    if plan.provenance is not None:
+        _check_document(_destination(directory, ".loom-fetch.json"), plan.provenance)
     present = {}
     for name, source in plan.sources.items():
         destination = _destination(directory, name)
@@ -464,6 +482,7 @@ def install(
                 # sees a card advertising a partially verified closure.
                 metadata = {
                     "model.json.lock": installation_lock_document,
+                    ".loom-fetch.json": plan.provenance,
                     "model.json": card,
                 }
                 for name, document in metadata.items():

@@ -36,3 +36,15 @@ schema = files("loom.model").joinpath("model-card.v1.schema.json").read_text()
 The development version is `0.0.0.dev0`. This target builds a local artifact and
 has no publishing command. Native releases and a qualified model catalog require
 their own release association.
+
+SDK publishers use `loom_python_wheel` from
+`//loom/packaging/python:defs.bzl` to set `version` and an independent `catalog`
+association, such as `github:OWNER/REPOSITORY@COMPATIBLE_TAG`. Several SDK versions
+may share a tag when the publication is qualified for each consumer. The
+association is stored in the wheel's `loom.json` distribution metadata.
+
+With an association, `loom-fetch --list` discovers the current compatible models.
+Without one, discovery requires an explicit `--catalog`; direct card URLs remain
+usable. The development wheel carries no default tag. See the
+[catalog workflow](../../py/loom/model/README.md#catalog-discovery) for generation,
+selection, and offline snapshot behavior.

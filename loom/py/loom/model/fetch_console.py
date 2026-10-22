@@ -18,6 +18,14 @@ from .fetch_hf import AccessRequired
 from .fetch_source import FetchError
 
 
+def display_text(text: str) -> str:
+    """Renders metadata as one terminal line without interpreting controls."""
+    return "".join(
+        character if character.isprintable() else f"\\u{ord(character):04x}"
+        for character in text
+    )
+
+
 class TerminalInput:
     """Owns temporary terminal input mode for one interactive operation."""
 
@@ -98,7 +106,7 @@ class AccessWaiter:
         self.last_action = None
 
     def _line(self, text: str):
-        self.output.write(text + "\n")
+        self.output.write(display_text(text) + "\n")
         self.output.flush()
 
     def _show(self, action: AccessRequired):

@@ -10,6 +10,7 @@ import json
 import os
 import threading
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 
@@ -18,6 +19,84 @@ from loom.model.fetch import check_output, install, plan_fetch
 from loom.model.fetch_source import Document, FetchError
 from loom.model.fetch_storage import ContentCache
 from loom.model.lock import FileIdentity, ModelLock
+
+
+def test_catalog_receipt_is_owned_verified_and_published_with_the_card(tmp_path):
+    publication = tmp_path / "publication"
+    publication.mkdir()
+    (publication / "code.loom").write_bytes(b"code")
+    (publication / "weights.data").write_bytes(b"weights")
+    text = json.dumps(_card())
+    card = publication / "model.json"
+    card.write_text(text)
+    cache = ContentCache(tmp_path / "cache")
+    snapshot = {"source": "github:fixture/library@compatible", "revision": "a" * 40}
+    plan = plan_fetch(
+        cache.read_document(str(card), offline=True),
+        ModelCard.parse(text).select(),
+        cache,
+        no_lock=True,
+        catalog=snapshot,
+    )
+    snapshot["revision"] = "b" * 40
+    output = tmp_path / "installed"
+    install(plan, cache, output)
+    receipt = json.loads((output / ".loom-fetch.json").read_text())
+    assert receipt["catalog"]["revision"] == "a" * 40
+    assert receipt["card"] == {
+        "location": str(card),
+        "sha256": hashlib.sha256(text.encode()).hexdigest(),
+    }
+    check_output(plan, output)
+    (output / ".loom-fetch.json").write_text("{}")
+    with pytest.raises(FetchError, match="conflicting installation document"):
+        check_output(plan, output)
+
+
+def test_catalog_receipt_destination_is_reserved(tmp_path):
+    document = _card()
+    document["programs"]["p"]["inputs"] = [".loom-fetch.json"]
+    card = ModelCard(document)
+    cache = ContentCache(tmp_path / "cache")
+    with pytest.raises(ManifestError, match="reserved installation path"):
+        plan_fetch(
+            Document(str(tmp_path / "model.json"), json.dumps(document)),
+            card.select(),
+            cache,
+            no_lock=True,
+        )
+
+
+def test_card_publication_failure_rolls_back_the_catalog_receipt(tmp_path):
+    (tmp_path / "code.loom").write_bytes(b"code")
+    (tmp_path / "weights.data").write_bytes(b"weights")
+    cache = ContentCache(tmp_path / "cache")
+    card = ModelCard(_card())
+    plan = plan_fetch(
+        Document(str(tmp_path / "source.json"), json.dumps(card.document)),
+        card.select(),
+        cache,
+        no_lock=True,
+        catalog={"source": "local catalog"},
+    )
+    output = tmp_path / "output"
+    link = os.link
+
+    def fail_card_publication(source, destination, **options):
+        if destination == output / "model.json":
+            assert (output / ".loom-fetch.json").is_file()
+            raise OSError("publication failed")
+        return link(source, destination, **options)
+
+    with (
+        patch("loom.model.fetch.os.link", side_effect=fail_card_publication),
+        pytest.raises(OSError, match="publication failed"),
+    ):
+        install(plan, cache, output)
+    assert not (output / "model.json").exists()
+    assert not (output / ".loom-fetch.json").exists()
+    assert not (output / "code.loom").exists()
+    assert not (output / "weights.data").exists()
 
 
 def _card():

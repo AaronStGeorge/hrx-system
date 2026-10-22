@@ -10,6 +10,7 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "model-card.v1.schema.json",
+    "model-catalog.v1.schema.json",
     "model-lock.v1.schema.json",
 ])
 
@@ -20,6 +21,48 @@ iree_py_library(
         "manifest.py",
     ],
     imports = ["../.."],
+)
+
+iree_py_library(
+    name = "catalog",
+    srcs = ["catalog.py"],
+    deps = [":manifest"],
+)
+
+iree_py_test(
+    name = "catalog_test",
+    srcs = [
+        "catalog_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.catalog_test"],
+    data = ["testdata/moonshine.json"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":catalog",
+        ":fetch_catalog",
+        ":fetch_source",
+        ":fetch_storage",
+        ":manifest",
+    ],
+)
+
+iree_py_binary(
+    name = "catalog_generate",
+    srcs = ["catalog.py"],
+    main = "catalog.py",
+    deps = [":catalog"],
+)
+
+iree_py_library(
+    name = "fetch_catalog",
+    srcs = ["fetch_catalog.py"],
+    deps = [
+        ":catalog",
+        ":fetch_source",
+        ":fetch_storage",
+        ":manifest",
+    ],
 )
 
 iree_py_library(
@@ -94,6 +137,7 @@ iree_py_library(
     srcs = ["fetch_main.py"],
     deps = [
         ":fetch",
+        ":fetch_catalog",
         ":fetch_console",
         ":fetch_hf",
         ":fetch_source",

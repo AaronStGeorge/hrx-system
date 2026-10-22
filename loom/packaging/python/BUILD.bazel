@@ -6,14 +6,21 @@
 
 # bazel-to-cmake: skip
 
-load("@rules_python//python:packaging.bzl", "py_package", "py_wheel")
+load("@rules_python//python:packaging.bzl", "py_package")
+load(":defs.bzl", "loom_python_wheel")
 
 package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "README.md",
+    "defs.bzl",
+])
 
 filegroup(
     name = "schemas",
     srcs = [
         "//loom/py/loom/model:model-card.v1.schema.json",
+        "//loom/py/loom/model:model-catalog.v1.schema.json",
         "//loom/py/loom/model:model-lock.v1.schema.json",
     ],
 )
@@ -29,26 +36,7 @@ py_package(
     ],
 )
 
-py_wheel(
+loom_python_wheel(
     name = "wheel",
-    description_file = "README.md",
-    distribution = "hrx-loom",
-    entry_points = {
-        "console_scripts": ["loom-fetch = loom.model.fetch_main:main"],
-    },
-    extra_distinfo_files = {"//:LICENSE": "licenses/LICENSE"},
-    extra_requires = {"hf": ["huggingface_hub>=2.2,<3"]},
-    homepage = "https://github.com/ROCm/hrx-system",
-    license = "Apache-2.0 WITH LLVM-exception",
-    python_requires = ">=3.12",
-    python_tag = "py3",
-    stamp = 0,
-    strip_path_prefixes = ["loom/py"],
-    summary = "Loom Python authoring tools and portable model acquisition",
-    twine_binary = None,
     version = "0.0.0.dev0",
-    deps = [
-        ":package",
-        ":schemas",
-    ],
 )

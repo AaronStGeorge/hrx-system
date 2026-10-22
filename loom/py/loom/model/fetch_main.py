@@ -16,7 +16,8 @@ from pathlib import Path
 
 from loom.model import ManifestError, ModelCard
 from loom.model.fetch import check_output, install, plan_fetch
-from loom.model.fetch_console import AccessWaiter
+from loom.model.fetch_catalog import installed_catalog, load_catalog
+from loom.model.fetch_console import AccessWaiter, display_text
 from loom.model.fetch_hf import AccessRequired
 from loom.model.fetch_source import FetchError, document_location
 from loom.model.fetch_storage import ContentCache
@@ -48,7 +49,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="loom-fetch", description="Acquire a portable Loom model's selected files."
     )
-    parser.add_argument("card", help="local model JSON or a raw HTTP(S) model-card URL")
+    parser.add_argument(
+        "card", nargs="?", help="local model JSON or a raw HTTP(S) model-card URL"
+    )
+    parser.add_argument("--model", help="model ID in the selected catalog")
+    parser.add_argument(
+        "--catalog",
+        help="local catalog JSON or github:OWNER/REPOSITORY@TAG_OR_COMMIT; "
+        "defaults to this SDK's association",
+    )
     parser.add_argument(
         "--list",
         action="store_true",
@@ -114,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
         help="share source/cache files or explicitly create independent copies",
     )
     args = parser.parse_args(argv)
+    if args.card is not None and (args.model is not None or args.catalog is not None):
+        parser.error("a direct card cannot be combined with --model or --catalog")
+    if args.card is None and args.model is None and not args.list:
+        parser.error("select a card or --model=ID; --list shows the available catalog")
     if not args.list and args.output is None:
         parser.error("--output is required for acquisition or --dry-run")
     if args.no_lock and args.lockfile:
@@ -131,19 +144,49 @@ def main(argv: list[str] | None = None) -> int:
             else None
         )
         cache = ContentCache(args.cache, wait_for_access=wait)
-        document = cache.read_document(
-            document_location(args.card), offline=args.offline
-        )
-        card = ModelCard.parse(document.text)
+        snapshot = None
+        if args.card is None:
+            snapshot = load_catalog(
+                args.catalog or installed_catalog(), cache, offline=args.offline
+            )
+            if args.model is None:
+                listing = snapshot.catalog.document
+                if args.json:
+                    sys.stdout.write(
+                        json.dumps(
+                            {**listing, "snapshot": snapshot.summary()}, indent=2
+                        )
+                        + "\n"
+                    )
+                else:
+                    if snapshot.revision:
+                        sys.stderr.write(f"Catalog revision: {snapshot.revision}\n")
+                    for identity, entry in listing["models"].items():
+                        sys.stdout.write(
+                            f"{display_text(identity)}\t{display_text(entry['name'])}\n"
+                        )
+                return 0
+            document, card = snapshot.read_model(
+                args.model, cache, offline=args.offline
+            )
+        else:
+            document = cache.read_document(
+                document_location(args.card), offline=args.offline
+            )
+            card = ModelCard.parse(document.text)
         if args.list:
             listing = card.document
             if args.json:
                 sys.stdout.write(json.dumps(listing, indent=2) + "\n")
             else:
-                sys.stdout.write(listing["model"]["name"] + "\n")
+                sys.stdout.write(display_text(listing["model"]["name"]) + "\n")
                 for section in ("configurations", "variants", "services", "programs"):
                     sys.stdout.write(
-                        f"{section}: " + ", ".join(listing.get(section, {})) + "\n"
+                        f"{section}: "
+                        + ", ".join(
+                            display_text(value) for value in listing.get(section, {})
+                        )
+                        + "\n"
                     )
             return 0
         selection = card.select(
@@ -161,8 +204,11 @@ def main(argv: list[str] | None = None) -> int:
             offline=args.offline,
             no_lock=args.no_lock,
             update_lock=args.update_lock,
+            catalog=snapshot.summary() if snapshot else None,
         )
         result = plan.summary()
+        if snapshot is not None:
+            result["catalog"] = snapshot.summary()
         result["output"] = str(args.output.absolute())
         if args.dry_run:
             check_output(plan, args.output)
@@ -174,28 +220,31 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(json.dumps(result, indent=2) + "\n")
         elif args.dry_run:
             sys.stdout.write(
-                f"{selection.model_id}: {selection.variant} / "
-                f"{selection.programs} / {selection.service_name}\n"
+                display_text(
+                    f"{selection.model_id}: {selection.variant} / "
+                    f"{selection.programs} / {selection.service_name}"
+                )
+                + "\n"
             )
             for file in result["files"]:
                 size = (
                     "unknown size" if file["size"] is None else f"{file['size']} bytes"
                 )
-                sys.stdout.write(f"  {file['path']} ({size})\n")
+                sys.stdout.write(f"  {display_text(file['path'])} ({size})\n")
         else:
-            sys.stdout.write(result["card"] + "\n")
+            sys.stdout.write(display_text(result["card"]) + "\n")
         return 0
     except AccessRequired as error:
         if args.json:
             sys.stdout.write(json.dumps(error.document(), indent=2) + "\n")
-        sys.stderr.write(f"loom-fetch: {error}\n")
+        sys.stderr.write(f"loom-fetch: {display_text(str(error))}\n")
         return 1
     except (ManifestError, FetchError, OSError) as error:
         if args.json:
             sys.stdout.write(
                 json.dumps({"kind": "error", "message": str(error)}) + "\n"
             )
-        sys.stderr.write(f"loom-fetch: {error}\n")
+        sys.stderr.write(f"loom-fetch: {display_text(str(error))}\n")
         return 1
     except KeyboardInterrupt:
         if args.json:

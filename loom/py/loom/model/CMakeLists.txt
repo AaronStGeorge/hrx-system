@@ -21,6 +21,62 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    catalog
+  SRCS
+    "catalog.py"
+  DEPS
+    loom::py::loom::model::manifest
+)
+
+iree_py_test(
+  NAME
+    catalog_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "catalog_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.catalog_test"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/model/testdata/moonshine.json"
+  DEPS
+    loom::py::loom::model::catalog
+    loom::py::loom::model::fetch_catalog
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_library(
+  NAME
+    catalog_generate
+  MAIN
+    "catalog.py"
+  SRCS
+    "catalog.py"
+  DEPS
+    loom::py::loom::model::catalog
+)
+
+iree_py_library(
+  NAME
+    fetch_catalog
+  SRCS
+    "fetch_catalog.py"
+  DEPS
+    loom::py::loom::model::catalog
+    loom::py::loom::model::fetch_source
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
     lock
   SRCS
     "lock.py"
@@ -102,6 +158,7 @@ iree_py_library(
     "fetch_main.py"
   DEPS
     loom::py::loom::model::fetch
+    loom::py::loom::model::fetch_catalog
     loom::py::loom::model::fetch_console
     loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_source

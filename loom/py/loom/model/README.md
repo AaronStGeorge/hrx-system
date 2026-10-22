@@ -182,3 +182,45 @@ card separately; native serving performs no network access or lock processing.
 The fetch-to-serve fixture checks source, bytecode, mixed, and offline packages
 against the same weighted response, and rejects substituted code before
 publication.
+
+## Catalog discovery
+
+An SDK wheel can associate itself with a compatible catalog tag independently of
+its Python package version. `loom-fetch --list --json` lists that catalog's named
+`models` map. Select an entry with `--model=MODEL_ID`, then use the same variant,
+configuration, provider-set, and output flags as a direct card. A direct card
+path or URL does not consult the catalog.
+
+`--catalog=./catalog.json` selects a local publication for authoring or CI.
+`--catalog=github:OWNER/REPOSITORY@TAG_OR_COMMIT` selects a GitHub publication.
+The client resolves a tag once, including annotated tags, then reads
+`catalog.json`, its relative cards, and their sibling locks at that commit.
+An advancing tag affects the next discovery operation. It cannot change a
+selection already being acquired. Missing tags fail explicitly; the client
+never substitutes `main` or an older online result.
+
+`--offline` reuses the last successfully loaded catalog snapshot. A failed
+refresh leaves that snapshot intact. Listing reads only discovery metadata;
+it does not read every card or check access to model weights. The selected card
+still owns service ABI and model-format admission.
+
+Generate a catalog from model cards without reading their payloads:
+
+```sh
+python -m loom.model.catalog --output=catalog.json \
+  --card=model/moonshine-ai/moonshine-streaming-tiny/model.json=model/moonshine-ai/moonshine-streaming-tiny/model.json
+loom-fetch --catalog=./catalog.json --list --json | jq '.models | keys[]'
+loom-fetch --catalog=./catalog.json --model=moonshine-ai/moonshine-streaming-tiny \
+  --configuration=streaming --output=./installed
+```
+
+Each `--card` maps its publication-relative path to a local input. Publication
+must place that card at the declared relative path. The generated index contains
+names, service versions, variants, and canonical configuration names. It is a
+discovery index, not qualification evidence. Its
+[versioned schema](model-catalog.v1.schema.json) is bundled with the Python SDK.
+
+Catalog acquisitions publish `.loom-fetch.json` before publishing `model.json`.
+This receipt records the source catalog, resolved commit, selected card location,
+and card digest. It participates in the same conflict checks and rollback as the
+rest of the installation. Native hosts do not consume acquisition receipts.
