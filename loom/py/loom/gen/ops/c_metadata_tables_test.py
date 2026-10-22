@@ -241,6 +241,27 @@ def test_generate_tables_marks_structural_materializations() -> None:
     assert ".vtable_flags = LOOM_OP_VTABLE_STRUCTURAL_MATERIALIZATION," in source
 
 
+def test_generate_tables_marks_fact_independent_canonicalization() -> None:
+    op = Op(
+        "test.projection",
+        group=Dialect("test"),
+        canonicalize="test_projection_canonicalize",
+        canonicalize_without_facts=True,
+    )
+
+    source = generate_tables_c("test", 0x01, [op])
+    assert ".vtable_flags = LOOM_OP_VTABLE_CANONICALIZE_WITHOUT_FACTS," in source
+
+
+def test_fact_independent_canonicalization_requires_callback() -> None:
+    with pytest.raises(ValueError, match="canonicalize_without_facts requires a canonicalize callback"):
+        Op(
+            "test.projection",
+            group=Dialect("test"),
+            canonicalize_without_facts=True,
+        )
+
+
 def test_rejects_duplicate_assembly_mnemonics() -> None:
     dialect = Dialect("test")
     ops = [Op(f"test.{name}", group=dialect, assembly=AssemblyFormat("copy")) for name in ("first", "second")]

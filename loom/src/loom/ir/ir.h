@@ -1039,6 +1039,9 @@ enum loom_op_vtable_flag_bits_e {
   LOOM_OP_VTABLE_STRUCTURAL_MATERIALIZATION = 1u << 10,
   // At least one result declares its originating buffer/view operand field.
   LOOM_OP_VTABLE_HAS_REFERENCE_SOURCE = 1u << 11,
+  // The canonicalization callback depends only on IR structure and may run in
+  // a mutation batch before pending value facts are published.
+  LOOM_OP_VTABLE_CANONICALIZE_WITHOUT_FACTS = 1u << 12,
 };
 typedef uint16_t loom_op_vtable_flags_t;
 

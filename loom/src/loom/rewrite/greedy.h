@@ -128,9 +128,16 @@ typedef struct loom_greedy_rewrite_callbacks_t {
   // prepare_region itself fails.
   loom_greedy_rewrite_cleanup_region_fn_t cleanup_region;
 
-  // Optional hook called once per fixed-point iteration after worklist seeding
-  // and before individual ops are popped. Pending facts are published first.
+  // Optional hook called once per fixed-point iteration after any
+  // fact-independent rewrite batch has completed and the worklist has been
+  // reseeded. Pending facts are published first.
   loom_greedy_rewrite_before_worklist_fn_t before_worklist;
+
+  // Optional fact-independent rewrite hook. When present, the driver drains a
+  // complete worklist through this hook before publishing the mutations as one
+  // batch and reseeding for |rewrite_op|. The callback must not observe value
+  // facts; mutation APIs continue maintaining the attached fact table.
+  loom_greedy_rewrite_op_fn_t rewrite_op_without_facts;
 
   // Optional hook called for each popped live op with pending facts published.
   // A callback that mutates and then reads derived facts must publish those
