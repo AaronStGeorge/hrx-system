@@ -728,9 +728,8 @@ def shared_tool_bazel_step(
             "//loom/src/loom/tools/loom-link:execution_test",
             "//loom/src/loom/tools/loom-run:execution_test",
             "//loom/src/loom/tooling/target/cpu:run_cxx_input_test",
-            "//loom/src/loom/import/cxx/tooling:execution_test",
+            "//loom/src/loom/import/cxx/test:export_roundtrip_test",
             "//loom/src/loom/tools/loom-import-cxx:execution_test",
-            "//loom/src/loom/tools/loom-import-cxx:export_roundtrip_test",
             "//loom/src/loom/tools/loom-serve:execution_test",
             "//loom/src/loom/tools/loom-check:execution_test",
             "//loom/src/loom/tools/loom-check/test:core_test",
@@ -1149,7 +1148,6 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                         "loom-link",
                         "loom-run",
                         "loom-import-cxx",
-                        "loom_import_cxx_tooling_execution_test_test_deps",
                         "loom-serve",
                         "loom-check",
                         "loom-check-test",
@@ -1162,11 +1160,10 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                     command_name,
                     "Test shared Loom tools",
                     regex=(
-                        r"^(loom/tools/(loom-compile|loom-opt|loom-format|loom-link|loom-import-cxx|loom-run|loom-serve|loom-check|loom-test|loom-benchmark)/(execution_test|export_roundtrip_test|scenario_execution_test)"
+                        r"^(loom/tools/(loom-compile|loom-opt|loom-format|loom-link|loom-import-cxx|loom-run|loom-serve|loom-check|loom-test|loom-benchmark)/(execution_test|scenario_execution_test)"
                         r"|loom/tools/loom-check/test/.*"
                         r"|loom/tooling/execution/hal/command_scenario_(execution|specialization)_test"
                         r"|loom/tooling/target/cpu/benchmark_scenario_correctness_test"
-                        r"|loom/import/cxx/tooling/execution_test"
                         r"|loom/tooling/target/cpu/run_cxx_input_test"
                         r"|loom/tooling/target/cpu/serve/serve_command_test)$"
                     ),

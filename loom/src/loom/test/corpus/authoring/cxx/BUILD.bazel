@@ -13,22 +13,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-# This is an admission-controlled authoring corpus. Keep every source explicit
-# so adding a program requires choosing and documenting the concept it owns.
-exports_files([
-    "flash_attention.cxx",
-    "iq4xs_gate_up.cxx",
-    "nvfp4_matrix.cxx",
-    "nvfp4_matrix.h",
-    "nvfp4_matrix_providers.cxx",
-    "nvfp4_matrix_providers.loom",
-    "q4k_q8_swiglu.cxx",
-    "q8s32_specialization.cxx",
-    "q8s32_specialization.h",
-    "q8s32_specialization_providers.cxx",
-    "q8s32_specialization_providers.loom",
-])
-
 _CXX_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/import:cxx",
 ])

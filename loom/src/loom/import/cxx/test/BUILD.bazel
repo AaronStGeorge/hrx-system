@@ -16,10 +16,6 @@ package(
 
 exports_files([
     "array_records_kernel.cxx",
-    "check_records.cxx",
-    "configured_workgroup_storage.cxx",
-    "mxfp_group_dot.cxx",
-    "paged_online_softmax_loop_f32.cxx",
     "packed_memory.cxx",
     "vector_lookup.cxx",
 ])

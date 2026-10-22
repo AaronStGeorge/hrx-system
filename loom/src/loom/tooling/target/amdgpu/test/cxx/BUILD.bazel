@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/amdgpu:descriptor_sets.bzl",
     "loom_amdgpu_descriptor_set_compatible_with",
@@ -343,44 +342,6 @@ loom_check_test(
 )
 
 loom_check_test(
-    name = "iq4xs_gate_up_async_lowering",
-    src = "iq4xs_gate_up_async_lowering.cxx-test",
-    data = ["//loom/src/loom/test/corpus/authoring/cxx:iq4xs_gate_up.cxx"],
-    runner = "//loom/src/loom/tools/loom-check",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target/arch:amdgpu",
-        "//loom/config/target/amdgpu:descriptor_set_cdna3_core",
-    ]),
-)
-
-loom_check_test(
-    name = "mxfp_group_dot_lowering",
-    src = "mxfp_group_dot.cxx-test",
-    data = ["//loom/src/loom/import/cxx/test:mxfp_group_dot.cxx"],
-    runner = "//loom/src/loom/tools/loom-check",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target/arch:amdgpu",
-    ]),
-)
-
-loom_check_test(
-    name = "nvfp4_matrix_lowering",
-    src = "nvfp4_matrix_lowering.cxx-test",
-    data = [
-        "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix.cxx",
-        "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix.h",
-        "//loom/src/loom/test/corpus/authoring/cxx:nvfp4_matrix_providers.cxx",
-    ],
-    runner = "//loom/src/loom/tools/loom-check",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target/arch:amdgpu",
-    ]),
-)
-
-loom_check_test(
     name = "storage_division",
     src = "storage_division.cxx-test",
     runner = "//loom/src/loom/tools/loom-check",
@@ -533,60 +494,6 @@ loom_test(
     srcs = ["packed_byte_shifts.cxx"],
     execution_profiles = _EXECUTION_PROFILES,
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
-)
-
-iree_execution_test_suite(
-    name = "source_locations_test",
-    data = ["source_locations.cxx"],
-    manifests = ["source_locations.test.json"],
-    tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target:amdgpu_artifacts",
-    ]),
-    tools = {
-        "loom-compile": "//loom/src/loom/tools/loom-compile",
-        "loom-import-cxx": "//loom/src/loom/tools/loom-import-cxx",
-    },
-)
-
-iree_execution_test_suite(
-    name = "configured_workgroup_storage_specialization_test",
-    data = ["//loom/src/loom/import/cxx/test:configured_workgroup_storage.cxx"],
-    manifests = ["configured_workgroup_storage.test.json"],
-    tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target:amdgpu_artifacts",
-    ]),
-    tools = {
-        "loom-compile": "//loom/src/loom/tools/loom-compile",
-        "loom-format": "//loom/src/loom/tools/loom-format",
-        "loom-import-cxx": "//loom/src/loom/tools/loom-import-cxx",
-    },
-)
-
-iree_execution_test_suite(
-    name = "q8s32_specialization_link_test",
-    data = [
-        "q8s32_specialization_ambiguous_provider.cxx",
-        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization.cxx",
-        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization.h",
-        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization_providers.cxx",
-        "//loom/src/loom/test/corpus/authoring/cxx:q8s32_specialization_providers.loom",
-    ],
-    manifests = ["q8s32_specialization.test.json"],
-    tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/import:cxx",
-        "//loom/config/target:amdgpu_artifacts",
-    ]),
-    tools = {
-        "loom-compile": "//loom/src/loom/tools/loom-compile",
-        "loom-import-cxx": "//loom/src/loom/tools/loom-import-cxx",
-        "loom-link": "//loom/src/loom/tools/loom-link",
-        "loom-opt": "//loom/src/loom/tools/loom-opt",
-    },
 )
 
 loom_test(

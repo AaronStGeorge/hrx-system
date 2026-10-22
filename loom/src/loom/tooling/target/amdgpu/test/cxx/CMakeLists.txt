@@ -3250,56 +3250,6 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "iq4xs_gate_up_async_lowering"
-  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
-  ARGS
-    "{{${CMAKE_CURRENT_SOURCE_DIR}/iq4xs_gate_up_async_lowering.cxx-test}}"
-  SRC
-    loom::tools::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/iq4xs_gate_up.cxx"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "mxfp_group_dot_lowering"
-  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
-  ARGS
-    "{{${CMAKE_CURRENT_SOURCE_DIR}/mxfp_group_dot.cxx-test}}"
-  SRC
-    loom::tools::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/mxfp_group_dot.cxx"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "nvfp4_matrix_lowering"
-  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
-  ARGS
-    "{{${CMAKE_CURRENT_SOURCE_DIR}/nvfp4_matrix_lowering.cxx-test}}"
-  SRC
-    loom::tools::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/nvfp4_matrix.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/nvfp4_matrix.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/nvfp4_matrix_providers.cxx"
-  LABELS
-    "loom-check"
-)
-endif()
-
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
@@ -4434,61 +4384,6 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_execution_test_suite(
-  NAME
-    source_locations_test
-  MANIFESTS
-    "source_locations.test.json"
-  TOOLS
-    "loom-compile=loom::tools::loom-compile"
-    "loom-import-cxx=loom::tools::loom-import-cxx"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/source_locations.cxx"
-  LABELS
-    "hostonly"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_execution_test_suite(
-  NAME
-    configured_workgroup_storage_specialization_test
-  MANIFESTS
-    "configured_workgroup_storage.test.json"
-  TOOLS
-    "loom-compile=loom::tools::loom-compile"
-    "loom-format=loom::tools::loom-format"
-    "loom-import-cxx=loom::tools::loom-import-cxx"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/configured_workgroup_storage.cxx"
-  LABELS
-    "hostonly"
-)
-endif()
-
-if(LOOM_IMPORT_CXX AND LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_execution_test_suite(
-  NAME
-    q8s32_specialization_link_test
-  MANIFESTS
-    "q8s32_specialization.test.json"
-  TOOLS
-    "loom-compile=loom::tools::loom-compile"
-    "loom-import-cxx=loom::tools::loom-import-cxx"
-    "loom-link=loom::tools::loom-link"
-    "loom-opt=loom::tools::loom-opt"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/q8s32_specialization.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/q8s32_specialization.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/q8s32_specialization_providers.cxx"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/cxx/q8s32_specialization_providers.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/cxx/q8s32_specialization_ambiguous_provider.cxx"
-  LABELS
-    "hostonly"
-)
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)

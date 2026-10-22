@@ -27,37 +27,10 @@ loomc_cc_binary(
 
 iree_execution_test_suite(
     name = "execution_test",
-    data = glob(["testdata/*"]) + [
-        "//loom/src/loom/import/cxx:include/hip/hip_fp16.h",
-        "//loom/src/loom/import/cxx:include/hip/hip_runtime.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/atomic.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/buffer.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/cache.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/encoding_type.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/index.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/kernel.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/math.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/scalar.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/shape.h",
-        "//loom/src/loom/import/cxx:include/loomcxx/view.h",
-    ],
     manifests = ["loom-import-cxx.test.json"],
     tags = ["hostonly"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
     tools = {
-        "loom-format": "//loom/src/loom/tools/loom-format",
-        "loom-import-cxx": ":loom-import-cxx",
-    },
-)
-
-iree_execution_test_suite(
-    name = "export_roundtrip_test",
-    data = ["testdata/readable_projection.loom"],
-    manifests = ["export_roundtrip.test.json"],
-    tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
-    tools = {
-        "loom-export-cxx": "//loom/py/loom/tools:loom-export-cxx",
         "loom-import-cxx": ":loom-import-cxx",
     },
 )

@@ -13,7 +13,8 @@ the authoring concept it owns in `README.md`, carry an independent correctness
 oracle, and avoid duplicating an existing example for another target or shape.
 Target packages own execution profiles, architecture matrices, variants, and
 expected failures; this package publishes reusable test modules without
-selecting a device.
+selecting a device. Target qualification consumes those modules through Bazel
+labels. It does not include corpus source files into target-owned fixtures.
 
 Every module target is incompatible unless the C++ importer is enabled. The
 programs remain semantically target-neutral: generic target queries such as
