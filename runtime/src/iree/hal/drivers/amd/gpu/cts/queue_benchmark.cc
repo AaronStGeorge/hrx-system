@@ -103,8 +103,11 @@ class NativeQueue {
  public:
   explicit NativeQueue(
       amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-      bool private_stream = false)
-      : command_type_(command_type), private_stream_(private_stream) {}
+      bool private_stream = false,
+      iree_hal_queue_placement_t placement = IREE_HAL_QUEUE_PLACEMENT_DEFAULT)
+      : command_type_(command_type),
+        private_stream_(private_stream),
+        placement_(placement) {}
 
   ~NativeQueue() {
     for (auto& lane : lanes_) {
@@ -114,6 +117,7 @@ class NativeQueue {
     }
     iree_hal_semaphore_release(completion_);
     iree_hal_pool_release(pool_);
+    iree_hal_queue_release(queue_);
     iree_hal_device_release(device_);
     iree_hal_device_group_release(group_);
     iree_hal_amd_gpu_context_free(context_);
@@ -215,8 +219,18 @@ class NativeQueue {
         iree_allocator_t{this, Allocate}, &device_));
     IREE_RETURN_IF_ERROR(iree_hal_device_group_create_from_device(
         device_, tracker_, iree_allocator_system(), &group_));
-    queue_ = iree_hal_device_queue(device_, 0, 0);
-    const auto* family = iree_hal_queue_family(queue_);
+    const auto* family =
+        iree_hal_queue_family(iree_hal_device_queue(device_, 0, 0));
+    if (placement_ == IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+      queue_ = iree_hal_device_queue(device_, 0, 0);
+      iree_hal_queue_retain(queue_);
+    } else {
+      iree_hal_queue_params_t queue_params;
+      iree_hal_queue_params_initialize(&queue_params);
+      queue_params.placement = placement_;
+      IREE_RETURN_IF_ERROR(
+          iree_hal_queue_acquire(family, &queue_params, &queue_));
+    }
     const iree_hal_pool_family_access_t access = {
         .family = family,
         .usage = IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER,
@@ -782,6 +796,8 @@ class NativeQueue {
   amdf_queue_command_type_t command_type_;
   // Chain rows use device-local single-producer dependencies.
   bool private_stream_;
+  // Required primary-ring locality for placement comparison rows.
+  iree_hal_queue_placement_t placement_;
   // Public final notification for a chain, distinct from its private stream.
   iree_hal_semaphore_t* completion_ = nullptr;
   // Last accepted public final notification.
@@ -798,7 +814,7 @@ class NativeQueue {
   iree_hal_device_t* device_ = nullptr;
   // Sealed scope assignment for the explicit allocation pool.
   iree_hal_device_group_t* group_ = nullptr;
-  // Borrowed queue, kept live by device_.
+  // Owning reference to a provisioned or explicitly acquired queue.
   iree_hal_queue_t* queue_ = nullptr;
   // Explicit host-readable storage for the kernel result.
   iree_hal_pool_t* pool_ = nullptr;
@@ -839,8 +855,9 @@ static void BM_Dispatch(
     Timing timing,
     amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
     Completion completion = Completion::kBarrier,
-    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE) {
-  NativeQueue dispatch(command_type);
+    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE,
+    iree_hal_queue_placement_t placement = IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+  NativeQueue dispatch(command_type, false, placement);
   if (!dispatch.Initialize(state)) {
     return;
   }
@@ -955,6 +972,27 @@ AQL_DISPATCH_COMPLETION_CASE(AqlBindingsDefaultSubmissionCompletion,
 AQL_DISPATCH_COMPLETION_CASE(AqlBindingsDefaultSubmissionCompletionActive,
                              kSubmission, IREE_ASYNC_WAIT_FLAG_ACTIVE);
 #undef AQL_DISPATCH_COMPLETION_CASE
+
+// Both localities execute the same direct-stream workload through acquired
+// queues. Completion stays outside submit-only timing.
+#define PLACED_DISPATCH_CASE(name, protocol, placement)              \
+  BENCHMARK_CAPTURE(BM_Dispatch, name, Arguments::kBindings,         \
+                    Barriers::kDefault, Timing::kSubmit, protocol,   \
+                    Completion::kBarrier, IREE_ASYNC_WAIT_FLAG_NONE, \
+                    placement)                                       \
+      ->Arg(1)                                                       \
+      ->Arg(32)                                                      \
+      ->Iterations(200)                                              \
+      ->UseRealTime()
+PLACED_DISPATCH_CASE(Pm4HostLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                     IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_DISPATCH_CASE(Pm4DeviceLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                     IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+PLACED_DISPATCH_CASE(AqlHostLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                     IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_DISPATCH_CASE(AqlDeviceLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                     IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+#undef PLACED_DISPATCH_CASE
 
 // Each event records the native queue clock and signals its own completion.
 // No extra queue operation is appended to either measured interval.
@@ -1228,8 +1266,9 @@ static void BM_Execute(
     Program program, uint32_t burst_count, Capture capture,
     amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
     Completion completion = Completion::kBarrier,
-    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE) {
-  NativeQueue queue(command_type);
+    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE,
+    iree_hal_queue_placement_t placement = IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+  NativeQueue queue(command_type, false, placement);
   if (!queue.Initialize(state)) {
     return;
   }
@@ -1444,6 +1483,29 @@ SUBMISSION_COMPLETION_CASE(AqlTableActiveSubmissionCompletion, kTable,
                            AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
                            IREE_ASYNC_WAIT_FLAG_ACTIVE);
 #undef SUBMISSION_COMPLETION_CASE
+
+// The middle sizes represent model recordings; the endpoints expose short
+// preparation and ring-wrap costs. These include the submission's own wait.
+#define PLACED_EXECUTE_CASE(name, protocol, placement)                 \
+  BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::kTable,             \
+                    Timing::kCompletion, Program::kDispatch, 1,        \
+                    Capture::kNone, protocol, Completion::kSubmission, \
+                    IREE_ASYNC_WAIT_FLAG_NONE, placement)              \
+      ->Arg(64)                                                        \
+      ->Arg(1229)                                                      \
+      ->Arg(1877)                                                      \
+      ->Arg(5000)                                                      \
+      ->Iterations(50)                                                 \
+      ->UseRealTime()
+PLACED_EXECUTE_CASE(Pm4HostLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                    IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_EXECUTE_CASE(Pm4DeviceLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                    IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+PLACED_EXECUTE_CASE(AqlHostLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                    IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_EXECUTE_CASE(AqlDeviceLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                    IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+#undef PLACED_EXECUTE_CASE
 
 // Identical resident programs distinguish ordinary execution, retained but
 // disabled packet regions, and active device samples. The caller upload is

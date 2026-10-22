@@ -438,7 +438,9 @@ iree_runtime_cc_library(
     deps = [
         "//libamdf:headers",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd:status",
+        "//runtime/src/iree/hal/drivers/amd/fabric:memory_transition",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
     ],
 )

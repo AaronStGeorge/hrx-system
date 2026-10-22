@@ -22,9 +22,9 @@ class RingTest : public ::testing::Test {
       }
       packet.words[0] = IREE_HAL_AMD_GPU_AQL_HEADER_INVALID;
     }
-    iree_hal_amd_gpu_aql_ring_initialize(packets_.data(), 0x123400001000,
-                                         packets_.size(), &read_index_,
-                                         &write_index_, &doorbell_, &ring_);
+    iree_hal_amd_gpu_aql_ring_initialize(
+        packets_.data(), 0x123400001000, packets_.size(), &read_index_,
+        &write_index_, &doorbell_, IREE_HAL_HOST_CACHE_FENCE_NONE, &ring_);
   }
 
   // Dependency-owned native storage; this fixture models consumption only.

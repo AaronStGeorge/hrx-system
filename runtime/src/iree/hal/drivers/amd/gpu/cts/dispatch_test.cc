@@ -36,6 +36,8 @@ struct DispatchPlacement {
   uint32_t queue_count;
   // Require the real cold-copy path even when the native CPU aperture works.
   bool staged;
+  // Acquire one host-local and one device-local queue in the same family.
+  bool mixed_placement = false;
 };
 
 class GpuNativeDispatchTest
@@ -71,6 +73,38 @@ class GpuNativeDispatchTest
     ASSERT_NE(artifact_.data, nullptr);
   }
 
+  void Create() {
+    GpuNativeTest::Create();
+    if (HasFatalFailure() || !GetParam().mixed_placement) {
+      return;
+    }
+    const auto* family = iree_hal_queue_family(queues_[0]);
+    const auto required = IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL |
+                          IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL;
+    if ((iree_hal_queue_family_spec(family)->placement_capabilities &
+         required) != required) {
+      GTEST_SKIP()
+          << "Selected native family does not expose both ring placements";
+    }
+    for (uint32_t i = 0; i < 2; ++i) {
+      iree_hal_queue_params_t params;
+      iree_hal_queue_params_initialize(&params);
+      params.placement = i == 0 ? IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL
+                                : IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL;
+      IREE_ASSERT_OK(
+          iree_hal_queue_acquire(family, &params, placed_queues_[i].out()));
+      queues_[i] = placed_queues_[i].get();
+      EXPECT_EQ(iree_hal_queue_placement(queues_[i]), params.placement);
+    }
+  }
+
+  void TearDown() override {
+    for (auto& queue : placed_queues_) {
+      queue.reset();
+    }
+    GpuNativeTest::TearDown();
+  }
+
   iree_status_t Load(iree_hal_executable_t** out_executable) {
     const auto* target =
         &iree_hal_device_spec_executables(iree_hal_device_spec(device_))
@@ -87,13 +121,16 @@ class GpuNativeDispatchTest
   // Native capability restriction; allocation and execution remain real.
   iree::hal::amd::gpu::cts::NativeMemoryGate memory_gate_;
 
+  // Explicitly acquired queues, released before their borrowed device.
+  std::array<Ref<iree_hal_queue_t>, 2> placed_queues_;
+
   // Complete compiler-produced image matching the selected physical target.
   iree_const_byte_span_t artifact_ = {};
 };
 
 TEST_P(GpuNativeDispatchTest, ExecutableGlobalsPreservePlacementAndVisibility) {
   Create();
-  if (HasFatalFailure()) {
+  if (HasFatalFailure() || IsSkipped()) {
     return;
   }
   Ref<iree_hal_executable_t> executable;
@@ -108,7 +145,7 @@ TEST_P(GpuNativeDispatchTest, ExecutableGlobalsPreservePlacementAndVisibility) {
       executable, IREE_SV("image_increment"), &function));
   Ref<iree_hal_semaphore_t> timeline;
   CreateSemaphore(timeline.out());
-  if (HasFatalFailure()) {
+  if (HasFatalFailure() || IsSkipped()) {
     return;
   }
   auto* semaphore = timeline.get();
@@ -229,7 +266,7 @@ TEST_P(GpuNativeDispatchTest, DirectDispatchThroughExplicitPoolAndSealedGroup) {
   options_.queue.argument_capacity = 8;
   options_.queue.retirement_capacity = 8;
   Create();
-  if (HasFatalFailure()) {
+  if (HasFatalFailure() || IsSkipped()) {
     return;
   }
 
@@ -381,7 +418,7 @@ void GpuNativeDispatchTest::RunIndirect(bool recorded) {
   options_.queue.argument_capacity = 8;
   options_.queue.retirement_capacity = 4;
   Create();
-  if (HasFatalFailure()) {
+  if (HasFatalFailure() || IsSkipped()) {
     return;
   }
 
@@ -634,7 +671,7 @@ TEST_P(GpuNativeDispatchTest,
   options_.queue.argument_capacity = 8;
   options_.queue.retirement_capacity = 4;
   Create();
-  if (HasFatalFailure()) {
+  if (HasFatalFailure() || IsSkipped()) {
     return;
   }
   const auto* family = iree_hal_queue_family(queues_[0]);
@@ -874,14 +911,17 @@ INSTANTIATE_TEST_SUITE_P(
         DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 1, false},
         DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 2, false},
         DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 1, true},
-        DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 1, true}),
+        DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 1, true},
+        DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 2, false, true},
+        DispatchPlacement{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 2, false, true}),
     [](const auto& info) {
       return std::string(info.param.command_type ==
                                  AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
                              ? "Aql"
                              : "Pm4") +
              (info.param.queue_count == 1 ? "SameQueue" : "CrossQueue") +
-             (info.param.staged ? "StagedCode" : "");
+             (info.param.staged ? "StagedCode" : "") +
+             (info.param.mixed_placement ? "MixedRingPlacement" : "");
     });
 
 }  // namespace

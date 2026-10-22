@@ -477,6 +477,8 @@ iree_cc_library(
   DEPS
     amdf::headers
     iree::base
+    iree::hal
+    iree::hal::drivers::amd::fabric::memory_transition
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::status
   PUBLIC

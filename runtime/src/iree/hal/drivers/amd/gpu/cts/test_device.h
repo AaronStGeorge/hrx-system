@@ -209,8 +209,7 @@ class GpuNativeTest : public ::testing::Test {
 
   void CreateSemaphore(iree_hal_semaphore_t** out_semaphore);
 
-  // Native lifecycle tests exercise concrete acquisition; shared HAL CTS owns
-  // public capability admission and parameter validation.
+  // Acquires another queue through the same public contract as applications.
   iree_status_t AcquireQueue(iree_hal_queue_t** out_queue);
 
   // Native ring/control backing is separate from device-local program storage.

@@ -73,7 +73,8 @@ class AqlCodeTest : public iree::hal::amd::gpu::cts::GpuNativeTest {
         reinterpret_cast<const iree_atomic_int64_t*>(
             mapping.read_index_address),
         reinterpret_cast<iree_atomic_int64_t*>(mapping.write_index_address),
-        reinterpret_cast<volatile uint64_t*>(mapping.doorbell_address), &ring_);
+        reinterpret_cast<volatile uint64_t*>(mapping.doorbell_address),
+        queue_.host_publish_fence, &ring_);
   }
 
   void TearDown() override {

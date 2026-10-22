@@ -128,7 +128,8 @@ iree_status_t iree_hal_amd_gpu_aql_code_allocate(
       (uint32_t)(mapping.ring_byte_length / 64),
       (void*)(uintptr_t)mapping.read_index_address,
       (void*)(uintptr_t)mapping.write_index_address,
-      (void*)(uintptr_t)mapping.doorbell_address, &code->ring);
+      (void*)(uintptr_t)mapping.doorbell_address,
+      code->queue.host_publish_fence, &code->ring);
   return iree_ok_status();
 }
 

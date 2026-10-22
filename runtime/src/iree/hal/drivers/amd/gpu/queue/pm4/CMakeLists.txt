@@ -743,6 +743,7 @@ iree_cc_library(
   DEPS
     ::commands
     iree::base
+    iree::hal
   PUBLIC
 )
 

@@ -21,7 +21,7 @@ void BM_HostMemoryPublication(benchmark::State& state) {
   iree_hal_amd_gpu_aql_ring_t ring;
   iree_hal_amd_gpu_aql_ring_initialize(packets.data(), 0x1000, packets.size(),
                                        &read_index, &write_index, &doorbell,
-                                       &ring);
+                                       IREE_HAL_HOST_CACHE_FENCE_NONE, &ring);
   const auto packet = iree_hal_amd_gpu_aql_packet_barrier(
       IREE_HAL_AMD_GPU_AQL_HEADER_BARRIER_AND, 0, nullptr, 0x2000);
   const uint32_t count = state.range(0);

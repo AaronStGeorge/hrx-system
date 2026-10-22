@@ -72,6 +72,22 @@ struct NativeRing {
     return status;
   }
 
+  static amdf_status_t AMDF_CALL Info(amdf_user_queue_t* queue,
+                                      amdf_user_queue_info_t* out_info) {
+    auto* self = reinterpret_cast<NativeRing*>(queue);
+    EXPECT_TRUE(self->queue_live);
+    EXPECT_EQ(out_info->type, AMDF_STRUCTURE_TYPE_USER_QUEUE_INFO);
+    EXPECT_EQ(out_info->structure_size, sizeof(*out_info));
+    amdf_status_t status = self->Call("info");
+    if (amdf_status_is_ok(status)) {
+      out_info->placement =
+          self->create_info->placement == AMDF_QUEUE_PLACEMENT_DEFAULT
+              ? AMDF_QUEUE_PLACEMENT_HOST_LOCAL
+              : self->create_info->placement;
+    }
+    return status;
+  }
+
   static amdf_status_t AMDF_CALL Map(amdf_user_queue_t* queue,
                                      amdf_device_t* producer,
                                      amdf_user_queue_mapping_t** out_mapping) {
@@ -111,6 +127,11 @@ struct NativeRing {
       out_info->doorbell_address = reinterpret_cast<uintptr_t>(&self->doorbell);
       out_info->index_bits = 64;
       out_info->doorbell_bits = 64;
+      out_info->host_publish_fence =
+          !view->device && self->create_info->placement ==
+                               AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL
+              ? AMDF_HOST_CACHE_FENCE_X86_SFENCE
+              : AMDF_HOST_CACHE_FENCE_NONE;
     }
     return status;
   }
@@ -156,6 +177,7 @@ struct NativeRing {
 class UserQueueTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    api_.user_queue_query_info = NativeRing::Info;
     api_.user_queue_map = NativeRing::Map;
     api_.user_queue_mapping_query_info = NativeRing::Query;
     api_.user_queue_wait_consumed = NativeRing::Wait;
@@ -214,6 +236,8 @@ class UserQueueTest : public ::testing::Test {
 TEST_F(UserQueueTest, CapturesMappedStorageWithoutPublication) {
   IREE_ASSERT_OK(Initialize());
   EXPECT_EQ(storage_.context, &context_);
+  EXPECT_EQ(storage_.placement, IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+  EXPECT_EQ(storage_.host_publish_fence, IREE_HAL_HOST_CACHE_FENCE_NONE);
   EXPECT_EQ(mapping_info_.ring_address,
             reinterpret_cast<uintptr_t>(native_.words.data()));
   EXPECT_EQ(mapping_info_.ring_byte_length, sizeof(native_.words));
@@ -224,14 +248,15 @@ TEST_F(UserQueueTest, CapturesMappedStorageWithoutPublication) {
   EXPECT_EQ(native_.write_index, 0u);
   EXPECT_EQ(native_.doorbell, 0u);
   EXPECT_EQ(Deinitialize(), AMDF_STATUS_OK);
-  EXPECT_EQ(native_.calls, (std::vector<std::string>{"create", "map", "query",
-                                                     "unmap", "destroy"}));
+  EXPECT_EQ(native_.calls,
+            (std::vector<std::string>{"create", "info", "map", "query", "unmap",
+                                      "destroy"}));
   EXPECT_EQ(Deinitialize(), AMDF_STATUS_OK);
-  EXPECT_EQ(native_.calls.size(), 5u);
+  EXPECT_EQ(native_.calls.size(), 6u);
 }
 
 TEST_F(UserQueueTest, ConstructionFailurePreservesPartialOwnerForCleanup) {
-  for (const char* operation : {"create", "map", "query"}) {
+  for (const char* operation : {"create", "info", "map", "query"}) {
     SCOPED_TRACE(operation);
     native_.fail_operation = operation;
     mapping_info_.format_version = 57;
@@ -246,20 +271,24 @@ TEST_F(UserQueueTest, ConstructionFailurePreservesPartialOwnerForCleanup) {
 }
 
 TEST_F(UserQueueTest, DeviceViewSharesQueueAndJoinsBeforeHostView) {
+  create_info_.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
   create_info_.required_capabilities |=
       AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER;
   amdf_user_queue_mapping_info_t device = {};
   IREE_ASSERT_OK(Initialize(&device));
   EXPECT_NE(storage_.device_mapping, nullptr);
+  EXPECT_EQ(storage_.placement, IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+  EXPECT_EQ(storage_.host_publish_fence, IREE_HAL_HOST_CACHE_FENCE_X86_SFENCE);
+  EXPECT_EQ(device.host_publish_fence, AMDF_HOST_CACHE_FENCE_NONE);
   EXPECT_EQ(device.ring_address, UINT64_C(0x12340000));
   EXPECT_NE(device.ring_address, mapping_info_.ring_address);
   EXPECT_EQ(device.ring_byte_length, mapping_info_.ring_byte_length);
   EXPECT_EQ(Deinitialize(113), AMDF_STATUS_OK);
   EXPECT_EQ(native_.consumed_target, 113u);
   EXPECT_EQ(native_.calls,
-            (std::vector<std::string>{"create", "map", "query", "device_map",
-                                      "device_query", "wait", "device_unmap",
-                                      "unmap", "destroy"}));
+            (std::vector<std::string>{"create", "info", "map", "query",
+                                      "device_map", "device_query", "wait",
+                                      "device_unmap", "unmap", "destroy"}));
 }
 
 TEST_F(UserQueueTest, DeviceMappingFailurePreservesBothOutputTransactions) {
@@ -301,8 +330,8 @@ TEST_F(UserQueueTest, JoinsThePublishedTailBeforeRemovingProducerView) {
   EXPECT_EQ(Deinitialize(80), AMDF_STATUS_OK);
   EXPECT_EQ(native_.consumed_target, 80u);
   EXPECT_EQ(native_.calls,
-            (std::vector<std::string>{"create", "map", "query", "wait", "unmap",
-                                      "destroy"}));
+            (std::vector<std::string>{"create", "info", "map", "query", "wait",
+                                      "unmap", "destroy"}));
 }
 
 TEST_F(UserQueueTest, FailedConsumptionPreservesQueueAndMapping) {
@@ -341,7 +370,7 @@ TEST_F(UserQueueTest, ApiBusyPreservesQueueWithoutRepeatingSuccessfulUnmap) {
   native_.fail_operation.clear();
   EXPECT_EQ(Deinitialize(), AMDF_STATUS_OK);
   EXPECT_EQ(native_.calls,
-            (std::vector<std::string>{"create", "map", "query", "unmap",
+            (std::vector<std::string>{"create", "info", "map", "query", "unmap",
                                       "destroy", "destroy"}));
 }
 

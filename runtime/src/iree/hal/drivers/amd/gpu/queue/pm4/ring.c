@@ -14,10 +14,13 @@ static_assert(sizeof(iree_hal_amd_gpu_pm4_ring_reservation_t) <= 16,
               "one reservation is a destination and a monotonic position");
 
 void iree_hal_amd_gpu_pm4_ring_initialize(
-    uint32_t* words, uint32_t capacity, iree_hal_amd_gpu_pm4_ring_t* out_ring) {
+    uint32_t* words, uint32_t capacity,
+    iree_hal_host_cache_fence_t host_publish_fence,
+    iree_hal_amd_gpu_pm4_ring_t* out_ring) {
   *out_ring = (iree_hal_amd_gpu_pm4_ring_t){
       .words = words,
       .capacity = capacity,
+      .host_publish_fence = host_publish_fence,
   };
 }
 

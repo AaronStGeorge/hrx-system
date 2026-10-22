@@ -85,7 +85,8 @@ class AqlProgramTest : public GpuNativeTest,
         device.ring_address, static_cast<uint32_t>(host.ring_byte_length / 64),
         reinterpret_cast<const iree_atomic_int64_t*>(host.read_index_address),
         reinterpret_cast<iree_atomic_int64_t*>(host.write_index_address),
-        reinterpret_cast<volatile uint64_t*>(host.doorbell_address), &ring_);
+        reinterpret_cast<volatile uint64_t*>(host.doorbell_address),
+        queue_.host_publish_fence, &ring_);
     signal_ = reinterpret_cast<iree_hal_amd_gpu_aql_signal_t*>(
         control_.contents.data);
     *signal_ = {
@@ -295,8 +296,8 @@ TEST_P(AqlProgramTest, ResidentFixupsAndIndirectPairsSurviveRingWrap) {
           .packets = packet_address,
           .ring_address = ring_.device_address,
           .packet_address = packet_address,
-          .ring_mask = ring_.capacity_mask,
-          .first = static_cast<uint32_t>(first) & ring_.capacity_mask,
+          .ring_mask = (ring_.capacity - 1),
+          .first = static_cast<uint32_t>(first) & (ring_.capacity - 1),
           .packet_count = count,
       };
       std::memcpy(control_.contents.data + 128, &materialize,
@@ -418,9 +419,9 @@ TEST_P(AqlProgramTest, TaggedCompletionsCaptureAndElideAcrossRingWrap) {
                   .packets = control_address_ + 512,
                   .ring_address = ring_.device_address,
                   .packet_address = control_address_ + 512,
-                  .ring_mask = ring_.capacity_mask,
-                  .first =
-                      static_cast<uint32_t>(position + 1) & ring_.capacity_mask,
+                  .ring_mask = (ring_.capacity - 1),
+                  .first = static_cast<uint32_t>(position + 1) &
+                           (ring_.capacity - 1),
                   .packet_count = kPacketCount,
               },
           .signals = enabled ? control_address_ + 2048 : 0,

@@ -6,6 +6,7 @@
 
 #include "iree/hal/drivers/amd/gpu/queue/user_queue.h"
 
+#include "iree/hal/drivers/amd/fabric/memory_transition.h"
 #include "iree/hal/drivers/amd/status.h"
 
 static iree_status_t iree_hal_amd_gpu_user_queue_map(
@@ -37,11 +38,32 @@ iree_status_t iree_hal_amd_gpu_user_queue_initialize(
               context->gpu->user_queue_create(context->device, create_info,
                                               &out_storage->queue),
               "gpu.user_queue_create"));
+  amdf_user_queue_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_USER_QUEUE_INFO,
+      .structure_size = sizeof(info),
+  };
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, IREE_HAL_AMD_STATUS_FROM_AMDF(
+              context->api->user_queue_query_info(out_storage->queue, &info),
+              "user_queue_query_info"));
+  // These ABI vocabularies intentionally use identical locality values.
+  static_assert((int)AMDF_QUEUE_PLACEMENT_DEFAULT ==
+                        (int)IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
+                    (int)AMDF_QUEUE_PLACEMENT_HOST_LOCAL ==
+                        (int)IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL &&
+                    (int)AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL ==
+                        (int)IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL,
+                "native and HAL queue locality values agree");
+  out_storage->placement = (iree_hal_queue_placement_t)info.placement;
   amdf_user_queue_mapping_info_t mapping_info;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0,
       iree_hal_amd_gpu_user_queue_map(context, out_storage->queue, NULL,
                                       &out_storage->mapping, &mapping_info));
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0,
+      iree_hal_amd_fabric_memory_translate_host_fence(
+          mapping_info.host_publish_fence, &out_storage->host_publish_fence));
   amdf_user_queue_mapping_info_t device_mapping_info;
   iree_status_t status = iree_ok_status();
   if (out_device_mapping_info) {

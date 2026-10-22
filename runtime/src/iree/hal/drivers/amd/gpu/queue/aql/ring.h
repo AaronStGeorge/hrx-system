@@ -9,6 +9,7 @@
 
 #include "iree/base/internal/atomics.h"
 #include "iree/hal/drivers/amd/gpu/queue/aql/packet.h"
+#include "iree/hal/memory_scope.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,8 +32,8 @@ typedef struct iree_hal_amd_gpu_aql_ring_t {
   uint64_t device_address;
   // Native power-of-two capacity in 64-byte packets.
   uint32_t capacity;
-  // Capacity minus one, captured for slot and GPU-address arithmetic.
-  uint32_t capacity_mask;
+  // Native host ordering required between packet-body and header stores.
+  iree_hal_host_cache_fence_t host_publish_fence;
   // Exclusive end of all accepted reservations, in monotonic packet indices.
   uint64_t reserved;
   // Last acquired native consumption, refreshed only when capacity is short.
@@ -47,6 +48,7 @@ void iree_hal_amd_gpu_aql_ring_initialize(
     iree_hal_amd_gpu_aql_packet_t* packets, uint64_t device_address,
     uint32_t capacity, const iree_atomic_int64_t* read_index,
     iree_atomic_int64_t* write_index, volatile uint64_t* doorbell,
+    iree_hal_host_cache_fence_t host_publish_fence,
     iree_hal_amd_gpu_aql_ring_t* out_ring);
 
 // Reserves an admitted nonempty bounded chunk of at most capacity packets.
@@ -80,7 +82,7 @@ void iree_hal_amd_gpu_aql_ring_notify(const iree_hal_amd_gpu_aql_ring_t* ring);
 // Exact GPU address of a reserved slot, without reading mapped native storage.
 static inline uint64_t iree_hal_amd_gpu_aql_ring_packet_address(
     const iree_hal_amd_gpu_aql_ring_t* ring, uint64_t position) {
-  return ring->device_address + (position & ring->capacity_mask) *
+  return ring->device_address + (position & (ring->capacity - 1)) *
                                     sizeof(iree_hal_amd_gpu_aql_packet_t);
 }
 

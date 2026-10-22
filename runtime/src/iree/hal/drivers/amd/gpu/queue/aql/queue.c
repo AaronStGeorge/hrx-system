@@ -2579,6 +2579,7 @@ iree_status_t iree_hal_amd_gpu_aql_queue_create(
       .next = &service,
       .queue_family_ordinal = options->family_ordinal,
       .priority = AMDF_QUEUE_PRIORITY_NORMAL,
+      .placement = (amdf_queue_placement_t)params->placement,
       .producer_mode = AMDF_QUEUE_PRODUCER_MODE_SINGLE,
       .required_capabilities = AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER |
                                AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER,
@@ -2590,6 +2591,7 @@ iree_status_t iree_hal_amd_gpu_aql_queue_create(
         context, &native, &queue->storage, &host_mapping, &device_mapping);
   }
   if (iree_status_is_ok(status)) {
+    queue->base.placement = queue->storage.placement;
     if (host_mapping.index_bits != 64 || host_mapping.doorbell_bits != 64 ||
         !host_mapping.read_index_address || !host_mapping.write_index_address ||
         !host_mapping.doorbell_address || !device_mapping.ring_address) {
@@ -2605,7 +2607,7 @@ iree_status_t iree_hal_amd_gpu_aql_queue_create(
           (void*)(uintptr_t)host_mapping.read_index_address,
           (void*)(uintptr_t)host_mapping.write_index_address,
           (void*)(uintptr_t)host_mapping.doorbell_address,
-          &queue->producer.ring);
+          queue->storage.host_publish_fence, &queue->producer.ring);
       iree_hal_amd_gpu_aql_scratch_initialize(
           &queue->growth, queue->storage.queue, options->scratch_memory,
           &queue->scratch);

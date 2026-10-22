@@ -94,7 +94,7 @@ class GpuProgramTest : public GpuNativeTest {
         iree_hal_amd_gpu_pm4_ring_initialize(
             reinterpret_cast<uint32_t*>(queue.mapping.ring_address),
             static_cast<uint32_t>(queue.mapping.ring_byte_length / 4),
-            &queue.ring);
+            queue.user.host_publish_fence, &queue.ring);
       }
     }
   }

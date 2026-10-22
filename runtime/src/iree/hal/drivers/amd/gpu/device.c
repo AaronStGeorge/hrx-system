@@ -311,12 +311,27 @@ static iree_status_t iree_hal_amd_gpu_device_build_spec(
                                       IREE_HAL_ATOMIC_WAIT_CONDITION_FLAGS_ALL;
   const uint32_t wait_conditions_64 = native_atomics->wait_conditions_64 &
                                       IREE_HAL_ATOMIC_WAIT_CONDITION_FLAGS_ALL;
+  const amdf_queue_family_info_t* native_family =
+      &device->context->families[family_ordinal];
+  iree_hal_queue_placement_capabilities_t placements = 0;
+  if (iree_hal_amd_gpu_device_compute_publication_modes(native_family) &
+      AMDF_QUEUE_PUBLICATION_MODE_USER) {
+    if (native_family->placement_capabilities &
+        AMDF_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL) {
+      placements |= IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL;
+    }
+    if (native_family->placement_capabilities &
+        AMDF_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL) {
+      placements |= IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL;
+    }
+  }
   const iree_hal_queue_family_spec_t family = {
       .name = device->command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
                   ? IREE_SV("aql")
                   : IREE_SV("pm4"),
       .flags = IREE_HAL_QUEUE_FAMILY_SPEC_FLAG_DYNAMIC_ACQUISITION,
       .provisioned_queue_count = queue_count,
+      .placement_capabilities = placements,
       // COPY_DATA captures the 64-bit CP clock; the native query supplies its
       // platform-specific rate. Zero rate leaves timestamp capture unavailable.
       .timestamp_valid_bits = clock.frequency_hz ? 64 : 0,

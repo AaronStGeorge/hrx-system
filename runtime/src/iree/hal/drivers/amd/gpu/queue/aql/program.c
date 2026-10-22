@@ -204,8 +204,8 @@ void iree_hal_amd_gpu_aql_program_emit(
       .packets = source,
       .ring_address = ring->device_address,
       .packet_address = source,
-      .ring_mask = ring->capacity_mask,
-      .first = (uint32_t)(position + count + 1) & ring->capacity_mask,
+      .ring_mask = (ring->capacity - 1),
+      .first = (uint32_t)(position + count + 1) & (ring->capacity - 1),
       .packet_count = packet_count,
   };
   if (profiling) {

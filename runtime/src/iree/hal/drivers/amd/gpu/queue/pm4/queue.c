@@ -438,6 +438,13 @@ iree_hal_amd_gpu_pm4_publish_accepted(
     }
   } else {
     const uint64_t published_words = queue->producer.ring.reserved_words;
+    if (queue->producer.ring.host_publish_fence !=
+        IREE_HAL_HOST_CACHE_FENCE_NONE) {
+      const iree_hal_memory_transition_recipe_info_t fence = {
+          .host = {.fence_after = queue->producer.ring.host_publish_fence},
+      };
+      iree_hal_memory_transition_execute_host_direct(&fence, NULL, 1);
+    }
     iree_atomic_store(queue->producer.write_index, published_words,
                       iree_memory_order_release);
     const iree_hal_memory_transition_recipe_info_t publication_fence = {
@@ -2357,6 +2364,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_prepare_native(
         .structure_size = sizeof(native),
         .queue_family_ordinal = queue->options.family_ordinal,
         .priority = AMDF_QUEUE_PRIORITY_NORMAL,
+        .placement = (amdf_queue_placement_t)queue->base.placement,
         .producer_mode = AMDF_QUEUE_PRODUCER_MODE_SINGLE,
         .required_capabilities = AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
         .ring_byte_length = queue->options.command_byte_capacity,
@@ -2364,10 +2372,11 @@ static iree_status_t iree_hal_amd_gpu_pm4_prepare_native(
     amdf_user_queue_mapping_info_t mapping;
     IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_user_queue_initialize(
         queue->context, &native, &queue->storage, &mapping, NULL));
+    queue->base.placement = queue->storage.placement;
     iree_hal_amd_gpu_pm4_ring_initialize(
         (uint32_t*)(uintptr_t)mapping.ring_address,
         (uint32_t)(mapping.ring_byte_length / sizeof(uint32_t)),
-        &queue->producer.ring);
+        queue->storage.host_publish_fence, &queue->producer.ring);
     if (mapping.index_bits != 64 || mapping.doorbell_bits != 64 ||
         !mapping.write_index_address || !mapping.doorbell_address) {
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,

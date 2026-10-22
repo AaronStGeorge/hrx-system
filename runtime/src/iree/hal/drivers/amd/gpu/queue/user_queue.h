@@ -29,6 +29,10 @@ typedef struct iree_hal_amd_gpu_user_queue_t {
   // Terminal native removal error after queue-handle consumption. Retaining
   // this failure prevents a later cleanup attempt from certifying quiescence.
   amdf_status_t removal_status;
+  // Achieved native primary-ring locality, captured once during construction.
+  iree_hal_queue_placement_t placement;
+  // Host ordering before publishing a valid header or producer index.
+  iree_hal_host_cache_fence_t host_publish_fence;
 } iree_hal_amd_gpu_user_queue_t;
 
 // Acquires the selected native USER queue and its host producer view. The

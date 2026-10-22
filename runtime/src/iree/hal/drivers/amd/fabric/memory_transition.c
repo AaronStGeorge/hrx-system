@@ -53,7 +53,7 @@ static iree_status_t iree_hal_amd_fabric_memory_translate_host_instruction(
   }
 }
 
-static iree_status_t iree_hal_amd_fabric_memory_translate_host_fence(
+iree_status_t iree_hal_amd_fabric_memory_translate_host_fence(
     amdf_host_cache_fence_t source, iree_hal_host_cache_fence_t* out_fence) {
   switch (source) {
     case AMDF_HOST_CACHE_FENCE_NONE:

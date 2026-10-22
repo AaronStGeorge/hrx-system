@@ -12,6 +12,7 @@ void iree_hal_amd_gpu_aql_ring_initialize(
     iree_hal_amd_gpu_aql_packet_t* packets, uint64_t device_address,
     uint32_t capacity, const iree_atomic_int64_t* read_index,
     iree_atomic_int64_t* write_index, volatile uint64_t* doorbell,
+    iree_hal_host_cache_fence_t host_publish_fence,
     iree_hal_amd_gpu_aql_ring_t* out_ring) {
   *out_ring = (iree_hal_amd_gpu_aql_ring_t){
       .packets = packets,
@@ -20,7 +21,7 @@ void iree_hal_amd_gpu_aql_ring_initialize(
       .doorbell = doorbell,
       .device_address = device_address,
       .capacity = capacity,
-      .capacity_mask = capacity - 1,
+      .host_publish_fence = host_publish_fence,
   };
 }
 
@@ -44,14 +45,20 @@ bool iree_hal_amd_gpu_aql_ring_try_reserve(iree_hal_amd_gpu_aql_ring_t* ring,
 void iree_hal_amd_gpu_aql_ring_write_body(
     const iree_hal_amd_gpu_aql_ring_t* ring, uint64_t position,
     const iree_hal_amd_gpu_aql_packet_t* packet) {
-  uint32_t* words = ring->packets[position & ring->capacity_mask].words;
+  uint32_t* words = ring->packets[position & (ring->capacity - 1)].words;
   memcpy(words + 1, packet->words + 1, sizeof(*packet) - sizeof(uint32_t));
 }
 
 void iree_hal_amd_gpu_aql_ring_publish_header(
     const iree_hal_amd_gpu_aql_ring_t* ring, uint64_t position,
     uint32_t header) {
-  uint32_t* words = ring->packets[position & ring->capacity_mask].words;
+  uint32_t* words = ring->packets[position & (ring->capacity - 1)].words;
+  if (ring->host_publish_fence != IREE_HAL_HOST_CACHE_FENCE_NONE) {
+    const iree_hal_memory_transition_recipe_info_t fence = {
+        .host = {.fence_after = ring->host_publish_fence},
+    };
+    iree_hal_memory_transition_execute_host_direct(&fence, NULL, 1);
+  }
   iree_atomic_store((iree_atomic_int32_t*)words, header,
                     iree_memory_order_release);
 }
