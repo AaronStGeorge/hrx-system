@@ -236,7 +236,10 @@ def capture_access_failures(capture: Capture, cwd: Path, output: str) -> None:
         )
     ):
         delete_paths.append(capture.file(Path(name), copy=True)["path"])
-    if os.name == "nt" and (read_paths or delete_paths):
+    delete_trees = re.findall(
+        r"^Error removing directory ([^\r\n]+)", output, re.MULTILINE
+    )
+    if os.name == "nt" and (read_paths or delete_paths or delete_trees):
         arguments = [
             sys.executable,
             str(Path(__file__).with_name("windows_file_access.py")),
@@ -245,6 +248,8 @@ def capture_access_failures(capture: Capture, cwd: Path, output: str) -> None:
             arguments.extend(["--read", path])
         for path in dict.fromkeys(delete_paths):
             arguments.extend(["--delete", path])
+        for path in dict.fromkeys(delete_trees):
+            arguments.extend(["--delete-tree", path])
         capture.tool(arguments, cwd, "windows-file-access")
 
 
