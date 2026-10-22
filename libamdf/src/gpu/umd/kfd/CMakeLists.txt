@@ -64,6 +64,7 @@ iree_cc_test(
     libamdf::src::wait
   LABELS
     "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
   RESOURCE_GROUP

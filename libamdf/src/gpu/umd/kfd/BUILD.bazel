@@ -42,7 +42,10 @@ amdf_cc_test(
     size = "medium",
     srcs = ["sparse_mapping_test.cc"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
-    tags = ["iree-run-requirement=libamdf.resource.amd_gpu"],
+    tags = [
+        "iree-run-requirement=libamdf.resource.amd_gpu",
+        "runtime-resource=amd-gpu",
+    ],
     target_compatible_with = KFD_COMPATIBILITY,
     deps = [
         ":buffer",
