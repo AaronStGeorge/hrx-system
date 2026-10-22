@@ -14,10 +14,11 @@ from typing import Any
 
 from loom.dsl import ContractFamily, TypeDef, TypeSemantic
 from loom.gen.assembly.tokens import KEYWORD_MAP
-from loom.gen.ops.c_names import c_dialect_enum, c_dialect_path
+from loom.gen.ops.c_names import c_dialect_path
 from loom.gen.ops.c_parameterized_types import (
     TYPE_IR_KIND_MAP,
     indirect_parameterized_type_defs,
+    parameterized_type_defs,
     type_descriptor_symbol,
     type_ir_kind_c_name,
 )
@@ -331,7 +332,9 @@ def _append_parameterized_registry(source: list[str], symbol_prefix: str, all_ty
 def generate_type_builders(all_types: Sequence[Any], *, path: str = "ops", namespace: str = "LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE") -> tuple[str, str]:
     """Generates construction APIs without compiler metadata dependencies."""
     guard = f"LOOM_{path.replace('/', '_').upper()}_TYPE_BUILDERS_H_"
-    includes = {"iree/base/api.h", "loom/ir/attribute.h", "loom/ir/types.h", "loom/util/bstring.h", *_type_enum_includes(all_types)}
+    includes = {"iree/base/api.h", "loom/ir/attribute.h", "loom/ir/types.h", *_type_enum_includes(all_types)}
+    if any(type_def.uses_inline_enum_parameter for type_def in all_types):
+        includes.add("loom/util/bstring.h")
     if namespace != "LOOM_PARAMETERIZED_TYPE_COMMON_NAMESPACE":
         includes.add("loom/ir/ir.h")
     header = [GENERATED_HEADER, f"#ifndef {guard}", f"#define {guard}", ""]
@@ -451,15 +454,13 @@ def generate_dialect_type_registry(dialect: Any, all_types: Sequence[Any]) -> tu
     header.append(f"#define {guard}")
     header.append("")
     header.append('#include "loom/ops/type_registry.h"')
-    header.extend(f'#include "{include}"' for include in _type_enum_includes(all_types) if include != "loom/ops/type_registry.h")
+    if parameterized_type_defs(all_types):
+        header.append(f'#include "loom/{path}/type_builders.h"')
     header.append("")
     header.append("#ifdef __cplusplus")
     header.append('extern "C" {')
     header.append("#endif")
     header.append("")
-    header.append("typedef struct loom_module_t loom_module_t;")
-    header.append("")
-    header.extend(_generate_parameterized_type_header_lines(all_types, c_dialect_enum(dialect.name)))
     header.extend(_generate_parameterized_type_metadata_header_lines(all_types))
     header.append("")
     symbol_prefix = f"loom_{dialect.name}_type_registry"
@@ -480,9 +481,7 @@ def generate_dialect_type_registry(dialect: Any, all_types: Sequence[Any]) -> tu
 
     source = [GENERATED_HEADER]
     source.append(f'#include "loom/{path}/types.h"')
-    source.append('#include "loom/ir/module.h"')
     _append_type_definition_source(source, all_types)
-    source.extend(_generate_parameterized_type_source_lines(all_types))
     _append_parameterized_registry(source, symbol_prefix, all_types)
     source.append(f"const loom_type_registry_entry_t {symbol_prefix}_entries[] = {{")
     for type_def in sorted(all_types, key=lambda value: value.name):

@@ -155,8 +155,8 @@ loom_cc_library(
     deps = [
         ":isa",
         ":scalar_types",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target/arch/spirv/ops",
+        "//loom/src/loom/ir:types",
+        "//loom/src/loom/target/arch/spirv/ops:type_builders",
         "//runtime/src/iree/base",
     ],
 )

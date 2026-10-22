@@ -154,6 +154,7 @@ def checked_in_file_set(model: GenerationModel | None = None) -> GeneratedFileSe
             if generation.dialect.checked_in_headers and filename in (
                 "ops.h",
                 "types.h",
+                "type_builders.h",
                 "tables.h",
             ):
                 checked_in_outputs[path] = contents
@@ -228,6 +229,8 @@ def _main_build_output_mode(parser: argparse.ArgumentParser, args: argparse.Name
         outputs: dict[str, Path] = {}
         _set_output(parser, outputs, "ops.h", args.ops_header)
         _set_output(parser, outputs, "types.h", args.types_header)
+        _set_output(parser, outputs, "type_builders.h", args.type_builders_header)
+        _set_output(parser, outputs, "type_builders.c", args.type_builders)
         _set_output(parser, outputs, "ops.inc", args.ops_include)
         _set_output(parser, outputs, "builders.c", args.builders)
         _set_output(parser, outputs, "tables.c", args.tables)
