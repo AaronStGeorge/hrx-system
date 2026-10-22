@@ -15,11 +15,16 @@ from urllib.parse import urlsplit
 from loom_serve_testing.http_harness import control, running_server
 
 
-def check_model(server, model, expected):
+def check_model(server, model, expected, *provider_encodings):
     server = str(Path(server).absolute())
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
     model = str(Path(model).absolute())
+    for binding in provider_encodings:
+        relative, encoding = binding.split("=", 1)
+        assert encoding in ("text", "bc"), binding
+        with (Path(model).parent / relative).open("rb") as stream:
+            assert (stream.read(4) == b"LOOM") == (encoding == "bc"), binding
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)
         log = directory / "server.log"

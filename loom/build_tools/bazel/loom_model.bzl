@@ -9,6 +9,7 @@
 _LINK_TOOLCHAIN = Label("//loom/build_tools/bazel:link_toolchain_type")
 
 def _loom_model_impl(ctx):
+    preserve = ctx.attr.encoding == "preserve"
     card = ctx.actions.declare_file(ctx.label.name + "/model.json")
     deployment = ctx.actions.declare_file(ctx.label.name + "/serve.json")
     outputs = [card, deployment]
@@ -32,14 +33,19 @@ def _loom_model_impl(ctx):
 
         # Importers resolve auxiliary inputs relative to the provider's physical
         # path. Staging preserves the card namespace without copying input bytes.
-        staged = ctx.actions.declare_file(ctx.label.name + ".input/" + name)
-        ctx.actions.symlink(output = staged, target_file = artifact)
-        inputs.append(staged)
+        staged = artifact
+        if not preserve:
+            staged = ctx.actions.declare_file(ctx.label.name + ".input/" + name)
+            ctx.actions.symlink(output = staged, target_file = artifact)
+            inputs.append(staged)
         output = ctx.actions.declare_file(ctx.label.name + "/" + name)
         runfiles.append(output)
         if target in ctx.attr.files:
             files[name] = {"input": staged.path, "output": output.path}
-            outputs.append(output)
+            if preserve:
+                ctx.actions.symlink(output = output, target_file = artifact)
+            else:
+                outputs.append(output)
         else:
             ctx.actions.symlink(output = output, target_file = artifact)
             assets[name] = output.path
@@ -56,12 +62,17 @@ def _loom_model_impl(ctx):
         "output_deployment": deployment.path,
         "programs": ctx.attr.programs if ctx.attr.programs else None,
     }))
-    linker = ctx.toolchains[_LINK_TOOLCHAIN].tool
+    arguments = ["--plan", plan.path]
+    tools = []
+    if not preserve:
+        linker = ctx.toolchains[_LINK_TOOLCHAIN].tool
+        arguments += ["--linker", linker.files_to_run.executable.path]
+        tools.append(linker.files_to_run)
     ctx.actions.run(
         executable = ctx.executable._builder,
-        arguments = ["--plan", plan.path, "--linker", linker.files_to_run.executable.path],
+        arguments = arguments,
         inputs = depset(inputs + [plan]),
-        tools = [linker.files_to_run],
+        tools = tools,
         outputs = outputs,
         mnemonic = "LoomModel",
         progress_message = "Building model configuration %s" % ctx.label,
@@ -77,8 +88,8 @@ loom_model = rule(
         "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Non-index files (parameters, tokenizers, and provider data) mapped to card paths; materialized as symlinks."),
         "card": attr.label(mandatory = True, allow_single_file = [".json"]),
         "configuration": attr.string(mandatory = True),
-        "encoding": attr.string(default = "bc", values = ["text", "bc"]),
-        "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; normalized with the configured linker."),
+        "encoding": attr.string(default = "bc", values = ["text", "bc", "preserve"], doc = "Normalize providers to Loom text/bytecode, or preserve their bytes, formats, and import options."),
+        "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; preserved as symlinks or normalized with the configured linker."),
         "model_name": attr.string(mandatory = True),
         "programs": attr.string(),
         "_builder": attr.label(default = Label("//loom/py/loom/model:build"), executable = True, cfg = "exec"),

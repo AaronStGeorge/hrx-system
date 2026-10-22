@@ -326,6 +326,36 @@ loom_py_test(
 )
 
 loom_py_test(
+    name = "model_card_mixed_test",
+    size = "small",
+    srcs = ["model_card_test.py"],
+    args = [
+        "$(rootpath :loom-serve-test-tool)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:card_model_mixed)",
+        "abab",
+        "prepare.loom=text",
+        "service.loom=text",
+        "control_module.loombc=bc",
+        "advance_module.loombc=bc",
+    ],
+    data = [
+        ":loom-serve-test-tool",
+        "//loom/src/loom/serve/fixture/text:card_model_mixed",
+    ],
+    main = "model_card_test.py",
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["//loom/src/loom/serve/testing:http"],
+)
+
+loom_py_test(
     name = "native_model_card_source_test",
     size = "small",
     srcs = ["model_card_test.py"],

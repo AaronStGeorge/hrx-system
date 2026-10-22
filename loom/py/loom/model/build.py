@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Normalizes a declared provider closure and emits a portable model card.
+"""Builds a declared provider closure and emits a portable model card.
 
 Bazel owns file placement, including zero-copy asset symlinks. This action owns
 selection and compilation. It never acquires files or invents service roots.
@@ -20,7 +20,7 @@ from pathlib import Path
 from loom.model import ManifestError, ModelCard
 
 
-def build(plan: dict, linker: str) -> None:
+def build(plan: dict, linker: str | None = None) -> None:
     selection = ModelCard.parse(Path(plan["card"]).read_text(encoding="utf-8")).select(
         plan["configuration"], programs=plan.get("programs")
     )
@@ -40,6 +40,11 @@ def build(plan: dict, linker: str) -> None:
     for path in selection.files:
         if path.split("/", 1)[0] in reserved:
             raise ManifestError(f"file {path!r} conflicts with a generated document")
+    encoding = plan["encoding"]
+    if encoding not in ("bc", "text", "preserve"):
+        raise ManifestError(f"unsupported provider encoding {encoding!r}")
+    if encoding != "preserve" and not linker:
+        raise ManifestError("provider normalization requires --linker")
 
     # Selection is already owned. Removing acquisition metadata describes the
     # materialized outputs, whose bytes may differ from the authored providers.
@@ -59,6 +64,16 @@ def build(plan: dict, linker: str) -> None:
         for value in program[role]:
             provider = {"path": value} if isinstance(value, str) else value
             name = provider["path"]
+            if encoding == "preserve":
+                result = {
+                    key: provider[key]
+                    for key in ("path", "format", "options")
+                    if key in provider
+                }
+                if provider.get("data"):
+                    result["data"] = [local_file(item) for item in provider["data"]]
+                normalized.append(result)
+                continue
             binding = plan["files"][name]
             arguments = [linker, "--mode=merge", binding["input"]]
             format_name = provider.get("format")
@@ -115,7 +130,7 @@ def build(plan: dict, linker: str) -> None:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
-    parser.add_argument("--linker", required=True)
+    parser.add_argument("--linker")
     args = parser.parse_args()
     build(json.loads(args.plan.read_text(encoding="utf-8")), args.linker)
 

@@ -22,6 +22,7 @@ def _plan():
     return {
         "card": str(card),
         "configuration": "check",
+        "encoding": "bc",
         "files": {
             path: {"input": "unopened", "output": "unwritten"}
             for path, file in selection.files.items()
@@ -68,3 +69,32 @@ def test_output_documents_have_reserved_paths(tmp_path):
     plan["files"]["model.json"] = {"input": "unopened", "output": "unwritten"}
     with pytest.raises(ManifestError, match="conflicts with a generated document"):
         build(plan, "unavailable-linker")
+
+
+def test_preservation_retains_provider_contract_without_a_linker(tmp_path):
+    plan = _plan()
+    document = json.loads(Path(plan["card"]).read_text())
+    provider = document["programs"]["source"]["inputs"][0]
+    provider.update(
+        origin="https://example.com/prepare.cxx",
+        format="cxx",
+        options=["cxx:std=c++20"],
+    )
+    card = tmp_path / "input.json"
+    card.write_text(json.dumps(document))
+    plan.update(
+        card=str(card),
+        encoding="preserve",
+        name="fixture-text",
+        output_card=str(tmp_path / "model.json"),
+        output_deployment=str(tmp_path / "serve.json"),
+    )
+    build(plan)
+    result = ModelCard.parse((tmp_path / "model.json").read_text()).select("check")
+    assert result.program["inputs"][0] == {
+        "path": "prepare.loom",
+        "format": "cxx",
+        "options": ["cxx:std=c++20"],
+        "data": ["weights.loom"],
+    }
+    assert result.parameters == ModelCard(document).select("check").parameters
