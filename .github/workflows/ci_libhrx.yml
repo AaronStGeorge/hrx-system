@@ -46,6 +46,7 @@ on:
       - "build_tools/**"
       - "runtime/**"
       - "libhrx/**"
+      - "libamdf/**"
       - "third_party/**"
   push:
     branches:

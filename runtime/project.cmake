@@ -62,6 +62,9 @@ set(IREE_HAL_EXECUTABLE_LOADER_EXTRA_DEPS "" CACHE STRING "")
 
 option(IREE_HAL_DRIVER_DEFAULTS
   "Default value for opt-in runtime HAL drivers." OFF)
+if(NOT DEFINED IREE_HAL_DRIVER_AMD_DEFAULT)
+  set(IREE_HAL_DRIVER_AMD_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
 if(NOT DEFINED IREE_HAL_DRIVER_AMDGPU_DEFAULT)
   set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
 endif()
@@ -91,7 +94,8 @@ option(IREE_HAL_DRIVER_WEBGPU
   "Enables the WebGPU runtime HAL driver."
   ${IREE_HAL_DRIVER_WEBGPU_DEFAULT})
 option(IREE_HAL_DRIVER_AMD
-  "Enables the native libamdf AMD runtime HAL driver." OFF)
+  "Enables the native libamdf AMD runtime HAL driver."
+  ${IREE_HAL_DRIVER_AMD_DEFAULT})
 
 option(IREE_HAL_EXECUTABLE_LOADER_DEFAULTS
   "Sets the default value for all runtime HAL executable loaders." ON)
