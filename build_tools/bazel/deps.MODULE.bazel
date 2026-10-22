@@ -9,17 +9,8 @@
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.21")
-bazel_dep(name = "rules_python", version = "2.1.0")
+bazel_dep(name = "rules_python", version = "2.4.3")
 bazel_dep(name = "rules_shell", version = "0.6.1")
-
-# Unstamped Python build metadata is known during analysis and does not need a
-# subprocess action for each binary and test.
-single_version_override(
-    module_name = "rules_python",
-    patch_strip = 1,
-    patches = ["//build_tools/third_party/rules_python:unstamped_build_data.patch"],
-    version = "2.1.0",
-)
 
 # Windows toolchains expose compiler-owned builtins and sanitizer artifacts and
 # declare whether the linker supports Bazel's automatic DLL export helper.
@@ -75,28 +66,33 @@ register_toolchains("//build_tools/macos:all")
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.defaults(python_version = "3.12")
 python.toolchain(python_version = "3.12")
-# Keep the compact and symbol-bearing runtimes on the same interpreter build.
-python.override(minor_mapping = {"3.12": "3.12.13"})
-python.single_version_platform_override(
+use_repo(python, "python_3_12", "python_3_12_host")
+
+# Runtime repositories and registrations belong to this module, including when
+# it is a dependency. Python extension overrides only apply to the root module.
+python_repository = use_repo_rule("@rules_python//python:repositories.bzl", "python_repository")
+
+python_repository(
+    name = "hrx_python_linux_x86_64_debug",
     platform = "x86_64-unknown-linux-gnu",
     python_version = "3.12.13",
+    release_filename = "cpython-3.12.13+20260414-x86_64-unknown-linux-gnu-install_only.tar.gz",
     sha256 = "cdcf8724d46e4857f8db5ee9f4252dc2f5da34f7940294ec6b312389dd3f41e0",
+    strip_prefix = "python",
     urls = ["https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.12.13+20260414-x86_64-unknown-linux-gnu-install_only.tar.gz"],
 )
-python.single_version_platform_override(
-    arch = "x86_64",
-    os_name = "linux",
-    platform = "x86_64-unknown-linux-gnu-stripped",
+
+python_repository(
+    name = "hrx_python_linux_x86_64_stripped",
+    platform = "x86_64-unknown-linux-gnu",
     python_version = "3.12.13",
+    release_filename = "cpython-3.12.13+20260414-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
     sha256 = "3c3427e5628648478da2aa227472c350475a68bc58109f1b43849636a4aecb89",
-    target_compatible_with = [
-        "@platforms//os:linux",
-        "@platforms//cpu:x86_64",
-    ],
-    target_settings = ["@@//build_tools/bazel:python_runtime_stripped"],
+    strip_prefix = "python",
     urls = ["https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.12.13+20260414-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"],
 )
-use_repo(python, "python_3_12", "python_3_12_host")
+
+register_toolchains("//build_tools/bazel/python_runtime:all")
 
 amdgpu_device_toolchain_repo = use_repo_rule(
     "//build_tools/amdgpu:device_toolchain_repository.bzl",

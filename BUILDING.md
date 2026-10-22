@@ -279,6 +279,14 @@ iree-bazel-build --config=python-runtime-debug //loom/py/loom/tools:loom-compile
 This composes with `--config=asan` and `--config=opt` without changing project
 optimization or C/C++ debug information.
 
+The compact and symbol-bearing Python 3.12 runtimes are registered by the HRX
+module, so the same default applies when HRX is consumed as a dependency. An
+external root can select native interpreter symbols with
+`--@hrx//build_tools/bazel:python_runtime_debug=true`; HRX's named `.bazelrc`
+configurations are not imported by Bzlmod. Other Python versions and platforms
+use their registered runtimes, and a root project's explicitly registered
+toolchains retain Bazel's normal selection priority.
+
 ### Default allocator
 
 IREE uses libc for `iree_allocator_system()` by default. Native builds can
