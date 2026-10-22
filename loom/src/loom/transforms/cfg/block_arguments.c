@@ -7,6 +7,7 @@
 #include "loom/transforms/cfg/block_arguments.h"
 
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 
 bool loom_cfg_block_arguments_can_replace(
     const loom_module_t* module, const loom_dominance_info_t* dominance,

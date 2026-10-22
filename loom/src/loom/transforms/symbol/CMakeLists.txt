@@ -307,7 +307,6 @@ loom_cc_library(
     loom::error::parameter
     loom::ir
     loom::ir::facts
-    loom::ir::type_refinement
     loom::ops::func
     loom::ops::op_defs
     loom::ops::special_values

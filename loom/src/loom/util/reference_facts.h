@@ -10,6 +10,7 @@
 #define LOOM_UTIL_REFERENCE_FACTS_H_
 
 #include "loom/ir/facts.h"
+#include "loom/ir/memory_space.h"
 
 #ifdef __cplusplus
 extern "C" {

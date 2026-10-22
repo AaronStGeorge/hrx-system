@@ -9,6 +9,7 @@
 #include "loom/ir/ancestry.h"
 #include "loom/ir/encoding.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/types.h"
 
 iree_status_t loom_availability_analysis_initialize(

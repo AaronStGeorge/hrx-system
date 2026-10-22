@@ -11,6 +11,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/target/pass_environment.h"
 #include "loom/transforms/boundary/projection_branch.h"
 #include "loom/transforms/boundary/projection_loop.h"

@@ -9,6 +9,7 @@
 #include "loom/error/parameter.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/types.h"
 #include "loom/ops/scf/ops.h"
 

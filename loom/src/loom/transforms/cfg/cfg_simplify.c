@@ -15,6 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"

@@ -11,6 +11,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/command/ops.h"
 #include "loom/ops/index/ops.h"

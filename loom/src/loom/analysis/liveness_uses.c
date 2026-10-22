@@ -8,6 +8,7 @@
 
 #include "loom/ir/ancestry.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/types.h"
 
 typedef struct loom_liveness_type_ref_callback_state_t {

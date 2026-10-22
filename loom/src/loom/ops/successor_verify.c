@@ -11,6 +11,7 @@
 #include "loom/error/error_catalog.h"
 #include "loom/error/parameter.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/types.h"
 
 static iree_status_t loom_ops_successor_verify_emit(

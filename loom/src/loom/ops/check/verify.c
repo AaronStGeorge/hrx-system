@@ -9,6 +9,7 @@
 #include "loom/ir/ancestry.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/check/ops.h"
 #include "loom/ops/function_contract_verify.h"
 

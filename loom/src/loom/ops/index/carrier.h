@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "loom/ir/facts.h"
+#include "loom/ir/ir.h"
 #include "loom/ir/scalar_type.h"
 
 #ifdef __cplusplus

@@ -11,6 +11,7 @@
 #include "loom/ir/ancestry.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/rewrite/loop_like.h"
 #include "loom/rewrite/remap.h"
 

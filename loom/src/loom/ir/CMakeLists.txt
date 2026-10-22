@@ -9,6 +9,25 @@
 
 iree_add_all_subdirs()
 
+iree_cc_library(
+  NAME
+    ir
+  DEPS
+    ::builders
+    ::facts
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
+    builders
+  DEPS
+    ::storage
+    ::symbol_map
+    ::types
+  PUBLIC
+)
+
 loom_cc_library(
   NAME
     facts
@@ -21,7 +40,7 @@ loom_cc_library(
     "facts_division.c"
     "float_facts.c"
   DEPS
-    ::ir
+    ::types
     iree::base
     iree::base::internal
     iree::math
@@ -83,10 +102,9 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
-    ir
+    storage
   HDRS
     "ancestry.h"
-    "attribute.h"
     "attribute_schema.h"
     "context.h"
     "encoding.h"
@@ -95,31 +113,25 @@ loom_cc_library(
     "ir.h"
     "local_value_domain.h"
     "location.h"
-    "memory_space.h"
     "module.h"
     "module_record.h"
     "module_source.h"
     "parameterized_attr.h"
     "parameterized_type.h"
-    "scalar_type.h"
     "semantics.h"
     "string_table.h"
-    "structural_hash.h"
-    "type_constraint.h"
     "type_dependencies.h"
     "type_descriptor.h"
     "type_identity.h"
     "type_import.h"
+    "type_refs.h"
     "type_table.h"
-    "types.h"
     "value_refs.h"
     "value_replacement.h"
   TEXTUAL_HDRS
     "location_tag_table.inc"
-    "scalar_type_table.inc"
   SRCS
     "ancestry.c"
-    "attribute.c"
     "context.c"
     "encoding.c"
     "function_version.c"
@@ -129,15 +141,14 @@ loom_cc_library(
     "module.c"
     "module_record.c"
     "module_source.c"
-    "scalar_type.c"
-    "type_constraint.c"
     "type_dependencies.c"
     "type_identity.c"
     "type_import.c"
-    "types.c"
+    "type_refs.c"
     "value_refs.c"
     "value_replacement.c"
   DEPS
+    ::types
     iree::base
     iree::base::internal
     iree::base::internal::arena
@@ -151,13 +162,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    type_refinement
+    types
   HDRS
+    "attribute.h"
+    "memory_space.h"
+    "scalar_type.h"
+    "structural_hash.h"
+    "type_constraint.h"
     "type_refinement.h"
+    "types.h"
+  TEXTUAL_HDRS
+    "scalar_type_table.inc"
   SRCS
+    "attribute.c"
+    "scalar_type.c"
+    "type_constraint.c"
     "type_refinement.c"
+    "types.c"
   DEPS
-    ::ir
     iree::base
     iree::base::internal::arena
   PUBLIC
@@ -207,8 +229,7 @@ loom_cc_test(
   SRCS
     "type_refinement_test.cc"
   DEPS
-    ::ir
-    ::type_refinement
+    ::types
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
@@ -220,7 +241,7 @@ loom_cc_test(
   SRCS
     "attribute_test.cc"
   DEPS
-    ::ir
+    ::types
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -317,7 +338,7 @@ loom_cc_library(
   SRCS
     "symbol_map.c"
   DEPS
-    ::ir
+    ::types
     iree::base
     iree::base::internal::arena
   PUBLIC
@@ -329,7 +350,7 @@ loom_cc_test(
   SRCS
     "scalar_type_test.cc"
   DEPS
-    ::ir
+    ::types
     iree::testing::gtest
     iree::testing::gtest_main
 )

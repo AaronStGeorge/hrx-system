@@ -222,6 +222,7 @@ loom_cc_library(
     hdrs = ["reference_facts.h"],
     deps = [
         "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ir:types",
     ],
 )
 

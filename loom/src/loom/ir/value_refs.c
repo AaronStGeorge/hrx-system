@@ -10,6 +10,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 
 // Consume one retained bitmap at a time. The callback cannot change membership,
 // so the current batch remains local across calls instead of round-tripping

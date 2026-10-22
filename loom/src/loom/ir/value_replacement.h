@@ -11,6 +11,7 @@
 #define LOOM_IR_VALUE_REPLACEMENT_H_
 
 #include "loom/ir/ir.h"
+#include "loom/ir/type_refs.h"
 
 #ifdef __cplusplus
 extern "C" {

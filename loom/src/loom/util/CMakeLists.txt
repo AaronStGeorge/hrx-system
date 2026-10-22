@@ -259,6 +259,7 @@ loom_cc_library(
     "reference_facts.c"
   DEPS
     loom::ir::facts
+    loom::ir::types
   PUBLIC
 )
 

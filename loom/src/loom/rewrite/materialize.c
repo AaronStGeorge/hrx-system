@@ -13,6 +13,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/rewriter.h"
 

@@ -11,6 +11,7 @@
 #include "loom/ir/encoding.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/types.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"

@@ -13,6 +13,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/type_descriptor.h"
+#include "loom/ir/type_refs.h"
 
 namespace loom {
 namespace {

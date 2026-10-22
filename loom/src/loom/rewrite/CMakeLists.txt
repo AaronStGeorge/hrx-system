@@ -214,7 +214,7 @@ loom_cc_library(
     iree::base
     iree::base::internal
     iree::base::internal::arena
-    loom::ir
+    loom::ir::builders
   PUBLIC
 )
 
@@ -393,7 +393,6 @@ loom_cc_library(
     iree::base::internal::arena
     loom::analysis::type_refinement
     loom::ir
-    loom::ir::type_refinement
     loom::ops::op_defs
     loom::target::registers
     loom::util::cfg_graph

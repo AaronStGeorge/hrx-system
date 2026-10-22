@@ -10,6 +10,7 @@
 
 #include "loom/ir/type_dependencies.h"
 #include "loom/ir/type_identity.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ir/types.h"
 
 #define LOOM_CFG_VALUE_IDENTITY_INVALID UINT32_MAX

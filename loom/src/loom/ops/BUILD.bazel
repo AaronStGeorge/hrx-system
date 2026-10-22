@@ -33,7 +33,7 @@ loom_cc_library(
     deps = [
         ":format",
         "//loom/src/loom/error:emitter",
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//loom/src/loom/util:adaptive_sort",
         "//loom/src/loom/util:bstring",
         "//runtime/src/iree/base",
@@ -50,7 +50,7 @@ loom_cc_library(
         "keyword_table.inc",
     ],
     deps = [
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//loom/src/loom/util:bstring",
         "//runtime/src/iree/base",
     ],

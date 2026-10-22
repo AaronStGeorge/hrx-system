@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/error/emitter.h"
+#include "loom/ir/type_refs.h"
 #include "loom/ops/op_defs.h"
 
 #ifdef __cplusplus

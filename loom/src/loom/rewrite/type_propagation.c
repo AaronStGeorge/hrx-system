@@ -13,6 +13,7 @@
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ir/type_refinement.h"
+#include "loom/ir/type_refs.h"
 #include "loom/target/registers.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/segmented_storage.h"
