@@ -113,7 +113,11 @@ iree_cc_test(
     topology_test
   SRCS
     "topology_test.cc"
+  LINKOPTS
+    "-Wl,--wrap=amdf_linux_endpoint_open_file"
+    "-Wl,--wrap=ioctl"
   DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_amdgpu_uapi>
     ::endpoint_profile
     ::topology
     amdf::headers

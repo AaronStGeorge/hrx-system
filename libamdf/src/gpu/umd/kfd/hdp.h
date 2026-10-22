@@ -20,10 +20,10 @@ amdf_queue_host_publication_flags_t amdf_gpu_kfd_hdp_host_publication(
     const amdf_gpu_kfd_topology_t* topology);
 
 // Acquires this device's optional KFD HDP register mapping. Success publishes
-// NULL when the target does not use the sequence, the local heap is not fully
-// host-visible, the native page is too large, or KFD reports that no remap is
-// available. Every other native failure is returned. The device is borrowed
-// through destruction.
+// NULL when the target does not use the sequence, native virtualization does
+// not expose it, the local heap is not fully host-visible, or the native page
+// is too large. Acquisition failures are returned without changing the
+// advertised capability. The device is borrowed through destruction.
 amdf_status_t amdf_gpu_kfd_hdp_create(amdf_gpu_umd_device_t* device,
                                       amdf_gpu_kfd_hdp_t** out_hdp);
 

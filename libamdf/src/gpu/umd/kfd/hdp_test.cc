@@ -318,10 +318,23 @@ TEST_F(KfdHdpTest, RestartsInterruptedPostingRead) {
   EXPECT_EQ(native_.posting_count, 2u);
 }
 
-TEST_F(KfdHdpTest, TreatsMissingNativeRemapAsOptional) {
-  native_.allocation_error = ENOMEM;
+TEST_F(KfdHdpTest, VirtualFunctionNeedsNoNativeRegisterMapping) {
+  device_.topology.virtual_function = true;
+  EXPECT_EQ(amdf_gpu_kfd_hdp_host_publication(&device_.topology),
+            AMDF_QUEUE_HOST_PUBLICATION_FLAG_UNKNOWN);
   ASSERT_EQ(amdf_gpu_kfd_hdp_create(&device_, &hdp_), AMDF_STATUS_OK);
   EXPECT_EQ(hdp_, nullptr);
+  EXPECT_EQ(native_.reservation, nullptr);
+  EXPECT_EQ(native_.allocation.size, 0u);
+}
+
+TEST_F(KfdHdpTest, AcquisitionFailureDoesNotChangeAdvertisedSupport) {
+  native_.allocation_error = ENOMEM;
+  auto* const sentinel = reinterpret_cast<amdf_gpu_kfd_hdp_t*>(uintptr_t{1});
+  auto* output = sentinel;
+  EXPECT_EQ(amdf_gpu_kfd_hdp_create(&device_, &output),
+            amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, ENOMEM));
+  EXPECT_EQ(output, sentinel);
   EXPECT_EQ(native_.cpu_mapping_count, 0u);
   EXPECT_EQ(native_.gpu_mapping_count, 0u);
   EXPECT_EQ(native_.release_count, 0u);
