@@ -130,7 +130,7 @@ static iree_status_t loom_benchmark_case_request_build(
         .root_symbol_count = 1,
         .config =
             options->config ? *options->config : (loomc_config_options_t){0},
-        .kernel_target_profile = options->target_profile,
+        .target_profile = options->target_profile,
         .request_sink =
             {
                 .publish = loom_benchmark_case_request_publish,

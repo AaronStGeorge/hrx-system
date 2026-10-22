@@ -247,12 +247,17 @@ typedef struct loomc_link_options_t {
   /// Number of entries in `module_providers`.
   loomc_host_size_t module_provider_count;
 
-  /// Optional homogeneous profile applied to every linked kernel entry before
-  /// dependency and template selection. Borrowed for the call. NULL preserves
-  /// authored targets. Cannot be combined with nonempty explicit target
-  /// specializations or declaration bindings in `next`.
+  /// Optional homogeneous execution profile applied before dependency and
+  /// template selection. Every selected kernel entry uses the profile. Any
+  /// other materialized function also uses it when its authored target still
+  /// resolves to `target.decl`. Targetless functions remain target-neutral,
+  /// and functions with concrete targets retain their authored context.
+  ///
+  /// Borrowed for the call. NULL preserves authored targets. Cannot be combined
+  /// with nonempty explicit target specializations or declaration bindings in
+  /// `next`.
   /// Requires `structure_size` to include this field.
-  const loomc_target_profile_t* kernel_target_profile;
+  const loomc_target_profile_t* target_profile;
 
   /// Optional reports owned by the returned result, independently of the
   /// module, index, and workspace. Zero performs no report formatting.

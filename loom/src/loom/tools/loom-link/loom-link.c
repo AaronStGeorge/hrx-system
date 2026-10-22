@@ -992,7 +992,7 @@ int main(int argc, char** argv) {
         .config = config_options,
         .root_provider_ordinals = link_index.root_providers.values,
         .root_provider_count = link_index.root_providers.count,
-        .kernel_target_profile = target_profile,
+        .target_profile = target_profile,
         .artifact_flags =
             FLAG_print_plan ? LOOMC_LINK_ARTIFACT_FLAG_PLAN_TEXT : 0,
     };

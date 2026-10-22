@@ -1159,7 +1159,7 @@ enum loom_call_like_kind_e {
   LOOM_CALL_LIKE_KIND_LOW_INTERNAL = 2,
   // Explicit semantic-to-target-low invocation of a selected low function.
   LOOM_CALL_LIKE_KIND_LOW_INVOKE = 3,
-  // Command-program materialization with specialization and binding operands.
+  // Command-program composition with specialization and storage bindings.
   LOOM_CALL_LIKE_KIND_COMMAND_PROGRAM = 4,
   // Exact compile-time template implementation call.
   LOOM_CALL_LIKE_KIND_TEMPLATE = 5,

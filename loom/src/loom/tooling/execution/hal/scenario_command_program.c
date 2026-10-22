@@ -441,13 +441,19 @@ static iree_status_t loom_run_hal_command_scenario_build_wrapper(
   loom_symbol_ref_t wrapper_ref = loom_symbol_ref_null();
   IREE_RETURN_IF_ERROR(
       loom_run_hal_command_scenario_add_wrapper_symbol(module, &wrapper_ref));
+  const loom_symbol_ref_t target = loom_func_like_target(program);
+  loom_command_program_def_build_flags_t build_flags = 0;
+  if (loom_symbol_ref_is_valid(target)) {
+    build_flags |= LOOM_COMMAND_PROGRAM_DEF_BUILD_FLAG_HAS_TARGET;
+  }
+
   loom_builder_t builder;
   loom_builder_initialize(module, &module->arena, loom_module_block(module),
                           &builder);
   loom_op_t* wrapper_op = NULL;
   IREE_RETURN_IF_ERROR(loom_command_program_def_build(
-      &builder, /*build_flags=*/0, /*visibility=*/0, /*retain=*/0,
-      loom_symbol_ref_null(), wrapper_ref,
+      &builder, build_flags, /*visibility=*/0, /*retain=*/0, target,
+      wrapper_ref,
       /*specializations_types=*/NULL,
       /*specializations_types_count=*/0, binding_types, binding_count,
       /*predicates=*/NULL, /*predicates_count=*/0, program.op->location,
@@ -470,6 +476,9 @@ static iree_status_t loom_run_hal_command_scenario_build_wrapper(
   }
   const loom_builder_ip_t module_ip = loom_builder_enter_region(
       &builder, wrapper_op, loom_command_program_def_body(wrapper_op));
+  // The wrapper has no specialization arguments and therefore owns no scalar
+  // predicates. The launched program retains its predicate contract, which is
+  // proved against the concrete constants materialized below.
   for (uint16_t i = 0; i < specialization_count; ++i) {
     const loom_testbench_value_t* value = NULL;
     IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
@@ -1409,7 +1418,7 @@ iree_status_t loom_run_hal_testbench_command_scenario_product_prepare(
         .config = provider_options->compilation->config
                       ? *provider_options->compilation->config
                       : (loomc_config_options_t){0},
-        .kernel_target_profile = product->selected_target_profile,
+        .target_profile = product->selected_target_profile,
         .request_sink =
             {
                 .publish = loom_run_hal_command_scenario_publish,

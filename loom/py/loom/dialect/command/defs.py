@@ -138,10 +138,11 @@ command_program_def = Op(
     phase=OpPhase.EXECUTABLE,
     doc=(
         "Reusable command-program definition. Leading specialization arguments "
-        "participate in staged specialization and launch-count evaluation; buffer "
-        "bindings are provided when the materialized program is issued. Observable "
-        "effects in the body must be explicit command operations; ordinary SSA "
-        "preparation may be pure or deterministic read-only computation."
+        "participate in staged specialization and launch-count evaluation. Launch "
+        "bindings are buffers or typed views; materialized programs receive their "
+        "backing buffer ranges when issued. Observable effects in the body must be "
+        "explicit command operations; ordinary SSA preparation may be pure or "
+        "deterministic read-only computation."
     ),
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
     attrs=list(_PROGRAM_ATTRS),
@@ -201,10 +202,15 @@ command_program_launch = Op(
     "command.program.launch",
     group=command_ops,
     phase=OpPhase.EXECUTABLE,
-    doc=("Invoke a command program with explicit specialization values and issue-time buffer bindings."),
+    doc=(
+        "Invoke a command program with explicit specialization values and storage "
+        "bindings. Buffer operands forward their complete bound ranges. Tensor or "
+        "typed-view operands may materialize buffer bindings while preserving their "
+        "derived storage ranges through command composition."
+    ),
     operands=[
         Operand("specializations", ANY, variadic=True),
-        Operand("bindings", BUFFER, variadic=True),
+        Operand("bindings", ANY, variadic=True),
     ],
     attrs=[
         AttrDef(

@@ -174,11 +174,10 @@ TEST_F(LinkOptionsTest, PlanReportOwnsItsBytesAfterLinkInputsAreReleased) {
 }
 
 TEST_F(LinkOptionsTest, OlderDescriptorsNeverReadAppendedStorage) {
-  constexpr size_t prefix_size =
-      offsetof(loomc_link_options_t, kernel_target_profile);
+  constexpr size_t prefix_size = offsetof(loomc_link_options_t, target_profile);
   const size_t declared_sizes[] = {
       0, prefix_size,
-      prefix_size + sizeof(loomc_link_options_t::kernel_target_profile) - 1,
+      prefix_size + sizeof(loomc_link_options_t::target_profile) - 1,
       offsetof(loomc_link_options_t, artifact_flags),
       offsetof(loomc_link_options_t, artifact_flags) +
           sizeof(loomc_link_artifact_flags_t) - 1};

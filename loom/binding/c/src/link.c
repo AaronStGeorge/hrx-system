@@ -112,19 +112,18 @@ static loomc_status_t loomc_link_validate_options(
   }
   if (options->structure_size != 0 &&
       options->structure_size <
-          offsetof(loomc_link_options_t, kernel_target_profile)) {
+          offsetof(loomc_link_options_t, target_profile)) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "link options structure_size is too small");
   }
   // Zero-sized descriptors use the original prefix. Read each appended field
   // only when the caller supplies its complete storage.
   *out_options = (loomc_link_options_t){0};
-  memcpy(out_options, options,
-         offsetof(loomc_link_options_t, kernel_target_profile));
+  memcpy(out_options, options, offsetof(loomc_link_options_t, target_profile));
   if (options->structure_size >=
-      offsetof(loomc_link_options_t, kernel_target_profile) +
-          sizeof(options->kernel_target_profile)) {
-    out_options->kernel_target_profile = options->kernel_target_profile;
+      offsetof(loomc_link_options_t, target_profile) +
+          sizeof(options->target_profile)) {
+    out_options->target_profile = options->target_profile;
   }
   if (options->structure_size >=
       offsetof(loomc_link_options_t, artifact_flags) +
@@ -223,7 +222,7 @@ static loomc_status_t loomc_link_validate_options(
         "link mode requires roots or include input exports/tests");
   }
   LOOMC_RETURN_IF_ERROR(loomc_link_materialization_validate_targets(
-      options->kernel_target_profile, *out_target_specialization,
+      options->target_profile, *out_target_specialization,
       loomc_context_target_environment(linker->context)));
   return loomc_config_validate_text_options(&options->config);
 }
@@ -754,8 +753,8 @@ loomc_status_t loomc_link_module(loomc_linker_t* linker,
       linker->context, workspace, options->link_index, &options->config,
       target_specialization, result, &arena, linker->allocator,
       &materialization_state);
-  materialization_state.specialization.kernel_profile =
-      options->kernel_target_profile;
+  materialization_state.specialization.deployment_profile =
+      options->target_profile;
   loomc_status_t status = loomc_link_module_overlay_initialize(
       linker, workspace, options, &overlay);
 

@@ -24,6 +24,16 @@ extern "C" {
 typedef struct loomc_link_target_specializations_t
     loomc_link_target_specializations_t;
 
+// Homogeneous deployment specialization phase for one materialization.
+typedef enum loomc_link_deployment_specialization_phase_e {
+  // Final linked products reject every incompatible selected entry.
+  LOOMC_LINK_DEPLOYMENT_SPECIALIZATION_PHASE_FINAL = 0,
+
+  // Command projection preserves incompatible concrete kernel alternatives
+  // until configuration and command normalization establish live entries.
+  LOOMC_LINK_DEPLOYMENT_SPECIALIZATION_PHASE_COMMAND_PROJECTION = 1,
+} loomc_link_deployment_specialization_phase_t;
+
 // Shared invocation state for selective provider materialization.
 //
 // The state borrows every referenced public handle and descriptor. It must
@@ -65,9 +75,13 @@ typedef struct loomc_link_materialization_state_t {
     // Resolved input identities retained after the first materialization.
     const loomc_link_target_specializations_t* indexed;
 
-    // Optional homogeneous kernel-entry profile applied after configuration.
-    // Mutually exclusive with nonempty explicit target assignments.
-    const loomc_target_profile_t* kernel_profile;
+    // Optional homogeneous deployment profile applied after configuration to
+    // selected kernel entries and declaration-targeted functions. Mutually
+    // exclusive with nonempty explicit target assignments.
+    const loomc_target_profile_t* deployment_profile;
+
+    // Phase governing concrete kernel compatibility for deployment_profile.
+    loomc_link_deployment_specialization_phase_t deployment_phase;
   } specialization;
 
   // Synchronous diagnostic destination and current provider source.
@@ -89,7 +103,7 @@ typedef struct loomc_link_materialization_state_t {
 // Validates the mutually exclusive homogeneous and explicit target policies at
 // the public invocation boundary, including profile/environment compatibility.
 LOOMC_API_PRIVATE loomc_status_t loomc_link_materialization_validate_targets(
-    const loomc_target_profile_t* kernel_profile,
+    const loomc_target_profile_t* deployment_profile,
     const loomc_target_specialization_options_t* target_specialization,
     const loomc_target_environment_t* target_environment);
 
@@ -116,6 +130,16 @@ LOOMC_API_PRIVATE void loomc_link_materialization_state_initialize_overlay(
 LOOMC_API_PRIVATE loom_link_plan_materialization_environment_t
 loomc_link_materialization_state_environment(
     loomc_link_materialization_state_t* state);
+
+// Validates the normalized live command entries retained after a command
+// projection materialization. This matches
+// loom_cmd_program_live_kernel_entry_validator_t without introducing a
+// command-target dependency into the shared binding library.
+LOOMC_API_PRIVATE iree_status_t
+loomc_link_materialization_validate_command_kernel_entries(
+    void* user_data, loom_module_t* module,
+    const loom_symbol_ref_t* kernel_refs, iree_host_size_t kernel_count,
+    bool* out_valid);
 
 #ifdef __cplusplus
 }  // extern "C"

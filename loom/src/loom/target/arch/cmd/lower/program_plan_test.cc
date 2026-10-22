@@ -289,7 +289,8 @@ command.program.def public @root() launch(%storage: buffer) {
   bool valid = false;
   IREE_ASSERT_OK(loom_cmd_program_plan_build_from_materialization(
       &materialization, &root_ref, /*program_count=*/1,
-      /*kernel_source=*/nullptr, loom_pass_builtin_registry(),
+      /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+      loom_pass_builtin_registry(),
       loom_cleanup_configured_pattern_provider_set(),
       /*diagnostic_emitter=*/{}, &block_pool_, &valid, &plan,
       iree_allocator_system()));
@@ -703,7 +704,8 @@ command.program.def public @root() launch() {
   bool valid = false;
   IREE_ASSERT_OK(loom_cmd_program_plan_build_from_materialization(
       &materialization, &root_ref, /*program_count=*/1,
-      /*kernel_source=*/nullptr, loom_pass_builtin_registry(), &provider_set,
+      /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+      loom_pass_builtin_registry(), &provider_set,
       /*diagnostic_emitter=*/{}, &block_pool_, &valid, &plan,
       iree_allocator_system()));
 
@@ -744,7 +746,8 @@ command.program.def public @increment_twice() launch(%source: buffer, %scratch: 
   bool valid = false;
   IREE_ASSERT_OK(loom_cmd_program_plan_build_from_materialization(
       &materialization, program_refs, IREE_ARRAYSIZE(program_refs),
-      /*kernel_source=*/nullptr, loom_pass_builtin_registry(),
+      /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+      loom_pass_builtin_registry(),
       loom_cleanup_configured_pattern_provider_set(),
       /*diagnostic_emitter=*/{}, &block_pool_, &valid, &plan,
       iree_allocator_system()));
@@ -1296,7 +1299,8 @@ command.program.def public @parameterized() launch(%parameters: buffer, %target:
   bool valid = false;
   IREE_ASSERT_OK(loom_cmd_program_plan_build_from_materialization(
       &materialization, program_refs, IREE_ARRAYSIZE(program_refs),
-      /*kernel_source=*/nullptr, loom_pass_builtin_registry(),
+      /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+      loom_pass_builtin_registry(),
       loom_cleanup_configured_pattern_provider_set(),
       /*diagnostic_emitter=*/{}, &block_pool_, &valid, &plan,
       iree_allocator_system()));
@@ -1391,7 +1395,8 @@ command.program.def public @bodyless() launch(%output: buffer) {
   bool valid = false;
   IREE_ASSERT_OK(loom_cmd_program_plan_build_from_materialization(
       &materialization, program_refs, IREE_ARRAYSIZE(program_refs),
-      /*kernel_source=*/nullptr, loom_pass_builtin_registry(),
+      /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+      loom_pass_builtin_registry(),
       loom_cleanup_configured_pattern_provider_set(),
       /*diagnostic_emitter=*/{}, &block_pool_, &valid, &plan,
       iree_allocator_system()));
@@ -1511,7 +1516,8 @@ command.program.def public @dynamic_root() launch() {
   bool valid = false;
   IREE_ASSERT_OK(loom_cmd_program_plan_build_from_materialization(
       &materialization, program_refs, IREE_ARRAYSIZE(program_refs),
-      /*kernel_source=*/nullptr, loom_pass_builtin_registry(),
+      /*kernel_source=*/nullptr, /*live_kernel_entry_validator=*/nullptr,
+      loom_pass_builtin_registry(),
       loom_cleanup_configured_pattern_provider_set(),
       /*diagnostic_emitter=*/{}, &block_pool_, &valid, &plan,
       iree_allocator_system()));

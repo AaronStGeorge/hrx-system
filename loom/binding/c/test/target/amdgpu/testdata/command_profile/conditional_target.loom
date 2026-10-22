@@ -1,0 +1,33 @@
+target.decl @device
+
+amdgpu.target<gfx11-generic> @rdna
+
+amdgpu.target<gfx9-4-generic> @cdna
+
+config.decl @test.use_rdna : %value: index where [range(%value, 0, 1)]
+
+kernel.def target(@rdna) @write_rdna() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch() {
+  kernel.return
+}
+
+kernel.def target(@cdna) @write_cdna() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch() {
+  kernel.return
+}
+
+command.program.def public target(@device) @dispatch() launch() {
+  %mode = config.get @test.use_rdna : index
+  %c0 = index.constant 0 : index
+  %use_rdna = index.cmp ne, %mode, %c0 : index
+  scf.if %use_rdna {
+    kernel.launch @write_rdna() : ()
+  } else {
+    kernel.launch @write_cdna() : ()
+  }
+  command.return
+}

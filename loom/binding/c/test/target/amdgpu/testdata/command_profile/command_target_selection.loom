@@ -1,0 +1,43 @@
+target.decl @device
+
+amdgpu.target<gfx11-generic> @rdna
+
+amdgpu.target<gfx9-4-generic> @cdna
+
+template.decl @submit()
+
+template.def<@submit> target(@rdna) @submit_rdna() {
+  kernel.launch @write_rdna() : ()
+  template.return
+}
+
+template.def<@submit> target(@cdna) @submit_cdna() {
+  kernel.launch @write_cdna() : ()
+  template.return
+}
+
+kernel.def target(@rdna) @write_rdna() {
+  %c1 = index.constant 1 : index
+  %width = target.subgroup.size : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%width, %c1, %c1) : index
+} launch() {
+  kernel.return
+}
+
+kernel.def target(@cdna) @write_cdna() {
+  %c1 = index.constant 1 : index
+  %width = target.subgroup.size : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%width, %c1, %c1) : index
+} launch() {
+  kernel.return
+}
+
+command.program.def target(@device) @nested_dispatch() launch() {
+  template.apply<@submit>() : ()
+  command.return
+}
+
+command.program.def public target(@device) @dispatch() launch() {
+  command.program.launch @nested_dispatch() : ()
+  command.return
+}

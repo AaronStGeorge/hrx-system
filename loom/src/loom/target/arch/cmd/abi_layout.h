@@ -24,7 +24,7 @@ typedef enum loom_cmd_buffer_role_e {
   LOOM_CMD_BUFFER_ROLE_REBINDABLE = 2,
 } loom_cmd_buffer_role_t;
 
-// ABI placement of one source command-program buffer argument.
+// ABI placement of one source command-program buffer or view argument.
 typedef struct loom_cmd_buffer_binding_t {
   // Materialization role selecting the fixed or rebindable resource table.
   loom_cmd_buffer_role_t role;

@@ -190,13 +190,17 @@ loom_cc_library(
   SRCS
     "module_specialization.c"
   DEPS
+    ::facts
     ::function_version_projection
+    ::profile
     ::specialization
     iree::base
     iree::base::internal::arena
+    loom::analysis::symbol_facts
     loom::error::emitter
     loom::ir
     loom::ops::op_defs
+    loom::ops::target
   PUBLIC
 )
 

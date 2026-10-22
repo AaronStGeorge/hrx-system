@@ -82,6 +82,21 @@ typedef struct loom_cmd_program_kernel_request_sink_t {
   void* user_data;
 } loom_cmd_program_kernel_request_sink_t;
 
+// Validates the distinct kernel entries retained by command normalization.
+//
+// |kernel_refs| name live kernel entries in |module|. The callback reports
+// source contract failures through its own diagnostics and |out_valid|; a
+// non-OK status identifies an infrastructure failure.
+typedef struct loom_cmd_program_live_kernel_entry_validator_t {
+  // Invoked once after command normalization and before request publication.
+  iree_status_t (*fn)(void* user_data, loom_module_t* module,
+                      const loom_symbol_ref_t* kernel_refs,
+                      iree_host_size_t kernel_count, bool* out_valid);
+
+  // Caller-owned validation and diagnostic context.
+  void* user_data;
+} loom_cmd_program_live_kernel_entry_validator_t;
+
 // Materializes an independently owned source product for |request|.
 //
 // Indexed requests delegate to their ordinary class materializer. Generated
@@ -215,6 +230,11 @@ typedef struct loom_cmd_program_plan_t {
 // product. A caller that receives a non-OK status or false validity must cancel
 // work accepted earlier in the call.
 //
+// |live_kernel_entry_validator| optionally validates the distinct kernel
+// entries reached after command normalization and before |kernel_source|
+// publishes any requests. It receives current module-local refs after symbol
+// compaction.
+//
 // Unsupported portable mappings and infrastructure failures return a non-OK
 // status. Source contract violations emit diagnostics, set |out_valid| to
 // false, leave |out_plan| empty, and return OK. A valid plan sets |out_valid|
@@ -224,6 +244,8 @@ iree_status_t loom_cmd_program_plan_build_from_materialization(
     loom_link_plan_materialization_t* materialization,
     const loom_symbol_ref_t* program_refs, iree_host_size_t program_count,
     const loom_cmd_program_kernel_source_t* kernel_source,
+    const loom_cmd_program_live_kernel_entry_validator_t*
+        live_kernel_entry_validator,
     const loom_pass_registry_t* pass_registry,
     const loom_cleanup_pattern_provider_set_t* cleanup_pattern_provider_set,
     iree_diagnostic_emitter_t diagnostic_emitter,

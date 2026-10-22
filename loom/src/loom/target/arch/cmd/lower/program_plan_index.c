@@ -142,6 +142,9 @@ iree_status_t loom_cmd_program_plan_build_from_index(
     status = loom_cmd_program_plan_build_from_materialization(
         &materialization.product, target_root_refs, program_count,
         kernel_source.sink.publish != NULL ? &kernel_source : NULL,
+        options != NULL && options->live_kernel_entry_validator.fn != NULL
+            ? &options->live_kernel_entry_validator
+            : NULL,
         pass_registry, cleanup_pattern_provider_set, diagnostic_emitter,
         materialization_environment->block_pool, out_valid, out_plan,
         materialization_environment->allocator);

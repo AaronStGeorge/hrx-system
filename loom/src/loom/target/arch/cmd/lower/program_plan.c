@@ -237,6 +237,59 @@ static iree_status_t loom_cmd_program_plan_normalize_roots(
   return status;
 }
 
+static iree_status_t loom_cmd_program_plan_validate_live_kernel_entries(
+    loom_module_t* module, const loom_cmd_program_root_build_t* root_builds,
+    iree_host_size_t root_count, iree_host_size_t command_count,
+    const loom_cmd_program_live_kernel_entry_validator_t* validator,
+    iree_arena_allocator_t* scratch_arena, bool* out_valid) {
+  *out_valid = false;
+  if (validator == NULL || validator->fn == NULL) {
+    *out_valid = true;
+    return iree_ok_status();
+  }
+
+  loom_symbol_ref_t* live_kernel_refs = NULL;
+  if (command_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(scratch_arena, command_count,
+                                                   sizeof(*live_kernel_refs),
+                                                   (void**)&live_kernel_refs));
+  }
+  uint8_t* seen_symbols = NULL;
+  if (module->symbols.count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, module->symbols.count, sizeof(*seen_symbols),
+        (void**)&seen_symbols));
+    memset(seen_symbols, 0, module->symbols.count * sizeof(*seen_symbols));
+  }
+
+  iree_host_size_t live_kernel_count = 0;
+  for (iree_host_size_t root_ordinal = 0; root_ordinal < root_count;
+       ++root_ordinal) {
+    const loom_cmd_schedule_plan_t* schedule =
+        &root_builds[root_ordinal].schedule;
+    for (iree_host_size_t command_ordinal = 0;
+         command_ordinal < schedule->command_count; ++command_ordinal) {
+      const loom_cmd_schedule_command_t* command =
+          &schedule->commands[command_ordinal];
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_PIPELINE_LAUNCH) {
+        continue;
+      }
+      const loom_symbol_ref_t entry_ref = command->callee;
+      IREE_ASSERT(loom_symbol_ref_is_valid(entry_ref));
+      IREE_ASSERT_EQ(entry_ref.module_id, 0u);
+      IREE_ASSERT_LT(entry_ref.symbol_id, module->symbols.count);
+      if (seen_symbols[entry_ref.symbol_id]) {
+        continue;
+      }
+      seen_symbols[entry_ref.symbol_id] = 1;
+      live_kernel_refs[live_kernel_count++] = entry_ref;
+    }
+  }
+  IREE_ASSERT_LE(live_kernel_count, command_count);
+  return validator->fn(validator->user_data, module, live_kernel_refs,
+                       live_kernel_count, out_valid);
+}
+
 static iree_status_t loom_cmd_program_plan_allocate_tables(
     iree_host_size_t root_count, iree_host_size_t entry_requirement_capacity,
     loom_cmd_program_plan_t* plan) {
@@ -615,6 +668,8 @@ iree_status_t loom_cmd_program_plan_build_from_materialization(
     loom_link_plan_materialization_t* materialization,
     const loom_symbol_ref_t* program_refs, iree_host_size_t program_count,
     const loom_cmd_program_kernel_source_t* kernel_source,
+    const loom_cmd_program_live_kernel_entry_validator_t*
+        live_kernel_entry_validator,
     const loom_pass_registry_t* pass_registry,
     const loom_cleanup_pattern_provider_set_t* cleanup_pattern_provider_set,
     iree_diagnostic_emitter_t diagnostic_emitter,
@@ -689,7 +744,6 @@ iree_status_t loom_cmd_program_plan_build_from_materialization(
         plan_module, pass_registry, cleanup_pattern_provider_set,
         diagnostic_emitter, block_pool, has_templates, &valid);
   }
-
   loom_value_fact_table_t source_facts = {0};
   if (valid && iree_status_is_ok(status)) {
     status = loom_value_fact_table_initialize(&source_facts, &scratch_arena,
@@ -739,6 +793,11 @@ iree_status_t loom_cmd_program_plan_build_from_materialization(
         entry_requirement_capacity += root->schedule.command_count;
       }
     }
+  }
+  if (valid && iree_status_is_ok(status)) {
+    status = loom_cmd_program_plan_validate_live_kernel_entries(
+        plan_module, root_builds, program_count, entry_requirement_capacity,
+        live_kernel_entry_validator, &scratch_arena, &valid);
   }
 
   if (valid && iree_status_is_ok(status) &&

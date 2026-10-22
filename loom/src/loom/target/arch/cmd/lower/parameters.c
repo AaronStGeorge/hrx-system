@@ -26,7 +26,7 @@ typedef struct loom_cmd_parameter_source_row_t {
   // command.parameter result mapped by the resulting placement row.
   loom_value_id_t result_value;
 
-  // Source command-program launch-binding ordinal selecting the root group.
+  // Source command-program storage-binding ordinal selecting the root group.
   uint16_t source_binding_ordinal;
 
   // Scratch-owned fully substituted parameter key.
@@ -52,14 +52,14 @@ typedef struct loom_cmd_parameter_source_range_t {
   // Source SSA value mapped by the resolved range.
   loom_value_id_t source_value;
 
-  // Source command-program launch-binding ordinal owning the storage root.
+  // Source command-program storage-binding ordinal owning the storage root.
   uint16_t source_binding_ordinal;
 
   // One-based parameter row for parameter-relative ranges, or zero for ranges
-  // already relative to the launch binding.
+  // already relative to the storage binding.
   iree_host_size_t parameter_row;
 
-  // Byte offset relative to the parameter or source launch-binding range.
+  // Byte offset relative to the parameter or source storage-binding range.
   uint64_t byte_offset;
 
   // Exact byte length of the derived range.
@@ -71,7 +71,7 @@ typedef struct loom_cmd_parameter_build_t {
   // walk.
   loom_module_t* module;
 
-  // Source program launch-binding values in signature order.
+  // Source program storage-binding values in signature order.
   const loom_value_id_t* binding_values;
 
   // Number of entries in |binding_values|.
