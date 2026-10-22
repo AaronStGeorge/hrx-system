@@ -403,6 +403,7 @@ loom_cc_benchmark(
     iree::base
     iree::base::internal::arena
     iree::testing::benchmark_main
+    loom::ops::type_registry
   TESTONLY
 )
 
