@@ -34,6 +34,17 @@ iree_status_t loom_low_schedule_target_pressure_initialize_packing_resources(
 uint32_t loom_low_schedule_register_packing_resource_capacity(
     const loom_low_schedule_build_state_t* state, uint16_t resource_id);
 
+// Resets the incrementally maintained current packing-resource footprints.
+void loom_low_schedule_target_pressure_reset_current_packing_units(
+    const loom_low_schedule_build_state_t* state,
+    loom_low_schedule_pressure_state_t* pressure_state);
+
+// Applies one register-class live-unit change to its packing resources.
+void loom_low_schedule_target_pressure_adjust_current_packing_units(
+    const loom_low_schedule_build_state_t* state,
+    loom_low_schedule_pressure_state_t* pressure_state, uint16_t reg_class_id,
+    int64_t delta_units);
+
 // Mutable pressure state for one shared register-class allocation domain.
 struct loom_low_schedule_pressure_set_record_t {
   // Current live units in the shared pressure set.
