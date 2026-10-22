@@ -72,6 +72,38 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "documentation",
+    srcs = ["documentation.py"],
+    deps = [
+        ":lock",
+        ":manifest",
+    ],
+)
+
+iree_py_binary(
+    name = "documentation_generate",
+    srcs = ["documentation.py"],
+    main = "documentation.py",
+    deps = [":documentation"],
+)
+
+iree_py_test(
+    name = "documentation_test",
+    srcs = [
+        "documentation_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.documentation_test"],
+    data = ["testdata/moonshine.json"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":documentation",
+        ":lock",
+        ":manifest",
+    ],
+)
+
+iree_py_library(
     name = "fetch_source",
     srcs = ["fetch_source.py"],
     deps = [

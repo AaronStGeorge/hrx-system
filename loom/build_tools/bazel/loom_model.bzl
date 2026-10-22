@@ -98,3 +98,35 @@ loom_model = rule(
     },
     toolchains = [_LINK_TOOLCHAIN],
 )
+
+def _loom_model_documentation_impl(ctx):
+    output = ctx.actions.declare_file(ctx.label.name + ".md")
+    arguments = ctx.actions.args()
+    arguments.add("--card", ctx.file.card)
+    arguments.add("--output", output)
+    inputs = [ctx.file.card]
+    if ctx.file.lockfile:
+        arguments.add("--lockfile", ctx.file.lockfile)
+        inputs.append(ctx.file.lockfile)
+    if ctx.attr.card_url:
+        arguments.add("--card-url", ctx.attr.card_url)
+    ctx.actions.run(
+        executable = ctx.executable._renderer,
+        arguments = [arguments],
+        inputs = inputs,
+        outputs = [output],
+        mnemonic = "LoomModelDocumentation",
+        progress_message = "Documenting model card %s" % ctx.label,
+    )
+    return [DefaultInfo(files = depset([output]), runfiles = ctx.runfiles(files = [output]))]
+
+loom_model_documentation = rule(
+    implementation = _loom_model_documentation_impl,
+    doc = "Generates a model reference from metadata alone, without acquiring or compiling payloads.",
+    attrs = {
+        "card": attr.label(mandatory = True, allow_single_file = [".json"]),
+        "card_url": attr.string(doc = "Published card URL used to resolve card-relative source links."),
+        "lockfile": attr.label(allow_single_file = True, doc = "Optional lock covering all card choices, supplying immutable source revisions and output commitments."),
+        "_renderer": attr.label(default = Label("//loom/py/loom/model:documentation_generate"), executable = True, cfg = "exec"),
+    },
+)

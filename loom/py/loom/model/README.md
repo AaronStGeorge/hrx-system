@@ -113,6 +113,45 @@ both encodings, including explicitly typed tokenizer files named
 service through the same providers; its checks append to retained sessions and
 compare activation bytes with a dense arithmetic oracle.
 
+## Generated references
+
+The SDK generates a model reference directly from its card:
+
+```sh
+python -m loom.model.documentation --card model.json --output model.md
+python -m loom.model.documentation --card model.json --lockfile model.json.lock \
+  --card-url=https://example.org/models/speech/model.json --output model.md
+```
+
+The reference lists every compatible variant, partition, service, and program
+choice, canonical configurations, effective JIT values, scoped parameter shards,
+tokenizers, provider order, and importer options. Local destinations and upstream
+locations appear separately. Transforms identify both the source archive and the
+operation producing the local file. Inline data is summarized by byte count.
+
+A supplied lock must cover every displayed choice. Its immutable repository
+revisions determine source links, and its sizes and SHA-256 values describe
+output files. Without a lock, links retain the card's authored revisions.
+Card-relative sources remain labelled relative paths unless `--card-url` supplies
+the publication URL. Rendering reads only the card and optional lock; it does
+not acquire files, verify payloads, compile programs, or establish qualification.
+
+The same operation is available as `render_markdown` in
+`loom.model.documentation`, or as the public Bazel rule:
+
+```starlark
+load("@hrx//loom/build_tools/bazel:defs.bzl", "loom_model_documentation")
+
+loom_model_documentation(
+    name = "reference",
+    card = "model.json",
+)
+```
+
+This produces `reference.md` using only declared metadata inputs. Optional
+`lockfile` and `card_url` attributes have the same meanings as the CLI flags.
+No weight or provider targets belong in this rule's dependency closure.
+
 ## Acquisition
 
 The [Python SDK wheel](../../../packaging/python/README.md) installs the

@@ -86,6 +86,49 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    documentation
+  SRCS
+    "documentation.py"
+  DEPS
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+)
+
+iree_py_library(
+  NAME
+    documentation_generate
+  MAIN
+    "documentation.py"
+  SRCS
+    "documentation.py"
+  DEPS
+    loom::py::loom::model::documentation
+)
+
+iree_py_test(
+  NAME
+    documentation_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "documentation_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.documentation_test"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/model/testdata/moonshine.json"
+  DEPS
+    loom::py::loom::model::documentation
+    loom::py::loom::model::lock
+    loom::py::loom::model::manifest
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_library(
+  NAME
     fetch_source
   SRCS
     "fetch_source.py"

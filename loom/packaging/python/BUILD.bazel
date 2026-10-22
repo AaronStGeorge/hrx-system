@@ -32,6 +32,7 @@ py_package(
         "//loom/py/loom:package",
         "//loom/py/loom/format/bytecode",
         "//loom/py/loom/format/text",
+        "//loom/py/loom/model:documentation",
         "//loom/py/loom/model:fetch_cli",
     ],
 )

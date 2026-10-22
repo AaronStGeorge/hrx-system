@@ -40,6 +40,7 @@ load(
 load(
     ":loom_model.bzl",
     _loom_model = "loom_model",
+    _loom_model_documentation = "loom_model_documentation",
 )
 load(
     ":loom_module.bzl",
@@ -76,6 +77,7 @@ loom_kernel_binary = _loom_kernel_binary
 loom_kernel_library = _loom_kernel_library
 loom_library = _loom_library
 loom_model = _loom_model
+loom_model_documentation = _loom_model_documentation
 loom_module = _loom_module
 loom_target_profile = _loom_target_profile
 loom_target_set = _loom_target_set
