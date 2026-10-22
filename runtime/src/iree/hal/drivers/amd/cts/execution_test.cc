@@ -165,6 +165,9 @@ class ExecutionTest
         participants_[kCpu].device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
         IREE_HAL_SEMAPHORE_FLAG_NONE, start_.out()));
     ASSERT_NO_FATAL_FAILURE(CreatePool());
+    if (IsSkipped()) {
+      return;
+    }
     ASSERT_NO_FATAL_FAILURE(LoadExecutables());
   }
 
@@ -199,6 +202,8 @@ class ExecutionTest
   }
 
   void CreatePool() {
+    const bool atomic =
+        std::get<1>(GetParam()) == SubmissionMode::kAtomicDefaults;
     const iree_hal_buffer_interface_t interfaces[] = {
         IREE_HAL_BUFFER_INTERFACE_HOST, IREE_HAL_BUFFER_INTERFACE_XDNA_SHIM_DMA,
         IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS};
@@ -208,7 +213,7 @@ class ExecutionTest
           IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER;
       families_[i].interfaces = UINT64_C(1) << interfaces[i];
     }
-    if (std::get<1>(GetParam()) == SubmissionMode::kAtomicDefaults) {
+    if (atomic) {
       for (Engine engine : {kCpu, kGpu}) {
         families_[engine].atomics.queue.system_scope_32 =
             IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD;
@@ -220,9 +225,13 @@ class ExecutionTest
     };
     iree_hal_slab_pool_options_t options;
     iree_hal_slab_pool_options_initialize(&options);
-    IREE_ASSERT_OK(iree_hal_slab_pool_create(
-        group_, scope, &options, iree_allocator_system(), pool_.out()));
-    if (std::get<1>(GetParam()) == SubmissionMode::kAtomicDefaults) {
+    iree::Status status = iree_hal_slab_pool_create(
+        group_, scope, &options, iree_allocator_system(), pool_.out());
+    if (atomic && status.code() == iree::StatusCode::kUnavailable) {
+      GTEST_SKIP() << "No shared CPU/GPU/NPU backing supports CPU/GPU ADD";
+    }
+    IREE_ASSERT_OK(status);
+    if (atomic) {
       for (Engine engine : {kCpu, kGpu, kNpu}) {
         iree_hal_memory_scope_t memory_scope;
         IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
