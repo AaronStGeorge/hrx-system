@@ -283,6 +283,28 @@ def amd_test_env() -> tuple[tuple[str, str], ...]:
     )
 
 
+def amd_gpu_cts_test_env(target_selector: str) -> tuple[tuple[str, str], ...]:
+    # Exclude only HAL backend suffixes. Native AQL/PM4/SDMA tests retain their
+    # own capability admission regardless of the selected GPU architecture.
+    selectors = target_selector.split(",")
+    family = next(
+        (
+            name
+            for name, prefixes in ci_config.AMD_GPU_CTS_TARGET_PREFIXES.items()
+            if all(selector.startswith(prefixes) for selector in selectors)
+        ),
+        None,
+    )
+    if family is None:
+        return ()
+    positive, _, negative = os.environ.get("GTEST_FILTER", "*").partition("-")
+    exclusions = [negative] if negative else []
+    for name in ci_config.AMD_GPU_CTS_TARGET_PREFIXES:
+        if name != family:
+            exclusions.extend((f"CTS*/*/{name}", f"CTS*/*/{name}_*"))
+    return (("GTEST_FILTER", positive + "-" + ":".join(exclusions)),)
+
+
 def amdgpu_test_env() -> tuple[tuple[str, str], ...]:
     test_env = []
     for name in AMDGPU_DEVICE_VISIBILITY_ENV_VARS:
@@ -864,7 +886,7 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
             config=config,
             test_tag_filters=test_tag_filters,
             available_resources=resources,
-            test_env=amd_test_env(),
+            test_env=amd_test_env() + amd_gpu_cts_test_env("rdna"),
             bazel_options=options + native_options,
         ),
         *additional_steps,
@@ -876,6 +898,7 @@ def amdgpu_test_steps(
     target_selector: str,
     config: str | None = None,
     xfail_targets: tuple[str, ...] = (),
+    separate_native: bool = False,
 ) -> list[CiStep]:
     config_name = f" / {config.upper()}" if config is not None else ""
     scoped_targets = targets + ci_config.AMDGPU_BAZEL_TARGET_EXCLUDES
@@ -888,7 +911,7 @@ def amdgpu_test_steps(
     host_sanitizer_tag_filters = (
         (f"-{ci_config.HOST_TSAN_INCOMPATIBLE_TEST_LABEL}",) if config == "tsan" else ()
     )
-    return [
+    steps = [
         *platform_coverage_build_steps(
             bazel_build_step(
                 f"Build IREE / AMDGPU{config_name}",
@@ -897,18 +920,42 @@ def amdgpu_test_steps(
                 bazel_options=bazel_options,
             )
         ),
+    ]
+    # Full qualification records native execution before entering legacy tests.
+    # Focused target overrides keep one invocation: either partition may be empty.
+    if separate_native:
+        steps.append(
+            bazel_test_step(
+                f"Test IREE / Native AMD GPU{config_name}",
+                scoped_targets + xfail_targets,
+                config=config,
+                test_tag_filters=(ci_config.AMD_GPU_RUN_REQUIREMENT_TAG,)
+                + host_sanitizer_tag_filters,
+                available_resources=ci_config.AMDGPU_RESOURCES,
+                test_env=amdgpu_test_env() + amd_gpu_cts_test_env(target_selector),
+                bazel_options=bazel_options,
+            )
+        )
+    steps.append(
         bazel_test_step(
             f"Test IREE / AMDGPU{config_name}",
             scoped_targets + xfail_targets,
             config=config,
             test_tag_filters=(
-                ci_config.AMDGPU_BAZEL_TEST_TAG_FILTERS + host_sanitizer_tag_filters
+                ci_config.AMDGPU_BAZEL_TEST_TAG_FILTERS
+                + host_sanitizer_tag_filters
+                + (
+                    ("-" + ci_config.AMD_GPU_RUN_REQUIREMENT_TAG,)
+                    if separate_native
+                    else ()
+                )
             ),
             available_resources=ci_config.AMDGPU_RESOURCES,
-            test_env=amdgpu_test_env(),
+            test_env=amdgpu_test_env() + amd_gpu_cts_test_env(target_selector),
             bazel_options=bazel_options,
-        ),
-    ]
+        )
+    )
+    return steps
 
 
 def amdgpu_windows_steps(
@@ -986,7 +1033,7 @@ def amdgpu_windows_steps(
             config=config,
             test_tag_filters=ci_config.AMD_GPU_WINDOWS_TEST_TAG_FILTERS,
             available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
-            test_env=amd_test_env(),
+            test_env=amd_test_env() + amd_gpu_cts_test_env(target_selector),
             bazel_options=options + ("--test_env=GTEST_FAIL_FAST=1",),
         )
     )
@@ -1010,6 +1057,7 @@ def amdgpu_steps(
     targets: tuple[str, ...],
     target_selector: str,
     enabled_loom_importers: tuple[str, ...] | None = None,
+    separate_native: bool = False,
 ) -> list[CiStep]:
     return [
         bazel_configure_step(
@@ -1020,6 +1068,7 @@ def amdgpu_steps(
         *amdgpu_test_steps(
             targets,
             target_selector,
+            separate_native=separate_native,
             xfail_targets=(
                 ci_config.AMDGPU_XFAIL_TARGETS
                 + ci_config.amdgpu_bazel_xfail_targets(target_selector)
@@ -1040,7 +1089,10 @@ def loom_amdgpu_bazel_steps() -> list[CiStep]:
 
 
 def amdgpu_config_steps(
-    targets: tuple[str, ...], target_selector: str, config: str
+    targets: tuple[str, ...],
+    target_selector: str,
+    config: str,
+    separate_native: bool = False,
 ) -> list[CiStep]:
     xfail_targets = (
         ci_config.AMDGPU_TSAN_SANITIZERS_XFAIL_TARGETS
@@ -1051,6 +1103,7 @@ def amdgpu_config_steps(
         targets,
         target_selector,
         config=config,
+        separate_native=separate_native,
         xfail_targets=(
             xfail_targets + ci_config.amdgpu_bazel_xfail_targets(target_selector)
         ),
@@ -1306,7 +1359,9 @@ def cmake_amdgpu_steps(
             regex=ci_config.AMDGPU_CMAKE_PACKAGE_REGEX,
             exclude_regex=xfail_regex,
             available_resources=ci_config.AMDGPU_RESOURCES,
-            env=sanitizer_env(sanitizer) + amdgpu_test_env(),
+            env=sanitizer_env(sanitizer)
+            + amdgpu_test_env()
+            + amd_gpu_cts_test_env(target_selector),
             parallelism=1,
         )
     )
@@ -1327,7 +1382,9 @@ def cmake_amdgpu_steps(
             label_exclude_regex=resource_label_exclude_regex,
             exclude_regex=resource_exclude_regex,
             available_resources=ci_config.AMDGPU_RESOURCES,
-            env=sanitizer_env(sanitizer) + amdgpu_test_env(),
+            env=sanitizer_env(sanitizer)
+            + amdgpu_test_env()
+            + amd_gpu_cts_test_env(target_selector),
             parallelism=1,
         )
     )
@@ -1635,12 +1692,18 @@ def _steps_from_args(args: argparse.Namespace) -> list[CiStep]:
                     enabled_loom_targets=("amdgpu", "vm"),
                     enabled_loom_importers=enabled_loom_importers,
                 ),
-                *amdgpu_config_steps(targets, amdgpu_target_selector, sanitizer),
+                *amdgpu_config_steps(
+                    targets,
+                    amdgpu_target_selector,
+                    sanitizer,
+                    separate_native=not args.target,
+                ),
             ]
         return amdgpu_steps(
             targets,
             amdgpu_target_selector,
             enabled_loom_importers=enabled_loom_importers,
+            separate_native=not args.target,
         )
     if bazel_target == "vulkan":
         return vulkan_steps(targets)

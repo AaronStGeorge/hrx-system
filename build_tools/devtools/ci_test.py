@@ -47,6 +47,41 @@ from build_tools.devtools import ci, ci_config, run_requirements
 
 
 class CiTest(unittest.TestCase):
+    def test_cts_family_filter_composes_with_requested_cases(self):
+        with (
+            mock.patch.object(
+                ci_config,
+                "AMD_GPU_CTS_TARGET_PREFIXES",
+                {"alpha": ("chip-a",), "beta": ("chip-b",)},
+            ),
+            mock.patch.dict(os.environ, {"GTEST_FILTER": "Selected.*-Ignored.*"}),
+        ):
+            self.assertEqual(
+                ci.amd_gpu_cts_test_env("chip-a0,chip-a1"),
+                (("GTEST_FILTER", "Selected.*-Ignored.*:CTS*/*/beta:CTS*/*/beta_*"),),
+            )
+            self.assertEqual(
+                ci.amd_gpu_cts_test_env("chip-b0"),
+                (("GTEST_FILTER", "Selected.*-Ignored.*:CTS*/*/alpha:CTS*/*/alpha_*"),),
+            )
+            for selector in ("chip-a0,chip-b0", "all", "unknown", ""):
+                with self.subTest(selector=selector):
+                    self.assertEqual(ci.amd_gpu_cts_test_env(selector), ())
+
+    def test_cts_family_filter_defaults_to_all_other_cases(self):
+        with (
+            mock.patch.object(
+                ci_config,
+                "AMD_GPU_CTS_TARGET_PREFIXES",
+                {"alpha": ("chip-a",), "beta": ("chip-b",)},
+            ),
+            mock.patch.dict(os.environ, {}, clear=True),
+        ):
+            self.assertEqual(
+                ci.amd_gpu_cts_test_env("chip-a0"),
+                (("GTEST_FILTER", "*-CTS*/*/beta:CTS*/*/beta_*"),),
+            )
+
     def test_sanitizer_uses_explicit_symbolizer_before_toolchain_discovery(self):
         with (
             mock.patch.dict(
@@ -2032,20 +2067,29 @@ fi
     def test_cmake_amdgpu_tests_pin_libhsa_from_rocm_root(self):
         args = ci.parse_arguments(["iree-cmake-amdgpu"])
 
-        with mock.patch.dict(
-            ci.os.environ,
-            {"HRX_ROCM_ROOT": "/tmp/rocm-root"},
-            clear=True,
+        for platform, relative_path in (
+            ("linux", "lib/libhsa-runtime64.so.1"),
+            ("win32", "bin/hsa-runtime64.dll"),
         ):
-            steps = ci.steps_from_args(args)
-            expected_env = ci.amdgpu_test_env()
-
-        test_steps = [
-            step for step in steps if step.name.startswith("Test IREE CMake AMDGPU")
-        ]
-        self.assertEqual(len(test_steps), 2)
-        for step in test_steps:
-            self.assertEqual(step.env, expected_env)
+            with (
+                self.subTest(platform=platform),
+                mock.patch.object(ci.sys, "platform", platform),
+                mock.patch.dict(
+                    ci.os.environ, {"HRX_ROCM_ROOT": "/tmp/rocm-root"}, clear=True
+                ),
+            ):
+                steps = ci.steps_from_args(args)
+                test_steps = [
+                    step
+                    for step in steps
+                    if step.name.startswith("Test IREE CMake AMDGPU")
+                ]
+                self.assertTrue(test_steps)
+                for step in test_steps:
+                    self.assertEqual(
+                        dict(step.env)["IREE_HAL_AMDGPU_LIBHSA_PATH"],
+                        str(Path("/tmp/rocm-root") / relative_path),
+                    )
 
     def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):
         args = ci.parse_arguments(["iree-cmake-amdgpu-msan"])

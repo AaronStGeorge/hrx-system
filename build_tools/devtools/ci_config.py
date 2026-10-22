@@ -228,6 +228,12 @@ AMD_GPU_BINARY_TARGETS = ("gfx90a", "gfx9-4-generic", "gfx11-generic", "gfx12-ge
 # Compiler-only fixtures cover the complete supported target vocabulary, even
 # when hardware execution uses one family and native CTS embeds a smaller set.
 AMD_GPU_LOOM_TARGETS = ("loom_defaults",)
+# Single-family hardware jobs select only that family's HAL CTS instances.
+# Multi-family selectors retain both; queue transport tests are independent.
+AMD_GPU_CTS_TARGET_PREFIXES = {
+    "rdna": ("rdna", "gfx10", "gfx11", "gfx12"),
+    "cdna": ("cdna", "gfx9"),
+}
 AMD_GPU_BAZEL_OPTIONS = (
     "--//runtime/src/iree/hal/drivers/amd/gpu:targets="
     + ",".join(AMD_GPU_BINARY_TARGETS),
