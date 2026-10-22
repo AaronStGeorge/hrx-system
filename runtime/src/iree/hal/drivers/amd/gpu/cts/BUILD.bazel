@@ -330,6 +330,7 @@ iree_runtime_cc_test(
 
 iree_runtime_cc_test(
     name = "file_transfer_test",
+    size = "medium",
     srcs = ["file_transfer_test.cc"],
     deps = [
         ":test_device",
