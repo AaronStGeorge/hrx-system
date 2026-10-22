@@ -66,6 +66,8 @@ iree_cc_library(
     iree::hal
     iree::hal::cts::util::profile_test_util
     iree::hal::cts::util::test_base
+    iree::io::file_handle
+    iree::testing::temp_file
   TESTONLY
   ALWAYSLINK
   PUBLIC

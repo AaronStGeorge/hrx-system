@@ -7,13 +7,18 @@
 // Tests for HAL queue_dispatch operations.
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
+#include <future>
 #include <numeric>
 #include <vector>
 
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/profile_test_util.h"
 #include "iree/hal/cts/util/test_base.h"
+#include "iree/io/file_contents.h"
+#include "iree/io/file_handle.h"
+#include "iree/testing/temp_file.h"
 
 namespace iree::hal::cts {
 
@@ -42,6 +47,8 @@ class QueueDispatchTest : public CtsTestBase<> {
     CtsTestBase::TearDown();
   }
 
+  void RunDeferredFileGather(iree_hal_queue_t* io_queue);
+
   iree_hal_queue_t* dispatch_queue_ = nullptr;
   iree_hal_executable_t* executable_ = nullptr;
 };
@@ -53,6 +60,238 @@ static void MakeScaleAndOffsetBindings(iree_hal_buffer_t* input_buffer,
       input_buffer, /*offset=*/0, iree_hal_buffer_byte_length(input_buffer));
   binding_refs[1] = iree_hal_make_buffer_ref(
       output_buffer, /*offset=*/0, iree_hal_buffer_byte_length(output_buffer));
+}
+
+// The callback owns the source and destination until its reads have captured
+// them. Completing the callback does not complete those reads or their
+// consumer.
+struct DeferredFileGather : iree_hal_resource_t {
+  // Borrowed fixture device, live through the final consumer completion.
+  iree_hal_device_t* device;
+  // Borrowed download destination, live through the final consumer completion.
+  const uint32_t* rows;
+  // Source file retained until each accepted read owns its own reference.
+  Ref<iree_hal_file_t> file;
+  // Destination retained independently by the callback, reads, and consumer.
+  Ref<iree_hal_buffer_t> target;
+  // External notification joined before the test destroys its borrowed state.
+  std::promise<void>* released;
+
+  DeferredFileGather(iree_hal_device_t* device, const uint32_t* rows,
+                     iree_hal_file_t* file, iree_hal_buffer_t* target,
+                     std::promise<void>* released)
+      : device(device),
+        rows(rows),
+        file(file),
+        target(target),
+        released(released) {
+    iree_hal_file_retain(file);
+    iree_hal_buffer_retain(target);
+    static const iree_hal_resource_vtable_t vtable = {
+        .destroy =
+            [](iree_hal_resource_t* resource) {
+              auto* state = static_cast<DeferredFileGather*>(resource);
+              auto* released = state->released;
+              delete state;
+              released->set_value();
+            },
+    };
+    iree_hal_resource_initialize(&vtable, this);
+  }
+
+  static iree_status_t Invoke(void* user_data, const uint64_t[4],
+                              iree_hal_host_call_context_t* context) {
+    auto* state = static_cast<DeferredFileGather*>(user_data);
+    std::array<iree_hal_semaphore_t*, 4> completions = {};
+    uint64_t values[] = {1, 1, 1, 1};
+    iree_status_t status = iree_ok_status();
+    for (size_t i = 0; i < completions.size() && iree_status_is_ok(status);
+         ++i) {
+      status = iree_hal_semaphore_create(
+          state->device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
+          IREE_HAL_SEMAPHORE_FLAG_NONE, &completions[i]);
+      if (iree_status_is_ok(status)) {
+        status = iree_hal_queue_read(
+            context->queue, iree_hal_semaphore_list_empty(),
+            {1, &completions[i], &values[i]}, state->file,
+            state->rows[i] * sizeof(uint32_t), state->target,
+            i * sizeof(uint32_t), sizeof(uint32_t), /*barriers=*/nullptr,
+            IREE_HAL_READ_FLAG_NONE);
+      }
+    }
+    if (iree_status_is_ok(status)) {
+      // Queue capture retains the signal list beyond the callback's return.
+      status = iree_hal_queue_transfer(
+          context->queue, {completions.size(), completions.data(), values},
+          context->signal_semaphore_list, 0, nullptr, /*barriers=*/nullptr);
+    }
+    for (auto* completion : completions) {
+      iree_hal_semaphore_release(completion);
+    }
+    return iree_status_is_ok(status)
+               ? iree_status_from_code(IREE_STATUS_DEFERRED)
+               : status;
+  }
+};
+
+void QueueDispatchTest::RunDeferredFileGather(iree_hal_queue_t* io_queue) {
+  iree::testing::TempFilePath path("iree_hal_cts_deferred_gather");
+  std::array<uint32_t, 32> file_contents;
+  for (size_t i = 0; i < file_contents.size(); ++i) {
+    file_contents[i] = 1009u + 17u * i;
+  }
+  IREE_ASSERT_OK(iree_io_file_contents_write(
+      path.path_view(),
+      iree_make_const_byte_span(file_contents.data(), sizeof(file_contents)),
+      iree_allocator_system()));
+  struct FileOwner {
+    // Owns the native handle until the imported file's final release.
+    iree_io_file_handle_t* handle = nullptr;
+    // Joined before this owner or the temporary path is destroyed.
+    std::promise<void> closed;
+  } owner;
+  auto file_closed_future = owner.closed.get_future();
+  IREE_ASSERT_OK(iree_io_file_handle_open(
+      IREE_IO_FILE_MODE_READ | IREE_IO_FILE_MODE_RANDOM_ACCESS |
+          IREE_IO_FILE_MODE_ASYNC,
+      path.path_view(), iree_allocator_system(), &owner.handle));
+  iree_io_file_handle_t* handle = nullptr;
+  iree_status_t wrap_status = iree_io_file_handle_wrap(
+      IREE_IO_FILE_ACCESS_READ, IREE_IO_FILE_MODE_ASYNC,
+      iree_io_file_handle_primitive(owner.handle),
+      {[](void* user_data, iree_io_file_handle_primitive_t) {
+         auto* owner = static_cast<FileOwner*>(user_data);
+         iree_io_file_handle_release(owner->handle);
+         owner->closed.set_value();
+       },
+       &owner},
+      iree_allocator_system(), &handle);
+  if (!iree_status_is_ok(wrap_status)) {
+    iree_io_file_handle_release(owner.handle);
+    EXPECT_TRUE(path.Remove());
+  }
+  IREE_ASSERT_OK(wrap_status);
+  Ref<iree_hal_file_t> file;
+  iree_status_t import_status = iree_hal_file_import(
+      device_, /*storage_pool=*/nullptr, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY,
+      IREE_HAL_MEMORY_ACCESS_READ, handle, IREE_HAL_EXTERNAL_FILE_FLAG_NONE,
+      file.out());
+  iree_io_file_handle_release(handle);
+  if (!iree_status_is_ok(import_status)) {
+    file_closed_future.wait();
+    EXPECT_TRUE(path.Remove());
+  }
+  IREE_ASSERT_OK(import_status);
+  if (!iree_hal_file_async_handle(file)) {
+    file.reset();
+    file_closed_future.wait();
+    EXPECT_TRUE(path.Remove());
+    GTEST_SKIP() << "device does not import native files for asynchronous I/O";
+  }
+  ASSERT_EQ(iree_hal_file_storage_buffer(file), nullptr);
+
+  const uint32_t seeds[] = {1, 2, 3, 4};
+  Ref<iree_hal_buffer_t> input, addresses, gathered, output;
+  IREE_ASSERT_OK(CreateUninitializedDeviceBuffer(sizeof(seeds), input.out()));
+  IREE_ASSERT_OK(
+      CreateUninitializedDeviceBuffer(sizeof(seeds), addresses.out()));
+  IREE_ASSERT_OK(
+      CreateUninitializedDeviceBuffer(sizeof(seeds), gathered.out()));
+  IREE_ASSERT_OK(CreateUninitializedDeviceBuffer(sizeof(seeds), output.out()));
+
+  // Gate the producer so that the callback, consumer, and final readback are
+  // submitted before any GPU-generated address is available to the callback.
+  SemaphoreList gate(device_, {0}, {1});
+  SemaphoreList uploaded(device_, {0}, {1});
+  SemaphoreList produced(device_, {0}, {1});
+  SemaphoreList downloaded(device_, {0}, {1});
+  SemaphoreList gathered_signal(device_, {0}, {1});
+  SemaphoreList consumed(device_, {0}, {1});
+  SemaphoreList finished(device_, {0}, {1});
+  IREE_ASSERT_OK(iree_hal_queue_update(
+      io_queue, gate, uploaded, seeds, 0, input, 0, sizeof(seeds),
+      /*barriers=*/nullptr, IREE_HAL_UPDATE_FLAG_NONE));
+
+  iree_hal_buffer_ref_t producer_bindings[2];
+  MakeScaleAndOffsetBindings(input, addresses, producer_bindings);
+  const uint32_t producer_constants[] = {3, 10};
+  IREE_ASSERT_OK(iree_hal_queue_dispatch(
+      dispatch_queue_, uploaded, produced, executable_,
+      iree_hal_executable_function_from_index(0),
+      iree_hal_make_static_dispatch_config(1, 1, 1),
+      iree_make_const_byte_span(producer_constants, sizeof(producer_constants)),
+      {IREE_ARRAYSIZE(producer_bindings), producer_bindings},
+      /*barriers=*/nullptr, IREE_HAL_DISPATCH_FLAG_NONE));
+
+  uint32_t rows[4] = {};
+  IREE_ASSERT_OK(iree_hal_queue_download(io_queue, produced, downloaded,
+                                         addresses, 0, rows, sizeof(rows),
+                                         /*barriers=*/nullptr));
+  std::promise<void> callback_released;
+  auto callback_released_future = callback_released.get_future();
+  auto* callback =
+      new DeferredFileGather(device_, rows, file, gathered, &callback_released);
+  const uint64_t args[4] = {};
+  iree_status_t call_status = iree_hal_queue_host_call(
+      io_queue, downloaded, gathered_signal,
+      iree_hal_make_host_call_with_resource(DeferredFileGather::Invoke,
+                                            callback, callback),
+      args, IREE_HAL_HOST_CALL_FLAG_NONE);
+  iree_hal_resource_release(callback);
+  IREE_ASSERT_OK(call_status);
+  file.reset();
+
+  iree_hal_buffer_ref_t consumer_bindings[2];
+  MakeScaleAndOffsetBindings(gathered, output, consumer_bindings);
+  const uint32_t consumer_constants[] = {5, 7};
+  IREE_ASSERT_OK(iree_hal_queue_dispatch(
+      dispatch_queue_, gathered_signal, consumed, executable_,
+      iree_hal_executable_function_from_index(0),
+      iree_hal_make_static_dispatch_config(1, 1, 1),
+      iree_make_const_byte_span(consumer_constants, sizeof(consumer_constants)),
+      {IREE_ARRAYSIZE(consumer_bindings), consumer_bindings},
+      /*barriers=*/nullptr, IREE_HAL_DISPATCH_FLAG_NONE));
+  gathered.reset();
+  std::array<uint32_t, 4> result = {};
+  IREE_ASSERT_OK(iree_hal_queue_download(io_queue, consumed, finished, output,
+                                         0, result.data(), sizeof(result),
+                                         /*barriers=*/nullptr));
+
+  IREE_ASSERT_OK(iree_hal_semaphore_list_signal(gate, /*frontier=*/nullptr));
+  IREE_ASSERT_OK(iree_hal_semaphore_list_wait(finished, iree_infinite_timeout(),
+                                              IREE_ASYNC_WAIT_FLAG_NONE));
+  callback_released_future.wait();
+  file_closed_future.wait();
+  EXPECT_THAT(result,
+              ContainerEq(std::array<uint32_t, 4>{6157, 6412, 6667, 6922}));
+  EXPECT_TRUE(path.Remove());
+}
+
+TEST_P(QueueDispatchTest, DeferredFileGatherWithQueuedConsumerOnAcquiredQueue) {
+  ASSERT_NE(transfer_queue_, nullptr);
+  const auto* family = iree_hal_queue_family(transfer_queue_);
+  const auto* spec = iree_hal_queue_family_spec(family);
+  if (!iree_all_bits_set(spec->flags,
+                         IREE_HAL_QUEUE_FAMILY_SPEC_FLAG_DYNAMIC_ACQUISITION)) {
+    GTEST_SKIP()
+        << "transfer queue family does not support dynamic acquisition";
+  }
+  iree_hal_queue_params_t params;
+  iree_hal_queue_params_initialize(&params);
+  Ref<iree_hal_queue_t> io_queue;
+  IREE_ASSERT_OK(iree_hal_queue_acquire(family, &params, io_queue.out()));
+  ASSERT_NE(io_queue.get(), dispatch_queue_);
+  RunDeferredFileGather(io_queue);
+}
+
+TEST_P(QueueDispatchTest, DeferredFileGatherWithQueuedConsumerOnSameQueue) {
+  const auto* spec =
+      iree_hal_queue_family_spec(iree_hal_queue_family(dispatch_queue_));
+  if (!iree_all_bits_set(spec->role_flags,
+                         IREE_HAL_QUEUE_FAMILY_ROLE_FLAG_TRANSFER)) {
+    GTEST_SKIP() << "dispatch queue does not support transfers";
+  }
+  RunDeferredFileGather(dispatch_queue_);
 }
 
 // Dispatches scale_and_offset directly on the queue:
