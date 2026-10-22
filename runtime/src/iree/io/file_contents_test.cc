@@ -165,6 +165,47 @@ TEST(FileContents, StdioStreamFillMultiBytePattern) {
   iree_io_file_contents_free(read_contents);
 }
 
+#if defined(IREE_PLATFORM_LINUX)
+
+TEST(FileContents, StdioStreamPreservesImmediateWriteFailure) {
+  iree_io_stream_t* stream = NULL;
+  IREE_ASSERT_OK(iree_io_stdio_stream_open(IREE_IO_STDIO_STREAM_MODE_WRITE,
+                                           IREE_SV("/dev/full"),
+                                           iree_allocator_system(), &stream));
+
+  std::vector<uint8_t> contents(64 * 1024, 0xA5);
+  EXPECT_THAT(
+      Status(iree_io_stream_write(stream, contents.size(), contents.data())),
+      StatusIs(StatusCode::kResourceExhausted));
+
+  iree_io_stream_release(stream);
+}
+
+TEST(FileContents, StdioStreamPreservesDeferredFlushFailure) {
+  iree_io_stream_t* stream = NULL;
+  IREE_ASSERT_OK(iree_io_stdio_stream_open(IREE_IO_STDIO_STREAM_MODE_WRITE,
+                                           IREE_SV("/dev/full"),
+                                           iree_allocator_system(), &stream));
+
+  const uint8_t value = 0xA5;
+  IREE_ASSERT_OK(iree_io_stream_write(stream, sizeof(value), &value));
+  EXPECT_THAT(Status(iree_io_stream_flush(stream)),
+              StatusIs(StatusCode::kResourceExhausted));
+
+  iree_io_stream_release(stream);
+}
+
+TEST(FileContents, FileWritePreservesCloseFailure) {
+  const uint8_t value = 0xA5;
+  EXPECT_THAT(Status(iree_io_file_contents_write(
+                  IREE_SV("/dev/full"),
+                  iree_make_const_byte_span(&value, sizeof(value)),
+                  iree_allocator_system())),
+              StatusIs(StatusCode::kResourceExhausted));
+}
+
+#endif  // IREE_PLATFORM_LINUX
+
 // Tests that a file opened for reading can be opened again concurrently.
 // Validates FILE_SHARE_READ behavior on Windows. Without it, the second open
 // fails with ERROR_SHARING_VIOLATION.

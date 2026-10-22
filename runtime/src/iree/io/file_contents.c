@@ -7,6 +7,8 @@
 #include "iree/io/file_contents.h"
 
 #if IREE_FILE_IO_ENABLE
+#include <errno.h>
+
 #include "iree/io/stdio_util.h"
 #endif  // IREE_FILE_IO_ENABLE
 
@@ -302,20 +304,54 @@ IREE_API_EXPORT iree_status_t iree_io_file_contents_write(
   iree_status_t status =
       iree_io_stdio_file_open(path, "wb", host_allocator, &file);
 
-  // Write all contents (if any) to the file.
-  if (iree_status_is_ok(status) && contents.data_length > 0) {
-    size_t ret = fwrite((char*)contents.data, contents.data_length, 1, file);
-    if (ret != 1) {
-      status = iree_make_status(
-          IREE_STATUS_DATA_LOSS,
-          "unable to write file contents of %" PRIhsz " bytes to '%.*s'",
-          contents.data_length, (int)path.size, path.data);
+  // Write all contents (if any) to the file. Chunk writes to avoid platform
+  // stdio limits and retain the exact progress if the backing store fills.
+  iree_host_size_t bytes_written = 0;
+  while (iree_status_is_ok(status) && bytes_written < contents.data_length) {
+    const iree_host_size_t chunk_size =
+        iree_min(contents.data_length - bytes_written, INT_MAX);
+    errno = 0;
+    const iree_host_size_t write_size =
+        fwrite(contents.data + bytes_written, 1, chunk_size, file);
+    bytes_written += write_size;
+    if (write_size != chunk_size) {
+      const int write_error = errno;
+      if (write_error != 0) {
+        status = iree_make_status(iree_status_code_from_errno(write_error),
+                                  "unable to write file '%.*s' after %" PRIhsz
+                                  "/%" PRIhsz " bytes (%d: %s)",
+                                  (int)path.size, path.data, bytes_written,
+                                  contents.data_length, write_error,
+                                  strerror(write_error));
+      } else {
+        status = iree_make_status(IREE_STATUS_DATA_LOSS,
+                                  "short write to file '%.*s' after %" PRIhsz
+                                  "/%" PRIhsz " bytes without a stdio error",
+                                  (int)path.size, path.data, bytes_written,
+                                  contents.data_length);
+      }
     }
   }
 
-  // Close the stdio handle.
+  // Closing publishes any writes still buffered by stdio. Preserve a prior
+  // write failure as the primary status while retaining a distinct close
+  // failure as additional diagnostic context.
   if (file) {
-    fclose(file);
+    errno = 0;
+    if (fclose(file) != 0) {
+      const int close_error = errno;
+      iree_status_t close_status =
+          close_error != 0
+              ? iree_make_status(iree_status_code_from_errno(close_error),
+                                 "unable to close file '%.*s' (%d: %s)",
+                                 (int)path.size, path.data, close_error,
+                                 strerror(close_error))
+              : iree_make_status(IREE_STATUS_DATA_LOSS,
+                                 "unable to close file '%.*s' without a "
+                                 "stdio error",
+                                 (int)path.size, path.data);
+      status = iree_status_join(status, close_status);
+    }
   }
   IREE_TRACE_ZONE_END(z0);
   return status;

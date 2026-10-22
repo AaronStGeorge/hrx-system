@@ -62,29 +62,6 @@ iree_io_stdio_file_open(iree_string_view_t path, const char* mode,
 
 #endif  // IREE_PLATFORM_WINDOWS
 
-//===----------------------------------------------------------------------===//
-// Error Handling
-//===----------------------------------------------------------------------===//
-
-// Makes a new status message ala iree_make_status but includes the error number
-// and optional string message on platforms that support it.
-#if defined(IREE_PLATFORM_WINDOWS)
-
-#define iree_make_stdio_status(message)                                     \
-  iree_make_status(iree_status_code_from_errno(errno), message " (%d: %s)", \
-                   errno, strerror(errno))
-#define iree_make_stdio_statusf(format, ...)                               \
-  iree_make_status(iree_status_code_from_errno(errno), format " (%d: %s)", \
-                   __VA_ARGS__, errno, strerror(errno))
-
-#else
-
-#define iree_make_stdio_status(...) \
-  iree_make_status(IREE_STATUS_UNKNOWN, __VA_ARGS__)
-#define iree_make_stdio_statusf iree_make_stdio_status
-
-#endif  // IREE_PLATFORM_*
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
