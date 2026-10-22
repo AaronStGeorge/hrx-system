@@ -94,6 +94,8 @@ struct loom_low_schedule_pressure_state_t {
   // Downstream headroom reserved by the current candidate, indexed by
   // register-packing resource.
   uint32_t* candidate_register_packing_activation_units;
+  // Current live footprint indexed by register-packing resource.
+  uint64_t* current_register_packing_units;
   // Downstream headroom reserved by the current candidate, indexed by bounded
   // unspillable completion domain.
   uint32_t* candidate_unspillable_activation_units;

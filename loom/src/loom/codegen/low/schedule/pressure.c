@@ -261,6 +261,13 @@ iree_status_t loom_low_schedule_pressure_initialize(
                            ->candidate_register_packing_activation_units));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->scratch_arena, register_packing_resource_count,
+        sizeof(*out_pressure_state->current_register_packing_units),
+        (void**)&out_pressure_state->current_register_packing_units));
+    memset(out_pressure_state->current_register_packing_units, 0,
+           register_packing_resource_count *
+               sizeof(*out_pressure_state->current_register_packing_units));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->scratch_arena, register_packing_resource_count,
         sizeof(*out_pressure_state->active_register_packing_completion_sinks),
         (void**)&out_pressure_state->active_register_packing_completion_sinks));
     memset(
@@ -411,11 +418,25 @@ static void loom_low_schedule_note_block_pressure_set(
       .block_ids[pressure_state->pressure_sets.block_count++] = pressure_set_id;
 }
 
-static inline void loom_low_schedule_adjust_pressure_set(
+static inline void loom_low_schedule_adjust_live_register_class(
     const loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state, uint16_t reg_class_id,
     int64_t delta_units) {
-  if (pressure_state->pressure_sets.records == NULL || delta_units == 0) {
+  if (delta_units == 0) {
+    return;
+  }
+  loom_low_schedule_target_pressure_adjust_current_packing_units(
+      state, pressure_state, reg_class_id, delta_units);
+  uint64_t* current_live_units =
+      &pressure_state->current_live_units_by_reg_class[reg_class_id];
+  if (delta_units < 0) {
+    const uint64_t removed_units = (uint64_t)-delta_units;
+    IREE_ASSERT_LE(removed_units, *current_live_units);
+    *current_live_units -= removed_units;
+  } else {
+    *current_live_units += (uint64_t)delta_units;
+  }
+  if (pressure_state->pressure_sets.records == NULL) {
     return;
   }
   const uint16_t pressure_set_id =
@@ -676,12 +697,8 @@ static uint32_t loom_low_schedule_remove_live_pressure_value(
   IREE_ASSERT_LE(unit_count, pressure_state->current_live_units);
   pressure_state->current_live_units -= unit_count;
   if (reg_class_id != LOOM_LOW_REG_CLASS_NONE) {
-    IREE_ASSERT_LE(
-        unit_count,
-        pressure_state->current_live_units_by_reg_class[reg_class_id]);
-    pressure_state->current_live_units_by_reg_class[reg_class_id] -= unit_count;
-    loom_low_schedule_adjust_pressure_set(state, pressure_state, reg_class_id,
-                                          -(int64_t)unit_count);
+    loom_low_schedule_adjust_live_register_class(
+        state, pressure_state, reg_class_id, -(int64_t)unit_count);
   }
   return unit_count;
 }
@@ -719,9 +736,8 @@ static void loom_low_schedule_add_source_pressure_value(
     return;
   }
   loom_low_schedule_note_block_pressure_reg_class(pressure_state, reg_class_id);
-  pressure_state->current_live_units_by_reg_class[reg_class_id] += added_units;
-  loom_low_schedule_adjust_pressure_set(state, pressure_state, reg_class_id,
-                                        (int64_t)added_units);
+  loom_low_schedule_adjust_live_register_class(
+      state, pressure_state, reg_class_id, (int64_t)added_units);
   loom_low_schedule_advance_source_pressure_cliff_floor(state, pressure_state,
                                                         reg_class_id);
   loom_low_schedule_note_resource_high_water(
@@ -778,6 +794,8 @@ static void loom_low_schedule_reset_source_pressure_block(
     pressure_state->packing_reserve_units_by_reg_class[reg_class_id] = 0;
   }
   pressure_state->block_reg_class_count = 0;
+  loom_low_schedule_target_pressure_reset_current_packing_units(state,
+                                                                pressure_state);
   loom_low_schedule_reset_block_pressure_sets(pressure_state);
   loom_low_schedule_pressure_alias_reset(&pressure_state->storage_aliases);
   pressure_state->current_live_units = 0;
@@ -883,6 +901,8 @@ void loom_low_schedule_pressure_initialize_block(
            state->target.descriptor_set->reg_class_count *
                sizeof(*pressure_state->current_live_units_by_reg_class));
   }
+  loom_low_schedule_target_pressure_reset_current_packing_units(state,
+                                                                pressure_state);
   loom_low_schedule_storage_lifetimes_set_forwarded_values(
       state, block_record->block->region_index, true);
 
@@ -953,10 +973,8 @@ void loom_low_schedule_pressure_initialize_block(
         pressure_state->current_live_units_by_reg_class) {
       loom_low_schedule_note_block_pressure_reg_class(pressure_state,
                                                       reg_class_id);
-      pressure_state->current_live_units_by_reg_class[reg_class_id] +=
-          unit_count;
-      loom_low_schedule_adjust_pressure_set(state, pressure_state, reg_class_id,
-                                            (int64_t)unit_count);
+      loom_low_schedule_adjust_live_register_class(
+          state, pressure_state, reg_class_id, (int64_t)unit_count);
       loom_low_schedule_note_resource_high_water(
           state, pressure_state, reg_class_id,
           LOOM_LOW_SCHEDULE_RESOURCE_HIGH_WATER_SCHEDULED);
@@ -1157,6 +1175,7 @@ static void loom_low_schedule_reset_candidate_pressure_deltas(
     record->candidate_delta_units = 0;
     record->candidate_write_delta_units = 0;
     record->candidate_early_added_units = 0;
+    record->candidate_opens_lifetime = false;
   }
   for (iree_host_size_t i = 0;
        i < pressure_state->candidate_delta_touched_count; ++i) {
@@ -1823,6 +1842,12 @@ void loom_low_schedule_pressure_score_candidate(
     if (value->remaining_use_count == 0) {
       continue;
     }
+    loom_low_schedule_required_pressure_t* required_pressure =
+        loom_low_schedule_required_pressure_for_value(state, pressure_state,
+                                                      value);
+    if (required_pressure != NULL) {
+      required_pressure->candidate_opens_lifetime = true;
+    }
     if (iree_any_bit_set(value->flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE)) {
       continue;
     }
@@ -1861,11 +1886,8 @@ void loom_low_schedule_pressure_score_candidate(
                          LOOM_LOW_SCHEDULE_VALUE_FLAG_EARLY_WRITE)) {
       loom_low_schedule_pressure_lifetime_note_early_result(
           state, pressure_state, value->register_class_id, unit_count);
-      loom_low_schedule_required_pressure_t* required =
-          loom_low_schedule_required_pressure_for_value(state, pressure_state,
-                                                        value);
-      if (required != NULL) {
-        required->candidate_early_added_units += unit_count;
+      if (required_pressure != NULL) {
+        required_pressure->candidate_early_added_units += unit_count;
       }
     }
   }
@@ -2044,10 +2066,8 @@ void loom_low_schedule_pressure_note_node_scheduled(
         pressure_state->current_live_units_by_reg_class) {
       loom_low_schedule_note_block_pressure_reg_class(pressure_state,
                                                       reg_class_id);
-      pressure_state->current_live_units_by_reg_class[reg_class_id] +=
-          unit_count;
-      loom_low_schedule_adjust_pressure_set(state, pressure_state, reg_class_id,
-                                            (int64_t)unit_count);
+      loom_low_schedule_adjust_live_register_class(
+          state, pressure_state, reg_class_id, (int64_t)unit_count);
       loom_low_schedule_note_resource_high_water(
           state, pressure_state, reg_class_id,
           LOOM_LOW_SCHEDULE_RESOURCE_HIGH_WATER_SCHEDULED);

@@ -27,6 +27,8 @@ struct loom_low_schedule_required_pressure_t {
   int64_t candidate_write_delta_units;
   // Required result units overlapping all inputs before their reads.
   uint64_t candidate_early_added_units;
+  // True when the candidate creates a used result in this domain.
+  bool candidate_opens_lifetime;
 };
 
 // Returns the required-pressure domain for a value, or NULL when it can spill
