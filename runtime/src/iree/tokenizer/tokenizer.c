@@ -1319,108 +1319,87 @@ iree_tokenizer_encode_state_match_post_norm_special_tokens(
   if (*total_tokens == output.capacity) {
     return IREE_TOKENIZER_POST_NORM_OUTPUT_FULL;
   }
+  bool segmenter_pending =
+      state->segmenter_state &&
+      iree_tokenizer_segmenter_state_has_pending(state->segmenter_state);
 
-  // When continuing a partial match (NEED_MORE), the match API contract
-  // requires that we pass only new bytes, not bytes already consumed. The
-  // match_position tracks how many bytes have been matched so far.
+  // A rejected candidate proves only that no token starts at that position.
+  // Search the rest of the retained span before handing it to segmentation;
+  // another token can start inside a rejected candidate's prefix. Retained
+  // partial matches consume only newly normalized bytes while they remain
+  // viable, then release their entire original span back to this search.
   iree_host_size_t already_matched =
       state->special_token_match_post.match_position;
-  if (already_matched > 0) {
-    // Slice to only new bytes.
-    if (already_matched >= normalized_text.size) {
-      if (normalized_span_complete) {
-        iree_tokenizer_special_tokens_encode_state_clear_partial(
-            &state->special_token_match_post);
-        return IREE_TOKENIZER_POST_NORM_NO_MATCH;
-      }
-      // The normalizer still owns input or output that may complete this match.
-      return IREE_TOKENIZER_POST_NORM_NEED_MORE;
-    }
-    normalized_text.data += already_matched;
-    normalized_text.size -= already_matched;
-  }
-
-  // O(1) rejection: check if any special token could start at this position.
-  // If safe_prefix_length > 0, no token starts in the first `safe` bytes.
   iree_host_size_t safe = 0;
-  if (already_matched == 0) {
-    safe = iree_tokenizer_special_tokens_safe_prefix_length(
-        &tokenizer->special_tokens_post_norm, normalized_text);
-    if (safe == normalized_text.size) {
-      return IREE_TOKENIZER_POST_NORM_NO_MATCH;  // No possible match.
-    }
-    // If safe > 0, a special token could start at position `safe`. Check if it
-    // actually matches/could match before reporting LIMIT. This avoids false
-    // LIMITs for characters like `<` in `<=` that look like they could start a
-    // token like `<|EOT|>` but don't.
-    if (safe > 0) {
-      iree_string_view_t check_view = {
-          .data = normalized_text.data + safe,
-          .size = normalized_text.size - safe,
-      };
-      iree_host_size_t check_length = 0;
-      iree_tokenizer_token_id_t check_id = 0;
-      iree_tokenizer_special_tokens_encode_state_t check_state = {0};
-      iree_tokenizer_special_tokens_match_result_t check_result =
-          iree_tokenizer_special_tokens_match(
-              &tokenizer->special_tokens_post_norm, check_view, &check_length,
-              &check_id, &check_state);
-      if (check_result == IREE_TOKENIZER_SPECIAL_TOKENS_NO_MATCH) {
-        // Not a special token (e.g., `<=` is not `<|EOT|>`). Let segmenter see
-        // all bytes including the `<`.
-        return IREE_TOKENIZER_POST_NORM_NO_MATCH;
-      }
-      // After normalization completes, NEED_MORE means the partial prefix
-      // will never become a complete special token. Treat it as
-      // NO_MATCH so the segmenter can process all bytes including the potential
-      // prefix. This prevents " <" at end-of-input from being split into " " +
-      // "<".
-      if (check_result == IREE_TOKENIZER_SPECIAL_TOKENS_NEED_MORE &&
-          normalized_span_complete) {
-        return IREE_TOKENIZER_POST_NORM_NO_MATCH;
-      }
-      // A special token matches or could match at position `safe`. Strip
-      // trailing whitespace if the token has LSTRIP - this prevents the
-      // whitespace from being tokenized when it should be consumed by the
-      // special token match (RoBERTa/BART <mask> with lstrip=true).
-      iree_host_size_t original_safe = safe;
-      safe = iree_tokenizer_strip_lstrip_whitespace(
-          &tokenizer->special_tokens_post_norm, normalized_text, safe,
-          check_result, check_id, &check_state);
-      bool confirmed = check_result == IREE_TOKENIZER_SPECIAL_TOKENS_MATCHED;
-      if (safe == 0 && original_safe > 0 && confirmed) {
-        // All prefix was whitespace. Skip those bytes and let the match
-        // proceed on the next call. Update prev_byte context so LSTRIP check
-        // succeeds when using the real state.
-        uint8_t last_whitespace =
-            (uint8_t)normalized_text.data[original_safe - 1];
-        state->special_token_match_post.prev_byte_plus_one =
-            last_whitespace + 1;
-        state->special_token_match_post.at_start_of_input = false;
-        state->segmenter_view_start += original_safe;
-        // Advance read_position if no segments are pending.
-        if (state->segment_count == state->segments_consumed) {
-          state->read_position = state->segmenter_view_start;
-        }
-      }
-      // Let the segmenter process the prefix first. Only a confirmed token
-      // completes that span; a possible prefix only limits available bytes.
-      *out_segment_limit = safe;
-      return confirmed ? IREE_TOKENIZER_POST_NORM_BOUNDARY
-                       : IREE_TOKENIZER_POST_NORM_LIMIT;
-    }
-  }
-
-  // Attempt to match (handles both fresh and continued partial matches).
   iree_host_size_t match_length = 0;
   iree_tokenizer_token_id_t match_id = 0;
-  iree_tokenizer_special_tokens_encode_state_t match_state =
-      state->special_token_match_post;
-  iree_tokenizer_special_tokens_match_result_t result =
-      iree_tokenizer_special_tokens_match(&tokenizer->special_tokens_post_norm,
-                                          normalized_text, &match_length,
-                                          &match_id, &match_state);
+  iree_tokenizer_special_tokens_encode_state_t match_state;
+  iree_tokenizer_special_tokens_match_result_t result;
+  for (;;) {
+    if (already_matched == 0) {
+      safe += iree_tokenizer_special_tokens_safe_prefix_length(
+          &tokenizer->special_tokens_post_norm,
+          iree_string_view_substr(normalized_text, safe, IREE_HOST_SIZE_MAX));
+      if (safe == normalized_text.size) {
+        return IREE_TOKENIZER_POST_NORM_NO_MATCH;
+      }
+    }
+    match_state = state->special_token_match_post;
+    if (already_matched >= normalized_text.size) {
+      result = IREE_TOKENIZER_SPECIAL_TOKENS_NEED_MORE;
+    } else {
+      result = iree_tokenizer_special_tokens_match(
+          &tokenizer->special_tokens_post_norm,
+          iree_string_view_substr(normalized_text, safe + already_matched,
+                                  IREE_HOST_SIZE_MAX),
+          &match_length, &match_id, &match_state);
+    }
+    if (result != IREE_TOKENIZER_SPECIAL_TOKENS_NO_MATCH &&
+        !(result == IREE_TOKENIZER_SPECIAL_TOKENS_NEED_MORE &&
+          normalized_span_complete)) {
+      break;
+    }
+    iree_tokenizer_special_tokens_encode_state_clear_partial(
+        &state->special_token_match_post);
+    already_matched = 0;
+    ++safe;
+  }
 
+  if (safe > 0) {
+    // A special token matches or could match at position `safe`. Strip
+    // trailing whitespace if the token has LSTRIP - this prevents the
+    // whitespace from being tokenized when it should be consumed by the
+    // special token match (RoBERTa/BART <mask> with lstrip=true).
+    iree_host_size_t original_safe = safe;
+    safe = iree_tokenizer_strip_lstrip_whitespace(
+        &tokenizer->special_tokens_post_norm, normalized_text, safe, result,
+        match_id, &match_state);
+    bool confirmed = result == IREE_TOKENIZER_SPECIAL_TOKENS_MATCHED;
+    if (safe == 0 && original_safe > 0 && confirmed && !segmenter_pending) {
+      // All prefix was whitespace. Skip those bytes and let the match
+      // proceed on the next call. Update prev_byte context so LSTRIP check
+      // succeeds when using the real state.
+      uint8_t last_whitespace =
+          (uint8_t)normalized_text.data[original_safe - 1];
+      state->special_token_match_post.prev_byte_plus_one = last_whitespace + 1;
+      state->special_token_match_post.at_start_of_input = false;
+      state->segmenter_view_start += original_safe;
+      // Advance read_position if no segments are pending.
+      if (state->segment_count == state->segments_consumed) {
+        state->read_position = state->segmenter_view_start;
+      }
+    }
+    // Let the segmenter process the prefix first. Only a confirmed token
+    // completes that span; a possible prefix only limits available bytes.
+    *out_segment_limit = safe;
+    return confirmed ? IREE_TOKENIZER_POST_NORM_BOUNDARY
+                     : IREE_TOKENIZER_POST_NORM_LIMIT;
+  }
+
+  if (result == IREE_TOKENIZER_SPECIAL_TOKENS_MATCHED && segmenter_pending) {
+    *out_segment_limit = 0;
+    return IREE_TOKENIZER_POST_NORM_BOUNDARY;
+  }
   state->special_token_match_post = match_state;
 
   if (result == IREE_TOKENIZER_SPECIAL_TOKENS_MATCHED) {
@@ -1450,31 +1429,9 @@ iree_tokenizer_encode_state_match_post_norm_special_tokens(
     return IREE_TOKENIZER_POST_NORM_MATCHED;
   }
 
-  if (result == IREE_TOKENIZER_SPECIAL_TOKENS_NEED_MORE) {
-    // Partial match in progress.
-    if (normalized_span_complete) {
-      // After normalization completes, this cannot become a complete special
-      // token. Clear any partial state and return NO_MATCH so the
-      // segmenter processes these bytes normally.
-      if (state->special_token_match_post.match_position > 0) {
-        iree_tokenizer_special_tokens_encode_state_clear_partial(
-            &state->special_token_match_post);
-      }
-      return IREE_TOKENIZER_POST_NORM_NO_MATCH;
-    }
-    // Wait for more normalized output. Don't advance any positions - the bytes
-    // are still in the ring and will be re-examined once more input arrives.
-    return IREE_TOKENIZER_POST_NORM_NEED_MORE;
-  }
-
-  // NO_MATCH: Let the segmenter process these bytes normally.
-  // If there was a partial match, clear it - those bytes aren't a special
-  // token.
-  if (state->special_token_match_post.match_position > 0) {
-    iree_tokenizer_special_tokens_encode_state_clear_partial(
-        &state->special_token_match_post);
-  }
-  return IREE_TOKENIZER_POST_NORM_NO_MATCH;
+  // A viable partial match retains its original bytes until more normalized
+  // output arrives. Completed spans were exhausted by the search above.
+  return IREE_TOKENIZER_POST_NORM_NEED_MORE;
 }
 
 // Attempts to emit a deferred special token.
@@ -1643,19 +1600,12 @@ static iree_status_t iree_tokenizer_encode_state_pump(
   // transforms the input. If matched, the token is emitted directly and we
   // re-enter the loop to check for more matches or continue processing.
   //
-  // IMPORTANT: Skip post-norm matching when the segmenter has pending state.
-  // When the segmenter returns consumed=0 with pending internal state (e.g.,
-  // sequence segmenter mid-expansion), it stores absolute byte offsets into
-  // the input view. Post-norm matching can advance segmenter_view_start
-  // (LSTRIP whitespace skip or matched token skip), which shrinks the ring
-  // view. The segmenter's stored offsets then exceed the new view size,
-  // causing unsigned underflow when computing remaining bytes. Let the
-  // segmenter finish its pending work first; post-norm matching will run on
-  // the next pump iteration after the segmenter commits its consumed bytes.
+  // Pending segmenter work can borrow offsets into this view. Matching still
+  // limits its input, including newly normalized bytes, but cannot consume a
+  // token or strip leading bytes until that earlier work retires.
   iree_host_size_t post_norm_segment_limit = IREE_HOST_SIZE_MAX;
   bool post_norm_boundary = false;
-  if (!(state->segmenter_state &&
-        iree_tokenizer_segmenter_state_has_pending(state->segmenter_state))) {
+  {
     iree_tokenizer_post_norm_match_result_t post_norm_result =
         iree_tokenizer_encode_state_match_post_norm_special_tokens(
             state, tokenizer, normalized_span_complete, *output, total_tokens,
@@ -1707,7 +1657,9 @@ static iree_status_t iree_tokenizer_encode_state_pump(
   }
   bool span_complete = post_norm_boundary || normalized_span_complete;
   if (state->segment_count < tokenizer->segment_batch_size &&
-      normalized_text.size > 0) {
+      (normalized_text.size > 0 ||
+       (post_norm_boundary && state->segmenter_state &&
+        iree_tokenizer_segmenter_state_has_pending(state->segmenter_state)))) {
     iree_tokenizer_segment_output_t segment_output = {
         .capacity = tokenizer->segment_batch_size - state->segment_count,
         .values = &state->segments[state->segment_count],
