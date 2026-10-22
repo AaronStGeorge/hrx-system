@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "iree/hal/device_group.h"
+#include "iree/hal/drivers/amd/gpu/queue/aql/queue.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/queue.h"
 #include "iree/hal/drivers/amd/gpu/queue/sdma/queue.h"
 #include "iree/hal/drivers/amd/status.h"
@@ -373,6 +374,42 @@ void NativeMemoryGate::Hold::ReleaseAndHoldNext() {
   owner_->entered_.acquire();
 }
 
+// Runner selection uses the same stable native identity as libamdf CTS. Query
+// before activation so an exclusive hardware lease never touches another GPU.
+iree_status_t MatchesNativeIdentity(iree_hal_amd_fabric_t* fabric,
+                                    const amdf_endpoint_id_t* id,
+                                    const char* selected, bool* out_matches) {
+  *out_matches = true;
+  if (!selected) {
+    return iree_ok_status();
+  }
+  amdf_endpoint_native_identity_t identity = {};
+  if (!amdf::cts::ParseNativeIdentity(selected, &identity)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid native GPU identity: %s", selected);
+  }
+  amdf_endpoint_t* endpoint = nullptr;
+  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
+      fabric->api->endpoint_open(fabric->instance, id, &endpoint),
+      "endpoint_open"));
+  amdf_endpoint_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
+      .structure_size = sizeof(info),
+  };
+  const amdf_status_t status =
+      fabric->api->endpoint_query_info(endpoint, &info);
+  const amdf_status_t close_status = fabric->api->endpoint_close(endpoint);
+  if (!amdf_status_is_ok(close_status)) {
+    iree_hal_amd_fabric_retain(fabric);
+  }
+  IREE_RETURN_IF_ERROR(iree_status_join(
+      IREE_HAL_AMD_STATUS_FROM_AMDF(status, "endpoint_query_info"),
+      IREE_HAL_AMD_STATUS_FROM_AMDF(close_status, "endpoint_close")));
+  *out_matches =
+      amdf::cts::NativeIdentityIsEqual(info.native_identity, identity);
+  return iree_ok_status();
+}
+
 void GpuNativeTest::SetUp() {
   const char* selected_identity_text =
       std::getenv("AMDF_CTS_GPU_NATIVE_IDENTITY");
@@ -389,8 +426,12 @@ void GpuNativeTest::SetUp() {
       amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST, &api),
       "amdf_query_api"));
   if (!fabric_) {
-    IREE_ASSERT_OK(iree_hal_amd_fabric_create(
-        api, AMDF_NATIVE_LIFETIME_INSTANCE, iree_allocator_system(), &fabric_));
+    if (native_lifetime() == AMDF_NATIVE_LIFETIME_PROCESS) {
+      IREE_ASSERT_OK(NativeMemoryGate::AcquireProcessFabric(&fabric_));
+    } else {
+      IREE_ASSERT_OK(iree_hal_amd_fabric_create(
+          api, native_lifetime(), iree_allocator_system(), &fabric_));
+    }
   }
   bool selected_endpoint_found = false;
   for (uint32_t i = 0; i < fabric_->endpoint_count && !context_; ++i) {
@@ -418,8 +459,30 @@ void GpuNativeTest::SetUp() {
       }
       bool supported = false;
       if (iree_status_is_ok(status) && is_selected) {
-        status =
-            iree_hal_amd_gpu_device_query_support(api, endpoint, &supported);
+        amdf_endpoint_info_t info = {
+            .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
+            .structure_size = sizeof(info),
+        };
+        status = IREE_HAL_AMD_STATUS_FROM_AMDF(
+            api->endpoint_query_info(endpoint, &info), "endpoint_query_info");
+        for (uint32_t family = 0; family < info.queue_family_count &&
+                                  !supported && iree_status_is_ok(status);
+             ++family) {
+          amdf_queue_family_info_t native = {
+              .type = AMDF_STRUCTURE_TYPE_QUEUE_FAMILY_INFO,
+              .structure_size = sizeof(native),
+          };
+          status = IREE_HAL_AMD_STATUS_FROM_AMDF(
+              api->endpoint_query_queue_family_info(endpoint, family, &native),
+              "endpoint_query_queue_family_info");
+          if (iree_status_is_ok(status)) {
+            supported =
+                command_type() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                    ? iree_hal_amd_gpu_aql_queue_publication_modes(&native) != 0
+                    : iree_hal_amd_gpu_pm4_queue_publication_modes(&native) !=
+                          0;
+          }
+        }
       }
       const amdf_status_t close_status = api->endpoint_close(endpoint);
       if (!amdf_status_is_ok(close_status)) {
@@ -435,15 +498,11 @@ void GpuNativeTest::SetUp() {
           iree_hal_amd_gpu_context_allocate(fabric_, &fabric_->endpoints[i].id,
                                             iree_hal_device_event_sink_stderr(),
                                             iree_allocator_system(), &context_);
-      if (context_status.code() == iree::StatusCode::kUnimplemented ||
-          context_status.code() == iree::StatusCode::kUnavailable) {
-        if (selected_identity) {
-          GTEST_SKIP()
-              << "Selected native AMD GPU does not support instance-lifetime "
-                 "PM4 conformance: "
-              << context_status.ToString();
-        }
-        continue;
+      // Independent native lifetime is optional. Ordinary PROCESS fixtures
+      // still require activation to succeed for their advertised queue family.
+      if (native_lifetime() == AMDF_NATIVE_LIFETIME_INSTANCE &&
+          context_status.code() == iree::StatusCode::kUnimplemented) {
+        GTEST_SKIP() << context_status.ToString();
       }
       IREE_ASSERT_OK(context_status);
     }
@@ -454,13 +513,24 @@ void GpuNativeTest::SetUp() {
           << "AMDF_CTS_GPU_NATIVE_IDENTITY does not identify an enumerated "
              "GPU: "
           << selected_identity_text;
-      GTEST_SKIP() << "Selected native AMD GPU has no supported PM4 family: "
+      GTEST_SKIP() << "Selected native AMD GPU has no supported requested "
+                      "packet family: "
                    << selected_identity_text;
     }
-    GTEST_SKIP() << "No native AMD GPU endpoint with a supported PM4 family";
+    GTEST_SKIP()
+        << "No native AMD GPU endpoint with the requested packet family";
   }
   iree_hal_amd_gpu_device_options_initialize(&options_);
   options_.queue_count = 2;
+  if (command_type() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL) {
+    for (uint32_t i = 0; i < context_->endpoint_info.queue_family_count; ++i) {
+      if (iree_hal_amd_gpu_aql_queue_publication_modes(
+              &context_->families[i])) {
+        options_.queue_family_ordinal = i;
+        break;
+      }
+    }
+  }
   IREE_ASSERT_OK(iree_async_proactor_pool_create(
       1, nullptr, proactor_options_, iree_allocator_system(), &proactors_));
   IREE_ASSERT_OK(iree_async_frontier_tracker_create(
@@ -485,15 +555,28 @@ void GpuNativeTest::Create(
   params.runtime_features = runtime_features;
   auto* context = context_;
   context_ = nullptr;
-  IREE_ASSERT_OK(iree_hal_amd_gpu_device_create(
-      context, IREE_SV("PM4 native CTS"), &options_, &params,
-      allocator_.allocator(), &device_));
+  iree::Status status = iree_hal_amd_gpu_device_create(
+      context, IREE_SV("AMD GPU native CTS"), &options_, &params,
+      allocator_.allocator(), &device_);
+  if (iree_any_bit_set(runtime_features,
+                       IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN) &&
+      status.code() == iree::StatusCode::kUnimplemented) {
+    GTEST_SKIP() << status.ToString();
+  }
+  IREE_ASSERT_OK(status);
   IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
       device_, tracker_, iree_allocator_system(), &group_));
   queues_[0] = iree_hal_device_queue(device_, 0, 0);
   queues_[1] = iree_hal_device_queue(device_, 0, 1);
   ASSERT_NE(queues_[0], nullptr);
   ASSERT_NE(queues_[1], nullptr);
+}
+
+iree_status_t GpuNativeTest::AcquireQueue(iree_hal_queue_t** out_queue) {
+  iree_hal_queue_params_t params;
+  iree_hal_queue_params_initialize(&params);
+  return iree_hal_queue_acquire(iree_hal_queue_family(queues_[0]), &params,
+                                out_queue);
 }
 
 void GpuNativeTest::CreateSemaphore(iree_hal_semaphore_t** out_semaphore) {

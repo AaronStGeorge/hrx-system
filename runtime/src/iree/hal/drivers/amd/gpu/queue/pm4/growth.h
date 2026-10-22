@@ -38,22 +38,22 @@ typedef struct iree_hal_amd_gpu_pm4_growth_context_t {
   iree_hal_amd_gpu_publisher_t* publisher;
   // Device publisher receiving completed acquisitions.
   iree_hal_amd_gpu_publication_t* publication;
-  // Exact source index in publication, also the native queue ordinal.
+  // Queue's stable native causal coordinate.
   uint32_t queue_ordinal;
-  // Immutable width of native signal frontiers.
+  // Exact deferred service source, independent of the vector coordinate.
+  uint32_t source_ordinal;
+  // Installed native frontier width, updated only by the exact publisher.
   uint32_t queue_count;
   // Number of cells in each acquired signal generation.
   uint32_t signal_capacity;
   // Available cells from every acquired block, independent of pending growth.
-  iree_hal_amd_gpu_pm4_signal_pool_t* signal_pool;
+  iree_hal_amd_gpu_signal_cache_t* signal_cache;
   // Coalesced returned-capacity publication with explicit wake enrollment.
   struct {
     // Stable typed record; initialized to ENTRY_REUSE_SIGNALS by the owner.
     iree_hal_amd_gpu_pm4_entry_t entry;
     // One while the record is linked or being consumed.
     iree_atomic_int32_t pending;
-    // One while signal demand is parked, including during native acquisition.
-    iree_atomic_int32_t waiting;
   } reuse;
   // One coalesced argument acquisition, or NULL without pending growth.
   iree_hal_amd_gpu_pm4_growth_t* arguments;
@@ -87,11 +87,11 @@ typedef struct iree_hal_amd_gpu_pm4_growth_result_t {
   // Last waiting capture with a NULL next link, or NULL for an empty cohort.
   iree_hal_amd_gpu_publication_entry_t* last;
   // Owned acquired arguments, or NULL for another kind or failure.
-  iree_hal_amd_gpu_pm4_argument_storage_t* arguments;
+  iree_hal_amd_gpu_argument_storage_t* arguments;
   // Owned acquired scratch generation, or NULL for another kind or failure.
   iree_hal_amd_gpu_pm4_scratch_storage_t* scratch;
   // Owned acquired signal block, or NULL for another kind or failure.
-  iree_hal_amd_gpu_pm4_signal_storage_t* signals;
+  iree_hal_amd_gpu_signal_storage_t* signals;
 } iree_hal_amd_gpu_pm4_growth_result_t;
 
 // Consumes a detached completed growth entry on its exact queue publisher.
@@ -106,9 +106,9 @@ iree_status_t iree_hal_amd_gpu_pm4_growth_end(
     iree_hal_amd_gpu_pm4_entry_t* entry, uint64_t argument_begin,
     iree_hal_amd_gpu_pm4_growth_result_t* out_result);
 
-// Signal-pool notification. Coalesces returned capacity into a typed publisher
-// record only while demand is enrolled. user_data is the stable growth context,
-// joined with every signal release before destruction.
+// Called with a live queue borrow by its publisher or service source.
+// Enqueues a typed hint only while demand is enrolled; native signal returns
+// notify the device-owned cache without reaching this queue state.
 void iree_hal_amd_gpu_pm4_growth_signals_available(void* user_data);
 
 // Consumes REUSE_SIGNALS under exclusive publication ownership. Available cells

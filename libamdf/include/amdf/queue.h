@@ -104,6 +104,32 @@ enum amdf_queue_priority_capability_bits_e {
   AMDF_QUEUE_PRIORITY_CAPABILITY_HIGH = 1u << AMDF_QUEUE_PRIORITY_HIGH,
 };
 
+/// Locality guarantee for primary command storage. Control indices, queue
+/// descriptors, and scratch are placed independently. Unified storage may
+/// satisfy either locality; DEVICE_LOCAL does not imply host inaccessibility.
+typedef uint32_t amdf_queue_placement_t;
+enum amdf_queue_placement_e {
+  /// Provider-selected placement, with no required locality.
+  AMDF_QUEUE_PLACEMENT_DEFAULT = 0,
+  /// Command storage is local to the host.
+  AMDF_QUEUE_PLACEMENT_HOST_LOCAL = 1,
+  /// Command storage is local to the queue's execution device.
+  AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL = 2,
+};
+
+/// Supported explicit primary command-storage placements. DEFAULT is always
+/// accepted. Each bit admits that placement with the family's producer modes
+/// and capabilities; placement does not remove producer access.
+typedef uint32_t amdf_queue_placement_capabilities_t;
+enum amdf_queue_placement_capability_bits_e {
+  /// Host-local command storage can be required.
+  AMDF_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL =
+      1u << AMDF_QUEUE_PLACEMENT_HOST_LOCAL,
+  /// Device-local command storage can be required.
+  AMDF_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL =
+      1u << AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL,
+};
+
 /// Direct producer operations implemented by one user queue.
 typedef uint64_t amdf_user_queue_capabilities_t;
 enum amdf_user_queue_capability_bits_e {
@@ -178,6 +204,8 @@ typedef struct amdf_queue_family_info_t {
   amdf_queue_producer_modes_t producer_modes;
   /// Supported scheduling priorities.
   amdf_queue_priority_capabilities_t priority_capabilities;
+  /// Supported explicit primary-ring placements for user publication.
+  amdf_queue_placement_capabilities_t placement_capabilities;
   /// Optional sidecar metadata format.
   amdf_queue_metadata_format_t metadata;
   /// Minimum supported power-of-two primary user ring length in bytes.
@@ -228,6 +256,8 @@ typedef struct amdf_user_queue_info_t {
   amdf_queue_producer_mode_t producer_mode;
   /// Scheduling priority selected for this queue.
   amdf_queue_priority_t priority;
+  /// Achieved primary-ring locality, or DEFAULT when no guarantee is exposed.
+  amdf_queue_placement_t placement;
   /// Direct producer operations achieved by this queue.
   amdf_user_queue_capabilities_t capabilities;
   /// Semantic operations achieved by this queue.
@@ -282,6 +312,10 @@ typedef struct amdf_user_queue_mapping_info_t {
   uint32_t index_bits;
   /// Atomic write width of the doorbell aperture.
   uint32_t doorbell_bits;
+  /// Host fence between command-body stores and publication of a valid packet
+  /// header or producer index. NONE for device mappings, whose format defines
+  /// device release ordering. The format's doorbell ordering still applies.
+  amdf_host_cache_fence_t host_publish_fence;
   /// Optional sidecar metadata format.
   amdf_queue_metadata_format_t metadata;
   /// Producer-local base address of the writable metadata ring.

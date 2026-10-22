@@ -12534,6 +12534,7 @@ HIPAPI hipError_t hipStreamCreateWithPriority(hipStream_t* stream,
   if (queue_priority != IREE_HAL_QUEUE_PRIORITY_NORMAL) {
     iree_hal_queue_params_t queue_params;
     iree_hal_queue_params_initialize(&queue_params);
+    queue_params.placement = iree_hal_queue_placement(context->queue);
     queue_params.priority = queue_priority;
     queue_params.execution_resources =
         iree_hal_queue_execution_resources(context->queue);
@@ -13887,6 +13888,7 @@ HIPAPI hipError_t hipExtStreamCreateWithCUMask(hipStream_t* stream,
       resource_set->resources.count != family_spec->execution_resource_count) {
     iree_hal_queue_params_t queue_params;
     iree_hal_queue_params_initialize(&queue_params);
+    queue_params.placement = iree_hal_queue_placement(context->queue);
     queue_params.execution_resources = resource_set->resources;
     status =
         iree_hal_queue_acquire(queue_family, &queue_params, &acquired_queue);

@@ -24,12 +24,11 @@ typedef enum iree_hal_amd_gpu_asan_shadow_backing_e {
   IREE_HAL_AMD_GPU_ASAN_SHADOW_BACKING_HOST_LOCAL = 1,
 } iree_hal_amd_gpu_asan_shadow_backing_t;
 
-// Cold provisioning of a PM4 family with USER or KERNEL publication. Native
-// protocol and publication capability determine admission, independently of
-// RDNA/CDNA.
+// Cold provisioning of a native packet family. Protocol and publication
+// capability determine admission, independently of RDNA/CDNA.
 typedef struct iree_hal_amd_gpu_device_options_t {
-  // Exact native family ordinal, or UINT32_MAX to select the first supported
-  // PM4 family. File transfers separately select a native SDMA family.
+  // Exact native family ordinal, or UINT32_MAX to prefer AQL on CDNA and PM4
+  // on RDNA among supported families. File transfers independently select SDMA.
   uint32_t queue_family_ordinal;
   // Number of provisioned queues in this family, between 1 and 256.
   uint32_t queue_count;
@@ -42,7 +41,8 @@ typedef struct iree_hal_amd_gpu_device_options_t {
   uint32_t completion_spin_ns;
   // Initial per-queue storage. Native growth uses the fabric allocation owner.
   struct {
-    // Native command storage capacity in bytes.
+    // Native command storage capacity in bytes, or zero for the protocol's
+    // default: 64 KiB for PM4 and 2 MiB for AQL.
     uint64_t ring_byte_length;
     // Power-of-two number of live native completion records.
     uint32_t retirement_capacity;
@@ -53,8 +53,10 @@ typedef struct iree_hal_amd_gpu_device_options_t {
     iree_host_size_t capture_block_size;
     // Number of blocks preallocated for each queue.
     iree_host_size_t capture_block_count;
-  } pm4;
+  } queue;
   // Provisioning used when the device's runtime features enable ASAN.
+  // GPU ASAN is unsupported in CPU ThreadSanitizer builds because their
+  // shadow address-space reservations are incompatible.
   struct {
     // Placement of physical shadow backing; reservations consume only VA.
     iree_hal_amd_gpu_asan_shadow_backing_t shadow_backing;
@@ -72,8 +74,9 @@ typedef struct iree_hal_amd_gpu_device_options_t {
   } tsan;
 } iree_hal_amd_gpu_device_options_t;
 
-// Initializes ordinary provisioning sizes and automatic PM4 family selection.
-// The caller may select an exact native family or explicit host NUMA placement.
+// Initializes ordinary provisioning sizes and automatic native family
+// selection. The caller may select an exact native family or explicit host NUMA
+// placement.
 void iree_hal_amd_gpu_device_options_initialize(
     iree_hal_amd_gpu_device_options_t* out_options);
 

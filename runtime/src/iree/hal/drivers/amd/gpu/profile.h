@@ -16,8 +16,8 @@ extern "C" {
 
 // Device-owned session with bounded, independently synchronized queue streams.
 // Begin/end require idle queues and external serialization with submission.
-// Appending never allocates or calls a sink; only begin/flush/end call the
-// sink.
+// Appending never allocates or calls a sink. Begin, flush, end, and cold queue
+// registration own sink calls; new queues emit metadata before accepting work.
 typedef struct iree_hal_amd_gpu_profile_t iree_hal_amd_gpu_profile_t;
 
 // Host-only reflection and original artifact bytes, independent of native
@@ -36,6 +36,14 @@ iree_status_t iree_hal_amd_gpu_profile_executable_create(
     uint32_t load_count, const uint64_t* load_addresses,
     iree_allocator_t host_allocator,
     iree_hal_amd_gpu_profile_executable_t** out_metadata);
+
+// Appends a newly placed queue variant to the retained host history. Flush
+// serializes the resulting load records independently of native image lifetime.
+// NULL metadata requires no work; failure leaves the prior history unchanged.
+iree_status_t iree_hal_amd_gpu_profile_executable_add_load(
+    iree_hal_amd_gpu_profile_executable_t* metadata, uint64_t virtual_base,
+    uint64_t byte_length, uint64_t address);
+
 void iree_hal_amd_gpu_profile_executable_retain(
     iree_hal_amd_gpu_profile_executable_t* metadata);
 void iree_hal_amd_gpu_profile_executable_release(
@@ -52,17 +60,31 @@ typedef struct iree_hal_amd_gpu_profile_dispatch_t {
   iree_hal_profile_dispatch_event_t event;
 } iree_hal_amd_gpu_profile_dispatch_t;
 
-// Two native clock writes owned by one invocation through host retirement.
-// These occupy the ordinary argument ring and are never in a reusable IB.
-// Active capture serializes dispatches around these samples. Intervals include
-// native dispatch issue and its completion join, not wave occupancy. Raw ticks
-// use the native queue's declared frequency without an inferred host epoch.
+// Native dispatch interval owned through host retirement. PM4 samples bracket
+// dispatch issue and completion joins; AQL samples are written by firmware in
+// native completion signals. Raw ticks use the queue's declared frequency
+// without an inferred host epoch and do not describe wave occupancy.
 typedef struct iree_hal_amd_gpu_profile_sample_t {
-  // CP clock sampled after preceding compute has joined.
+  // Native dispatch-start clock tick.
   uint64_t begin;
-  // CP clock sampled after this dispatch's compute work has joined.
+  // Native dispatch-end clock tick.
   uint64_t end;
 } iree_hal_amd_gpu_profile_sample_t;
+
+// An independently retiring dispatch range. Its native owner keeps samples
+// alive until completion copies them into the bounded host stream. Chunked
+// publication stores this view in each retirement record, not the shared
+// invocation: later publication can overlap earlier retirement.
+typedef struct iree_hal_amd_gpu_profile_completion_t {
+  // First timestamp pair, or NULL for metadata-only capture.
+  const iree_hal_amd_gpu_profile_sample_t* samples;
+  // Byte distance between timestamp pairs; zero for metadata-only capture.
+  uint32_t sample_stride;
+  // First dispatch in the immutable command metadata, or zero for direct work.
+  uint32_t first;
+  // Completed dispatches in this range, including metadata-only dispatches.
+  uint32_t count;
+} iree_hal_amd_gpu_profile_completion_t;
 
 // Host-only command metadata retained independently of resident IB storage.
 typedef struct iree_hal_amd_gpu_profile_commands_t
@@ -93,21 +115,28 @@ typedef struct iree_hal_amd_gpu_profile_operation_t {
   iree_hal_amd_gpu_profile_commands_t* commands;
   // Direct dispatch attribution; executable metadata is borrowed by capture.
   iree_hal_amd_gpu_profile_dispatch_t dispatch;
-  // Invocation-private native samples, read only after native retirement.
-  const iree_hal_amd_gpu_profile_sample_t* samples;
-  // Sample count fixed at public acceptance; zero for metadata-only capture.
-  uint32_t sample_count;
+  // Whole-operation completion facts. Chunked execution derives independent
+  // subranges and sample views in each native retirement record.
+  iree_hal_amd_gpu_profile_completion_t completion;
   // The stream has received this operation, including a possible ring drop.
   bool recorded;
 } iree_hal_amd_gpu_profile_operation_t;
 
 // Begins the requested capture and emits device/queue metadata. Unsupported
-// families and filters fail before starting a sink session. An empty request
-// returns NULL. The sink remains retained until end.
+// families fail before starting a sink session. An empty request returns NULL.
+// The filter pattern is copied and the sink remains retained until end.
 iree_status_t iree_hal_amd_gpu_profile_begin(
     const iree_hal_device_profiling_options_t* options, uint64_t session_id,
     uint32_t queue_count, uint64_t timestamp_frequency_hz,
     iree_allocator_t host_allocator, iree_hal_amd_gpu_profile_t** out_profile);
+
+// Prepares one device-assigned coordinate before the queue accepts work.
+// Existing streams and their completed records remain stable through queue
+// replacement. Serializes native stream metadata with explicit flush, without
+// stopping other producers. NULL is a no-op; failure leaves the coordinate
+// unregistered.
+iree_status_t iree_hal_amd_gpu_profile_register_queue(
+    iree_hal_amd_gpu_profile_t* profile, uint32_t queue_ordinal);
 
 // These session queries consume immutable captured options and do no work.
 bool iree_hal_amd_gpu_profile_captures_dispatches(
@@ -115,12 +144,29 @@ bool iree_hal_amd_gpu_profile_captures_dispatches(
 bool iree_hal_amd_gpu_profile_timestamps_dispatches(
     const iree_hal_amd_gpu_profile_t* profile);
 
+// Selects an entire recording using predicates known without visiting its
+// commands. Individual command/function predicates are evaluated at retirement
+// using retained metadata; the native sample layout stays unchanged. False
+// suppresses capture and its metadata requirement for the whole invocation.
+bool iree_hal_amd_gpu_profile_captures_commands(
+    const iree_hal_amd_gpu_profile_t* profile, uint32_t queue_ordinal,
+    uint64_t command_buffer_id);
+
+// Selects dispatch artifacts using all active predicates. Direct calls use
+// command_buffer_id=0 and cannot match a command-index predicate. Names are
+// borrowed for this call; no allocation or executable lookup is performed.
+bool iree_hal_amd_gpu_profile_captures_dispatch(
+    const iree_hal_amd_gpu_profile_t* profile, uint32_t queue_ordinal,
+    uint64_t command_buffer_id, uint32_t command_index,
+    iree_string_view_t function_name);
+
 // Called before returning invocation argument-ring credit or captured resource
 // references. Copies completed samples and immutable attribution to bounded
 // host rings, retaining only host metadata. No sink/native call or allocation.
 void iree_hal_amd_gpu_profile_operation_complete(
     iree_hal_amd_gpu_profile_t* profile,
-    const iree_hal_amd_gpu_profile_operation_t* operation);
+    const iree_hal_amd_gpu_profile_operation_t* operation,
+    const iree_hal_amd_gpu_profile_completion_t* completion);
 
 // Writes stable stream snapshots outside their mutexes. Failed writes retain
 // the snapshot for retry. The caller serializes flush/end with each other.

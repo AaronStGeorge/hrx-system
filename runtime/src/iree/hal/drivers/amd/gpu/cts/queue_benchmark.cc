@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <atomic>
 #include <barrier>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <thread>
 #include <vector>
@@ -31,18 +33,91 @@ enum class Program { kDispatch, kTransfers };
 enum class Barriers { kDefault, kExplicitEmpty };
 enum class Timing { kSubmit, kCompletion, kSampledSubmit };
 enum class Capture { kNone, kMetadata, kActive };
+enum class Completion { kBarrier, kSubmission };
+enum class AtomicOperation { kWait, kStore, kAdd };
+
+// KFD's process VM belongs to this fabric throughout the benchmark process.
+// Rows still join and release their devices, queues, and execution storage.
+struct ProcessFabric {
+  ProcessFabric() {
+    const amdf_api_t* api = nullptr;
+    status = IREE_HAL_AMD_STATUS_FROM_AMDF(
+        amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST, &api),
+        "amdf_query_api");
+    if (iree_status_is_ok(status)) {
+      status = iree_hal_amd_fabric_create(api, AMDF_NATIVE_LIFETIME_PROCESS,
+                                          iree_allocator_system(), &fabric);
+    }
+  }
+  ~ProcessFabric() {
+    iree_hal_amd_fabric_release(fabric);
+    iree_status_free(status);
+  }
+  // One owning reference outlives every benchmark row.
+  iree_hal_amd_fabric_t* fabric = nullptr;
+  // A construction failure is reported by every row using this owner.
+  iree_status_t status = iree_ok_status();
+};
+
+static iree_status_t MatchesRunnerSelection(iree_hal_amd_fabric_t* fabric,
+                                            const amdf_endpoint_id_t* id,
+                                            bool* out_matches) {
+  *out_matches = true;
+  const char* selected = std::getenv("AMDF_CTS_GPU_NATIVE_IDENTITY");
+  if (!selected) {
+    return iree_ok_status();
+  }
+  amdf_endpoint_t* endpoint = nullptr;
+  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
+      fabric->api->endpoint_open(fabric->instance, id, &endpoint),
+      "endpoint_open"));
+  amdf_endpoint_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
+      .structure_size = sizeof(info),
+  };
+  const auto status = fabric->api->endpoint_query_info(endpoint, &info);
+  const auto close_status = fabric->api->endpoint_close(endpoint);
+  IREE_RETURN_IF_ERROR(iree_status_join(
+      IREE_HAL_AMD_STATUS_FROM_AMDF(status, "endpoint_query_info"),
+      IREE_HAL_AMD_STATUS_FROM_AMDF(close_status, "endpoint_close")));
+  char identity[96] = {};
+  if (info.native_identity.type ==
+      AMDF_ENDPOINT_NATIVE_IDENTITY_TYPE_LINUX_DEVICE) {
+    std::snprintf(identity, sizeof(identity), "linux_device:%u:%u",
+                  info.native_identity.value.linux_device.major,
+                  info.native_identity.value.linux_device.minor);
+  } else if (info.native_identity.type ==
+             AMDF_ENDPOINT_NATIVE_IDENTITY_TYPE_WINDOWS_ADAPTER) {
+    std::snprintf(
+        identity, sizeof(identity), "windows_adapter:%" PRIx64 ":%u",
+        info.native_identity.value.windows_adapter.luid,
+        info.native_identity.value.windows_adapter.physical_adapter_index);
+  }
+  *out_matches = std::strcmp(selected, identity) == 0;
+  return iree_ok_status();
+}
 
 // Warm dispatches reuse capture blocks; allocation counts report slow-path
 // growth. Final device release joins workers and native owners between rows.
 class NativeQueue {
  public:
+  explicit NativeQueue(
+      amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+      bool private_stream = false,
+      iree_hal_queue_placement_t placement = IREE_HAL_QUEUE_PLACEMENT_DEFAULT)
+      : command_type_(command_type),
+        private_stream_(private_stream),
+        placement_(placement) {}
+
   ~NativeQueue() {
     for (auto& lane : lanes_) {
       iree_hal_semaphore_release(lane.timeline);
       iree_hal_executable_release(lane.executable);
       iree_hal_buffer_release(lane.output);
     }
+    iree_hal_semaphore_release(completion_);
     iree_hal_pool_release(pool_);
+    iree_hal_queue_release(queue_);
     iree_hal_device_release(device_);
     iree_hal_device_group_release(group_);
     iree_hal_amd_gpu_context_free(context_);
@@ -53,30 +128,34 @@ class NativeQueue {
   }
 
   bool Initialize(benchmark::State& state, size_t producer_count = 1,
-                  size_t buffer_length = 2 * sizeof(uint32_t)) {
-    iree::Status status = InitializeDevice(producer_count, buffer_length);
+                  size_t buffer_length = 2 * sizeof(uint32_t),
+                  iree_hal_atomic_operation_flags_t atomic_operations = 0) {
+    iree::Status status = InitializeDevice(state, producer_count, buffer_length,
+                                           atomic_operations);
     if (!status.ok()) {
       state.SkipWithError(status.ToString().c_str());
       return false;
     }
-    if (!device_) {
-      state.SkipWithMessage(
-          "No native AMD GPU endpoint with a supported PM4 family");
-      return false;
-    }
-    return true;
+    return !state.skipped();
   }
 
-  iree_status_t InitializeDevice(size_t producer_count, size_t buffer_length) {
+  iree_status_t InitializeDevice(
+      benchmark::State& state, size_t producer_count, size_t buffer_length,
+      iree_hal_atomic_operation_flags_t atomic_operations) {
     lanes_.resize(producer_count);
-    const amdf_api_t* api = nullptr;
-    IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-        amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST, &api),
-        "amdf_query_api"));
-    IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_create(
-        api, AMDF_NATIVE_LIFETIME_INSTANCE, iree_allocator_system(), &fabric_));
+    static ProcessFabric shared;
+    IREE_RETURN_IF_ERROR(iree_status_clone(shared.status));
+    fabric_ = shared.fabric;
+    iree_hal_amd_fabric_retain(fabric_);
+    uint32_t family_ordinal = UINT32_MAX;
     for (uint32_t i = 0; i < fabric_->endpoint_count; ++i) {
       if (fabric_->endpoints[i].engine_kind == AMDF_ENGINE_KIND_GPU) {
+        bool selected = false;
+        IREE_RETURN_IF_ERROR(MatchesRunnerSelection(
+            fabric_, &fabric_->endpoints[i].id, &selected));
+        if (!selected) {
+          continue;
+        }
         iree_status_t status = iree_hal_amd_gpu_context_allocate(
             fabric_, &fabric_->endpoints[i].id,
             iree_hal_device_event_sink_stderr(), iree_allocator_system(),
@@ -90,8 +169,21 @@ class NativeQueue {
         bool supported = false;
         for (uint32_t family = 0;
              family < context_->endpoint_info.queue_family_count; ++family) {
-          supported |= iree_hal_amd_gpu_pm4_queue_publication_modes(
-                           &context_->families[family]) != 0;
+          const auto& native = context_->families[family];
+          if (native.command_type != command_type_) {
+            continue;
+          }
+          supported =
+              command_type_ == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                  ? (native.format_features &
+                     AMDF_GPU_AQL_FORMAT_FEATURE_SCRATCH_SERVICE) &&
+                        (native.user_queue_capabilities &
+                         AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER)
+                  : iree_hal_amd_gpu_pm4_queue_publication_modes(&native) != 0;
+          if (supported) {
+            family_ordinal = family;
+            break;
+          }
         }
         if (supported) {
           break;
@@ -101,11 +193,14 @@ class NativeQueue {
       }
     }
     if (!context_) {
+      state.SkipWithMessage(
+          "No native AMD GPU endpoint with the requested packet family");
       return iree_ok_status();
     }
-    const uint32_t gfx_major = context_->target_info.gfx_ip.major;
+    const auto gfxip = context_->target_info.gfx_ip;
     iree_hal_amd_gpu_device_options_t options;
     iree_hal_amd_gpu_device_options_initialize(&options);
+    options.queue_family_ordinal = family_ordinal;
     IREE_RETURN_IF_ERROR(iree_async_proactor_pool_create(
         1, nullptr, iree_async_proactor_pool_options_default(),
         iree_allocator_system(), &proactors_));
@@ -117,16 +212,43 @@ class NativeQueue {
     auto* context = context_;
     context_ = nullptr;
     IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_device_create(
-        context, IREE_SV("PM4 queue benchmark"), &options, &params,
+        context, IREE_SV("AMD queue benchmark"), &options, &params,
         iree_allocator_t{this, Allocate}, &device_));
     IREE_RETURN_IF_ERROR(iree_hal_device_group_create_from_device(
         device_, tracker_, iree_allocator_system(), &group_));
-    queue_ = iree_hal_device_queue(device_, 0, 0);
-    const auto* family = iree_hal_queue_family(queue_);
+    const auto* family =
+        iree_hal_queue_family(iree_hal_device_queue(device_, 0, 0));
+    const auto* family_spec = iree_hal_queue_family_spec(family);
+    if (placement_ != IREE_HAL_QUEUE_PLACEMENT_DEFAULT &&
+        !(family_spec->placement_capabilities & (1u << placement_))) {
+      state.SkipWithMessage(
+          "Queue family does not support the requested ring "
+          "placement");
+      return iree_ok_status();
+    }
+    if (!iree_all_bits_set(
+            family_spec->atomic_capabilities.operations.system_scope_32,
+            atomic_operations)) {
+      state.SkipWithMessage(
+          "Queue family does not support the requested atomic "
+          "operations");
+      return iree_ok_status();
+    }
+    if (placement_ == IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+      queue_ = iree_hal_device_queue(device_, 0, 0);
+      iree_hal_queue_retain(queue_);
+    } else {
+      iree_hal_queue_params_t queue_params;
+      iree_hal_queue_params_initialize(&queue_params);
+      queue_params.placement = placement_;
+      IREE_RETURN_IF_ERROR(
+          iree_hal_queue_acquire(family, &queue_params, &queue_));
+    }
     const iree_hal_pool_family_access_t access = {
         .family = family,
         .usage = IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER,
         .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
+        .atomics = {.queue = {.system_scope_32 = atomic_operations}},
     };
     const iree_hal_pool_scope_t scope = {
         .family_count = 1,
@@ -139,8 +261,16 @@ class NativeQueue {
     };
     iree_hal_slab_pool_options_t pool_options;
     iree_hal_slab_pool_options_initialize(&pool_options);
-    IREE_RETURN_IF_ERROR(iree_hal_slab_pool_create(
-        group_, scope, &pool_options, iree_allocator_system(), &pool_));
+    iree_status_t status = iree_hal_slab_pool_create(
+        group_, scope, &pool_options, iree_allocator_system(), &pool_);
+    if (atomic_operations && iree_status_is_unavailable(status)) {
+      iree_status_ignore(status);
+      state.SkipWithMessage(
+          "No native memory route supports the requested "
+          "atomic operations");
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(status);
     iree_hal_memory_scope_t program_scope;
     IREE_RETURN_IF_ERROR(iree_hal_device_group_resolve_memory_scope(
         group_, {IREE_HAL_MEMORY_SITE_PROGRAM, family}, &program_scope));
@@ -151,7 +281,10 @@ class NativeQueue {
 
     const auto* files = iree_hal_amd_gpu_hip_images_create();
     iree_const_byte_span_t artifact = iree_const_byte_span_empty();
-    const char* selector = gfx_major == 11 ? "gfx11_generic" : "gfx12_generic";
+    const char* selector =
+        gfxip.major == 9    ? (gfxip.minor == 4 ? "gfx9_4_generic" : "gfx90a")
+        : gfxip.major == 11 ? "gfx11_generic"
+                            : "gfx12_generic";
     for (size_t i = 0; i < iree_hal_amd_gpu_hip_images_size(); ++i) {
       if (std::strstr(files[i].name, selector)) {
         artifact = iree_make_const_byte_span(files[i].data, files[i].size);
@@ -165,7 +298,7 @@ class NativeQueue {
     load.executable_data = artifact;
     for (auto& lane : lanes_) {
       IREE_RETURN_IF_ERROR(iree_hal_pool_allocate_buffer(
-          pool_, iree_hal_make_pool_reservation_request(buffer_length, 4),
+          pool_, iree_hal_make_pool_reservation_request(buffer_length, 8),
           iree_infinite_timeout(), &lane.output));
       lane.address = iree_hal_buffer_native_binding(lane.output, address_slot)
                          .device_address;
@@ -175,9 +308,55 @@ class NativeQueue {
           lane.executable, IREE_SV("image_transform"), &lane.function));
       IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(
           device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
-          IREE_HAL_SEMAPHORE_FLAG_NONE, &lane.timeline));
+          private_stream_ ? IREE_HAL_SEMAPHORE_FLAG_DEVICE_LOCAL |
+                                IREE_HAL_SEMAPHORE_FLAG_SINGLE_PRODUCER
+                          : IREE_HAL_SEMAPHORE_FLAG_NONE,
+          &lane.timeline));
+    }
+    if (private_stream_) {
+      IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(
+          device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
+          IREE_HAL_SEMAPHORE_FLAG_NONE, &completion_));
     }
     return iree_ok_status();
+  }
+
+  // The final dispatch signals both its private stream and public completion.
+  // A zero grid measures admission/signaling only; it launches no kernel.
+  iree_status_t SubmitChain(uint32_t count, bool empty) {
+    auto& lane = lanes_[0];
+    const auto reference = iree_hal_make_buffer_ref(lane.output, 0, 4);
+    const uint32_t value = 1;
+    auto config = iree_hal_make_static_dispatch_config(empty ? 0 : 1, 1, 1);
+    config.workgroup_size[0] = 32;
+    config.workgroup_size[1] = config.workgroup_size[2] = 1;
+    iree_hal_semaphore_t* signal_semaphores[] = {lane.timeline, completion_};
+    iree_status_t status = iree_ok_status();
+    for (uint32_t i = 0; i < count && iree_status_is_ok(status); ++i) {
+      const bool final = i + 1 == count;
+      uint64_t before = lane.epoch;
+      uint64_t values[] = {before + 1, completion_value_ + 1};
+      status = iree_hal_queue_dispatch(
+          queue_, {i ? 1u : 0u, &lane.timeline, &before},
+          {final ? 2u : 1u, signal_semaphores, values}, lane.executable,
+          lane.function, config,
+          iree_make_const_byte_span(&value, sizeof(value)), {1, &reference},
+          nullptr, IREE_HAL_DISPATCH_FLAG_NONE);
+      if (iree_status_is_ok(status)) {
+        ++lane.epoch;
+        if (final) {
+          ++completion_value_;
+        }
+      }
+    }
+    lane.expected = value * 3 + 19;
+    return status;
+  }
+
+  iree_status_t CompleteChain(
+      iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE) {
+    return iree_hal_semaphore_wait(completion_, completion_value_,
+                                   iree_infinite_timeout(), wait_flags);
   }
 
   iree_status_t Submit(size_t producer, Arguments arguments,
@@ -470,6 +649,88 @@ class NativeQueue {
                                     bytes.data_length);
   }
 
+  iree_status_t Timestamp(size_t index) {
+    auto& lane = lanes_[0];
+    uint64_t before = lane.epoch, after = before + 1;
+    IREE_RETURN_IF_ERROR(iree_hal_queue_timestamp(
+        queue_, {before ? 1u : 0u, &lane.timeline, &before},
+        {1, &lane.timeline, &after}, lane.output, index * sizeof(uint64_t),
+        nullptr, IREE_HAL_TIMESTAMP_FLAG_NONE));
+    lane.epoch = after;
+    return iree_ok_status();
+  }
+
+  // One explicit semaphore edge per scalar command, matching direct dispatch.
+  // The wait observes an already-published value and never needs a CPU
+  // producer.
+  iree_status_t Atomic(AtomicOperation operation, Barriers barriers) {
+    auto& lane = lanes_[0];
+    uint64_t before = lane.epoch, after = before + 1;
+    const iree_hal_semaphore_list_t waits = {before ? 1u : 0u, &lane.timeline,
+                                             &before};
+    const iree_hal_semaphore_list_t signals = {1, &lane.timeline, &after};
+    const iree_hal_barrier_list_t empty = {};
+    const iree_hal_queue_barriers_t explicit_empty = {&empty, &empty};
+    const auto* memory_barriers =
+        barriers == Barriers::kDefault ? nullptr : &explicit_empty;
+    if (operation == AtomicOperation::kWait) {
+      const iree_hal_atomic_wait_params_t params = {
+          .value = lane.expected,
+          .mask = UINT32_MAX,
+          .flags = IREE_HAL_ATOMIC_FLAG_SYSTEM_SCOPE,
+          .width = IREE_HAL_ATOMIC_WIDTH_32,
+          .condition = IREE_HAL_ATOMIC_WAIT_CONDITION_EQUAL,
+      };
+      IREE_RETURN_IF_ERROR(iree_hal_queue_atomic_wait(
+          queue_, waits, signals, lane.output, 0, params, memory_barriers));
+    } else if (operation == AtomicOperation::kStore) {
+      const iree_hal_atomic_store_params_t params = {
+          .value = lane.expected + 1,
+          .flags = IREE_HAL_ATOMIC_FLAG_SYSTEM_SCOPE,
+          .width = IREE_HAL_ATOMIC_WIDTH_32,
+      };
+      IREE_RETURN_IF_ERROR(iree_hal_queue_atomic_store(
+          queue_, waits, signals, lane.output, 0, params, memory_barriers));
+      ++lane.expected;
+    } else {
+      const iree_hal_atomic_rmw_params_t params = {
+          .operand = 1,
+          .flags = IREE_HAL_ATOMIC_FLAG_SYSTEM_SCOPE,
+          .width = IREE_HAL_ATOMIC_WIDTH_32,
+          .operation = IREE_HAL_ATOMIC_RMW_OPERATION_ADD,
+      };
+      IREE_RETURN_IF_ERROR(iree_hal_queue_atomic_rmw(
+          queue_, waits, signals, lane.output, 0, params, memory_barriers));
+      ++lane.expected;
+    }
+    lane.epoch = after;
+    return iree_ok_status();
+  }
+
+  // Readback and numerical checks run after the measured completion boundary.
+  iree_status_t CheckTimestamps(std::vector<uint64_t>& ticks,
+                                uint64_t* last_tick) {
+    IREE_RETURN_IF_ERROR(ReadBytes(
+        iree_make_byte_span(ticks.data(), ticks.size() * sizeof(ticks[0]))));
+    const uint32_t bits =
+        iree_hal_queue_family(queue_)->spec->timestamp_valid_bits;
+    const uint64_t mask = bits == 64 ? UINT64_MAX : (UINT64_C(1) << bits) - 1;
+    uint64_t previous = *last_tick;
+    for (uint64_t tick : ticks) {
+      if (previous && ((tick - previous) & mask) > (mask >> 1)) {
+        return iree_make_status(IREE_STATUS_DATA_LOSS,
+                                "queue timestamps are not ordered");
+      }
+      previous = tick;
+    }
+    if (previous == *last_tick) {
+      return iree_make_status(IREE_STATUS_DATA_LOSS,
+                              "queue timestamp did not advance");
+    }
+    *last_tick = previous;
+    return iree_ok_status();
+  }
+
   // The concrete queue advances its causal epoch once per native publication.
   // Query only after completion; this counts real retirement units without
   // adding counters or instrumentation to the production submission path.
@@ -485,7 +746,8 @@ class NativeQueue {
     return frontier.entries[0].epoch;
   }
 
-  iree_status_t Complete(size_t producer) {
+  iree_status_t Complete(size_t producer, iree_async_wait_flags_t wait_flags =
+                                              IREE_ASYNC_WAIT_FLAG_NONE) {
     auto& lane = lanes_[producer];
     // Explicit-empty dispatches have no inter-kernel data dependency: each
     // reads immutable globals and overwrites the same output in semaphore
@@ -495,9 +757,15 @@ class NativeQueue {
         queue_, {1, &lane.timeline, &before}, {1, &lane.timeline, &after},
         nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
     lane.epoch = after;
+    return Wait(producer, wait_flags);
+  }
+
+  // Default dispatches and recorded programs carry their own outgoing
+  // visibility boundary. Their signals need no extra submission or doorbell.
+  iree_status_t Wait(size_t producer, iree_async_wait_flags_t wait_flags) {
+    const auto& lane = lanes_[producer];
     return iree_hal_semaphore_wait(lane.timeline, lane.epoch,
-                                   iree_infinite_timeout(),
-                                   IREE_ASYNC_WAIT_FLAG_NONE);
+                                   iree_infinite_timeout(), wait_flags);
   }
 
   iree_status_t CheckOutput(size_t producer) {
@@ -545,6 +813,16 @@ class NativeQueue {
     return iree_ok_status();
   }
 
+  // Exact requested packet family, independent of shader ISA.
+  amdf_queue_command_type_t command_type_;
+  // Chain rows use device-local single-producer dependencies.
+  bool private_stream_;
+  // Required primary-ring locality for placement comparison rows.
+  iree_hal_queue_placement_t placement_;
+  // Public final notification for a chain, distinct from its private stream.
+  iree_hal_semaphore_t* completion_ = nullptr;
+  // Last accepted public final notification.
+  uint64_t completion_value_ = 0;
   // Native discovery owner, independently of the transferred context.
   iree_hal_amd_fabric_t* fabric_ = nullptr;
   // Unique constructing owner, transferred to device on success.
@@ -557,7 +835,7 @@ class NativeQueue {
   iree_hal_device_t* device_ = nullptr;
   // Sealed scope assignment for the explicit allocation pool.
   iree_hal_device_group_t* group_ = nullptr;
-  // Borrowed queue, kept live by device_.
+  // Owning reference to a provisioned or explicitly acquired queue.
   iree_hal_queue_t* queue_ = nullptr;
   // Explicit host-readable storage for the kernel result.
   iree_hal_pool_t* pool_ = nullptr;
@@ -593,17 +871,26 @@ class NativeQueue {
   std::atomic<uint64_t> allocation_count_ = 0;
 };
 
-static void BM_Dispatch(benchmark::State& state, Arguments arguments,
-                        Barriers barriers, Timing timing) {
-  NativeQueue dispatch;
+static void BM_Dispatch(
+    benchmark::State& state, Arguments arguments, Barriers barriers,
+    Timing timing,
+    amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+    Completion completion = Completion::kBarrier,
+    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE,
+    iree_hal_queue_placement_t placement = IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+  NativeQueue dispatch(command_type, false, placement);
   if (!dispatch.Initialize(state)) {
     return;
   }
   const size_t count = state.range(0);
+  const auto complete = [&] {
+    return completion == Completion::kBarrier ? dispatch.Complete(0, wait_flags)
+                                              : dispatch.Wait(0, wait_flags);
+  };
   for (size_t i = 0; i < count * 2; ++i) {
     IREE_CHECK_OK(dispatch.Submit(0, arguments, barriers));
   }
-  IREE_CHECK_OK(dispatch.Complete(0));
+  IREE_CHECK_OK(complete());
   IREE_CHECK_OK(dispatch.CheckOutput(0));
   const uint64_t allocations_before = dispatch.allocation_count();
   std::vector<iree_duration_t> samples;
@@ -623,7 +910,7 @@ static void BM_Dispatch(benchmark::State& state, Arguments arguments,
     if (timing != Timing::kCompletion) {
       state.PauseTiming();
     }
-    IREE_CHECK_OK(dispatch.Complete(0));
+    IREE_CHECK_OK(complete());
     if (timing == Timing::kCompletion) {
       state.PauseTiming();
     }
@@ -662,11 +949,269 @@ DISPATCH_CASE(NativeDefaultLatency, kNative, kDefault, kSampledSubmit);
 DISPATCH_CASE(NativeEmptyLatency, kNative, kExplicitEmpty, kSampledSubmit);
 #undef DISPATCH_CASE
 
+BENCHMARK_CAPTURE(BM_Dispatch, AqlBindingsDefaultSubmit, Arguments::kBindings,
+                  Barriers::kDefault, Timing::kSubmit,
+                  AMDF_QUEUE_COMMAND_TYPE_GPU_AQL)
+    ->Arg(1)
+    ->Arg(32)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_Dispatch, AqlBindingsEmptySubmit, Arguments::kBindings,
+                  Barriers::kExplicitEmpty, Timing::kSubmit,
+                  AMDF_QUEUE_COMMAND_TYPE_GPU_AQL)
+    ->Arg(1)
+    ->Arg(32)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_Dispatch, AqlBindingsDefaultCompletion,
+                  Arguments::kBindings, Barriers::kDefault, Timing::kCompletion,
+                  AMDF_QUEUE_COMMAND_TYPE_GPU_AQL)
+    ->Arg(1)
+    ->Arg(32)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+
+// Own-submission waits isolate the dispatch's completion boundary; active
+// variants distinguish caller wake latency from execution and retirement.
+#define AQL_DISPATCH_COMPLETION_CASE(name, completion, wait_flags)           \
+  BENCHMARK_CAPTURE(BM_Dispatch, name, Arguments::kBindings,                 \
+                    Barriers::kDefault, Timing::kCompletion,                 \
+                    AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, Completion::completion, \
+                    wait_flags)                                              \
+      ->Arg(1)                                                               \
+      ->Arg(32)                                                              \
+      ->Arg(1000)                                                            \
+      ->Iterations(200)                                                      \
+      ->UseRealTime()
+AQL_DISPATCH_COMPLETION_CASE(AqlBindingsDefaultCompletionActive, kBarrier,
+                             IREE_ASYNC_WAIT_FLAG_ACTIVE);
+AQL_DISPATCH_COMPLETION_CASE(AqlBindingsDefaultSubmissionCompletion,
+                             kSubmission, IREE_ASYNC_WAIT_FLAG_NONE);
+AQL_DISPATCH_COMPLETION_CASE(AqlBindingsDefaultSubmissionCompletionActive,
+                             kSubmission, IREE_ASYNC_WAIT_FLAG_ACTIVE);
+#undef AQL_DISPATCH_COMPLETION_CASE
+
+// Both localities execute the same direct-stream workload through acquired
+// queues. Completion stays outside submit-only timing.
+#define PLACED_DISPATCH_CASE(name, protocol, placement)              \
+  BENCHMARK_CAPTURE(BM_Dispatch, name, Arguments::kBindings,         \
+                    Barriers::kDefault, Timing::kSubmit, protocol,   \
+                    Completion::kBarrier, IREE_ASYNC_WAIT_FLAG_NONE, \
+                    placement)                                       \
+      ->Arg(1)                                                       \
+      ->Arg(32)                                                      \
+      ->Iterations(200)                                              \
+      ->UseRealTime()
+PLACED_DISPATCH_CASE(Pm4HostLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                     IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_DISPATCH_CASE(Pm4DeviceLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                     IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+PLACED_DISPATCH_CASE(AqlHostLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                     IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_DISPATCH_CASE(AqlDeviceLocalSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                     IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+#undef PLACED_DISPATCH_CASE
+
+// Each event records the native queue clock and signals its own completion.
+// No extra queue operation is appended to either measured interval.
+static void BM_Timestamp(benchmark::State& state,
+                         amdf_queue_command_type_t command_type, Timing timing,
+                         iree_async_wait_flags_t wait_flags) {
+  const size_t count = state.range(0);
+  NativeQueue queue(command_type);
+  if (!queue.Initialize(state, 1, count * sizeof(uint64_t))) {
+    return;
+  }
+  std::vector<uint64_t> ticks(count);
+  uint64_t last_tick = 0;
+  for (int warmup = 0; warmup < 2; ++warmup) {
+    for (size_t i = 0; i < count; ++i) {
+      IREE_CHECK_OK(queue.Timestamp(i));
+    }
+    IREE_CHECK_OK(queue.Wait(0, wait_flags));
+    IREE_CHECK_OK(queue.CheckTimestamps(ticks, &last_tick));
+  }
+  const uint64_t allocations_before = queue.allocation_count();
+  for (auto _ : state) {
+    for (size_t i = 0; i < count; ++i) {
+      IREE_CHECK_OK(queue.Timestamp(i));
+    }
+    if (timing == Timing::kSubmit) {
+      state.PauseTiming();
+    }
+    IREE_CHECK_OK(queue.Wait(0, wait_flags));
+    if (timing == Timing::kCompletion) {
+      state.PauseTiming();
+    }
+    IREE_CHECK_OK(queue.CheckTimestamps(ticks, &last_tick));
+    state.ResumeTiming();
+  }
+  state.SetItemsProcessed(state.iterations() * count);
+  state.counters["host_allocations"] =
+      queue.allocation_count() - allocations_before;
+}
+
+#define TIMESTAMP_CASE(name, command_type, timing, wait_flags)        \
+  BENCHMARK_CAPTURE(BM_Timestamp, name, command_type, Timing::timing, \
+                    wait_flags)                                       \
+      ->Arg(1)                                                        \
+      ->Arg(32)                                                       \
+      ->Arg(1000)                                                     \
+      ->Iterations(200)                                               \
+      ->UseRealTime()
+TIMESTAMP_CASE(Pm4Submit, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, kSubmit,
+               IREE_ASYNC_WAIT_FLAG_NONE);
+TIMESTAMP_CASE(Pm4Completion, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, kCompletion,
+               IREE_ASYNC_WAIT_FLAG_NONE);
+TIMESTAMP_CASE(Pm4ActiveCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+               kCompletion, IREE_ASYNC_WAIT_FLAG_ACTIVE);
+TIMESTAMP_CASE(AqlSubmit, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, kSubmit,
+               IREE_ASYNC_WAIT_FLAG_NONE);
+TIMESTAMP_CASE(AqlCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, kCompletion,
+               IREE_ASYNC_WAIT_FLAG_NONE);
+TIMESTAMP_CASE(AqlActiveCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+               kCompletion, IREE_ASYNC_WAIT_FLAG_ACTIVE);
+#undef TIMESTAMP_CASE
+
+// Scope preparation and output checks stay outside timing. Submit rows exclude
+// the final completion wait; completion rows include that exact public signal.
+static void BM_Atomic(benchmark::State& state,
+                      amdf_queue_command_type_t command_type,
+                      AtomicOperation operation, Barriers barriers,
+                      Timing timing) {
+  const size_t count = state.range(0);
+  const auto required =
+      IREE_HAL_ATOMIC_OPERATION_FLAG_STORE |
+      (operation == AtomicOperation::kWait ? IREE_HAL_ATOMIC_OPERATION_FLAG_WAIT
+       : operation == AtomicOperation::kAdd
+           ? IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD
+           : 0);
+  NativeQueue queue(command_type);
+  if (!queue.Initialize(state, 1, sizeof(uint32_t), required)) {
+    return;
+  }
+  IREE_CHECK_OK(queue.Atomic(AtomicOperation::kStore, Barriers::kDefault));
+  IREE_CHECK_OK(queue.Wait(0, IREE_ASYNC_WAIT_FLAG_NONE));
+  for (int warmup = 0; warmup < 2; ++warmup) {
+    for (size_t i = 0; i < count; ++i) {
+      IREE_CHECK_OK(queue.Atomic(operation, barriers));
+    }
+    IREE_CHECK_OK(queue.Wait(0, IREE_ASYNC_WAIT_FLAG_NONE));
+    IREE_CHECK_OK(queue.CheckOutput(0));
+  }
+  const uint64_t allocations_before = queue.allocation_count();
+  for (auto _ : state) {
+    for (size_t i = 0; i < count; ++i) {
+      IREE_CHECK_OK(queue.Atomic(operation, barriers));
+    }
+    if (timing == Timing::kSubmit) {
+      state.PauseTiming();
+    }
+    IREE_CHECK_OK(queue.Wait(0, IREE_ASYNC_WAIT_FLAG_NONE));
+    if (timing == Timing::kCompletion) {
+      state.PauseTiming();
+    }
+    IREE_CHECK_OK(queue.CheckOutput(0));
+    state.ResumeTiming();
+  }
+  state.SetItemsProcessed(state.iterations() * count);
+  state.counters["host_allocations"] =
+      queue.allocation_count() - allocations_before;
+}
+
+#define ATOMIC_CASE(name, command_type, operation, barriers, timing)           \
+  BENCHMARK_CAPTURE(BM_Atomic, name, command_type, AtomicOperation::operation, \
+                    Barriers::barriers, Timing::timing)                        \
+      ->Arg(1)                                                                 \
+      ->Arg(1000)                                                              \
+      ->Iterations(200)                                                        \
+      ->UseRealTime()
+#define ATOMIC_OPERATION_CASES(prefix, command_type, name, operation)         \
+  ATOMIC_CASE(prefix##name##DefaultSubmit, command_type, operation, kDefault, \
+              kSubmit);                                                       \
+  ATOMIC_CASE(prefix##name##EmptySubmit, command_type, operation,             \
+              kExplicitEmpty, kSubmit);                                       \
+  ATOMIC_CASE(prefix##name##DefaultCompletion, command_type, operation,       \
+              kDefault, kCompletion)
+ATOMIC_OPERATION_CASES(Pm4, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, Wait, kWait);
+ATOMIC_OPERATION_CASES(Pm4, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, Store, kStore);
+ATOMIC_OPERATION_CASES(Pm4, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, Add, kAdd);
+ATOMIC_OPERATION_CASES(Aql, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, Wait, kWait);
+ATOMIC_OPERATION_CASES(Aql, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, Store, kStore);
+ATOMIC_OPERATION_CASES(Aql, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, Add, kAdd);
+#undef ATOMIC_OPERATION_CASES
+#undef ATOMIC_CASE
+
+static void BM_AqlChain(
+    benchmark::State& state, bool empty, Timing timing,
+    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE) {
+  NativeQueue queue(AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, true);
+  if (!queue.Initialize(state)) {
+    return;
+  }
+  const uint32_t count = state.range(0);
+  IREE_CHECK_OK(queue.SubmitChain(count, empty));
+  IREE_CHECK_OK(queue.CompleteChain(wait_flags));
+  const uint64_t allocations_before = queue.allocation_count();
+  for (auto _ : state) {
+    IREE_CHECK_OK(queue.SubmitChain(count, empty));
+    if (timing == Timing::kSubmit) {
+      state.PauseTiming();
+    }
+    IREE_CHECK_OK(queue.CompleteChain(wait_flags));
+    if (timing == Timing::kCompletion) {
+      state.PauseTiming();
+    }
+    if (!empty) {
+      IREE_CHECK_OK(queue.CheckOutput(0));
+    }
+    state.ResumeTiming();
+  }
+  state.counters["host_allocations"] =
+      queue.allocation_count() - allocations_before;
+  state.SetItemsProcessed(state.iterations() * count);
+}
+BENCHMARK_CAPTURE(BM_AqlChain, EmptySubmit, true, Timing::kSubmit)
+    ->Arg(1)
+    ->Arg(20)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_AqlChain, EmptyCompletion, true, Timing::kCompletion)
+    ->Arg(1)
+    ->Arg(20)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_AqlChain, DispatchSubmit, false, Timing::kSubmit)
+    ->Arg(1)
+    ->Arg(20)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_AqlChain, DispatchCompletion, false, Timing::kCompletion)
+    ->Arg(1)
+    ->Arg(20)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_AqlChain, DispatchCompletionActive, false,
+                  Timing::kCompletion, IREE_ASYNC_WAIT_FLAG_ACTIVE)
+    ->Arg(1)
+    ->Arg(20)
+    ->Arg(1000)
+    ->Iterations(200)
+    ->UseRealTime();
+
 // Completion and destruction are excluded from recording timing. One actual
 // invocation verifies the recorded program before measuring its construction.
-static void BM_Record(benchmark::State& state, BindingMode bindings,
-                      Program program) {
-  NativeQueue queue;
+static void BM_Record(
+    benchmark::State& state, BindingMode bindings, Program program,
+    amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4) {
+  NativeQueue queue(command_type);
   if (!queue.Initialize(state)) {
     return;
   }
@@ -713,16 +1258,38 @@ BENCHMARK_CAPTURE(BM_Record, TransfersTable, BindingMode::kTable,
     ->Iterations(50)
     ->UseRealTime();
 
-// Each iteration submits a fixed number of command buffers before one final
-// wait. Submit timing excludes that wait; completion timing includes it.
+BENCHMARK_CAPTURE(BM_Record, AqlDirect, BindingMode::kDirect,
+                  Program::kDispatch, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL)
+    ->Arg(1)
+    ->Arg(100)
+    ->Arg(1000)
+    ->Arg(5000)
+    ->Iterations(50)
+    ->UseRealTime();
+BENCHMARK_CAPTURE(BM_Record, AqlTable, BindingMode::kTable, Program::kDispatch,
+                  AMDF_QUEUE_COMMAND_TYPE_GPU_AQL)
+    ->Arg(1)
+    ->Arg(100)
+    ->Arg(1000)
+    ->Arg(5000)
+    ->Iterations(50)
+    ->UseRealTime();
+
+// Each iteration submits a fixed number of command buffers before completing
+// through either a separate queue barrier or the submission's own signal.
+// Submit timing excludes that boundary; completion timing includes it.
 // Sampled rows isolate each API call at the cost of two clock reads. Bursts
 // additionally separate the first call after a wait from subsequent calls, so
 // idle/wake costs cannot be mistaken for steady submission costs. No row
 // measures calibrated time to first workgroup.
-static void BM_Execute(benchmark::State& state, BindingMode bindings,
-                       Timing timing, Program program, uint32_t burst_count,
-                       Capture capture) {
-  NativeQueue queue;
+static void BM_Execute(
+    benchmark::State& state, BindingMode bindings, Timing timing,
+    Program program, uint32_t burst_count, Capture capture,
+    amdf_queue_command_type_t command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+    Completion completion = Completion::kBarrier,
+    iree_async_wait_flags_t wait_flags = IREE_ASYNC_WAIT_FLAG_NONE,
+    iree_hal_queue_placement_t placement = IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+  NativeQueue queue(command_type, false, placement);
   if (!queue.Initialize(state)) {
     return;
   }
@@ -736,11 +1303,15 @@ static void BM_Execute(benchmark::State& state, BindingMode bindings,
   if (capture == Capture::kActive) {
     IREE_CHECK_OK(queue.BeginCapture());
   }
+  const auto complete = [&] {
+    return completion == Completion::kBarrier ? queue.Complete(0, wait_flags)
+                                              : queue.Wait(0, wait_flags);
+  };
   for (uint32_t i = 0; i < 2; ++i) {
     for (uint32_t j = 0; j < burst_count; ++j) {
       IREE_CHECK_OK(queue.Execute(recording, bindings));
     }
-    IREE_CHECK_OK(queue.Complete(0));
+    IREE_CHECK_OK(complete());
     IREE_CHECK_OK(queue.CheckOutput(0));
   }
   if (capture == Capture::kActive) {
@@ -774,7 +1345,7 @@ static void BM_Execute(benchmark::State& state, BindingMode bindings,
     if (timing != Timing::kCompletion) {
       state.PauseTiming();
     }
-    IREE_CHECK_OK(queue.Complete(0));
+    IREE_CHECK_OK(complete());
     if (timing == Timing::kCompletion) {
       state.PauseTiming();
     }
@@ -850,6 +1421,112 @@ EXECUTE_BURST_CASE(TableBurstCompletion, kTable, kCompletion);
 EXECUTE_BURST_CASE(DirectBurstLatency, kDirect, kSampledSubmit);
 EXECUTE_BURST_CASE(TableBurstLatency, kTable, kSampledSubmit);
 #undef EXECUTE_BURST_CASE
+
+// The same numerical program and memory barriers exercise native AQL packet
+// materialization. Direct references and one reused table slot distinguish
+// invocation work from the number of recorded dispatches and fixups.
+#define AQL_EXECUTE_CASE(name, bindings, timing, burst_count)        \
+  BENCHMARK_CAPTURE(BM_Execute, Aql##name, BindingMode::bindings,    \
+                    Timing::timing, Program::kDispatch, burst_count, \
+                    Capture::kNone, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL) \
+      ->Arg(1)                                                       \
+      ->Arg(100)                                                     \
+      ->Arg(1000)                                                    \
+      ->Arg(5000)                                                    \
+      ->Iterations(50)                                               \
+      ->UseRealTime()
+AQL_EXECUTE_CASE(DirectSubmit, kDirect, kSubmit, 1);
+AQL_EXECUTE_CASE(TableSubmit, kTable, kSubmit, 1);
+AQL_EXECUTE_CASE(DirectCompletion, kDirect, kCompletion, 1);
+AQL_EXECUTE_CASE(TableCompletion, kTable, kCompletion, 1);
+AQL_EXECUTE_CASE(DirectBurstSubmit, kDirect, kSubmit, 8);
+AQL_EXECUTE_CASE(TableBurstSubmit, kTable, kSubmit, 8);
+AQL_EXECUTE_CASE(DirectBurstCompletion, kDirect, kCompletion, 8);
+AQL_EXECUTE_CASE(TableBurstCompletion, kTable, kCompletion, 8);
+#undef AQL_EXECUTE_CASE
+
+// Keep the complete public wait boundary while isolating caller sleep/wakeup
+// from native preparation and retirement. ACTIVE is an application policy,
+// never an implicit change to the ordinary completion rows above.
+#define ACTIVE_EXECUTE_CASE(name, bindings, protocol)               \
+  BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::bindings,        \
+                    Timing::kCompletion, Program::kDispatch, 1,     \
+                    Capture::kNone, protocol, Completion::kBarrier, \
+                    IREE_ASYNC_WAIT_FLAG_ACTIVE)                    \
+      ->Arg(1)                                                      \
+      ->Arg(100)                                                    \
+      ->Arg(1000)                                                   \
+      ->Arg(5000)                                                   \
+      ->Iterations(50)                                              \
+      ->UseRealTime()
+ACTIVE_EXECUTE_CASE(DirectActiveCompletion, kDirect,
+                    AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
+ACTIVE_EXECUTE_CASE(TableActiveCompletion, kTable,
+                    AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
+ACTIVE_EXECUTE_CASE(AqlDirectActiveCompletion, kDirect,
+                    AMDF_QUEUE_COMMAND_TYPE_GPU_AQL);
+ACTIVE_EXECUTE_CASE(AqlTableActiveCompletion, kTable,
+                    AMDF_QUEUE_COMMAND_TYPE_GPU_AQL);
+#undef ACTIVE_EXECUTE_CASE
+
+// These rows time queue_execute followed directly by its semaphore wait.
+// Completion rows above retain a separate queue_barrier before waiting, which
+// also measures publication of later work while the recording is still live.
+#define SUBMISSION_COMPLETION_CASE(name, bindings, protocol, wait_flags) \
+  BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::bindings,             \
+                    Timing::kCompletion, Program::kDispatch, 1,          \
+                    Capture::kNone, protocol, Completion::kSubmission,   \
+                    wait_flags)                                          \
+      ->Arg(1)                                                           \
+      ->Arg(100)                                                         \
+      ->Arg(1000)                                                        \
+      ->Arg(5000)                                                        \
+      ->Iterations(50)                                                   \
+      ->UseRealTime()
+SUBMISSION_COMPLETION_CASE(DirectSubmissionCompletion, kDirect,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 0);
+SUBMISSION_COMPLETION_CASE(TableSubmissionCompletion, kTable,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, 0);
+SUBMISSION_COMPLETION_CASE(AqlDirectSubmissionCompletion, kDirect,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 0);
+SUBMISSION_COMPLETION_CASE(AqlTableSubmissionCompletion, kTable,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, 0);
+SUBMISSION_COMPLETION_CASE(DirectActiveSubmissionCompletion, kDirect,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                           IREE_ASYNC_WAIT_FLAG_ACTIVE);
+SUBMISSION_COMPLETION_CASE(TableActiveSubmissionCompletion, kTable,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                           IREE_ASYNC_WAIT_FLAG_ACTIVE);
+SUBMISSION_COMPLETION_CASE(AqlDirectActiveSubmissionCompletion, kDirect,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                           IREE_ASYNC_WAIT_FLAG_ACTIVE);
+SUBMISSION_COMPLETION_CASE(AqlTableActiveSubmissionCompletion, kTable,
+                           AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                           IREE_ASYNC_WAIT_FLAG_ACTIVE);
+#undef SUBMISSION_COMPLETION_CASE
+
+// The middle sizes represent model recordings; the endpoints expose short
+// preparation and ring-wrap costs. These include the submission's own wait.
+#define PLACED_EXECUTE_CASE(name, protocol, placement)                 \
+  BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::kTable,             \
+                    Timing::kCompletion, Program::kDispatch, 1,        \
+                    Capture::kNone, protocol, Completion::kSubmission, \
+                    IREE_ASYNC_WAIT_FLAG_NONE, placement)              \
+      ->Arg(64)                                                        \
+      ->Arg(1229)                                                      \
+      ->Arg(1877)                                                      \
+      ->Arg(5000)                                                      \
+      ->Iterations(50)                                                 \
+      ->UseRealTime()
+PLACED_EXECUTE_CASE(Pm4HostLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                    IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_EXECUTE_CASE(Pm4DeviceLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                    IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+PLACED_EXECUTE_CASE(AqlHostLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                    IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+PLACED_EXECUTE_CASE(AqlDeviceLocalCompletion, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+                    IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+#undef PLACED_EXECUTE_CASE
 
 // Identical resident programs distinguish ordinary execution, retained but
 // disabled packet regions, and active device samples. The caller upload is

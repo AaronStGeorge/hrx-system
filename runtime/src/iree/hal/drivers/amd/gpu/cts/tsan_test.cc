@@ -7,9 +7,12 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <string>
+#include <tuple>
 
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/profile_test_util.h"
+#include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/amd/gpu/cts/test_device.h"
 #include "iree/hal/drivers/amd/gpu/cts/tsan_images.h"
 #include "iree/testing/gtest.h"
@@ -24,8 +27,13 @@ namespace {
 constexpr uint32_t kWorkgroupShadowStride = 32 + 16 + 16 * 16;
 
 class GpuTsanTest : public GpuNativeTest,
-                    public ::testing::WithParamInterface<uint32_t> {
+                    public ::testing::WithParamInterface<
+                        std::tuple<amdf_queue_command_type_t, uint32_t>> {
  protected:
+  amdf_queue_command_type_t command_type() const override {
+    return std::get<0>(GetParam());
+  }
+
   void SetUp() override {
     IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_, UINT64_MAX,
                                              AMDF_NATIVE_LIFETIME_PROCESS));
@@ -39,16 +47,19 @@ class GpuTsanTest : public GpuNativeTest,
       GTEST_SKIP() << "Native shader notification is unavailable";
     }
     context_->event_sink = {Publish, this};
-    const uint32_t gfx_major = context_->target_info.gfx_ip.major;
+    const auto gfx = context_->target_info.gfx_ip;
     const auto* files = iree_hal_amd_gpu_tsan_images_create();
-    const char* selector = gfx_major == 11 ? "gfx11-generic" : "gfx12-generic";
+    const char* selector = gfx.major == 9
+                               ? (gfx.minor == 4 ? "gfx9-4-generic" : "gfx90a")
+                           : gfx.major == 11 ? "gfx11-generic"
+                                             : "gfx12-generic";
     for (size_t i = 0; i < iree_hal_amd_gpu_tsan_images_size(); ++i) {
       if (std::strstr(files[i].name, selector)) {
         artifact_ = iree_make_const_byte_span(files[i].data, files[i].size);
       }
     }
     ASSERT_NE(artifact_.data, nullptr);
-    options_.tsan.memory.shadow_size = GetParam();
+    options_.tsan.memory.shadow_size = std::get<1>(GetParam());
   }
 
   void TearDown() override {
@@ -156,9 +167,9 @@ class GpuTsanTest : public GpuNativeTest,
         0));
   }
 
-  void Record(uint32_t pairs) {
+  void Record(uint32_t pairs, iree_hal_command_buffer_mode_t mode = 0) {
     IREE_ASSERT_OK(iree_hal_command_buffer_create(
-        iree_hal_queue_family(queues_[0]), 0,
+        iree_hal_queue_family(queues_[0]), mode,
         IREE_HAL_COMMAND_CATEGORY_DISPATCH, 0, &recording_));
     IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording_));
     for (uint32_t i = 0; i < pairs; ++i) {
@@ -246,6 +257,83 @@ TEST_P(GpuTsanTest, SharedRecordingSelectsQueueShadowAndJoinsArenaReuse) {
   }
 }
 
+TEST_P(GpuTsanTest,
+       RecordedSanitizerAndProfileSurviveQueueAcquisitionAndReuse) {
+  ASSERT_NO_FATAL_FAILURE(
+      Load(IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_REPORT_ONLY));
+  iree::hal::cts::TestProfileSink sink;
+  iree::hal::cts::TestProfileSinkInitialize(&sink);
+  iree::hal::cts::DeviceProfilingScope profile(device_);
+  IREE_ASSERT_OK(
+      profile.Begin(IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA,
+                    iree::hal::cts::TestProfileSinkAsBase(&sink)));
+  constexpr uint32_t kPairs = 2;
+  constexpr uint32_t kReuses = 3;
+  ASSERT_NO_FATAL_FAILURE(
+      Record(kPairs, IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_DISPATCH_METADATA));
+  for (uint64_t value = 1; value <= kReuses; ++value) {
+    iree::hal::cts::Ref<iree_hal_queue_t> acquired;
+    IREE_ASSERT_OK(AcquireQueue(acquired.out()));
+    IREE_ASSERT_OK(iree_hal_queue_execute(acquired, {}, {1, &done_[0], &value},
+                                          recording_, {}, 0));
+    acquired.reset();
+    IREE_ASSERT_OK(
+        iree_hal_semaphore_wait(done_[0], value, iree_infinite_timeout(), 0));
+    EXPECT_EQ(reports_.load(), value * kPairs * 3);
+    EXPECT_EQ(capacity_reports_.load(), 0u);
+    EXPECT_EQ(errors_.load(), 0u);
+    IREE_ASSERT_OK(iree_hal_device_profiling_flush(device_));
+    EXPECT_EQ(sink.code_objects.size(), 1u);
+    EXPECT_EQ(sink.code_object_loads.size(), 2 + value);
+  }
+  iree_hal_command_buffer_release(recording_);
+  recording_ = nullptr;
+  iree_hal_executable_release(executable_);
+  executable_ = nullptr;
+  IREE_ASSERT_OK(profile.End());
+  EXPECT_EQ(sink.code_object_loads.size(), 2 + kReuses);
+}
+
+TEST_P(GpuTsanTest, NewImageIncludesAlreadyAcquiredQueue) {
+  ASSERT_NO_FATAL_FAILURE(
+      Load(IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_REPORT_ONLY));
+  iree::hal::cts::Ref<iree_hal_queue_t> acquired;
+  IREE_ASSERT_OK(AcquireQueue(acquired.out()));
+  const auto* targets =
+      iree_hal_device_spec_executables(iree_hal_device_spec(device_));
+  iree_hal_executable_load_params_t params;
+  iree_hal_executable_load_params_initialize(&params);
+  params.executable_data = artifact_;
+  iree::hal::cts::Ref<iree_hal_executable_t> loaded;
+  IREE_ASSERT_OK(iree_hal_executable_load(iree_hal_queue_family(acquired),
+                                          &targets->targets[0], &params,
+                                          loaded.out()));
+  iree_hal_executable_function_t function;
+  IREE_ASSERT_OK(iree_hal_executable_lookup_function_by_name(
+      loaded, IREE_SV("report_race"), &function));
+  uint64_t value = 1;
+  IREE_ASSERT_OK(iree_hal_queue_dispatch(acquired, {}, {1, &done_[0], &value},
+                                         loaded, function, Config(), {}, {},
+                                         nullptr, 0));
+  IREE_ASSERT_OK(
+      iree_hal_semaphore_wait(done_[0], value, iree_infinite_timeout(), 0));
+  EXPECT_EQ(reports_.load(), 1u);
+  EXPECT_EQ(errors_.load(), 0u);
+  // Unlink the older image while the newer image and acquired queue remain
+  // live.
+  iree_hal_executable_release(executable_);
+  executable_ = nullptr;
+  acquired.reset();
+  IREE_ASSERT_OK(AcquireQueue(acquired.out()));
+  ++value;
+  IREE_ASSERT_OK(iree_hal_queue_dispatch(acquired, {}, {1, &done_[0], &value},
+                                         loaded, function, Config(), {}, {},
+                                         nullptr, 0));
+  acquired.reset();
+  EXPECT_EQ(reports_.load(), 2u);
+  EXPECT_EQ(errors_.load(), 0u);
+}
+
 TEST_P(GpuTsanTest, ProfileSharesOriginalImageAcrossQueuePlacements) {
   ASSERT_NO_FATAL_FAILURE(
       Load(IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_REPORT_ONLY));
@@ -308,7 +396,8 @@ TEST_P(GpuTsanTest, CapacityFailurePreservesStatusAndNativeRetirement) {
   ASSERT_FALSE(HasFatalFailure());
   // Only the first excess workgroup reports capacity; valid preceding
   // workgroups have disjoint data.
-  const uint32_t workgroups = GetParam() / kWorkgroupShadowStride + 1;
+  const uint32_t workgroups =
+      options_.tsan.memory.shadow_size / kWorkgroupShadowStride + 1;
   uint64_t value = 1;
   IREE_ASSERT_OK(iree_hal_queue_dispatch(
       queues_[0], iree_hal_semaphore_list_empty(), {1, &done_[0], &value},
@@ -417,10 +506,21 @@ TEST_P(GpuTsanTest, IndirectDispatchRelocatesPacketAndPreparationProgram) {
 
 // Each arena admits the three-workgroup replay cases while exercising
 // different capacity boundaries.
-INSTANTIATE_TEST_SUITE_P(ShadowBytes, GpuTsanTest,
-                         ::testing::Values(4 * kWorkgroupShadowStride,
-                                           8 * kWorkgroupShadowStride,
-                                           64 * kWorkgroupShadowStride));
+INSTANTIATE_TEST_SUITE_P(
+    ShadowBytes, GpuTsanTest,
+    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
+                       ::testing::Values(4 * kWorkgroupShadowStride,
+                                         8 * kWorkgroupShadowStride,
+                                         64 * kWorkgroupShadowStride)),
+    [](const ::testing::TestParamInfo<
+        std::tuple<amdf_queue_command_type_t, uint32_t>>& info) {
+      return std::string(std::get<0>(info.param) ==
+                                 AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                             ? "Aql"
+                             : "Pm4") +
+             std::to_string(std::get<1>(info.param));
+    });
 
 }  // namespace
 }  // namespace iree::hal::amd::gpu::cts

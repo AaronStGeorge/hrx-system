@@ -60,6 +60,9 @@ TEST(LinuxGpuMemoryProfileTest, InstanceLifetimeExposesOwnedSystemMemory) {
   EXPECT_EQ(profile.device_address.maximum_address, (UINT64_C(1) << 48) - 1);
   EXPECT_EQ(profile.host_mapping.byte_offset_granularity, 1u);
   EXPECT_EQ(profile.host_mapping.byte_length_granularity, 1u);
+  EXPECT_NE(
+      profile.host_mapping.features & AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS,
+      0u);
   EXPECT_EQ(profile.host_mapping.supported_access,
             AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE);
   ASSERT_EQ(profile.external_memory_support_count, 2u);
@@ -234,6 +237,9 @@ TEST(LinuxGpuMemoryProfileTest, ProcessLifetimeUsesDenseOptionalProfiles) {
   EXPECT_EQ(local_profile.allocation.minimum_alignment, 4096u);
   EXPECT_EQ(local_profile.host_mapping.supported_access,
             AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE);
+  EXPECT_EQ(local_profile.host_mapping.features &
+                AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS,
+            0u);
 
   const amdf_memory_native_profile_t registered_profile =
       QueryProfile(&device, 3);
@@ -1031,9 +1037,11 @@ TEST(LinuxGpuMemoryProfileTest, SystemSignalsPreserveIndependentSdmaPolicy) {
   ASSERT_EQ(endpoint.queue_family_count, 3u);
   const auto profile = QueryProfile(&device, 1);
   EXPECT_EQ(profile.atomic_operations_32,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+             AMDF_ATOMIC_OPERATION_ADD));
   EXPECT_EQ(profile.atomic_operations_64,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+             AMDF_ATOMIC_OPERATION_ADD));
   amdf_memory_site_query_t query = {
       .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
       .flags = profile.guaranteed_flags,
@@ -1089,9 +1097,11 @@ TEST(LinuxGpuMemoryProfileTest, SystemSignalsDoNotRequireSdma) {
   ASSERT_EQ(endpoint.queue_family_count, 2u);
   const auto profile = QueryProfile(&device, 1);
   EXPECT_EQ(profile.atomic_operations_32,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+             AMDF_ATOMIC_OPERATION_ADD));
   EXPECT_EQ(profile.atomic_operations_64,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+             AMDF_ATOMIC_OPERATION_ADD));
   const amdf_memory_site_query_t query = {
       .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
       .flags = profile.guaranteed_flags,
@@ -1122,9 +1132,11 @@ TEST(LinuxGpuMemoryProfileTest, SystemGroupSignalsRemainConsumerSpecific) {
   ASSERT_TRUE(unqualified_profile.construction.query_access(
       &unqualified_profile, &qualified_profile, &projected));
   EXPECT_EQ(projected.atomic_operations_32,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+             AMDF_ATOMIC_OPERATION_ADD));
   EXPECT_EQ(projected.atomic_operations_64,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+             AMDF_ATOMIC_OPERATION_ADD));
 
   unqualified.topology.memory_features = AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY;
   const auto local = QueryProfile(&unqualified, 2);
@@ -1176,7 +1188,7 @@ TEST(LinuxGpuMemoryProfileTest,
       AMDF_MEMORY_ACCESS_READ, AMDF_MEMORY_ACCESS_WRITE,
       AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE};
   // Compiler ISA is intentionally absent: it does not select SDMA cache policy.
-  for (uint32_t revision : {2u, 4u, 5u}) {
+  for (uint32_t revision : {0u, 2u, 4u, 5u}) {
     SCOPED_TRACE(revision);
     auto device = MakeLegacySdmaMemoryDevice();
     device.topology.sdma.ip.revision = revision;
@@ -1236,7 +1248,7 @@ TEST(LinuxGpuMemoryProfileTest,
 
 TEST(LinuxGpuMemoryProfileTest, LegacySdmaPolicyExcludesOtherNativeEngines) {
   const amdf_gpu_kfd_ip_version_t versions[] = {
-      {4, 4, 2, false}, {4, 4, 0, true}, {4, 4, 3, true}, {4, 4, 6, true},
+      {4, 4, 2, false}, {4, 4, 1, true}, {4, 4, 3, true}, {4, 4, 6, true},
       {4, 3, 2, true},  {5, 4, 2, true}, {6, 1, 1, true}, {7, 1, 0, true},
   };
   for (const auto& ip : versions) {
@@ -1332,14 +1344,20 @@ TEST(LinuxGpuMemoryProfileTest, LegacySdmaPreservesHostAperturePublication) {
   }
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemSignalsRequireNativeMappingAndCpuRoutes) {
+TEST(LinuxGpuMemoryProfileTest, SystemAtomicsRequireNativeMappingAndCpuRoutes) {
   const struct {
     // Native GC identity, independent of the compiler target spelling.
     amdf_gpu_kfd_ip_version_t gc;
-    // Whether owned coherent SYSTEM backing supports CP stores and wait loads.
-    bool supports_signals;
+    // Whether owned control backing supports CP stores, waits, and ADD.
+    bool supports_atomics;
   } cases[] = {
-      {{.major = 9, .minor = 4, .revision = 3, .exact = true}, false},
+      {{.major = 9, .minor = 0, .revision = 10, .exact = true}, true},
+      {{.major = 9, .minor = 4, .revision = 1, .exact = true}, true},
+      {{.major = 9, .minor = 4, .revision = 2, .exact = true}, true},
+      {{.major = 9, .minor = 4, .revision = 3, .exact = true}, true},
+      {{.major = 9, .minor = 4, .revision = 4, .exact = true}, true},
+      {{.major = 9, .minor = 5, .revision = 0, .exact = true}, true},
+      {{.major = 9, .minor = 4, .revision = 3, .exact = false}, false},
       {{.major = 11, .minor = 0, .revision = 0, .exact = true}, true},
       {{.major = 11, .minor = 5, .revision = 0, .exact = true}, true},
       {{.major = 11, .minor = 5, .revision = 1, .exact = true}, true},
@@ -1372,16 +1390,18 @@ TEST(LinuxGpuMemoryProfileTest, SystemSignalsRequireNativeMappingAndCpuRoutes) {
       for (uint32_t ordinal = 0; ordinal < 4; ++ordinal) {
         SCOPED_TRACE(ordinal);
         const auto profile = QueryProfile(&device, ordinal);
-        const bool native_mapping = ordinal == 1 && test_case.supports_signals;
+        const bool native_mapping = ordinal == 1 && test_case.supports_atomics;
         EXPECT_EQ(
             profile.atomic_operations_32,
             native_mapping && (widths & 1) != 0
-                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE)
+                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+                   AMDF_ATOMIC_OPERATION_ADD)
                 : 0u);
         EXPECT_EQ(
             profile.atomic_operations_64,
             native_mapping && (widths & 2) != 0
-                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE)
+                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+                   AMDF_ATOMIC_OPERATION_ADD)
                 : 0u);
       }
     }

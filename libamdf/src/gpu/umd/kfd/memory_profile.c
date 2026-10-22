@@ -66,13 +66,14 @@ static amdf_status_t amdf_gpu_kfd_sdma_local_describe_site(
   return amdf_gpu_kfd_sdma_describe_site(query, out_description);
 }
 
-// Linux selects sdma_v4_4_2 for these engines; ROCr uses its V4 no-GCR path
-// across CDNA. This is independent of compiler ISA and compute PTE MTYPE.
+// SDMA 4.4 uses the V4 no-GCR visibility path across CDNA. This is independent
+// of compiler ISA and compute PTE MTYPE.
 static bool amdf_gpu_kfd_supports_legacy_sdma_visibility(
     const amdf_gpu_kfd_topology_t* topology) {
   const amdf_gpu_kfd_ip_version_t* ip = &topology->sdma.ip;
   return ip->exact && ip->major == 4 && ip->minor == 4 &&
-         (ip->revision == 2 || ip->revision == 4 || ip->revision == 5);
+         (ip->revision == 0 || ip->revision == 2 || ip->revision == 4 ||
+          ip->revision == 5);
 }
 
 static bool amdf_gpu_kfd_supports_gfx1151_system_visibility(
@@ -222,7 +223,7 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
   };
   // Owned GTT uses CPU-cached TTM pages with snooped GPU PTEs. Host coherence
   // is independent of GPU MTYPE: payloads retain GPU caches while control
-  // backing requests KFD COHERENT (MTYPE_UC on GMC11).
+  // backing requests KFD UNCACHED.
   const bool control_system =
       memory_profile_ordinal == AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CONTROL;
   uint32_t ordinal = AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT;
@@ -253,6 +254,7 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.device_address = page_address;
     profile.allocation = allocation;
     profile.host_mapping = host_mapping;
+    profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
     profile.external_memory_support_count = 2;
     profile.external_memory_support[0] = (amdf_external_memory_support_t){
         .type = AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD,
@@ -270,21 +272,24 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
             AMDF_LINUX_DMA_BUF_DIRECT_HOST_PROVENANCE;
     profile.external_memory_support[1].flags &=
         ~AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_FOREIGN_API;
-    // GMC11 maps coherent pinned GTT as UC. GC12.0 CP atomics bypass GL2
-    // through MALL even when that GTT mapping is NC. Native CPU route widths
-    // supply the independent AtomicOps requirement for either mapping.
-    // Wait comparisons remain an independent queue capability.
+    // Control allocations request UC on GMC9/11/12. GC12.0 additionally routes
+    // CP atomics through MALL. Native CPU route widths supply the independent
+    // AtomicOps requirement; the uncached mapping alone does not establish it.
+    // PCIe supports integer ADD, unlike raw SUB/AND/OR/XOR. Wait comparisons
+    // remain an independent queue capability.
     const amdf_gpu_kfd_ip_version_t* gc = &topology->gc_ip;
     if (control_system && gc->exact &&
-        (gc->major == 11 ||
+        (gc->major == 9 || gc->major == 11 ||
          (gc->major == 12 && gc->minor == 0 && gc->revision <= 1))) {
       if (topology->host_atomics.supports_32) {
-        profile.atomic_operations_32 =
-            AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
+        profile.atomic_operations_32 = AMDF_ATOMIC_OPERATION_WAIT |
+                                       AMDF_ATOMIC_OPERATION_STORE |
+                                       AMDF_ATOMIC_OPERATION_ADD;
       }
       if (topology->host_atomics.supports_64) {
-        profile.atomic_operations_64 =
-            AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
+        profile.atomic_operations_64 = AMDF_ATOMIC_OPERATION_WAIT |
+                                       AMDF_ATOMIC_OPERATION_STORE |
+                                       AMDF_ATOMIC_OPERATION_ADD;
       }
     }
     profile.visibility.describe_site =
@@ -312,6 +317,10 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.allocation = allocation;
     if ((profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) != 0) {
       profile.host_mapping = host_mapping;
+      if (topology->integrated) {
+        profile.host_mapping.features |=
+            AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
+      }
     }
     if (amdf_gpu_kfd_supports_legacy_sdma_visibility(topology)) {
       profile.visibility.describe_site = amdf_gpu_kfd_sdma_local_describe_site;
@@ -334,6 +343,7 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.device_address.minimum_alignment = 1;
     profile.registration = registration;
     profile.host_mapping = host_mapping;
+    profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
   } else if (memory_profile_ordinal == ordinal &&
              topology->sdma.engine_count != 0) {
     // Owned host pools provide a fresh DMA-BUF for each attachment. Public

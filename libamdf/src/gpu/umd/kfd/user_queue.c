@@ -65,6 +65,8 @@ struct amdf_gpu_umd_user_queue_t {
   uint32_t queue_identifier;
   // Whether construction acquired a native queue, including identifier zero.
   bool queue_created;
+  // Whether insufficient scratch pauses for caller service instead of failing.
+  bool scratch_service;
   // Sticky native VM, provider, or firmware failure.
   amdf_atomic_uint64_t terminal_status;
 };
@@ -295,11 +297,26 @@ static bool amdf_gpu_kfd_user_queue_select_plan(
         (family->producer_modes & (1u << create_info->producer_mode)) != 0 &&
         (create_info->required_capabilities &
          ~family->user_queue_capabilities) == 0 &&
+        (create_info->placement == AMDF_QUEUE_PLACEMENT_DEFAULT ||
+         (create_info->placement <= AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL &&
+          (family->placement_capabilities & (1u << create_info->placement)) !=
+              0)) &&
         create_info->roles == family->roles &&
         (create_info->ring_byte_length == 0 ||
          (create_info->ring_byte_length >= family->minimum_ring_byte_length &&
           create_info->ring_byte_length <= family->maximum_ring_byte_length))) {
       *out_plan = *plan;
+      if (create_info->placement == AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL) {
+        out_plan->ring.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
+        if (!device->topology.integrated) {
+          out_plan->ring.storage.native_flags =
+              (out_plan->ring.storage.native_flags &
+               ~KFD_IOC_ALLOC_MEM_FLAGS_GTT) |
+              KFD_IOC_ALLOC_MEM_FLAGS_VRAM | KFD_IOC_ALLOC_MEM_FLAGS_PUBLIC |
+              KFD_IOC_ALLOC_MEM_FLAGS_UNCACHED;
+          out_plan->ring.host_publish_fence = AMDF_HOST_CACHE_FENCE_X86_SFENCE;
+        }
+      }
       if (create_info->ring_byte_length != 0) {
         out_plan->ring.primary_byte_length = create_info->ring_byte_length;
         out_plan->ring.storage.byte_length = create_info->ring_byte_length;
@@ -333,12 +350,19 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
 
   amdf_gpu_kfd_aql_descriptor_t aql_descriptor = {0};
   if (plan.aql.xcc_count != 0) {
+    if (create_info->inactive_event.format != 0 &&
+        (create_info->inactive_event.format !=
+             AMDF_GPU_EVENT_FORMAT_KFD_SIGNAL ||
+         create_info->inactive_event.format_version != 1)) {
+      return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+    }
     const amdf_status_t status = amdf_gpu_kfd_aql_descriptor_initialize(
         &plan, create_info, &aql_descriptor);
     if (!amdf_status_is_ok(status)) {
       return status;
     }
-  } else if (create_info->scratch.byte_length != 0) {
+  } else if (create_info->scratch.byte_length != 0 ||
+             create_info->scratch_service) {
     return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
   }
 
@@ -352,6 +376,7 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
   queue->device = device;
   queue->native_api = device->user_queue_native_api;
   queue->plan = plan;
+  queue->scratch_service = create_info->scratch_service;
   amdf_atomic_uint64_initialize(&queue->terminal_status, AMDF_STATUS_OK);
 
   status = amdf_gpu_kfd_user_queue_buffer_create(
@@ -404,6 +429,9 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
                                      queue->plan.aql
                                          .inactive_signal_byte_offset);
     inactive_signal->kind = 1;
+    inactive_signal->event_mailbox_address =
+        create_info->inactive_event.mailbox_address;
+    inactive_signal->event_id = create_info->inactive_event.interrupt_context;
     for (size_t offset = 0; offset < queue->plan.ring.primary_byte_length;
          offset += 64) {
       // Zero is a vendor packet, not an empty AQL slot.
@@ -487,6 +515,7 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
                         (queue->device_doorbell.native != NULL
                              ? AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER
                              : 0),
+        .placement = queue->plan.ring.placement,
         .ring_byte_length = queue->plan.ring.primary_byte_length,
         .metadata_ring_byte_length = queue->plan.ring.metadata_byte_length,
     };
@@ -531,6 +560,9 @@ amdf_status_t amdf_gpu_umd_user_queue_map(
                                           : (uintptr_t)queue->doorbell,
       .index_bits = queue->plan.control.index_bit_count,
       .doorbell_bits = queue->plan.doorbell.bit_count,
+      .host_publish_fence = device_producer
+                                ? AMDF_HOST_CACHE_FENCE_NONE
+                                : queue->plan.ring.host_publish_fence,
       .metadata_ring_address =
           queue->plan.ring.metadata_byte_length == 0
               ? 0
@@ -550,6 +582,189 @@ amdf_status_t amdf_gpu_umd_user_queue_mapping_destroy(
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
   return AMDF_STATUS_OK;
+}
+
+// Firmware's wave64 and wave32 insufficient-scratch notifications. Unrelated
+// error bits cannot become recoverable merely because scratch is insufficient.
+static bool amdf_gpu_kfd_aql_is_scratch_request(uint64_t value) {
+  return value != 0 && (value & ~UINT64_C(0x401)) == 0;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_query_scratch(
+    amdf_gpu_umd_user_queue_t* queue,
+    amdf_gpu_aql_scratch_request_t* out_request) {
+  if (!queue->scratch_service) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+  }
+  const amdf_status_t terminal_status =
+      amdf_atomic_uint64_load_acquire(&queue->terminal_status);
+  if (!amdf_status_is_ok(terminal_status)) {
+    return terminal_status;
+  }
+  const uint64_t inactive_value =
+      amdf_atomic_uint64_load_acquire(amdf_gpu_kfd_user_queue_control_value(
+          queue, queue->plan.aql.inactive_signal_byte_offset +
+                     offsetof(amdf_gpu_kfd_aql_signal_t, value)));
+  if (inactive_value == 0) {
+    *out_request = (amdf_gpu_aql_scratch_request_t){0};
+    return AMDF_STATUS_OK;
+  }
+  if (!amdf_gpu_kfd_aql_is_scratch_request(inactive_value)) {
+    return inactive_value > UINT32_MAX
+               ? amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL)
+               : amdf_make_status(AMDF_STATUS_DOMAIN_FIRMWARE,
+                                  (uint32_t)inactive_value);
+  }
+
+  // EOP handling may leave consumption before the requesting dispatch. Only
+  // this paused service path reads packet bodies; publication uses stores.
+  const uint64_t read_index = amdf_atomic_uint64_load_acquire(
+      amdf_gpu_kfd_user_queue_read_index(queue));
+  const uint64_t write_index = amdf_atomic_uint64_load_acquire(
+      amdf_gpu_kfd_user_queue_write_index(queue));
+  const uint64_t packet_count = queue->plan.ring.primary_byte_length / 64;
+  uint64_t count = write_index - read_index;
+  if (count > packet_count) {
+    count = packet_count;
+  }
+  for (uint64_t i = 0; i < count; ++i) {
+    const uint8_t* packet = (const uint8_t*)queue->ring.host_pointer +
+                            ((read_index + i) & (packet_count - 1)) * 64;
+    const uint32_t header =
+        __atomic_load_n((const uint32_t*)packet, __ATOMIC_ACQUIRE);
+    if ((header & 0xff) != 2) {
+      continue;  // KERNEL_DISPATCH.
+    }
+    uint32_t private_byte_length;
+    memcpy(&private_byte_length, packet + 24, sizeof(private_byte_length));
+    if (private_byte_length == 0) {
+      continue;
+    }
+    amdf_gpu_aql_scratch_request_t request;
+    const amdf_status_t status = amdf_gpu_kfd_aql_scratch_requirements(
+        &queue->plan, private_byte_length,
+        (inactive_value & 0x400) != 0 ? 32 : 64, &request);
+    if (!amdf_status_is_ok(status)) {
+      return status;
+    }
+    request.dispatch_index = read_index + i;
+    *out_request = request;
+    return AMDF_STATUS_OK;
+  }
+  return amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL);
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_resume_scratch(
+    amdf_gpu_umd_user_queue_t* queue,
+    const amdf_gpu_umd_queue_scratch_t* scratch) {
+  amdf_gpu_aql_scratch_request_t request;
+  amdf_status_t status = amdf_gpu_umd_user_queue_query_scratch(queue, &request);
+  if (!amdf_status_is_ok(status)) {
+    return status;
+  }
+  if (request.byte_length == 0) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION);
+  }
+  if (scratch->maximum_private_segment_byte_length <
+      request.private_segment_byte_length) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
+  }
+  const uint64_t alignment = UINT64_C(1)
+                             << queue->plan.aql.scratch.wave_size_shift;
+  const uint64_t wave_byte_length =
+      ((uint64_t)scratch->maximum_private_segment_byte_length *
+           request.wavefront_size +
+       alignment - 1) &
+      ~(alignment - 1);
+  status = amdf_gpu_kfd_aql_scratch_initialize(
+      &queue->plan, scratch, wave_byte_length,
+      (amdf_gpu_kfd_aql_descriptor_t*)queue->control.host_pointer);
+  if (!amdf_status_is_ok(status)) {
+    return status;
+  }
+  amdf_atomic_uint64_store_release(
+      amdf_gpu_kfd_user_queue_control_value(
+          queue, queue->plan.aql.inactive_signal_byte_offset +
+                     offsetof(amdf_gpu_kfd_aql_signal_t, value)),
+      0);
+  return AMDF_STATUS_OK;
+}
+
+// The caller has joined execution and excludes publication and service.
+// Disconnect/reconnect reloads descriptor fields cached by CP. A failed
+// native update cannot establish whether CP still reaches borrowed backing.
+static amdf_status_t amdf_gpu_kfd_user_queue_set_active(
+    amdf_gpu_umd_user_queue_t* queue, bool active) {
+  const struct kfd_ioctl_update_queue_args update = {
+      .ring_base_address = queue->ring.device_address,
+      .queue_id = queue->queue_identifier,
+      .ring_size = (uint32_t)queue->plan.ring.primary_byte_length,
+      .queue_percentage = active ? KFD_MAX_QUEUE_PERCENTAGE : 0,
+      .queue_priority = 7,
+  };
+  const amdf_status_t status = queue->native_api->queue_update(
+      queue->native_api->user_data, queue->device, &update);
+  if (!amdf_status_is_ok(status)) {
+    amdf_gpu_kfd_user_queue_record_failure(queue, status);
+  }
+  return status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_trim_scratch(
+    amdf_gpu_umd_user_queue_t* queue) {
+  if (!queue->scratch_service) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+  }
+  amdf_status_t status =
+      amdf_atomic_uint64_load_acquire(&queue->terminal_status);
+  if (!amdf_status_is_ok(status)) {
+    return status;
+  }
+  amdf_gpu_kfd_aql_descriptor_t* descriptor = queue->control.host_pointer;
+  if (descriptor->scratch_wave64_lane_byte_length == 0) {
+    return AMDF_STATUS_OK;
+  }
+  status = amdf_gpu_kfd_user_queue_set_active(queue, false);
+  if (amdf_status_is_ok(status)) {
+    descriptor->compute_temporary_ring_size = 0;
+    memcpy(descriptor->scratch_resource_descriptor,
+           queue->plan.aql.scratch.resource_descriptor,
+           sizeof(descriptor->scratch_resource_descriptor));
+    descriptor->scratch_backing_address = 0;
+    descriptor->scratch_wave64_lane_byte_length = 0;
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    status = amdf_gpu_kfd_user_queue_set_active(queue, true);
+  }
+  return status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_set_dispatch_timestamps(
+    amdf_gpu_umd_user_queue_t* queue, bool enabled) {
+  amdf_status_t status =
+      amdf_atomic_uint64_load_acquire(&queue->terminal_status);
+  if (!amdf_status_is_ok(status)) {
+    return status;
+  }
+  amdf_gpu_kfd_aql_descriptor_t* descriptor = queue->control.host_pointer;
+  const uint32_t properties =
+      (descriptor->queue_properties & ~(1u << 3)) | (enabled ? (1u << 3) : 0);
+  if (properties == descriptor->queue_properties) {
+    return AMDF_STATUS_OK;
+  }
+  // Before the first publication CP has not cached the packet-processing
+  // properties. A previously used queue must reload them even when idle.
+  const bool reload = descriptor->write_dispatch_id != 0;
+  if (reload) {
+    status = amdf_gpu_kfd_user_queue_set_active(queue, false);
+  }
+  if (amdf_status_is_ok(status)) {
+    descriptor->queue_properties = properties;
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    if (reload) {
+      status = amdf_gpu_kfd_user_queue_set_active(queue, true);
+    }
+  }
+  return status;
 }
 
 amdf_status_t amdf_gpu_umd_user_queue_query_status(
@@ -579,9 +794,11 @@ amdf_status_t amdf_gpu_umd_user_queue_query_status(
         amdf_atomic_uint64_load_acquire(amdf_gpu_kfd_user_queue_control_value(
             queue, queue->plan.aql.inactive_signal_byte_offset +
                        offsetof(amdf_gpu_kfd_aql_signal_t, value)));
-    if (inactive_value != 0) {
-      // Fixed scratch never services firmware grow/reclaim requests. Preserve
-      // the native CP reason for the caller, including insufficient scratch.
+    if (inactive_value != 0 &&
+        !(queue->scratch_service &&
+          amdf_gpu_kfd_aql_is_scratch_request(inactive_value))) {
+      // Only opted-in scratch requests are recoverable. Preserve every other
+      // native CP reason, including insufficient scratch on fixed queues.
       terminal_status = inactive_value > UINT32_MAX
                             ? amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL)
                             : amdf_make_status(AMDF_STATUS_DOMAIN_FIRMWARE,

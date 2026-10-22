@@ -9,20 +9,20 @@
 #include <atomic>
 #include <cstring>
 #include <semaphore>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "iree/async/frontier_tracker.h"
-#include "iree/async/util/proactor_pool.h"
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/amd/fabric/fabric.h"
 #include "iree/hal/drivers/amd/gpu/cts/test_device.h"
 #include "iree/hal/drivers/amd/gpu/device.h"
 #include "iree/hal/drivers/amd/gpu/image/hip_images.h"
-#include "iree/hal/drivers/amd/gpu/queue/pm4/semaphore.h"
-#include "iree/hal/drivers/amd/gpu/queue/pm4/signal.h"
-#include "iree/hal/drivers/amd/registration/driver_module.h"
+#include "iree/hal/drivers/amd/gpu/queue/semaphore.h"
+#include "iree/hal/drivers/amd/gpu/queue/signal.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/hal/memory/fixed_block_pool.h"
 #include "iree/hal/slab_pool.h"
@@ -33,7 +33,6 @@ namespace {
 
 IREE_ASYNC_FIXED_FRONTIER_TYPE(CompletedFrontier, 2);
 
-using iree::hal::amd::gpu::cts::DeviceAllocator;
 using iree::hal::amd::gpu::cts::GpuNativeTest;
 
 TEST_F(GpuNativeTest, TrimReleasesUnusedCaptureCache) {
@@ -48,7 +47,7 @@ TEST_F(GpuNativeTest, TrimReleasesUnusedCaptureCache) {
   const size_t before = allocator_.live_count.load();
   IREE_ASSERT_OK(iree_hal_device_trim(device_));
   EXPECT_EQ(allocator_.live_count.load(),
-            before - options_.queue_count * options_.pm4.capture_block_count);
+            before - options_.queue_count * options_.queue.capture_block_count);
   iree_hal_semaphore_t* done = nullptr;
   CreateSemaphore(&done);
   uint64_t value = 1;
@@ -61,8 +60,13 @@ TEST_F(GpuNativeTest, TrimReleasesUnusedCaptureCache) {
 }
 
 class GpuNativeTransferTest : public GpuNativeTest,
-                              public ::testing::WithParamInterface<bool> {
+                              public ::testing::WithParamInterface<
+                                  std::pair<amdf_queue_command_type_t, bool>> {
  protected:
+  amdf_queue_command_type_t command_type() const override {
+    return GetParam().first;
+  }
+
   void SetUp() override {
     GpuNativeTest::SetUp();
     if (HasFatalFailure() || IsSkipped()) {
@@ -71,9 +75,9 @@ class GpuNativeTransferTest : public GpuNativeTest,
     // Start with small staging, retirement, and primary-ring capacities. Bulk
     // transfers must grow staging and reuse it through native completion
     // events.
-    options_.pm4.ring_byte_length = 4096;
-    options_.pm4.retirement_capacity = 4;
-    options_.pm4.argument_capacity = 1024;
+    options_.queue.ring_byte_length = 4096;
+    options_.queue.retirement_capacity = 4;
+    options_.queue.argument_capacity = 1024;
     Create();
     if (HasFatalFailure()) {
       return;
@@ -91,6 +95,19 @@ class GpuNativeTransferTest : public GpuNativeTest,
     iree_hal_slab_pool_options_initialize(&options);
     IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &options,
                                              iree_allocator_system(), &pool_));
+    iree_hal_memory_scope_t queue_scope;
+    IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
+        group_, {IREE_HAL_MEMORY_SITE_QUEUE, access.family}, &queue_scope));
+    const auto transition =
+        iree_hal_pool_query_transition(pool_, queue_scope, queue_scope);
+    ASSERT_TRUE(iree_hal_memory_effects_is_supported(transition.release));
+    ASSERT_TRUE(iree_hal_memory_effects_is_supported(transition.acquire));
+    ASSERT_FALSE(
+        iree_hal_memory_effects_requires_resources(transition.release));
+    ASSERT_FALSE(
+        iree_hal_memory_effects_requires_resources(transition.acquire));
+    acquire_.effects = transition.acquire;
+    release_.effects = transition.release;
     for (auto& buffer : buffers_) {
       IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
           pool_, iree_hal_make_pool_reservation_request(kLength, 4),
@@ -116,9 +133,7 @@ class GpuNativeTransferTest : public GpuNativeTest,
   }
 
   const iree_hal_queue_barriers_t* Barriers() {
-    static const iree_hal_barrier_list_t empty = {};
-    static const iree_hal_queue_barriers_t barriers = {&empty, &empty};
-    return GetParam() ? &barriers : nullptr;
+    return GetParam().second ? &barriers_ : nullptr;
   }
 
   void Wait(uint64_t value) {
@@ -136,13 +151,24 @@ class GpuNativeTransferTest : public GpuNativeTest,
   iree_hal_semaphore_t* timeline_ = nullptr;
   // Host-controlled readiness for borrowed uploads and captured updates.
   iree_hal_semaphore_t* gate_ = nullptr;
+  // Exact pool transitions between shader or copy-engine accesses. An empty
+  // payload boundary is valid only when the queried transition is empty.
+  iree_hal_barrier_t acquire_ = {};
+  // Publishes every transfer in the batch before its completion semaphore.
+  iree_hal_barrier_t release_ = {};
+  // Stable descriptors shared by concurrent submitting threads.
+  iree_hal_barrier_list_t before_ = {1, &acquire_};
+  // Stable producer boundary paired with before_.
+  iree_hal_barrier_list_t after_ = {1, &release_};
+  // Explicit qualified alternatives to conservative default boundaries.
+  iree_hal_queue_barriers_t barriers_ = {&before_, &after_};
 };
 
 class GpuNativeRecordedTransferTest : public GpuNativeTransferTest {
  protected:
   iree_hal_buffer_ref_t Reference(size_t index, uint64_t offset,
                                   uint64_t length) {
-    return GetParam()
+    return GetParam().second
                ? iree_hal_make_indirect_buffer_ref(index + 1, offset, length)
                : iree_hal_make_buffer_ref(buffers_[index], offset, length);
   }
@@ -158,7 +184,8 @@ TEST_P(GpuNativeRecordedTransferTest,
   iree_hal_command_buffer_t* recording = nullptr;
   IREE_ASSERT_OK(iree_hal_command_buffer_create(
       iree_hal_queue_family(queues_[0]), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
-      IREE_HAL_COMMAND_CATEGORY_TRANSFER, GetParam() ? 3 : 0, &recording));
+      IREE_HAL_COMMAND_CATEGORY_TRANSFER, GetParam().second ? 3 : 0,
+      &recording));
   IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording));
   const iree_hal_barrier_t acquire = {
       .source_stage_mask = IREE_HAL_EXECUTION_STAGE_COMMAND_ISSUE,
@@ -214,11 +241,11 @@ TEST_P(GpuNativeRecordedTransferTest,
   bindings[2] = {buffers_[1], 0, IREE_HAL_WHOLE_BUFFER};
   IREE_ASSERT_OK(iree_hal_queue_execute(
       queues_[0], {1, &gate_, &one}, {1, &timeline_, &one}, recording,
-      {GetParam() ? bindings.size() : 0, bindings.data()}, 0));
+      {GetParam().second ? bindings.size() : 0, bindings.data()}, 0));
   std::swap(bindings[1], bindings[2]);
   IREE_ASSERT_OK(iree_hal_queue_execute(
       queues_[1], {1, &timeline_, &one}, {1, &timeline_, &two}, recording,
-      {GetParam() ? bindings.size() : 0, bindings.data()}, 0));
+      {GetParam().second ? bindings.size() : 0, bindings.data()}, 0));
   bindings.fill({});
   iree_hal_command_buffer_release(recording);
   std::vector<uint8_t> downloaded(kLength, 0xCC);
@@ -226,7 +253,7 @@ TEST_P(GpuNativeRecordedTransferTest,
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
       .download =
           {
-              .source_buffer = buffers_[GetParam() ? 0 : 1],
+              .source_buffer = buffers_[GetParam().second ? 0 : 1],
               .target = downloaded.data(),
               .length = kLength,
           },
@@ -240,8 +267,86 @@ TEST_P(GpuNativeRecordedTransferTest,
   EXPECT_EQ(downloaded, expected);
 }
 
-INSTANTIATE_TEST_SUITE_P(BindingMode, GpuNativeRecordedTransferTest,
-                         ::testing::Values(false, true));
+TEST_P(GpuNativeRecordedTransferTest,
+       InterleavedDirectAndResidentTransfersPreserveEveryResult) {
+  constexpr uint32_t kCount = 128;
+  iree_hal_command_buffer_t* recording = nullptr;
+  IREE_ASSERT_OK(iree_hal_command_buffer_create(
+      iree_hal_queue_family(queues_[0]), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+      IREE_HAL_COMMAND_CATEGORY_TRANSFER, GetParam().second ? 3 : 0,
+      &recording));
+  IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording));
+  const iree_hal_barrier_t acquire = {
+      .source_stage_mask = IREE_HAL_EXECUTION_STAGE_COMMAND_ISSUE,
+      .target_stage_mask = IREE_HAL_EXECUTION_STAGE_TRANSFER,
+      .flags = IREE_HAL_BARRIER_FLAG_ACQUIRE_SYSTEM_SCOPE,
+  };
+  IREE_ASSERT_OK(iree_hal_command_buffer_barrier(recording, &acquire));
+  IREE_ASSERT_OK(iree_hal_command_buffer_copy_buffer(
+      recording, Reference(0, 0, 4), Reference(1, 0, 4), 0));
+  const iree_hal_barrier_t release = {
+      .source_stage_mask = IREE_HAL_EXECUTION_STAGE_TRANSFER,
+      .target_stage_mask = IREE_HAL_EXECUTION_STAGE_COMMAND_RETIRE,
+      .flags = IREE_HAL_BARRIER_FLAG_RELEASE_SYSTEM_SCOPE,
+  };
+  IREE_ASSERT_OK(iree_hal_command_buffer_barrier(recording, &release));
+  IREE_ASSERT_OK(iree_hal_command_buffer_end(recording));
+  std::array<iree_hal_buffer_binding_t, 3> bindings = {};
+  bindings[1] = {buffers_[0], 0, IREE_HAL_WHOLE_BUFFER};
+  bindings[2] = {buffers_[1], 0, IREE_HAL_WHOLE_BUFFER};
+  // One caller publishes ahead without a host wait. Small native capacities
+  // force wrap and retirement reuse while direct and GPU-produced packets
+  // share the FIFO. Each direct copy preserves its preceding resident result.
+  for (uint32_t i = 0; i < kCount; ++i) {
+    const uint32_t pattern = 0xCAFE0000u + i;
+    uint64_t before = i * 3, filled = before + 1, executed = before + 2,
+             copied = before + 3;
+    IREE_ASSERT_OK(iree_hal_queue_fill(
+        queues_[0], {i ? 1u : 0u, &timeline_, &before},
+        {1, &timeline_, &filled}, buffers_[0], 0, 4, &pattern, 4, nullptr, 0));
+    IREE_ASSERT_OK(iree_hal_queue_execute(
+        queues_[0], {1, &timeline_, &filled}, {1, &timeline_, &executed},
+        recording, {GetParam().second ? bindings.size() : 0, bindings.data()},
+        0));
+    IREE_ASSERT_OK(iree_hal_queue_copy(
+        queues_[0], {1, &timeline_, &executed}, {1, &timeline_, &copied},
+        buffers_[1], 0, buffers_[1], (i + 1) * 4, 4, nullptr, 0));
+  }
+  iree_hal_command_buffer_release(recording);
+  std::array<uint32_t, kCount> output = {};
+  const iree_hal_transfer_operation_t download = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      .download =
+          {
+              .source_buffer = buffers_[1],
+              .source_offset = 4,
+              .target = output.data(),
+              .length = sizeof(output),
+          },
+  };
+  uint64_t before = kCount * 3, downloaded = before + 1;
+  IREE_ASSERT_OK(iree_hal_queue_transfer(queues_[0], {1, &timeline_, &before},
+                                         {1, &timeline_, &downloaded}, 1,
+                                         &download, nullptr));
+  ReleaseBuffers();
+  Wait(downloaded);
+  for (uint32_t i = 0; i < kCount; ++i) {
+    EXPECT_EQ(output[i], 0xCAFE0000u + i) << i;
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    BindingMode, GpuNativeRecordedTransferTest,
+    ::testing::Values(std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, false),
+                      std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, true),
+                      std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, false),
+                      std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, true)),
+    [](const auto& info) {
+      return std::string(info.param.first == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                             ? "Aql"
+                             : "Pm4") +
+             (info.param.second ? "Table" : "Direct");
+    });
 
 TEST_P(GpuNativeTransferTest, CapturedUpdatesAndDeferredHostTransfers) {
   std::vector<uint8_t> update(kLength), upload(kLength, 0);
@@ -373,6 +478,32 @@ TEST_P(GpuNativeTransferTest,
 }
 
 TEST_P(GpuNativeTransferTest,
+       HostStagingVisibilityIsIndependentOfPayloadBoundaries) {
+  const iree_hal_barrier_list_t empty = {};
+  const iree_hal_queue_barriers_t upload_barriers = {
+      GetParam().second ? &empty : nullptr, &after_};
+  const iree_hal_queue_barriers_t download_barriers = {
+      &before_, GetParam().second ? &empty : nullptr};
+  std::vector<uint8_t> source(kLength), target(kLength, 0xCC);
+  for (size_t i = 0; i < source.size(); ++i) {
+    source[i] = static_cast<uint8_t>((i * 31) ^ (i >> 8));
+  }
+  uint64_t uploaded = 1, downloaded = 2;
+  // Optional payload boundaries cover only the device-to-device handoff.
+  // Upload still acquires its host staging, and download still publishes its
+  // staging before the retirement worker reads it.
+  IREE_ASSERT_OK(iree_hal_queue_upload(
+      queues_[0], {}, {1, &timeline_, &uploaded}, source.data(), buffers_[0], 0,
+      source.size(), &upload_barriers));
+  IREE_ASSERT_OK(iree_hal_queue_download(
+      queues_[1], {1, &timeline_, &uploaded}, {1, &timeline_, &downloaded},
+      buffers_[0], 0, target.data(), target.size(), &download_barriers));
+  ReleaseBuffers();
+  Wait(downloaded);
+  EXPECT_EQ(target, source);
+}
+
+TEST_P(GpuNativeTransferTest,
        ConcurrentTransfersResumeAfterStagingCapacityReturns) {
   using iree::hal::cts::Ref;
   constexpr size_t kLaneCount = 8;
@@ -414,8 +545,10 @@ TEST_P(GpuNativeTransferTest,
         IREE_ASSERT_OK(iree_hal_queue_download(
             queues_[0], {1, &timeline, &uploaded}, {1, &timeline, &downloaded},
             buffers[lane], 3, target.data() + 1, kTransferLength, barriers));
-        IREE_ASSERT_OK(iree_hal_semaphore_wait(timeline, downloaded,
-                                               iree_infinite_timeout(), 0));
+        IREE_ASSERT_OK(iree_hal_semaphore_wait(
+            timeline, downloaded, iree_infinite_timeout(),
+            (lane + iteration) & 1 ? IREE_ASYNC_WAIT_FLAG_ACTIVE
+                                   : IREE_ASYNC_WAIT_FLAG_NONE));
         EXPECT_EQ(target.front(), 0xCC);
         EXPECT_EQ(target.back(), 0xCC);
         EXPECT_EQ(
@@ -521,17 +654,28 @@ TEST_P(GpuNativeTransferTest, ZeroLengthOperationsAreOnlyABarrier) {
       {.type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD, .download = {}},
   };
   uint64_t value = 1;
+  const iree_hal_barrier_list_t empty = {};
+  const iree_hal_queue_barriers_t barriers = {&empty, &empty};
   IREE_ASSERT_OK(iree_hal_queue_transfer(
       queues_[0], {1, &gate_, &value}, {1, &timeline_, &value},
-      IREE_ARRAYSIZE(operations), operations, Barriers()));
+      IREE_ARRAYSIZE(operations), operations,
+      GetParam().second ? &barriers : nullptr));
   IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, value, nullptr));
   Wait(value);
 }
 
-INSTANTIATE_TEST_SUITE_P(Boundaries, GpuNativeTransferTest, ::testing::Bool(),
-                         [](const ::testing::TestParamInfo<bool>& info) {
-                           return info.param ? "ExplicitEmpty" : "Default";
-                         });
+INSTANTIATE_TEST_SUITE_P(
+    Boundaries, GpuNativeTransferTest,
+    ::testing::Values(std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, false),
+                      std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, true),
+                      std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, false),
+                      std::make_pair(AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, true)),
+    [](const auto& info) {
+      return std::string(info.param.first == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                             ? "Aql"
+                             : "Pm4") +
+             (info.param.second ? "Explicit" : "Default");
+    });
 
 class GpuNativeAllocationTest : public GpuNativeTest {
  protected:
@@ -772,7 +916,7 @@ TEST_F(GpuNativeAllocationTest, RecycledBatchJoinsIndependentOwnerFrontiers) {
   }
 }
 
-TEST_F(GpuNativeAllocationTest, ReleaseTransactionSpansIndependentPools) {
+TEST_F(GpuNativeAllocationTest, RejectedReleasePreservesIndependentPools) {
   std::array<iree_hal_pool_t*, 2> pools = {};
   for (auto& pool : pools) {
     CreateFinitePool(&pool);
@@ -783,25 +927,38 @@ TEST_F(GpuNativeAllocationTest, ReleaseTransactionSpansIndependentPools) {
   const auto request = iree_hal_make_pool_reservation_request(4096, 4);
   std::array<iree_hal_buffer_t*, 2> roots = {};
   std::array<uint64_t, 2> values = {1, 1};
+  uint64_t one = 1;
   for (size_t i = 0; i < roots.size(); ++i) {
-    IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[i], {},
+    IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[i], {1, &semaphores_[3], &one},
                                          {1, &semaphores_[i], &values[i]},
                                          pools[i], 1, &request, &roots[i]));
   }
-  uint64_t one = 1;
-  IREE_ASSERT_OK(iree_hal_queue_dealloca(
-      queues_[0], {2, semaphores_.data(), values.data()},
-      {1, &semaphores_[2], &one}, roots.size(), roots.data()));
-  for (auto* root : roots) {
-    iree_hal_buffer_release(root);
-  }
-  Wait(semaphores_[2]);
-  for (auto* pool : pools) {
+  const iree_hal_semaphore_list_t rejected_signal = {1, &semaphores_[2], &one};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        iree_hal_queue_dealloca(
+                            queues_[0], {2, semaphores_.data(), values.data()},
+                            rejected_signal, roots.size(), roots.data()));
+  EXPECT_FALSE(iree_hal_semaphore_list_poll(rejected_signal));
+
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(semaphores_[3], one, nullptr));
+  uint64_t two = 2;
+  for (size_t i = 0; i < roots.size(); ++i) {
+    Wait(semaphores_[i]);
     iree_hal_pool_stats_t stats;
-    iree_hal_pool_query_stats(pool, &stats);
+    iree_hal_pool_query_stats(pools[i], &stats);
+    EXPECT_EQ(stats.reservation_count, 1u);
+    EXPECT_NE(iree_hal_buffer_native_binding(roots[i], slot_).device_address,
+              0u);
+    IREE_ASSERT_OK(
+        iree_hal_queue_dealloca(queues_[i], {1, &semaphores_[i], &one},
+                                {1, &semaphores_[i], &two}, 1, &roots[i]));
+    iree_hal_buffer_release(roots[i]);
+    Wait(semaphores_[i], two);
+    iree_hal_pool_query_stats(pools[i], &stats);
     EXPECT_EQ(stats.reservation_count, 0u);
-    iree_hal_pool_release(pool);
+    iree_hal_pool_release(pools[i]);
   }
+  EXPECT_FALSE(iree_hal_semaphore_list_poll(rejected_signal));
 }
 
 TEST_F(GpuNativeAllocationTest, RejectedBatchLeavesOutputsAndPoolUntouched) {
@@ -981,7 +1138,7 @@ TEST_F(GpuNativeTest, FinalReleaseAfterFailedAcceptedWait) {
 }
 
 TEST_F(GpuNativeTest, FailedQueueConstructionReleasesItsOwners) {
-  options_.pm4.argument_capacity = 0;
+  options_.queue.argument_capacity = 0;
   auto params = iree_hal_device_create_params_default();
   params.proactor_pool = proactors_;
   auto* context = context_;
@@ -994,6 +1151,8 @@ TEST_F(GpuNativeTest, FailedQueueConstructionReleasesItsOwners) {
   EXPECT_EQ(device_, nullptr);
   EXPECT_EQ(allocator_.live_count.load(), 0u);
 }
+
+using iree::hal::amd::gpu::cts::CompletionPause;
 
 TEST_F(GpuNativeTest, NativeConsumerPreservesProducerRetirementFailure) {
   const void* native_domain = context_;
@@ -1014,44 +1173,9 @@ TEST_F(GpuNativeTest, NativeConsumerPreservesProducerRetirementFailure) {
   // A public completion callback holds the device's single completion owner.
   // Native submission remains live, so both operations below can reach the
   // hardware before any host observer retires the producer.
-  struct CompletionPause {
-    // Borrowed timeline owning timepoint enrollment.
-    iree_async_semaphore_t* semaphore;
-    // Stack callback storage, joined before leaving this scope.
-    iree_async_semaphore_timepoint_t timepoint = {};
-    // Callback entry, observed before submitting the native dependency chain.
-    std::binary_semaphore entered{0};
-    // Releases the callback after the producer's public timeline fails.
-    std::binary_semaphore proceed{0};
-    // Joins the callback's final stack access.
-    std::binary_semaphore finished{0};
-    // Successful enrollment still requiring cancellation or callback joining.
-    bool enrolled = false;
-    void Join() {
-      if (enrolled &&
-          !iree_async_semaphore_cancel_timepoint(semaphore, &timepoint)) {
-        proceed.release();
-        finished.acquire();
-      }
-      enrolled = false;
-    }
-    ~CompletionPause() { Join(); }
-  } pause{reinterpret_cast<iree_async_semaphore_t*>(paused_handle)};
-  pause.timepoint = {
-      .callback =
-          [](void* user_data, iree_async_semaphore_timepoint_t*,
-             iree_status_t status) {
-            auto* pause = static_cast<CompletionPause*>(user_data);
-            IREE_EXPECT_OK(status);
-            pause->entered.release();
-            pause->proceed.acquire();
-            pause->finished.release();
-          },
-      .user_data = &pause,
-  };
-  IREE_ASSERT_OK(iree_async_semaphore_acquire_timepoint(pause.semaphore, one,
-                                                        &pause.timepoint));
-  pause.enrolled = true;
+  CompletionPause pause{
+      reinterpret_cast<iree_async_semaphore_t*>(paused_handle)};
+  IREE_ASSERT_OK(pause.Arm(one));
   IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {},
                                         {1, &paused_handle, &one}, nullptr, 0));
   pause.entered.acquire();
@@ -1062,11 +1186,11 @@ TEST_F(GpuNativeTest, NativeConsumerPreservesProducerRetirementFailure) {
                                         0));
   // A published native consumer proves the dependency was admitted without
   // waiting on the producer's host timeline, which is still held above.
-  iree_hal_amd_gpu_pm4_semaphore_wait_t published = {};
-  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
+  iree_hal_amd_gpu_semaphore_wait_t published = {};
+  IREE_ASSERT_OK(iree_hal_amd_gpu_semaphore_acquire_wait(
       consumer, one, native_domain, &published));
-  EXPECT_EQ(published.state, IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_NATIVE);
-  iree_hal_amd_gpu_pm4_signal_release(published.signal);
+  EXPECT_EQ(published.state, IREE_HAL_AMD_GPU_SEMAPHORE_WAIT_NATIVE);
+  iree_hal_amd_gpu_signal_release(published.signal);
   iree_hal_semaphore_fail(
       producer, iree_make_status(IREE_STATUS_ABORTED, "producer failed"));
   pause.Join();
@@ -1182,10 +1306,15 @@ class GpuNativeMemoryProgressTest : public GpuNativeAllocationTest {
 
 class GpuNativeRecordingProgressTest
     : public GpuNativeMemoryProgressTest,
-      public ::testing::WithParamInterface<bool> {
+      public ::testing::WithParamInterface<
+          std::pair<amdf_queue_command_type_t, bool>> {
  protected:
+  amdf_queue_command_type_t command_type() const override {
+    return GetParam().first;
+  }
+
   void SetUp() override {
-    if (GetParam()) {
+    if (GetParam().second) {
       memory_gate_.RequireCodeUpload();
     }
     GpuNativeMemoryProgressTest::SetUp();
@@ -1256,8 +1385,145 @@ TEST_P(GpuNativeRecordingProgressTest,
   Wait(semaphores_[2], two);
 }
 
-INSTANTIATE_TEST_SUITE_P(LocalPublication, GpuNativeRecordingProgressTest,
-                         ::testing::Bool());
+TEST_P(GpuNativeRecordingProgressTest,
+       RecordedResourcesRetireWhileUnusedCloneAllocationIsHeld) {
+  using iree::hal::cts::Ref;
+  const auto request = iree_hal_make_pool_reservation_request(4096, 4);
+  uint64_t one = 1;
+  Ref<iree_hal_buffer_t> output;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], {},
+                                       {1, &semaphores_[0], &one}, pool_, 1,
+                                       &request, output.out()));
+  Wait(semaphores_[0]);
+  Ref<iree_hal_command_buffer_t> recording;
+  IREE_ASSERT_OK(iree_hal_command_buffer_create(
+      iree_hal_queue_family(queues_[0]), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+      IREE_HAL_COMMAND_CATEGORY_TRANSFER, 0, recording.out()));
+  IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording));
+  const uint32_t pattern = 0x1234CAFE;
+  IREE_ASSERT_OK(iree_hal_command_buffer_fill_buffer(
+      recording, iree_hal_make_buffer_ref(output, 0, 16), &pattern,
+      sizeof(pattern), 0));
+  const iree_hal_barrier_t release = {
+      .source_stage_mask = IREE_HAL_EXECUTION_STAGE_TRANSFER,
+      .target_stage_mask = IREE_HAL_EXECUTION_STAGE_COMMAND_RETIRE,
+      .flags = IREE_HAL_BARRIER_FLAG_RELEASE_SYSTEM_SCOPE,
+  };
+  IREE_ASSERT_OK(iree_hal_command_buffer_barrier(recording, &release));
+  IREE_ASSERT_OK(iree_hal_command_buffer_end(recording));
+
+  CompletionPause pause{
+      reinterpret_cast<iree_async_semaphore_t*>(semaphores_[3])};
+  IREE_ASSERT_OK(pause.Arm(one));
+  IREE_ASSERT_OK(iree_hal_queue_barrier(
+      queues_[0], {}, {1, &semaphores_[3], &one}, nullptr, 0));
+  pause.entered.acquire();
+  IREE_ASSERT_OK(iree_hal_queue_execute(
+      queues_[0], {}, {1, &semaphores_[1], &one}, recording, {}, 0));
+  {
+    // The first invocation owns the initial instance until host retirement.
+    // An independent queue requests a clone; returned capacity must let it
+    // finish while that unnecessary native allocation remains blocked.
+    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold hold(&memory_gate_);
+    IREE_ASSERT_OK(iree_hal_queue_execute(
+        queues_[1], {}, {1, &semaphores_[2], &one}, recording, {}, 0));
+    hold.WaitEntered();
+    recording.reset();
+    pause.Join();
+    Wait(semaphores_[1]);
+    Wait(semaphores_[2]);
+    EXPECT_EQ(iree_atomic_ref_count_load(&output.get()->resource.ref_count), 1);
+  }
+  std::array<uint32_t, 4> observed = {};
+  const iree_hal_transfer_operation_t download = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      .download =
+          {
+              .source_buffer = output,
+              .target = observed.data(),
+              .length = sizeof(observed),
+          },
+  };
+  uint64_t two = 2;
+  IREE_ASSERT_OK(iree_hal_queue_transfer(queues_[1], {1, &semaphores_[2], &one},
+                                         {1, &semaphores_[2], &two}, 1,
+                                         &download, nullptr));
+  Wait(semaphores_[2], two);
+  for (uint32_t value : observed) {
+    EXPECT_EQ(value, pattern);
+  }
+  // The original recording and both invocations have gone. The unused clone
+  // and its final program reference are joined by ordinary device teardown.
+}
+
+TEST_P(GpuNativeRecordingProgressTest,
+       RejectedInvocationReleasesResourcesBeforeFailureNotification) {
+  using iree::hal::cts::Ref;
+  const auto request = iree_hal_make_pool_reservation_request(4096, 4);
+  uint64_t one = 1;
+  Ref<iree_hal_buffer_t> output;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], {},
+                                       {1, &semaphores_[0], &one}, pool_, 1,
+                                       &request, output.out()));
+  Wait(semaphores_[0]);
+  Ref<iree_hal_command_buffer_t> recording;
+  IREE_ASSERT_OK(iree_hal_command_buffer_create(
+      iree_hal_queue_family(queues_[0]), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+      IREE_HAL_COMMAND_CATEGORY_TRANSFER, 0, recording.out()));
+  IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording));
+  const uint32_t pattern = 0x1234CAFE;
+  IREE_ASSERT_OK(iree_hal_command_buffer_fill_buffer(
+      recording, iree_hal_make_buffer_ref(output, 0, 16), &pattern,
+      sizeof(pattern), 0));
+  IREE_ASSERT_OK(iree_hal_command_buffer_end(recording));
+  struct Completion {
+    // The caller retains this buffer through the notification observation.
+    iree_hal_buffer_t* buffer;
+    // Payload ownership observed exactly when public failure becomes visible.
+    int32_t references = 0;
+    // Terminal result, published with the observation through finished.
+    iree_status_code_t code = IREE_STATUS_OK;
+    // Joins the callback's last access to this stack state.
+    std::binary_semaphore finished{0};
+  } completion{output};
+  iree_async_semaphore_timepoint_t timepoint = {
+      .callback =
+          [](void* user_data, iree_async_semaphore_timepoint_t*,
+             iree_status_t status) {
+            auto* completion = static_cast<Completion*>(user_data);
+            completion->references = iree_atomic_ref_count_load(
+                &completion->buffer->resource.ref_count);
+            completion->code = iree_status_consume_code(status);
+            completion->finished.release();
+          },
+      .user_data = &completion,
+  };
+  IREE_ASSERT_OK(iree_async_semaphore_acquire_timepoint(
+      reinterpret_cast<iree_async_semaphore_t*>(semaphores_[2]), one,
+      &timepoint));
+  IREE_ASSERT_OK(iree_hal_queue_execute(queues_[0], {1, &semaphores_[1], &one},
+                                        {1, &semaphores_[2], &one}, recording,
+                                        {}, 0));
+  recording.reset();
+  iree_hal_semaphore_fail(semaphores_[1],
+                          iree_status_from_code(IREE_STATUS_ABORTED));
+  completion.finished.acquire();
+  EXPECT_EQ(completion.code, IREE_STATUS_ABORTED);
+  EXPECT_EQ(completion.references, 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LocalPublication, GpuNativeRecordingProgressTest,
+    ::testing::Values(std::pair{AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, false},
+                      std::pair{AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, true},
+                      std::pair{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, false},
+                      std::pair{AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, true}),
+    [](const auto& info) {
+      return std::string(info.param.first == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                             ? "Aql"
+                             : "Pm4") +
+             (info.param.second ? "Staged" : "Mapped");
+    });
 
 TEST_F(GpuNativeMemoryProgressTest,
        HostCallbacksCompleteWhileAllocationIsHeld) {
@@ -1676,131 +1942,6 @@ TEST_F(GpuNativeTest, BatchedMappingsReplaceProtectAndReleaseNativeBacking) {
   iree_hal_pool_stats_t statistics;
   iree_hal_pool_query_stats(pool, &statistics);
   EXPECT_EQ(statistics.reservation_count, 0u);
-}
-
-class DriverTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    IREE_ASSERT_OK(
-        iree_hal_driver_registry_allocate(iree_allocator_system(), &registry_));
-    IREE_ASSERT_OK(iree_hal_amd_driver_module_register(registry_));
-    IREE_ASSERT_OK(iree_hal_driver_registry_acquire_driver(
-        registry_, IREE_SV("rdna"), &driver_));
-    IREE_ASSERT_OK(iree_hal_driver_query_available_devices(
-        driver_, IREE_SV("rdna"), iree_allocator_system(), &count_, &infos_));
-    if (!count_) {
-      GTEST_SKIP() << "No RDNA endpoint";
-    }
-    IREE_ASSERT_OK(iree_async_proactor_pool_create(
-        1, nullptr, iree_async_proactor_pool_options_default(),
-        iree_allocator_system(), &proactors_));
-  }
-
-  void TearDown() override {
-    for (size_t i = 0; i < devices_.size(); ++i) {
-      iree_hal_semaphore_release(semaphores_[i]);
-      iree_hal_device_release(devices_[i]);
-      EXPECT_EQ(allocators_[i].live_count.load(), 0u);
-    }
-    iree_async_proactor_pool_release(proactors_);
-    iree_allocator_free(iree_allocator_system(), infos_);
-    iree_hal_driver_release(driver_);
-    iree_hal_driver_registry_free(registry_);
-  }
-
-  void Create(size_t index, iree_string_view_t path) {
-    auto params = iree_hal_device_create_params_default();
-    params.proactor_pool = proactors_;
-    const iree_string_pair_t options[] = {
-        {.key = IREE_SV("queue_count"), .value = IREE_SV("2")}};
-    iree::Status status = iree_hal_driver_create_device_by_path(
-        driver_, IREE_SV("rdna"), path, IREE_ARRAYSIZE(options), options,
-        &params, allocators_[index].allocator(), &devices_[index]);
-    if (status.code() == iree::StatusCode::kUnimplemented ||
-        status.code() == iree::StatusCode::kUnavailable) {
-      GTEST_SKIP() << status.ToString();
-    }
-    IREE_ASSERT_OK(status);
-    EXPECT_TRUE(iree_string_view_equal(iree_hal_device_id(devices_[index]),
-                                       IREE_SV("rdna")));
-    ASSERT_NE(iree_hal_device_queue(devices_[index], 0, 0), nullptr);
-    ASSERT_NE(iree_hal_device_queue(devices_[index], 0, 1), nullptr);
-  }
-
-  void Run(size_t index) {
-    iree_hal_device_t* device = devices_[index];
-    iree_hal_semaphore_t** semaphore = &semaphores_[index];
-    IREE_ASSERT_OK(
-        iree_hal_semaphore_create(device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
-                                  IREE_HAL_SEMAPHORE_FLAG_NONE, semaphore));
-    uint64_t first = 1, second = 2;
-    IREE_ASSERT_OK(iree_hal_queue_barrier(
-        iree_hal_device_queue(device, 0, 1), {1, semaphore, &first},
-        {1, semaphore, &second}, nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
-    IREE_ASSERT_OK(iree_hal_queue_barrier(
-        iree_hal_device_queue(device, 0, 0), iree_hal_semaphore_list_empty(),
-        {1, semaphore, &first}, nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
-    IREE_ASSERT_OK(iree_hal_semaphore_wait(*semaphore, second,
-                                           iree_infinite_timeout(),
-                                           IREE_ASYNC_WAIT_FLAG_NONE));
-  }
-
-  // Public registry retaining the canonical AMD driver until explicitly freed.
-  iree_hal_driver_registry_t* registry_ = nullptr;
-  // Independent reference acquired through the RDNA scheme.
-  iree_hal_driver_t* driver_ = nullptr;
-  // Public discovery rows, independent of native execution resources.
-  iree_hal_device_info_t* infos_ = nullptr;
-  // Number of architecture-filtered discovery rows.
-  iree_host_size_t count_ = 0;
-  // Process progress service supplied to public device construction.
-  iree_async_proactor_pool_t* proactors_ = nullptr;
-  // Device ownership includes asynchronous final worker cleanup.
-  std::array<DeviceAllocator, 2> allocators_;
-  // Independently provisioned devices sharing one native fabric.
-  std::array<iree_hal_device_t*, 2> devices_ = {};
-  // Cross-queue dependencies and final completions observed by this test.
-  std::array<iree_hal_semaphore_t*, 2> semaphores_ = {};
-};
-
-TEST_F(DriverTest, SchemesShareOneDriverAndFabric) {
-  iree_hal_driver_t* xdna_driver = nullptr;
-  IREE_ASSERT_OK(iree_hal_driver_registry_acquire_driver(
-      registry_, IREE_SV("xdna"), &xdna_driver));
-  EXPECT_EQ(driver_, xdna_driver);
-  iree_hal_driver_release(xdna_driver);
-}
-
-TEST_F(DriverTest, OrdinalAndNativeIdentityOutliveDriver) {
-  // The registry selects PROCESS native lifetime for host registration. Both
-  // devices must share that owner: KFD cannot reacquire a destroyed primary VM.
-  Create(0, IREE_SV("0"));
-  if (HasFatalFailure() || IsSkipped()) {
-    return;
-  }
-  Create(1, infos_[0].path);
-  if (HasFatalFailure() || IsSkipped()) {
-    return;
-  }
-  iree_hal_driver_release(driver_);
-  driver_ = nullptr;
-  iree_hal_driver_registry_free(registry_);
-  registry_ = nullptr;
-  Run(0);
-  Run(1);
-}
-
-TEST_F(DriverTest, RejectsUnknownDeviceParametersBeforeActivation) {
-  auto params = iree_hal_device_create_params_default();
-  params.proactor_pool = proactors_;
-  const iree_string_pair_t invalid[] = {
-      {.key = IREE_SV("columns"), .value = IREE_SV("1")}};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      iree_hal_driver_create_device_by_id(
-          driver_, infos_[0].device_id, IREE_ARRAYSIZE(invalid), invalid,
-          &params, allocators_[0].allocator(), &devices_[0]));
-  EXPECT_EQ(devices_[0], nullptr);
 }
 
 }  // namespace

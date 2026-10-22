@@ -34,6 +34,15 @@ void GpuStoreRelease(uint64_t address, T value) {
       .store(value, std::memory_order_release);
 }
 
+// Orders ring stores before the format's valid-header or producer-index store.
+inline void GpuPublishFence(const amdf_user_queue_mapping_info_t& mapping) {
+  if (mapping.host_publish_fence == AMDF_HOST_CACHE_FENCE_X86_SFENCE) {
+    _mm_sfence();
+  } else if (mapping.host_publish_fence == AMDF_HOST_CACHE_FENCE_X86_MFENCE) {
+    _mm_mfence();
+  }
+}
+
 // Orders command and index stores before the write-only MMIO doorbell. A C++
 // release store alone does not supply this x86 host-to-device store fence.
 inline void GpuRingDoorbell(uint64_t address, uint64_t value) {
@@ -70,14 +79,16 @@ struct GpuUserQueue {
   GpuUserQueue() = default;
   GpuUserQueue(const GpuUserQueue&) = delete;
   GpuUserQueue& operator=(const GpuUserQueue&) = delete;
-  void Initialize(const amdf_api_t* api, const amdf_gpu_api_t* gpu_api,
-                  amdf_device_t* device, const amdf_queue_family_info_t& family,
-                  amdf_queue_producer_mode_t producer_mode,
-                  const amdf_gpu_queue_scratch_t& scratch,
-                  amdf_user_queue_capabilities_t required_capabilities =
-                      AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
-                  uint64_t ring_byte_length = 0,
-                  amdf_gpu_user_queue_flags_t flags = 0);
+  void Initialize(
+      const amdf_api_t* api, const amdf_gpu_api_t* gpu_api,
+      amdf_device_t* device, const amdf_queue_family_info_t& family,
+      amdf_queue_producer_mode_t producer_mode,
+      const amdf_gpu_queue_scratch_t& scratch,
+      amdf_user_queue_capabilities_t required_capabilities =
+          AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
+      uint64_t ring_byte_length = 0, amdf_gpu_user_queue_flags_t flags = 0,
+      const void* next = nullptr,
+      amdf_queue_placement_t placement = AMDF_QUEUE_PLACEMENT_DEFAULT);
   bool Release(const amdf_api_t* api);
 
   // Publishes an already-written PM4/SDMA stream, with the engine's index

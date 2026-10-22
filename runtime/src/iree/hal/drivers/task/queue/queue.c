@@ -2990,7 +2990,11 @@ iree_status_t iree_hal_task_queue_initialize(
 
   memset(out_queue, 0, sizeof(*out_queue));
 
-  iree_hal_queue_initialize(params->queue_family, &params->queue_params,
+  iree_hal_queue_params_t achieved = params->queue_params;
+  if (achieved.placement == IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+    achieved.placement = IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL;
+  }
+  iree_hal_queue_initialize(params->queue_family, &achieved,
                             &iree_hal_task_queue_vtable, &out_queue->base);
   out_queue->device = params->device;
   out_queue->executor = params->executor;

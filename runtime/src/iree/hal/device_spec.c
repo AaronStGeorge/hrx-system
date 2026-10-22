@@ -290,6 +290,16 @@ static iree_status_t iree_hal_device_spec_validate_queue_family(
     }
   }
 
+  const iree_hal_queue_placement_capabilities_t known_placements =
+      IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL |
+      IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL;
+  if (IREE_UNLIKELY(family->placement_capabilities & ~known_placements)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "device spec queue family %" PRIhsz
+                            " has unknown placement bits 0x%08" PRIx32,
+                            family_ordinal,
+                            family->placement_capabilities & ~known_placements);
+  }
   const iree_hal_queue_feature_flags_t known_queue_features =
       IREE_HAL_QUEUE_FEATURE_FLAG_COOPERATIVE_DISPATCH;
   if (IREE_UNLIKELY(family->supported_queue_features & ~known_queue_features)) {

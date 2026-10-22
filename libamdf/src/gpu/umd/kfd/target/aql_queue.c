@@ -89,16 +89,22 @@ bool amdf_gpu_kfd_aql_queue_plan(const amdf_gpu_kfd_topology_t* topology,
               .format_version = AMDF_GPU_AQL_QUEUE_FORMAT_VERSION_1,
               .format_features =
                   AMDF_GPU_AQL_FORMAT_FEATURE_DISPATCH_TIMESTAMPS |
+                  AMDF_GPU_AQL_FORMAT_FEATURE_SCRATCH_SERVICE |
+                  topology->aql_scalar_register_features |
                   (barrier_value ? AMDF_GPU_AQL_FORMAT_FEATURE_BARRIER_VALUE
                                  : 0),
               .publication_modes = AMDF_QUEUE_PUBLICATION_MODE_USER,
               .roles = AMDF_QUEUE_ROLE_COMPUTE | AMDF_QUEUE_ROLE_TRANSFER |
-                       AMDF_QUEUE_ROLE_CACHE_CONTROL,
+                       AMDF_QUEUE_ROLE_ATOMIC | AMDF_QUEUE_ROLE_CACHE_CONTROL,
               .cache_operations = AMDF_CACHE_OPERATIONS_RELEASE_TO_SYSTEM |
                                   AMDF_CACHE_OPERATIONS_ACQUIRE_FROM_SYSTEM,
               .cache_transition_kinds = AMDF_CACHE_TRANSITION_KINDS_GLOBAL,
+              // The format-1 vendor carrier executes MEC PM4 commands. Their
+              // encoding capabilities do not qualify target-memory atomics.
+              .atomic_capabilities = amdf_gpu_pm4_atomic_capabilities(),
               .user_queue_capabilities =
-                  AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
+                  AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER |
+                  AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER,
               .producer_modes = AMDF_QUEUE_PRODUCER_MODE_BIT_SINGLE |
                                 AMDF_QUEUE_PRODUCER_MODE_BIT_MULTI,
               .priority_capabilities = AMDF_QUEUE_PRIORITY_CAPABILITY_NORMAL,

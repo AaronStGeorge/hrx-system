@@ -498,8 +498,12 @@ TEST(ReplayExecuteTest, ReplaysDynamicQueueAcquisition) {
 
   iree_hal_queue_params_t queue_params;
   iree_hal_queue_params_initialize(&queue_params);
+  queue_params.placement = IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL;
   iree_hal_queue_t* queue = nullptr;
   IREE_ASSERT_OK(iree_hal_queue_acquire(queue_family, &queue_params, &queue));
+
+  EXPECT_EQ(IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL,
+            iree_hal_queue_placement(queue));
 
   iree_hal_semaphore_t* semaphore = nullptr;
   IREE_ASSERT_OK(iree_hal_semaphore_create(
@@ -526,11 +530,44 @@ TEST(ReplayExecuteTest, ReplaysDynamicQueueAcquisition) {
   iree_hal_device_group_release(wrapped_group);
   iree_hal_device_group_release(source_group);
 
-  iree_hal_device_group_t* replay_group = CreateTaskDeviceGroup();
+  // Observe the replayed request through the same production recorder wrapper.
+  // A dropped placement would be recorded as DEFAULT here even on a CPU whose
+  // physical storage can satisfy both explicit localities.
+  std::vector<uint8_t> replay_storage(32768, 0);
+  iree_hal_replay_recorder_t* replay_recorder =
+      CreateHostAllocationRecorder(&replay_storage);
+  iree_hal_device_group_t* replay_source = CreateTaskDeviceGroup();
+  iree_hal_device_group_t* replay_group = nullptr;
+  IREE_ASSERT_OK(iree_hal_replay_wrap_device_group(
+      replay_recorder, replay_source, iree_allocator_system(), &replay_group));
   IREE_EXPECT_OK(iree_hal_replay_execute_file(GetCapturedFileContents(storage),
                                               replay_group, /*options=*/nullptr,
                                               iree_allocator_system()));
+  IREE_ASSERT_OK(iree_hal_replay_recorder_close(replay_recorder));
+  iree_hal_replay_recorder_release(replay_recorder);
   iree_hal_device_group_release(replay_group);
+  iree_hal_device_group_release(replay_source);
+  const auto contents = GetCapturedFileContents(replay_storage);
+  iree_hal_replay_file_header_t header;
+  iree_host_size_t offset = 0;
+  IREE_ASSERT_OK(iree_hal_replay_file_parse_header(contents, &header, &offset));
+  uint32_t queue_count = 0;
+  while (offset < header.file_length) {
+    iree_hal_replay_file_record_t record;
+    IREE_ASSERT_OK(
+        iree_hal_replay_file_parse_record(contents, offset, &record, &offset));
+    if (record.header.record_type == IREE_HAL_REPLAY_FILE_RECORD_TYPE_OBJECT &&
+        record.header.payload_type ==
+            IREE_HAL_REPLAY_PAYLOAD_TYPE_DYNAMIC_QUEUE_OBJECT) {
+      iree_hal_replay_dynamic_queue_object_payload_t payload;
+      ASSERT_GE(record.payload.data_length, sizeof(payload));
+      memcpy(&payload, record.payload.data, sizeof(payload));
+      EXPECT_EQ((uint32_t)IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL,
+                payload.placement);
+      ++queue_count;
+    }
+  }
+  EXPECT_EQ(queue_count, 1u);
 }
 
 TEST(ReplayExecuteTest, ExecutesPreparedPlanRepeatedly) {
@@ -1646,7 +1683,7 @@ TEST(ReplayExecuteTest, ExecutesRecordedQueueAllocaFromChildPool) {
       IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE,
       /*interfaces=*/0,
       /*requirements=*/0,
-      /*atomic_operations=*/{},
+      /*atomics=*/{},
   };
   const iree_hal_pool_scope_t scope = {
       /*family_count=*/1,
@@ -1763,7 +1800,7 @@ TEST(ReplayExecuteTest, ExecutesPoolAllocationImportAndTrimRecords) {
       IREE_HAL_BUFFER_USAGE_TRANSFER,
       /*interfaces=*/0,
       /*requirements=*/0,
-      /*atomic_operations=*/{},
+      /*atomics=*/{},
   };
   const iree_hal_pool_scope_t scope = {
       /*family_count=*/1,

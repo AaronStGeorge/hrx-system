@@ -451,7 +451,8 @@ low.func.def target<amdgpu.rdna3.core>(@target) @sopk_immediate_mul(%value: reg<
 amdgpu.target<gfx1100> @target
 
 low.func.def target<amdgpu.rdna3.core>(@target) @sopk_immediate_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm {
-  %result = s_mulk_i32 %value, 12
+  %value_copy = copy %value : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>
+  %result = s_mulk_i32 %value_copy, 12
   return %result
 }
 
@@ -765,5 +766,70 @@ amdgpu.target<gfx1250> @target
 
 low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) @gfx1250_vbuffer_load_b96_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x3>) asm {
   %result = buffer_load_b96_vaddr_offset %resource, %vaddr {offset = 2049}
+  return %result
+}
+
+// ====
+
+// The selected physical tie preserves independent storage for ABI inputs.
+// Architected workgroup coordinates reside in read-only TTMP registers.
+amdgpu.target<gfx1200> @target
+
+low.func.def target<amdgpu.rdna4.core>(@target) @sopk_workgroup_scale() -> (reg<amdgpu.sgpr>) asm {
+  %workgroup = live_in<amdgpu.cluster_id_x> : reg<amdgpu.sgpr>
+  %width = s_mov_b32 64
+  %offset = s_mul_i32 %workgroup, %width
+  return %offset
+}
+
+// ----
+amdgpu.target<gfx1200> @target
+
+low.func.def target<amdgpu.rdna4.core>(@target) @sopk_workgroup_scale() -> (reg<amdgpu.sgpr>) asm {
+  %workgroup = live_in<amdgpu.cluster_id_x> : reg<amdgpu.sgpr>
+  %workgroup_copy = copy %workgroup : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>
+  %offset = s_mulk_i32 %workgroup_copy, 64
+  return %offset
+}
+
+// ====
+
+amdgpu.target<gfx1250> @target
+
+low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) @sopk_packed_cluster_scale() -> (reg<amdgpu.sgpr>) asm {
+  %coordinate = live_in<amdgpu.cluster_id_yz> : reg<amdgpu.sgpr>
+  %scale = s_mov_b32 7
+  %result = s_mul_i32 %coordinate, %scale
+  return %result
+}
+
+// ----
+amdgpu.target<gfx1250> @target
+
+low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) @sopk_packed_cluster_scale() -> (reg<amdgpu.sgpr>) asm {
+  %coordinate = live_in<amdgpu.cluster_id_yz> : reg<amdgpu.sgpr>
+  %coordinate_copy = copy %coordinate : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>
+  %result = s_mulk_i32 %coordinate_copy, 7
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1250> @target
+
+low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) @sopk_local_workgroup_scale() -> (reg<amdgpu.sgpr>) asm {
+  %coordinate = live_in<amdgpu.cluster_workgroup_info> : reg<amdgpu.sgpr>
+  %scale = s_mov_b32 7
+  %result = s_mul_i32 %coordinate, %scale
+  return %result
+}
+
+// ----
+amdgpu.target<gfx1250> @target
+
+low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) @sopk_local_workgroup_scale() -> (reg<amdgpu.sgpr>) asm {
+  %coordinate = live_in<amdgpu.cluster_workgroup_info> : reg<amdgpu.sgpr>
+  %coordinate_copy = copy %coordinate : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>
+  %result = s_mulk_i32 %coordinate_copy, 7
   return %result
 }

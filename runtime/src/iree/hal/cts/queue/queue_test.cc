@@ -89,6 +89,12 @@ static void ExpectQueuePropertiesSupportedByFamily(
         family_spec->priorities[i] == iree_hal_queue_priority(queue);
   }
   EXPECT_TRUE(priority_supported);
+  const auto placement = iree_hal_queue_placement(queue);
+  ASSERT_LE((uint32_t)placement,
+            (uint32_t)IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+  if (placement != IREE_HAL_QUEUE_PLACEMENT_DEFAULT) {
+    EXPECT_NE(family_spec->placement_capabilities & (1u << placement), 0u);
+  }
   EXPECT_EQ(0u, iree_hal_queue_features(queue) &
                     ~family_spec->supported_queue_features);
 
@@ -202,6 +208,39 @@ TEST_P(QueueTest, DynamicallyAcquiredQueueExecutesBarrier) {
                                         IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
   IREE_ASSERT_OK(iree_hal_semaphore_list_wait(signal, iree_infinite_timeout(),
                                               IREE_ASYNC_WAIT_FLAG_NONE));
+}
+
+TEST_P(QueueTest, ExplicitPlacementsPreserveQueueExecution) {
+  DynamicQueueFamily family;
+  if (!FindDynamicQueueFamily(device_, /*required_roles=*/0, &family)) {
+    GTEST_SKIP() << "device has no dynamically acquirable queue family";
+  }
+  for (const auto placement : {IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL,
+                               IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL}) {
+    SCOPED_TRACE((uint32_t)placement);
+    iree_hal_queue_params_t params;
+    iree_hal_queue_params_initialize(&params);
+    params.placement = placement;
+    if (!(family.spec->placement_capabilities & (1u << placement))) {
+      auto* const sentinel = reinterpret_cast<iree_hal_queue_t*>(uintptr_t{1});
+      auto* output = sentinel;
+      IREE_EXPECT_STATUS_IS(
+          IREE_STATUS_INVALID_ARGUMENT,
+          iree_hal_queue_acquire(family.identity, &params, &output));
+      EXPECT_EQ(sentinel, output);
+      continue;
+    }
+    Ref<iree_hal_queue_t> queue;
+    IREE_ASSERT_OK(
+        iree_hal_queue_acquire(family.identity, &params, queue.out()));
+    EXPECT_EQ(placement, iree_hal_queue_placement(queue));
+    SemaphoreList signal(device_, {0}, {1});
+    IREE_ASSERT_OK(
+        iree_hal_queue_barrier(queue, iree_hal_semaphore_list_empty(), signal,
+                               nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
+    IREE_ASSERT_OK(iree_hal_semaphore_list_wait(signal, iree_infinite_timeout(),
+                                                IREE_ASYNC_WAIT_FLAG_NONE));
+  }
 }
 
 TEST_P(QueueTest, QueueAcquisitionCanonicalizesCompleteResourceSet) {
@@ -355,6 +394,13 @@ TEST_P(QueueTest, QueueAcquisitionRejectsInvalidRequests) {
         iree_hal_queue_acquire(family.identity, &params, &output));
     EXPECT_EQ(sentinel, output);
   }
+
+  iree_hal_queue_params_initialize(&params);
+  params.placement = (iree_hal_queue_placement_t)UINT32_MAX;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_hal_queue_acquire(family.identity, &params, &output));
+  EXPECT_EQ(sentinel, output);
 
   iree_hal_queue_params_initialize(&params);
   const iree_hal_queue_execution_resource_ordinal_t out_of_range_resource =

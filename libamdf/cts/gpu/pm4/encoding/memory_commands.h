@@ -10,6 +10,19 @@
 #include <cstddef>
 #include <cstdint>
 
+// Ordinary memory comparisons used by the CTS. These are the MEC
+// WAIT_REG_MEM/WAIT_REG_MEM64 and COND_INDIRECT_BUFFER function values, not
+// host comparison opcodes.
+enum class Pm4MemoryComparison : uint32_t {
+  kAlways = 0,
+  kLess = 1,
+  kLessOrEqual = 2,
+  kEqual = 3,
+  kNotEqual = 4,
+  kGreaterOrEqual = 5,
+  kGreater = 6,
+};
+
 namespace pm4 {
 
 // COPY_DATA count selection. A transfer width does not imply atomicity.
@@ -24,6 +37,15 @@ enum class CopyDataPolicy : uint32_t {
   kStreaming = 1,
 };
 
+// Encodes an ordinary MEC memory wait into seven or nine caller-owned DWORDs
+// and returns that count. The naturally aligned target has separately qualified
+// WAIT semantics. The comparison uses (loaded_value & mask) versus value.
+// No ACE offload or payload-cache operation is performed.
+size_t WaitMemory32(uint32_t* words, uint64_t address, uint32_t value,
+                    Pm4MemoryComparison comparison, uint32_t mask);
+size_t WaitMemory64(uint32_t* words, uint64_t address, uint64_t value,
+                    Pm4MemoryComparison comparison, uint64_t mask);
+
 // Encodes an immediate-to-TC/L2 COPY_DATA into six caller-owned DWORDs and
 // returns six. Confirmation orders this CP write before following CP commands;
 // it performs no cache action, shader wait, or read-modify-write.
@@ -32,6 +54,14 @@ enum class CopyDataPolicy : uint32_t {
 // independently of this packet's width. Other payload visibility is explicit.
 size_t StoreImmediate(uint32_t* words, uint64_t target_address, uint64_t value,
                       CopyDataWidth width);
+
+// Encodes one single-pass ATOMIC_MEM ADD_RTN into nine caller-owned DWORDs
+// and returns nine. The naturally aligned target has separately qualified ADD
+// semantics and participant reach. RTN orders the operation before following CP
+// commands; the returned value is discarded. No payload cache work is
+// performed.
+size_t AtomicAdd32(uint32_t* words, uint64_t target_address, uint32_t value);
+size_t AtomicAdd64(uint32_t* words, uint64_t target_address, uint64_t value);
 
 // Encodes one confirmed TC/L2-to-TC/L2 copy into six caller-owned DWORDs and
 // returns six. Both addresses are aligned to four bytes for k32Bit and eight

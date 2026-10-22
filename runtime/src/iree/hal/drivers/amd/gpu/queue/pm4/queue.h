@@ -13,6 +13,7 @@
 #include "iree/hal/drivers/amd/gpu/profile.h"
 #include "iree/hal/drivers/amd/gpu/publication.h"
 #include "iree/hal/drivers/amd/gpu/queue/allocation.h"
+#include "iree/hal/drivers/amd/gpu/queue/backing.h"
 #include "iree/hal/drivers/amd/gpu/queue/file_staging.h"
 #include "iree/hal/drivers/amd/gpu/queue/memory_mapping.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/barrier.h"
@@ -28,8 +29,16 @@ extern "C" {
 typedef struct iree_hal_amd_gpu_pm4_queue_options_t {
   // Exact native family selected independently of the compiler target.
   uint32_t family_ordinal;
-  // Stable ordinal in the parent's provisioned queue array.
+  // Stable native frontier coordinate owned by the device.
   uint32_t queue_ordinal;
+  // Stable service source, independent of the native frontier coordinate.
+  uint32_t source_ordinal;
+  // Last completed epoch from an earlier owner of this coordinate.
+  uint64_t initial_epoch;
+  // Installed native coordinate extent, including previously used slots.
+  uint32_t queue_count;
+  // Device-owned native cells and return wake target, live beyond this queue.
+  iree_hal_amd_gpu_signal_cache_t* signals;
   // One admitted USER or KERNEL publication mode.
   amdf_queue_publication_modes_t publication_mode;
   // Power-of-two command storage capacity in bytes.
@@ -89,16 +98,16 @@ iree_status_t iree_hal_amd_gpu_pm4_queue_create(
     const iree_hal_queue_params_t* params, iree_allocator_t host_allocator,
     iree_hal_queue_t** out_queue);
 
-// Assigns a group-owned completion axis before any public work is accepted.
-// Registration is transactional. NULL aborts a prior assignment during failed
-// group construction. The queue retains the tracker and retires its axis after
-// the completion observer joins. Native submission never advances this axis.
-iree_status_t iree_hal_amd_gpu_pm4_queue_assign_frontier(
+// Borrows a device-registered completion axis before accepting public work.
+// The device retains the tracker and coordinate across queue replacement.
+// NULL clears the borrow when a group assignment is removed. Only retirement
+// advances this axis; native submission never does.
+void iree_hal_amd_gpu_pm4_queue_assign_frontier(
     iree_hal_queue_t* queue, iree_async_frontier_tracker_t* tracker,
     iree_async_axis_t axis);
 
 // Borrows a device-owned profiling session until idle end detaches it.
-void iree_hal_amd_gpu_pm4_queue_set_profile(
+iree_status_t iree_hal_amd_gpu_pm4_queue_set_profile(
     iree_hal_queue_t* queue, iree_hal_amd_gpu_profile_t* profile);
 
 // Borrows the queue's bounded deferred publication source. The parent joins
@@ -121,6 +130,25 @@ void iree_hal_amd_gpu_pm4_queue_notify_failure(iree_hal_queue_t* queue);
 // execution or backing release. The parent remains live through publication.
 void iree_hal_amd_gpu_pm4_queue_trim(iree_hal_queue_t* queue);
 
+// Extends host dependency metadata under exact publication ownership. The cold
+// caller waits only for this typed metadata operation; native work and backing
+// acquisition can remain outstanding. notification belongs to the device and
+// stays live through callback tails. Failure leaves existing queues usable.
+iree_status_t iree_hal_amd_gpu_pm4_queue_reserve_frontiers(
+    iree_hal_queue_t* queue, uint32_t queue_count,
+    iree_notification_t* notification);
+
+// Arms synchronous final-release ownership after both worker sources are live.
+// The callback joins accepted work and native ownership before returning true;
+// false preserves this queue when native quiescence cannot be proven.
+void iree_hal_amd_gpu_pm4_queue_set_release(iree_hal_queue_t* queue,
+                                            bool (*release)(void*,
+                                                            iree_hal_queue_t*),
+                                            void* user_data);
+
+// Completed coordinate after accepted work and callback tails have joined.
+uint64_t iree_hal_amd_gpu_pm4_queue_completed_epoch(iree_hal_queue_t* queue);
+
 // Rejects subsequent public submissions after the parent has joined external
 // API callers. Already accepted work retains its normal dependency semantics.
 // This is a nonblocking state change; the parent wakes its native observer.
@@ -131,13 +159,13 @@ void iree_hal_amd_gpu_pm4_queue_close(iree_hal_queue_t* queue);
 // prove consumption of the final notification/padding tail.
 bool iree_hal_amd_gpu_pm4_queue_is_idle(iree_hal_queue_t* queue);
 
-// Joins the final native notification tail after every queue in this domain is
-// idle, native acquisition callbacks have joined, and both publication and
-// completion owners have made their final accesses. Peer consumers may retain
-// this queue's signal backing until their own retirement. Cold native cleanup
+// Joins the final native notification tail after this queue is idle, its native
+// acquisition callbacks have joined, and publication/completion sources have
+// made their final accesses. Peer consumers may retain device-owned signal
+// backing until their own retirement. Cold native cleanup
 // runs on the caller; backing releases use the allocation domain. Failure
-// preserves the
-// queue/context graph and must be handled by the parent without freeing it.
+// preserves the queue/context graph and must be handled by the parent without
+// freeing it.
 amdf_status_t iree_hal_amd_gpu_pm4_queue_shutdown(iree_hal_queue_t* queue);
 
 #ifdef __cplusplus

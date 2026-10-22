@@ -20,8 +20,15 @@
 #include "iree/hal/drivers/amd/gpu/code.h"
 #include "iree/hal/drivers/amd/gpu/device.h"
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
 
 namespace iree::hal::amd::gpu::cts {
+
+// Matches the runner's portable identity using passive discovery. NULL admits
+// every endpoint; opening the query handle activates no device.
+iree_status_t MatchesNativeIdentity(iree_hal_amd_fabric_t* fabric,
+                                    const amdf_endpoint_id_t* id,
+                                    const char* selected, bool* out_matches);
 
 // Observe complete resource reclamation at synchronous final device release.
 struct DeviceAllocator {
@@ -47,7 +54,7 @@ class NativeMemoryGate {
   iree_status_t CreateFabric(
       iree_hal_amd_fabric_t** out_fabric,
       uint64_t maximum_byte_length = UINT64_MAX,
-      amdf_native_lifetime_t lifetime = AMDF_NATIVE_LIFETIME_INSTANCE);
+      amdf_native_lifetime_t lifetime = AMDF_NATIVE_LIFETIME_PROCESS);
 
   // PROCESS native bindings share one fabric across fixtures, as the registered
   // driver does. Reopening a different render file cannot replace that VM.
@@ -138,8 +145,62 @@ class NativeMemoryGate {
   MemoryUsage usage_;
 };
 
+// Holds the real completion callback boundary while native work progresses.
+struct CompletionPause {
+  // Borrowed timeline owning timepoint enrollment.
+  iree_async_semaphore_t* semaphore;
+  // Stack callback storage, joined before leaving this scope.
+  iree_async_semaphore_timepoint_t timepoint = {};
+  // Callback entry, observed before submitting the native dependency chain.
+  std::binary_semaphore entered{0};
+  // Releases the callback after the test establishes its pending-work state.
+  std::binary_semaphore proceed{0};
+  // Joins the callback's final stack access.
+  std::binary_semaphore finished{0};
+  // Successful enrollment still requiring cancellation or callback joining.
+  bool enrolled = false;
+  iree_status_t Arm(uint64_t value) {
+    timepoint = {
+        .callback =
+            [](void* user_data, iree_async_semaphore_timepoint_t*,
+               iree_status_t status) {
+              auto* pause = static_cast<CompletionPause*>(user_data);
+              IREE_EXPECT_OK(status);
+              pause->entered.release();
+              pause->proceed.acquire();
+              pause->finished.release();
+            },
+        .user_data = this,
+    };
+    IREE_RETURN_IF_ERROR(
+        iree_async_semaphore_acquire_timepoint(semaphore, value, &timepoint));
+    enrolled = true;
+    return iree_ok_status();
+  }
+  void Join() {
+    if (enrolled &&
+        !iree_async_semaphore_cancel_timepoint(semaphore, &timepoint)) {
+      proceed.release();
+      finished.acquire();
+    }
+    enrolled = false;
+  }
+  ~CompletionPause() { Join(); }
+};
+
 class GpuNativeTest : public ::testing::Test {
  protected:
+  // Native packet protocol exercised by this fixture, independent of ISA.
+  virtual amdf_queue_command_type_t command_type() const {
+    return AMDF_QUEUE_COMMAND_TYPE_GPU_PM4;
+  }
+
+  // Ordinary execution shares the process binding used by the registered
+  // driver. Explicit lifetime cases can request an independent native owner.
+  virtual amdf_native_lifetime_t native_lifetime() const {
+    return AMDF_NATIVE_LIFETIME_PROCESS;
+  }
+
   void SetUp() override;
 
   void TearDown() override;
@@ -147,6 +208,9 @@ class GpuNativeTest : public ::testing::Test {
   void Create(iree_hal_device_runtime_feature_flags_t runtime_features = 0);
 
   void CreateSemaphore(iree_hal_semaphore_t** out_semaphore);
+
+  // Acquires another queue through the same public contract as applications.
+  iree_status_t AcquireQueue(iree_hal_queue_t** out_queue);
 
   // Native ring/control backing is separate from device-local program storage.
   void SelectControlMemory(amdf_memory_device_access_t* access,

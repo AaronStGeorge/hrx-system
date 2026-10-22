@@ -65,15 +65,16 @@ class GpuCommandTest : public GpuDeviceFixture {
                    amdf_queue_producer_mode_t producer_mode =
                        AMDF_QUEUE_PRODUCER_MODE_SINGLE,
                    const amdf_gpu_queue_scratch_t& scratch = {});
-  void CreateQueue(const amdf_queue_family_info_t& family,
-                   GpuUserQueue** out_queue,
-                   amdf_queue_producer_mode_t producer_mode =
-                       AMDF_QUEUE_PRODUCER_MODE_SINGLE,
-                   const amdf_gpu_queue_scratch_t& scratch = {},
-                   amdf_user_queue_capabilities_t required_capabilities =
-                       AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
-                   uint64_t ring_byte_length = 0,
-                   amdf_gpu_user_queue_flags_t flags = 0);
+  void CreateQueue(
+      const amdf_queue_family_info_t& family, GpuUserQueue** out_queue,
+      amdf_queue_producer_mode_t producer_mode =
+          AMDF_QUEUE_PRODUCER_MODE_SINGLE,
+      const amdf_gpu_queue_scratch_t& scratch = {},
+      amdf_user_queue_capabilities_t required_capabilities =
+          AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
+      uint64_t ring_byte_length = 0, amdf_gpu_user_queue_flags_t flags = 0,
+      const void* next = nullptr,
+      amdf_queue_placement_t placement = AMDF_QUEUE_PLACEMENT_DEFAULT);
   // Requests finite command storage; zero retains the native/default capacity.
   void CreateQueue(GpuCommandQueue** out_queue,
                    uint64_t command_byte_length = 0);

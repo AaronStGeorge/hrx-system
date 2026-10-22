@@ -58,6 +58,29 @@ typedef int32_t iree_hal_queue_priority_t;
 // Canonical normal scheduling priority.
 #define IREE_HAL_QUEUE_PRIORITY_NORMAL ((iree_hal_queue_priority_t)0)
 
+// Locality of primary queue command storage. This does not place buffers,
+// executables, recorded commands, synchronization words, or scratch. On unified
+// memory systems the same storage may satisfy both explicit localities.
+typedef enum iree_hal_queue_placement_e {
+  // Implementation-selected placement, with no required locality.
+  IREE_HAL_QUEUE_PLACEMENT_DEFAULT = 0,
+  // Command storage is local to the host.
+  IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL = 1,
+  // Command storage is local to the queue's execution device.
+  IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL = 2,
+} iree_hal_queue_placement_t;
+
+// Supported explicit command-storage placements. DEFAULT is always available
+// to an otherwise valid queue. Placement does not change supported operations,
+// producer access, or semaphore-based ordering.
+typedef uint32_t iree_hal_queue_placement_capabilities_t;
+enum iree_hal_queue_placement_capability_bits_e {
+  IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL =
+      1u << IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL,
+  IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL =
+      1u << IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL,
+};
+
 // Immutable execution features of an exact queue.
 typedef uint64_t iree_hal_queue_feature_flags_t;
 enum iree_hal_queue_feature_flag_bits_e {
@@ -88,6 +111,9 @@ typedef struct iree_hal_queue_params_t {
   // Exact scheduling priority.
   iree_hal_queue_priority_t priority;
 
+  // Required command-storage locality, or DEFAULT for implementation policy.
+  iree_hal_queue_placement_t placement;
+
   // Exact queue feature bits.
   iree_hal_queue_feature_flags_t features;
 
@@ -95,8 +121,8 @@ typedef struct iree_hal_queue_params_t {
   iree_hal_queue_execution_resource_list_t execution_resources;
 } iree_hal_queue_params_t;
 
-// Initializes |out_params| to normal priority, no specialized features, and
-// the complete execution-resource set advertised by a queue family.
+// Initializes |out_params| to normal priority, default placement, no features,
+// and the complete execution-resource set advertised by a queue family.
 IREE_API_EXPORT void iree_hal_queue_params_initialize(
     iree_hal_queue_params_t* out_params);
 
@@ -741,6 +767,12 @@ IREE_API_EXPORT const iree_hal_queue_family_t* iree_hal_queue_family(
 IREE_API_EXPORT iree_hal_queue_priority_t
 iree_hal_queue_priority(const iree_hal_queue_t* queue);
 
+// Returns the achieved immutable command-storage locality. DEFAULT reports no
+// guarantee when the native API does not expose placement. An explicit request
+// must be satisfied; it never silently falls back to another placement.
+IREE_API_EXPORT iree_hal_queue_placement_t
+iree_hal_queue_placement(const iree_hal_queue_t* queue);
+
 // Returns the immutable execution features of |queue|.
 IREE_API_EXPORT iree_hal_queue_feature_flags_t
 iree_hal_queue_features(const iree_hal_queue_t* queue);
@@ -929,7 +961,7 @@ IREE_API_EXPORT iree_status_t iree_hal_queue_atomic_rmw(
 // A 64-bit tick is written into |target_buffer| at |target_offset| after every
 // wait timepoint is reached, and the signal timepoints are published after the
 // write completes. The target must be naturally aligned and permit an 8-byte
-// device write.
+// device write with TRANSFER_TARGET usage.
 //
 // The tick belongs to the timestamp domain published by |queue|'s family.
 // Ticks captured by queues in that family are comparable. HAL exposes no
@@ -1323,6 +1355,9 @@ struct iree_hal_queue_t {
 
   // Exact immutable scheduling priority.
   iree_hal_queue_priority_t priority;
+
+  // Achieved immutable command-storage locality guarantee.
+  iree_hal_queue_placement_t placement;
 
   // Exact immutable execution features.
   iree_hal_queue_feature_flags_t features;

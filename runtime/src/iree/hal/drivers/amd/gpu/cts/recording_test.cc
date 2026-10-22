@@ -30,9 +30,9 @@ class GpuNativeRecordingTest : public GpuNativeTest {
       return;
     }
     const uint32_t gfx_major = context_->target_info.gfx_ip.major;
-    options_.pm4.ring_byte_length = 4096;
-    options_.pm4.retirement_capacity = 4;
-    options_.pm4.argument_capacity = 32;
+    options_.queue.ring_byte_length = 4096;
+    options_.queue.retirement_capacity = 4;
+    options_.queue.argument_capacity = 32;
     Create();
     if (HasFatalFailure()) {
       return;
@@ -409,7 +409,7 @@ TEST_P(GpuNativeRecordingSizeTest,
   }
   std::array<iree_hal_buffer_binding_t, 3> table = {};
   table[2] = {outputs[0], 0, 64};
-  std::array<iree_hal_amd_gpu_pm4_command_binding_t, 3> captured;
+  std::array<iree_hal_amd_gpu_command_binding_t, 3> captured;
   iree_hal_amd_gpu_pm4_command_invocation_t invocation;
   IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_command_invocation_initialize(
       recording, {table.size(), table.data()}, captured.data(), 0,
@@ -851,7 +851,7 @@ TEST_F(GpuNativeInvocationTest,
           iree_hal_make_indirect_buffer_ref(0, 0, IREE_HAL_WHOLE_BUFFER), 0));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         iree_hal_command_buffer_end(recording));
-  std::array<iree_hal_amd_gpu_pm4_command_binding_t, 2> captured;
+  std::array<iree_hal_amd_gpu_command_binding_t, 2> captured;
   iree_hal_amd_gpu_pm4_command_invocation_t invocation;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         iree_hal_amd_gpu_pm4_command_invocation_initialize(

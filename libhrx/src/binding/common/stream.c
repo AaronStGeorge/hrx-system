@@ -400,6 +400,7 @@ iree_status_t iree_hal_streaming_stream_select_cooperative_queue_locked(
   iree_hal_queue_params_t params;
   iree_hal_queue_params_initialize(&params);
   params.priority = iree_hal_queue_priority(stream->queue);
+  params.placement = iree_hal_queue_placement(stream->queue);
   params.features = iree_hal_queue_features(stream->queue) |
                     IREE_HAL_QUEUE_FEATURE_FLAG_COOPERATIVE_DISPATCH;
   params.execution_resources =

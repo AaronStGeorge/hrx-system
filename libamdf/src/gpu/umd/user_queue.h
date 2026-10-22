@@ -22,7 +22,7 @@ typedef struct amdf_gpu_umd_user_queue_mapping_t
     amdf_gpu_umd_user_queue_mapping_t;
 
 // Queue-device scratch range resolved by the shared GPU layer. The caller
-// keeps its backing live until queue destruction succeeds.
+// keeps its backing live until a scratch request or successful destruction.
 typedef struct amdf_gpu_umd_queue_scratch_t {
   // Queue-device address of the first scratch byte, or zero when disabled.
   uint64_t device_address;
@@ -42,10 +42,16 @@ typedef struct amdf_gpu_umd_user_queue_create_info_t {
   uint32_t format_version;
   // Requested native scheduling priority.
   amdf_queue_priority_t priority;
+  // Required primary-ring locality, or DEFAULT for the native policy.
+  amdf_queue_placement_t placement;
   // Selected reservation protocol.
   amdf_queue_producer_mode_t producer_mode;
   // Enables native dispatch timestamps in each AQL completion signal.
   bool dispatch_timestamps;
+  // Enables caller servicing of native scratch requests.
+  bool scratch_service;
+  // Optional native wake operands for scratch requests and queue errors.
+  amdf_gpu_event_info_t inactive_event;
   // Direct producer operations required by the caller.
   amdf_user_queue_capabilities_t required_capabilities;
   // Semantic operations advertised for the selected family.
@@ -62,6 +68,8 @@ typedef struct amdf_gpu_umd_user_queue_result_t {
   amdf_queue_id_t queue_id;
   // Direct producer operations achieved by this queue.
   amdf_user_queue_capabilities_t capabilities;
+  // Achieved primary-ring locality guarantee.
+  amdf_queue_placement_t placement;
   // Actual primary ring capacity in bytes.
   uint64_t ring_byte_length;
   // Actual metadata sidecar capacity in bytes, or zero when absent.
@@ -82,6 +90,8 @@ typedef struct amdf_gpu_umd_user_queue_mapping_result_t {
   uint32_t index_bits;
   // Atomic write width of the notification aperture.
   uint32_t doorbell_bits;
+  // Host fence required before publishing a valid header or producer index.
+  amdf_host_cache_fence_t host_publish_fence;
   // Producer-local base address of the writable metadata ring.
   uint64_t metadata_ring_address;
 } amdf_gpu_umd_user_queue_mapping_result_t;
@@ -110,6 +120,27 @@ amdf_status_t amdf_gpu_umd_user_queue_mapping_destroy(
 // Samples native publication, consumption, and sticky terminal state.
 amdf_status_t amdf_gpu_umd_user_queue_query_status(
     amdf_gpu_umd_user_queue_t* queue, amdf_user_queue_status_t* out_status);
+
+// Samples a pending request; zero byte_length means none. Does not enter the
+// kernel or allocate. The caller serializes this with scratch installation.
+amdf_status_t amdf_gpu_umd_user_queue_query_scratch(
+    amdf_gpu_umd_user_queue_t* queue,
+    amdf_gpu_aql_scratch_request_t* out_request);
+
+// Installs backing into a paused scratch-service queue and resumes firmware.
+amdf_status_t amdf_gpu_umd_user_queue_resume_scratch(
+    amdf_gpu_umd_user_queue_t* queue,
+    const amdf_gpu_umd_queue_scratch_t* scratch);
+
+// Detaches scratch from a caller-quiesced service queue. Native failure is
+// terminal and preserves the caller's backing obligation through destruction.
+amdf_status_t amdf_gpu_umd_user_queue_trim_scratch(
+    amdf_gpu_umd_user_queue_t* queue);
+
+// Selects timestamp writes on a caller-quiesced AQL queue. Native failure is
+// terminal and preserves borrowed resources through successful destruction.
+amdf_status_t amdf_gpu_umd_user_queue_set_dispatch_timestamps(
+    amdf_gpu_umd_user_queue_t* queue, bool enabled);
 
 // Waits for one already-published format index under `deadline`.
 amdf_status_t amdf_gpu_umd_user_queue_wait_consumed(

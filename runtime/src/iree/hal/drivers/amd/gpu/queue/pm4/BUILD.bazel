@@ -58,35 +58,11 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
-    name = "fixup",
-    srcs = ["fixup.c"],
-    hdrs = ["fixup.h"],
-    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
-    deps = [
-        ":commands",
-        ":launch",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/drivers/amd/gpu/image",
-        "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
-    ],
-)
-
-iree_runtime_cc_library(
     name = "retirement",
     srcs = ["retirement.c"],
     hdrs = ["retirement.h"],
     deps = [
         ":commands",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "signal",
-    srcs = ["signal.c"],
-    hdrs = ["signal.h"],
-    deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
     ],
@@ -100,6 +76,8 @@ iree_runtime_cc_library(
         ":commands",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:buffer",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:transfer",
     ],
 )
 
@@ -113,6 +91,7 @@ iree_runtime_cc_library(
         ":launch",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu:dispatch",
         "//runtime/src/iree/hal/drivers/amd/gpu:kernarg",
         "//runtime/src/iree/hal/drivers/amd/gpu/image",
         "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
@@ -126,6 +105,7 @@ iree_runtime_cc_test(
         ":transfer",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:transfer",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -201,82 +181,6 @@ iree_c_embed_data(
     target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
 )
 
-[
-    loom_kernel_binary(
-        name = "fixup_program_" + target,
-        testonly = True,
-        srcs = ["fixup.loom"],
-        out = "fixup_program_" + target + ".hsaco",
-        target = ":dispatch_program_profile_" + target,
-        target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
-    )
-    for target in _PROGRAM_TARGETS
-]
-
-[
-    loom_kernel_binary(
-        name = "blit_program_" + target,
-        testonly = True,
-        srcs = ["blit.loom"],
-        out = "blit_program_" + target + ".hsaco",
-        target = ":dispatch_program_profile_" + target,
-        target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
-    )
-    for target in _PROGRAM_TARGETS
-]
-
-iree_c_embed_data(
-    name = "fixup_programs",
-    testonly = True,
-    srcs = [":fixup_program_" + target for target in _PROGRAM_TARGETS],
-    c_file_output = "fixup_programs.c",
-    h_file_output = "fixup_programs.h",
-    identifier = "iree_hal_amd_gpu_pm4_fixup_programs",
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
-)
-
-iree_runtime_cc_test(
-    name = "fixup_test",
-    srcs = ["fixup_test.cc"],
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH + _NATIVE_DEVICE_COMPATIBLE_WITH,
-    deps = [
-        ":fixup",
-        ":fixup_programs",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/drivers/amd/gpu/image",
-        "//runtime/src/iree/hal/drivers/amd/gpu/image:hsaco",
-        "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-iree_c_embed_data(
-    name = "blit_programs",
-    testonly = True,
-    srcs = [":blit_program_" + target for target in _PROGRAM_TARGETS],
-    c_file_output = "blit_programs.c",
-    h_file_output = "blit_programs.h",
-    identifier = "iree_hal_amd_gpu_pm4_blit_programs",
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH,
-)
-
-iree_runtime_cc_test(
-    name = "blit_test",
-    srcs = ["blit_test.cc"],
-    target_compatible_with = _PROGRAM_COMPATIBLE_WITH + _NATIVE_DEVICE_COMPATIBLE_WITH,
-    deps = [
-        ":blit",
-        ":blit_programs",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/drivers/amd/gpu/image",
-        "//runtime/src/iree/hal/drivers/amd/gpu/image:hsaco",
-        "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 iree_runtime_cc_test(
     name = "dispatch_program_test",
     srcs = ["dispatch_program_test.cc"],
@@ -300,7 +204,6 @@ iree_runtime_cc_library(
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":barrier",
-        ":blit",
         ":commands",
         ":dispatch",
         ":launch",
@@ -313,6 +216,11 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amd/gpu:executable",
         "//runtime/src/iree/hal/drivers/amd/gpu:kernarg",
         "//runtime/src/iree/hal/drivers/amd/gpu:profile",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:blit",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:control",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:inputs",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:recording",
         "//runtime/src/iree/hal/utils:resource_set",
     ],
 )
@@ -324,22 +232,8 @@ iree_runtime_cc_library(
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
-        ":fixup",
         "//runtime/src/iree/base",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "blit",
-    srcs = ["blit.c"],
-    hdrs = ["blit.h"],
-    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
-    deps = [
-        ":commands",
-        ":launch",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/drivers/amd/gpu/image",
-        "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:recording",
     ],
 )
 
@@ -350,9 +244,7 @@ iree_runtime_cc_library(
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":barrier",
-        ":blit",
         ":commands",
-        ":fixup",
         ":launch",
         "//libamdf:headers",
         "//runtime/src/iree/base",
@@ -362,6 +254,9 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amd/fabric:memory",
         "//runtime/src/iree/hal/drivers/amd/gpu:code",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:blit",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:fixup",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
     ],
 )
 
@@ -412,6 +307,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
         "//runtime/src/iree/hal/drivers/amd/gpu:publication",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:capture_pool",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:publisher",
     ],
 )
@@ -425,8 +321,6 @@ iree_runtime_cc_library(
         ":barrier",
         ":command_buffer",
         ":dispatch",
-        ":semaphore",
-        ":signal",
         ":transfer",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
@@ -435,23 +329,13 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amd/gpu:executable",
         "//runtime/src/iree/hal/drivers/amd/gpu:kernarg",
         "//runtime/src/iree/hal/drivers/amd/gpu:profile",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:buffer",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:capture_pool",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:control",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:publisher",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "semaphore",
-    srcs = ["semaphore.c"],
-    hdrs = ["semaphore.h"],
-    deps = [
-        ":signal",
-        "//runtime/src/iree/async",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/utils:host_semaphore",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:semaphore",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:signal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:transfer",
     ],
 )
 
@@ -465,7 +349,6 @@ iree_runtime_cc_test(
         ":command_buffer",
         ":growth",
         ":program",
-        ":signal",
         ":submission",
         "//libamdf:headers",
         "//runtime/src/iree/base",
@@ -476,8 +359,11 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/drivers/amd/fabric:memory",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
         "//runtime/src/iree/hal/drivers/amd/gpu:publication",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:backing",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:capture_pool",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:publisher",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:signal",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -490,17 +376,18 @@ iree_runtime_cc_test(
     deps = [
         ":barrier",
         ":dispatch",
-        ":semaphore",
-        ":signal",
         ":submission",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async:platform",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu:dispatch",
         "//runtime/src/iree/hal/drivers/amd/gpu:executable",
         "//runtime/src/iree/hal/drivers/amd/gpu:kernarg",
         "//runtime/src/iree/hal/drivers/amd/gpu/image:metadata",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:capture_pool",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:semaphore",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:signal",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -527,57 +414,6 @@ iree_runtime_cc_benchmark(
         ":barrier",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
-        "//runtime/src/iree/testing:benchmark_main",
-    ],
-)
-
-iree_runtime_cc_test(
-    name = "semaphore_test",
-    srcs = ["semaphore_test.cc"],
-    deps = [
-        ":semaphore",
-        ":signal",
-        "//runtime/src/iree/async",
-        "//runtime/src/iree/async:platform",
-        "//runtime/src/iree/async/util:semaphore_wait",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/drivers/amd/gpu/queue:host_wait",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-iree_runtime_cc_benchmark(
-    name = "semaphore_benchmark",
-    srcs = ["semaphore_benchmark.cc"],
-    deps = [
-        ":semaphore",
-        ":signal",
-        "//runtime/src/iree/async",
-        "//runtime/src/iree/async:platform",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/testing:benchmark_main",
-    ],
-)
-
-iree_runtime_cc_test(
-    name = "signal_test",
-    srcs = ["signal_test.cc"],
-    deps = [
-        ":signal",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-iree_runtime_cc_benchmark(
-    name = "signal_benchmark",
-    srcs = ["signal_benchmark.cc"],
-    deps = [
-        ":signal",
         "//runtime/src/iree/testing:benchmark_main",
     ],
 )
@@ -659,12 +495,13 @@ iree_runtime_cc_library(
     hdrs = ["backing.h"],
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
-        ":signal",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/drivers/amd/fabric:memory",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:backing",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:signal",
     ],
 )
 
@@ -685,8 +522,6 @@ iree_runtime_cc_library(
         ":retirement",
         ":ring",
         ":scratch",
-        ":semaphore",
-        ":signal",
         ":submission",
         ":transfer",
         "//libamdf:headers",
@@ -696,25 +531,34 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base:cpu_data",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/base/threading:thread",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/drivers/amd/fabric:memory",
         "//runtime/src/iree/hal/drivers/amd/gpu:completion",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
+        "//runtime/src/iree/hal/drivers/amd/gpu:dispatch",
         "//runtime/src/iree/hal/drivers/amd/gpu:executable",
         "//runtime/src/iree/hal/drivers/amd/gpu:feedback",
         "//runtime/src/iree/hal/drivers/amd/gpu:profile",
         "//runtime/src/iree/hal/drivers/amd/gpu:publication",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:allocation",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:backing",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:buffer",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:capture_pool",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:control",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:file_staging",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:file_transfer",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:host_call",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:host_wait",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:memory_mapping",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:publisher",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:semaphore",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:signal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:transfer",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:user_queue",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue/pm4/kmq:storage",
-        "//runtime/src/iree/hal/drivers/amd/gpu/queue/pm4/umq:ring",
     ],
 )
 
@@ -725,6 +569,7 @@ iree_runtime_cc_library(
     deps = [
         ":commands",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
     ],
 )
 
@@ -766,8 +611,6 @@ iree_runtime_cc_test(
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":barrier",
-        ":blit",
-        ":fixup",
         ":launch",
         ":program",
         "//libamdf:headers",
@@ -777,6 +620,9 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/drivers/amd/fabric",
         "//runtime/src/iree/hal/drivers/amd/gpu:context",
         "//runtime/src/iree/hal/drivers/amd/gpu/image",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:blit",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:fixup",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:program",
         "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -789,9 +635,10 @@ iree_runtime_cc_test(
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":commands",
-        ":fixup",
         ":recording",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:fixup",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:recording",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

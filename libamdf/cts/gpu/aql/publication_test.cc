@@ -8,12 +8,22 @@
 
 namespace {
 
-TEST_F(AqlQueueTest, CompletesBarriersAndReusesRetiredSlots) {
+class AqlQueuePlacementTest
+    : public AqlQueueTest,
+      public ::testing::WithParamInterface<amdf_queue_placement_t> {};
+
+TEST_P(AqlQueuePlacementTest, CompletesBarriersAndReusesRetiredSlots) {
+  if (GetParam() != AMDF_QUEUE_PLACEMENT_DEFAULT &&
+      !(family_.placement_capabilities & (1u << GetParam()))) {
+    GTEST_SKIP() << "family does not support requested ring placement";
+  }
   GpuMemory* storage = nullptr;
   GpuUserQueue* queue = nullptr;
   ASSERT_NO_FATAL_FAILURE(CreateMemory(
       AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &storage));
-  ASSERT_NO_FATAL_FAILURE(CreateQueue(&queue));
+  ASSERT_NO_FATAL_FAILURE(CreateQueue(
+      family_, &queue, AMDF_QUEUE_PRODUCER_MODE_SINGLE, {},
+      AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER, 4096, 0, nullptr, GetParam()));
   std::memset(storage->host.pointer, 0, storage->info.byte_length);
   auto* signals = static_cast<aql::Signal*>(storage->host.pointer);
   signals[0] = aql::UserSignal();
@@ -37,6 +47,11 @@ TEST_F(AqlQueueTest, CompletesBarriersAndReusesRetiredSlots) {
     // completion, not read-index advancement, permits rearming the signal.
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(Placements, AqlQueuePlacementTest,
+                         ::testing::Values(AMDF_QUEUE_PLACEMENT_DEFAULT,
+                                           AMDF_QUEUE_PLACEMENT_HOST_LOCAL,
+                                           AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL));
 
 TEST_F(AqlQueueTest, MultipleProducersReserveAndPublishIndependently) {
   if ((family_.producer_modes & AMDF_QUEUE_PRODUCER_MODE_BIT_MULTI) == 0) {

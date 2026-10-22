@@ -14,6 +14,10 @@
 extern "C" {
 #endif  // __cplusplus
 
+// Translates native host publication ordering at the API boundary.
+iree_status_t iree_hal_amd_fabric_memory_translate_host_fence(
+    amdf_host_cache_fence_t source, iree_hal_host_cache_fence_t* out_fence);
+
 // Translates one successful libamdf pair query into the HAL's immutable pair
 // vocabulary. This validates the native result at the API boundary and
 // preserves unqualified UNKNOWN sides without inventing a fallback action.

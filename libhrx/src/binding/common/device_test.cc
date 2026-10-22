@@ -1,0 +1,132 @@
+// Copyright 2026 The HRX Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "common/device.h"
+
+#include "common/hrx_bridge.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "libhrx/src/libhrx/device.h"
+
+namespace {
+
+TEST(StreamingQueuePlacementTest, SelectsOnlyAdvertisedHostLocalPlacement) {
+  const uint32_t cases[] = {
+      0, IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL,
+      IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL,
+      IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL |
+          IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL};
+  for (uint32_t capabilities : cases) {
+    const iree_hal_queue_family_spec_t spec = {
+        .placement_capabilities = capabilities,
+    };
+    const iree_hal_queue_family_t family = {.spec = &spec};
+    EXPECT_EQ(iree_hal_streaming_queue_family_select_placement(&family),
+              capabilities & IREE_HAL_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL
+                  ? IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL
+                  : IREE_HAL_QUEUE_PLACEMENT_DEFAULT);
+  }
+}
+
+// Changes only which real CPU queue the dependency provisions. Queue creation,
+// properties, execution, and lifetime remain the task HAL's implementation.
+struct ProvisionedQueueView {
+  // Stack-owned device interface, borrowed only during the selection call.
+  iree_hal_resource_t resource;
+  // Real CPU device supplying the immutable family specification.
+  iree_hal_device_t* device;
+  // Real queue presented as the dependency's provisioned primary queue.
+  iree_hal_queue_t* queue;
+
+  iree_hal_device_t* Initialize() {
+    static const iree_hal_device_vtable_t vtable = {
+        .destroy = +[](iree_hal_device_t*) {},
+        .device_spec =
+            +[](iree_hal_device_t* base) {
+              return iree_hal_device_spec(
+                  reinterpret_cast<ProvisionedQueueView*>(base)->device);
+            },
+        .queue =
+            +[](iree_hal_device_t* base, iree_hal_queue_family_ordinal_t family,
+                iree_hal_queue_ordinal_t ordinal) {
+              auto* self = reinterpret_cast<ProvisionedQueueView*>(base);
+              EXPECT_EQ(family, iree_hal_queue_family(self->queue)->ordinal);
+              EXPECT_EQ(ordinal, 0u);
+              return self->queue;
+            },
+    };
+    iree_hal_resource_initialize(&vtable, &resource);
+    return reinterpret_cast<iree_hal_device_t*>(this);
+  }
+};
+
+class StreamingDeviceQueueTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    IREE_ASSERT_OK(HRX_CALL(hrx_cpu_initialize(0)));
+    hrx_device_t device = nullptr;
+    IREE_ASSERT_OK(HRX_CALL(hrx_cpu_device_get(0, &device)));
+    entry_.hal_device = hrx_device_hal(device);
+  }
+
+  void TearDown() override {
+    iree_hal_queue_release(acquired_);
+    iree_hal_queue_release(device_local_);
+    IREE_EXPECT_OK(HRX_CALL(hrx_cpu_shutdown()));
+  }
+
+  // Real streaming registry entry's HAL ownership boundary.
+  iree_hal_streaming_device_t entry_ = {};
+  // Caller-owned result of the production streaming selection.
+  iree_hal_queue_t* acquired_ = nullptr;
+  // Caller-owned alternate provisioned queue used by the device view.
+  iree_hal_queue_t* device_local_ = nullptr;
+};
+
+TEST_F(StreamingDeviceQueueTest, ReusesProvisionedHostLocalQueue) {
+  iree_hal_queue_t* provisioned = nullptr;
+  IREE_ASSERT_OK(
+      iree_hal_streaming_device_select_primary_queue(&entry_, &provisioned));
+  IREE_ASSERT_OK(
+      iree_hal_streaming_device_acquire_primary_queue(&entry_, &acquired_));
+  EXPECT_EQ(acquired_, provisioned);
+  EXPECT_EQ(iree_hal_queue_placement(acquired_),
+            IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+  iree_hal_queue_release(acquired_);
+  acquired_ = nullptr;
+  // Releasing the caller's reference leaves the provisioned owner intact.
+  IREE_ASSERT_OK(
+      iree_hal_streaming_device_acquire_primary_queue(&entry_, &acquired_));
+  EXPECT_EQ(acquired_, provisioned);
+}
+
+TEST_F(StreamingDeviceQueueTest, AcquiresHostLocalFromDeviceLocalProvisioning) {
+  iree_hal_queue_t* provisioned = nullptr;
+  IREE_ASSERT_OK(
+      iree_hal_streaming_device_select_primary_queue(&entry_, &provisioned));
+  iree_hal_queue_params_t params;
+  iree_hal_queue_params_initialize(&params);
+  params.placement = IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL;
+  IREE_ASSERT_OK(iree_hal_queue_acquire(iree_hal_queue_family(provisioned),
+                                        &params, &device_local_));
+  ProvisionedQueueView view = {
+      .device = entry_.hal_device,
+      .queue = device_local_,
+  };
+  iree_hal_streaming_device_t viewed_entry = {.hal_device = view.Initialize()};
+  IREE_ASSERT_OK(iree_hal_streaming_device_acquire_primary_queue(&viewed_entry,
+                                                                 &acquired_));
+  EXPECT_NE(acquired_, device_local_);
+  EXPECT_EQ(iree_hal_queue_family(acquired_),
+            iree_hal_queue_family(device_local_));
+  EXPECT_EQ(iree_hal_queue_placement(acquired_),
+            IREE_HAL_QUEUE_PLACEMENT_HOST_LOCAL);
+  EXPECT_EQ(iree_hal_queue_placement(device_local_),
+            IREE_HAL_QUEUE_PLACEMENT_DEVICE_LOCAL);
+  iree_hal_device_release(viewed_entry.hal_device);
+}
+
+}  // namespace

@@ -15,6 +15,7 @@
 #include "libamdf/src/child_tracker.h"
 #include "libamdf/src/device.h"
 #include "libamdf/src/gpu/device.h"
+#include "libamdf/src/gpu/event.h"
 #include "libamdf/src/gpu/umd/user_queue.h"
 #include "libamdf/src/memory.h"
 #include "libamdf/src/user_queue.h"
@@ -33,6 +34,13 @@ struct amdf_gpu_umd_user_queue_mapping_t {
   FakeNativeState* state;
 };
 
+struct amdf_gpu_event_t {
+  // Exact device borrowed by this dependency event.
+  amdf_device_t* device;
+  // Immutable native notification operands.
+  amdf_gpu_event_info_t info;
+};
+
 struct FakeNativeState {
   // Native construction calls reached after public input validation.
   uint32_t create_call_count = 0;
@@ -47,6 +55,12 @@ struct FakeNativeState {
   amdf_gpu_umd_user_queue_create_info_t observed_create = {};
   amdf_gpu_umd_device_t* observed_producer = nullptr;
   uint64_t waited_index = 0;
+  // Last caller backing resolved before native resume.
+  amdf_gpu_umd_queue_scratch_t resumed_scratch = {};
+  // Timestamp selections that reached the native dependency.
+  uint32_t timestamp_call_count = 0;
+  // Last validated timestamp selection passed to the native dependency.
+  bool timestamps_enabled = false;
 };
 
 namespace {
@@ -157,6 +171,35 @@ class GpuUserQueueTest : public ::testing::Test {
   amdf_user_queue_t* queue_ = nullptr;
   amdf_user_queue_mapping_t* mapping_ = nullptr;
 };
+
+TEST_F(GpuUserQueueTest, RequiresAdvertisedPlacementAndReportsAchievement) {
+  auto create = MakeCreateInfo();
+  create.placement = AMDF_QUEUE_PLACEMENT_DEVICE_LOCAL;
+  EXPECT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
+  EXPECT_EQ(consumer_state_.create_call_count, 0u);
+  EXPECT_EQ(queue_, nullptr);
+  current_family.placement_capabilities =
+      AMDF_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL;
+  ASSERT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(consumer_state_.observed_create.placement, create.placement);
+  amdf_user_queue_info_t info = {
+      .type = AMDF_STRUCTURE_TYPE_USER_QUEUE_INFO,
+      .structure_size = sizeof(info),
+  };
+  ASSERT_EQ(amdf_user_queue_query_info(queue_, &info), AMDF_STATUS_OK);
+  EXPECT_EQ(info.placement, create.placement);
+}
+
+TEST_F(GpuUserQueueTest, RejectsUnknownPlacementBeforeNativeCreation) {
+  auto create = MakeCreateInfo();
+  create.placement = UINT32_MAX;
+  EXPECT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  EXPECT_EQ(consumer_state_.create_call_count, 0u);
+  EXPECT_EQ(queue_, nullptr);
+}
 
 TEST_F(GpuUserQueueTest, RetainsQueueAcrossRejectedDestruction) {
   const amdf_gpu_user_queue_create_info_t create_info = MakeCreateInfo();
@@ -354,6 +397,117 @@ TEST_F(GpuUserQueueTest, RejectsUnavailableDispatchTimestampsBeforeCreation) {
   EXPECT_EQ(amdf_child_tracker_count(&consumer_.base.children), 0u);
 }
 
+TEST_F(GpuUserQueueTest, TimestampSelectionValidatesBeforeNativeMutation) {
+  EXPECT_EQ(amdf_gpu_user_queue_set_dispatch_timestamps(nullptr, 1),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  for (auto command_type :
+       {AMDF_QUEUE_COMMAND_TYPE_GPU_AQL, AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
+        AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA}) {
+    for (auto features :
+         {amdf_queue_format_features_t{0},
+          amdf_queue_format_features_t{
+              AMDF_GPU_AQL_FORMAT_FEATURE_DISPATCH_TIMESTAMPS}}) {
+      current_family.command_type = command_type;
+      current_family.format_features = features;
+      auto create_info = MakeCreateInfo();
+      ASSERT_EQ(
+          amdf_gpu_user_queue_create(&consumer_.base, &create_info, &queue_),
+          AMDF_STATUS_OK);
+      const uint32_t before = consumer_state_.timestamp_call_count;
+      EXPECT_EQ(amdf_gpu_user_queue_set_dispatch_timestamps(queue_, 2),
+                amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+      const bool supported =
+          command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL && features;
+      for (uint32_t enabled : {0u, 1u}) {
+        EXPECT_EQ(amdf_gpu_user_queue_set_dispatch_timestamps(queue_, enabled),
+                  supported
+                      ? AMDF_STATUS_OK
+                      : amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
+        if (supported) {
+          EXPECT_EQ(consumer_state_.timestamps_enabled, enabled != 0);
+        }
+      }
+      EXPECT_EQ(consumer_state_.timestamp_call_count,
+                before + (supported ? 2u : 0u));
+      ASSERT_EQ(amdf_user_queue_destroy(queue_), AMDF_STATUS_OK);
+      queue_ = nullptr;
+    }
+  }
+}
+
+TEST_F(GpuUserQueueTest, ScratchServiceValidatesExactEventAndBacking) {
+  current_family.command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_AQL;
+  current_family.format_features = AMDF_GPU_AQL_FORMAT_FEATURE_SCRATCH_SERVICE;
+  amdf_gpu_event_t event = {
+      .device = &producer_.base,
+      .info = {.mailbox_address = 0x12340000, .interrupt_context = 17},
+  };
+  amdf_gpu_aql_scratch_service_info_t service = {
+      .type = AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_SERVICE_INFO,
+      .structure_size = sizeof(service),
+      .event = &event,
+  };
+  auto create_info = MakeCreateInfo();
+  create_info.next = &service;
+  EXPECT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create_info, &queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  EXPECT_EQ(consumer_state_.create_call_count, 0u);
+  event.device = &consumer_.base;
+  ASSERT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create_info, &queue_),
+            AMDF_STATUS_OK);
+  EXPECT_TRUE(consumer_state_.observed_create.scratch_service);
+  EXPECT_EQ(consumer_state_.observed_create.inactive_event.mailbox_address,
+            event.info.mailbox_address);
+  auto scratch = create_info.scratch;
+  scratch.access_ordinal = 0;
+  EXPECT_EQ(amdf_gpu_user_queue_resume_scratch(queue_, &scratch),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  EXPECT_EQ(consumer_state_.resumed_scratch.device_address, 0u);
+  ASSERT_EQ(amdf_gpu_user_queue_resume_scratch(queue_, &create_info.scratch),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(consumer_state_.resumed_scratch.device_address, 0x801000u);
+
+  amdf_gpu_aql_scratch_request_t request = {
+      .type = AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_REQUEST,
+      .structure_size = sizeof(request),
+  };
+  ASSERT_EQ(amdf_gpu_user_queue_query_scratch(queue_, &request),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_gpu_user_queue_trim_scratch(queue_), AMDF_STATUS_OK);
+  EXPECT_EQ(request.byte_length, 4096u);
+  EXPECT_EQ(request.structure_size, sizeof(request));
+  const auto saved = request;
+  consumer_state_.query_status =
+      amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+  EXPECT_EQ(amdf_gpu_user_queue_query_scratch(queue_, &request),
+            consumer_state_.query_status);
+  EXPECT_EQ(amdf_gpu_user_queue_trim_scratch(queue_),
+            consumer_state_.query_status);
+  EXPECT_EQ(std::memcmp(&saved, &request, sizeof(request)), 0);
+}
+
+TEST_F(GpuUserQueueTest, ScratchServiceRequiresQualifiedAqlFamily) {
+  amdf_gpu_aql_scratch_service_info_t service = {
+      .type = AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_SERVICE_INFO,
+      .structure_size = sizeof(service),
+  };
+  auto create_info = MakeCreateInfo();
+  create_info.next = &service;
+  for (auto command_type :
+       {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA,
+        AMDF_QUEUE_COMMAND_TYPE_GPU_AQL}) {
+    current_family.command_type = command_type;
+    current_family.format_features =
+        command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+            ? 0
+            : AMDF_GPU_AQL_FORMAT_FEATURE_SCRATCH_SERVICE;
+    EXPECT_EQ(
+        amdf_gpu_user_queue_create(&consumer_.base, &create_info, &queue_),
+        amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
+  }
+  EXPECT_EQ(consumer_state_.create_call_count, 0u);
+}
+
 TEST_F(GpuUserQueueTest, RejectsUnknownQueueFlagsBeforeCreation) {
   auto create_info = MakeCreateInfo();
   auto* const sentinel = reinterpret_cast<amdf_user_queue_t*>(uintptr_t{1});
@@ -524,6 +678,9 @@ amdf_status_t amdf_gpu_umd_user_queue_create(
       .queue_id = {.words = {19, 23}},
       .capabilities = AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER |
                       AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER,
+      .placement = create_info->placement == AMDF_QUEUE_PLACEMENT_DEFAULT
+                       ? AMDF_QUEUE_PLACEMENT_HOST_LOCAL
+                       : create_info->placement,
       .ring_byte_length = create_info->ring_byte_length == 0
                               ? UINT64_C(4096)
                               : create_info->ring_byte_length,
@@ -565,6 +722,42 @@ amdf_status_t amdf_gpu_umd_user_queue_query_status(
   out_status->producer_index = 13;
   out_status->consumed_index = 11;
   return queue->state->query_status;
+}
+
+amdf_device_t* amdf_gpu_event_get_device(const amdf_gpu_event_t* event) {
+  return event->device;
+}
+
+amdf_status_t AMDF_CALL amdf_gpu_event_query_info(
+    amdf_gpu_event_t* event, amdf_gpu_event_info_t* out_info) {
+  *out_info = event->info;
+  return AMDF_STATUS_OK;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_query_scratch(
+    amdf_gpu_umd_user_queue_t* queue,
+    amdf_gpu_aql_scratch_request_t* out_request) {
+  out_request->byte_length = 4096;
+  return queue->state->query_status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_trim_scratch(
+    amdf_gpu_umd_user_queue_t* queue) {
+  return queue->state->query_status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_set_dispatch_timestamps(
+    amdf_gpu_umd_user_queue_t* queue, bool enabled) {
+  ++queue->state->timestamp_call_count;
+  queue->state->timestamps_enabled = enabled;
+  return queue->state->query_status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_resume_scratch(
+    amdf_gpu_umd_user_queue_t* queue,
+    const amdf_gpu_umd_queue_scratch_t* scratch) {
+  queue->state->resumed_scratch = *scratch;
+  return AMDF_STATUS_OK;
 }
 
 amdf_status_t amdf_gpu_umd_user_queue_wait_consumed(

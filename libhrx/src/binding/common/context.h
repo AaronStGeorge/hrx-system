@@ -87,8 +87,8 @@ struct iree_hal_streaming_context_t {
   iree_hal_streaming_device_ordinal_t device_ordinal;
   iree_hal_streaming_device_t* device_entry;
 
-  // Provisioned hardware queue used by streams in this context. Borrowed from
-  // |device| and valid for the context lifetime.
+  // Owned primary streaming queue, preferring host-local command storage.
+  // Released after stream teardown and before the retained device.
   iree_hal_queue_t* queue;
 
   // HAL resources.

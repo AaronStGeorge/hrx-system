@@ -106,8 +106,11 @@ typedef uint32_t amdf_abi_version_t;
 /// Memory cleanup disposition independent of construction status.
 #define AMDF_ABI_VERSION_12 ((amdf_abi_version_t)12)
 
+/// Required queue command-storage placement and mapped publication ordering.
+#define AMDF_ABI_VERSION_13 ((amdf_abi_version_t)13)
+
 /// The most recent ABI version described by this header.
-#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_12
+#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_13
 
 /// The unmangled symbol used to acquire the immutable API table.
 #define AMDF_QUERY_API_SYMBOL "amdf_query_api"

@@ -11,13 +11,35 @@ iree_add_all_subdirs()
 
 loom_target_profile(
   NAME
+    "feedback_profile_gfx90a"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx90a"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "feedback_profile_gfx9-4-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx9-4-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
     "feedback_profile_gfx11-generic"
   FAMILY
     "amdgpu"
   SELECTOR
     "gfx11-generic"
   REQUIRES
-    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
 )
 
 loom_target_profile(
@@ -28,10 +50,42 @@ loom_target_profile(
   SELECTOR
     "gfx12-generic"
   REQUIRES
-    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
 )
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "feedback_gfx90a"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:feedback_gfx90a"
+  TARGET
+    "::feedback_profile_gfx90a"
+  OUTPUT
+    "feedback_gfx90a.hsaco"
+  SRCS
+    "feedback.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "feedback_gfx9-4-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:feedback_gfx9-4-generic"
+  TARGET
+    "::feedback_profile_gfx9-4-generic"
+  OUTPUT
+    "feedback_gfx9-4-generic.hsaco"
+  SRCS
+    "feedback.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "feedback_gfx11-generic"
@@ -47,7 +101,7 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "feedback_gfx12-generic"
@@ -63,13 +117,15 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 iree_c_embed_data(
   NAME
     feedback_images
   SRCS
     "${CMAKE_CURRENT_BINARY_DIR}/feedback_gfx11-generic.hsaco"
     "${CMAKE_CURRENT_BINARY_DIR}/feedback_gfx12-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/feedback_gfx9-4-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/feedback_gfx90a.hsaco"
   C_FILE_OUTPUT
     "feedback_images.c"
   H_FILE_OUTPUT
@@ -81,7 +137,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_test(
   NAME
     feedback_test
@@ -104,14 +160,275 @@ iree_cc_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_gfx90a"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_gfx90a"
+  TARGET
+    "::feedback_profile_gfx90a"
+  OUTPUT
+    "code_transform_gfx90a.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_gfx9-4-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_gfx9-4-generic"
+  TARGET
+    "::feedback_profile_gfx9-4-generic"
+  OUTPUT
+    "code_transform_gfx9-4-generic.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_gfx11-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_gfx11-generic"
+  TARGET
+    "::feedback_profile_gfx11-generic"
+  OUTPUT
+    "code_transform_gfx11-generic.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_gfx12-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_gfx12-generic"
+  TARGET
+    "::feedback_profile_gfx12-generic"
+  OUTPUT
+    "code_transform_gfx12-generic.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_alternate_gfx90a"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_alternate_gfx90a"
+  TARGET
+    "::feedback_profile_gfx90a"
+  OUTPUT
+    "code_transform_alternate_gfx90a.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform_alternate.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_alternate_gfx9-4-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_alternate_gfx9-4-generic"
+  TARGET
+    "::feedback_profile_gfx9-4-generic"
+  OUTPUT
+    "code_transform_alternate_gfx9-4-generic.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform_alternate.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_alternate_gfx11-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_alternate_gfx11-generic"
+  TARGET
+    "::feedback_profile_gfx11-generic"
+  OUTPUT
+    "code_transform_alternate_gfx11-generic.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform_alternate.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "code_transform_alternate_gfx12-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:code_transform_alternate_gfx12-generic"
+  TARGET
+    "::feedback_profile_gfx12-generic"
+  OUTPUT
+    "code_transform_alternate_gfx12-generic.hsaco"
+  SRCS
+    "${PROJECT_SOURCE_DIR}/libamdf/cts/gpu/kernels/transform_alternate.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+iree_c_embed_data(
+  NAME
+    code_images
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_alternate_gfx11-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_alternate_gfx12-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_alternate_gfx9-4-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_alternate_gfx90a.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_gfx11-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_gfx12-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_gfx9-4-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/code_transform_gfx90a.hsaco"
+  C_FILE_OUTPUT
+    "code_images.c"
+  H_FILE_OUTPUT
+    "code_images.h"
+  IDENTIFIER
+    "iree_hal_amd_gpu_code_images"
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    code_test
+  SRCS
+    "code_test.cc"
+  DEPS
+    ::code_images
+    ::test_device
+    amdf::headers
+    iree::base
+    iree::base::internal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::code
+    iree::hal::drivers::amd::gpu::context
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::aql::packet
+    iree::hal::drivers::amd::gpu::queue::aql::ring
+    iree::hal::drivers::amd::gpu::queue::user_queue
+    iree::hal::drivers::amd::status
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+loom_target_profile(
+  NAME
+    "scratch_profile_gfx90a"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx90a"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "scratch_profile_gfx9-4-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx9-4-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "scratch_profile_gfx11-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx11-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "scratch_profile_gfx12-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx12-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "scratch_gfx90a"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:scratch_gfx90a"
+  TARGET
+    "::scratch_profile_gfx90a"
+  OUTPUT
+    "scratch_gfx90a.hsaco"
+  SRCS
+    "scratch.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "scratch_gfx9-4-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:scratch_gfx9-4-generic"
+  TARGET
+    "::scratch_profile_gfx9-4-generic"
+  OUTPUT
+    "scratch_gfx9-4-generic.hsaco"
+  SRCS
+    "scratch.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "scratch_gfx11-generic"
   COMPONENT
     "//runtime/src/iree/hal/drivers/amd/gpu/cts:scratch_gfx11-generic"
   TARGET
-    "::feedback_profile_gfx11-generic"
+    "::scratch_profile_gfx11-generic"
   OUTPUT
     "scratch_gfx11-generic.hsaco"
   SRCS
@@ -120,14 +437,14 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "scratch_gfx12-generic"
   COMPONENT
     "//runtime/src/iree/hal/drivers/amd/gpu/cts:scratch_gfx12-generic"
   TARGET
-    "::feedback_profile_gfx12-generic"
+    "::scratch_profile_gfx12-generic"
   OUTPUT
     "scratch_gfx12-generic.hsaco"
   SRCS
@@ -136,13 +453,15 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 iree_c_embed_data(
   NAME
     scratch_images
   SRCS
     "${CMAKE_CURRENT_BINARY_DIR}/scratch_gfx11-generic.hsaco"
     "${CMAKE_CURRENT_BINARY_DIR}/scratch_gfx12-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/scratch_gfx9-4-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/scratch_gfx90a.hsaco"
   C_FILE_OUTPUT
     "scratch_images.c"
   H_FILE_OUTPUT
@@ -154,7 +473,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_test(
   NAME
     scratch_test
@@ -204,7 +523,39 @@ iree_cc_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "asan_report_gfx90a"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:asan_report_gfx90a"
+  TARGET
+    "::feedback_profile_gfx90a"
+  OUTPUT
+    "asan_report_gfx90a.hsaco"
+  SRCS
+    "asan_report.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "asan_report_gfx9-4-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:asan_report_gfx9-4-generic"
+  TARGET
+    "::feedback_profile_gfx9-4-generic"
+  OUTPUT
+    "asan_report_gfx9-4-generic.hsaco"
+  SRCS
+    "asan_report.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "asan_report_gfx11-generic"
@@ -220,7 +571,7 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "asan_report_gfx12-generic"
@@ -236,13 +587,15 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 iree_c_embed_data(
   NAME
     asan_report_images
   SRCS
     "${CMAKE_CURRENT_BINARY_DIR}/asan_report_gfx11-generic.hsaco"
     "${CMAKE_CURRENT_BINARY_DIR}/asan_report_gfx12-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/asan_report_gfx9-4-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/asan_report_gfx90a.hsaco"
   C_FILE_OUTPUT
     "asan_report_images.c"
   H_FILE_OUTPUT
@@ -254,7 +607,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_test(
   NAME
     asan_report_test
@@ -277,7 +630,39 @@ iree_cc_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "tsan_gfx90a"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:tsan_gfx90a"
+  TARGET
+    "::feedback_profile_gfx90a"
+  OUTPUT
+    "tsan_gfx90a.hsaco"
+  SRCS
+    "tsan.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "tsan_gfx9-4-generic"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:tsan_gfx9-4-generic"
+  TARGET
+    "::feedback_profile_gfx9-4-generic"
+  OUTPUT
+    "tsan_gfx9-4-generic.hsaco"
+  SRCS
+    "tsan.loom"
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "tsan_gfx11-generic"
@@ -293,7 +678,7 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 loom_kernel_binary(
   NAME
     "tsan_gfx12-generic"
@@ -309,13 +694,15 @@ loom_kernel_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
 iree_c_embed_data(
   NAME
     tsan_images
   SRCS
     "${CMAKE_CURRENT_BINARY_DIR}/tsan_gfx11-generic.hsaco"
     "${CMAKE_CURRENT_BINARY_DIR}/tsan_gfx12-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/tsan_gfx9-4-generic.hsaco"
+    "${CMAKE_CURRENT_BINARY_DIR}/tsan_gfx90a.hsaco"
   C_FILE_OUTPUT
     "tsan_images.c"
   H_FILE_OUTPUT
@@ -327,7 +714,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_test(
   NAME
     tsan_test
@@ -339,6 +726,7 @@ iree_cc_test(
     iree::base
     iree::hal
     iree::hal::cts::util::profile_test_util
+    iree::hal::cts::util::test_base
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
@@ -364,6 +752,42 @@ iree_cc_library(
   TESTONLY
   ALWAYSLINK
   PUBLIC
+)
+endif()
+
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    buffer_test
+  DEPS
+    ::backends
+    iree::hal::cts::buffer::all_tests
+    iree::hal::cts::util::test_main
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    command_buffer_test
+  DEPS
+    ::backends
+    iree::hal::cts::command_buffer::all_tests
+    iree::hal::cts::util::test_main
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
 )
 endif()
 
@@ -420,10 +844,29 @@ endif()
 if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_test(
   NAME
-    host_call_test
+    queue_test
   DEPS
     ::backends
-    iree::hal::cts::queue::queue_host_call_test
+    iree::hal::cts::queue::all_tests
+    iree::hal::cts::util::test_main
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    semaphore_test
+  DEPS
+    ::backends
+    iree::hal::cts::core::semaphore_test
+    iree::hal::cts::core::semaphore_thread_test
     iree::hal::cts::util::test_main
   LABELS
     "iree-build-requirement=libamdf"
@@ -478,9 +921,12 @@ iree_cc_test(
     "driver_test.cc"
   DEPS
     ::test_device
+    amdf::amdf_static
+    amdf::headers
     iree::async::util::proactor_pool
     iree::base
     iree::hal
+    iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::registration
     iree::hal::drivers::amd::status
     iree::testing::gtest
@@ -501,24 +947,35 @@ iree_cc_test(
   NAME
     native_test
   SRCS
+    "aql_program_test.cc"
     "dispatch_test.cc"
     "native_test.cc"
+    "protocol_test.cc"
+    "queue_lifetime_test.cc"
+    "timestamp_test.cc"
   DEPS
     ::test_device
     amdf::amdf_static
     amdf::headers
     iree::async
-    iree::async::util::proactor_pool
     iree::base
+    iree::base::internal
     iree::hal
     iree::hal::cts::util::test_base
     iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::device
     iree::hal::drivers::amd::gpu::image::hip_images
-    iree::hal::drivers::amd::gpu::queue::pm4::semaphore
-    iree::hal::drivers::amd::gpu::queue::pm4::signal
-    iree::hal::drivers::amd::registration
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::kernarg
+    iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::aql::command_buffer
+    iree::hal::drivers::amd::gpu::queue::aql::program
+    iree::hal::drivers::amd::gpu::queue::aql::ring
+    iree::hal::drivers::amd::gpu::queue::pm4::queue
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::hal::drivers::amd::gpu::queue::signal
+    iree::hal::drivers::amd::gpu::queue::user_queue
     iree::hal::drivers::amd::status
     iree::hal::memory::fixed_block_pool
     iree::testing::gtest
@@ -554,6 +1011,7 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::device
     iree::hal::drivers::amd::gpu::publication
+    iree::hal::drivers::amd::gpu::queue::aql::queue
     iree::hal::drivers::amd::gpu::queue::pm4::queue
     iree::hal::drivers::amd::gpu::queue::sdma::queue
     iree::hal::drivers::amd::status
@@ -603,15 +1061,16 @@ iree_cc_test(
     iree::hal::drivers::amd::fabric::memory
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::image
+    iree::hal::drivers::amd::gpu::queue::fixup
     iree::hal::drivers::amd::gpu::queue::pm4::barrier
     iree::hal::drivers::amd::gpu::queue::pm4::commands
-    iree::hal::drivers::amd::gpu::queue::pm4::fixup
     iree::hal::drivers::amd::gpu::queue::pm4::kmq::storage
     iree::hal::drivers::amd::gpu::queue::pm4::launch
     iree::hal::drivers::amd::gpu::queue::pm4::program
     iree::hal::drivers::amd::gpu::queue::pm4::queue
     iree::hal::drivers::amd::gpu::queue::pm4::ring
-    iree::hal::drivers::amd::gpu::queue::pm4::umq::ring
+    iree::hal::drivers::amd::gpu::queue::program
+    iree::hal::drivers::amd::gpu::queue::user_queue
     iree::hal::drivers::amd::gpu::target::identity
     iree::hal::drivers::amd::status
     iree::testing::gtest

@@ -11,12 +11,14 @@
 #include "iree/hal/drivers/amd/gpu/executable.h"
 #include "iree/hal/drivers/amd/gpu/profile.h"
 #include "iree/hal/drivers/amd/gpu/queue/capture_pool.h"
+#include "iree/hal/drivers/amd/gpu/queue/control.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/barrier.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/command_buffer.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/dispatch.h"
-#include "iree/hal/drivers/amd/gpu/queue/pm4/semaphore.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/transfer.h"
 #include "iree/hal/drivers/amd/gpu/queue/publisher.h"
+#include "iree/hal/drivers/amd/gpu/queue/semaphore.h"
+#include "iree/hal/drivers/amd/gpu/queue/transfer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,7 +34,7 @@ typedef struct iree_hal_amd_gpu_pm4_submission_wait_t {
   // Requested timeline value.
   uint64_t value;
   // Owned eligible native reader, or NULL for a completed/host dependency.
-  iree_hal_amd_gpu_pm4_signal_t* signal;
+  iree_hal_amd_gpu_signal_t* signal;
 } iree_hal_amd_gpu_pm4_submission_wait_t;
 
 // Borrowed dispatch inputs consumed by one publication attempt. Native
@@ -43,8 +45,8 @@ typedef struct iree_hal_amd_gpu_pm4_dispatch_request_t {
   iree_hal_executable_t* executable;
   // Prepared immutable launch and argument representation.
   const iree_hal_amd_gpu_pm4_function_t* function;
-  // Already admitted launch geometry.
-  iree_hal_amd_gpu_pm4_dispatch_t geometry;
+  // Admitted geometry and private-storage requirements.
+  iree_hal_amd_gpu_pm4_dispatch_t launch;
   // Borrowed device-time geometry, when flags select indirect parameters.
   iree_hal_buffer_ref_t parameters;
   // Borrowed dense or native argument bytes, copied directly to native storage.
@@ -59,8 +61,10 @@ typedef enum iree_hal_amd_gpu_pm4_entry_kind_e {
   IREE_HAL_AMD_GPU_PM4_ENTRY_BARRIER,
   IREE_HAL_AMD_GPU_PM4_ENTRY_DISPATCH,
   IREE_HAL_AMD_GPU_PM4_ENTRY_TRANSFER,
+  IREE_HAL_AMD_GPU_PM4_ENTRY_CONTROL,
   IREE_HAL_AMD_GPU_PM4_ENTRY_EXECUTE,
   IREE_HAL_AMD_GPU_PM4_ENTRY_TRIM,
+  IREE_HAL_AMD_GPU_PM4_ENTRY_FRONTIERS,
   IREE_HAL_AMD_GPU_PM4_ENTRY_REUSE_SIGNALS,
   IREE_HAL_AMD_GPU_PM4_ENTRY_REUSE_PROGRAM,
   IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_ARGUMENTS,
@@ -105,7 +109,7 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   // Prepared terminal execution/cache boundary.
   iree_hal_amd_gpu_pm4_barrier_t after;
   // Owned native producer point, if any signal can use native acceleration.
-  iree_hal_amd_gpu_pm4_signal_t* signal;
+  iree_hal_amd_gpu_signal_t* signal;
   // Optional profile operation occupies the bytes immediately after this
   // header.
   bool profiled;
@@ -120,6 +124,13 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   // Exact initialized extent, computed once by the capture constructor.
   iree_host_size_t capture_size;
   union {
+    // Scalar operation and target retained through terminal native retirement.
+    struct {
+      // Prepared address slot, resolved only after allocation dependencies.
+      iree_hal_amd_gpu_buffer_reference_t target;
+      // Immutable validated scalar operation.
+      iree_hal_amd_gpu_control_t command;
+    } control;
     // Admitted dispatch with privately captured arguments and resources.
     struct {
       // Executable dominating function, retained unless flags borrow lifetime.
@@ -136,11 +147,11 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
       iree_const_byte_span_t constants;
       // Admitted interpretation of constants, bindings, and launch geometry.
       iree_hal_dispatch_flags_t flags;
-      // Admitted direct geometry.
-      iree_hal_amd_gpu_pm4_dispatch_t geometry;
+      // Admitted geometry and private-storage requirements.
+      iree_hal_amd_gpu_pm4_dispatch_t launch;
     } dispatch;
     // Captured transfer descriptors and the exclusively owned publish cursor.
-    iree_hal_amd_gpu_pm4_transfer_t transfer;
+    iree_hal_amd_gpu_transfer_t transfer;
     // Immutable recording and private table/cursor, owned through completion.
     iree_hal_amd_gpu_pm4_command_invocation_t execute;
   };
@@ -156,13 +167,13 @@ static inline uint32_t iree_hal_amd_gpu_pm4_submission_scratch_required(
   if (submission->entry.kind != IREE_HAL_AMD_GPU_PM4_ENTRY_DISPATCH) {
     return 0;
   }
-  const iree_hal_amd_gpu_pm4_dispatch_t* geometry =
-      &submission->dispatch.geometry;
+  const iree_hal_amd_gpu_pm4_dispatch_t* launch = &submission->dispatch.launch;
   return iree_hal_dispatch_uses_indirect_parameters(
              submission->dispatch.flags) ||
-                 (geometry->workgroup_count[0] &&
-                  geometry->workgroup_count[1] && geometry->workgroup_count[2])
-             ? geometry->scratch_wave_byte_length
+                 (launch->geometry.workgroup_count[0] &&
+                  launch->geometry.workgroup_count[1] &&
+                  launch->geometry.workgroup_count[2])
+             ? launch->scratch_wave_byte_length
              : 0;
 }
 
@@ -213,6 +224,18 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create_retirement(
     uint32_t native_wait_count, iree_hal_semaphore_list_t signals,
     iree_hal_amd_gpu_pm4_barrier_t before, iree_hal_amd_gpu_pm4_barrier_t after,
     const iree_hal_amd_gpu_profile_operation_t* profile,
+    iree_hal_amd_gpu_pm4_submission_t** out_submission);
+
+// Captures a qualified scalar control target and its dependency edges. Native
+// address resolution waits for admission; the buffer is retained through
+// terminal retirement. Failure retains nothing.
+iree_status_t iree_hal_amd_gpu_pm4_submission_create_control(
+    iree_hal_amd_gpu_capture_pool_t* pool, bool profiled,
+    const iree_hal_queue_family_t* family, iree_hal_semaphore_list_t waits,
+    iree_hal_semaphore_list_t signals, iree_hal_buffer_t* target,
+    iree_device_size_t offset, iree_hal_amd_gpu_control_t command,
+    const iree_hal_amd_gpu_pm4_barrier_profile_t* profile,
+    const iree_hal_queue_barriers_t* barriers,
     iree_hal_amd_gpu_pm4_submission_t** out_submission);
 
 // Captures the complete public transfer transaction, including update bytes
@@ -319,15 +342,6 @@ void iree_hal_amd_gpu_pm4_submission_release_payload(
 // not suffice. NULL is ignored.
 void iree_hal_amd_gpu_pm4_submission_release(
     iree_hal_amd_gpu_pm4_submission_t* submission);
-
-// Resolves a prepared direct buffer binding at the point execution is ready.
-// Dispatch admission has checked the captured range. This checks its native
-// permissions, exact family domain, and queue-ordered backing commitment.
-// It never maps memory, retains a buffer, or inspects pointer-valued bytes.
-iree_status_t iree_hal_amd_gpu_pm4_submission_resolve_address(
-    const iree_hal_queue_family_t* family, iree_hal_memory_site_kind_t site,
-    iree_hal_buffer_ref_t reference, iree_hal_buffer_usage_t usage,
-    iree_hal_memory_access_t access, uint64_t* out_address);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -21,6 +21,7 @@ iree_cc_library(
     iree::base::internal
     iree::base::threading
     iree::base::threading::thread
+    iree::hal::drivers::amd::gpu::queue::publisher
   PUBLIC
 )
 
@@ -66,15 +67,22 @@ iree_cc_library(
     iree::hal::drivers::amd::fabric::memory
     iree::hal::drivers::amd::fabric::memory_backend
     iree::hal::drivers::amd::gpu::queue::allocation
+    iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::aql::command_buffer
+    iree::hal::drivers::amd::gpu::queue::aql::program
+    iree::hal::drivers::amd::gpu::queue::aql::queue
+    iree::hal::drivers::amd::gpu::queue::backing
     iree::hal::drivers::amd::gpu::queue::file_staging
+    iree::hal::drivers::amd::gpu::queue::membership
     iree::hal::drivers::amd::gpu::queue::memory_mapping
     iree::hal::drivers::amd::gpu::queue::pm4::barrier
     iree::hal::drivers::amd::gpu::queue::pm4::command_buffer
     iree::hal::drivers::amd::gpu::queue::pm4::program
     iree::hal::drivers::amd::gpu::queue::pm4::queue
     iree::hal::drivers::amd::gpu::queue::pm4::scratch
-    iree::hal::drivers::amd::gpu::queue::pm4::semaphore
+    iree::hal::drivers::amd::gpu::queue::program
     iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::hal::drivers::amd::gpu::queue::semaphore
     iree::hal::drivers::amd::gpu::target::identity
     iree::hal::drivers::amd::status
     iree::hal::utils::device_spec_builder
@@ -138,6 +146,7 @@ iree_cc_library(
   DEPS
     ::code
     ::context
+    ::dispatch
     ::feedback
     ::kernarg
     ::profile
@@ -156,6 +165,8 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::image
     iree::hal::drivers::amd::gpu::image::hsaco
     iree::hal::drivers::amd::gpu::image::metadata
+    iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::aql::dispatch
     iree::hal::drivers::amd::gpu::queue::pm4::dispatch
     iree::hal::drivers::amd::gpu::queue::pm4::launch
     iree::hal::drivers::amd::gpu::target::identity
@@ -176,6 +187,7 @@ iree_cc_library(
     ::context
     amdf::headers
     iree::base
+    iree::base::threading
     iree::hal
     iree::hal::drivers::amd::fabric::memory
     iree::hal::drivers::amd::status
@@ -462,5 +474,60 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    dispatch
+  HDRS
+    "dispatch.h"
+  SRCS
+    "dispatch.c"
+  DEPS
+    ::kernarg
+    amdf::headers
+    iree::base
+    iree::hal
+    iree::hal::drivers::amd::gpu::image
+    iree::hal::drivers::amd::gpu::image::metadata
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    dispatch_test
+  SRCS
+    "dispatch_test.cc"
+  DEPS
+    ::dispatch
+    ::kernarg
+    iree::base
+    iree::hal
+    iree::hal::drivers::amd::gpu::image::metadata
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_binary_benchmark(
+  NAME
+    dispatch_benchmark
+  SRCS
+    "dispatch_benchmark.cc"
+  DEPS
+    ::dispatch
+    amdf::headers
+    iree::base
+    iree::hal
+    iree::hal::drivers::amd::gpu::image
+    iree::hal::drivers::amd::gpu::image::metadata
+    iree::testing::benchmark_main
+    iree::third_party::google_benchmark
+  TESTONLY
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

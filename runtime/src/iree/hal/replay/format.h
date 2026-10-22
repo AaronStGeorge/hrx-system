@@ -19,10 +19,9 @@ extern "C" {
 // Magic header bytes for IREE HAL replay files: "IRRP".
 #define IREE_HAL_REPLAY_FILE_MAGIC 0x50525249u
 
-// Major version of the IREE HAL replay file format. Version 13 replaces
-// implicit allocator buffer routing with explicit pool construction and use,
-// including file storage attachment.
-#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 13u
+// Major version of the IREE HAL replay file format. Version 15 preserves
+// required command-storage placement in dynamic queue acquisition.
+#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 15u
 
 // Minor version of the IREE HAL replay file format. Scoped host mappings have
 // independent identities in related_object_id: map creates the identity,
@@ -337,9 +336,25 @@ typedef struct iree_hal_replay_pool_create_slab_payload_t {
   uint32_t preferred_host_mapping_modes;
   // Preferred host cacheability.
   uint32_t preferred_host_cacheability;
+  // Required host device scope 32 operations.
+  uint32_t host_atomic_device_scope_32;
+  // Required host device scope 64 operations.
+  uint32_t host_atomic_device_scope_64;
+  // Required host system scope 32 operations.
+  uint32_t host_atomic_system_scope_32;
+  // Required host system scope 64 operations.
+  uint32_t host_atomic_system_scope_64;
+  // Preferred host device scope 32 operations.
+  uint32_t preferred_host_atomic_device_scope_32;
+  // Preferred host device scope 64 operations.
+  uint32_t preferred_host_atomic_device_scope_64;
+  // Preferred host system scope 32 operations.
+  uint32_t preferred_host_atomic_system_scope_32;
+  // Preferred host system scope 64 operations.
+  uint32_t preferred_host_atomic_system_scope_64;
 } iree_hal_replay_pool_create_slab_payload_t;
-static_assert(sizeof(iree_hal_replay_pool_create_slab_payload_t) == 80,
-              "slab pool replay header must be 80 bytes");
+static_assert(sizeof(iree_hal_replay_pool_create_slab_payload_t) == 112,
+              "slab pool replay header must be 112 bytes");
 
 // Virtual-buffer construction followed by family_count family access rows.
 // The operation's related object is the ordinary buffer being created.
@@ -360,9 +375,17 @@ typedef struct iree_hal_replay_virtual_buffer_create_payload_t {
   uint32_t host_cacheability;
   // Reserved for future construction policy; must be zero.
   uint32_t reserved0;
+  // Required host device scope 32 operations.
+  uint32_t host_atomic_device_scope_32;
+  // Required host device scope 64 operations.
+  uint32_t host_atomic_device_scope_64;
+  // Required host system scope 32 operations.
+  uint32_t host_atomic_system_scope_32;
+  // Required host system scope 64 operations.
+  uint32_t host_atomic_system_scope_64;
 } iree_hal_replay_virtual_buffer_create_payload_t;
-static_assert(sizeof(iree_hal_replay_virtual_buffer_create_payload_t) == 48,
-              "virtual buffer replay header must be 48 bytes");
+static_assert(sizeof(iree_hal_replay_virtual_buffer_create_payload_t) == 64,
+              "virtual buffer replay header must be 64 bytes");
 
 // Checked full removal for the buffer named by the operation's object ID.
 typedef struct iree_hal_replay_virtual_buffer_detach_payload_t {
@@ -389,16 +412,24 @@ typedef struct iree_hal_replay_pool_family_access_payload_t {
   // Reserved for future family requirements; must be zero.
   uint32_t reserved0;
   // Required 32-bit atomic operations in the device coherence domain.
-  uint32_t atomic_device_scope_32;
+  uint32_t queue_atomic_device_scope_32;
   // Required 64-bit atomic operations in the device coherence domain.
-  uint32_t atomic_device_scope_64;
+  uint32_t queue_atomic_device_scope_64;
   // Required 32-bit atomic operations in the system coherence domain.
-  uint32_t atomic_system_scope_32;
+  uint32_t queue_atomic_system_scope_32;
   // Required 64-bit atomic operations in the system coherence domain.
-  uint32_t atomic_system_scope_64;
+  uint32_t queue_atomic_system_scope_64;
+  // Required program device scope 32 operations.
+  uint32_t program_atomic_device_scope_32;
+  // Required program device scope 64 operations.
+  uint32_t program_atomic_device_scope_64;
+  // Required program system scope 32 operations.
+  uint32_t program_atomic_system_scope_32;
+  // Required program system scope 64 operations.
+  uint32_t program_atomic_system_scope_64;
 } iree_hal_replay_pool_family_access_payload_t;
-static_assert(sizeof(iree_hal_replay_pool_family_access_payload_t) == 48,
-              "pool family replay row must be 48 bytes");
+static_assert(sizeof(iree_hal_replay_pool_family_access_payload_t) == 64,
+              "pool family replay row must be 64 bytes");
 
 // Stable external storage class representation used in pool payloads.
 typedef struct iree_hal_replay_external_storage_class_payload_t {
@@ -747,13 +778,17 @@ typedef struct iree_hal_replay_dynamic_queue_object_payload_t {
   uint32_t family_ordinal;
   // Exact signed queue priority.
   int32_t priority;
+  // Required primary command-storage locality.
+  uint32_t placement;
+  // Reserved for future queue properties; must be zero.
+  uint32_t reserved0;
   // Exact immutable queue feature bits.
   uint64_t features;
   // Number of uint32_t execution-resource ordinals following this header.
   uint64_t execution_resource_count;
 } iree_hal_replay_dynamic_queue_object_payload_t;
-static_assert(sizeof(iree_hal_replay_dynamic_queue_object_payload_t) == 24,
-              "dynamic queue replay payload must be 24 bytes");
+static_assert(sizeof(iree_hal_replay_dynamic_queue_object_payload_t) == 32,
+              "dynamic queue replay payload must be 32 bytes");
 
 // Payload describing a captured file object followed by file reference bytes.
 typedef struct iree_hal_replay_file_object_payload_t {

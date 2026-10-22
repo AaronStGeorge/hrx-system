@@ -16,6 +16,9 @@
 extern "C" {
 #endif
 
+/// An explicitly owned native wake resource, independent of completion values.
+typedef struct amdf_gpu_event_t amdf_gpu_event_t;
+
 /// The first supported GPU extension version.
 #define AMDF_GPU_EXTENSION_VERSION_1 1u
 
@@ -25,8 +28,14 @@ extern "C" {
 /// Adds native GPU events and caller-owned blocking observation.
 #define AMDF_GPU_EXTENSION_VERSION_3 3u
 
+/// Adds caller-serviced AQL scratch requests.
+#define AMDF_GPU_EXTENSION_VERSION_4 4u
+
+/// Adds caller-quiesced control of native AQL dispatch timestamps.
+#define AMDF_GPU_EXTENSION_VERSION_5 5u
+
 /// The most recent GPU extension version described by this header.
-#define AMDF_GPU_EXTENSION_VERSION_LATEST AMDF_GPU_EXTENSION_VERSION_3
+#define AMDF_GPU_EXTENSION_VERSION_LATEST AMDF_GPU_EXTENSION_VERSION_5
 
 /// An `amdf_gpu_endpoint_info_t` output structure.
 #define AMDF_STRUCTURE_TYPE_GPU_ENDPOINT_INFO \
@@ -57,6 +66,14 @@ extern "C" {
 
 /// An `amdf_gpu_event_info_t` output structure.
 #define AMDF_STRUCTURE_TYPE_GPU_EVENT_INFO ((amdf_structure_type_t)0x00020009u)
+
+/// An `amdf_gpu_aql_scratch_service_info_t` input extension.
+#define AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_SERVICE_INFO \
+  ((amdf_structure_type_t)0x0002000au)
+
+/// An `amdf_gpu_aql_scratch_request_t` output structure.
+#define AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_REQUEST \
+  ((amdf_structure_type_t)0x0002000bu)
 
 /// Features available on a live device under its instance's lifetime policy.
 typedef uint64_t amdf_gpu_device_features_t;
@@ -229,8 +246,9 @@ typedef struct amdf_gpu_device_info_t {
 /// the consumed frontier is W - ((W - R) & (capacity - 1)). Status and wait
 /// operations expand the native counter to this monotonic frontier; the raw
 /// mapping continues to expose the native ring-relative read index.
-/// After storing complete commands, the producer release-stores the new write
-/// index, executes a host-to-device store fence (SFENCE on x86-64), then stores
+/// After storing complete commands, the host producer executes the mapping's
+/// host_publish_fence, then release-stores the new write index, executes a
+/// host-to-device store fence (SFENCE on x86-64), then stores
 /// the same value to the write-only 64-bit MMIO doorbell. A C/C++ release store
 /// alone does not supply that fence. Consumption proves ring storage can be
 /// reused; command completion requires a separate fence.
@@ -293,7 +311,8 @@ enum amdf_gpu_pm4_format_feature_bits_e {
 /// write indices are naturally aligned 64-bit monotonic byte counts; each
 /// index selects storage modulo `ring_byte_length`. A producer never advances
 /// more than that capacity beyond the acquired read index. After storing
-/// complete packets into the ring, the producer performs a release store of
+/// complete packets into the ring, a host producer executes the mapping's
+/// host_publish_fence. The producer then performs a release store of
 /// the new write index. A host producer then executes a host-to-device store
 /// fence (SFENCE on x86-64) before storing the same value to the write-only
 /// 64-bit MMIO doorbell; a C/C++ release store alone does not supply that
@@ -404,7 +423,9 @@ enum amdf_gpu_sdma_format_feature_bits_e {
 /// through the write index (atomic fetch-add for MULTI), wait until the
 /// reserved slot is below acquired read_index + ring_byte_length / 64, and
 /// write the packet body before release-storing its header/setup dword. A host
-/// producer then executes a host-to-device store fence (SFENCE on x86-64)
+/// producer executes the mapping's host_publish_fence before the header store;
+/// this orders write-combined ring stores even while firmware polls that slot.
+/// It then executes a host-to-device store fence (SFENCE on x86-64)
 /// before storing the packet's reservation index to the write-only 64-bit
 /// MMIO doorbell. A C/C++ release store alone does not supply that fence.
 /// MULTI producers may notify out of order; an unpublished earlier slot blocks
@@ -412,6 +433,15 @@ enum amdf_gpu_sdma_format_feature_bits_e {
 /// invalidates retired packet slots. Consumption
 /// releases ring storage, not code, kernargs, scratch, or kernel data: those
 /// require native execution completion.
+///
+/// DEVICE_PRODUCER mappings expose the owning GPU's ring, indices and
+/// doorbell addresses. A device publisher uses system-scope release stores
+/// for the complete header/setup dword and notification. A host may reserve
+/// and notify a later INVALID packet that an earlier dispatch will publish;
+/// it must not publish that packet's header itself. Host and device producers
+/// coordinate reservation ownership and capacity before touching a slot.
+/// Packet templates and fixup data may reside independently in local memory.
+/// No producer needs to read or modify an existing ring header to publish it.
 ///
 /// Dispatches use AMD kernel descriptors and caller-owned kernargs. Completion
 /// and barrier dependencies use native 64-byte AMD signal blocks, not bare
@@ -424,6 +454,17 @@ enum amdf_gpu_sdma_format_feature_bits_e {
 /// complete. System acquire/release fence scopes provide the advertised global
 /// cache transitions. This contract does not enable HSA runtime services,
 /// dynamic scratch growth, or device enqueue.
+///
+/// USER completion signals can notify a same-device KFD_SIGNAL version-1
+/// event. Set the signal's 64-bit event mailbox at byte 16 to mailbox_address
+/// and its 32-bit event ID at byte 24 to interrupt_context. Firmware handles
+/// the mailbox write and interrupt for dispatch and AND/OR barrier completion.
+/// Multiple signals and queues may share one event. Notifications can coalesce
+/// and only prompt an acquire recheck of the authoritative signal values;
+/// event_wait success alone does not establish execution completion. Retain
+/// the event until every queue that can notify it has been destroyed, including
+/// notification tails after a completion value becomes visible. Signal reuse
+/// also waits for every dependent reader's execution completion.
 ///
 /// AMD vendor format 1 carries a four-dword INDIRECT_BUFFER at packet byte 4,
 /// remaining-dword count 10 at byte 20, zero reserved words, and the native
@@ -443,7 +484,7 @@ enum amdf_gpu_sdma_format_feature_bits_e {
 /// observes command-processor progress and does not complete shader work.
 #define AMDF_GPU_AQL_QUEUE_FORMAT_VERSION_1 1u
 
-/// Optional native AQL operations reported in `format_features`.
+/// Native AQL operations and context facts reported in `format_features`.
 enum amdf_gpu_aql_format_feature_bits_e {
   /// AMD vendor format 2 BARRIER_VALUE waits until (signal_value & mask)
   /// satisfies the signed 64-bit HSA comparison against its reference value.
@@ -455,31 +496,48 @@ enum amdf_gpu_aql_format_feature_bits_e {
   /// Queue creation accepts AMDF_GPU_USER_QUEUE_FLAG_DISPATCH_TIMESTAMPS.
   /// Availability does not enable capture; the caller selects it at creation.
   AMDF_GPU_AQL_FORMAT_FEATURE_DISPATCH_TIMESTAMPS = UINT64_C(1) << 5,
+  /// Supports caller servicing of scratch-growth requests and explicit idle
+  /// scratch detachment.
+  AMDF_GPU_AQL_FORMAT_FEATURE_SCRATCH_SERVICE = UINT64_C(1) << 6,
+  /// The native dispatch context reserves 16 additional SGPRs per wave for
+  /// its trap handler, after rounding the descriptor's scalar allocation.
+  /// This is independent of the compiler descriptor's reserved trap bit.
+  /// Mutually exclusive with SGPR_TRAP_RESERVE_0; neither bit means unknown.
+  /// These facts describe the library-managed context, without external
+  /// replacement of its trap handler. RDNA scalar capacity is not occupancy
+  /// limited, so these bits need not be reported there.
+  AMDF_GPU_AQL_FORMAT_FEATURE_SGPR_TRAP_RESERVE_16 = UINT64_C(1) << 7,
+  /// The native dispatch context has no per-wave trap SGPR reservation.
+  /// Absence of SGPR_TRAP_RESERVE_16 alone does not imply this fact.
+  AMDF_GPU_AQL_FORMAT_FEATURE_SGPR_TRAP_RESERVE_0 = UINT64_C(1) << 8,
 };
 
 /// Scratch backing borrowed by one directly published compute queue.
 ///
 /// An all-zero value disables queue-owned scratch provisioning. AQL then
-/// accepts only commands whose private segment is empty. PM4 command-owned
-/// scratch uses DISPATCH_SCRATCH with this value zero. Otherwise the selected
-/// access must belong to the queue's device and provide read/write permission
-/// and a stable GPU address. The queue borrows the memory without lifetime
-/// tracking. The caller keeps the scratch
-/// backing live until queue destruction succeeds.
+/// accepts only commands whose private segment is empty unless scratch service
+/// is enabled. PM4 command-owned scratch uses DISPATCH_SCRATCH with this value
+/// zero. Otherwise the selected access must belong to the queue's device and
+/// provide read/write permission and a stable GPU address. The queue borrows
+/// the memory without lifetime tracking. The caller keeps it live until
+/// queue destruction
+/// succeeds or scratch service explicitly surrenders it through a nonempty
+/// request or successful idle trim.
 ///
-/// AQL format 1 retains fixed scratch across dispatches. Let C be
-/// compute_unit_count, E be xcc_count * shader_engine_count_per_xcc, and S be
-/// maximum_scratch_wave_count_per_compute_unit. Its physical slot count is
+/// Without scratch service, AQL format 1 retains fixed scratch across
+/// dispatches. Let C be compute_unit_count, E be xcc_count times
+/// shader_engine_count_per_xcc, and S be the maximum scratch waves per CU.
+/// Its physical slot count is
 /// ceil(C / E) * E * S, including padding for asymmetric CU harvesting. Set
 /// maximum_wave_count to this slot count; smaller pools requiring firmware
 /// scratch reclamation are unsupported. The GPU base is 4096-byte aligned.
 /// Each slot receives the requested per-workitem private byte length
 /// times 64, rounded up to 1024 bytes. Backing must cover every wave; excess
 /// backing does not change the configured capacity. Every submitted dispatch
-/// fits the configured per-workitem private limit. Scratch is exclusive to the
-/// queue until its final execution completion and successful destruction.
+/// fits the configured per-workitem private limit. Without scratch service,
+/// scratch remains exclusive to the queue until successful destruction.
 typedef struct amdf_gpu_queue_scratch_t {
-  /// Memory resource borrowed for the queue lifetime, or NULL when disabled.
+  /// Memory resource borrowed until surrender/destruction, or NULL if disabled.
   amdf_memory_t* memory;
   /// Resource-local access for the queue's device, or zero when disabled.
   uint32_t access_ordinal;
@@ -495,10 +553,61 @@ typedef struct amdf_gpu_queue_scratch_t {
   uint32_t maximum_wave_count;
 } amdf_gpu_queue_scratch_t;
 
-/// Immutable options selected when a directly published GPU queue is created.
+/// Enables caller servicing of AQL scratch requests at queue construction.
+///
+/// Append to `amdf_gpu_user_queue_create_info_t::next`. Requires the AQL
+/// SCRATCH_SERVICE format feature and GPU extension version 4. Firmware pauses
+/// the queue when a dispatch exceeds its current scratch capacity; querying
+/// and resuming the request are the caller's responsibility. Other queues
+/// remain independent. No allocation policy, worker, or automatic retry is
+/// provided by libamdf. Initial scratch may be empty.
+typedef struct amdf_gpu_aql_scratch_service_info_t {
+  /// Must be `AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_SERVICE_INFO`.
+  amdf_structure_type_t type;
+  /// Must be at least `sizeof(amdf_gpu_aql_scratch_service_info_t)`.
+  uint32_t structure_size;
+  /// Optional input extension chain. No extensions are currently defined.
+  const void* next;
+  /// Optional event from the exact queue device, borrowed until successful
+  /// queue destruction. Firmware uses it for scratch requests and queue errors.
+  /// Notifications may coalesce with other uses of the event; query the
+  /// authoritative request after waking. NULL enables explicit querying only.
+  amdf_gpu_event_t* event;
+} amdf_gpu_aql_scratch_service_info_t;
+
+/// One firmware request for retained scratch covering all physical wave slots.
+///
+/// A zero byte_length means no request is pending; the other payload fields
+/// are then zero. A nonzero request surrenders the previous scratch backing:
+/// the caller may release or reuse it before acquiring the replacement.
+/// The queue stays paused until a successful resume. This surrender does not
+/// establish completion of unrelated resources or other queues.
+typedef struct amdf_gpu_aql_scratch_request_t {
+  /// Must be `AMDF_STRUCTURE_TYPE_GPU_AQL_SCRATCH_REQUEST`.
+  amdf_structure_type_t type;
+  /// Must be at least `sizeof(amdf_gpu_aql_scratch_request_t)`.
+  uint32_t structure_size;
+  /// Optional output extension chain. No extensions are currently defined.
+  void* next;
+  /// Monotonic packet index of the requesting dispatch.
+  uint64_t dispatch_index;
+  /// Required backing length, rounded to native pages.
+  uint64_t byte_length;
+  /// Packet's private-segment requirement per workitem.
+  uint32_t private_segment_byte_length;
+  /// Requested native wave width, 32 or 64.
+  uint32_t wavefront_size;
+  /// Required physical slot count, including shader-engine harvest padding.
+  uint32_t wave_count;
+  /// Reserved for compatible growth; always zero.
+  uint32_t reserved;
+} amdf_gpu_aql_scratch_request_t;
+
+/// Initial options selected when a directly published GPU queue is created.
 typedef uint32_t amdf_gpu_user_queue_flags_t;
 enum amdf_gpu_user_queue_flag_bits_e {
-  /// Enables AQL firmware dispatch timestamps for the queue's lifetime.
+  /// Initially enables AQL firmware dispatch timestamps. Version 5 allows
+  /// changing this selection with user_queue_set_dispatch_timestamps.
   /// Requires the AQL DISPATCH_TIMESTAMPS format feature. PM4 and SDMA use
   /// explicit timestamp commands and reject this option.
   ///
@@ -525,15 +634,19 @@ typedef struct amdf_gpu_user_queue_create_info_t {
   amdf_structure_type_t type;
   /// Must be at least `sizeof(amdf_gpu_user_queue_create_info_t)`.
   uint32_t structure_size;
-  /// Optional input extension chain. No extensions are currently defined.
+  /// Optional input extension chain. Accepts
+  /// `amdf_gpu_aql_scratch_service_info_t`.
   const void* next;
   /// Endpoint-local PM4, SDMA, or AQL family supporting user publication.
   uint32_t queue_family_ordinal;
   /// Requested scheduling priority.
   amdf_queue_priority_t priority;
+  /// Required primary-ring locality, or DEFAULT for provider policy. An
+  /// unsupported explicit placement fails; producer access is unchanged.
+  amdf_queue_placement_t placement;
   /// Required producer reservation protocol.
   amdf_queue_producer_mode_t producer_mode;
-  /// Immutable queue options. Unknown bits are invalid.
+  /// Initial queue options. Unknown bits are invalid.
   amdf_gpu_user_queue_flags_t flags;
   /// Direct producer capabilities that creation must achieve.
   /// Optional device publication must be requested here; mapping does not
@@ -543,7 +656,7 @@ typedef struct amdf_gpu_user_queue_create_info_t {
   amdf_user_queue_capabilities_t required_capabilities;
   /// Requested power-of-two primary ring capacity, or zero for the default.
   uint64_t ring_byte_length;
-  /// Compute scratch borrowed for the queue lifetime, or all-zero when absent.
+  /// Initial compute scratch borrowed until surrender/destruction, or all-zero.
   amdf_gpu_queue_scratch_t scratch;
 } amdf_gpu_user_queue_create_info_t;
 
@@ -603,9 +716,6 @@ typedef struct amdf_gpu_kernel_queue_submission_info_t {
   /// attachment remains borrowed until the accepted submission retires.
   const amdf_gpu_kernel_command_t* commands;
 } amdf_gpu_kernel_queue_submission_info_t;
-
-/// An explicitly owned native wake resource, independent of completion values.
-typedef struct amdf_gpu_event_t amdf_gpu_event_t;
 
 /// Native producer protocol returned by an event's immutable information.
 typedef uint32_t amdf_gpu_event_format_t;
@@ -870,6 +980,75 @@ typedef struct amdf_gpu_api_t {
   /// consumes the event; a native release failure preserves it for retry.
   /// Shared native connection backing remains with its instance.
   amdf_status_t(AMDF_CALL* event_destroy)(amdf_gpu_event_t* event);
+
+  /// Queries a scratch-service queue without allocation or kernel entry.
+  /// Requires GPU extension version 4 and scratch service enabled at creation.
+  /// An empty request succeeds; other firmware failures return their native
+  /// status. Failure leaves out_request unchanged.
+  ///
+  /// This is a cold firmware-service operation. Locating a request may read
+  /// up to one ring's worth of packet headers because native consumption can
+  /// lag the requesting dispatch. The caller serializes query/resume calls
+  /// and keeps the queue live; normal packet publication may continue within
+  /// ring capacity. Event notification alone does not surrender backing.
+  amdf_status_t(AMDF_CALL* user_queue_query_scratch)(
+      amdf_user_queue_t* queue, amdf_gpu_aql_scratch_request_t* out_request);
+
+  /// Installs caller-owned backing and resumes a pending scratch request.
+  /// Requires GPU extension version 4. The caller sets maximum_wave_count
+  /// from the request and maximum_private_segment_byte_length to at least its
+  /// private requirement. The backing length must cover that selected bound
+  /// at the request's wave width, rounded per target to complete wave slots.
+  /// Excess backing does not increase the configured capacity.
+  ///
+  /// Validates and writes the native descriptor, then releases firmware's
+  /// pause. No allocation, kernel entry, waiting, or lifetime tracking occurs.
+  /// Success borrows scratch through the next nonempty request, successful
+  /// scratch trim, or successful queue destruction. Failure leaves firmware
+  /// paused and does not borrow the supplied backing. Calling without a
+  /// pending request returns FAILED_PRECONDITION. Ordinary execution
+  /// completion alone does not authorize releasing bound scratch.
+  amdf_status_t(AMDF_CALL* user_queue_resume_scratch)(
+      amdf_user_queue_t* queue, const amdf_gpu_queue_scratch_t* scratch);
+
+  /// Detaches scratch from an idle scratch-service queue. Requires GPU
+  /// extension version 4. The caller must have joined every accepted dispatch
+  /// and packet, and must exclude publication, scratch service, and teardown
+  /// until this call returns. The library does not prove these lifetimes.
+  ///
+  /// This cold operation may enter the kernel to disconnect and reconnect the
+  /// same queue; it allocates no backing and creates no worker. Success
+  /// surrenders the previous scratch allocation while preserving the queue,
+  /// mappings, indices, and event. A later private dispatch requests backing
+  /// normally. Repeating trim without intervening scratch growth is a no-op.
+  ///
+  /// Native failure makes the queue terminal and grants no permission to free
+  /// its borrowed resources; successful queue destruction still joins them.
+  amdf_status_t(AMDF_CALL* user_queue_trim_scratch)(amdf_user_queue_t* queue);
+
+  /// Enables (1) or disables (0) native AQL dispatch timestamps on an idle
+  /// queue. Requires GPU extension version 5 and the queue family's AQL
+  /// DISPATCH_TIMESTAMPS format feature. Other values are INVALID_ARGUMENT;
+  /// other command formats or unavailable native support are UNSUPPORTED.
+  ///
+  /// The caller must have joined every accepted dispatch and packet, and
+  /// must exclude publication, scratch service, configuration, and teardown
+  /// until this call returns. Consumption alone does not establish execution
+  /// completion. The library does not prove these lifetimes or wait for work.
+  ///
+  /// This cold operation may enter the kernel to disconnect and reconnect the
+  /// same queue, preserving its identity, mappings, indices, and scratch.
+  /// It allocates no backing and creates no worker. Repeating the current
+  /// selection succeeds without native calls. Success affects subsequent
+  /// dispatches; each enabled dispatch still needs its own initialized signal
+  /// as described by AMDF_GPU_USER_QUEUE_FLAG_DISPATCH_TIMESTAMPS.
+  ///
+  /// Native reconfiguration failure makes the queue terminal and grants no
+  /// permission to free borrowed resources; successful queue destruction
+  /// still joins them. Invalid input or unsupported selection does not alter
+  /// the queue.
+  amdf_status_t(AMDF_CALL* user_queue_set_dispatch_timestamps)(
+      amdf_user_queue_t* queue, uint32_t enabled);
 } amdf_gpu_api_t;
 
 #ifdef __cplusplus

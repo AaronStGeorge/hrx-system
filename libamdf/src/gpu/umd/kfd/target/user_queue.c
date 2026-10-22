@@ -22,7 +22,9 @@ void amdf_gpu_kfd_target_user_queue_plans_initialize(
   // storage and descriptor encodings are resolved before either family is
   // advertised, and the live constructor consumes the same plans.
   const bool cdna = topology->properties.gfx_ip.major == 9 &&
-                    ((topology->properties.gfx_ip.minor == 4 &&
+                    ((topology->properties.gfx_ip.minor == 0 &&
+                      topology->properties.gfx_ip.stepping == 10) ||
+                     (topology->properties.gfx_ip.minor == 4 &&
                       topology->properties.gfx_ip.stepping <= 2) ||
                      (topology->properties.gfx_ip.minor == 5 &&
                       topology->properties.gfx_ip.stepping == 0));
@@ -44,6 +46,16 @@ void amdf_gpu_kfd_target_user_queue_plans_initialize(
   if (amdf_gpu_kfd_sdma_queue_plan(topology, page_size, cache_line_size,
                                    &plan)) {
     plans.values[plans.count++] = plan;
+  }
+  const bool host_visible_local =
+      topology->integrated ||
+      (topology->vram.total_byte_length != 0 &&
+       topology->vram.visible_byte_length >= topology->vram.total_byte_length);
+  for (uint32_t i = 0; i < plans.count; ++i) {
+    plans.values[i].family.placement_capabilities =
+        AMDF_QUEUE_PLACEMENT_CAPABILITY_HOST_LOCAL |
+        (host_visible_local ? AMDF_QUEUE_PLACEMENT_CAPABILITY_DEVICE_LOCAL : 0);
+    plans.values[i].ring.placement = AMDF_QUEUE_PLACEMENT_HOST_LOCAL;
   }
   *out_plans = plans;
 }
