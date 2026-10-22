@@ -324,6 +324,28 @@ TEST_P(InputTest, InputRejectionLeavesInvocationReusable) {
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
 }
 
+TEST_P(InputTest, InputRejectionPreservesLongAuthoredDiagnostic) {
+  std::string diagnostic(30001, '\0');
+  for (size_t i = 0; i < diagnostic.size(); ++i) {
+    diagnostic[i] = (char)('a' + (i % 26));
+  }
+  iree_vm_variant_t arguments[] = {
+      iree_vm_variant_from_i32(0),
+      Text(iree_make_string_view(diagnostic.data(), diagnostic.size()))};
+  iree_status_t status =
+      Invoke(IREE_SV("check"), iree_vm_variant_span_from_array(arguments),
+             iree_vm_variant_span_empty());
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
+  const iree_string_view_t stored_message = iree_status_message(status);
+  EXPECT_TRUE(iree_string_view_equal(
+      stored_message,
+      iree_make_string_view(diagnostic.data(), diagnostic.size())));
+#endif  // IREE_STATUS_FEATURE_ANNOTATIONS
+  iree_status_free(status);
+  iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
+}
+
 TEST_P(InputTest, UnsupportedFlagsLeaveInvocationReusable) {
   for (int32_t flags : {1, 2, 6, -1, 0}) {
     iree_vm_variant_t arguments[] = {Text(IREE_SV("a")),

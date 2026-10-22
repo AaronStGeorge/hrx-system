@@ -247,8 +247,9 @@ static iree_status_t loom_x86_loom_check_prepare_abis(
         module, loom_func_like_cast(module, op), &target, request->case_arena,
         &supported, &constraint, &out_module_abi->functions[function_index]));
     if (!supported) {
-      return iree_make_status(IREE_STATUS_UNIMPLEMENTED, "%.*s",
-                              (int)constraint.size, constraint.data);
+      return iree_status_allocate_copy(IREE_STATUS_UNIMPLEMENTED,
+                                       iree_make_cstring_view(__FILE__),
+                                       __LINE__, constraint);
     }
     loom_x86_module_abi_bind(out_module_abi, function_index++, symbol_id);
   }

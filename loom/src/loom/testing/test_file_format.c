@@ -93,8 +93,7 @@ static iree_status_t loom_test_file_format_annotate_failure(
   }
   if (iree_status_is_ok(detail_status)) {
     const iree_string_view_t detail_view = iree_string_builder_view(&detail);
-    status = iree_status_annotate_f(status, "%.*s", (int)detail_view.size,
-                                    detail_view.data);
+    status = iree_status_annotate_copy(status, detail_view);
   } else {
     status = iree_status_join(status, detail_status);
   }

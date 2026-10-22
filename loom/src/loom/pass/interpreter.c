@@ -1089,13 +1089,13 @@ static iree_status_t loom_pass_interpreter_execute_range(
         break;
       }
       case LOOM_PASS_PROGRAM_INSTRUCTION_FAIL:
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION, "%.*s",
-                                (int)instruction->message.message.size,
-                                instruction->message.message.data);
+        return iree_status_allocate_copy(
+            IREE_STATUS_FAILED_PRECONDITION, iree_make_cstring_view(__FILE__),
+            __LINE__, instruction->message.message);
       case LOOM_PASS_PROGRAM_INSTRUCTION_HALT:
-        return iree_make_status(IREE_STATUS_ABORTED, "%.*s",
-                                (int)instruction->message.message.size,
-                                instruction->message.message.data);
+        return iree_status_allocate_copy(
+            IREE_STATUS_ABORTED, iree_make_cstring_view(__FILE__), __LINE__,
+            instruction->message.message);
       default:
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "unsupported pass program instruction");

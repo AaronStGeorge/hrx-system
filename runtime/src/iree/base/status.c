@@ -702,6 +702,12 @@ IREE_API_EXPORT iree_status_t iree_status_ignore(iree_status_t status) {
   return iree_ok_status();
 }
 
+#if IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS
+static iree_status_t iree_status_annotate_copy_parts(
+    iree_status_t base_status, iree_string_view_t prefix,
+    iree_string_view_t message);
+#endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
+
 IREE_API_EXPORT iree_status_t iree_status_join(iree_status_t base_status,
                                                iree_status_t new_status) {
   if (!iree_status_is_ok(base_status)) {
@@ -712,9 +718,9 @@ IREE_API_EXPORT iree_status_t iree_status_join(iree_status_t base_status,
       iree_host_size_t message_length = 0;
       if (iree_status_to_string(new_status, &allocator, &message,
                                 &message_length)) {
-        base_status =
-            iree_status_annotate_f(base_status, "additional failure: %.*s",
-                                   (int)message_length, message);
+        base_status = iree_status_annotate_copy_parts(
+            base_status, iree_make_cstring_view("additional failure: "),
+            iree_make_string_view(message, message_length));
         iree_allocator_free(allocator, message);
       } else {
         base_status = iree_status_annotate_f(
@@ -780,14 +786,83 @@ iree_status_annotate(iree_status_t base_status, iree_string_view_t message) {
                                     (iree_status_payload_t*)payload);
 }
 
+static iree_status_t iree_status_annotate_copy_parts(
+    iree_status_t base_status, iree_string_view_t prefix,
+    iree_string_view_t message) {
+  if (iree_status_is_ok(base_status) || (iree_string_view_is_empty(prefix) &&
+                                         iree_string_view_is_empty(message))) {
+    return base_status;
+  }
+
+  iree_status_storage_t* storage = iree_status_storage(base_status);
+  if (!storage && iree_string_view_is_empty(prefix)) {
+    return iree_status_allocate_copy(iree_status_code(base_status),
+                                     iree_string_view_empty(), 0, message);
+  }
+
+  iree_host_size_t message_length = 0;
+  if (!iree_host_size_checked_add(prefix.size, message.size, &message_length)) {
+    return base_status;
+  }
+  iree_host_size_t message_storage_size = 0;
+  if (!iree_host_size_checked_add(message_length, 1, &message_storage_size)) {
+    return base_status;
+  }
+  iree_host_size_t allocation_size = 0;
+  iree_host_size_t message_offset = 0;
+  iree_status_t layout_status = IREE_STRUCT_LAYOUT(
+      iree_sizeof_struct(iree_status_payload_message_t), &allocation_size,
+      IREE_STRUCT_FIELD(message_storage_size, char, &message_offset));
+  if (!iree_status_is_ok(layout_status)) {
+    iree_status_ignore(layout_status);
+    return base_status;
+  }
+
+  iree_allocator_t allocator = iree_allocator_system();
+  iree_status_payload_message_t* payload = NULL;
+  iree_status_ignore(
+      iree_allocator_malloc(allocator, allocation_size, (void**)&payload));
+  if (IREE_UNLIKELY(!payload)) {
+    return base_status;
+  }
+  memset(payload, 0, sizeof(*payload));
+  payload->header.type = IREE_STATUS_PAYLOAD_TYPE_MESSAGE;
+  payload->header.allocator = allocator;
+  payload->header.formatter = iree_status_payload_message_formatter;
+  char* message_storage = (char*)payload + message_offset;
+  if (!iree_string_view_is_empty(prefix)) {
+    memcpy(message_storage, prefix.data, prefix.size);
+  }
+  if (!iree_string_view_is_empty(message)) {
+    memcpy(message_storage + prefix.size, message.data, message.size);
+  }
+  message_storage[message_length] = 0;
+  payload->message = iree_make_string_view(message_storage, message_length);
+
+  if (!storage) {
+    iree_status_t copied_status = iree_status_allocate_copy(
+        iree_status_code(base_status), iree_string_view_empty(), 0,
+        payload->message);
+    iree_allocator_free(allocator, payload);
+    return copied_status;
+  }
+  return iree_status_append_payload(base_status, storage,
+                                    (iree_status_payload_t*)payload);
+}
+
+IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t iree_status_annotate_copy(
+    iree_status_t base_status, iree_string_view_t message) {
+  return iree_status_annotate_copy_parts(base_status, iree_string_view_empty(),
+                                         message);
+}
+
 IREE_MUST_USE_RESULT static iree_status_t iree_status_annotate_vf(
     iree_status_t base_status, const char* format, va_list varargs) {
   if (iree_status_is_ok(base_status)) {
     return base_status;
   }
 
-  // If there's no storage yet we can just reuse normal allocation. Both that
-  // and this do not copy |message|.
+  // If there's no storage yet we can reuse the primary-message allocator.
   iree_status_storage_t* storage = iree_status_storage(base_status);
   if (!storage) {
     return iree_status_allocate_vf(iree_status_code(base_status), NULL, 0,
@@ -860,6 +935,49 @@ IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t IREE_PRINTF_ATTRIBUTE(2, 3)
 
 #endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
 
+#if IREE_STATUS_FEATURES != 0
+// Appends |value| to a bounded status output while retaining the complete
+// required length. |inout_buffer| becomes NULL after truncation so later
+// fields are measured without writing past the caller's capacity.
+static bool iree_status_format_append(iree_string_view_t value,
+                                      iree_host_size_t buffer_capacity,
+                                      char** inout_buffer,
+                                      iree_host_size_t* inout_buffer_length) {
+  iree_host_size_t new_buffer_length = 0;
+  if (!iree_host_size_checked_add(*inout_buffer_length, value.size,
+                                  &new_buffer_length)) {
+    *inout_buffer = NULL;
+    *inout_buffer_length = IREE_HOST_SIZE_MAX;
+    return false;
+  }
+
+  char* buffer = *inout_buffer;
+  bool is_buffer_sufficient = true;
+  if (buffer) {
+    const iree_host_size_t remaining_capacity =
+        *inout_buffer_length < buffer_capacity
+            ? buffer_capacity - *inout_buffer_length
+            : 0;
+    const iree_host_size_t copy_length =
+        remaining_capacity > 0 ? iree_min(value.size, remaining_capacity - 1)
+                               : 0;
+    if (copy_length > 0) {
+      memcpy(buffer + *inout_buffer_length, value.data, copy_length);
+    }
+    if (remaining_capacity > 0) {
+      buffer[*inout_buffer_length + copy_length] = 0;
+    }
+    if (copy_length != value.size) {
+      *inout_buffer = NULL;
+      is_buffer_sufficient = false;
+    }
+  }
+
+  *inout_buffer_length = new_buffer_length;
+  return is_buffer_sufficient;
+}
+#endif  // has IREE_STATUS_FEATURES
+
 static bool iree_status_format_message(iree_status_t status,
                                        iree_host_size_t buffer_capacity,
                                        char* buffer,
@@ -881,21 +999,13 @@ static bool iree_status_format_message(iree_status_t status,
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
   // Append base storage message.
   if (storage && !iree_string_view_is_empty(storage->message)) {
-    iree_host_size_t remaining_capacity =
-        buffer && buffer_length < buffer_capacity
-            ? buffer_capacity - buffer_length
-            : 0;
-    int n =
-        iree_snprintf(remaining_capacity > 0 ? buffer + buffer_length : NULL,
-                      remaining_capacity, has_prefix ? "; %.*s" : "%.*s",
-                      (int)storage->message.size, storage->message.data);
-    if (IREE_UNLIKELY(n < 0)) {
-      return false;
-    } else if (buffer && (iree_host_size_t)n >= remaining_capacity) {
-      buffer = NULL;
-      is_buffer_sufficient = false;
+    if (has_prefix) {
+      is_buffer_sufficient &=
+          iree_status_format_append(iree_make_cstring_view("; "),
+                                    buffer_capacity, &buffer, &buffer_length);
     }
-    buffer_length += n;
+    is_buffer_sufficient &= iree_status_format_append(
+        storage->message, buffer_capacity, &buffer, &buffer_length);
     has_prefix = true;
   }
 #endif  // has IREE_STATUS_FEATURE_ANNOTATIONS
@@ -911,28 +1021,18 @@ static bool iree_status_format_message(iree_status_t status,
     }
 
     // Separate this payload from a preceding message or payload.
-    iree_host_size_t remaining_capacity =
-        buffer && buffer_length < buffer_capacity
-            ? buffer_capacity - buffer_length
-            : 0;
     if (has_prefix) {
-      if (buffer) {
-        if (remaining_capacity <= 2) {
-          buffer = NULL;
-          is_buffer_sufficient = false;
-        } else {
-          buffer[buffer_length] = ';';
-          buffer[buffer_length + 1] = ' ';
-        }
-      }
-      buffer_length += 2;  // '; '
+      is_buffer_sufficient &=
+          iree_status_format_append(iree_make_cstring_view("; "),
+                                    buffer_capacity, &buffer, &buffer_length);
     }
 
     // Append payload via custom formatter callback.
     iree_host_size_t payload_buffer_length = 0;
-    remaining_capacity = buffer && buffer_length < buffer_capacity
-                             ? buffer_capacity - buffer_length
-                             : 0;
+    iree_host_size_t remaining_capacity =
+        buffer && buffer_length < buffer_capacity
+            ? buffer_capacity - buffer_length
+            : 0;
     payload->formatter(payload, remaining_capacity,
                        remaining_capacity > 0 ? buffer + buffer_length : NULL,
                        &payload_buffer_length);
@@ -940,7 +1040,12 @@ static bool iree_status_format_message(iree_status_t status,
       buffer = NULL;
       is_buffer_sufficient = false;
     }
-    buffer_length += payload_buffer_length;
+    if (!iree_host_size_checked_add(buffer_length, payload_buffer_length,
+                                    &buffer_length)) {
+      buffer = NULL;
+      buffer_length = IREE_HOST_SIZE_MAX;
+      is_buffer_sufficient = false;
+    }
     has_prefix = true;
 
     payload = payload->next;
@@ -998,7 +1103,11 @@ IREE_API_EXPORT bool iree_status_format(iree_status_t status,
       remaining_capacity > 0 ? buffer + prefix_buffer_length : NULL,
       &message_buffer_length,
       /*has_prefix=*/true);
-  *out_buffer_length = prefix_buffer_length + message_buffer_length;
+  if (!iree_host_size_checked_add(prefix_buffer_length, message_buffer_length,
+                                  out_buffer_length)) {
+    *out_buffer_length = IREE_HOST_SIZE_MAX;
+    return false;
+  }
   return is_buffer_sufficient && ret;
 }
 
@@ -1175,7 +1284,11 @@ iree_status_freeze(iree_status_t status) {
     iree_status_free(status);
     return iree_status_from_code(code);
   }
-  message_buffer_size++;  // NUL
+  if (!iree_host_size_checked_add(message_buffer_size, 1,
+                                  &message_buffer_size)) {
+    iree_status_free(status);
+    return iree_status_from_code(code);
+  }
 
   // Compute the storage size for the status with additional room to store the
   // formatted message and source file location if present.

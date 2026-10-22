@@ -6,7 +6,6 @@
 
 #include "loom/serve/runtime/program/input.h"
 
-#include <limits.h>
 #include <string.h>
 
 #include "iree/base/internal/unicode.h"
@@ -189,8 +188,9 @@ static iree_status_t loom_serve_input_module_start(
   const iree_string_view_t text =
       iree_make_string_view((const char*)bytes.data, bytes.data_length);
   if (params->function_ordinal == INPUT_FUNCTION_REQUIRE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "%.*s",
-                            (int)iree_min(text.size, INT_MAX), text.data);
+    return iree_status_allocate_copy(IREE_STATUS_INVALID_ARGUMENT,
+                                     iree_make_cstring_view(__FILE__), __LINE__,
+                                     text);
   }
   if (!module->tokenizer) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,

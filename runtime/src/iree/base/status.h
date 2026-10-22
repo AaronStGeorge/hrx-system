@@ -646,10 +646,17 @@ iree_status_consume_code(iree_status_t status);
 // annotations are not enabled.
 #if IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS
 
-// Annotates a status message with the given constant string message.
+// Annotates a status message with the given constant string |message|.
+// The message storage is borrowed and must outlive the returned status.
 // Ignored if |base_status| is OK.
 IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t
 iree_status_annotate(iree_status_t base_status, iree_string_view_t message);
+
+// Annotates a status message with a copy of |message|. The returned status owns
+// the copied storage independently of the source string. Ignored if
+// |base_status| is OK.
+IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t iree_status_annotate_copy(
+    iree_status_t base_status, iree_string_view_t message);
 
 // Annotates a status message with the given printf-style message.
 // Ignored if |base_status| is OK.
@@ -662,6 +669,10 @@ IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t IREE_PRINTF_ATTRIBUTE(2, 3)
 #define iree_status_annotate(base_status, message)                     \
   ((void)sizeof(                                                       \
        iree_status_allocate(IREE_STATUS_UNKNOWN, NULL, 0, (message))), \
+   (base_status))
+#define iree_status_annotate_copy(base_status, message)               \
+  ((void)sizeof(iree_status_allocate_copy(                            \
+       IREE_STATUS_UNKNOWN, iree_string_view_empty(), 0, (message))), \
    (base_status))
 #define iree_status_annotate_f(base_status, ...)                           \
   ((void)sizeof(                                                           \
