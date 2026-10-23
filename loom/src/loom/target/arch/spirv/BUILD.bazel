@@ -261,6 +261,7 @@ loom_cc_library(
         "//loom/src/loom/target:profile",
         "//loom/src/loom/target/arch/spirv/records:target_records",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

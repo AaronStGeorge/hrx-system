@@ -280,6 +280,7 @@ loom_cc_library(
   DEPS
     ::facts
     iree::base
+    iree::base::internal::arena
     loom::target::arch::spirv::records::target_records
     loom::target::profile
   PUBLIC
