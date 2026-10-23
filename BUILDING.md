@@ -266,6 +266,15 @@ exports the same configured bindings in either mode.
 Windows CMake builds place the shared tools and both DLLs together under the
 build tree's `bin/` directory so the tools also run directly from the build tree.
 
+The Bazel archive and shared-library composition rules live in the HRX module
+under `build_tools/bazel/cc_static_library.bzl` and `cc_shared_library.bzl`.
+They preserve PIC selection, original ThinLTO backend artifacts, native library
+dependencies, linker flags, linkstamps, and declared linker inputs. Compiler
+actions, toolchains, and C++ provider identities still come from the selected
+`rules_cc` module. This keeps libamdf artifacts and shared Loom tools usable
+when HRX is an external dependency: Bzlmod applies dependency overrides and
+patches only from the root module, not from imported modules.
+
 ### Python runtime symbols
 
 Bazel's Linux x86-64 glibc Python runtime omits interpreter C debug information
@@ -278,6 +287,14 @@ iree-bazel-build --config=python-runtime-debug //loom/py/loom/tools:loom-compile
 
 This composes with `--config=asan` and `--config=opt` without changing project
 optimization or C/C++ debug information.
+
+The compact and symbol-bearing Python 3.12 runtimes are registered by the HRX
+module, so the same default applies when HRX is consumed as a dependency. An
+external root can select native interpreter symbols with
+`--@hrx//build_tools/bazel:python_runtime_debug=true`; HRX's named `.bazelrc`
+configurations are not imported by Bzlmod. Other Python versions and platforms
+use their registered runtimes, and a root project's explicitly registered
+toolchains retain Bazel's normal selection priority.
 
 ### Default allocator
 

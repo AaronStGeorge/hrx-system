@@ -7,10 +7,10 @@
 """Bazel composition for the public libamdf artifacts."""
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
-load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
-load("@rules_cc//cc:cc_static_library.bzl", "cc_static_library")
 load("//build_tools/bazel:cc.bzl", "iree_cc_library")
 load("//build_tools/bazel:cc_opts.bzl", "cc_opts")
+load("//build_tools/bazel:cc_shared_library.bzl", "iree_cc_shared_library")
+load("//build_tools/bazel:cc_static_library.bzl", "iree_cc_static_library")
 load("//build_tools/bazel:requirements.bzl", "apply_build_requirements")
 load("//libamdf/requirements:defs.bzl", "LIBAMDF")
 load(":cc.bzl", "amdf_cc_library")
@@ -58,7 +58,7 @@ def amdf_library(
     # One archive owns the complete implementation. Native UMD entry points
     # and shared family code reference each other through private interfaces;
     # exposing their component archives would require caller link grouping.
-    cc_static_library(
+    iree_cc_static_library(
         name = name + "_static_artifact",
         # The archive checker rejects coalescible ASAN COMMON symbols. Actual
         # shared-library and static-consumer links enforce symbol resolution.
@@ -75,7 +75,7 @@ def amdf_library(
         visibility = visibility,
         deps = [":" + name + "_static_artifact"],
     )
-    cc_shared_library(
+    iree_cc_shared_library(
         name = name + "_shared_artifact",
         # The shared artifact uses the same complete implementation archive.
         # As a direct root, cc_shared_library retains its public entry points

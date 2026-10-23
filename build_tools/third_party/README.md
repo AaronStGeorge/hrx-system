@@ -75,11 +75,16 @@ The version lives only in `build_tools/third_party/deps.MODULE.bazel`:
 ```starlark
 bazel_dep(
     name = "googletest",
-    version = "1.17.0.bcr.2",
-    dev_dependency = True,
+    version = "1.18.0.bcr.1",
     repo_name = "com_google_googletest",
 )
 ```
+
+Dependencies reached by exported targets are ordinary module dependencies,
+including the GoogleTest, Benchmark, and Catch2 helpers exposed to downstream
+test suites. `dev_dependency` describes module visibility, not whether a library
+is used for tests: Bazel removes those declarations when HRX is a dependency.
+Analysis-test tooling used only to develop HRX itself remains development-only.
 
 Use Bazel's `http_archive` repo rule for source archives that are not available
 from BCR:

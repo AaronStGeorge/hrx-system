@@ -1,0 +1,68 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Interpreter registrations have no CMake target surface.
+# bazel-to-cmake: skip
+
+# Keep runtime, C-extension, and exec-tools registration semantics together at
+# the same upstream boundary used to create the runtime repositories.
+# buildifier: disable=bzl-visibility
+load("@rules_python//python/private:py_toolchain_suite.bzl", "py_toolchain_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "version_default",
+    flag_values = {"@rules_python//python/config_settings:python_version": ""},
+)
+
+config_setting(
+    name = "version_minor",
+    flag_values = {"@rules_python//python/config_settings:python_version": "3.12"},
+)
+
+config_setting(
+    name = "version_exact",
+    flag_values = {"@rules_python//python/config_settings:python_version": "3.12.13"},
+)
+
+config_setting(
+    name = "debug_runtime",
+    flag_values = {
+        "//build_tools/bazel:python_runtime_debug": "true",
+        "@rules_python//python/config_settings:py_freethreaded": "no",
+        "@rules_python//python/config_settings:py_linux_libc": "glibc",
+    },
+)
+
+py_toolchain_suite(
+    prefix = "stripped",
+    python_version = "3.12.13",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = ["//build_tools/bazel:python_runtime_stripped"],
+    user_repository_name = "hrx_python_linux_x86_64_stripped",
+    version_settings = [
+        ":version_default",
+        ":version_minor",
+        ":version_exact",
+    ],
+)
+
+py_toolchain_suite(
+    prefix = "debug",
+    python_version = "3.12.13",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [":debug_runtime"],
+    user_repository_name = "hrx_python_linux_x86_64_debug",
+    version_settings = [
+        ":version_default",
+        ":version_minor",
+        ":version_exact",
+    ],
+)

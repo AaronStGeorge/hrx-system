@@ -4,8 +4,20 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+# Source dependency policy has no CMake target surface.
+# bazel-to-cmake: skip
+
+load("//build_tools/bazel:python.bzl", "iree_py_test")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "deps.MODULE.bazel",
 ])
+
+iree_py_test(
+    name = "exported_dependencies_test",
+    srcs = ["exported_dependencies_test.py"],
+    data = ["deps.MODULE.bazel"],
+    deps = ["//build_tools/bazel_to_cmake:dependency_metadata"],
+)

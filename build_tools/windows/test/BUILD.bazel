@@ -1,0 +1,42 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Bazel toolchain analysis tests have no CMake target surface.
+# bazel-to-cmake: skip
+
+load("@rules_cc//cc/toolchains:cc_toolchain.bzl", "cc_toolchain")
+load("//build_tools/windows:toolchain_config.bzl", "windows_cross_toolchain_config")
+load(":toolchain_config_test.bzl", "toolchain_config_test_suite")
+
+filegroup(name = "empty")
+
+windows_cross_toolchain_config(
+    name = "configuration",
+    abi_libc_version = "msvcrt",
+    abi_version = "msvc",
+    compiler = "clang-cl",
+    cpu = "x64_windows",
+    host_system_name = "x86_64-unknown-linux-gnu",
+    msvc_cl_path = "clang-cl",
+    msvc_lib_path = "llvm-lib",
+    msvc_link_path = "lld-link",
+    msvc_ml_path = "clang-cl",
+    target_libc = "msvcrt",
+    target_system_name = "x86_64-pc-windows-msvc",
+    toolchain_identifier = "cross-feature-test",
+)
+
+cc_toolchain(
+    name = "compiler",
+    all_files = ":empty",
+    ar_files = ":empty",
+    as_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    toolchain_config = ":configuration",
+)
+
+toolchain_config_test_suite(name = "toolchain_config_tests")

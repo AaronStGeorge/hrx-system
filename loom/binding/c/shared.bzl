@@ -6,11 +6,11 @@
 
 """Optional, exact-build compiler/runtime sharing for LoomC tools."""
 
-load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("//build_tools/bazel:cc_opts.bzl", "cc_opts")
+load("//build_tools/bazel:cc_shared_library.bzl", "iree_cc_shared_library")
 load("//loom/build_tools/bazel:cc.bzl", "loom_cc_binary", "loom_cc_library")
 
 _SHARED_TOOLS = "//loom/config:shared_tools_enabled"
@@ -156,7 +156,7 @@ def loomc_shared_libraries(name, components, runtime_deps, tool_components = [])
             target_compatible_with = compatible_with,
         )
         export_file = "cmake/" + library_name + "_exports.lds"
-        cc_shared_library(
+        iree_cc_shared_library(
             name = target_name,
             deps = deps,
             dynamic_deps = dynamic_deps,

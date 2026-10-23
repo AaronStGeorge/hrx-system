@@ -49,7 +49,7 @@ set(IREE_DEP_GOOGLE_BENCHMARK_OWNER "shared")
 set(IREE_DEP_GOOGLE_BENCHMARK_MODULE_NAME "google_benchmark")
 set(IREE_DEP_GOOGLE_BENCHMARK_REPO_NAME "com_google_benchmark")
 set(IREE_DEP_GOOGLE_BENCHMARK_VERSION "1.9.5")
-set(IREE_DEP_GOOGLE_BENCHMARK_DEV_DEPENDENCY "TRUE")
+set(IREE_DEP_GOOGLE_BENCHMARK_DEV_DEPENDENCY "FALSE")
 set(IREE_DEP_GOOGLE_BENCHMARK_SOURCE_URL "https://bcr.bazel.build/modules/google_benchmark/1.9.5/source.json")
 set(IREE_DEP_GOOGLE_BENCHMARK_URLS
   "https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
@@ -68,21 +68,17 @@ set(IREE_DEP_GOOGLETEST_KIND "bazel_dep")
 set(IREE_DEP_GOOGLETEST_OWNER "shared")
 set(IREE_DEP_GOOGLETEST_MODULE_NAME "googletest")
 set(IREE_DEP_GOOGLETEST_REPO_NAME "com_google_googletest")
-set(IREE_DEP_GOOGLETEST_VERSION "1.17.0.bcr.2")
-set(IREE_DEP_GOOGLETEST_DEV_DEPENDENCY "TRUE")
-set(IREE_DEP_GOOGLETEST_SOURCE_URL "https://bcr.bazel.build/modules/googletest/1.17.0.bcr.2/source.json")
+set(IREE_DEP_GOOGLETEST_VERSION "1.18.0.bcr.1")
+set(IREE_DEP_GOOGLETEST_DEV_DEPENDENCY "FALSE")
+set(IREE_DEP_GOOGLETEST_SOURCE_URL "https://bcr.bazel.build/modules/googletest/1.18.0.bcr.1/source.json")
 set(IREE_DEP_GOOGLETEST_URLS
-  "https://github.com/google/googletest/releases/download/v1.17.0/googletest-1.17.0.tar.gz"
+  "https://github.com/google/googletest/releases/download/v1.18.0/googletest-1.18.0.tar.gz"
 )
-set(IREE_DEP_GOOGLETEST_SHA256 "65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c")
-set(IREE_DEP_GOOGLETEST_STRIP_PREFIX "googletest-1.17.0")
+set(IREE_DEP_GOOGLETEST_SHA256 "6e3191c1455468b3fc35a417fb565c1c5071aee1b7e7f85e30cf48a98d37d8b5")
+set(IREE_DEP_GOOGLETEST_STRIP_PREFIX "googletest-1.18.0")
 set(IREE_DEP_GOOGLETEST_BUILD_FILE "")
-set(IREE_DEP_GOOGLETEST_PATCHES
-  "//build_tools/third_party/googletest:character_printers.patch"
-)
-set(IREE_DEP_GOOGLETEST_PATCH_ARGS
-  "-p1"
-)
+set(IREE_DEP_GOOGLETEST_PATCHES "")
+set(IREE_DEP_GOOGLETEST_PATCH_ARGS "")
 
 set(IREE_DEP_LIBBACKTRACE_KIND "bazel_dep")
 set(IREE_DEP_LIBBACKTRACE_OWNER "shared")
@@ -173,7 +169,7 @@ set(IREE_DEP_CATCH2_OWNER "shared")
 set(IREE_DEP_CATCH2_MODULE_NAME "catch2")
 set(IREE_DEP_CATCH2_REPO_NAME "catch2")
 set(IREE_DEP_CATCH2_VERSION "3.13.0")
-set(IREE_DEP_CATCH2_DEV_DEPENDENCY "TRUE")
+set(IREE_DEP_CATCH2_DEV_DEPENDENCY "FALSE")
 set(IREE_DEP_CATCH2_SOURCE_URL "https://bcr.bazel.build/modules/catch2/3.13.0/source.json")
 set(IREE_DEP_CATCH2_URLS
   "https://github.com/catchorg/Catch2/archive/refs/tags/v3.13.0.tar.gz"

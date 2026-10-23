@@ -19,6 +19,12 @@ exports_files(
 )
 
 py_library(
+    name = "dependency_metadata",
+    srcs = ["deps.py"],
+    visibility = ["//build_tools/third_party:__pkg__"],
+)
+
+py_library(
     name = "converter",
     srcs = [
         "bazel_to_cmake_config.py",
