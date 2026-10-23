@@ -62,7 +62,7 @@ pipeline.def<kernel> public retain target(@device) @grouped_projection() run(%ou
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %374 = mov.short 1
-  %238 = mov.acquire-delta -1
+  %238 = mov.short -1
   %90 = mov.local-address 458752
   acq %238, 48
   %377 = mov.short 11
@@ -337,7 +337,7 @@ pipeline.def<kernel> public retain target(@device) @fixed_snapshot() run(%output
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %124 = mov.short 1
-  %57 = mov.acquire-delta -1
+  %57 = mov.short -1
   %38 = mov.local-address 458752
   acq %57, 48
   %initial = mov.short 11

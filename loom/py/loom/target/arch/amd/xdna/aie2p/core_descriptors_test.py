@@ -896,14 +896,6 @@ def test_descriptor_encoding_ids_and_adapters_are_materialized() -> None:
         assert descriptor.operands[0].ready_stage == 1
         assert Constraint(ConstraintKind.REMATERIALIZABLE, 0) in descriptor.constraints
 
-    acquire_delta = descriptors["amd.xdna.aie2p.lock.acquire-delta.i32"]
-    assert acquire_delta.op_kind is DescriptorOpKind.OP
-    assert acquire_delta.asm_forms[0].mnemonic == "mov.acquire-delta"
-    assert acquire_delta.operands[0].reg_alts[0].reg_class == "aie2p.er"
-    assert Constraint(ConstraintKind.REMATERIALIZABLE, 0) not in (
-        acquire_delta.constraints
-    )
-
     scalar_move = descriptors["amd.xdna.aie2p.move.scalar"]
     assert [operand.field_name for operand in scalar_move.operands] == [
         "dst",

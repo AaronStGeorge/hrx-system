@@ -44,7 +44,7 @@ pipeline.def<kernel> public retain target(@npu) @reordered_publication() run(%ou
 
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
-  %57 = mov.acquire-delta -1
+  %57 = mov.short -1
   %52 = mov.local-address 393216
   acq %57, 32
   acq %57, 32
@@ -64,7 +64,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %248 = mov.short 1
-  %152 = mov.acquire-delta -1
+  %152 = mov.short -1
   acq %152, 49
   %250 = mov.short 0
   %86 = mov.local-address 458760
@@ -285,7 +285,7 @@ pipeline.def<kernel> public retain target(@npu) @reordered_retirement() run(%out
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %197 = mov.short 1
-  %62 = mov.acquire-delta -1
+  %62 = mov.short -1
   %199 = mov.short 0
   %57 = mov.local-address 393216
   %count = mov.short 3
@@ -316,7 +316,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %213 = mov.short 1
-  %103 = mov.acquire-delta -1
+  %103 = mov.short -1
   acq %103, 49
   acq %103, 49
   %82 = mov.i32 -2147483648
@@ -518,7 +518,7 @@ pipeline.def<kernel> public retain target(@npu) @rotating_retirement() run(%outp
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %298 = mov.short 1
-  %100 = mov.acquire-delta -1
+  %100 = mov.short -1
   %300 = mov.short 0
   %95 = mov.local-address 393216
   %count = mov.short 5
@@ -549,7 +549,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %315 = mov.short 1
-  %189 = mov.acquire-delta -1
+  %189 = mov.short -1
   acq %189, 49
   %begin = mov.short 0
   %pairs = mov.short 2
@@ -785,7 +785,7 @@ pipeline.def<kernel> public retain target(@device) @branch_retirement_order() ru
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %121 = mov.short 2
   %122 = mov.short 1
-  %52 = mov.acquire-delta -1
+  %52 = mov.short -1
   %124 = mov.short 0
   %47 = mov.local-address 393216
   low.br ^_bb1(%124: reg<aie2p.er>, %124: reg<aie2p.er>)
@@ -815,7 +815,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %137 = mov.short 1
-  %74 = mov.acquire-delta -1
+  %74 = mov.short -1
   %69 = mov.local-address 458752
   acq %74, 49
   acq %74, 49
@@ -1116,7 +1116,7 @@ pipeline.def<kernel> public retain target(@device) @consumed_distribution() run(
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_2() asm {
   %166 = mov.short 1
-  %74 = mov.acquire-delta -1
+  %74 = mov.short -1
   acq %74, 49
   rel %166, 48
   rel %166, 50
@@ -1128,7 +1128,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_2() asm {
 
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   %168 = mov.short 1
-  %88 = mov.acquire-delta -1
+  %88 = mov.short -1
   acq %88, 49
   rel %168, 48
   rel %168, 50
