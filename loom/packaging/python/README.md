@@ -44,6 +44,20 @@ The wheel filename describes the selected target platform: `linux_x86_64`,
 use the build toolchain's libc baseline; these tags make no manylinux portability
 claim.
 
+The final release artifact is built through the `release_wheel` target:
+
+```sh
+iree-bazel-build --config=loom-sdk --config=opt //loom/packaging/python:release_wheel
+```
+
+On Linux x86-64, Bazel audits the ELF ABI before producing
+`manylinux_wheel/hrx_loom-VERSION-py3-none-manylinux_2_39_x86_64.whl` beneath this
+package's `bazel-bin` directory. An incompatible toolchain fails this action.
+The audit changes only wheel tags and their recorded digests; it cannot add
+system libraries or alter the installed payload. Windows retains the original
+`win_amd64` wheel. Linux aarch64 development builds do not yet have a qualified
+release artifact.
+
 `--config=loom-sdk` selects the SDK's CPU and libamdf runtime drivers, compiler
 targets, and media codecs independently of the worktree configuration. Native
 AMD execution uses the operating-system device driver; it requires no ROCm SDK.

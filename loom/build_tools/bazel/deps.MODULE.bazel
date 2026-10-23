@@ -18,6 +18,15 @@ sdk_version(
     version_file = "//loom/packaging/python:version.json",
 )
 
+# Release tooling is an execution dependency, independent of installed SDK APIs.
+wheel_pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+wheel_pip.parse(
+    hub_name = "loom_wheel_pip",
+    python_version = "3.12",
+    requirements_lock = "//loom/packaging/python:requirements.lock.txt",
+)
+use_repo(wheel_pip, "loom_wheel_pip")
+
 hygiene_sources = use_repo_rule(
     "//loom/build_tools/hygiene:sources.bzl",
     "hygiene_sources",

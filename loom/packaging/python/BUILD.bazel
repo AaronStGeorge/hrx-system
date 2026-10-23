@@ -8,7 +8,9 @@
 
 load("@hrx_loom_version//:version.bzl", "MODEL_CATALOG", "PACKAGE_VERSION")
 load("@rules_python//python:packaging.bzl", "py_package")
+load("//build_tools/bazel:python.bzl", "iree_py_binary")
 load(":defs.bzl", "loom_python_wheel")
+load(":manylinux.bzl", "manylinux_wheel")
 load(":native.bzl", "loom_native_files")
 
 package(default_visibility = ["//visibility:public"])
@@ -17,6 +19,7 @@ exports_files([
     "PYPI_README.md",
     "README.md",
     "defs.bzl",
+    "requirements.lock.txt",
     "version.json",
 ])
 
@@ -126,4 +129,29 @@ loom_python_wheel(
     name = "wheel",
     catalog = MODEL_CATALOG or "",
     version = PACKAGE_VERSION,
+)
+
+iree_py_binary(
+    name = "manylinux",
+    srcs = ["manylinux.py"],
+    visibility = ["//visibility:private"],
+    deps = ["@loom_wheel_pip//auditwheel"],
+)
+
+manylinux_wheel(
+    name = "manylinux_wheel",
+    platform = "manylinux_2_39_x86_64",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    wheel = ":wheel",
+)
+
+alias(
+    name = "release_wheel",
+    actual = select({
+        ":linux_x86_64": ":manylinux_wheel",
+        ":windows_x86_64": ":wheel",
+    }),
 )

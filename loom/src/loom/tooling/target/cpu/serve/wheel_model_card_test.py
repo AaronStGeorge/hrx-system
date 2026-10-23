@@ -109,18 +109,23 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
         environment["PATH"] = str(scripts) + os.pathsep + os.defpath
         python = scripts / ("python.exe" if os.name == "nt" else "python")
         fetch = scripts / ("loom-fetch.exe" if os.name == "nt" else "loom-fetch")
-        run(
-            python,
-            "-I",
-            "-m",
-            "pip",
-            "--disable-pip-version-check",
-            "install",
-            "--no-index",
-            "--no-deps",
-            "--no-compile",
-            wheel,
-        )
+
+        def install(artifact):
+            run(
+                python,
+                "-I",
+                "-m",
+                "pip",
+                "--disable-pip-version-check",
+                "install",
+                "--no-index",
+                "--no-deps",
+                "--no-compile",
+                "--force-reinstall",
+                artifact,
+            )
+
+        install(wheel)
         assert shutil.which("bazel", path=environment["PATH"]) is None
         assert shutil.which("bazelisk", path=environment["PATH"]) is None
         with ZipFile(wheel) as archive:
@@ -135,9 +140,9 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
             # rules_python appends one newline after the description payload.
             assert metadata.get_payload() == Path(readme).read_text() + "\n"
             native_names = {
-                Path(name).name
-                for name in archive.namelist()
-                if ".data/scripts/" in name
+                Path(entry.filename).name
+                for entry in archive.infolist()
+                if not entry.is_dir() and ".data/scripts/" in entry.filename
             }
         assert {"libiree.so", "libloomc.so"} <= native_names, native_names
         for name in sorted(native_names):
@@ -216,19 +221,7 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
         if identity["model-catalog"] is None:
             failure = json.loads(run(fetch, "--list", "--json", expected=1))
             assert "no associated model catalog" in failure["message"]
-        run(
-            python,
-            "-I",
-            "-m",
-            "pip",
-            "--disable-pip-version-check",
-            "install",
-            "--no-index",
-            "--no-deps",
-            "--no-compile",
-            "--upgrade",
-            associated_wheel,
-        )
+        install(associated_wheel)
         run(
             python,
             "-I",
@@ -239,6 +232,8 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
             "assert installed_catalog() == 'github:fixture/library@compatible'",
             associated_wheel.name.split("-")[1],
         )
+        # Acquisition and native output must use the final publication artifact.
+        install(wheel)
         card = deployment.parent / "model.json"
         listing = json.loads(run(fetch, card, "--list", "--json"))
         assert listing["model"]["id"] == "loom-fixture/text"

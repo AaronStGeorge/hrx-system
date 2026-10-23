@@ -433,7 +433,7 @@ loom_py_test(
         "wheel_model_card_test.py",
     ],
     args = [
-        "$(rootpath //loom/packaging/python:wheel)",
+        "$(rootpath //loom/packaging/python:release_wheel)",
         "$(rootpath //loom/packaging/python/test:associated_wheel)",
         "$(rootpath //loom/src/loom/serve/fixture/text:card_model_mixed)",
         "$(rootpath @patchelf//:patchelf)",
@@ -442,8 +442,8 @@ loom_py_test(
     ],
     data = [
         "//loom/packaging/python:PYPI_README.md",
+        "//loom/packaging/python:release_wheel",
         "//loom/packaging/python:version.json",
-        "//loom/packaging/python:wheel",
         "//loom/packaging/python/test:associated_wheel",
         "//loom/src/loom/serve/fixture/text:card_model_mixed",
         "@patchelf",
