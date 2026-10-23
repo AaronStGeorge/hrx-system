@@ -184,6 +184,50 @@ class WindowsDiagnosticsTest(unittest.TestCase):
             self.assertNotIn("A_SECRET", manifest_text)
             self.assertNotIn("not captured", manifest_text)
 
+    def test_failed_process_image_survives_rebuild_and_resource_query_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "bazel-out" / "opt exec" / "bin" / "loom-link.exe"
+            executable.parent.mkdir(parents=True)
+            original = b"original executable image\x00\xff"
+            executable.write_bytes(original)
+            installed = root / "bazel-outside" / "sdk-tool.exe"
+            installed.parent.mkdir()
+            installed.write_bytes(b"installed toolchain image")
+            missing = executable.with_name("missing.exe")
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            (artifacts / "output.log").write_text(
+                "\n".join(
+                    f'CreateProcessW("{path}" --mode=merge): '
+                    "Not enough memory resources are available (error: 8)"
+                    for path in (executable, executable, installed, missing)
+                )
+            )
+
+            # Native resource-query tools are dependencies; an unavailable query
+            # must not lose the image that the real collector reads and hashes.
+            with mock.patch.object(
+                subprocess, "run", side_effect=FileNotFoundError("native query missing")
+            ):
+                diagnostics.capture_failure(
+                    artifacts,
+                    root,
+                    {"PATH": ""},
+                    None,
+                    started_at=dt.datetime.now(dt.UTC),
+                )
+            executable.write_bytes(b"rebuilt image")
+            manifest = json.loads((artifacts / "manifest.json").read_text())
+            self.assertNotIn("capture_error", manifest)
+            records = {record["path"]: record for record in manifest["files"]}
+            self.assertEqual(set(records), {str(executable), str(missing)})
+            record = records[str(executable)]
+            self.assertEqual((artifacts / record["copy"]).read_bytes(), original)
+            self.assertEqual(record["sha256"], hashlib.sha256(original).hexdigest())
+            self.assertIn("error", records[str(missing)])
+            self.assertTrue(all("error" in tool for tool in manifest["tools"]))
+
     def test_policy_capture_failure_preserves_command_and_other_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
