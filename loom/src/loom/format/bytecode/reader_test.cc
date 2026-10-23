@@ -446,7 +446,8 @@ class ReaderTest : public ::testing::Test {
         &builder, LOOM_FUNC_DEF_BUILD_FLAG_HAS_RETAIN, /*visibility=*/0,
         /*linkage=*/0, LOOM_FUNC_RETAIN_RETAIN, /*cc=*/0, /*effect_contract=*/0,
         /*temperature=*/0,
-        /*inline_policy=*/0, loom_symbol_ref_null(), /*abi=*/0,
+        /*inline_policy=*/0, loom_symbol_ref_null(),
+        /*source_signature=*/loom_attr_absent(), /*abi=*/0,
         loom_named_attr_slice_empty(), /*export_symbol=*/LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), callee, arg_types,
         IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
@@ -499,11 +500,11 @@ class ReaderTest : public ::testing::Test {
             LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_SYMBOL,
         /*visibility=*/0, /*retain=*/0, import_module_id, import_symbol_id,
         /*cc=*/0, /*effect_contract=*/0, /*temperature=*/0, /*inline_policy=*/0,
-        loom_symbol_ref_null(), /*abi=*/0, loom_named_attr_slice_empty(),
-        LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), callee,
-        arg_types, IREE_ARRAYSIZE(arg_types), result_types,
-        IREE_ARRAYSIZE(result_types), nullptr, 0, nullptr, 0,
-        LOOM_LOCATION_UNKNOWN, &decl_op));
+        loom_symbol_ref_null(), /*source_signature=*/loom_attr_absent(),
+        /*abi=*/0, loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &decl_op));
     return module;
   }
 
