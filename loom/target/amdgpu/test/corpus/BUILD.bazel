@@ -11,7 +11,7 @@ load(
     "loom_test",
 )
 load("//loom/src/loom/test/corpus:catalog.bzl", "LOOM_CORPUS")
-load("//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_ACCESS_PROFILE", "AMDGPU_HARDWARE_PROFILE", "AMD_GPU_HARDWARE_PROFILE")
+load("//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_ACCESS_PROFILE", "AMDGPU_HARDWARE_PROFILE")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -154,25 +154,20 @@ loom_corpus_build(
 loom_corpus_test(
     name = "scenario_execution",
     allowed_failures = {
-        profile.name: {
+        AMDGPU_HARDWARE_PROFILE.name: {
             "numeric/vector/packed/dot.loom:@packed_mixed_nibble_dot_values": "TARGET/003",
-        }
-        for profile in [
-            AMDGPU_HARDWARE_PROFILE,
-            AMD_GPU_HARDWARE_PROFILE,
-        ]
+        },
     },
     catalog = LOOM_CORPUS,
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
     profile_sources = {
         AMDGPU_ACCESS_PROFILE.name: ["numeric/vector/dynamic_windows.loom"],
     },
     xfails = {
-        profile.name: {
+        AMDGPU_HARDWARE_PROFILE.name: {
             "function/buffer/arguments.loom:@buffer_extent_values": "TARGET/001",
             "function/buffer/call_overflow.loom:@buffer_overflow_values": "LOWERING/044",
             "function/buffer/calls.loom:@buffer_call_values": "LOWERING/044",
@@ -231,11 +226,7 @@ loom_corpus_test(
             "numeric/vector/interleave.loom:@irregular_byte_row_mask_values": "AMDGPU/023,TARGET/002",
             "numeric/vector/packed/arithmetic.loom:@bfloat_transpose_all_bits": "AMDGPU/023",
             "numeric/vector/packed/arithmetic.loom:@byte_predicate_transpose_values": "AMDGPU/023",
-        }
-        for profile in [
-            AMDGPU_HARDWARE_PROFILE,
-            AMD_GPU_HARDWARE_PROFILE,
-        ]
+        },
     },
 )
 
@@ -249,10 +240,7 @@ loom_test(
     name = "inverse_hyperbolic_stress",
     srcs = ["//loom/src/loom/test/stress/numeric:inverse_hyperbolic.loom"],
     benchmark_smoke = False,
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
+    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
     tags = [
         "manual",
         "stress",

@@ -14,7 +14,6 @@ load(
 load(
     "@hrx//loom/target/amdgpu:execution_profiles.bzl",
     "AMDGPU_HARDWARE_PROFILE",
-    "AMD_GPU_HARDWARE_PROFILE",
 )
 
 package(
@@ -25,10 +24,7 @@ package(
 loom_kernel_library(
     name = "saxpy",
     srcs = ["saxpy.loom"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
+    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
     targets = ["@hrx//loom/target/amdgpu:gfx11-generic"],
 )
 # --8<-- [end:kernel-library]

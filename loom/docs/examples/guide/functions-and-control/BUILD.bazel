@@ -8,7 +8,7 @@
 
 load("@hrx//loom/build_tools/bazel:defs.bzl", "loom_kernel_library", "loom_library", "loom_test")
 load("@hrx//loom/src/loom/tooling/target/spirv:execution_profiles.bzl", "SPIRV_VULKAN_HARDWARE_PROFILE")
-load("@hrx//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_ACCESS_PROFILE", "AMDGPU_HARDWARE_PROFILE", "AMD_GPU_HARDWARE_PROFILE")
+load("@hrx//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_ACCESS_PROFILE", "AMDGPU_HARDWARE_PROFILE")
 load("@hrx//loom/target/vm:execution_profiles.bzl", "VM_REFERENCE_PROFILE")
 
 package(
@@ -34,10 +34,7 @@ loom_kernel_library(
         "read-ahead.loom",
         "read-ahead-tests.loom",
     ],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
+    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
     targets = [
         "@hrx//loom/target/amdgpu:gfx11-generic",
         "@hrx//loom/target/amdgpu:gfx1250-a0",
@@ -49,10 +46,7 @@ loom_kernel_library(
 loom_test(
     name = "read_ahead_variants_test",
     srcs = ["read-ahead-tests.loom"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
+    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
     variants = {
         "serial": {"configs": {
             "read_ahead.depth": "1",
@@ -75,7 +69,6 @@ loom_kernel_library(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
         SPIRV_VULKAN_HARDWARE_PROFILE,
     ],
@@ -94,7 +87,6 @@ loom_kernel_library(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
         SPIRV_VULKAN_HARDWARE_PROFILE,
     ],
@@ -113,7 +105,6 @@ loom_kernel_library(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         SPIRV_VULKAN_HARDWARE_PROFILE,
     ],
     targets = [

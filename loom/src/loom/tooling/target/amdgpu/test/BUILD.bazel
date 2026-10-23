@@ -210,9 +210,17 @@ loom_test(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
+)
+
+loom_test(
+    name = "amd_gpu_hal_tests",
+    srcs = [
+        "amdgpu_hal_actual.loom",
+        "generated_tensor_cases.loom",
+    ],
+    execution_profiles = [AMD_GPU_HARDWARE_PROFILE],
 )
 
 loom_test(
@@ -220,7 +228,6 @@ loom_test(
     srcs = ["packed_integer_widening.loom"],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -232,7 +239,6 @@ loom_test(
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -242,7 +248,6 @@ loom_test(
     srcs = ["packed_table_lookup.loom"],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -253,7 +258,6 @@ loom_test(
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -265,7 +269,6 @@ loom_test(
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -275,7 +278,6 @@ loom_test(
     srcs = ["amdgpu_unused_kernargs.loom"],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -285,7 +287,6 @@ loom_test(
     srcs = ["callable_values.loom"],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -295,7 +296,6 @@ loom_test(
     srcs = ["narrow_arguments.loom"],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
@@ -309,7 +309,6 @@ loom_test(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
     target_compatible_with = _GFX11_EXECUTION_COMPATIBLE_WITH,
@@ -359,10 +358,7 @@ loom_test(
 
 loom_test(
     name = "checked_benchmark_workload_test",
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
+    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
     module = "//loom/src/loom/test/corpus/checked_benchmarks:checked_benchmark_workload_module",
     tags = ["manual"],
 )
@@ -372,10 +368,7 @@ loom_test(
     configs = {
         "mlp_down_projection_residual_bf16.row_capacity": "3584",
     },
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
+    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
     module = "//loom/src/loom/test/corpus/authoring:authoring_benchmark_workload_module",
     tags = ["manual"],
 )
@@ -409,7 +402,6 @@ loom_test(
     ],
     execution_profiles = [
         AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
         AMDGPU_ACCESS_PROFILE,
     ],
 )
