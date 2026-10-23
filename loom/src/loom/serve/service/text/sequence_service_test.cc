@@ -272,6 +272,108 @@ TEST_F(SourceSequenceServiceTest,
   interface.set_observer(interface.self, {});
 }
 
+class CachedSequenceCohortTest : public SourceSequenceServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceSequenceServiceTest::ModelOptions();
+    options.checkpoint_capacity = 5;
+    return options;
+  }
+
+  loom_serve_text_service_options_t ServiceOptions() const override {
+    auto options = SourceSequenceServiceTest::ServiceOptions();
+    options.session_cache_capacity = 4;
+    return options;
+  }
+};
+
+TEST_F(CachedSequenceCohortTest, FittingCachedCohortTrimsAtEpochBoundary) {
+  const auto options = ServiceOptions();
+  loom_serve_text_service_t* value = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_service_allocate(model_, &options, nullptr,
+                                                  host_allocator_, &value));
+  auto destroy = [](loom_serve_text_service_t* service) {
+    loom_serve_text_service_free(service, IREE_STATUS_OK);
+  };
+  std::unique_ptr<loom_serve_text_service_t, decltype(destroy)> service(
+      value, destroy);
+  const auto interface = loom_serve_text_service_interface(value);
+  Observe(interface);
+  const auto idle = [&] {
+    return !interface.is_pending(interface.self) &&
+           !interface.is_active(interface.self) &&
+           !interface.snapshot(interface.self).queued_requests;
+  };
+  loom_serve_http_connection_t* connection = nullptr;
+  std::vector<std::string> handles;
+  std::vector<std::vector<int32_t>> histories;
+  for (int32_t i = 0; i < 8; ++i) {
+    histories.push_back({i % 3, (i / 3) % 3, (i + 1) % 3});
+    const auto& history = histories.back();
+    const int client =
+        Send("{\"position\":0,\"token_ids\":[" + std::to_string(history[0]) +
+                 "," + std::to_string(history[1]) + "," +
+                 std::to_string(history[2]) + "]}",
+             "", "/v1/sequences");
+    ASSERT_NO_FATAL_FAILURE(Accept(client, interface, &connection));
+    ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface, idle));
+    const auto response = Read(client);
+    handles.push_back(Handle(response));
+    ASSERT_EQ(handles.back().size(), 32u) << response;
+    CheckChunk(response, history, 0);
+  }
+
+  // Eight histories rotate over four rows. Queue each complete cohort before
+  // advancing the owner, including partial-tail COW on resume. Capacity is
+  // ample: no admission needs maintenance to make room.
+  for (size_t cohort = 0; cohort < 4; ++cohort) {
+    const size_t first = (cohort % 2) * 4;
+    std::vector<int> clients;
+    uint64_t cursor =
+        loom_serve_telemetry_stream_head(interface.telemetry.stream);
+    for (size_t i = first; i < first + 4; ++i) {
+      const int32_t token = static_cast<int32_t>((i + cohort) % 3);
+      clients.push_back(
+          Send("{\"session\":\"" + handles[i] +
+                   "\",\"position\":" + std::to_string(histories[i].size()) +
+                   ",\"token_ids\":[" + std::to_string(token) + "]}",
+               "", "/v1/sequences"));
+      ASSERT_NO_FATAL_FAILURE(Accept(clients.back(), interface, &connection));
+      histories[i].push_back(token);
+    }
+    ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface, idle));
+    for (size_t i = first; i < first + 4; ++i) {
+      const auto response = Read(clients[i - first]);
+      EXPECT_EQ(Handle(response), handles[i]);
+      CheckChunk(response, histories[i], histories[i].size() - 1);
+    }
+    size_t admitted = 0, trims = 0, epochs = 0;
+    const auto head =
+        loom_serve_telemetry_stream_head(interface.telemetry.stream);
+    while (cursor < head) {
+      loom_serve_telemetry_record_t record;
+      ASSERT_EQ(loom_serve_telemetry_stream_read(interface.telemetry.stream,
+                                                 &cursor, &record),
+                LOOM_SERVE_TELEMETRY_READ_RECORD);
+      const std::string event = record.event->name;
+      if (event == "admit") {
+        ++admitted;
+      } else if (event == "state_trim" && !epochs) {
+        EXPECT_EQ(admitted, 4u);
+        ++trims;
+      } else if (event == "epoch") {
+        ++epochs;
+      }
+    }
+    EXPECT_EQ(admitted, 4u);
+    EXPECT_EQ(trims, 1u);
+    EXPECT_EQ(epochs, 1u);
+  }
+  EXPECT_EQ(interface.telemetry.counters->completed, 24u);
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).pending, 0u);
+  interface.set_observer(interface.self, {});
+}
+
 class RegisteredSequenceServiceTest : public SourceSequenceServiceTest {
  protected:
   bool NeedsStandaloneModel() const override { return false; }

@@ -39,5 +39,5 @@ iree_host_size_t loom_serve_text_request_reservation(
     // contribute; an ordinary single-output tail requires no extra credit.
     extent = iree_min(context_capacity, extent + proposal_depth - 1);
   }
-  return ((extent + block_size - 1) / block_size) * block_size;
+  return iree_host_size_ceil_div(extent, block_size) * block_size;
 }

@@ -301,7 +301,7 @@ iree_status_t loom_serve_text_load_allocate(
       options->epoch_count > SIZE_MAX / (2 * sizeof(int64_t)) ||
       options->draft_depth > 7 ||
       (options->draft_depth && !options->epoch_count) ||
-      options->pool_capacity > 4194304 ||
+      (uint64_t)options->pool_capacity > INT64_MAX ||
       options->checkpoint_capacity > INT32_MAX ||
       (options->checkpoint_capacity && !options->pool_capacity) ||
       (options->pool_capacity && !options->epoch_count)) {
@@ -786,7 +786,7 @@ loom_serve_text_pool_usage_t loom_serve_text_model_pool_usage(
     const loom_serve_text_state_row_t* row = &model->state.rows[i];
     if (row->reserved_extent) {
       const iree_host_size_t live =
-          (row->position + usage.block_size - 1) / usage.block_size;
+          iree_host_size_ceil_div(row->position, usage.block_size);
       usage.pending += (row->block_count - live) * usage.block_size;
     }
   }
@@ -1318,7 +1318,7 @@ iree_status_t loom_serve_text_model_submit_epoch(
       model->state.row_arena,
       device_input,
       model->state.epoch.buffers[5],
-      model->state.draft.carry,
+      model->state.carry,
       model->state.draft.committed,
       model->state.draft.results,
       model->state.draft.cache,

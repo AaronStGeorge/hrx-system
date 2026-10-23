@@ -115,6 +115,8 @@ typedef struct loom_serve_text_options_t {
   // Shared cache slot capacity, divisible by the source-declared page
   // size. Nonzero selects paged packed execution; zero uses dense addressing.
   // This is independent of the logical context ceiling and requires epochs.
+  // The count fits signed i64 for source bootstrap; source geometry must fit
+  // UINT32_MAX physical pages before native page IDs are allocated.
   iree_host_size_t pool_capacity;
   // Number of host packed token/span shape buckets; zero selects isolated
   // execution. Source may map several buckets to the same command.

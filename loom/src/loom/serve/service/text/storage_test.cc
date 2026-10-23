@@ -62,6 +62,15 @@ class TextStorageTest : public ::testing::Test {
     iree_vm_environment_free(environment);
   }
 
+  void SetPoolGeometry(uint64_t block_size, uint64_t page_count) {
+    iree_unaligned_store_le_u64(bytes[4].data, block_size);
+    iree_unaligned_store_le_u64(bytes[4].data + 11 * 8, page_count * 128);
+    iree_unaligned_store_le_u64(bytes[4].data + 16 * 8, page_count * 64);
+    iree_unaligned_store_le_u64(bytes[0].data + 1 * 24,
+                                256 + 2 * page_count * 128);
+    iree_unaligned_store_le_u64(bytes[0].data + 9 * 24, 512 + page_count * 64);
+  }
+
   // Allocator owning source values and parsed metadata.
   const iree_allocator_t host_allocator = iree_allocator_system();
   // Source buffer reference-type owner.
@@ -125,6 +134,57 @@ TEST_F(TextStorageTest, RejectsUnrepresentablePoolGeometry) {
       IREE_STATUS_INVALID_ARGUMENT,
       loom_serve_text_storage_initialize(&types, results, 3, 17, 32,
                                          host_allocator, &storage));
+}
+
+TEST_F(TextStorageTest, FullPageIdSpacePreservesWideByteOffsets) {
+  SetPoolGeometry(1, UINT32_MAX);
+  IREE_ASSERT_OK(loom_serve_text_storage_initialize(
+      &types, results, 3, 17, UINT32_MAX, host_allocator, &storage));
+  EXPECT_EQ(storage.blocks_per_row, 17u);
+  EXPECT_EQ(storage.regions[0].blocks.stride, uint64_t{UINT32_MAX} * 128);
+  const uint32_t blocks[] = {UINT32_MAX - 1, 0, UINT32_MAX / 2 + 1};
+  iree_hal_buffer_t* views[5] = {};
+  iree_host_size_t count = 0;
+  loom_serve_snapshot_range_t* ranges = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_storage_plan_snapshot(
+      &storage, 0, views, false, IREE_ARRAYSIZE(blocks), blocks, host_allocator,
+      &count, &ranges));
+  ASSERT_EQ(count, 9u);
+  for (size_t plane = 0; plane < 2; ++plane) {
+    for (size_t block = 0; block < IREE_ARRAYSIZE(blocks); ++block) {
+      EXPECT_EQ(ranges[plane * 3 + block].offset,
+                256 + plane * uint64_t{UINT32_MAX} * 128 +
+                    uint64_t{blocks[block]} * 128);
+      EXPECT_EQ(ranges[plane * 3 + block].length, 128u);
+    }
+  }
+  for (size_t block = 0; block < IREE_ARRAYSIZE(blocks); ++block) {
+    EXPECT_EQ(ranges[6 + block].offset, 512 + uint64_t{blocks[block]} * 64);
+    EXPECT_EQ(ranges[6 + block].length, 64u);
+  }
+  iree_allocator_free(host_allocator, ranges);
+}
+
+TEST_F(TextStorageTest, WidePagesHaveIndependentLogicalCapacity) {
+  SetPoolGeometry(UINT32_MAX, 1);
+  IREE_ASSERT_OK(loom_serve_text_storage_initialize(
+      &types, results, 3, 17, UINT32_MAX, host_allocator, &storage));
+  EXPECT_EQ(storage.block_size, UINT32_MAX);
+  EXPECT_EQ(storage.blocks_per_row, 1u);
+}
+
+TEST_F(TextStorageTest, RejectsPoolBeyondPhysicalPageIdSpace) {
+  if (sizeof(iree_host_size_t) < sizeof(uint64_t)) {
+    GTEST_SKIP() << "host token counts cannot exceed the page-ID space";
+  }
+  const uint64_t page_count = uint64_t{UINT32_MAX} + 1;
+  SetPoolGeometry(4, page_count);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_text_storage_initialize(
+          &types, results, 3, 17, static_cast<iree_host_size_t>(page_count * 4),
+          host_allocator, &storage));
+  EXPECT_EQ(storage.regions, nullptr);
 }
 
 TEST_F(TextStorageTest, DraftCacheWithoutCarryHasNoSnapshotCarryRange) {

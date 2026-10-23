@@ -239,7 +239,9 @@ static iree_status_t loom_serve_model_configuration_text(
       loom_serve_model_configuration_size(&fields[DEFINITION_CONTEXT_CAPACITY],
                                           1, 262144, &text->context_capacity));
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
-      &fields[DEFINITION_POOL_CAPACITY], 1, 4194304, &text->pool_capacity));
+      &fields[DEFINITION_POOL_CAPACITY], 1,
+      iree_min((uint64_t)IREE_HOST_SIZE_MAX, (uint64_t)INT64_MAX),
+      &text->pool_capacity));
   IREE_RETURN_IF_ERROR(
       loom_serve_model_configuration_size(&fields[DEFINITION_PREFILL_CAPACITY],
                                           1, 262144, &text->prefill_capacity));
