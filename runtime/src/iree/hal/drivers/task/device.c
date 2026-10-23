@@ -101,9 +101,6 @@ typedef struct iree_hal_task_device_t {
   // Active HAL-native profiling recorder, or NULL when profiling is disabled.
   iree_hal_task_profile_recorder_t* profile_recorder;
 
-  // Next process-local profiling session identifier assigned by this device.
-  uint64_t next_profile_session_id;
-
   // Next profiling submission identifier within the active session.
   iree_atomic_int64_t next_profile_submission_id;
 
@@ -815,7 +812,8 @@ iree_hal_task_device_profile_queue_scope(const iree_hal_task_device_t* device,
 
 static iree_status_t iree_hal_task_device_profiling_begin(
     iree_hal_device_t* base_device,
-    const iree_hal_device_profiling_options_t* options) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
   iree_hal_task_device_t* device = iree_hal_task_device_cast(base_device);
   if (device->profile_recorder) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -851,7 +849,7 @@ static iree_status_t iree_hal_task_device_profiling_begin(
 
   iree_hal_task_profile_recorder_options_t recorder_options = {
       .name = device->identifier,
-      .session_id = ++device->next_profile_session_id,
+      .session_id = session_id,
       .device_record_count = 1,
       .device_records = &device_record,
       .queue_record_count = device->queue_count,

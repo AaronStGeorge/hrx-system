@@ -36,13 +36,13 @@ void iree_hal_amdgpu_profile_device_metrics_session_free(
 // Writes source and descriptor metadata chunks for |session|.
 iree_status_t iree_hal_amdgpu_profile_device_metrics_session_write_metadata(
     const iree_hal_amdgpu_profile_device_metrics_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name);
 
 // Samples all active device metric sources and writes sample chunks.
 iree_status_t iree_hal_amdgpu_profile_device_metrics_session_sample_and_write(
     iree_hal_amdgpu_profile_device_metrics_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name);
 
 #ifdef __cplusplus

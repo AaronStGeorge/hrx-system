@@ -427,11 +427,12 @@ static iree_status_t iree_hal_amd_xdna_device_import_file(
 
 static iree_status_t iree_hal_amd_xdna_device_profiling_begin(
     iree_hal_device_t* device,
-    const iree_hal_device_profiling_options_t* options) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
   iree_hal_amd_xdna_device_t* self = (void*)device;
   return iree_hal_amd_xdna_queue_profiling_begin(
       self->queue, self->topology.topology ? self->topology.topology_index : 0,
-      self->command_arena, options);
+      self->command_arena, options, session_id);
 }
 
 static iree_status_t iree_hal_amd_xdna_device_profiling_flush(

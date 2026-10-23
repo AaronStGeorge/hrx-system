@@ -396,6 +396,35 @@ TEST_F(DeviceProfilingTest, BeginUnsupportedBackendDoesNotTouchSink) {
   EXPECT_EQ(0, sink.end_count);
 }
 
+TEST_F(DeviceProfilingTest, BeginAssignsUniqueSessionIdsAcrossDevices) {
+  iree_hal_mock_device_options_t mock_options;
+  iree_hal_mock_device_options_initialize(&mock_options);
+  iree_hal_device_t* second_device = NULL;
+  IREE_ASSERT_OK(iree_hal_mock_device_create(
+      &mock_options, iree_allocator_system(), &second_device));
+
+  CountingProfileSink sink = {};
+  CountingProfileSinkInitialize(&sink);
+  iree_hal_device_profiling_options_t profiling_options = {0};
+  profiling_options.data_families =
+      IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS;
+  profiling_options.sink = CountingProfileSinkAsBase(&sink);
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, Begin(&profiling_options));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      iree_hal_device_profiling_begin(second_device, &profiling_options));
+  const iree_hal_profile_session_id_t first_session_id =
+      iree_hal_mock_device_profile_session_id(device_);
+  const iree_hal_profile_session_id_t second_session_id =
+      iree_hal_mock_device_profile_session_id(second_device);
+  EXPECT_NE(IREE_HAL_PROFILE_SESSION_ID_NONE, first_session_id);
+  EXPECT_NE(IREE_HAL_PROFILE_SESSION_ID_NONE, second_session_id);
+  EXPECT_NE(first_session_id, second_session_id);
+
+  iree_hal_device_release(second_device);
+}
+
 TEST_F(DeviceProfilingTest, BeginLightweightStatisticsReachesBackend) {
   CountingProfileSink sink = {};
   CountingProfileSinkInitialize(&sink);

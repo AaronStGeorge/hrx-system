@@ -136,7 +136,7 @@ TEST_F(ProfileEventsTest, MemoryEventsPreserveRecordsAndReportDrops) {
       &streams_, /*event_capacity=*/2, iree_allocator_system()));
   iree_hal_amdgpu_profile_event_streams_clear_memory(&streams_);
 
-  const uint64_t session_id = 7;
+  const iree_hal_profile_session_id_t session_id = 7;
   const uint64_t allocation_id = 42;
 
   iree_hal_profile_memory_event_t event =

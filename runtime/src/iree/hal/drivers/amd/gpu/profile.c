@@ -41,7 +41,7 @@ struct iree_hal_amd_gpu_profile_executable_t {
   // Records already emitted in emitted_session; reset when a new session emits.
   iree_host_size_t emitted_load_count;
   // Last emitted device-local session, accessed only by serialized flush/end.
-  uint64_t emitted_session;
+  iree_hal_profile_session_id_t emitted_session;
 };
 
 iree_status_t iree_hal_amd_gpu_profile_executable_add_load(
@@ -105,7 +105,7 @@ struct iree_hal_amd_gpu_profile_commands_t {
   // Allocated recording-time array capacity.
   uint32_t capacity;
   // Last emitted device-local session, accessed only by serialized flush/end.
-  uint64_t emitted_session;
+  iree_hal_profile_session_id_t emitted_session;
 };
 
 static iree_atomic_int64_t iree_hal_amd_gpu_profile_next_executable_id =
@@ -612,9 +612,10 @@ iree_status_t iree_hal_amd_gpu_profile_register_queue(
 }
 
 iree_status_t iree_hal_amd_gpu_profile_begin(
-    const iree_hal_device_profiling_options_t* options, uint64_t session_id,
-    uint32_t queue_count, uint64_t timestamp_frequency_hz,
-    iree_allocator_t host_allocator, iree_hal_amd_gpu_profile_t** out_profile) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id, uint32_t queue_count,
+    uint64_t timestamp_frequency_hz, iree_allocator_t host_allocator,
+    iree_hal_amd_gpu_profile_t** out_profile) {
   *out_profile = NULL;
   iree_hal_device_profiling_data_families_t families = options->data_families;
   if (!families &&

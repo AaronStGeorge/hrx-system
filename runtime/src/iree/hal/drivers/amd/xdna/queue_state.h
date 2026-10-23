@@ -66,8 +66,6 @@ struct iree_hal_amd_xdna_queue_t {
   iree_hal_amd_xdna_queue_storage_t storage;
   // Session recorder owned by this queue under the idle begin/end contract.
   iree_hal_amd_xdna_profile_t* profile;
-  // Monotonically increasing session identity, independent of native epochs.
-  uint64_t next_profile_session_id;
   // Borrowed device owner dominating all native children.
   iree_hal_amd_xdna_context_t* context;
   // Borrowed shared completion owner.

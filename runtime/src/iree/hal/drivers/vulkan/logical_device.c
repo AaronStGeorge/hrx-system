@@ -174,9 +174,6 @@ struct iree_hal_vulkan_logical_device_t {
     // Host time domain selected for calibrated profiling samples.
     VkTimeDomainEXT host_time_domain;
 
-    // Next process-local profiling session id.
-    uint64_t next_session_id;
-
     // Next clock-correlation sample id for the active profiling session.
     uint64_t next_clock_correlation_sample_id;
 
@@ -1117,7 +1114,8 @@ iree_hal_vulkan_logical_device_memory_backend(iree_hal_device_t* base_device) {
 
 static iree_status_t iree_hal_vulkan_logical_device_profiling_begin(
     iree_hal_device_t* base_device,
-    const iree_hal_device_profiling_options_t* options) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
   iree_hal_vulkan_logical_device_t* device =
       iree_hal_vulkan_logical_device_cast(base_device);
   if (device->profile.recorder) {
@@ -1194,7 +1192,7 @@ static iree_status_t iree_hal_vulkan_logical_device_profiling_begin(
 
   iree_hal_vulkan_profile_recorder_options_t recorder_options = {
       .name = device->identifier,
-      .session_id = ++device->profile.next_session_id,
+      .session_id = session_id,
       .device_record_count = 1,
       .device_records = &device_record,
       .queue_record_count = device->queues.queue_count,

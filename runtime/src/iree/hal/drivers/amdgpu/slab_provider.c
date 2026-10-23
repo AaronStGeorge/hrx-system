@@ -127,7 +127,7 @@ typedef struct iree_hal_amdgpu_slab_handle_t {
   iree_hal_buffer_t* imported_buffer;
 
   // Profiling session id owning |profile_allocation_id|.
-  uint64_t profile_session_id;
+  iree_hal_profile_session_id_t profile_session_id;
 
   // Session-local allocation id for the slab acquire/release lifecycle.
   uint64_t profile_allocation_id;
@@ -187,7 +187,7 @@ static bool iree_hal_amdgpu_slab_provider_record_memory_event(
     iree_hal_amdgpu_slab_provider_t* provider,
     iree_hal_profile_memory_event_type_t type,
     iree_hal_amdgpu_slab_handle_t* slab_handle, const void* backing_ptr) {
-  uint64_t session_id = slab_handle->profile_session_id;
+  iree_hal_profile_session_id_t session_id = slab_handle->profile_session_id;
   uint64_t allocation_id = slab_handle->profile_allocation_id;
   if (type == IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_SLAB_ACQUIRE) {
     allocation_id =

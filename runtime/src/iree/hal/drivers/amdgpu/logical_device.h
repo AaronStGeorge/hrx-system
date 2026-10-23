@@ -135,9 +135,6 @@ typedef struct iree_hal_amdgpu_logical_device_t {
   // Next non-zero executable identifier assigned by this device.
   iree_atomic_uint64_t next_executable_id;
 
-  // Next process-local profile session identifier allocated by this device.
-  uint64_t next_profile_session_id;
-
   // Durable profiling metadata registered by cold executable/command-buffer
   // construction paths.
   iree_hal_amdgpu_profile_metadata_registry_t profile_metadata;
@@ -202,7 +199,7 @@ typedef struct iree_hal_amdgpu_logical_device_t {
     // Opaque storage backing borrowed pointers in |options|, or NULL.
     iree_hal_device_profiling_options_storage_t* options_storage;
     // Process-local profiling session identifier assigned at begin.
-    uint64_t session_id;
+    iree_hal_profile_session_id_t session_id;
     // Next session-local clock-correlation sample identifier.
     uint64_t next_clock_correlation_sample_id;
     // Cursor tracking metadata side-table chunks emitted in this session.
@@ -310,7 +307,8 @@ bool iree_hal_amdgpu_logical_device_should_profile_dispatch(
 // allocation id. Callers that may release after a later profiling session
 // begins must pass the id back to the session-filtered record helper.
 uint64_t iree_hal_amdgpu_logical_device_allocate_profile_memory_allocation_id(
-    iree_hal_device_t* base_device, uint64_t* out_session_id);
+    iree_hal_device_t* base_device,
+    iree_hal_profile_session_id_t* out_session_id);
 
 // Records one memory lifecycle event into the active profiling stream.
 //
@@ -325,7 +323,7 @@ bool iree_hal_amdgpu_logical_device_record_profile_memory_event(
 
 // Records one memory lifecycle event only if |session_id| is still active.
 bool iree_hal_amdgpu_logical_device_record_profile_memory_event_for_session(
-    iree_hal_device_t* base_device, uint64_t session_id,
+    iree_hal_device_t* base_device, iree_hal_profile_session_id_t session_id,
     const iree_hal_profile_memory_event_t* event);
 
 // Records one queue operation event into the active profiling stream.

@@ -24,9 +24,9 @@ typedef struct iree_hal_amd_xdna_profile_t iree_hal_amd_xdna_profile_t;
 // request returns NULL. The sink is retained until end. Begin/end require the
 // HAL idle-device contract; warm capture never allocates or invokes the sink.
 iree_status_t iree_hal_amd_xdna_profile_begin(
-    const iree_hal_device_profiling_options_t* options, uint64_t session_id,
-    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
-    iree_hal_amd_xdna_context_t* context,
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint32_t queue_ordinal, iree_hal_amd_xdna_context_t* context,
     iree_hal_amd_xdna_command_arena_t* command_arena,
     iree_allocator_t host_allocator, iree_hal_amd_xdna_profile_t** out_profile);
 

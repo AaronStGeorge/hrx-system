@@ -315,6 +315,9 @@ typedef struct iree_hal_mock_device_t {
   // True when metadata-only mock executable loading is enabled.
   bool executable_loading_enabled;
 
+  // Most recent profiling session identity passed through the device vtable.
+  iree_hal_profile_session_id_t profile_session_id;
+
   // Immutable device facts captured at creation time.
   iree_hal_device_spec_t* device_spec;
 
@@ -653,7 +656,10 @@ iree_hal_mock_device_query_semaphore_compatibility(
 
 static iree_status_t iree_hal_mock_device_profiling_begin(
     iree_hal_device_t* base_device,
-    const iree_hal_device_profiling_options_t* options) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
+  iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
+  device->profile_session_id = session_id;
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
 }
 
@@ -665,6 +671,11 @@ static iree_status_t iree_hal_mock_device_profiling_flush(
 static iree_status_t iree_hal_mock_device_profiling_end(
     iree_hal_device_t* base_device) {
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
+}
+
+iree_hal_profile_session_id_t iree_hal_mock_device_profile_session_id(
+    iree_hal_device_t* base_device) {
+  return iree_hal_mock_device_cast(base_device)->profile_session_id;
 }
 
 static const iree_hal_memory_backend_t* iree_hal_mock_device_memory_backend(

@@ -52,7 +52,8 @@ bool iree_hal_amd_xdna_queue_try_wait_epoch(iree_hal_queue_t* queue,
 iree_status_t iree_hal_amd_xdna_queue_profiling_begin(
     iree_hal_queue_t* queue, uint32_t physical_device_ordinal,
     iree_hal_amd_xdna_command_arena_t* command_arena,
-    const iree_hal_device_profiling_options_t* options);
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id);
 iree_status_t iree_hal_amd_xdna_queue_profiling_flush(iree_hal_queue_t* queue);
 iree_status_t iree_hal_amd_xdna_queue_profiling_end(iree_hal_queue_t* queue);
 

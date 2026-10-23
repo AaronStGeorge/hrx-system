@@ -88,7 +88,7 @@ bool iree_hal_amdgpu_profile_counter_session_captures_queue_ranges(
 // Writes counter-set and counter metadata chunks for |session|.
 iree_status_t iree_hal_amdgpu_profile_counter_session_write_metadata(
     const iree_hal_amdgpu_profile_counter_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name);
 
 // Enables host-queue-carried counter sample storage for |queue|.
@@ -115,7 +115,7 @@ iree_status_t iree_hal_amdgpu_host_queue_start_profile_counter_ranges(
 // Stops, optionally writes, and optionally restarts physical-device ranges.
 iree_status_t iree_hal_amdgpu_host_queue_flush_profile_counter_ranges(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id,
+    iree_hal_profile_session_id_t session_id,
     iree_hal_amdgpu_profile_counter_range_flush_flags_t flags);
 
 // Returns the number of additional AQL packets needed for |reservation|.
@@ -186,7 +186,7 @@ void iree_hal_amdgpu_host_queue_commit_profile_counter_read_stop_packets(
 // successfully; queue slot reuse is what makes the aqlprofile handles safe.
 iree_status_t iree_hal_amdgpu_host_queue_write_profile_counter_samples(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id, uint64_t event_read_position,
+    iree_hal_profile_session_id_t session_id, uint64_t event_read_position,
     iree_host_size_t event_count,
     const iree_hal_profile_dispatch_event_t* events);
 

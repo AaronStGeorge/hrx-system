@@ -72,7 +72,7 @@ void iree_hal_amdgpu_profile_device_metric_sample_builder_append_i64(
 //===----------------------------------------------------------------------===//
 
 static iree_status_t iree_hal_amdgpu_profile_device_metrics_write_chunk(
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name, iree_string_view_t content_type,
     const uint8_t* storage, iree_host_size_t storage_size) {
   iree_hal_profile_chunk_metadata_t metadata =
@@ -178,7 +178,7 @@ iree_hal_amdgpu_profile_device_metrics_pack_descriptor_record(
 static iree_status_t
 iree_hal_amdgpu_profile_device_metrics_write_source_metadata(
     const iree_hal_amdgpu_profile_device_metric_source_t* source,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name) {
   uint8_t storage[128] = {0};
   iree_host_size_t storage_size = 0;
@@ -194,7 +194,7 @@ iree_hal_amdgpu_profile_device_metrics_write_source_metadata(
 static iree_status_t
 iree_hal_amdgpu_profile_device_metrics_write_descriptor_metadata(
     const iree_hal_amdgpu_profile_device_metric_source_t* source,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name, uint64_t metric_id) {
   const iree_hal_profile_metric_descriptor_t* descriptor =
       iree_hal_profile_builtin_metric_descriptor_lookup(metric_id);
@@ -217,7 +217,7 @@ iree_hal_amdgpu_profile_device_metrics_write_descriptor_metadata(
 
 static iree_status_t iree_hal_amdgpu_profile_device_metrics_write_sample(
     const iree_hal_amdgpu_profile_device_metric_sample_builder_t* builder,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name) {
   iree_host_size_t storage_size = 0;
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
@@ -319,7 +319,7 @@ void iree_hal_amdgpu_profile_device_metrics_session_free(
 
 iree_status_t iree_hal_amdgpu_profile_device_metrics_session_write_metadata(
     const iree_hal_amdgpu_profile_device_metrics_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name) {
   if (!session) {
     return iree_ok_status();
@@ -342,7 +342,7 @@ iree_status_t iree_hal_amdgpu_profile_device_metrics_session_write_metadata(
 
 iree_status_t iree_hal_amdgpu_profile_device_metrics_session_sample_and_write(
     iree_hal_amdgpu_profile_device_metrics_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name) {
   if (!session) {
     return iree_ok_status();

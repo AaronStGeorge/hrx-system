@@ -76,7 +76,7 @@ typedef struct iree_hal_amdgpu_profile_trace_collect_context_t {
   // Profile sink receiving trace chunks.
   iree_hal_profile_sink_t* sink;
   // Active profile session id.
-  uint64_t session_id;
+  iree_hal_profile_session_id_t session_id;
   // Copied dispatch event record correlated with the trace.
   const iree_hal_profile_dispatch_event_t* event;
   // Trace slot whose handle is being decoded.
@@ -633,8 +633,8 @@ static hsa_status_t iree_hal_amdgpu_profile_trace_collect_callback(
 static iree_status_t iree_hal_amdgpu_host_queue_write_profile_trace(
     iree_hal_amdgpu_host_queue_t* queue,
     iree_hal_amdgpu_profile_trace_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id, uint64_t event_position,
-    const iree_hal_profile_dispatch_event_t* event) {
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
+    uint64_t event_position, const iree_hal_profile_dispatch_event_t* event) {
   iree_hal_amdgpu_profile_trace_slot_t* slot =
       iree_hal_amdgpu_host_queue_profile_trace_slot(queue, event_position);
   if (IREE_UNLIKELY(!slot->handle.handle || slot->trace_id == 0)) {
@@ -663,7 +663,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_write_profile_trace(
 
 iree_status_t iree_hal_amdgpu_host_queue_write_profile_traces(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id, uint64_t event_read_position,
+    iree_hal_profile_session_id_t session_id, uint64_t event_read_position,
     iree_host_size_t event_count,
     const iree_hal_profile_dispatch_event_t* events) {
   if (!sink || !event_count || !queue->profiling.traces.session) {

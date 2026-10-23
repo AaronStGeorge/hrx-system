@@ -72,7 +72,7 @@ static void iree_hal_amdgpu_host_queue_record_memory_event(
   iree_hal_amdgpu_host_queue_populate_memory_event_pool_stats(pool, &event);
   // Session numbers belong to their originating device. A foreign queue
   // records this allocation in its own active capture using the shared ID.
-  const uint64_t session_id =
+  const iree_hal_profile_session_id_t session_id =
       iree_hal_buffer_allocation_placement(buffer).device ==
               queue->logical_device
           ? allocation_profile.session_id
@@ -267,7 +267,8 @@ iree_status_t iree_hal_amdgpu_host_queue_prepare_alloca_buffers(
         out_canonical_requests[prepared_count].allocation_size, pool,
         queue->transient_buffer_pool, &out_buffers[prepared_count]);
     if (iree_status_is_ok(status)) {
-      uint64_t session_id = 0;
+      iree_hal_profile_session_id_t session_id =
+          IREE_HAL_PROFILE_SESSION_ID_NONE;
       uint64_t allocation_id =
           iree_hal_amdgpu_logical_device_allocate_profile_memory_allocation_id(
               queue->logical_device, &session_id);

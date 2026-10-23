@@ -62,7 +62,7 @@ struct RecordingProfileSink {
   iree_status_code_t fail_end_session_status_code = IREE_STATUS_OK;
 
   // Session identifier observed at begin.
-  uint64_t session_id = 0;
+  iree_hal_profile_session_id_t session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
 
   // Status code observed by the most recent end_session callback.
   iree_status_code_t observed_end_session_status_code = IREE_STATUS_OK;

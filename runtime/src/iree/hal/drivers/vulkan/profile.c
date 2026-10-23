@@ -61,7 +61,7 @@ struct iree_hal_vulkan_profile_recorder_t {
   iree_hal_device_profiling_options_storage_t* options_storage;
 
   // Process-local profiling session identifier.
-  uint64_t session_id;
+  iree_hal_profile_session_id_t session_id;
 
   // True while the sink session has begun and has not been ended.
   bool active;

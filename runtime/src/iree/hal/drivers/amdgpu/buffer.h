@@ -158,8 +158,8 @@ void iree_hal_amdgpu_buffer_trace_allocation(iree_hal_buffer_t* buffer);
 // and queue_alloca transient buffers have their own pool/reservation event
 // streams and must not be double-counted as standalone buffer allocations.
 void iree_hal_amdgpu_buffer_set_profile_allocation(
-    iree_hal_buffer_t* buffer, uint64_t session_id, uint64_t allocation_id,
-    uint64_t pool_id, uint32_t physical_device_ordinal,
+    iree_hal_buffer_t* buffer, iree_hal_profile_session_id_t session_id,
+    uint64_t allocation_id, uint64_t pool_id, uint32_t physical_device_ordinal,
     iree_device_size_t alignment);
 
 // Returns true if |buffer| directly wraps ROCr storage.
