@@ -876,7 +876,12 @@ def amdgpu_test_steps(
         ci_config.AMDGPU_BAZEL_OPTIONS
         + ci_config.AMD_GPU_BAZEL_OPTIONS
         + amd_gpu_device_compiler_options()
-        + ("--//runtime/config/hal:drivers=task,amd",)
+        + (
+            # Shared Loom hardware fixtures consume this selector independently
+            # of the enabled drivers and the embedded native CTS image set.
+            "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
+            "--//runtime/config/hal:drivers=task,amd",
+        )
     )
     host_sanitizer_tag_filters = (
         (f"-{ci_config.HOST_TSAN_INCOMPATIBLE_TEST_LABEL}",) if config == "tsan" else ()
@@ -1270,7 +1275,6 @@ def cmake_amdgpu_steps(
             command_name,
             enabled_drivers=("amd",),
             enabled_loom_targets=("amdgpu", "vm"),
-            amdgpu_target_selector=target_selector,
             sanitizer=sanitizer,
             extra_options=(
                 "-DAMDF_BUILD=ON",
@@ -1278,6 +1282,7 @@ def cmake_amdgpu_steps(
                 "-DAMDF_FAMILY_CDNA=ON",
                 "-DAMDF_FAMILY_XDNA=OFF",
                 "-DLOOM_BUILD=ON",
+                "-DIREE_HAL_AMDGPU_TARGETS=" + target_selector,
                 "-DIREE_HAL_AMD_GPU_TARGETS="
                 + ";".join(ci_config.AMD_GPU_BINARY_TARGETS),
                 "-DLOOM_TARGET_AMDGPU_TARGETS="

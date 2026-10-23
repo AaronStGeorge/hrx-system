@@ -1036,6 +1036,26 @@ class CiTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only supported for AMDGPU"):
             ci.steps_from_args(args)
 
+    def test_amdgpu_execution_selector_is_independent_of_compiler_targets(self):
+        with mock.patch.object(
+            ci_config,
+            "AMD_GPU_BAZEL_OPTIONS",
+            ("--//loom/config/target/amdgpu:targets=compiler-source",),
+        ):
+            steps = ci.steps_from_args(
+                ci.parse_arguments(
+                    ["iree-bazel-amdgpu", "--amdgpu-target", "selected-hardware"]
+                )
+            )
+        test_step = next(step for step in steps if "test" in step.argv)
+        self.assertIn(
+            "--//runtime/src/iree/hal/drivers/amdgpu:targets=selected-hardware",
+            test_step.argv,
+        )
+        self.assertIn(
+            "--//loom/config/target/amdgpu:targets=compiler-source", test_step.argv
+        )
+
     def test_amdgpu_loom_importers_are_forwarded_to_configuration(self):
         args = ci.parse_arguments(
             [
@@ -1925,12 +1945,17 @@ fi
             mock.patch.object(ci_config, "AMD_GPU_LOOM_TARGETS", ("compiler-source",)),
         ):
             steps = ci.steps_from_args(
-                ci.parse_arguments(["iree-cmake-amdgpu", "--amdgpu-target", "gfx942"])
+                ci.parse_arguments(
+                    ["iree-cmake-amdgpu", "--amdgpu-target", "selected-hardware"]
+                )
             )
         configure_step = steps[0]
         self.assertIn("-DIREE_HAL_AMD_GPU_TARGETS=image-a;image-b", configure_step.argv)
         self.assertIn(
             "-DLOOM_TARGET_AMDGPU_TARGETS=compiler-source", configure_step.argv
+        )
+        self.assertIn(
+            "-DIREE_HAL_AMDGPU_TARGETS=selected-hardware", configure_step.argv
         )
 
     def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):
