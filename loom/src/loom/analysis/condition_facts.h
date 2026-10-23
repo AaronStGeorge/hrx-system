@@ -300,7 +300,9 @@ iree_status_t loom_condition_facts_query(
 // canonicalized and deduplicated. Allocation failure is the only reason a
 // valid query cannot produce a complete result. With a NULL fact table,
 // consequences depend only on Boolean structure and immutable literals, not
-// numeric observations that may change across loop iterations.
+// numeric observations that may change across loop iterations. With a fact
+// table, condition-owned operands are transitively composed through retained
+// alias relations once and stored in the returned derivation.
 iree_status_t loom_condition_facts_query_complete(
     loom_condition_query_t* query, const loom_value_fact_table_t* fact_table,
     loom_value_id_t condition_value, bool assumed_truth,

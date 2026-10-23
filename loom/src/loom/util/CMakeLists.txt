@@ -327,6 +327,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    fact_relation
+  HDRS
+    "fact_relation.h"
+  SRCS
+    "fact_relation.c"
+  DEPS
+    ::fact_ordinal_map
+    ::fact_table_api
+    iree::base
+    iree::base::internal
+    iree::base::internal::arena
+    loom::analysis::integer_relation
+    loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     fact_table
   HDRS
     "fact_cfg.h"
@@ -339,7 +357,6 @@ loom_cc_library(
     "fact_origin.h"
     "fact_range.h"
     "fact_recurrence.h"
-    "fact_relation.h"
     "fact_select_dependencies.h"
     "fact_snapshot.h"
     "fact_table.h"
@@ -355,7 +372,6 @@ loom_cc_library(
     "fact_origin.c"
     "fact_range.c"
     "fact_recurrence.c"
-    "fact_relation.c"
     "fact_select_dependencies.c"
     "fact_snapshot.c"
     "fact_table.c"
@@ -370,6 +386,7 @@ loom_cc_library(
     ::cfg_regions
     ::fact_control
     ::fact_ordinal_map
+    ::fact_relation
     ::fact_table_api
     ::numeric_format
     ::reference_facts
@@ -505,6 +522,7 @@ loom_cc_test(
   SRCS
     "fact_relation_test.cc"
   DEPS
+    ::fact_relation
     ::fact_table
     ::predicate_facts
     iree::base::internal::arena
@@ -560,6 +578,7 @@ loom_cc_library(
     "predicate_facts.c"
   DEPS
     ::fact_ordinal_map
+    ::fact_relation
     ::fact_table
     iree::base::internal
     iree::base::internal::arena

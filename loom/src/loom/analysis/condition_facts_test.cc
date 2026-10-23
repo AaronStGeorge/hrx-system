@@ -129,6 +129,27 @@ class ConditionFactsTest : public ::testing::Test {
     return op;
   }
 
+  loom_value_id_t BuildIndexAssumeRelation(loom_value_id_t value,
+                                           loom_predicate_kind_t kind,
+                                           loom_value_id_t bound) {
+    const loom_predicate_t predicate = {
+        .kind = kind,
+        .arg_count = 2,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE,
+                     LOOM_PRED_ARG_NONE},
+        .reserved = {},
+        .args = {value, bound, 0},
+    };
+    const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+    loom_op_t* assume = nullptr;
+    IREE_CHECK_OK(loom_index_assume_build(&builder_, &value, 1, &predicate, 1,
+                                          &type, 1, LOOM_LOCATION_UNKNOWN,
+                                          &assume));
+    IREE_CHECK_OK(
+        loom_value_fact_table_compute_op(&fact_table_, module_, assume));
+    return loom_index_assume_results(assume).values[0];
+  }
+
   bool Query(loom_value_id_t condition_value, bool assumed_truth = true) {
     bool complete = false;
     IREE_CHECK_OK(loom_condition_facts_query(&condition_query_, &fact_table_,
@@ -164,6 +185,61 @@ TEST_F(ConditionFactsTest, IndexCompareTrueEdgeProducesRelation) {
   EXPECT_EQ(relation.left.value_id, induction);
   EXPECT_EQ(relation.right.kind, LOOM_CONDITION_INTEGER_OPERAND_VALUE);
   EXPECT_EQ(relation.right.value_id, upper_bound);
+}
+
+TEST_F(ConditionFactsTest, CompleteDerivationRetainsComposedAliasBound) {
+  const loom_value_id_t row = DefineIndexValue();
+  const loom_value_id_t visible_input = DefineIndexValue();
+  const loom_value_id_t capacity = DefineIndexValue();
+  DefineFacts(row, loom_value_facts_make(0, 16383, 1));
+  DefineFacts(visible_input, loom_value_facts_make(0, 16384, 1));
+  DefineFacts(capacity, loom_value_facts_make(0, 16384, 1));
+  const loom_value_id_t visible =
+      BuildIndexAssumeRelation(visible_input, LOOM_PREDICATE_LE, capacity);
+  const loom_op_t* compare =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_ULT, row, visible);
+
+  loom_condition_derivation_t derivation;
+  loom_condition_derivation_initialize(&analysis_arena_, &derivation);
+  IREE_ASSERT_OK(loom_condition_facts_query_complete(
+      &condition_query_, &fact_table_, loom_index_cmp_result(compare), true,
+      &derivation));
+  const loom_condition_integer_relation_t query = {
+      .relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      .left = {LOOM_CONDITION_INTEGER_OPERAND_VALUE, row, 0},
+      .right = {LOOM_CONDITION_INTEGER_OPERAND_VALUE, capacity, 0},
+  };
+  bool result = false;
+  EXPECT_TRUE(loom_condition_fact_set_proves_integer_relation(
+      &derivation.integer_facts, &fact_table_, &query, &result));
+  EXPECT_TRUE(result);
+}
+
+TEST_F(ConditionFactsTest, AliasBoundCompositionRejectsIncomparableOrder) {
+  const loom_value_id_t row = DefineIndexValue();
+  const loom_value_id_t visible_input = DefineIndexValue();
+  const loom_value_id_t capacity = DefineIndexValue();
+  DefineFacts(row, loom_value_facts_make(0, 16383, 1));
+  DefineFacts(visible_input, loom_value_facts_make(0, 16384, 1));
+  DefineFacts(capacity, loom_value_facts_make(0, 16384, 1));
+  const loom_value_id_t visible =
+      BuildIndexAssumeRelation(visible_input, LOOM_PREDICATE_NE, capacity);
+  const loom_op_t* compare =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_ULT, row, visible);
+
+  loom_condition_derivation_t derivation;
+  loom_condition_derivation_initialize(&analysis_arena_, &derivation);
+  IREE_ASSERT_OK(loom_condition_facts_query_complete(
+      &condition_query_, &fact_table_, loom_index_cmp_result(compare), true,
+      &derivation));
+  const loom_condition_integer_relation_t query = {
+      .relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      .left = {LOOM_CONDITION_INTEGER_OPERAND_VALUE, row, 0},
+      .right = {LOOM_CONDITION_INTEGER_OPERAND_VALUE, capacity, 0},
+  };
+  bool result = false;
+  EXPECT_FALSE(loom_condition_fact_set_proves_integer_relation(
+      &derivation.integer_facts, &fact_table_, &query, &result));
 }
 
 TEST_F(ConditionFactsTest, QuotientConsequencesCoverScalarWidthsAndRounding) {
@@ -1908,6 +1984,8 @@ TEST_F(ConditionFactsTest, SelectSelectorTruthMatchesAllCompletions) {
           }
         }
         const bool forced = selector_outcomes == 1u || selector_outcomes == 2u;
+        const bool shares_assumed_truth =
+            forced && ((selector_outcomes == 2u) == assumed_truth);
         IREE_ASSERT_OK(loom_condition_facts_query_complete(
             &condition_query_, /*fact_table=*/nullptr, result, assumed_truth,
             &derivation));
@@ -1917,17 +1995,28 @@ TEST_F(ConditionFactsTest, SelectSelectorTruthMatchesAllCompletions) {
                   forced ? selector_outcomes : 0u);
         EXPECT_EQ(derivation.boolean_fact_count, forced ? 2u : 1u);
         EXPECT_EQ(derivation.integer_facts.integer_relation_count,
-                  forced ? 2u : 1u);
+                  1u + (forced ? 1u : 0u) + (shares_assumed_truth ? 1u : 0u));
+        unsigned composed_value_relations = 0;
         for (iree_host_size_t i = 0;
              i < derivation.integer_facts.integer_relation_count; ++i) {
           const auto& fact = derivation.integer_facts.integer_relations[i];
           EXPECT_EQ(fact.relation, LOOM_SYMBOLIC_INTEGER_RELATION_EQ);
           ASSERT_EQ(fact.left.kind, LOOM_CONDITION_INTEGER_OPERAND_VALUE);
-          ASSERT_EQ(fact.right.kind, LOOM_CONDITION_INTEGER_OPERAND_CONSTANT);
-          ASSERT_TRUE(fact.right.constant == 0 || fact.right.constant == 1);
-          EXPECT_EQ(DerivedBooleanTruthMask(derivation, fact.left.value_id),
-                    fact.right.constant ? 2u : 1u);
+          if (fact.right.kind == LOOM_CONDITION_INTEGER_OPERAND_CONSTANT) {
+            ASSERT_TRUE(fact.right.constant == 0 || fact.right.constant == 1);
+            EXPECT_EQ(DerivedBooleanTruthMask(derivation, fact.left.value_id),
+                      fact.right.constant ? 2u : 1u);
+            continue;
+          }
+          ASSERT_TRUE(forced);
+          ASSERT_EQ(fact.right.kind, LOOM_CONDITION_INTEGER_OPERAND_VALUE);
+          EXPECT_TRUE((fact.left.value_id == selector &&
+                       fact.right.value_id == result) ||
+                      (fact.left.value_id == result &&
+                       fact.right.value_id == selector));
+          ++composed_value_relations;
         }
+        EXPECT_EQ(composed_value_relations, shares_assumed_truth ? 1u : 0u);
       }
     }
   }

@@ -116,5 +116,44 @@ TEST(IntegerRelationTest, ConvertsStrictOutcomes) {
             LOOM_INTEGER_ORDER_OUTCOME_EQUAL);
 }
 
+TEST(IntegerRelationTest, ComposesEveryPossibleOrderSet) {
+  for (loom_integer_order_outcome_bits_t left_middle = 0;
+       left_middle <= LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL; ++left_middle) {
+    for (loom_integer_order_outcome_bits_t middle_right = 0;
+         middle_right <= LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL; ++middle_right) {
+      loom_integer_order_outcome_bits_t expected = 0;
+      for (int left = -2; left <= 2; ++left) {
+        for (int middle = -2; middle <= 2; ++middle) {
+          const auto left_outcome =
+              left < middle    ? LOOM_INTEGER_ORDER_OUTCOME_LESS
+              : left == middle ? LOOM_INTEGER_ORDER_OUTCOME_EQUAL
+                               : LOOM_INTEGER_ORDER_OUTCOME_GREATER;
+          if (!(left_middle & (1u << left_outcome))) {
+            continue;
+          }
+          for (int right = -2; right <= 2; ++right) {
+            const auto right_outcome =
+                middle < right    ? LOOM_INTEGER_ORDER_OUTCOME_LESS
+                : middle == right ? LOOM_INTEGER_ORDER_OUTCOME_EQUAL
+                                  : LOOM_INTEGER_ORDER_OUTCOME_GREATER;
+            if (!(middle_right & (1u << right_outcome))) {
+              continue;
+            }
+            const auto composed_outcome =
+                left < right    ? LOOM_INTEGER_ORDER_OUTCOME_LESS
+                : left == right ? LOOM_INTEGER_ORDER_OUTCOME_EQUAL
+                                : LOOM_INTEGER_ORDER_OUTCOME_GREATER;
+            expected |= 1u << composed_outcome;
+          }
+        }
+      }
+      EXPECT_EQ(loom_integer_order_outcomes_compose(left_middle, middle_right),
+                expected)
+          << "left_middle=" << static_cast<int>(left_middle)
+          << ", middle_right=" << static_cast<int>(middle_right);
+    }
+  }
+}
+
 }  // namespace
 }  // namespace loom

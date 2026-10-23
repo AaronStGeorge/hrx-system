@@ -168,28 +168,42 @@ loom_condition_fact_scope_projection_exclusions(
   return exclusions;
 }
 
-bool loom_condition_fact_scope_proves_integer_relation(
+loom_integer_order_outcome_bits_t loom_condition_fact_scope_query_integer_order(
     const loom_condition_fact_scope_t* scope,
     const loom_value_fact_table_t* fact_table,
-    const loom_condition_integer_relation_t* queried, bool* out_result) {
+    loom_condition_integer_operand_t left,
+    loom_condition_integer_operand_t right) {
+  const loom_condition_integer_relation_t queried = {
+      .relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ,
+      .left = left,
+      .right = right,
+  };
   loom_integer_order_outcome_bits_t exclusions = 0;
   for (const loom_condition_fact_scope_t* current = scope; current != NULL;
        current = current->parent) {
     if (current->local_derivation != NULL) {
       exclusions |= loom_condition_fact_scope_flat_exclusions(
-          &current->local_derivation->integer_facts, fact_table, queried);
+          &current->local_derivation->integer_facts, fact_table, &queried);
     } else if (current->edge_projection != NULL) {
       exclusions |= loom_condition_fact_scope_projection_exclusions(
-          current->edge_projection, fact_table, queried);
+          current->edge_projection, fact_table, &queried);
     } else if (current->relation_view != NULL) {
       exclusions |= loom_cfg_condition_relation_view_query_excluded_outcomes(
-          current->relation_table, current->relation_view, fact_table,
-          queried->left, queried->right);
+          current->relation_table, current->relation_view, fact_table, left,
+          right);
     }
   }
+  return LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL &
+         (loom_integer_order_outcome_bits_t)~exclusions;
+}
+
+bool loom_condition_fact_scope_proves_integer_relation(
+    const loom_condition_fact_scope_t* scope,
+    const loom_value_fact_table_t* fact_table,
+    const loom_condition_integer_relation_t* queried, bool* out_result) {
   const loom_integer_order_outcome_bits_t outcomes =
-      LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL &
-      (loom_integer_order_outcome_bits_t)~exclusions;
+      loom_condition_fact_scope_query_integer_order(
+          scope, fact_table, queried->left, queried->right);
   return loom_symbolic_integer_relation_resolve(outcomes, queried->relation,
                                                 out_result);
 }

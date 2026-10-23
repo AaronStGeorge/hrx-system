@@ -93,6 +93,25 @@ static loom_condition_integer_relation_t ValueRelation(
   return result;
 }
 
+static bool EvaluateIntegerRelation(loom_symbolic_integer_relation_t relation,
+                                    int64_t left, int64_t right) {
+  switch (relation) {
+    case LOOM_SYMBOLIC_INTEGER_RELATION_EQ:
+      return left == right;
+    case LOOM_SYMBOLIC_INTEGER_RELATION_NE:
+      return left != right;
+    case LOOM_SYMBOLIC_INTEGER_RELATION_LT:
+      return left < right;
+    case LOOM_SYMBOLIC_INTEGER_RELATION_LE:
+      return left <= right;
+    case LOOM_SYMBOLIC_INTEGER_RELATION_GT:
+      return left > right;
+    case LOOM_SYMBOLIC_INTEGER_RELATION_GE:
+      return left >= right;
+  }
+  return false;
+}
+
 static loom_condition_fact_set_t SingleRelationFacts(
     loom_condition_integer_relation_t* relation) {
   loom_condition_fact_set_t facts = {
@@ -1471,7 +1490,7 @@ TEST_F(SymbolicExprTest, ProvesShiftedQuotientBoundFromActiveShiftedExtent) {
       {shift_two, shift_two, LOOM_SYMBOLIC_PROOF_TRUE},
       {shift_two, shift_three, LOOM_SYMBOLIC_PROOF_UNKNOWN},
       {shift_sixty_four, shift_sixty_four, LOOM_SYMBOLIC_PROOF_UNKNOWN},
-      {dynamic_shift, dynamic_shift, LOOM_SYMBOLIC_PROOF_UNKNOWN},
+      {dynamic_shift, dynamic_shift, LOOM_SYMBOLIC_PROOF_TRUE},
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.quotient_shift);
@@ -1536,6 +1555,342 @@ TEST_F(SymbolicExprTest, ProvesScalarQuotientBoundFromActiveProductRelation) {
       &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT, quotient, bound,
       &proof));
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
+TEST_F(SymbolicExprTest,
+       QuotientPairStrictOrderCoversUnsignedTypesAndSpellings) {
+  enum class QuotientForm { kDivide, kShift };
+  const loom_scalar_type_t scalar_types[] = {
+      LOOM_SCALAR_TYPE_INDEX, LOOM_SCALAR_TYPE_I1,  LOOM_SCALAR_TYPE_I8,
+      LOOM_SCALAR_TYPE_I16,   LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_I64,
+  };
+  const QuotientForm forms[] = {QuotientForm::kDivide, QuotientForm::kShift};
+  auto define_value = [&](loom_scalar_type_t scalar_type) {
+    loom_value_id_t value = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_value(
+        &builder_, loom_type_scalar(scalar_type), &value));
+    return value;
+  };
+  auto build_quotient = [&](QuotientForm form, loom_value_id_t dividend,
+                            loom_value_id_t scale,
+                            loom_scalar_type_t scalar_type) {
+    loom_op_t* op = nullptr;
+    if (scalar_type == LOOM_SCALAR_TYPE_INDEX) {
+      if (form == QuotientForm::kDivide) {
+        IREE_CHECK_OK(loom_index_div_build(&builder_, dividend, scale,
+                                           LOOM_LOCATION_UNKNOWN, &op));
+      } else {
+        IREE_CHECK_OK(loom_index_shrui_build(&builder_, dividend, scale,
+                                             LOOM_LOCATION_UNKNOWN, &op));
+      }
+    } else {
+      const loom_type_t type = loom_type_scalar(scalar_type);
+      if (form == QuotientForm::kDivide) {
+        IREE_CHECK_OK(loom_scalar_divui_build(&builder_, dividend, scale, type,
+                                              LOOM_LOCATION_UNKNOWN, &op));
+      } else {
+        IREE_CHECK_OK(loom_scalar_shrui_build(&builder_, dividend, scale, type,
+                                              LOOM_LOCATION_UNKNOWN, &op));
+      }
+    }
+    ComputeFacts(op);
+    return loom_op_const_results(op)[0];
+  };
+
+  for (loom_scalar_type_t scalar_type : scalar_types) {
+    const int64_t divisor = scalar_type == LOOM_SCALAR_TYPE_I1 ? 1 : 4;
+    const int64_t shift = scalar_type == LOOM_SCALAR_TYPE_I1 ? 0 : 2;
+    const int64_t maximum = scalar_type == LOOM_SCALAR_TYPE_I1 ? 1 : 124;
+    for (QuotientForm left_form : forms) {
+      for (QuotientForm right_form : forms) {
+        SCOPED_TRACE(loom_scalar_type_name(scalar_type));
+        SCOPED_TRACE(static_cast<int>(left_form));
+        SCOPED_TRACE(static_cast<int>(right_form));
+        const loom_value_id_t left_dividend = define_value(scalar_type);
+        const loom_value_id_t right_dividend = define_value(scalar_type);
+        const loom_value_id_t left_scale = define_value(scalar_type);
+        const loom_value_id_t right_scale = define_value(scalar_type);
+        DefineFacts(left_dividend,
+                    loom_value_facts_make(0, maximum, /*known_divisor=*/1));
+        DefineFacts(right_dividend, loom_value_facts_make(0, maximum, divisor));
+        DefineFacts(left_scale,
+                    loom_value_facts_exact_i64(
+                        left_form == QuotientForm::kDivide ? divisor : shift));
+        DefineFacts(right_scale,
+                    loom_value_facts_exact_i64(
+                        right_form == QuotientForm::kDivide ? divisor : shift));
+        const loom_value_id_t left_quotient =
+            build_quotient(left_form, left_dividend, left_scale, scalar_type);
+        const loom_value_id_t right_quotient = build_quotient(
+            right_form, right_dividend, right_scale, scalar_type);
+
+        loom_condition_integer_relation_t active_relation = ValueRelation(
+            LOOM_SYMBOLIC_INTEGER_RELATION_LT, left_dividend, right_dividend);
+        loom_condition_fact_set_t condition_facts =
+            SingleRelationFacts(&active_relation);
+        ScopedConditionFacts condition_scope(&expression_context_,
+                                             &condition_facts);
+        loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+        IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+            &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+            left_quotient, right_quotient, &proof));
+        EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+        IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+            &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_GE,
+            left_quotient, right_quotient, &proof));
+        EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+      }
+    }
+
+    const int64_t bit_count = loom_scalar_type_bitwidth(scalar_type);
+    const loom_value_id_t left_dividend = define_value(scalar_type);
+    const loom_value_id_t right_dividend = define_value(scalar_type);
+    const loom_value_id_t invalid_shift = define_value(scalar_type);
+    DefineFacts(left_dividend,
+                loom_value_facts_make(0, maximum, /*known_divisor=*/1));
+    DefineFacts(right_dividend, loom_value_facts_make(0, maximum, divisor));
+    DefineFacts(invalid_shift, loom_value_facts_exact_i64(bit_count));
+    const loom_value_id_t left_quotient = build_quotient(
+        QuotientForm::kShift, left_dividend, invalid_shift, scalar_type);
+    const loom_value_id_t right_quotient = build_quotient(
+        QuotientForm::kShift, right_dividend, invalid_shift, scalar_type);
+    loom_condition_integer_relation_t active_relation = ValueRelation(
+        LOOM_SYMBOLIC_INTEGER_RELATION_LT, left_dividend, right_dividend);
+    loom_condition_fact_set_t condition_facts =
+        SingleRelationFacts(&active_relation);
+    ScopedConditionFacts condition_scope(&expression_context_,
+                                         &condition_facts);
+    loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+    IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+        &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE, left_quotient,
+        right_quotient, &proof));
+    EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_UNKNOWN)
+        << loom_scalar_type_name(scalar_type);
+  }
+}
+
+TEST_F(SymbolicExprTest, QuotientPairOrderMatchesRoundingOracle) {
+  const loom_symbolic_integer_relation_t relations[] = {
+      LOOM_SYMBOLIC_INTEGER_RELATION_EQ, LOOM_SYMBOLIC_INTEGER_RELATION_NE,
+      LOOM_SYMBOLIC_INTEGER_RELATION_LT, LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+      LOOM_SYMBOLIC_INTEGER_RELATION_GT, LOOM_SYMBOLIC_INTEGER_RELATION_GE,
+  };
+  const int64_t divisor = 4;
+  const loom_value_id_t divisor_value =
+      loom_index_constant_result(BuildIndexConstant(divisor));
+  DefineFacts(divisor_value, loom_value_facts_exact_i64(divisor));
+  for (loom_symbolic_integer_relation_t known_relation : relations) {
+    for (unsigned divisibility = 0; divisibility < 4; ++divisibility) {
+      SCOPED_TRACE(known_relation);
+      SCOPED_TRACE(divisibility);
+      const bool left_divisible = (divisibility & 1) != 0;
+      const bool right_divisible = (divisibility & 2) != 0;
+      const loom_value_id_t left_dividend = DefineIndexValue();
+      const loom_value_id_t right_dividend = DefineIndexValue();
+      DefineFacts(left_dividend,
+                  loom_value_facts_make(0, 31, left_divisible ? divisor : 1));
+      DefineFacts(right_dividend,
+                  loom_value_facts_make(0, 31, right_divisible ? divisor : 1));
+      loom_op_t* left_op = nullptr;
+      IREE_ASSERT_OK(loom_index_div_build(&builder_, left_dividend,
+                                          divisor_value, LOOM_LOCATION_UNKNOWN,
+                                          &left_op));
+      ComputeFacts(left_op);
+      const loom_value_id_t left_quotient = loom_index_div_result(left_op);
+      loom_op_t* right_op = nullptr;
+      IREE_ASSERT_OK(loom_index_div_build(&builder_, right_dividend,
+                                          divisor_value, LOOM_LOCATION_UNKNOWN,
+                                          &right_op));
+      ComputeFacts(right_op);
+      const loom_value_id_t right_quotient = loom_index_div_result(right_op);
+
+      loom_integer_order_outcome_bits_t expected_outcomes = 0;
+      for (int64_t left = 0; left <= 31; ++left) {
+        if (left_divisible && left % divisor != 0) {
+          continue;
+        }
+        for (int64_t right = 0; right <= 31; ++right) {
+          if ((right_divisible && right % divisor != 0) ||
+              !EvaluateIntegerRelation(known_relation, left, right)) {
+            continue;
+          }
+          const int64_t left_result = left / divisor;
+          const int64_t right_result = right / divisor;
+          const loom_integer_order_outcome_t outcome =
+              left_result < right_result ? LOOM_INTEGER_ORDER_OUTCOME_LESS
+              : left_result == right_result
+                  ? LOOM_INTEGER_ORDER_OUTCOME_EQUAL
+                  : LOOM_INTEGER_ORDER_OUTCOME_GREATER;
+          expected_outcomes |= 1u << outcome;
+        }
+      }
+      ASSERT_NE(expected_outcomes, 0u);
+
+      loom_condition_integer_relation_t active_relation =
+          ValueRelation(known_relation, left_dividend, right_dividend);
+      loom_condition_fact_set_t condition_facts =
+          SingleRelationFacts(&active_relation);
+      ScopedConditionFacts condition_scope(&expression_context_,
+                                           &condition_facts);
+      for (loom_symbolic_integer_relation_t queried_relation : relations) {
+        SCOPED_TRACE(queried_relation);
+        bool expected = false;
+        const bool resolved = loom_symbolic_integer_relation_resolve(
+            expected_outcomes, queried_relation, &expected);
+        loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+        IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+            &expression_context_, queried_relation, left_quotient,
+            right_quotient, &proof));
+        EXPECT_EQ(proof, resolved ? (expected ? LOOM_SYMBOLIC_PROOF_TRUE
+                                              : LOOM_SYMBOLIC_PROOF_FALSE)
+                                  : LOOM_SYMBOLIC_PROOF_UNKNOWN);
+      }
+    }
+  }
+}
+
+TEST_F(SymbolicExprTest, QuotientPairSupportsSharedDynamicScales) {
+  const loom_value_id_t left_dividend = DefineIndexValue();
+  const loom_value_id_t right_dividend = DefineIndexValue();
+  const loom_value_id_t divisor = DefineIndexValue();
+  DefineFacts(left_dividend, loom_value_facts_make(0, 255, 1));
+  DefineFacts(right_dividend, loom_value_facts_make(0, 255, 1));
+  DefineFacts(divisor, loom_value_facts_make(1, 8, 1));
+  loom_op_t* left_op = nullptr;
+  IREE_ASSERT_OK(loom_index_div_build(&builder_, left_dividend, divisor,
+                                      LOOM_LOCATION_UNKNOWN, &left_op));
+  ComputeFacts(left_op);
+  loom_op_t* right_op = nullptr;
+  IREE_ASSERT_OK(loom_index_div_build(&builder_, right_dividend, divisor,
+                                      LOOM_LOCATION_UNKNOWN, &right_op));
+  ComputeFacts(right_op);
+  loom_condition_integer_relation_t active_relation = ValueRelation(
+      LOOM_SYMBOLIC_INTEGER_RELATION_LT, left_dividend, right_dividend);
+  loom_condition_fact_set_t condition_facts =
+      SingleRelationFacts(&active_relation);
+  ScopedConditionFacts condition_scope(&expression_context_, &condition_facts);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+      loom_index_div_result(left_op), loom_index_div_result(right_op), &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      loom_index_div_result(left_op), loom_index_div_result(right_op), &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_UNKNOWN);
+}
+
+TEST_F(SymbolicExprTest, QuotientPairDynamicShiftUsesWorstCaseDivisibility) {
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  auto define_value = [&]() {
+    loom_value_id_t value = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_value(&builder_, type, &value));
+    return value;
+  };
+  const loom_value_id_t left_dividend = define_value();
+  const loom_value_id_t right_dividend = define_value();
+  const loom_value_id_t shift = define_value();
+  DefineFacts(left_dividend, loom_value_facts_make(0, 252, 1));
+  DefineFacts(right_dividend, loom_value_facts_make(0, 252, 4));
+  DefineFacts(shift, loom_value_facts_make(1, 2, 1));
+  loom_op_t* left_op = nullptr;
+  IREE_ASSERT_OK(loom_scalar_shrui_build(&builder_, left_dividend, shift, type,
+                                         LOOM_LOCATION_UNKNOWN, &left_op));
+  ComputeFacts(left_op);
+  loom_op_t* right_op = nullptr;
+  IREE_ASSERT_OK(loom_scalar_shrui_build(&builder_, right_dividend, shift, type,
+                                         LOOM_LOCATION_UNKNOWN, &right_op));
+  ComputeFacts(right_op);
+  loom_condition_integer_relation_t active_relation = ValueRelation(
+      LOOM_SYMBOLIC_INTEGER_RELATION_LT, left_dividend, right_dividend);
+  loom_condition_fact_set_t condition_facts =
+      SingleRelationFacts(&active_relation);
+  ScopedConditionFacts condition_scope(&expression_context_, &condition_facts);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      loom_scalar_shrui_result(left_op), loom_scalar_shrui_result(right_op),
+      &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
+TEST_F(SymbolicExprTest, QuotientPairRejectsMismatchedScales) {
+  const loom_value_id_t left_dividend = DefineIndexValue();
+  const loom_value_id_t right_dividend = DefineIndexValue();
+  const loom_value_id_t four =
+      loom_index_constant_result(BuildIndexConstant(4));
+  const loom_value_id_t eight =
+      loom_index_constant_result(BuildIndexConstant(8));
+  DefineFacts(left_dividend, loom_value_facts_make(0, 63, 1));
+  DefineFacts(right_dividend, loom_value_facts_make(0, 63, 8));
+  DefineFacts(four, loom_value_facts_exact_i64(4));
+  DefineFacts(eight, loom_value_facts_exact_i64(8));
+  loom_op_t* left_op = nullptr;
+  IREE_ASSERT_OK(loom_index_div_build(&builder_, left_dividend, four,
+                                      LOOM_LOCATION_UNKNOWN, &left_op));
+  ComputeFacts(left_op);
+  loom_op_t* right_op = nullptr;
+  IREE_ASSERT_OK(loom_index_div_build(&builder_, right_dividend, eight,
+                                      LOOM_LOCATION_UNKNOWN, &right_op));
+  ComputeFacts(right_op);
+  loom_condition_integer_relation_t active_relation = ValueRelation(
+      LOOM_SYMBOLIC_INTEGER_RELATION_LT, left_dividend, right_dividend);
+  loom_condition_fact_set_t condition_facts =
+      SingleRelationFacts(&active_relation);
+  ScopedConditionFacts condition_scope(&expression_context_, &condition_facts);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+      loom_index_div_result(left_op), loom_index_div_result(right_op), &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_UNKNOWN);
+}
+
+TEST_F(SymbolicExprTest,
+       QuotientPairRequiresNonNegativeDividendsAndPositiveDivisor) {
+  const loom_value_id_t left_dividend = DefineIndexValue();
+  const loom_value_id_t right_dividend = DefineIndexValue();
+  const loom_value_id_t divisor = DefineIndexValue();
+  loom_op_t* left_op = nullptr;
+  IREE_ASSERT_OK(loom_index_div_build(&builder_, left_dividend, divisor,
+                                      LOOM_LOCATION_UNKNOWN, &left_op));
+  loom_op_t* right_op = nullptr;
+  IREE_ASSERT_OK(loom_index_div_build(&builder_, right_dividend, divisor,
+                                      LOOM_LOCATION_UNKNOWN, &right_op));
+  loom_condition_integer_relation_t active_relation = ValueRelation(
+      LOOM_SYMBOLIC_INTEGER_RELATION_LT, left_dividend, right_dividend);
+  loom_condition_fact_set_t condition_facts =
+      SingleRelationFacts(&active_relation);
+  ScopedConditionFacts condition_scope(&expression_context_, &condition_facts);
+
+  const struct {
+    loom_value_facts_t left;
+    loom_value_facts_t right;
+    loom_value_facts_t divisor;
+    loom_symbolic_proof_result_t expected;
+  } cases[] = {
+      {loom_value_facts_make(-1, 63, 1), loom_value_facts_make(0, 64, 8),
+       loom_value_facts_exact_i64(8), LOOM_SYMBOLIC_PROOF_UNKNOWN},
+      {loom_value_facts_make(0, 63, 1), loom_value_facts_make(-8, 64, 8),
+       loom_value_facts_exact_i64(8), LOOM_SYMBOLIC_PROOF_TRUE},
+      {loom_value_facts_make(0, 63, 1), loom_value_facts_make(0, 64, 8),
+       loom_value_facts_make(0, 8, 1), LOOM_SYMBOLIC_PROOF_UNKNOWN},
+  };
+  for (const auto& test_case : cases) {
+    DefineFacts(left_dividend, test_case.left);
+    DefineFacts(right_dividend, test_case.right);
+    DefineFacts(divisor, test_case.divisor);
+    ComputeFacts(left_op);
+    ComputeFacts(right_op);
+    loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+    IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+        &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+        loom_index_div_result(left_op), loom_index_div_result(right_op),
+        &proof));
+    EXPECT_EQ(proof, test_case.expected);
+  }
 }
 
 TEST_F(SymbolicExprTest, ProvesQuotientBoundFromDividendIdentityPredicate) {

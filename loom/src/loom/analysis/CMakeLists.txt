@@ -408,6 +408,7 @@ loom_cc_library(
     loom::ops::scalar::op_defs
     loom::ops::scf::op_defs
     loom::util::adaptive_sort
+    loom::util::fact_relation
     loom::util::fact_table_api
   PUBLIC
 )
@@ -1553,6 +1554,7 @@ loom_cc_library(
     loom::ir
     loom::ops::op_defs
     loom::target::facts
+    loom::util::fact_relation
     loom::util::fact_table
   PUBLIC
 )
@@ -1788,6 +1790,7 @@ loom_cc_library(
     loom::ops::scalar
     loom::ops::scf
     loom::util::adaptive_sort
+    loom::util::fact_relation
     loom::util::fact_table
   PUBLIC
 )

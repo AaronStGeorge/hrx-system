@@ -64,6 +64,9 @@ TEST(ConditionFactScopeTest, ConjoinsRelationsAcrossFragments) {
   EXPECT_TRUE(loom_condition_fact_scope_proves_integer_relation(
       &child_scope, nullptr, &query, &result));
   EXPECT_TRUE(result);
+  EXPECT_EQ(loom_condition_fact_scope_query_integer_order(
+                &child_scope, nullptr, ValueOperand(left), ValueOperand(right)),
+            LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
 }
 
 TEST(ConditionFactScopeTest, ContradictoryFragmentsRemainUnknown) {
@@ -98,6 +101,9 @@ TEST(ConditionFactScopeTest, ContradictoryFragmentsRemainUnknown) {
   bool result = false;
   EXPECT_FALSE(loom_condition_fact_scope_proves_integer_relation(
       &child_scope, nullptr, &query, &result));
+  EXPECT_EQ(loom_condition_fact_scope_query_integer_order(
+                &child_scope, nullptr, ValueOperand(left), ValueOperand(right)),
+            0u);
 }
 
 TEST(ConditionFactScopeTest, ProjectedFragmentExposesRangeAndRelationFacts) {
