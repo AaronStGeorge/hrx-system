@@ -145,10 +145,10 @@ CPU_BAZEL_TARGET_EXCLUDES = (
     "-//runtime/src/iree/hal/drivers/webgpu/...",
 )
 CPU_RESOURCE_TAG_EXCLUDES = run_requirements.bazel_exclusions(())
-# GPU jobs explicitly admit both native endpoints and HSA agents. XDNA-only
-# jobs retain their separate device requirement.
+# GPU jobs admit native endpoints. XDNA-only jobs retain their separate device
+# requirement.
 XDNA_RESOURCES = ("libamdf.resource.xdna",)
-AMDGPU_RESOURCES = ("runtime.resource.amd_gpu", "libamdf.resource.amd_gpu")
+AMDGPU_RESOURCES = ("libamdf.resource.amd_gpu",)
 AMD_GPU_RUN_REQUIREMENT_TAG = "iree-run-requirement=libamdf.resource.amd_gpu"
 VULKAN_RESOURCES = ("vulkan.resource.device",)
 # Each command resets explicit API requests from machine-local Bazel settings.
@@ -256,10 +256,9 @@ AMD_CLIENT_WINDOWS_RESOURCES = (
         "d3d12.resource.device",
     )
 )
-AMDGPU_CMAKE_PACKAGE_REGEX = r"^iree/hal/drivers/(amd|amdgpu)/"
+AMDGPU_CMAKE_PACKAGE_REGEX = r"^iree/hal/drivers/amd/"
 AMDGPU_CMAKE_BUILD_TARGETS = (
     "runtime/src/iree/hal/drivers/amd/all",
-    "runtime/src/iree/hal/drivers/amdgpu/all",
     "libamdf/all",
 )
 AMDGPU_BAZEL_OPTIONS = (
@@ -294,15 +293,12 @@ AMDGPU_WINDOWS_COPY_FILTER = (
     "SdmaKernelQueueTest.ExecutesMaterializedSdmaCopy"
 )
 DEFAULT_AMDGPU_TARGET_SELECTOR = "gfx942"
-AMDGPU_BUILD_REQUIREMENT_TAG = "iree-build-requirement=runtime.hal.amdgpu"
-AMDGPU_RUN_REQUIREMENT_TAG = "iree-run-requirement=runtime.resource.amd_gpu"
 AMDGPU_BAZEL_TEST_TAG_FILTERS = (
-    AMDGPU_BUILD_REQUIREMENT_TAG,
-    AMDGPU_RUN_REQUIREMENT_TAG,
     AMDF_BUILD_REQUIREMENT_TAG,
     AMD_GPU_RUN_REQUIREMENT_TAG,
 )
 AMDGPU_BAZEL_TARGET_EXCLUDES = (
+    "-//runtime/src/iree/hal/drivers/amdgpu/...",
     "-//runtime/src/iree/hal/drivers/vulkan/...",
     "-//runtime/src/iree/hal/drivers/webgpu/...",
 )
