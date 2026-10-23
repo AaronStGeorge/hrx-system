@@ -558,7 +558,10 @@ loom_cc_library_group(
 iree_assert_dependency_boundary(
     name = "construction_dependency_boundary",
     forbidden_dependencies = [
+        "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ir:structural",
+        "//loom/src/loom/ir:symbol_map",
         "//loom/src/loom/ops:atomic",
         "//loom/src/loom/ops:cache",
         "//loom/src/loom/ops:combining",
