@@ -132,7 +132,7 @@ typedef struct loom_serve_model_configuration_t {
 // Parses a deployment with name, definition, optional model reference, device,
 // admission, and base_directory. A model reference selects a local portable
 // card. Its definition supplies kind and deployment overrides; cold resolution
-// supplies the program and asset closure and canonical configuration defaults.
+// supplies the program and asset closure and canonical preset defaults.
 // Direct definitions supply their own prepare/control paths, sources array,
 // modality-specific inputs/capacities, and source-owned options.
 // Unknown, duplicate, wrong-kind and invalid fields reject before any model

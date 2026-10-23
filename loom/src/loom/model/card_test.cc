@@ -42,7 +42,7 @@ constexpr char kCard[] = R"json({
     }}},
     "large": {"services": {"chat": {"programs": ["source"]}}}
   },
-  "configurations": {
+  "presets": {
     "check": {"service": "chat", "variant": "small", "programs": "mixed",
               "execution": {"rows": 2}, "request": {"max_tokens": 4}}
   }
@@ -89,7 +89,7 @@ constexpr char kPartitionCard[] = R"json({
     "other side": {"services": {"chat": {"programs": ["source"],
       "parameters": {"model": {"files": ["second.irpa"]}}, "config": {"part": 1}}}}
   }}},
-  "configurations": {"check": {"variant": "small", "service": "chat",
+  "presets": {"check": {"variant": "small", "service": "chat",
     "programs": "source", "partition": "node-0"}}
 })json";
 
@@ -98,7 +98,7 @@ TEST_F(CardTest, NamedPartitionOwnsItsCompleteClosure) {
   EXPECT_EQ(String(loom_model_card_selection(card_)->selector.partition),
             "node-0");
   const loom_model_selector_t selector = {
-      .configuration = IREE_SV("check"),
+      .preset = IREE_SV("check"),
       .partition = IREE_SV("other side"),
   };
   std::string json = kPartitionCard;
@@ -131,7 +131,7 @@ TEST_F(CardTest, SelectionOwnsMixedProvidersAndScopedInputs) {
   IREE_ASSERT_OK(Parse(json));
   json.assign(json.size(), 'x');
   const auto* selection = loom_model_card_selection(card_);
-  EXPECT_EQ(String(selection->selector.configuration), "check");
+  EXPECT_EQ(String(selection->selector.preset), "check");
   EXPECT_EQ(String(selection->kind), "text");
   EXPECT_EQ(selection->version, 1u);
   EXPECT_EQ(String(selection->directory), "program");
@@ -160,7 +160,7 @@ TEST_F(CardTest, SelectionOwnsMixedProvidersAndScopedInputs) {
 
 TEST_F(CardTest, CompatibleOverrideRetainsVariantFacts) {
   const loom_model_selector_t selector = {
-      .configuration = IREE_SV("check"),
+      .preset = IREE_SV("check"),
       .programs = IREE_SV("source"),
   };
   IREE_ASSERT_OK(Parse(kCard, &selector));
@@ -185,14 +185,14 @@ TEST_F(CardTest, InformationalMemoryHasNoSchedulingAuthority) {
 
 TEST_F(CardTest, IncompatibleCanonicalProgramRequiresExplicitOverride) {
   const loom_model_selector_t selector = {
-      .configuration = IREE_SV("check"),
+      .preset = IREE_SV("check"),
       .variant = IREE_SV("large"),
   };
   IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(kCard, &selector));
   EXPECT_EQ(card_, nullptr);
 }
 
-TEST_F(CardTest, ExplicitSelectionDoesNotSilentlyPickAConfiguration) {
+TEST_F(CardTest, ExplicitSelectionDoesNotSilentlyPickAPreset) {
   const loom_model_selector_t selector = {.variant = IREE_SV("small")};
   IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(kCard, &selector));
   EXPECT_EQ(card_, nullptr);

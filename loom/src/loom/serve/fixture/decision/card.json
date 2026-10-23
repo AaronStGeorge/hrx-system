@@ -35,7 +35,7 @@
       }
     }
   },
-  "configurations": {
+  "presets": {
     "check": {
       "service": "serve",
       "variant": "fixture",

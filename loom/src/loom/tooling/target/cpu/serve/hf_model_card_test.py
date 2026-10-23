@@ -26,7 +26,7 @@ def main():
     card = ModelCard.parse(fixture.read_text(encoding="utf-8"))
     files = {}
     for programs in ("source", "archive", "mixed"):
-        for name in card.select(configuration="check", programs=programs).files:
+        for name in card.select(preset="check", programs=programs).files:
             files[name] = (fixture.parent / name).read_bytes()
     identities = [
         FileIdentity(name, len(content), hashlib.sha256(content).hexdigest())
@@ -52,7 +52,7 @@ def main():
                 "loom.model.fetch_main",
                 url,
                 "--cache=" + str(root / "cache"),
-                "--configuration=check",
+                "--preset=check",
                 "--no-input",
                 "--json",
             ]
@@ -111,7 +111,7 @@ def main():
                 json.dumps(
                     {
                         "name": "fixture-text",
-                        "model": {"path": "model.json", "configuration": "check"},
+                        "model": {"path": "model.json", "preset": "check"},
                         "definition": {"kind": "text"},
                     }
                 ),

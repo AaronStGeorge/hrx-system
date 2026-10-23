@@ -237,17 +237,17 @@ class Picker:
         self,
         card: ModelCard,
         *,
-        configuration=None,
+        preset=None,
         service=None,
         variant=None,
         programs=None,
         partition=None,
     ) -> Selection:
         document = card.document
-        configurations = document.get("configurations", {})
+        presets = document.get("presets", {})
         declared = card.choices()
         tables = {
-            "configuration": configurations,
+            "preset": presets,
             "service": document["services"],
             "variant": document["variants"],
             "programs": document["programs"],
@@ -258,7 +258,7 @@ class Picker:
         requested = dict(
             service=service, variant=variant, programs=programs, partition=partition
         )
-        for label, value in dict(requested, configuration=configuration).items():
+        for label, value in dict(requested, preset=preset).items():
             if value is not None and value not in tables[label]:
                 raise ManifestError(f"{label}: unknown name {value!r}")
         compatible = [
@@ -269,7 +269,9 @@ class Picker:
                 for key, value in requested.items()
             )
         ]
-        settings = configurations.get(configuration, {})
+        settings = presets.get(preset, {})
+        if service is None:
+            service = settings.get("service")
         if service is None:
             services = {choice["service"] for choice in compatible}
             service = self.choose(
@@ -286,7 +288,7 @@ class Picker:
                 default=settings.get("service"),
             )
         compatible = [choice for choice in compatible if choice["service"] == service]
-        if configuration is None:
+        if preset is None:
             choices = [
                 Choice(
                     name,
@@ -300,12 +302,14 @@ class Picker:
                         else ""
                     ),
                 )
-                for name, value in configurations.items()
+                for name, value in presets.items()
                 if value["service"] == service
             ]
             if choices:
-                configuration = self.choose("Configuration", choices)
-                settings = configurations[configuration]
+                preset = self.choose("Preset", choices)
+                settings = presets[preset]
+        if variant is None:
+            variant = settings.get("variant")
         if variant is None:
             variants = {choice["variant"] for choice in compatible}
             variant = self.choose(
@@ -318,6 +322,8 @@ class Picker:
                 default=settings.get("variant"),
             )
         compatible = [choice for choice in compatible if choice["variant"] == variant]
+        if partition is None:
+            partition = settings.get("partition")
         if partition is None and "partitions" in document["variants"][variant]:
             partitions = {choice["partition"] for choice in compatible}
             partition = self.choose(
@@ -335,18 +341,17 @@ class Picker:
             choice for choice in compatible if choice.get("partition") == partition
         ]
         if programs is None:
-            programs = self.choose(
-                "Programs",
-                [
-                    Choice(name, name)
-                    for name in dict.fromkeys(
-                        choice["programs"] for choice in compatible
-                    )
-                ],
-                default=settings.get("programs"),
-            )
+            programs = settings.get("programs")
+        if programs is None:
+            available = {choice["programs"] for choice in compatible}
+            if len(available) != 1:
+                raise ManifestError(
+                    "programs: choose a preset or specify --programs "
+                    f"({len(available)} compatible choices)"
+                )
+            programs = next(iter(available))
         return card.select(
-            configuration,
+            preset,
             service=service,
             variant=variant,
             programs=programs,

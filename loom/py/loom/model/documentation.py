@@ -233,17 +233,17 @@ def render_markdown(
             )
             + " |"
         )
-    lines += ["", "## Canonical configurations", ""]
-    for name, configuration in document.get("configurations", {}).items():
-        if "memory" in configuration:
+    lines += ["", "## Canonical presets", ""]
+    for name, preset in document.get("presets", {}).items():
+        if "memory" in preset:
             lines += [
-                _code(name) + ": " + _text(describe_memory(configuration["memory"])),
+                _code(name) + ": " + _text(describe_memory(preset["memory"])),
                 "",
             ]
     lines += (
-        _json(document["configurations"])
-        if document.get("configurations")
-        else ["No canonical configurations declared.", ""]
+        _json(document["presets"])
+        if document.get("presets")
+        else ["No canonical presets declared.", ""]
     )
     lines += [
         "## Services",

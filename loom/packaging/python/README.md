@@ -25,7 +25,7 @@ python -m pip install bazel-bin/loom/packaging/python/hrx_loom-0.0.0.dev0-py3-no
 loom-serve --help
 loom-benchmark --help
 loom-fetch model.json --list --json
-loom-fetch model.json --configuration=check --output=./model
+loom-fetch model.json --preset=check --output=./model
 python -m loom.model.documentation --card model.json --output=model.md
 ```
 

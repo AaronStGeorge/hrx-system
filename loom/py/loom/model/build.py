@@ -23,7 +23,7 @@ from loom.model import ManifestError, ModelCard
 
 def build(plan: dict, linker: str | None = None) -> None:
     selection = ModelCard.parse(Path(plan["card"]).read_text(encoding="utf-8")).select(
-        plan["configuration"],
+        plan["preset"],
         programs=plan.get("programs"),
         partition=plan.get("partition"),
     )
@@ -150,7 +150,7 @@ def build(plan: dict, linker: str | None = None) -> None:
     )
     deployment = {
         "name": plan["name"],
-        "model": {"path": "model.json", "configuration": selection.configuration},
+        "model": {"path": "model.json", "preset": selection.preset},
         "definition": {"kind": selection.service["kind"]},
     }
     Path(plan["output_deployment"]).write_text(

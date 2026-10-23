@@ -21,7 +21,7 @@ def _plan():
     selection = ModelCard.parse(card.read_text()).select("check")
     return {
         "card": str(card),
-        "configuration": "check",
+        "preset": "check",
         "encoding": "bc",
         "files": {
             path: {"input": "unopened", "output": "unwritten"}

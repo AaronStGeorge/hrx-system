@@ -71,7 +71,7 @@ class FetchPlan:
         """Machine-readable acquisition facts; unknown sizes remain null."""
         return {
             "model": self.selection.model_id,
-            "configuration": self.selection.configuration,
+            "preset": self.selection.preset,
             "service": self.selection.service_name,
             "variant": self.selection.variant,
             "partition": self.selection.partition,

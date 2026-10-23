@@ -58,7 +58,6 @@ def _loom_model_impl(ctx):
     ctx.actions.write(plan, json.encode({
         "assets": assets,
         "card": ctx.file.card.path,
-        "configuration": ctx.attr.configuration,
         "data": data,
         "encoding": ctx.attr.encoding,
         "files": files,
@@ -67,6 +66,7 @@ def _loom_model_impl(ctx):
         "output_card": card.path,
         "output_deployment": deployment.path,
         "partition": ctx.attr.partition if ctx.attr.partition else None,
+        "preset": ctx.attr.preset,
         "programs": ctx.attr.programs if ctx.attr.programs else None,
     }))
     arguments = ["--plan", plan.path]
@@ -82,7 +82,7 @@ def _loom_model_impl(ctx):
         tools = tools,
         outputs = outputs,
         mnemonic = "LoomModel",
-        progress_message = "Building model configuration %s" % ctx.label,
+        progress_message = "Building model preset %s" % ctx.label,
     )
     return [
         DefaultInfo(files = depset([deployment]), runfiles = ctx.runfiles(files = runfiles)),
@@ -94,12 +94,12 @@ loom_model = rule(
     attrs = {
         "assets": attr.label_keyed_string_dict(allow_files = True, doc = "Optional runtime assets, such as small fixture parameters or tokenizers, mapped to card paths. Omitted assets retain their acquisition descriptors for loom-fetch. Supplied assets are runfiles, never linker inputs."),
         "card": attr.label(mandatory = True, allow_single_file = [".json"]),
-        "configuration": attr.string(mandatory = True),
         "data": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected providers' auxiliary files, mapped to card paths. These are compiler inputs and runtime runfiles, separate from parameter/tokenizer acquisition."),
         "encoding": attr.string(default = "bc", values = ["text", "bc", "preserve"], doc = "Normalize providers to Loom text/bytecode, or preserve their bytes, formats, and import options."),
         "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; preserved as symlinks or normalized with the configured linker."),
         "model_name": attr.string(mandatory = True),
         "partition": attr.string(doc = "Executable partition override within the selected variant."),
+        "preset": attr.string(mandatory = True),
         "programs": attr.string(),
         "_builder": attr.label(default = Label("//loom/py/loom/model:build"), executable = True, cfg = "exec"),
     },

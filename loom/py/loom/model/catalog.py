@@ -48,7 +48,7 @@ class ModelCatalog:
             _object(
                 entry,
                 path,
-                ("name", "card", "services", "variants", "configurations"),
+                ("name", "card", "services", "variants", "presets"),
                 ("description",),
             )
             _string(entry["name"], path + ".name")
@@ -56,7 +56,7 @@ class ModelCatalog:
             if "description" in entry and not isinstance(entry["description"], str):
                 raise ManifestError(path + ".description: expected a string")
             _strings(entry["variants"], path + ".variants", empty=False)
-            _strings(entry["configurations"], path + ".configurations")
+            _strings(entry["presets"], path + ".presets")
             for name, service in _mapping(
                 entry["services"], path + ".services"
             ).items():
@@ -111,7 +111,7 @@ def generate(cards: dict[str, ModelCard]) -> ModelCatalog:
                 for name, service in document["services"].items()
             },
             "variants": list(document["variants"]),
-            "configurations": list(document.get("configurations", {})),
+            "presets": list(document.get("presets", {})),
         }
         if "description" in document["model"]:
             entry["description"] = document["model"]["description"]

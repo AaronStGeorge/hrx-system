@@ -77,7 +77,7 @@ def main(server, fixture):
                 json.dumps(
                     {
                         "name": "fixture-text",
-                        "model": {"path": "model.json", "configuration": "check"},
+                        "model": {"path": "model.json", "preset": "check"},
                         "definition": {"kind": "text"},
                     }
                 )

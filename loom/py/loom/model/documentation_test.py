@@ -106,7 +106,7 @@ def _card():
                     },
                 }
             },
-            "configurations": {
+            "presets": {
                 "check": {
                     "variant": "original",
                     "partition": "node-0",
@@ -284,9 +284,9 @@ def test_real_model_lists_checkpoint_tokenizer_and_development_abi():
     assert '"sample_rate": 16000' in rendered
 
 
-def test_configuration_guidance_keeps_assumptions_and_unknown_components():
+def test_preset_guidance_keeps_assumptions_and_unknown_components():
     document = _card().document
-    document["configurations"]["check"]["memory"] = {
+    document["presets"]["check"]["memory"] = {
         "weights_bytes": 180000000,
         "workload": "Original F32; history and runtime pools excluded.",
     }
@@ -328,7 +328,7 @@ def test_standalone_overview_and_upstream_links_precede_generated_contract(tmp_p
         "repository": "org/trained",
         "revision": "model/v1",
     }
-    overview = "## Run this model\n\nEnglish transcription. [Upstream](https://example.org/model).\n\n```sh\nloom-fetch model.json --configuration=check --output=./installed\n```\n"
+    overview = "## Run this model\n\nEnglish transcription. [Upstream](https://example.org/model).\n\n```sh\nloom-fetch model.json --preset=check --output=./installed\n```\n"
     card = tmp_path / "model.json"
     card.write_text(json.dumps(document))
     introduction = tmp_path / "OVERVIEW.md"

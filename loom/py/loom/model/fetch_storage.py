@@ -172,7 +172,7 @@ def _read_document_bytes(source: Source, offline: bool) -> bytes:
 
 
 class ContentCache:
-    """Whole files are shared by verified content, not by model/configuration name."""
+    """Whole files are shared by verified content, not by model/preset name."""
 
     def __init__(self, root: Path, *, huggingface=None, wait_for_access=None):
         # Loom-owned document/content storage, independent of the Hub's cache.

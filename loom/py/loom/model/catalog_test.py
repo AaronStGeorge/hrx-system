@@ -68,7 +68,7 @@ def test_generator_reads_model_facts_and_not_parameters():
     entry = document["models"]["moonshine-ai/moonshine-streaming-tiny"]
     assert entry["card"] == "model/moonshine/model.json"
     assert entry["services"] == {"transcription": {"kind": "recognition"}}
-    assert entry["configurations"] == ["streaming"]
+    assert entry["presets"] == ["streaming"]
     assert "parameters" not in entry
     with pytest.raises(ManifestError, match="duplicate catalog model"):
         generate({"a.json": _card(), "b.json": _card()})

@@ -68,13 +68,13 @@
       },
       "description": "Named parameter/configuration variants and their compatible service/program selections."
     },
-    "configurations": {
+    "presets": {
       "type": "object",
       "propertyNames": {
         "$ref": "#/$defs/name"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/configuration"
+        "$ref": "#/$defs/preset"
       },
       "description": "Canonical runnable, test, or benchmark selections. HTTP deployment policy belongs to a separate document."
     }
@@ -379,7 +379,7 @@
         },
         "options": {
           "$ref": "#/$defs/names",
-          "description": "Model-owned preparation options accepted from canonical configurations."
+          "description": "Model-owned preparation options accepted from canonical presets."
         },
         "interface": {
           "type": "object",
@@ -491,7 +491,7 @@
         }
       ]
     },
-    "configuration": {
+    "preset": {
       "type": "object",
       "required": [
         "service",

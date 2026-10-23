@@ -7,7 +7,7 @@ no model-specific native code or server rebuild.
 
 A deployment can describe its programs directly or reference a portable model
 card. A card owns model identity, services, program sets, parameter variants,
-and canonical configurations independently of the server.
+and presets independently of the server.
 
 This document describes the arithmetic embedding package in the
 [serving walkthrough](workflows/serve-models.md):
@@ -36,7 +36,7 @@ A text deployment can select a local card and override its execution defaults:
   "name": "chat",
   "model": {
     "path": "model.json",
-    "configuration": "interactive",
+    "preset": "interactive",
     "programs": "mixed"
   },
   "definition": {"kind": "text", "rows": 2}
@@ -78,7 +78,7 @@ The referenced `model.json` can contain:
       }
     }
   },
-  "configurations": {
+  "presets": {
     "interactive": {
       "service": "chat",
       "variant": "small",
@@ -125,7 +125,7 @@ loader's format inference. Ambiguous or unsupported encodings fail.
 Variant `config` values override program defaults and reach both preparation
 and generated native stages. Values are compiler scalars: booleans, finite
 numbers, or strings. Source preparation may specialize individual stage keys.
-Canonical configurations supply execution defaults and optional source-owned
+Presets supply execution defaults and optional source-owned
 `options`; accepted option names are declared by the service. A deployment's
 explicit settings override canonical defaults. Explicit service, variant, and
 program selections must remain compatible; an ambiguous selection fails.
@@ -133,7 +133,7 @@ Checkpoint paths, tokenizer paths, providers, and asset directories belong to
 the card and cannot be overridden through the deployment definition. Image
 adapters are selected per request, independently of the base model card.
 
-Canonical configurations may include informational `memory` estimates:
+Presets may include informational `memory` estimates:
 `weights_bytes` for resident prepared parameters, `transient_bytes` for additional
 request/state/workspace storage, and a required `workload` description stating
 assumptions and coverage. Unknown counts are omitted. The fetch picker and
@@ -160,7 +160,7 @@ the server reads its `path` and `format` without interpreting that transform.
 | --- | --- |
 | `name` | Required nonempty visible-ASCII routing alias, independent of source symbols. |
 | `definition` | Required object specifying a modality, programs, assets and capacities. |
-| `model` | Optional local card reference with `path` and optional `configuration`, `service`, `variant`, `partition`, and `programs` selectors. Programs and assets then come from the card. |
+| `model` | Optional local card reference with `path` and optional `preset`, `service`, `variant`, `partition`, and `programs` selectors. Programs and assets then come from the card. |
 | `admission` | `"open"` by default; `"drained"` registers metadata without reading programs, loading weights or allocating model storage. |
 | `device` | Nonnegative index into the ordered CLI device group; required when the group has more than one member. |
 | `base_directory` | Optional local file base; relative values resolve from the containing document. |

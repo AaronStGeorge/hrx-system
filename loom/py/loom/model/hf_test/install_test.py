@@ -40,9 +40,7 @@ def _card():
                 }
             }
         },
-        "configurations": {
-            "check": {"variant": "v", "service": "text", "programs": "p"}
-        },
+        "presets": {"check": {"variant": "v", "service": "text", "programs": "p"}},
     }
 
 

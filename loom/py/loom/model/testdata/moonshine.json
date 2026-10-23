@@ -151,7 +151,7 @@
       }
     }
   },
-  "configurations": {
+  "presets": {
     "streaming": {
       "variant": "original",
       "programs": "development",

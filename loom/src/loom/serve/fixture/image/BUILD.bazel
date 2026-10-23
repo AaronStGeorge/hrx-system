@@ -19,7 +19,6 @@ exports_files(
         name = "card_model_" + encoding,
         assets = {"tokenizer.json": "vocabulary.data"},
         card = "card.json",
-        configuration = "check",
         encoding = encoding,
         files = {
             "config.loom": "config.loom",
@@ -29,6 +28,7 @@ exports_files(
             "service.loom": "service.loom",
         },
         model_name = "pixels",
+        preset = "check",
         tags = ["skip-bazel_to_cmake"],
         visibility = ["//visibility:public"],
     )

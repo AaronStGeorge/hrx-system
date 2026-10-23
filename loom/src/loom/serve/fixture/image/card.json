@@ -21,7 +21,7 @@
       }
     }
   },
-  "configurations": {
+  "presets": {
     "check": {
       "service": "render", "variant": "fixture", "programs": "fixture",
       "execution": {"width": 7, "height": 5, "text_tokens": 32, "pending_requests": 4}

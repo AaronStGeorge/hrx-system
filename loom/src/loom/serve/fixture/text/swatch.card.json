@@ -109,7 +109,7 @@
       }
     }
   },
-  "configurations": {
+  "presets": {
     "check": {
       "service": "chat",
       "variant": "swatch",

@@ -82,17 +82,16 @@ def _list_card(card: ModelCard, *, json_output: bool) -> None:
         sys.stdout.write(json.dumps(listing, indent=2) + "\n")
         return
     sys.stdout.write(display_text(listing["model"]["name"]) + "\n")
-    for section in ("configurations", "variants", "services", "programs"):
+    for section in ("presets", "variants", "services", "programs"):
         sys.stdout.write(
             f"{section}: "
             + ", ".join(display_text(value) for value in listing.get(section, {}))
             + "\n"
         )
-    for name, configuration in listing.get("configurations", {}).items():
-        if "memory" in configuration:
+    for name, preset in listing.get("presets", {}).items():
+        if "memory" in preset:
             sys.stdout.write(
-                display_text(name + ": " + describe_memory(configuration["memory"]))
-                + "\n"
+                display_text(name + ": " + describe_memory(preset["memory"])) + "\n"
             )
 
 
@@ -129,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="wait and recheck provider access even without an interactive terminal",
     )
-    parser.add_argument("--configuration", help="named canonical configuration")
+    parser.add_argument("--preset", help="named canonical preset")
     parser.add_argument("--service", help="named service")
     parser.add_argument("--variant", help="named parameter variant")
     parser.add_argument("--partition", help="named executable partition of the variant")
@@ -204,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--all-variants requires --update-lock")
         if any(
             (
-                args.configuration,
+                args.preset,
                 args.service,
                 args.variant,
                 args.programs,
@@ -287,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
             else lambda **values: picker.selection(card, **values)
         )
         selection = select(
-            configuration=args.configuration,
+            preset=args.preset,
             service=args.service,
             variant=args.variant,
             partition=args.partition,

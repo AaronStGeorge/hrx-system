@@ -18,7 +18,6 @@ exports_files(
     loom_model(
         name = "card_model_" + encoding,
         card = "card.json",
-        configuration = "check",
         encoding = encoding,
         files = {
             "config.loom": "config.loom",
@@ -28,6 +27,7 @@ exports_files(
             "service.loom": "service.loom",
         },
         model_name = "judge",
+        preset = "check",
         tags = ["skip-bazel_to_cmake"],
         visibility = ["//visibility:public"],
     )

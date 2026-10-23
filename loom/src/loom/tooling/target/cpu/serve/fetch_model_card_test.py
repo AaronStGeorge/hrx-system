@@ -31,7 +31,7 @@ def main():
         publication.mkdir()
         files = {}
         for programs in ("source", "archive", "mixed"):
-            files.update(card.select(configuration="check", programs=programs).files)
+            files.update(card.select(preset="check", programs=programs).files)
         identities = []
         for path in files:
             source = fixture_card.parent / path
@@ -66,7 +66,7 @@ def main():
                     str(fetch),
                     url,
                     "--cache=" + str(root / "cache"),
-                    "--configuration=check",
+                    "--preset=check",
                     "--json",
                 ]
                 listed = subprocess.run(
@@ -90,7 +90,7 @@ def main():
                     text=True,
                 )
                 assert len(json.loads(dry_run.stdout)["files"]) == len(
-                    card.select(configuration="check", programs="source").files
+                    card.select(preset="check", programs="source").files
                 )
                 assert json.loads(dry_run.stdout)["memory"]["weights_bytes"] == 4
                 assert not (root / "preview").exists()
@@ -131,7 +131,7 @@ def main():
                     [
                         str(fetch),
                         url,
-                        "--configuration=check",
+                        "--preset=check",
                         "--programs=source",
                         "--cache=" + str(root / "tampered-cache"),
                         "--output=" + str(root / "tampered"),
@@ -163,7 +163,7 @@ def main():
                 json.dumps(
                     {
                         "name": "fixture-text",
-                        "model": {"path": "model.json", "configuration": "check"},
+                        "model": {"path": "model.json", "preset": "check"},
                         "definition": {"kind": "text"},
                     }
                 ),

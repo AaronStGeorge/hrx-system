@@ -26,14 +26,14 @@ constexpr char kCard[] = R"json({
     "parameters": {"weights": {"files": ["model.safetensors"]}},
     "tokenizers": {"text": {"path": "vocabulary.data", "format": "huggingface-json"}}
   }}}},
-  "configurations": {"check": {"service": "chat", "variant": "tiny",
+  "presets": {"check": {"service": "chat", "variant": "tiny",
     "programs": "source", "execution": {"rows": 3, "context_capacity": 96,
     "pool_capacity": 256, "prefill_capacity": 32, "max_tokens": 4}}}
 })json";
 
 constexpr char kDeployment[] = R"json({
   "name": "fixture-text",
-  "model": {"path": "cards/model.json", "configuration": "check"},
+  "model": {"path": "cards/model.json", "preset": "check"},
   "definition": {"kind": "text", "rows": 2, "context_capacity": 64},
   "base_directory": "//host/models"
 })json";

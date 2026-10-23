@@ -34,7 +34,7 @@ iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
                                       sources->control,
                                       sources->reference.path,
                                       sources->package_directory,
-                                      sources->reference.selector.configuration,
+                                      sources->reference.selector.preset,
                                       sources->reference.selector.service,
                                       sources->reference.selector.variant,
                                       sources->reference.selector.programs,
@@ -64,8 +64,8 @@ iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
       loom_serve_sources_copy_string(sources->reference.path, &cursor);
   copy->package_directory =
       loom_serve_sources_copy_string(sources->package_directory, &cursor);
-  copy->reference.selector.configuration = loom_serve_sources_copy_string(
-      sources->reference.selector.configuration, &cursor);
+  copy->reference.selector.preset = loom_serve_sources_copy_string(
+      sources->reference.selector.preset, &cursor);
   copy->reference.selector.service = loom_serve_sources_copy_string(
       sources->reference.selector.service, &cursor);
   copy->reference.selector.variant = loom_serve_sources_copy_string(

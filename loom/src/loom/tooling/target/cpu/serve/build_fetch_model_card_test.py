@@ -72,7 +72,7 @@ def main():
                         [
                             str(fetch),
                             f"http://127.0.0.1:{server.server_port}/{index}/model.json",
-                            "--configuration=check",
+                            "--preset=check",
                             "--output=" + str(output),
                             "--cache=" + str(root / "cache"),
                         ],

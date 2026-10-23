@@ -96,7 +96,7 @@ def main(fetch, serve, fixture):
             def install(name, variant="swatch", origin=base, *extra):
                 output = root / name
                 run(
-                    "--configuration=check",
+                    "--preset=check",
                     "--variant=" + variant,
                     "--origin=checkpoint=" + origin,
                     "--cache=" + str(root / "client-cache"),
@@ -108,7 +108,7 @@ def main(fetch, serve, fixture):
                     json.dumps(
                         {
                             "name": "fixture-text",
-                            "model": {"path": "model.json", "configuration": "check"},
+                            "model": {"path": "model.json", "preset": "check"},
                             "definition": {"kind": "text"},
                         }
                     )
@@ -147,7 +147,7 @@ def main(fetch, serve, fixture):
                 # than satisfying the request from the earlier materialized output.
                 compact_cache = root / "compact-cache"
                 run(
-                    "--configuration=check",
+                    "--preset=check",
                     "--origin=checkpoint=" + str(mirror),
                     "--cache=" + str(compact_cache),
                     "--output=" + str(root / "compact"),
@@ -163,7 +163,7 @@ def main(fetch, serve, fixture):
                 (mirror / "source.safetensors").write_bytes(changed)
                 developer = root / "developer"
                 run(
-                    "--configuration=check",
+                    "--preset=check",
                     "--origin=checkpoint=" + str(mirror),
                     "--cache=" + str(root / "developer-cache"),
                     "--output=" + str(developer),

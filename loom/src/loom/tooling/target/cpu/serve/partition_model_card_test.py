@@ -77,7 +77,7 @@ def main(fetch, serve, fixture, *built):
                     requests.clear()
                     output = root / str(index)
                     result = run(
-                        "--configuration=check",
+                        "--preset=check",
                         "--partition=" + partition,
                         "--output=" + str(output),
                         "--cache=" + str(root / "client-cache"),
@@ -95,7 +95,7 @@ def main(fetch, serve, fixture, *built):
                                 "name": "fixture-text",
                                 "model": {
                                     "path": "model.json",
-                                    "configuration": "check",
+                                    "preset": "check",
                                     "partition": partition,
                                 },
                                 "definition": {"kind": "text"},

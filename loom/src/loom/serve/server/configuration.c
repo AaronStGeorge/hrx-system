@@ -542,9 +542,8 @@ void loom_serve_model_configuration_deinitialize(
     iree_allocator_free(host_allocator, (void*)model->sources.values);
     iree_allocator_free(host_allocator,
                         (void*)model->sources.reference.path.data);
-    iree_allocator_free(
-        host_allocator,
-        (void*)model->sources.reference.selector.configuration.data);
+    iree_allocator_free(host_allocator,
+                        (void*)model->sources.reference.selector.preset.data);
     iree_allocator_free(host_allocator,
                         (void*)model->sources.reference.selector.service.data);
     iree_allocator_free(host_allocator,
@@ -616,7 +615,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   if (fields[5].value.data && !resolved_sources) {
     loom_serve_model_configuration_field_t reference_fields[] = {
         {"path", IREE_JSON_VALUE_TYPE_STRING},
-        {"configuration", IREE_JSON_VALUE_TYPE_STRING},
+        {"preset", IREE_JSON_VALUE_TYPE_STRING},
         {"service", IREE_JSON_VALUE_TYPE_STRING},
         {"variant", IREE_JSON_VALUE_TYPE_STRING},
         {"programs", IREE_JSON_VALUE_TYPE_STRING},
@@ -628,7 +627,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
         &reference_context));
     loom_model_reference_t* reference = &out_model->sources.reference;
     iree_string_view_t* destinations[] = {&reference->path,
-                                          &reference->selector.configuration,
+                                          &reference->selector.preset,
                                           &reference->selector.service,
                                           &reference->selector.variant,
                                           &reference->selector.programs,

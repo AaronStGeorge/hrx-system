@@ -14,7 +14,7 @@ selected facts through a deployment document's `model` reference.
 | `programs` | Named sets of linker inputs, libraries, auxiliary data, and default JIT configuration. |
 | `services` | Named service contracts with independent ABI versions. |
 | `variants` | Compatible provider sets, fixed JIT configuration, scoped parameters, and named tokenizers. |
-| `configurations` | Canonical selections with execution, request, workload, and preparation options. |
+| `presets` | Canonical selections with execution, request, workload, and preparation options. |
 
 `schema_version: 1` selects the bundled [editor schema](model-card.v1.schema.json).
 `$schema` associates it with an editor; consumers never download that URI to
@@ -53,7 +53,7 @@ filename. Both accept strings or explicit file descriptors. Variant `config`
 scalars override program defaults and reach preparation and native JITs.
 Canonical `options` may use only names accepted by the selected service.
 
-A canonical configuration can carry coarse guidance in its optional `memory`
+A canonical preset can carry coarse guidance in its optional `memory`
 object:
 
 ```json
@@ -86,7 +86,7 @@ Programs, scoped parameters, tokenizers, and JIT values come entirely from the
 selected partition; there is no inheritance or automatic union. Machine
 assignment and communication between partitions belong to the application.
 
-Canonical configurations can name a `partition`. An explicit `--partition`
+Canonical presets can name a `partition`. An explicit `--partition`
 overrides it; an ambiguous partition requires a choice. Selection preserves only
 that partition in the fetched or built card. `ModelCard.choices()` enumerates
 the compatible variant, partition, service, and program combinations without
@@ -103,7 +103,7 @@ checks. Native support is documented in the
 ## Bazel integration
 
 `loom_model`, exported by `//loom/build_tools/bazel:defs.bzl`, takes a card,
-canonical configuration, optional provider-set and partition overrides, output
+canonical preset, optional provider-set and partition overrides, output
 encoding, and explicit Bazel inputs. `files` maps targets to the selected linker-provider
 paths. `data` maps exactly their auxiliary inputs. `assets` optionally supplies
 runtime parameters or tokenizers, principally for small fixtures and swatches.
@@ -161,7 +161,7 @@ python -m loom.model.documentation --card model.json --lockfile model.json.lock 
 ```
 
 The reference lists every compatible variant, partition, service, and program
-choice, canonical configurations, effective JIT values, scoped parameter shards,
+choice, canonical presets, effective JIT values, scoped parameter shards,
 tokenizers, provider order, and importer options. Local destinations and upstream
 locations appear separately. Transforms identify both the source archive and the
 operation producing the local file. Inline data is summarized by byte count.
@@ -207,17 +207,18 @@ only the card. Named maps remain available to ordinary JSON tools:
 
 ```sh
 loom-fetch model.json --list --json | jq '.variants | keys[]'
-loom-fetch model.json --configuration=streaming --output=./installed --dry-run
-loom-fetch model.json --configuration=streaming --output=./installed
-loom-fetch partitioned.json --configuration=check --partition=node-0 --output=./node-0
+loom-fetch model.json --preset=streaming --output=./installed --dry-run
+loom-fetch model.json --preset=streaming --output=./installed
+loom-fetch partitioned.json --preset=check --partition=node-0 --output=./node-0
 ```
 
 On Windows and Unix terminals, missing selections open a keyboard picker. Type
 to filter, use arrows or Home/End/Page Up/Page Down to move, and press Enter to
-select. Ctrl-U clears the filter; Escape or Ctrl-C cancels. Service, configuration,
-variant, partition, and program choices come from the selected card. Explicit
-flags constrain the choices, and canonical configurations supply highlighted
-defaults.
+select. Ctrl-U clears the filter; Escape or Ctrl-C cancels. Service, preset,
+variant, and partition choices come from the selected card. A preset supplies
+its choices directly; explicit flags override them. Program sets follow the
+preset or the sole compatible choice. An ambiguous card needs a named preset
+or an explicit developer `--programs` override.
 
 The picker asks for an installation directory when `--output` is absent. Screen
 controls and input modes are restored on completion or cancellation. Unsupported
@@ -253,7 +254,7 @@ pass over a remote parent checkpoint. For example, a compact mirror can supply
 different swatch values while keeping the publisher's code:
 
 ```sh
-loom-fetch model.json --configuration=swatch --origin=checkpoint=./fixture \
+loom-fetch model.json --preset=swatch --origin=checkpoint=./fixture \
   --offline --no-verify-parameters --output=./experiment
 ```
 
@@ -329,7 +330,7 @@ API exposes the same operation cancellation through `ContentCache.cancel()`.
 
 Files stream into verified content storage with bounded buffers and concurrent
 transfers. The default `--materialize=share` links cache or local-source files
-into the installation, so changing only configuration does not copy weights.
+into the installation, so changing only preset does not copy weights.
 Filesystems without sharing require an explicit `--materialize=copy` choice.
 Shared files remain shared: editing one view can alter another, and a later
 locked fetch detects that modification. Verified existing destinations can be
@@ -385,14 +386,14 @@ By default, only the resulting archive is retained. `--preserve-sources` also
 retains the remote intervals actually read, with their offsets in an acquisition
 receipt. It does not fetch omitted tensors. Existing local files and complete HF
 cache entries are reused in place and remain owned by their original storage.
-An existing verified result is shared across configurations; adding preservation
+An existing verified result is shared across presets; adding preservation
 reads the missing source intervals without writing a second result archive.
 Preservation requires additional storage for the selected source bytes.
 
 ```sh
-loom-fetch model.json --configuration=swatch --output=./swatch
-loom-fetch model.json --configuration=swatch --output=./swatch --preserve-sources
-loom-fetch model.json --configuration=swatch --output=./another --offline
+loom-fetch model.json --preset=swatch --output=./swatch
+loom-fetch model.json --preset=swatch --output=./swatch --preserve-sources
+loom-fetch model.json --preset=swatch --output=./another --offline
 ```
 
 The logical acquisition identity includes the origin and normalized transform,
@@ -408,7 +409,7 @@ executes acquisition transforms.
 An SDK wheel can associate itself with a compatible catalog tag independently of
 its Python package version. `loom-fetch --list --json` lists that catalog's named
 `models` map. Select an entry with `--model=MODEL_ID`, then use the same variant,
-configuration, provider-set, and output flags as a direct card. A direct card
+preset, provider-set, and output flags as a direct card. A direct card
 path or URL does not consult the catalog.
 
 `--catalog=./catalog.json` selects a local publication for authoring or CI.
@@ -431,12 +432,12 @@ python -m loom.model.catalog --output=catalog.json \
   --card=model/moonshine-ai/moonshine-streaming-tiny/model.json=model/moonshine-ai/moonshine-streaming-tiny/model.json
 loom-fetch --catalog=./catalog.json --list --json | jq '.models | keys[]'
 loom-fetch --catalog=./catalog.json --model=moonshine-ai/moonshine-streaming-tiny \
-  --configuration=streaming --output=./installed
+  --preset=streaming --output=./installed
 ```
 
 Each `--card` maps its publication-relative path to a local input. Publication
 must place that card at the declared relative path. The generated index contains
-names, service versions, variants, and canonical configuration names. It is a
+names, service versions, variants, and canonical preset names. It is a
 discovery index, not qualification evidence. Its
 [versioned schema](model-catalog.v1.schema.json) is bundled with the Python SDK.
 

@@ -11,7 +11,7 @@ download. Other modalities have their own [source fixtures](../README.md).
 
 The [portable card](native.card.json) names independent text and sequence
 services backed by the same provider set. [service.loom](service.loom) exports
-their distinct ABI names. The `encode` configuration selects sequence requests,
+their distinct ABI names. The `encode` preset selects sequence requests,
 the ordered checkpoint shards, and zero JIT bias adjustment; it requires no
 tokenizer. `sequence_card_model_text` and `sequence_card_model_bc` build runnable
 packages whose CPU checks append known token IDs to a retained session and

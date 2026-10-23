@@ -59,12 +59,12 @@ typedef struct loom_model_tokenizer_t {
   loom_model_file_t file;
 } loom_model_tokenizer_t;
 
-// A caller may select a canonical configuration and override its choices.
-// Empty choices use that configuration, or the sole available compatible
+// A caller may select a canonical preset and override its choices.
+// Empty choices use that preset, or the sole available compatible
 // choice. Ambiguity is an error; no hardware or payload inspection occurs.
 typedef struct loom_model_selector_t {
-  // Optional canonical configuration name.
-  iree_string_view_t configuration;
+  // Optional canonical preset name.
+  iree_string_view_t preset;
   // Optional service identity override.
   iree_string_view_t service;
   // Optional parameter variant override.
@@ -80,7 +80,7 @@ typedef struct loom_model_selector_t {
 typedef struct loom_model_reference_t {
   // Card locator in the application's local file or package namespace.
   iree_string_view_t path;
-  // Explicit choices and optional canonical configuration.
+  // Explicit choices and optional canonical preset.
   loom_model_selector_t selector;
 } loom_model_reference_t;
 

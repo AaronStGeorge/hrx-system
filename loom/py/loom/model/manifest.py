@@ -326,8 +326,8 @@ class Selection:
 
     # Original training-source identity.
     model_id: str
-    # Canonical configuration name, or None for explicit choices.
-    configuration: str | None
+    # Canonical preset name, or None for explicit choices.
+    preset: str | None
     # Service identity, separate from its contract kind and version.
     service_name: str
     # Parameter/configuration variant identity.
@@ -378,7 +378,7 @@ class ModelCard:
             doc,
             "$",
             ("schema_version", "model", "programs", "services", "variants"),
-            ("$schema", "origins", "configurations"),
+            ("$schema", "origins", "presets"),
         )
         if "$schema" in doc:
             _string(doc["$schema"], "$.$schema")
@@ -456,22 +456,22 @@ class ModelCard:
             for key in ("interface", "constraints"):
                 _mapping(service.get(key, {}), path + "." + key, empty=True)
         self._validate_variants(origins, services, programs)
-        for name, configuration in _mapping(
-            doc.get("configurations", {}), "$.configurations", empty=True
+        for name, preset in _mapping(
+            doc.get("presets", {}), "$.presets", empty=True
         ).items():
-            path = "$.configurations." + name
+            path = "$.presets." + name
             _object(
-                configuration,
+                preset,
                 path,
                 ("service", "variant", "programs"),
                 ("options", "execution", "request", "workload", "partition", "memory"),
             )
             for key in ("options", "execution", "request", "workload"):
-                _mapping(configuration.get(key, {}), path + "." + key, empty=True)
-            if "partition" in configuration:
-                _string(configuration["partition"], path + ".partition")
-            if "memory" in configuration:
-                _memory(configuration["memory"], path + ".memory")
+                _mapping(preset.get(key, {}), path + "." + key, empty=True)
+            if "partition" in preset:
+                _string(preset["partition"], path + ".partition")
+            if "memory" in preset:
+                _memory(preset["memory"], path + ".memory")
             self.select(name)
 
     def _validate_variants(self, origins: dict, services: dict, programs: dict):
@@ -573,7 +573,7 @@ class ModelCard:
 
     def select(
         self,
-        configuration: str | None = None,
+        preset: str | None = None,
         *,
         service: str | None = None,
         variant: str | None = None,
@@ -589,17 +589,17 @@ class ModelCard:
                 return next(iter(table))
             return _reference(requested, table, label)
 
-        configurations = doc.get("configurations", {})
+        presets = doc.get("presets", {})
         if (
-            configuration is None
+            preset is None
             and all(value is None for value in (service, variant, programs, partition))
-            and len(configurations) == 1
+            and len(presets) == 1
         ):
-            configuration = next(iter(configurations))
+            preset = next(iter(presets))
         settings = {}
-        if configuration is not None:
-            _reference(configuration, configurations, "configuration")
-            settings = configurations[configuration]
+        if preset is not None:
+            _reference(preset, presets, "preset")
+            settings = presets[preset]
         variant = choose(
             doc["variants"],
             variant if variant is not None else settings.get("variant"),
@@ -723,10 +723,10 @@ class ModelCard:
         settings.update(service=service, variant=variant, programs=programs)
         if partition is not None:
             settings["partition"] = partition
-        projected["configurations"] = {configuration: settings} if configuration else {}
+        projected["presets"] = {preset: settings} if preset else {}
         return Selection(
             model_id=doc["model"]["id"],
-            configuration=configuration,
+            preset=preset,
             service_name=service,
             variant=variant,
             partition=partition,

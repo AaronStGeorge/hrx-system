@@ -12,7 +12,7 @@
       "propertyNames": {"$ref": "model-card.v1.schema.json#/$defs/name"},
       "additionalProperties": {
         "type": "object",
-        "required": ["name", "card", "services", "variants", "configurations"],
+        "required": ["name", "card", "services", "variants", "presets"],
         "properties": {
           "name": {"type": "string", "minLength": 1},
           "description": {"type": "string"},
@@ -32,7 +32,7 @@
             }
           },
           "variants": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "model-card.v1.schema.json#/$defs/name"}},
-          "configurations": {"type": "array", "uniqueItems": true, "items": {"$ref": "model-card.v1.schema.json#/$defs/name"}}
+          "presets": {"type": "array", "uniqueItems": true, "items": {"$ref": "model-card.v1.schema.json#/$defs/name"}}
         },
         "additionalProperties": false
       }

@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--card", type=Path, required=True)
     parser.add_argument("--file", required=True)
-    parser.add_argument("--configuration")
+    parser.add_argument("--preset")
     parser.add_argument("--service")
     parser.add_argument("--variant")
     parser.add_argument("--programs")
@@ -26,7 +26,7 @@ def main():
     files = (
         ModelCard.parse(args.card.read_text(encoding="utf-8"))
         .select(
-            args.configuration,
+            args.preset,
             service=args.service,
             variant=args.variant,
             programs=args.programs,

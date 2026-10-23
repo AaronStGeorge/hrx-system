@@ -578,7 +578,7 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   IREE_RETURN_IF_ERROR(loom_model_check_fields(
       &root,
       "$schema schema_version model origins programs services variants "
-      "configurations"));
+      "presets"));
   loom_model_selection_t* selection = &card->selection;
   loom_model_json_object_t metadata;
   IREE_RETURN_IF_ERROR(loom_model_object_field(
@@ -588,33 +588,33 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
       loom_model_string_field(&metadata, "id", true, &selection->model_id));
   IREE_RETURN_IF_ERROR(
       loom_model_string_field(&metadata, "name", true, &selection->model_name));
-  loom_model_json_object_t configurations;
-  IREE_RETURN_IF_ERROR(loom_model_object_field(&root, "configurations", false,
-                                               NULL, &configurations));
-  iree_string_view_t configuration_json = IREE_SV("{}");
-  if (selector->configuration.size ||
+  loom_model_json_object_t presets;
+  IREE_RETURN_IF_ERROR(
+      loom_model_object_field(&root, "presets", false, NULL, &presets));
+  iree_string_view_t preset_json = IREE_SV("{}");
+  if (selector->preset.size ||
       (!selector->service.size && !selector->variant.size &&
        !selector->programs.size && !selector->partition.size &&
-       configurations.count == 1)) {
-    IREE_RETURN_IF_ERROR(loom_model_choose(
-        &configurations, selector->configuration, "configuration",
-        &selection->selector.configuration, &configuration_json));
+       presets.count == 1)) {
+    IREE_RETURN_IF_ERROR(loom_model_choose(&presets, selector->preset, "preset",
+                                           &selection->selector.preset,
+                                           &preset_json));
   }
-  loom_model_json_object_t configuration;
+  loom_model_json_object_t preset;
   IREE_RETURN_IF_ERROR(loom_model_object(
-      card, configuration_json,
+      card, preset_json,
       "service variant programs partition options execution request workload "
       "memory",
-      &configuration));
+      &preset));
   loom_model_selector_t defaults = {0};
-  IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "service", false,
-                                               &defaults.service));
-  IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "variant", false,
-                                               &defaults.variant));
-  IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "programs",
-                                               false, &defaults.programs));
-  IREE_RETURN_IF_ERROR(loom_model_string_field(&configuration, "partition",
-                                               false, &defaults.partition));
+  IREE_RETURN_IF_ERROR(
+      loom_model_string_field(&preset, "service", false, &defaults.service));
+  IREE_RETURN_IF_ERROR(
+      loom_model_string_field(&preset, "variant", false, &defaults.variant));
+  IREE_RETURN_IF_ERROR(
+      loom_model_string_field(&preset, "programs", false, &defaults.programs));
+  IREE_RETURN_IF_ERROR(loom_model_string_field(&preset, "partition", false,
+                                               &defaults.partition));
   loom_model_json_object_t variants;
   IREE_RETURN_IF_ERROR(
       loom_model_object_field(&root, "variants", true, NULL, &variants));
@@ -745,15 +745,15 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
       loom_model_config(&programs, &service_variant, &selection->config));
   IREE_RETURN_IF_ERROR(loom_model_parameters(&service_variant, selection));
   IREE_RETURN_IF_ERROR(loom_model_tokenizers(&service_variant, selection));
-  IREE_RETURN_IF_ERROR(loom_model_value(&configuration, "options",
+  IREE_RETURN_IF_ERROR(loom_model_value(&preset, "options",
                                         IREE_JSON_VALUE_TYPE_OBJECT, false,
                                         &selection->options));
   iree_string_view_list_t accepted_options;
   IREE_RETURN_IF_ERROR(
       loom_model_strings(&service, "options", false, &accepted_options));
   loom_model_json_object_t options;
-  IREE_RETURN_IF_ERROR(loom_model_object_field(&configuration, "options", false,
-                                               NULL, &options));
+  IREE_RETURN_IF_ERROR(
+      loom_model_object_field(&preset, "options", false, NULL, &options));
   for (iree_host_size_t i = 0; i < options.count; ++i) {
     bool accepted = false;
     for (iree_host_size_t j = 0; j < accepted_options.count; ++j) {
@@ -767,10 +767,10 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
                               options.fields[i].key.data);
     }
   }
-  IREE_RETURN_IF_ERROR(loom_model_value(&configuration, "execution",
+  IREE_RETURN_IF_ERROR(loom_model_value(&preset, "execution",
                                         IREE_JSON_VALUE_TYPE_OBJECT, false,
                                         &selection->execution));
-  IREE_RETURN_IF_ERROR(loom_model_value(&configuration, "request",
+  IREE_RETURN_IF_ERROR(loom_model_value(&preset, "request",
                                         IREE_JSON_VALUE_TYPE_OBJECT, false,
                                         &selection->request));
   if (!selection->options.data) {

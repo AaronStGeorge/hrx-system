@@ -124,9 +124,7 @@ def _card():
                 }
             },
         },
-        "configurations": {
-            "check": {"variant": "v", "service": "text", "programs": "p"}
-        },
+        "presets": {"check": {"variant": "v", "service": "text", "programs": "p"}},
     }
 
 
@@ -146,7 +144,7 @@ def test_memory_guidance_is_owned_metadata_in_listing_and_fetch_plan(tmp_path, c
         "weights_bytes": 7,
         "workload": "Original parameter payload; overhead excluded.",
     }
-    document["configurations"]["check"]["memory"] = memory
+    document["presets"]["check"]["memory"] = memory
     path = tmp_path / "model.json"
     path.write_text(json.dumps(document))
     assert main([str(path), "--list"]) == 0
@@ -155,10 +153,7 @@ def test_memory_guidance_is_owned_metadata_in_listing_and_fetch_plan(tmp_path, c
         in capsys.readouterr().out
     )
     assert main([str(path), "--list", "--json"]) == 0
-    assert (
-        json.loads(capsys.readouterr().out)["configurations"]["check"]["memory"]
-        == memory
-    )
+    assert json.loads(capsys.readouterr().out)["presets"]["check"]["memory"] == memory
     for name, content in (
         ("code.loom", b"code"),
         ("weights.data", b"weights"),
@@ -168,7 +163,7 @@ def test_memory_guidance_is_owned_metadata_in_listing_and_fetch_plan(tmp_path, c
     result = main(
         [
             str(path),
-            "--configuration=check",
+            "--preset=check",
             "--no-lock",
             "--no-input",
             "--dry-run",

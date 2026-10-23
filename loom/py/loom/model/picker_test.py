@@ -40,7 +40,7 @@ def test_selection_uses_compatible_services_variants_and_canonical_options():
     document["programs"]["archive"] = {"inputs": ["code.loombc"], "libraries": []}
     document["variants"]["small"]["services"]["chat"]["programs"].append("archive")
     document["variants"]["audio"] = {"services": {"speech": {"programs": ["source"]}}}
-    document["configurations"] = {
+    document["presets"] = {
         "check": {
             "service": "chat",
             "variant": "small",
@@ -80,10 +80,60 @@ def test_plain_named_choices_filter_and_escape_metadata():
     assert "\x1b" not in output.getvalue()
 
 
-def test_configuration_picker_displays_informational_memory_and_assumptions():
+def test_named_preset_supplies_choices_without_reprompting():
+    document = _card()
+    document["programs"]["archive"] = {"inputs": ["code.loombc"], "libraries": []}
+    document["variants"]["small"]["services"]["chat"]["programs"].append("archive")
+    document["variants"]["large"] = copy.deepcopy(document["variants"]["small"])
+    document["services"]["speech"] = {"kind": "speech", "version": 1}
+    document["variants"]["audio"] = {"services": {"speech": {"programs": ["source"]}}}
+    document["presets"] = {
+        "chat": {"service": "chat", "variant": "small", "programs": "source"}
+    }
+    output = io.StringIO()
+    picker = Picker(io.StringIO(""), output)
+    selected = picker.selection(ModelCard(document), preset="chat")
+    assert (
+        selected.preset,
+        selected.service_name,
+        selected.variant,
+        selected.programs,
+    ) == ("chat", "chat", "small", "source")
+    selected = picker.selection(
+        ModelCard(document), preset="chat", variant="large", programs="archive"
+    )
+    assert selected.variant == "large"
+    assert set(selected.files) == {"code.loombc"}
+    assert output.getvalue() == ""
+
+
+def test_preset_picker_resolves_programs_without_another_question():
+    document = _card()
+    document["programs"]["archive"] = {"inputs": ["code.loombc"], "libraries": []}
+    document["variants"]["small"]["services"]["chat"]["programs"].append("archive")
+    document["presets"] = {
+        name: {"service": "chat", "variant": "small", "programs": programs}
+        for name, programs in (("development", "source"), ("release", "archive"))
+    }
+    output = io.StringIO()
+    selected = Picker(io.StringIO("release\n"), output).selection(ModelCard(document))
+    assert selected.preset == "release"
+    assert set(selected.files) == {"code.loombc"}
+    assert "Programs" not in output.getvalue()
+
+
+def test_program_ambiguity_requires_a_preset_or_explicit_override():
+    document = _card()
+    document["programs"]["archive"] = {"inputs": ["code.loombc"], "libraries": []}
+    document["variants"]["small"]["services"]["chat"]["programs"].append("archive")
+    with pytest.raises(ManifestError, match="choose a preset or specify --programs"):
+        Picker(io.StringIO(""), io.StringIO()).selection(ModelCard(document))
+
+
+def test_preset_picker_displays_informational_memory_and_assumptions():
     document = _card()
     selection = {"variant": "small", "programs": "source", "service": "chat"}
-    document["configurations"] = {
+    document["presets"] = {
         "average": selection
         | {"memory": {"weights_bytes": 1073741824, "workload": "One average request."}},
         "empty": selection

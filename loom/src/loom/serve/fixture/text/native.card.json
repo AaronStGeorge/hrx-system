@@ -144,7 +144,7 @@
       }
     }
   },
-  "configurations": {
+  "presets": {
     "check": {
       "service": "chat",
       "variant": "fixture",

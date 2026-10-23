@@ -43,7 +43,7 @@
       }
     }
   },
-  "configurations": {
+  "presets": {
     "default": {
       "service": "transcription",
       "variant": "fixture",

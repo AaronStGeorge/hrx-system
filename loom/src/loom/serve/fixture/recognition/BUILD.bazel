@@ -27,7 +27,6 @@ loom_library(
 loom_model(
     name = "card_model",
     card = "card.json",
-    configuration = "default",
     files = {
         ":generate_module": "generate.loombc",
         "control.loom": "control.loom",
@@ -35,6 +34,7 @@ loom_model(
         "service.loom": "service.loom",
     },
     model_name = "recognition",
+    preset = "default",
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )
@@ -42,7 +42,6 @@ loom_model(
 loom_model(
     name = "card_model_text",
     card = "card.json",
-    configuration = "default",
     encoding = "text",
     files = {
         ":generate_module": "generate.loombc",
@@ -51,6 +50,7 @@ loom_model(
         "service.loom": "service.loom",
     },
     model_name = "recognition",
+    preset = "default",
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )
@@ -58,7 +58,6 @@ loom_model(
 loom_model(
     name = "card_activity",
     card = "card.json",
-    configuration = "activity",
     encoding = "bc",
     files = {
         ":generate_module": "generate.loombc",
@@ -67,6 +66,7 @@ loom_model(
         "service.loom": "service.loom",
     },
     model_name = "activity",
+    preset = "activity",
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )
@@ -74,7 +74,6 @@ loom_model(
 loom_model(
     name = "card_activity_text",
     card = "card.json",
-    configuration = "activity",
     encoding = "text",
     files = {
         ":generate_module": "generate.loombc",
@@ -83,6 +82,7 @@ loom_model(
         "service.loom": "service.loom",
     },
     model_name = "activity",
+    preset = "activity",
     tags = ["skip-bazel_to_cmake"],
     visibility = ["//visibility:public"],
 )
