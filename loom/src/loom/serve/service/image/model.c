@@ -1174,21 +1174,25 @@ iree_status_t loom_serve_image_model_advance_batch(
         model->output.data_length, alignment);
     model->invocation.storage[1] = iree_hal_make_pool_reservation_request(
         stage->transient.required_byte_length, alignment);
-    const iree_device_size_t extents[] = {
-        iree_hal_buffer_byte_length(model->input),
-        model->output.data_length,
-        stage->transient.required_byte_length,
-    };
-    IREE_RETURN_IF_ERROR(loom_serve_residency_check_working_set(
+    const iree_device_size_t workspace_bytes =
+        iree_device_align(model->output.data_length, alignment) +
+        stage->transient.required_byte_length;
+    const iree_device_size_t input_bytes =
+        iree_hal_buffer_byte_length(model->input);
+    if (input_bytes > IREE_DEVICE_SIZE_MAX - workspace_bytes) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "image invocation exceeds device address space");
+    }
+    // The output never escapes the invocation: collection follows both work
+    // and feedback retirement. Its storage and all split command parts share
+    // one private high-water until that collection releases the admission pin.
+    IREE_RETURN_IF_ERROR(loom_serve_residency_prepare_working_set(
         loom_serve_executables_residency(model->executables),
-        IREE_ARRAYSIZE(extents), extents));
+        input_bytes + workspace_bytes, 0));
     // Register geometry for both members of this allocation transaction so
     // they can occupy one backing range without sharing their lifetimes.
-    return loom_serve_execution_reserve_workspace(
-        model->execution,
-        iree_device_align(model->output.data_length, alignment) +
-            stage->transient.required_byte_length,
-        alignment);
+    return loom_serve_execution_reserve_workspace(model->execution,
+                                                  workspace_bytes, alignment);
   }
   return iree_ok_status();
 }

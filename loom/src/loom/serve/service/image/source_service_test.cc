@@ -1759,6 +1759,77 @@ TEST_P(ImageSpecializationTest, CohortPrivateValuesSurvivePartsAndReuse) {
   ASSERT_NO_FATAL_FAILURE(RunCohort(-0.25f, false, true));
 }
 
+TEST_P(ImageSpecializationTest, PeerAdmissionRetainsWholeInvocationWorkingSet) {
+  constexpr uint32_t kExtent = 40;
+  const auto prepare = [this] {
+    loom_serve_image_prepared_t prepared;
+    IREE_ASSERT_OK(PrepareSingle(IREE_SV(R"({"prompt":"aba","seed":1})"),
+                                 kExtent, kExtent, &prepared));
+    prepared_ = true;
+    loom_serve_image_model_set_observer(model_, {Wake, this});
+    IREE_ASSERT_OK(Resolve(false));
+    loom_serve_image_model_set_observer(model_, {});
+  };
+  ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
+  ASSERT_NO_FATAL_FAILURE(prepare());
+  IREE_ASSERT_OK(loom_serve_residency_acquire_wait(
+      loom_serve_image_model_residency(model_)));
+  prepared_ = false;
+  const auto destroy = [](loom_serve_image_model_t* model) {
+    IREE_EXPECT_OK(loom_serve_image_model_free(model));
+  };
+  std::unique_ptr<loom_serve_image_model_t, decltype(destroy)> first(
+      std::exchange(model_, nullptr), destroy);
+  ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
+  ASSERT_NO_FATAL_FAILURE(prepare());
+  const auto peer = loom_serve_image_model_generator(model_);
+  const auto expect_peer_capacity = [&] {
+    loom_serve_residency_admission_t admission;
+    IREE_ASSERT_OK(peer.try_admit(peer.self, &admission));
+    // Each image's float output is 19,200 bytes. Both fit individually, but
+    // together exceed the bounded domain's 32 KiB before input and scratch.
+    EXPECT_EQ(admission, loom_serve_device_memory_pool(device_)
+                             ? LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY
+                             : LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+    if (admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
+      loom_serve_residency_release(loom_serve_image_model_residency(model_));
+    }
+  };
+  ASSERT_NO_FATAL_FAILURE(expect_peer_capacity());
+  const auto finish = [&](loom_serve_image_model_t* model, bool check_peer) {
+    const auto generator = loom_serve_image_model_generator(model);
+    bool complete = false;
+    while (!complete) {
+      loom_serve_execution_frontier_t frontier;
+      IREE_ASSERT_OK(generator.submit(generator.self, 0, &frontier, &complete));
+      IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
+          {2, frontier.semaphores, frontier.values}, iree_infinite_timeout(),
+          IREE_ASYNC_WAIT_FLAG_NONE));
+      if (check_peer) {
+        // Intermediate command parts and final device readiness both retain
+        // the accepted invocation until its owner collects the output.
+        ASSERT_NO_FATAL_FAILURE(expect_peer_capacity());
+      }
+    }
+    const auto output = generator.complete(generator.self);
+    const auto expected = Pixels(3, 1, kExtent * kExtent);
+    ASSERT_EQ(output.data_length, expected.size() * sizeof(float));
+    std::vector<float> actual(expected.size());
+    for (size_t i = 0; i < actual.size(); ++i) {
+      actual[i] = iree_unaligned_load_le_f32(output.data + i * sizeof(float));
+    }
+    EXPECT_EQ(actual, expected);
+  };
+  ASSERT_NO_FATAL_FAILURE(finish(first.get(), true));
+
+  // The identical prepared peer now fits, without another JIT or preparation.
+  loom_serve_residency_admission_t admission;
+  IREE_ASSERT_OK(peer.try_admit(peer.self, &admission));
+  ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+  prepared_ = false;
+  ASSERT_NO_FATAL_FAILURE(finish(model_, false));
+}
+
 TEST_P(ImageSpecializationTest, DisabledReuseStillAllowsLargerRequests) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel({0, 0}, {this, Allocate}));
   ASSERT_NO_FATAL_FAILURE(Run(15, 9, false));
