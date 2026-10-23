@@ -15,6 +15,25 @@
 extern "C" {
 #endif
 
+// Producer-retained inputs for one direct native helper.
+typedef struct loom_aie2p_program_helper_t {
+  // Module-local helper definition called by the entry function.
+  loom_symbol_ref_t function;
+  // Invocation-refined target facts owned by the helper's function version.
+  const loom_target_facts_t* function_target_facts;
+  // Source memory proofs bound to the helper's current operations.
+  const loom_low_memory_access_map_t* memory_accesses;
+  // Source execution proofs bound to the helper's current loop controls.
+  const loom_low_loop_execution_map_t* loop_execution;
+} loom_aie2p_program_helper_t;
+
+typedef struct loom_aie2p_program_helper_list_t {
+  // Direct helpers in producer-retained call inventory order.
+  const loom_aie2p_program_helper_t* values;
+  // Number of records in |values|.
+  iree_host_size_t count;
+} loom_aie2p_program_helper_list_t;
+
 // Compiles |entry_function_op| and its producer-retained direct,
 // nonrecursive, module-internal helper callees into one tile contribution.
 // Helpers use scalar and pointer register ABI values, remain spill-free and
@@ -22,7 +41,7 @@ extern "C" {
 // exact ordinary leaf compilation path.
 iree_status_t loom_aie2p_program_compile(
     loom_module_t* module, loom_op_t* entry_function_op,
-    loom_symbol_ref_array_t direct_callees,
+    loom_aie2p_program_helper_list_t direct_helpers,
     const loom_aie2p_leaf_compile_options_t* entry_options,
     iree_arena_allocator_t* arena, bool* out_compiled,
     loom_aie2p_leaf_contribution_t* out_contribution);
