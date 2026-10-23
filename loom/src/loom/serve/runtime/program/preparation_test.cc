@@ -250,7 +250,7 @@ class PreparationCaptureTest : public PreparationTest {
   void SetUp() override {
     PreparationTest::SetUp();
     IREE_ASSERT_OK(loom_serve_preparation_module_create(
-        environment, nullptr, host_allocator, &module));
+        environment, nullptr, nullptr, host_allocator, &module));
     const iree_string_view_t roots[] = {
         IREE_SV("request_stages"), IREE_SV("configure_cold_stage"),
         IREE_SV("conflicting_parameter_policy"), IREE_SV("no_stages")};

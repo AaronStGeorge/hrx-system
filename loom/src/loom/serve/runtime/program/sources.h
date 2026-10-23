@@ -42,6 +42,8 @@ typedef struct loom_serve_sources_t {
   // Borrowed immutable selected model facts after card resolution. Direct
   // program callers leave this NULL. Cloned namespaces retain the card.
   loom_model_card_t* card;
+  // Borrowed service-owned role within card; NULL selects the primary service.
+  const loom_model_component_t* component;
 } loom_serve_sources_t;
 
 // Captures every locator and retains the immutable package in one allocation.

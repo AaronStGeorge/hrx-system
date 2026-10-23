@@ -45,6 +45,8 @@ struct loom_serve_preparation_t {
   iree_allocator_t host_allocator;
   // Retained model configuration supplying immutable defaults to every stage.
   loom_model_card_t* card;
+  // Borrowed service-owned component contract retained through card.
+  const loom_model_component_t* component;
   // Requested owned bytes, accumulated where each allocation is established.
   iree_host_size_t storage_size;
   // Number of initialized stages, including partial declarations on failure.
@@ -66,6 +68,8 @@ typedef struct loom_serve_preparation_module_t {
   iree_vm_ref_type_t buffer_type;
   // Retained model facts for named parameter declarations and stage config.
   loom_model_card_t* card;
+  // Borrowed service-owned component contract retained through card.
+  const loom_model_component_t* component;
   // One serialized source invocation's declaration capability.
   struct {
     // Only an explicitly scoped invocation may declare or configure stages.
@@ -461,6 +465,7 @@ static iree_status_t loom_serve_preparation_module_start(
           module->host_allocator, sizeof(*preparation), (void**)&preparation));
       preparation->host_allocator = module->host_allocator;
       preparation->card = module->card;
+      preparation->component = module->component;
       loom_model_card_retain(preparation->card);
       preparation->storage_size = sizeof(*preparation);
       module->capture.preparation = preparation;
@@ -633,7 +638,8 @@ static const iree_vm_module_vtable_t preparation_module_vtable = {
 
 iree_status_t loom_serve_preparation_module_create(
     iree_vm_environment_t* environment, loom_model_card_t* card,
-    iree_allocator_t host_allocator, iree_vm_module_t** out_module) {
+    const loom_model_component_t* component, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module) {
   *out_module = NULL;
   iree_vm_ref_types_t types = {0};
   IREE_RETURN_IF_ERROR(iree_vm_ref_types_resolve(
@@ -644,6 +650,7 @@ iree_status_t loom_serve_preparation_module_create(
       iree_allocator_malloc(host_allocator, sizeof(*module), (void**)&module));
   module->host_allocator = host_allocator;
   module->card = card;
+  module->component = component;
   loom_model_card_retain(card);
   module->buffer_type = types.buffer;
   module->descriptor = (iree_vm_module_descriptor_t){
@@ -677,7 +684,8 @@ iree_status_t loom_serve_preparation_allocate(
   *out_preparation = NULL;
   iree_vm_module_t* library = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_preparation_module_create(
-      environment, sources->card, host_allocator, &library));
+      environment, sources->card, sources->component, host_allocator,
+      &library));
   loom_serve_preparation_module_begin(library, 0,
                                       LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
   loom_serve_program_t* program = NULL;
@@ -727,6 +735,11 @@ iree_host_size_t loom_serve_preparation_stage_count(
 loom_model_card_t* loom_serve_preparation_card(
     const loom_serve_preparation_t* preparation) {
   return preparation->card;
+}
+
+const loom_model_component_t* loom_serve_preparation_component(
+    const loom_serve_preparation_t* preparation) {
+  return preparation->component;
 }
 
 iree_host_size_t loom_serve_preparation_storage_size(

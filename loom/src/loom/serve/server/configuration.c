@@ -150,7 +150,7 @@ static iree_status_t loom_serve_model_configuration_specialization_cache(
 }
 
 static iree_status_t loom_serve_model_configuration_component(
-    iree_string_view_t value,
+    iree_string_view_t value, bool card, const loom_model_component_t* contract,
     loom_serve_finite_component_configuration_t* component,
     iree_allocator_t host_allocator) {
   loom_serve_model_configuration_field_t fields[] = {
@@ -161,14 +161,41 @@ static iree_status_t loom_serve_model_configuration_component(
       {"specialization_cache", IREE_JSON_VALUE_TYPE_OBJECT}};
   loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
                                                      fields};
-  IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
-      value, loom_serve_model_configuration_field_visit, &context));
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[0], host_allocator, &component->prepare));
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[1], host_allocator, &component->control));
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
-      &fields[2], host_allocator, &component->assets));
+  component->contract = contract;
+  if (value.data) {
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
+        value, loom_serve_model_configuration_field_visit, &context));
+  }
+  if (card) {
+    for (iree_host_size_t i = 0; i < 3; ++i) {
+      if (fields[i].value.data) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "component '%s' belongs to the model card",
+                                fields[i].name);
+      }
+    }
+    if (contract) {
+      loom_serve_model_configuration_field_t defaults[] = {
+          {"specialization_cache", IREE_JSON_VALUE_TYPE_OBJECT}};
+      loom_serve_model_configuration_fields_t default_context = {1, defaults};
+      IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
+          contract->execution, loom_serve_model_configuration_field_visit,
+          &default_context));
+      if (!fields[3].value.data) {
+        fields[3].value = contract->options;
+      }
+      if (!fields[4].value.data) {
+        fields[4].value = defaults[0].value;
+      }
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[0], host_allocator, &component->prepare));
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[1], host_allocator, &component->control));
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[2], host_allocator, &component->assets));
+  }
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_options(
       &fields[3], host_allocator, &component->options));
   return loom_serve_model_configuration_specialization_cache(
@@ -300,9 +327,20 @@ static iree_status_t loom_serve_model_configuration_text(
                             "every proposal; two-epoch continuation requires "
                             "nonzero draft depth");
   }
-  if (fields[DEFINITION_IMAGE].value.data) {
+  const loom_model_component_t* image =
+      sources->card
+          ? loom_model_selection_component(
+                loom_model_card_selection(sources->card), IREE_SV("image"))
+          : NULL;
+  if (sources->card && !image && fields[DEFINITION_IMAGE].value.data) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "selected text service does not declare an image component");
+  }
+  if (image || fields[DEFINITION_IMAGE].value.data) {
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_component(
-        fields[DEFINITION_IMAGE].value, &text->image, host_allocator));
+        fields[DEFINITION_IMAGE].value, card, image, &text->image,
+        host_allocator));
   }
   return iree_ok_status();
 }
@@ -454,10 +492,11 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
     IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
         selection->execution, loom_serve_model_configuration_field_visit,
         &default_context));
-    const int facts[] = {
-        DEFINITION_KIND,    DEFINITION_PREPARE,    DEFINITION_CONTROL,
-        DEFINITION_SOURCES, DEFINITION_WEIGHTS,    DEFINITION_TOKENIZER,
-        DEFINITION_ASSETS,  DEFINITION_CHECKPOINT, DEFINITION_ADAPTER};
+    const int facts[] = {DEFINITION_KIND,    DEFINITION_PREPARE,
+                         DEFINITION_CONTROL, DEFINITION_SOURCES,
+                         DEFINITION_WEIGHTS, DEFINITION_TOKENIZER,
+                         DEFINITION_ASSETS,  DEFINITION_CHECKPOINT,
+                         DEFINITION_ADAPTER, DEFINITION_IMAGE};
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(facts); ++i) {
       if (defaults[facts[i]].value.data) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -481,6 +520,22 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                             "unknown model kind '%.*s'",
                             (int)fields[DEFINITION_KIND].value.size,
                             fields[DEFINITION_KIND].value.data);
+  }
+  if (model->sources.card) {
+    const loom_model_selection_t* selection =
+        loom_model_card_selection(model->sources.card);
+    for (iree_host_size_t i = 0; i < selection->component_count; ++i) {
+      const loom_model_component_t* component = &selection->components[i];
+      if (model->kind != LOOM_SERVE_MODEL_KIND_TEXT ||
+          !iree_string_view_equal(component->name, IREE_SV("image")) ||
+          (component->version && component->version != 1)) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "unsupported component '%.*s' ABI %u for service '%.*s'",
+            (int)component->name.size, component->name.data, component->version,
+            (int)selection->kind.size, selection->kind.data);
+      }
+    }
   }
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(fields); ++i) {
     if (fields[i].value.data && fields[i].kinds &&

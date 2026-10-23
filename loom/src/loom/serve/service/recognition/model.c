@@ -596,6 +596,7 @@ static iree_status_t loom_serve_recognition_create_control(
   if (iree_status_is_ok(status)) {
     status = loom_serve_program_link_service(
         module, loom_serve_preparation_card(model->preparation),
+        loom_serve_preparation_component(model->preparation),
         (iree_vm_module_span_t){native_modules, 3}, host_allocator,
         &model->control.program);
   }

@@ -999,12 +999,13 @@ static iree_status_t loom_serve_text_registration_create(
           (text->session_cache_capacity ? text->session_cache_capacity + 1 : 0),
       .options = configuration->options};
   iree_status_t status = iree_ok_status();
-  if (text->image.prepare.size) {
+  if (text->image.contract || text->image.prepare.size) {
     loom_serve_finite_model_options_t image_options = {
         .sources = configuration->sources,
         .asset_directory = text->image.assets,
         .options = text->image.options,
         .specialization_cache = text->image.specialization_cache};
+    image_options.sources.component = text->image.contract;
     image_options.sources.prepare = text->image.prepare;
     image_options.sources.control = text->image.control;
     status = loom_serve_finite_component_allocate(

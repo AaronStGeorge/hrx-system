@@ -18,6 +18,7 @@ exports_files(
         "tokenizer_merging.json",
         "service.loom",
         "native.card.json",
+        "image.card.json",
         "partition.card.json",
         "swatch.card.json",
         "native.source.json",
@@ -260,5 +261,58 @@ loom_model(
         ("source", "preserve", "source"),
         ("archive", "bc", "source"),
         ("mixed", "preserve", "mixed"),
+    ]
+]
+
+loom_library(
+    name = "multimodal",
+    srcs = [
+        "advance.loom",
+        "control.loom",
+        "prepare.loom",
+        "service.loom",
+        "//loom/src/loom/serve/fixture/projector:control.loom",
+        "//loom/src/loom/serve/fixture/projector:project.loom",
+        "//loom/src/loom/serve/fixture/projector:service.loom",
+        "//loom/src/loom/serve/fixture/projector:weighted_project.loom",
+    ],
+)
+
+[
+    loom_model(
+        name = "image_" + name,
+        assets = {
+            ":bias.data": "bias.data",
+            ":metadata.safetensors": "metadata.safetensors",
+            "tokenizer.json": "tokenizer.json",
+        } if name == "model" else {},
+        card = "image.card.json",
+        data = {"weights.loom": "weights.loom"},
+        encoding = "preserve",
+        files = {":multimodal": "multimodal.loombc"} if programs == "archive" else ({
+            "//loom/src/loom/serve/fixture/projector:control.loom": "image/control.loom",
+            "//loom/src/loom/serve/fixture/projector:project.loom": "image/project.loom",
+            "//loom/src/loom/serve/fixture/projector:service.loom": "image/service.loom",
+            "//loom/src/loom/serve/fixture/projector:weighted_project.loom": "image/weighted_project.loom",
+            "prepare.loom": "prepare.loom",
+            "service.loom": "service.loom",
+        } | ({
+            ":advance_module": "advance_module.loombc",
+            ":control_module": "control_module.loombc",
+        } if programs == "mixed" else {
+            "advance.loom": "advance.loom",
+            "control.loom": "control.loom",
+        })),
+        model_name = "fixture-text",
+        preset = "check",
+        programs = programs,
+        tags = ["skip-bazel_to_cmake"],
+        visibility = ["//visibility:public"],
+    )
+    for name, programs in [
+        ("model", "source"),
+        ("fetch_source", "source"),
+        ("fetch_archive", "archive"),
+        ("fetch_mixed", "mixed"),
     ]
 ]

@@ -550,6 +550,140 @@ static iree_status_t loom_model_json_syntax(iree_string_view_t json) {
   return iree_ok_status();
 }
 
+static iree_status_t loom_model_identifier(iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < name.size; ++i) {
+    const char c = name.data[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ||
+          (i && c >= '0' && c <= '9'))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "model service kind and component role must be a symbol identifier");
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_model_version(
+    const loom_model_json_object_t* definition, uint32_t* out_version) {
+  iree_string_view_t version;
+  IREE_RETURN_IF_ERROR(loom_model_value(
+      definition, "version", IREE_JSON_VALUE_TYPE_NUMBER, false, &version));
+  *out_version = 0;
+  if (version.data) {
+    uint64_t number = 0;
+    IREE_RETURN_IF_ERROR(iree_json_parse_uint64(version, &number));
+    if (!number || number > UINT32_MAX) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "model service version must be in [1, 2^32-1]");
+    }
+    *out_version = (uint32_t)number;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_model_settings(
+    const loom_model_json_object_t* definition,
+    const loom_model_json_object_t* preset, iree_string_view_t* out_options,
+    iree_string_view_t* out_execution) {
+  iree_string_view_list_t accepted_options;
+  IREE_RETURN_IF_ERROR(
+      loom_model_strings(definition, "options", false, &accepted_options));
+  loom_model_json_object_t options;
+  IREE_RETURN_IF_ERROR(
+      loom_model_object_field(preset, "options", false, NULL, &options));
+  for (iree_host_size_t i = 0; i < options.count; ++i) {
+    bool accepted = false;
+    for (iree_host_size_t j = 0; j < accepted_options.count; ++j) {
+      accepted |= iree_string_view_equal(options.fields[i].key,
+                                         accepted_options.values[j]);
+    }
+    if (!accepted) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "selected service does not accept option '%.*s'",
+                              (int)options.fields[i].key.size,
+                              options.fields[i].key.data);
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_model_value(
+      preset, "options", IREE_JSON_VALUE_TYPE_OBJECT, false, out_options));
+  IREE_RETURN_IF_ERROR(loom_model_value(
+      preset, "execution", IREE_JSON_VALUE_TYPE_OBJECT, false, out_execution));
+  if (!out_options->data) {
+    *out_options = IREE_SV("{}");
+  }
+  if (!out_execution->data) {
+    *out_execution = IREE_SV("{}");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_model_components(
+    const loom_model_json_object_t* service,
+    const loom_model_json_object_t* preset, loom_model_selection_t* selection) {
+  loom_model_json_object_t definitions, settings;
+  IREE_RETURN_IF_ERROR(loom_model_object_field(service, "components", false,
+                                               NULL, &definitions));
+  IREE_RETURN_IF_ERROR(
+      loom_model_object_field(preset, "components", false, NULL, &settings));
+  for (iree_host_size_t i = 0; i < settings.count; ++i) {
+    if (!loom_model_field(&definitions, settings.fields[i].key)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "preset names undeclared component '%.*s'",
+                              (int)settings.fields[i].key.size,
+                              settings.fields[i].key.data);
+    }
+  }
+  loom_model_card_t* card = service->card;
+  loom_model_component_t* components = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&card->arena, definitions.count,
+                                sizeof(*components), (void**)&components));
+  for (iree_host_size_t i = 0; i < definitions.count; ++i) {
+    loom_model_component_t* component = &components[i];
+    component->name = definitions.fields[i].key;
+    IREE_RETURN_IF_ERROR(loom_model_identifier(component->name));
+    loom_model_json_object_t definition, values;
+    char* prefix = NULL;
+    iree_host_size_t prefix_length = 0;
+    if (!iree_host_size_checked_add(selection->kind.size, component->name.size,
+                                    &prefix_length) ||
+        !iree_host_size_checked_add(prefix_length, 1, &prefix_length)) {
+      return iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "component symbol namespace exceeds host storage");
+    }
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate(&card->arena, prefix_length, (void**)&prefix));
+    memcpy(prefix, selection->kind.data, selection->kind.size);
+    prefix[selection->kind.size] = '_';
+    memcpy(prefix + selection->kind.size + 1, component->name.data,
+           component->name.size);
+    component->export_prefix = iree_make_string_view(prefix, prefix_length);
+    if (definitions.fields[i].type != IREE_JSON_VALUE_TYPE_OBJECT) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "component definition must be an object");
+    }
+    IREE_RETURN_IF_ERROR(loom_model_object(
+        card, definitions.fields[i].value,
+        "version options interface constraints", &definition));
+    const loom_model_json_field_t* setting =
+        loom_model_field(&settings, component->name);
+    if (setting && setting->type != IREE_JSON_VALUE_TYPE_OBJECT) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "component preset must be an object");
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_model_object(card, setting ? setting->value : IREE_SV("{}"),
+                          "options execution", &values));
+    IREE_RETURN_IF_ERROR(loom_model_version(&definition, &component->version));
+    IREE_RETURN_IF_ERROR(loom_model_settings(
+        &definition, &values, &component->options, &component->execution));
+  }
+  selection->component_count = definitions.count;
+  selection->components = components;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_model_select(loom_model_card_t* card,
                                        iree_string_view_t json,
                                        const loom_model_selector_t* selector) {
@@ -604,7 +738,7 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   IREE_RETURN_IF_ERROR(loom_model_object(
       card, preset_json,
       "service variant programs partition options execution request workload "
-      "memory",
+      "memory components",
       &preset));
   loom_model_selector_t defaults = {0};
   IREE_RETURN_IF_ERROR(
@@ -672,29 +806,13 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
                         &selection->selector.service, &service_json));
   loom_model_json_object_t service;
   IREE_RETURN_IF_ERROR(loom_model_object(
-      card, service_json, "kind version options interface constraints",
-      &service));
+      card, service_json,
+      "kind version options interface constraints components", &service));
   IREE_RETURN_IF_ERROR(
       loom_model_string_field(&service, "kind", true, &selection->kind));
-  for (iree_host_size_t i = 0; i < selection->kind.size; ++i) {
-    const char c = selection->kind.data[i];
-    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ||
-          (i && c >= '0' && c <= '9'))) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "model service kind must be a symbol identifier");
-    }
-  }
-  IREE_RETURN_IF_ERROR(loom_model_value(
-      &service, "version", IREE_JSON_VALUE_TYPE_NUMBER, false, &version));
-  if (version.data) {
-    uint64_t number = 0;
-    IREE_RETURN_IF_ERROR(iree_json_parse_uint64(version, &number));
-    if (!number || number > UINT32_MAX) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "model service version must be in [1, 2^32-1]");
-    }
-    selection->version = (uint32_t)number;
-  }
+  IREE_RETURN_IF_ERROR(loom_model_identifier(selection->kind));
+  IREE_RETURN_IF_ERROR(loom_model_version(&service, &selection->version));
+  IREE_RETURN_IF_ERROR(loom_model_components(&service, &preset, selection));
   iree_string_view_list_t compatible;
   IREE_RETURN_IF_ERROR(
       loom_model_strings(&service_variant, "programs", true, &compatible));
@@ -745,40 +863,11 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
       loom_model_config(&programs, &service_variant, &selection->config));
   IREE_RETURN_IF_ERROR(loom_model_parameters(&service_variant, selection));
   IREE_RETURN_IF_ERROR(loom_model_tokenizers(&service_variant, selection));
-  IREE_RETURN_IF_ERROR(loom_model_value(&preset, "options",
-                                        IREE_JSON_VALUE_TYPE_OBJECT, false,
-                                        &selection->options));
-  iree_string_view_list_t accepted_options;
-  IREE_RETURN_IF_ERROR(
-      loom_model_strings(&service, "options", false, &accepted_options));
-  loom_model_json_object_t options;
-  IREE_RETURN_IF_ERROR(
-      loom_model_object_field(&preset, "options", false, NULL, &options));
-  for (iree_host_size_t i = 0; i < options.count; ++i) {
-    bool accepted = false;
-    for (iree_host_size_t j = 0; j < accepted_options.count; ++j) {
-      accepted |= iree_string_view_equal(options.fields[i].key,
-                                         accepted_options.values[j]);
-    }
-    if (!accepted) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "selected service does not accept option '%.*s'",
-                              (int)options.fields[i].key.size,
-                              options.fields[i].key.data);
-    }
-  }
-  IREE_RETURN_IF_ERROR(loom_model_value(&preset, "execution",
-                                        IREE_JSON_VALUE_TYPE_OBJECT, false,
-                                        &selection->execution));
+  IREE_RETURN_IF_ERROR(loom_model_settings(
+      &service, &preset, &selection->options, &selection->execution));
   IREE_RETURN_IF_ERROR(loom_model_value(&preset, "request",
                                         IREE_JSON_VALUE_TYPE_OBJECT, false,
                                         &selection->request));
-  if (!selection->options.data) {
-    selection->options = IREE_SV("{}");
-  }
-  if (!selection->execution.data) {
-    selection->execution = IREE_SV("{}");
-  }
   if (!selection->request.data) {
     selection->request = IREE_SV("{}");
   }
@@ -842,6 +931,16 @@ const loom_model_tokenizer_t* loom_model_selection_tokenizer(
   for (iree_host_size_t i = 0; i < selection->tokenizer_count; ++i) {
     if (iree_string_view_equal(selection->tokenizers[i].name, name)) {
       return &selection->tokenizers[i];
+    }
+  }
+  return NULL;
+}
+
+const loom_model_component_t* loom_model_selection_component(
+    const loom_model_selection_t* selection, iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < selection->component_count; ++i) {
+    if (iree_string_view_equal(selection->components[i].name, name)) {
+      return &selection->components[i];
     }
   }
   return NULL;

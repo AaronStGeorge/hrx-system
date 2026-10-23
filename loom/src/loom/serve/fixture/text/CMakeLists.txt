@@ -176,4 +176,23 @@ loom_generated_file(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_VM)
+loom_module(
+  NAME
+    multimodal
+  SRCS
+    "advance.loom"
+    "control.loom"
+    "prepare.loom"
+    "service.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/control.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/project.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/service.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/weighted_project.loom"
+  MODE merge
+  OUTPUT_FORMAT bc
+  STRICT_DEPS
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

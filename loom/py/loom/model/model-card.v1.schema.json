@@ -388,6 +388,16 @@
         "constraints": {
           "type": "object",
           "description": "Service-owned admission constraints; shape does not establish executable support."
+        },
+        "components": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/component"
+          },
+          "description": "Roles defined by the service, such as text.image for image projection. Exports use <kind>_<role>_<entry>_vN."
         }
       },
       "additionalProperties": false
@@ -531,6 +541,22 @@
         "memory": {
           "$ref": "#/$defs/memory",
           "description": "Optional author estimates for this exact selection and assumed workload. Informational only; not a scheduler or hardware-fit contract."
+        },
+        "components": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "options": {
+                "type": "object"
+              },
+              "execution": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Canonical options and execution defaults for components declared by the selected service."
         }
       },
       "additionalProperties": false
@@ -735,6 +761,31 @@
         }
       ],
       "additionalProperties": false
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Exact component ABI revision. Omission explicitly means unversioned development behavior, not version 1 or automatic compatibility negotiation.",
+          "maximum": 4294967295
+        },
+        "options": {
+          "$ref": "#/$defs/names",
+          "description": "Model-owned preparation options accepted from canonical presets."
+        },
+        "interface": {
+          "type": "object",
+          "description": "Service-owned public input/output description."
+        },
+        "constraints": {
+          "type": "object",
+          "description": "Service-owned admission constraints; shape does not establish executable support."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Service-owned component sharing the selected providers and parameter scopes. Its ABI revision is independent of its parent service."
     }
   }
 }

@@ -26,6 +26,55 @@ def _service(document):
     return document["variants"]["fixture"]["services"]["chat"]
 
 
+def test_components_share_files_and_retain_independent_contracts():
+    document = _document()
+    document["services"]["chat"]["components"] = {
+        "image": {"version": 3, "options": ["patches"]}
+    }
+    document["presets"]["check"]["components"] = {
+        "image": {
+            "options": {"patches": 4},
+            "execution": {"specialization_cache": {"capacity": 2}},
+        }
+    }
+    _service(document)["parameters"]["vision"] = copy.deepcopy(
+        _service(document)["parameters"]["model"]
+    )
+    selected = ModelCard(document).select("check")
+    assert selected.service["version"] == 1
+    assert selected.service["components"]["image"]["version"] == 3
+    assert len(selected.files) == len(ModelCard(_document()).select("check").files)
+    projected = ModelCard(selected.document).select()
+    assert projected.service == selected.service
+    assert projected.settings == selected.settings
+    assert projected.parameters["vision"] == projected.parameters["model"]
+
+
+@pytest.mark.parametrize(
+    "component", [{"version": 0}, {"version": True}, {"programs": ["source"]}]
+)
+def test_component_contract_rejects_invalid_version_or_independent_files(component):
+    document = _document()
+    document["services"]["chat"]["components"] = {"image": component}
+    with pytest.raises(ManifestError):
+        ModelCard(document)
+
+
+def test_component_presets_require_declared_roles_and_options():
+    document = _document()
+    document["presets"]["check"]["components"] = {"image": {"options": {"patches": 4}}}
+    with pytest.raises(ManifestError, match="undeclared component"):
+        ModelCard(document)
+    document["services"]["chat"]["components"] = {"image": {}}
+    with pytest.raises(ManifestError, match="undeclared model options"):
+        ModelCard(document)
+    document["services"]["chat"]["components"]["image"]["options"] = ["patches"]
+    assert (
+        "version"
+        not in ModelCard(document).select("check").service["components"]["image"]
+    )
+
+
 def test_memory_estimate_survives_exact_selection_and_projection():
     card = ModelCard(_document())
     selected = card.select("check")

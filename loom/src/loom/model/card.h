@@ -84,6 +84,21 @@ typedef struct loom_model_reference_t {
   loom_model_selector_t selector;
 } loom_model_reference_t;
 
+// A service-owned role sharing its parent's providers and parameter scopes.
+// The host defines its lifecycle and checks its independently versioned ABI.
+typedef struct loom_model_component_t {
+  // Role within the parent service, such as text's image projector.
+  iree_string_view_t name;
+  // Selected symbol namespace, formed once from service kind and role.
+  iree_string_view_t export_prefix;
+  // Exact component ABI revision; zero denotes unversioned development.
+  uint32_t version;
+  // Canonical preparation options, or an empty JSON object.
+  iree_string_view_t options;
+  // Canonical execution settings, interpreted by the parent service host.
+  iree_string_view_t execution;
+} loom_model_component_t;
+
 // Immutable selected model facts, with no device, HTTP, or acquisition policy.
 // Every view is owned by the enclosing card and remains valid until release.
 typedef struct loom_model_selection_t {
@@ -97,6 +112,10 @@ typedef struct loom_model_selection_t {
   iree_string_view_t kind;
   // Exact service ABI revision; zero denotes unversioned development behavior.
   uint32_t version;
+  // Number of independently versioned service-owned components.
+  iree_host_size_t component_count;
+  // Borrowed immutable role contracts, sharing this selection's file closure.
+  const loom_model_component_t* components;
   // Execution context relative to the card; does not rebase declared files.
   iree_string_view_t directory;
   // Primary link providers, potentially in several different formats.
@@ -143,6 +162,8 @@ const loom_model_selection_t* loom_model_card_selection(
 const loom_model_parameter_t* loom_model_selection_parameter(
     const loom_model_selection_t* selection, iree_string_view_t scope);
 const loom_model_tokenizer_t* loom_model_selection_tokenizer(
+    const loom_model_selection_t* selection, iree_string_view_t name);
+const loom_model_component_t* loom_model_selection_component(
     const loom_model_selection_t* selection, iree_string_view_t name);
 
 #ifdef __cplusplus

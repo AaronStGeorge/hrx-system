@@ -158,6 +158,54 @@ TEST_F(CardTest, SelectionOwnsMixedProvidersAndScopedInputs) {
   EXPECT_EQ(String(selection->execution), R"({"rows": 2})");
 }
 
+TEST_F(CardTest, ComponentsOwnIndependentVersionsAndCanonicalSettings) {
+  std::string json = Replace(
+      "\"kind\": \"text\", \"version\": 1",
+      R"("kind":"text","version":1,"components":{"image":{"version":3,"options":["patches"]},"audio":{}})");
+  json.insert(
+      json.find("\"execution\""),
+      R"("components":{"image":{"options":{"patches":4},"execution":{"rows":2}}},)");
+  IREE_ASSERT_OK(Parse(json));
+  json.assign(json.size(), 'x');
+  const auto* selection = loom_model_card_selection(card_);
+  EXPECT_EQ(selection->version, 1u);
+  ASSERT_EQ(selection->component_count, 2u);
+  const auto* image =
+      loom_model_selection_component(selection, IREE_SV("image"));
+  ASSERT_NE(image, nullptr);
+  EXPECT_EQ(String(image->export_prefix), "text_image");
+  EXPECT_EQ(image->version, 3u);
+  EXPECT_EQ(String(image->options), R"({"patches":4})");
+  EXPECT_EQ(String(image->execution), R"({"rows":2})");
+  const auto* audio =
+      loom_model_selection_component(selection, IREE_SV("audio"));
+  ASSERT_NE(audio, nullptr);
+  EXPECT_EQ(audio->version, 0u);
+  EXPECT_EQ(String(audio->options), "{}");
+  EXPECT_EQ(loom_model_selection_component(selection, IREE_SV("missing")),
+            nullptr);
+}
+
+TEST_F(CardTest, ComponentBoundaryRejectsInvalidDeclarationsAndSettings) {
+  for (const char* component :
+       {R"({"bad-name":{}})", R"({"image":3})", R"({"image":{"version":0}})",
+        R"({"image":{"programs":["source"]}})"}) {
+    std::string json = kCard;
+    json.insert(json.find("\"kind\": \"text\""),
+                std::string("\"components\":") + component + ",");
+    EXPECT_FALSE(iree::Status(Parse(json)).ok());
+    EXPECT_EQ(card_, nullptr);
+  }
+  std::string json = kCard;
+  json.insert(json.find("\"execution\""), R"("components":{"image":{}},)");
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
+  json.insert(json.find("\"kind\": \"text\""), R"("components":{"image":{}},)");
+  IREE_ASSERT_OK(Parse(json));
+  json.replace(json.find(R"("image":{})", json.find("\"presets\"")), 10,
+               R"("image":{"options":{"patches":4}})");
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
+}
+
 TEST_F(CardTest, CompatibleOverrideRetainsVariantFacts) {
   const loom_model_selector_t selector = {
       .preset = IREE_SV("check"),

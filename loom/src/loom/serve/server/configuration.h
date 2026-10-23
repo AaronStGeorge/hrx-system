@@ -17,9 +17,12 @@ extern "C" {
 
 // Optional model-owned finite computation with independent preparation and
 // parameter residency. The enclosing deployment supplies the source package,
-// provider catalog, local path base and device. An empty prepare path means
-// absent; a present declaration owns all four strings.
+// provider catalog, local path base, and device. Presence is established by a
+// selected card contract or an authored prepare path. Options are owned; direct
+// declarations also own their program and asset locators.
 typedef struct loom_serve_finite_component_configuration_t {
+  // Borrowed role contract owned by sources.card; NULL for direct programs.
+  const loom_model_component_t* contract;
   // Owned cold VM program declaring component stages and parameter domains.
   iree_string_view_t prepare;
   // Owned warm VM program implementing the finite invocation contract.

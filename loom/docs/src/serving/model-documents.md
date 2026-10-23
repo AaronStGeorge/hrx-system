@@ -118,6 +118,37 @@ development contracts. Each uses its own `<kind>_<role>_v1` exports for both
 preparation and control. Selecting a different service does not rename exports
 or substitute another service's ABI.
 
+Text services can declare an independently versioned image projector:
+
+```json
+{
+  "services": {
+    "chat": {
+      "kind": "text",
+      "version": 1,
+      "components": {"image": {"version": 1}}
+    }
+  }
+}
+```
+
+The component uses `text_image_prepare_v1`, `text_image_prepare_request_v1`,
+`text_image_prepare_batch_v1`, and `text_image_run_v1`. These exports may share
+one bytecode bundle with the primary text exports. Both use the card's selected
+providers and named parameter scopes. The server supports image component ABI 1
+and the unversioned `text_image_<role>` development contract. Other selected
+component roles or revisions fail before program loading.
+
+Presets can supply `components.image.options` for option names declared by the
+component, and `components.image.execution.specialization_cache` for its idle
+request-code cache. A serving deployment's `definition.image` can override
+`options` and `specialization_cache`; program and parameter paths remain card
+facts. Referenced cards resolve on a worker even for drained registrations,
+making component metadata available without preparing programs or loading
+weights. Component management becomes available when that resolution completes.
+Image preparation and parameter activation remain lazy and independent of the
+text model. Evicting image parameters preserves text sessions and checkpoints.
+
 Program set names are opaque: `mixed` could be renamed `source` without changing
 its contents. Each input and library contributes to the link index with its
 declared role. A provider object can specify `path`, `format`, importer

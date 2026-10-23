@@ -21,6 +21,9 @@ struct loom_serve_program_t {
   iree_vm_module_t* module;
   // Optional retained service contract; generic programs use exact symbols.
   loom_model_card_t* card;
+  // Borrowed component contract owned by card; NULL selects its primary
+  // service.
+  const loom_model_component_t* component;
   // Owned process borrowing no session state.
   iree_vm_process_t* process;
   // Fixed invocation backing, independent of request and token counts.
@@ -69,20 +72,24 @@ iree_status_t loom_serve_program_compile(
 }
 
 static iree_status_t loom_serve_program_service_names(
-    const loom_model_selection_t* model, iree_host_size_t count,
+    const loom_model_selection_t* model,
+    const loom_model_component_t* component, iree_host_size_t count,
     const iree_string_view_t* roles, iree_allocator_t host_allocator,
     iree_string_view_t** out_names) {
   *out_names = NULL;
+  const iree_string_view_t prefix =
+      component ? component->export_prefix : model->kind;
+  const uint32_t version = component ? component->version : model->version;
   char suffix[16] = {0};
   const iree_host_size_t suffix_length =
-      model->version ? (iree_host_size_t)snprintf(suffix, sizeof(suffix),
-                                                  "_v%u", model->version)
-                     : 0;
+      version
+          ? (iree_host_size_t)snprintf(suffix, sizeof(suffix), "_v%u", version)
+          : 0;
   iree_host_size_t size = 0;
   bool representable =
       iree_host_size_checked_mul(count, sizeof(**out_names), &size);
   for (iree_host_size_t i = 0; i < count && representable; ++i) {
-    representable = iree_host_size_checked_add(size, model->kind.size, &size) &&
+    representable = iree_host_size_checked_add(size, prefix.size, &size) &&
                     iree_host_size_checked_add(size, roles[i].size, &size) &&
                     iree_host_size_checked_add(size, 1 + suffix_length, &size);
   }
@@ -96,8 +103,8 @@ static iree_status_t loom_serve_program_service_names(
   char* cursor = (char*)(names + count);
   for (iree_host_size_t i = 0; i < count; ++i) {
     char* begin = cursor;
-    memcpy(cursor, model->kind.data, model->kind.size);
-    cursor += model->kind.size;
+    memcpy(cursor, prefix.data, prefix.size);
+    cursor += prefix.size;
     *cursor++ = '_';
     memcpy(cursor, roles[i].data, roles[i].size);
     cursor += roles[i].size;
@@ -119,8 +126,8 @@ iree_status_t loom_serve_program_compile_service(
   iree_string_view_t* names = NULL;
   if (sources->card) {
     IREE_RETURN_IF_ERROR(loom_serve_program_service_names(
-        loom_model_card_selection(sources->card), root_count, roles,
-        host_allocator, &names));
+        loom_model_card_selection(sources->card), sources->component,
+        root_count, roles, host_allocator, &names));
   }
   iree_status_t status = loom_serve_program_compile(
       target_environment, environment, sources, source_path, root_count,
@@ -131,11 +138,12 @@ iree_status_t loom_serve_program_compile_service(
 
 iree_status_t loom_serve_program_link_service(
     iree_vm_module_t* module, loom_model_card_t* card,
-    iree_vm_module_span_t libraries, iree_allocator_t host_allocator,
-    loom_serve_program_t** out_program) {
+    const loom_model_component_t* component, iree_vm_module_span_t libraries,
+    iree_allocator_t host_allocator, loom_serve_program_t** out_program) {
   IREE_RETURN_IF_ERROR(
       loom_serve_program_link(module, libraries, host_allocator, out_program));
   (*out_program)->card = card;
+  (*out_program)->component = component;
   loom_model_card_retain(card);
   return iree_ok_status();
 }
@@ -153,7 +161,8 @@ iree_status_t loom_serve_program_allocate_service(
       target_environment, environment, sources, source_path, root_count, roles,
       report, host_allocator, &module);
   if (iree_status_is_ok(status)) {
-    status = loom_serve_program_link_service(module, sources->card, libraries,
+    status = loom_serve_program_link_service(module, sources->card,
+                                             sources->component, libraries,
                                              host_allocator, out_program);
   }
   iree_vm_module_release(module);
@@ -166,7 +175,7 @@ iree_status_t loom_serve_program_lookup(loom_serve_program_t* program,
   iree_string_view_t* names = NULL;
   if (program->card) {
     IREE_RETURN_IF_ERROR(loom_serve_program_service_names(
-        loom_model_card_selection(program->card), 1, &name,
+        loom_model_card_selection(program->card), program->component, 1, &name,
         program->host_allocator, &names));
   }
   iree_status_t status =
@@ -342,8 +351,8 @@ iree_status_t loom_serve_program_bind(
   }
   iree_string_view_t* names = NULL;
   iree_status_t status = loom_serve_program_service_names(
-      loom_model_card_selection(program->card), binding_count, roles,
-      program->host_allocator, &names);
+      loom_model_card_selection(program->card), program->component,
+      binding_count, roles, program->host_allocator, &names);
   if (iree_status_is_ok(status)) {
     status =
         loom_serve_program_bind_names(program, binding_count, bindings, names);

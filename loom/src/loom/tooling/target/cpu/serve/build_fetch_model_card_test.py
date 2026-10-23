@@ -18,7 +18,7 @@ from pathlib import Path
 
 from loom.model import ModelCard
 from loom.model.lock import FileIdentity, ModelLock, file_digest
-from model_card_test import check_model
+from model_card_test import check_model, complete
 
 
 def main():
@@ -87,7 +87,13 @@ def main():
             installations[1].parent / "bias.data"
         )
         for deployment in installations:
-            check_model(server_tool, deployment, "abab")
+            selected = ModelCard.parse(deployment.read_text()).select()
+            check_model(
+                server_tool,
+                deployment,
+                complete([0], bias=2 + selected.config["fixture.bias_delta"]),
+                image="image" in selected.service.get("components", {}),
+            )
 
 
 if __name__ == "__main__":

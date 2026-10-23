@@ -82,6 +82,7 @@ iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
   copy->package = sources->package;
   loom_serve_package_retain(copy->package);
   copy->card = sources->card;
+  copy->component = sources->component;
   loom_model_card_retain(copy->card);
   *out_sources = copy;
   return iree_ok_status();

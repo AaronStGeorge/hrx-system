@@ -79,7 +79,8 @@ iree_status_t loom_serve_program_allocate(
     loom_serve_program_t** out_program);
 
 // Service-role counterparts of compile/link/allocate. Card-backed programs
-// resolve roles as kind_role_vN (or kind_role for development); direct program
+// resolve roles as kind_role_vN, or kind_component_role_vN for components
+// (without the version suffix for development); direct program
 // namespaces retain their exact authored names. The linked program retains
 // the selected contract, so ordinary bind and lookup use the same names.
 // Parameter policies and other non-service programs use the exact-name APIs.
@@ -91,8 +92,8 @@ iree_status_t loom_serve_program_compile_service(
     iree_allocator_t host_allocator, iree_vm_module_t** out_module);
 iree_status_t loom_serve_program_link_service(
     iree_vm_module_t* module, loom_model_card_t* card,
-    iree_vm_module_span_t libraries, iree_allocator_t host_allocator,
-    loom_serve_program_t** out_program);
+    const loom_model_component_t* component, iree_vm_module_span_t libraries,
+    iree_allocator_t host_allocator, loom_serve_program_t** out_program);
 iree_status_t loom_serve_program_allocate_service(
     loomc_target_environment_t* target_environment,
     iree_vm_environment_t* environment, const loom_serve_sources_t* sources,

@@ -140,8 +140,9 @@ TEST_F(ProgramTest, CardRolesNeverFallBackToBareExports) {
   std::unique_ptr<iree_vm_module_t, decltype(&iree_vm_module_release)>
       module_owner(module, iree_vm_module_release);
   loom_serve_program_t* program = nullptr;
-  IREE_ASSERT_OK(loom_serve_program_link_service(
-      module, card, iree_vm_module_span_empty(), host_allocator_, &program));
+  IREE_ASSERT_OK(loom_serve_program_link_service(module, card, nullptr,
+                                                 iree_vm_module_span_empty(),
+                                                 host_allocator_, &program));
   iree_vm_function_t function = {};
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
                         loom_serve_program_lookup(program, role, &function));
@@ -154,6 +155,67 @@ TEST_F(ProgramTest, CardRolesNeverFallBackToBareExports) {
   EXPECT_FALSE(status.ok());
   EXPECT_EQ(module, nullptr);
   iree_vm_module_release(module);
+}
+
+TEST_F(ProgramTest, ComponentAbiSurvivesCompileLinkLookupAndBinding) {
+  for (int version : {0, 1, 7}) {
+    const std::string component =
+        version ? "\"version\":" + std::to_string(version) : "";
+    const std::string card_json =
+        R"({"schema_version":1,
+      "model":{"id":"fixture/text","name":"Fixture"},
+      "programs":{"all":{"inputs":["bundle.loom"],"libraries":[]}},
+      "services":{"chat":{"kind":"text","version":2,"components":{"image":{)" +
+        component +
+        R"(}}}},"variants":{"only":{"services":{"chat":{"programs":["all"]}}}}})";
+    const std::string name =
+        "text_image_prepare" + (version ? "_v" + std::to_string(version) : "");
+    const std::string source =
+        "func.def public @text_prepare_v2() { func.return }\n"
+        "func.def public @" +
+        name +
+        "() -> (i32) { %value = scalar.constant 7 : i32 func.return %value : "
+        "i32 }";
+    const loom_serve_package_file_t file = {
+        IREE_SV("bundle.loom"),
+        iree_make_const_byte_span(source.data(), source.size())};
+    loom_serve_package_t* package = nullptr;
+    IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model.json"), 1, &file,
+                                             host_allocator_, &package));
+    std::unique_ptr<loom_serve_package_t, decltype(&loom_serve_package_release)>
+        package_owner(package, loom_serve_package_release);
+    loom_model_card_t* card = nullptr;
+    IREE_ASSERT_OK(
+        loom_model_card_parse(iree_make_cstring_view(card_json.c_str()),
+                              nullptr, host_allocator_, &card));
+    std::unique_ptr<loom_model_card_t, decltype(&loom_model_card_release)>
+        card_owner(card, loom_model_card_release);
+    const loom_serve_sources_t sources = {
+        .package = package,
+        .card = card,
+        .component = loom_model_selection_component(
+            loom_model_card_selection(card), IREE_SV("image")),
+    };
+    const iree_string_view_t role = IREE_SV("prepare");
+    loom_serve_program_free(program_);
+    program_ = nullptr;
+    IREE_ASSERT_OK(loom_serve_program_allocate_service(
+        target_environment_, environment_, &sources, {}, 1, &role,
+        iree_vm_module_span_empty(), &compilation_, host_allocator_,
+        &program_));
+    card_owner.reset();
+    package_owner.reset();
+    IREE_ASSERT_OK(loom_serve_program_lookup(program_, role, &function_));
+    const auto result_type = Scalar(IREE_VM_SCALAR_TYPE_I32);
+    IREE_ASSERT_OK(Bind(role, {}, {&result_type, 1}));
+    iree_vm_variant_t result = {};
+    IREE_ASSERT_OK(iree_vm_invoke(loom_serve_program_invocation(program_),
+                                  function_, iree_vm_variant_span_empty(),
+                                  {&result, 1}));
+    int32_t value = 0;
+    IREE_ASSERT_OK(iree_vm_i32_from_variant(result, &value));
+    EXPECT_EQ(value, 7);
+  }
 }
 
 TEST_F(ProgramTest, ExactScalarFamiliesMatchOnBothSides) {

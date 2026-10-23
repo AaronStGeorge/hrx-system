@@ -396,7 +396,8 @@ static iree_status_t loom_serve_finite_create_control(
   if (iree_status_is_ok(status)) {
     status = loom_serve_preparation_module_create(
         model->control.environment,
-        loom_serve_preparation_card(model->preparation), host_allocator,
+        loom_serve_preparation_card(model->preparation),
+        loom_serve_preparation_component(model->preparation), host_allocator,
         &native_modules[3]);
     model->control.preparation = native_modules[3];
     iree_vm_module_retain(model->control.preparation);
@@ -404,6 +405,7 @@ static iree_status_t loom_serve_finite_create_control(
   if (iree_status_is_ok(status)) {
     status = loom_serve_program_link_service(
         module, loom_serve_preparation_card(model->preparation),
+        loom_serve_preparation_component(model->preparation),
         (iree_vm_module_span_t){native_modules, 4}, host_allocator,
         &model->control.program);
   }

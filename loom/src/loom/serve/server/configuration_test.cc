@@ -139,6 +139,36 @@ TEST_F(ConfigurationTest, DeploymentOwnsItsPresetSelection) {
   EXPECT_EQ(model_.name.data, nullptr);
 }
 
+TEST_F(ConfigurationTest, DirectCardRetainsLazyImageContractAndDefaults) {
+  auto json = Card("text");
+  json.insert(json.find("\"version\":1"),
+              R"("components":{"image":{"version":1,"options":["patches"]}},)");
+  json.insert(
+      json.find("\"execution\""),
+      R"("components":{"image":{"options":{"patches":4},"execution":{"specialization_cache":{"capacity":3}}}},)");
+  IREE_ASSERT_OK(Load(json));
+  ASSERT_NE(model_.text.image.contract, nullptr);
+  EXPECT_EQ(String(model_.text.image.contract->export_prefix), "text_image");
+  EXPECT_EQ(String(model_.text.image.options), R"({"patches":4})");
+  EXPECT_EQ(model_.text.image.specialization_cache.capacity, 3u);
+  EXPECT_EQ(model_.text.image.prepare.size, 0u);
+  EXPECT_EQ(model_.text.image.assets.size, 0u);
+}
+
+TEST_F(ConfigurationTest, UnsupportedComponentsFailBeforeProgramIo) {
+  for (const char* declaration :
+       {R"({"audio":{"version":1}})", R"({"image":{"version":2}})"}) {
+    auto json = Card("text");
+    json.insert(json.find("\"version\":1"),
+                std::string("\"components\":") + declaration + ",");
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, Load(json));
+    EXPECT_EQ(model_.sources.card, nullptr);
+  }
+  auto json = Card("speech");
+  json.insert(json.find("\"version\":1"), R"("components":{"image":{}},)");
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, Load(json));
+}
+
 TEST_F(ConfigurationTest, OwnsAuthoredPathsAndBaseSeparately) {
   auto json =
       Document("embedding", R"(,"assets":".","options":{"batch_units":64})");

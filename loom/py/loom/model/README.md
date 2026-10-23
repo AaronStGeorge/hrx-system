@@ -101,6 +101,40 @@ set. Schema, service, and bytecode revisions have independent compatibility
 checks. Native support is documented in the
 [serving model contract](../../../docs/src/serving/model-documents.md).
 
+A service may declare components whose roles and lifecycle it owns. Text's
+`image` component projects images for text requests:
+
+```json
+{
+  "services": {
+    "chat": {
+      "kind": "text",
+      "version": 1,
+      "components": {"image": {"version": 1}}
+    }
+  }
+}
+```
+
+The projector exports `text_image_prepare_v1`,
+`text_image_prepare_request_v1`, `text_image_prepare_batch_v1`, and
+`text_image_run_v1`. Its revision is independent of the parent text revision;
+omitting it selects `text_image_<role>` development names. Components share
+the selected providers, JIT `config`, parameter scopes, and tokenizers. They
+introduce no separate program or variant choice. A single bytecode library can
+provide both contracts; source and mixed-provider selections work the same way.
+Declaring a parameter scope makes it available to preparation, without loading
+it until that preparation asks for it.
+
+Component `options` lists accepted model option names. Presets may provide their
+values and host execution defaults under `components.image.options` and
+`components.image.execution`. The native text host prepares its image component
+on demand and manages its parameter residency independently. A text-only
+selection uses a service without the image component and a file closure without
+its additional assets. The
+[weighted multimodal fixture](../../../src/loom/serve/fixture/text/image.card.json)
+shows a complete card, including shared parameter files and a shared bundle.
+
 ## Bazel integration
 
 `loom_model`, exported by `//loom/build_tools/bazel:defs.bzl`, takes a card,
@@ -129,8 +163,8 @@ assets, and a separate `serve.json` referencing that card. The default output is
 `serve.json`; the `model_card` and `model_files` output groups expose the card
 and built files for publication. A package with external runtime assets is
 completed by `loom-fetch` before serving. For local development, acquire from
-the built card with `--update-lock`, then use a deployment referencing the
-installed `model.json`. Public releases supply the corresponding lock. The
+the built card with `--update-lock`, then serve the installed `model.json`
+directly. Public releases supply the corresponding lock. The
 input card and staged source files are action inputs, not runtime dependencies
 of the resulting package.
 

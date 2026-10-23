@@ -300,6 +300,49 @@ loom_py_test(
     ],
 )
 
+loom_py_test(
+    name = "build_fetch_text_image_card_test",
+    size = "small",
+    srcs = [
+        "build_fetch_model_card_test.py",
+        "model_card_test.py",
+    ],
+    args = [
+        "$(rootpath //loom/py/loom/model:loom-fetch)",
+        "$(rootpath :loom-serve-test-tool)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:image.card.json)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:image_fetch_source)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:image_fetch_archive)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:image_fetch_mixed)",
+    ],
+    data = [
+        ":loom-serve-test-tool",
+        "//loom/py/loom/model:loom-fetch",
+        "//loom/src/loom/serve/fixture/text:image.card.json",
+        "//loom/src/loom/serve/fixture/text:image_fetch_archive",
+        "//loom/src/loom/serve/fixture/text:image_fetch_mixed",
+        "//loom/src/loom/serve/fixture/text:image_fetch_source",
+        "//loom/src/loom/serve/fixture/text:native_source_files",
+    ],
+    imports = ["."],
+    main = "build_fetch_model_card_test.py",
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//loom/config/serve:image_input_enabled",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//loom/py/loom/model:lock",
+        "//loom/py/loom/model:manifest",
+        "//loom/src/loom/serve/testing:http",
+    ],
+)
+
 # Optional HF SDK acquisition shares its cache through the native runtime boundary.
 loom_py_test(
     name = "hf_model_card_test",
@@ -1137,12 +1180,39 @@ loom_cc_test(
 
 loom_cc_test(
     name = "source_text_media_test",
+    args = ["--gtest_filter=-Declarations/ManagedMediaServiceTest.*/1"],
     data = EMBEDDING_SOURCES + PROJECTOR_SOURCES + TEXT_SOURCES,
     env = {
         "LOOM_SERVE_TEST_MEDIA_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:model.json)",
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
         "LOOM_SERVE_TEST_PROJECTOR_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/projector:model.json)",
     },
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//loom/config/execute:task_hal",
+    ]) + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":test_compiler",
+        ":test_device",
+        "//loom/src/loom/serve/service/text:source_media_tests",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "card_text_media_test",
+    args = ["--gtest_filter=Declarations/ManagedMediaServiceTest.*/1"],
+    data = EMBEDDING_SOURCES + PROJECTOR_SOURCES + TEXT_SOURCES + ["//loom/src/loom/serve/fixture/text:image_model"],
+    env = {
+        "LOOM_SERVE_TEST_MEDIA_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:model.json)",
+        "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
+        "LOOM_SERVE_TEST_PROJECTOR_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/projector:model.json)",
+        "LOOM_SERVE_TEST_TEXT_IMAGE_CARD": "$(rootpath //loom/src/loom/serve/fixture/text:image_model)",
+    },
+    tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/target/arch:x86",
         "//loom/config/execute:task_hal",

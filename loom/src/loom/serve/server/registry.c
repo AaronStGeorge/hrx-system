@@ -406,12 +406,18 @@ bool loom_serve_registry_has_component(
     loom_serve_model_component_t component) {
   return component == LOOM_SERVE_MODEL_COMPONENT_PRIMARY ||
          (model->configuration.kind == LOOM_SERVE_MODEL_KIND_TEXT &&
-          model->configuration.text.image.prepare.size != 0);
+          (model->configuration.text.image.contract ||
+           model->configuration.text.image.prepare.size != 0));
 }
 
 static iree_status_t loom_serve_registry_require_component(
     const loom_serve_registered_model_t* model,
     loom_serve_model_component_t component) {
+  if (component != LOOM_SERVE_MODEL_COMPONENT_PRIMARY &&
+      model->configuration.sources.reference.path.size) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "model card is still resolving component metadata");
+  }
   if (!loom_serve_registry_has_component(model, component)) {
     return iree_make_status(IREE_STATUS_NOT_FOUND, "model has no %s component",
                             loom_serve_model_component_name(component));
@@ -564,7 +570,7 @@ iree_status_t loom_serve_registry_advance(loom_serve_registry_t* registry,
   bool progress = false;
   const loom_serve_registration_phase_t previous_phase = model->phase;
   if (model->phase == LOOM_SERVE_REGISTRATION_DECLARED && !model->removal &&
-      (!model->closed ||
+      (model->configuration.sources.reference.path.size || !model->closed ||
        model->parameter_operation == LOOM_SERVE_PARAMETER_OPERATION_WAITING)) {
     if (model->configuration.sources.reference.path.size) {
       model->status = loom_serve_model_resolution_start(
@@ -594,9 +600,17 @@ iree_status_t loom_serve_registry_advance(loom_serve_registry_t* registry,
         model->configuration = resolved;
         resolved = (loom_serve_model_configuration_t){0};
         model->service.name = model->configuration.name;
-        model->status = registry->factory.create(
-            registry->factory.self, &model->configuration, observer,
-            model->stream, registry->host_allocator, &model->registration);
+        if (!model->closed || model->parameter_operation ==
+                                  LOOM_SERVE_PARAMETER_OPERATION_WAITING) {
+          model->status = registry->factory.create(
+              registry->factory.self, &model->configuration, observer,
+              model->stream, registry->host_allocator, &model->registration);
+        } else {
+          // Resolve model facts while drained without preparing programs or
+          // parameters. Component management can then use the declared roles.
+          loom_serve_registry_set_phase(model,
+                                        LOOM_SERVE_REGISTRATION_DECLARED);
+        }
       }
       loom_serve_model_configuration_deinitialize(&resolved);
       if (model->removal || !iree_status_is_ok(model->status)) {

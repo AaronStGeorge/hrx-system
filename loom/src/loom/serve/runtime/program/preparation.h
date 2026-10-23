@@ -72,14 +72,20 @@ typedef struct loom_serve_preparation_t loom_serve_preparation_t;
 loom_model_card_t* loom_serve_preparation_card(
     const loom_serve_preparation_t* preparation);
 
+// Borrowed component role retained through the card, or NULL for the primary.
+const loom_model_component_t* loom_serve_preparation_component(
+    const loom_serve_preparation_t* preparation);
+
 // Creates the source-facing "prepare" declaration capability. The caller
 // serializes begin/take with VM invocation and retains the module while linked.
 // No declaration storage is allocated until source code declares a stage.
 // An optional retained card supplies named parameter scopes and fixed JIT
-// configuration; captured declarations retain it independently of the module.
+// configuration; captured declarations retain it and the selected component
+// independently of the module.
 iree_status_t loom_serve_preparation_module_create(
     iree_vm_environment_t* environment, loom_model_card_t* card,
-    iree_allocator_t host_allocator, iree_vm_module_t** out_module);
+    const loom_model_component_t* component, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module);
 
 enum loom_serve_preparation_flag_bits_e {
   // Allows checkpoint declarations when the caller owns parameter resolution.

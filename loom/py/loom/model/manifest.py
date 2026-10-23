@@ -292,6 +292,15 @@ def _config(value: Any, path: str) -> None:
             _fail(path + "." + name, "expected a scalar compiler value")
 
 
+def _service_contract(service: dict, path: str) -> None:
+    version = service.get("version", 1)
+    if type(version) is not int or not 1 <= version <= 0xFFFFFFFF:
+        _fail(path + ".version", "expected a service ABI version in [1, 2^32-1]")
+    _strings(service.get("options", []), path + ".options")
+    for key in ("interface", "constraints"):
+        _mapping(service.get(key, {}), path + "." + key, empty=True)
+
+
 def _memory(value: Any, path: str) -> None:
     _object(value, path, ("workload",), ("weights_bytes", "transient_bytes"))
     _string(value["workload"], path + ".workload")
@@ -442,19 +451,25 @@ class ModelCard:
                 service,
                 path,
                 ("kind",),
-                ("version", "options", "interface", "constraints"),
+                ("version", "options", "interface", "constraints", "components"),
             )
             kind = _string(service["kind"], path + ".kind")
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", kind):
                 _fail(path + ".kind", "expected a service symbol identifier")
-            version = service.get("version", 1)
-            if type(version) is not int or not 1 <= version <= 0xFFFFFFFF:
-                _fail(
-                    path + ".version", "expected a service ABI version in [1, 2^32-1]"
+            _service_contract(service, path)
+            for role, component in _mapping(
+                service.get("components", {}), path + ".components", empty=True
+            ).items():
+                component_path = path + ".components." + role
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", role):
+                    _fail(component_path, "expected a component symbol identifier")
+                _object(
+                    component,
+                    component_path,
+                    (),
+                    ("version", "options", "interface", "constraints"),
                 )
-            _strings(service.get("options", []), path + ".options")
-            for key in ("interface", "constraints"):
-                _mapping(service.get(key, {}), path + "." + key, empty=True)
+                _service_contract(component, component_path)
         self._validate_variants(origins, services, programs)
         for name, preset in _mapping(
             doc.get("presets", {}), "$.presets", empty=True
@@ -464,10 +479,27 @@ class ModelCard:
                 preset,
                 path,
                 ("service", "variant", "programs"),
-                ("options", "execution", "request", "workload", "partition", "memory"),
+                (
+                    "options",
+                    "execution",
+                    "request",
+                    "workload",
+                    "partition",
+                    "memory",
+                    "components",
+                ),
             )
             for key in ("options", "execution", "request", "workload"):
                 _mapping(preset.get(key, {}), path + "." + key, empty=True)
+            for role, component in _mapping(
+                preset.get("components", {}), path + ".components", empty=True
+            ).items():
+                component_path = path + ".components." + role
+                _object(component, component_path, (), ("options", "execution"))
+                for key in ("options", "execution"):
+                    _mapping(
+                        component.get(key, {}), component_path + "." + key, empty=True
+                    )
             if "partition" in preset:
                 _string(preset["partition"], path + ".partition")
             if "memory" in preset:
@@ -637,6 +669,18 @@ class ModelCard:
                 "options",
                 "undeclared model options: " + ", ".join(sorted(unknown_options)),
             )
+        for role, component in settings.get("components", {}).items():
+            definition = service_definition.get("components", {}).get(role)
+            if definition is None:
+                _fail("components." + role, "preset names an undeclared component")
+            unknown = component.get("options", {}).keys() - set(
+                definition.get("options", [])
+            )
+            if unknown:
+                _fail(
+                    "components." + role + ".options",
+                    "undeclared model options: " + ", ".join(sorted(unknown)),
+                )
         program = doc["programs"][programs]
         files = {}
 

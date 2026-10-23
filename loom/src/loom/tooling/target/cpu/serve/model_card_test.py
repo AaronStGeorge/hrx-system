@@ -7,6 +7,7 @@
 """Checks a built model card through the native server and weighted execution."""
 
 import json
+import struct
 import sys
 import tempfile
 from pathlib import Path
@@ -15,7 +16,80 @@ from urllib.parse import urlsplit
 from loom_serve_testing.http_harness import control, running_server
 
 
-def check_model(server, model, expected, *provider_encodings, environment=None):
+def complete(tokens, limit=4, bias=2):
+    """Dense arithmetic oracle, independent of serving packets and pooled state."""
+    hidden = history = total = position = 0
+
+    def consume(token):
+        nonlocal hidden, history, total, position
+        hidden = (5 * hidden + token + bias) % 97
+        history = (7 * history + hidden + position) % 101
+        total += history
+        position += 1
+
+    for token in tokens:
+        consume(token)
+    result = ""
+    for _ in range(limit):
+        if position % 11 == 0:
+            break
+        token = (hidden + total) % 3
+        result += "abx"[token]
+        consume(token)
+    return result
+
+
+def check_image(address, model):
+    status = control(address, "GET", "/v1/status", 200)
+    state = next(item["loom"] for item in status["data"] if item["id"] == model)
+    assert state["parameters"]["image"]["phase"] == "declared", state
+    image = (
+        "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
+        "UkdCCkVOREhEUgr/AAAA/wAAAP////8="
+    )
+    response = control(
+        address,
+        "POST",
+        "/v1/chat/completions",
+        200,
+        headers={"Content-Type": "application/json"},
+        body=json.dumps(
+            {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "a"},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "data:image/x-portable-arbitrarymap;base64,"
+                                    + image,
+                                    "detail": "low",
+                                },
+                            },
+                            {"type": "text", "text": "b"},
+                        ],
+                    }
+                ],
+                "max_tokens": 4,
+            }
+        ),
+    )
+    # Red 255 + opaque alpha 255 + cohort width 1 + checkpoint bias 2.
+    feature = struct.unpack("<i", struct.pack("<f", 513.0))[0]
+    assert response["choices"][0]["message"]["content"] == complete([0, feature, 1]), (
+        response
+    )
+    status = control(address, "GET", "/v1/status", 200)
+    state = next(item["loom"] for item in status["data"] if item["id"] == model)
+    assert state["parameters"]["image"]["active"], state
+
+
+def check_model(
+    server, model, expected, *provider_encodings, environment=None, image=False
+):
     server = str(Path(server).absolute())
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
@@ -71,6 +145,8 @@ def check_model(server, model, expected, *provider_encodings, environment=None):
             assert response["choices"][0]["message"]["content"] == expected, response
             assert response["usage"]["prompt_tokens"] == 1, response
             assert response["usage"]["completion_tokens"] == 4, response
+            if image:
+                check_image(address, model_name)
         assert process.returncode == 0, log.read_text()
 
 
