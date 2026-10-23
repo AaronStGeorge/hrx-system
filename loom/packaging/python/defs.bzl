@@ -54,7 +54,7 @@ def loom_python_wheel(name, version, catalog = "", testonly = False):
     py_wheel(
         name = name,
         testonly = testonly,
-        description_file = Label("//loom/packaging/python:README.md"),
+        description_file = Label("//loom/packaging/python:PYPI_README.md"),
         distribution = "hrx-loom",
         data_files = {Label("//loom/packaging/python:native"): "scripts/"},
         entry_points = {"console_scripts": [

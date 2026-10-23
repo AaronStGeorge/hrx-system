@@ -6,6 +6,7 @@
 
 # bazel-to-cmake: skip
 
+load("@hrx_loom_version//:version.bzl", "MODEL_CATALOG", "PACKAGE_VERSION")
 load("@rules_python//python:packaging.bzl", "py_package")
 load(":defs.bzl", "loom_python_wheel")
 load(":native.bzl", "loom_native_files")
@@ -13,8 +14,10 @@ load(":native.bzl", "loom_native_files")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "PYPI_README.md",
     "README.md",
     "defs.bzl",
+    "version.json",
 ])
 
 [
@@ -121,5 +124,6 @@ py_package(
 
 loom_python_wheel(
     name = "wheel",
-    version = "0.0.0.dev0",
+    catalog = MODEL_CATALOG or "",
+    version = PACKAGE_VERSION,
 )

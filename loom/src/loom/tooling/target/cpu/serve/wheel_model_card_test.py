@@ -6,6 +6,7 @@
 
 """Installs the SDK and serves a fetched model with its packaged native tools."""
 
+import email.parser
 import functools
 import http.server
 import json
@@ -68,11 +69,13 @@ def pick_model(arguments, environment, output):
         os.close(slave)
 
 
-def main(wheel, associated_wheel, deployment, elf_inspector):
+def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readme):
     wheel = Path(wheel).absolute()
     associated_wheel = Path(associated_wheel).absolute()
     deployment = Path(deployment).absolute()
     elf_inspector = Path(elf_inspector).absolute()
+    identity = json.loads(Path(version_file).read_text())
+    assert wheel.name.split("-")[1].partition("+")[0] == identity["package-version"]
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -121,6 +124,16 @@ def main(wheel, associated_wheel, deployment, elf_inspector):
         assert shutil.which("bazel", path=environment["PATH"]) is None
         assert shutil.which("bazelisk", path=environment["PATH"]) is None
         with ZipFile(wheel) as archive:
+            metadata_path = next(
+                name
+                for name in archive.namelist()
+                if name.endswith(".dist-info/METADATA")
+            )
+            metadata = email.parser.BytesParser().parsebytes(
+                archive.read(metadata_path)
+            )
+            # rules_python appends one newline after the description payload.
+            assert metadata.get_payload() == Path(readme).read_text() + "\n"
             native_names = {
                 Path(name).name
                 for name in archive.namelist()
@@ -177,10 +190,14 @@ from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import write_module
 from loom.format.text.parser import Parser
 from loom.model import ModelCard
+from loom.model.fetch_catalog import installed_catalog
 
 assert importlib.util.find_spec('huggingface_hub') is None
 distribution = importlib.metadata.distribution('hrx-loom')
 assert distribution.version == sys.argv[1], (distribution.version, sys.argv[1])
+catalog = json.loads(sys.argv[2])
+if catalog is not None:
+    assert installed_catalog() == catalog
 assert distribution.metadata.get_all('Provides-Extra') == ['hf']
 assert distribution.requires == ["huggingface_hub<3,>=2.2; extra == 'hf'"], distribution.requires
 default_ops()
@@ -193,10 +210,12 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
     assert schema['$schema'] == 'https://json-schema.org/draft/2020-12/schema'
 """,
             wheel.name.split("-")[1],
+            json.dumps(identity["model-catalog"]),
         )
         assert "--offline" in run(fetch, "--help")
-        failure = json.loads(run(fetch, "--list", "--json", expected=1))
-        assert "no associated model catalog" in failure["message"]
+        if identity["model-catalog"] is None:
+            failure = json.loads(run(fetch, "--list", "--json", expected=1))
+            assert "no associated model catalog" in failure["message"]
         run(
             python,
             "-I",

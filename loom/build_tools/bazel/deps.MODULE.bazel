@@ -8,6 +8,16 @@
 
 bazel_dep(name = "patchelf", version = "0.18.0.bcr.1")
 
+sdk_version = use_repo_rule(
+    "//loom/packaging/python:version.bzl",
+    "sdk_version",
+)
+
+sdk_version(
+    name = "hrx_loom_version",
+    version_file = "//loom/packaging/python:version.json",
+)
+
 hygiene_sources = use_repo_rule(
     "//loom/build_tools/hygiene:sources.bzl",
     "hygiene_sources",

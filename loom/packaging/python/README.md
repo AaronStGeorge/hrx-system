@@ -22,7 +22,7 @@ Build the development wheel through Bazel and install it with Python 3.12 or
 newer. For Linux x86-64:
 
 ```sh
-iree-bazel-build --config=opt //loom/packaging/python:wheel
+iree-bazel-build --config=loom-sdk --config=opt //loom/packaging/python:wheel
 python -m pip install bazel-bin/loom/packaging/python/hrx_loom-0.0.0.dev0-py3-none-linux_x86_64.whl
 loom-serve --help
 loom-benchmark --help
@@ -44,7 +44,15 @@ The wheel filename describes the selected target platform: `linux_x86_64`,
 use the build toolchain's libc baseline; these tags make no manylinux portability
 claim.
 
-Installed users need Python and the wheel; Bazel is a package-author build tool.
+`--config=loom-sdk` selects the SDK's CPU and libamdf runtime drivers, compiler
+targets, and media codecs independently of the worktree configuration. Native
+AMD execution uses the operating-system device driver; it requires no ROCm SDK.
+The `amdgpu2`, `rdna`, `cdna`, and `xdna` drivers use libamdf. The legacy `amdgpu`
+driver is excluded from this configuration. Instrumentation and optimization
+are selected separately, as shown below.
+
+Installed users need Python, the wheel, and the platform prerequisites in the
+[package description](PYPI_README.md); Bazel is a package-author build tool.
 `loom-serve --device=task --model=./model/model.json` loads the fetched card's
 selected preset directly; choose a device supported by that model. A separate
 serving deployment can supply routing aliases, placement, and execution
@@ -59,9 +67,11 @@ from importlib.resources import files
 schema = files("loom.model").joinpath("model-card.v1.schema.json").read_text()
 ```
 
-The development version is `0.0.0.dev0`. This target builds a local artifact and
-has no publishing command. Release publishers supply a version and compatible
-model catalog association.
+The checked-in [version.json](version.json) owns the SDK's base package version
+and compatible model catalog association. Bazel reads it during analysis; builds
+have no environment or timestamp version override. The current development
+identity is `0.0.0.dev0` with no associated catalog. This target builds a local
+artifact and has no publishing command.
 
 The native build configuration determines the installed version. Publishers
 supply a base version without a `+` suffix; the wheel rule adds the matching
@@ -88,7 +98,7 @@ For example, the Tracy development wheel on Linux x86-64 is built and installed
 with:
 
 ```sh
-iree-bazel-build --config=opt \
+iree-bazel-build --config=loom-sdk --config=opt \
   --//runtime/config/base/tracing:provider=tracy //loom/packaging/python:wheel
 python -m pip install bazel-bin/loom/packaging/python/hrx_loom-0.0.0.dev0+tracy-py3-none-linux_x86_64.whl
 ```
@@ -104,9 +114,9 @@ suffixes. A requirement such as `hrx-loom==1.2.3` also accepts `1.2.3+tracy`, so
 switching back selects the normal wheel file or URL explicitly. This target
 does not publish either kind of artifact.
 
-SDK publishers use `loom_python_wheel` from
-`//loom/packaging/python:defs.bzl` to set `version` and an independent `catalog`
-association, such as `github:OWNER/REPOSITORY@COMPATIBLE_TAG`. Several SDK versions
+SDK publishers set `package-version` and the independent `model-catalog`
+association in `version.json`, such as
+`github:OWNER/REPOSITORY@COMPATIBLE_TAG`. Several SDK versions
 may share a tag when the publication is qualified for each consumer. The
 association is stored in the wheel's `loom.json` distribution metadata.
 
