@@ -87,6 +87,41 @@ have no environment or timestamp version override. The current development
 identity is `0.0.0.dev0` with no associated catalog. This target builds a local
 artifact and has no publishing command.
 
+Release preparation uses canonical PEP 440 versions such as `1.2.3`, `1.2.3a1`,
+`1.2.3b1`, or `1.2.3rc1`, with a matching `v`-prefixed Git tag. Development
+versions can append `.devN` and are buildable but cannot pass the release tag
+check. A release also names a compatible published library catalog. For example,
+to preview an identity change on a release-preparation branch:
+
+```sh
+python loom/packaging/python/release.py \
+  --identity loom/packaging/python/version.json prepare \
+  --version=1.2.3 --catalog=github:ROCm/hrx-loom-library@v1.2.3 --dry-run
+```
+
+Omitting `--dry-run` edits only the named JSON. Review and commit that change
+through the normal branch workflow. The helper creates no commit or tag and
+performs no network operation. Naming the source JSON explicitly prevents an
+invocation through Bazel from editing its runfiles.
+
+The same tool verifies the identity of built artifacts and the complete release
+set. It compares the actual filename, wheel metadata, catalog association, and
+standalone package description with the checked-in sources:
+
+```sh
+python loom/packaging/python/release.py verify /path/to/hrx_loom-1.2.3-py3-none-win_amd64.whl
+python loom/packaging/python/release.py check-tag v1.2.3
+python loom/packaging/python/release.py bundle /path/to/release-assets --tag=v1.2.3
+```
+
+The bundle contains one wheel for each combination of Linux/Windows and the four
+native profiles below. An incomplete or mismatched set fails before
+`SHA256SUMS` is created. Repeating the command accepts an identical checksum file
+and rejects conflicting bytes. These checks establish artifact identity;
+installed-wheel tests establish runtime behavior. The normal profile is the
+PyPI artifact; the instrumented profiles are explicit GitHub release assets.
+These commands prepare and check local files without publishing them.
+
 The native build configuration determines the installed version. Publishers
 supply a base version without a `+` suffix; the wheel rule adds the matching
 suffix automatically:

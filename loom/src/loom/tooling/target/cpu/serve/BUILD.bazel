@@ -459,7 +459,10 @@ loom_py_test(
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    deps = ["//loom/src/loom/serve/testing:http"],
+    deps = [
+        "//loom/packaging/python:release_lib",
+        "//loom/src/loom/serve/testing:http",
+    ],
 )
 
 loom_py_test(

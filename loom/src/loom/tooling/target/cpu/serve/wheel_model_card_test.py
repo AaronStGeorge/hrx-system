@@ -6,7 +6,6 @@
 
 """Installs the SDK and serves a fetched model with its packaged native tools."""
 
-import email.parser
 import functools
 import http.server
 import json
@@ -21,6 +20,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from model_card_test import check_model
+from release import inspect_wheel, read_identity
 
 
 def pick_model(arguments, environment, output):
@@ -74,8 +74,8 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
     associated_wheel = Path(associated_wheel).absolute()
     deployment = Path(deployment).absolute()
     elf_inspector = Path(elf_inspector).absolute()
-    identity = json.loads(Path(version_file).read_text())
-    assert wheel.name.split("-")[1].partition("+")[0] == identity["package-version"]
+    identity = read_identity(Path(version_file))
+    inspect_wheel(wheel, identity, Path(readme).read_text(encoding="utf-8"))
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -129,16 +129,6 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
         assert shutil.which("bazel", path=environment["PATH"]) is None
         assert shutil.which("bazelisk", path=environment["PATH"]) is None
         with ZipFile(wheel) as archive:
-            metadata_path = next(
-                name
-                for name in archive.namelist()
-                if name.endswith(".dist-info/METADATA")
-            )
-            metadata = email.parser.BytesParser().parsebytes(
-                archive.read(metadata_path)
-            )
-            # rules_python appends one newline after the description payload.
-            assert metadata.get_payload() == Path(readme).read_text() + "\n"
             native_names = {
                 Path(entry.filename).name
                 for entry in archive.infolist()
@@ -215,10 +205,10 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
     assert schema['$schema'] == 'https://json-schema.org/draft/2020-12/schema'
 """,
             wheel.name.split("-")[1],
-            json.dumps(identity["model-catalog"]),
+            json.dumps(identity.catalog),
         )
         assert "--offline" in run(fetch, "--help")
-        if identity["model-catalog"] is None:
+        if identity.catalog is None:
             failure = json.loads(run(fetch, "--list", "--json", expected=1))
             assert "no associated model catalog" in failure["message"]
         install(associated_wheel)

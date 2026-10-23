@@ -8,7 +8,7 @@
 
 load("@hrx_loom_version//:version.bzl", "MODEL_CATALOG", "PACKAGE_VERSION")
 load("@rules_python//python:packaging.bzl", "py_package")
-load("//build_tools/bazel:python.bzl", "iree_py_binary")
+load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_library", "iree_py_test")
 load(":defs.bzl", "loom_python_wheel")
 load(":manylinux.bzl", "manylinux_wheel")
 load(":native.bzl", "loom_native_files")
@@ -154,4 +154,26 @@ alias(
         ":linux_x86_64": ":manylinux_wheel",
         ":windows_x86_64": ":wheel",
     }),
+)
+
+iree_py_library(
+    name = "release_lib",
+    srcs = ["release.py"],
+    imports = ["."],
+)
+
+iree_py_binary(
+    name = "release",
+    srcs = ["release.py"],
+    data = [
+        "PYPI_README.md",
+        "version.json",
+    ],
+)
+
+iree_py_test(
+    name = "release_test",
+    size = "small",
+    srcs = ["release_test.py"],
+    deps = [":release_lib"],
 )
