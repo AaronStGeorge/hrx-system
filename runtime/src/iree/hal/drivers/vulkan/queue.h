@@ -479,8 +479,9 @@ iree_hal_vulkan_queue_completion_action_null(void) {
 }
 
 // Submits an existing queue dependency/publication boundary with an owned
-// continuation. A successful submission retains the action resource; a
-// rejected submission may invoke the action with the terminal failure.
+// continuation. An accepted submission retains the action resource and invokes
+// the action once on completion, including deferred failure. A rejected
+// submission returns an error without invoking or retaining the action.
 iree_status_t iree_hal_vulkan_queue_submit_barrier_with_action(
     iree_hal_vulkan_queue_t* queue,
     const iree_hal_semaphore_list_t wait_semaphore_list,

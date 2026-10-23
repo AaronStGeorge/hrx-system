@@ -5994,6 +5994,9 @@ static iree_status_t iree_hal_vulkan_queue_submit_captured_submission(
           IREE_STATUS_INTERNAL,
           "Vulkan captured submission was neither submitted nor deferred");
     }
+    // Rejection is reported by the return status. Preserve normal resource
+    // cleanup but leave completion accounting to the caller.
+    submission->completion_action.fn = NULL;
     iree_hal_vulkan_queue_fail_unsubmitted_submission(
         queue, submission, iree_status_clone(status));
   }

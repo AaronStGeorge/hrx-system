@@ -1,12 +1,11 @@
-// RUN: with-checks compile-report target=amd.xdna.aie2p:core source-to-low,low-dce
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
 
 func.def @carried_counter_store(%output: buffer) {
   %begin = index.constant 0 : index
   %step = index.constant 1 : index
   %end = index.constant 4 : index
-  %base = index.constant 0 : offset
+  %row_stride = index.constant 4 : offset
   %aligned_output = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
-  %output_view = buffer.view %aligned_output[%base] : buffer -> view<4xi32>
   cfg.br ^preheader
 ^preheader:
   cfg.br ^header(%begin: index)
@@ -14,8 +13,10 @@ func.def @carried_counter_store(%output: buffer) {
   %more = index.cmp slt, %position, %end : index
   cfg.cond_br %more, ^body, ^exit
 ^body:
+  %row_byte_offset = index.scale %position, %row_stride : index, offset -> offset
+  %row = buffer.view %aligned_output[%row_byte_offset] : buffer -> view<1xi32>
   %value = index.cast %position : index to i32
-  view.store %value, %output_view[%position] : i32, view<4xi32>
+  view.store %value, %row[0] : i32, view<1xi32>
   %next = index.add %position, %step : index
   cfg.br ^header(%next: index)
 ^exit:
@@ -23,4 +24,69 @@ func.def @carried_counter_store(%output: buffer) {
 }
 
 // ----
-CHECK: COMPILE-REPORT: source_low[*] * source_op=view.store * execution_count=4
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @carried_counter_store() asm {
+  %aligned_output = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %15 = mov.i32 0
+  %begin = mov.short 0
+  %step = mov.short 1
+  %end = mov.short 4
+  low.br ^header(%begin: reg<aie2p.er>, %15: reg<aie2p.er>)
+^header(%value: reg<aie2p.er>, %row_byte_offset: reg<aie2p.er>):
+  %more = lt %value, %end
+  low.cond_br %more, ^body, ^exit : reg<aie2p.er>
+^body:
+  %20 = mov.address-index %row_byte_offset
+  st.i32.index %value, %aligned_output, %20
+  %next = add.nc %value, %step
+  %22 = add.nc.immediate %row_byte_offset, 4
+  low.br ^header(%next: reg<aie2p.er>, %22: reg<aie2p.er>)
+^exit:
+  return
+}
+
+// ====
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
+
+func.def @shared_ranked_stride_store(%column_count: index, %output: buffer) where [range(%column_count, 1, 128)] {
+  %c0 = index.constant 0 : index
+  %c0_offset = index.constant 0 : offset
+  %step = index.constant 32 : index
+  %end = index.constant 256 : index
+  %aligned_output = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+  %view = buffer.view %aligned_output[%c0_offset] : buffer -> view<256x2x[%column_count]xi32>
+  %value = scalar.constant 11 : i32
+  scf.for %row = [%c0 to %end step %step] {
+    view.store %value, %view[%row, 0, 0] : i32, view<256x2x[%column_count]xi32>
+    view.store %value, %view[%row, 1, 0] : i32, view<256x2x[%column_count]xi32>
+  }
+  func.return
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @shared_ranked_stride_store(%column_count: reg<aie2p.er>) where [range(%column_count, 1, 128)] asm {
+  %aligned_output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %18 = mov.i32 0
+  %c0 = mov.short 0
+  %step = mov.short 32
+  %end = mov.short 256
+  %value = mov.short 11
+  low.br ^_bb1(%c0: reg<aie2p.er>, %18: reg<aie2p.er>)
+^_bb1(%row: reg<aie2p.er>, %16: reg<aie2p.er>):
+  %23 = lt %row, %end
+  low.cond_br %23, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %24 = mov.address-index %16
+  st.i32.index %value, %aligned_output, %24
+  %25 = mov.i32 2
+  %26 = lshl %column_count, %25
+  %27 = add.nc %26, %16
+  %28 = mov.address-index %27
+  st.i32.index %value, %aligned_output, %28
+  %29 = mov.i32 8
+  %30 = lshl %column_count, %29
+  %31 = add.nc %16, %30
+  %32 = add.nc %row, %step
+  low.br ^_bb1(%32: reg<aie2p.er>, %31: reg<aie2p.er>)
+^_bb3:
+  return
+}

@@ -15,6 +15,15 @@
 
 typedef struct loom_low_lower_realization_record_t
     loom_low_lower_realization_record_t;
+typedef struct loom_low_lower_realization_source_binding_t
+    loom_low_lower_realization_source_binding_t;
+
+struct loom_low_lower_realization_source_binding_t {
+  // Source SSA result aliased to the carried physical value.
+  loom_value_id_t source_value_id;
+  // Next binding in selection order.
+  loom_low_lower_realization_source_binding_t* next;
+};
 
 struct loom_low_lower_realization_t {
   // Physical carrier selected for initialization and loop state.
@@ -31,6 +40,8 @@ struct loom_low_lower_realization_t {
   const loom_op_t* source_op;
   // Next unique realization in preparation order.
   struct loom_low_lower_realization_t* next;
+  // Source results bound to this carried value.
+  loom_low_lower_realization_source_binding_t* source_bindings;
   // Construction ends when finalize freezes events and initializes values.
   union {
     // Borrowed interning and placement record, valid only during construction.
@@ -104,7 +115,7 @@ typedef struct loom_low_lower_realization_offer_record_t {
   loom_low_lower_realization_offer_t offer;
   // Exact repetition domain retained by the shared CFG owner.
   const loom_low_lower_realization_loop_t* loop;
-  // Packet location and execution block.
+  // Retained-plan location and execution block.
   const loom_op_t* source_op;
   // Next offer in source preparation order.
   struct loom_low_lower_realization_offer_record_t* next;
@@ -263,6 +274,12 @@ const loom_low_lower_realization_loop_t* loom_low_lower_realization_loop(
              : NULL;
 }
 
+static bool loom_low_lower_realization_find_anchor(
+    const loom_low_lower_context_t* context,
+    const loom_low_lower_realization_construction_t* state,
+    const loom_op_t* use, const loom_low_lower_realization_recipe_t* recipe,
+    const loom_block_t** out_block, const loom_op_t** out_anchor);
+
 iree_status_t loom_low_lower_realization_offer(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_realization_loop_t* loop,
@@ -272,6 +289,15 @@ iree_status_t loom_low_lower_realization_offer(
   }
   loom_low_lower_realization_construction_t* construction =
       context->lowering->source_plan.realizations->construction;
+  if (offer->recipe != NULL) {
+    const loom_block_t* initial_block = NULL;
+    const loom_op_t* initial_anchor = NULL;
+    if (!loom_low_lower_realization_find_anchor(
+            context, construction, loop->entry, offer->recipe, &initial_block,
+            &initial_anchor)) {
+      return iree_ok_status();
+    }
+  }
   loom_low_lower_realization_offer_record_t* record = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(construction->arena, sizeof(*record),
                                            (void**)&record));
@@ -313,6 +339,10 @@ typedef struct loom_low_lower_realization_cost_group_t {
   double direct_cost;
   // Shared loop cost plus every participating packet's setup cost.
   double replacement_cost;
+  // Number of distinct direct calculations credited to the group.
+  uint32_t removed_count;
+  // Largest minimum replacement count required by a member offer.
+  uint32_t minimum_removed_count;
 } loom_low_lower_realization_cost_group_t;
 
 typedef struct loom_low_lower_realization_cost_credit_t {
@@ -324,7 +354,10 @@ typedef struct loom_low_lower_realization_cost_credit_t {
 
 static iree_status_t loom_low_lower_realizations_select_offers(
     loom_low_lower_context_t* context,
-    loom_low_lower_realization_construction_t* state) {
+    loom_low_lower_realization_construction_t* state, bool* out_selected) {
+  if (out_selected != NULL) {
+    *out_selected = false;
+  }
   if (state->offers.count == 0) {
     return iree_ok_status();
   }
@@ -379,8 +412,12 @@ static iree_status_t loom_low_lower_realizations_select_offers(
           .first = record,
           .replacement_cost =
               offer->group_setup_cost + trips * offer->group_iteration_cost,
+          .minimum_removed_count = offer->minimum_removed_count,
       };
       group_buckets[bucket] = group;
+    } else {
+      group->minimum_removed_count =
+          iree_max(group->minimum_removed_count, offer->minimum_removed_count);
     }
     offer_groups[offer_index++] = group;
     group->replacement_cost += offer->setup_cost;
@@ -398,6 +435,7 @@ static iree_status_t loom_low_lower_realizations_select_offers(
       credits[bucket] = (loom_low_lower_realization_cost_credit_t){
           .group = group, .removed_key = offer->removed_key};
       group->direct_cost += trips * offer->removed_iteration_cost;
+      ++group->removed_count;
     }
   }
   offer_index = 0;
@@ -405,17 +443,64 @@ static iree_status_t loom_low_lower_realizations_select_offers(
        record; record = record->next) {
     const loom_low_lower_realization_cost_group_t* group =
         offer_groups[offer_index++];
-    record->selected = group->direct_cost > group->replacement_cost;
+    record->selected = group->removed_count >= group->minimum_removed_count &&
+                       group->direct_cost > group->replacement_cost;
   }
   iree_status_t status = iree_ok_status();
   for (loom_low_lower_realization_offer_record_t* record = state->offers.first;
        record && iree_status_is_ok(status); record = record->next) {
     if (record->selected) {
-      status =
-          record->offer.apply(context, record->source_op, record->offer.data);
+      const loom_low_lower_realization_t* realization = NULL;
+      if (record->offer.recipe != NULL) {
+        status = loom_low_lower_realization_request(
+            context, record->source_op, record->loop, record->offer.recipe,
+            &realization);
+        IREE_ASSERT(!iree_status_is_ok(status) || realization != NULL,
+                    "preflighted offer recipe became unplaceable");
+      }
+      if (iree_status_is_ok(status)) {
+        status = record->offer.apply(context, record->source_op, realization,
+                                     record->offer.data);
+      }
+      if (iree_status_is_ok(status) && out_selected != NULL) {
+        *out_selected = true;
+      }
     }
   }
   return status;
+}
+
+static void loom_low_lower_realizations_mark_source_inputs(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_realizations_t* state) {
+  for (const loom_low_lower_realization_t* value = state->first; value;
+       value = value->next) {
+    const loom_low_lower_realization_record_t* record =
+        value->state.construction;
+    for (uint16_t i = 0; i < record->input_count; ++i) {
+      if (record->inputs[i].kind == LOOM_LOW_LOWER_REALIZATION_INPUT_SOURCE) {
+        loom_low_lower_require_source_value_storage(
+            context, record->inputs[i].value.identity);
+      }
+    }
+  }
+}
+
+iree_status_t loom_low_lower_realizations_prepare_selection(
+    loom_low_lower_context_t* context) {
+  loom_low_lower_realizations_t* state =
+      context->lowering->source_plan.realizations;
+  if (state == NULL) {
+    return iree_ok_status();
+  }
+  loom_low_lower_realization_construction_t* construction = state->construction;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_realizations_select_offers(context, construction, NULL));
+  construction->offers.first = NULL;
+  construction->offers.last = NULL;
+  construction->offers.count = 0;
+  loom_low_lower_realizations_mark_source_inputs(context, state);
+  return iree_ok_status();
 }
 
 static uint32_t loom_low_lower_realization_hash(
@@ -643,6 +728,24 @@ iree_status_t loom_low_lower_realization_request(
   return iree_ok_status();
 }
 
+iree_status_t loom_low_lower_realization_bind_source_value(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_realization_t* realization,
+    loom_value_id_t source_value_id) {
+  IREE_ASSERT(realization->loop != NULL);
+  loom_low_lower_realization_source_binding_t* binding = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_function_array(
+      context, 1, sizeof(*binding), (void**)&binding));
+  *binding = (loom_low_lower_realization_source_binding_t){
+      .source_value_id = source_value_id,
+  };
+  loom_low_lower_realization_t* mutable_realization =
+      (loom_low_lower_realization_t*)realization;
+  binding->next = mutable_realization->source_bindings;
+  mutable_realization->source_bindings = binding;
+  return iree_ok_status();
+}
+
 static uint32_t loom_low_lower_realization_event_sort_word(
     const loom_low_lower_realization_event_t* event, uint32_t word) {
   switch (word) {
@@ -714,15 +817,19 @@ static iree_status_t loom_low_lower_realizations_order_events(
 }
 
 iree_status_t loom_low_lower_realizations_finalize(
-    loom_low_lower_context_t* context) {
+    loom_low_lower_context_t* context, bool* out_storage_refinement_required) {
+  *out_storage_refinement_required = false;
   loom_low_lower_realizations_t* state =
       context->lowering->source_plan.realizations;
   if (state == NULL) {
     return iree_ok_status();
   }
   loom_low_lower_realization_construction_t* construction = state->construction;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_realizations_select_offers(context, construction));
+  bool selected = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_realizations_select_offers(
+      context, construction, &selected));
+  *out_storage_refinement_required = selected;
+  loom_low_lower_realizations_mark_source_inputs(context, state);
   if (construction->count == 0) {
     state->construction = NULL;
     return iree_ok_status();
@@ -739,12 +846,6 @@ iree_status_t loom_low_lower_realizations_finalize(
        value = value->next) {
     const loom_low_lower_realization_record_t* record =
         value->state.construction;
-    for (uint16_t i = 0; i < record->input_count; ++i) {
-      if (record->inputs[i].kind == LOOM_LOW_LOWER_REALIZATION_INPUT_SOURCE) {
-        loom_low_lower_require_source_value_storage(
-            context, record->inputs[i].value.identity);
-      }
-    }
     state->events[event_count] = (loom_low_lower_realization_event_t){
         .realization = value,
         .block_index = record->initial_block->region_index,
@@ -848,6 +949,12 @@ iree_status_t loom_low_lower_realizations_map_blocks(
           &context->builder,
           context->block_map[value->loop->header->region_index], value->type,
           &value->state.values.header));
+      for (const loom_low_lower_realization_source_binding_t* binding =
+               value->source_bindings;
+           binding != NULL; binding = binding->next) {
+        IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
+            context, binding->source_value_id, value->state.values.header));
+      }
     }
   }
   return iree_ok_status();

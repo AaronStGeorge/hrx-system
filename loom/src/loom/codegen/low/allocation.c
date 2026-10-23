@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/allocation/concat_affinity.h"
 #include "loom/codegen/low/allocation/copy_decision.h"
 #include "loom/codegen/low/allocation/destructive_reuse.h"
 #include "loom/codegen/low/allocation/edge_copy.h"
@@ -120,12 +121,13 @@ loom_low_allocation_make_interval_assignment_context(
   };
 }
 
-// Selects between first-fit and an isolated fragmentation-repair coloring.
-// A winning repair retains its owned arrays and recycles the first-fit state.
-static iree_status_t loom_low_allocation_repair_fragmentation(
+// Compares the retained coloring with one isolated alternative assignment. A
+// winning alternative retains its owned arrays and recycles the prior state.
+static iree_status_t loom_low_allocation_try_alternative_assignment(
     loom_low_allocation_build_state_t* state,
     const loom_low_function_model_t* model,
     const loom_local_value_domain_t* value_domain,
+    loom_low_allocation_search_strategy_t search_strategy,
     const iree_arena_checkpoint_t* assignment_checkpoint,
     iree_arena_allocator_t* decision_arena) {
   iree_arena_allocator_t scratch_arena;
@@ -179,10 +181,8 @@ static iree_status_t loom_low_allocation_repair_fragmentation(
   if (iree_status_is_ok(status)) {
     const loom_low_allocation_interval_assignment_context_t scratch_context =
         loom_low_allocation_make_interval_assignment_context(
-            state, model,
-            LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR,
-            &scratch_arena, &scratch_target_constraints,
-            &scratch_storage_leases,
+            state, model, search_strategy, &scratch_arena,
+            &scratch_target_constraints, &scratch_storage_leases,
             state->target_constraints.error_count == 0
                 ? &state->interval_assignment.spill_traffic_bytes
                 : NULL);
@@ -726,7 +726,8 @@ static iree_status_t loom_low_allocate_function_impl(
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_concat_affinity_build(
-        &state.placement, &decision_arena, &state.concat_affinity);
+        state.target.descriptor_set, &state.placement, &state.liveness,
+        &state.unit_liveness, &decision_arena, &state.concat_affinity);
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_storage_identity_initialize(
@@ -784,18 +785,33 @@ static iree_status_t loom_low_allocate_function_impl(
         &interval_assignment_context, &decision_arena,
         &state.interval_assignment);
   }
-  // Required register values can fail first-fit placement through fragmentation
-  // just as spillable values can. Their retained failure is provisional until
-  // the alternative packing has also been considered.
+  // A complete pressure-efficient coloring must improve predicted spill
+  // traffic before replacing first-fit. The comparison attempt stops as soon
+  // as it reaches the retained coloring's traffic.
+  if (retained_location_table == NULL && iree_status_is_ok(status) &&
+      !state.options->has_allocation_repair &&
+      ((state.target_constraints.error_count == 0 &&
+        state.interval_assignment.spill_count != 0) ||
+       loom_low_allocation_failure_is_present(
+           &state.target_constraints.failure))) {
+    status = loom_low_allocation_try_alternative_assignment(
+        &state, model, value_domain,
+        LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_PRESSURE_EFFICIENCY,
+        &interval_assignment_checkpoint, &decision_arena);
+  }
+  // Required register values can fail placement through fragmentation just as
+  // spillable values can. Their retained failure is provisional until the
+  // alternative packing has also been considered.
   if (retained_location_table == NULL && iree_status_is_ok(status) &&
       state.interval_assignment.has_packable_aggregates &&
       ((state.target_constraints.error_count == 0 &&
         state.interval_assignment.spill_count != 0) ||
        loom_low_allocation_failure_is_present(
            &state.target_constraints.failure))) {
-    status = loom_low_allocation_repair_fragmentation(
-        &state, model, value_domain, &interval_assignment_checkpoint,
-        &decision_arena);
+    status = loom_low_allocation_try_alternative_assignment(
+        &state, model, value_domain,
+        LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR,
+        &interval_assignment_checkpoint, &decision_arena);
   }
   // Backedge placement belongs to the final physical assignment. Spill repair
   // rewrites the IR and rebuilds the frame, so relocating a provisional spill
