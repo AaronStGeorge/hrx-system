@@ -12,6 +12,7 @@
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
 #include "loom/serve/runtime/parameter/bank.h"
+#include "loom/serve/runtime/parameter/module.h"
 #include "loom/serve/runtime/parameter/sources.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/input.h"
@@ -102,6 +103,8 @@ struct loom_serve_image_model_t {
     iree_vm_module_t* runner;
     // Scoped request declaration capture, including checkpoint bindings.
     iree_vm_module_t* preparation;
+    // Retained demand-read capability, rebound with each request's sources.
+    iree_vm_module_t* parameters;
     // Opaque source-owned state, retained across serialized requests.
     iree_vm_buffer_t* state;
     // Cold-resolved request preparation function.
@@ -126,6 +129,8 @@ static void loom_serve_image_model_release_consumers(
   model->control.runner = NULL;
   iree_vm_module_release(model->control.preparation);
   model->control.preparation = NULL;
+  iree_vm_module_release(model->control.parameters);
+  model->control.parameters = NULL;
   loom_serve_stage_table_free(model->stages.table);
   model->stages.table = NULL;
   iree_hal_buffer_release(model->invocation.workspace);
@@ -397,7 +402,7 @@ static iree_status_t loom_serve_image_create_control(
       .stages = {model->stages.table->part_count, model->stages.table->parts},
       .feedback = {1, &model->output},
   };
-  iree_vm_module_t* native_modules[4] = {0};
+  iree_vm_module_t* native_modules[5] = {0};
   iree_vm_buffer_t* read_only_tags = NULL;
   iree_status_t status = iree_vm_buffer_subspan(
       model->control.tags, 0, tags.data_length, IREE_VM_BUFFER_ACCESS_FLAG_READ,
@@ -429,14 +434,23 @@ static iree_status_t loom_serve_image_create_control(
     iree_vm_module_retain(model->control.preparation);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_serve_parameters_module_create(
+        model->control.environment, &model->control.hal_types,
+        loom_serve_device_transfer_queue(model->owner),
+        model->parameter_sources, host_allocator, &native_modules[4]);
+    model->control.parameters = native_modules[4];
+    iree_vm_module_retain(model->control.parameters);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_serve_program_link(module,
-                                     (iree_vm_module_span_t){native_modules, 4},
+                                     (iree_vm_module_span_t){native_modules, 5},
                                      host_allocator, &model->control.program);
   }
   iree_vm_module_release(native_modules[0]);
   iree_vm_module_release(native_modules[1]);
   iree_vm_module_release(native_modules[2]);
   iree_vm_module_release(native_modules[3]);
+  iree_vm_module_release(native_modules[4]);
   IREE_RETURN_IF_ERROR(status);
   const iree_vm_signature_type_t buffer = {
       .kind = IREE_VM_SIGNATURE_TYPE_KIND_REF,
@@ -535,6 +549,7 @@ static iree_status_t loom_serve_image_model_link(
   loom_serve_executable_options_t bound_options = options;
   bound_options.stages = model->stages.table;
   bound_options.runner = model->control.runner;
+  bound_options.parameter_module = model->control.parameters;
   return loom_serve_executables_allocate(&bound_options, host_allocator,
                                          &model->executables);
 }

@@ -50,6 +50,8 @@ typedef struct loom_serve_executable_options_t {
   loom_serve_stage_record_options_t recording;
   // Borrowed runner, initially bound to stages and alive through retirement.
   iree_vm_module_t* runner;
+  // Borrowed demand-read capability, bound alongside each invocation's code.
+  iree_vm_module_t* parameter_module;
   // Bounds reusable request products without restricting one active request.
   loom_serve_variant_cache_options_t cache;
   // Independent bounds on retained checkpoint entries and final packed bytes.

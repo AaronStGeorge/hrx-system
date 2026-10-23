@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/base/threading/mutex.h"
+#include "loom/serve/runtime/parameter/module.h"
 #include "loom/serve/runtime/program/stage_set.h"
 #include "loomc/iree.h"
 
@@ -300,6 +301,8 @@ void loom_serve_executables_retire(loom_serve_executables_t* executables) {
   executables->retiring = true;
   loom_serve_preparation_free(executables->invocation.declarations);
   loom_serve_module_clear_stages(executables->options.runner);
+  loom_serve_parameters_module_bind_sources(
+      executables->options.parameter_module, NULL);
   loom_serve_variant_entry_release(executables->invocation.entry);
   loom_serve_variant_entry_release(executables->cache.bound);
   loom_serve_variant_pool_free(executables->cache.pool);
@@ -394,6 +397,10 @@ static iree_status_t loom_serve_executables_bind(
       choice ? choice->table : generation->table;
   IREE_RETURN_IF_ERROR(loom_serve_module_bind_stages(
       executables->options.runner, table->part_count, table->parts));
+  loom_serve_parameters_module_bind_sources(
+      executables->options.parameter_module,
+      choice ? choice->parameter_sources
+             : executables->options.parameter_sources);
   loom_serve_variant_entry_retain(entry);
   loom_serve_variant_entry_release(executables->cache.bound);
   executables->cache.bound = entry;
@@ -504,6 +511,8 @@ static void loom_serve_choice_discard(loom_serve_executables_t* executables,
                                       loom_serve_variant_entry_t* entry) {
   if (entry == executables->cache.bound) {
     loom_serve_module_clear_stages(executables->options.runner);
+    loom_serve_parameters_module_bind_sources(
+        executables->options.parameter_module, NULL);
     loom_serve_variant_entry_release(executables->cache.bound);
     executables->cache.bound = NULL;
     loom_serve_generation_release(executables->bound);

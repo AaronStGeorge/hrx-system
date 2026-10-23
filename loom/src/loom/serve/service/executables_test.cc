@@ -12,6 +12,7 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/vm/buffer.h"
 #include "iree/vm/sync.h"
+#include "loom/serve/runtime/parameter/module.h"
 #include "loom/serve/runtime/parameter/weights_test_base.h"
 #include "loom/serve/runtime/program/program.h"
 
@@ -49,6 +50,7 @@ class ExecutablesTest : public WeightsTest {
     IREE_EXPECT_OK(loom_serve_executables_free(executables_));
     loom_serve_program_free(control_);
     iree_vm_module_release(runner_);
+    iree_vm_module_release(parameters_);
     loom_serve_stage_table_free(table_);
     loom_serve_preparation_free(preparation_);
     loom_serve_parameter_sources_release(parameter_sources_);
@@ -208,6 +210,11 @@ class ExecutablesTest : public WeightsTest {
         &hal_types_, execution_, module_options, host_allocator_, &runner_));
     options.stages = table_;
     options.runner = runner_;
+    IREE_RETURN_IF_ERROR(loom_serve_parameters_module_create(
+        environment_, &hal_types_,
+        loom_serve_device_transfer_queue(device_owner_), parameter_sources_,
+        host_allocator_, &parameters_));
+    options.parameter_module = parameters_;
     IREE_RETURN_IF_ERROR(loom_serve_executables_allocate(
         &options, host_allocator_, &executables_));
     loom_serve_executables_set_observer(
@@ -332,6 +339,9 @@ class ExecutablesTest : public WeightsTest {
   loom_serve_stage_table_t* table_ = nullptr;
   // Native runner consuming the selected request table.
   iree_vm_module_t* runner_ = nullptr;
+  // Demand-read capability selected atomically with the request's command
+  // table.
+  iree_vm_module_t* parameters_ = nullptr;
   // Source-selected request ownership under test.
   loom_serve_executables_t* executables_ = nullptr;
   // Real VM caller of the runner ABI.

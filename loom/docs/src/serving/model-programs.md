@@ -149,6 +149,65 @@ CPU or synchronizing other models. A null fence represents no external work.
 Completion describes readiness; storage ownership still extends through the
 last accepted consumer, including when a dependency fails.
 
+### Read checkpoint bytes on demand
+
+Large lookup tables and paged experts can remain in checkpoint files instead
+of occupying a resident parameter binding. The warm `parameters` capability
+reads demanded byte ranges from the same sources declared during preparation:
+
+```text
+parameters.gather(source, key, wait, descriptors, descriptor_offset, count, target)
+    -> hal.fence
+```
+
+`source` is the selected invocation's source ordinal, and `key` is a host byte
+buffer naming an entry in that checkpoint. Independent sources may use the
+same key. `descriptors` and `target` are `hal.buffer` references. Starting at
+`descriptor_offset`, each 24-byte record contains three little-endian `u64`
+values: the entry-relative byte offset, destination-buffer byte offset, and
+byte length. Destination ranges are disjoint; zero-length records require no
+payload transfer. Hashing, deduplication, packing, and cache placement remain
+model-program decisions, not tensor interpretations in the server.
+
+A control program can enqueue independent reads before joining either one:
+
+```text
+producer = runner.execute_N(descriptor_stage, ...)
+produced = runner.fence(producer)
+first = parameters.gather(source_a, key_a, produced, ranges_a, 0, count_a, target_a)
+second = parameters.gather(source_b, key_b, produced, ranges_b, 0, count_b, target_b)
+runner.execute_N(independent_stage, ...)
+runner.join(first)
+runner.execute_N(first_consumer, ...)
+runner.join(second)
+runner.execute_N(second_consumer, ...)
+```
+
+The supplied fence covers descriptor production and destination availability,
+including any earlier readers of reused storage. The returned fence orders
+payload consumers and descriptor reuse. An empty gather preserves its incoming
+dependency without touching storage. Changing a request's source choice or
+removing its model does not redirect or release accepted reads: each read
+retains its original provider and buffer captures until actual retirement.
+Failed readiness is not permission to recycle those buffers.
+
+This implementation asynchronously snapshots the descriptors to host memory,
+then submits the ranges through the parameter provider and HAL file queues.
+The VM call never waits for completion or synchronizes unrelated models. It
+requires queue download and deferred host-call support. Checkpoint opening
+uses the configured parameter-file mode; direct I/O requires appropriately
+aligned file ranges and destinations and does not silently fall back to
+buffered reads. A snapshot costs 24 bytes per descriptor plus one copied key;
+checkpoint payloads are not materialized in a separate model-owned host array.
+
+This is host-VM-initiated asynchronous I/O, not a persistent GPU request
+service. A kernel that requests data while continuing other work needs a
+device-side progress and credit protocol beyond this call. The shared source
+identity and byte-range contract do not impose a model-wide barrier on that
+separate execution mechanism.
+
+### Tokenize request inputs
+
 Request preparation can use the `input` capability to encode text and decode
 token spans with the deployment's tokenizer. `encode(text, flags, capacity)`
 returns a zero-padded little-endian I32 ID buffer and live token count; it can

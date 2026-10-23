@@ -15,6 +15,7 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
+#include "loom/serve/runtime/parameter/module.h"
 #include "loom/serve/runtime/parameter/sources.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/input.h"
@@ -582,7 +583,7 @@ static iree_status_t loom_serve_recognition_create_control(
       .stages = {model->stages.count, stages},
       .feedback = {1, &model->output},
   };
-  iree_vm_module_t* native_modules[3] = {0};
+  iree_vm_module_t* native_modules[4] = {0};
   iree_vm_buffer_t* read_only_tags = NULL;
   iree_status_t status = iree_vm_buffer_subspan(
       model->control.tags, 0, tags.data_length, IREE_VM_BUFFER_ACCESS_FLAG_READ,
@@ -605,13 +606,20 @@ static iree_status_t loom_serve_recognition_create_control(
                                            host_allocator, &native_modules[2]);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_serve_parameters_module_create(
+        model->control.environment, &model->control.hal_types,
+        loom_serve_device_transfer_queue(model->owner),
+        model->parameter_sources, host_allocator, &native_modules[3]);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_serve_program_link(module,
-                                     (iree_vm_module_span_t){native_modules, 3},
+                                     (iree_vm_module_span_t){native_modules, 4},
                                      host_allocator, &model->control.program);
   }
   iree_vm_module_release(native_modules[0]);
   iree_vm_module_release(native_modules[1]);
   iree_vm_module_release(native_modules[2]);
+  iree_vm_module_release(native_modules[3]);
   IREE_RETURN_IF_ERROR(status);
   const iree_vm_signature_type_t buffer = {
       .kind = IREE_VM_SIGNATURE_TYPE_KIND_REF,

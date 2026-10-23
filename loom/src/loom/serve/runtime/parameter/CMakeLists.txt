@@ -108,6 +108,74 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    gather
+  HDRS
+    "gather.h"
+  SRCS
+    "gather.c"
+  DEPS
+    iree::base
+    iree::hal
+    iree::io::parameter_provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    module
+  HDRS
+    "module.h"
+  SRCS
+    "module.c"
+  DEPS
+    ::gather
+    ::sources
+    iree::base
+    iree::hal
+    iree::module::hal::types
+    iree::vm
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    gather_tests
+  SRCS
+    "gather_test.cc"
+    "module_test.cc"
+  DEPS
+    ::gather
+    ::module
+    ::sources
+    iree::base
+    iree::hal
+    iree::io::file_handle
+    iree::io::parameter_index
+    iree::io::parameter_index_provider
+    iree::io::parameter_provider
+    iree::module::hal::types
+    iree::testing::gtest
+    iree::testing::temp_file
+    iree::vm
+    loom::serve::runtime::device
+    loom::serve::runtime::execution::retirement
+    loom::serve::runtime::host
+    loom::serve::runtime::program
+    loom::serve::runtime::program::sources
+    loom::serve::testing::device
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     inputs
   HDRS
     "inputs.h"

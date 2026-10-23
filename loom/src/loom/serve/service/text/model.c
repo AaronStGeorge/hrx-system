@@ -253,9 +253,9 @@ static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
     model->stage_bindings[i] = loom_serve_text_stage_binding(&model->stages[i]);
   }
   IREE_RETURN_IF_ERROR(loom_serve_text_control_initialize(
-      &model->source, model->execution, &model->state, model->shape_count,
-      model->shapes, model->stage_count, model->stage_bindings,
-      model->host_allocator, &model->control));
+      &model->source, model->execution, model->transfer, &model->state,
+      model->shape_count, model->shapes, model->stage_count,
+      model->stage_bindings, model->host_allocator, &model->control));
   iree_async_proactor_t* proactor = NULL;
   IREE_RETURN_IF_ERROR(iree_async_proactor_pool_get(
       loom_serve_host_proactor_pool(
