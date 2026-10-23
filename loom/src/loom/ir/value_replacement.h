@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Immutable substitution of one SSA identity through shared types and
-// attributes.
+// Immutable SSA substitutions through shared types and attributes, including
+// simultaneous instantiation of dependent value tuples.
 
 #ifndef LOOM_IR_VALUE_REPLACEMENT_H_
 #define LOOM_IR_VALUE_REPLACEMENT_H_
@@ -17,16 +17,12 @@
 extern "C" {
 #endif
 
-// Completed canonical substitution and its intrusive binary radix branch.
+// Completed identity substitution in a scoped radix map.
 typedef struct loom_value_replacement_memo_t {
-  // Low-bit-tagged leaves or untagged branches; zero is the empty map.
-  uintptr_t edges[2];
-  // Immutable module-local source type identity.
-  loom_type_id_t source;
-  // Canonical replacement type identity in the same module.
-  loom_type_id_t result;
-  // Differing source-ID bit, strictly decreasing along branch paths.
-  uint32_t bit;
+  // Immutable module-local source identity in this map's domain.
+  uint32_t source;
+  // Replacement identity in the same module and map domain.
+  uint32_t result;
 } loom_value_replacement_memo_t;
 
 // Shared scratch for bottom-up canonical type remapping. Completed entries
@@ -149,6 +145,17 @@ iree_status_t loom_module_replace_type_value_references(
 iree_status_t loom_module_replace_attribute_value_references(
     loom_module_t* module, loom_attribute_t attribute, loom_value_id_t old_id,
     loom_value_id_t new_id, loom_attribute_t* out_attribute, bool* out_changed);
+
+// Assigns a source tuple's type scheme to a disjoint target tuple in the same
+// module. Each tuple contains distinct allocated values; their definition sites
+// need not have been published. Source identities map simultaneously to their
+// corresponding target identities, while other references remain unchanged.
+// Scratch is scoped to this call and backed by the module's block pool. Tuples
+// without dependent types allocate no scratch. Allocation or encoding-width
+// failure may leave a prefix of target types assigned.
+iree_status_t loom_module_assign_value_types(
+    loom_module_t* module, const loom_value_id_t* source_values,
+    const loom_value_id_t* target_values, iree_host_size_t value_count);
 
 #ifdef __cplusplus
 }  // extern "C"

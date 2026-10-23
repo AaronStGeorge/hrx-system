@@ -1230,7 +1230,7 @@ def _generate_builder_implementation(
             offset = len(param.get("implicit_args", ()))
             lines.append(f"  if (result_types && {inferred_result_name}_count > 0) {{")
             lines.append(f"    loom_block_t* entry = loom_region_entry_block(loom_op_regions(*out_op)[{index}]);")
-            lines.append("    IREE_RETURN_IF_ERROR(loom_ir_remap_assign_value_types(")
+            lines.append("    IREE_RETURN_IF_ERROR(loom_module_assign_value_types(")
             lines.append("        builder->module, loom_op_results(*out_op),")
             lines.append(f"        entry->arg_ids + {offset}, {inferred_result_name}_count));")
             lines.append("  }")
@@ -1251,7 +1251,7 @@ def _generate_builder_implementation(
         offset = len(param.get("implicit_args", ()))
         lines.append("  if (result_count > 0) {")
         lines.append(f"    loom_block_t* entry = loom_region_entry_block(loom_op_regions(*out_op)[{index}]);")
-        lines.append("    IREE_RETURN_IF_ERROR(loom_ir_remap_assign_value_types(")
+        lines.append("    IREE_RETURN_IF_ERROR(loom_module_assign_value_types(")
         lines.append("        builder->module, loom_op_results(*out_op),")
         lines.append(f"        entry->arg_ids + {offset}, result_count));")
         lines.append("  }")
@@ -1299,7 +1299,7 @@ def generate_builders_c(
     lines.append('#include "loom/ir/module.h"')
     lines.append('#include "loom/ops/builder_macros.h"')
     if any(c_builder_model.variadic_result_count_source(op) is not None or _has_result_backed_region(op) for op in ops):
-        lines.append('#include "loom/rewrite/remap.h"')
+        lines.append('#include "loom/ir/value_replacement.h"')
     if any(isinstance(element, StableKeyRef) for op in ops for element in c_builder_model.flatten_format(op.format)):
         lines.append('#include "loom/util/stable_id.h"')
     lines.append("")

@@ -43,7 +43,6 @@ loom_cc_library(
     ::op_defs
     loom::ir::builders
     loom::ops::op_defs
-    loom::rewrite::remap
   PUBLIC
 )
 

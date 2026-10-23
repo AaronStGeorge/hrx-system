@@ -10,6 +10,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/value_replacement.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/rewrite/remap.h"
 #include "loom/transforms/boundary/projection_branch.h"
@@ -782,7 +783,7 @@ static iree_status_t loom_boundary_projection_prepare_body_arguments(
   IREE_ASSERT_EQ(source_entry->arg_count, function->final_argument_count);
   IREE_RETURN_IF_ERROR(loom_boundary_projection_define_values(
       plan, function->final_argument_count, out_arguments));
-  IREE_RETURN_IF_ERROR(loom_ir_remap_assign_value_types(
+  IREE_RETURN_IF_ERROR(loom_module_assign_value_types(
       plan->module, source_entry->arg_ids, *out_arguments,
       function->final_argument_count));
   for (uint16_t i = 0; i < function->argument_count; ++i) {

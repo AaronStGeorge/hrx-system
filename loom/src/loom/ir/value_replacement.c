@@ -22,30 +22,48 @@
 typedef struct loom_type_remap_context_t {
   // Borrowed module owning every canonical input and result.
   const loom_module_t* module;
-  // Publishing substitution, or NULL for read-only lookup.
-  loom_value_replacement_t* replacement;
-  // Complete source-to-target map for lookup, or NULL for one replacement.
+  // Same owning module when publishing, or NULL for read-only lookup.
+  loom_module_t* target_module;
+  // Borrowed bounded source-to-target spans, or NULL for indexed/single maps.
   const loom_type_value_remap_t* value_map;
+  // Fixed-width indexed tuple map, or zero for bounded spans/single maps.
+  uintptr_t value_index;
+  // Source identity for a single substitution, unused by tuple maps.
+  loom_value_id_t old_id;
+  // Target identity for a single substitution, unused by tuple maps.
+  loom_value_id_t new_id;
   // Scratch and completed source-type results shared across calls.
   loom_type_remap_state_t* state;
 } loom_type_remap_context_t;
 
 static bool loom_remap_is_lookup(const loom_type_remap_context_t* context) {
-  return context->replacement == NULL;
+  return context->target_module == NULL;
 }
 
 static loom_value_replacement_memo_t* loom_remap_memo(uintptr_t edge) {
   return (loom_value_replacement_memo_t*)(edge & ~(uintptr_t)1);
 }
 
-static bool loom_remap_find(uintptr_t edge, loom_type_id_t source,
-                            loom_type_id_t* out_result) {
+// Compressed paths contain at most eight nibbles of a module-local identity.
+// A branch keeps a representative key to detect divergence above its nibble
+// during insertion without a second descent through the tree.
+typedef struct loom_remap_branch_t {
+  // Inline leaf for the identity that first split this branch's prefix.
+  loom_value_replacement_memo_t entry;
+  // Tagged leaves, untagged branches, or zero for an absent nibble.
+  uintptr_t children[16];
+  // Nibble-aligned bit offset, strictly decreasing along branch paths.
+  uint32_t shift;
+} loom_remap_branch_t;
+
+static bool loom_remap_find(uintptr_t edge, uint32_t source,
+                            uint32_t* out_result) {
+  while (edge && !(edge & 1)) {
+    const loom_remap_branch_t* branch = (const loom_remap_branch_t*)edge;
+    edge = branch->children[(source >> branch->shift) & 15];
+  }
   if (!edge) {
     return false;
-  }
-  while (!(edge & 1)) {
-    const loom_value_replacement_memo_t* branch = loom_remap_memo(edge);
-    edge = branch->edges[(source >> branch->bit) & 1];
   }
   const loom_value_replacement_memo_t* leaf = loom_remap_memo(edge);
   if (leaf->source != source) {
@@ -55,156 +73,123 @@ static bool loom_remap_find(uintptr_t edge, loom_type_id_t source,
   return true;
 }
 
-static iree_status_t loom_remap_insert(loom_type_remap_state_t* state,
-                                       loom_type_id_t source,
-                                       loom_type_id_t result) {
-  loom_value_replacement_memo_t* entry = &state->first_result;
-  if (state->memo) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate(&state->scratch, sizeof(*entry), (void**)&entry));
-  }
-  *entry = (loom_value_replacement_memo_t){.source = source, .result = result};
-  const uintptr_t leaf = (uintptr_t)entry | 1;
-  if (!state->memo) {
-    state->memo = leaf;
+static iree_status_t loom_remap_insert(iree_arena_allocator_t* arena,
+                                       uintptr_t* root,
+                                       loom_value_replacement_memo_t* first,
+                                       uint32_t source, uint32_t result) {
+  if (!*root) {
+    *first =
+        (loom_value_replacement_memo_t){.source = source, .result = result};
+    *root = (uintptr_t)first | 1;
     return iree_ok_status();
   }
-  uintptr_t existing = state->memo;
-  while (!(existing & 1)) {
-    const loom_value_replacement_memo_t* branch = loom_remap_memo(existing);
-    existing = branch->edges[(source >> branch->bit) & 1];
-  }
-  const uint32_t difference = source ^ loom_remap_memo(existing)->source;
-  // Acyclic canonical inputs complete before any later occurrence can request
-  // the same source. Every insertion therefore introduces a distinct identity.
-  IREE_ASSERT(difference != 0);
-  entry->bit = 31 - iree_math_count_leading_zeros_u32(difference);
-  uintptr_t* edge = &state->memo;
-  while (!(*edge & 1)) {
-    loom_value_replacement_memo_t* branch = loom_remap_memo(*edge);
-    if (branch->bit < entry->bit) {
+  uintptr_t* edge = root;
+  uint32_t existing_key = 0;
+  while (*edge && !(*edge & 1)) {
+    loom_remap_branch_t* branch = (loom_remap_branch_t*)*edge;
+    existing_key = branch->entry.source;
+    if (((source ^ existing_key) >> branch->shift) >> 4) {
       break;
     }
-    edge = &branch->edges[(source >> branch->bit) & 1];
+    edge = &branch->children[(source >> branch->shift) & 15];
   }
-  const uint32_t side = (source >> entry->bit) & 1;
-  entry->edges[side] = leaf;
-  entry->edges[side ^ 1] = *edge;
-  *edge = (uintptr_t)entry;
+  if (!*edge) {
+    loom_value_replacement_memo_t* entry = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate(arena, sizeof(*entry), (void**)&entry));
+    *entry =
+        (loom_value_replacement_memo_t){.source = source, .result = result};
+    *edge = (uintptr_t)entry | 1;
+    return iree_ok_status();
+  }
+  if (*edge & 1) {
+    existing_key = loom_remap_memo(*edge)->source;
+  }
+  const uint32_t difference = source ^ existing_key;
+  // Both callers insert distinct identities: tuple inputs are unique, and
+  // completed canonical substitutions are looked up before another visit.
+  IREE_ASSERT(difference != 0);
+  const uint32_t shift =
+      (31 - iree_math_count_leading_zeros_u32(difference)) & ~3u;
+  loom_remap_branch_t* branch = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, sizeof(*branch), (void**)&branch));
+  *branch = (loom_remap_branch_t){.entry = {.source = source, .result = result},
+                                  .shift = shift};
+  branch->children[(source >> shift) & 15] = (uintptr_t)&branch->entry | 1;
+  branch->children[(existing_key >> shift) & 15] = *edge;
+  *edge = (uintptr_t)branch;
   return iree_ok_status();
+}
+
+static bool loom_remap_value(const loom_type_remap_context_t* context,
+                             loom_value_id_t value,
+                             loom_value_id_t* out_result) {
+  if (context->value_map) {
+    *out_result =
+        loom_type_remap_value(context->module, context->value_map, value);
+    return *out_result != value;
+  }
+  if (context->value_index) {
+    return loom_remap_find(context->value_index, value, out_result);
+  }
+  *out_result = context->new_id;
+  return value == context->old_id;
 }
 
 //===----------------------------------------------------------------------===//
 // Immediate payloads
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_value_replacement_leaf_type(
-    loom_value_replacement_t* replacement, loom_type_t type,
-    loom_type_t* out_type, bool* out_changed) {
-  loom_type_t result = type;
+IREE_ATTRIBUTE_ALWAYS_INLINE static inline iree_status_t loom_remap_leaf_type(
+    loom_type_remap_context_t* context, loom_type_t* type, bool* out_changed,
+    bool* out_representable) {
   bool changed = false;
-  if (loom_type_has_ssa_encoding(type) &&
-      loom_type_encoding_value_id(type) == replacement->old_id) {
-    if (replacement->new_id > UINT16_MAX) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "cannot store value %%%u in a 16-bit SSA encoding reference",
-          (unsigned)replacement->new_id);
-    }
-    result.encoding_id = (uint16_t)replacement->new_id;
-    changed = true;
-  }
-  if (loom_type_has_dimensions(type)) {
-    const uint8_t rank = loom_type_rank(type);
-    if (loom_type_has_inline_dims(type)) {
-      for (uint8_t i = 0; i < rank; ++i) {
-        if (loom_dim_is_dynamic(result.dims[i]) &&
-            loom_dim_value_id(result.dims[i]) == replacement->old_id) {
-          result.dims[i] = loom_dim_pack_dynamic(replacement->new_id);
-          changed = true;
-        }
-      }
-    } else {
-      const loom_overflow_dim_t* original =
-          (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
-      loom_overflow_dim_t* dimensions = NULL;
-      for (uint8_t i = 0; i < rank; ++i) {
-        if (!loom_dim_is_dynamic(original[i]) ||
-            loom_dim_value_id(original[i]) != replacement->old_id) {
-          continue;
-        }
-        if (!dimensions) {
-          IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-              &replacement->state.scratch, rank, sizeof(*dimensions),
-              (void**)&dimensions));
-          memcpy(dimensions, original, rank * sizeof(*dimensions));
-        }
-        dimensions[i] = loom_dim_pack_dynamic(replacement->new_id);
-      }
-      if (dimensions) {
-        result.dims[0] = (uint64_t)(uintptr_t)dimensions;
-        result.dims[1] = 0;
-        changed = true;
-      }
-    }
-  }
-  if (changed) {
-    IREE_RETURN_IF_ERROR(
-        loom_module_intern_type(replacement->module, result, &result));
-  }
-  *out_type = result;
-  *out_changed = changed;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_type_remap_lookup_leaf_type(
-    loom_type_remap_context_t* context, loom_type_t type, loom_type_t* out_type,
-    bool* out_changed, bool* out_representable) {
-  loom_type_t result = type;
-  bool changed = false;
-  *out_type = type;
   *out_changed = false;
   *out_representable = true;
-  if (loom_type_has_ssa_encoding(type)) {
-    const loom_value_id_t encoding = loom_type_encoding_value_id(type);
-    const loom_value_id_t remapped_encoding =
-        loom_type_remap_value(context->module, context->value_map, encoding);
-    if (remapped_encoding != encoding) {
+  if (loom_type_has_ssa_encoding(*type)) {
+    const loom_value_id_t encoding = loom_type_encoding_value_id(*type);
+    loom_value_id_t remapped_encoding;
+    if (loom_remap_value(context, encoding, &remapped_encoding)) {
       if (remapped_encoding > UINT16_MAX) {
+        if (!loom_remap_is_lookup(context)) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "cannot store value %%%u in a 16-bit SSA encoding reference",
+              (unsigned)remapped_encoding);
+        }
         *out_representable = false;
         return iree_ok_status();
       }
-      result.encoding_id = (uint16_t)remapped_encoding;
+      type->encoding_id = (uint16_t)remapped_encoding;
       changed = true;
     }
   }
-  if (loom_type_has_dimensions(type)) {
-    const uint8_t rank = loom_type_rank(type);
-    if (loom_type_has_inline_dims(type)) {
+  if (loom_type_has_dimensions(*type)) {
+    const uint8_t rank = loom_type_rank(*type);
+    if (loom_type_has_inline_dims(*type)) {
       for (uint8_t i = 0; i < rank; ++i) {
-        if (!loom_dim_is_dynamic(result.dims[i])) {
+        if (!loom_dim_is_dynamic(type->dims[i])) {
           continue;
         }
-        const loom_value_id_t value_id = loom_dim_value_id(result.dims[i]);
-        const loom_value_id_t remapped_value = loom_type_remap_value(
-            context->module, context->value_map, value_id);
-        if (remapped_value != value_id) {
-          result.dims[i] = loom_dim_pack_dynamic(remapped_value);
+        const loom_value_id_t value_id = loom_dim_value_id(type->dims[i]);
+        loom_value_id_t remapped_value;
+        if (loom_remap_value(context, value_id, &remapped_value)) {
+          type->dims[i] = loom_dim_pack_dynamic(remapped_value);
           changed = true;
         }
       }
     } else {
       const loom_overflow_dim_t* original =
-          (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
+          (const loom_overflow_dim_t*)(uintptr_t)type->dims[0];
       loom_overflow_dim_t* dimensions = NULL;
       for (uint8_t i = 0; i < rank; ++i) {
         if (!loom_dim_is_dynamic(original[i])) {
           continue;
         }
         const loom_value_id_t value_id = loom_dim_value_id(original[i]);
-        const loom_value_id_t remapped_value = loom_type_remap_value(
-            context->module, context->value_map, value_id);
-        if (remapped_value == value_id) {
+        loom_value_id_t remapped_value;
+        if (!loom_remap_value(context, value_id, &remapped_value)) {
           continue;
         }
         if (!dimensions) {
@@ -216,13 +201,12 @@ static iree_status_t loom_type_remap_lookup_leaf_type(
         dimensions[i] = loom_dim_pack_dynamic(remapped_value);
       }
       if (dimensions) {
-        result.dims[0] = (uint64_t)(uintptr_t)dimensions;
-        result.dims[1] = 0;
+        type->dims[0] = (uint64_t)(uintptr_t)dimensions;
+        type->dims[1] = 0;
         changed = true;
       }
     }
   }
-  *out_type = result;
   *out_changed = changed;
   return iree_ok_status();
 }
@@ -233,49 +217,25 @@ static iree_status_t loom_remap_predicates(loom_type_remap_context_t* context,
                                            loom_attribute_t* out_attribute,
                                            bool* out_changed) {
   loom_predicate_t* predicates = NULL;
-  if (loom_remap_is_lookup(context)) {
-    for (uint16_t i = 0; i < attribute.count; ++i) {
-      const loom_predicate_t* original = &attribute.predicate_list[i];
-      for (uint8_t j = 0; j < original->arg_count; ++j) {
-        if (original->arg_tags[j] != LOOM_PRED_ARG_VALUE ||
-            original->args[j] < 0) {
-          continue;
-        }
-        const loom_value_id_t value_id = (loom_value_id_t)original->args[j];
-        const loom_value_id_t remapped_value = loom_type_remap_value(
-            context->module, context->value_map, value_id);
-        if (remapped_value == value_id) {
-          continue;
-        }
-        if (!predicates) {
-          IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, attribute.count,
-                                                         sizeof(*predicates),
-                                                         (void**)&predicates));
-          memcpy(predicates, attribute.predicate_list,
-                 attribute.count * sizeof(*predicates));
-        }
-        predicates[i].args[j] = remapped_value;
+  for (uint16_t i = 0; i < attribute.count; ++i) {
+    const loom_predicate_t* original = &attribute.predicate_list[i];
+    for (uint8_t j = 0; j < original->arg_count; ++j) {
+      if (original->arg_tags[j] != LOOM_PRED_ARG_VALUE ||
+          original->args[j] < 0) {
+        continue;
       }
-    }
-  } else {
-    const loom_value_id_t old_id = context->replacement->old_id;
-    const loom_value_id_t new_id = context->replacement->new_id;
-    for (uint16_t i = 0; i < attribute.count; ++i) {
-      const loom_predicate_t* original = &attribute.predicate_list[i];
-      for (uint8_t j = 0; j < original->arg_count; ++j) {
-        if (original->arg_tags[j] != LOOM_PRED_ARG_VALUE ||
-            (loom_value_id_t)original->args[j] != old_id) {
-          continue;
-        }
-        if (!predicates) {
-          IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, attribute.count,
-                                                         sizeof(*predicates),
-                                                         (void**)&predicates));
-          memcpy(predicates, attribute.predicate_list,
-                 attribute.count * sizeof(*predicates));
-        }
-        predicates[i].args[j] = new_id;
+      const loom_value_id_t value_id = (loom_value_id_t)original->args[j];
+      loom_value_id_t remapped_value;
+      if (!loom_remap_value(context, value_id, &remapped_value)) {
+        continue;
       }
+      if (!predicates) {
+        IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+            arena, attribute.count, sizeof(*predicates), (void**)&predicates));
+        memcpy(predicates, attribute.predicate_list,
+               attribute.count * sizeof(*predicates));
+      }
+      predicates[i].args[j] = remapped_value;
     }
   }
   *out_attribute = attribute;
@@ -387,17 +347,18 @@ static iree_status_t loom_replacement_request_type(
   const loom_type_dependency_id_t dependencies =
       loom_type_table_dependencies(&module->types, source);
   const bool may_change =
-      loom_remap_is_lookup(context)
+      (loom_remap_is_lookup(context) || context->value_map ||
+       context->value_index)
           ? dependencies != 0
           : loom_type_dependencies_contains(&module->type_uses, dependencies,
-                                            context->replacement->old_id);
+                                            context->old_id);
   if (!may_change) {
     return iree_ok_status();
   }
   loom_type_id_t found = LOOM_TYPE_ID_INVALID;
   if (loom_remap_find(context->state->memo, source, &found)) {
     *destination = found;
-    if (walk->top) {
+    if (walk->top && found != source) {
       walk->top->flags |= LOOM_REPLACEMENT_FRAME_FLAG_CHANGED;
       if (found == LOOM_TYPE_ID_INVALID) {
         walk->top->flags |= LOOM_REPLACEMENT_FRAME_FLAG_ABSENT;
@@ -521,8 +482,7 @@ static iree_status_t loom_replacement_finish_type(
       } else {
         loom_type_t result_type;
         IREE_RETURN_IF_ERROR(loom_module_make_parameterized_type(
-            context->replacement->module,
-            loom_type_parameterized_descriptor(type),
+            context->target_module, loom_type_parameterized_descriptor(type),
             frame->children.attributes, frame->count, &result_type, &result));
       }
     } else if (loom_remap_is_lookup(context)) {
@@ -530,32 +490,29 @@ static iree_status_t loom_replacement_finish_type(
           context->module, type, frame->children.types, frame->count);
     } else {
       IREE_RETURN_IF_ERROR(loom_module_intern_topological_type_id(
-          context->replacement->module, type, frame->children.types,
-          frame->count, &result));
+          context->target_module, type, frame->children.types, frame->count,
+          &result));
     }
   } else if (!frame->count) {
-    loom_type_t result_type;
+    loom_type_t result_type = type;
     bool changed = false;
-    if (loom_remap_is_lookup(context)) {
-      bool representable = true;
-      IREE_RETURN_IF_ERROR(loom_type_remap_lookup_leaf_type(
-          context, type, &result_type, &changed, &representable));
-      if (!representable) {
-        result = LOOM_TYPE_ID_INVALID;
-      } else if (changed) {
+    bool representable = true;
+    IREE_RETURN_IF_ERROR(
+        loom_remap_leaf_type(context, &result_type, &changed, &representable));
+    if (!representable) {
+      result = LOOM_TYPE_ID_INVALID;
+    } else if (changed) {
+      if (loom_remap_is_lookup(context)) {
         result = loom_module_lookup_type_id(context->module, result_type);
-      }
-    } else {
-      IREE_RETURN_IF_ERROR(loom_value_replacement_leaf_type(
-          context->replacement, type, &result_type, &changed));
-      if (changed) {
-        IREE_RETURN_IF_ERROR(loom_module_intern_type_id(
-            context->replacement->module, result_type, &result));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_module_intern_type_id(context->target_module,
+                                                        result_type, &result));
       }
     }
   }
   IREE_RETURN_IF_ERROR(
-      loom_remap_insert(context->state, frame->type.id, result));
+      loom_remap_insert(&context->state->scratch, &context->state->memo,
+                        &context->state->first_result, frame->type.id, result));
   *(loom_type_id_t*)frame->destination = result;
   if (frame->parent && result != frame->type.id) {
     frame->parent->flags |= LOOM_REPLACEMENT_FRAME_FLAG_CHANGED;
@@ -678,9 +635,30 @@ static loom_type_remap_context_t loom_value_replacement_context(
     loom_value_replacement_t* replacement) {
   return (loom_type_remap_context_t){
       .module = replacement->module,
-      .replacement = replacement,
+      .target_module = replacement->module,
+      .old_id = replacement->old_id,
+      .new_id = replacement->new_id,
       .state = &replacement->state,
   };
+}
+
+IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_value_replacement_leaf_type(
+    loom_value_replacement_t* replacement, loom_type_t type,
+    loom_type_t* out_type, bool* out_changed) {
+  loom_type_remap_context_t context =
+      loom_value_replacement_context(replacement);
+  loom_type_t result = type;
+  bool changed = false;
+  bool representable = true;
+  IREE_RETURN_IF_ERROR(
+      loom_remap_leaf_type(&context, &result, &changed, &representable));
+  if (changed) {
+    IREE_RETURN_IF_ERROR(
+        loom_module_intern_type(replacement->module, result, &result));
+  }
+  *out_type = result;
+  *out_changed = changed;
+  return iree_ok_status();
 }
 
 void loom_value_replacement_initialize(
@@ -786,14 +764,16 @@ iree_status_t loom_type_remap_lookup_equal(loom_type_remap_lookup_t* lookup,
   loom_type_remap_context_t context = {
       .module = lookup->module,
       .value_map = lookup->remap,
+      .old_id = LOOM_VALUE_ID_INVALID,
+      .new_id = LOOM_VALUE_ID_INVALID,
       .state = &lookup->state,
   };
   if (!loom_type_identity_key(source_type)) {
-    loom_type_t remapped_type;
+    loom_type_t remapped_type = source_type;
     bool changed = false;
     bool representable = true;
-    IREE_RETURN_IF_ERROR(loom_type_remap_lookup_leaf_type(
-        &context, source_type, &remapped_type, &changed, &representable));
+    IREE_RETURN_IF_ERROR(loom_remap_leaf_type(&context, &remapped_type,
+                                              &changed, &representable));
     *out_equal = representable && loom_type_equal(remapped_type, target_type);
     return iree_ok_status();
   }
@@ -865,5 +845,94 @@ iree_status_t loom_module_replace_attribute_value_references(
   iree_status_t status = loom_value_replacement_attribute(
       &replacement, attribute, out_attribute, out_changed);
   loom_value_replacement_deinitialize(&replacement);
+  return status;
+}
+
+//===----------------------------------------------------------------------===//
+// Simultaneous tuple instantiation
+//===----------------------------------------------------------------------===//
+
+IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_module_assign_dependent_types(
+    loom_module_t* module, const loom_value_id_t* source_values,
+    const loom_value_id_t* target_values, iree_host_size_t value_count) {
+  loom_type_remap_state_t state;
+  loom_type_remap_state_initialize(module->arena.block_pool, &state);
+  loom_type_remap_context_t context = {
+      .module = module,
+      .target_module = module,
+      .state = &state,
+  };
+  // Tiny tuples use the existing bounded span lookup. Larger tuples share
+  // the canonical memo's radix mechanics, with at most eight branches per key.
+  const loom_type_value_remap_t span = {
+      .source_values = source_values,
+      .target_values = target_values,
+      .count = value_count <= 2 ? (uint16_t)value_count : 0,
+  };
+  loom_value_replacement_memo_t first_mapping;
+  iree_status_t status = iree_ok_status();
+  if (value_count <= 2) {
+    context.value_map = &span;
+  } else {
+    for (iree_host_size_t i = 0; i < value_count && iree_status_is_ok(status);
+         ++i) {
+      status =
+          loom_remap_insert(&state.scratch, &context.value_index,
+                            &first_mapping, source_values[i], target_values[i]);
+    }
+  }
+  for (iree_host_size_t i = 0; i < value_count && iree_status_is_ok(status);
+       ++i) {
+    loom_type_t type = loom_module_value_type(module, source_values[i]);
+    if (loom_type_may_reference_values(type)) {
+      if (loom_type_identity_key(type)) {
+        const loom_type_id_t source = loom_module_lookup_type_id(module, type);
+        loom_type_id_t result = source;
+        loom_value_replacement_walk_t walk = {.context = &context};
+        status = loom_replacement_request_type(&walk, source, &result);
+        if (iree_status_is_ok(status)) {
+          status = loom_replacement_run(&walk);
+        }
+        if (iree_status_is_ok(status)) {
+          type = loom_type_table_get(&module->types, result);
+        }
+      } else {
+        bool changed = false;
+        bool representable = true;
+        status =
+            loom_remap_leaf_type(&context, &type, &changed, &representable);
+      }
+    }
+    if (iree_status_is_ok(status) &&
+        !loom_type_equal(type,
+                         loom_module_value_type(module, target_values[i]))) {
+      status = loom_module_set_value_type(module, target_values[i], type);
+    }
+  }
+  loom_type_remap_state_deinitialize(&state);
+  return status;
+}
+
+iree_status_t loom_module_assign_value_types(
+    loom_module_t* module, const loom_value_id_t* source_values,
+    const loom_value_id_t* target_values, iree_host_size_t value_count) {
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    loom_type_use_iterator_t dependencies;
+    loom_module_value_type_dependencies(module, source_values[i],
+                                        &dependencies);
+    if (loom_type_dependencies_next(&dependencies) != LOOM_VALUE_ID_INVALID) {
+      return loom_module_assign_dependent_types(module, source_values,
+                                                target_values, value_count);
+    }
+  }
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < value_count && iree_status_is_ok(status);
+       ++i) {
+    const loom_type_t type = loom_module_value_type(module, source_values[i]);
+    if (!loom_type_equal(type,
+                         loom_module_value_type(module, target_values[i]))) {
+      status = loom_module_set_value_type(module, target_values[i], type);
+    }
+  }
   return status;
 }

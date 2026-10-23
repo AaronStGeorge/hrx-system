@@ -463,7 +463,6 @@ loom_cc_library_group(
 
 iree_assert_dependency_boundary(
     name = "construction_dependency_boundary",
-    allowed_dependencies = ["//loom/src/loom/rewrite:remap"],
     forbidden_dependencies = [
         ":op_registry",
         ":type_registry",
