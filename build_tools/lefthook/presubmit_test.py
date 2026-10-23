@@ -1559,6 +1559,44 @@ class PresubmitTest(unittest.TestCase):
         run_command.assert_not_called()
         self.assertIn("query failed", output.getvalue())
 
+    def test_clang_tidy_all_scope_uses_packages_without_file_filter(self):
+        paths = [
+            "runtime/src/iree/base/status.c",
+            "runtime/src/iree/hal/drivers/amd/gpu/cts/driver_test.cc",
+        ]
+        with (
+            mock.patch.object(presubmit.sys, "platform", "linux"),
+            mock.patch.object(
+                presubmit, "clang_tidy_llvm_available", return_value=True
+            ),
+            mock.patch.object(
+                presubmit, "run_command", return_value=True
+            ) as run_command,
+        ):
+            self.assertTrue(
+                presubmit.run_clang_tidy(
+                    input_scope(paths, mode="all", tracked_paths=paths),
+                    profile="ci",
+                    lane="bazel",
+                    verbose=False,
+                )
+            )
+
+        command = run_command.call_args.args[0]
+        self.assertEqual(
+            command[command.index("--") + 1 :],
+            [
+                "//runtime/src/iree/base:all",
+                "//runtime/src/iree/hal/drivers/amd/gpu/cts:all",
+            ],
+        )
+        self.assertFalse(
+            any(
+                argument.startswith(presubmit.CLANG_TIDY_SELECTED_FILES_FLAG + "=")
+                for argument in command
+            )
+        )
+
     def test_clang_tidy_base_implementation_scope_stays_bounded(self):
         inputs = input_scope(
             ["runtime/src/iree/base/status.c"],

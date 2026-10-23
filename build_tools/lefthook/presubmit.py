@@ -1128,8 +1128,9 @@ def is_clang_tidy_full_scope_trigger(path: str) -> bool:
 
 
 def clang_tidy_uses_full_scope(inputs: PresubmitInputs) -> bool:
-    return inputs.mode == "base" and any(
-        is_clang_tidy_full_scope_trigger(path) for path in inputs.changed_paths
+    return inputs.mode == "all" or (
+        inputs.mode == "base"
+        and any(is_clang_tidy_full_scope_trigger(path) for path in inputs.changed_paths)
     )
 
 
