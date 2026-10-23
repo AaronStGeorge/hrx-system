@@ -22,6 +22,18 @@
 namespace loom {
 namespace {
 
+struct VisitedRelation {
+  loom_value_id_t counterpart;
+  loom_integer_order_outcome_bits_t outcomes;
+};
+
+static bool CollectRelation(void* user_data, loom_value_id_t counterpart,
+                            loom_integer_order_outcome_bits_t outcomes) {
+  static_cast<std::vector<VisitedRelation>*>(user_data)->push_back(
+      {counterpart, outcomes});
+  return true;
+}
+
 class FactRelationTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -347,6 +359,36 @@ TEST_F(FactRelationTest, SignedRelationsRetainEveryOrientation) {
         relation_case.predicate_kind, results.values[0], results.values[1]);
     EXPECT_EQ(loom_value_fact_table_evaluate_predicate(&table_, &repeated),
               LOOM_DECISION_TRUTH_TRUE);
+  }
+}
+
+TEST_F(FactRelationTest, VisitsEachScopedCounterpartOnce) {
+  loom_value_id_t third = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_value(&builder_, type_, &third));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table_, third, loom_value_facts_unknown()));
+  const std::vector<loom_predicate_t> predicates = {
+      RelationPredicate(LOOM_PREDICATE_LT, inputs_[0], inputs_[1]),
+      RelationPredicate(LOOM_PREDICATE_NE, inputs_[0], third),
+      LiteralPredicate(LOOM_PREDICATE_NE, inputs_[0], 17),
+  };
+  loom_op_t* assume = nullptr;
+  IREE_ASSERT_OK(BuildAssume({inputs_[0]}, predicates, &assume));
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
+  const loom_value_id_t scoped = loom_index_assume_results(assume).values[0];
+
+  std::vector<VisitedRelation> visited;
+  EXPECT_TRUE(loom_value_fact_table_for_each_signed_integer_relation_while(
+      &table_, scoped, CollectRelation, &visited));
+  ASSERT_EQ(visited.size(), 2u);
+  for (const VisitedRelation& relation : visited) {
+    if (relation.counterpart == inputs_[1]) {
+      EXPECT_EQ(relation.outcomes, LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
+    } else {
+      EXPECT_EQ(relation.counterpart, third);
+      EXPECT_EQ(relation.outcomes, LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS |
+                                       LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER);
+    }
   }
 }
 

@@ -47,6 +47,21 @@ loom_value_fact_table_query_signed_integer_literal_order(
     const loom_value_fact_table_t* table, loom_value_id_t value,
     int64_t literal);
 
+// Visitor for one constrained retained relation from an alias to a canonical
+// counterpart. |outcomes| is the nonempty, non-universal set of possible
+// signed comparison outcomes for the alias relative to |counterpart|.
+typedef bool (*loom_value_fact_signed_integer_relation_visit_fn_t)(
+    void* user_data, loom_value_id_t counterpart,
+    loom_integer_order_outcome_bits_t outcomes);
+
+// Visits each constrained signed relation published for |value| once. This
+// enumerates the alias's sparse retained sets without allocation or producer
+// traversal. Relations published only for a differently scoped alias remain in
+// that alias's scope. Returns false when |visit| stops iteration.
+bool loom_value_fact_table_for_each_signed_integer_relation_while(
+    const loom_value_fact_table_t* table, loom_value_id_t value,
+    loom_value_fact_signed_integer_relation_visit_fn_t visit, void* user_data);
+
 // Clears all scope-local retained relation state. The caller releases the
 // transient arena after clearing the complete fact-table scope.
 void loom_value_fact_integer_relations_clear_scope(

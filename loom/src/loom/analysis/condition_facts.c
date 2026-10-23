@@ -17,6 +17,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/util/adaptive_sort.h"
+#include "loom/util/fact_relation.h"
 
 #define LOOM_CONDITION_QUERY_INITIAL_CAPACITY 16
 
@@ -1277,6 +1278,166 @@ static iree_status_t loom_condition_facts_query_impl(
   return status;
 }
 
+static bool loom_condition_fact_set_contains_integer_relation(
+    const loom_condition_fact_set_t* facts,
+    loom_condition_integer_relation_t relation) {
+  relation = loom_condition_integer_relation_canonicalize(relation);
+  for (iree_host_size_t i = 0; i < facts->integer_relation_count; ++i) {
+    const loom_condition_integer_relation_t* existing =
+        &facts->integer_relations[i];
+    if (existing->relation == relation.relation &&
+        loom_condition_integer_operands_equal(existing->left, relation.left) &&
+        loom_condition_integer_operands_equal(existing->right,
+                                              relation.right)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_condition_derivation_append_composed_relation(
+    loom_condition_derivation_t* derivation,
+    loom_condition_integer_operand_t left,
+    loom_integer_order_outcome_bits_t outcomes,
+    loom_condition_integer_operand_t right) {
+  if (loom_condition_integer_operands_equal(left, right)) {
+    return iree_ok_status();
+  }
+  loom_symbolic_integer_relation_t relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+  if (!loom_symbolic_integer_relation_from_outcomes(outcomes, &relation)) {
+    return iree_ok_status();
+  }
+  const loom_condition_integer_relation_t composed = {
+      .relation = relation,
+      .left = left,
+      .right = right,
+  };
+  if (loom_condition_fact_set_contains_integer_relation(
+          &derivation->integer_facts, composed)) {
+    return iree_ok_status();
+  }
+  bool complete = true;
+  return loom_condition_fact_set_append_integer_relation(
+      &derivation->integer_facts, derivation, composed, &complete);
+}
+
+typedef struct loom_condition_retained_composition_t {
+  loom_condition_derivation_t* derivation;
+  loom_condition_integer_operand_t anchor;
+  loom_integer_order_outcome_bits_t anchor_middle_outcomes;
+  iree_status_t status;
+} loom_condition_retained_composition_t;
+
+static bool loom_condition_derivation_compose_retained_relation(
+    void* user_data, loom_value_id_t counterpart,
+    loom_integer_order_outcome_bits_t middle_counterpart_outcomes) {
+  loom_condition_retained_composition_t* composition =
+      (loom_condition_retained_composition_t*)user_data;
+  const loom_integer_order_outcome_bits_t outcomes =
+      loom_integer_order_outcomes_compose(composition->anchor_middle_outcomes,
+                                          middle_counterpart_outcomes);
+  const loom_condition_integer_operand_t counterpart_operand = {
+      .kind = LOOM_CONDITION_INTEGER_OPERAND_VALUE,
+      .value_id = counterpart,
+  };
+  composition->status = loom_condition_derivation_append_composed_relation(
+      composition->derivation, composition->anchor, outcomes,
+      counterpart_operand);
+  return iree_status_is_ok(composition->status);
+}
+
+static iree_status_t loom_condition_derivation_compose_from_middle(
+    const loom_value_fact_table_t* fact_table,
+    loom_condition_derivation_t* derivation,
+    iree_host_size_t source_relation_count,
+    loom_condition_integer_operand_t anchor,
+    loom_integer_order_outcome_bits_t anchor_middle_outcomes,
+    loom_condition_integer_operand_t middle) {
+  for (iree_host_size_t i = 0; i < source_relation_count; ++i) {
+    const loom_condition_integer_relation_t source =
+        derivation->integer_facts.integer_relations[i];
+    loom_condition_integer_operand_t counterpart = {0};
+    loom_integer_order_outcome_bits_t middle_counterpart_outcomes = 0;
+    if (loom_condition_integer_operands_equal(middle, source.left)) {
+      counterpart = source.right;
+      middle_counterpart_outcomes =
+          loom_symbolic_integer_relation_outcomes(source.relation);
+    } else if (loom_condition_integer_operands_equal(middle, source.right)) {
+      counterpart = source.left;
+      middle_counterpart_outcomes = loom_integer_order_outcomes_swap(
+          loom_symbolic_integer_relation_outcomes(source.relation));
+    } else {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_condition_derivation_append_composed_relation(
+        derivation, anchor,
+        loom_integer_order_outcomes_compose(anchor_middle_outcomes,
+                                            middle_counterpart_outcomes),
+        counterpart));
+  }
+
+  if (middle.kind != LOOM_CONDITION_INTEGER_OPERAND_VALUE || !fact_table) {
+    return iree_ok_status();
+  }
+  loom_condition_retained_composition_t composition = {
+      .derivation = derivation,
+      .anchor = anchor,
+      .anchor_middle_outcomes = anchor_middle_outcomes,
+      .status = iree_ok_status(),
+  };
+  (void)loom_value_fact_table_for_each_signed_integer_relation_while(
+      fact_table, middle.value_id,
+      loom_condition_derivation_compose_retained_relation, &composition);
+  return composition.status;
+}
+
+static bool loom_condition_derivation_operand_is_source_anchor(
+    const loom_condition_derivation_t* derivation,
+    iree_host_size_t source_relation_count,
+    loom_condition_integer_operand_t operand) {
+  for (iree_host_size_t i = 0; i < source_relation_count; ++i) {
+    const loom_condition_integer_relation_t* source =
+        &derivation->integer_facts.integer_relations[i];
+    if (loom_condition_integer_operands_equal(operand, source->left) ||
+        loom_condition_integer_operands_equal(operand, source->right)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Expands each condition-owned anchor through other local condition relations
+// and sparse relations retained by the intermediate alias. Derived relations
+// are persisted with the edge derivation, keeping downstream proof queries
+// indexed and preventing per-use relation walks. Expansion never connects two
+// ambient-only values, which bounds closure to the condition's own operands.
+static iree_status_t loom_condition_derivation_compose_integer_relations(
+    const loom_value_fact_table_t* fact_table,
+    loom_condition_derivation_t* derivation) {
+  const iree_host_size_t source_relation_count =
+      derivation->integer_facts.integer_relation_count;
+  for (iree_host_size_t i = 0;
+       i < derivation->integer_facts.integer_relation_count; ++i) {
+    const loom_condition_integer_relation_t relation =
+        derivation->integer_facts.integer_relations[i];
+    const loom_integer_order_outcome_bits_t outcomes =
+        loom_symbolic_integer_relation_outcomes(relation.relation);
+    if (loom_condition_derivation_operand_is_source_anchor(
+            derivation, source_relation_count, relation.left)) {
+      IREE_RETURN_IF_ERROR(loom_condition_derivation_compose_from_middle(
+          fact_table, derivation, source_relation_count, relation.left,
+          outcomes, relation.right));
+    }
+    if (loom_condition_derivation_operand_is_source_anchor(
+            derivation, source_relation_count, relation.right)) {
+      IREE_RETURN_IF_ERROR(loom_condition_derivation_compose_from_middle(
+          fact_table, derivation, source_relation_count, relation.right,
+          loom_integer_order_outcomes_swap(outcomes), relation.left));
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_condition_facts_query(
     loom_condition_query_t* query, const loom_value_fact_table_t* fact_table,
     loom_value_id_t condition_value, bool assumed_truth,
@@ -1298,6 +1459,10 @@ iree_status_t loom_condition_facts_query_complete(
       &out_derivation->integer_facts, out_derivation,
       /*out_refinements=*/NULL, &complete);
   if (iree_status_is_ok(status)) {
+    status = loom_condition_derivation_compose_integer_relations(
+        fact_table, out_derivation);
+  }
+  if (iree_status_is_ok(status)) {
     loom_condition_derivation_finalize(out_derivation);
   }
   return status;
@@ -1318,6 +1483,10 @@ iree_status_t loom_condition_facts_query_conjunction_complete(
         assumptions[i].assumed_truth, &out_derivation->integer_facts,
         out_derivation,
         /*out_refinements=*/NULL, &complete);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_condition_derivation_compose_integer_relations(
+        fact_table, out_derivation);
   }
   if (iree_status_is_ok(status)) {
     loom_condition_derivation_finalize(out_derivation);

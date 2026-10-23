@@ -96,6 +96,15 @@ loom_symbolic_integer_relation_t loom_integer_order_outcome_relation(
 loom_integer_order_outcome_bits_t loom_integer_order_outcomes_swap(
     loom_integer_order_outcome_bits_t outcomes);
 
+// Returns the tight possible outcomes for |left| relative to |right| after
+// composing |left_middle| (left relative to an intermediate value) with
+// |middle_right| (that intermediate value relative to right). Empty inputs
+// produce an empty result; unconstrained inputs conservatively compose to all
+// outcomes.
+loom_integer_order_outcome_bits_t loom_integer_order_outcomes_compose(
+    loom_integer_order_outcome_bits_t left_middle,
+    loom_integer_order_outcome_bits_t middle_right);
+
 // Resolves |queried_relation| against a nonempty set of possible outcomes.
 // Returns false when some outcomes satisfy the query and others do not.
 bool loom_symbolic_integer_relation_resolve(

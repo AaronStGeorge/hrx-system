@@ -172,6 +172,54 @@ loom_integer_order_outcome_bits_t loom_integer_order_outcomes_swap(
   return swapped;
 }
 
+loom_integer_order_outcome_bits_t loom_integer_order_outcomes_compose(
+    loom_integer_order_outcome_bits_t left_middle,
+    loom_integer_order_outcome_bits_t middle_right) {
+  static const loom_integer_order_outcome_bits_t composition[3][3] = {
+      [LOOM_INTEGER_ORDER_OUTCOME_LESS] =
+          {
+              [LOOM_INTEGER_ORDER_OUTCOME_LESS] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS,
+              [LOOM_INTEGER_ORDER_OUTCOME_EQUAL] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS,
+              [LOOM_INTEGER_ORDER_OUTCOME_GREATER] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL,
+          },
+      [LOOM_INTEGER_ORDER_OUTCOME_EQUAL] =
+          {
+              [LOOM_INTEGER_ORDER_OUTCOME_LESS] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS,
+              [LOOM_INTEGER_ORDER_OUTCOME_EQUAL] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_EQUAL,
+              [LOOM_INTEGER_ORDER_OUTCOME_GREATER] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER,
+          },
+      [LOOM_INTEGER_ORDER_OUTCOME_GREATER] =
+          {
+              [LOOM_INTEGER_ORDER_OUTCOME_LESS] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL,
+              [LOOM_INTEGER_ORDER_OUTCOME_EQUAL] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER,
+              [LOOM_INTEGER_ORDER_OUTCOME_GREATER] =
+                  LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER,
+          },
+  };
+  loom_integer_order_outcome_bits_t composed = 0;
+  for (loom_integer_order_outcome_t left_outcome = 0;
+       left_outcome < LOOM_INTEGER_ORDER_OUTCOME_COUNT; ++left_outcome) {
+    if (!(left_middle & (1u << left_outcome))) {
+      continue;
+    }
+    for (loom_integer_order_outcome_t right_outcome = 0;
+         right_outcome < LOOM_INTEGER_ORDER_OUTCOME_COUNT; ++right_outcome) {
+      if (middle_right & (1u << right_outcome)) {
+        composed |= composition[left_outcome][right_outcome];
+      }
+    }
+  }
+  return composed;
+}
+
 bool loom_symbolic_integer_relation_resolve(
     loom_integer_order_outcome_bits_t outcomes,
     loom_symbolic_integer_relation_t queried_relation, bool* out_result) {
