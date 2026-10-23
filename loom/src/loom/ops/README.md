@@ -36,5 +36,6 @@ likewise expose vocabulary without requiring target record tables.
 
 `construction_dependency_boundary` checks the complete configured dialect
 family together. It keeps compiler registries, semantic dialect libraries,
-analysis, rewriting, and format implementations out of the construction closure;
-the value-remapping primitive used by region builders remains permitted.
+analysis, rewriting, and format implementations out of the construction closure.
+Region builders instantiate dependent argument types through the IR construction
+API, without depending on the general operation remapper.

@@ -45,7 +45,6 @@ loom_cc_library(
         ":op_defs",
         "//loom/src/loom/ir:builders",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/rewrite:remap",
     ],
 )
 

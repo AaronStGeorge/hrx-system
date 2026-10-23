@@ -142,7 +142,7 @@ loom_cc_library(
         "//loom/binding/c:loomc",
         "//loom/binding/c/target/iree_hal",
         "//loom/src/loom/config:text_binding",
-        "//loom/src/loom/ops/check",
+        "//loom/src/loom/ops/check:op_defs",
         "//loom/src/loom/sanitizer:options",
         "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/cli:loomc_options",

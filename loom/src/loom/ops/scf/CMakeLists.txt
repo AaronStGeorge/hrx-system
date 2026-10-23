@@ -104,7 +104,6 @@ loom_cc_library(
   DEPS
     loom::ir::builders
     loom::ops::op_defs
-    loom::rewrite::remap
   PUBLIC
 )
 

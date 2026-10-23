@@ -42,7 +42,6 @@ loom_cc_library(
     ::op_defs
     loom::ir::builders
     loom::ops::op_defs
-    loom::rewrite::remap
     loom::util::stable_id
   PUBLIC
 )

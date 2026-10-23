@@ -255,4 +255,5 @@ def test_condition_loop_builder_exposes_independent_entry_scheme() -> None:
     assert "loom_module_value_type(builder->module, iter_args[_i])" in source
     assert "loom_builder_define_value(builder, _arg_type, &_arg_id)" in source
     assert "loom_block_add_arg(builder->module, _block, _arg_id)" in source
-    assert '#include "loom/rewrite/remap.h"' in source
+    assert '#include "loom/ir/value_replacement.h"' in source
+    assert "loom_module_assign_value_types(" in source

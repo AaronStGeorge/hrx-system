@@ -10,6 +10,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/value_replacement.h"
 #include "loom/rewrite/remap.h"
 
 typedef struct loom_loop_like_value_range_t {
@@ -478,7 +479,7 @@ iree_status_t loom_loop_like_build_replacement(
       .count = target_result_count,
   };
   if (target_result_count != 0) {
-    IREE_RETURN_IF_ERROR(loom_ir_remap_assign_value_types(
+    IREE_RETURN_IF_ERROR(loom_module_assign_value_types(
         builder->module, out_replacement->results.values,
         out_replacement->body_state.values, target_result_count));
   }

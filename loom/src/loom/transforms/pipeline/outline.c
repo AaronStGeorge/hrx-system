@@ -8,6 +8,7 @@
 
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/symbol_map.h"
+#include "loom/ir/value_replacement.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/func_symbol_facts.h"
@@ -147,7 +148,7 @@ static iree_status_t loom_pipeline_outline_strand(loom_rewriter_t* rewriter,
       0, NULL, 0, NULL, 0, strand->location, &function));
   loom_region_t* target_body = loom_func_def_body(function);
   loom_block_t* entry = loom_region_entry_block(target_body);
-  IREE_RETURN_IF_ERROR(loom_ir_remap_assign_value_types(
+  IREE_RETURN_IF_ERROR(loom_module_assign_value_types(
       module, captures, entry->arg_ids, capture_count));
   for (iree_host_size_t i = 0; i < capture_count; ++i) {
     IREE_RETURN_IF_ERROR(

@@ -47,7 +47,7 @@ loom_cc_library(
     loom::binding::c::loomc
     loom::binding::c::target::iree_hal
     loom::config::text_binding
-    loom::ops::check
+    loom::ops::check::op_defs
     loom::sanitizer::options
     loom::tooling::cli::help
     loom::tooling::cli::loomc_options

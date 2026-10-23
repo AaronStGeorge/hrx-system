@@ -94,9 +94,8 @@ loom_cc_library(
     loom::error::diagnostic
     loom::error::json_sink
     loom::error::renderer
-    loom::ir
-    loom::ir::facts
-    loom::ops::check
+    loom::ir::builders
+    loom::ops::check::op_defs
     loom::sanitizer::options
     loom::tooling::cli::help
     loom::tooling::cli::loomc_diagnostic_json

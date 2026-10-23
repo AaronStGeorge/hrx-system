@@ -52,7 +52,7 @@ loom_cc_library(
     hdrs = ["source.h"],
     deps = [
         ":diagnostic",
-        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:builders",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/internal:unicode",

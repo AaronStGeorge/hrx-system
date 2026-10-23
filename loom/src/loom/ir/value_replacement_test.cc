@@ -170,6 +170,20 @@ class ValueReplacementTest : public ::testing::Test {
     EXPECT_EQ(std::memcmp(&first, &second, sizeof(first)), 0);
   }
 
+  void OverwriteReleasedBlocks() {
+    iree_arena_allocator_t reused;
+    iree_arena_initialize(&pool_, &reused);
+    const auto allocations_before_reuse = allocation_count_;
+    const auto block_size = iree_arena_block_pool_max_allocation_size(&pool_);
+    // The first backing allocation proves all previously free blocks were used.
+    while (allocation_count_ == allocations_before_reuse) {
+      void* memory;
+      IREE_CHECK_OK(iree_arena_allocate(&reused, block_size, &memory));
+      std::memset(memory, 0xA5, block_size);
+    }
+    iree_arena_deinitialize(&reused);
+  }
+
   // Backing allocation ordinal to fail, or SIZE_MAX when disabled.
   size_t failure_index_ = SIZE_MAX;
   // Backing allocations attempted since the current fault test began.
@@ -256,7 +270,7 @@ TEST_F(ValueReplacementTest, MixedAttributeTypeGraphUsesAnExplicitStack) {
 }
 
 TEST_F(ValueReplacementTest,
-       LookupNormalizesCanonicalGraphsWithoutPublishingTypes) {
+       CanonicalGraphsSupportLookupAndTupleInstantiation) {
   const loom_value_id_t other_id = Constant(3);
   const loom_value_id_t absent_target_id = Constant(4);
   const loom_value_id_t other_target_id = Constant(5);
@@ -406,6 +420,21 @@ TEST_F(ValueReplacementTest,
   EXPECT_EQ(module_->type_intern.count, interner_count);
   EXPECT_EQ(module_->recent_exact_type_ordinals[0], recent_types[0]);
   EXPECT_EQ(module_->recent_exact_type_ordinals[1], recent_types[1]);
+
+  // The publishing tuple path uses the same normalization through functions,
+  // registers, dialect types, parameters, dictionaries, and predicates.
+  const auto source_carrier = Carrier(source);
+  const auto target_carrier = Carrier(loom_type_none());
+  const loom_value_id_t sources[] = {source_carrier, old_id_, other_id};
+  const loom_value_id_t targets[] = {target_carrier, new_id_, other_target_id};
+  iree_arena_block_pool_trim(&pool_);
+  IREE_ASSERT_OK(loom_module_assign_value_types(module_, sources, targets,
+                                                IREE_ARRAYSIZE(sources)));
+  OverwriteReleasedBlocks();
+  ExpectSame(loom_module_value_type(module_, target_carrier), target);
+  ExpectSame(loom_module_value_type(module_, source_carrier), source);
+  ExpectDependencies(target_carrier, {new_id_, other_target_id});
+  EXPECT_EQ(module_->types.count, type_count);
 }
 
 TEST_F(ValueReplacementTest, LookupLeavesNeedNoTraversalState) {
@@ -570,17 +599,7 @@ TEST_F(ValueReplacementTest, PublishedAttributesSurviveScratchBlockReuse) {
   // completed replacement. Reacquire and overwrite them before reading the IR.
   iree_arena_block_pool_trim(&pool_);
   IREE_ASSERT_OK(loom_value_replace_all_uses_with(module_, old_id_, new_id_));
-  iree_arena_allocator_t reused;
-  iree_arena_initialize(&pool_, &reused);
-  const auto allocations_before_reuse = allocation_count_;
-  const auto block_size = iree_arena_block_pool_max_allocation_size(&pool_);
-  // The first backing allocation proves all previously free blocks were used.
-  while (allocation_count_ == allocations_before_reuse) {
-    void* memory;
-    IREE_ASSERT_OK(iree_arena_allocate(&reused, block_size, &memory));
-    std::memset(memory, 0xA5, block_size);
-  }
-  iree_arena_deinitialize(&reused);
+  OverwriteReleasedBlocks();
   const auto result = loom_test_attrs_dict(owner);
   ASSERT_EQ(result.count, 2);
   EXPECT_EQ(result.entries[0].name_id, predicate_key);
@@ -695,6 +714,210 @@ TEST_F(ValueReplacementTest, EncodingOverflowDoesNotChangeTheCarrier) {
       loom_type_remap_lookup_equal(&lookup.value, original, original, &equal));
   EXPECT_FALSE(equal);
   EXPECT_FALSE(lookup.value.state_initialized);
+
+  const auto prefix = Carrier(loom_type_none());
+  const auto destination = Carrier(loom_type_none());
+  const loom_value_id_t sources[] = {old_id_, carrier, old_encoding};
+  const loom_value_id_t targets[] = {prefix, destination, new_encoding};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_module_assign_value_types(module_, sources, targets,
+                                     IREE_ARRAYSIZE(sources)));
+  ExpectSame(loom_module_value_type(module_, prefix),
+             loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+  ExpectSame(loom_module_value_type(module_, destination), loom_type_none());
+  ExpectDependencies(destination, {});
+  ExpectDependencies(carrier, {old_encoding});
+}
+
+TEST_F(ValueReplacementTest, PlainAndTinyTuplesNeedNoScratchBlocks) {
+  IREE_ASSERT_OK(loom_module_assign_value_types(module_, nullptr, nullptr, 0));
+  std::array<loom_value_id_t, 32> sources;
+  std::array<loom_value_id_t, 32> targets;
+  for (size_t i = 0; i < sources.size(); ++i) {
+    sources[i] = Carrier(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+    targets[i] = Carrier(loom_type_none());
+  }
+  const loom_value_id_t dependent_sources[] = {Carrier(Vector(old_id_)),
+                                               old_id_};
+  const loom_value_id_t dependent_targets[] = {Carrier(Vector(new_id_)),
+                                               new_id_};
+  iree_arena_block_pool_trim(&pool_);
+  const auto allocations = allocation_count_;
+  IREE_ASSERT_OK(loom_module_assign_value_types(
+      module_, sources.data(), targets.data(), sources.size()));
+  IREE_ASSERT_OK(loom_module_assign_value_types(
+      module_, dependent_sources, dependent_targets,
+      IREE_ARRAYSIZE(dependent_sources)));
+  EXPECT_EQ(allocation_count_, allocations);
+  for (const auto target : targets) {
+    ExpectSame(loom_module_value_type(module_, target),
+               loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+  }
+  ExpectDependencies(dependent_targets[0], {new_id_});
+}
+
+TEST_F(ValueReplacementTest, TuplesMapSparseUnpublishedValuesSimultaneously) {
+  constexpr std::array<size_t, 4> kCounts = {1, 2, 8, 128};
+  constexpr std::array<size_t, 4> kStrides = {1, 17, 257, 17};
+  for (size_t trial = 0; trial < kCounts.size(); ++trial) {
+    SCOPED_TRACE(trial);
+    ASSERT_NO_FATAL_FAILURE(ResetModule());
+    const auto count = kCounts[trial];
+    const auto index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+    const auto external = old_id_;
+    std::vector<loom_value_id_t> providers(count);
+    for (size_t i = 0; i < count; ++i) {
+      for (size_t gap = 0; gap < kStrides[trial]; ++gap) {
+        IREE_ASSERT_OK(
+            loom_module_define_value(module_, index_type, &providers[i]));
+      }
+    }
+    std::vector<loom_value_id_t> sources(2 * count);
+    std::vector<loom_value_id_t> targets(2 * count);
+    std::vector<loom_type_t> source_types(count);
+    for (size_t i = 0; i < count; ++i) {
+      const size_t provider_position = (2 * i * 73) % sources.size();
+      const size_t carrier_position = ((2 * i + 1) * 73) % sources.size();
+      auto type = loom_type_shaped_2d(
+          LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+          loom_dim_pack_dynamic(providers[(i * 73) % count]),
+          loom_dim_pack_dynamic(external), 0);
+      if (i % 2) {
+        type = Pair(type, type);
+      }
+      source_types[i] = type;
+      sources[provider_position] = providers[i];
+      IREE_ASSERT_OK(
+          loom_module_define_value(module_, type, &sources[carrier_position]));
+      IREE_ASSERT_OK(loom_module_define_value(module_, index_type,
+                                              &targets[provider_position]));
+      IREE_ASSERT_OK(loom_module_define_value(module_, loom_type_none(),
+                                              &targets[carrier_position]));
+    }
+    IREE_ASSERT_OK(loom_module_assign_value_types(
+        module_, sources.data(), targets.data(), sources.size()));
+    OverwriteReleasedBlocks();
+    for (size_t i = 0; i < count; ++i) {
+      const size_t carrier_position = ((2 * i + 1) * 73) % sources.size();
+      const size_t provider_index = (i * 73) % count;
+      const auto expected_width =
+          targets[(2 * provider_index * 73) % targets.size()];
+      auto type = loom_module_value_type(module_, targets[carrier_position]);
+      if (i % 2) {
+        const auto* data = loom_type_func_data(type);
+        ASSERT_EQ(data->arg_count, 2);
+        ExpectSame(data->types[0], data->types[1]);
+        type = data->types[0];
+      }
+      EXPECT_EQ(loom_type_dim_value_id_at(type, 0), expected_width);
+      EXPECT_EQ(loom_type_dim_value_id_at(type, 1), external);
+      ExpectSame(loom_module_value_type(module_, sources[carrier_position]),
+                 source_types[i]);
+      ExpectDependencies(targets[carrier_position], {external, expected_width});
+    }
+  }
+}
+
+TEST_F(ValueReplacementTest,
+       TupleSharesCanonicalResultsWithoutRetainedScratch) {
+  constexpr size_t kDepth = 64;
+  constexpr size_t kCount = 65;
+  auto source_type = Vector(old_id_);
+  for (size_t i = 0; i < kDepth; ++i) {
+    source_type = Pair(source_type, source_type);
+  }
+  std::array<loom_value_id_t, kCount> sources;
+  std::array<loom_value_id_t, kCount> targets;
+  sources[0] = old_id_;
+  targets[0] = new_id_;
+  for (size_t i = 1; i < kCount; ++i) {
+    sources[i] = Carrier(source_type);
+    targets[i] = Carrier(loom_type_none());
+  }
+  const auto original_type_count = module_->types.count;
+  IREE_ASSERT_OK(loom_module_assign_value_types(
+      module_, sources.data(), targets.data(), sources.size()));
+  EXPECT_EQ(module_->types.count, original_type_count + kDepth + 1);
+  const auto retained_bytes = module_->arena.used_allocation_size;
+  const auto retained_type_count = module_->types.count;
+  IREE_ASSERT_OK(loom_module_assign_value_types(
+      module_, sources.data(), targets.data(), sources.size()));
+  EXPECT_EQ(module_->arena.used_allocation_size, retained_bytes);
+  EXPECT_EQ(module_->types.count, retained_type_count);
+  OverwriteReleasedBlocks();
+  const auto result = loom_module_value_type(module_, targets[1]);
+  for (size_t i = 1; i < kCount; ++i) {
+    ExpectSame(loom_module_value_type(module_, targets[i]), result);
+    ExpectDependencies(targets[i], {new_id_});
+  }
+  auto leaf = result;
+  for (size_t i = 0; i < kDepth; ++i) {
+    const auto* children = loom_type_func_data(leaf)->types;
+    ExpectSame(children[0], children[1]);
+    leaf = children[0];
+  }
+  ExpectSame(leaf, Vector(new_id_));
+}
+
+TEST_F(ValueReplacementTest, TupleAllocationFailuresKeepAssignedPrefixValid) {
+  bool saw_partial_assignment = false;
+  for (size_t failure = 0;; ++failure) {
+    SCOPED_TRACE(failure);
+    ASSERT_NO_FATAL_FAILURE(ResetModule());
+    auto source_type = Vector(old_id_);
+    for (size_t i = 0; i < 16; ++i) {
+      source_type = Array(source_type);
+    }
+    const loom_value_id_t sources[] = {old_id_, Carrier(source_type),
+                                       Carrier(source_type)};
+    const loom_value_id_t targets[] = {Carrier(loom_type_none()),
+                                       Carrier(loom_type_none()),
+                                       Carrier(loom_type_none())};
+    iree_arena_block_pool_trim(&pool_);
+    failure_index_ = failure;
+    allocation_count_ = 0;
+    iree_status_t status = loom_module_assign_value_types(
+        module_, sources, targets, IREE_ARRAYSIZE(sources));
+    failure_index_ = SIZE_MAX;
+    const bool succeeded = iree_status_is_ok(status);
+    if (!succeeded) {
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+      EXPECT_EQ(allocation_count_, failure + 1);
+    }
+    saw_partial_assignment |=
+        !succeeded && loom_type_kind(loom_module_value_type(
+                          module_, targets[0])) != LOOM_TYPE_NONE;
+    bool saw_unassigned = false;
+    for (size_t i = 1; i < IREE_ARRAYSIZE(targets); ++i) {
+      auto type = loom_module_value_type(module_, targets[i]);
+      if (loom_type_kind(type) == LOOM_TYPE_NONE) {
+        saw_unassigned = true;
+        ExpectDependencies(targets[i], {});
+      } else {
+        EXPECT_FALSE(saw_unassigned);
+        for (size_t depth = 0; depth < 16; ++depth) {
+          ASSERT_TRUE(loom_test_array_type_isa(type));
+          type = loom_type_table_get(&module_->types,
+                                     loom_test_array_type_element_type(type));
+        }
+        ExpectSame(type, Vector(targets[0]));
+        ExpectDependencies(targets[i], {targets[0]});
+      }
+      ExpectSame(loom_module_value_type(module_, sources[i]), source_type);
+      ExpectDependencies(sources[i], {old_id_});
+    }
+    IREE_ASSERT_OK(loom_module_assign_value_types(module_, sources, targets,
+                                                  IREE_ARRAYSIZE(sources)));
+    OverwriteReleasedBlocks();
+    for (size_t i = 1; i < IREE_ARRAYSIZE(targets); ++i) {
+      ExpectDependencies(targets[i], {targets[0]});
+    }
+    if (succeeded) {
+      break;
+    }
+  }
+  EXPECT_TRUE(saw_partial_assignment);
 }
 
 TEST_F(ValueReplacementTest, MembershipUsesFullSparseProviderIdentities) {
