@@ -94,18 +94,43 @@ class ExecutablesTest : public WeightsTest {
     arguments[4] = iree_vm_variant_from_i32(count);
     arguments[5] = iree_vm_variant_from_i64(tag);
     arguments[6] = iree_vm_variant_from_i64(static_cast<int64_t>(limit));
+    iree_vm_module_t* capture = nullptr;
+    loom_serve_program_t* program = nullptr;
     if (iree_status_is_ok(status)) {
+      status = loom_serve_preparation_module_create(environment_,
+                                                    host_allocator_, &capture);
+    }
+    if (iree_status_is_ok(status)) {
+      loom_serve_preparation_module_begin(
+          capture, preparation_ ? 1 : 0, preparation_,
+          LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
       loom_serve_compilation_report_t report = {};
-      status = loom_serve_preparation_allocate(
+      const auto root = iree_make_cstring_view(entry);
+      status = loom_serve_program_allocate(
           loom_serve_host_target_environment(
               loom_serve_device_host(device_owner_)),
           environment_, &sources_,
-          iree_make_cstring_view(FLAG_executable_sources),
-          iree_make_cstring_view(entry),
-          iree_vm_variant_span_from_array(arguments),
-          iree_vm_variant_span_empty(), iree_vm_module_span_empty(), &report,
-          host_allocator_, out_preparation);
+          iree_make_cstring_view(FLAG_executable_sources), 1, &root,
+          {&capture, 1}, &report, host_allocator_, &program);
+      iree_vm_function_t function = {};
+      if (iree_status_is_ok(status)) {
+        status =
+            iree_vm_process_lookup_function(loom_serve_program_process(program),
+                                            IREE_SV("model"), root, &function);
+      }
+      if (iree_status_is_ok(status)) {
+        status =
+            iree_vm_invoke(loom_serve_program_invocation(program), function,
+                           iree_vm_variant_span_from_array(arguments), {});
+      }
+      *out_preparation = loom_serve_preparation_module_take(capture);
+      if (!iree_status_is_ok(status)) {
+        loom_serve_preparation_free(*out_preparation);
+        *out_preparation = nullptr;
+      }
     }
+    loom_serve_program_free(program);
+    iree_vm_module_release(capture);
     iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
     return status;
   }
@@ -230,11 +255,11 @@ class ExecutablesTest : public WeightsTest {
     return status;
   }
 
-  void Execute(int32_t first, int32_t stride = 3) {
+  void Execute(int32_t first, int32_t stride = 3, int32_t stage = 1) {
     auto* residency = loom_serve_executables_residency(executables_);
     IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residency));
     iree_vm_variant_t arguments[] = {
-        iree_vm_variant_from_i32(1),
+        iree_vm_variant_from_i32(stage),
         iree_hal_buffer_variant_from_ptr_borrowed(&hal_types_, output_buffer_)};
     iree_vm_variant_t results[1] = {};
     auto status =
@@ -332,6 +357,21 @@ TEST_P(ExecutablesTest, RebindsCheckpointDataWithoutRecompilingSharedCode) {
   EXPECT_EQ(compilation_.commands, before + 1);
   EXPECT_EQ(loom_serve_parameter_bank_buffers(bank_)[0], base);
   EXPECT_EQ(loom_serve_residency_activity(residency_).activations, 2u);
+}
+
+TEST_P(ExecutablesTest, SourceOnlyChoicesPreserveColdCodeAndResidentBindings) {
+  IREE_ASSERT_OK(Create(1));
+  const auto commands = compilation_.commands;
+  const auto kernels = compilation_.kernels;
+  const auto* base = loom_serve_parameter_bank_buffers(bank_)[0];
+  for (bool swapped : {false, true, false}) {
+    IREE_ASSERT_OK(Begin("domains", swapped, 0, 0, 0, "sources_only"));
+    IREE_ASSERT_OK(Advance(false));
+    ASSERT_NO_FATAL_FAILURE(Execute(290, 3, 0));
+    EXPECT_EQ(compilation_.commands, commands);
+    EXPECT_EQ(compilation_.kernels, kernels);
+    EXPECT_EQ(loom_serve_parameter_bank_buffers(bank_)[0], base);
+  }
 }
 
 TEST_P(ExecutablesTest, SelectsSubsetWithoutChangingParameterStorage) {

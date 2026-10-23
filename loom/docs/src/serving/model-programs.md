@@ -94,14 +94,27 @@ configuration and checkpoint domains. Shared preparation capabilities include:
 | `config(stage, key, value)` | Bind a public Loom configuration value in textual syntax. |
 | `config_i64(stage, key, value)` | Bind a signed integer configuration value. |
 | `workspace_limit(stage, bytes)` | Bound command workspace, including compatible live replacements. |
-| `parameter(stage, binding, directory, path, policy)` | Append a checkpoint file to a reflected fixed binding's parameter domain. |
+| `source(directory, path)` | Declare the first shard of a checkpoint and return its source ordinal. |
+| `source_append(source, directory, path)` | Append a shard to that checkpoint's ordered index. |
+| `parameter(stage, binding, input, source, policy)` | Bind a checkpoint to one policy-local input of a reflected fixed parameter binding. |
 
-A split checkpoint uses one `parameter` call per file with the same binding
-and preparation policy. The files populate one parameter index in declaration
-order, so their tensors share one residency plan. Stages naming the same ordered
-file list and policy share that domain. File selection belongs to the model's
-cold source; the loader accepts explicit GGUF, safetensors, and other supported
-parameter files without inferring filenames.
+A split checkpoint uses `source` for its first file and `source_append` for
+each additional shard. The files populate one index in declaration order.
+The same source can supply several resident bindings or stages without repeating
+the file list. Sources identify bytes, independently of resident placement or
+preparation policy; a source declaration by itself loads no parameter payload.
+
+Each fixed binding declares its policy inputs once, densely from zero. A policy
+can combine independent checkpoints containing the same keys: its `weights`
+imports use those local input ordinals, not model-wide source ordinals. Stages
+naming the same ordered file lists and policy share a resident domain. The
+loader accepts explicit GGUF, safetensors, and other supported parameter files
+without inferring filenames.
+
+Request preparation can declare additional sources after the immutable cold
+source prefix, or bind that prefix to new stages. It cannot append shards to a
+cold source. Each request choice owns its declarations independently; selecting
+another choice does not change the checkpoint identity of accepted work.
 
 The exact signatures and ownership are in the
 [preparation contract](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/runtime/program/preparation.h).

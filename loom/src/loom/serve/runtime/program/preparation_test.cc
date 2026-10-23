@@ -11,6 +11,7 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/buffer.h"
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/program/program.h"
 #include "loomc/iree.h"
@@ -204,8 +205,9 @@ TEST_F(PreparationTest, InvalidDeclarationsReleasePartialOwnership) {
   const loom_serve_test_preparation_case_t cases[] = {
       {"missing_stage", IREE_STATUS_OUT_OF_RANGE},
       {"conflicting_parameter_policy", IREE_STATUS_INVALID_ARGUMENT},
-      {"sparse_source", IREE_STATUS_INVALID_ARGUMENT},
-      {"negative_source", IREE_STATUS_INVALID_ARGUMENT},
+      {"sparse_input", IREE_STATUS_INVALID_ARGUMENT},
+      {"negative_input", IREE_STATUS_INVALID_ARGUMENT},
+      {"duplicate_input", IREE_STATUS_INVALID_ARGUMENT},
       {"direct_parameter", IREE_STATUS_INVALID_ARGUMENT},
       {"missing_workspace_stage", IREE_STATUS_OUT_OF_RANGE},
       {"duplicate_workspace_limit", IREE_STATUS_ALREADY_EXISTS},
@@ -249,9 +251,14 @@ class PreparationCaptureTest : public PreparationTest {
     PreparationTest::SetUp();
     IREE_ASSERT_OK(loom_serve_preparation_module_create(
         environment, host_allocator, &module));
-    const iree_string_view_t roots[] = {
-        IREE_SV("request_stages"), IREE_SV("configure_cold_stage"),
-        IREE_SV("conflicting_parameter_policy"), IREE_SV("no_stages")};
+    const iree_string_view_t roots[] = {IREE_SV("request_stages"),
+                                        IREE_SV("configure_cold_stage"),
+                                        IREE_SV("conflicting_parameter_policy"),
+                                        IREE_SV("no_stages"),
+                                        IREE_SV("shared_source"),
+                                        IREE_SV("cold_source"),
+                                        IREE_SV("bind_source"),
+                                        IREE_SV("append_source")};
     IREE_ASSERT_OK(loom_serve_program_allocate(
         target_environment, environment, &sources,
         iree_make_cstring_view(FLAG_boundary_source), IREE_ARRAYSIZE(roots),
@@ -277,6 +284,29 @@ class PreparationCaptureTest : public PreparationTest {
                           arguments, results);
   }
 
+  iree_status_t DeclareSource(iree_string_view_t entry, iree_string_view_t path,
+                              int32_t* out_ordinal) {
+    iree_vm_ref_types_t types = {};
+    IREE_RETURN_IF_ERROR(iree_vm_ref_types_resolve(
+        iree_vm_environment_lookup_ref_type_table(environment, IREE_SV("vm")),
+        &types));
+    iree_vm_buffer_t* buffer = nullptr;
+    IREE_RETURN_IF_ERROR(
+        iree_vm_buffer_clone(IREE_VM_BUFFER_ACCESS_FLAG_READ,
+                             iree_make_const_byte_span(path.data, path.size), 1,
+                             host_allocator, &buffer));
+    iree_vm_variant_t argument =
+        iree_vm_buffer_variant_from_ptr_move(&types, &buffer);
+    iree_vm_variant_t result = {};
+    auto status = Invoke(entry, {&argument, 1}, {&result, 1});
+    if (iree_status_is_ok(status)) {
+      status = iree_vm_i32_from_variant(result, out_ordinal);
+    }
+    iree_vm_variant_reset(&argument);
+    iree_vm_variant_reset(&result);
+    return status;
+  }
+
   // A single linked source program serves multiple independent captures.
   loom_serve_program_t* program = nullptr;
   // Persistent capability retained independently of the linked program.
@@ -288,7 +318,7 @@ class PreparationCaptureTest : public PreparationTest {
 TEST_F(PreparationCaptureTest, RequestDeclarationsOwnValuesAcrossInvocations) {
   iree_vm_variant_t arguments[] = {iree_vm_variant_from_i64(11)};
   iree_vm_variant_t results[2] = {};
-  loom_serve_preparation_module_begin(module, 3, 0);
+  loom_serve_preparation_module_begin(module, 3, nullptr, 0);
   IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
                         iree_vm_variant_span_from_array(arguments),
                         iree_vm_variant_span_from_array(results)));
@@ -300,7 +330,7 @@ TEST_F(PreparationCaptureTest, RequestDeclarationsOwnValuesAcrossInvocations) {
   EXPECT_EQ(dispatch, 4);
 
   arguments[0] = iree_vm_variant_from_i64(22);
-  loom_serve_preparation_module_begin(module, 7, 0);
+  loom_serve_preparation_module_begin(module, 7, nullptr, 0);
   IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
                         iree_vm_variant_span_from_array(arguments),
                         iree_vm_variant_span_from_array(results)));
@@ -334,7 +364,7 @@ TEST_F(PreparationCaptureTest, RequestDeclarationsOwnValuesAcrossInvocations) {
 }
 
 TEST_F(PreparationCaptureTest, EmptyCaptureNeedsNoDeclarationStorage) {
-  loom_serve_preparation_module_begin(module, 4, 0);
+  loom_serve_preparation_module_begin(module, 4, nullptr, 0);
   IREE_ASSERT_OK(Invoke(IREE_SV("no_stages")));
   preparation = loom_serve_preparation_module_take(module);
   EXPECT_EQ(preparation, nullptr);
@@ -347,7 +377,8 @@ TEST_F(PreparationCaptureTest, IdentityAndStorageBelongToOwnedDeclarations) {
   for (int64_t tag : {99, 99, 100}) {
     iree_vm_variant_t arguments[] = {iree_vm_variant_from_i64(tag)};
     iree_vm_variant_t results[2] = {};
-    loom_serve_preparation_module_begin(module, preparation ? 17 : 3, 0);
+    loom_serve_preparation_module_begin(module, preparation ? 17 : 3, nullptr,
+                                        0);
     IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
                           iree_vm_variant_span_from_array(arguments),
                           iree_vm_variant_span_from_array(results)));
@@ -380,7 +411,7 @@ TEST_F(PreparationCaptureTest, CapabilityCannotEscapeItsInvocation) {
                                iree_vm_variant_span_from_array(arguments),
                                iree_vm_variant_span_from_array(results)));
   arguments[0] = iree_vm_variant_from_i64(11);
-  loom_serve_preparation_module_begin(module, 0, 0);
+  loom_serve_preparation_module_begin(module, 0, nullptr, 0);
   IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
                         iree_vm_variant_span_from_array(arguments),
                         iree_vm_variant_span_from_array(results)));
@@ -393,7 +424,7 @@ TEST_F(PreparationCaptureTest, CapabilityCannotEscapeItsInvocation) {
 }
 
 TEST_F(PreparationCaptureTest, RequestCannotReplaceCheckpointDeclarations) {
-  loom_serve_preparation_module_begin(module, 4, 0);
+  loom_serve_preparation_module_begin(module, 4, nullptr, 0);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Invoke(IREE_SV("conflicting_parameter_policy")));
   preparation = loom_serve_preparation_module_take(module);
@@ -402,7 +433,7 @@ TEST_F(PreparationCaptureTest, RequestCannotReplaceCheckpointDeclarations) {
 }
 
 TEST_F(PreparationCaptureTest, RequestCannotConfigureColdStage) {
-  loom_serve_preparation_module_begin(module, 4, 0);
+  loom_serve_preparation_module_begin(module, 4, nullptr, 0);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
                         Invoke(IREE_SV("configure_cold_stage")));
   preparation = loom_serve_preparation_module_take(module);
@@ -412,12 +443,111 @@ TEST_F(PreparationCaptureTest, RequestCannotConfigureColdStage) {
 }
 
 TEST_F(PreparationCaptureTest, RequestOrdinalsCannotOverflow) {
-  loom_serve_preparation_module_begin(module, INT32_MAX, 0);
+  loom_serve_preparation_module_begin(module, INT32_MAX, nullptr, 0);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Invoke(IREE_SV("configure_cold_stage")));
   preparation = loom_serve_preparation_module_take(module);
   ASSERT_NE(preparation, nullptr);
   EXPECT_EQ(loom_serve_preparation_stage_count(preparation), 0u);
+}
+
+TEST_F(PreparationCaptureTest, OneSourceServesMultipleBindingsAndStages) {
+  loom_serve_preparation_module_begin(module, 0, nullptr,
+                                      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
+  int32_t ordinal = -1;
+  IREE_ASSERT_OK(
+      DeclareSource(IREE_SV("shared_source"), IREE_SV("model.irpa"), &ordinal));
+  preparation = loom_serve_preparation_module_take(module);
+  EXPECT_EQ(ordinal, 0);
+  ASSERT_EQ(loom_serve_preparation_source_count(preparation), 1u);
+  const auto files = loom_serve_preparation_source(preparation, ordinal);
+  ASSERT_EQ(files.count, 2u);
+  EXPECT_EQ(std::string(files.values[0].data, files.values[0].size),
+            "/checkpoints/model.irpa");
+  EXPECT_EQ(std::string(files.values[1].data, files.values[1].size),
+            "/checkpoints/weights.loom");
+  ASSERT_EQ(loom_serve_preparation_stage_count(preparation), 2u);
+  for (size_t i = 0; i < 2; ++i) {
+    const auto* stage = loom_serve_preparation_stage(preparation, i);
+    ASSERT_EQ(stage->parameter_count, i ? 1u : 2u);
+    for (size_t j = 0; j < stage->parameter_count; ++j) {
+      const auto& parameter = stage->parameters[j];
+      ASSERT_EQ(parameter.source_count, 1u);
+      EXPECT_EQ(parameter.source_ordinals[0], ordinal);
+      EXPECT_EQ(parameter.sources[0].values, files.values);
+      EXPECT_EQ(parameter.sources[0].count, files.count);
+    }
+  }
+}
+
+TEST_F(PreparationCaptureTest, ColdOnlySourcesAffectChoiceButNotCodeIdentity) {
+  for (const auto path :
+       {IREE_SV("model.irpa"), IREE_SV("other.irpa"), IREE_SV("model.irpa")}) {
+    loom_serve_preparation_module_begin(module, 0, nullptr,
+                                        LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
+    int32_t ordinal = -1;
+    IREE_ASSERT_OK(DeclareSource(IREE_SV("cold_source"), path, &ordinal));
+    second = loom_serve_preparation_module_take(module);
+    ASSERT_EQ(loom_serve_preparation_source_count(second), 1u);
+    EXPECT_EQ(loom_serve_preparation_stage(second, 0)->parameter_count, 0u);
+    if (!preparation) {
+      preparation = second;
+      second = nullptr;
+    } else {
+      EXPECT_EQ(loom_serve_preparation_equal(preparation, second),
+                iree_string_view_equal(path, IREE_SV("model.irpa")));
+      EXPECT_TRUE(loom_serve_preparation_code_equal(preparation, second));
+      loom_serve_preparation_free(second);
+      second = nullptr;
+    }
+  }
+}
+
+TEST_F(PreparationCaptureTest, RequestSourcesExtendButCannotMutateColdPrefix) {
+  loom_serve_preparation_module_begin(module, 0, nullptr,
+                                      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
+  int32_t cold = -1;
+  IREE_ASSERT_OK(
+      DeclareSource(IREE_SV("cold_source"), IREE_SV("cold.irpa"), &cold));
+  preparation = loom_serve_preparation_module_take(module);
+  const auto cold_files = loom_serve_preparation_source(preparation, cold);
+  loom_serve_preparation_module_begin(module, 1, preparation,
+                                      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
+  int32_t request = -1;
+  IREE_ASSERT_OK(DeclareSource(IREE_SV("shared_source"),
+                               IREE_SV("request.irpa"), &request));
+  iree_vm_variant_t argument = iree_vm_variant_from_i32(cold);
+  IREE_ASSERT_OK(Invoke(IREE_SV("bind_source"), {&argument, 1}));
+  argument = iree_vm_variant_from_i32(cold);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        Invoke(IREE_SV("append_source"), {&argument, 1}));
+  second = loom_serve_preparation_module_take(module);
+  EXPECT_EQ(request, 1);
+  ASSERT_EQ(loom_serve_preparation_source_count(second), 2u);
+  EXPECT_EQ(loom_serve_preparation_source(second, cold).values,
+            cold_files.values);
+  const auto* stage = loom_serve_preparation_stage(second, 2);
+  ASSERT_EQ(stage->parameter_count, 1u);
+  EXPECT_EQ(stage->parameters[0].source_ordinals[0], cold);
+  EXPECT_EQ(stage->parameters[0].sources[0].values, cold_files.values);
+  EXPECT_EQ(loom_serve_preparation_source(preparation, cold).count, 1u);
+}
+
+TEST_F(PreparationCaptureTest,
+       SourceOrdinalsAreCheckedAtTheDeclarationBoundary) {
+  for (int32_t ordinal : {-1, 0, INT32_MAX}) {
+    for (const auto entry :
+         {IREE_SV("bind_source"), IREE_SV("append_source")}) {
+      loom_serve_preparation_module_begin(
+          module, 0, nullptr, LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
+      iree_vm_variant_t argument = iree_vm_variant_from_i32(ordinal);
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                            Invoke(entry, {&argument, 1}));
+      second = loom_serve_preparation_module_take(module);
+      loom_serve_preparation_free(second);
+      second = nullptr;
+    }
+  }
 }
 
 }  // namespace

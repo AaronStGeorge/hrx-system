@@ -20,17 +20,20 @@
 extern "C" {
 #endif
 
-// Source-selected checkpoint files and preparation policy for one fixed
-// binding.
+// Source-selected inputs and preparation policy for one fixed binding.
 typedef struct loom_serve_preparation_parameter_t {
   // Fixed-buffer ordinal in the compiled command's parameter reflection.
   uint32_t binding;
   // Number of independently indexed input checkpoints, in source order.
   uint32_t source_count;
-  // Owned resolved shard paths per source, independent of the bootstrap VM.
+  // Finalized shard views in policy-local input order, borrowing the capture's
+  // shared source catalog. Checkpoint owners copy these when retaining
+  // identity.
   const iree_string_view_list_t* sources;
   // Owned preparation-policy path, relative to the bootstrap source directory.
   iree_string_view_t policy;
+  // Shared source ordinals corresponding to the policy-local input order.
+  const uint32_t* source_ordinals;
 } loom_serve_preparation_parameter_t;
 
 // Compares checkpoint domains by their ordered source file lists and
@@ -69,7 +72,8 @@ typedef struct loom_serve_preparation_t loom_serve_preparation_t;
 
 // Creates the source-facing "prepare" declaration capability. The caller
 // serializes begin/take with VM invocation and retains the module while linked.
-// No declaration storage is allocated until source code declares a stage.
+// No declaration storage is allocated until source code declares a stage or
+// source.
 iree_status_t loom_serve_preparation_module_create(
     iree_vm_environment_t* environment, iree_allocator_t host_allocator,
     iree_vm_module_t** out_module);
@@ -84,9 +88,13 @@ typedef uint32_t loom_serve_preparation_flags_t;
 
 // Begins one declaration capture. The previous capture has been taken. Stage
 // ordinals start at first_stage, preserving a caller's existing cold table.
-// first_stage is at most INT32_MAX. Calls to prepare outside a capture fail.
+// first_stage is at most INT32_MAX. base supplies immutable cold sources;
+// request sources follow that prefix and cannot modify it. The caller keeps
+// base alive through this capture and every consumer of its result. NULL means
+// no prefix. Calls to prepare outside a capture fail.
 void loom_serve_preparation_module_begin(iree_vm_module_t* module,
                                          uint32_t first_stage,
+                                         const loom_serve_preparation_t* base,
                                          loom_serve_preparation_flags_t flags);
 
 // Ends the capture and transfers its declarations, including partial results
@@ -102,17 +110,18 @@ loom_serve_preparation_t* loom_serve_preparation_module_take(
 //   config(i32 stage, buffer key, buffer value)
 //   config_i64(i32 stage, buffer key, i64 value)
 //   workspace_limit(i32 stage, i64 bytes)
-//   parameter(i32 stage, i32 binding, i32 source, buffer directory, buffer
-//   path,
-//             buffer policy)
+//   source(buffer directory, buffer path) -> i32 source
+//   source_append(i32 source, buffer directory, buffer path)
+//   parameter(i32 stage, i32 binding, i32 input, i32 source, buffer policy)
 // All string buffers exclude NUL bytes. Config values use the public loomc
 // textual value syntax; config_i64 formats signed decimal values. Parameter
-// paths join directory and path in the server filesystem namespace. Repeated
-// parameter calls for the same binding and source append shards to one index.
-// Distinct sources may contain identical tensor names. Source ordinals are
-// declared densely from zero, and all sources for a binding name one policy.
-// File order is preserved within each index. Policy paths resolve through the
-// source environment. Declarations
+// sources join directory and path in the server filesystem namespace. source
+// declares the first shard of an independent index; source_append adds shards
+// in order. Sources need no resident binding and may contain identical keys.
+// parameter maps a dense policy-local input ordinal to a declared source. Each
+// input is bound once; all inputs for a binding name one policy. Several stages
+// and bindings may share a source. Policy paths resolve through the source
+// environment. Declarations
 // copy their strings and retain no references to arguments, source mappings,
 // or the VM environment.
 // Additional caller libraries are linked beside the prepare module. Results
@@ -139,6 +148,15 @@ void loom_serve_preparation_free(loom_serve_preparation_t* preparation);
 
 iree_host_size_t loom_serve_preparation_stage_count(
     const loom_serve_preparation_t* preparation);
+
+// Number of shared sources, including the immutable cold prefix. NULL has no
+// sources. Source ordinals are scoped to this capture, never process-global.
+uint32_t loom_serve_preparation_source_count(
+    const loom_serve_preparation_t* preparation);
+
+// Borrows the ordered shard paths for a previously declared source ordinal.
+iree_string_view_list_t loom_serve_preparation_source(
+    const loom_serve_preparation_t* preparation, uint32_t ordinal);
 
 // Requested owned bytes, including spare array capacity and copied strings.
 // NULL has no storage. This query does not traverse declarations.

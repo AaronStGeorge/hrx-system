@@ -331,7 +331,7 @@ static iree_status_t loom_serve_weight_query_preparer(
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_move(types, &key)};
   iree_vm_variant_t results[1] = {0};
-  loom_serve_preparation_module_begin(library, 0, 0);
+  loom_serve_preparation_module_begin(library, 0, NULL, 0);
   loom_serve_weight_inputs_module_begin(input_library);
   iree_status_t status =
       iree_vm_invoke(loom_serve_program_invocation(program), function,

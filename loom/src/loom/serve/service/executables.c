@@ -747,6 +747,8 @@ static iree_status_t loom_serve_checkpoint_allocate(
   }
   fits &= iree_host_size_checked_mul_add(size, shard_count,
                                          sizeof(iree_string_view_t), &size);
+  fits &= iree_host_size_checked_mul_add(size, declaration->source_count,
+                                         sizeof(uint32_t), &size);
   if (!fits) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "checkpoint identity storage is not representable");
@@ -758,9 +760,13 @@ static iree_status_t loom_serve_checkpoint_allocate(
   iree_string_view_list_t* sources = (iree_string_view_list_t*)(checkpoint + 1);
   iree_string_view_t* shards =
       (iree_string_view_t*)(sources + declaration->source_count);
-  char* bytes = (char*)(shards + shard_count);
+  uint32_t* ordinals = (uint32_t*)(shards + shard_count);
+  char* bytes = (char*)(ordinals + declaration->source_count);
   checkpoint->declaration = *declaration;
   checkpoint->declaration.sources = sources;
+  checkpoint->declaration.source_ordinals = ordinals;
+  memcpy(ordinals, declaration->source_ordinals,
+         declaration->source_count * sizeof(*ordinals));
   checkpoint->declaration.policy =
       iree_make_string_view(bytes, declaration->policy.size);
   memcpy(bytes, declaration->policy.data, declaration->policy.size);
@@ -882,6 +888,9 @@ static iree_status_t loom_serve_choice_bind_parameter(
 static iree_status_t loom_serve_choice_check(loom_serve_choice_t* choice) {
   loom_serve_executables_t* executables = choice->owner;
   const loom_serve_choice_code_t* code = choice->code;
+  if (!code->count) {
+    return iree_ok_status();
+  }
   const loom_serve_preparation_stage_t* canonical =
       loom_serve_preparation_stage(choice->preparation, 0);
   const loom_cmd_program_t* program =
@@ -914,12 +923,21 @@ static iree_status_t loom_serve_choice_check(loom_serve_choice_t* choice) {
   return status;
 }
 
+// A source-only request preserves the cold stage table and resident bindings.
+// Otherwise all request stages share the first stage's checkpoint map.
+static iree_host_size_t loom_serve_choice_parameter_count(
+    const loom_serve_preparation_t* preparation) {
+  return loom_serve_preparation_stage_count(preparation)
+             ? loom_serve_preparation_stage(preparation, 0)->parameter_count
+             : 0;
+}
+
 static iree_status_t loom_serve_choice_record(loom_serve_choice_job_t* job) {
   loom_serve_choice_t* choice = job->choice;
   loom_serve_executables_t* executables = choice->owner;
   const loom_serve_choice_code_t* code = choice->code;
   const iree_host_size_t count =
-      loom_serve_preparation_stage(choice->preparation, 0)->parameter_count;
+      loom_serve_choice_parameter_count(choice->preparation);
   if (!count) {
     return loom_serve_executables_record(
         &executables->options, choice->generation->table, code->count,
@@ -950,7 +968,7 @@ static void loom_serve_choice_complete(loom_serve_choice_t* choice,
   if (iree_status_is_ok(status)) {
     choice->storage_size =
         sizeof(*choice) +
-        loom_serve_preparation_stage(choice->preparation, 0)->parameter_count *
+        loom_serve_choice_parameter_count(choice->preparation) *
             sizeof(*choice->checkpoints) +
         loom_serve_preparation_storage_size(choice->preparation) +
         loom_serve_stage_table_storage_size(choice->table);
@@ -1030,7 +1048,7 @@ static iree_status_t loom_serve_choice_allocate_residency(
   }
   loom_serve_executables_t* executables = choice->owner;
   const iree_host_size_t count =
-      loom_serve_preparation_stage(choice->preparation, 0)->parameter_count;
+      loom_serve_choice_parameter_count(choice->preparation);
   iree_hal_buffer_t** buffers = (iree_hal_buffer_t**)(job->bindings + count);
   loom_serve_residency_group_t** groups =
       (loom_serve_residency_group_t**)(buffers + count);
@@ -1086,7 +1104,7 @@ static void loom_serve_choice_advance(loom_serve_executables_t* executables,
     status = loom_serve_choice_check(choice);
   }
   const iree_host_size_t count =
-      loom_serve_preparation_stage(choice->preparation, 0)->parameter_count;
+      loom_serve_choice_parameter_count(choice->preparation);
   while (job->index < count && iree_status_is_ok(status)) {
     if (!job->bindings[job->index].bank) {
       status = loom_serve_choice_bind_parameter(job, (uint32_t)job->index,
@@ -1161,8 +1179,7 @@ static iree_status_t loom_serve_choice_begin(
   }
   loom_serve_choice_t* choice = NULL;
   const iree_host_size_t count =
-      loom_serve_preparation_stage(executables->invocation.declarations, 0)
-          ->parameter_count;
+      loom_serve_choice_parameter_count(executables->invocation.declarations);
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_struct_array(
       executables->host_allocator, sizeof(*choice), count,
       sizeof(*choice->checkpoints), (void**)&choice));
@@ -1196,7 +1213,7 @@ static iree_status_t loom_serve_choice_begin(
     iree_slim_mutex_initialize(&job->mutex);
     job->choice = choice;
     const loom_serve_preparation_stage_t* selected =
-        loom_serve_preparation_stage(choice->preparation, 0);
+        count ? loom_serve_preparation_stage(choice->preparation, 0) : NULL;
     const loom_serve_preparation_stage_t* retained =
         loom_serve_preparation_stage(executables->options.preparation, 0);
     for (iree_host_size_t i = 0; i < count; ++i) {

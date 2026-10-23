@@ -933,7 +933,7 @@ iree_status_t loom_serve_finite_model_prepare_batch(
       count, requests, model->host_allocator, &ranges, &packed));
   loom_serve_executables_capture(model->executables);
   loom_serve_preparation_module_begin(model->control.preparation,
-                                      model->stages.count,
+                                      model->stages.count, model->preparation,
                                       LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,

@@ -955,7 +955,7 @@ static iree_status_t loom_serve_image_prepare_batch(
       iree_vm_buffer_variant_from_ptr_move(&model->control.vm_types, &packed)};
   iree_vm_variant_t results[2] = {0};
   loom_serve_preparation_module_begin(model->control.preparation,
-                                      model->stages.count,
+                                      model->stages.count, model->preparation,
                                       LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
   iree_status_t status = iree_vm_invoke(
       loom_serve_program_invocation(model->control.program),
