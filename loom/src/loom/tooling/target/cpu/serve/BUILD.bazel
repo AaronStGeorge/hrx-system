@@ -300,6 +300,48 @@ loom_py_test(
     ],
 )
 
+# Runtime assets are staged separately from the current compiler outputs.
+loom_py_test(
+    name = "staged_model_card_test",
+    size = "small",
+    srcs = [
+        "model_card_test.py",
+        "staged_model_card_test.py",
+    ],
+    args = [
+        "$(rootpath :loom-serve-test-tool)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:native.card.json)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:fetch_model_source)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:fetch_model_archive)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:fetch_model_mixed)",
+    ],
+    data = [
+        ":loom-serve-test-tool",
+        "//loom/src/loom/serve/fixture/text:fetch_model_archive",
+        "//loom/src/loom/serve/fixture/text:fetch_model_mixed",
+        "//loom/src/loom/serve/fixture/text:fetch_model_source",
+        "//loom/src/loom/serve/fixture/text:native.card.json",
+        "//loom/src/loom/serve/fixture/text:native_source_files",
+    ],
+    imports = ["."],
+    main = "staged_model_card_test.py",
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//loom/py/loom/model:lock",
+        "//loom/py/loom/model:manifest",
+        "//loom/src/loom/serve/testing:http",
+        "//loom/src/loom/serve/testing:model_staging",
+    ],
+)
+
 loom_py_test(
     name = "build_fetch_text_image_card_test",
     size = "small",

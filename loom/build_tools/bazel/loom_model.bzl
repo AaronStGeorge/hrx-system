@@ -84,8 +84,15 @@ def _loom_model_impl(ctx):
         mnemonic = "LoomModel",
         progress_message = "Building model preset %s" % ctx.label,
     )
+
+    # Test identities include authored choices and externally provisioned assets.
+    # These metadata dependencies are not provider inputs or publication files:
+    # a normalized package needs its own lock for the bytes it publishes.
+    test_inputs = [ctx.file.card]
+    if ctx.file.lockfile:
+        test_inputs.append(ctx.file.lockfile)
     return [
-        DefaultInfo(files = depset([deployment]), runfiles = ctx.runfiles(files = runfiles)),
+        DefaultInfo(files = depset([deployment]), runfiles = ctx.runfiles(files = runfiles + test_inputs)),
         OutputGroupInfo(model_card = depset([card]), model_files = depset(runfiles)),
     ]
 
@@ -97,6 +104,7 @@ loom_model = rule(
         "data": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected providers' auxiliary files, mapped to card paths. These are compiler inputs and runtime runfiles, separate from parameter/tokenizer acquisition."),
         "encoding": attr.string(default = "bc", values = ["text", "bc", "preserve"], doc = "Normalize providers to Loom text/bytecode, or preserve their bytes, formats, and import options."),
         "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; preserved as symlinks or normalized with the configured linker."),
+        "lockfile": attr.label(allow_single_file = True, doc = "Authored acquisition lock carried as a test dependency. Changes invalidate dependent tests without reading runtime assets or recompiling providers. This is not the publication lock of normalized outputs."),
         "model_name": attr.string(mandatory = True),
         "partition": attr.string(doc = "Executable partition override within the selected variant."),
         "preset": attr.string(mandatory = True),

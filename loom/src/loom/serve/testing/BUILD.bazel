@@ -323,6 +323,18 @@ loom_py_library(
     deps = [":logs"],
 )
 
+loom_py_library(
+    name = "model_staging",
+    testonly = True,
+    srcs = ["loom_serve_testing/model_staging.py"],
+    imports = ["."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//loom/py/loom/model:fetch_storage",
+        "//loom/py/loom/model:manifest",
+    ],
+)
+
 loom_py_test(
     name = "http_test",
     size = "small",

@@ -164,13 +164,28 @@ assets, and a separate `serve.json` referencing that card. The default output is
 and built files for publication. A package with external runtime assets is
 completed by `loom-fetch` before serving. For local development, acquire from
 the built card with `--update-lock`, then serve the installed `model.json`
-directly. Public releases supply the corresponding lock. The
-input card and staged source files are action inputs, not runtime dependencies
-of the resulting package.
+directly. Public releases supply the corresponding lock. Compiler source inputs
+are not needed to run a normalized package.
 
-Tests consume the emitted package and their runner. Normal Bazel content
-identity determines reuse: a build rerun that produces identical outputs does
-not itself invalidate a test; a changed executable, selected card, or asset does.
+The optional `lockfile` attribute declares the authored acquisition lock as a
+test dependency. The original card and lock are carried in runfiles, alongside
+the built package, so edits to either invalidate dependent tests. The lock does
+not enter the linker action or the `model_files` publication output group: a
+normalized publication needs a lock describing its own output bytes.
+
+Model regression tests use current built providers and independently provisioned
+parameters and tokenizers. The test-only
+[`model_staging`](../../../src/loom/serve/testing/README.md) helper shares these
+files into a fresh model directory without copying or hashing weights. The
+runner must already have the assets at its explicitly configured path. Their
+bytes stay outside Bazel's inputs, runfiles, and caches; the checked-in lock is
+their trusted cache identity. Changing external assets without updating that
+lock intentionally permits reuse of a cached result. `loom-fetch` verification
+is an acquisition concern, independent of the test's output assertions.
+
+Normal Bazel content identity determines test reuse. Changes to the card, lock,
+tested program output, runner, runtime, oracle inputs, or execution configuration
+invalidate the test; rerunning a build that produces identical outputs does not.
 The weighted text fixture checks an actual response through this path. The
 recognition fixture checks activity and transcription as independent services
 sharing one provider universe, including concurrent streams and both bytecode

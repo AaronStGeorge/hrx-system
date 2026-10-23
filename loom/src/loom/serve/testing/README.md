@@ -20,6 +20,14 @@ The local `loom_serve_testing` Python package contains these helpers:
   server state and counters, not sleeps or promised event retention.
 - `logs` owns an observer's cursors. Gaps, model removal and stream reincarnation
   remain explicit; a reader never owns server resources.
+- `model_staging.stage_model(card, assets, output)` creates a fresh model
+  directory with current built providers and auxiliary inputs from `card` and
+  provisioned parameters and tokenizers from `assets`. File roles come from the
+  selected card. Files are hardlinked or symlinked; weights are never copied,
+  hashed, or downloaded. The caller owns the output directory's cleanup,
+  including partial failure, and declares the built model with its authored
+  `lockfile` as test data. The lock identifies external assets for Bazel caching;
+  asset changes without a lock update intentionally do not invalidate tests.
 - `chat` consumes complete chat/SSE responses, validates terminal outcomes and
   records monotonic request, first-text and output-chunk times. An optional
   content observer receives answer deltas with their receipt timestamps while

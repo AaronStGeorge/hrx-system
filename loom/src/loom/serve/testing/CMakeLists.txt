@@ -421,6 +421,20 @@ iree_py_library(
 endif()
 
 if(LOOM_TARGET_ARCH_VM)
+iree_py_library(
+  NAME
+    model_staging
+  SRCS
+    "loom_serve_testing/model_staging.py"
+  IMPORTS
+    "."
+  DEPS
+    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::manifest
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
 iree_py_test(
   NAME
     http_test
