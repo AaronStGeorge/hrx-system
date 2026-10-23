@@ -18,6 +18,44 @@ func.def @guarded_product_quotient_proves_dynamic_axis_bound(%payload: buffer, %
 
 // ====
 
+// A strict bound between two non-negative coordinates remains strict after
+// dividing both by the same scale when the upper coordinate is divisible by
+// that scale.
+func.def @guarded_matching_quotients_prove_dynamic_axis_bound(%payload: buffer, %base: offset, %channel0: index, %width0: index, %value: i32) {
+  %channel = index.assume %channel0 [range(%channel0, 0, 255)] : index
+  %width = index.assume %width0 [range(%width0, 16, 256), multiple_of(%width0, 16)] : index
+  %tile = index.constant 16 : index
+  %group_count = index.div %width, %tile : index
+  %in_bounds = index.cmp ult, %channel, %width : index
+  scf.if %in_bounds {
+    %group = index.div %channel, %tile : index
+    %view = buffer.view %payload[%base] : buffer -> view<[%group_count]xi32>
+    view.store %value, %view[%group] : i32, view<[%group_count]xi32>
+  }
+  func.return
+}
+
+// ====
+
+// Without divisibility, values in the upper coordinate's final partial tile
+// can map to the first group beyond its floor-divided view extent.
+func.def @guarded_matching_quotients_require_divisible_upper(%payload: buffer, %base: offset, %channel0: index, %width0: index, %value: i32) {
+  %channel = index.assume %channel0 [range(%channel0, 0, 255)] : index
+  %width = index.assume %width0 [range(%width0, 16, 255)] : index
+  %tile = index.constant 16 : index
+  %group_count = index.div %width, %tile : index
+  %in_bounds = index.cmp ult, %channel, %width : index
+  scf.if %in_bounds {
+    %group = index.div %channel, %tile : index
+    %view = buffer.view %payload[%base] : buffer -> view<[%group_count]xi32>
+    // ERROR@+1: SUBRANGE/024 {op_name="view.store", view_axis="0"}
+    view.store %value, %view[%group] : i32, view<[%group_count]xi32>
+  }
+  func.return
+}
+
+// ====
+
 // RUN: with-checks pass scf-to-cfg,vector-memory-footprint
 
 // CFG lowering retains the product guard in the operand-indexed path facts.

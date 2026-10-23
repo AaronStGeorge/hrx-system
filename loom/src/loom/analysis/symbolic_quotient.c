@@ -8,11 +8,13 @@
 
 #include <stdint.h>
 
+#include "loom/analysis/condition_fact_scope.h"
 #include "loom/analysis/symbolic_value.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/carrier.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/util/fact_relation.h"
 
 typedef enum loom_symbolic_quotient_scale_kind_e {
   LOOM_SYMBOLIC_QUOTIENT_SCALE_DIVISOR = 0,
@@ -80,18 +82,9 @@ static iree_status_t loom_symbolic_quotient_value_is_positive(
   return iree_ok_status();
 }
 
-static iree_status_t loom_symbolic_quotient_shift_is_supported(
-    loom_symbolic_expr_context_t* context, loom_value_id_t shifted_value,
-    loom_value_id_t amount_value, bool* out_supported) {
-  *out_supported = false;
-  loom_value_facts_t amount_facts = {0};
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_context_lookup_facts(
-      context, amount_value, &amount_facts));
-  int64_t amount = 0;
-  if (!loom_value_facts_as_exact_i64(amount_facts, &amount) || amount < 0) {
-    return iree_ok_status();
-  }
-
+static int32_t loom_symbolic_quotient_shift_bit_count(
+    const loom_symbolic_expr_context_t* context,
+    loom_value_id_t shifted_value) {
   const loom_scalar_type_t scalar_type = loom_type_element_type(
       loom_module_value_type(context->module, shifted_value));
   int32_t bit_count = loom_scalar_type_bitwidth(scalar_type);
@@ -103,7 +96,20 @@ static iree_status_t loom_symbolic_quotient_shift_is_supported(
       bit_count = 64;
     }
   }
-  *out_supported = bit_count > 0 && amount < bit_count;
+  return bit_count;
+}
+
+static iree_status_t loom_symbolic_quotient_shift_is_supported(
+    loom_symbolic_expr_context_t* context, loom_value_id_t shifted_value,
+    loom_value_id_t amount_value, bool* out_supported) {
+  *out_supported = false;
+  loom_value_facts_t amount_facts = {0};
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_context_lookup_facts(
+      context, amount_value, &amount_facts));
+  const int32_t bit_count =
+      loom_symbolic_quotient_shift_bit_count(context, shifted_value);
+  *out_supported = bit_count > 0 && amount_facts.range_lo >= 0 &&
+                   amount_facts.range_hi < bit_count;
   return iree_ok_status();
 }
 
@@ -165,6 +171,22 @@ static iree_status_t loom_symbolic_quotient_scale_matches_shift(
                shift_amount <= 62 &&
                divisor == (INT64_C(1) << (uint32_t)shift_amount);
   return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_quotient_scales_match(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_quotient_def_t* left,
+    const loom_symbolic_quotient_def_t* right, bool* out_match) {
+  if (left->scale_kind == right->scale_kind) {
+    return loom_symbolic_values_match(context, left->scale_value,
+                                      right->scale_value, out_match);
+  }
+  if (left->scale_kind == LOOM_SYMBOLIC_QUOTIENT_SCALE_DIVISOR) {
+    return loom_symbolic_quotient_scale_matches_shift(
+        context, left, right->scale_value, out_match);
+  }
+  return loom_symbolic_quotient_scale_matches_shift(
+      context, right, left->scale_value, out_match);
 }
 
 static iree_status_t loom_symbolic_quotient_matches_product(
@@ -243,17 +265,13 @@ static bool loom_symbolic_quotient_bound_relation(
   return true;
 }
 
-static iree_status_t loom_symbolic_quotient_inputs_are_supported(
+static iree_status_t loom_symbolic_quotient_def_is_supported(
     loom_symbolic_expr_context_t* context,
-    const loom_symbolic_quotient_def_t* quotient, loom_value_id_t bound_value,
-    bool* out_supported) {
+    const loom_symbolic_quotient_def_t* quotient, bool* out_supported) {
   bool dividend_non_negative = false;
   IREE_RETURN_IF_ERROR(loom_symbolic_value_is_non_negative(
       context, quotient->dividend, &dividend_non_negative));
-  bool bound_non_negative = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_value_is_non_negative(
-      context, bound_value, &bound_non_negative));
-  if (!dividend_non_negative || !bound_non_negative) {
+  if (!dividend_non_negative) {
     *out_supported = false;
     return iree_ok_status();
   }
@@ -264,6 +282,165 @@ static iree_status_t loom_symbolic_quotient_inputs_are_supported(
   }
   return loom_symbolic_quotient_value_is_positive(
       context, quotient->scale_value, out_supported);
+}
+
+static iree_status_t loom_symbolic_quotient_inputs_are_supported(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_quotient_def_t* quotient, loom_value_id_t bound_value,
+    bool* out_supported) {
+  IREE_RETURN_IF_ERROR(loom_symbolic_quotient_def_is_supported(
+      context, quotient, out_supported));
+  if (!*out_supported) {
+    return iree_ok_status();
+  }
+  return loom_symbolic_value_is_non_negative(context, bound_value,
+                                             out_supported);
+}
+
+static iree_status_t loom_symbolic_quotient_divisibility_scale(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_quotient_def_t* quotient, uint64_t* out_scale,
+    bool* out_available) {
+  *out_scale = 0;
+  *out_available = false;
+  if (quotient->scale_kind == LOOM_SYMBOLIC_QUOTIENT_SCALE_DIVISOR) {
+    int64_t scale_value = 0;
+    IREE_RETURN_IF_ERROR(loom_symbolic_quotient_value_is_exact_i64(
+        context, quotient->scale_value, &scale_value, out_available));
+    *out_available = *out_available && scale_value > 0;
+    *out_scale = (uint64_t)scale_value;
+    return iree_ok_status();
+  }
+
+  loom_value_facts_t amount_facts = {0};
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_context_lookup_facts(
+      context, quotient->scale_value, &amount_facts));
+  const int32_t bit_count =
+      loom_symbolic_quotient_shift_bit_count(context, quotient->dividend);
+  *out_available = bit_count > 0 && amount_facts.range_lo >= 0 &&
+                   amount_facts.range_hi < bit_count;
+  if (*out_available) {
+    // Divisibility by the largest possible power of two implies divisibility
+    // for every smaller shift amount in the active range.
+    *out_scale = UINT64_C(1) << (uint32_t)amount_facts.range_hi;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_quotient_dividend_is_divisible(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_quotient_def_t* quotient, bool* out_divisible) {
+  loom_value_facts_t dividend_facts = {0};
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_context_lookup_facts(
+      context, quotient->dividend, &dividend_facts));
+  if (loom_value_facts_is_zero(dividend_facts)) {
+    *out_divisible = true;
+    return iree_ok_status();
+  }
+
+  uint64_t scale = 0;
+  bool scale_available = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_quotient_divisibility_scale(
+      context, quotient, &scale, &scale_available));
+  *out_divisible =
+      scale_available && scale <= INT64_MAX &&
+      loom_value_facts_divisible_by(dividend_facts, (int64_t)scale);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_quotient_map_dividend_order(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_quotient_def_t* left,
+    const loom_symbolic_quotient_def_t* right,
+    loom_integer_order_outcome_bits_t dividend_outcomes,
+    loom_integer_order_outcome_bits_t* out_quotient_outcomes) {
+  bool left_divisible = false;
+  if (dividend_outcomes & LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER) {
+    IREE_RETURN_IF_ERROR(loom_symbolic_quotient_dividend_is_divisible(
+        context, left, &left_divisible));
+  }
+  bool right_divisible = false;
+  if (dividend_outcomes & LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS) {
+    IREE_RETURN_IF_ERROR(loom_symbolic_quotient_dividend_is_divisible(
+        context, right, &right_divisible));
+  }
+
+  loom_integer_order_outcome_bits_t quotient_outcomes = 0;
+  if (dividend_outcomes & LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS) {
+    quotient_outcomes |= LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS;
+    if (!right_divisible) {
+      quotient_outcomes |= LOOM_INTEGER_ORDER_OUTCOME_BIT_EQUAL;
+    }
+  }
+  if (dividend_outcomes & LOOM_INTEGER_ORDER_OUTCOME_BIT_EQUAL) {
+    quotient_outcomes |= LOOM_INTEGER_ORDER_OUTCOME_BIT_EQUAL;
+  }
+  if (dividend_outcomes & LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER) {
+    quotient_outcomes |= LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER;
+    if (!left_divisible) {
+      quotient_outcomes |= LOOM_INTEGER_ORDER_OUTCOME_BIT_EQUAL;
+    }
+  }
+  *out_quotient_outcomes = quotient_outcomes;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_quotient_pair_proves_relation(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_quotient_def_t* left, loom_value_id_t right_value,
+    loom_symbolic_integer_relation_t relation, bool* out_matched,
+    loom_symbolic_proof_result_t* out_result) {
+  *out_matched = false;
+  const loom_value_id_t right_source =
+      loom_symbolic_expr_assumption_source_value(context, right_value);
+  const loom_op_t* right_op =
+      loom_symbolic_quotient_value_defining_op(context, right_source);
+  loom_symbolic_quotient_def_t right = {0};
+  if (!right_op || !loom_symbolic_quotient_def(right_op, &right)) {
+    return iree_ok_status();
+  }
+
+  bool left_supported = false;
+  IREE_RETURN_IF_ERROR(
+      loom_symbolic_quotient_def_is_supported(context, left, &left_supported));
+  bool right_supported = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_quotient_def_is_supported(
+      context, &right, &right_supported));
+  if (!left_supported || !right_supported) {
+    return iree_ok_status();
+  }
+
+  bool scales_match = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_quotient_scales_match(
+      context, left, &right, &scales_match));
+  if (!scales_match) {
+    return iree_ok_status();
+  }
+
+  loom_integer_order_outcome_bits_t dividend_outcomes =
+      loom_value_fact_table_query_signed_integer_order(
+          context->fact_table, left->dividend, right.dividend);
+  const loom_condition_integer_operand_t left_operand = {
+      .kind = LOOM_CONDITION_INTEGER_OPERAND_VALUE,
+      .value_id = left->dividend,
+  };
+  const loom_condition_integer_operand_t right_operand = {
+      .kind = LOOM_CONDITION_INTEGER_OPERAND_VALUE,
+      .value_id = right.dividend,
+  };
+  dividend_outcomes &= loom_condition_fact_scope_query_integer_order(
+      context->condition_scope, context->fact_table, left_operand,
+      right_operand);
+  loom_integer_order_outcome_bits_t quotient_outcomes = 0;
+  IREE_RETURN_IF_ERROR(loom_symbolic_quotient_map_dividend_order(
+      context, left, &right, dividend_outcomes, &quotient_outcomes));
+  bool result = false;
+  if (loom_symbolic_integer_relation_resolve(quotient_outcomes, relation,
+                                             &result)) {
+    *out_matched = true;
+    *out_result = result ? LOOM_SYMBOLIC_PROOF_TRUE : LOOM_SYMBOLIC_PROOF_FALSE;
+  }
+  return iree_ok_status();
 }
 
 typedef struct loom_symbolic_quotient_condition_proof_t {
@@ -457,6 +634,12 @@ iree_status_t loom_symbolic_expr_quotient_bound_proves_relation(
       loom_symbolic_quotient_value_defining_op(context, quotient_source);
   loom_symbolic_quotient_def_t quotient = {0};
   if (!quotient_op || !loom_symbolic_quotient_def(quotient_op, &quotient)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_symbolic_quotient_pair_proves_relation(
+      context, &quotient, bound_value, relation, out_matched, out_result));
+  if (*out_matched) {
     return iree_ok_status();
   }
 

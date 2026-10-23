@@ -75,6 +75,15 @@ bool loom_condition_fact_scope_apply_to_value_facts(
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
     loom_value_facts_t* inout_facts);
 
+// Returns the possible signed comparison outcomes for |left| relative to
+// |right| after intersecting every fragment in |scope|. An unconstrained scope
+// admits every outcome; contradictory fragments produce an empty set.
+loom_integer_order_outcome_bits_t loom_condition_fact_scope_query_integer_order(
+    const loom_condition_fact_scope_t* scope,
+    const loom_value_fact_table_t* fact_table,
+    loom_condition_integer_operand_t left,
+    loom_condition_integer_operand_t right);
+
 // Attempts to evaluate |queried| from the conjunction of every fragment in
 // |scope|. Contradictory fragments leave the result unknown.
 bool loom_condition_fact_scope_proves_integer_relation(
