@@ -471,6 +471,8 @@ iree_assert_dependency_boundary(
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_records",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/ops",
         "//loom/src/loom/target/arch/amdgpu/ops",
+        "//loom/src/loom/target/arch/spirv:features",
+        "//loom/src/loom/target/arch/spirv:scalar_types",
         "//loom/src/loom/target/arch/spirv/ops",
         "//loom/src/loom/target/arch/spirv/records:target_records",
         "//loom/src/loom/target/arch/vm/ops",
@@ -478,6 +480,7 @@ iree_assert_dependency_boundary(
         "//loom/src/loom/target/arch/x86/ops",
         "//loom/src/loom/target/arch/x86/records:target_records",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/util:numeric_format",
     ] + [
         "//loom/src/loom/ops/%s" % dialect
         for dialect in _CONSTRUCTION_DIALECTS

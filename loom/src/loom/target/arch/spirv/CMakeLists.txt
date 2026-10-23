@@ -117,6 +117,20 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
+    vocabulary
+  HDRS
+    "features.h"
+    "scalar_type.h"
+  DEPS
+    ::isa
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_library(
+  NAME
     scalar_types
   HDRS
     "scalar_types.h"
@@ -124,6 +138,7 @@ loom_cc_library(
     "scalar_types.c"
   DEPS
     ::features
+    ::vocabulary
     iree::base
     loom::util::numeric_format
   PUBLIC

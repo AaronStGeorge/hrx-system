@@ -114,7 +114,7 @@ loom_cc_library(
     iree::base
     loom::ir::builders
     loom::target::arch::spirv::isa
-    loom::target::arch::spirv::scalar_types
+    loom::target::arch::spirv::vocabulary
   PUBLIC
 )
 endif()
