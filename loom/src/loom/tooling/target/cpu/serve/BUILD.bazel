@@ -82,14 +82,14 @@ loom_cc_test(
     srcs = ["activity_test_main.c"],
     args = [
         "--fixture=true",
-        "--model=$(rootpath //loom/src/loom/serve/fixture/recognition:card_activity)",
+        "--model=$(rootpath //loom/src/loom/serve/fixture/recognition:activity_card)",
         "--transcription_model=$(rootpath //loom/src/loom/serve/fixture/recognition:card_model)",
         "--device=task",
         "--pool_backing=fixed",
         "--workers=1",
     ],
     data = [
-        "//loom/src/loom/serve/fixture/recognition:card_activity",
+        "//loom/src/loom/serve/fixture/recognition:activity_card",
         "//loom/src/loom/serve/fixture/recognition:card_model",
     ],
     tags = ["skip-bazel_to_cmake"],
@@ -116,7 +116,7 @@ loom_cc_test(
     args = [
         "--fixture=true",
         "--model=$(rootpath //loom/src/loom/serve/fixture/recognition:card_activity_text)",
-        "--transcription_model=$(rootpath //loom/src/loom/serve/fixture/recognition:card_model_text)",
+        "--transcription_model=$(rootpath //loom/src/loom/serve/fixture/recognition:transcription_card_text)",
         "--device=task",
         "--pool_backing=fixed",
         "--workers=8",
@@ -124,7 +124,7 @@ loom_cc_test(
     ],
     data = [
         "//loom/src/loom/serve/fixture/recognition:card_activity_text",
-        "//loom/src/loom/serve/fixture/recognition:card_model_text",
+        "//loom/src/loom/serve/fixture/recognition:transcription_card_text",
     ],
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([

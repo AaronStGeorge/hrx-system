@@ -20,13 +20,13 @@ from catalog_test_util import check_decision as check_decision_result
 from loom_serve_testing.http_harness import running_server
 
 
-def check_image(client):
+def check_image(client, model):
     def request(index):
         prompt = "ab" + "a" * (index % 2)
         result = client.request(
             "/v1/images/generations",
             {
-                "model": "pixels",
+                "model": model,
                 "prompt": prompt,
                 "seed": index,
                 "response_format": "b64_json",
@@ -36,14 +36,14 @@ def check_image(client):
 
     with ThreadPoolExecutor(max_workers=4) as workers:
         list(workers.map(request, range(8)))
-    assert client.request("/tokenize", {"model": "pixels", "content": "abxa"}) == {
+    assert client.request("/tokenize", {"model": model, "content": "abxa"}) == {
         "tokens": [0, 1, 2, 0]
     }
     # Adapter selection belongs to each request, independently of the card.
     result = client.request(
         "/v1/images/generations",
         {
-            "model": "pixels",
+            "model": model,
             "prompt": "aba",
             "seed": 1,
             "loras": [{"id": "red", "scale": -2}],
@@ -52,12 +52,12 @@ def check_image(client):
     check_png(result["data"][0]["b64_json"], "aba", 0)
 
 
-def check_embedding(client):
+def check_embedding(client, model):
     def request(index):
         inputs = ["a" * (index + 1), "bax", "xx"]
         result = client.request(
             "/v1/embeddings",
-            {"model": "vectors", "input": inputs, "dimensions": 2},
+            {"model": model, "input": inputs, "dimensions": 2},
         )
         assert [row["index"] for row in result["data"]] == [0, 1, 2], result
         assert [row["embedding"] for row in result["data"]] == [
@@ -68,17 +68,17 @@ def check_embedding(client):
 
     with ThreadPoolExecutor(max_workers=4) as workers:
         list(workers.map(request, range(8)))
-    assert client.request("/tokenize", {"model": "vectors", "content": "abxa"}) == {
+    assert client.request("/tokenize", {"model": model, "content": "abxa"}) == {
         "tokens": [0, 1, 2, 0]
     }
 
 
-def check_decision(client):
+def check_decision(client, model):
     for _ in range(4):
         result = client.request(
             "/v1/systemone",
             {
-                "model": "judge",
+                "model": model,
                 "state": "a",
                 "questions": {
                     "truth": {
@@ -92,14 +92,14 @@ def check_decision(client):
         check_decision_result(result)
 
 
-def check_speech(client):
+def check_speech(client, model):
     def request(index):
         text = "ab" + "a" * index
         voice = "positive" if index % 2 else "negative"
         result = client.request(
             "/v1/audio/speech",
             {
-                "model": "speech",
+                "model": model,
                 "input": text,
                 "voice": voice,
                 "seed": index,
@@ -110,17 +110,17 @@ def check_speech(client):
 
     with ThreadPoolExecutor(max_workers=4) as workers:
         list(workers.map(request, range(8)))
-    assert client.request("/tokenize", {"model": "speech", "content": "abba"}) == {
+    assert client.request("/tokenize", {"model": model, "content": "abba"}) == {
         "tokens": [0, 1, 1, 0]
     }
 
 
-def check_sequence(client):
+def check_sequence(client, model):
     history = []
     handle = None
     for tokens in ([0, 1, 2, 0, 1, 1, 0, 0, 2, 1, 0], [1], [2, 0]):
         position = len(history)
-        body = {"model": "fixture-sequence", "position": position, "token_ids": tokens}
+        body = {"model": model, "position": position, "token_ids": tokens}
         if handle:
             body["session"] = handle
         connection = http.client.HTTPConnection(client.address)
@@ -171,7 +171,7 @@ def check_sequence(client):
         ), events
 
 
-def main(server, kind, deployment):
+def check_service(server, kind, deployment, model):
     server = str(Path(server).absolute())
     deployment = str(Path(deployment).absolute())
     with tempfile.TemporaryDirectory() as temporary:
@@ -198,13 +198,25 @@ def main(server, kind, deployment):
                     "decision": check_decision,
                     "speech": check_speech,
                     "sequence": check_sequence,
-                }[kind](client)
+                }[kind](client, model)
             except (AssertionError, RuntimeError) as error:
                 status = client.request("/v1/status")
                 raise AssertionError(
                     f"{error}\nmodel status: {status}\n{log.read_text()}"
                 ) from error
         assert process.returncode == 0, log.read_text()
+
+
+def main(server, kind, deployment):
+    deployment = Path(deployment).absolute()
+    for path in (deployment, deployment.parent / "model.json"):
+        document = json.loads(path.read_text())
+        model = (
+            document["model"]["id"]
+            if "schema_version" in document
+            else document["name"]
+        )
+        check_service(server, kind, str(path), model)
 
 
 if __name__ == "__main__":

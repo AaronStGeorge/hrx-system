@@ -595,7 +595,7 @@ static iree_status_t loom_model_select(loom_model_card_t* card,
   if (selector->preset.size ||
       (!selector->service.size && !selector->variant.size &&
        !selector->programs.size && !selector->partition.size &&
-       presets.count == 1)) {
+       presets.count)) {
     IREE_RETURN_IF_ERROR(loom_model_choose(&presets, selector->preset, "preset",
                                            &selection->selector.preset,
                                            &preset_json));

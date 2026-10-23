@@ -102,6 +102,20 @@ static iree_status_t loom_serve_model_configuration_size(
   return iree_ok_status();
 }
 
+static iree_status_t loom_serve_model_configuration_validate_name(
+    iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < name.size; ++i) {
+    const uint8_t c = (uint8_t)name.data[i];
+    if (c < 0x21 || c > 0x7e) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "model names must fit a visible ASCII HTTP header selector; "
+          "use a deployment document to supply a routing alias");
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_serve_model_configuration_options(
     const loom_serve_model_configuration_field_t* field,
     iree_allocator_t host_allocator, iree_string_view_t* out_value) {
@@ -409,6 +423,27 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
   if (model->sources.card) {
     const loom_model_selection_t* selection =
         loom_model_card_selection(model->sources.card);
+    if (fields[DEFINITION_KIND].value.data &&
+        !iree_string_view_equal(fields[DEFINITION_KIND].value,
+                                selection->kind)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "deployment kind '%.*s' does not match selected service kind '%.*s'",
+          (int)fields[DEFINITION_KIND].value.size,
+          fields[DEFINITION_KIND].value.data, (int)selection->kind.size,
+          selection->kind.data);
+    }
+    if (selection->version && selection->version != 1) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "selected service requires %.*s ABI %u; this host implements "
+          "ABI 1 and the unversioned development contract for the selected "
+          "kind",
+          (int)selection->kind.size, selection->kind.data, selection->version);
+    }
+    if (!fields[DEFINITION_KIND].value.data) {
+      fields[DEFINITION_KIND].value = selection->kind;
+    }
     loom_serve_model_configuration_field_t defaults[IREE_ARRAYSIZE(fields)];
     memcpy(defaults, fields, sizeof(fields));
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(defaults); ++i) {
@@ -643,14 +678,8 @@ static iree_status_t loom_serve_model_configuration_model_parse(
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_options(
         &document_field, host_allocator, &out_model->document));
   }
-  for (iree_host_size_t i = 0; i < out_model->name.size; ++i) {
-    const uint8_t c = (uint8_t)out_model->name.data[i];
-    if (c < 0x21 || c > 0x7e) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "model names must fit a visible ASCII HTTP header selector");
-    }
-  }
+  IREE_RETURN_IF_ERROR(
+      loom_serve_model_configuration_validate_name(out_model->name));
   if (fields[2].value.data) {
     if (iree_string_view_equal(fields[2].value, IREE_SV("drained"))) {
       out_model->start_drained = true;
@@ -756,10 +785,8 @@ iree_status_t loom_serve_model_configuration_resolve(
     loom_serve_model_configuration_t* out_model) {
   *out_model = (loom_serve_model_configuration_t){0};
   loom_serve_sources_t* sources = NULL;
-  IREE_RETURN_IF_ERROR(loom_serve_sources_resolve(
-      &model->sources,
-      iree_make_cstring_view(loom_serve_model_kind_name(model->kind)), 1,
-      host_allocator, &sources));
+  IREE_RETURN_IF_ERROR(
+      loom_serve_sources_resolve(&model->sources, host_allocator, &sources));
   iree_status_t status = loom_serve_model_configuration_model_parse(
       model->document, iree_string_view_empty(), NULL, sources, host_allocator,
       out_model);
@@ -772,8 +799,54 @@ iree_status_t loom_serve_model_configuration_resolve(
   return status;
 }
 
+static iree_status_t loom_serve_model_configuration_card(
+    iree_string_view_t json, iree_string_view_t directory,
+    iree_string_view_t preset, iree_allocator_t host_allocator,
+    loom_serve_model_configuration_t* out_model) {
+  *out_model =
+      (loom_serve_model_configuration_t){.host_allocator = host_allocator,
+                                         .device_index = IREE_HOST_SIZE_MAX,
+                                         .pending_requests = 32};
+  const loom_model_selector_t selector = {.preset = preset};
+  loom_model_card_t* card = NULL;
+  iree_status_t status =
+      loom_model_card_parse(json, &selector, host_allocator, &card);
+  if (iree_status_is_ok(status)) {
+    const loom_serve_sources_t sources = {.base_directory = directory,
+                                          .card = card};
+    status = loom_serve_sources_clone(&sources, host_allocator,
+                                      &out_model->resolved_sources);
+  }
+  if (iree_status_is_ok(status)) {
+    out_model->sources = *out_model->resolved_sources;
+    const iree_string_view_t identity =
+        loom_model_card_selection(card)->model_id;
+    status = loom_serve_model_configuration_validate_name(identity);
+    if (iree_status_is_ok(status)) {
+      char* name = NULL;
+      status = iree_allocator_clone(
+          host_allocator,
+          iree_make_const_byte_span(identity.data, identity.size),
+          (void**)&name);
+      if (iree_status_is_ok(status)) {
+        out_model->name = iree_make_string_view(name, identity.size);
+      }
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_model_configuration_definition_parse(
+        IREE_SV("{}"), out_model, host_allocator);
+  }
+  loom_model_card_release(card);
+  if (!iree_status_is_ok(status)) {
+    loom_serve_model_configuration_deinitialize(out_model);
+  }
+  return status;
+}
+
 iree_status_t loom_serve_model_configuration_load(
-    iree_string_view_t path, iree_allocator_t host_allocator,
+    iree_string_view_t path, iree_string_view_t preset,
+    iree_allocator_t host_allocator,
     loom_serve_model_configuration_t* out_model) {
   *out_model = (loom_serve_model_configuration_t){0};
   iree_io_file_contents_t* contents = NULL;
@@ -783,10 +856,25 @@ iree_status_t loom_serve_model_configuration_load(
   if (!directory.size) {
     directory = IREE_SV(".");
   }
-  iree_status_t status = loom_serve_model_configuration_initialize(
+  const iree_string_view_t json =
       iree_make_string_view((const char*)contents->const_buffer.data,
-                            contents->const_buffer.data_length),
-      directory, NULL, host_allocator, out_model);
+                            contents->const_buffer.data_length);
+  iree_string_view_t revision = iree_string_view_empty();
+  iree_status_t status = iree_json_try_lookup_object_value(
+      json, IREE_SV("schema_version"), &revision);
+  if (iree_status_is_ok(status)) {
+    if (revision.data) {
+      status = loom_serve_model_configuration_card(json, directory, preset,
+                                                   host_allocator, out_model);
+    } else if (preset.size) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "--preset requires a model card; a deployment selects model.preset");
+    } else {
+      status = loom_serve_model_configuration_initialize(
+          json, directory, NULL, host_allocator, out_model);
+    }
+  }
   iree_io_file_contents_free(contents);
   return status;
 }

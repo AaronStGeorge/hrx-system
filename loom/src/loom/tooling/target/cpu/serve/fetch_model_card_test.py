@@ -158,18 +158,7 @@ def main():
         assert result.returncode == 0, result.stderr
         outputs.append(offline)
         for output in outputs:
-            deployment = output / "serve.json"
-            deployment.write_text(
-                json.dumps(
-                    {
-                        "name": "fixture-text",
-                        "model": {"path": "model.json", "preset": "check"},
-                        "definition": {"kind": "text"},
-                    }
-                ),
-                encoding="utf-8",
-            )
-            check_model(serve, deployment, "abab")
+            check_model(serve, output / "model.json", "abab")
 
 
 if __name__ == "__main__":

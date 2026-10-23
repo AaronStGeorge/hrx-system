@@ -192,7 +192,8 @@ class NativeActivityTest : public ::testing::Test {
   void Register(const char* path, size_t role) {
     loom_serve_model_configuration_t configuration;
     IREE_ASSERT_OK(loom_serve_model_configuration_load(
-        iree_make_cstring_view(path), allocator_, &configuration));
+        iree_make_cstring_view(path), iree_string_view_empty(), allocator_,
+        &configuration));
     if (FLAG_fixture) {
       configuration.device_index = role ? FLAG_fixture_transcription_device : 0;
     }

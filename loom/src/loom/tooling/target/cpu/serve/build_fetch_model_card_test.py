@@ -53,7 +53,6 @@ def main():
                 size, digest = file_digest(source)
                 identities.append(FileIdentity(file.origin, size, digest))
             shutil.copyfile(card, directory / "model.json")
-            shutil.copyfile(deployment, directory / "serve.json")
             (directory / "model.json.lock").write_text(
                 json.dumps(ModelLock.snapshot({}, identities))
             )
@@ -78,8 +77,7 @@ def main():
                         ],
                         check=True,
                     )
-                    shutil.copyfile(deployment, output / "serve.json")
-                    installations.append(output / "serve.json")
+                    installations.append(output / "model.json")
             finally:
                 server.shutdown()
                 thread.join()

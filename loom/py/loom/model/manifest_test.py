@@ -264,6 +264,19 @@ def test_explicit_selection_without_canonical_preset():
     assert card.select(service="chat", programs="mixed").programs == "mixed"
 
 
+def test_ambiguous_presets_require_selection_even_with_identical_files():
+    document = _document()
+    settings = document["presets"]["check"]
+    document["presets"] = {
+        "small": settings,
+        "large": settings | {"execution": {"rows": 8}},
+    }
+    card = ModelCard(document)
+    with pytest.raises(ManifestError, match="preset: select explicitly"):
+        card.select()
+    assert card.select("large").settings["execution"]["rows"] == 8
+
+
 def test_programs_must_be_supported_by_variant():
     document = _document()
     _service(document)["programs"] = ["source"]

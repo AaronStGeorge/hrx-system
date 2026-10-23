@@ -162,11 +162,15 @@ iree_status_t loom_serve_model_configuration_resolve(
     iree_allocator_t host_allocator,
     loom_serve_model_configuration_t* out_model);
 
-// Reads one model document and supplies its directory to the shared parser.
+// Reads a model card or deployment document. A card uses its model identity as
+// the routing alias and its selected preset's canonical hosting defaults.
+// preset chooses among a card's named presets; empty requires an unambiguous
+// selection. Deployments own their selectors and reject a nonempty preset.
 // This cold file-I/O entry belongs on a startup thread or preparation worker,
 // never on the HTTP owner. No program or parameter payload is read here.
 iree_status_t loom_serve_model_configuration_load(
-    iree_string_view_t path, iree_allocator_t host_allocator,
+    iree_string_view_t path, iree_string_view_t preset,
+    iree_allocator_t host_allocator,
     loom_serve_model_configuration_t* out_model);
 
 // Resolves this deployment's device against the caller's immutable group size.

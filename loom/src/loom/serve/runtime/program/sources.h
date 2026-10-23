@@ -57,14 +57,12 @@ void loom_serve_sources_free(loom_serve_sources_t* sources,
                              iree_allocator_t host_allocator);
 
 // Resolves a local card reference or clones a direct namespace. Card files
-// are read here, on a preparation worker. The service host supplies the exact
-// supported kind/version; omission in the card selects development behavior.
+// are read here, on a preparation worker. The service host validates the
+// selected kind/version after resolution; this layer owns only model facts.
 // Result owns its local base, selected card, and namespace through
 // sources_free. No program, parameter, tokenizer, origin, or lock is opened by
 // resolution.
 iree_status_t loom_serve_sources_resolve(const loom_serve_sources_t* sources,
-                                         iree_string_view_t service_kind,
-                                         uint32_t service_version,
                                          iree_allocator_t host_allocator,
                                          loom_serve_sources_t** out_sources);
 

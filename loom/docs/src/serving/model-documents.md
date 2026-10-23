@@ -9,6 +9,23 @@ A deployment can describe its programs directly or reference a portable model
 card. A card owns model identity, services, program sets, parameter variants,
 and presets independently of the server.
 
+After fetching a model, pass its card directly to the server:
+
+```sh
+loom-fetch model.json --preset=interactive --output=./installed
+loom-serve --device=task --model=./installed/model.json
+```
+
+This example selects the `interactive` preset and uses the task device; select
+a device supported by the model's programs. Fetch retains the selected preset,
+so serving needs no separate deployment file. Requests use the card's `model.id`
+as their model name. Programs and weights are prepared on worker threads.
+
+An authored card with several presets requires a choice, for example
+`loom-serve --device=task --model=model.json --preset=interactive`.
+`--preset` applies to one card. For multiple deployments, custom routing aliases,
+device placement, or execution overrides, use the referencing documents below.
+
 This document describes the arithmetic embedding package in the
 [serving walkthrough](workflows/serve-models.md):
 

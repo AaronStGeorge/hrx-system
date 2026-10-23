@@ -4,8 +4,9 @@ A model card describes a published model independently of its host application.
 `ModelCard.parse` validates plain JSON, and `select` resolves one service,
 variant, optional named partition, and provider set. Neither operation reads
 weights, invokes a compiler, or performs network access. The native `loom-serve`
-consumer reads the same
-selected facts through a deployment document's `model` reference.
+consumer loads a selected card directly with `--model=model.json`. A deployment
+document's `model` reference supplies explicit routing, placement, or execution
+overrides when needed.
 
 | Section | Meaning |
 | --- | --- |
@@ -209,8 +210,14 @@ only the card. Named maps remain available to ordinary JSON tools:
 loom-fetch model.json --list --json | jq '.variants | keys[]'
 loom-fetch model.json --preset=streaming --output=./installed --dry-run
 loom-fetch model.json --preset=streaming --output=./installed
+loom-serve --device=task --model=./installed/model.json
 loom-fetch partitioned.json --preset=check --partition=node-0 --output=./node-0
 ```
+
+Select a device supported by the model; the example uses the task device.
+The fetched card retains its preset, and requests use its `model.id` as the
+model name. An authored card with multiple presets can be served directly with
+`--preset=NAME` alongside one `--model` argument.
 
 On Windows and Unix terminals, missing selections open a keyboard picker. Type
 to filter, use arrows or Home/End/Page Up/Page Down to move, and press Enter to

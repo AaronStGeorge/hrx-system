@@ -19,6 +19,22 @@ exports_files(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "activity_card",
+    srcs = [":card_activity"],
+    output_group = "model_card",
+    tags = ["skip-bazel_to_cmake"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "transcription_card_text",
+    srcs = [":card_model_text"],
+    output_group = "model_card",
+    tags = ["skip-bazel_to_cmake"],
+    visibility = ["//visibility:public"],
+)
+
 loom_library(
     name = "generate_module",
     srcs = ["generate.loom"],

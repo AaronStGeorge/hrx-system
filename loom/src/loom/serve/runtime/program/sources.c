@@ -97,8 +97,6 @@ void loom_serve_sources_free(loom_serve_sources_t* sources,
 }
 
 iree_status_t loom_serve_sources_resolve(const loom_serve_sources_t* sources,
-                                         iree_string_view_t service_kind,
-                                         uint32_t service_version,
                                          iree_allocator_t host_allocator,
                                          loom_serve_sources_t** out_sources) {
   *out_sources = NULL;
@@ -114,18 +112,6 @@ iree_status_t loom_serve_sources_resolve(const loom_serve_sources_t* sources,
       iree_make_string_view((const char*)bytes.data, bytes.data_length),
       &sources->reference.selector, host_allocator, &card);
   loomc_source_release(document);
-  if (iree_status_is_ok(status)) {
-    const loom_model_selection_t* selection = loom_model_card_selection(card);
-    if (!iree_string_view_equal(selection->kind, service_kind) ||
-        (selection->version && selection->version != service_version)) {
-      status = iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "selected service requires %.*s ABI %u; this host implements %.*s "
-          "ABI %u and the unversioned development contract",
-          (int)selection->kind.size, selection->kind.data, selection->version,
-          (int)service_kind.size, service_kind.data, service_version);
-    }
-  }
   char* path = NULL;
   if (iree_status_is_ok(status) &&
       (sources->base_directory.size ||

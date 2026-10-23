@@ -198,6 +198,18 @@ TEST_F(CardTest, ExplicitSelectionDoesNotSilentlyPickAPreset) {
   EXPECT_EQ(card_, nullptr);
 }
 
+TEST_F(CardTest, AmbiguousPresetsRequireSelection) {
+  const std::string json =
+      Replace("\"presets\": {",
+              "\"presets\": {\"other\": {\"service\": \"chat\", \"variant\": "
+              "\"small\", "
+              "\"programs\": \"mixed\", \"execution\": {\"rows\": 8}},");
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
+  const loom_model_selector_t selector = {.preset = IREE_SV("other")};
+  IREE_ASSERT_OK(Parse(json, &selector));
+  EXPECT_EQ(String(loom_model_card_selection(card_)->selector.preset), "other");
+}
+
 TEST_F(CardTest, UnknownRevisionFailsBeforeInterpretingNewFields) {
   IREE_ASSERT_STATUS_IS(
       IREE_STATUS_UNIMPLEMENTED,

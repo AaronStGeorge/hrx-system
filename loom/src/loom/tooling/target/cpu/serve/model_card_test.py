@@ -20,6 +20,10 @@ def check_model(server, model, expected, *provider_encodings, environment=None):
     # Preserve the runfiles namespace: resolving its symlinks would discard the
     # declared relative relationship between the deployment and its assets.
     model = str(Path(model).absolute())
+    document = json.loads(Path(model).read_text())
+    model_name = (
+        document["model"]["id"] if "schema_version" in document else document["name"]
+    )
     for binding in provider_encodings:
         relative, encoding = binding.split("=", 1)
         assert encoding in ("text", "bc"), binding
@@ -52,7 +56,7 @@ def check_model(server, model, expected, *provider_encodings, environment=None):
                     headers={"Content-Type": "application/json"},
                     body=json.dumps(
                         {
-                            "model": "fixture-text",
+                            "model": model_name,
                             "messages": [{"role": "user", "content": "a"}],
                             "max_tokens": 4,
                         }

@@ -593,9 +593,9 @@ class ModelCard:
         if (
             preset is None
             and all(value is None for value in (service, variant, programs, partition))
-            and len(presets) == 1
+            and presets
         ):
-            preset = next(iter(presets))
+            preset = choose(presets, None, "preset")
         settings = {}
         if preset is not None:
             _reference(preset, presets, "preset")

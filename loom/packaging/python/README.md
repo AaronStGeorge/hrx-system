@@ -43,8 +43,10 @@ use the build toolchain's libc baseline; these tags make no manylinux portabilit
 claim.
 
 Installed users need Python and the wheel; Bazel is a package-author build tool.
-A serving deployment references the fetched local `model.json`; model acquisition
-and serving configuration remain separate operations.
+`loom-serve --device=task --model=./model/model.json` loads the fetched card's
+selected preset directly; choose a device supported by that model. A separate
+serving deployment can supply routing aliases, placement, and execution
+overrides.
 
 The wheel carries versioned JSON schemas alongside `loom.model`. Applications
 can read them without accessing a repository:

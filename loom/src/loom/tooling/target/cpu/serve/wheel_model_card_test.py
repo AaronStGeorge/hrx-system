@@ -317,12 +317,13 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
                 (catalog_installation / ".loom-fetch.json").read_text()
             )
             assert receipt["catalog"] == listing["snapshot"]
-        serving = json.loads(deployment.read_text())
-        serving["model"]["path"] = str(catalog_installation / "model.json")
-        selected = directory / "serve.json"
-        selected.write_text(json.dumps(serving))
         server = shutil.which("loom-serve", path=environment["PATH"])
-        check_model(str(server), str(selected), "abab", environment=environment)
+        check_model(
+            str(server),
+            str(catalog_installation / "model.json"),
+            "abab",
+            environment=environment,
+        )
 
 
 if __name__ == "__main__":
