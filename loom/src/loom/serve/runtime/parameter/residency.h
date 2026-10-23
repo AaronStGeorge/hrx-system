@@ -138,6 +138,19 @@ iree_status_t loom_serve_residency_prepare_working_set(
     loom_serve_residency_t* residency, uint64_t private_bytes,
     uint64_t output_bytes);
 
+// Checks a replacement command peak at a completed execution boundary. Live
+// rows may retain parameter pins; an increase must fit alongside their state
+// and accepted peers. This neither changes accounting nor reclaims history.
+// Ordered activation staging remains part of the private high-water.
+iree_status_t loom_serve_residency_check_private_peak(
+    const loom_serve_residency_t* residency, uint64_t private_bytes);
+
+// Publishes a checked replacement after its command binding succeeds, on the
+// same serialized owner turn as check_private_peak. No work, parameter pin,
+// escaping output, or retained state changes. Publication cannot fail.
+void loom_serve_residency_set_private_peak(loom_serve_residency_t* residency,
+                                           uint64_t private_bytes);
+
 // Replaces an owned output reference with an independently retained credit
 // view. The producer's pin and the final view retirement must both complete
 // before its admission credit returns. The cache outlives every consumer;

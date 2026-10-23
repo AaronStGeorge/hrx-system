@@ -287,6 +287,7 @@ loom_cc_library(
     "model_instance.h"
     "source_execution_test.cc"
     "state_test.cc"
+    "workspace_test.cc"
   DEPS
     ::capture
     ::epoch_upload

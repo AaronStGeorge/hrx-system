@@ -793,8 +793,8 @@ iree_status_t loom_serve_residency_check_working_set(
   return iree_ok_status();
 }
 
-iree_status_t loom_serve_residency_prepare_working_set(
-    loom_serve_residency_t* residency, uint64_t private_bytes,
+static uint64_t loom_serve_residency_private_peak(
+    const loom_serve_residency_t* residency, uint64_t private_bytes,
     uint64_t output_bytes) {
   // Activation staging and execution are ordered on this invocation's
   // timeline. Reserve their maximum, retaining output credit independently
@@ -802,8 +802,15 @@ iree_status_t loom_serve_residency_prepare_working_set(
   // their own activation peak until their invocation releases its final pin.
   const uint64_t activation =
       loom_serve_residency_activation_workspace(residency);
-  private_bytes = iree_max(
-      private_bytes, activation > output_bytes ? activation - output_bytes : 0);
+  return iree_max(private_bytes,
+                  activation > output_bytes ? activation - output_bytes : 0);
+}
+
+iree_status_t loom_serve_residency_prepare_working_set(
+    loom_serve_residency_t* residency, uint64_t private_bytes,
+    uint64_t output_bytes) {
+  private_bytes =
+      loom_serve_residency_private_peak(residency, private_bytes, output_bytes);
   const iree_device_size_t extents[] = {private_bytes, output_bytes};
   IREE_RETURN_IF_ERROR(loom_serve_residency_check_working_set(
       residency, IREE_ARRAYSIZE(extents), extents));
@@ -828,7 +835,8 @@ static bool loom_serve_residency_contains_group(
 // Unpinned weight groups are reclaimable; shared pinned groups count once.
 // Native allocator availability and idle slab caches are not scheduling inputs.
 static bool loom_serve_residency_admit_working_set(
-    const loom_serve_residency_t* residency, uint64_t additional_state) {
+    const loom_serve_residency_t* residency, uint64_t additional_state,
+    uint64_t private_bytes, bool reclaim_history) {
   loom_serve_residency_cache_t* cache = residency->cache;
   if (!cache->pool || loom_serve_memory_pool_limit(cache->pool) == UINT64_MAX) {
     return true;
@@ -865,10 +873,12 @@ static bool loom_serve_residency_admit_working_set(
   for (const loom_serve_residency_t* entry = cache->oldest; entry;
        entry = entry->next) {
     if (entry == residency || entry->pin_count) {
-      if (entry->private_bytes > remaining) {
+      const uint64_t required =
+          entry == residency ? private_bytes : entry->private_bytes;
+      if (required > remaining) {
         return false;
       }
-      remaining -= entry->private_bytes;
+      remaining -= required;
     }
   }
   const uint64_t output = residency->pin_count ? 0 : residency->output_bytes;
@@ -883,7 +893,7 @@ static bool loom_serve_residency_admit_working_set(
   // Ask one eligible owner to retire its history, preserving every accepted
   // consumer and borrowed preparation. Native retirement wakes the owner;
   // this admission neither waits nor probes allocator space.
-  if (!loom_serve_residency_cache_is_reclaiming(cache)) {
+  if (reclaim_history && !loom_serve_residency_cache_is_reclaiming(cache)) {
     for (loom_serve_residency_t* entry = cache->oldest; entry;
          entry = entry->next) {
       if (!entry->pin_count && entry->reclaimer.request &&
@@ -893,6 +903,29 @@ static bool loom_serve_residency_admit_working_set(
     }
   }
   return false;
+}
+
+iree_status_t loom_serve_residency_check_private_peak(
+    const loom_serve_residency_t* residency, uint64_t private_bytes) {
+  private_bytes = loom_serve_residency_private_peak(residency, private_bytes,
+                                                    residency->output_bytes);
+  const iree_device_size_t extents[] = {private_bytes, residency->output_bytes};
+  IREE_RETURN_IF_ERROR(loom_serve_residency_check_working_set(
+      residency, IREE_ARRAYSIZE(extents), extents));
+  if (residency->pin_count && private_bytes > residency->private_bytes &&
+      !loom_serve_residency_admit_working_set(residency, 0, private_bytes,
+                                              false)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "replacement command workspace exceeds available serving capacity");
+  }
+  return iree_ok_status();
+}
+
+void loom_serve_residency_set_private_peak(loom_serve_residency_t* residency,
+                                           uint64_t private_bytes) {
+  residency->private_bytes = loom_serve_residency_private_peak(
+      residency, private_bytes, residency->output_bytes);
 }
 
 // Borrowed for one serialized admission, before either state or parameters
@@ -936,7 +969,8 @@ static iree_status_t loom_serve_residency_acquire_parameters(
                                               state->range_count, state->ranges)
                                               .missing_bytes
                                         : 0;
-  if (!loom_serve_residency_admit_working_set(residency, additional_state)) {
+  if (!loom_serve_residency_admit_working_set(residency, additional_state,
+                                              residency->private_bytes, true)) {
     return iree_ok_status();
   }
   // Nested execution shares parameter protection. A new row still admits its

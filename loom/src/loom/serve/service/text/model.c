@@ -257,6 +257,11 @@ static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
       &model->source, model->execution, model->transfer, &model->state,
       model->shape_count, model->shapes, model->stage_count,
       model->stage_bindings, model->host_allocator, &model->control));
+  model->stage_workspace_bytes =
+      loom_serve_module_workspace_requirement(model->control.native_module)
+          .allocation_size;
+  IREE_RETURN_IF_ERROR(loom_serve_residency_prepare_working_set(
+      model->residency, model->stage_workspace_bytes, 0));
   iree_async_proactor_t* proactor = NULL;
   IREE_RETURN_IF_ERROR(iree_async_proactor_pool_get(
       loom_serve_host_proactor_pool(
@@ -692,11 +697,17 @@ iree_status_t loom_serve_text_model_compile_variant_async(
 
 iree_status_t loom_serve_text_model_select_variant(
     loom_serve_text_model_t* model, const loom_serve_text_variant_t* variant) {
-  return variant ? loom_serve_text_variant_bind(variant, model,
-                                                model->control.native_module)
-                 : loom_serve_module_bind_stages(model->control.native_module,
-                                                 model->stage_count,
-                                                 model->stage_bindings);
+  if (variant) {
+    return loom_serve_text_variant_bind(
+        variant, model, model->control.native_module, model->residency);
+  }
+  IREE_RETURN_IF_ERROR(loom_serve_residency_check_private_peak(
+      model->residency, model->stage_workspace_bytes));
+  IREE_RETURN_IF_ERROR(loom_serve_module_bind_stages(
+      model->control.native_module, model->stage_count, model->stage_bindings));
+  loom_serve_residency_set_private_peak(model->residency,
+                                        model->stage_workspace_bytes);
+  return iree_ok_status();
 }
 
 loom_serve_text_row_t* loom_serve_text_model_row(loom_serve_text_model_t* model,
