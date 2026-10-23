@@ -42,7 +42,7 @@ loom_cc_library(
     textual_hdrs = ["ops.inc"],
     deps = [
         "//loom/src/loom/ir:builders",
-        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:builders",
         "//loom/src/loom/ops:vocabulary",
     ],
 )

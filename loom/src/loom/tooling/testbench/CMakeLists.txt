@@ -44,8 +44,8 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::ir::builders
+    loom::ops::builders
     loom::ops::kernel::op_defs
-    loom::ops::op_defs
     loom::tooling::testbench::scenario::plan
   PUBLIC
 )
@@ -64,10 +64,10 @@ loom_cc_library(
     iree::base::internal::arena
     loom::ir::builders
     loom::ops::buffer::builders
+    loom::ops::builders
     loom::ops::command::builders
     loom::ops::index::builders
     loom::ops::kernel::builders
-    loom::ops::op_defs
     loom::ops::scalar::builders
     loom::rewrite::remap
   PUBLIC

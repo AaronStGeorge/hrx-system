@@ -46,7 +46,7 @@ loom_cc_library(
     "builders.c"
   DEPS
     loom::ir::builders
-    loom::ops::op_defs
+    loom::ops::builders
     loom::ops::vocabulary
   PUBLIC
 )

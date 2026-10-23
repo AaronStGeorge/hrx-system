@@ -34,7 +34,7 @@ loom_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//loom/src/loom/ir:builders",
-        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:builders",
         "//loom/src/loom/target:types",
     ],
 )

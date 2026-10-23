@@ -41,7 +41,7 @@ loom_cc_library(
   DEPS
     ::op_defs
     loom::ir::builders
-    loom::ops::op_defs
+    loom::ops::builders
     loom::util::stable_id
   PUBLIC
 )

@@ -23,11 +23,12 @@ _OP_HEADERS = [
     "attribute_accessors.h",
     "builder.h",
     "builder_macros.h",
+    "mutation.h",
     "op_defs.h",
     "use_list.h",
 ]
 
-# Declarations/accessors do not bring construction, editing, or spelling tables.
+# Declarations/accessors do not bring construction, mutation, or spelling tables.
 # Invoking an out-of-line API still requires its implementation library.
 loom_cc_library(
     name = "headers",
@@ -59,8 +60,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "op_defs",
+    name = "builders",
     srcs = [
+        "builder.c",
         "op_defs.c",
         "use_list.c",
     ],
@@ -69,10 +71,32 @@ loom_cc_library(
         ":headers",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir:builders",
-        "//loom/src/loom/util:adaptive_sort",
         "//loom/src/loom/util:bstring",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "mutation",
+    srcs = ["mutation.c"],
+    hdrs = ["mutation.h"],
+    deps = [
+        ":builders",
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/util:adaptive_sort",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+# Complete operation support. Native constructors can select :builders without
+# the erasure, result/block removal, or bulk replacement implementation.
+loom_cc_library_group(
+    name = "op_defs",
+    deps = [
+        ":builders",
+        ":mutation",
     ],
 )
 
@@ -566,6 +590,8 @@ iree_assert_dependency_boundary(
         "//loom/src/loom/ops:cache",
         "//loom/src/loom/ops:combining",
         "//loom/src/loom/ops:format",
+        "//loom/src/loom/ops:mutation",
+        "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops:type_registry",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
