@@ -77,7 +77,7 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
     deployment = Path(deployment).absolute()
     elf_inspector = Path(elf_inspector).absolute()
     identity = read_identity(Path(version_file))
-    inspect_wheel(wheel, identity, Path(readme).read_text(encoding="utf-8"))
+    artifact = inspect_wheel(wheel, identity, Path(readme).read_text(encoding="utf-8"))
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -153,10 +153,31 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
             else {"libiree.so", "libloomc.so"}
         )
         assert companions <= native_names, native_names
+        if os.name == "nt":
+            symbols = {name for name in native_names if name.endswith(".pdb")}
+            project_binaries = {
+                name
+                for name in native_names
+                if name.endswith(".exe")
+                or name in companions | {"amdf_wkmi_bridge.dll"}
+            }
+            expected_symbols = {
+                str(Path(name).with_suffix(".pdb")) for name in project_binaries
+            }
+            if artifact.profile in ("debug", "asan"):
+                assert symbols == expected_symbols, (symbols, expected_symbols)
+            else:
+                assert symbols <= expected_symbols, (symbols, expected_symbols)
         for name in sorted(native_names):
             installed = scripts / name
             with installed.open("rb") as stream:
-                signature = b"MZ" if os.name == "nt" else b"\x7fELF"
+                signature = b"\x7fELF"
+                if os.name == "nt":
+                    signature = (
+                        b"Microsoft C/C++ MSF 7.00\r\n\x1aDS\x00\x00\x00"
+                        if name.endswith(".pdb")
+                        else b"MZ"
+                    )
                 assert stream.read(len(signature)) == signature, name
             if os.name != "nt":
                 runpath = run(elf_inspector, "--print-rpath", installed).strip()

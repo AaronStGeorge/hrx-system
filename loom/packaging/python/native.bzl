@@ -34,6 +34,53 @@ _configuration = transition(
     outputs = _CONFIGURATION.keys(),
 )
 
+_SymbolsInfo = provider(
+    doc = "Symbols paired with their native outputs before runfiles flattening.",
+    fields = {
+        "pairs": "Depset of (native File, PDB File) pairs from their link owners.",
+    },
+)
+
+_SYMBOL_DEPENDENCIES = [
+    "actual",
+    "data",
+    "deps",
+    "dynamic_deps",
+    "environment",
+    "implementation_deps",
+    "runtime_deps",
+    "src",
+    "srcs",
+]
+
+def _symbols_impl(target, ctx):
+    pairs = []
+    if OutputGroupInfo in target and hasattr(target[OutputGroupInfo], "pdb_file"):
+        for file in target[DefaultInfo].files.to_list():
+            if file.extension in ["exe", "dll"]:
+                for pdb in target[OutputGroupInfo].pdb_file.to_list():
+                    pairs.append((file, pdb))
+    transitive = []
+    if ctx.rule:
+        for name in _SYMBOL_DEPENDENCIES:
+            value = getattr(ctx.rule.attr, name, None)
+
+            # Runtime bundles name their root libraries with a label-keyed
+            # dictionary. Other edges are labels or label lists.
+            dependencies = value.keys() if type(value) == "dict" else value
+            if type(dependencies) != "list":
+                dependencies = [dependencies] if dependencies else []
+            for dependency in dependencies:
+                if type(dependency) == "Target" and _SymbolsInfo in dependency:
+                    transitive.append(dependency[_SymbolsInfo].pairs)
+    return [_SymbolsInfo(pairs = depset(pairs, transitive = transitive))]
+
+_symbols = aspect(
+    implementation = _symbols_impl,
+    attr_aspects = _SYMBOL_DEPENDENCIES,
+    doc = "Retains declared symbols through link and runtime edges, excluding build tools.",
+)
+
 def _native_files_impl(ctx):
     files = {}
     for library in ctx.attr.libraries:
@@ -54,6 +101,18 @@ def _native_files_impl(ctx):
         # once, retaining toolchain runtimes such as Windows AddressSanitizer.
         for file in tool[DefaultInfo].default_runfiles.files.to_list():
             files.setdefault(file.basename, file)
+
+    native_files = {file: True for file in files.values()}
+    symbols = depset(transitive = [
+        target[_SymbolsInfo].pairs
+        for target in ctx.attr.libraries + ctx.attr.tools
+    ])
+    for file, pdb in symbols.to_list():
+        if file in native_files:
+            existing = files.get(pdb.basename)
+            if existing != None and existing != pdb:
+                fail("Duplicate native symbol destination: " + pdb.basename)
+            files[pdb.basename] = pdb
 
     outputs = files.values()
     if ctx.executable.elf_patcher:
@@ -82,12 +141,14 @@ loom_native_files = rule(
             cfg = "exec",
         ),
         "libraries": attr.label_list(
+            aspects = [_symbols],
             default = [
                 "//loom/binding/c:iree_shared",
                 "//loom/binding/c:loomc_shared",
             ],
         ),
         "tools": attr.label_list(
+            aspects = [_symbols],
             default = ["//loom/src/loom/tools/" + name for name in NATIVE_COMMANDS],
         ),
         "_allowlist_function_transition": attr.label(

@@ -80,7 +80,9 @@ are selected separately, as shown below.
 
 Windows SDK profiles use the redistributable dynamic C runtime. The debug
 profile keeps unoptimized code and assertions without requiring Visual Studio's
-development-only debug runtime.
+development-only debug runtime. Profiles that produce PDB symbols install them
+beside their matching executables and libraries, including libamdf's private
+Windows bridge, so a debugger can find them in the installed environment.
 
 Installed users need Python, the wheel, and the platform prerequisites in the
 [package description](PYPI_README.md); Bazel is a package-author build tool.
