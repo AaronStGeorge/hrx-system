@@ -165,8 +165,9 @@ static uint32_t loom_low_allocation_interval_assignment_peak_live_units(
 }
 
 // Incoming locations are preferences for the complete interval, not fixed
-// storage. In particular, implicit instruction writes can force entry transport
-// even when no other SSA value occupies the incoming register.
+// storage. The fragmentation attempt must be free to repack them. Implicit
+// instruction writes can also force entry transport even when no other SSA
+// value occupies the incoming register.
 static bool loom_low_allocation_interval_assignment_find_entry_location(
     loom_low_allocation_interval_assignment_state_t* state,
     loom_low_allocation_search_context_t* search_context,
@@ -175,7 +176,9 @@ static bool loom_low_allocation_interval_assignment_find_entry_location(
     const loom_low_allocation_class_capacity_t* capacity, uint32_t* out_base) {
   const loom_low_allocation_interval_assignment_context_t* context =
       state->context;
-  if (value_ordinal >= context->entry_location_count) {
+  if (value_ordinal >= context->entry_location_count ||
+      context->search_strategy ==
+          LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR) {
     return false;
   }
   const loom_low_allocation_abi_location_t* entry =
@@ -704,12 +707,13 @@ loom_low_allocation_interval_assignment_spill_active_assignment(
 }
 
 // Moves one independently placed active assignment when its complete lifetime
-// fits in the inclusive base range without reducing the current residency
-// tier. |protected_assignment|, when present, reserves a not-yet-published
-// location for the current interval. Previously published assignments are
-// checked with exact sparse lifetimes because changing the assignment in place
-// changes its location before as well as after the current allocation point.
-// Future intervals observe the relocated active-unit entry.
+// fits without reducing the current residency tier. Linear locations use the
+// inclusive base range; explicit-register callers search the complete domain.
+// |protected_assignment|, when present, reserves a not-yet-published location
+// for the current interval. Previously published assignments are checked with
+// exact sparse lifetimes because changing the assignment in place changes its
+// location before as well as after the current allocation point. Future
+// intervals observe the relocated active-unit entry.
 static iree_status_t
 loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
     loom_low_allocation_interval_assignment_state_t* state,
@@ -752,9 +756,9 @@ loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
   const loom_low_reg_class_t* reg_class =
       &state->context->target->descriptor_set
            ->reg_classes[assignment->descriptor_reg_class_id];
-  if (!capacity.is_bounded ||
-      loom_low_reg_class_uses_explicit_physical_registers(reg_class) ||
-      capacity.max_units <= minimum_base ||
+  const bool uses_explicit_physical_registers =
+      loom_low_reg_class_uses_explicit_physical_registers(reg_class);
+  if (!capacity.is_bounded || capacity.max_units <= minimum_base ||
       assignment->location_kind != capacity.location_kind ||
       assignment->location_count > capacity.max_units) {
     return iree_ok_status();
@@ -818,7 +822,7 @@ loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
   }
   const uint32_t last_base =
       iree_min(capacity.max_units - assignment->location_count, maximum_base);
-  if (base > last_base) {
+  if (!uses_explicit_physical_registers && base > last_base) {
     return iree_ok_status();
   }
   if (state->relocation_assignment_indices == NULL) {
@@ -845,7 +849,29 @@ loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
           (uint32_t)i;
     }
   }
-  while (base <= last_base) {
+  const uint64_t candidate_count =
+      uses_explicit_physical_registers
+          ? loom_low_allocation_storage_explicit_location_candidate_count(
+                state->context->target->descriptor_set,
+                assignment->descriptor_reg_class_id, assignment->location_count)
+          : ((uint64_t)last_base - base) / alignment + 1u;
+  const uint32_t first_base = base;
+  for (uint64_t i = 0; i < candidate_count; ++i) {
+    base = first_base + (uint32_t)(i * alignment);
+    if (uses_explicit_physical_registers) {
+      uint32_t pressure_extent = 0;
+      if (!loom_low_allocation_storage_explicit_location_candidate(
+              state->context->target->descriptor_set,
+              assignment->descriptor_reg_class_id, assignment->location_count,
+              (uint32_t)i, &base, /*out_first_candidate_ordinal=*/NULL,
+              &pressure_extent, /*out_packing_rank=*/NULL) ||
+          pressure_extent > capacity.max_units ||
+          (loom_low_reg_class_uses_contiguous_physical_register_candidates(
+               reg_class) &&
+           base % alignment != 0)) {
+        continue;
+      }
+    }
     loom_low_allocation_assignment_t candidate = *assignment;
     candidate.location_base = base;
     bool conflicts =
@@ -908,10 +934,6 @@ loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
       *out_relocated = true;
       return iree_ok_status();
     }
-    if (last_base - base < alignment) {
-      break;
-    }
-    base += alignment;
   }
   return iree_ok_status();
 }
@@ -948,6 +970,105 @@ loom_low_allocation_interval_assignment_prepare_assignment(
           state->unit_liveness.end_points, state->unit_liveness.point_count,
           &stored_assignment);
   return stored_assignment;
+}
+
+// Incoming ABI locations are movable preferences. When one independent input
+// fragments an otherwise legal span, recolor it before committing a spill.
+// The relocation owner checks its complete lifetime; entry transport is built
+// only after the final assignments, so this introduces no in-body copy.
+IREE_ATTRIBUTE_NOINLINE static iree_status_t
+loom_low_allocation_interval_assignment_try_relocate_entry_blocker(
+    loom_low_allocation_interval_assignment_state_t* state,
+    loom_low_allocation_search_context_t* search_context,
+    const loom_low_allocation_interval_order_entry_t* entry,
+    loom_value_ordinal_t value_ordinal,
+    const loom_low_allocation_class_capacity_t* capacity,
+    uint32_t* out_location_base, bool* out_relocated) {
+  *out_relocated = false;
+  const loom_low_allocation_interval_assignment_context_t* context =
+      state->context;
+  const loom_low_descriptor_set_t* descriptors =
+      context->target->descriptor_set;
+  const loom_liveness_interval_t* interval = entry->interval;
+  const loom_low_reg_class_t* reg_class =
+      &descriptors->reg_classes[capacity->descriptor_reg_class_id];
+  const bool uses_explicit_physical_registers =
+      loom_low_reg_class_uses_explicit_physical_registers(reg_class);
+  if (interval->unit_count > capacity->max_units) {
+    return iree_ok_status();
+  }
+  const uint32_t alignment = loom_low_allocation_live_range_interval_alignment(
+      descriptors, context->liveness,
+      context->placement->operand_constraints_by_interval, interval);
+  const uint64_t candidate_count =
+      uses_explicit_physical_registers
+          ? loom_low_allocation_storage_explicit_location_candidate_count(
+                descriptors, capacity->descriptor_reg_class_id,
+                interval->unit_count)
+          : (uint64_t)(capacity->max_units - interval->unit_count) / alignment +
+                1u;
+  loom_low_allocation_assignment_t requested = {
+      .value_id = interval->value_id,
+      .descriptor_reg_class_id = capacity->descriptor_reg_class_id,
+      .start_point = entry->acquisition_start_point,
+      .end_point =
+          loom_low_allocation_live_range_interval_storage_end_point(interval),
+      .unit_count = interval->unit_count,
+      .location_kind = capacity->location_kind,
+      .location_count = interval->unit_count,
+  };
+  requested = loom_low_allocation_interval_assignment_prepare_assignment(
+      state, &requested, value_ordinal);
+  for (iree_host_size_t ordinal = 0; ordinal < context->entry_location_count;
+       ++ordinal) {
+    const uint32_t assignment_index =
+        state->result.assignment_indices_by_value_ordinal[ordinal];
+    if (context->entry_locations[ordinal].location_kind ==
+            LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED ||
+        assignment_index == UINT32_MAX ||
+        state->active.entries[assignment_index].position == UINT32_MAX) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* blocker =
+        &state->result.assignments[assignment_index];
+    for (uint64_t i = 0; i < candidate_count; ++i) {
+      requested.location_base = (uint32_t)(i * alignment);
+      if (uses_explicit_physical_registers) {
+        uint32_t pressure_extent = 0;
+        if (!loom_low_allocation_storage_explicit_location_candidate(
+                descriptors, capacity->descriptor_reg_class_id,
+                interval->unit_count, (uint32_t)i, &requested.location_base,
+                /*out_first_candidate_ordinal=*/NULL, &pressure_extent,
+                /*out_packing_rank=*/NULL) ||
+            pressure_extent > capacity->max_units ||
+            (loom_low_reg_class_uses_contiguous_physical_register_candidates(
+                 reg_class) &&
+             requested.location_base % alignment != 0)) {
+          continue;
+        }
+      }
+      if (!loom_low_allocation_active_assignment_conflicts(
+              &state->active.live_range_sweep, descriptors,
+              &state->unit_liveness, state->result.assignments,
+              state->result.assignment_count, assignment_index, &requested,
+              NULL, 0) ||
+          loom_low_allocation_search_assignment_conflicts(
+              search_context, &requested, &blocker->value_id, 1, NULL, 0,
+              LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
+              state, search_context, assignment_index,
+              capacity->descriptor_reg_class_id, /*minimum_base=*/0,
+              /*maximum_base=*/UINT32_MAX, &requested, out_relocated));
+      if (*out_relocated) {
+        *out_location_base = requested.location_base;
+        return iree_ok_status();
+      }
+    }
+  }
+  return iree_ok_status();
 }
 
 // Required storage cannot be spilled again, but an independent assignment can
@@ -1203,7 +1324,9 @@ loom_low_allocation_interval_assignment_try_relocate_blocker_callback(
       &state->result.assignments[conflict_assignment_index];
   const loom_value_t* conflict_value =
       loom_module_value(state->context->module, conflict_assignment->value_id);
-  if (conflict_value->use_count != 1 ||
+  if (loom_low_allocation_storage_assignment_uses_explicit_physical_register(
+          state->context->target->descriptor_set, conflict_assignment) ||
+      conflict_value->use_count != 1 ||
       conflict_assignment->descriptor_reg_class_id !=
           requested_assignment->descriptor_reg_class_id ||
       conflict_assignment->location_kind !=
@@ -1544,6 +1667,13 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
     }
     const uint32_t retained_fixed_value_index_plus_one =
         search_context.retained_fixed_value_index_plus_one;
+    if (!assigned && context->entry_location_count != 0 &&
+        capacity.is_bounded) {
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_interval_assignment_try_relocate_entry_blocker(
+              state, &search_context, entry, value_ordinal, &capacity,
+              &location_base, &assigned));
+    }
     const loom_low_allocation_spill_register_requirement_t spill_requirement =
         loom_low_allocation_spill_register_requirement_for_value(
             context->module, context->liveness->region, interval->value_id);
@@ -1595,7 +1725,9 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
           }
           bool relocated = false;
           if (victim_set.released_value_count == 0 &&
-              interval_requires_register && capacity.is_bounded) {
+              interval_requires_register && capacity.is_bounded &&
+              !loom_low_allocation_storage_assignment_uses_explicit_physical_register(
+                  context->target->descriptor_set, victim)) {
             IREE_RETURN_IF_ERROR(
                 loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
                     state, &search_context, victim_index,
