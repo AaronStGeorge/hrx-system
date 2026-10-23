@@ -6,6 +6,8 @@
 
 """Bazel module fragment for Loom-specific dependencies."""
 
+bazel_dep(name = "patchelf", version = "0.18.0.bcr.1")
+
 hygiene_sources = use_repo_rule(
     "//loom/build_tools/hygiene:sources.bzl",
     "hygiene_sources",

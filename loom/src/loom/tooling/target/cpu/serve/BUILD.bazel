@@ -436,11 +436,13 @@ loom_py_test(
         "$(rootpath //loom/packaging/python:wheel)",
         "$(rootpath //loom/packaging/python/test:associated_wheel)",
         "$(rootpath //loom/src/loom/serve/fixture/text:card_model_mixed)",
+        "$(rootpath @patchelf//:patchelf)",
     ],
     data = [
         "//loom/packaging/python:wheel",
         "//loom/packaging/python/test:associated_wheel",
         "//loom/src/loom/serve/fixture/text:card_model_mixed",
+        "@patchelf",
     ],
     imports = ["."],
     main = "wheel_model_card_test.py",

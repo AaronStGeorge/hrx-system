@@ -54,12 +54,33 @@ def _native_files_impl(ctx):
         # once, retaining toolchain runtimes such as Windows AddressSanitizer.
         for file in tool[DefaultInfo].default_runfiles.files.to_list():
             files.setdefault(file.basename, file)
-    return [DefaultInfo(files = depset(files.values()))]
+
+    outputs = files.values()
+    if ctx.executable.elf_patcher:
+        # Bazel's solib paths serve build-tree execution. The wheel owns a flat
+        # installation with matching companions beside every native command.
+        outputs = []
+        for file in files.values():
+            output = ctx.actions.declare_file(ctx.label.name + "/" + file.basename)
+            ctx.actions.run(
+                executable = ctx.executable.elf_patcher,
+                arguments = ["--set-rpath", "$ORIGIN", "--output", output.path, file.path],
+                inputs = [file],
+                outputs = [output],
+                mnemonic = "LoomWheelRelocate",
+                progress_message = "Relocating Loom wheel native file %s" % file.basename,
+            )
+            outputs.append(output)
+    return [DefaultInfo(files = depset(outputs))]
 
 loom_native_files = rule(
     implementation = _native_files_impl,
     cfg = _configuration,
     attrs = {
+        "elf_patcher": attr.label(
+            executable = True,
+            cfg = "exec",
+        ),
         "libraries": attr.label_list(
             default = [
                 "//loom/binding/c:iree_shared",

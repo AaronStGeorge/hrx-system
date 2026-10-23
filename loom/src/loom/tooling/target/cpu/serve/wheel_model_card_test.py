@@ -17,6 +17,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from zipfile import ZipFile
 
 from model_card_test import check_model
 
@@ -67,10 +68,11 @@ def pick_model(arguments, environment, output):
         os.close(slave)
 
 
-def main(wheel, associated_wheel, deployment):
+def main(wheel, associated_wheel, deployment, elf_inspector):
     wheel = Path(wheel).absolute()
     associated_wheel = Path(associated_wheel).absolute()
     deployment = Path(deployment).absolute()
+    elf_inspector = Path(elf_inspector).absolute()
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -118,6 +120,19 @@ def main(wheel, associated_wheel, deployment):
         )
         assert shutil.which("bazel", path=environment["PATH"]) is None
         assert shutil.which("bazelisk", path=environment["PATH"]) is None
+        with ZipFile(wheel) as archive:
+            native_names = {
+                Path(name).name
+                for name in archive.namelist()
+                if ".data/scripts/" in name
+            }
+        assert {"libiree.so", "libloomc.so"} <= native_names, native_names
+        for name in sorted(native_names):
+            installed = scripts / name
+            with installed.open("rb") as stream:
+                assert stream.read(4) == b"\x7fELF", name
+            runpath = run(elf_inspector, "--print-rpath", installed).strip()
+            assert runpath == "$ORIGIN", (name, runpath)
         for command in (
             "loom-benchmark",
             "loom-check",

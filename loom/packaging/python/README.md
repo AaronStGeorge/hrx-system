@@ -11,6 +11,8 @@ and `loom-test`. Python supplies `loom-compile-report`, `loom-export-cxx`,
 `loom-fetch`, and `loom-lint`. The wheel includes the matching native shared
 libraries beside the executables. C++ import includes its standard and Loom
 headers, so it works without a separate compiler or source checkout.
+Linux wheel packaging gives each native file an adjacent-library search path;
+installed commands load their matching companions without Bazel build paths.
 
 The Python APIs use the standard library. The optional `hf` extra enables Hugging
 Face acquisition; local and HTTP model sources work without it. Model weights

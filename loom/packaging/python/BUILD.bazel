@@ -87,7 +87,13 @@ exports_files([
     ]
 ]
 
-loom_native_files(name = "native")
+loom_native_files(
+    name = "native",
+    elf_patcher = select({
+        "@platforms//os:linux": "@patchelf//:patchelf",
+        "//conditions:default": None,
+    }),
+)
 
 filegroup(
     name = "schemas",
