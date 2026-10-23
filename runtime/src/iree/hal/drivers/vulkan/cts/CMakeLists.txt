@@ -692,6 +692,7 @@ iree_cc_test(
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base
     iree::hal::cts::util::test_main
+    iree::hal::drivers::vulkan::queue_test
     iree::testing::gtest
   LABELS
     "iree-build-requirement=runtime.hal.vulkan"

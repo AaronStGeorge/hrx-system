@@ -320,6 +320,37 @@ endif()
 if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
+    queue_test
+  SRCS
+    "allocator.h"
+    "barrier.h"
+    "builtins.h"
+    "queue.h"
+    "queue_test.cc"
+    "semaphore.h"
+  DEPS
+    ::headers
+    ::profile
+    ::vulkan
+    iree::async
+    iree::base
+    iree::base::internal
+    iree::base::threading
+    iree::base::threading::thread
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::vulkan::util::libvulkan
+    iree::hal::utils::submitted_signal
+    iree::testing::gtest
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_library(
+  NAME
     queue_test_util
   HDRS
     "queue_test_util.h"
