@@ -165,6 +165,7 @@ from loom.model import ModelCard
 
 assert importlib.util.find_spec('huggingface_hub') is None
 distribution = importlib.metadata.distribution('hrx-loom')
+assert distribution.version == sys.argv[1], (distribution.version, sys.argv[1])
 assert distribution.metadata.get_all('Provides-Extra') == ['hf']
 assert distribution.requires == ["huggingface_hub<3,>=2.2; extra == 'hf'"], distribution.requires
 default_ops()
@@ -176,6 +177,7 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
     schema = json.loads(files('loom.model').joinpath(name + '.v1.schema.json').read_text())
     assert schema['$schema'] == 'https://json-schema.org/draft/2020-12/schema'
 """,
+            wheel.name.split("-")[1],
         )
         assert "--offline" in run(fetch, "--help")
         failure = json.loads(run(fetch, "--list", "--json", expected=1))
@@ -197,8 +199,11 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
             python,
             "-I",
             "-c",
+            "import importlib.metadata, sys; "
+            "assert importlib.metadata.version('hrx-loom') == sys.argv[1]; "
             "from loom.model.fetch_catalog import installed_catalog; "
             "assert installed_catalog() == 'github:fixture/library@compatible'",
+            associated_wheel.name.split("-")[1],
         )
         card = deployment.parent / "model.json"
         listing = json.loads(run(fetch, card, "--list", "--json"))

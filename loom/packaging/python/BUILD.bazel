@@ -38,6 +38,55 @@ exports_files([
     }.items()
 ]
 
+# Wheel identities describe the selected native configuration. Release and Tracy
+# builds use the ordinary optimized profile; instrumentation is never selected
+# by an optional Python dependency.
+[
+    config_setting(
+        name = "profile_" + profile,
+        flag_values = {
+            "//build_tools/bazel:sanitizer": sanitizer,
+            "//runtime/config/base/tracing:provider": tracing,
+        },
+        values = values,
+    )
+    for profile, sanitizer, tracing, values in [
+        (
+            "release",
+            "false",
+            "disabled",
+            {"compilation_mode": "opt"},
+        ),
+        (
+            "tracy",
+            "false",
+            "tracy",
+            {"compilation_mode": "opt"},
+        ),
+        (
+            "debug",
+            "false",
+            "disabled",
+            {"compilation_mode": "dbg"},
+        ),
+        (
+            "asan",
+            "true",
+            "disabled",
+            {
+                "cc_output_directory_tag": "asan",
+                "features": "asan",
+            },
+        ),
+        (
+            "development",
+            "false",
+            "disabled",
+            {"compilation_mode": "fastbuild"},
+        ),
+    ]
+]
+
 loom_native_files(name = "native")
 
 filegroup(

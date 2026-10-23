@@ -18,12 +18,34 @@ _metadata = rule(
     attrs = {"catalog": attr.string()},
 )
 
+def _distribution_version(version):
+    if "+" in version:
+        fail("Supply the base SDK version; the native configuration owns the local version suffix")
+    versions = {
+        Label("//loom/packaging/python:profile_release"): version,
+        Label("//loom/packaging/python:profile_tracy"): version + "+tracy",
+        Label("//loom/packaging/python:profile_debug"): version + "+debug",
+        Label("//loom/packaging/python:profile_asan"): version + "+asan",
+    }
+    if ".dev" in version:
+        versions[Label("//loom/packaging/python:profile_development")] = version
+    return select(
+        versions,
+        no_match_error = (
+            "Unsupported Loom wheel configuration: use --config=opt, " +
+            "--config=opt --//runtime/config/base/tracing:provider=tracy, " +
+            "--compilation_mode=dbg, or --config=asan. " +
+            "Fastbuild requires a development version; combined instrumentation is not a wheel profile."
+        ),
+    )
+
 def loom_python_wheel(name, version, catalog = "", testonly = False):
     """Builds an SDK wheel without publishing it.
 
     Args:
       name: Target name.
-      version: Explicit Python distribution version.
+      version: Base Python distribution version, without a local suffix. Native
+        tracing, debug, and ASAN configurations add their matching suffix.
       catalog: Compatible github:OWNER/REPOSITORY@TAG association; empty for a
         development SDK requiring an explicit discovery source.
       testonly: Whether this wheel is a test fixture.
@@ -59,7 +81,7 @@ def loom_python_wheel(name, version, catalog = "", testonly = False):
         strip_path_prefixes = ["loom/py"],
         summary = "Loom compiler, serving and authoring tools, and Python SDK",
         twine_binary = None,
-        version = version,
+        version = _distribution_version(version),
         deps = [
             Label("//loom/packaging/python:package"),
             Label("//loom/packaging/python:schemas"),
