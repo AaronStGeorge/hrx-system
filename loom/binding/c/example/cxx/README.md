@@ -20,10 +20,10 @@ extern "C" Pair loom_call_native_pair(Pair value) {
 }
 ```
 
-The example also crosses a mixed `{float, unsigned}` record, a 24-byte record
-that uses the platform's hidden-result convention, and a pointer with
-nonzero byte displacement. Each definition mixes fields so an identity-shaped
-ABI mistake cannot pass accidentally.
+The example also crosses a mixed `{float, unsigned}` record, a native 128-bit
+SIMD value, a 24-byte record that uses the platform's hidden-result convention,
+and a pointer with nonzero byte displacement. Each definition transforms its
+input so an identity-shaped ABI mistake cannot pass accidentally.
 
 ```sh
 iree-bazel-run --config=loom-importer-cxx \

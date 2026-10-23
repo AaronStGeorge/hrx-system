@@ -11,6 +11,7 @@
 static_assert(sizeof(Pair) == 8);
 static_assert(sizeof(Mixed) == 8);
 static_assert(sizeof(Large) == 24);
+static_assert(sizeof(Words4) == 16);
 
 extern "C" Pair native_pair(Pair value) {
   return {value.first ^ 0x55aa55aau, value.second + 41u};
@@ -23,6 +24,10 @@ extern "C" Mixed native_mixed(Mixed value) {
 extern "C" Large native_large(Large value) {
   return {value.second * 3u, value.third + 5u,
           value.first ^ 0x123456789abcdef0ull};
+}
+
+extern "C" Words4 native_words(Words4 value) {
+  return value * Words4{2u, 3u, 4u, 5u};
 }
 
 extern "C" const unsigned* native_advance(const unsigned* base) {
@@ -51,6 +56,11 @@ int main() {
   ok &= require(large.first == 16u && large.second == 15u && large.third == 20u,
                 "native caller to Loom Large definition");
 
+  Words4 words = loom_words(Words4{1u, 2u, 3u, 4u});
+  ok &= require(
+      words[0] == 2u && words[1] == 4u && words[2] == 6u && words[3] == 8u,
+      "native caller to Loom SIMD definition");
+
   unsigned values[8] = {};
   ok &= require(loom_advance(values) == values + 3,
                 "native caller to Loom pointer definition");
@@ -67,6 +77,11 @@ int main() {
   ok &= require(large.first == 33u && large.second == 18u &&
                     large.third == 0x123456789abcdef7ull,
                 "Loom caller to native Large definition");
+
+  words = loom_call_native_words(Words4{1u, 2u, 3u, 4u});
+  ok &= require(words[0] == 22u && words[1] == 66u && words[2] == 132u &&
+                    words[3] == 220u,
+                "Loom caller to native SIMD definition");
 
   ok &= require(loom_call_native_advance(values) == values + 5,
                 "Loom caller to native pointer definition");

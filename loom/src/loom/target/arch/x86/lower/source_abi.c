@@ -45,6 +45,8 @@ typedef struct loom_x86_source_abi_leaf_t {
   uint32_t byte_offset;
   // Exact source object width of this leaf.
   uint32_t byte_length;
+  // Physical carrier receiving the leaf, or UINT16_MAX for storage projection.
+  uint16_t physical_index;
   // True when a loaded GPR32 value must be reduced to one bit.
   bool normalize_i1;
 } loom_x86_source_abi_leaf_t;
@@ -56,6 +58,8 @@ typedef struct loom_x86_source_abi_carrier_t {
   uint32_t byte_offset;
   // Physical x86 register class used by the Low signature.
   uint16_t register_class;
+  // Number of source leaves projected into this carrier.
+  uint16_t leaf_count;
 } loom_x86_source_abi_carrier_t;
 static_assert(sizeof(loom_x86_source_abi_carrier_t) == 8,
               "x86 source ABI carrier recipes must be exactly 8 bytes");
@@ -79,6 +83,8 @@ typedef struct loom_x86_source_abi_object_t {
   uint32_t storage_byte_length;
   // True when the complete argument crosses through stack memory.
   bool is_memory_argument;
+  // True when every leaf has a direct register projection.
+  bool has_direct_projection;
 } loom_x86_source_abi_object_t;
 static_assert(sizeof(loom_x86_source_abi_object_t) == 40,
               "x86 source ABI object recipes must be exactly 40 bytes");
@@ -224,6 +230,7 @@ static iree_status_t loom_x86_source_abi_build_leaves(
                   : LOOM_X86_SOURCE_ABI_LEAF_SCALAR,
       .byte_offset = object_byte_offset,
       .byte_length = byte_length,
+      .physical_index = UINT16_MAX,
       .normalize_i1 = kind == LOOM_FUNC_ABI_C_TYPE_KIND_BOOLEAN,
   };
   if (leaf->kind == LOOM_X86_SOURCE_ABI_LEAF_VECTOR) {
@@ -455,6 +462,52 @@ static iree_status_t loom_x86_source_abi_append_memory_argument(
   return iree_ok_status();
 }
 
+static void loom_x86_source_abi_bind_direct_projection(
+    loom_x86_source_abi_object_t* object, loom_x86_source_abi_leaf_t* leaves,
+    const loom_type_t* logical_types, loom_x86_source_abi_carrier_t* carriers) {
+  object->has_direct_projection = true;
+  uint16_t local_carrier_index = 0;
+  for (uint16_t i = 0; i < object->leaf_count; ++i) {
+    loom_x86_source_abi_leaf_t* leaf = &leaves[object->leaf_offset + i];
+    const uint32_t leaf_byte_length =
+        leaf->kind == LOOM_X86_SOURCE_ABI_LEAF_POINTER ? 8 : leaf->byte_length;
+    while (local_carrier_index < object->physical_count) {
+      const loom_x86_source_abi_carrier_t* carrier =
+          &carriers[object->physical_offset + local_carrier_index];
+      const uint32_t carrier_byte_end =
+          local_carrier_index + 1 < object->physical_count
+              ? carriers[object->physical_offset + local_carrier_index + 1]
+                    .byte_offset
+              : object->classification.byte_length;
+      if (leaf->byte_offset >= carrier->byte_offset &&
+          leaf->byte_offset + leaf_byte_length <= carrier_byte_end) {
+        break;
+      }
+      ++local_carrier_index;
+    }
+    if (local_carrier_index == object->physical_count) {
+      object->has_direct_projection = false;
+      return;
+    }
+    const uint16_t physical_index =
+        object->physical_offset + local_carrier_index;
+    loom_x86_source_abi_carrier_t* carrier = &carriers[physical_index];
+    if (leaf->kind == LOOM_X86_SOURCE_ABI_LEAF_VECTOR) {
+      const loom_type_t logical_type = logical_types[leaf->logical_offset];
+      if (!loom_low_type_is_register(logical_type) ||
+          loom_low_register_type_unit_count(logical_type) != 1 ||
+          loom_low_register_type_class_id(logical_type) !=
+              carrier->register_class ||
+          leaf->byte_offset != carrier->byte_offset) {
+        object->has_direct_projection = false;
+        return;
+      }
+    }
+    leaf->physical_index = physical_index;
+    ++carrier->leaf_count;
+  }
+}
+
 static iree_status_t loom_x86_source_abi_allocate_physical_arrays(
     loom_x86_source_abi_plan_builder_t* builder, uint16_t argument_capacity,
     uint16_t result_capacity) {
@@ -607,6 +660,17 @@ iree_status_t loom_x86_plan_source_abi(
       IREE_RETURN_IF_ERROR(loom_x86_source_abi_append_direct_object(
           &builder, /*argument=*/false, object));
     }
+  }
+
+  for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
+    loom_x86_source_abi_bind_direct_projection(
+        &plan->arguments[i], plan->argument_leaves,
+        plan->logical_argument_types, plan->argument_carriers);
+  }
+  if (plan->result_object_count != 0 && !plan->has_indirect_result) {
+    loom_x86_source_abi_bind_direct_projection(
+        &plan->results[0], plan->result_leaves, plan->logical_result_types,
+        plan->result_carriers);
   }
 
   if (builder.stack_bytes != 0) {
@@ -783,6 +847,83 @@ static iree_status_t loom_x86_source_abi_emit_move(
       out_value);
 }
 
+static iree_status_t loom_x86_source_abi_emit_copy(
+    loom_low_lower_context_t* context, loom_value_id_t source,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  loom_op_t* copy = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_copy_build(
+      loom_low_lower_context_builder(context), source, /*detached=*/false,
+      loom_module_value_type(loom_low_lower_context_module(context), source),
+      location, &copy));
+  *out_value = loom_low_copy_result(copy);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_source_abi_emit_mask_u32(
+    loom_low_lower_context_t* context,
+    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
+    uint32_t mask, loom_type_t result_type, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  return loom_x86_source_abi_emit_packet(
+      context, entry->mask_u32, &value, 1, IREE_SV("imm32"),
+      loom_attr_i64(mask), result_type, /*tie_first_operand=*/true, location,
+      out_value);
+}
+
+static iree_status_t loom_x86_source_abi_emit_widen_u32(
+    loom_low_lower_context_t* context,
+    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  loom_type_t result_type;
+  IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+      context, LOOM_X86_REGISTER_CLASS_GPR64, &result_type));
+  return loom_x86_source_abi_emit_packet(
+      context, entry->widen_u32, &value, 1, iree_string_view_empty(),
+      loom_attr_absent(), result_type, /*tie_first_operand=*/false, location,
+      out_value);
+}
+
+static iree_status_t loom_x86_source_abi_emit_truncate_u64(
+    loom_low_lower_context_t* context,
+    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  loom_type_t result_type;
+  IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+      context, LOOM_X86_REGISTER_CLASS_GPR32, &result_type));
+  return loom_x86_source_abi_emit_packet(
+      context, entry->truncate_u64, &value, 1, iree_string_view_empty(),
+      loom_attr_absent(), result_type, /*tie_first_operand=*/false, location,
+      out_value);
+}
+
+static iree_status_t loom_x86_source_abi_emit_shift_u64(
+    loom_low_lower_context_t* context,
+    const loom_x86_entry_descriptors_t* entry, bool left, loom_value_id_t value,
+    uint32_t shift, loom_location_id_t location, loom_value_id_t* out_value) {
+  loom_type_t result_type;
+  IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+      context, LOOM_X86_REGISTER_CLASS_GPR64, &result_type));
+  return loom_x86_source_abi_emit_packet(
+      context, left ? entry->shift_left_u64 : entry->shift_right_u64, &value, 1,
+      IREE_SV("shift"), loom_attr_i64(shift), result_type,
+      /*tie_first_operand=*/true, location, out_value);
+}
+
+static iree_status_t loom_x86_source_abi_emit_or_u64(
+    loom_low_lower_context_t* context,
+    const loom_x86_entry_descriptors_t* entry, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  loom_type_t result_type;
+  IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+      context, LOOM_X86_REGISTER_CLASS_GPR64, &result_type));
+  const loom_value_id_t operands[] = {lhs, rhs};
+  return loom_x86_source_abi_emit_packet(
+      context, entry->or_u64, operands, IREE_ARRAYSIZE(operands),
+      iree_string_view_empty(), loom_attr_absent(), result_type,
+      /*tie_first_operand=*/true, location, out_value);
+}
+
 static iree_status_t loom_x86_source_abi_emit_pointer_address(
     loom_low_lower_context_t* context,
     const loom_x86_entry_descriptors_t* entry, loom_value_id_t base,
@@ -790,11 +931,10 @@ static iree_status_t loom_x86_source_abi_emit_pointer_address(
     loom_value_id_t* out_address) {
   const loom_type_t base_type =
       loom_module_value_type(loom_low_lower_context_module(context), base);
-  loom_op_t* copy = NULL;
+  loom_value_id_t base_copy;
   IREE_RETURN_IF_ERROR(
-      loom_low_copy_build(loom_low_lower_context_builder(context), base,
-                          /*detached=*/false, base_type, location, &copy));
-  const loom_value_id_t operands[] = {loom_low_copy_result(copy), byte_offset};
+      loom_x86_source_abi_emit_copy(context, base, location, &base_copy));
+  const loom_value_id_t operands[] = {base_copy, byte_offset};
   return loom_x86_source_abi_emit_packet(
       context, entry->add_u64, operands, IREE_ARRAYSIZE(operands),
       iree_string_view_empty(), loom_attr_absent(), base_type,
@@ -816,11 +956,8 @@ static iree_status_t loom_x86_source_abi_normalize_i1(
     const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
     loom_type_t result_type, loom_location_id_t location,
     loom_value_id_t* out_value) {
-  const loom_value_id_t operands[] = {value};
-  return loom_x86_source_abi_emit_packet(
-      context, entry->mask_i1, operands, IREE_ARRAYSIZE(operands),
-      IREE_SV("imm32"), loom_attr_i64(1), result_type,
-      /*tie_first_operand=*/true, location, out_value);
+  return loom_x86_source_abi_emit_mask_u32(context, entry, value, 1,
+                                           result_type, location, out_value);
 }
 
 static iree_status_t loom_x86_source_abi_reserve_storage(
@@ -942,13 +1079,184 @@ static iree_status_t loom_x86_source_abi_unpack_leaves(
   return iree_ok_status();
 }
 
-static iree_status_t loom_x86_source_abi_pack_object(
+static bool loom_x86_source_abi_leaf_is_identity_projection(
+    const loom_x86_source_abi_leaf_t* leaf,
+    const loom_x86_source_abi_carrier_t* carrier, loom_type_t logical_type) {
+  return leaf->kind != LOOM_X86_SOURCE_ABI_LEAF_POINTER &&
+         carrier->leaf_count == 1 &&
+         leaf->byte_offset == carrier->byte_offset &&
+         loom_low_type_is_register(logical_type) &&
+         loom_low_register_type_unit_count(logical_type) == 1 &&
+         loom_low_register_type_class_id(logical_type) ==
+             carrier->register_class;
+}
+
+static iree_status_t loom_x86_source_abi_pack_direct_object(
     loom_low_lower_context_t* context, const loom_x86_source_abi_plan_t* plan,
     const loom_x86_source_abi_object_t* object,
-    const loom_x86_source_abi_leaf_t* leaves,
+    const loom_x86_source_abi_leaf_t* leaves, const loom_type_t* logical_types,
     const loom_value_id_t* logical_values,
     const loom_x86_source_abi_carrier_t* carriers,
     loom_value_id_t* physical_values, loom_location_id_t location) {
+  for (uint16_t i = 0; i < object->physical_count; ++i) {
+    physical_values[object->physical_offset + i] = LOOM_VALUE_ID_INVALID;
+  }
+  for (uint16_t i = 0; i < object->leaf_count; ++i) {
+    const loom_x86_source_abi_leaf_t* leaf = &leaves[object->leaf_offset + i];
+    IREE_ASSERT_NE(leaf->physical_index, UINT16_MAX);
+    const loom_x86_source_abi_carrier_t* carrier =
+        &carriers[leaf->physical_index];
+    const loom_type_t logical_type = logical_types[leaf->logical_offset];
+    if (loom_x86_source_abi_leaf_is_identity_projection(leaf, carrier,
+                                                        logical_type)) {
+      physical_values[leaf->physical_index] =
+          logical_values[leaf->logical_offset];
+      continue;
+    }
+
+    loom_value_id_t fragment = logical_values[leaf->logical_offset];
+    const uint32_t byte_length =
+        leaf->kind == LOOM_X86_SOURCE_ABI_LEAF_POINTER ? 8 : leaf->byte_length;
+    if (leaf->kind == LOOM_X86_SOURCE_ABI_LEAF_POINTER) {
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_pointer_address(
+          context, plan->entry, fragment,
+          logical_values[leaf->logical_offset + 1], location, &fragment));
+    } else {
+      IREE_ASSERT_NE(leaf->kind, LOOM_X86_SOURCE_ABI_LEAF_VECTOR);
+      const uint16_t fragment_class = byte_length <= 4
+                                          ? LOOM_X86_REGISTER_CLASS_GPR32
+                                          : LOOM_X86_REGISTER_CLASS_GPR64;
+      loom_type_t fragment_type;
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+          context, fragment_class, &fragment_type));
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_move(
+          context, plan->entry, fragment, fragment_type, location, &fragment));
+      if (byte_length < 4) {
+        const uint32_t mask =
+            leaf->normalize_i1 ? 1u : (1u << (byte_length * 8u)) - 1u;
+        IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_copy(
+            context, fragment, location, &fragment));
+        IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_mask_u32(
+            context, plan->entry, fragment, mask, fragment_type, location,
+            &fragment));
+      }
+      if (byte_length <= 4) {
+        IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_widen_u32(
+            context, plan->entry, fragment, location, &fragment));
+      }
+    }
+
+    const uint32_t shift = (leaf->byte_offset - carrier->byte_offset) * 8u;
+    if (shift != 0) {
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_shift_u64(
+          context, plan->entry, /*left=*/true, fragment, shift, location,
+          &fragment));
+    }
+    loom_value_id_t* accumulator = &physical_values[leaf->physical_index];
+    if (*accumulator == LOOM_VALUE_ID_INVALID) {
+      *accumulator = fragment;
+    } else {
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_or_u64(
+          context, plan->entry, *accumulator, fragment, location, accumulator));
+    }
+  }
+
+  for (uint16_t i = 0; i < object->physical_count; ++i) {
+    const uint16_t physical_index = object->physical_offset + i;
+    const loom_x86_source_abi_carrier_t* carrier = &carriers[physical_index];
+    loom_value_id_t value = physical_values[physical_index];
+    loom_type_t physical_type;
+    IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+        context, carrier->register_class, &physical_type));
+    if (value == LOOM_VALUE_ID_INVALID) {
+      IREE_ASSERT_EQ(carrier->register_class, LOOM_X86_REGISTER_CLASS_GPR64);
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_zero_offset(
+          context, plan->entry, physical_type, location, &value));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_move(
+          context, plan->entry, value, physical_type, location, &value));
+    }
+    physical_values[physical_index] = value;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_source_abi_unpack_direct_object(
+    loom_low_lower_context_t* context, const loom_x86_source_abi_plan_t* plan,
+    const loom_x86_source_abi_object_t* object,
+    const loom_x86_source_abi_leaf_t* leaves, const loom_type_t* logical_types,
+    const loom_x86_source_abi_carrier_t* carriers,
+    const loom_value_id_t* physical_values, loom_value_id_t* logical_values,
+    loom_location_id_t location) {
+  for (uint16_t i = 0; i < object->leaf_count; ++i) {
+    const loom_x86_source_abi_leaf_t* leaf = &leaves[object->leaf_offset + i];
+    IREE_ASSERT_NE(leaf->physical_index, UINT16_MAX);
+    const loom_x86_source_abi_carrier_t* carrier =
+        &carriers[leaf->physical_index];
+    const loom_type_t logical_type = logical_types[leaf->logical_offset];
+    if (loom_x86_source_abi_leaf_is_identity_projection(leaf, carrier,
+                                                        logical_type)) {
+      logical_values[leaf->logical_offset] =
+          physical_values[leaf->physical_index];
+      continue;
+    }
+
+    loom_type_t gpr64_type;
+    IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+        context, LOOM_X86_REGISTER_CLASS_GPR64, &gpr64_type));
+    loom_value_id_t fragment = physical_values[leaf->physical_index];
+    IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_move(
+        context, plan->entry, fragment, gpr64_type, location, &fragment));
+    const uint32_t shift = (leaf->byte_offset - carrier->byte_offset) * 8u;
+    if (shift != 0) {
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_copy(context, fragment,
+                                                         location, &fragment));
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_shift_u64(
+          context, plan->entry, /*left=*/false, fragment, shift, location,
+          &fragment));
+    }
+    if (leaf->kind == LOOM_X86_SOURCE_ABI_LEAF_POINTER) {
+      logical_values[leaf->logical_offset] = fragment;
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_zero_offset(
+          context, plan->entry, logical_types[leaf->logical_offset + 1],
+          location, &logical_values[leaf->logical_offset + 1]));
+      continue;
+    }
+
+    IREE_ASSERT_NE(leaf->kind, LOOM_X86_SOURCE_ABI_LEAF_VECTOR);
+    if (leaf->byte_length <= 4) {
+      IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_truncate_u64(
+          context, plan->entry, fragment, location, &fragment));
+      if (leaf->byte_length < 4) {
+        const uint32_t mask =
+            leaf->normalize_i1 ? 1u : (1u << (leaf->byte_length * 8u)) - 1u;
+        loom_type_t gpr32_type;
+        IREE_RETURN_IF_ERROR(loom_x86_source_abi_make_register_type(
+            context, LOOM_X86_REGISTER_CLASS_GPR32, &gpr32_type));
+        IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_mask_u32(
+            context, plan->entry, fragment, mask, gpr32_type, location,
+            &fragment));
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_x86_source_abi_emit_move(
+        context, plan->entry, fragment, logical_type, location, &fragment));
+    logical_values[leaf->logical_offset] = fragment;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_source_abi_pack_object(
+    loom_low_lower_context_t* context, const loom_x86_source_abi_plan_t* plan,
+    const loom_x86_source_abi_object_t* object,
+    const loom_x86_source_abi_leaf_t* leaves, const loom_type_t* logical_types,
+    const loom_value_id_t* logical_values,
+    const loom_x86_source_abi_carrier_t* carriers,
+    loom_value_id_t* physical_values, loom_location_id_t location) {
+  if (object->has_direct_projection) {
+    return loom_x86_source_abi_pack_direct_object(
+        context, plan, object, leaves, logical_types, logical_values, carriers,
+        physical_values, location);
+  }
   loom_value_id_t storage;
   loom_value_id_t address;
   IREE_RETURN_IF_ERROR(loom_x86_source_abi_reserve_storage(
@@ -977,6 +1285,11 @@ static iree_status_t loom_x86_source_abi_unpack_object(
     const loom_x86_source_abi_carrier_t* carriers,
     const loom_value_id_t* physical_values, loom_value_id_t* logical_values,
     loom_location_id_t location) {
+  if (object->has_direct_projection) {
+    return loom_x86_source_abi_unpack_direct_object(
+        context, plan, object, leaves, logical_types, carriers, physical_values,
+        logical_values, location);
+  }
   loom_value_id_t storage;
   loom_value_id_t address;
   IREE_RETURN_IF_ERROR(loom_x86_source_abi_reserve_storage(
@@ -1057,8 +1370,9 @@ iree_status_t loom_x86_emit_source_abi(
         return iree_ok_status();
       }
       return loom_x86_source_abi_pack_object(
-          context, plan, object, plan->result_leaves, input_values,
-          plan->result_carriers, output_values, location);
+          context, plan, object, plan->result_leaves,
+          plan->logical_result_types, input_values, plan->result_carriers,
+          output_values, location);
     }
     case LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_CALL_ARGUMENTS: {
       IREE_ASSERT_EQ(input_count,
@@ -1082,7 +1396,8 @@ iree_status_t loom_x86_emit_source_abi(
       for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
         IREE_RETURN_IF_ERROR(loom_x86_source_abi_pack_object(
             context, plan, &plan->arguments[i], plan->argument_leaves,
-            input_values, plan->argument_carriers, output_values, location));
+            plan->logical_argument_types, input_values, plan->argument_carriers,
+            output_values, location));
       }
       return iree_ok_status();
     }

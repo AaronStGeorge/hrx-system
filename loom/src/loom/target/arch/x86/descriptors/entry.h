@@ -37,10 +37,18 @@ typedef struct loom_x86_entry_descriptors_t {
   uint32_t store_u64;
   // Pointer-sized address addition.
   uint32_t add_u64;
-  // Low-bit predicate normalization.
-  uint32_t mask_i1;
+  // Word bit masking with an immediate.
+  uint32_t mask_u32;
   // Zero extension of a word to a pointer-sized carrier.
   uint32_t widen_u32;
+  // Truncation of a pointer-sized carrier to its low word.
+  uint32_t truncate_u64;
+  // Pointer-sized immediate left shift.
+  uint32_t shift_left_u64;
+  // Pointer-sized immediate logical right shift.
+  uint32_t shift_right_u64;
+  // Pointer-sized bitwise union.
+  uint32_t or_u64;
   // Word immediate materialization.
   uint32_t constant_u32;
   // Pointer-sized immediate materialization.
