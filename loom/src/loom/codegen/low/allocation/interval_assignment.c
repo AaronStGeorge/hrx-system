@@ -14,6 +14,7 @@
 #include "loom/codegen/low/allocation/fixed_storage_index.h"
 #include "loom/codegen/low/allocation/interval_order.h"
 #include "loom/codegen/low/allocation/live_range.h"
+#include "loom/codegen/low/allocation/ordinal_recolor.h"
 #include "loom/codegen/low/allocation/physical_domains.h"
 #include "loom/codegen/low/allocation/scalar_packing.h"
 #include "loom/codegen/low/allocation/search.h"
@@ -1215,7 +1216,11 @@ loom_low_allocation_interval_assignment_try_relocate_required_blocker(
       state->context->target->descriptor_set;
   if (loom_low_reg_class_uses_explicit_physical_registers(
           &descriptors->reg_classes[capacity->descriptor_reg_class_id])) {
-    return iree_ok_status();
+    return loom_low_allocation_ordinal_recolor_try(
+        state->context->value_domain, state->context->storage_transport,
+        search_context, &state->result.assignment_map,
+        state->result.assignments, state->scratch_arena, entry->interval,
+        value_ordinal, capacity, out_location_base, out_relocated);
   }
   const loom_liveness_interval_t* interval = entry->interval;
   const uint32_t alignment = loom_low_allocation_live_range_interval_alignment(

@@ -1097,6 +1097,21 @@ TEST_LOW_COINDEXED_RESULTS_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_COINDEXED_OPERANDS_DESCRIPTOR = Descriptor(
+    key="test.coindexed.operands",
+    mnemonic="test.coindexed.operands",
+    semantic_tag="test.coindexed.operands",
+    operands=(
+        Operand("primary", OperandRole.OPERAND, _PACKED_NARROW_ALT),
+        Operand("partner", OperandRole.OPERAND, _COINDEXED_PARTNER_ALT),
+    ),
+    constraints=(Constraint(ConstraintKind.SAME_REGISTER_ORDINAL, 0, 1),),
+    asm_forms=_asm(operands=("primary", "partner")),
+    effects=(_STORE_EFFECT,),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
 TEST_LOW_ADD_F32_DESCRIPTOR = Descriptor(
     key="test.add.f32",
     mnemonic="test.add.f32",
@@ -2777,6 +2792,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_TIED_PAIR_DESCRIPTOR,
         TEST_LOW_SAME_REGISTER_VALUE_TYPES_DESCRIPTOR,
         TEST_LOW_COINDEXED_RESULTS_DESCRIPTOR,
+        TEST_LOW_COINDEXED_OPERANDS_DESCRIPTOR,
         TEST_LOW_READ_LOW16_I32_DESCRIPTOR,
         TEST_LOW_READ_HIGH16_I32_DESCRIPTOR,
         TEST_LOW_WRITE_LOW16_I32_DESCRIPTOR,

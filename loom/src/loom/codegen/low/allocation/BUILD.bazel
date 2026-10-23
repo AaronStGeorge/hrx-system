@@ -75,11 +75,35 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "ordinal_component",
+    srcs = ["ordinal_component.c"],
+    hdrs = ["ordinal_component.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//loom/src/loom/codegen/low:placement",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "ordinal_component_test",
+    srcs = ["ordinal_component_test.cc"],
+    deps = [
+        ":ordinal_component",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "placement",
     srcs = ["placement.c"],
     hdrs = ["placement.h"],
     deps = [
         ":edge_affinity",
+        ":ordinal_component",
         ":target_constraints",
         ":unit_location",
         "//loom/src/loom/analysis:liveness",
@@ -822,6 +846,31 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "ordinal_recolor",
+    srcs = ["ordinal_recolor.c"],
+    hdrs = ["ordinal_recolor.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":active_unit",
+        ":assignment_map",
+        ":live_range",
+        ":search",
+        ":storage",
+        ":storage_lease",
+        ":target_constraints",
+        ":unit_liveness",
+        ":write_interference",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:placement",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "interval_assignment",
     srcs = ["interval_assignment.c"],
     hdrs = ["interval_assignment.h"],
@@ -833,6 +882,7 @@ loom_cc_library(
         ":coalescing",
         ":interval_order",
         ":live_range",
+        ":ordinal_recolor",
         ":physical_domains",
         ":preference",
         ":scalar_packing",
