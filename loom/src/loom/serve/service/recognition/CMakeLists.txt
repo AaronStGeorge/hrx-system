@@ -319,6 +319,7 @@ loom_cc_library(
     iree::testing::gtest
     loom::serve::runtime::execution
     loom::serve::runtime::parameter::residency
+    loom::serve::runtime::storage::memory
     loom::serve::testing::service_application
   TESTONLY
   ALWAYSLINK

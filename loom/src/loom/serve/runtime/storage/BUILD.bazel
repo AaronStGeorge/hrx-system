@@ -58,6 +58,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/runtime/execution:retirement",
+        "//loom/src/loom/serve/runtime/parameter:residency",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
     ],

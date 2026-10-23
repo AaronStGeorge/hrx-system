@@ -90,7 +90,7 @@ class SourceRecognitionStreamTest : public ::testing::Test {
     };
     observed.complete_admit = [](void* self, void* invocation) {
       auto* test = static_cast<SourceRecognitionStreamTest*>(self);
-      return test->actual_.complete_admit(test->actual_.self, invocation);
+      test->actual_.complete_admit(test->actual_.self, invocation);
     };
     observed.prepare_work =
         [](void* self, void* invocation,
