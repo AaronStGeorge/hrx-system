@@ -37,6 +37,7 @@ loom_cc_library(
     "rule_source_memory_plan.h"
     "rule_value.h"
     "rules.h"
+    "source_abi_projection.h"
     "source_call.h"
     "source_graph_nodes.h"
     "source_graph_placement.h"
@@ -73,6 +74,7 @@ loom_cc_library(
     "rule_source_memory_materialize.c"
     "rule_source_memory_plan.c"
     "rule_value.c"
+    "source_abi_projection.c"
     "source_call.c"
     "source_graph_nodes.c"
     "source_graph_placement.c"
@@ -126,6 +128,7 @@ loom_cc_library(
     loom::ops::callable_effects
     loom::ops::cfg
     loom::ops::encoding
+    loom::ops::func
     loom::ops::func_symbol_facts
     loom::ops::global
     loom::ops::index

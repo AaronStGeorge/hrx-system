@@ -279,7 +279,7 @@ TEST_F(LowLowerFunctionBoundaryTest,
 }
 
 TEST_F(LowLowerFunctionBoundaryTest,
-       SourceAbiRequiresExplicitPhysicalProjection) {
+       SourceAbiWithoutProjectionUsesSelectedTargetBoundary) {
   loom_attribute_t source_abi = loom_attr_absent();
   IREE_ASSERT_OK(loom_func_abi_c_signature_attr_make(
       module_, loom_make_i64_array(nullptr, 0), loom_make_i64_array(nullptr, 0),
@@ -311,7 +311,8 @@ TEST_F(LowLowerFunctionBoundaryTest,
   mapping_context_.source_function = function;
 
   IREE_ASSERT_OK(loom_low_lower_function_boundary_validate(&mapping_context_));
-  EXPECT_EQ(result_.error_count, 1u);
+  EXPECT_EQ(result_.error_count, 0u);
+  EXPECT_EQ(mapping_context_.lowering->boundary.source_abi_projection, nullptr);
   EXPECT_EQ(mapping_context_.lowering->boundary.argument_map, nullptr);
 }
 

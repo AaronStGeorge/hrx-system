@@ -35,6 +35,7 @@
 #include "loom/error/emitter.h"
 #include "loom/error/parameter.h"
 #include "loom/ir/ir.h"
+#include "loom/ops/func/source_abi.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/sanitizer/options.h"
@@ -49,6 +50,8 @@ extern "C" {
 
 typedef struct loom_low_representation_projection_index_t
     loom_low_representation_projection_index_t;
+typedef struct loom_low_source_abi_projection_index_t
+    loom_low_source_abi_projection_index_t;
 
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
 typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
@@ -388,6 +391,67 @@ typedef struct loom_low_lower_map_abi_layout_callback_t {
   // Caller-owned payload passed to |fn|.
   void* user_data;
 } loom_low_lower_map_abi_layout_callback_t;
+
+// Target-owned physical signature selected for one verified source ABI. All
+// arrays belong to the caller-provided planning arena. Logical source values
+// remain flat inside source-to-Low; these carriers describe only the external
+// callable edge.
+typedef struct loom_low_lower_source_abi_target_plan_t {
+  // Physical argument carriers in emitted Low signature order.
+  const loom_type_t* argument_types;
+  // Number of physical argument carriers.
+  uint16_t argument_count;
+  // Physical result carriers in emitted Low signature order.
+  const loom_type_t* result_types;
+  // Number of physical result carriers.
+  uint16_t result_count;
+  // Physical result-to-argument ties, when required by the target ABI.
+  const loom_tied_result_t* tied_results;
+  // Number of physical result ties.
+  uint16_t tied_result_count;
+  // Immutable target state consumed only by the retained emitter.
+  const void* target_data;
+} loom_low_lower_source_abi_target_plan_t;
+
+typedef iree_status_t (*loom_low_lower_plan_source_abi_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_func_c_abi_signature_t* signature,
+    const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
+    const loom_type_t* logical_result_types, uint16_t logical_result_count,
+    iree_arena_allocator_t* arena,
+    loom_low_lower_source_abi_target_plan_t* out_plan);
+
+typedef enum loom_low_lower_source_abi_emission_phase_e {
+  // Unpacks physical function entry arguments into logical source values.
+  LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_DEFINITION_ENTRY = 0,
+  // Packs one logical function exit into physical Low return values.
+  LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_DEFINITION_EXIT = 1,
+  // Packs logical invocation operands into physical Low call operands.
+  LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_CALL_ARGUMENTS = 2,
+  // Unpacks physical Low call results into logical invocation results.
+  LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_CALL_RESULTS = 3,
+} loom_low_lower_source_abi_emission_phase_t;
+
+typedef iree_status_t (*loom_low_lower_emit_source_abi_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    loom_low_lower_source_abi_emission_phase_t phase,
+    const loom_op_t* source_op, const void* target_plan,
+    const loom_value_id_t* input_values, uint16_t input_count,
+    loom_value_id_t* output_values, uint16_t output_count,
+    iree_arena_allocator_t* state_arena, void** inout_state);
+
+typedef struct loom_low_lower_source_abi_callback_t {
+  // Classifies one complete verified source signature. This runs once per
+  // selected symbol before declarations, definitions, or calls are emitted.
+  loom_low_lower_plan_source_abi_fn_t plan;
+  // Emits explicit Low pack/unpack operations from the retained target plan.
+  // Definition entry may retain per-function state in |state_arena| for every
+  // exit. Call argument state lives through the immediately following result
+  // projection. The callback must fill every output value.
+  loom_low_lower_emit_source_abi_fn_t emit;
+  // Caller-owned payload passed to both callbacks.
+  void* user_data;
+} loom_low_lower_source_abi_callback_t;
 
 typedef uint64_t loom_low_lower_plan_id_t;
 
@@ -953,6 +1017,9 @@ typedef struct loom_low_lower_policy_t {
   // Optionally materializes target-owned low boundary attrs/layout from the
   // source function signature and mapped low signature.
   loom_low_lower_map_abi_layout_callback_t map_abi_layout;
+  // Optional whole-callable C source ABI projection. Targets classify the
+  // verified object signature once and emit only retained explicit recipes.
+  loom_low_lower_source_abi_callback_t source_abi;
   // Optionally plans target-specific branch expansion before Low creation.
   loom_low_lower_prepare_branch_callback_t prepare_branch;
   // Prepares and emits branch/return conversions to the receiving signature.
@@ -1083,6 +1150,9 @@ typedef struct loom_low_lower_options_t {
   loom_storage_access_scope_t* storage_access;
   // Borrowed projected helper interfaces, available before IR publication.
   const loom_low_representation_projection_index_t* representation_projections;
+  // Borrowed physical source ABI interfaces, available before declarations,
+  // definitions, and their direct calls are published.
+  const loom_low_source_abi_projection_index_t* source_abi_projections;
   // Structured diagnostic emitter for user legality and lowering failures.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.
@@ -1591,6 +1661,12 @@ iree_status_t loom_low_lower_emit_branch_constraint(
 iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_type_t actual_type, iree_string_view_t type_constraint);
+
+// Emits the canonical target-context rejection for a source ABI shape the
+// active target cannot project.
+iree_status_t loom_low_lower_emit_source_abi_unsupported(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_string_view_t reason);
 
 // Emits a generated structured lowering diagnostic.
 iree_status_t loom_low_lower_emit_error_ref(
