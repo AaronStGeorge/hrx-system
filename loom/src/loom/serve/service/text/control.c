@@ -9,16 +9,17 @@
 #include <string.h>
 
 #include "iree/vm/sync.h"
+#include "loom/serve/runtime/parameter/module.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
 #include "loom/serve/service/text/epoch_plan.h"
 
 iree_status_t loom_serve_text_control_initialize(
     const loom_serve_text_source_t* source, loom_serve_execution_t* execution,
-    const loom_serve_text_state_t* state, iree_host_size_t shape_count,
-    const loom_serve_packing_shape_t* shapes, iree_host_size_t stage_count,
-    const loom_serve_stage_t* stages, iree_allocator_t host_allocator,
-    loom_serve_text_control_t* out_control) {
+    iree_hal_queue_t* transfer, const loom_serve_text_state_t* state,
+    iree_host_size_t shape_count, const loom_serve_packing_shape_t* shapes,
+    iree_host_size_t stage_count, const loom_serve_stage_t* stages,
+    iree_allocator_t host_allocator, loom_serve_text_control_t* out_control) {
   loom_serve_text_control_t* control = out_control;
   memset(control, 0, sizeof(*control));
   // Both dense padding and semantic packed inputs belong to the single model
@@ -99,7 +100,8 @@ iree_status_t loom_serve_text_control_initialize(
   status = loom_serve_module_create(&source->types, execution, options,
                                     host_allocator, &control->native_module);
   IREE_RETURN_IF_ERROR(status);
-  iree_vm_module_t* libraries[] = {control->native_module, NULL, NULL, NULL};
+  iree_vm_module_t* libraries[] = {control->native_module, NULL, NULL, NULL,
+                                   NULL};
   status = loom_serve_input_module_create(
       source->environment, source->tokenizer, host_allocator, &libraries[1]);
   if (iree_status_is_ok(status)) {
@@ -107,16 +109,22 @@ iree_status_t loom_serve_text_control_initialize(
                                            &libraries[2]);
   }
   const bool generates = source->mode == LOOM_SERVE_TEXT_MODE_GENERATE;
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_parameters_module_create(
+        source->environment, &source->types, transfer,
+        source->parameter_sources, host_allocator, &libraries[3]);
+  }
   if (iree_status_is_ok(status) && generates) {
     status = loom_serve_text_chat_tools_module_create(
-        source->environment, host_allocator, &libraries[3]);
+        source->environment, host_allocator, &libraries[4]);
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_program_link(
         source->module,
-        iree_vm_module_span_from_ptr(libraries, generates ? 4 : 3),
+        iree_vm_module_span_from_ptr(libraries, generates ? 5 : 4),
         host_allocator, &control->program);
   }
+  iree_vm_module_release(libraries[4]);
   iree_vm_module_release(libraries[3]);
   iree_vm_module_release(libraries[2]);
   iree_vm_module_release(libraries[1]);
