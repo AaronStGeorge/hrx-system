@@ -11,8 +11,6 @@
 #include "loom/ops/func/ops.h"
 
 typedef struct loom_x86_source_signature_classifier_t {
-  const loom_func_c_abi_signature_t* signature;
-  uint64_t root_byte_length;
   uint16_t maximum_vector_bytes;
   bool unsupported;
   bool memory;
@@ -64,37 +62,27 @@ static void loom_x86_source_signature_mark(
   }
 }
 
-static bool loom_x86_source_signature_is_aligned(uint64_t byte_offset,
-                                                 uint64_t byte_alignment) {
-  return byte_alignment != 0 && (byte_offset & (byte_alignment - 1u)) == 0;
-}
-
-static void loom_x86_source_signature_classify_type(
-    loom_x86_source_signature_classifier_t* classifier, uint32_t type_index,
-    uint64_t byte_offset, uint32_t depth) {
+static void loom_x86_source_signature_classify_leaf(
+    const loom_c_abi_signature_layout_t* layout,
+    loom_x86_source_signature_classifier_t* classifier,
+    const loom_c_abi_leaf_t* leaf) {
   if (classifier->unsupported || classifier->memory) {
     return;
   }
-  IREE_ASSERT_LT(type_index, classifier->signature->types.count);
-  IREE_ASSERT_LT(depth, 64u);
-  const loom_attribute_t type = classifier->signature->types.values[type_index];
-  const uint64_t byte_length =
-      (uint64_t)loom_func_abi_c_type_attr_byte_length(type);
-  const uint64_t byte_alignment =
-      (uint64_t)loom_func_abi_c_type_attr_byte_alignment(type);
-  if (byte_offset > classifier->root_byte_length ||
-      byte_length > classifier->root_byte_length - byte_offset) {
-    IREE_ASSERT_UNREACHABLE(
-        "verified source signature child exceeds root object");
+  if (!(leaf->flags & LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED)) {
+    classifier->memory = true;
     return;
   }
-
+  IREE_ASSERT_LT(leaf->type_index, layout->signature.types.count);
+  const loom_attribute_t type =
+      layout->signature.types.values[leaf->type_index];
   switch (loom_func_abi_c_type_attr_kind(type)) {
     case LOOM_FUNC_ABI_C_TYPE_KIND_BOOLEAN:
     case LOOM_FUNC_ABI_C_TYPE_KIND_SIGNED_INTEGER:
     case LOOM_FUNC_ABI_C_TYPE_KIND_UNSIGNED_INTEGER:
     case LOOM_FUNC_ABI_C_TYPE_KIND_POINTER:
-      loom_x86_source_signature_mark(classifier, byte_offset, byte_length,
+      loom_x86_source_signature_mark(classifier, leaf->byte_offset,
+                                     leaf->byte_length,
                                      LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER,
                                      LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER);
       return;
@@ -106,72 +94,27 @@ static void loom_x86_source_signature_classify_type(
                   format == LOOM_FUNC_ABI_C_TYPE_FORMAT_F8E5M2
               ? LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER
               : LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE;
-      loom_x86_source_signature_mark(classifier, byte_offset, byte_length,
-                                     abi_class, abi_class);
+      loom_x86_source_signature_mark(classifier, leaf->byte_offset,
+                                     leaf->byte_length, abi_class, abi_class);
       return;
     }
     case LOOM_FUNC_ABI_C_TYPE_KIND_VECTOR: {
       const uint64_t carrier_byte_length =
-          byte_length <= 16u ? 16u : byte_length;
+          leaf->byte_length <= 16u ? 16u : leaf->byte_length;
       if ((carrier_byte_length != 16u && carrier_byte_length != 32u &&
            carrier_byte_length != 64u) ||
           carrier_byte_length > classifier->maximum_vector_bytes) {
         classifier->memory = true;
         return;
       }
-      loom_x86_source_signature_mark(classifier, byte_offset, byte_length,
+      loom_x86_source_signature_mark(classifier, leaf->byte_offset,
+                                     leaf->byte_length,
                                      LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
                                      LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP);
       return;
     }
-    case LOOM_FUNC_ABI_C_TYPE_KIND_ARRAY: {
-      const uint32_t element_type =
-          (uint32_t)loom_func_abi_c_type_attr_element_type(type);
-      const uint64_t element_count =
-          (uint64_t)loom_func_abi_c_type_attr_element_count(type);
-      const uint64_t element_stride =
-          (uint64_t)loom_func_abi_c_type_attr_element_stride(type);
-      const loom_attribute_t element =
-          classifier->signature->types.values[element_type];
-      const uint64_t element_alignment =
-          (uint64_t)loom_func_abi_c_type_attr_byte_alignment(element);
-      if (byte_alignment < element_alignment ||
-          !loom_x86_source_signature_is_aligned(element_stride,
-                                                element_alignment)) {
-        classifier->memory = true;
-        return;
-      }
-      for (uint64_t i = 0; i < element_count; ++i) {
-        loom_x86_source_signature_classify_type(
-            classifier, element_type, byte_offset + i * element_stride,
-            depth + 1u);
-      }
-      return;
-    }
-    case LOOM_FUNC_ABI_C_TYPE_KIND_RECORD: {
-      const loom_parameterized_attr_array_t fields =
-          loom_func_abi_c_type_attr_fields(type);
-      for (iree_host_size_t i = 0; i < fields.count; ++i) {
-        const loom_attribute_t field = fields.values[i];
-        const uint32_t field_type =
-            (uint32_t)loom_func_abi_c_field_attr_type(field);
-        const uint64_t field_offset =
-            (uint64_t)loom_func_abi_c_field_attr_byte_offset(field);
-        const loom_attribute_t field_type_attr =
-            classifier->signature->types.values[field_type];
-        const uint64_t field_alignment =
-            (uint64_t)loom_func_abi_c_type_attr_byte_alignment(field_type_attr);
-        if (byte_alignment < field_alignment ||
-            !loom_x86_source_signature_is_aligned(byte_offset + field_offset,
-                                                  field_alignment)) {
-          classifier->memory = true;
-          return;
-        }
-        loom_x86_source_signature_classify_type(
-            classifier, field_type, byte_offset + field_offset, depth + 1u);
-      }
-      return;
-    }
+    case LOOM_FUNC_ABI_C_TYPE_KIND_ARRAY:
+    case LOOM_FUNC_ABI_C_TYPE_KIND_RECORD:
     default:
       classifier->unsupported = true;
       return;
@@ -179,41 +122,36 @@ static void loom_x86_source_signature_classify_type(
 }
 
 bool loom_x86_source_signature_classify(
-    const loom_func_c_abi_signature_t* signature, uint32_t root_type_index,
+    const loom_c_abi_signature_layout_t* layout,
+    const loom_c_abi_object_t* object, const loom_c_abi_leaf_t* object_leaves,
     uint16_t maximum_vector_bytes,
     loom_x86_source_signature_classification_t* out_classification) {
-  IREE_ASSERT_ARGUMENT(signature);
+  IREE_ASSERT_ARGUMENT(layout);
+  IREE_ASSERT_ARGUMENT(object);
+  IREE_ASSERT(object->leaf_count == 0 || object_leaves != NULL);
   IREE_ASSERT_ARGUMENT(out_classification);
   *out_classification = (loom_x86_source_signature_classification_t){0};
-  IREE_ASSERT_LT(root_type_index, signature->types.count);
-  const loom_attribute_t root = signature->types.values[root_type_index];
-  const int64_t raw_byte_length = loom_func_abi_c_type_attr_byte_length(root);
-  const int64_t raw_byte_alignment =
-      loom_func_abi_c_type_attr_byte_alignment(root);
-  const int64_t raw_component_count =
-      loom_func_abi_c_type_attr_component_count(root);
-  if (raw_byte_length <= 0 || raw_byte_length > UINT32_MAX ||
-      raw_byte_alignment <= 0 || raw_byte_alignment > UINT32_MAX ||
-      raw_component_count <= 0 || raw_component_count > UINT16_MAX ||
+  if (object->byte_length > UINT32_MAX || object->byte_alignment > UINT32_MAX ||
+      object->logical_count == 0 ||
       (maximum_vector_bytes != 0 && maximum_vector_bytes != 16 &&
        maximum_vector_bytes != 32 && maximum_vector_bytes != 64)) {
     return false;
   }
 
   loom_x86_source_signature_classifier_t classifier = {
-      .signature = signature,
-      .root_byte_length = (uint64_t)raw_byte_length,
       .maximum_vector_bytes = maximum_vector_bytes,
-      .memory = raw_byte_length > 64,
+      .memory = object->byte_length > 64,
   };
-  loom_x86_source_signature_classify_type(&classifier, root_type_index,
-                                          /*byte_offset=*/0, /*depth=*/0);
+  for (uint16_t i = 0; i < object->leaf_count; ++i) {
+    loom_x86_source_signature_classify_leaf(layout, &classifier,
+                                            &object_leaves[i]);
+  }
   if (classifier.unsupported) {
     return false;
   }
 
   const uint8_t eightbyte_count =
-      classifier.memory ? 0 : (uint8_t)((raw_byte_length + 7) / 8);
+      classifier.memory ? 0 : (uint8_t)((object->byte_length + 7) / 8);
   for (uint8_t i = 0; i < eightbyte_count; ++i) {
     if (classifier.eightbytes[i] == LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP &&
         (i == 0 ||
@@ -234,9 +172,9 @@ bool loom_x86_source_signature_classify(
     }
   }
   *out_classification = (loom_x86_source_signature_classification_t){
-      .byte_length = (uint32_t)raw_byte_length,
-      .byte_alignment = (uint32_t)raw_byte_alignment,
-      .component_count = (uint16_t)raw_component_count,
+      .byte_length = (uint32_t)object->byte_length,
+      .byte_alignment = (uint32_t)object->byte_alignment,
+      .component_count = object->logical_count,
       .eightbyte_count = classifier.memory ? 0 : eightbyte_count,
       .is_memory = classifier.memory,
   };

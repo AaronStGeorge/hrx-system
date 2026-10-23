@@ -30,6 +30,8 @@ class X86SourceSignatureTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
+    iree_arena_initialize(&block_pool_, &scratch_arena_);
+    iree_arena_initialize(&block_pool_, &result_arena_);
     loom_context_initialize(iree_allocator_system(), &context_);
     iree_host_size_t op_count = 0;
     const loom_op_vtable_t* const* vtables =
@@ -50,6 +52,8 @@ class X86SourceSignatureTest : public ::testing::Test {
   void TearDown() override {
     loom_module_free(module_);
     loom_context_deinitialize(&context_);
+    iree_arena_deinitialize(&result_arena_);
+    iree_arena_deinitialize(&scratch_arena_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
@@ -138,13 +142,22 @@ class X86SourceSignatureTest : public ::testing::Test {
 
   loom_x86_source_signature_classification_t Classify(
       uint32_t root, uint16_t maximum_vector_bytes) {
+    const int64_t root_type = root;
     const loom_func_c_abi_signature_t signature = {
+        .arguments = loom_make_i64_array(&root_type, 1),
         .types =
             loom_make_parameterized_attr_array(types_.data(), types_.size()),
     };
+    loom_c_abi_signature_layout_t layout;
+    IREE_CHECK_OK(loom_c_abi_signature_layout_build(&signature, &scratch_arena_,
+                                                    &result_arena_, &layout));
+    const loom_c_abi_object_t* object = &layout.arguments[0];
+    const loom_c_abi_leaf_t* leaves =
+        object->leaf_count ? layout.argument_leaves + object->leaf_offset
+                           : nullptr;
     loom_x86_source_signature_classification_t classification;
     EXPECT_TRUE(loom_x86_source_signature_classify(
-        &signature, root, maximum_vector_bytes, &classification));
+        &layout, object, leaves, maximum_vector_bytes, &classification));
     return classification;
   }
 
@@ -160,6 +173,8 @@ class X86SourceSignatureTest : public ::testing::Test {
   }
 
   iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t scratch_arena_;
+  iree_arena_allocator_t result_arena_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   std::vector<loom_attribute_t> types_;
@@ -270,11 +285,17 @@ TEST_F(X86SourceSignatureTest, RetainsPaddingAsNoClass) {
 
 TEST_F(X86SourceSignatureTest, RejectsEmptySourceObjects) {
   const uint32_t empty = AddRecord(1, 1, 0, {});
+  const int64_t root_type = empty;
   const loom_func_c_abi_signature_t signature = {
+      .arguments = loom_make_i64_array(&root_type, 1),
       .types = loom_make_parameterized_attr_array(types_.data(), types_.size()),
   };
+  loom_c_abi_signature_layout_t layout;
+  IREE_ASSERT_OK(loom_c_abi_signature_layout_build(&signature, &scratch_arena_,
+                                                   &result_arena_, &layout));
   loom_x86_source_signature_classification_t classification;
-  EXPECT_FALSE(loom_x86_source_signature_classify(&signature, empty, 32,
+  EXPECT_FALSE(loom_x86_source_signature_classify(&layout, &layout.arguments[0],
+                                                  /*object_leaves=*/nullptr, 32,
                                                   &classification));
 }
 

@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_X86_SOURCE_SIGNATURE_H_
 #define LOOM_TARGET_ARCH_X86_SOURCE_SIGNATURE_H_
 
-#include "loom/ops/func/source_signature.h"
+#include "loom/target/abi/c/signature_layout.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,13 +52,14 @@ typedef struct loom_x86_source_signature_classification_t {
 static_assert(sizeof(loom_x86_source_signature_classification_t) == 20,
               "x86 source signature classification must be exactly 20 bytes");
 
-// Classifies one root in a verified C source signature. |maximum_vector_bytes|
-// is 16, 32, or 64 when the selected profile can transport the corresponding
-// native vector class, and zero when it exposes no SIMD boundary registers.
-// Returns false only for source families deliberately outside the supported
-// x86 interop contract. ABI-mandated stack objects return true with is_memory.
+// Classifies one normalized root C object. |maximum_vector_bytes| is 16, 32,
+// or 64 when the selected profile can transport the corresponding native
+// vector class, and zero when it exposes no SIMD boundary registers. Returns
+// false only for source families deliberately outside the supported x86
+// interop contract. ABI-mandated stack objects return true with is_memory.
 bool loom_x86_source_signature_classify(
-    const loom_func_c_abi_signature_t* signature, uint32_t root_type_index,
+    const loom_c_abi_signature_layout_t* layout,
+    const loom_c_abi_object_t* object, const loom_c_abi_leaf_t* object_leaves,
     uint16_t maximum_vector_bytes,
     loom_x86_source_signature_classification_t* out_classification);
 

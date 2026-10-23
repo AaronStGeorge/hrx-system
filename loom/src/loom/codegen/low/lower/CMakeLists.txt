@@ -142,6 +142,7 @@ loom_cc_library(
     loom::rewrite::materialize
     loom::rewrite::remap
     loom::sanitizer::options
+    loom::target::abi::c::signature_layout
     loom::target::contract
     loom::target::facts
     loom::target::function_contract

@@ -165,6 +165,7 @@ loom_cc_library(
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/abi/c:signature_layout",
         "//loom/src/loom/util:cfg_execution",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:cfg_loop_nest",

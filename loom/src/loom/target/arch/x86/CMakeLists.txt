@@ -65,6 +65,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::ops::func
+    loom::target::abi::c::signature_layout
   PUBLIC
 )
 endif()

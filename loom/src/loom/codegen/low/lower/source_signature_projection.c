@@ -25,6 +25,8 @@ struct loom_low_source_signature_projection_plan_t {
   const loom_type_t* logical_result_types;
   // Number of flat logical result carriers.
   uint16_t logical_result_count;
+  // Target-independent source object and terminal leaf layout.
+  loom_c_abi_signature_layout_t signature_layout;
   // Physical target signature and opaque emission recipe.
   loom_low_lower_source_signature_target_plan_t target;
   // Canonical target-owned placement/layout attributes.
@@ -242,8 +244,16 @@ iree_status_t loom_low_plan_source_signature_projection(
         &context, IREE_SV("target has no C source signature projection"));
   }
   if (iree_status_is_ok(status) && out_result->error_count == 0) {
+    status = loom_c_abi_signature_layout_build(&signature, &function_arena,
+                                               arena, &plan->signature_layout);
+  }
+  if (iree_status_is_ok(status) && out_result->error_count == 0) {
+    IREE_ASSERT_EQ(plan->signature_layout.argument_logical_count,
+                   plan->logical_argument_count);
+    IREE_ASSERT_EQ(plan->signature_layout.result_logical_count,
+                   plan->logical_result_count);
     status = plan->callback.plan(
-        plan->callback.user_data, &context, &signature,
+        plan->callback.user_data, &context, &plan->signature_layout,
         plan->logical_argument_types, plan->logical_argument_count,
         plan->logical_result_types, plan->logical_result_count, arena,
         &plan->target);

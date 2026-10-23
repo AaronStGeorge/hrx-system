@@ -35,10 +35,10 @@
 #include "loom/error/emitter.h"
 #include "loom/error/parameter.h"
 #include "loom/ir/ir.h"
-#include "loom/ops/func/source_signature.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/sanitizer/options.h"
+#include "loom/target/abi/c/signature_layout.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/types.h"
 #include "loom/util/fact_cfg.h"
@@ -422,7 +422,7 @@ typedef struct loom_low_lower_source_signature_target_plan_t {
 
 typedef iree_status_t (*loom_low_lower_plan_source_signature_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
-    const loom_func_c_abi_signature_t* signature,
+    const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
     iree_arena_allocator_t* arena,

@@ -34,6 +34,7 @@ _FUNC_VISIBILITY = [
     "//loom/src/loom/ops/low:__pkg__",
     "//loom/src/loom/rewrite:__pkg__",
     "//loom/src/loom/target:__pkg__",
+    "//loom/src/loom/target/abi/c:__pkg__",
     "//loom/src/loom/target/arch:__subpackages__",
     "//loom/src/loom/target/emit:__subpackages__",
     "//loom/src/loom/target/reporting:__pkg__",

@@ -87,6 +87,7 @@ loom_cc_library(
     visibility = _X86_LOWER_VISIBILITY,
     deps = [
         "//loom/src/loom/ops/func",
+        "//loom/src/loom/target/abi/c:signature_layout",
         "//runtime/src/iree/base",
     ],
 )

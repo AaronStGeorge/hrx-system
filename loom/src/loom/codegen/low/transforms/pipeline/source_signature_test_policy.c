@@ -41,22 +41,20 @@ static iree_status_t loom_test_low_source_signature_unsupported(
 }
 
 static iree_status_t loom_test_low_plan_source_signature_groups(
-    loom_low_lower_context_t* context, loom_i64_array_t roots,
-    loom_parameterized_attr_array_t types, const loom_type_t* logical_types,
+    loom_low_lower_context_t* context, const loom_c_abi_object_t* objects,
+    uint16_t object_count, const loom_type_t* logical_types,
     uint16_t logical_count, loom_type_t* physical_types,
     loom_test_low_source_signature_group_t* groups) {
   uint32_t logical_offset = 0;
-  for (iree_host_size_t i = 0; i < roots.count; ++i) {
-    const loom_attribute_t source_type = types.values[roots.values[i]];
-    const int64_t raw_component_count =
-        loom_func_abi_c_type_attr_component_count(source_type);
-    if (raw_component_count <= 0 || raw_component_count > UINT16_MAX ||
-        (uint64_t)logical_offset + (uint64_t)raw_component_count >
-            logical_count) {
+  for (uint16_t i = 0; i < object_count; ++i) {
+    const loom_c_abi_object_t* object = &objects[i];
+    if (object->logical_count == 0 ||
+        object->logical_offset != logical_offset ||
+        (uint32_t)logical_offset + object->logical_count > logical_count) {
       return loom_test_low_source_signature_unsupported(
           context, IREE_SV("test target requires nonempty source objects"));
     }
-    const uint16_t component_count = (uint16_t)raw_component_count;
+    const uint16_t component_count = object->logical_count;
     const loom_type_t first_type = logical_types[logical_offset];
     if (!loom_low_type_is_register(first_type)) {
       return loom_test_low_source_signature_unsupported(
@@ -97,13 +95,14 @@ static iree_status_t loom_test_low_plan_source_signature_groups(
 
 iree_status_t loom_test_low_plan_source_signature(
     void* user_data, loom_low_lower_context_t* context,
-    const loom_func_c_abi_signature_t* signature,
+    const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
     iree_arena_allocator_t* arena,
     loom_low_lower_source_signature_target_plan_t* out_plan) {
   (void)user_data;
   *out_plan = (loom_low_lower_source_signature_target_plan_t){0};
+  const loom_func_c_abi_signature_t* signature = &layout->signature;
   if (signature->arguments.count > UINT16_MAX ||
       signature->results.count > UINT16_MAX) {
     return loom_test_low_source_signature_unsupported(
@@ -135,10 +134,10 @@ iree_status_t loom_test_low_plan_source_signature(
   plan->argument_group_count = argument_group_count;
   plan->result_group_count = result_group_count;
   IREE_RETURN_IF_ERROR(loom_test_low_plan_source_signature_groups(
-      context, signature->arguments, signature->types, logical_argument_types,
+      context, layout->arguments, argument_group_count, logical_argument_types,
       logical_argument_count, physical_arguments, plan->groups));
   IREE_RETURN_IF_ERROR(loom_test_low_plan_source_signature_groups(
-      context, signature->results, signature->types, logical_result_types,
+      context, layout->results, result_group_count, logical_result_types,
       logical_result_count, physical_results,
       plan->groups + argument_group_count));
   if (loom_low_lower_context_error_count(context) != 0) {

@@ -19,7 +19,7 @@ extern "C" {
 // signature.
 iree_status_t loom_x86_plan_source_signature(
     void* user_data, loom_low_lower_context_t* context,
-    const loom_func_c_abi_signature_t* signature,
+    const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
     iree_arena_allocator_t* arena,
