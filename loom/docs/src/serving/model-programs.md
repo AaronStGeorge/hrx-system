@@ -141,6 +141,14 @@ The [runner-module contract](https://github.com/ROCm/hrx-system/blob/main/loom/s
 defines arity, buffer types and lifetime. This is a coarse serving capability,
 not a source program's ownership of the entire device or process scheduler.
 
+Independent work can use explicit dependencies. `runner.fence(work)` returns a
+`hal.fence` for a previously accepted work value. It captures that producer,
+not later submissions or the separate feedback branch. `runner.join(ready)`
+orders subsequent model work after the supplied fence without waiting on the
+CPU or synchronizing other models. A null fence represents no external work.
+Completion describes readiness; storage ownership still extends through the
+last accepted consumer, including when a dependency fails.
+
 Request preparation can use the `input` capability to encode text and decode
 token spans with the deployment's tokenizer. `encode(text, flags, capacity)`
 returns a zero-padded little-endian I32 ID buffer and live token count; it can
@@ -183,8 +191,9 @@ It uses the same `stage`, `dispatch`, `config`, `config_i64`, and
 `workspace_limit` imports as cold preparation. Returned ordinals follow the
 cold stages and are valid for that invocation. This lets a package specialize
 an actual image geometry or cohort extent without enumerating a size catalog
-at registration. Checkpoint domains remain the cold program's responsibility;
-request stages must preserve their layout and cannot declare new parameters.
+at registration. A request can also declare sources and parameter bindings;
+omitting parameter declarations preserves the cold layout. New source ordinals
+follow the immutable cold prefix and belong to that exact request choice.
 
 The server reuses an exact declaration set within its selected source generation
 or compiles it asynchronously before parameter admission. Other models keep
