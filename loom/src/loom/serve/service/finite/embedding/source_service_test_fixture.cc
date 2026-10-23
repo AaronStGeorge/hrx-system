@@ -145,13 +145,16 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::RunOwner(
 
 iree_host_size_t SourceEmbeddingServiceTest::DeviceCount() const { return 1; }
 
+uint64_t SourceEmbeddingServiceTest::BatchUnits() const { return 64; }
+
 void SourceEmbeddingServiceTest::SetUp() {
   iree_notification_initialize(&notification_);
   auto application_options = loom_serve_test_application_options_default();
   application_options.device_count = DeviceCount();
   if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
-    // One parameter page plus the fixture's 3344-byte invocation fits. Two
-    // parameter pages do not: a peer must reuse backing after deactivation.
+    // One parameter page plus a 64-unit invocation fits. The concurrent
+    // pressure cases use 32-unit invocations so two also fit. Two parameter
+    // pages do not: a weighted peer must reuse backing after deactivation.
     application_options.slab_size = 4096;
     application_options.memory_limit = 7680;
   }
@@ -200,15 +203,17 @@ iree_status_t SourceEmbeddingServiceTest::ListenerAllocatorControl(
 void SourceEmbeddingServiceTest::CreateModel(const std::string& directory) {
   loom_serve::testing::ModelDocument document;
   IREE_ASSERT_OK(document.Load(directory + "/model.json"));
+  const std::string options =
+      "{\"batch_units\":" + std::to_string(BatchUnits()) + "}";
   const loom_serve_finite_model_options_t model_options = {
       .sources = document.value().sources,
       .asset_directory = IREE_SV("."),
-      .options = IREE_SV("{\"batch_units\":64}"),
+      .options = iree_make_string_view(options.data(), options.size()),
   };
   loom_serve_test_embedding_model_lifecycle_t load;
   IREE_ASSERT_OK(load.Run(device_, model_options));
   model_ = load.model;
-  EXPECT_EQ(loom_serve_finite_model_batch_limit(model_), 64u);
+  EXPECT_EQ(loom_serve_finite_model_batch_limit(model_), BatchUnits());
 }
 
 void SourceEmbeddingServiceTest::CreateService(
@@ -622,7 +627,8 @@ global.rodata.def @policy = bytes("706f6c6963792e6c6f6f6d")
   ASSERT_TRUE(bootstrap.good());
   std::ofstream manifest(target + "/model.json");
   manifest
-      << R"({"name":"checkpoint","definition":{"kind":"embedding","prepare":"prepare.loom","control":"control.loom","sources":["config.loom","embed.loom","weights.loom"],"assets":"."}})";
+      << R"({"name":"checkpoint","definition":{"kind":"embedding","prepare":"prepare.loom","control":"control.loom","sources":["config.loom","embed.loom","weights.loom"],"assets":".","options":{"batch_units":)"
+      << BatchUnits() << "}}}";
   manifest.close();
   ASSERT_TRUE(manifest.good());
   std::string header =

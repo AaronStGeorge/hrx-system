@@ -5,11 +5,19 @@
 
 #include "loom/serve/runtime/parameter/residency.h"
 
+#include "iree/base/threading/mutex.h"
+
 struct loom_serve_residency_cache_t {
   // Allocation policy for the cache metadata.
   iree_allocator_t host_allocator;
   // Borrowed physical budget; NULL for explicitly fixed allocations.
   loom_serve_memory_pool_t* pool;
+  // Serializes final output-credit returns with owner observation/detachment.
+  iree_slim_mutex_t output_mutex;
+  // Accepted output bounds, including independent downstream queue captures.
+  uint64_t output_bytes;
+  // Nonblocking owner wake after final output retirement, under output_mutex.
+  loom_serve_wake_callback_t observer;
   // Least recently used model history owner, independent of shared weights.
   loom_serve_residency_t* oldest;
   // Most recently used model history owner.
@@ -31,6 +39,15 @@ struct loom_serve_residency_cache_t {
     loom_serve_residency_t* last;
   } admission;
 };
+
+typedef struct loom_serve_residency_output_t {
+  // One producer obligation plus one published output-view obligation.
+  iree_atomic_ref_count_t ref_count;
+  // Borrowed device admission owner, outliving every external consumer.
+  loom_serve_residency_cache_t* cache;
+  // Accepted source output bound, not allocator-reported availability.
+  uint64_t bytes;
+} loom_serve_residency_output_t;
 
 struct loom_serve_residency_group_t {
   // Allocator owning this registration and its copied plan pointers.
@@ -83,6 +100,12 @@ struct loom_serve_residency_t {
   iree_host_size_t pin_count;
   // Persistent weight-only retention, independent of accepted operation pins.
   bool pinned;
+  // Prepared peak for ordered commands and cohort-private input storage.
+  uint64_t private_bytes;
+  // Prepared escaping output bound for the next invocation.
+  uint64_t output_bytes;
+  // Producer obligation for the accepted output, independent after publication.
+  loom_serve_residency_output_t* output;
   // Last acquisition submitted all imports; groups may since be evicted.
   bool active;
   // Borrowed model idle-cache owner, independent of parameter pins.
@@ -106,6 +129,59 @@ struct loom_serve_residency_t {
   // Shared immutable groups acquired together by each invocation/cohort.
   loom_serve_residency_entry_t entries[];
 };
+
+void loom_serve_residency_cache_set_observer(
+    loom_serve_residency_cache_t* cache, loom_serve_wake_callback_t observer) {
+  iree_slim_mutex_lock(&cache->output_mutex);
+  cache->observer = observer;
+  iree_slim_mutex_unlock(&cache->output_mutex);
+}
+
+bool loom_serve_residency_cache_is_pending(
+    loom_serve_residency_cache_t* cache) {
+  iree_slim_mutex_lock(&cache->output_mutex);
+  const bool pending = cache->output_bytes != 0;
+  iree_slim_mutex_unlock(&cache->output_mutex);
+  return pending;
+}
+
+static void loom_serve_residency_output_release(
+    loom_serve_residency_output_t* output) {
+  if (output && iree_atomic_ref_count_dec(&output->ref_count) == 1) {
+    loom_serve_residency_cache_t* cache = output->cache;
+    const uint64_t bytes = output->bytes;
+    iree_allocator_free(cache->host_allocator, output);
+    iree_slim_mutex_lock(&cache->output_mutex);
+    cache->output_bytes -= bytes;
+    if (cache->observer.wake) {
+      cache->observer.wake(cache->observer.user_data);
+    }
+    iree_slim_mutex_unlock(&cache->output_mutex);
+  }
+}
+
+static void loom_serve_residency_output_retired(void* user_data,
+                                                iree_hal_buffer_t* buffer) {
+  loom_serve_residency_output_release(user_data);
+}
+
+iree_status_t loom_serve_residency_track_output(
+    loom_serve_residency_t* residency, iree_hal_buffer_t** buffer) {
+  if (!residency->output) {
+    return iree_ok_status();
+  }
+  iree_hal_buffer_t* view = NULL;
+  IREE_RETURN_IF_ERROR(iree_hal_subspan_buffer_create_with_callback(
+      *buffer, iree_hal_buffer_byte_offset(*buffer),
+      iree_hal_buffer_byte_length(*buffer),
+      (iree_hal_buffer_release_callback_t){loom_serve_residency_output_retired,
+                                           residency->output},
+      residency->host_allocator, &view));
+  iree_atomic_ref_count_inc(&residency->output->ref_count);
+  iree_hal_buffer_release(*buffer);
+  *buffer = view;
+  return iree_ok_status();
+}
 
 static bool loom_serve_residency_is_waiting(
     const loom_serve_residency_t* residency) {
@@ -483,6 +559,19 @@ static iree_status_t loom_serve_residency_reclaim(void* user_data,
   return iree_ok_status();
 }
 
+static uint64_t loom_serve_residency_activation_workspace(
+    const loom_serve_residency_t* residency) {
+  uint64_t bytes = 0;
+  for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
+    const loom_serve_residency_group_t* group = residency->entries[i].group;
+    for (iree_host_size_t j = 0; j < group->weight_count; ++j) {
+      bytes += loom_serve_weights_activation_workspace(group->weights[j])
+                   .allocation_size;
+    }
+  }
+  return bytes;
+}
+
 iree_status_t loom_serve_residency_cache_allocate(
     loom_serve_memory_pool_t* pool, iree_allocator_t host_allocator,
     loom_serve_residency_cache_t** out_cache) {
@@ -492,6 +581,7 @@ iree_status_t loom_serve_residency_cache_allocate(
       iree_allocator_malloc(host_allocator, sizeof(*cache), (void**)&cache));
   cache->host_allocator = host_allocator;
   cache->pool = pool;
+  iree_slim_mutex_initialize(&cache->output_mutex);
   if (pool) {
     loom_serve_memory_pool_set_reclaimer(
         pool,
@@ -507,6 +597,10 @@ void loom_serve_residency_cache_free(loom_serve_residency_cache_t* cache) {
   }
   IREE_ASSERT(!cache->oldest);
   IREE_ASSERT(!cache->groups.oldest);
+  iree_slim_mutex_lock(&cache->output_mutex);
+  IREE_ASSERT(!cache->output_bytes);
+  iree_slim_mutex_unlock(&cache->output_mutex);
+  iree_slim_mutex_deinitialize(&cache->output_mutex);
   if (cache->pool) {
     loom_serve_memory_pool_set_reclaimer(cache->pool,
                                          (loom_serve_memory_reclaimer_t){0});
@@ -597,6 +691,8 @@ iree_status_t loom_serve_residency_allocate(
   for (iree_host_size_t i = 0; i < group_count; ++i) {
     residency->entries[i].group = groups[i];
   }
+  residency->private_bytes =
+      loom_serve_residency_activation_workspace(residency);
   loom_serve_residency_append(residency);
   *out_residency = residency;
   return iree_ok_status();
@@ -697,6 +793,108 @@ iree_status_t loom_serve_residency_check_working_set(
   return iree_ok_status();
 }
 
+iree_status_t loom_serve_residency_prepare_working_set(
+    loom_serve_residency_t* residency, uint64_t private_bytes,
+    uint64_t output_bytes) {
+  // Activation staging and execution are ordered on this invocation's
+  // timeline. Reserve their maximum, retaining output credit independently
+  // after producer completion. Shared-group borrowers conservatively reserve
+  // their own activation peak until their invocation releases its final pin.
+  const uint64_t activation =
+      loom_serve_residency_activation_workspace(residency);
+  private_bytes = iree_max(
+      private_bytes, activation > output_bytes ? activation - output_bytes : 0);
+  const iree_device_size_t extents[] = {private_bytes, output_bytes};
+  IREE_RETURN_IF_ERROR(loom_serve_residency_check_working_set(
+      residency, IREE_ARRAYSIZE(extents), extents));
+  IREE_ASSERT(!residency->pin_count);
+  residency->private_bytes = private_bytes;
+  residency->output_bytes = output_bytes;
+  return iree_ok_status();
+}
+
+static bool loom_serve_residency_contains_group(
+    const loom_serve_residency_t* residency,
+    const loom_serve_residency_group_t* group) {
+  for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
+    if (residency->entries[i].group == group) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Forecast against service-owned requirements and live reservation accounting.
+// Unpinned weight groups are reclaimable; shared pinned groups count once.
+// Native allocator availability and idle slab caches are not scheduling inputs.
+static bool loom_serve_residency_admit_working_set(
+    const loom_serve_residency_t* residency, uint64_t additional_state) {
+  loom_serve_residency_cache_t* cache = residency->cache;
+  if (!cache->pool || loom_serve_memory_pool_limit(cache->pool) == UINT64_MAX) {
+    return true;
+  }
+  uint64_t remaining = loom_serve_memory_pool_limit(cache->pool);
+  uint64_t parameter_bytes = 0;
+  for (const loom_serve_residency_group_t* group = cache->groups.oldest; group;
+       group = group->next) {
+    const bool needed = loom_serve_residency_group_is_pinned(group) ||
+                        loom_serve_residency_contains_group(residency, group);
+    for (iree_host_size_t i = 0; i < group->weight_count; ++i) {
+      const loom_serve_memory_usage_t memory =
+          loom_serve_weights_memory_usage(group->weights[i]);
+      parameter_bytes += memory.committed_bytes + memory.pending_bytes;
+      if (needed) {
+        if (memory.reserved_bytes > remaining) {
+          return false;
+        }
+        remaining -= memory.reserved_bytes;
+      }
+    }
+  }
+  // No observation above collects native operations: every counter belongs to
+  // the same serialized owner snapshot, including pending range commitments.
+  const uint64_t mutable_bytes =
+      loom_serve_memory_pool_live_bytes(cache->pool) - parameter_bytes;
+  iree_slim_mutex_lock(&cache->output_mutex);
+  const uint64_t output_bytes = cache->output_bytes;
+  iree_slim_mutex_unlock(&cache->output_mutex);
+  if (output_bytes > remaining) {
+    return false;
+  }
+  remaining -= output_bytes;
+  for (const loom_serve_residency_t* entry = cache->oldest; entry;
+       entry = entry->next) {
+    if (entry == residency || entry->pin_count) {
+      if (entry->private_bytes > remaining) {
+        return false;
+      }
+      remaining -= entry->private_bytes;
+    }
+  }
+  const uint64_t output = residency->pin_count ? 0 : residency->output_bytes;
+  if (output > remaining || additional_state > remaining - output) {
+    return false;
+  }
+  remaining -= output + additional_state;
+  if (mutable_bytes <= remaining) {
+    return true;
+  }
+  // Protected work fits; idle mutable history is the only remaining pressure.
+  // Ask one eligible owner to retire its history, preserving every accepted
+  // consumer and borrowed preparation. Native retirement wakes the owner;
+  // this admission neither waits nor probes allocator space.
+  if (!loom_serve_residency_cache_is_reclaiming(cache)) {
+    for (loom_serve_residency_t* entry = cache->oldest; entry;
+         entry = entry->next) {
+      if (!entry->pin_count && entry->reclaimer.request &&
+          entry->reclaimer.request(entry->reclaimer.self)) {
+        break;
+      }
+    }
+  }
+  return false;
+}
+
 // Borrowed for one serialized admission, before either state or parameters
 // submit work. The state owner retains the resulting native operation.
 typedef struct loom_serve_residency_state_t {
@@ -731,6 +929,16 @@ static iree_status_t loom_serve_residency_acquire_parameters(
     const loom_serve_residency_state_t* state,
     loom_serve_residency_admission_t* out_admission) {
   *out_admission = LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY;
+  IREE_RETURN_IF_ERROR(
+      loom_serve_residency_cache_query_status(residency->cache));
+  const uint64_t additional_state = state
+                                        ? loom_serve_memory_ranges_footprint(
+                                              state->range_count, state->ranges)
+                                              .missing_bytes
+                                        : 0;
+  if (!loom_serve_residency_admit_working_set(residency, additional_state)) {
+    return iree_ok_status();
+  }
   // Nested execution shares parameter protection. A new row still admits its
   // complete state growth before borrowing another pin.
   if (residency->pin_count && residency->active) {
@@ -749,8 +957,6 @@ static iree_status_t loom_serve_residency_acquire_parameters(
     *out_admission = LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED;
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(
-      loom_serve_residency_cache_query_status(residency->cache));
   bool active = true;
   for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
     if (residency->entries[i].group->releasing) {
@@ -760,6 +966,19 @@ static iree_status_t loom_serve_residency_acquire_parameters(
     active &= residency->entries[i].group->active;
   }
   residency->active = false;
+  if (residency->output_bytes && residency->cache->pool &&
+      loom_serve_memory_pool_limit(residency->cache->pool) != UINT64_MAX) {
+    loom_serve_residency_output_t* output = NULL;
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+        residency->cache->host_allocator, sizeof(*output), (void**)&output));
+    iree_atomic_ref_count_init(&output->ref_count);
+    output->cache = residency->cache;
+    output->bytes = residency->output_bytes;
+    iree_slim_mutex_lock(&output->cache->output_mutex);
+    output->cache->output_bytes += output->bytes;
+    iree_slim_mutex_unlock(&output->cache->output_mutex);
+    residency->output = output;
+  }
   ++residency->pin_count;
   for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
     ++residency->entries[i].group->pin_count;
@@ -786,6 +1005,8 @@ static iree_status_t loom_serve_residency_acquire_parameters(
       // No parameter activation was accepted. Undo this attempt's pin even
       // when a native state failure leaves its caller-owned operation to join.
       --residency->pin_count;
+      loom_serve_residency_output_release(residency->output);
+      residency->output = NULL;
       for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
         --residency->entries[i].group->pin_count;
       }
@@ -934,6 +1155,8 @@ loom_serve_execution_frontier_t loom_serve_residency_frontier(
 void loom_serve_residency_release(loom_serve_residency_t* residency) {
   IREE_ASSERT(residency->pin_count);
   if (!--residency->pin_count) {
+    loom_serve_residency_output_release(residency->output);
+    residency->output = NULL;
     const iree_time_t now = iree_time_now();
     for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
       loom_serve_residency_group_t* group = residency->entries[i].group;

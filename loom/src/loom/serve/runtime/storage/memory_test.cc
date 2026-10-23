@@ -442,8 +442,10 @@ TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
       {second, 0, 4},
       {first, bulk.slab_size, tail_bytes - 1},
   };
-  EXPECT_EQ(loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges),
-            committed_bytes);
+  auto footprint =
+      loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges);
+  EXPECT_EQ(footprint.total_bytes, committed_bytes);
+  EXPECT_EQ(footprint.missing_bytes, committed_bytes);
   deferred_backing->defer = true;
   loom_serve_memory_admission_t commit_admission;
   loom_serve_memory_operation_t* operation = nullptr;
@@ -456,6 +458,10 @@ TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
   EXPECT_EQ(statistics[1].pending_bytes, state.slab_size);
   EXPECT_EQ(loom_serve_memory_pool_statistics(pool).pending_bytes,
             committed_bytes);
+  footprint =
+      loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges);
+  EXPECT_EQ(footprint.total_bytes, committed_bytes);
+  EXPECT_EQ(footprint.missing_bytes, 0u);
   deferred_backing->ResumeAcquisitions();
   loom_serve_memory_operation_await(operation);
   IREE_ASSERT_OK(loom_serve_memory_operation_query_status(operation));
@@ -721,24 +727,34 @@ TEST_F(MemoryTest, CohortAdmissionCountsUniqueSlabsAndLeavesDenialUntouched) {
   };
   // Forecast all touched slots, not just missing backing. Repeated queries
   // neither accumulate marks nor affect the commitment/trim transaction.
-  EXPECT_EQ(loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges),
-            4 * kSlabSize);
-  EXPECT_EQ(loom_serve_memory_ranges_footprint(3, ranges), 2 * kSlabSize);
-  EXPECT_EQ(loom_serve_memory_ranges_footprint(0, nullptr), 0u);
+  auto footprint =
+      loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges);
+  EXPECT_EQ(footprint.total_bytes, 4 * kSlabSize);
+  EXPECT_EQ(footprint.missing_bytes, 3 * kSlabSize);
+  footprint = loom_serve_memory_ranges_footprint(3, ranges);
+  EXPECT_EQ(footprint.total_bytes, 2 * kSlabSize);
+  EXPECT_EQ(footprint.missing_bytes, kSlabSize);
+  footprint = loom_serve_memory_ranges_footprint(0, nullptr);
+  EXPECT_EQ(footprint.total_bytes, 0u);
+  EXPECT_EQ(footprint.missing_bytes, 0u);
   bool admitted = true;
   IREE_ASSERT_OK(loom_serve_memory_pool_try_commit(pool, IREE_ARRAYSIZE(ranges),
                                                    ranges, &admitted));
   EXPECT_FALSE(admitted);
   EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, kSlabSize);
   EXPECT_EQ(statistics[1].committed_bytes, 0u);
-  EXPECT_EQ(loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges),
-            4 * kSlabSize);
+  footprint =
+      loom_serve_memory_ranges_footprint(IREE_ARRAYSIZE(ranges), ranges);
+  EXPECT_EQ(footprint.total_bytes, 4 * kSlabSize);
+  EXPECT_EQ(footprint.missing_bytes, 3 * kSlabSize);
   CheckRetained(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
   IREE_ASSERT_OK(loom_serve_memory_pool_try_commit(pool, 3, ranges, &admitted));
   EXPECT_TRUE(admitted);
   EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes,
             2 * kSlabSize);
-  EXPECT_EQ(loom_serve_memory_ranges_footprint(3, ranges), 2 * kSlabSize);
+  footprint = loom_serve_memory_ranges_footprint(3, ranges);
+  EXPECT_EQ(footprint.total_bytes, 2 * kSlabSize);
+  EXPECT_EQ(footprint.missing_bytes, 0u);
   RoundTrip(loom_serve_virtual_buffer_handle(first), kSlabSize, 0x87654321);
   IREE_ASSERT_OK(loom_serve_memory_pool_try_commit(pool, 3, ranges, &admitted));
   EXPECT_TRUE(admitted);

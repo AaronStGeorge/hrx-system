@@ -1604,7 +1604,8 @@ INSTANTIATE_TEST_SUITE_P(Backing, WeightsTest, ::testing::Values(false, true));
 // The failed reclaimer belongs to a private pool; native devices remain shared.
 class RejectedAdmissionWeightsTest : public WeightsTest {};
 
-TEST_P(RejectedAdmissionWeightsTest, PreflightFailureReleasesAllPins) {
+TEST_P(RejectedAdmissionWeightsTest,
+       LogicalDenialDoesNotInvokePhysicalReclamation) {
   ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
   IREE_ASSERT_OK(Compile(0, "raw"));
   const auto root = Root(0, 0);
@@ -1619,11 +1620,9 @@ TEST_P(RejectedAdmissionWeightsTest, PreflightFailureReleasesAllPins) {
                 return iree_make_status(IREE_STATUS_UNAVAILABLE,
                                         "parameter capacity reclaim failed");
               }});
-  retirement_code_ = IREE_STATUS_UNAVAILABLE;
   for (int attempt = 0; attempt < 2; ++attempt) {
     loom_serve_residency_admission_t admission;
-    IREE_EXPECT_STATUS_IS(retirement_code_, loom_serve_residency_try_admit(
-                                                residencies_[0], &admission));
+    IREE_ASSERT_OK(loom_serve_residency_try_admit(residencies_[0], &admission));
     EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);
     const auto snapshot = loom_serve_residency_snapshot(residencies_[0]);
     EXPECT_FALSE(snapshot.active);

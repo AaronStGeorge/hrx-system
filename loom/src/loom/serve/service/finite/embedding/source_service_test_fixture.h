@@ -86,6 +86,8 @@ class SourceEmbeddingServiceTest : public ::testing::Test {
  protected:
   virtual iree_host_size_t DeviceCount() const;
 
+  virtual uint64_t BatchUnits() const;
+
   void SetUp() override;
 
   static iree_status_t ListenerAllocatorControl(

@@ -29,6 +29,10 @@ using loom_serve::testing::StalledStderr;
 
 class ElasticEmbeddingServiceTest : public SourceEmbeddingServiceTest {
  protected:
+  // 4096 parameter bytes + two (16 + 52 * 32)-byte invocations fit in
+  // 7680 bytes. Two parameter pages still cannot fit, preserving eviction.
+  uint64_t BatchUnits() const override { return 32; }
+
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceEmbeddingServiceTest::SetUp());
     // Cold-allocation holds must not depend on a previous test's cached slabs.

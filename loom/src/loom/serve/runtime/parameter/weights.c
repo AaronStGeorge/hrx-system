@@ -1545,6 +1545,17 @@ loom_serve_memory_statistics_t loom_serve_weights_statistics(
   return weights->statistics;
 }
 
+loom_serve_memory_usage_t loom_serve_weights_memory_usage(
+    const loom_serve_weights_t* weights) {
+  return (loom_serve_memory_usage_t){
+      .reserved_bytes = weights->statistics.reserved_bytes,
+      .committed_bytes = weights->statistics.committed_bytes,
+      .pending_bytes = weights->statistics.pending_bytes,
+      .releasing_bytes = weights->statistics.releasing_bytes,
+      .released_bytes = weights->statistics.released_bytes,
+  };
+}
+
 loom_serve_weight_activity_t loom_serve_weights_activity(
     const loom_serve_weights_t* weights) {
   return weights->activity;

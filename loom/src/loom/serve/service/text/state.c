@@ -1613,7 +1613,8 @@ iree_status_t loom_serve_text_state_row_prepare_reserve(
   reservation->commitments = commitments;
   reservation->commitment_count = commitment_count;
   reservation->footprint_bytes =
-      loom_serve_memory_ranges_footprint(commitment_count, commitments);
+      loom_serve_memory_ranges_footprint(commitment_count, commitments)
+          .total_bytes;
   iree_allocator_free(state->host_allocator, ranges);
   if (iree_status_is_ok(status)) {
     *out_reservation = reservation;

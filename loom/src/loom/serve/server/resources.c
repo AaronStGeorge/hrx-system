@@ -19,8 +19,11 @@ void loom_serve_resources_set_observer(const loom_serve_resources_t* resources,
   }
   for (iree_host_size_t i = 0;
        i < loom_serve_device_group_count(resources->device_group); ++i) {
-    loom_serve_memory_pool_t* pool = loom_serve_device_memory_pool(
-        loom_serve_device_group_at(resources->device_group, i));
+    loom_serve_device_t* device =
+        loom_serve_device_group_at(resources->device_group, i);
+    loom_serve_memory_pool_t* pool = loom_serve_device_memory_pool(device);
+    loom_serve_residency_cache_set_observer(
+        loom_serve_device_residency_cache(device), observer);
     if (pool) {
       loom_serve_memory_pool_set_observer(pool, observer.wake,
                                           observer.user_data);
@@ -57,8 +60,11 @@ bool loom_serve_resources_is_pending(const loom_serve_resources_t* resources) {
   bool pending = false;
   for (iree_host_size_t i = 0;
        i < loom_serve_device_group_count(resources->device_group); ++i) {
-    loom_serve_memory_pool_t* pool = loom_serve_device_memory_pool(
-        loom_serve_device_group_at(resources->device_group, i));
+    loom_serve_device_t* device =
+        loom_serve_device_group_at(resources->device_group, i);
+    pending |= loom_serve_residency_cache_is_pending(
+        loom_serve_device_residency_cache(device));
+    loom_serve_memory_pool_t* pool = loom_serve_device_memory_pool(device);
     if (pool) {
       pending |= loom_serve_memory_pool_is_pending(pool);
     }

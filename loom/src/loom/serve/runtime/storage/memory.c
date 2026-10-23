@@ -546,6 +546,11 @@ uint64_t loom_serve_memory_pool_limit(const loom_serve_memory_pool_t* pool) {
   return pool->limit_bytes;
 }
 
+uint64_t loom_serve_memory_pool_live_bytes(
+    const loom_serve_memory_pool_t* pool) {
+  return loom_serve_memory_demand_total(pool->demand);
+}
+
 iree_status_t loom_serve_memory_pool_query_status(
     loom_serve_memory_pool_t* pool) {
   loom_serve_memory_pool_collect(pool);
@@ -694,9 +699,9 @@ static iree_device_size_t loom_serve_memory_slab_length(
                   buffer->byte_length - index * buffer->geometry.slab_size);
 }
 
-uint64_t loom_serve_memory_ranges_footprint(
+loom_serve_memory_footprint_t loom_serve_memory_ranges_footprint(
     iree_host_size_t range_count, const loom_serve_memory_range_t* ranges) {
-  uint64_t bytes = 0;
+  loom_serve_memory_footprint_t footprint = {0};
   for (iree_host_size_t r = 0; r < range_count; ++r) {
     const loom_serve_memory_range_t* range = &ranges[r];
     const iree_device_size_t slab_size = range->buffer->geometry.slab_size;
@@ -707,7 +712,12 @@ uint64_t loom_serve_memory_ranges_footprint(
       if (!slab->counted) {
         slab->counted = true;
         const uint64_t length = loom_serve_memory_slab_length(range->buffer, i);
-        bytes += iree_min(length, UINT64_MAX - bytes);
+        footprint.total_bytes +=
+            iree_min(length, UINT64_MAX - footprint.total_bytes);
+        if (!slab->physical && !slab->in_flight) {
+          footprint.missing_bytes +=
+              iree_min(length, UINT64_MAX - footprint.missing_bytes);
+        }
       }
     }
   }
@@ -720,7 +730,7 @@ uint64_t loom_serve_memory_ranges_footprint(
       range->buffer->slabs[i].counted = false;
     }
   }
-  return bytes;
+  return footprint;
 }
 
 static uint64_t* loom_serve_memory_slab_demand(

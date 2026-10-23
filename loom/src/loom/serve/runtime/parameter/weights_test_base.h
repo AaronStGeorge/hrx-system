@@ -434,7 +434,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     }
   }
 
-  void UseDeferredBacking() {
+  void UseDeferredBacking(uint64_t memory_limit = 2 * kSlabBytes) {
     if (!pool_) {
       return;
     }
@@ -472,7 +472,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
         &capabilities, deferred_backing_, kSlabBytes, &geometry));
     const loom_serve_memory_geometry_t geometries[] = {geometry, geometry};
     IREE_ASSERT_OK(loom_serve_memory_pool_allocate(
-        group, scope, deferred_backing_, transfer_, geometries, 2 * kSlabBytes,
+        group, scope, deferred_backing_, transfer_, geometries, memory_limit,
         host_allocator_, &owned_pool_));
     pool_ = owned_pool_;
     IREE_ASSERT_OK(loom_serve_residency_cache_allocate(pool_, host_allocator_,

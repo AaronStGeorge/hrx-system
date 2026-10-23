@@ -1107,15 +1107,16 @@ iree_status_t loom_serve_finite_model_advance_batch(
   IREE_RETURN_IF_ERROR(
       loom_serve_executables_advance(model->executables, cancel, out_complete));
   if (!cancel && *out_complete) {
-    const iree_device_size_t extents[] = {
-        iree_vm_buffer_length(model->invocation.payload),
-        loom_serve_finite_result_output_length(model->invocation.result),
-        loom_serve_module_workspace_requirement(model->control.runner)
-            .allocation_size,
-    };
-    return loom_serve_residency_check_working_set(
-        loom_serve_executables_residency(model->executables),
-        IREE_ARRAYSIZE(extents), extents);
+    const uint64_t input_bytes =
+        iree_vm_buffer_length(model->invocation.payload);
+    const uint64_t private_bytes =
+        input_bytes +
+        iree_min(loom_serve_module_workspace_requirement(model->control.runner)
+                     .allocation_size,
+                 UINT64_MAX - input_bytes);
+    return loom_serve_residency_prepare_working_set(
+        loom_serve_executables_residency(model->executables), private_bytes,
+        loom_serve_finite_result_output_length(model->invocation.result));
   }
   return iree_ok_status();
 }
@@ -1175,16 +1176,23 @@ iree_status_t loom_serve_finite_model_submit(
         loom_serve_execution_dealloca(execution, model->buffers[0], &value);
   }
   if (iree_status_is_ok(status)) {
-    loom_serve_finite_result_bind(
-        model->invocation.result, execution,
-        iree_hal_buffer_allocated_buffer(model->buffers[1]));
-    *out_result = model->invocation.result;
-    model->invocation.result = NULL;
-    *out_frontier = loom_serve_finite_result_ready(*out_result);
+    iree_hal_buffer_t* output =
+        iree_hal_buffer_allocated_buffer(model->buffers[1]);
+    iree_hal_buffer_retain(output);
+    status = loom_serve_residency_track_output(
+        loom_serve_executables_residency(model->executables), &output);
+    if (iree_status_is_ok(status)) {
+      loom_serve_finite_result_bind(model->invocation.result, execution,
+                                    output);
+      *out_result = model->invocation.result;
+      model->invocation.result = NULL;
+      *out_frontier = loom_serve_finite_result_ready(*out_result);
+    }
+    iree_hal_buffer_release(output);
   }
   // Producer captures retain tracked views through actual queue retirement.
-  // The result owns the raw output root independently, so its later consumers
-  // cannot keep source parameters or command programs alive.
+  // The result's independent output view retains capacity through its final
+  // consumer, without retaining source parameters or command programs.
   for (iree_host_size_t i = 0; i < 2; ++i) {
     iree_hal_buffer_release(model->buffers[i]);
     model->buffers[i] = NULL;

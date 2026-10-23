@@ -157,6 +157,9 @@ TEST_P(WeightPackingTest,
 
 TEST_P(WeightPackingTest,
        InvocationWorkingSetAdmitsStateAndParametersTogether) {
+  // One weight slab, one state slab, and captured input lanes fit together.
+  // Adding a second state slab leaves no space for those activation lanes.
+  ASSERT_NO_FATAL_FAILURE(UseDeferredBacking(3 * kSlabBytes));
   WriteFactors(path_.path(), 0, 8);
   WriteFactors(adapter_path_.path(), 100, 4);
   IREE_ASSERT_OK(Compile(0, "packed_target"));
@@ -173,8 +176,9 @@ TEST_P(WeightPackingTest,
         pool_, loom_serve_device_weight_geometry(device_owner_), 2 * kSlabBytes,
         256, &state_statistics_, &state_));
     range = {state_, 0, 2 * kSlabBytes};
-    // Either resource fits alone. Their union does not: neither backing nor
-    // parameter I/O may start, and the caller retains no partial pin.
+    // Either resource fits alone. Their union plus activation staging does
+    // not: neither backing nor parameter I/O may start, and the caller retains
+    // no partial pin.
     IREE_ASSERT_OK(loom_serve_residency_try_admit_state(
         residencies_[0], 1, &range, nullptr, 0, &admission, &operation));
     EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);

@@ -28,7 +28,8 @@ typedef struct loom_serve_resources_t {
   loom_serve_http_listener_t* const* listeners;
 } loom_serve_resources_t;
 
-// Registers the router's nonblocking scheduling wake with native capacity work.
+// Registers the router's nonblocking scheduling wake with native capacity work
+// and final output retirement.
 // An empty observer detaches and joins callback access before router teardown.
 void loom_serve_resources_set_observer(const loom_serve_resources_t* resources,
                                        loom_serve_wake_callback_t observer);
@@ -39,8 +40,9 @@ void loom_serve_resources_set_observer(const loom_serve_resources_t* resources,
 iree_status_t loom_serve_resources_query_status(
     const loom_serve_resources_t* resources);
 
-// Whether native capacity work still borrows application resources. Router
-// shutdown joins this independently of model readiness or semaphore failure.
+// Whether native capacity work or accepted outputs still borrow application
+// resources. Router shutdown joins this independently of model readiness or
+// semaphore failure.
 bool loom_serve_resources_is_pending(const loom_serve_resources_t* resources);
 
 // Writes a JSON object with bound listeners, immutable device identities and
