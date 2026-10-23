@@ -588,7 +588,9 @@ iree_hal_webgpu_device_query_semaphore_compatibility(
 
 static iree_status_t iree_hal_webgpu_device_profiling_begin(
     iree_hal_device_t* base_device,
-    const iree_hal_device_profiling_options_t* options) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
+  (void)session_id;
   // WebGPU has no user-accessible profiling API.
   return iree_ok_status();
 }

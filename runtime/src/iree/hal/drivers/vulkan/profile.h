@@ -45,7 +45,7 @@ typedef struct iree_hal_vulkan_profile_recorder_options_t {
   iree_string_view_t name;
 
   // Process-local profiling session identifier assigned by the caller.
-  uint64_t session_id;
+  iree_hal_profile_session_id_t session_id;
 
   // Number of physical device metadata records in |device_records|.
   iree_host_size_t device_record_count;

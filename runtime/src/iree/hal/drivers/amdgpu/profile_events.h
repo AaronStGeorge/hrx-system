@@ -88,7 +88,8 @@ void iree_hal_amdgpu_profile_event_streams_clear_queue(
 // Records one memory event if |session_id| matches |active_session_id|.
 bool iree_hal_amdgpu_profile_event_streams_record_memory_event(
     iree_hal_amdgpu_profile_event_streams_t* streams,
-    uint64_t active_session_id, uint64_t session_id,
+    iree_hal_profile_session_id_t active_session_id,
+    iree_hal_profile_session_id_t session_id,
     const iree_hal_profile_memory_event_t* event);
 
 // Records one queue event.
@@ -99,13 +100,13 @@ void iree_hal_amdgpu_profile_event_streams_record_queue_event(
 // Writes pending memory events to |sink|.
 iree_status_t iree_hal_amdgpu_profile_event_streams_write_memory(
     iree_hal_amdgpu_profile_event_streams_t* streams,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_allocator_t host_allocator);
 
 // Writes pending queue events to |sink|.
 iree_status_t iree_hal_amdgpu_profile_event_streams_write_queue(
     iree_hal_amdgpu_profile_event_streams_t* streams,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_allocator_t host_allocator);
 
 #ifdef __cplusplus

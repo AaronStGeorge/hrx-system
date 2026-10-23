@@ -20,11 +20,14 @@
 
 #else
 
+#if !defined(IREE_PLATFORM_WINDOWS)
+#include <pthread.h>
+#endif  // !IREE_PLATFORM_WINDOWS
+
 #if defined(IREE_PLATFORM_ANDROID)
 #include <unistd.h>
 #define iree_thread_id() ((uint64_t)gettid())
 #elif defined(IREE_PLATFORM_APPLE)
-#include <pthread.h>
 #define iree_thread_id() ((uint64_t)pthread_mach_thread_np(pthread_self()))
 #elif defined(IREE_PLATFORM_LINUX)
 #include <sys/syscall.h>
@@ -264,5 +267,59 @@ void iree_tracing_memory_free(const char* name, size_t name_length, void* ptr) {
   fflush(file);
 #endif  // IREE_TRACING_CONSOLE_FLUSH
 }
+
+#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+static iree_atomic_int32_t iree_tracing_reallocation_active =
+    IREE_ATOMIC_VAR_INIT(0);
+#if defined(IREE_PLATFORM_WINDOWS)
+static SRWLOCK iree_tracing_reallocation_mutex = SRWLOCK_INIT;
+#else
+static pthread_mutex_t iree_tracing_reallocation_mutex =
+    PTHREAD_MUTEX_INITIALIZER;
+#endif  // IREE_PLATFORM_WINDOWS
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+
+void iree_tracing_allocation_wait_for_reallocations(void) {
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+  if (iree_atomic_load(&iree_tracing_reallocation_active,
+                       iree_memory_order_acquire)) {
+#if defined(IREE_PLATFORM_WINDOWS)
+    AcquireSRWLockExclusive(&iree_tracing_reallocation_mutex);
+    ReleaseSRWLockExclusive(&iree_tracing_reallocation_mutex);
+#else
+    pthread_mutex_lock(&iree_tracing_reallocation_mutex);
+    pthread_mutex_unlock(&iree_tracing_reallocation_mutex);
+#endif  // IREE_PLATFORM_WINDOWS
+  }
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+}
+
+void iree_tracing_reallocation_begin(void) {
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+#if defined(IREE_PLATFORM_WINDOWS)
+  AcquireSRWLockExclusive(&iree_tracing_reallocation_mutex);
+#else
+  pthread_mutex_lock(&iree_tracing_reallocation_mutex);
+#endif  // IREE_PLATFORM_WINDOWS
+  iree_atomic_store(&iree_tracing_reallocation_active, 1,
+                    iree_memory_order_release);
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+}
+
+void iree_tracing_reallocation_end(void) {
+#if !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+  iree_atomic_store(&iree_tracing_reallocation_active, 0,
+                    iree_memory_order_release);
+#if defined(IREE_PLATFORM_WINDOWS)
+  ReleaseSRWLockExclusive(&iree_tracing_reallocation_mutex);
+#else
+  pthread_mutex_unlock(&iree_tracing_reallocation_mutex);
+#endif  // IREE_PLATFORM_WINDOWS
+#endif  // !IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+}
+
+#endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
 
 #endif  // IREE_TRACING_FEATURES

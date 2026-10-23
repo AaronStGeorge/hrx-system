@@ -32,6 +32,13 @@ extern "C" {
 // implementation documents a stricter contract.
 typedef struct iree_hal_profile_sink_t iree_hal_profile_sink_t;
 
+// Process-local identity of one HAL profiling session.
+//
+// Session identifiers namespace every producer-defined identifier emitted
+// during a capture. Zero indicates that no profiling session is active.
+typedef uint64_t iree_hal_profile_session_id_t;
+#define IREE_HAL_PROFILE_SESSION_ID_NONE ((iree_hal_profile_session_id_t)0)
+
 // Bitfield specifying properties of a profiling chunk.
 typedef uint64_t iree_hal_profile_chunk_flags_t;
 enum iree_hal_profile_chunk_flag_bits_t {
@@ -58,7 +65,7 @@ typedef struct iree_hal_profile_chunk_metadata_t {
   // Human-readable stream or artifact name.
   iree_string_view_t name;
   // Process-local profiling session identifier.
-  uint64_t session_id;
+  iree_hal_profile_session_id_t session_id;
   // Producer-defined stream identifier within |session_id|.
   uint64_t stream_id;
   // Producer-defined event identifier associated with this chunk, or 0.

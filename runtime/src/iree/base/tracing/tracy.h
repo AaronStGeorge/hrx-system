@@ -143,6 +143,9 @@ void iree_tracing_mutex_after_unlock(uint32_t lock_id);
 
 #if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
 void* iree_tracing_obscure_ptr(void* ptr);
+void iree_tracing_allocation_wait_for_reallocations(void);
+void iree_tracing_reallocation_begin(void);
+void iree_tracing_reallocation_end(void);
 #endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
 
 #endif  // IREE_TRACING_FEATURES

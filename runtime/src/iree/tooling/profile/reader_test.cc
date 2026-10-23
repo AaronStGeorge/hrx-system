@@ -85,12 +85,14 @@ static void AppendProfileFileHeader(std::vector<uint8_t>* storage,
 
 static void AppendProfileFileRecord(
     std::vector<uint8_t>* storage,
-    iree_hal_profile_file_record_type_t record_type) {
+    iree_hal_profile_file_record_type_t record_type,
+    iree_hal_profile_session_id_t session_id = 1) {
   iree_hal_profile_file_record_header_t header;
   memset(&header, 0, sizeof(header));
   header.record_length = sizeof(header);
   header.header_length = sizeof(header);
   header.record_type = record_type;
+  header.session_id = session_id;
 
   const iree_host_size_t offset = storage->size();
   storage->resize(offset + sizeof(header));
@@ -110,6 +112,49 @@ static iree_status_t CountProfileFileRecord(
   EXPECT_EQ(counter->count, record_index);
   ++counter->count;
   return iree_ok_status();
+}
+
+typedef struct ProfileRecordSpec {
+  // File record kind to append.
+  iree_hal_profile_file_record_type_t record_type;
+  // Profiling session owning the record.
+  iree_hal_profile_session_id_t session_id;
+} ProfileRecordSpec;
+
+static iree_status_t IterateProfileRecordSequence(
+    std::initializer_list<ProfileRecordSpec> records,
+    iree_host_size_t* out_record_count) {
+  std::vector<uint8_t> storage;
+  AppendProfileFileHeader(&storage, /*file_length=*/0);
+  for (const ProfileRecordSpec& record : records) {
+    AppendProfileFileRecord(&storage, record.record_type, record.session_id);
+  }
+  reinterpret_cast<iree_hal_profile_file_header_t*>(storage.data())
+      ->file_length = storage.size();
+
+  iree_io_file_contents_t contents;
+  memset(&contents, 0, sizeof(contents));
+  contents.const_buffer =
+      iree_make_const_byte_span(storage.data(), storage.size());
+
+  iree_profile_file_t profile_file;
+  memset(&profile_file, 0, sizeof(profile_file));
+  profile_file.host_allocator = iree_allocator_system();
+  profile_file.contents = &contents;
+  IREE_RETURN_IF_ERROR(iree_hal_profile_file_parse_header(
+      contents.const_buffer, &profile_file.header,
+      &profile_file.first_record_offset));
+  profile_file.file_length = (iree_host_size_t)profile_file.header.file_length;
+
+  RecordCounter counter = {};
+  iree_profile_file_record_callback_t callback = {
+      .fn = CountProfileFileRecord,
+      .user_data = &counter,
+  };
+  iree_status_t status =
+      iree_profile_file_for_each_record(&profile_file, callback);
+  *out_record_count = counter.count;
+  return status;
 }
 
 TEST(ProfileTypedRecordTest, IteratesTypedRecords) {
@@ -290,6 +335,7 @@ TEST(ProfileFileReaderTest, IteratesOnlyLogicalFileLength) {
 
   iree_profile_file_t profile_file;
   memset(&profile_file, 0, sizeof(profile_file));
+  profile_file.host_allocator = iree_allocator_system();
   profile_file.contents = &contents;
   IREE_ASSERT_OK(iree_hal_profile_file_parse_header(
       contents.const_buffer, &profile_file.header,
@@ -303,6 +349,94 @@ TEST(ProfileFileReaderTest, IteratesOnlyLogicalFileLength) {
   };
   IREE_ASSERT_OK(iree_profile_file_for_each_record(&profile_file, callback));
   EXPECT_EQ(3u, counter.count);
+}
+
+TEST(ProfileFileReaderTest, AcceptsInterleavedSessions) {
+  iree_host_size_t record_count = 0;
+  IREE_ASSERT_OK(IterateProfileRecordSequence(
+      {
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK, 11},
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 22},
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK, 22},
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 11},
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK, 22},
+          {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 22},
+      },
+      &record_count));
+  EXPECT_EQ(record_count, 7u);
+}
+
+TEST(ProfileFileReaderTest, RejectsMissingSessionIdentifier) {
+  iree_host_size_t record_count = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_DATA_LOSS,
+                        IterateProfileRecordSequence(
+                            {{IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN,
+                              IREE_HAL_PROFILE_SESSION_ID_NONE}},
+                            &record_count));
+}
+
+TEST(ProfileFileReaderTest, RejectsRepeatedSessionIdentifier) {
+  iree_host_size_t record_count = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DATA_LOSS,
+      IterateProfileRecordSequence(
+          {
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+          },
+          &record_count));
+}
+
+TEST(ProfileFileReaderTest, RejectsChunkOutsideActiveSession) {
+  iree_host_size_t record_count = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DATA_LOSS,
+      IterateProfileRecordSequence(
+          {{IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK, 11}}, &record_count));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DATA_LOSS,
+      IterateProfileRecordSequence(
+          {
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK, 11},
+          },
+          &record_count));
+}
+
+TEST(ProfileFileReaderTest, RejectsMismatchedSessionEnd) {
+  iree_host_size_t record_count = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DATA_LOSS,
+      IterateProfileRecordSequence(
+          {
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 22},
+          },
+          &record_count));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DATA_LOSS,
+      IterateProfileRecordSequence(
+          {
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_END, 11},
+          },
+          &record_count));
+}
+
+TEST(ProfileFileReaderTest, RejectsUnterminatedSession) {
+  iree_host_size_t record_count = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DATA_LOSS,
+      IterateProfileRecordSequence(
+          {
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN, 11},
+              {IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK, 11},
+          },
+          &record_count));
 }
 
 }  // namespace

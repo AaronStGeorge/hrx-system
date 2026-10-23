@@ -182,8 +182,8 @@ bool iree_hal_amdgpu_profile_metadata_function_matches(
 // from the durable registry.
 iree_status_t iree_hal_amdgpu_profile_metadata_write(
     iree_hal_amdgpu_profile_metadata_registry_t* registry,
-    iree_hal_profile_sink_t* sink, uint64_t session_id, iree_string_view_t name,
-    bool emit_executable_artifacts,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
+    iree_string_view_t name, bool emit_executable_artifacts,
     iree_hal_amdgpu_profile_metadata_cursor_t* cursor);
 
 #ifdef __cplusplus

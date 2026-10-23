@@ -15,6 +15,8 @@ extern "C" {
 
 // Executable function metadata indexed by executable id and function ordinal.
 typedef struct iree_profile_model_function_t {
+  // Capture-wide profiling session identifier owning this function.
+  iree_hal_profile_session_id_t session_id;
   // Session-local executable identifier owning this function.
   uint64_t executable_id;
   // Flags specifying which optional function fields are populated.
@@ -40,6 +42,8 @@ typedef struct iree_profile_model_function_t {
 
 // Executable metadata indexed by session-local executable id.
 typedef struct iree_profile_model_executable_t {
+  // Capture-wide profiling session identifier owning this executable.
+  iree_hal_profile_session_id_t session_id;
   // Immutable executable metadata record borrowed from the profile bundle.
   iree_hal_profile_executable_record_t record;
   // First function row owned by this executable, or IREE_HOST_SIZE_MAX.
@@ -52,6 +56,8 @@ typedef struct iree_profile_model_executable_t {
 
 // Command-buffer metadata indexed by session-local command-buffer id.
 typedef struct iree_profile_model_command_buffer_t {
+  // Capture-wide profiling session identifier owning this command buffer.
+  iree_hal_profile_session_id_t session_id;
   // Immutable command-buffer metadata record borrowed from the profile bundle.
   iree_hal_profile_command_buffer_record_t record;
   // First command-operation row for this command buffer, or IREE_HOST_SIZE_MAX.
@@ -64,6 +70,8 @@ typedef struct iree_profile_model_command_buffer_t {
 
 // Command-operation metadata indexed by command-buffer id and command index.
 typedef struct iree_profile_model_command_operation_t {
+  // Capture-wide profiling session identifier owning this operation.
+  iree_hal_profile_session_id_t session_id;
   // Immutable command-operation metadata record copied from the profile bundle.
   iree_hal_profile_command_operation_record_t record;
   // Next command-operation row in the owning command buffer, or
@@ -73,12 +81,16 @@ typedef struct iree_profile_model_command_operation_t {
 
 // Queue metadata indexed by physical device, queue ordinal, and stream id.
 typedef struct iree_profile_model_queue_t {
+  // Capture-wide profiling session identifier owning this queue.
+  iree_hal_profile_session_id_t session_id;
   // Immutable queue metadata record borrowed from the profile bundle.
   iree_hal_profile_queue_record_t record;
 } iree_profile_model_queue_t;
 
 // Device metric source metadata indexed by source id.
 typedef struct iree_profile_model_metric_source_t {
+  // Capture-wide profiling session identifier owning this metric source.
+  iree_hal_profile_session_id_t session_id;
   // Immutable metric source metadata copied from the profile bundle.
   iree_hal_profile_device_metric_source_record_t record;
   // Borrowed source name from the mapped profile bundle.
@@ -87,6 +99,8 @@ typedef struct iree_profile_model_metric_source_t {
 
 // Device metric descriptor metadata indexed by source id and metric id.
 typedef struct iree_profile_model_metric_descriptor_t {
+  // Capture-wide profiling session identifier owning this metric descriptor.
+  iree_hal_profile_session_id_t session_id;
   // Immutable metric descriptor metadata copied from the profile bundle.
   iree_hal_profile_device_metric_descriptor_record_t record;
   // Borrowed metric name from the mapped profile bundle.
@@ -97,6 +111,8 @@ typedef struct iree_profile_model_metric_descriptor_t {
 
 // Per-physical-device clock-correlation state.
 typedef struct iree_profile_model_device_t {
+  // Capture-wide profiling session identifier owning this device.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal.
   uint32_t physical_device_ordinal;
   // Device metadata flags observed for this physical device.
@@ -243,46 +259,52 @@ void iree_profile_model_deinitialize(iree_profile_model_t* model);
 // Returns the physical-device model row for |physical_device_ordinal|, creating
 // one if no clock-correlation sample has referenced it yet.
 iree_status_t iree_profile_model_ensure_device(
-    iree_profile_model_t* model, uint32_t physical_device_ordinal,
-    iree_profile_model_device_t** out_device);
+    iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, iree_profile_model_device_t** out_device);
 
 // Returns the physical-device model row for |physical_device_ordinal|.
 const iree_profile_model_device_t* iree_profile_model_find_device(
-    const iree_profile_model_t* model, uint32_t physical_device_ordinal);
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal);
 
 // Returns the queue metadata row for a physical queue stream.
 const iree_profile_model_queue_t* iree_profile_model_find_queue(
-    const iree_profile_model_t* model, uint32_t physical_device_ordinal,
-    uint32_t queue_ordinal, uint64_t stream_id);
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
+    uint64_t stream_id);
 
 // Returns the executable metadata row for |executable_id|.
 const iree_profile_model_executable_t* iree_profile_model_find_executable(
-    const iree_profile_model_t* model, uint64_t executable_id);
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint64_t executable_id);
 
 // Returns the executable function metadata row for |executable_id| and
 // |function_ordinal|.
 const iree_profile_model_function_t* iree_profile_model_find_function(
-    const iree_profile_model_t* model, uint64_t executable_id,
-    uint32_t function_ordinal);
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint64_t executable_id, uint32_t function_ordinal);
 
 // Returns the command-buffer metadata row for |command_buffer_id|.
 const iree_profile_model_command_buffer_t*
 iree_profile_model_find_command_buffer(const iree_profile_model_t* model,
+                                       iree_hal_profile_session_id_t session_id,
                                        uint64_t command_buffer_id);
 
 // Returns the metric source metadata row for |source_id|.
 const iree_profile_model_metric_source_t* iree_profile_model_find_metric_source(
-    const iree_profile_model_t* model, uint64_t source_id);
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint64_t source_id);
 
 // Returns the metric descriptor metadata row for |source_id| and |metric_id|.
 const iree_profile_model_metric_descriptor_t*
-iree_profile_model_find_metric_descriptor(const iree_profile_model_t* model,
-                                          uint64_t source_id,
-                                          uint64_t metric_id);
+iree_profile_model_find_metric_descriptor(
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint64_t source_id, uint64_t metric_id);
 
 // Resolves a metric descriptor reference or fails if metadata is missing.
 iree_status_t iree_profile_model_resolve_metric_descriptor(
-    const iree_profile_model_t* model, uint64_t source_id, uint64_t metric_id,
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint64_t source_id, uint64_t metric_id,
     const iree_profile_model_metric_descriptor_t** out_descriptor);
 
 // Fits a linear device-tick to nanosecond conversion for |device|.
@@ -362,13 +384,14 @@ iree_string_view_t iree_profile_model_format_function_key(
 
 // Resolves an executable/function pair into a human-readable dispatch key.
 iree_status_t iree_profile_model_resolve_dispatch_key(
-    const iree_profile_model_t* model, uint32_t physical_device_ordinal,
-    uint64_t executable_id, uint32_t function_ordinal, char* numeric_buffer,
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, uint64_t executable_id,
+    uint32_t function_ordinal, char* numeric_buffer,
     iree_host_size_t numeric_buffer_capacity, iree_string_view_t* out_key);
 
 // Resolves a command operation into a human-readable operation key.
 iree_status_t iree_profile_model_resolve_command_operation_key(
-    const iree_profile_model_t* model,
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
     const iree_hal_profile_command_operation_record_t* operation,
     char* numeric_buffer, iree_host_size_t numeric_buffer_capacity,
     iree_string_view_t* out_key);

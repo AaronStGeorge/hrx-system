@@ -436,7 +436,8 @@ static void loom_run_hal_profile_summary_copy_function_name(
   }
   iree_string_view_t function_name = iree_string_view_empty();
   if (!iree_hal_profile_statistics_sink_find_function_name(
-          sink, row->executable_id, row->function_ordinal, &function_name)) {
+          sink, row->session_id, row->executable_id, row->function_ordinal,
+          &function_name)) {
     return;
   }
   iree_host_size_t copy_length = iree_min(

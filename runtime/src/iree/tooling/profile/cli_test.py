@@ -68,6 +68,14 @@ def _find_row(rows, row_type):
     raise AssertionError(f"missing row type {row_type!r}: {rows!r}")
 
 
+def _find_rows(rows, row_type):
+    return [
+        row
+        for row in rows
+        if row.get("type") == row_type or row.get("record_type") == row_type
+    ]
+
+
 def _row_type_set(rows):
     return {row.get("type", row.get("record_type")) for row in rows}
 
@@ -133,6 +141,88 @@ class IreeProfileCliTest(unittest.TestCase):
         self.assertIn("host_dispatch_group", _row_type_set(dispatch_rows))
         self.assertIn("statistics_summary", _row_type_set(statistics_rows))
         self.assertIn("statistics_row", _row_type_set(statistics_rows))
+
+    def test_producer_local_ids_are_scoped_to_their_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile_path = self._create_profile(directory, "--duplicate_local_ids")
+            summary_rows = self._profile_jsonl(profile_path, "summary")
+            command_rows = self._profile_jsonl(profile_path, "command")
+            filtered_command_rows = self._profile_jsonl(
+                profile_path, "command", "--id=7"
+            )
+            dispatch_rows = self._profile_jsonl(
+                profile_path, "dispatch", "--dispatch_events"
+            )
+            memory_rows = self._profile_jsonl(profile_path, "memory")
+            filtered_memory_rows = self._profile_jsonl(
+                profile_path, "memory", "--id=31"
+            )
+            statistics_rows = self._profile_jsonl(profile_path, "statistics")
+
+            output_path = os.path.join(directory, "sessions.ireeperf.jsonl")
+            _run_checked(
+                [
+                    self.iree_profile,
+                    "--format=ireeperf-jsonl",
+                    f"--output={output_path}",
+                    "export",
+                    profile_path,
+                ]
+            )
+            with open(output_path, "r", encoding="utf-8") as file:
+                export_rows = [json.loads(line) for line in file if line.strip()]
+
+        device_rows = _find_rows(summary_rows, "device_summary")
+        self.assertEqual({row["session_id"] for row in device_rows}, {1, 2})
+        self.assertEqual(
+            {row["tick_frequency_hz"] for row in device_rows},
+            {50_000_000.0, 100_000_000.0},
+        )
+
+        operations = _find_rows(command_rows, "command_operation")
+        self.assertEqual({row["session_id"] for row in operations}, {1, 2})
+        self.assertEqual({row["command_buffer_id"] for row in operations}, {7})
+        filtered_operations = _find_rows(filtered_command_rows, "command_operation")
+        self.assertEqual({row["session_id"] for row in filtered_operations}, {1, 2})
+
+        dispatches = _find_rows(dispatch_rows, "dispatch_event")
+        self.assertEqual({row["session_id"] for row in dispatches}, {1, 2})
+        self.assertEqual({row["event_id"] for row in dispatches}, {200})
+
+        memory_devices = _find_rows(memory_rows, "memory_device")
+        self.assertEqual({row["session_id"] for row in memory_devices}, {1, 2})
+        allocations = _find_rows(memory_rows, "memory_allocation")
+        self.assertEqual({row["session_id"] for row in allocations}, {1, 2})
+        self.assertEqual({row["allocation_id"] for row in allocations}, {31, 32})
+        filtered_allocations = _find_rows(filtered_memory_rows, "memory_allocation")
+        self.assertEqual({row["session_id"] for row in filtered_allocations}, {1, 2})
+        self.assertEqual({row["allocation_id"] for row in filtered_allocations}, {31})
+
+        function_rows = [
+            row
+            for row in statistics_rows
+            if row.get("type") == "statistics_row"
+            and row.get("row_type") == "dispatch_function"
+        ]
+        self.assertEqual({row["session_id"] for row in function_rows}, {1, 2})
+        self.assertEqual(
+            {row["function_name"] for row in function_rows},
+            {"smoke_function", "smoke_function_second"},
+        )
+
+        schema = _find_row(export_rows, "schema")
+        self.assertEqual(schema["schema_version"], 18)
+        exported_functions = _find_rows(export_rows, "executable_function")
+        self.assertEqual(
+            {
+                (row["session_id"], row["executable_id"], row["name"])
+                for row in exported_functions
+            },
+            {
+                (1, 13, "smoke_function"),
+                (2, 13, "smoke_function_second"),
+            },
+        )
 
     def test_statistics_reports_aggregate_row_families(self):
         with tempfile.TemporaryDirectory() as directory:

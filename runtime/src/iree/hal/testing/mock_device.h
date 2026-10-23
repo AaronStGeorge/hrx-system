@@ -73,6 +73,11 @@ iree_status_t iree_hal_mock_device_create(
     const iree_hal_mock_device_options_t* options,
     iree_allocator_t host_allocator, iree_hal_device_t** out_device);
 
+// Returns the most recent profiling session identity passed to the mock device.
+// Returns IREE_HAL_PROFILE_SESSION_ID_NONE before the first profiling begin.
+iree_hal_profile_session_id_t iree_hal_mock_device_profile_session_id(
+    iree_hal_device_t* device);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

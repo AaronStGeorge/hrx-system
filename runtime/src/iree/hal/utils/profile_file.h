@@ -67,7 +67,7 @@ typedef struct iree_hal_profile_file_record_header_t {
   // Total payload byte length after content type and name strings.
   uint64_t payload_length;
   // Profiling session identifier from iree_hal_profile_chunk_metadata_t.
-  uint64_t session_id;
+  iree_hal_profile_session_id_t session_id;
   // Stream identifier from iree_hal_profile_chunk_metadata_t.
   uint64_t stream_id;
   // Event identifier from iree_hal_profile_chunk_metadata_t.

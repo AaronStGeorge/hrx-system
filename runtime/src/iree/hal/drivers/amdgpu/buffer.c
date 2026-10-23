@@ -48,7 +48,7 @@ struct iree_hal_amdgpu_buffer_t {
   uint64_t profile_allocation_id;
 
   // Profiling session id owning |profile_allocation_id|.
-  uint64_t profile_session_id;
+  iree_hal_profile_session_id_t profile_session_id;
 
   // Producer-defined memory pool id used for profiling events.
   uint64_t profile_pool_id;
@@ -371,7 +371,7 @@ static void iree_hal_amdgpu_buffer_initialize(
   out_buffer->release_callback = release_callback;
   IREE_TRACE(out_buffer->allocation_trace_id = NULL);
   out_buffer->profile_allocation_id = 0;
-  out_buffer->profile_session_id = 0;
+  out_buffer->profile_session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   out_buffer->profile_pool_id = 0;
   out_buffer->profile_physical_device_ordinal = UINT32_MAX;
   out_buffer->profile_alignment = 0;
@@ -451,8 +451,8 @@ void iree_hal_amdgpu_buffer_trace_allocation(iree_hal_buffer_t* base_buffer) {
 }
 
 void iree_hal_amdgpu_buffer_set_profile_allocation(
-    iree_hal_buffer_t* base_buffer, uint64_t session_id, uint64_t allocation_id,
-    uint64_t pool_id, uint32_t physical_device_ordinal,
+    iree_hal_buffer_t* base_buffer, iree_hal_profile_session_id_t session_id,
+    uint64_t allocation_id, uint64_t pool_id, uint32_t physical_device_ordinal,
     iree_device_size_t alignment) {
   iree_hal_amdgpu_buffer_t* buffer = iree_hal_amdgpu_buffer_cast(base_buffer);
   buffer->profile_allocation_id = allocation_id;
@@ -505,7 +505,7 @@ static void iree_hal_amdgpu_buffer_destroy(iree_hal_buffer_t* base_buffer) {
   memset(&buffer->native, 0, sizeof(buffer->native));
   buffer->release_callback = iree_hal_buffer_release_callback_null();
   buffer->profile_allocation_id = 0;
-  buffer->profile_session_id = 0;
+  buffer->profile_session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   buffer->profile_pool_id = 0;
   buffer->profile_physical_device_ordinal = UINT32_MAX;
   buffer->profile_alignment = 0;

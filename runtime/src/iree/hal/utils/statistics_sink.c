@@ -29,6 +29,8 @@ typedef struct iree_hal_profile_statistics_index_t {
 } iree_hal_profile_statistics_index_t;
 
 typedef struct iree_hal_profile_statistics_function_t {
+  // Profiling session owning |executable_id|.
+  iree_hal_profile_session_id_t session_id;
   // Session-local executable identifier owning this function.
   uint64_t executable_id;
   // Function ordinal within |executable_id|.
@@ -40,6 +42,8 @@ typedef struct iree_hal_profile_statistics_function_t {
 } iree_hal_profile_statistics_function_t;
 
 typedef struct iree_hal_profile_statistics_device_t {
+  // Profiling session owning |physical_device_ordinal|.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal.
   uint32_t physical_device_ordinal;
   // Device metadata flags observed for this physical device.
@@ -83,6 +87,8 @@ typedef struct iree_hal_profile_statistics_sink_t {
   iree_host_size_t device_count;
   // Capacity of |devices| in entries.
   iree_host_size_t device_capacity;
+  // Lookup index from session/device keys to |devices| entry indexes.
+  iree_hal_profile_statistics_index_t device_index;
   // Source records reported as dropped by truncated producer chunks.
   uint64_t dropped_record_count;
 } iree_hal_profile_statistics_sink_t;
@@ -219,6 +225,7 @@ static uint64_t iree_hal_profile_statistics_row_hash(
     const iree_hal_profile_statistics_row_t* row) {
   uint64_t hash = iree_hal_profile_statistics_mix_u64(row->row_type);
   hash = iree_hal_profile_statistics_combine_u64(hash, row->time_domain);
+  hash = iree_hal_profile_statistics_combine_u64(hash, row->session_id);
   hash = iree_hal_profile_statistics_combine_u64(hash,
                                                  row->physical_device_ordinal);
   hash = iree_hal_profile_statistics_combine_u64(hash, row->queue_ordinal);
@@ -238,6 +245,7 @@ static bool iree_hal_profile_statistics_row_matches(const void* user_data,
   const iree_hal_profile_statistics_row_t* candidate = &sink->rows[value];
   return candidate->row_type == expected->row_type &&
          candidate->time_domain == expected->time_domain &&
+         candidate->session_id == expected->session_id &&
          candidate->physical_device_ordinal ==
              expected->physical_device_ordinal &&
          candidate->queue_ordinal == expected->queue_ordinal &&
@@ -252,12 +260,14 @@ static void iree_hal_profile_statistics_row_initialize(
     iree_hal_profile_statistics_row_t* row,
     iree_hal_profile_statistics_row_type_t row_type,
     iree_hal_profile_statistics_time_domain_t time_domain,
-    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
-    uint32_t event_type, uint64_t executable_id, uint64_t command_buffer_id,
-    uint32_t function_ordinal, uint32_t command_index) {
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint32_t queue_ordinal, uint32_t event_type, uint64_t executable_id,
+    uint64_t command_buffer_id, uint32_t function_ordinal,
+    uint32_t command_index) {
   memset(row, 0, sizeof(*row));
   row->row_type = row_type;
   row->time_domain = time_domain;
+  row->session_id = session_id;
   row->physical_device_ordinal = physical_device_ordinal;
   row->queue_ordinal = queue_ordinal;
   row->event_type = event_type;
@@ -273,10 +283,10 @@ static iree_status_t iree_hal_profile_statistics_sink_ensure_row(
     iree_hal_profile_statistics_sink_t* sink,
     iree_hal_profile_statistics_row_type_t row_type,
     iree_hal_profile_statistics_time_domain_t time_domain,
-    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
-    uint32_t event_type, uint64_t executable_id, uint64_t command_buffer_id,
-    uint32_t function_ordinal, uint32_t command_index,
-    iree_hal_profile_statistics_row_t** out_row) {
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint32_t queue_ordinal, uint32_t event_type, uint64_t executable_id,
+    uint64_t command_buffer_id, uint32_t function_ordinal,
+    uint32_t command_index, iree_hal_profile_statistics_row_t** out_row) {
   *out_row = NULL;
 
   if (sink->row_count + 1 > sink->row_capacity) {
@@ -288,9 +298,9 @@ static iree_status_t iree_hal_profile_statistics_sink_ensure_row(
 
   iree_hal_profile_statistics_row_t* probe = &sink->rows[sink->row_count];
   iree_hal_profile_statistics_row_initialize(
-      probe, row_type, time_domain, physical_device_ordinal, queue_ordinal,
-      event_type, executable_id, command_buffer_id, function_ordinal,
-      command_index);
+      probe, row_type, time_domain, session_id, physical_device_ordinal,
+      queue_ordinal, event_type, executable_id, command_buffer_id,
+      function_ordinal, command_index);
   const uint64_t hash = iree_hal_profile_statistics_row_hash(probe);
 
   iree_host_size_t existing_index = 0;
@@ -309,14 +319,18 @@ static iree_status_t iree_hal_profile_statistics_sink_ensure_row(
 }
 
 static uint64_t iree_hal_profile_statistics_function_hash(
-    uint64_t executable_id, uint32_t function_ordinal) {
-  uint64_t hash = iree_hal_profile_statistics_mix_u64(executable_id);
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
+    uint32_t function_ordinal) {
+  uint64_t hash = iree_hal_profile_statistics_mix_u64(session_id);
+  hash = iree_hal_profile_statistics_combine_u64(hash, executable_id);
   return iree_hal_profile_statistics_combine_u64(hash, function_ordinal);
 }
 
 typedef struct iree_hal_profile_statistics_function_lookup_t {
   // Statistics sink owning candidate functions.
   const iree_hal_profile_statistics_sink_t* sink;
+  // Profiling session owning |executable_id|.
+  iree_hal_profile_session_id_t session_id;
   // Session-local executable identifier.
   uint64_t executable_id;
   // Function ordinal within |executable_id|.
@@ -329,17 +343,20 @@ static bool iree_hal_profile_statistics_function_matches(
       (const iree_hal_profile_statistics_function_lookup_t*)user_data;
   const iree_hal_profile_statistics_function_t* candidate =
       &lookup->sink->functions[value];
-  return candidate->executable_id == lookup->executable_id &&
+  return candidate->session_id == lookup->session_id &&
+         candidate->executable_id == lookup->executable_id &&
          candidate->function_ordinal == lookup->function_ordinal;
 }
 
 static iree_status_t iree_hal_profile_statistics_sink_insert_function(
-    iree_hal_profile_statistics_sink_t* sink, uint64_t executable_id,
+    iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint32_t function_ordinal, iree_string_view_t name) {
   const uint64_t hash = iree_hal_profile_statistics_function_hash(
-      executable_id, function_ordinal);
+      session_id, executable_id, function_ordinal);
   const iree_hal_profile_statistics_function_lookup_t lookup = {
       .sink = sink,
+      .session_id = session_id,
       .executable_id = executable_id,
       .function_ordinal = function_ordinal,
   };
@@ -373,6 +390,7 @@ static iree_status_t iree_hal_profile_statistics_sink_insert_function(
   iree_hal_profile_statistics_index_insert_existing(&sink->function_index, hash,
                                                     function_index);
   sink->functions[function_index] = (iree_hal_profile_statistics_function_t){
+      .session_id = session_id,
       .executable_id = executable_id,
       .function_ordinal = function_ordinal,
       .reserved0 = 0,
@@ -382,36 +400,69 @@ static iree_status_t iree_hal_profile_statistics_sink_insert_function(
   return iree_ok_status();
 }
 
+static uint64_t iree_hal_profile_statistics_device_hash(
+    iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal) {
+  uint64_t hash = iree_hal_profile_statistics_mix_u64(session_id);
+  return iree_hal_profile_statistics_combine_u64(hash, physical_device_ordinal);
+}
+
+typedef struct iree_hal_profile_statistics_device_lookup_t {
+  // Statistics sink owning candidate devices.
+  const iree_hal_profile_statistics_sink_t* sink;
+  // Profiling session owning |physical_device_ordinal|.
+  iree_hal_profile_session_id_t session_id;
+  // Session-local physical device ordinal.
+  uint32_t physical_device_ordinal;
+} iree_hal_profile_statistics_device_lookup_t;
+
+static bool iree_hal_profile_statistics_device_matches(const void* user_data,
+                                                       iree_host_size_t value) {
+  const iree_hal_profile_statistics_device_lookup_t* lookup =
+      (const iree_hal_profile_statistics_device_lookup_t*)user_data;
+  const iree_hal_profile_statistics_device_t* candidate =
+      &lookup->sink->devices[value];
+  return candidate->session_id == lookup->session_id &&
+         candidate->physical_device_ordinal == lookup->physical_device_ordinal;
+}
+
+static bool iree_hal_profile_statistics_sink_find_device_index(
+    const iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    iree_host_size_t* out_device_index) {
+  const iree_hal_profile_statistics_device_lookup_t lookup = {
+      .sink = sink,
+      .session_id = session_id,
+      .physical_device_ordinal = physical_device_ordinal,
+  };
+  return iree_hal_profile_statistics_index_find(
+      &sink->device_index,
+      iree_hal_profile_statistics_device_hash(session_id,
+                                              physical_device_ordinal),
+      iree_hal_profile_statistics_device_matches, &lookup, out_device_index);
+}
+
 static const iree_hal_profile_statistics_device_t*
 iree_hal_profile_statistics_sink_find_device(
     const iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id,
     uint32_t physical_device_ordinal) {
-  for (iree_host_size_t i = 0; i < sink->device_count; ++i) {
-    if (sink->devices[i].physical_device_ordinal == physical_device_ordinal) {
-      return &sink->devices[i];
-    }
+  iree_host_size_t device_index = 0;
+  if (!iree_hal_profile_statistics_sink_find_device_index(
+          sink, session_id, physical_device_ordinal, &device_index)) {
+    return NULL;
   }
-  return NULL;
-}
-
-static iree_hal_profile_statistics_device_t*
-iree_hal_profile_statistics_sink_find_device_mutable(
-    iree_hal_profile_statistics_sink_t* sink,
-    uint32_t physical_device_ordinal) {
-  for (iree_host_size_t i = 0; i < sink->device_count; ++i) {
-    if (sink->devices[i].physical_device_ordinal == physical_device_ordinal) {
-      return &sink->devices[i];
-    }
-  }
-  return NULL;
+  return &sink->devices[device_index];
 }
 
 static iree_status_t iree_hal_profile_statistics_sink_ensure_device(
-    iree_hal_profile_statistics_sink_t* sink, uint32_t physical_device_ordinal,
+    iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     iree_hal_profile_statistics_device_t** out_device) {
-  *out_device = iree_hal_profile_statistics_sink_find_device_mutable(
-      sink, physical_device_ordinal);
-  if (*out_device) {
+  iree_host_size_t existing_device_index = 0;
+  if (iree_hal_profile_statistics_sink_find_device_index(
+          sink, session_id, physical_device_ordinal, &existing_device_index)) {
+    *out_device = &sink->devices[existing_device_index];
     return iree_ok_status();
   }
 
@@ -423,10 +474,17 @@ static iree_status_t iree_hal_profile_statistics_sink_ensure_device(
         (void**)&sink->devices));
   }
 
-  iree_hal_profile_statistics_device_t* device =
-      &sink->devices[sink->device_count++];
+  const iree_host_size_t device_index = sink->device_count;
+  IREE_RETURN_IF_ERROR(iree_hal_profile_statistics_index_insert(
+      &sink->device_index, sink->host_allocator,
+      iree_hal_profile_statistics_device_hash(session_id,
+                                              physical_device_ordinal),
+      device_index));
+  iree_hal_profile_statistics_device_t* device = &sink->devices[device_index];
   memset(device, 0, sizeof(*device));
+  device->session_id = session_id;
   device->physical_device_ordinal = physical_device_ordinal;
+  ++sink->device_count;
   *out_device = device;
   return iree_ok_status();
 }
@@ -610,6 +668,7 @@ static iree_status_t iree_hal_profile_statistics_row_add_sample(
 
 static iree_status_t iree_hal_profile_statistics_sink_add_row_sample(
     iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id,
     iree_hal_profile_statistics_row_type_t row_type,
     iree_hal_profile_statistics_time_domain_t time_domain,
     uint32_t physical_device_ordinal, uint32_t queue_ordinal,
@@ -620,9 +679,9 @@ static iree_status_t iree_hal_profile_statistics_sink_add_row_sample(
     uint64_t tile_duration_sum_ns) {
   iree_hal_profile_statistics_row_t* row = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_profile_statistics_sink_ensure_row(
-      sink, row_type, time_domain, physical_device_ordinal, queue_ordinal,
-      event_type, executable_id, command_buffer_id, function_ordinal,
-      command_index, &row));
+      sink, row_type, time_domain, session_id, physical_device_ordinal,
+      queue_ordinal, event_type, executable_id, command_buffer_id,
+      function_ordinal, command_index, &row));
   return iree_hal_profile_statistics_row_add_sample(
       row, has_timing, start_time, end_time, operation_count, payload_bytes,
       tile_count, tile_duration_sum_ns);
@@ -666,7 +725,8 @@ static iree_status_t iree_hal_profile_statistics_for_each_fixed_record(
 }
 
 static iree_status_t iree_hal_profile_statistics_process_device_iovec(
-    iree_hal_profile_statistics_sink_t* sink, iree_const_byte_span_t iovec) {
+    iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, iree_const_byte_span_t iovec) {
   iree_status_t status = iree_ok_status();
   iree_host_size_t offset = 0;
   while (iree_status_is_ok(status) && offset < iovec.data_length) {
@@ -707,7 +767,7 @@ static iree_status_t iree_hal_profile_statistics_process_device_iovec(
 
     iree_hal_profile_statistics_device_t* device = NULL;
     status = iree_hal_profile_statistics_sink_ensure_device(
-        sink, record.physical_device_ordinal, &device);
+        sink, session_id, record.physical_device_ordinal, &device);
     if (iree_status_is_ok(status) && has_timestamp_frequency &&
         iree_all_bits_set(device->metadata_flags,
                           IREE_HAL_PROFILE_DEVICE_FLAG_TIMESTAMP_FREQUENCY) &&
@@ -731,8 +791,9 @@ static iree_status_t iree_hal_profile_statistics_process_device_iovec(
 }
 
 static iree_status_t iree_hal_profile_statistics_process_device_records(
-    iree_hal_profile_statistics_sink_t* sink, iree_host_size_t iovec_count,
-    const iree_const_byte_span_t* iovecs) {
+    iree_hal_profile_statistics_sink_t* sink,
+    const iree_hal_profile_chunk_metadata_t* metadata,
+    iree_host_size_t iovec_count, const iree_const_byte_span_t* iovecs) {
   if (iovec_count > 0 && !iovecs) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "profile statistics device iovecs are required");
@@ -740,7 +801,8 @@ static iree_status_t iree_hal_profile_statistics_process_device_records(
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < iovec_count;
        ++i) {
-    status = iree_hal_profile_statistics_process_device_iovec(sink, iovecs[i]);
+    status = iree_hal_profile_statistics_process_device_iovec(
+        sink, metadata->session_id, iovecs[i]);
   }
   return status;
 }
@@ -756,7 +818,8 @@ static iree_status_t iree_hal_profile_statistics_process_dispatch_event(
   iree_status_t status = iree_ok_status();
   if (event->executable_id != 0 && event->function_ordinal != UINT32_MAX) {
     status = iree_hal_profile_statistics_sink_add_row_sample(
-        sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_FUNCTION,
+        sink, metadata->session_id,
+        IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_FUNCTION,
         IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_DEVICE_TICK,
         metadata->physical_device_ordinal, metadata->queue_ordinal,
         /*event_type=*/0, event->executable_id, /*command_buffer_id=*/0,
@@ -766,7 +829,8 @@ static iree_status_t iree_hal_profile_statistics_process_dispatch_event(
   }
   if (iree_status_is_ok(status) && event->command_buffer_id != 0) {
     status = iree_hal_profile_statistics_sink_add_row_sample(
-        sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_COMMAND_BUFFER,
+        sink, metadata->session_id,
+        IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_COMMAND_BUFFER,
         IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_DEVICE_TICK,
         metadata->physical_device_ordinal, metadata->queue_ordinal,
         /*event_type=*/0, /*executable_id=*/0, event->command_buffer_id,
@@ -777,7 +841,8 @@ static iree_status_t iree_hal_profile_statistics_process_dispatch_event(
   if (iree_status_is_ok(status) && event->command_buffer_id != 0 &&
       event->command_index != UINT32_MAX) {
     status = iree_hal_profile_statistics_sink_add_row_sample(
-        sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_COMMAND_OPERATION,
+        sink, metadata->session_id,
+        IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_COMMAND_OPERATION,
         IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_DEVICE_TICK,
         metadata->physical_device_ordinal, metadata->queue_ordinal,
         /*event_type=*/0, event->executable_id, event->command_buffer_id,
@@ -791,12 +856,12 @@ static iree_status_t iree_hal_profile_statistics_process_dispatch_event(
 static iree_status_t iree_hal_profile_statistics_process_clock_correlation(
     iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_chunk_metadata_t* metadata, const void* record) {
-  (void)metadata;
   const iree_hal_profile_clock_correlation_record_t* clock_record =
       (const iree_hal_profile_clock_correlation_record_t*)record;
   iree_hal_profile_statistics_device_t* device = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_profile_statistics_sink_ensure_device(
-      sink, clock_record->physical_device_ordinal, &device));
+      sink, metadata->session_id, clock_record->physical_device_ordinal,
+      &device));
   iree_hal_profile_statistics_device_record_clock_sample(device, clock_record);
   return iree_ok_status();
 }
@@ -804,13 +869,13 @@ static iree_status_t iree_hal_profile_statistics_process_clock_correlation(
 static iree_status_t iree_hal_profile_statistics_process_queue_device_event(
     iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_chunk_metadata_t* metadata, const void* record) {
-  (void)metadata;
   const iree_hal_profile_queue_device_event_t* event =
       (const iree_hal_profile_queue_device_event_t*)record;
   const bool has_timing =
       event->start_tick != 0 && event->end_tick >= event->start_tick;
   return iree_hal_profile_statistics_sink_add_row_sample(
-      sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_DEVICE_OPERATION,
+      sink, metadata->session_id,
+      IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_DEVICE_OPERATION,
       IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_DEVICE_TICK,
       event->physical_device_ordinal, event->queue_ordinal, event->type,
       /*executable_id=*/0, event->command_buffer_id, UINT32_MAX, UINT32_MAX,
@@ -821,13 +886,13 @@ static iree_status_t iree_hal_profile_statistics_process_queue_device_event(
 static iree_status_t iree_hal_profile_statistics_process_queue_event(
     iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_chunk_metadata_t* metadata, const void* record) {
-  (void)metadata;
   const iree_hal_profile_queue_event_t* event =
       (const iree_hal_profile_queue_event_t*)record;
   const bool has_timing = iree_hal_profile_statistics_host_span_is_valid(
       event->host_time_ns, event->ready_host_time_ns);
   return iree_hal_profile_statistics_sink_add_row_sample(
-      sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_HOST_OPERATION,
+      sink, metadata->session_id,
+      IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_HOST_OPERATION,
       IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_IREE_HOST_TIME_NS,
       event->physical_device_ordinal, event->queue_ordinal, event->type,
       /*executable_id=*/0, event->command_buffer_id, UINT32_MAX, UINT32_MAX,
@@ -840,7 +905,6 @@ static iree_status_t iree_hal_profile_statistics_process_queue_event(
 static iree_status_t iree_hal_profile_statistics_process_host_execution_event(
     iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_chunk_metadata_t* metadata, const void* record) {
-  (void)metadata;
   const iree_hal_profile_host_execution_event_t* event =
       (const iree_hal_profile_host_execution_event_t*)record;
   const bool has_timing = iree_hal_profile_statistics_host_span_is_valid(
@@ -853,7 +917,8 @@ static iree_status_t iree_hal_profile_statistics_process_host_execution_event(
                                        : 0;
 
   iree_status_t status = iree_hal_profile_statistics_sink_add_row_sample(
-      sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_QUEUE_OPERATION,
+      sink, metadata->session_id,
+      IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_QUEUE_OPERATION,
       IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_IREE_HOST_TIME_NS,
       event->physical_device_ordinal, event->queue_ordinal, event->type,
       /*executable_id=*/0, event->command_buffer_id, UINT32_MAX, UINT32_MAX,
@@ -862,7 +927,8 @@ static iree_status_t iree_hal_profile_statistics_process_host_execution_event(
   if (iree_status_is_ok(status) && event->executable_id != 0 &&
       event->function_ordinal != UINT32_MAX) {
     status = iree_hal_profile_statistics_sink_add_row_sample(
-        sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_FUNCTION,
+        sink, metadata->session_id,
+        IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_FUNCTION,
         IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_IREE_HOST_TIME_NS,
         event->physical_device_ordinal, event->queue_ordinal,
         /*event_type=*/0, event->executable_id, /*command_buffer_id=*/0,
@@ -872,7 +938,7 @@ static iree_status_t iree_hal_profile_statistics_process_host_execution_event(
   }
   if (iree_status_is_ok(status) && event->command_buffer_id != 0) {
     status = iree_hal_profile_statistics_sink_add_row_sample(
-        sink,
+        sink, metadata->session_id,
         IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_COMMAND_BUFFER,
         IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_IREE_HOST_TIME_NS,
         event->physical_device_ordinal, event->queue_ordinal,
@@ -884,7 +950,7 @@ static iree_status_t iree_hal_profile_statistics_process_host_execution_event(
   if (iree_status_is_ok(status) && event->command_buffer_id != 0 &&
       event->command_index != UINT32_MAX) {
     status = iree_hal_profile_statistics_sink_add_row_sample(
-        sink,
+        sink, metadata->session_id,
         IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_COMMAND_OPERATION,
         IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_IREE_HOST_TIME_NS,
         event->physical_device_ordinal, event->queue_ordinal,
@@ -899,11 +965,11 @@ static iree_status_t iree_hal_profile_statistics_process_host_execution_event(
 static iree_status_t iree_hal_profile_statistics_process_memory_event(
     iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_chunk_metadata_t* metadata, const void* record) {
-  (void)metadata;
   const iree_hal_profile_memory_event_t* event =
       (const iree_hal_profile_memory_event_t*)record;
   return iree_hal_profile_statistics_sink_add_row_sample(
-      sink, IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_MEMORY_LIFECYCLE,
+      sink, metadata->session_id,
+      IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_MEMORY_LIFECYCLE,
       IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_NONE,
       event->physical_device_ordinal, event->queue_ordinal, event->type,
       /*executable_id=*/0, /*command_buffer_id=*/0, UINT32_MAX, UINT32_MAX,
@@ -913,7 +979,8 @@ static iree_status_t iree_hal_profile_statistics_process_memory_event(
 }
 
 static iree_status_t iree_hal_profile_statistics_process_function_iovec(
-    iree_hal_profile_statistics_sink_t* sink, iree_const_byte_span_t iovec) {
+    iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, iree_const_byte_span_t iovec) {
   iree_status_t status = iree_ok_status();
   iree_host_size_t offset = 0;
   while (iree_status_is_ok(status) && offset < iovec.data_length) {
@@ -947,15 +1014,16 @@ static iree_status_t iree_hal_profile_statistics_process_function_iovec(
     const iree_string_view_t name =
         iree_make_string_view(name_data, record.name_length);
     status = iree_hal_profile_statistics_sink_insert_function(
-        sink, record.executable_id, record.function_ordinal, name);
+        sink, session_id, record.executable_id, record.function_ordinal, name);
     offset += record.record_length;
   }
   return status;
 }
 
 static iree_status_t iree_hal_profile_statistics_process_function_records(
-    iree_hal_profile_statistics_sink_t* sink, iree_host_size_t iovec_count,
-    const iree_const_byte_span_t* iovecs) {
+    iree_hal_profile_statistics_sink_t* sink,
+    const iree_hal_profile_chunk_metadata_t* metadata,
+    iree_host_size_t iovec_count, const iree_const_byte_span_t* iovecs) {
   if (iovec_count > 0 && !iovecs) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "profile statistics chunk iovec list is required");
@@ -963,8 +1031,8 @@ static iree_status_t iree_hal_profile_statistics_process_function_records(
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < iovec_count;
        ++i) {
-    status =
-        iree_hal_profile_statistics_process_function_iovec(sink, iovecs[i]);
+    status = iree_hal_profile_statistics_process_function_iovec(
+        sink, metadata->session_id, iovecs[i]);
   }
   return status;
 }
@@ -978,6 +1046,8 @@ static void iree_hal_profile_statistics_sink_reset(
   iree_hal_profile_statistics_index_deinitialize(&sink->function_index,
                                                  host_allocator);
   iree_hal_profile_statistics_index_deinitialize(&sink->row_index,
+                                                 host_allocator);
+  iree_hal_profile_statistics_index_deinitialize(&sink->device_index,
                                                  host_allocator);
   iree_allocator_free(host_allocator, sink->functions);
   iree_allocator_free(host_allocator, sink->rows);
@@ -1053,16 +1123,18 @@ IREE_API_EXPORT iree_status_t iree_hal_profile_statistics_sink_for_each_row(
 }
 
 IREE_API_EXPORT bool iree_hal_profile_statistics_sink_find_function_name(
-    const iree_hal_profile_statistics_sink_t* sink, uint64_t executable_id,
+    const iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint32_t function_ordinal, iree_string_view_t* out_name) {
   IREE_ASSERT_ARGUMENT(sink);
   IREE_ASSERT_ARGUMENT(out_name);
   *out_name = iree_string_view_empty();
 
   const uint64_t hash = iree_hal_profile_statistics_function_hash(
-      executable_id, function_ordinal);
+      session_id, executable_id, function_ordinal);
   const iree_hal_profile_statistics_function_lookup_t lookup = {
       .sink = sink,
+      .session_id = session_id,
       .executable_id = executable_id,
       .function_ordinal = function_ordinal,
   };
@@ -1093,7 +1165,7 @@ IREE_API_EXPORT bool iree_hal_profile_statistics_sink_scale_duration_to_ns(
     case IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_DEVICE_TICK: {
       const iree_hal_profile_statistics_device_t* device =
           iree_hal_profile_statistics_sink_find_device(
-              sink, row->physical_device_ordinal);
+              sink, row->session_id, row->physical_device_ordinal);
       return iree_hal_profile_statistics_scale_device_ticks_to_ns(
           device, duration, out_duration_ns);
     }
@@ -1351,8 +1423,8 @@ static void iree_hal_profile_statistics_fprint_function_key(
     const iree_hal_profile_statistics_row_t* row) {
   iree_string_view_t function_name = iree_string_view_empty();
   if (iree_hal_profile_statistics_sink_find_function_name(
-          context->sink, row->executable_id, row->function_ordinal,
-          &function_name)) {
+          context->sink, row->session_id, row->executable_id,
+          row->function_ordinal, &function_name)) {
     fprintf(context->file, "%.*s", (int)function_name.size, function_name.data);
   } else {
     fprintf(context->file, "executable=%" PRIu64 " function=%" PRIu32,
@@ -1367,21 +1439,23 @@ static iree_status_t iree_hal_profile_statistics_print_row(
   FILE* file = context->file;
   switch (row->row_type) {
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_FUNCTION:
-      fprintf(file, "  dispatch ");
+      fprintf(file, "  session=%" PRIu64 " dispatch ", row->session_id);
       iree_hal_profile_statistics_fprint_function_key(context, row);
       iree_hal_profile_statistics_fprint_row_timing(context, row);
       fprintf(file, "\n");
       break;
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_FUNCTION:
-      fprintf(file, "  host_execute ");
+      fprintf(file, "  session=%" PRIu64 " host_execute ", row->session_id);
       iree_hal_profile_statistics_fprint_function_key(context, row);
       iree_hal_profile_statistics_fprint_row_timing(context, row);
       iree_hal_profile_statistics_fprint_tile_totals(context, row);
       fprintf(file, "\n");
       break;
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_QUEUE_OPERATION:
-      fprintf(file, "  host_execute_queue p=%" PRIu32 " q=%" PRIu32 " %s",
-              row->physical_device_ordinal, row->queue_ordinal,
+      fprintf(file,
+              "  session=%" PRIu64 " host_execute_queue p=%" PRIu32
+              " q=%" PRIu32 " %s",
+              row->session_id, row->physical_device_ordinal, row->queue_ordinal,
               iree_hal_profile_statistics_queue_event_type_name(
                   (iree_hal_profile_queue_event_type_t)row->event_type));
       iree_hal_profile_statistics_fprint_row_timing(context, row);
@@ -1389,8 +1463,10 @@ static iree_status_t iree_hal_profile_statistics_print_row(
       fprintf(file, "\n");
       break;
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_DEVICE_OPERATION:
-      fprintf(file, "  device_queue p=%" PRIu32 " q=%" PRIu32 " %s",
-              row->physical_device_ordinal, row->queue_ordinal,
+      fprintf(file,
+              "  session=%" PRIu64 " device_queue p=%" PRIu32 " q=%" PRIu32
+              " %s",
+              row->session_id, row->physical_device_ordinal, row->queue_ordinal,
               iree_hal_profile_statistics_queue_event_type_name(
                   (iree_hal_profile_queue_event_type_t)row->event_type));
       iree_hal_profile_statistics_fprint_row_timing(context, row);
@@ -1398,8 +1474,9 @@ static iree_status_t iree_hal_profile_statistics_print_row(
       fprintf(file, "\n");
       break;
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_HOST_OPERATION:
-      fprintf(file, "  host_queue p=%" PRIu32 " q=%" PRIu32 " %s",
-              row->physical_device_ordinal, row->queue_ordinal,
+      fprintf(file,
+              "  session=%" PRIu64 " host_queue p=%" PRIu32 " q=%" PRIu32 " %s",
+              row->session_id, row->physical_device_ordinal, row->queue_ordinal,
               iree_hal_profile_statistics_queue_event_type_name(
                   (iree_hal_profile_queue_event_type_t)row->event_type));
       iree_hal_profile_statistics_fprint_row_timing(context, row);
@@ -1408,9 +1485,9 @@ static iree_status_t iree_hal_profile_statistics_print_row(
       break;
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_MEMORY_LIFECYCLE:
       fprintf(file,
-              "  memory p=%" PRIu32 " q=%" PRIu32 " %s count=%" PRIu64
-              " bytes=%" PRIu64 "\n",
-              row->physical_device_ordinal, row->queue_ordinal,
+              "  session=%" PRIu64 " memory p=%" PRIu32 " q=%" PRIu32
+              " %s count=%" PRIu64 " bytes=%" PRIu64 "\n",
+              row->session_id, row->physical_device_ordinal, row->queue_ordinal,
               iree_hal_profile_statistics_memory_event_type_name(
                   (iree_hal_profile_memory_event_type_t)row->event_type),
               row->sample_count, row->payload_bytes);
@@ -1494,9 +1571,7 @@ static iree_status_t iree_hal_profile_statistics_sink_begin_session(
     iree_hal_profile_sink_t* base_sink,
     const iree_hal_profile_chunk_metadata_t* metadata) {
   (void)metadata;
-  iree_hal_profile_statistics_sink_t* sink =
-      iree_hal_profile_statistics_sink_cast(base_sink);
-  iree_hal_profile_statistics_sink_reset(sink);
+  (void)iree_hal_profile_statistics_sink_cast(base_sink);
   return iree_ok_status();
 }
 
@@ -1510,8 +1585,8 @@ static iree_status_t iree_hal_profile_statistics_sink_write(
       iree_hal_profile_statistics_sink_add_dropped_records(sink, metadata));
   if (iree_string_view_equal(metadata->content_type,
                              IREE_HAL_PROFILE_CONTENT_TYPE_DEVICES)) {
-    return iree_hal_profile_statistics_process_device_records(sink, iovec_count,
-                                                              iovecs);
+    return iree_hal_profile_statistics_process_device_records(
+        sink, metadata, iovec_count, iovecs);
   } else if (iree_string_view_equal(
                  metadata->content_type,
                  IREE_HAL_PROFILE_CONTENT_TYPE_DISPATCH_EVENTS)) {
@@ -1558,7 +1633,7 @@ static iree_status_t iree_hal_profile_statistics_sink_write(
                  metadata->content_type,
                  IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_FUNCTIONS)) {
     return iree_hal_profile_statistics_process_function_records(
-        sink, iovec_count, iovecs);
+        sink, metadata, iovec_count, iovecs);
   }
   return iree_ok_status();
 }

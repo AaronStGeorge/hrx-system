@@ -29,6 +29,8 @@ typedef enum iree_profile_projection_mode_e {
 } iree_profile_projection_mode_t;
 
 typedef struct iree_profile_dispatch_aggregate_t {
+  // Capture-wide profiling session identifier owning this aggregate row.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this aggregate row.
   uint32_t physical_device_ordinal;
   // Producer-local executable identifier for this aggregate row.
@@ -62,6 +64,8 @@ typedef struct iree_profile_dispatch_aggregate_t {
 } iree_profile_dispatch_aggregate_t;
 
 typedef struct iree_profile_dispatch_command_aggregate_t {
+  // Capture-wide profiling session identifier owning this aggregate row.
+  iree_hal_profile_session_id_t session_id;
   // Producer-local command-buffer identifier for this aggregate row.
   uint64_t command_buffer_id;
   // Queue submission epoch containing this command-buffer execution.
@@ -87,6 +91,8 @@ typedef struct iree_profile_dispatch_command_aggregate_t {
 } iree_profile_dispatch_command_aggregate_t;
 
 typedef struct iree_profile_dispatch_queue_aggregate_t {
+  // Capture-wide profiling session identifier owning this aggregate row.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this aggregate row.
   uint32_t physical_device_ordinal;
   // Session-local queue ordinal for this aggregate row.
@@ -110,6 +116,8 @@ typedef struct iree_profile_dispatch_queue_aggregate_t {
 } iree_profile_dispatch_queue_aggregate_t;
 
 typedef struct iree_profile_host_dispatch_aggregate_t {
+  // Capture-wide profiling session identifier owning this aggregate row.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this aggregate row.
   uint32_t physical_device_ordinal;
   // Producer-local executable identifier for this aggregate row.
@@ -147,6 +155,8 @@ typedef struct iree_profile_host_dispatch_aggregate_t {
 } iree_profile_host_dispatch_aggregate_t;
 
 typedef struct iree_profile_host_dispatch_command_aggregate_t {
+  // Capture-wide profiling session identifier owning this aggregate row.
+  iree_hal_profile_session_id_t session_id;
   // Producer-local command-buffer identifier for this aggregate row.
   uint64_t command_buffer_id;
   // Queue submission epoch containing this command-buffer execution.
@@ -176,6 +186,8 @@ typedef struct iree_profile_host_dispatch_command_aggregate_t {
 } iree_profile_host_dispatch_command_aggregate_t;
 
 typedef struct iree_profile_dispatch_top_event_t {
+  // Capture-wide profiling session identifier owning this dispatch event.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this dispatch event.
   uint32_t physical_device_ordinal;
   // Session-local queue ordinal for this dispatch event.
@@ -189,6 +201,8 @@ typedef struct iree_profile_dispatch_top_event_t {
 } iree_profile_dispatch_top_event_t;
 
 typedef struct iree_profile_host_dispatch_top_event_t {
+  // Capture-wide profiling session identifier owning this host dispatch span.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this host dispatch span.
   uint32_t physical_device_ordinal;
   // Session-local queue ordinal for this host dispatch span.
@@ -217,6 +231,8 @@ typedef struct iree_profile_dispatch_event_row_t {
 } iree_profile_dispatch_event_row_t;
 
 typedef struct iree_profile_host_dispatch_event_row_t {
+  // Capture-wide profiling session identifier owning this event.
+  iree_hal_profile_session_id_t session_id;
   // Host dispatch event record valid only for the callback duration.
   const iree_hal_profile_host_execution_event_t* event;
   // Resolved executable/function key valid only for the callback duration.

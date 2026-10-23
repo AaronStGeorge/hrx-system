@@ -20,6 +20,7 @@ static iree_hal_profile_file_record_t MakeChunk(
   iree_hal_profile_file_record_t chunk;
   memset(&chunk, 0, sizeof(chunk));
   chunk.header.record_type = IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK;
+  chunk.header.session_id = 1;
   chunk.content_type = IREE_SV("application/vnd.iree.test");
   chunk.payload = iree_make_const_byte_span(payload.data(), payload.size());
   return chunk;

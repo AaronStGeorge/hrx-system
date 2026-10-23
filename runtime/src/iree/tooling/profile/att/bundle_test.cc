@@ -28,8 +28,11 @@ static iree_hal_profile_file_record_t MakeChunk(
 
 static iree_status_t ParseChunk(iree_profile_att_profile_t* profile,
                                 iree_string_view_t content_type,
-                                const std::vector<uint8_t>& payload) {
+                                const std::vector<uint8_t>& payload,
+                                iree_hal_profile_session_id_t session_id =
+                                    IREE_HAL_PROFILE_SESSION_ID_NONE) {
   iree_hal_profile_file_record_t chunk = MakeChunk(content_type, payload);
+  chunk.header.session_id = session_id;
   return iree_profile_att_profile_parse_record(profile, &chunk);
 }
 
@@ -141,13 +144,15 @@ TEST(AttBundleTest, ParsesIndexesAndFindsRelationships) {
   ASSERT_EQ(1u, profile.trace_count);
 
   const iree_profile_att_code_object_t* found_code_object =
-      iree_profile_att_profile_find_code_object(&profile, 10, 20);
+      iree_profile_att_profile_find_code_object(
+          &profile, IREE_HAL_PROFILE_SESSION_ID_NONE, 10, 20);
   ASSERT_NE(nullptr, found_code_object);
   ASSERT_EQ(3u, found_code_object->data.data_length);
   EXPECT_EQ(0xBB, found_code_object->data.data[1]);
 
   const iree_profile_att_function_t* found_function =
-      iree_profile_att_profile_find_function(&profile, 10, 3);
+      iree_profile_att_profile_find_function(
+          &profile, IREE_HAL_PROFILE_SESSION_ID_NONE, 10, 3);
   ASSERT_NE(nullptr, found_function);
   EXPECT_TRUE(
       iree_string_view_equal(found_function->name, IREE_SV("dispatch_fn")));
@@ -157,6 +162,89 @@ TEST(AttBundleTest, ParsesIndexesAndFindsRelationships) {
   ASSERT_NE(nullptr, found_dispatch);
   EXPECT_EQ(2u, found_dispatch->physical_device_ordinal);
   EXPECT_EQ(5u, found_dispatch->queue_ordinal);
+
+  iree_profile_att_profile_deinitialize(&profile);
+}
+
+TEST(AttBundleTest, KeepsSessionLocalRelationshipsDistinct) {
+  iree_profile_att_profile_t profile;
+  iree_profile_att_profile_initialize(iree_allocator_system(), &profile);
+
+  const iree_hal_profile_session_id_t session_ids[] = {11, 22};
+  std::vector<uint8_t> code_object_payloads[IREE_ARRAYSIZE(session_ids)];
+  std::vector<uint8_t> dispatch_payloads[IREE_ARRAYSIZE(session_ids)];
+  std::vector<uint8_t> trace_payloads[IREE_ARRAYSIZE(session_ids)];
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(session_ids); ++i) {
+    const iree_hal_profile_session_id_t session_id = session_ids[i];
+    iree_hal_profile_executable_code_object_record_t code_object =
+        iree_hal_profile_executable_code_object_record_default();
+    code_object.record_length = sizeof(code_object) + 1;
+    code_object.executable_id = 10;
+    code_object.code_object_id = 20;
+    code_object.data_length = 1;
+    AppendRecord(&code_object_payloads[i], code_object,
+                 {session_id == 11 ? uint8_t{0xAA} : uint8_t{0xBB}});
+    IREE_ASSERT_OK(ParseChunk(
+        &profile, IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_CODE_OBJECTS,
+        code_object_payloads[i], session_id));
+
+    iree_hal_profile_dispatch_event_t dispatch =
+        iree_hal_profile_dispatch_event_default();
+    dispatch.event_id = 7;
+    dispatch.submission_id = 8;
+    dispatch.command_buffer_id = 9;
+    dispatch.command_index = 4;
+    dispatch.executable_id = 10;
+    dispatch.function_ordinal = 3;
+    AppendRecord(&dispatch_payloads[i], dispatch);
+    iree_hal_profile_file_record_t dispatch_chunk = MakeChunk(
+        IREE_HAL_PROFILE_CONTENT_TYPE_DISPATCH_EVENTS, dispatch_payloads[i]);
+    dispatch_chunk.header.session_id = session_id;
+    dispatch_chunk.header.physical_device_ordinal = 2;
+    dispatch_chunk.header.queue_ordinal = session_id == 11 ? 1 : 2;
+    IREE_ASSERT_OK(
+        iree_profile_att_profile_parse_record(&profile, &dispatch_chunk));
+
+    iree_hal_profile_executable_trace_record_t trace =
+        iree_hal_profile_executable_trace_record_default();
+    trace.record_length = sizeof(trace);
+    trace.format = IREE_HAL_PROFILE_EXECUTABLE_TRACE_FORMAT_AMDGPU_ATT;
+    trace.trace_id = 30;
+    trace.dispatch_event_id = 7;
+    trace.submission_id = 8;
+    trace.command_buffer_id = 9;
+    trace.command_index = 4;
+    trace.executable_id = 10;
+    trace.function_ordinal = 3;
+    trace.physical_device_ordinal = 2;
+    trace.queue_ordinal = session_id == 11 ? 1 : 2;
+    trace.data_length = 1;
+    AppendTraceRecord(&trace_payloads[i], trace, {0x01});
+    IREE_ASSERT_OK(ParseChunk(&profile,
+                              IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_TRACES,
+                              trace_payloads[i], session_id));
+  }
+
+  const iree_profile_att_code_object_t* first_code_object =
+      iree_profile_att_profile_find_code_object(&profile, 11, 10, 20);
+  const iree_profile_att_code_object_t* second_code_object =
+      iree_profile_att_profile_find_code_object(&profile, 22, 10, 20);
+  ASSERT_NE(first_code_object, nullptr);
+  ASSERT_NE(second_code_object, nullptr);
+  EXPECT_EQ(first_code_object->data.data[0], 0xAA);
+  EXPECT_EQ(second_code_object->data.data[0], 0xBB);
+
+  ASSERT_EQ(profile.trace_count, 2u);
+  const iree_profile_att_dispatch_t* first_dispatch =
+      iree_profile_att_profile_find_dispatch(&profile, &profile.traces[0]);
+  const iree_profile_att_dispatch_t* second_dispatch =
+      iree_profile_att_profile_find_dispatch(&profile, &profile.traces[1]);
+  ASSERT_NE(first_dispatch, nullptr);
+  ASSERT_NE(second_dispatch, nullptr);
+  EXPECT_EQ(first_dispatch->session_id, 11u);
+  EXPECT_EQ(first_dispatch->queue_ordinal, 1u);
+  EXPECT_EQ(second_dispatch->session_id, 22u);
+  EXPECT_EQ(second_dispatch->queue_ordinal, 2u);
 
   iree_profile_att_profile_deinitialize(&profile);
 }

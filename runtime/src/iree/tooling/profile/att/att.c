@@ -34,8 +34,9 @@ static bool iree_profile_att_trace_matches(
     return false;
   }
   const iree_profile_att_function_t* function_info =
-      iree_profile_att_profile_find_function(
-          profile, trace->record.executable_id, trace->record.function_ordinal);
+      iree_profile_att_profile_find_function(profile, trace->session_id,
+                                             trace->record.executable_id,
+                                             trace->record.function_ordinal);
   if (iree_string_view_is_empty(filter) ||
       iree_string_view_equal(filter, IREE_SV("*"))) {
     return true;
@@ -49,11 +50,13 @@ static void iree_profile_att_print_trace_header_text(
     const iree_profile_att_trace_t* trace,
     const iree_profile_att_decoded_trace_t* decoded_trace, FILE* file) {
   const iree_profile_att_function_t* function_info =
-      iree_profile_att_profile_find_function(
-          profile, trace->record.executable_id, trace->record.function_ordinal);
+      iree_profile_att_profile_find_function(profile, trace->session_id,
+                                             trace->record.executable_id,
+                                             trace->record.function_ordinal);
   const iree_profile_att_dispatch_t* dispatch =
       iree_profile_att_profile_find_dispatch(profile, trace);
-  fprintf(file, "ATT trace %" PRIu64 "\n", trace->record.trace_id);
+  fprintf(file, "ATT session %" PRIu64 " trace %" PRIu64 "\n",
+          trace->session_id, trace->record.trace_id);
   fprintf(file, "  executable=%" PRIu64 " function=%" PRIu32 " name=%.*s\n",
           trace->record.executable_id, trace->record.function_ordinal,
           function_info ? (int)function_info->name.size : 9,
@@ -127,22 +130,25 @@ static iree_status_t iree_profile_att_print_trace_jsonl(
     const iree_profile_att_trace_t* trace,
     iree_profile_att_decoded_trace_t* decoded_trace, FILE* file) {
   const iree_profile_att_function_t* function_info =
-      iree_profile_att_profile_find_function(
-          profile, trace->record.executable_id, trace->record.function_ordinal);
+      iree_profile_att_profile_find_function(profile, trace->session_id,
+                                             trace->record.executable_id,
+                                             trace->record.function_ordinal);
   const iree_profile_att_dispatch_t* dispatch =
       iree_profile_att_profile_find_dispatch(profile, trace);
   fprintf(file,
-          "{\"type\":\"att_trace\",\"trace_id\":%" PRIu64
-          ",\"dispatch_event_id\":%" PRIu64 ",\"submission_id\":%" PRIu64
-          ",\"command_buffer_id\":%" PRIu64 ",\"command_index\":%" PRIu32
-          ",\"executable_id\":%" PRIu64 ",\"function_ordinal\":%" PRIu32
+          "{\"type\":\"att_trace\",\"session_id\":%" PRIu64
+          ",\"trace_id\":%" PRIu64 ",\"dispatch_event_id\":%" PRIu64
+          ",\"submission_id\":%" PRIu64 ",\"command_buffer_id\":%" PRIu64
+          ",\"command_index\":%" PRIu32 ",\"executable_id\":%" PRIu64
+          ",\"function_ordinal\":%" PRIu32
           ",\"physical_device_ordinal\":%" PRIu32 ",\"queue_ordinal\":%" PRIu32
           ",\"stream_id\":%" PRIu64 ",\"key\":",
-          trace->record.trace_id, trace->record.dispatch_event_id,
-          trace->record.submission_id, trace->record.command_buffer_id,
-          trace->record.command_index, trace->record.executable_id,
-          trace->record.function_ordinal, trace->record.physical_device_ordinal,
-          trace->record.queue_ordinal, trace->record.stream_id);
+          trace->session_id, trace->record.trace_id,
+          trace->record.dispatch_event_id, trace->record.submission_id,
+          trace->record.command_buffer_id, trace->record.command_index,
+          trace->record.executable_id, trace->record.function_ordinal,
+          trace->record.physical_device_ordinal, trace->record.queue_ordinal,
+          trace->record.stream_id);
   iree_profile_fprint_json_string(
       file, function_info ? function_info->name : IREE_SV("<unknown>"));
   fprintf(file,
@@ -183,11 +189,12 @@ static iree_status_t iree_profile_att_print_trace_jsonl(
       instruction = IREE_SV("<unresolved>");
     }
     if (iree_status_is_ok(status)) {
-      fprintf(
-          file,
-          "{\"type\":\"att_instruction\",\"trace_id\":%" PRIu64
-          ",\"code_object_id\":%" PRIu64 ",\"pc\":%" PRIu64 ",\"category\":",
-          trace->record.trace_id, stats->pc.code_object_id, stats->pc.address);
+      fprintf(file,
+              "{\"type\":\"att_instruction\",\"session_id\":%" PRIu64
+              ",\"trace_id\":%" PRIu64 ",\"code_object_id\":%" PRIu64
+              ",\"pc\":%" PRIu64 ",\"category\":",
+              trace->session_id, trace->record.trace_id,
+              stats->pc.code_object_id, stats->pc.address);
       iree_profile_fprint_json_string(
           file, iree_make_cstring_view(
                     iree_profile_att_instruction_category_name(category)));

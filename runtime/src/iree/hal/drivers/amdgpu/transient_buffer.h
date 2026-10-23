@@ -96,7 +96,8 @@ bool iree_hal_amdgpu_transient_buffer_isa(const iree_hal_buffer_t* buffer);
 // allocation. Set it before publishing the wrapper to any queue or caller.
 // The wrapper clears the id when it returns to its pool.
 void iree_hal_amdgpu_transient_buffer_set_profile_allocation(
-    iree_hal_buffer_t* buffer, uint64_t session_id, uint64_t allocation_id);
+    iree_hal_buffer_t* buffer, iree_hal_profile_session_id_t session_id,
+    uint64_t allocation_id);
 
 // Attaches a queue-owned pool reservation to |buffer|.
 //

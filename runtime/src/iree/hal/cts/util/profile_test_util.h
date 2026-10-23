@@ -163,7 +163,7 @@ struct TestProfileSink {
   bool write_after_end = false;
 
   // Session identifier observed at begin and expected on later callbacks.
-  uint64_t session_id = 0;
+  iree_hal_profile_session_id_t session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
 };
 
 // Initializes |sink| for use as an iree_hal_profile_sink_t.

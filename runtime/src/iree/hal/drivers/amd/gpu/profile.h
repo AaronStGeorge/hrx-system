@@ -126,9 +126,10 @@ typedef struct iree_hal_amd_gpu_profile_operation_t {
 // families fail before starting a sink session. An empty request returns NULL.
 // The filter pattern is copied and the sink remains retained until end.
 iree_status_t iree_hal_amd_gpu_profile_begin(
-    const iree_hal_device_profiling_options_t* options, uint64_t session_id,
-    uint32_t queue_count, uint64_t timestamp_frequency_hz,
-    iree_allocator_t host_allocator, iree_hal_amd_gpu_profile_t** out_profile);
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id, uint32_t queue_count,
+    uint64_t timestamp_frequency_hz, iree_allocator_t host_allocator,
+    iree_hal_amd_gpu_profile_t** out_profile);
 
 // Prepares one device-assigned coordinate before the queue accepts work.
 // Existing streams and their completed records remain stable through queue

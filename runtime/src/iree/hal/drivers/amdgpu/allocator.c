@@ -199,7 +199,7 @@ typedef struct iree_hal_amdgpu_imported_host_release_data_t {
   iree_hal_buffer_usage_t buffer_usage;
 
   // Profiling session id owning |profile_allocation_id|.
-  uint64_t profile_session_id;
+  iree_hal_profile_session_id_t profile_session_id;
 
   // Session-local allocation id for the import/unimport lifecycle.
   uint64_t profile_allocation_id;
@@ -231,7 +231,7 @@ typedef struct iree_hal_amdgpu_imported_device_release_data_t {
   iree_hal_buffer_usage_t buffer_usage;
 
   // Profiling session id owning |profile_allocation_id|.
-  uint64_t profile_session_id;
+  iree_hal_profile_session_id_t profile_session_id;
 
   // Session-local allocation id for the import/unimport lifecycle.
   uint64_t profile_allocation_id;
@@ -1209,7 +1209,7 @@ static void iree_hal_amdgpu_allocator_record_buffer_allocate(
     const iree_hal_amdgpu_allocator_placement_t* memory_placement,
     iree_hal_amdgpu_buffer_spec_t params, iree_device_size_t allocation_size,
     void* host_ptr, iree_hal_buffer_t* buffer) {
-  uint64_t session_id = 0;
+  iree_hal_profile_session_id_t session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   const uint64_t allocation_id =
       iree_hal_amdgpu_logical_device_allocate_profile_memory_allocation_id(
           (iree_hal_device_t*)allocator->logical_device, &session_id);
@@ -1241,7 +1241,7 @@ static void iree_hal_amdgpu_allocator_record_buffer_import(
     iree_hal_amdgpu_buffer_spec_t params,
     const iree_hal_external_storage_t* external_buffer,
     iree_hal_amdgpu_imported_host_release_data_t* release_data) {
-  uint64_t session_id = 0;
+  iree_hal_profile_session_id_t session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   const uint64_t allocation_id =
       iree_hal_amdgpu_logical_device_allocate_profile_memory_allocation_id(
           (iree_hal_device_t*)allocator->logical_device, &session_id);
@@ -1288,7 +1288,7 @@ static void iree_hal_amdgpu_allocator_record_device_buffer_import(
     iree_hal_buffer_usage_t buffer_usage, void* device_ptr,
     iree_device_size_t length, uint32_t physical_device_ordinal,
     iree_hal_amdgpu_imported_device_release_data_t* release_data) {
-  uint64_t session_id = 0;
+  iree_hal_profile_session_id_t session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   const uint64_t allocation_id =
       iree_hal_amdgpu_logical_device_allocate_profile_memory_allocation_id(
           (iree_hal_device_t*)allocator->logical_device, &session_id);

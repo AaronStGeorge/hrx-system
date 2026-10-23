@@ -9,6 +9,7 @@
 
 #include "iree/hal/buffer.h"
 #include "iree/hal/pool.h"
+#include "iree/hal/profile_sink.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,7 +21,7 @@ typedef struct iree_hal_buffer_allocation_profile_t {
   uint64_t id;
   // Origin device's capture session, or zero when no session was captured.
   // Only the origin device may use this value to filter its own events.
-  uint64_t session_id;
+  iree_hal_profile_session_id_t session_id;
 } iree_hal_buffer_allocation_profile_t;
 
 // Returns a new process-wide allocation identity. Producers use the same

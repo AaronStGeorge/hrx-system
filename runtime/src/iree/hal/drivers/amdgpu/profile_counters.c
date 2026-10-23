@@ -1551,7 +1551,7 @@ static iree_status_t iree_hal_amdgpu_profile_counter_pack_counter_record(
 }
 
 static iree_status_t iree_hal_amdgpu_profile_counter_write_metadata_chunk(
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name, iree_string_view_t content_type,
     const uint8_t* storage, iree_host_size_t storage_size) {
   iree_hal_profile_chunk_metadata_t metadata =
@@ -1566,7 +1566,7 @@ static iree_status_t iree_hal_amdgpu_profile_counter_write_metadata_chunk(
 
 iree_status_t iree_hal_amdgpu_profile_counter_session_write_metadata(
     const iree_hal_amdgpu_profile_counter_session_t* session,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_string_view_t stream_name) {
   if (!iree_hal_amdgpu_profile_counter_session_is_active(session)) {
     return iree_ok_status();
@@ -2468,7 +2468,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_pack_profile_counter_samples(
 
 static iree_status_t iree_hal_amdgpu_host_queue_write_profile_counter_chunk(
     const iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id, iree_string_view_t chunk_name,
+    iree_hal_profile_session_id_t session_id, iree_string_view_t chunk_name,
     const uint8_t* sample_storage, iree_host_size_t sample_storage_size) {
   iree_hal_profile_chunk_metadata_t metadata =
       iree_hal_profile_chunk_metadata_default();
@@ -2487,7 +2487,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_write_profile_counter_chunk(
 
 iree_status_t iree_hal_amdgpu_host_queue_write_profile_counter_samples(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id, uint64_t event_read_position,
+    iree_hal_profile_session_id_t session_id, uint64_t event_read_position,
     iree_host_size_t event_count,
     const iree_hal_profile_dispatch_event_t* events) {
   if (!sink || !event_count ||
@@ -2632,7 +2632,7 @@ iree_hal_amdgpu_host_queue_pack_profile_counter_range_samples(
 static iree_status_t
 iree_hal_amdgpu_host_queue_write_profile_counter_range_samples(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id, uint32_t bank) {
+    iree_hal_profile_session_id_t session_id, uint32_t bank) {
   if (!sink || !queue->profiling.counters.ranges.slots) {
     return iree_ok_status();
   }
@@ -2678,7 +2678,7 @@ iree_hal_amdgpu_host_queue_write_profile_counter_range_samples(
 
 iree_status_t iree_hal_amdgpu_host_queue_flush_profile_counter_ranges(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id,
+    iree_hal_profile_session_id_t session_id,
     iree_hal_amdgpu_profile_counter_range_flush_flags_t flags) {
   if (!queue->profiling.counters.ranges.slots) {
     return iree_ok_status();

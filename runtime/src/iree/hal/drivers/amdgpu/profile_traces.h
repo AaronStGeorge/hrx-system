@@ -139,7 +139,7 @@ void iree_hal_amdgpu_host_queue_commit_profile_trace_stop_packet(
 // have succeeded.
 iree_status_t iree_hal_amdgpu_host_queue_write_profile_traces(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id, uint64_t event_read_position,
+    iree_hal_profile_session_id_t session_id, uint64_t event_read_position,
     iree_host_size_t event_count,
     const iree_hal_profile_dispatch_event_t* events);
 

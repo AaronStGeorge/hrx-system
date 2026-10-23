@@ -24,6 +24,7 @@
 #include "iree/hal/memory/asan_pool.h"
 #include "iree/hal/pool.h"
 #include "iree/hal/profile_options.h"
+#include "iree/hal/profile_sink.h"
 #include "iree/hal/queue.h"
 #include "iree/hal/resource.h"
 #include "iree/hal/semaphore.h"
@@ -652,6 +653,10 @@ IREE_API_EXPORT iree_status_t iree_hal_device_wait_semaphores(
 // IREE_STATUS_FAILED_PRECONDITION. Unsupported requested data must fail loudly
 // instead of returning success with no profile output.
 //
+// The public entry point assigns every nonzero begin a process-wide
+// iree_hal_profile_session_id_t. Backends carry that identity unchanged in all
+// emitted metadata; every backend-defined identity is local to that session.
+//
 // Callers must externally serialize begin/end with queue acquisition/release,
 // queue submission, command buffer recording that may later observe the
 // session, and concurrent begin/flush/end calls on the same device. Unless the
@@ -810,7 +815,8 @@ typedef struct iree_hal_device_vtable_t {
 
   iree_status_t(IREE_API_PTR* profiling_begin)(
       iree_hal_device_t* device,
-      const iree_hal_device_profiling_options_t* options);
+      const iree_hal_device_profiling_options_t* options,
+      iree_hal_profile_session_id_t session_id);
   iree_status_t(IREE_API_PTR* profiling_flush)(iree_hal_device_t* device);
   iree_status_t(IREE_API_PTR* profiling_end)(iree_hal_device_t* device);
 

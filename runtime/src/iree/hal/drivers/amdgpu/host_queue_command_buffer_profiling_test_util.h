@@ -206,7 +206,7 @@ struct CommandBufferProfileSink {
   std::vector<uint32_t> dispatch_event_physical_device_ordinals;
 
   // Session identifier observed at begin and expected on later callbacks.
-  uint64_t session_id = 0;
+  iree_hal_profile_session_id_t session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
 
   // True if the backend writes after ending the profiling session.
   bool write_after_end = false;

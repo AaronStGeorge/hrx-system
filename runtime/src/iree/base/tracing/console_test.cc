@@ -4,11 +4,26 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <cstdio>
 #include <string>
 #include <thread>
 
+#include "iree/base/api.h"
 #include "iree/base/tracing.h"
 #include "iree/testing/gtest.h"
+
+#if defined(IREE_SANITIZER_ADDRESS) || defined(__SANITIZE_ADDRESS__)
+// This test intentionally issues an impossible allocation and requires the
+// standard realloc contract: return NULL while preserving the old allocation.
+extern "C" const char* __asan_default_options() {
+  return "allocator_may_return_null=1";
+}
+#endif  // IREE_SANITIZER_ADDRESS || __SANITIZE_ADDRESS__
+#if defined(IREE_SANITIZER_THREAD)
+extern "C" const char* __tsan_default_options() {
+  return "allocator_may_return_null=1";
+}
+#endif  // IREE_SANITIZER_THREAD
 
 namespace {
 
@@ -102,6 +117,7 @@ TEST(ConsoleTracingTest, MessagesAndAllocations) {
   ::testing::internal::CaptureStderr();
   IREE_TRACE_MESSAGE(INFO, "embedded message");
   IREE_TRACE_MESSAGE_DYNAMIC(INFO, allocation.data(), 8);
+  IREE_TRACE_ALLOC_WAIT_FOR_REALLOCATIONS();
   IREE_TRACE_ALLOC(allocation.data(), allocation.size());
   IREE_TRACE_FREE(allocation.data());
   IREE_TRACE_APP_EXIT(0);
@@ -112,6 +128,34 @@ TEST(ConsoleTracingTest, MessagesAndAllocations) {
   EXPECT_THAT(output, ::testing::HasSubstr("heap alloc "));
   EXPECT_THAT(output, ::testing::HasSubstr("heap free "));
 #endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
+}
+
+TEST(ConsoleTracingTest, FailedReallocationPreservesOwnership) {
+  void* allocation = nullptr;
+  iree_status_t status = iree_allocator_malloc_uninitialized(
+      iree_allocator_system(), 64, &allocation);
+  ASSERT_TRUE(iree_status_is_ok(status));
+  ASSERT_NE(allocation, nullptr);
+  static_cast<char*>(allocation)[0] = 42;
+
+  void* original_allocation = allocation;
+  char address[2 + 2 * sizeof(void*) + 1] = {0};
+  std::snprintf(address, sizeof(address), "%p", original_allocation);
+  const std::string allocation_event = std::string("heap alloc ") + address;
+  const std::string free_event = std::string("heap free ") + address;
+
+  ::testing::internal::CaptureStderr();
+  status = iree_allocator_realloc(iree_allocator_system(), IREE_HOST_SIZE_MAX,
+                                  &allocation);
+  const std::string output = ::testing::internal::GetCapturedStderr();
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_RESOURCE_EXHAUSTED);
+  EXPECT_EQ(allocation, original_allocation);
+  EXPECT_EQ(output.find(allocation_event), std::string::npos);
+  EXPECT_EQ(output.find(free_event), std::string::npos);
+
+  iree_status_ignore(status);
+  EXPECT_EQ(static_cast<char*>(allocation)[0], 42);
+  iree_allocator_free(iree_allocator_system(), allocation);
 }
 
 }  // namespace

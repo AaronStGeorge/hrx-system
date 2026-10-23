@@ -193,8 +193,7 @@ static iree_status_t iree_profile_statistics_process_record(
     void* user_data, const iree_hal_profile_file_record_t* record,
     iree_host_size_t record_index) {
   (void)record_index;
-  // Aggregate the full bundle. The statistics sink resets on begin_session,
-  // so replay only chunk records instead of forwarding session markers.
+  // Only chunk records carry data contributing to aggregate rows.
   if (record->header.record_type != IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK) {
     return iree_ok_status();
   }
@@ -285,9 +284,11 @@ static iree_status_t iree_profile_statistics_print_jsonl_row(
           has_operation_count ? "true" : "false",
           has_tile_totals ? "true" : "false");
   fprintf(file,
+          ",\"session_id\":%" PRIu64
           ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
           ",\"event_type\":%u,\"event_name\":",
-          row->physical_device_ordinal, row->queue_ordinal, row->event_type);
+          row->session_id, row->physical_device_ordinal, row->queue_ordinal,
+          row->event_type);
   const char* event_type_name = iree_profile_statistics_event_type_name(row);
   if (event_type_name[0] != '\0') {
     iree_profile_fprint_json_string(file,
@@ -304,8 +305,8 @@ static iree_status_t iree_profile_statistics_print_jsonl_row(
   iree_string_view_t function_name = iree_string_view_empty();
   const bool has_function_name =
       iree_hal_profile_statistics_sink_find_function_name(
-          context->statistics_sink, row->executable_id, row->function_ordinal,
-          &function_name);
+          context->statistics_sink, row->session_id, row->executable_id,
+          row->function_ordinal, &function_name);
   fprintf(file, ",\"function_name\":");
   if (has_function_name) {
     iree_profile_fprint_json_string(file, function_name);

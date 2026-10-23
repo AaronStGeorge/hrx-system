@@ -15,6 +15,8 @@ extern "C" {
 #endif  // __cplusplus
 
 typedef struct iree_profile_file_t {
+  // Host allocator used for transient iteration state.
+  iree_allocator_t host_allocator;
   // Mapped profile file contents owned by this wrapper.
   iree_io_file_contents_t* contents;
   // Parsed profile file header.
@@ -23,6 +25,8 @@ typedef struct iree_profile_file_t {
   iree_host_size_t first_record_offset;
   // Logical byte length to parse, excluding any stale trailing storage.
   iree_host_size_t file_length;
+  // True after one complete iteration validates the session lifecycle.
+  bool session_lifecycle_validated;
 } iree_profile_file_t;
 
 // Function signature invoked once per parsed profile file record.
@@ -103,9 +107,11 @@ iree_status_t iree_profile_file_open(iree_string_view_t path,
 // Releases the mapping owned by |profile_file|.
 void iree_profile_file_close(iree_profile_file_t* profile_file);
 
-// Iterates all records in |profile_file| in file order.
+// Iterates all records in |profile_file| in file order. The first complete
+// iteration validates session lifecycle structure; later iterations reuse that
+// result while still parsing every record for their callback.
 iree_status_t iree_profile_file_for_each_record(
-    const iree_profile_file_t* profile_file,
+    iree_profile_file_t* profile_file,
     iree_profile_file_record_callback_t callback);
 
 #ifdef __cplusplus

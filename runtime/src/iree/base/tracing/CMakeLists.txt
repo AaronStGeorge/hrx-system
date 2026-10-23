@@ -21,6 +21,7 @@ if(${IREE_TRACING_PROVIDER} STREQUAL "console")
       iree::base::core_headers
       iree::base::internal
       iree::base::internal::time
+      Threads::Threads
     DEFINES
       "IREE_TRACING_PROVIDER_H=\"iree/base/tracing/console.h\""
       "IREE_TRACING_MODE=${IREE_TRACING_MODE}"
@@ -34,6 +35,7 @@ if(${IREE_TRACING_PROVIDER} STREQUAL "console")
         "console_test.cc"
       DEPS
         ::provider
+        iree::base
         iree::base::core_headers
         iree::testing::gtest
     )
@@ -64,6 +66,7 @@ elseif(${IREE_TRACING_PROVIDER} STREQUAL "tracy")
         "tracy_test.cc"
       DEPS
         ::provider
+        iree::base
         iree::base::core_headers
         iree::testing::gtest
         iree::testing::gtest_main

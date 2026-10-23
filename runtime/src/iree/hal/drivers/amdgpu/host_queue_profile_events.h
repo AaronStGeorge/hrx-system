@@ -150,7 +150,7 @@ void iree_hal_amdgpu_host_queue_retire_profile_queue_device_events(
 // and completion paths only append to the queue-local batch.
 iree_status_t iree_hal_amdgpu_host_queue_write_profile_events(
     iree_hal_amdgpu_host_queue_t* queue, iree_hal_profile_sink_t* sink,
-    uint64_t session_id);
+    iree_hal_profile_session_id_t session_id);
 
 #ifdef __cplusplus
 }  // extern "C"

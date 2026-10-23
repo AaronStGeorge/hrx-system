@@ -9,15 +9,16 @@
 iree_status_t iree_hal_amd_xdna_queue_profiling_begin(
     iree_hal_queue_t* base, uint32_t physical_device_ordinal,
     iree_hal_amd_xdna_command_arena_t* command_arena,
-    const iree_hal_device_profiling_options_t* options) {
+    const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
   iree_hal_amd_xdna_queue_t* queue = (void*)base;
   if (queue->profile) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "XDNA profiling session is already active");
   }
   return iree_hal_amd_xdna_profile_begin(
-      options, ++queue->next_profile_session_id, physical_device_ordinal, 0,
-      queue->context, command_arena, queue->host_allocator, &queue->profile);
+      options, session_id, physical_device_ordinal, 0, queue->context,
+      command_arena, queue->host_allocator, &queue->profile);
 }
 
 iree_status_t iree_hal_amd_xdna_queue_profiling_flush(iree_hal_queue_t* base) {

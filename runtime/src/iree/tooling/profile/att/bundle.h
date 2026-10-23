@@ -15,6 +15,8 @@ extern "C" {
 #endif  // __cplusplus
 
 typedef struct iree_profile_att_code_object_t {
+  // Profiling session owning |executable_id| and |code_object_id|.
+  iree_hal_profile_session_id_t session_id;
   // Producer-local executable identifier that owns this code object.
   uint64_t executable_id;
   // Producer-local code-object marker identifier used in ATT packets.
@@ -24,6 +26,8 @@ typedef struct iree_profile_att_code_object_t {
 } iree_profile_att_code_object_t;
 
 typedef struct iree_profile_att_code_object_load_t {
+  // Profiling session owning all session-local keys in this load.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal where the code object was loaded.
   uint32_t physical_device_ordinal;
   // Producer-local executable identifier that owns this code object.
@@ -37,6 +41,8 @@ typedef struct iree_profile_att_code_object_load_t {
 } iree_profile_att_code_object_load_t;
 
 typedef struct iree_profile_att_function_t {
+  // Profiling session owning |executable_id|.
+  iree_hal_profile_session_id_t session_id;
   // Producer-local executable identifier that owns this function.
   uint64_t executable_id;
   // Function ordinal referenced by dispatch and trace records.
@@ -46,6 +52,8 @@ typedef struct iree_profile_att_function_t {
 } iree_profile_att_function_t;
 
 typedef struct iree_profile_att_dispatch_t {
+  // Profiling session owning the copied dispatch identifiers.
+  iree_hal_profile_session_id_t session_id;
   // Dispatch event record copied from the profile bundle.
   iree_hal_profile_dispatch_event_t record;
   // Physical device ordinal from the containing chunk metadata.
@@ -55,6 +63,8 @@ typedef struct iree_profile_att_dispatch_t {
 } iree_profile_att_dispatch_t;
 
 typedef struct iree_profile_att_trace_t {
+  // Profiling session owning the copied trace identifiers.
+  iree_hal_profile_session_id_t session_id;
   // Executable trace record copied from the profile bundle.
   iree_hal_profile_executable_trace_record_t record;
   // Borrowed raw ATT/SQTT trace bytes from the mapped profile bundle.
@@ -118,11 +128,13 @@ iree_status_t iree_profile_att_profile_parse_file(
     iree_string_view_t path, iree_profile_att_profile_t* profile);
 
 const iree_profile_att_code_object_t* iree_profile_att_profile_find_code_object(
-    const iree_profile_att_profile_t* profile, uint64_t executable_id,
+    const iree_profile_att_profile_t* profile,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint64_t code_object_id);
 
 const iree_profile_att_function_t* iree_profile_att_profile_find_function(
-    const iree_profile_att_profile_t* profile, uint64_t executable_id,
+    const iree_profile_att_profile_t* profile,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint32_t function_ordinal);
 
 const iree_profile_att_dispatch_t* iree_profile_att_profile_find_dispatch(

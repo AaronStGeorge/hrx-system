@@ -24,6 +24,12 @@
 
 IREE_HAL_API_RETAIN_RELEASE(device);
 
+// Process-wide identity source for HAL profiling sessions. Profile record
+// identities below the session boundary are producer-local and must always be
+// interpreted together with this value.
+static iree_atomic_uint64_t iree_hal_device_next_profile_session_id =
+    IREE_ATOMIC_VAR_INIT(1);
+
 IREE_API_EXPORT iree_status_t iree_hal_device_create_params_verify(
     const iree_hal_device_create_params_t* params) {
   IREE_ASSERT_ARGUMENT(params);
@@ -364,8 +370,10 @@ IREE_API_EXPORT iree_status_t iree_hal_device_profiling_begin(
   }
 
   IREE_TRACE_ZONE_BEGIN(z0);
+  const iree_hal_profile_session_id_t session_id = iree_atomic_fetch_add(
+      &iree_hal_device_next_profile_session_id, 1, iree_memory_order_relaxed);
   iree_status_t status =
-      _VTABLE_DISPATCH(device, profiling_begin)(device, options);
+      _VTABLE_DISPATCH(device, profiling_begin)(device, options, session_id);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

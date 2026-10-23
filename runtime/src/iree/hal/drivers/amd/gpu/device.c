@@ -147,8 +147,6 @@ typedef struct iree_hal_amd_gpu_device_t {
   iree_hal_amd_gpu_feedback_t feedback;
   // Optional profiling session, owned until externally serialized idle end.
   iree_hal_amd_gpu_profile_t* profile;
-  // Monotonic session identity for this device's lifetime.
-  uint64_t next_profile_session_id;
   // Retained placement-local process infrastructure, independent of the pool.
   iree_async_proactor_pool_entry_t* proactor_entry;
   // Final public release closes queue admission before joining completion.
@@ -1495,8 +1493,8 @@ static iree_status_t iree_hal_amd_gpu_device_import_file(
 }
 
 static iree_status_t iree_hal_amd_gpu_device_profiling_begin(
-    iree_hal_device_t* base,
-    const iree_hal_device_profiling_options_t* options) {
+    iree_hal_device_t* base, const iree_hal_device_profiling_options_t* options,
+    iree_hal_profile_session_id_t session_id) {
   iree_hal_amd_gpu_device_t* device = (void*)base;
   if (device->profile) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -1529,8 +1527,8 @@ static iree_status_t iree_hal_amd_gpu_device_profiling_begin(
   }
   iree_hal_amd_gpu_profile_t* profile = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_profile_begin(
-      options, ++device->next_profile_session_id, device->queue_count,
-      clock.frequency_hz, device->host_allocator, &profile));
+      options, session_id, device->queue_count, clock.frequency_hz,
+      device->host_allocator, &profile));
   iree_status_t status = iree_hal_amd_gpu_queue_membership_set_profile(
       &device->membership, profile);
   if (iree_status_is_ok(status)) {

@@ -15,18 +15,24 @@ extern "C" {
 
 // Host-timestamped queue event retained by the active queue query.
 typedef struct iree_profile_queue_event_row_t {
+  // Capture-wide profiling session identifier owning this event.
+  iree_hal_profile_session_id_t session_id;
   // Immutable queue event record copied from the profile bundle.
   iree_hal_profile_queue_event_t record;
 } iree_profile_queue_event_row_t;
 
 // Device-timestamped queue event retained by the active queue query.
 typedef struct iree_profile_queue_device_event_row_t {
+  // Capture-wide profiling session identifier owning this event.
+  iree_hal_profile_session_id_t session_id;
   // Immutable queue device event record copied from the profile bundle.
   iree_hal_profile_queue_device_event_t record;
 } iree_profile_queue_device_event_row_t;
 
 // Host-timestamped execution span retained by the active queue query.
 typedef struct iree_profile_host_execution_event_row_t {
+  // Capture-wide profiling session identifier owning this event.
+  iree_hal_profile_session_id_t session_id;
   // Immutable host execution event record copied from the profile bundle.
   iree_hal_profile_host_execution_event_t record;
 } iree_profile_host_execution_event_row_t;

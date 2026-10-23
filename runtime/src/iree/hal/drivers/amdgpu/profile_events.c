@@ -165,7 +165,8 @@ void iree_hal_amdgpu_profile_event_streams_clear_queue(
 
 bool iree_hal_amdgpu_profile_event_streams_record_memory_event(
     iree_hal_amdgpu_profile_event_streams_t* streams,
-    uint64_t active_session_id, uint64_t session_id,
+    iree_hal_profile_session_id_t active_session_id,
+    iree_hal_profile_session_id_t session_id,
     const iree_hal_profile_memory_event_t* event) {
   bool recorded = false;
   iree_hal_amdgpu_profile_event_stream_t* stream = &streams->memory.stream;
@@ -173,8 +174,8 @@ bool iree_hal_amdgpu_profile_event_streams_record_memory_event(
     return false;
   }
   iree_slim_mutex_lock(&stream->mutex);
-  const bool session_matches =
-      session_id == 0 || active_session_id == session_id;
+  const bool session_matches = session_id == IREE_HAL_PROFILE_SESSION_ID_NONE ||
+                               active_session_id == session_id;
   if (session_matches) {
     uint64_t event_position = 0;
     uint64_t event_id = 0;
@@ -226,7 +227,7 @@ void iree_hal_amdgpu_profile_event_streams_record_queue_event(
 
 iree_status_t iree_hal_amdgpu_profile_event_streams_write_memory(
     iree_hal_amdgpu_profile_event_streams_t* streams,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_allocator_t host_allocator) {
   iree_hal_profile_chunk_metadata_t metadata =
       iree_hal_profile_chunk_metadata_default();
@@ -239,7 +240,7 @@ iree_status_t iree_hal_amdgpu_profile_event_streams_write_memory(
 
 iree_status_t iree_hal_amdgpu_profile_event_streams_write_queue(
     iree_hal_amdgpu_profile_event_streams_t* streams,
-    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
     iree_allocator_t host_allocator) {
   iree_hal_profile_chunk_metadata_t metadata =
       iree_hal_profile_chunk_metadata_default();

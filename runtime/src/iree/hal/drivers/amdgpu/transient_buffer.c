@@ -56,7 +56,7 @@ struct iree_hal_amdgpu_transient_buffer_t {
   iree_atomic_int32_t deallocation_state;
 
   // Origin device's profiling session, or zero when capture was inactive.
-  uint64_t profile_session_id;
+  iree_hal_profile_session_id_t profile_session_id;
 
   // Process-wide profiling allocation id for this queue_alloca lifecycle.
   uint64_t profile_allocation_id;
@@ -283,7 +283,7 @@ iree_status_t iree_hal_amdgpu_transient_buffer_create(
   iree_atomic_store(&buffer->deallocation_state,
                     IREE_HAL_AMDGPU_TRANSIENT_BUFFER_DEALLOCATION_STATE_IDLE,
                     iree_memory_order_relaxed);
-  buffer->profile_session_id = 0;
+  buffer->profile_session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   buffer->profile_allocation_id = 0;
 
   *out_buffer = &buffer->base;
@@ -297,7 +297,7 @@ bool iree_hal_amdgpu_transient_buffer_isa(const iree_hal_buffer_t* buffer) {
 }
 
 void iree_hal_amdgpu_transient_buffer_set_profile_allocation(
-    iree_hal_buffer_t* base_buffer, uint64_t session_id,
+    iree_hal_buffer_t* base_buffer, iree_hal_profile_session_id_t session_id,
     uint64_t allocation_id) {
   iree_hal_amdgpu_transient_buffer_t* buffer =
       iree_hal_amdgpu_transient_buffer_cast(base_buffer);
@@ -512,7 +512,7 @@ static void iree_hal_amdgpu_transient_buffer_destroy(
   iree_atomic_store(&buffer->deallocation_state,
                     IREE_HAL_AMDGPU_TRANSIENT_BUFFER_DEALLOCATION_STATE_IDLE,
                     iree_memory_order_relaxed);
-  buffer->profile_session_id = 0;
+  buffer->profile_session_id = IREE_HAL_PROFILE_SESSION_ID_NONE;
   buffer->profile_allocation_id = 0;
   buffer->source_pool = NULL;
   iree_hal_amdgpu_transient_buffer_pool_release(wrapper_pool, buffer);
