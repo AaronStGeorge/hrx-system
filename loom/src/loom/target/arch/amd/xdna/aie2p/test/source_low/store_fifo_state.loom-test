@@ -1,0 +1,83 @@
+// RUN: emit source-low output=low
+
+aie2p.target<core> @target
+
+low.func.def inline target<amd.xdna.aie2p.core>(@target) @initialize_store_fifo(%output: reg<aie2p.ep>) -> (reg<aie2p.mpfs>, reg<aie2p.mstfifo>, reg<aie2p.mr26_fifo_st>) asm {
+  %pointer = mov.store-fifo.pointer %output
+  %low = vlda.store-fifo.low512 %output, 0
+  %fifo = vlda.store-fifo.high512 %output, %low, 64
+  %position = mova.fifo.store.position 0
+  return %pointer, %fifo, %position
+}
+
+low.func.def inline target<amd.xdna.aie2p.core>(@target) @encode_bfp_operand(%input: reg<aie2p.ep>) -> (reg<aie2p.mexa>) asm {
+  set.rounding 12
+  %lower = vlda.convert.bf16x32.to.f32x32 %input, 0
+  %upper = vlda.convert.bf16x32.to.f32x32 %input, 64
+  %values = concat(%lower, %upper) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
+  %encoded = vconv.bfp16ebs8.fp32 %values
+  return %encoded
+}
+
+low.func.def inline target<amd.xdna.aie2p.core>(@target) @push_store_fifo(%input: reg<aie2p.ep>, %operand: reg<aie2p.mexa>, %pointer: reg<aie2p.mpfs>, %fifo: reg<aie2p.mstfifo>, %position: reg<aie2p.mr26_fifo_st>) -> (reg<aie2p.mpfs>, reg<aie2p.mstfifo>, reg<aie2p.mr26_fifo_st>) asm {
+  %lower = vlda.convert.bf16x32.to.f32x32 %input, 0
+  %upper = vlda.convert.bf16x32.to.f32x32 %input, 64
+  %values = concat(%lower, %upper) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
+  %encoded = vconv.bfp16ebs8.fp32 %values
+  %matrix_control = mova.i32 780
+  %decoded = mmul.bfp16ebs8.m8n8k8 %encoded, %operand, %matrix_control
+  %pushed, %next_pointer, %next_position = vst.push.bfp16ebs8.from.fp32 %fifo, %decoded, %pointer, %position
+  %flushed, %final_pointer, %final_position = vst.flush.convert.512 %pushed, %next_pointer, %next_position
+  return %final_pointer, %flushed, %final_position
+}
+
+func.def target(@target) @carry_store_fifo(%input: buffer, %output: buffer) {
+  %operand = low.invoke @encode_bfp_operand(%input) : (buffer) -> (aie2p.bfp16ebs8.operand)
+  %pointer, %fifo, %position = low.invoke @initialize_store_fifo(%output) : (buffer) -> (aie2p.store_fifo.pointer, aie2p.store_fifo, aie2p.store_fifo.position)
+  %begin = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  %final_pointer, %final_fifo, %final_position = scf.for %i = [%begin to %end step %step](%current_pointer = %pointer : aie2p.store_fifo.pointer, %current_fifo = %fifo : aie2p.store_fifo, %current_position = %position : aie2p.store_fifo.position) -> (aie2p.store_fifo.pointer, aie2p.store_fifo, aie2p.store_fifo.position) {
+    %next_pointer, %next_fifo, %next_position = low.invoke @push_store_fifo(%input, %operand, %current_pointer, %current_fifo, %current_position) : (buffer, aie2p.bfp16ebs8.operand, aie2p.store_fifo.pointer, aie2p.store_fifo, aie2p.store_fifo.position) -> (aie2p.store_fifo.pointer, aie2p.store_fifo, aie2p.store_fifo.position)
+    scf.yield %next_pointer, %next_fifo, %next_position : aie2p.store_fifo.pointer, aie2p.store_fifo, aie2p.store_fifo.position
+  }
+  func.return
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @carry_store_fifo() asm {
+  %input = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %output = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  set.rounding 12
+  %lower$10 = vlda.convert.bf16x32.to.f32x32 %input, 0
+  %upper$11 = vlda.convert.bf16x32.to.f32x32 %input, 64
+  %values$12 = concat(%lower$10, %upper$11) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
+  %encoded$13 = vconv.bfp16ebs8.fp32 %values$12
+  %pointer = mov.store-fifo.pointer %output
+  %low = vlda.store-fifo.low512 %output, 0
+  %fifo = vlda.store-fifo.high512 %output, %low, 64
+  %position = mova.fifo.store.position 0
+  %begin = mov.short 0
+  %end = mov.short 4
+  %step = mov.short 1
+  low.br ^_bb1(%begin: reg<aie2p.er>, %pointer: reg<aie2p.mpfs>, %fifo: reg<aie2p.mstfifo>, %position: reg<aie2p.mr26_fifo_st>)
+^_bb1(%i: reg<aie2p.er>, %current_pointer: reg<aie2p.mpfs>, %current_fifo: reg<aie2p.mstfifo>, %current_position: reg<aie2p.mr26_fifo_st>):
+  %76 = lt %i, %end
+  low.cond_br %76, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %81 = copy %current_pointer : reg<aie2p.mpfs> -> reg<aie2p.mpfs>
+  %82 = copy %current_fifo : reg<aie2p.mstfifo> -> reg<aie2p.mstfifo>
+  %83 = copy %current_position : reg<aie2p.mr26_fifo_st> -> reg<aie2p.mr26_fifo_st>
+  %lower$22 = vlda.convert.bf16x32.to.f32x32 %input, 0
+  %upper$23 = vlda.convert.bf16x32.to.f32x32 %input, 64
+  %values$24 = concat(%lower$22, %upper$23) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
+  %encoded$25 = vconv.bfp16ebs8.fp32 %values$24
+  %matrix_control = mova.i32 780
+  %decoded = mmul.bfp16ebs8.m8n8k8 %encoded$25, %encoded$13, %matrix_control
+  %pushed, %next_pointer, %next_position = vst.push.bfp16ebs8.from.fp32 %82, %decoded, %81, %83
+  %flushed, %final_pointer, %final_position = vst.flush.convert.512 %pushed, %next_pointer, %next_position
+  %80 = add.nc %i, %step
+  low.br ^_bb1(%80: reg<aie2p.er>, %final_pointer: reg<aie2p.mpfs>, %flushed: reg<aie2p.mstfifo>, %final_position: reg<aie2p.mr26_fifo_st>)
+^_bb3:
+  return
+}

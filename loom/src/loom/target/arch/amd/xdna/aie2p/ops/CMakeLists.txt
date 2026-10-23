@@ -52,6 +52,7 @@ loom_generated_cc_library(
   GENERATOR
     loom::py::loom::gen::ops::c_tables_aie2p_generator
   SRCS
+    "bfp_operand.c"
     "fifo.c"
     "registry.c"
     "target.c"
@@ -64,6 +65,7 @@ loom_generated_cc_library(
     "tables.c"
     "types.c"
   HDRS
+    "bfp_operand.h"
     "fifo.h"
     "registry.h"
     "target.h"

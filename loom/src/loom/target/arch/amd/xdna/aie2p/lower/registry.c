@@ -23,6 +23,7 @@
 #include "loom/target/arch/amd/xdna/aie2p/lower/transpose.h"
 #include "loom/target/arch/amd/xdna/aie2p/lower/vector_construct.h"
 #include "loom/target/arch/amd/xdna/aie2p/lower/vector_load.h"
+#include "loom/target/arch/amd/xdna/aie2p/ops/bfp_operand.h"
 #include "loom/target/arch/amd/xdna/aie2p/ops/fifo.h"
 #include "loom/target/arch/amd/xdna/aie2p/vector_carrier.h"
 #include "loom/target/arch/amd/xdna/error_catalog.h"
@@ -66,7 +67,11 @@ static bool loom_aie2p_source_type_supported(void* user_data,
                                              const loom_module_t* module,
                                              loom_type_t source_type) {
   (void)user_data;
-  if (loom_aie2p_load_fifo_type_isa(module, source_type)) {
+  if (loom_aie2p_load_fifo_type_isa(module, source_type) ||
+      loom_aie2p_store_fifo_type_isa(module, source_type) ||
+      loom_aie2p_store_fifo_pointer_type_isa(module, source_type) ||
+      loom_aie2p_store_fifo_position_type_isa(module, source_type) ||
+      loom_aie2p_bfp16ebs8_operand_type_isa(module, source_type)) {
     return true;
   }
   if (!loom_type_is_scalar(source_type)) {
@@ -100,6 +105,26 @@ static iree_status_t loom_aie2p_map_type(void* user_data,
                                     source_type)) {
     return loom_low_lower_make_register_type(
         context, AIE2P_CORE_REG_CLASS_ID_AIE2P_ELDFIFOREG, 1, out_low_type);
+  }
+  if (loom_aie2p_store_fifo_type_isa(loom_low_lower_context_module(context),
+                                     source_type)) {
+    return loom_low_lower_make_register_type(
+        context, AIE2P_CORE_REG_CLASS_ID_AIE2P_MSTFIFO, 1, out_low_type);
+  }
+  if (loom_aie2p_store_fifo_pointer_type_isa(
+          loom_low_lower_context_module(context), source_type)) {
+    return loom_low_lower_make_register_type(
+        context, AIE2P_CORE_REG_CLASS_ID_AIE2P_MPFS, 1, out_low_type);
+  }
+  if (loom_aie2p_store_fifo_position_type_isa(
+          loom_low_lower_context_module(context), source_type)) {
+    return loom_low_lower_make_register_type(
+        context, AIE2P_CORE_REG_CLASS_ID_AIE2P_MR26_FIFO_ST, 1, out_low_type);
+  }
+  if (loom_aie2p_bfp16ebs8_operand_type_isa(
+          loom_low_lower_context_module(context), source_type)) {
+    return loom_low_lower_make_register_type(
+        context, AIE2P_CORE_REG_CLASS_ID_AIE2P_MEXA, 1, out_low_type);
   }
   if (loom_type_is_buffer(source_type)) {
     return loom_low_lower_make_register_type(
