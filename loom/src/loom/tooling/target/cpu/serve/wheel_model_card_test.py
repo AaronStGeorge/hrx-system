@@ -17,9 +17,11 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from urllib.parse import urlsplit
 from zipfile import ZipFile
 
-from model_card_test import check_model
+from loom_serve_testing.http_harness import running_server
+from model_card_test import check_model, check_text
 from release import inspect_wheel, read_identity
 
 
@@ -93,8 +95,14 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
         directory = Path(temporary)
 
         def run(*arguments, expected=0):
+            command = [str(argument) for argument in arguments]
+            # Windows CreateProcess does not use the supplied environment's
+            # PATH when locating the executable. Resolve our isolated PATH here.
+            executable = shutil.which(command[0], path=environment.get("PATH"))
+            assert executable is not None, command[0]
+            command[0] = executable
             result = subprocess.run(
-                [str(argument) for argument in arguments],
+                command,
                 cwd=directory,
                 env=environment,
                 text=True,
@@ -106,7 +114,12 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
 
         run(sys.executable, "-I", "-m", "venv", directory / "venv")
         scripts = directory / "venv" / ("Scripts" if os.name == "nt" else "bin")
-        environment["PATH"] = str(scripts) + os.pathsep + os.defpath
+        system_path = (
+            str(Path(os.environ["SystemRoot"]) / "System32")
+            if os.name == "nt"
+            else os.defpath
+        )
+        environment["PATH"] = str(scripts) + os.pathsep + system_path
         python = scripts / ("python.exe" if os.name == "nt" else "python")
         fetch = scripts / ("loom-fetch.exe" if os.name == "nt" else "loom-fetch")
 
@@ -134,13 +147,20 @@ def main(wheel, associated_wheel, deployment, elf_inspector, version_file, readm
                 for entry in archive.infolist()
                 if not entry.is_dir() and ".data/scripts/" in entry.filename
             }
-        assert {"libiree.so", "libloomc.so"} <= native_names, native_names
+        companions = (
+            {"iree.dll", "loomc.dll"}
+            if os.name == "nt"
+            else {"libiree.so", "libloomc.so"}
+        )
+        assert companions <= native_names, native_names
         for name in sorted(native_names):
             installed = scripts / name
             with installed.open("rb") as stream:
-                assert stream.read(4) == b"\x7fELF", name
-            runpath = run(elf_inspector, "--print-rpath", installed).strip()
-            assert runpath == "$ORIGIN", (name, runpath)
+                signature = b"MZ" if os.name == "nt" else b"\x7fELF"
+                assert stream.read(len(signature)) == signature, name
+            if os.name != "nt":
+                runpath = run(elf_inspector, "--print-rpath", installed).strip()
+                assert runpath == "$ORIGIN", (name, runpath)
         for command in (
             "loom-benchmark",
             "loom-check",
@@ -342,12 +362,26 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
             )
             assert receipt["catalog"] == listing["snapshot"]
         server = shutil.which("loom-serve", path=environment["PATH"])
-        check_model(
-            str(server),
-            str(catalog_installation / "model.json"),
-            "abab",
+        model = str(catalog_installation / "model.json")
+        with running_server(
+            [
+                server,
+                "--device=task",
+                "--workers=1",
+                "--listen=127.0.0.1:0",
+                "--model=" + model,
+            ],
+            directory / "peer.log",
+            cwd=directory,
             environment=environment,
-        )
+        ) as (peer, address):
+            assert address is not None, (directory / "peer.log").read_text()
+            check_model(str(server), model, "abab", environment=environment)
+            # Retiring another server must not signal this server or the test
+            # runner, including when Windows console control is broadcast.
+            assert peer.poll() is None
+            check_text(urlsplit("http://" + address), "loom-fixture/text", "abab")
+        assert peer.returncode == 0
 
 
 if __name__ == "__main__":

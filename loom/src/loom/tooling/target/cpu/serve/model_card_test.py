@@ -87,6 +87,31 @@ def check_image(address, model):
     assert state["parameters"]["image"]["active"], state
 
 
+def check_text(address, model_name, expected):
+    try:
+        response = control(
+            address,
+            "POST",
+            "/v1/chat/completions",
+            200,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(
+                {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": "a"}],
+                    "max_tokens": 4,
+                }
+            ),
+        )
+    except RuntimeError as error:
+        status = control(address, "GET", "/v1/status", 200)
+        raise RuntimeError(f"{error}\nmodel status: {json.dumps(status)}") from error
+    # Independent dense oracle: checkpoint bias 2, plus the selected JIT delta.
+    assert response["choices"][0]["message"]["content"] == expected, response
+    assert response["usage"]["prompt_tokens"] == 1, response
+    assert response["usage"]["completion_tokens"] == 4, response
+
+
 def check_model(
     server, model, expected, *provider_encodings, environment=None, image=False
 ):
@@ -121,30 +146,7 @@ def check_model(
         ) as (process, bound_address):
             assert bound_address is not None, log.read_text()
             address = urlsplit("http://" + bound_address)
-            try:
-                response = control(
-                    address,
-                    "POST",
-                    "/v1/chat/completions",
-                    200,
-                    headers={"Content-Type": "application/json"},
-                    body=json.dumps(
-                        {
-                            "model": model_name,
-                            "messages": [{"role": "user", "content": "a"}],
-                            "max_tokens": 4,
-                        }
-                    ),
-                )
-            except RuntimeError as error:
-                status = control(address, "GET", "/v1/status", 200)
-                raise RuntimeError(
-                    f"{error}\nmodel status: {json.dumps(status)}"
-                ) from error
-            # Independent dense oracle: checkpoint bias 2, plus the selected JIT delta.
-            assert response["choices"][0]["message"]["content"] == expected, response
-            assert response["usage"]["prompt_tokens"] == 1, response
-            assert response["usage"]["completion_tokens"] == 4, response
+            check_text(address, model_name, expected)
             if image:
                 check_image(address, model_name)
         assert process.returncode == 0, log.read_text()

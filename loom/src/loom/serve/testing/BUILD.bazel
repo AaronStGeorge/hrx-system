@@ -317,7 +317,10 @@ loom_py_test(
 loom_py_library(
     name = "http",
     testonly = True,
-    srcs = ["loom_serve_testing/http_harness.py"],
+    srcs = [
+        "loom_serve_testing/http_harness.py",
+        "loom_serve_testing/process.py",
+    ],
     imports = ["."],
     visibility = ["//visibility:public"],
     deps = [":logs"],
@@ -343,4 +346,11 @@ loom_py_test(
         ":http",
         ":logs",
     ],
+)
+
+loom_py_test(
+    name = "process_test",
+    size = "small",
+    srcs = ["loom_serve_testing/process_test.py"],
+    deps = [":http"],
 )

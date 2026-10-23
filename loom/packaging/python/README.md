@@ -58,6 +58,19 @@ system libraries or alter the installed payload. Windows retains the original
 `win_amd64` wheel. Linux aarch64 development builds do not yet have a qualified
 release artifact.
 
+The installed-artifact check runs on Linux or native Windows:
+
+```sh
+iree-bazel-test --config=loom-sdk --config=opt //loom/src/loom/tooling/target/cpu/serve:wheel_model_card_test
+```
+
+It installs the final wheel into an isolated environment, exercises all commands
+and C++ import, fetches a fixture over HTTP, reuses it offline, and checks native
+inference and graceful shutdown. Two simultaneous servers establish that stopping
+one leaves the other serving requests. Windows uses separate consoles and real
+console control events. Cross-building the target verifies its inputs; execution
+requires the matching operating system.
+
 `--config=loom-sdk` selects the SDK's CPU and libamdf runtime drivers, compiler
 targets, and media codecs independently of the worktree configuration. Native
 AMD execution uses the operating-system device driver; it requires no ROCm SDK.

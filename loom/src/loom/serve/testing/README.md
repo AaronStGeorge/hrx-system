@@ -17,7 +17,9 @@ The local `loom_serve_testing` Python package contains these helpers:
 
 - `http_harness` owns child-process startup, HTTP control calls, joined shutdown,
   and explicitly fallible telemetry history. Readiness and completion come from
-  server state and counters, not sleeps or promised event retention.
+  server state and counters, not sleeps or promised event retention. Its
+  `process` helper requests graceful shutdown with SIGTERM on POSIX or Ctrl+Break
+  in a privately owned Windows console, and joins the child on every path.
 - `logs` owns an observer's cursors. Gaps, model removal and stream reincarnation
   remain explicit; a reader never owns server resources.
 - `model_staging.stage_model(card, assets, output)` creates a fresh model

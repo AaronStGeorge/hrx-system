@@ -436,7 +436,10 @@ loom_py_test(
         "$(rootpath //loom/packaging/python:release_wheel)",
         "$(rootpath //loom/packaging/python/test:associated_wheel)",
         "$(rootpath //loom/src/loom/serve/fixture/text:card_model_mixed)",
-        "$(rootpath @patchelf//:patchelf)",
+    ] + select({
+        "@platforms//os:linux": ["$(rootpath @patchelf//:patchelf)"],
+        "//conditions:default": ["unused"],
+    }) + [
         "$(rootpath //loom/packaging/python:version.json)",
         "$(rootpath //loom/packaging/python:PYPI_README.md)",
     ],
@@ -446,8 +449,10 @@ loom_py_test(
         "//loom/packaging/python:version.json",
         "//loom/packaging/python/test:associated_wheel",
         "//loom/src/loom/serve/fixture/text:card_model_mixed",
-        "@patchelf",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["@patchelf"],
+        "//conditions:default": [],
+    }),
     imports = ["."],
     main = "wheel_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
@@ -457,6 +462,7 @@ loom_py_test(
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
         "@platforms//os:linux": [],
+        "@platforms//os:windows": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [

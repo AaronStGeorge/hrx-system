@@ -16,12 +16,12 @@ The outer runner owns hang detection for valid submitted work.
 import contextlib
 import http.client
 import json
-import signal
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from loom_serve_testing.logs import LogClient
+from loom_serve_testing.process import creation_options, shutdown
 
 
 def control(address, method, path, expected, *, session=None, body=None, headers=None):
@@ -248,6 +248,7 @@ def running_server(command, log_path, on_event=None, *, cwd=None, environment=No
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
+            **creation_options(),
         )
         address = None
         drain = observer = None
@@ -302,14 +303,14 @@ def running_server(command, log_path, on_event=None, *, cwd=None, environment=No
                 if observer:
                     observer.result()
             finally:
-                if process.poll() is None:
-                    process.send_signal(signal.SIGTERM)
-                returncode = process.wait()
                 try:
-                    if drain:
-                        drain.result()
+                    returncode = shutdown(process)
                 finally:
-                    process.stderr.close()
+                    try:
+                        if drain:
+                            drain.result()
+                    finally:
+                        process.stderr.close()
                 if failure is not None:
                     failure.add_note(
                         f"server diagnostics (exit {returncode}): {log_path}\n"

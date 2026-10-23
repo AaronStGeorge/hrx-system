@@ -413,6 +413,7 @@ iree_py_library(
     http
   SRCS
     "loom_serve_testing/http_harness.py"
+    "loom_serve_testing/process.py"
   IMPORTS
     "."
   DEPS
@@ -445,6 +446,27 @@ iree_py_test(
   DEPS
     loom::serve::testing::http
     loom::serve::testing::logs
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+  TIMEOUT
+    60
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+iree_py_test(
+  NAME
+    process_test
+  MAIN
+    "loom_serve_testing/process_test.py"
+  SRCS
+    "loom_serve_testing/process_test.py"
+  DEPS
+    loom::serve::testing::http
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
   PACKAGE_DIRS
