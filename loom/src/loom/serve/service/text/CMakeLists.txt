@@ -304,6 +304,32 @@ loom_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    media_projector_tests
+  SRCS
+    "media_projector_test.cc"
+  DEPS
+    ::media_projector
+    iree::async
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::testing::gtest
+    loom::serve::media::image
+    loom::serve::runtime::device
+    loom::serve::runtime::host
+    loom::serve::service::finite::model
+    loom::serve::service::finite::result
+    loom::serve::testing::model
+    loom::serve::testing::service_application
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
 if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME

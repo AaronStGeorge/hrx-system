@@ -40,6 +40,9 @@ struct loom_serve_text_media_request_t {
   uint64_t consumer_bytes;
   // Complete request forecast evaluated before decoding its first window.
   loom_serve_finite_memory_forecast_t forecast;
+  // The declared producer and consumer fit only as sequential phases. Keep
+  // future results private until producer completion releases its residency.
+  bool await_producer;
   // CPU planning has settled this request, including a failed forecast.
   bool forecasted;
   // CPU-only forecast result, transferred after the planning loan joins.
@@ -215,6 +218,9 @@ struct loom_serve_text_media_projector_t {
   loom_serve_text_media_job_t** cohort;
   // Number of selected source requests.
   iree_host_size_t cohort_count;
+  // Owned running-cohort result, including unpublished cancelled peer rows.
+  // Failed readiness retains it through the owner's normal retirement path.
+  loom_serve_finite_result_t* result;
   // Contiguous codec descriptors borrowing the selected jobs.
   loom_serve_media_image_request_t* requests;
   // Codec result buffers transferred into jobs after realization.
@@ -368,8 +374,9 @@ static iree_status_t loom_serve_text_media_request_forecast(
   }
   iree_allocator_free(request->host_allocator, descriptions);
   if (iree_status_is_ok(status)) {
-    // Check the two sequential phases independently. This is impossible-alone
-    // preflight, not credit against peers or permission to overlap the phases.
+    // Reject impossible sequential phases before selecting publication order.
+    // Their combined footprint permits overlap within this request; neither
+    // check reserves completion credit against independent peer requests.
     const loom_serve_finite_memory_forecast_t forecast = request->forecast;
     uint64_t available = limit;
     if (forecast.retained_bytes > available) {
@@ -386,6 +393,10 @@ static iree_status_t loom_serve_text_media_request_forecast(
                              "image producer or language continuation exceeds "
                              "the serving memory limit of %" PRIu64 " bytes",
                              limit);
+      } else {
+        request->await_producer =
+            forecast.private_peak_bytes >
+            available - forecast.expanded_bytes - request->consumer_bytes;
       }
     }
   }
@@ -554,30 +565,35 @@ static void loom_serve_text_media_projector_complete(
   for (iree_host_size_t i = 0; i < projector->cohort_count; ++i) {
     loom_serve_text_media_job_release(projector->cohort[i]);
   }
+  loom_serve_finite_result_release(projector->result);
+  projector->result = NULL;
   projector->cohort_count = 0;
   projector->phase = MEDIA_PREPARED;
 }
 
-static iree_status_t loom_serve_text_media_projector_submit(
-    loom_serve_text_media_projector_t* projector) {
-  loom_serve_finite_result_t* result = NULL;
-  loom_serve_execution_frontier_t ready;
-  IREE_RETURN_IF_ERROR(
-      loom_serve_finite_model_submit(projector->model, &result, &ready));
+static void loom_serve_text_media_projector_publish(
+    loom_serve_text_media_projector_t* projector, bool completed) {
   for (iree_host_size_t i = 0; i < projector->cohort_count; ++i) {
     loom_serve_text_media_job_t* job = projector->cohort[i];
-    if (!job->request) {
+    if (!job->request || (job->request->await_producer && !completed)) {
       continue;
     }
     loom_serve_text_media_image_t* image =
         &job->request->images[job->image_index];
-    loom_serve_finite_result_retain(result);
-    image->result = result;
+    loom_serve_finite_result_retain(projector->result);
+    image->result = projector->result;
     image->result_index = (uint32_t)i;
     image->selected = false;
     job->request = NULL;
   }
-  loom_serve_finite_result_release(result);
+}
+
+static iree_status_t loom_serve_text_media_projector_submit(
+    loom_serve_text_media_projector_t* projector) {
+  loom_serve_execution_frontier_t ready;
+  IREE_RETURN_IF_ERROR(loom_serve_finite_model_submit(
+      projector->model, &projector->result, &ready));
+  loom_serve_text_media_projector_publish(projector, false);
   IREE_RETURN_IF_ERROR(
       loom_serve_text_readiness_await(&projector->readiness, &ready));
   projector->phase = MEDIA_RUNNING;
@@ -692,6 +708,7 @@ iree_status_t loom_serve_text_media_projector_advance(
     *out_progress = true;
     if (iree_status_is_ok(status)) {
       loom_serve_finite_model_complete(projector->model);
+      loom_serve_text_media_projector_publish(projector, true);
       loom_serve_text_media_projector_complete(projector);
     }
   }
@@ -789,5 +806,6 @@ void loom_serve_text_media_projector_free(
     loom_serve_text_media_job_release(&projector->jobs[i]);
   }
   loom_serve_text_readiness_deinitialize(&projector->readiness);
+  loom_serve_finite_result_release(projector->result);
   iree_allocator_free_aligned(projector->host_allocator, projector);
 }

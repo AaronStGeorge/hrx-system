@@ -480,7 +480,9 @@ def run_from_command_line(cases):
 # state policy. The manual pressure_stress_test target retains the complete
 # Cartesian product for explicit stress qualification.
 _CASES = (
-    (1, 2 * MODEL_BYTES, "none"),
+    # Retain both state slabs while swapping weights; media also fits as
+    # sequential phases without requiring their combined declared footprint.
+    (1, 20 * 1024, "none"),
     (1, MODEL_BYTES, "checkpoint"),
     (1, 2 * MODEL_BYTES, "parameters"),
     (4, MODEL_BYTES, "none"),

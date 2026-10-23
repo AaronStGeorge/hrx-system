@@ -607,6 +607,24 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "media_projector_test",
+    data = PROJECTOR_SOURCES,
+    env = {
+        "LOOM_SERVE_TEST_PROJECTOR_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/projector:model.json)",
+    },
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//loom/config/execute:task_hal",
+    ]),
+    deps = [
+        ":test_compiler",
+        ":test_device",
+        "//loom/src/loom/serve/service/text:media_projector_tests",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "source_text_media_test",
     data = EMBEDDING_SOURCES + PROJECTOR_SOURCES + TEXT_SOURCES,
     env = {

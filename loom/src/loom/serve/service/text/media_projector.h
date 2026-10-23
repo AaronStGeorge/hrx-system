@@ -33,7 +33,9 @@ iree_status_t loom_serve_text_media_request_allocate(
 
 // Rebinds checked input coordinates after history eviction/prefix lookup.
 // Existing features remain reusable by image occurrence. Returns whether all
-// remaining images have projected results. Does not start or wait for work.
+// remaining images have published results. Requests whose declared phases fit
+// only sequentially publish after producer completion; others can compose
+// directly with future-ready results. Does not start or wait for work.
 bool loom_serve_text_media_request_bind(
     loom_serve_text_media_request_t* request,
     const loom_serve_text_input_t* input, iree_host_size_t consumed);
