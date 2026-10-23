@@ -18,13 +18,16 @@ IREE_FLAG(bool, omit_dispatch_events, false,
           "Omits device dispatch events from the generated profile.");
 IREE_FLAG(bool, unaligned_device_clock, false,
           "Marks device clock samples as unaligned with the host clock.");
+IREE_FLAG(bool, duplicate_local_ids, false,
+          "Emits a second session reusing every producer-local identifier.");
 
 static const char kUsage[] =
     "Generates deterministic profile fixtures for iree-profile tests.\n"
     "\n"
     "$ test_fixture_generator --output=smoke.ireeprof [options]\n";
 
-static const uint64_t kSmokeSessionId = 1;
+static const iree_hal_profile_session_id_t kSmokeSessionId = 1;
+static const iree_hal_profile_session_id_t kSecondSmokeSessionId = 2;
 static const uint32_t kSmokePhysicalDevice = 0;
 static const uint32_t kSmokeQueueOrdinal = 0;
 static const uint64_t kSmokeStreamId = 11;
@@ -39,56 +42,56 @@ static const uint64_t kSmokeSourceSpecificMetricId =
 static const uint64_t kSmokeSubmissionId = 77;
 static const uint64_t kSmokeTimestampFrequencyHz = 100000000;
 
+typedef struct iree_profile_fixture_writer_t {
+  iree_hal_profile_sink_t* sink;
+  iree_hal_profile_session_id_t session_id;
+} iree_profile_fixture_writer_t;
+
 static iree_status_t write_profile_chunk_iovecs(
-    iree_hal_profile_sink_t* sink, iree_string_view_t content_type,
-    iree_string_view_t name, iree_host_size_t iovec_count,
-    const iree_const_byte_span_t* iovecs) {
+    const iree_profile_fixture_writer_t* writer,
+    iree_string_view_t content_type, iree_string_view_t name,
+    iree_host_size_t iovec_count, const iree_const_byte_span_t* iovecs) {
   iree_hal_profile_chunk_metadata_t metadata =
       iree_hal_profile_chunk_metadata_default();
   metadata.content_type = content_type;
   metadata.name = name;
-  metadata.session_id = kSmokeSessionId;
+  metadata.session_id = writer->session_id;
   metadata.physical_device_ordinal = kSmokePhysicalDevice;
   metadata.queue_ordinal = kSmokeQueueOrdinal;
   metadata.stream_id = kSmokeStreamId;
   if (iovec_count == 0) {
-    return iree_hal_profile_sink_write(sink, &metadata, 0, NULL);
+    return iree_hal_profile_sink_write(writer->sink, &metadata, 0, NULL);
   }
-  return iree_hal_profile_sink_write(sink, &metadata, iovec_count, iovecs);
+  return iree_hal_profile_sink_write(writer->sink, &metadata, iovec_count,
+                                     iovecs);
 }
 
-static iree_status_t write_profile_chunk(iree_hal_profile_sink_t* sink,
-                                         iree_string_view_t content_type,
-                                         iree_string_view_t name,
-                                         iree_const_byte_span_t payload) {
+static iree_status_t write_profile_chunk(
+    const iree_profile_fixture_writer_t* writer,
+    iree_string_view_t content_type, iree_string_view_t name,
+    iree_const_byte_span_t payload) {
   if (payload.data_length == 0) {
-    return write_profile_chunk_iovecs(sink, content_type, name, 0, NULL);
+    return write_profile_chunk_iovecs(writer, content_type, name, 0, NULL);
   }
-  return write_profile_chunk_iovecs(sink, content_type, name, 1, &payload);
+  return write_profile_chunk_iovecs(writer, content_type, name, 1, &payload);
 }
 
-static iree_status_t write_smoke_profile(iree_string_view_t path,
-                                         bool include_dispatch_events,
-                                         bool unaligned_device_clock) {
-  iree_io_file_handle_t* file_handle = NULL;
-  IREE_RETURN_IF_ERROR(iree_io_file_handle_create(
-      IREE_IO_FILE_MODE_READ | IREE_IO_FILE_MODE_WRITE, path,
-      /*initial_size=*/0, iree_allocator_system(), &file_handle));
-
-  iree_hal_profile_sink_t* sink = NULL;
-  iree_status_t status = iree_hal_profile_file_sink_create(
-      file_handle, iree_allocator_system(), &sink);
-  iree_io_file_handle_release(file_handle);
-  if (!iree_status_is_ok(status)) {
-    return status;
-  }
-
+static iree_status_t write_smoke_session(
+    iree_hal_profile_sink_t* sink, iree_hal_profile_session_id_t session_id,
+    bool include_dispatch_events, bool unaligned_device_clock) {
+  const bool is_second_session = session_id == kSecondSmokeSessionId;
+  const iree_profile_fixture_writer_t writer = {
+      .sink = sink,
+      .session_id = session_id,
+  };
   iree_hal_profile_chunk_metadata_t session_metadata =
       iree_hal_profile_chunk_metadata_default();
   session_metadata.content_type = IREE_HAL_PROFILE_CONTENT_TYPE_SESSION;
-  session_metadata.name = IREE_SV("cli-smoke");
-  session_metadata.session_id = kSmokeSessionId;
-  status = iree_hal_profile_sink_begin_session(sink, &session_metadata);
+  session_metadata.name =
+      is_second_session ? IREE_SV("cli-smoke-second") : IREE_SV("cli-smoke");
+  session_metadata.session_id = session_id;
+  iree_status_t status =
+      iree_hal_profile_sink_begin_session(sink, &session_metadata);
 
   if (iree_status_is_ok(status)) {
     iree_hal_profile_device_record_t device =
@@ -96,9 +99,11 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     device.physical_device_ordinal = kSmokePhysicalDevice;
     device.queue_count = 1;
     device.flags |= IREE_HAL_PROFILE_DEVICE_FLAG_TIMESTAMP_FREQUENCY;
-    device.timestamp_frequency_hz = kSmokeTimestampFrequencyHz;
+    device.timestamp_frequency_hz = is_second_session
+                                        ? kSmokeTimestampFrequencyHz / 2
+                                        : kSmokeTimestampFrequencyHz;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICES, IREE_SV("devices"),
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICES, IREE_SV("devices"),
         iree_make_const_byte_span(&device, sizeof(device)));
   }
 
@@ -109,7 +114,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     queue.queue_ordinal = kSmokeQueueOrdinal;
     queue.stream_id = kSmokeStreamId;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_QUEUES, IREE_SV("queues"),
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_QUEUES, IREE_SV("queues"),
         iree_make_const_byte_span(&queue, sizeof(queue)));
   }
 
@@ -119,12 +124,15 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     executable.executable_id = kSmokeExecutableId;
     executable.function_count = 1;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLES, IREE_SV("executables"),
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLES,
+        IREE_SV("executables"),
         iree_make_const_byte_span(&executable, sizeof(executable)));
   }
 
   if (iree_status_is_ok(status)) {
-    const char function_name[] = "smoke_function";
+    const iree_string_view_t function_name =
+        is_second_session ? IREE_SV("smoke_function_second")
+                          : IREE_SV("smoke_function");
     iree_hal_profile_executable_function_record_t function_record =
         iree_hal_profile_executable_function_record_default();
     function_record.executable_id = kSmokeExecutableId;
@@ -133,15 +141,16 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     function_record.workgroup_size[0] = 7;
     function_record.workgroup_size[1] = 8;
     function_record.workgroup_size[2] = 9;
-    function_record.name_length = sizeof(function_name) - 1;
+    function_record.name_length = function_name.size;
     function_record.record_length =
         sizeof(function_record) + function_record.name_length;
     iree_const_byte_span_t iovecs[2] = {
         iree_make_const_byte_span(&function_record, sizeof(function_record)),
-        iree_make_const_byte_span(function_name, function_record.name_length),
+        iree_make_const_byte_span(function_name.data,
+                                  function_record.name_length),
     };
     status = write_profile_chunk_iovecs(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_FUNCTIONS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_FUNCTIONS,
         IREE_SV("executable-functions"), IREE_ARRAYSIZE(iovecs), iovecs);
   }
 
@@ -152,7 +161,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     command_buffer.queue_family_ordinal = 0;
     command_buffer.physical_device_ordinal = kSmokePhysicalDevice;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_BUFFERS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_BUFFERS,
         IREE_SV("command-buffers"),
         iree_make_const_byte_span(&command_buffer, sizeof(command_buffer)));
   }
@@ -173,7 +182,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     command_operation.workgroup_size[1] = 8;
     command_operation.workgroup_size[2] = 9;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_OPERATIONS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_OPERATIONS,
         IREE_SV("command-operations"),
         iree_make_const_byte_span(&command_operation,
                                   sizeof(command_operation)));
@@ -193,17 +202,17 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     clock_samples[0].physical_device_ordinal = kSmokePhysicalDevice;
     clock_samples[0].sample_id = 1;
     clock_samples[0].device_tick = 100;
-    clock_samples[0].host_cpu_timestamp_ns = 1000;
-    clock_samples[0].host_time_begin_ns = 900;
-    clock_samples[0].host_time_end_ns = 910;
+    clock_samples[0].host_cpu_timestamp_ns = is_second_session ? 4000 : 1000;
+    clock_samples[0].host_time_begin_ns = is_second_session ? 3900 : 900;
+    clock_samples[0].host_time_end_ns = is_second_session ? 3910 : 910;
     clock_samples[1] = clock_samples[0];
     clock_samples[1].sample_id = 2;
     clock_samples[1].device_tick = 200;
-    clock_samples[1].host_cpu_timestamp_ns = 2000;
-    clock_samples[1].host_time_begin_ns = 1900;
-    clock_samples[1].host_time_end_ns = 1910;
+    clock_samples[1].host_cpu_timestamp_ns = is_second_session ? 6000 : 2000;
+    clock_samples[1].host_time_begin_ns = is_second_session ? 5900 : 1900;
+    clock_samples[1].host_time_end_ns = is_second_session ? 5910 : 1910;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_CLOCK_CORRELATIONS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_CLOCK_CORRELATIONS,
         IREE_SV("clock-correlations"),
         iree_make_const_byte_span(clock_samples, sizeof(clock_samples)));
   }
@@ -227,7 +236,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     dispatch.start_tick = 120;
     dispatch.end_tick = 160;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_DISPATCH_EVENTS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_DISPATCH_EVENTS,
         IREE_SV("dispatch-events"),
         iree_make_const_byte_span(&dispatch, sizeof(dispatch)));
   }
@@ -252,7 +261,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     queue_event.operation_count = 1;
     queue_event.payload_length = 4096;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_QUEUE_EVENTS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_QUEUE_EVENTS,
         IREE_SV("queue-events"),
         iree_make_const_byte_span(&queue_event, sizeof(queue_event)));
   }
@@ -289,7 +298,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     device_events[2].start_tick = 165;
     device_events[2].end_tick = 170;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_QUEUE_DEVICE_EVENTS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_QUEUE_DEVICE_EVENTS,
         IREE_SV("queue-device-events"),
         iree_make_const_byte_span(device_events, sizeof(device_events)));
   }
@@ -328,7 +337,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     host_events[1].tile_count = 4;
     host_events[1].tile_duration_sum_ns = 30;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_HOST_EXECUTION_EVENTS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_HOST_EXECUTION_EVENTS,
         IREE_SV("host-execution-events"),
         iree_make_const_byte_span(host_events, sizeof(host_events)));
   }
@@ -367,7 +376,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     memory_events[3].event_id = 303;
     memory_events[3].host_time_ns = 3290;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_MEMORY_EVENTS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_MEMORY_EVENTS,
         IREE_SV("memory-events"),
         iree_make_const_byte_span(memory_events, sizeof(memory_events)));
   }
@@ -390,7 +399,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
         iree_make_const_byte_span(source_name, source_record.name_length),
     };
     status = write_profile_chunk_iovecs(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICE_METRIC_SOURCES,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICE_METRIC_SOURCES,
         IREE_SV("device-metric-sources"), IREE_ARRAYSIZE(iovecs), iovecs);
   }
 
@@ -452,7 +461,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
                                     source_specific_record.description_length),
       };
       status = write_profile_chunk_iovecs(
-          sink, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICE_METRIC_DESCRIPTORS,
+          &writer, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICE_METRIC_DESCRIPTORS,
           IREE_SV("device-metric-descriptors"), IREE_ARRAYSIZE(iovecs), iovecs);
     }
   }
@@ -491,7 +500,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
         iree_make_const_byte_span(values, sizeof(values)),
     };
     status = write_profile_chunk_iovecs(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICE_METRIC_SAMPLES,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_DEVICE_METRIC_SAMPLES,
         IREE_SV("device-metric-samples"), IREE_ARRAYSIZE(iovecs), iovecs);
   }
 
@@ -510,7 +519,7 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
     relationship.source_id = 100;
     relationship.target_id = 102;
     status = write_profile_chunk(
-        sink, IREE_HAL_PROFILE_CONTENT_TYPE_EVENT_RELATIONSHIPS,
+        &writer, IREE_HAL_PROFILE_CONTENT_TYPE_EVENT_RELATIONSHIPS,
         IREE_SV("event-relationships"),
         iree_make_const_byte_span(&relationship, sizeof(relationship)));
   }
@@ -518,6 +527,31 @@ static iree_status_t write_smoke_profile(iree_string_view_t path,
   if (iree_status_is_ok(status)) {
     status = iree_hal_profile_sink_end_session(sink, &session_metadata,
                                                IREE_STATUS_OK);
+  }
+  return status;
+}
+
+static iree_status_t write_smoke_profile(iree_string_view_t path,
+                                         bool include_dispatch_events,
+                                         bool unaligned_device_clock,
+                                         bool duplicate_local_ids) {
+  iree_io_file_handle_t* file_handle = NULL;
+  IREE_RETURN_IF_ERROR(iree_io_file_handle_create(
+      IREE_IO_FILE_MODE_READ | IREE_IO_FILE_MODE_WRITE, path,
+      /*initial_size=*/0, iree_allocator_system(), &file_handle));
+
+  iree_hal_profile_sink_t* sink = NULL;
+  iree_status_t status = iree_hal_profile_file_sink_create(
+      file_handle, iree_allocator_system(), &sink);
+  iree_io_file_handle_release(file_handle);
+  if (iree_status_is_ok(status)) {
+    status = write_smoke_session(sink, kSmokeSessionId, include_dispatch_events,
+                                 unaligned_device_clock);
+  }
+  if (iree_status_is_ok(status) && duplicate_local_ids) {
+    status =
+        write_smoke_session(sink, kSecondSmokeSessionId,
+                            include_dispatch_events, unaligned_device_clock);
   }
   iree_hal_profile_sink_release(sink);
   return status;
@@ -537,9 +571,9 @@ int main(int argc, char** argv) {
   }
 
   if (iree_status_is_ok(status)) {
-    status = write_smoke_profile(iree_make_cstring_view(FLAG_output),
-                                 !FLAG_omit_dispatch_events,
-                                 FLAG_unaligned_device_clock);
+    status = write_smoke_profile(
+        iree_make_cstring_view(FLAG_output), !FLAG_omit_dispatch_events,
+        FLAG_unaligned_device_clock, FLAG_duplicate_local_ids);
   }
   if (!iree_status_is_ok(status)) {
     iree_status_fprint(stderr, status);

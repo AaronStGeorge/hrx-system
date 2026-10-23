@@ -19,21 +19,57 @@ void iree_profile_summary_initialize(iree_allocator_t host_allocator,
 }
 
 void iree_profile_summary_deinitialize(iree_profile_summary_t* summary) {
+  iree_profile_index_deinitialize(&summary->device_index,
+                                  summary->host_allocator);
   iree_allocator_free(summary->host_allocator, summary->devices);
   memset(summary, 0, sizeof(*summary));
 }
 
+typedef struct iree_profile_summary_device_lookup_t {
+  // Summary owning candidate device rows.
+  const iree_profile_summary_t* summary;
+  // Profiling session owning |physical_device_ordinal|.
+  iree_hal_profile_session_id_t session_id;
+  // Session-local physical device ordinal.
+  uint32_t physical_device_ordinal;
+} iree_profile_summary_device_lookup_t;
+
+static uint64_t iree_profile_summary_device_hash(
+    iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal) {
+  uint64_t hash = iree_profile_index_mix_u64(session_id);
+  return iree_profile_index_combine_u64(hash, physical_device_ordinal);
+}
+
+static bool iree_profile_summary_device_matches(const void* user_data,
+                                                iree_host_size_t value) {
+  const iree_profile_summary_device_lookup_t* lookup =
+      (const iree_profile_summary_device_lookup_t*)user_data;
+  const iree_profile_device_summary_t* candidate =
+      &lookup->summary->devices[value];
+  return candidate->session_id == lookup->session_id &&
+         candidate->physical_device_ordinal == lookup->physical_device_ordinal;
+}
+
 static iree_status_t iree_profile_summary_get_device(
-    iree_profile_summary_t* summary, uint32_t physical_device_ordinal,
+    iree_profile_summary_t* summary, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal,
     iree_profile_device_summary_t** out_device) {
   *out_device = NULL;
 
-  for (iree_host_size_t i = 0; i < summary->device_count; ++i) {
-    if (summary->devices[i].physical_device_ordinal ==
-        physical_device_ordinal) {
-      *out_device = &summary->devices[i];
-      return iree_ok_status();
-    }
+  const iree_profile_summary_device_lookup_t lookup = {
+      .summary = summary,
+      .session_id = session_id,
+      .physical_device_ordinal = physical_device_ordinal,
+  };
+  const uint64_t hash =
+      iree_profile_summary_device_hash(session_id, physical_device_ordinal);
+  iree_host_size_t existing_device_index = 0;
+  if (iree_profile_index_find(&summary->device_index, hash,
+                              iree_profile_summary_device_matches, &lookup,
+                              &existing_device_index)) {
+    *out_device = &summary->devices[existing_device_index];
+    return iree_ok_status();
   }
 
   if (summary->device_count + 1 > summary->device_capacity) {
@@ -44,13 +80,17 @@ static iree_status_t iree_profile_summary_get_device(
         (void**)&summary->devices));
   }
 
-  iree_profile_device_summary_t* device =
-      &summary->devices[summary->device_count++];
+  const iree_host_size_t device_index = summary->device_count;
+  IREE_RETURN_IF_ERROR(iree_profile_index_insert(
+      &summary->device_index, summary->host_allocator, hash, device_index));
+  iree_profile_device_summary_t* device = &summary->devices[device_index];
   memset(device, 0, sizeof(*device));
+  device->session_id = session_id;
   device->physical_device_ordinal = physical_device_ordinal;
   device->minimum_clock_uncertainty_ns = INT64_MAX;
   device->earliest_dispatch_start_tick = UINT64_MAX;
   device->minimum_dispatch_ticks = UINT64_MAX;
+  ++summary->device_count;
   *out_device = device;
   return iree_ok_status();
 }
@@ -184,7 +224,8 @@ static iree_status_t iree_profile_summary_process_device_records(
     iree_profile_device_summary_t* device = NULL;
     if (iree_status_is_ok(status)) {
       status = iree_profile_summary_get_device(
-          summary, device_record.physical_device_ordinal, &device);
+          summary, record->header.session_id,
+          device_record.physical_device_ordinal, &device);
     }
     if (iree_status_is_ok(status) && has_timestamp_frequency &&
         iree_all_bits_set(device->metadata_flags,
@@ -231,7 +272,8 @@ static iree_status_t iree_profile_summary_process_queue_records(
 
     iree_profile_device_summary_t* device = NULL;
     status = iree_profile_summary_get_device(
-        summary, queue_record.physical_device_ordinal, &device);
+        summary, record->header.session_id,
+        queue_record.physical_device_ordinal, &device);
     if (iree_status_is_ok(status)) {
       ++device->queue_record_count;
     }
@@ -345,7 +387,8 @@ static iree_status_t iree_profile_summary_process_clock_correlation_records(
 
     iree_profile_device_summary_t* device = NULL;
     status = iree_profile_summary_get_device(
-        summary, clock_record.physical_device_ordinal, &device);
+        summary, record->header.session_id,
+        clock_record.physical_device_ordinal, &device);
     if (iree_status_is_ok(status)) {
       iree_profile_summary_record_clock_sample(device, &clock_record);
     }
@@ -358,7 +401,8 @@ static iree_status_t iree_profile_summary_process_dispatch_event_records(
     const iree_hal_profile_file_record_t* record) {
   iree_profile_device_summary_t* device = NULL;
   IREE_RETURN_IF_ERROR(iree_profile_summary_get_device(
-      summary, record->header.physical_device_ordinal, &device));
+      summary, record->header.session_id,
+      record->header.physical_device_ordinal, &device));
 
   iree_profile_typed_record_iterator_t iterator;
   iree_profile_typed_record_iterator_initialize(
@@ -600,7 +644,8 @@ static iree_status_t iree_profile_summary_process_device_metric_sample_records(
     iree_profile_device_summary_t* device = NULL;
     if (iree_status_is_ok(status)) {
       status = iree_profile_summary_get_device(
-          summary, sample_record.physical_device_ordinal, &device);
+          summary, record->header.session_id,
+          sample_record.physical_device_ordinal, &device);
     }
     if (iree_status_is_ok(status)) {
       ++summary->device_metric.sample_record_count;
@@ -931,6 +976,7 @@ static iree_profile_model_device_t iree_profile_device_summary_as_model_device(
     const iree_profile_device_summary_t* device) {
   iree_profile_model_device_t model_device;
   memset(&model_device, 0, sizeof(model_device));
+  model_device.session_id = device->session_id;
   model_device.physical_device_ordinal = device->physical_device_ordinal;
   model_device.metadata_flags = device->metadata_flags;
   model_device.timestamp_frequency_hz = device->timestamp_frequency_hz;
@@ -1271,9 +1317,11 @@ static void iree_profile_print_summary_text_device(
     const iree_profile_device_summary_t* device, FILE* file) {
   const iree_profile_summary_device_timing_t timing =
       iree_profile_summary_calculate_device_timing(device);
-  fprintf(file, "  device[%u]: device_records=%u queues=%u/%u\n",
-          device->physical_device_ordinal, device->device_record_count,
-          device->queue_record_count, device->queue_count);
+  fprintf(file,
+          "  session[%" PRIu64 "].device[%u]: device_records=%u queues=%u/%u\n",
+          device->session_id, device->physical_device_ordinal,
+          device->device_record_count, device->queue_record_count,
+          device->queue_count);
   iree_profile_print_summary_text_device_clock(device, &timing, file);
   iree_profile_print_summary_text_device_dispatches(device, &timing, file);
   iree_profile_print_summary_text_device_metrics(device, file);
@@ -1445,7 +1493,8 @@ static void iree_profile_print_summary_jsonl_device(
       iree_profile_summary_calculate_device_timing(device);
   fprintf(
       file,
-      "{\"type\":\"device_summary\",\"physical_device_ordinal\":%u"
+      "{\"type\":\"device_summary\",\"session_id\":%" PRIu64
+      ",\"physical_device_ordinal\":%u"
       ",\"device_records\":%u,\"queue_records\":%u,\"queues\":%u"
       ",\"clock_samples\":%" PRIu64
       ",\"invalid_clock_alignment_samples\":%" PRIu64
@@ -1468,9 +1517,10 @@ static void iree_profile_print_summary_jsonl_device(
       ",\"max_dispatch_ns\":%" PRId64 ",\"total_dispatch_ns\":%" PRId64
       ",\"device_metric_samples\":%" PRIu64 ",\"device_metric_values\":%" PRIu64
       ",\"invalid_device_metric_samples\":%" PRIu64 "}\n",
-      device->physical_device_ordinal, device->device_record_count,
-      device->queue_record_count, device->queue_count,
-      device->clock_sample_count, device->invalid_clock_alignment_sample_count,
+      device->session_id, device->physical_device_ordinal,
+      device->device_record_count, device->queue_record_count,
+      device->queue_count, device->clock_sample_count,
+      device->invalid_clock_alignment_sample_count,
       timing.has_clock_fit ? "true" : "false",
       timing.has_duration_scale ? "true" : "false",
       iree_profile_model_duration_scale_source_name(

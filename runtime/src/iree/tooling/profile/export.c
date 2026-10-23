@@ -14,15 +14,17 @@
 #include "iree/tooling/profile/model.h"
 #include "iree/tooling/profile/reader.h"
 
-#define IREE_PROFILE_EXPORT_SCHEMA_VERSION 17
+#define IREE_PROFILE_EXPORT_SCHEMA_VERSION 18
 
-static void iree_profile_export_print_prefix(FILE* file,
-                                             const char* record_type,
-                                             iree_host_size_t record_index) {
+static void iree_profile_export_print_prefix(
+    FILE* file, const char* record_type,
+    const iree_hal_profile_file_record_t* record,
+    iree_host_size_t record_index) {
   fprintf(file,
           "{\"schema_version\":%d,\"record_type\":\"%s\""
-          ",\"source_record_index\":%" PRIhsz,
-          IREE_PROFILE_EXPORT_SCHEMA_VERSION, record_type, record_index);
+          ",\"source_record_index\":%" PRIhsz ",\"session_id\":%" PRIu64,
+          IREE_PROFILE_EXPORT_SCHEMA_VERSION, record_type, record_index,
+          record->header.session_id);
 }
 
 static void iree_profile_export_fprint_hex_bytes(FILE* file,
@@ -103,10 +105,10 @@ static void iree_profile_export_print_device_metric_value(
 }
 
 static bool iree_profile_export_try_get_driver_host_cpu_clock_fit(
-    const iree_profile_model_t* model, uint32_t physical_device_ordinal,
-    iree_profile_model_clock_fit_t* out_fit) {
-  const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(model, physical_device_ordinal);
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, iree_profile_model_clock_fit_t* out_fit) {
+  const iree_profile_model_device_t* device = iree_profile_model_find_device(
+      model, session_id, physical_device_ordinal);
   return iree_profile_model_device_try_fit_clock_exact(
       device, IREE_PROFILE_MODEL_CLOCK_TIME_DOMAIN_HOST_CPU_TIMESTAMP_NS,
       out_fit);
@@ -137,10 +139,9 @@ typedef struct iree_profile_export_device_time_t {
 } iree_profile_export_device_time_t;
 
 static iree_profile_export_device_time_t
-iree_profile_export_calculate_device_time(const iree_profile_model_t* model,
-                                          uint32_t physical_device_ordinal,
-                                          uint64_t start_tick,
-                                          uint64_t end_tick) {
+iree_profile_export_calculate_device_time(
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, uint64_t start_tick, uint64_t end_tick) {
   iree_profile_export_device_time_t device_time;
   memset(&device_time, 0, sizeof(device_time));
   device_time.is_valid =
@@ -150,8 +151,8 @@ iree_profile_export_calculate_device_time(const iree_profile_model_t* model,
   }
 
   device_time.duration_ticks = end_tick - start_tick;
-  const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(model, physical_device_ordinal);
+  const iree_profile_model_device_t* device = iree_profile_model_find_device(
+      model, session_id, physical_device_ordinal);
   iree_profile_model_duration_scale_t duration_scale;
   if (iree_profile_model_device_try_resolve_duration_scale(device,
                                                            &duration_scale)) {
@@ -164,7 +165,7 @@ iree_profile_export_calculate_device_time(const iree_profile_model_t* model,
 
   iree_profile_model_clock_fit_t clock_fit;
   if (!iree_profile_export_try_get_driver_host_cpu_clock_fit(
-          model, physical_device_ordinal, &clock_fit)) {
+          model, session_id, physical_device_ordinal, &clock_fit)) {
     return device_time;
   }
   int64_t start_driver_host_cpu_time_ns = 0;
@@ -193,12 +194,12 @@ static void iree_profile_export_print_session_record(
               IREE_HAL_PROFILE_FILE_RECORD_TYPE_SESSION_BEGIN
           ? "begin"
           : "end";
-  iree_profile_export_print_prefix(file, "session", record_index);
+  iree_profile_export_print_prefix(file, "session", record, record_index);
   fprintf(file,
-          ",\"event\":\"%s\",\"session_id\":%" PRIu64 ",\"stream_id\":%" PRIu64
-          ",\"event_id\":%" PRIu64 ",\"session_status_code\":%u",
-          event_name, record->header.session_id, record->header.stream_id,
-          record->header.event_id, record->header.session_status_code);
+          ",\"event\":\"%s\",\"stream_id\":%" PRIu64 ",\"event_id\":%" PRIu64
+          ",\"session_status_code\":%u",
+          event_name, record->header.stream_id, record->header.event_id,
+          record->header.session_status_code);
   fprintf(file, ",\"session_status\":");
   iree_profile_fprint_json_string(
       file, iree_make_cstring_view(iree_profile_status_code_name(
@@ -207,9 +208,10 @@ static void iree_profile_export_print_session_record(
 }
 
 static void iree_profile_export_print_diagnostic(
-    iree_host_size_t record_index, const char* severity, const char* category,
-    iree_string_view_t content_type, const char* message, FILE* file) {
-  iree_profile_export_print_prefix(file, "diagnostic", record_index);
+    const iree_hal_profile_file_record_t* record, iree_host_size_t record_index,
+    const char* severity, const char* category, iree_string_view_t content_type,
+    const char* message, FILE* file) {
+  iree_profile_export_print_prefix(file, "diagnostic", record, record_index);
   fprintf(file, ",\"severity\":");
   iree_profile_fprint_json_string(file, iree_make_cstring_view(severity));
   fprintf(file, ",\"category\":");
@@ -224,7 +226,7 @@ static void iree_profile_export_print_diagnostic(
 static void iree_profile_export_print_truncated_chunk_diagnostic(
     const iree_hal_profile_file_record_t* record, iree_host_size_t record_index,
     FILE* file) {
-  iree_profile_export_print_prefix(file, "diagnostic", record_index);
+  iree_profile_export_print_prefix(file, "diagnostic", record, record_index);
   fprintf(file, ",\"severity\":\"error\",\"category\":\"truncated_chunk\"");
   fprintf(file, ",\"content_type\":");
   iree_profile_fprint_json_string(file, record->content_type);
@@ -258,7 +260,7 @@ static iree_status_t iree_profile_export_process_device_records(
            iree_min(typed_record.contents.data_length, sizeof(device_record)));
     const bool has_uuid = iree_all_bits_set(
         device_record.flags, IREE_HAL_PROFILE_DEVICE_FLAG_PHYSICAL_DEVICE_UUID);
-    iree_profile_export_print_prefix(file, "device", record_index);
+    iree_profile_export_print_prefix(file, "device", record, record_index);
     fprintf(file,
             ",\"physical_device_ordinal\":%u,\"flags\":%u"
             ",\"queue_count\":%u,\"physical_device_uuid_present\":%s"
@@ -306,7 +308,7 @@ static iree_status_t iree_profile_export_process_queue_records(
 
     iree_hal_profile_queue_record_t queue_record;
     memcpy(&queue_record, typed_record.contents.data, sizeof(queue_record));
-    iree_profile_export_print_prefix(file, "queue", record_index);
+    iree_profile_export_print_prefix(file, "queue", record, record_index);
     fprintf(file,
             ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
             ",\"stream_id\":%" PRIu64 "}\n",
@@ -340,7 +342,7 @@ static iree_status_t iree_profile_export_process_executable_records(
     const bool has_code_object_hash =
         iree_all_bits_set(executable_record.flags,
                           IREE_HAL_PROFILE_EXECUTABLE_FLAG_CODE_OBJECT_HASH);
-    iree_profile_export_print_prefix(file, "executable", record_index);
+    iree_profile_export_print_prefix(file, "executable", record, record_index);
     fprintf(file,
             ",\"executable_id\":%" PRIu64
             ",\"flags\":%u"
@@ -390,7 +392,7 @@ static iree_status_t iree_profile_export_process_executable_function_records(
       iree_string_view_t name =
           iree_make_string_view((const char*)typed_record.inline_payload.data,
                                 typed_record.inline_payload.data_length);
-      iree_profile_export_print_prefix(file, "executable_function",
+      iree_profile_export_print_prefix(file, "executable_function", record,
                                        record_index);
       fprintf(file,
               ",\"executable_id\":%" PRIu64
@@ -437,7 +439,8 @@ static iree_status_t iree_profile_export_process_command_buffer_records(
     iree_hal_profile_command_buffer_record_t command_buffer_record;
     memcpy(&command_buffer_record, typed_record.contents.data,
            sizeof(command_buffer_record));
-    iree_profile_export_print_prefix(file, "command_buffer", record_index);
+    iree_profile_export_print_prefix(file, "command_buffer", record,
+                                     record_index);
     fprintf(
         file,
         ",\"command_buffer_id\":%" PRIu64
@@ -477,12 +480,14 @@ static iree_status_t iree_profile_export_process_command_operation_records(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_command_operation_key(
-        model, &operation_record, numeric_buffer, sizeof(numeric_buffer), &key);
+        model, record->header.session_id, &operation_record, numeric_buffer,
+        sizeof(numeric_buffer), &key);
     if (iree_status_is_ok(status)) {
       const bool has_block_structure =
           iree_hal_profile_command_operation_has_block_structure(
               &operation_record);
-      iree_profile_export_print_prefix(file, "command_operation", record_index);
+      iree_profile_export_print_prefix(file, "command_operation", record,
+                                       record_index);
       fprintf(file,
               ",\"command_buffer_id\":%" PRIu64
               ",\"command_index\":%u"
@@ -546,7 +551,8 @@ static iree_status_t iree_profile_export_process_clock_records(
 
     iree_hal_profile_clock_correlation_record_t clock_record;
     memcpy(&clock_record, typed_record.contents.data, sizeof(clock_record));
-    iree_profile_export_print_prefix(file, "clock_correlation", record_index);
+    iree_profile_export_print_prefix(file, "clock_correlation", record,
+                                     record_index);
     fprintf(
         file,
         ",\"sample_id\":%" PRIu64
@@ -596,16 +602,19 @@ static iree_status_t iree_profile_export_process_dispatch_records(
            sizeof(dispatch_record));
     const iree_profile_export_device_time_t device_time =
         iree_profile_export_calculate_device_time(
-            model, record->header.physical_device_ordinal,
-            dispatch_record.start_tick, dispatch_record.end_tick);
+            model, record->header.session_id,
+            record->header.physical_device_ordinal, dispatch_record.start_tick,
+            dispatch_record.end_tick);
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_dispatch_key(
-        model, record->header.physical_device_ordinal,
-        dispatch_record.executable_id, dispatch_record.function_ordinal,
-        numeric_buffer, sizeof(numeric_buffer), &key);
+        model, record->header.session_id,
+        record->header.physical_device_ordinal, dispatch_record.executable_id,
+        dispatch_record.function_ordinal, numeric_buffer,
+        sizeof(numeric_buffer), &key);
     if (iree_status_is_ok(status)) {
-      iree_profile_export_print_prefix(file, "dispatch_event", record_index);
+      iree_profile_export_print_prefix(file, "dispatch_event", record,
+                                       record_index);
       fprintf(file,
               ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
               ",\"stream_id\":%" PRIu64 ",\"event_id\":%" PRIu64
@@ -679,9 +688,11 @@ static iree_status_t iree_profile_export_process_queue_device_event_records(
            sizeof(queue_device_event));
     const iree_profile_export_device_time_t device_time =
         iree_profile_export_calculate_device_time(
-            model, queue_device_event.physical_device_ordinal,
+            model, record->header.session_id,
+            queue_device_event.physical_device_ordinal,
             queue_device_event.start_tick, queue_device_event.end_tick);
-    iree_profile_export_print_prefix(file, "queue_device_event", record_index);
+    iree_profile_export_print_prefix(file, "queue_device_event", record,
+                                     record_index);
     fprintf(file,
             ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
             ",\"stream_id\":%" PRIu64 ",\"event_id\":%" PRIu64
@@ -763,12 +774,12 @@ static iree_status_t iree_profile_export_process_host_execution_event_records(
                                   host_event.function_ordinal != UINT32_MAX;
     if (has_dispatch_key) {
       status = iree_profile_model_resolve_dispatch_key(
-          model, host_event.physical_device_ordinal, host_event.executable_id,
-          host_event.function_ordinal, numeric_buffer, sizeof(numeric_buffer),
-          &key);
+          model, record->header.session_id, host_event.physical_device_ordinal,
+          host_event.executable_id, host_event.function_ordinal, numeric_buffer,
+          sizeof(numeric_buffer), &key);
     }
     if (iree_status_is_ok(status)) {
-      iree_profile_export_print_prefix(file, "host_execution_event",
+      iree_profile_export_print_prefix(file, "host_execution_event", record,
                                        record_index);
       fprintf(file,
               ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
@@ -840,7 +851,7 @@ static iree_status_t iree_profile_export_process_command_region_event_records(
         is_valid ? region_event.command_region.end_host_time_ns -
                        region_event.command_region.start_host_time_ns
                  : 0;
-    iree_profile_export_print_prefix(file, "command_region_event",
+    iree_profile_export_print_prefix(file, "command_region_event", record,
                                      record_index);
     fprintf(
         file,
@@ -951,7 +962,7 @@ static iree_status_t iree_profile_export_process_queue_event_records(
 
     iree_hal_profile_queue_event_t queue_event;
     memcpy(&queue_event, typed_record.contents.data, sizeof(queue_event));
-    iree_profile_export_print_prefix(file, "queue_event", record_index);
+    iree_profile_export_print_prefix(file, "queue_event", record, record_index);
     fprintf(file, ",\"event_id\":%" PRIu64 ",\"op\":", queue_event.event_id);
     iree_profile_fprint_json_string(
         file, iree_make_cstring_view(
@@ -1003,7 +1014,8 @@ static iree_status_t iree_profile_export_process_memory_event_records(
 
     iree_hal_profile_memory_event_t memory_event;
     memcpy(&memory_event, typed_record.contents.data, sizeof(memory_event));
-    iree_profile_export_print_prefix(file, "memory_event", record_index);
+    iree_profile_export_print_prefix(file, "memory_event", record,
+                                     record_index);
     fprintf(file,
             ",\"event_id\":%" PRIu64 ",\"event_type\":", memory_event.event_id);
     iree_profile_fprint_json_string(
@@ -1068,7 +1080,8 @@ static iree_status_t iree_profile_export_process_event_relationship_records(
     iree_hal_profile_event_relationship_record_t relationship_record;
     memcpy(&relationship_record, typed_record.contents.data,
            sizeof(relationship_record));
-    iree_profile_export_print_prefix(file, "event_relationship", record_index);
+    iree_profile_export_print_prefix(file, "event_relationship", record,
+                                     record_index);
     fprintf(file, ",\"relationship_id\":%" PRIu64 ",\"kind\":",
             relationship_record.relationship_id);
     iree_profile_fprint_json_string(
@@ -1131,7 +1144,8 @@ static iree_status_t iree_profile_export_process_counter_set_records(
       iree_string_view_t name =
           iree_make_string_view((const char*)typed_record.inline_payload.data,
                                 typed_record.inline_payload.data_length);
-      iree_profile_export_print_prefix(file, "counter_set", record_index);
+      iree_profile_export_print_prefix(file, "counter_set", record,
+                                       record_index);
       fprintf(file,
               ",\"counter_set_id\":%" PRIu64
               ",\"physical_device_ordinal\":%u"
@@ -1191,7 +1205,7 @@ static iree_status_t iree_profile_export_process_counter_records(
           iree_make_string_view(string_base + counter_record.block_name_length +
                                     counter_record.name_length,
                                 counter_record.description_length);
-      iree_profile_export_print_prefix(file, "counter", record_index);
+      iree_profile_export_print_prefix(file, "counter", record, record_index);
       fprintf(file,
               ",\"counter_set_id\":%" PRIu64
               ",\"counter_ordinal\":%u"
@@ -1249,10 +1263,12 @@ static iree_status_t iree_profile_export_process_counter_sample_records(
       iree_profile_export_device_time_t device_time = {0};
       if (has_device_tick_range) {
         device_time = iree_profile_export_calculate_device_time(
-            model, sample_record.physical_device_ordinal,
-            sample_record.start_tick, sample_record.end_tick);
+            model, record->header.session_id,
+            sample_record.physical_device_ordinal, sample_record.start_tick,
+            sample_record.end_tick);
       }
-      iree_profile_export_print_prefix(file, "counter_sample", record_index);
+      iree_profile_export_print_prefix(file, "counter_sample", record,
+                                       record_index);
       fprintf(file,
               ",\"sample_id\":%" PRIu64 ",\"counter_set_id\":%" PRIu64
               ",\"scope\":",
@@ -1347,7 +1363,7 @@ static iree_status_t iree_profile_export_process_device_metric_source_records(
       iree_string_view_t name =
           iree_make_string_view((const char*)typed_record.inline_payload.data,
                                 typed_record.inline_payload.data_length);
-      iree_profile_export_print_prefix(file, "device_metric_source",
+      iree_profile_export_print_prefix(file, "device_metric_source", record,
                                        record_index);
       fprintf(file,
               ",\"source_id\":%" PRIu64
@@ -1411,7 +1427,7 @@ iree_profile_export_process_device_metric_descriptor_records(
       iree_string_view_t description =
           iree_make_string_view(string_base + descriptor_record.name_length,
                                 descriptor_record.description_length);
-      iree_profile_export_print_prefix(file, "device_metric_descriptor",
+      iree_profile_export_print_prefix(file, "device_metric_descriptor", record,
                                        record_index);
       fprintf(file,
               ",\"source_id\":%" PRIu64 ",\"metric_id\":%" PRIu64
@@ -1491,7 +1507,8 @@ static iree_status_t iree_profile_export_process_device_metric_sample_records(
            i < sample_record.value_count && iree_status_is_ok(status); ++i) {
         const iree_profile_model_metric_descriptor_t* descriptor = NULL;
         status = iree_profile_model_resolve_metric_descriptor(
-            model, sample_record.source_id, values[i].metric_id, &descriptor);
+            model, record->header.session_id, sample_record.source_id,
+            values[i].metric_id, &descriptor);
       }
     }
     if (iree_status_is_ok(status)) {
@@ -1506,7 +1523,7 @@ static iree_status_t iree_profile_export_process_device_metric_sample_records(
       const bool has_source_timestamp = iree_all_bits_set(
           sample_record.flags,
           IREE_HAL_PROFILE_DEVICE_METRIC_SAMPLE_FLAG_SOURCE_TIMESTAMP);
-      iree_profile_export_print_prefix(file, "device_metric_sample",
+      iree_profile_export_print_prefix(file, "device_metric_sample", record,
                                        record_index);
       fprintf(file,
               ",\"sample_id\":%" PRIu64 ",\"source_id\":%" PRIu64
@@ -1531,7 +1548,8 @@ static iree_status_t iree_profile_export_process_device_metric_sample_records(
         }
         const iree_profile_model_metric_descriptor_t* descriptor =
             iree_profile_model_find_metric_descriptor(
-                model, sample_record.source_id, values[i].metric_id);
+                model, record->header.session_id, sample_record.source_id,
+                values[i].metric_id);
         fprintf(file,
                 "{\"metric_id\":%" PRIu64 ",\"name\":", values[i].metric_id);
         iree_profile_fprint_json_string(file, descriptor->name);
@@ -1585,7 +1603,8 @@ static iree_status_t iree_profile_export_process_executable_trace_record(
   IREE_RETURN_IF_ERROR(iree_profile_executable_trace_record_parse(
       record, &trace_record, /*out_trace_data=*/NULL));
 
-  iree_profile_export_print_prefix(file, "executable_trace", record_index);
+  iree_profile_export_print_prefix(file, "executable_trace", record,
+                                   record_index);
   fprintf(file, ",\"trace_id\":%" PRIu64 ",\"format\":", trace_record.trace_id);
   iree_profile_fprint_json_string(
       file, iree_make_cstring_view(iree_profile_executable_trace_format_name(
@@ -1678,7 +1697,7 @@ static iree_status_t iree_profile_export_process_chunk_record(
   }
 
   iree_profile_export_print_diagnostic(
-      record_index, "warning", "unknown_chunk", record->content_type,
+      record, record_index, "warning", "unknown_chunk", record->content_type,
       "unknown profile chunk content type", file);
   return iree_ok_status();
 }
@@ -1696,7 +1715,7 @@ static iree_status_t iree_profile_export_process_decoded_record(
   }
   if (record->header.record_type != IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK) {
     iree_profile_export_print_diagnostic(
-        record_index, "warning", "unknown_record", record->content_type,
+        record, record_index, "warning", "unknown_record", record->content_type,
         "unknown profile file record type", file);
     return iree_ok_status();
   }

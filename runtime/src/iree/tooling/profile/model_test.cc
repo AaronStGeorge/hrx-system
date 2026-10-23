@@ -20,6 +20,7 @@ static iree_hal_profile_file_record_t MakeChunk(
   iree_hal_profile_file_record_t chunk;
   memset(&chunk, 0, sizeof(chunk));
   chunk.header.record_type = IREE_HAL_PROFILE_FILE_RECORD_TYPE_CHUNK;
+  chunk.header.session_id = 1;
   chunk.content_type = IREE_SV("application/vnd.iree.test");
   chunk.payload = iree_make_const_byte_span(payload.data(), payload.size());
   return chunk;
@@ -36,6 +37,13 @@ static iree_hal_profile_file_record_t MakeDevicesChunk(
     const std::vector<uint8_t>& payload) {
   iree_hal_profile_file_record_t chunk = MakeChunk(payload);
   chunk.content_type = IREE_HAL_PROFILE_CONTENT_TYPE_DEVICES;
+  return chunk;
+}
+
+static iree_hal_profile_file_record_t MakeQueuesChunk(
+    const std::vector<uint8_t>& payload) {
+  iree_hal_profile_file_record_t chunk = MakeChunk(payload);
+  chunk.content_type = IREE_HAL_PROFILE_CONTENT_TYPE_QUEUES;
   return chunk;
 }
 
@@ -98,6 +106,17 @@ static void AppendCommandBuffer(std::vector<uint8_t>* payload,
       iree_hal_profile_command_buffer_record_default();
   record.command_buffer_id = command_buffer_id;
   record.physical_device_ordinal = 0;
+  AppendPlainRecord(payload, record);
+}
+
+static void AppendQueue(std::vector<uint8_t>* payload,
+                        uint32_t physical_device_ordinal,
+                        uint32_t queue_ordinal, uint64_t stream_id) {
+  iree_hal_profile_queue_record_t record =
+      iree_hal_profile_queue_record_default();
+  record.physical_device_ordinal = physical_device_ordinal;
+  record.queue_ordinal = queue_ordinal;
+  record.stream_id = stream_id;
   AppendPlainRecord(payload, record);
 }
 
@@ -319,7 +338,7 @@ TEST(ProfileModelTest, AcceptsOriginalDeviceRecordPrefix) {
   IREE_ASSERT_OK(
       iree_profile_model_process_metadata_record(&model, &device_chunk));
   const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(&model, 3);
+      iree_profile_model_find_device(&model, 1, 3);
   ASSERT_NE(device, nullptr);
   EXPECT_FALSE(
       iree_any_bit_set(device->metadata_flags,
@@ -378,7 +397,7 @@ TEST(ProfileModelTest, LinksExecutableFunctionsByOwner) {
       iree_profile_model_process_metadata_record(&model, &function_chunk));
 
   const iree_profile_model_executable_t* executable =
-      iree_profile_model_find_executable(&model, 5);
+      iree_profile_model_find_executable(&model, 1, 5);
   ASSERT_NE(executable, nullptr);
   ASSERT_EQ(2u, executable->function_row_count);
   ASSERT_NE(IREE_HOST_SIZE_MAX, executable->first_function_index);
@@ -394,9 +413,175 @@ TEST(ProfileModelTest, LinksExecutableFunctionsByOwner) {
   EXPECT_EQ(IREE_HOST_SIZE_MAX, second_function->next_function_index);
 
   const iree_profile_model_executable_t* other_executable =
-      iree_profile_model_find_executable(&model, 7);
+      iree_profile_model_find_executable(&model, 1, 7);
   ASSERT_NE(other_executable, nullptr);
   EXPECT_EQ(1u, other_executable->function_row_count);
+  iree_profile_model_deinitialize(&model);
+}
+
+TEST(ProfileModelTest, SeparatesSessionLocalMetadataIdentities) {
+  constexpr iree_hal_profile_session_id_t kFirstSession = 11;
+  constexpr iree_hal_profile_session_id_t kSecondSession = 22;
+
+  std::vector<uint8_t> device_payload;
+  iree_hal_profile_device_record_t device_record =
+      iree_hal_profile_device_record_default();
+  device_record.physical_device_ordinal = 0;
+  AppendPlainRecord(&device_payload, device_record);
+  iree_hal_profile_file_record_t first_device_chunk =
+      MakeDevicesChunk(device_payload);
+  first_device_chunk.header.session_id = kFirstSession;
+  iree_hal_profile_file_record_t second_device_chunk =
+      MakeDevicesChunk(device_payload);
+  second_device_chunk.header.session_id = kSecondSession;
+
+  std::vector<uint8_t> queue_payload;
+  AppendQueue(&queue_payload, 0, 0, 1);
+  iree_hal_profile_file_record_t first_queue_chunk =
+      MakeQueuesChunk(queue_payload);
+  first_queue_chunk.header.session_id = kFirstSession;
+  iree_hal_profile_file_record_t second_queue_chunk =
+      MakeQueuesChunk(queue_payload);
+  second_queue_chunk.header.session_id = kSecondSession;
+
+  std::vector<uint8_t> executable_payload;
+  AppendExecutable(&executable_payload, 1, 1);
+  iree_hal_profile_file_record_t first_executable_chunk =
+      MakeExecutablesChunk(executable_payload);
+  first_executable_chunk.header.session_id = kFirstSession;
+  iree_hal_profile_file_record_t second_executable_chunk =
+      MakeExecutablesChunk(executable_payload);
+  second_executable_chunk.header.session_id = kSecondSession;
+
+  std::vector<uint8_t> first_function_payload;
+  AppendExecutableFunction(&first_function_payload, 1, 0,
+                           IREE_SV("first_function"));
+  iree_hal_profile_file_record_t first_function_chunk =
+      MakeExecutableFunctionsChunk(first_function_payload);
+  first_function_chunk.header.session_id = kFirstSession;
+  std::vector<uint8_t> second_function_payload;
+  AppendExecutableFunction(&second_function_payload, 1, 0,
+                           IREE_SV("second_function"));
+  iree_hal_profile_file_record_t second_function_chunk =
+      MakeExecutableFunctionsChunk(second_function_payload);
+  second_function_chunk.header.session_id = kSecondSession;
+
+  std::vector<uint8_t> command_buffer_payload;
+  AppendCommandBuffer(&command_buffer_payload, 1);
+  iree_hal_profile_file_record_t first_command_buffer_chunk =
+      MakeCommandBuffersChunk(command_buffer_payload);
+  first_command_buffer_chunk.header.session_id = kFirstSession;
+  iree_hal_profile_file_record_t second_command_buffer_chunk =
+      MakeCommandBuffersChunk(command_buffer_payload);
+  second_command_buffer_chunk.header.session_id = kSecondSession;
+
+  iree_hal_profile_command_operation_record_t operation_record =
+      iree_hal_profile_command_operation_record_default();
+  operation_record.type = IREE_HAL_PROFILE_COMMAND_OPERATION_TYPE_FILL;
+  operation_record.command_buffer_id = 1;
+  operation_record.command_index = 0;
+  std::vector<uint8_t> operation_payload;
+  AppendCommandOperation(&operation_payload, operation_record);
+  iree_hal_profile_file_record_t first_operation_chunk =
+      MakeCommandOperationsChunk(operation_payload);
+  first_operation_chunk.header.session_id = kFirstSession;
+  iree_hal_profile_file_record_t second_operation_chunk =
+      MakeCommandOperationsChunk(operation_payload);
+  second_operation_chunk.header.session_id = kSecondSession;
+
+  std::vector<uint8_t> first_source_payload;
+  AppendMetricSource(&first_source_payload, 1, IREE_SV("first.metrics"));
+  iree_hal_profile_file_record_t first_source_chunk =
+      MakeMetricSourcesChunk(first_source_payload);
+  first_source_chunk.header.session_id = kFirstSession;
+  std::vector<uint8_t> second_source_payload;
+  AppendMetricSource(&second_source_payload, 1, IREE_SV("second.metrics"));
+  iree_hal_profile_file_record_t second_source_chunk =
+      MakeMetricSourcesChunk(second_source_payload);
+  second_source_chunk.header.session_id = kSecondSession;
+
+  std::vector<uint8_t> first_descriptor_payload;
+  AppendMetricDescriptor(&first_descriptor_payload, 1, 1,
+                         IREE_SV("first.metric"), IREE_SV("First metric."));
+  iree_hal_profile_file_record_t first_descriptor_chunk =
+      MakeMetricDescriptorsChunk(first_descriptor_payload);
+  first_descriptor_chunk.header.session_id = kFirstSession;
+  std::vector<uint8_t> second_descriptor_payload;
+  AppendMetricDescriptor(&second_descriptor_payload, 1, 1,
+                         IREE_SV("second.metric"), IREE_SV("Second metric."));
+  iree_hal_profile_file_record_t second_descriptor_chunk =
+      MakeMetricDescriptorsChunk(second_descriptor_payload);
+  second_descriptor_chunk.header.session_id = kSecondSession;
+
+  const iree_hal_profile_file_record_t* chunks[] = {
+      &first_device_chunk,         &second_device_chunk,
+      &first_queue_chunk,          &second_queue_chunk,
+      &first_executable_chunk,     &second_executable_chunk,
+      &first_function_chunk,       &second_function_chunk,
+      &first_command_buffer_chunk, &second_command_buffer_chunk,
+      &first_operation_chunk,      &second_operation_chunk,
+      &first_source_chunk,         &second_source_chunk,
+      &first_descriptor_chunk,     &second_descriptor_chunk,
+  };
+  iree_profile_model_t model;
+  iree_profile_model_initialize(iree_allocator_system(), &model);
+  for (const iree_hal_profile_file_record_t* chunk : chunks) {
+    IREE_ASSERT_OK(iree_profile_model_process_metadata_record(&model, chunk));
+  }
+
+  EXPECT_EQ(2u, model.device_count);
+  EXPECT_EQ(2u, model.queue_count);
+  EXPECT_EQ(2u, model.executable_count);
+  EXPECT_EQ(2u, model.function_count);
+  EXPECT_EQ(2u, model.command_buffer_count);
+  EXPECT_EQ(2u, model.command_operation_count);
+  EXPECT_EQ(2u, model.metric_source_count);
+  EXPECT_EQ(2u, model.metric_descriptor_count);
+  EXPECT_NE(nullptr, iree_profile_model_find_device(&model, kFirstSession, 0));
+  EXPECT_NE(nullptr,
+            iree_profile_model_find_queue(&model, kSecondSession, 0, 0, 1));
+
+  const iree_profile_model_function_t* first_function =
+      iree_profile_model_find_function(&model, kFirstSession, 1, 0);
+  const iree_profile_model_function_t* second_function =
+      iree_profile_model_find_function(&model, kSecondSession, 1, 0);
+  ASSERT_NE(nullptr, first_function);
+  ASSERT_NE(nullptr, second_function);
+  EXPECT_TRUE(
+      iree_string_view_equal(first_function->name, IREE_SV("first_function")));
+  EXPECT_TRUE(iree_string_view_equal(second_function->name,
+                                     IREE_SV("second_function")));
+
+  const iree_profile_model_command_buffer_t* first_command_buffer =
+      iree_profile_model_find_command_buffer(&model, kFirstSession, 1);
+  const iree_profile_model_command_buffer_t* second_command_buffer =
+      iree_profile_model_find_command_buffer(&model, kSecondSession, 1);
+  ASSERT_NE(nullptr, first_command_buffer);
+  ASSERT_NE(nullptr, second_command_buffer);
+  EXPECT_EQ(
+      kFirstSession,
+      model.command_operations[first_command_buffer->first_operation_index]
+          .session_id);
+  EXPECT_EQ(
+      kSecondSession,
+      model.command_operations[second_command_buffer->first_operation_index]
+          .session_id);
+
+  const iree_profile_model_metric_source_t* first_source =
+      iree_profile_model_find_metric_source(&model, kFirstSession, 1);
+  const iree_profile_model_metric_source_t* second_source =
+      iree_profile_model_find_metric_source(&model, kSecondSession, 1);
+  ASSERT_NE(nullptr, first_source);
+  ASSERT_NE(nullptr, second_source);
+  EXPECT_TRUE(
+      iree_string_view_equal(first_source->name, IREE_SV("first.metrics")));
+  EXPECT_TRUE(
+      iree_string_view_equal(second_source->name, IREE_SV("second.metrics")));
+  EXPECT_NE(nullptr, iree_profile_model_find_metric_descriptor(
+                         &model, kFirstSession, 1, 1));
+  EXPECT_NE(nullptr, iree_profile_model_find_metric_descriptor(
+                         &model, kSecondSession, 1, 1));
+
   iree_profile_model_deinitialize(&model);
 }
 
@@ -491,13 +676,13 @@ TEST(ProfileModelTest, IndexesDeviceMetricDescriptors) {
       iree_profile_model_process_metadata_record(&model, &descriptor_chunk));
 
   const iree_profile_model_metric_source_t* source =
-      iree_profile_model_find_metric_source(&model, 1);
+      iree_profile_model_find_metric_source(&model, 1, 1);
   ASSERT_NE(source, nullptr);
   EXPECT_TRUE(iree_string_view_equal(source->name, IREE_SV("test.metrics")));
 
   const iree_profile_model_metric_descriptor_t* descriptor = NULL;
-  IREE_ASSERT_OK(
-      iree_profile_model_resolve_metric_descriptor(&model, 1, 2, &descriptor));
+  IREE_ASSERT_OK(iree_profile_model_resolve_metric_descriptor(&model, 1, 1, 2,
+                                                              &descriptor));
   ASSERT_NE(descriptor, nullptr);
   EXPECT_TRUE(iree_string_view_equal(descriptor->name, IREE_SV("test.clock")));
   EXPECT_TRUE(
@@ -510,9 +695,9 @@ TEST(ProfileModelTest, RejectsMissingDeviceMetricDescriptorReference) {
   iree_profile_model_initialize(iree_allocator_system(), &model);
 
   const iree_profile_model_metric_descriptor_t* descriptor = NULL;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_DATA_LOSS,
-      iree_profile_model_resolve_metric_descriptor(&model, 1, 2, &descriptor));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_DATA_LOSS,
+                        iree_profile_model_resolve_metric_descriptor(
+                            &model, 1, 1, 2, &descriptor));
   EXPECT_EQ(nullptr, descriptor);
   iree_profile_model_deinitialize(&model);
 }

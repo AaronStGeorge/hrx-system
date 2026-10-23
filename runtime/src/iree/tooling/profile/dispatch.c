@@ -47,6 +47,8 @@ void iree_profile_dispatch_context_deinitialize(
 typedef struct iree_profile_dispatch_function_lookup_t {
   // Dispatch context owning candidate aggregate rows.
   const iree_profile_dispatch_context_t* context;
+  // Capture-wide profiling session identifier.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal.
   uint32_t physical_device_ordinal;
   // Producer-local executable identifier.
@@ -58,6 +60,8 @@ typedef struct iree_profile_dispatch_function_lookup_t {
 typedef struct iree_profile_dispatch_command_lookup_t {
   // Dispatch context owning candidate aggregate rows.
   const iree_profile_dispatch_context_t* context;
+  // Capture-wide profiling session identifier.
+  iree_hal_profile_session_id_t session_id;
   // Producer-local command-buffer identifier.
   uint64_t command_buffer_id;
   // Queue submission epoch containing the command buffer execution.
@@ -73,6 +77,8 @@ typedef struct iree_profile_dispatch_command_lookup_t {
 typedef struct iree_profile_dispatch_queue_lookup_t {
   // Dispatch context owning candidate aggregate rows.
   const iree_profile_dispatch_context_t* context;
+  // Capture-wide profiling session identifier.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal.
   uint32_t physical_device_ordinal;
   // Session-local queue ordinal.
@@ -84,18 +90,20 @@ typedef struct iree_profile_dispatch_queue_lookup_t {
 } iree_profile_dispatch_queue_lookup_t;
 
 static uint64_t iree_profile_dispatch_function_hash(
-    uint32_t physical_device_ordinal, uint64_t executable_id,
-    uint32_t function_ordinal) {
-  uint64_t hash = iree_profile_index_mix_u64(physical_device_ordinal);
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint64_t executable_id, uint32_t function_ordinal) {
+  uint64_t hash = iree_profile_index_mix_u64(session_id);
+  hash = iree_profile_index_combine_u64(hash, physical_device_ordinal);
   hash = iree_profile_index_combine_u64(hash, executable_id);
   return iree_profile_index_combine_u64(hash, function_ordinal);
 }
 
 static uint64_t iree_profile_dispatch_command_hash(
-    uint64_t command_buffer_id, uint64_t submission_id,
-    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
-    uint64_t stream_id) {
-  uint64_t hash = iree_profile_index_mix_u64(command_buffer_id);
+    iree_hal_profile_session_id_t session_id, uint64_t command_buffer_id,
+    uint64_t submission_id, uint32_t physical_device_ordinal,
+    uint32_t queue_ordinal, uint64_t stream_id) {
+  uint64_t hash = iree_profile_index_mix_u64(session_id);
+  hash = iree_profile_index_combine_u64(hash, command_buffer_id);
   hash = iree_profile_index_combine_u64(hash, submission_id);
   hash = iree_profile_index_combine_u64(hash, physical_device_ordinal);
   hash = iree_profile_index_combine_u64(hash, queue_ordinal);
@@ -103,9 +111,10 @@ static uint64_t iree_profile_dispatch_command_hash(
 }
 
 static uint64_t iree_profile_dispatch_queue_hash(
-    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
-    uint64_t stream_id, uint64_t submission_id) {
-  uint64_t hash = iree_profile_index_mix_u64(physical_device_ordinal);
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint32_t queue_ordinal, uint64_t stream_id, uint64_t submission_id) {
+  uint64_t hash = iree_profile_index_mix_u64(session_id);
+  hash = iree_profile_index_combine_u64(hash, physical_device_ordinal);
   hash = iree_profile_index_combine_u64(hash, queue_ordinal);
   hash = iree_profile_index_combine_u64(hash, stream_id);
   return iree_profile_index_combine_u64(hash, submission_id);
@@ -117,7 +126,8 @@ static bool iree_profile_dispatch_aggregate_matches(const void* user_data,
       (const iree_profile_dispatch_function_lookup_t*)user_data;
   const iree_profile_dispatch_aggregate_t* aggregate =
       &lookup->context->aggregates[value];
-  return aggregate->physical_device_ordinal ==
+  return aggregate->session_id == lookup->session_id &&
+         aggregate->physical_device_ordinal ==
              lookup->physical_device_ordinal &&
          aggregate->executable_id == lookup->executable_id &&
          aggregate->function_ordinal == lookup->function_ordinal;
@@ -129,7 +139,8 @@ static bool iree_profile_dispatch_command_aggregate_matches(
       (const iree_profile_dispatch_command_lookup_t*)user_data;
   const iree_profile_dispatch_command_aggregate_t* aggregate =
       &lookup->context->command_aggregates[value];
-  return aggregate->command_buffer_id == lookup->command_buffer_id &&
+  return aggregate->session_id == lookup->session_id &&
+         aggregate->command_buffer_id == lookup->command_buffer_id &&
          aggregate->submission_id == lookup->submission_id &&
          aggregate->physical_device_ordinal ==
              lookup->physical_device_ordinal &&
@@ -143,7 +154,8 @@ static bool iree_profile_dispatch_queue_aggregate_matches(
       (const iree_profile_dispatch_queue_lookup_t*)user_data;
   const iree_profile_dispatch_queue_aggregate_t* aggregate =
       &lookup->context->queue_aggregates[value];
-  return aggregate->physical_device_ordinal ==
+  return aggregate->session_id == lookup->session_id &&
+         aggregate->physical_device_ordinal ==
              lookup->physical_device_ordinal &&
          aggregate->queue_ordinal == lookup->queue_ordinal &&
          aggregate->stream_id == lookup->stream_id &&
@@ -156,7 +168,8 @@ static bool iree_profile_dispatch_host_aggregate_matches(
       (const iree_profile_dispatch_function_lookup_t*)user_data;
   const iree_profile_host_dispatch_aggregate_t* aggregate =
       &lookup->context->host_dispatch_aggregates[value];
-  return aggregate->physical_device_ordinal ==
+  return aggregate->session_id == lookup->session_id &&
+         aggregate->physical_device_ordinal ==
              lookup->physical_device_ordinal &&
          aggregate->executable_id == lookup->executable_id &&
          aggregate->function_ordinal == lookup->function_ordinal;
@@ -168,7 +181,8 @@ static bool iree_profile_dispatch_host_command_aggregate_matches(
       (const iree_profile_dispatch_command_lookup_t*)user_data;
   const iree_profile_host_dispatch_command_aggregate_t* aggregate =
       &lookup->context->host_command_aggregates[value];
-  return aggregate->command_buffer_id == lookup->command_buffer_id &&
+  return aggregate->session_id == lookup->session_id &&
+         aggregate->command_buffer_id == lookup->command_buffer_id &&
          aggregate->submission_id == lookup->submission_id &&
          aggregate->physical_device_ordinal ==
              lookup->physical_device_ordinal &&
@@ -183,54 +197,59 @@ static iree_status_t iree_profile_dispatch_validate_event_metadata(
     iree_profile_projection_mode_t projection_mode) {
   const iree_profile_model_t* model = &context->model;
   const iree_profile_model_queue_t* queue_info = iree_profile_model_find_queue(
-      model, record->header.physical_device_ordinal,
+      model, record->header.session_id, record->header.physical_device_ordinal,
       record->header.queue_ordinal, record->header.stream_id);
   if (!queue_info) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
         "dispatch event references missing queue metadata "
-        "device=%u queue=%u stream=%" PRIu64 " submission=%" PRIu64,
-        record->header.physical_device_ordinal, record->header.queue_ordinal,
-        record->header.stream_id, event->submission_id);
+        "session=%" PRIu64 " device=%u queue=%u stream=%" PRIu64
+        " submission=%" PRIu64,
+        record->header.session_id, record->header.physical_device_ordinal,
+        record->header.queue_ordinal, record->header.stream_id,
+        event->submission_id);
   }
   if (projection_mode == IREE_PROFILE_PROJECTION_MODE_COMMAND &&
       event->command_buffer_id != 0 &&
-      !iree_profile_model_find_command_buffer(model,
+      !iree_profile_model_find_command_buffer(model, record->header.session_id,
                                               event->command_buffer_id)) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
         "dispatch event references missing command-buffer metadata "
-        "command_buffer=%" PRIu64 " submission=%" PRIu64,
-        event->command_buffer_id, event->submission_id);
+        "session=%" PRIu64 " command_buffer=%" PRIu64 " submission=%" PRIu64,
+        record->header.session_id, event->command_buffer_id,
+        event->submission_id);
   }
   return iree_ok_status();
 }
 
 static iree_status_t iree_profile_dispatch_validate_host_event_metadata(
     const iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id,
     const iree_hal_profile_host_execution_event_t* event,
     iree_profile_projection_mode_t projection_mode) {
   const iree_profile_model_t* model = &context->model;
-  const iree_profile_model_queue_t* queue_info =
-      iree_profile_model_find_queue(model, event->physical_device_ordinal,
-                                    event->queue_ordinal, event->stream_id);
+  const iree_profile_model_queue_t* queue_info = iree_profile_model_find_queue(
+      model, session_id, event->physical_device_ordinal, event->queue_ordinal,
+      event->stream_id);
   if (!queue_info) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
         "host dispatch event references missing queue metadata "
-        "device=%u queue=%u stream=%" PRIu64 " submission=%" PRIu64,
-        event->physical_device_ordinal, event->queue_ordinal, event->stream_id,
-        event->submission_id);
+        "session=%" PRIu64 " device=%u queue=%u stream=%" PRIu64
+        " submission=%" PRIu64,
+        session_id, event->physical_device_ordinal, event->queue_ordinal,
+        event->stream_id, event->submission_id);
   }
   if (projection_mode == IREE_PROFILE_PROJECTION_MODE_COMMAND &&
       event->command_buffer_id != 0 &&
-      !iree_profile_model_find_command_buffer(model,
+      !iree_profile_model_find_command_buffer(model, session_id,
                                               event->command_buffer_id)) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
         "host dispatch event references missing command-buffer metadata "
-        "command_buffer=%" PRIu64 " submission=%" PRIu64,
-        event->command_buffer_id, event->submission_id);
+        "session=%" PRIu64 " command_buffer=%" PRIu64 " submission=%" PRIu64,
+        session_id, event->command_buffer_id, event->submission_id);
   }
   return iree_ok_status();
 }
@@ -278,19 +297,21 @@ static bool iree_profile_dispatch_host_event_matches_id(
 }
 
 static iree_status_t iree_profile_dispatch_get_aggregate(
-    iree_profile_dispatch_context_t* context, uint32_t physical_device_ordinal,
+    iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     uint64_t executable_id, uint32_t function_ordinal,
     iree_profile_dispatch_aggregate_t** out_aggregate) {
   *out_aggregate = NULL;
 
   const iree_profile_dispatch_function_lookup_t lookup = {
       .context = context,
+      .session_id = session_id,
       .physical_device_ordinal = physical_device_ordinal,
       .executable_id = executable_id,
       .function_ordinal = function_ordinal,
   };
   const uint64_t hash = iree_profile_dispatch_function_hash(
-      physical_device_ordinal, executable_id, function_ordinal);
+      session_id, physical_device_ordinal, executable_id, function_ordinal);
   iree_host_size_t existing_index = 0;
   if (iree_profile_index_find(&context->aggregate_index, hash,
                               iree_profile_dispatch_aggregate_matches, &lookup,
@@ -314,6 +335,7 @@ static iree_status_t iree_profile_dispatch_get_aggregate(
   iree_profile_dispatch_aggregate_t* aggregate =
       &context->aggregates[aggregate_index];
   memset(aggregate, 0, sizeof(*aggregate));
+  aggregate->session_id = session_id;
   aggregate->physical_device_ordinal = physical_device_ordinal;
   aggregate->executable_id = executable_id;
   aggregate->function_ordinal = function_ordinal;
@@ -325,7 +347,8 @@ static iree_status_t iree_profile_dispatch_get_aggregate(
 }
 
 static iree_status_t iree_profile_dispatch_get_command_aggregate(
-    iree_profile_dispatch_context_t* context, uint64_t command_buffer_id,
+    iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id, uint64_t command_buffer_id,
     uint64_t submission_id, uint32_t physical_device_ordinal,
     uint32_t queue_ordinal, uint64_t stream_id,
     iree_profile_dispatch_command_aggregate_t** out_aggregate) {
@@ -333,6 +356,7 @@ static iree_status_t iree_profile_dispatch_get_command_aggregate(
 
   const iree_profile_dispatch_command_lookup_t lookup = {
       .context = context,
+      .session_id = session_id,
       .command_buffer_id = command_buffer_id,
       .submission_id = submission_id,
       .physical_device_ordinal = physical_device_ordinal,
@@ -340,8 +364,8 @@ static iree_status_t iree_profile_dispatch_get_command_aggregate(
       .stream_id = stream_id,
   };
   const uint64_t hash = iree_profile_dispatch_command_hash(
-      command_buffer_id, submission_id, physical_device_ordinal, queue_ordinal,
-      stream_id);
+      session_id, command_buffer_id, submission_id, physical_device_ordinal,
+      queue_ordinal, stream_id);
   iree_host_size_t existing_index = 0;
   if (iree_profile_index_find(&context->command_aggregate_index, hash,
                               iree_profile_dispatch_command_aggregate_matches,
@@ -367,6 +391,7 @@ static iree_status_t iree_profile_dispatch_get_command_aggregate(
   iree_profile_dispatch_command_aggregate_t* aggregate =
       &context->command_aggregates[aggregate_index];
   memset(aggregate, 0, sizeof(*aggregate));
+  aggregate->session_id = session_id;
   aggregate->command_buffer_id = command_buffer_id;
   aggregate->submission_id = submission_id;
   aggregate->physical_device_ordinal = physical_device_ordinal;
@@ -379,20 +404,23 @@ static iree_status_t iree_profile_dispatch_get_command_aggregate(
 }
 
 static iree_status_t iree_profile_dispatch_get_queue_aggregate(
-    iree_profile_dispatch_context_t* context, uint32_t physical_device_ordinal,
+    iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     uint32_t queue_ordinal, uint64_t stream_id, uint64_t submission_id,
     iree_profile_dispatch_queue_aggregate_t** out_aggregate) {
   *out_aggregate = NULL;
 
   const iree_profile_dispatch_queue_lookup_t lookup = {
       .context = context,
+      .session_id = session_id,
       .physical_device_ordinal = physical_device_ordinal,
       .queue_ordinal = queue_ordinal,
       .stream_id = stream_id,
       .submission_id = submission_id,
   };
-  const uint64_t hash = iree_profile_dispatch_queue_hash(
-      physical_device_ordinal, queue_ordinal, stream_id, submission_id);
+  const uint64_t hash =
+      iree_profile_dispatch_queue_hash(session_id, physical_device_ordinal,
+                                       queue_ordinal, stream_id, submission_id);
   iree_host_size_t existing_index = 0;
   if (iree_profile_index_find(&context->queue_aggregate_index, hash,
                               iree_profile_dispatch_queue_aggregate_matches,
@@ -417,6 +445,7 @@ static iree_status_t iree_profile_dispatch_get_queue_aggregate(
   iree_profile_dispatch_queue_aggregate_t* aggregate =
       &context->queue_aggregates[aggregate_index];
   memset(aggregate, 0, sizeof(*aggregate));
+  aggregate->session_id = session_id;
   aggregate->physical_device_ordinal = physical_device_ordinal;
   aggregate->queue_ordinal = queue_ordinal;
   aggregate->stream_id = stream_id;
@@ -428,19 +457,21 @@ static iree_status_t iree_profile_dispatch_get_queue_aggregate(
 }
 
 static iree_status_t iree_profile_dispatch_get_host_aggregate(
-    iree_profile_dispatch_context_t* context, uint32_t physical_device_ordinal,
+    iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     uint64_t executable_id, uint32_t function_ordinal,
     iree_profile_host_dispatch_aggregate_t** out_aggregate) {
   *out_aggregate = NULL;
 
   const iree_profile_dispatch_function_lookup_t lookup = {
       .context = context,
+      .session_id = session_id,
       .physical_device_ordinal = physical_device_ordinal,
       .executable_id = executable_id,
       .function_ordinal = function_ordinal,
   };
   const uint64_t hash = iree_profile_dispatch_function_hash(
-      physical_device_ordinal, executable_id, function_ordinal);
+      session_id, physical_device_ordinal, executable_id, function_ordinal);
   iree_host_size_t existing_index = 0;
   if (iree_profile_index_find(&context->host_dispatch_aggregate_index, hash,
                               iree_profile_dispatch_host_aggregate_matches,
@@ -468,6 +499,7 @@ static iree_status_t iree_profile_dispatch_get_host_aggregate(
   iree_profile_host_dispatch_aggregate_t* aggregate =
       &context->host_dispatch_aggregates[aggregate_index];
   memset(aggregate, 0, sizeof(*aggregate));
+  aggregate->session_id = session_id;
   aggregate->physical_device_ordinal = physical_device_ordinal;
   aggregate->executable_id = executable_id;
   aggregate->function_ordinal = function_ordinal;
@@ -479,7 +511,8 @@ static iree_status_t iree_profile_dispatch_get_host_aggregate(
 }
 
 static iree_status_t iree_profile_dispatch_get_host_command_aggregate(
-    iree_profile_dispatch_context_t* context, uint64_t command_buffer_id,
+    iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id, uint64_t command_buffer_id,
     uint64_t submission_id, uint32_t physical_device_ordinal,
     uint32_t queue_ordinal, uint64_t stream_id,
     iree_profile_host_dispatch_command_aggregate_t** out_aggregate) {
@@ -487,6 +520,7 @@ static iree_status_t iree_profile_dispatch_get_host_command_aggregate(
 
   const iree_profile_dispatch_command_lookup_t lookup = {
       .context = context,
+      .session_id = session_id,
       .command_buffer_id = command_buffer_id,
       .submission_id = submission_id,
       .physical_device_ordinal = physical_device_ordinal,
@@ -494,8 +528,8 @@ static iree_status_t iree_profile_dispatch_get_host_command_aggregate(
       .stream_id = stream_id,
   };
   const uint64_t hash = iree_profile_dispatch_command_hash(
-      command_buffer_id, submission_id, physical_device_ordinal, queue_ordinal,
-      stream_id);
+      session_id, command_buffer_id, submission_id, physical_device_ordinal,
+      queue_ordinal, stream_id);
   iree_host_size_t existing_index = 0;
   if (iree_profile_index_find(
           &context->host_command_aggregate_index, hash,
@@ -524,6 +558,7 @@ static iree_status_t iree_profile_dispatch_get_host_command_aggregate(
   iree_profile_host_dispatch_command_aggregate_t* aggregate =
       &context->host_command_aggregates[aggregate_index];
   memset(aggregate, 0, sizeof(*aggregate));
+  aggregate->session_id = session_id;
   aggregate->command_buffer_id = command_buffer_id;
   aggregate->submission_id = submission_id;
   aggregate->physical_device_ordinal = physical_device_ordinal;
@@ -726,6 +761,7 @@ static void iree_profile_dispatch_record_top_event(
 
   iree_profile_dispatch_top_event_t* top_event =
       &context->top_dispatches[target_index];
+  top_event->session_id = file_record->header.session_id;
   top_event->physical_device_ordinal =
       file_record->header.physical_device_ordinal;
   top_event->queue_ordinal = file_record->header.queue_ordinal;
@@ -736,6 +772,7 @@ static void iree_profile_dispatch_record_top_event(
 
 static void iree_profile_dispatch_record_top_host_event(
     iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id,
     const iree_hal_profile_host_execution_event_t* event) {
   if (event->start_host_time_ns < 0 ||
       event->end_host_time_ns < event->start_host_time_ns) {
@@ -763,6 +800,7 @@ static void iree_profile_dispatch_record_top_host_event(
 
   iree_profile_host_dispatch_top_event_t* top_event =
       &context->top_host_dispatches[target_index];
+  top_event->session_id = session_id;
   top_event->physical_device_ordinal = event->physical_device_ordinal;
   top_event->queue_ordinal = event->queue_ordinal;
   top_event->stream_id = event->stream_id;
@@ -779,7 +817,8 @@ static iree_status_t iree_profile_dispatch_process_event_records(
   const iree_profile_model_t* model = &context->model;
   iree_profile_model_device_t* device = NULL;
   IREE_RETURN_IF_ERROR(iree_profile_model_ensure_device(
-      &context->model, record->header.physical_device_ordinal, &device));
+      &context->model, record->header.session_id,
+      record->header.physical_device_ordinal, &device));
   iree_profile_model_clock_fit_t clock_fit;
   const bool has_clock_fit = iree_profile_model_device_try_fit_clock_exact(
       device, IREE_PROFILE_MODEL_CLOCK_TIME_DOMAIN_HOST_CPU_TIMESTAMP_NS,
@@ -816,7 +855,8 @@ static iree_status_t iree_profile_dispatch_process_event_records(
     }
     if (iree_status_is_ok(status) && id_matches) {
       status = iree_profile_model_resolve_dispatch_key(
-          model, record->header.physical_device_ordinal, event.executable_id,
+          model, record->header.session_id,
+          record->header.physical_device_ordinal, event.executable_id,
           event.function_ordinal, numeric_buffer, sizeof(numeric_buffer), &key);
     }
     if (iree_status_is_ok(status) && !iree_string_view_is_empty(key) &&
@@ -844,8 +884,9 @@ static iree_status_t iree_profile_dispatch_process_event_records(
       if (iree_status_is_ok(status) && aggregate_events) {
         iree_profile_dispatch_aggregate_t* aggregate = NULL;
         status = iree_profile_dispatch_get_aggregate(
-            context, record->header.physical_device_ordinal,
-            event.executable_id, event.function_ordinal, &aggregate);
+            context, record->header.session_id,
+            record->header.physical_device_ordinal, event.executable_id,
+            event.function_ordinal, &aggregate);
         if (iree_status_is_ok(status) &&
             !iree_profile_dispatch_record_aggregate_event(aggregate, &event)) {
           status =
@@ -858,8 +899,8 @@ static iree_status_t iree_profile_dispatch_process_event_records(
         if (iree_status_is_ok(status) && event.command_buffer_id != 0) {
           iree_profile_dispatch_command_aggregate_t* command_aggregate = NULL;
           status = iree_profile_dispatch_get_command_aggregate(
-              context, event.command_buffer_id, event.submission_id,
-              record->header.physical_device_ordinal,
+              context, record->header.session_id, event.command_buffer_id,
+              event.submission_id, record->header.physical_device_ordinal,
               record->header.queue_ordinal, record->header.stream_id,
               &command_aggregate);
           if (iree_status_is_ok(status) &&
@@ -875,7 +916,8 @@ static iree_status_t iree_profile_dispatch_process_event_records(
         if (iree_status_is_ok(status)) {
           iree_profile_dispatch_queue_aggregate_t* queue_aggregate = NULL;
           status = iree_profile_dispatch_get_queue_aggregate(
-              context, record->header.physical_device_ordinal,
+              context, record->header.session_id,
+              record->header.physical_device_ordinal,
               record->header.queue_ordinal, record->header.stream_id,
               event.submission_id, &queue_aggregate);
           if (iree_status_is_ok(status) &&
@@ -929,12 +971,13 @@ static iree_status_t iree_profile_dispatch_process_host_execution_records(
         &event, projection_mode, id_filter);
     if (id_matches) {
       status = iree_profile_dispatch_validate_host_event_metadata(
-          context, &event, projection_mode);
+          context, record->header.session_id, &event, projection_mode);
     }
     if (iree_status_is_ok(status) && id_matches) {
       status = iree_profile_model_resolve_dispatch_key(
-          model, event.physical_device_ordinal, event.executable_id,
-          event.function_ordinal, numeric_buffer, sizeof(numeric_buffer), &key);
+          model, record->header.session_id, event.physical_device_ordinal,
+          event.executable_id, event.function_ordinal, numeric_buffer,
+          sizeof(numeric_buffer), &key);
     }
     if (iree_status_is_ok(status) && !iree_string_view_is_empty(key) &&
         iree_profile_key_matches(key, filter)) {
@@ -943,12 +986,14 @@ static iree_status_t iree_profile_dispatch_process_host_execution_records(
                             event.end_host_time_ns >= event.start_host_time_ns;
       if (is_valid) {
         ++context->valid_host_dispatch_count;
-        iree_profile_dispatch_record_top_host_event(context, &event);
+        iree_profile_dispatch_record_top_host_event(
+            context, record->header.session_id, &event);
       } else {
         ++context->invalid_host_dispatch_count;
       }
       if (event_callback.host_fn) {
         const iree_profile_host_dispatch_event_row_t event_row = {
+            .session_id = record->header.session_id,
             .event = &event,
             .key = key,
         };
@@ -957,8 +1002,8 @@ static iree_status_t iree_profile_dispatch_process_host_execution_records(
       if (iree_status_is_ok(status) && aggregate_events) {
         iree_profile_host_dispatch_aggregate_t* aggregate = NULL;
         status = iree_profile_dispatch_get_host_aggregate(
-            context, event.physical_device_ordinal, event.executable_id,
-            event.function_ordinal, &aggregate);
+            context, record->header.session_id, event.physical_device_ordinal,
+            event.executable_id, event.function_ordinal, &aggregate);
         if (iree_status_is_ok(status) &&
             !iree_profile_dispatch_record_host_aggregate_event(aggregate,
                                                                &event)) {
@@ -973,9 +1018,9 @@ static iree_status_t iree_profile_dispatch_process_host_execution_records(
           iree_profile_host_dispatch_command_aggregate_t* command_aggregate =
               NULL;
           status = iree_profile_dispatch_get_host_command_aggregate(
-              context, event.command_buffer_id, event.submission_id,
-              event.physical_device_ordinal, event.queue_ordinal,
-              event.stream_id, &command_aggregate);
+              context, record->header.session_id, event.command_buffer_id,
+              event.submission_id, event.physical_device_ordinal,
+              event.queue_ordinal, event.stream_id, &command_aggregate);
           if (iree_status_is_ok(status) &&
               !iree_profile_dispatch_record_host_command_aggregate_event(
                   command_aggregate, &event)) {

@@ -112,6 +112,7 @@ static iree_status_t iree_profile_att_parse_code_objects(
     }
     if (iree_status_is_ok(status)) {
       iree_profile_att_code_object_t code_object = {
+          .session_id = record->header.session_id,
           .executable_id = code_object_record.executable_id,
           .code_object_id = code_object_record.code_object_id,
           .data = typed_record.inline_payload,
@@ -148,6 +149,7 @@ static iree_status_t iree_profile_att_parse_code_object_loads(
     }
     if (iree_status_is_ok(status)) {
       iree_profile_att_code_object_load_t code_object_load = {
+          .session_id = record->header.session_id,
           .physical_device_ordinal = load_record.physical_device_ordinal,
           .executable_id = load_record.executable_id,
           .code_object_id = load_record.code_object_id,
@@ -188,6 +190,7 @@ static iree_status_t iree_profile_att_parse_functions(
     }
     if (iree_status_is_ok(status)) {
       iree_profile_att_function_t function_info = {
+          .session_id = record->header.session_id,
           .executable_id = function_record.executable_id,
           .function_ordinal = function_record.function_ordinal,
           .name = iree_make_string_view(
@@ -217,6 +220,7 @@ static iree_status_t iree_profile_att_parse_dispatches(
     }
 
     iree_profile_att_dispatch_t dispatch = {
+        .session_id = record->header.session_id,
         .physical_device_ordinal = record->header.physical_device_ordinal,
         .queue_ordinal = record->header.queue_ordinal,
     };
@@ -242,6 +246,7 @@ static iree_status_t iree_profile_att_parse_trace(
   IREE_RETURN_IF_ERROR(iree_profile_executable_trace_record_parse(
       record, &trace_record, &trace_data));
   iree_profile_att_trace_t trace = {
+      .session_id = record->header.session_id,
       .record = trace_record,
       .data = trace_data,
   };
@@ -302,12 +307,14 @@ iree_status_t iree_profile_att_profile_parse_file(
 }
 
 const iree_profile_att_code_object_t* iree_profile_att_profile_find_code_object(
-    const iree_profile_att_profile_t* profile, uint64_t executable_id,
+    const iree_profile_att_profile_t* profile,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint64_t code_object_id) {
   for (iree_host_size_t i = 0; i < profile->code_object_count; ++i) {
     const iree_profile_att_code_object_t* code_object =
         &profile->code_objects[i];
-    if (code_object->executable_id == executable_id &&
+    if (code_object->session_id == session_id &&
+        code_object->executable_id == executable_id &&
         code_object->code_object_id == code_object_id) {
       return code_object;
     }
@@ -316,11 +323,13 @@ const iree_profile_att_code_object_t* iree_profile_att_profile_find_code_object(
 }
 
 const iree_profile_att_function_t* iree_profile_att_profile_find_function(
-    const iree_profile_att_profile_t* profile, uint64_t executable_id,
+    const iree_profile_att_profile_t* profile,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint32_t function_ordinal) {
   for (iree_host_size_t i = 0; i < profile->function_count; ++i) {
     const iree_profile_att_function_t* function_info = &profile->functions[i];
-    if (function_info->executable_id == executable_id &&
+    if (function_info->session_id == session_id &&
+        function_info->executable_id == executable_id &&
         function_info->function_ordinal == function_ordinal) {
       return function_info;
     }
@@ -333,7 +342,8 @@ const iree_profile_att_dispatch_t* iree_profile_att_profile_find_dispatch(
     const iree_profile_att_trace_t* trace) {
   for (iree_host_size_t i = 0; i < profile->dispatch_count; ++i) {
     const iree_profile_att_dispatch_t* dispatch = &profile->dispatches[i];
-    if (dispatch->record.event_id == trace->record.dispatch_event_id &&
+    if (dispatch->session_id == trace->session_id &&
+        dispatch->record.event_id == trace->record.dispatch_event_id &&
         dispatch->record.submission_id == trace->record.submission_id &&
         dispatch->record.command_buffer_id == trace->record.command_buffer_id &&
         dispatch->record.command_index == trace->record.command_index &&

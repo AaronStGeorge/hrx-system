@@ -16,6 +16,8 @@ extern "C" {
 typedef struct iree_profile_model_t iree_profile_model_t;
 
 typedef struct iree_profile_counter_set_t {
+  // Capture-wide profiling session identifier owning this counter set.
+  iree_hal_profile_session_id_t session_id;
   // Immutable counter set metadata record copied from the profile bundle.
   iree_hal_profile_counter_set_record_t record;
   // Borrowed counter set name from the mapped profile bundle.
@@ -29,6 +31,8 @@ typedef struct iree_profile_counter_set_t {
 } iree_profile_counter_set_t;
 
 typedef struct iree_profile_counter_t {
+  // Capture-wide profiling session identifier owning this counter.
+  iree_hal_profile_session_id_t session_id;
   // Immutable counter metadata record copied from the profile bundle.
   iree_hal_profile_counter_record_t record;
   // Borrowed hardware block name from the mapped profile bundle.
@@ -42,6 +46,8 @@ typedef struct iree_profile_counter_t {
 } iree_profile_counter_t;
 
 typedef struct iree_profile_counter_aggregate_t {
+  // Capture-wide profiling session identifier owning this aggregate row.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this aggregate row.
   uint32_t physical_device_ordinal;
   // Session-local queue ordinal for this aggregate row.
@@ -121,6 +127,8 @@ typedef struct iree_profile_counter_context_t {
 } iree_profile_counter_context_t;
 
 typedef struct iree_profile_counter_sample_row_t {
+  // Capture-wide profiling session identifier owning this sample.
+  iree_hal_profile_session_id_t session_id;
   // Counter sample record valid only for the callback duration.
   const iree_hal_profile_counter_sample_record_t* sample;
   // Counter set metadata associated with |sample|.

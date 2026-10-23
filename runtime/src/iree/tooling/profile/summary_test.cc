@@ -148,6 +148,41 @@ TEST(ProfileSummaryTest, AcceptsOriginalDeviceRecordPrefix) {
   iree_profile_summary_deinitialize(&summary);
 }
 
+TEST(ProfileSummaryTest, KeepsSessionLocalDevicesDistinct) {
+  iree_hal_profile_device_record_t device_record =
+      iree_hal_profile_device_record_default();
+  device_record.flags = IREE_HAL_PROFILE_DEVICE_FLAG_TIMESTAMP_FREQUENCY;
+  device_record.physical_device_ordinal = 0;
+  device_record.queue_count = 1;
+  device_record.timestamp_frequency_hz = 100000000;
+  std::vector<uint8_t> first_payload;
+  AppendPlainRecord(&first_payload, device_record);
+  iree_hal_profile_file_record_t first_chunk = MakeDevicesChunk(first_payload);
+  first_chunk.header.session_id = 11;
+
+  device_record.timestamp_frequency_hz = 200000000;
+  std::vector<uint8_t> second_payload;
+  AppendPlainRecord(&second_payload, device_record);
+  iree_hal_profile_file_record_t second_chunk =
+      MakeDevicesChunk(second_payload);
+  second_chunk.header.session_id = 22;
+
+  iree_profile_summary_t summary;
+  iree_profile_summary_initialize(iree_allocator_system(), &summary);
+  IREE_ASSERT_OK(iree_profile_summary_process_record(&summary, &first_chunk));
+  IREE_ASSERT_OK(iree_profile_summary_process_record(&summary, &second_chunk));
+
+  ASSERT_EQ(summary.device_count, 2u);
+  EXPECT_EQ(summary.devices[0].session_id, 11u);
+  EXPECT_EQ(summary.devices[0].physical_device_ordinal, 0u);
+  EXPECT_EQ(summary.devices[0].timestamp_frequency_hz, 100000000u);
+  EXPECT_EQ(summary.devices[1].session_id, 22u);
+  EXPECT_EQ(summary.devices[1].physical_device_ordinal, 0u);
+  EXPECT_EQ(summary.devices[1].timestamp_frequency_hz, 200000000u);
+
+  iree_profile_summary_deinitialize(&summary);
+}
+
 TEST(ProfileSummaryTest, CountsInvalidClockAlignmentSamples) {
   std::vector<uint8_t> payload;
   iree_hal_profile_clock_correlation_record_t clock_sample =

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 UINT64_MASK = (1 << 64) - 1
 UINT32_MAX = (1 << 32) - 1
 INT64_MIN = -(1 << 63)
@@ -48,6 +48,10 @@ def parse_integer(value: Any, default: int = 0) -> int:
 def parse_ordinal(value: Any, default: int = -1) -> int:
     ordinal = parse_integer(value, default)
     return default if ordinal == UINT32_MAX else ordinal
+
+
+def profile_session_id(record: dict[str, Any]) -> int:
+    return parse_integer(record.get("session_id", 0))
 
 
 def round_ratio(numerator: int, denominator: int) -> int:
@@ -115,12 +119,27 @@ def validate_schema(records: list[dict[str, Any]]) -> None:
             f"unsupported ireeperf-jsonl schema version {schema_version}; "
             f"expected {SCHEMA_VERSION}"
         )
+    for record_index, record in enumerate(records):
+        if record.get("record_type") == "schema":
+            continue
+        if "session_id" not in record:
+            raise SystemExit(
+                f"ireeperf-jsonl record {record_index} has no profiling session ID"
+            )
+        session_id = parse_integer(record["session_id"])
+        if session_id <= 0 or session_id > UINT64_MASK:
+            raise SystemExit(
+                f"ireeperf-jsonl record {record_index} has invalid profiling "
+                f"session ID {session_id}"
+            )
 
 
 def build_device_clock_mappers(
     records: list[dict[str, Any]],
-) -> dict[int, DeviceClockMapper]:
-    samples_by_device: dict[int, list[dict[str, Any]]] = collections.defaultdict(list)
+) -> dict[tuple[int, int], DeviceClockMapper]:
+    samples_by_device: dict[tuple[int, int], list[dict[str, Any]]] = (
+        collections.defaultdict(list)
+    )
     for record in records:
         if record.get("record_type") != "clock_correlation":
             continue
@@ -129,12 +148,14 @@ def build_device_clock_mappers(
         host_time_ns = timestamp_midpoint(record)
         if host_time_ns is None:
             continue
-        samples_by_device[parse_integer(record["physical_device_ordinal"])].append(
-            record
+        device_key = (
+            profile_session_id(record),
+            parse_integer(record["physical_device_ordinal"]),
         )
+        samples_by_device[device_key].append(record)
 
-    mappers: dict[int, DeviceClockMapper] = {}
-    for physical_device_ordinal, samples in samples_by_device.items():
+    mappers: dict[tuple[int, int], DeviceClockMapper] = {}
+    for device_key, samples in samples_by_device.items():
         samples.sort(key=lambda sample: parse_integer(sample["device_tick"]))
         first = samples[0]
         last = samples[-1]
@@ -142,7 +163,7 @@ def build_device_clock_mappers(
         last_host_time_ns = timestamp_midpoint(last)
         if first_host_time_ns is None or last_host_time_ns is None:
             continue
-        mappers[physical_device_ordinal] = DeviceClockMapper(
+        mappers[device_key] = DeviceClockMapper(
             first_device_tick=parse_integer(first["device_tick"]),
             first_host_time_ns=first_host_time_ns,
             last_device_tick=parse_integer(last["device_tick"]),
@@ -152,7 +173,8 @@ def build_device_clock_mappers(
 
 
 def device_event_host_time_range(
-    record: dict[str, Any], clock_mappers: dict[int, DeviceClockMapper]
+    record: dict[str, Any],
+    clock_mappers: dict[tuple[int, int], DeviceClockMapper],
 ) -> tuple[int, int, str] | None:
     if not record.get("valid", True):
         return None
@@ -161,7 +183,7 @@ def device_event_host_time_range(
     physical_device_ordinal = parse_ordinal(record.get("physical_device_ordinal"), 0)
     start_tick = parse_integer(record["start_tick"])
     end_tick = parse_integer(record["end_tick"])
-    mapper = clock_mappers.get(physical_device_ordinal)
+    mapper = clock_mappers.get((profile_session_id(record), physical_device_ordinal))
     if mapper is not None:
         return (
             mapper.host_time_from_device_tick(start_tick),
@@ -204,29 +226,42 @@ def queue_key(record: dict[str, Any]) -> tuple[int, int]:
     )
 
 
-def submission_key(record: dict[str, Any]) -> tuple[int, int, int, int] | None:
+def submission_key(record: dict[str, Any]) -> tuple[int, int, int, int, int] | None:
     submission_id = parse_integer(record.get("submission_id", 0))
     if submission_id == 0:
         return None
     physical_device_ordinal, queue_ordinal = queue_key(record)
     stream_id = parse_integer(record.get("stream_id", 0))
-    return (physical_device_ordinal, queue_ordinal, stream_id, submission_id)
+    return (
+        profile_session_id(record),
+        physical_device_ordinal,
+        queue_ordinal,
+        stream_id,
+        submission_id,
+    )
 
 
 def event_endpoint_key(
     record: dict[str, Any], endpoint_type: str
-) -> tuple[str, int, int, int, int] | None:
+) -> tuple[str, int, int, int, int, int] | None:
     event_id = parse_integer(record.get("event_id", 0))
     if event_id == 0:
         return None
     physical_device_ordinal, queue_ordinal = queue_key(record)
     stream_id = parse_integer(record.get("stream_id", 0))
-    return (endpoint_type, physical_device_ordinal, queue_ordinal, stream_id, event_id)
+    return (
+        endpoint_type,
+        profile_session_id(record),
+        physical_device_ordinal,
+        queue_ordinal,
+        stream_id,
+        event_id,
+    )
 
 
 def relationship_endpoint_key(
     record: dict[str, Any], prefix: str
-) -> tuple[str, int, int, int, int] | None:
+) -> tuple[str, int, int, int, int, int] | None:
     endpoint_type = str(record.get(f"{prefix}_type", ""))
     endpoint_id = parse_integer(record.get(f"{prefix}_id", 0))
     if not endpoint_type or endpoint_id == 0:
@@ -235,6 +270,7 @@ def relationship_endpoint_key(
     stream_id = parse_integer(record.get("stream_id", 0))
     return (
         endpoint_type,
+        profile_session_id(record),
         physical_device_ordinal,
         queue_ordinal,
         stream_id,

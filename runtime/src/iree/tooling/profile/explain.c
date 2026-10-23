@@ -26,6 +26,8 @@ typedef enum iree_profile_explain_timing_source_e {
 typedef struct iree_profile_explain_function_rank_t {
   // Timing source used to rank this function.
   iree_profile_explain_timing_source_t timing_source;
+  // Capture-wide profiling session identifier owning this function aggregate.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal for this function aggregate.
   uint32_t physical_device_ordinal;
   // Producer-local executable identifier for this function aggregate.
@@ -110,7 +112,7 @@ typedef struct iree_profile_explain_device_row_t {
 
 typedef struct iree_profile_explain_queue_row_t {
   // Queue metadata row represented by these derived metrics.
-  const iree_hal_profile_queue_record_t* queue;
+  const iree_profile_model_queue_t* queue;
   // Aggregate dispatch timing and gap summary for the queue.
   iree_profile_explain_queue_summary_t summary;
   // True when the queue device has a driver host CPU timestamp clock fit.
@@ -216,10 +218,10 @@ static int iree_profile_explain_compare_interval(const void* lhs,
 
 static bool iree_profile_explain_try_fit_driver_host_cpu_clock(
     const iree_profile_dispatch_context_t* context,
-    uint32_t physical_device_ordinal,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     iree_profile_model_clock_fit_t* out_clock_fit) {
-  const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(&context->model, physical_device_ordinal);
+  const iree_profile_model_device_t* device = iree_profile_model_find_device(
+      &context->model, session_id, physical_device_ordinal);
   return iree_profile_model_device_try_fit_clock_exact(
       device, IREE_PROFILE_MODEL_CLOCK_TIME_DOMAIN_HOST_CPU_TIMESTAMP_NS,
       out_clock_fit);
@@ -227,10 +229,10 @@ static bool iree_profile_explain_try_fit_driver_host_cpu_clock(
 
 static bool iree_profile_explain_try_resolve_duration_scale(
     const iree_profile_dispatch_context_t* context,
-    uint32_t physical_device_ordinal,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     iree_profile_model_duration_scale_t* out_duration_scale) {
-  const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(&context->model, physical_device_ordinal);
+  const iree_profile_model_device_t* device = iree_profile_model_find_device(
+      &context->model, session_id, physical_device_ordinal);
   return iree_profile_model_device_try_resolve_duration_scale(
       device, out_duration_scale);
 }
@@ -279,6 +281,7 @@ static iree_status_t iree_profile_explain_collect_function_ranks(
         iree_profile_explain_function_rank_t* rank = &ranks[rank_count++];
         memset(rank, 0, sizeof(*rank));
         rank->timing_source = IREE_PROFILE_EXPLAIN_TIMING_SOURCE_HOST_EXECUTION;
+        rank->session_id = aggregate->session_id;
         rank->physical_device_ordinal = aggregate->physical_device_ordinal;
         rank->executable_id = aggregate->executable_id;
         rank->function_ordinal = aggregate->function_ordinal;
@@ -303,6 +306,7 @@ static iree_status_t iree_profile_explain_collect_function_ranks(
 
         const iree_profile_model_device_t* device =
             iree_profile_model_find_device(&context->model,
+                                           aggregate->session_id,
                                            aggregate->physical_device_ordinal);
         iree_profile_model_duration_scale_t duration_scale;
         const bool has_duration_scale =
@@ -313,6 +317,7 @@ static iree_status_t iree_profile_explain_collect_function_ranks(
         memset(rank, 0, sizeof(*rank));
         rank->timing_source =
             IREE_PROFILE_EXPLAIN_TIMING_SOURCE_DEVICE_DISPATCH;
+        rank->session_id = aggregate->session_id;
         rank->physical_device_ordinal = aggregate->physical_device_ordinal;
         rank->executable_id = aggregate->executable_id;
         rank->function_ordinal = aggregate->function_ordinal;
@@ -367,13 +372,15 @@ static void iree_profile_explain_compute_queue_operation_totals(
 
 static double iree_profile_explain_visible_span_ticks(
     const iree_profile_dispatch_context_t* context,
+    iree_hal_profile_session_id_t session_id,
     uint32_t physical_device_ordinal) {
   uint64_t earliest_start_tick = UINT64_MAX;
   uint64_t latest_end_tick = 0;
   for (iree_host_size_t i = 0; i < context->queue_aggregate_count; ++i) {
     const iree_profile_dispatch_queue_aggregate_t* aggregate =
         &context->queue_aggregates[i];
-    if (aggregate->physical_device_ordinal != physical_device_ordinal ||
+    if (aggregate->session_id != session_id ||
+        aggregate->physical_device_ordinal != physical_device_ordinal ||
         aggregate->valid_count == 0) {
       continue;
     }
@@ -395,12 +402,14 @@ static bool iree_profile_explain_accumulate_ticks(uint64_t* total_ticks,
 
 static iree_status_t iree_profile_explain_total_dispatch_ticks_for_device(
     const iree_profile_dispatch_context_t* context,
-    uint32_t physical_device_ordinal, uint64_t* out_total_ticks) {
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint64_t* out_total_ticks) {
   *out_total_ticks = 0;
   for (iree_host_size_t i = 0; i < context->aggregate_count; ++i) {
     const iree_profile_dispatch_aggregate_t* aggregate =
         &context->aggregates[i];
-    if (aggregate->physical_device_ordinal == physical_device_ordinal) {
+    if (aggregate->session_id == session_id &&
+        aggregate->physical_device_ordinal == physical_device_ordinal) {
       if (!iree_profile_explain_accumulate_ticks(out_total_ticks,
                                                  aggregate->total_ticks)) {
         return iree_make_status(
@@ -435,9 +444,9 @@ static iree_status_t iree_profile_explain_resolve_device_row(
         iree_profile_model_duration_scale_tick_frequency_hz(&duration_scale);
   }
   out_row->visible_span_ticks = iree_profile_explain_visible_span_ticks(
-      context, device->physical_device_ordinal);
+      context, device->session_id, device->physical_device_ordinal);
   IREE_RETURN_IF_ERROR(iree_profile_explain_total_dispatch_ticks_for_device(
-      context, device->physical_device_ordinal,
+      context, device->session_id, device->physical_device_ordinal,
       &out_row->total_dispatch_ticks));
   out_row->active_over_visible_ratio =
       out_row->visible_span_ticks > 0.0
@@ -452,16 +461,18 @@ static iree_status_t iree_profile_explain_resolve_device_row(
 }
 
 static bool iree_profile_explain_queue_aggregate_matches(
-    const iree_hal_profile_queue_record_t* queue,
+    const iree_profile_model_queue_t* queue,
     const iree_profile_dispatch_queue_aggregate_t* aggregate) {
-  return aggregate->physical_device_ordinal == queue->physical_device_ordinal &&
-         aggregate->queue_ordinal == queue->queue_ordinal &&
-         aggregate->stream_id == queue->stream_id;
+  return aggregate->session_id == queue->session_id &&
+         aggregate->physical_device_ordinal ==
+             queue->record.physical_device_ordinal &&
+         aggregate->queue_ordinal == queue->record.queue_ordinal &&
+         aggregate->stream_id == queue->record.stream_id;
 }
 
 static iree_status_t iree_profile_explain_collect_queue_intervals(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_queue_record_t* queue,
+    const iree_profile_model_queue_t* queue,
     iree_profile_explain_interval_t* intervals,
     iree_host_size_t* inout_interval_count,
     iree_profile_explain_queue_summary_t* summary) {
@@ -479,8 +490,8 @@ static iree_status_t iree_profile_explain_collect_queue_intervals(
           IREE_STATUS_OUT_OF_RANGE,
           "queue summary dispatch tick total overflow device=%u queue=%u"
           " stream=%" PRIu64,
-          queue->physical_device_ordinal, queue->queue_ordinal,
-          queue->stream_id);
+          queue->record.physical_device_ordinal, queue->record.queue_ordinal,
+          queue->record.stream_id);
     }
     if (aggregate->valid_count != 0) {
       ++summary->valid_submission_count;
@@ -524,8 +535,7 @@ static void iree_profile_explain_merge_queue_intervals(
 
 static iree_status_t iree_profile_explain_summarize_queue(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_queue_record_t* queue,
-    iree_allocator_t host_allocator,
+    const iree_profile_model_queue_t* queue, iree_allocator_t host_allocator,
     iree_profile_explain_queue_summary_t* out_summary) {
   memset(out_summary, 0, sizeof(*out_summary));
   if (context->queue_aggregate_count == 0) {
@@ -553,8 +563,7 @@ static iree_status_t iree_profile_explain_summarize_queue(
 
 static iree_status_t iree_profile_explain_resolve_queue_row(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_queue_record_t* queue,
-    iree_allocator_t host_allocator,
+    const iree_profile_model_queue_t* queue, iree_allocator_t host_allocator,
     iree_profile_explain_queue_row_t* out_row) {
   memset(out_row, 0, sizeof(*out_row));
   out_row->queue = queue;
@@ -563,10 +572,12 @@ static iree_status_t iree_profile_explain_resolve_queue_row(
 
   iree_profile_model_clock_fit_t clock_fit;
   out_row->has_clock_fit = iree_profile_explain_try_fit_driver_host_cpu_clock(
-      context, queue->physical_device_ordinal, &clock_fit);
+      context, queue->session_id, queue->record.physical_device_ordinal,
+      &clock_fit);
   iree_profile_model_duration_scale_t duration_scale;
   out_row->has_duration_scale = iree_profile_explain_try_resolve_duration_scale(
-      context, queue->physical_device_ordinal, &duration_scale);
+      context, queue->session_id, queue->record.physical_device_ordinal,
+      &duration_scale);
   out_row->duration_scale_source = duration_scale.source;
   if (out_row->has_duration_scale) {
     out_row->nanoseconds_per_tick =
@@ -686,11 +697,12 @@ static iree_status_t iree_profile_explain_print_text_devices(
     IREE_RETURN_IF_ERROR(iree_profile_explain_resolve_device_row(
         dispatch_context, device, &row));
     fprintf(file,
-            "  device[%u]: clock_fit=%s duration_scale=%s"
+            "  session=%" PRIu64
+            " device[%u]: clock_fit=%s duration_scale=%s"
             " clock_samples=%" PRIu64
             " visible_span_ticks=%.3f active_dispatch_ticks=%" PRIu64
             " active_over_visible=%.3f\n",
-            row.device->physical_device_ordinal,
+            row.device->session_id, row.device->physical_device_ordinal,
             row.has_clock_fit ? "true" : "false",
             iree_profile_model_duration_scale_source_name(
                 row.duration_scale_source),
@@ -712,19 +724,19 @@ static iree_status_t iree_profile_explain_print_text_queues(
     iree_allocator_t host_allocator, FILE* file) {
   fprintf(file, "queues:\n");
   for (iree_host_size_t i = 0; i < dispatch_context->model.queue_count; ++i) {
-    const iree_hal_profile_queue_record_t* queue =
-        &dispatch_context->model.queues[i].record;
+    const iree_profile_model_queue_t* queue =
+        &dispatch_context->model.queues[i];
     iree_profile_explain_queue_row_t row;
     IREE_RETURN_IF_ERROR(iree_profile_explain_resolve_queue_row(
         dispatch_context, queue, host_allocator, &row));
     fprintf(file,
-            "  queue device=%u ordinal=%u stream=%" PRIu64
+            "  queue session=%" PRIu64 " device=%u ordinal=%u stream=%" PRIu64
             ": submissions=%" PRIu64 " valid=%" PRIu64 " invalid=%" PRIu64
             " busy_ticks=%.3f"
             " total_dispatch_ticks=%" PRIu64,
-            row.queue->physical_device_ordinal, row.queue->queue_ordinal,
-            row.queue->stream_id, row.summary.submission_count,
-            row.summary.valid_submission_count,
+            row.queue->session_id, row.queue->record.physical_device_ordinal,
+            row.queue->record.queue_ordinal, row.queue->record.stream_id,
+            row.summary.submission_count, row.summary.valid_submission_count,
             row.summary.invalid_submission_count, row.summary.busy_ticks,
             row.summary.total_dispatch_ticks);
     if (row.has_total_dispatch_time_ns) {
@@ -762,16 +774,17 @@ static iree_status_t iree_profile_explain_print_text_top_functions(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(iree_profile_model_resolve_dispatch_key(
-        &dispatch_context->model, rank->physical_device_ordinal,
-        rank->executable_id, rank->function_ordinal, numeric_buffer,
-        sizeof(numeric_buffer), &key));
+        &dispatch_context->model, rank->session_id,
+        rank->physical_device_ordinal, rank->executable_id,
+        rank->function_ordinal, numeric_buffer, sizeof(numeric_buffer), &key));
     fprintf(file,
-            "  #%" PRIhsz " %.*s device=%u executable=%" PRIu64
-            " function=%u count=%" PRIu64 " valid=%" PRIu64 " invalid=%" PRIu64
-            " timing_source=%s",
-            i + 1, (int)key.size, key.data, rank->physical_device_ordinal,
-            rank->executable_id, rank->function_ordinal, rank->dispatch_count,
-            rank->valid_count, rank->invalid_count,
+            "  #%" PRIhsz " %.*s session=%" PRIu64
+            " device=%u executable=%" PRIu64 " function=%u count=%" PRIu64
+            " valid=%" PRIu64 " invalid=%" PRIu64 " timing_source=%s",
+            i + 1, (int)key.size, key.data, rank->session_id,
+            rank->physical_device_ordinal, rank->executable_id,
+            rank->function_ordinal, rank->dispatch_count, rank->valid_count,
+            rank->invalid_count,
             iree_profile_explain_timing_source_string(rank->timing_source));
     if (rank->timing_source ==
         IREE_PROFILE_EXPLAIN_TIMING_SOURCE_DEVICE_DISPATCH) {
@@ -806,8 +819,8 @@ static iree_status_t iree_profile_explain_print_text_top_dispatches(
       iree_profile_model_duration_scale_t duration_scale;
       const bool has_duration_scale =
           iree_profile_explain_try_resolve_duration_scale(
-              dispatch_context, top_event->physical_device_ordinal,
-              &duration_scale);
+              dispatch_context, top_event->session_id,
+              top_event->physical_device_ordinal, &duration_scale);
       int64_t duration_ns = 0;
       const bool has_duration_ns =
           has_duration_scale &&
@@ -816,16 +829,18 @@ static iree_status_t iree_profile_explain_print_text_top_dispatches(
       char numeric_buffer[128];
       iree_string_view_t key = iree_string_view_empty();
       IREE_RETURN_IF_ERROR(iree_profile_model_resolve_dispatch_key(
-          &dispatch_context->model, top_event->physical_device_ordinal,
-          top_event->event.executable_id, top_event->event.function_ordinal,
-          numeric_buffer, sizeof(numeric_buffer), &key));
+          &dispatch_context->model, top_event->session_id,
+          top_event->physical_device_ordinal, top_event->event.executable_id,
+          top_event->event.function_ordinal, numeric_buffer,
+          sizeof(numeric_buffer), &key));
       fprintf(file,
               "  #%" PRIhsz " event=%" PRIu64 " submission=%" PRIu64
-              " %.*s device=%u queue=%u stream=%" PRIu64
+              " %.*s session=%" PRIu64 " device=%u queue=%u stream=%" PRIu64
               " timing_source=%s duration_ticks=%" PRIu64,
               i + 1, top_event->event.event_id, top_event->event.submission_id,
-              (int)key.size, key.data, top_event->physical_device_ordinal,
-              top_event->queue_ordinal, top_event->stream_id,
+              (int)key.size, key.data, top_event->session_id,
+              top_event->physical_device_ordinal, top_event->queue_ordinal,
+              top_event->stream_id,
               iree_profile_explain_timing_source_string(
                   IREE_PROFILE_EXPLAIN_TIMING_SOURCE_DEVICE_DISPATCH),
               top_event->duration_ticks);
@@ -848,17 +863,19 @@ static iree_status_t iree_profile_explain_print_text_top_dispatches(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(iree_profile_model_resolve_dispatch_key(
-        &dispatch_context->model, top_event->physical_device_ordinal,
-        top_event->event.executable_id, top_event->event.function_ordinal,
-        numeric_buffer, sizeof(numeric_buffer), &key));
+        &dispatch_context->model, top_event->session_id,
+        top_event->physical_device_ordinal, top_event->event.executable_id,
+        top_event->event.function_ordinal, numeric_buffer,
+        sizeof(numeric_buffer), &key));
     fprintf(file,
             "  #%" PRIhsz " event=%" PRIu64 " submission=%" PRIu64
-            " %.*s device=%u queue=%u stream=%" PRIu64
+            " %.*s session=%" PRIu64 " device=%u queue=%u stream=%" PRIu64
             " timing_source=%s duration_ns=%" PRId64 " tile_count=%" PRIu64
             " tile_duration_sum_ns=%" PRId64,
             i + 1, top_event->event.event_id, top_event->event.submission_id,
-            (int)key.size, key.data, top_event->physical_device_ordinal,
-            top_event->queue_ordinal, top_event->stream_id,
+            (int)key.size, key.data, top_event->session_id,
+            top_event->physical_device_ordinal, top_event->queue_ordinal,
+            top_event->stream_id,
             iree_profile_explain_timing_source_string(
                 IREE_PROFILE_EXPLAIN_TIMING_SOURCE_HOST_EXECUTION),
             top_event->duration_ns, top_event->event.tile_count,
@@ -922,12 +939,12 @@ static void iree_profile_explain_print_text_memory_pressure(
   for (iree_host_size_t i = 0; i < memory_context->device_count; ++i) {
     const iree_profile_memory_device_t* device = &memory_context->devices[i];
     fprintf(file,
-            "  device[%u]: slab_high_water=%" PRIu64
+            "  session=%" PRIu64 " device[%u]: slab_high_water=%" PRIu64
             " pool_reserved_high_water=%" PRIu64
             " pool_materialized_high_water=%" PRIu64
             " queue_inflight_high_water=%" PRIu64 " buffer_high_water=%" PRIu64
             " pool_waits=%" PRIu64 "\n",
-            device->physical_device_ordinal,
+            device->session_id, device->physical_device_ordinal,
             device->slab_allocation_balance.high_water_bytes,
             device->pool_reservation_balance.high_water_bytes,
             device->pool_materialization_balance.high_water_bytes,
@@ -1104,7 +1121,8 @@ static iree_status_t iree_profile_explain_print_jsonl_devices(
     IREE_RETURN_IF_ERROR(iree_profile_explain_resolve_device_row(
         dispatch_context, device, &row));
     fprintf(file,
-            "{\"type\":\"explain_device\",\"physical_device_ordinal\":%u"
+            "{\"type\":\"explain_device\",\"session_id\":%" PRIu64
+            ",\"physical_device_ordinal\":%u"
             ",\"clock_fit_available\":%s,\"clock_samples\":%" PRIu64
             ",\"duration_scale_available\":%s"
             ",\"duration_scale_source\":\"%s\""
@@ -1114,7 +1132,7 @@ static iree_status_t iree_profile_explain_print_jsonl_devices(
             ",\"tick_frequency_hz\":%.3f,\"visible_span_ns\":%.3f"
             ",\"active_dispatch_time_ns_available\":%s"
             ",\"active_dispatch_ns\":%" PRId64 "}\n",
-            row.device->physical_device_ordinal,
+            row.device->session_id, row.device->physical_device_ordinal,
             row.has_clock_fit ? "true" : "false",
             row.device->clock_sample_count,
             row.has_duration_scale ? "true" : "false",
@@ -1136,13 +1154,14 @@ static iree_status_t iree_profile_explain_print_jsonl_queues(
     const iree_profile_dispatch_context_t* dispatch_context,
     iree_allocator_t host_allocator, FILE* file) {
   for (iree_host_size_t i = 0; i < dispatch_context->model.queue_count; ++i) {
-    const iree_hal_profile_queue_record_t* queue =
-        &dispatch_context->model.queues[i].record;
+    const iree_profile_model_queue_t* queue =
+        &dispatch_context->model.queues[i];
     iree_profile_explain_queue_row_t row;
     IREE_RETURN_IF_ERROR(iree_profile_explain_resolve_queue_row(
         dispatch_context, queue, host_allocator, &row));
     fprintf(file,
-            "{\"type\":\"explain_queue\",\"physical_device_ordinal\":%u"
+            "{\"type\":\"explain_queue\",\"session_id\":%" PRIu64
+            ",\"physical_device_ordinal\":%u"
             ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64
             ",\"submissions\":%" PRIu64 ",\"valid_submissions\":%" PRIu64
             ",\"invalid_submissions\":%" PRIu64
@@ -1156,9 +1175,9 @@ static iree_status_t iree_profile_explain_print_jsonl_queues(
             ",\"gap_analysis_available\":%s,\"gaps\":%" PRIu64
             ",\"total_gap_ticks\":%.3f,\"max_gap_ticks\":%.3f"
             ",\"total_gap_ns\":%.3f,\"max_gap_ns\":%.3f}\n",
-            row.queue->physical_device_ordinal, row.queue->queue_ordinal,
-            row.queue->stream_id, row.summary.submission_count,
-            row.summary.valid_submission_count,
+            row.queue->session_id, row.queue->record.physical_device_ordinal,
+            row.queue->record.queue_ordinal, row.queue->record.stream_id,
+            row.summary.submission_count, row.summary.valid_submission_count,
             row.summary.invalid_submission_count, row.summary.busy_ticks,
             row.summary.total_dispatch_ticks,
             row.has_clock_fit ? "true" : "false",
@@ -1196,17 +1215,18 @@ static iree_status_t iree_profile_explain_print_jsonl_top_functions(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(iree_profile_model_resolve_dispatch_key(
-        &dispatch_context->model, rank->physical_device_ordinal,
-        rank->executable_id, rank->function_ordinal, numeric_buffer,
-        sizeof(numeric_buffer), &key));
+        &dispatch_context->model, rank->session_id,
+        rank->physical_device_ordinal, rank->executable_id,
+        rank->function_ordinal, numeric_buffer, sizeof(numeric_buffer), &key));
     fprintf(file,
             "{\"type\":\"explain_top_function\",\"rank\":%" PRIhsz
+            ",\"session_id\":%" PRIu64
             ",\"physical_device_ordinal\":%u"
             ",\"executable_id\":%" PRIu64
             ",\"function_ordinal\":%u"
             ",\"key\":",
-            i + 1, rank->physical_device_ordinal, rank->executable_id,
-            rank->function_ordinal);
+            i + 1, rank->session_id, rank->physical_device_ordinal,
+            rank->executable_id, rank->function_ordinal);
     iree_profile_fprint_json_string(file, key);
     fprintf(file,
             ",\"dispatches\":%" PRIu64 ",\"valid\":%" PRIu64
@@ -1241,8 +1261,8 @@ static iree_status_t iree_profile_explain_print_jsonl_top_dispatches(
       iree_profile_model_duration_scale_t duration_scale;
       const bool has_duration_scale =
           iree_profile_explain_try_resolve_duration_scale(
-              dispatch_context, top_event->physical_device_ordinal,
-              &duration_scale);
+              dispatch_context, top_event->session_id,
+              top_event->physical_device_ordinal, &duration_scale);
       int64_t duration_ns = 0;
       const bool has_duration_ns =
           has_duration_scale &&
@@ -1251,17 +1271,19 @@ static iree_status_t iree_profile_explain_print_jsonl_top_dispatches(
       char numeric_buffer[128];
       iree_string_view_t key = iree_string_view_empty();
       IREE_RETURN_IF_ERROR(iree_profile_model_resolve_dispatch_key(
-          &dispatch_context->model, top_event->physical_device_ordinal,
-          top_event->event.executable_id, top_event->event.function_ordinal,
-          numeric_buffer, sizeof(numeric_buffer), &key));
+          &dispatch_context->model, top_event->session_id,
+          top_event->physical_device_ordinal, top_event->event.executable_id,
+          top_event->event.function_ordinal, numeric_buffer,
+          sizeof(numeric_buffer), &key));
       fprintf(file,
               "{\"type\":\"explain_top_dispatch\",\"rank\":%" PRIhsz
               ",\"event_id\":%" PRIu64 ",\"submission_id\":%" PRIu64
+              ",\"session_id\":%" PRIu64
               ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
               ",\"stream_id\":%" PRIu64 ",\"key\":",
               i + 1, top_event->event.event_id, top_event->event.submission_id,
-              top_event->physical_device_ordinal, top_event->queue_ordinal,
-              top_event->stream_id);
+              top_event->session_id, top_event->physical_device_ordinal,
+              top_event->queue_ordinal, top_event->stream_id);
       iree_profile_fprint_json_string(file, key);
       fprintf(file,
               ",\"timing_source\":\"%s\""
@@ -1288,19 +1310,21 @@ static iree_status_t iree_profile_explain_print_jsonl_top_dispatches(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(iree_profile_model_resolve_dispatch_key(
-        &dispatch_context->model, top_event->physical_device_ordinal,
-        top_event->event.executable_id, top_event->event.function_ordinal,
-        numeric_buffer, sizeof(numeric_buffer), &key));
+        &dispatch_context->model, top_event->session_id,
+        top_event->physical_device_ordinal, top_event->event.executable_id,
+        top_event->event.function_ordinal, numeric_buffer,
+        sizeof(numeric_buffer), &key));
     fprintf(file,
             "{\"type\":\"explain_top_dispatch\",\"rank\":%" PRIhsz
             ",\"event_id\":%" PRIu64 ",\"submission_id\":%" PRIu64
+            ",\"session_id\":%" PRIu64
             ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
             ",\"stream_id\":%" PRIu64 ",\"command_buffer_id\":%" PRIu64
             ",\"command_index\":%u,\"key\":",
             i + 1, top_event->event.event_id, top_event->event.submission_id,
-            top_event->physical_device_ordinal, top_event->queue_ordinal,
-            top_event->stream_id, top_event->event.command_buffer_id,
-            top_event->event.command_index);
+            top_event->session_id, top_event->physical_device_ordinal,
+            top_event->queue_ordinal, top_event->stream_id,
+            top_event->event.command_buffer_id, top_event->event.command_index);
     iree_profile_fprint_json_string(file, key);
     fprintf(file,
             ",\"timing_source\":\"%s\""
@@ -1365,6 +1389,7 @@ static void iree_profile_explain_print_jsonl_memory_pressure(
     const iree_profile_memory_device_t* device = &memory_context->devices[i];
     fprintf(file,
             "{\"type\":\"explain_memory_pressure\""
+            ",\"session_id\":%" PRIu64
             ",\"physical_device_ordinal\":%u"
             ",\"slab_high_water_bytes\":%" PRIu64
             ",\"pool_reserved_high_water_bytes\":%" PRIu64
@@ -1372,7 +1397,7 @@ static void iree_profile_explain_print_jsonl_memory_pressure(
             ",\"queue_inflight_high_water_bytes\":%" PRIu64
             ",\"buffer_high_water_bytes\":%" PRIu64 ",\"pool_waits\":%" PRIu64
             "}\n",
-            device->physical_device_ordinal,
+            device->session_id, device->physical_device_ordinal,
             device->slab_allocation_balance.high_water_bytes,
             device->pool_reservation_balance.high_water_bytes,
             device->pool_materialization_balance.high_water_bytes,

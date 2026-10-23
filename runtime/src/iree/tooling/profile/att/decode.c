@@ -224,12 +224,14 @@ static iree_status_t iree_profile_att_load_trace_code_objects(
        iree_status_is_ok(status) && i < profile->code_object_load_count; ++i) {
     const iree_profile_att_code_object_load_t* load =
         &profile->code_object_loads[i];
-    if (load->physical_device_ordinal !=
-        trace->record.physical_device_ordinal) {
+    if (load->session_id != trace->session_id ||
+        load->physical_device_ordinal !=
+            trace->record.physical_device_ordinal) {
       continue;
     }
     const iree_profile_att_code_object_t* code_object =
-        iree_profile_att_profile_find_code_object(profile, load->executable_id,
+        iree_profile_att_profile_find_code_object(profile, trace->session_id,
+                                                  load->executable_id,
                                                   load->code_object_id);
     if (!code_object) {
       status =

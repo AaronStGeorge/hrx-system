@@ -81,6 +81,19 @@ class CommonTest(unittest.TestCase):
                 ]
             )
 
+    def test_validate_schema_rejects_invalid_session_id(self):
+        schema_record = {
+            "schema_version": common.SCHEMA_VERSION,
+            "record_type": "schema",
+            "format": "ireeperf-jsonl",
+        }
+        with self.assertRaisesRegex(SystemExit, "has no profiling session ID"):
+            common.validate_schema([schema_record, {"record_type": "device"}])
+        with self.assertRaisesRegex(SystemExit, "invalid profiling session ID 0"):
+            common.validate_schema(
+                [schema_record, {"record_type": "device", "session_id": 0}]
+            )
+
     def test_clock_mapper_interpolates_device_ticks(self):
         mappers = common.build_device_clock_mappers(
             [
@@ -101,7 +114,7 @@ class CommonTest(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(1500, mappers[0].host_time_from_device_tick(150))
+        self.assertEqual(1500, mappers[(0, 0)].host_time_from_device_tick(150))
 
     def test_device_event_uses_clock_fit_before_derived_host_time(self):
         mappers = common.build_device_clock_mappers(
@@ -240,6 +253,97 @@ class PerfettoTest(unittest.TestCase):
         self.assertEqual(1, stats.queue_instants)
         self.assertEqual(2, stats.clock_instants)
         self.assertEqual(1, stats.relationship_flows)
+
+    def test_build_trace_keeps_session_local_metadata_and_tracks_distinct(self):
+        builder = _FakeTraceProtoBuilder()
+        records = []
+        for session_id, function_name, start_time_ns in (
+            (11, "kernel_alpha", 1000),
+            (22, "kernel_beta", 2000),
+        ):
+            records.extend(
+                [
+                    {
+                        "record_type": "device",
+                        "session_id": session_id,
+                        "physical_device_ordinal": 0,
+                    },
+                    {
+                        "record_type": "queue",
+                        "session_id": session_id,
+                        "physical_device_ordinal": 0,
+                        "queue_ordinal": 0,
+                        "stream_id": 0,
+                    },
+                    {
+                        "record_type": "executable_function",
+                        "session_id": session_id,
+                        "executable_id": 7,
+                        "function_ordinal": 0,
+                        "name": function_name,
+                    },
+                    {
+                        "record_type": "command_buffer",
+                        "session_id": session_id,
+                        "command_buffer_id": 5,
+                    },
+                    {
+                        "record_type": "command_operation",
+                        "session_id": session_id,
+                        "command_buffer_id": 5,
+                        "command_index": 0,
+                        "op": "dispatch",
+                        "executable_id": 7,
+                        "function_ordinal": 0,
+                    },
+                    {
+                        "record_type": "host_execution_event",
+                        "session_id": session_id,
+                        "event_id": 1,
+                        "op": "execute",
+                        "physical_device_ordinal": 0,
+                        "queue_ordinal": 0,
+                        "stream_id": 0,
+                        "command_buffer_id": 5,
+                        "command_index": 0,
+                        "start_host_time_ns": start_time_ns,
+                        "end_host_time_ns": start_time_ns + 100,
+                    },
+                ]
+            )
+
+        trace_bytes, stats = perfetto.build_trace(
+            records,
+            perfetto.PerfettoImports(
+                trace_proto_builder=lambda: builder,
+                track_descriptor=_FakeTrackDescriptor,
+                track_event=_FakeTrackEvent,
+            ),
+        )
+
+        device_track_names = {
+            packet.track_descriptor.name
+            for packet in builder.packets
+            if hasattr(packet.track_descriptor, "name")
+            and packet.track_descriptor.name.startswith("session[")
+        }
+        slice_tracks = {
+            packet.track_event.name: packet.track_event.track_uuid
+            for packet in builder.packets
+            if getattr(packet.track_event, "type", None)
+            == _FakeTrackEvent.TYPE_SLICE_BEGIN
+        }
+
+        self.assertTrue(trace_bytes.startswith(b"packets="))
+        self.assertEqual(2, stats.host_execution_slices)
+        self.assertIn("session[11] device[0]", device_track_names)
+        self.assertIn("session[22] device[0]", device_track_names)
+        self.assertIn("execute cb#5: kernel_alpha", slice_tracks)
+        self.assertIn("execute cb#5: kernel_beta", slice_tracks)
+        self.assertNotEqual(
+            slice_tracks["execute cb#5: kernel_alpha"],
+            slice_tracks["execute cb#5: kernel_beta"],
+        )
 
     def test_build_trace_projects_device_metrics_as_counter_tracks(self):
         builder = _FakeTraceProtoBuilder()

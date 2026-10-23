@@ -19,10 +19,10 @@ static bool iree_profile_command_operation_filter_matches(
 
 static bool iree_profile_projection_try_fit_driver_host_cpu_clock(
     const iree_profile_dispatch_context_t* context,
-    uint32_t physical_device_ordinal,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     iree_profile_model_clock_fit_t* out_clock_fit) {
-  const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(&context->model, physical_device_ordinal);
+  const iree_profile_model_device_t* device = iree_profile_model_find_device(
+      &context->model, session_id, physical_device_ordinal);
   return iree_profile_model_device_try_fit_clock_exact(
       device, IREE_PROFILE_MODEL_CLOCK_TIME_DOMAIN_HOST_CPU_TIMESTAMP_NS,
       out_clock_fit);
@@ -30,10 +30,10 @@ static bool iree_profile_projection_try_fit_driver_host_cpu_clock(
 
 static bool iree_profile_projection_try_resolve_duration_scale(
     const iree_profile_dispatch_context_t* context,
-    uint32_t physical_device_ordinal,
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
     iree_profile_model_duration_scale_t* out_duration_scale) {
-  const iree_profile_model_device_t* device =
-      iree_profile_model_find_device(&context->model, physical_device_ordinal);
+  const iree_profile_model_device_t* device = iree_profile_model_find_device(
+      &context->model, session_id, physical_device_ordinal);
   return iree_profile_model_device_try_resolve_duration_scale(
       device, out_duration_scale);
 }
@@ -71,11 +71,13 @@ iree_profile_projection_calculate_dispatch_timing(
 
   iree_profile_model_clock_fit_t clock_fit;
   timing.has_clock_fit = iree_profile_projection_try_fit_driver_host_cpu_clock(
-      context, aggregate->physical_device_ordinal, &clock_fit);
+      context, aggregate->session_id, aggregate->physical_device_ordinal,
+      &clock_fit);
   iree_profile_model_duration_scale_t duration_scale;
   timing.has_duration_scale =
       iree_profile_projection_try_resolve_duration_scale(
-          context, aggregate->physical_device_ordinal, &duration_scale);
+          context, aggregate->session_id, aggregate->physical_device_ordinal,
+          &duration_scale);
   timing.duration_scale_source = duration_scale.source;
   timing.ns_per_tick =
       timing.has_duration_scale
@@ -113,20 +115,20 @@ typedef struct iree_profile_projection_submission_timing_t {
 static iree_profile_projection_submission_timing_t
 iree_profile_projection_calculate_submission_timing(
     const iree_profile_dispatch_context_t* context,
-    uint32_t physical_device_ordinal, uint64_t earliest_start_tick,
-    uint64_t latest_end_tick, uint64_t valid_count,
-    uint64_t total_dispatch_ticks) {
+    iree_hal_profile_session_id_t session_id, uint32_t physical_device_ordinal,
+    uint64_t earliest_start_tick, uint64_t latest_end_tick,
+    uint64_t valid_count, uint64_t total_dispatch_ticks) {
   iree_profile_projection_submission_timing_t timing = {0};
   timing.span_ticks =
       iree_profile_model_span_ticks(earliest_start_tick, latest_end_tick);
 
   iree_profile_model_clock_fit_t clock_fit;
   timing.has_clock_fit = iree_profile_projection_try_fit_driver_host_cpu_clock(
-      context, physical_device_ordinal, &clock_fit);
+      context, session_id, physical_device_ordinal, &clock_fit);
   iree_profile_model_duration_scale_t duration_scale;
   timing.has_duration_scale =
       iree_profile_projection_try_resolve_duration_scale(
-          context, physical_device_ordinal, &duration_scale);
+          context, session_id, physical_device_ordinal, &duration_scale);
   timing.duration_scale_source = duration_scale.source;
   timing.ns_per_tick =
       timing.has_duration_scale
@@ -172,9 +174,11 @@ static void iree_profile_dispatch_print_event_jsonl(
           &row->duration_scale, duration_ticks, &duration_ns);
 
   fprintf(file,
-          "{\"type\":\"dispatch_event\",\"physical_device_ordinal\":%u"
+          "{\"type\":\"dispatch_event\",\"session_id\":%" PRIu64
+          ",\"physical_device_ordinal\":%u"
           ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64
           ",\"event_id\":%" PRIu64 ",\"submission_id\":%" PRIu64,
+          file_record->header.session_id,
           file_record->header.physical_device_ordinal,
           file_record->header.queue_ordinal, file_record->header.stream_id,
           event->event_id, event->submission_id);
@@ -227,10 +231,11 @@ static void iree_profile_dispatch_print_host_event_jsonl(
           "{\"type\":\"host_dispatch_event\",\"timing_source\":"
           "\"host_execution_event\",\"time_domain\":\"iree_host_time_ns\""
           ",\"duration_time_domain\":\"iree_host_duration_ns\""
+          ",\"session_id\":%" PRIu64
           ",\"physical_device_ordinal\":%u"
           ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64
           ",\"event_id\":%" PRIu64 ",\"submission_id\":%" PRIu64,
-          event->physical_device_ordinal, event->queue_ordinal,
+          row->session_id, event->physical_device_ordinal, event->queue_ordinal,
           event->stream_id, event->event_id, event->submission_id);
   fprintf(file,
           ",\"command_buffer_id\":%" PRIu64
@@ -279,49 +284,23 @@ static iree_status_t iree_profile_command_count_matching_operations(
   iree_host_size_t operation_count = 0;
   iree_status_t status = iree_ok_status();
 
-  if (id_filter >= 0) {
-    const iree_profile_model_command_buffer_t* command_buffer =
-        iree_profile_model_find_command_buffer(&context->model,
-                                               (uint64_t)id_filter);
-    iree_host_size_t operation_index =
-        command_buffer ? command_buffer->first_operation_index
-                       : IREE_HOST_SIZE_MAX;
-    while (operation_index != IREE_HOST_SIZE_MAX && iree_status_is_ok(status)) {
-      const iree_hal_profile_command_operation_record_t* operation =
-          &context->model.command_operations[operation_index].record;
-      const char* operation_name =
-          iree_profile_command_operation_type_name(operation->type);
-      char numeric_buffer[128];
-      iree_string_view_t key = iree_string_view_empty();
-      status = iree_profile_model_resolve_command_operation_key(
-          &context->model, operation, numeric_buffer, sizeof(numeric_buffer),
-          &key);
-      if (iree_status_is_ok(status) &&
-          iree_profile_command_operation_filter_matches(
-              iree_make_cstring_view(operation_name), key, filter)) {
-        ++operation_count;
-      }
-      operation_index = context->model.command_operations[operation_index]
-                            .next_operation_index;
-    }
-    if (iree_status_is_ok(status)) {
-      *out_operation_count = operation_count;
-    }
-    return status;
-  }
-
   for (iree_host_size_t i = 0;
        i < context->model.command_operation_count && iree_status_is_ok(status);
        ++i) {
+    const iree_profile_model_command_operation_t* operation_info =
+        &context->model.command_operations[i];
     const iree_hal_profile_command_operation_record_t* operation =
-        &context->model.command_operations[i].record;
+        &operation_info->record;
+    if (id_filter >= 0 && operation->command_buffer_id != (uint64_t)id_filter) {
+      continue;
+    }
     const char* operation_name =
         iree_profile_command_operation_type_name(operation->type);
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_command_operation_key(
-        &context->model, operation, numeric_buffer, sizeof(numeric_buffer),
-        &key);
+        &context->model, operation_info->session_id, operation, numeric_buffer,
+        sizeof(numeric_buffer), &key);
     if (iree_status_is_ok(status) &&
         iree_profile_command_operation_filter_matches(
             iree_make_cstring_view(operation_name), key, filter)) {
@@ -336,15 +315,17 @@ static iree_status_t iree_profile_command_count_matching_operations(
 
 static iree_status_t iree_profile_command_print_operation_text(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_command_operation_record_t* operation,
+    const iree_profile_model_command_operation_t* operation_info,
     iree_string_view_t filter, FILE* file) {
+  const iree_hal_profile_command_operation_record_t* operation =
+      &operation_info->record;
   const char* operation_name =
       iree_profile_command_operation_type_name(operation->type);
   char numeric_buffer[128];
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(iree_profile_model_resolve_command_operation_key(
-      &context->model, operation, numeric_buffer, sizeof(numeric_buffer),
-      &key));
+      &context->model, operation_info->session_id, operation, numeric_buffer,
+      sizeof(numeric_buffer), &key));
   if (!iree_profile_command_operation_filter_matches(
           iree_make_cstring_view(operation_name), key, filter)) {
     return iree_ok_status();
@@ -399,27 +380,30 @@ static iree_status_t iree_profile_command_print_operation_text(
 
 static iree_status_t iree_profile_command_print_operation_jsonl(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_command_operation_record_t* operation,
+    const iree_profile_model_command_operation_t* operation_info,
     iree_string_view_t filter, FILE* file) {
+  const iree_hal_profile_command_operation_record_t* operation =
+      &operation_info->record;
   const char* operation_name =
       iree_profile_command_operation_type_name(operation->type);
   char numeric_buffer[128];
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(iree_profile_model_resolve_command_operation_key(
-      &context->model, operation, numeric_buffer, sizeof(numeric_buffer),
-      &key));
+      &context->model, operation_info->session_id, operation, numeric_buffer,
+      sizeof(numeric_buffer), &key));
   if (!iree_profile_command_operation_filter_matches(
           iree_make_cstring_view(operation_name), key, filter)) {
     return iree_ok_status();
   }
 
   fprintf(file,
-          "{\"type\":\"command_operation\",\"command_buffer_id\":%" PRIu64
+          "{\"type\":\"command_operation\",\"session_id\":%" PRIu64
+          ",\"command_buffer_id\":%" PRIu64
           ",\"command_index\":%u,\"op\":\"%s\",\"flags\":%u"
           ",\"block_structure\":%s"
           ",\"block_ordinal\":%u,\"block_command_ordinal\":%u",
-          operation->command_buffer_id, operation->command_index,
-          operation_name, operation->flags,
+          operation_info->session_id, operation->command_buffer_id,
+          operation->command_index, operation_name, operation->flags,
           iree_hal_profile_command_operation_has_block_structure(operation)
               ? "true"
               : "false",
@@ -477,11 +461,13 @@ static void iree_profile_dispatch_print_text_group(
       iree_profile_projection_dispatch_stddev_ticks(aggregate);
   fprintf(file, "  %.*s\n", (int)key.size, key.data);
   fprintf(file,
-          "    device=%u executable=%" PRIu64 " function=%u count=%" PRIu64
-          " valid=%" PRIu64 " invalid=%" PRIu64 "\n",
-          aggregate->physical_device_ordinal, aggregate->executable_id,
-          aggregate->function_ordinal, aggregate->dispatch_count,
-          aggregate->valid_count, aggregate->invalid_count);
+          "    session=%" PRIu64 " device=%u executable=%" PRIu64
+          " function=%u count=%" PRIu64 " valid=%" PRIu64 " invalid=%" PRIu64
+          "\n",
+          aggregate->session_id, aggregate->physical_device_ordinal,
+          aggregate->executable_id, aggregate->function_ordinal,
+          aggregate->dispatch_count, aggregate->valid_count,
+          aggregate->invalid_count);
   if (aggregate->valid_count != 0) {
     fprintf(file,
             "    ticks: min=%" PRIu64 " avg=%.3f stddev=%.3f max=%" PRIu64
@@ -516,12 +502,13 @@ static void iree_profile_dispatch_print_text_host_group(
       iree_profile_projection_host_dispatch_stddev_ns(aggregate);
   fprintf(file, "  %.*s\n", (int)key.size, key.data);
   fprintf(file,
-          "    timing=host_execution device=%u executable=%" PRIu64
-          " function=%u count=%" PRIu64 " valid=%" PRIu64 " invalid=%" PRIu64
-          "\n",
-          aggregate->physical_device_ordinal, aggregate->executable_id,
-          aggregate->function_ordinal, aggregate->dispatch_count,
-          aggregate->valid_count, aggregate->invalid_count);
+          "    timing=host_execution session=%" PRIu64
+          " device=%u executable=%" PRIu64 " function=%u count=%" PRIu64
+          " valid=%" PRIu64 " invalid=%" PRIu64 "\n",
+          aggregate->session_id, aggregate->physical_device_ordinal,
+          aggregate->executable_id, aggregate->function_ordinal,
+          aggregate->dispatch_count, aggregate->valid_count,
+          aggregate->invalid_count);
   if (aggregate->valid_count != 0) {
     fprintf(file,
             "    time_ns: min=%" PRId64
@@ -554,9 +541,10 @@ static iree_status_t iree_profile_dispatch_print_text(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_dispatch_key(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->executable_id, aggregate->function_ordinal, numeric_buffer,
-        sizeof(numeric_buffer), &key);
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->executable_id,
+        aggregate->function_ordinal, numeric_buffer, sizeof(numeric_buffer),
+        &key);
     if (iree_status_is_ok(status)) {
       iree_profile_dispatch_print_text_group(context, aggregate, key, file);
     }
@@ -569,9 +557,10 @@ static iree_status_t iree_profile_dispatch_print_text(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_dispatch_key(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->executable_id, aggregate->function_ordinal, numeric_buffer,
-        sizeof(numeric_buffer), &key);
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->executable_id,
+        aggregate->function_ordinal, numeric_buffer, sizeof(numeric_buffer),
+        &key);
     if (iree_status_is_ok(status)) {
       iree_profile_dispatch_print_text_host_group(aggregate, key, file);
     }
@@ -611,10 +600,11 @@ static void iree_profile_dispatch_print_jsonl_group(
   const double stddev_ticks =
       iree_profile_projection_dispatch_stddev_ticks(aggregate);
   fprintf(file,
-          "{\"type\":\"dispatch_group\",\"physical_device_ordinal\":%u"
+          "{\"type\":\"dispatch_group\",\"session_id\":%" PRIu64
+          ",\"physical_device_ordinal\":%u"
           ",\"executable_id\":%" PRIu64 ",\"function_ordinal\":%u,\"key\":",
-          aggregate->physical_device_ordinal, aggregate->executable_id,
-          aggregate->function_ordinal);
+          aggregate->session_id, aggregate->physical_device_ordinal,
+          aggregate->executable_id, aggregate->function_ordinal);
   iree_profile_fprint_json_string(file, key);
   fprintf(file,
           ",\"count\":%" PRIu64 ",\"valid\":%" PRIu64 ",\"invalid\":%" PRIu64
@@ -663,10 +653,11 @@ static void iree_profile_dispatch_print_jsonl_host_group(
           "{\"type\":\"host_dispatch_group\",\"timing_source\":"
           "\"host_execution_event\",\"time_domain\":\"iree_host_time_ns\""
           ",\"duration_time_domain\":\"iree_host_duration_ns\""
+          ",\"session_id\":%" PRIu64
           ",\"physical_device_ordinal\":%u"
           ",\"executable_id\":%" PRIu64 ",\"function_ordinal\":%u,\"key\":",
-          aggregate->physical_device_ordinal, aggregate->executable_id,
-          aggregate->function_ordinal);
+          aggregate->session_id, aggregate->physical_device_ordinal,
+          aggregate->executable_id, aggregate->function_ordinal);
   iree_profile_fprint_json_string(file, key);
   fprintf(
       file,
@@ -699,9 +690,10 @@ static iree_status_t iree_profile_dispatch_print_jsonl_aggregates(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_dispatch_key(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->executable_id, aggregate->function_ordinal, numeric_buffer,
-        sizeof(numeric_buffer), &key);
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->executable_id,
+        aggregate->function_ordinal, numeric_buffer, sizeof(numeric_buffer),
+        &key);
     if (iree_status_is_ok(status)) {
       iree_profile_dispatch_print_jsonl_group(context, aggregate, key, file);
     }
@@ -714,9 +706,10 @@ static iree_status_t iree_profile_dispatch_print_jsonl_aggregates(
     char numeric_buffer[128];
     iree_string_view_t key = iree_string_view_empty();
     status = iree_profile_model_resolve_dispatch_key(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->executable_id, aggregate->function_ordinal, numeric_buffer,
-        sizeof(numeric_buffer), &key);
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->executable_id,
+        aggregate->function_ordinal, numeric_buffer, sizeof(numeric_buffer),
+        &key);
     if (iree_status_is_ok(status)) {
       iree_profile_dispatch_print_jsonl_host_group(aggregate, key, file);
     }
@@ -857,12 +850,13 @@ static iree_status_t iree_profile_projection_index_allocate_row_links(
 }
 
 static iree_status_t iree_profile_projection_index_find_function_index(
-    const iree_profile_model_t* model, uint32_t physical_device_ordinal,
-    uint64_t executable_id, uint32_t function_ordinal,
-    iree_host_size_t* out_function_index) {
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, uint64_t executable_id,
+    uint32_t function_ordinal, iree_host_size_t* out_function_index) {
   *out_function_index = IREE_HOST_SIZE_MAX;
   const iree_profile_model_function_t* function_info =
-      iree_profile_model_find_function(model, executable_id, function_ordinal);
+      iree_profile_model_find_function(model, session_id, executable_id,
+                                       function_ordinal);
   if (!function_info) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
@@ -875,11 +869,13 @@ static iree_status_t iree_profile_projection_index_find_function_index(
 }
 
 static iree_status_t iree_profile_projection_index_find_command_buffer_index(
-    const iree_profile_model_t* model, uint64_t command_buffer_id,
-    uint64_t submission_id, iree_host_size_t* out_command_buffer_index) {
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint64_t command_buffer_id, uint64_t submission_id,
+    iree_host_size_t* out_command_buffer_index) {
   *out_command_buffer_index = IREE_HOST_SIZE_MAX;
   const iree_profile_model_command_buffer_t* command_buffer =
-      iree_profile_model_find_command_buffer(model, command_buffer_id);
+      iree_profile_model_find_command_buffer(model, session_id,
+                                             command_buffer_id);
   if (!command_buffer) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
@@ -893,12 +889,13 @@ static iree_status_t iree_profile_projection_index_find_command_buffer_index(
 }
 
 static iree_status_t iree_profile_projection_index_find_queue_index(
-    const iree_profile_model_t* model, uint32_t physical_device_ordinal,
-    uint32_t queue_ordinal, uint64_t stream_id, uint64_t submission_id,
+    const iree_profile_model_t* model, iree_hal_profile_session_id_t session_id,
+    uint32_t physical_device_ordinal, uint32_t queue_ordinal,
+    uint64_t stream_id, uint64_t submission_id,
     iree_host_size_t* out_queue_index) {
   *out_queue_index = IREE_HOST_SIZE_MAX;
   const iree_profile_model_queue_t* queue = iree_profile_model_find_queue(
-      model, physical_device_ordinal, queue_ordinal, stream_id);
+      model, session_id, physical_device_ordinal, queue_ordinal, stream_id);
   if (!queue) {
     return iree_make_status(
         IREE_STATUS_DATA_LOSS,
@@ -937,9 +934,9 @@ static iree_status_t iree_profile_projection_index_build_functions(
         &context->aggregates[i];
     iree_host_size_t function_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(iree_profile_projection_index_find_function_index(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->executable_id, aggregate->function_ordinal,
-        &function_index));
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->executable_id,
+        aggregate->function_ordinal, &function_index));
     iree_profile_projection_row_list_append(
         &index->functions[function_index].device_dispatches,
         index->aggregate_next_indices, i);
@@ -951,9 +948,9 @@ static iree_status_t iree_profile_projection_index_build_functions(
         &context->host_dispatch_aggregates[i];
     iree_host_size_t function_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(iree_profile_projection_index_find_function_index(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->executable_id, aggregate->function_ordinal,
-        &function_index));
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->executable_id,
+        aggregate->function_ordinal, &function_index));
     iree_profile_projection_row_list_append(
         &index->functions[function_index].host_dispatches,
         index->host_dispatch_next_indices, i);
@@ -990,8 +987,9 @@ static iree_status_t iree_profile_projection_index_build_command_buffers(
     iree_host_size_t command_buffer_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(
         iree_profile_projection_index_find_command_buffer_index(
-            &context->model, aggregate->command_buffer_id,
-            aggregate->submission_id, &command_buffer_index));
+            &context->model, aggregate->session_id,
+            aggregate->command_buffer_id, aggregate->submission_id,
+            &command_buffer_index));
     iree_profile_projection_row_list_append(
         &index->command_buffers[command_buffer_index].device_executions,
         index->command_next_indices, i);
@@ -1003,8 +1001,9 @@ static iree_status_t iree_profile_projection_index_build_command_buffers(
     iree_host_size_t command_buffer_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(
         iree_profile_projection_index_find_command_buffer_index(
-            &context->model, aggregate->command_buffer_id,
-            aggregate->submission_id, &command_buffer_index));
+            &context->model, aggregate->session_id,
+            aggregate->command_buffer_id, aggregate->submission_id,
+            &command_buffer_index));
     iree_profile_projection_row_list_append(
         &index->command_buffers[command_buffer_index].host_executions,
         index->host_command_next_indices, i);
@@ -1049,21 +1048,23 @@ static iree_status_t iree_profile_projection_index_build_queues(
         &context->queue_aggregates[i];
     iree_host_size_t queue_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(iree_profile_projection_index_find_queue_index(
-        &context->model, aggregate->physical_device_ordinal,
-        aggregate->queue_ordinal, aggregate->stream_id,
-        aggregate->submission_id, &queue_index));
+        &context->model, aggregate->session_id,
+        aggregate->physical_device_ordinal, aggregate->queue_ordinal,
+        aggregate->stream_id, aggregate->submission_id, &queue_index));
     iree_profile_projection_row_list_append(
         &index->queues[queue_index].submissions, index->queue_next_indices, i);
   }
 
   for (iree_host_size_t i = 0;
        i < context->queue_query.queue_device_event_count; ++i) {
-    const iree_hal_profile_queue_device_event_t* event =
-        &context->queue_query.queue_device_events[i].record;
+    const iree_profile_queue_device_event_row_t* event_row =
+        &context->queue_query.queue_device_events[i];
+    const iree_hal_profile_queue_device_event_t* event = &event_row->record;
     iree_host_size_t queue_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(iree_profile_projection_index_find_queue_index(
-        &context->model, event->physical_device_ordinal, event->queue_ordinal,
-        event->stream_id, event->submission_id, &queue_index));
+        &context->model, event_row->session_id, event->physical_device_ordinal,
+        event->queue_ordinal, event->stream_id, event->submission_id,
+        &queue_index));
     iree_profile_projection_row_list_append(
         &index->queues[queue_index].device_events,
         index->queue_device_event_next_indices, i);
@@ -1071,12 +1072,14 @@ static iree_status_t iree_profile_projection_index_build_queues(
 
   for (iree_host_size_t i = 0;
        i < context->queue_query.host_execution_event_count; ++i) {
-    const iree_hal_profile_host_execution_event_t* event =
-        &context->queue_query.host_execution_events[i].record;
+    const iree_profile_host_execution_event_row_t* event_row =
+        &context->queue_query.host_execution_events[i];
+    const iree_hal_profile_host_execution_event_t* event = &event_row->record;
     iree_host_size_t queue_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(iree_profile_projection_index_find_queue_index(
-        &context->model, event->physical_device_ordinal, event->queue_ordinal,
-        event->stream_id, event->submission_id, &queue_index));
+        &context->model, event_row->session_id, event->physical_device_ordinal,
+        event->queue_ordinal, event->stream_id, event->submission_id,
+        &queue_index));
     iree_profile_projection_row_list_append(
         &index->queues[queue_index].host_execution_events,
         index->host_execution_event_next_indices, i);
@@ -1084,12 +1087,14 @@ static iree_status_t iree_profile_projection_index_build_queues(
 
   for (iree_host_size_t i = 0; i < context->queue_query.queue_event_count;
        ++i) {
-    const iree_hal_profile_queue_event_t* event =
-        &context->queue_query.queue_events[i].record;
+    const iree_profile_queue_event_row_t* event_row =
+        &context->queue_query.queue_events[i];
+    const iree_hal_profile_queue_event_t* event = &event_row->record;
     iree_host_size_t queue_index = IREE_HOST_SIZE_MAX;
     IREE_RETURN_IF_ERROR(iree_profile_projection_index_find_queue_index(
-        &context->model, event->physical_device_ordinal, event->queue_ordinal,
-        event->stream_id, event->submission_id, &queue_index));
+        &context->model, event_row->session_id, event->physical_device_ordinal,
+        event->queue_ordinal, event->stream_id, event->submission_id,
+        &queue_index));
     iree_profile_projection_row_list_append(&index->queues[queue_index].events,
                                             index->queue_event_next_indices, i);
   }
@@ -1115,12 +1120,15 @@ static void iree_profile_executable_print_text_header(
 }
 
 static void iree_profile_executable_print_text_executable(
-    const iree_hal_profile_executable_record_t* executable, FILE* file) {
+    const iree_profile_model_executable_t* executable_info, FILE* file) {
+  const iree_hal_profile_executable_record_t* executable =
+      &executable_info->record;
   const bool has_code_object_hash = iree_all_bits_set(
       executable->flags, IREE_HAL_PROFILE_EXECUTABLE_FLAG_CODE_OBJECT_HASH);
-  fprintf(file, "executable %" PRIu64 ": functions=%u flags=%u ",
-          executable->executable_id, executable->function_count,
-          executable->flags);
+  fprintf(file,
+          "executable %" PRIu64 ": session=%" PRIu64 " functions=%u flags=%u ",
+          executable->executable_id, executable_info->session_id,
+          executable->function_count, executable->flags);
   fprintf(file, "code_object_hash=");
   if (has_code_object_hash) {
     iree_profile_fprint_hash_hex(file, executable->code_object_hash);
@@ -1273,7 +1281,7 @@ static iree_status_t iree_profile_executable_print_text(
     if (!iree_profile_executable_matches_id(executable, id_filter)) {
       continue;
     }
-    iree_profile_executable_print_text_executable(executable, file);
+    iree_profile_executable_print_text_executable(executable_info, file);
     iree_profile_executable_print_text_functions(context, index,
                                                  executable_info, filter, file);
   }
@@ -1311,15 +1319,19 @@ static void iree_profile_executable_print_jsonl_hash(const uint64_t hash[2],
 }
 
 static void iree_profile_executable_print_jsonl_executable(
-    const iree_hal_profile_executable_record_t* executable, FILE* file) {
+    const iree_profile_model_executable_t* executable_info, FILE* file) {
+  const iree_hal_profile_executable_record_t* executable =
+      &executable_info->record;
   const bool has_code_object_hash = iree_all_bits_set(
       executable->flags, IREE_HAL_PROFILE_EXECUTABLE_FLAG_CODE_OBJECT_HASH);
   fprintf(file,
-          "{\"type\":\"executable\",\"executable_id\":%" PRIu64
+          "{\"type\":\"executable\",\"session_id\":%" PRIu64
+          ",\"executable_id\":%" PRIu64
           ",\"flags\":%u,\"function_count\":%u"
           ",\"code_object_hash_present\":%s,\"code_object_hash\":",
-          executable->executable_id, executable->flags,
-          executable->function_count, has_code_object_hash ? "true" : "false");
+          executable_info->session_id, executable->executable_id,
+          executable->flags, executable->function_count,
+          has_code_object_hash ? "true" : "false");
   iree_profile_executable_print_jsonl_hash(executable->code_object_hash,
                                            has_code_object_hash, file);
   fputs("}\n", file);
@@ -1332,10 +1344,11 @@ static void iree_profile_executable_print_jsonl_function(
       function_info->flags,
       IREE_HAL_PROFILE_EXECUTABLE_FUNCTION_FLAG_FUNCTION_HASH);
   fprintf(file,
-          "{\"type\":\"executable_function\",\"executable_id\":%" PRIu64
+          "{\"type\":\"executable_function\",\"session_id\":%" PRIu64
+          ",\"executable_id\":%" PRIu64
           ",\"function_ordinal\":%u,\"flags\":%u,\"key\":",
-          function_info->executable_id, function_info->function_ordinal,
-          function_info->flags);
+          function_info->session_id, function_info->executable_id,
+          function_info->function_ordinal, function_info->flags);
   iree_profile_fprint_json_string(file, key);
   fprintf(file,
           ",\"constant_byte_length\":%u,\"binding_count\":%u"
@@ -1358,12 +1371,13 @@ static void iree_profile_executable_print_jsonl_dispatch_group(
       iree_profile_projection_calculate_dispatch_timing(context, aggregate);
   fprintf(file,
           "{\"type\":\"executable_function_dispatch_group\""
+          ",\"session_id\":%" PRIu64
           ",\"physical_device_ordinal\":%u"
           ",\"executable_id\":%" PRIu64
           ",\"function_ordinal\":%u"
           ",\"key\":",
-          aggregate->physical_device_ordinal, aggregate->executable_id,
-          aggregate->function_ordinal);
+          aggregate->session_id, aggregate->physical_device_ordinal,
+          aggregate->executable_id, aggregate->function_ordinal);
   iree_profile_fprint_json_string(file, key);
   fprintf(file,
           ",\"dispatches\":%" PRIu64 ",\"valid\":%" PRIu64
@@ -1419,12 +1433,13 @@ static void iree_profile_executable_print_jsonl_host_dispatch_group(
           ",\"timing_source\":\"host_execution_event\""
           ",\"time_domain\":\"iree_host_time_ns\""
           ",\"duration_time_domain\":\"iree_host_duration_ns\""
+          ",\"session_id\":%" PRIu64
           ",\"physical_device_ordinal\":%u"
           ",\"executable_id\":%" PRIu64
           ",\"function_ordinal\":%u"
           ",\"key\":",
-          aggregate->physical_device_ordinal, aggregate->executable_id,
-          aggregate->function_ordinal);
+          aggregate->session_id, aggregate->physical_device_ordinal,
+          aggregate->executable_id, aggregate->function_ordinal);
   iree_profile_fprint_json_string(file, key);
   fprintf(file,
           ",\"dispatches\":%" PRIu64 ",\"valid\":%" PRIu64
@@ -1497,7 +1512,7 @@ static iree_status_t iree_profile_executable_print_jsonl(
     if (!iree_profile_executable_matches_id(executable, id_filter)) {
       continue;
     }
-    iree_profile_executable_print_jsonl_executable(executable, file);
+    iree_profile_executable_print_jsonl_executable(executable_info, file);
     iree_profile_executable_print_jsonl_functions(
         context, index, executable_info, filter, file);
   }
@@ -1532,38 +1547,29 @@ static void iree_profile_command_print_text_header(
 }
 
 static void iree_profile_command_print_text_command_buffer(
-    const iree_hal_profile_command_buffer_record_t* command_buffer,
+    const iree_profile_model_command_buffer_t* command_buffer_info,
     FILE* file) {
-  fprintf(file,
-          "command_buffer %" PRIu64 ": device=%u mode=%" PRIu64
-          " categories=%" PRIu64 " queue_family=%u\n",
-          command_buffer->command_buffer_id,
-          command_buffer->physical_device_ordinal, command_buffer->mode,
-          command_buffer->command_categories,
-          command_buffer->queue_family_ordinal);
+  const iree_hal_profile_command_buffer_record_t* command_buffer =
+      &command_buffer_info->record;
+  fprintf(
+      file,
+      "command_buffer %" PRIu64 ": session=%" PRIu64 " device=%u mode=%" PRIu64
+      " categories=%" PRIu64 " queue_family=%u\n",
+      command_buffer->command_buffer_id, command_buffer_info->session_id,
+      command_buffer->physical_device_ordinal, command_buffer->mode,
+      command_buffer->command_categories, command_buffer->queue_family_ordinal);
 }
 
 static iree_status_t iree_profile_command_print_text_operations(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_command_buffer_record_t* command_buffer,
+    const iree_profile_model_command_buffer_t* command_buffer_info,
     iree_string_view_t filter, FILE* file) {
-  const iree_profile_model_command_buffer_t* command_buffer_info =
-      iree_profile_model_find_command_buffer(&context->model,
-                                             command_buffer->command_buffer_id);
-  if (!command_buffer_info) {
-    return iree_make_status(
-        IREE_STATUS_DATA_LOSS,
-        "command-buffer report references missing command-buffer metadata "
-        "command_buffer=%" PRIu64,
-        command_buffer->command_buffer_id);
-  }
-
   iree_status_t status = iree_ok_status();
   iree_host_size_t operation_index = command_buffer_info->first_operation_index;
   while (operation_index != IREE_HOST_SIZE_MAX && iree_status_is_ok(status)) {
-    const iree_hal_profile_command_operation_record_t* operation =
-        &context->model.command_operations[operation_index].record;
-    status = iree_profile_command_print_operation_text(context, operation,
+    const iree_profile_model_command_operation_t* operation_info =
+        &context->model.command_operations[operation_index];
+    status = iree_profile_command_print_operation_text(context, operation_info,
                                                        filter, file);
     operation_index =
         context->model.command_operations[operation_index].next_operation_index;
@@ -1576,7 +1582,7 @@ static void iree_profile_command_print_text_execution(
     const iree_profile_dispatch_command_aggregate_t* aggregate, FILE* file) {
   const iree_profile_projection_submission_timing_t timing =
       iree_profile_projection_calculate_submission_timing(
-          context, aggregate->physical_device_ordinal,
+          context, aggregate->session_id, aggregate->physical_device_ordinal,
           aggregate->earliest_start_tick, aggregate->latest_end_tick,
           aggregate->valid_count, aggregate->total_ticks);
   fprintf(file,
@@ -1658,14 +1664,15 @@ static iree_status_t iree_profile_command_print_text(
   for (iree_host_size_t i = 0;
        i < context->model.command_buffer_count && iree_status_is_ok(status);
        ++i) {
-    const iree_hal_profile_command_buffer_record_t* command_buffer =
-        &context->model.command_buffers[i].record;
-    if (!iree_profile_command_buffer_matches_id(command_buffer, id_filter)) {
+    const iree_profile_model_command_buffer_t* command_buffer_info =
+        &context->model.command_buffers[i];
+    if (!iree_profile_command_buffer_matches_id(&command_buffer_info->record,
+                                                id_filter)) {
       continue;
     }
-    iree_profile_command_print_text_command_buffer(command_buffer, file);
-    status = iree_profile_command_print_text_operations(context, command_buffer,
-                                                        filter, file);
+    iree_profile_command_print_text_command_buffer(command_buffer_info, file);
+    status = iree_profile_command_print_text_operations(
+        context, command_buffer_info, filter, file);
     if (iree_status_is_ok(status)) {
       iree_profile_command_print_text_executions(context, index, i, file);
       iree_profile_command_print_text_host_executions(context, index, i, file);
@@ -1697,15 +1704,18 @@ static void iree_profile_command_print_jsonl_summary(
 }
 
 static void iree_profile_command_print_jsonl_command_buffer(
-    const iree_hal_profile_command_buffer_record_t* command_buffer,
+    const iree_profile_model_command_buffer_t* command_buffer_info,
     FILE* file) {
+  const iree_hal_profile_command_buffer_record_t* command_buffer =
+      &command_buffer_info->record;
   fprintf(file,
-          "{\"type\":\"command_buffer\",\"command_buffer_id\":%" PRIu64
+          "{\"type\":\"command_buffer\",\"session_id\":%" PRIu64
+          ",\"command_buffer_id\":%" PRIu64
           ",\"physical_device_ordinal\":%u,\"mode\":%" PRIu64
           ",\"command_categories\":%" PRIu64
           ",\"queue_family_ordinal\":%u"
           "}\n",
-          command_buffer->command_buffer_id,
+          command_buffer_info->session_id, command_buffer->command_buffer_id,
           command_buffer->physical_device_ordinal, command_buffer->mode,
           command_buffer->command_categories,
           command_buffer->queue_family_ordinal);
@@ -1715,12 +1725,13 @@ static void iree_profile_command_print_jsonl_command_buffers(
     const iree_profile_dispatch_context_t* context, int64_t id_filter,
     FILE* file) {
   for (iree_host_size_t i = 0; i < context->model.command_buffer_count; ++i) {
-    const iree_hal_profile_command_buffer_record_t* command_buffer =
-        &context->model.command_buffers[i].record;
-    if (!iree_profile_command_buffer_matches_id(command_buffer, id_filter)) {
+    const iree_profile_model_command_buffer_t* command_buffer_info =
+        &context->model.command_buffers[i];
+    if (!iree_profile_command_buffer_matches_id(&command_buffer_info->record,
+                                                id_filter)) {
       continue;
     }
-    iree_profile_command_print_jsonl_command_buffer(command_buffer, file);
+    iree_profile_command_print_jsonl_command_buffer(command_buffer_info, file);
   }
 }
 
@@ -1729,30 +1740,16 @@ static iree_status_t iree_profile_command_print_jsonl_operations(
     int64_t id_filter, FILE* file) {
   iree_status_t status = iree_ok_status();
 
-  if (id_filter >= 0) {
-    const iree_profile_model_command_buffer_t* command_buffer =
-        iree_profile_model_find_command_buffer(&context->model,
-                                               (uint64_t)id_filter);
-    iree_host_size_t operation_index =
-        command_buffer ? command_buffer->first_operation_index
-                       : IREE_HOST_SIZE_MAX;
-    while (operation_index != IREE_HOST_SIZE_MAX && iree_status_is_ok(status)) {
-      const iree_hal_profile_command_operation_record_t* operation =
-          &context->model.command_operations[operation_index].record;
-      status = iree_profile_command_print_operation_jsonl(context, operation,
-                                                          filter, file);
-      operation_index = context->model.command_operations[operation_index]
-                            .next_operation_index;
-    }
-    return status;
-  }
-
   for (iree_host_size_t i = 0;
        i < context->model.command_operation_count && iree_status_is_ok(status);
        ++i) {
-    const iree_hal_profile_command_operation_record_t* operation =
-        &context->model.command_operations[i].record;
-    status = iree_profile_command_print_operation_jsonl(context, operation,
+    const iree_profile_model_command_operation_t* operation_info =
+        &context->model.command_operations[i];
+    if (id_filter >= 0 &&
+        operation_info->record.command_buffer_id != (uint64_t)id_filter) {
+      continue;
+    }
+    status = iree_profile_command_print_operation_jsonl(context, operation_info,
                                                         filter, file);
   }
   return status;
@@ -1763,13 +1760,13 @@ static void iree_profile_command_print_jsonl_execution(
     const iree_profile_dispatch_command_aggregate_t* aggregate, FILE* file) {
   const iree_profile_projection_submission_timing_t timing =
       iree_profile_projection_calculate_submission_timing(
-          context, aggregate->physical_device_ordinal,
+          context, aggregate->session_id, aggregate->physical_device_ordinal,
           aggregate->earliest_start_tick, aggregate->latest_end_tick,
           aggregate->valid_count, aggregate->total_ticks);
   fprintf(
       file,
-      "{\"type\":\"command_execution\",\"command_buffer_id\":%" PRIu64
-      ",\"submission_id\":%" PRIu64
+      "{\"type\":\"command_execution\",\"session_id\":%" PRIu64
+      ",\"command_buffer_id\":%" PRIu64 ",\"submission_id\":%" PRIu64
       ",\"physical_device_ordinal\":%u"
       ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64 ",\"dispatches\":%" PRIu64
       ",\"valid\":%" PRIu64 ",\"invalid\":%" PRIu64
@@ -1780,11 +1777,11 @@ static void iree_profile_command_print_jsonl_execution(
       ",\"duration_scale_source\":\"%s\""
       ",\"total_dispatch_time_ns_available\":%s"
       ",\"span_ns\":%.3f,\"total_dispatch_ns\":%" PRId64 "}\n",
-      aggregate->command_buffer_id, aggregate->submission_id,
-      aggregate->physical_device_ordinal, aggregate->queue_ordinal,
-      aggregate->stream_id, aggregate->dispatch_count, aggregate->valid_count,
-      aggregate->invalid_count, timing.span_ticks, aggregate->total_ticks,
-      timing.has_clock_fit ? "true" : "false",
+      aggregate->session_id, aggregate->command_buffer_id,
+      aggregate->submission_id, aggregate->physical_device_ordinal,
+      aggregate->queue_ordinal, aggregate->stream_id, aggregate->dispatch_count,
+      aggregate->valid_count, aggregate->invalid_count, timing.span_ticks,
+      aggregate->total_ticks, timing.has_clock_fit ? "true" : "false",
       timing.has_duration_scale ? "true" : "false",
       iree_profile_model_duration_scale_source_name(
           timing.duration_scale_source),
@@ -1794,33 +1791,14 @@ static void iree_profile_command_print_jsonl_execution(
 }
 
 static void iree_profile_command_print_jsonl_executions(
-    const iree_profile_dispatch_context_t* context,
-    const iree_profile_projection_index_t* index, int64_t id_filter,
+    const iree_profile_dispatch_context_t* context, int64_t id_filter,
     FILE* file) {
-  if (id_filter >= 0) {
-    const iree_profile_model_command_buffer_t* command_buffer =
-        iree_profile_model_find_command_buffer(&context->model,
-                                               (uint64_t)id_filter);
-    if (!command_buffer) {
-      return;
-    }
-    const iree_host_size_t command_buffer_index =
-        (iree_host_size_t)(command_buffer - context->model.command_buffers);
-    const iree_profile_projection_row_list_t* row_list =
-        &index->command_buffers[command_buffer_index].device_executions;
-    iree_host_size_t i = row_list->first_index;
-    while (i != IREE_HOST_SIZE_MAX) {
-      const iree_profile_dispatch_command_aggregate_t* aggregate =
-          &context->command_aggregates[i];
-      iree_profile_command_print_jsonl_execution(context, aggregate, file);
-      i = index->command_next_indices[i];
-    }
-    return;
-  }
-
   for (iree_host_size_t i = 0; i < context->command_aggregate_count; ++i) {
     const iree_profile_dispatch_command_aggregate_t* aggregate =
         &context->command_aggregates[i];
+    if (id_filter >= 0 && aggregate->command_buffer_id != (uint64_t)id_filter) {
+      continue;
+    }
     iree_profile_command_print_jsonl_execution(context, aggregate, file);
   }
 }
@@ -1832,61 +1810,43 @@ static void iree_profile_command_print_jsonl_host_execution(
                               ? aggregate->latest_end_host_time_ns -
                                     aggregate->earliest_start_host_time_ns
                               : 0;
-  fprintf(
-      file,
-      "{\"type\":\"command_host_execution\""
-      ",\"timing_source\":\"host_execution_event\""
-      ",\"time_domain\":\"iree_host_time_ns\""
-      ",\"duration_time_domain\":\"iree_host_duration_ns\""
-      ",\"command_buffer_id\":%" PRIu64 ",\"submission_id\":%" PRIu64
-      ",\"physical_device_ordinal\":%u"
-      ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64 ",\"dispatches\":%" PRIu64
-      ",\"valid\":%" PRIu64 ",\"invalid\":%" PRIu64 ",\"span_ns\":%" PRId64
-      ",\"total_dispatch_ns\":%" PRId64 ",\"total_tile_count\":%" PRIu64
-      ",\"total_tile_duration_sum_ns\":%" PRId64 "}\n",
-      aggregate->command_buffer_id, aggregate->submission_id,
-      aggregate->physical_device_ordinal, aggregate->queue_ordinal,
-      aggregate->stream_id, aggregate->dispatch_count, aggregate->valid_count,
-      aggregate->invalid_count, span_ns, aggregate->total_ns,
-      aggregate->total_tile_count, aggregate->total_tile_duration_sum_ns);
+  fprintf(file,
+          "{\"type\":\"command_host_execution\""
+          ",\"timing_source\":\"host_execution_event\""
+          ",\"time_domain\":\"iree_host_time_ns\""
+          ",\"duration_time_domain\":\"iree_host_duration_ns\""
+          ",\"session_id\":%" PRIu64 ",\"command_buffer_id\":%" PRIu64
+          ",\"submission_id\":%" PRIu64
+          ",\"physical_device_ordinal\":%u"
+          ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64
+          ",\"dispatches\":%" PRIu64 ",\"valid\":%" PRIu64
+          ",\"invalid\":%" PRIu64 ",\"span_ns\":%" PRId64
+          ",\"total_dispatch_ns\":%" PRId64 ",\"total_tile_count\":%" PRIu64
+          ",\"total_tile_duration_sum_ns\":%" PRId64 "}\n",
+          aggregate->session_id, aggregate->command_buffer_id,
+          aggregate->submission_id, aggregate->physical_device_ordinal,
+          aggregate->queue_ordinal, aggregate->stream_id,
+          aggregate->dispatch_count, aggregate->valid_count,
+          aggregate->invalid_count, span_ns, aggregate->total_ns,
+          aggregate->total_tile_count, aggregate->total_tile_duration_sum_ns);
 }
 
 static void iree_profile_command_print_jsonl_host_executions(
-    const iree_profile_dispatch_context_t* context,
-    const iree_profile_projection_index_t* index, int64_t id_filter,
+    const iree_profile_dispatch_context_t* context, int64_t id_filter,
     FILE* file) {
-  if (id_filter >= 0) {
-    const iree_profile_model_command_buffer_t* command_buffer =
-        iree_profile_model_find_command_buffer(&context->model,
-                                               (uint64_t)id_filter);
-    if (!command_buffer) {
-      return;
-    }
-    const iree_host_size_t command_buffer_index =
-        (iree_host_size_t)(command_buffer - context->model.command_buffers);
-    const iree_profile_projection_row_list_t* row_list =
-        &index->command_buffers[command_buffer_index].host_executions;
-    iree_host_size_t i = row_list->first_index;
-    while (i != IREE_HOST_SIZE_MAX) {
-      const iree_profile_host_dispatch_command_aggregate_t* aggregate =
-          &context->host_command_aggregates[i];
-      iree_profile_command_print_jsonl_host_execution(aggregate, file);
-      i = index->host_command_next_indices[i];
-    }
-    return;
-  }
-
   for (iree_host_size_t i = 0; i < context->host_command_aggregate_count; ++i) {
     const iree_profile_host_dispatch_command_aggregate_t* aggregate =
         &context->host_command_aggregates[i];
+    if (id_filter >= 0 && aggregate->command_buffer_id != (uint64_t)id_filter) {
+      continue;
+    }
     iree_profile_command_print_jsonl_host_execution(aggregate, file);
   }
 }
 
 static iree_status_t iree_profile_command_print_jsonl(
     const iree_profile_dispatch_context_t* context, iree_string_view_t filter,
-    int64_t id_filter, const iree_profile_projection_index_t* index,
-    FILE* file) {
+    int64_t id_filter, FILE* file) {
   iree_host_size_t matched_command_operation_count = 0;
   IREE_RETURN_IF_ERROR(iree_profile_command_count_matching_operations(
       context, filter, id_filter, &matched_command_operation_count));
@@ -1898,10 +1858,8 @@ static iree_status_t iree_profile_command_print_jsonl(
   iree_status_t status = iree_profile_command_print_jsonl_operations(
       context, filter, id_filter, file);
   if (iree_status_is_ok(status)) {
-    iree_profile_command_print_jsonl_executions(context, index, id_filter,
-                                                file);
-    iree_profile_command_print_jsonl_host_executions(context, index, id_filter,
-                                                     file);
+    iree_profile_command_print_jsonl_executions(context, id_filter, file);
+    iree_profile_command_print_jsonl_host_executions(context, id_filter, file);
   }
   return status;
 }
@@ -1938,7 +1896,7 @@ static void iree_profile_queue_print_text_submission(
     const iree_profile_dispatch_queue_aggregate_t* aggregate, FILE* file) {
   const iree_profile_projection_submission_timing_t timing =
       iree_profile_projection_calculate_submission_timing(
-          context, aggregate->physical_device_ordinal,
+          context, aggregate->session_id, aggregate->physical_device_ordinal,
           aggregate->earliest_start_tick, aggregate->latest_end_tick,
           aggregate->valid_count, aggregate->total_ticks);
   fprintf(file,
@@ -1956,7 +1914,8 @@ static void iree_profile_queue_print_text_submission(
 
 static void iree_profile_queue_print_text_device_event(
     const iree_profile_dispatch_context_t* context,
-    const iree_hal_profile_queue_device_event_t* event, FILE* file) {
+    const iree_profile_queue_device_event_row_t* event_row, FILE* file) {
+  const iree_hal_profile_queue_device_event_t* event = &event_row->record;
   const bool is_valid = event->start_tick != 0 && event->end_tick != 0 &&
                         event->end_tick >= event->start_tick;
   const uint64_t duration_ticks =
@@ -1964,7 +1923,8 @@ static void iree_profile_queue_print_text_device_event(
   iree_profile_model_duration_scale_t duration_scale;
   const bool has_duration_scale =
       iree_profile_projection_try_resolve_duration_scale(
-          context, event->physical_device_ordinal, &duration_scale);
+          context, event_row->session_id, event->physical_device_ordinal,
+          &duration_scale);
   int64_t duration_ns = 0;
   const bool has_duration_ns =
       is_valid && has_duration_scale &&
@@ -1984,7 +1944,8 @@ static void iree_profile_queue_print_text_device_event(
 }
 
 static void iree_profile_queue_print_text_host_execution_event(
-    const iree_hal_profile_host_execution_event_t* event, FILE* file) {
+    const iree_profile_host_execution_event_row_t* event_row, FILE* file) {
+  const iree_hal_profile_host_execution_event_t* event = &event_row->record;
   const bool is_valid = event->start_host_time_ns >= 0 &&
                         event->end_host_time_ns >= event->start_host_time_ns;
   const int64_t duration_ns =
@@ -2001,7 +1962,8 @@ static void iree_profile_queue_print_text_host_execution_event(
 }
 
 static void iree_profile_queue_print_text_event(
-    const iree_hal_profile_queue_event_t* event, FILE* file) {
+    const iree_profile_queue_event_row_t* event_row, FILE* file) {
+  const iree_hal_profile_queue_event_t* event = &event_row->record;
   fprintf(
       file,
       "  event=%" PRIu64 " type=%s submission=%" PRIu64
@@ -2038,9 +2000,9 @@ static void iree_profile_queue_print_text_device_events_for_queue(
       &index->queues[queue_index].device_events;
   iree_host_size_t i = row_list->first_index;
   while (i != IREE_HOST_SIZE_MAX) {
-    const iree_hal_profile_queue_device_event_t* event =
-        &context->queue_query.queue_device_events[i].record;
-    iree_profile_queue_print_text_device_event(context, event, file);
+    const iree_profile_queue_device_event_row_t* event_row =
+        &context->queue_query.queue_device_events[i];
+    iree_profile_queue_print_text_device_event(context, event_row, file);
     i = index->queue_device_event_next_indices[i];
   }
 }
@@ -2053,9 +2015,9 @@ static void iree_profile_queue_print_text_host_execution_events_for_queue(
       &index->queues[queue_index].host_execution_events;
   iree_host_size_t i = row_list->first_index;
   while (i != IREE_HOST_SIZE_MAX) {
-    const iree_hal_profile_host_execution_event_t* event =
-        &context->queue_query.host_execution_events[i].record;
-    iree_profile_queue_print_text_host_execution_event(event, file);
+    const iree_profile_host_execution_event_row_t* event_row =
+        &context->queue_query.host_execution_events[i];
+    iree_profile_queue_print_text_host_execution_event(event_row, file);
     i = index->host_execution_event_next_indices[i];
   }
 }
@@ -2068,9 +2030,9 @@ static void iree_profile_queue_print_text_events_for_queue(
       &index->queues[queue_index].events;
   iree_host_size_t i = row_list->first_index;
   while (i != IREE_HOST_SIZE_MAX) {
-    const iree_hal_profile_queue_event_t* event =
-        &context->queue_query.queue_events[i].record;
-    iree_profile_queue_print_text_event(event, file);
+    const iree_profile_queue_event_row_t* event_row =
+        &context->queue_query.queue_events[i];
+    iree_profile_queue_print_text_event(event_row, file);
     i = index->queue_event_next_indices[i];
   }
 }
@@ -2079,11 +2041,13 @@ static void iree_profile_queue_print_text_queue(
     const iree_profile_dispatch_context_t* context,
     const iree_profile_projection_index_t* index, iree_host_size_t queue_index,
     FILE* file) {
-  const iree_hal_profile_queue_record_t* queue =
-      &context->model.queues[queue_index].record;
-  fprintf(file, "queue device=%u ordinal=%u stream=%" PRIu64 "\n",
-          queue->physical_device_ordinal, queue->queue_ordinal,
-          queue->stream_id);
+  const iree_profile_model_queue_t* queue_info =
+      &context->model.queues[queue_index];
+  const iree_hal_profile_queue_record_t* queue = &queue_info->record;
+  fprintf(file,
+          "queue session=%" PRIu64 " device=%u ordinal=%u stream=%" PRIu64 "\n",
+          queue_info->session_id, queue->physical_device_ordinal,
+          queue->queue_ordinal, queue->stream_id);
 
   iree_profile_queue_print_text_submissions_for_queue(context, index,
                                                       queue_index, file);
@@ -2135,13 +2099,14 @@ static void iree_profile_queue_print_jsonl_summary(
 static void iree_profile_queue_print_jsonl_queues(
     const iree_profile_dispatch_context_t* context, FILE* file) {
   for (iree_host_size_t i = 0; i < context->model.queue_count; ++i) {
-    const iree_hal_profile_queue_record_t* queue =
-        &context->model.queues[i].record;
+    const iree_profile_model_queue_t* queue_info = &context->model.queues[i];
+    const iree_hal_profile_queue_record_t* queue = &queue_info->record;
     fprintf(file,
-            "{\"type\":\"queue\",\"physical_device_ordinal\":%u"
+            "{\"type\":\"queue\",\"session_id\":%" PRIu64
+            ",\"physical_device_ordinal\":%u"
             ",\"queue_ordinal\":%u,\"stream_id\":%" PRIu64 "}\n",
-            queue->physical_device_ordinal, queue->queue_ordinal,
-            queue->stream_id);
+            queue_info->session_id, queue->physical_device_ordinal,
+            queue->queue_ordinal, queue->stream_id);
   }
 }
 
@@ -2156,11 +2121,12 @@ static void iree_profile_queue_print_jsonl_submissions(
     }
     const iree_profile_projection_submission_timing_t timing =
         iree_profile_projection_calculate_submission_timing(
-            context, aggregate->physical_device_ordinal,
+            context, aggregate->session_id, aggregate->physical_device_ordinal,
             aggregate->earliest_start_tick, aggregate->latest_end_tick,
             aggregate->valid_count, aggregate->total_ticks);
     fprintf(file,
-            "{\"type\":\"queue_submission\",\"submission_id\":%" PRIu64
+            "{\"type\":\"queue_submission\",\"session_id\":%" PRIu64
+            ",\"submission_id\":%" PRIu64
             ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
             ",\"stream_id\":%" PRIu64 ",\"dispatches\":%" PRIu64
             ",\"valid\":%" PRIu64 ",\"invalid\":%" PRIu64
@@ -2170,11 +2136,11 @@ static void iree_profile_queue_print_jsonl_submissions(
             ",\"duration_scale_source\":\"%s\""
             ",\"total_dispatch_time_ns_available\":%s"
             ",\"span_ns\":%.3f,\"total_dispatch_ns\":%" PRId64 "}\n",
-            aggregate->submission_id, aggregate->physical_device_ordinal,
-            aggregate->queue_ordinal, aggregate->stream_id,
-            aggregate->dispatch_count, aggregate->valid_count,
-            aggregate->invalid_count, timing.span_ticks, aggregate->total_ticks,
-            timing.has_clock_fit ? "true" : "false",
+            aggregate->session_id, aggregate->submission_id,
+            aggregate->physical_device_ordinal, aggregate->queue_ordinal,
+            aggregate->stream_id, aggregate->dispatch_count,
+            aggregate->valid_count, aggregate->invalid_count, timing.span_ticks,
+            aggregate->total_ticks, timing.has_clock_fit ? "true" : "false",
             timing.has_duration_scale ? "true" : "false",
             iree_profile_model_duration_scale_source_name(
                 timing.duration_scale_source),
@@ -2190,8 +2156,9 @@ static void iree_profile_queue_print_jsonl_device_events(
     FILE* file) {
   for (iree_host_size_t i = 0;
        i < context->queue_query.queue_device_event_count; ++i) {
-    const iree_hal_profile_queue_device_event_t* event =
-        &context->queue_query.queue_device_events[i].record;
+    const iree_profile_queue_device_event_row_t* event_row =
+        &context->queue_query.queue_device_events[i];
+    const iree_hal_profile_queue_device_event_t* event = &event_row->record;
     if (id_filter >= 0 && event->submission_id != (uint64_t)id_filter) {
       continue;
     }
@@ -2202,11 +2169,13 @@ static void iree_profile_queue_print_jsonl_device_events(
     iree_profile_model_clock_fit_t clock_fit;
     const bool has_clock_fit =
         iree_profile_projection_try_fit_driver_host_cpu_clock(
-            context, event->physical_device_ordinal, &clock_fit);
+            context, event_row->session_id, event->physical_device_ordinal,
+            &clock_fit);
     iree_profile_model_duration_scale_t duration_scale;
     const bool has_duration_scale =
         iree_profile_projection_try_resolve_duration_scale(
-            context, event->physical_device_ordinal, &duration_scale);
+            context, event_row->session_id, event->physical_device_ordinal,
+            &duration_scale);
     int64_t duration_ns = 0;
     const bool has_duration_ns =
         is_valid && has_duration_scale &&
@@ -2214,7 +2183,8 @@ static void iree_profile_queue_print_jsonl_device_events(
             &duration_scale, duration_ticks, &duration_ns);
     fprintf(
         file,
-        "{\"type\":\"queue_device_event\",\"event_id\":%" PRIu64
+        "{\"type\":\"queue_device_event\",\"session_id\":%" PRIu64
+        ",\"event_id\":%" PRIu64
         ",\"op\":\"%s\",\"flags\":%u,\"submission_id\":%" PRIu64
         ",\"command_buffer_id\":%" PRIu64 ",\"allocation_id\":%" PRIu64
         ",\"physical_device_ordinal\":%u,\"queue_ordinal\":%u"
@@ -2227,12 +2197,12 @@ static void iree_profile_queue_print_jsonl_device_events(
         ",\"duration_scale_available\":%s"
         ",\"duration_scale_source\":\"%s\""
         ",\"duration_ns\":%" PRId64 "}\n",
-        event->event_id, iree_profile_queue_event_type_name(event->type),
-        event->flags, event->submission_id, event->command_buffer_id,
-        event->allocation_id, event->physical_device_ordinal,
-        event->queue_ordinal, event->stream_id, event->operation_count,
-        event->payload_length, event->start_tick, event->end_tick,
-        duration_ticks, is_valid ? "true" : "false",
+        event_row->session_id, event->event_id,
+        iree_profile_queue_event_type_name(event->type), event->flags,
+        event->submission_id, event->command_buffer_id, event->allocation_id,
+        event->physical_device_ordinal, event->queue_ordinal, event->stream_id,
+        event->operation_count, event->payload_length, event->start_tick,
+        event->end_tick, duration_ticks, is_valid ? "true" : "false",
         has_clock_fit ? "true" : "false", has_duration_scale ? "true" : "false",
         iree_profile_model_duration_scale_source_name(duration_scale.source),
         has_duration_ns ? duration_ns : 0);
@@ -2244,8 +2214,9 @@ static void iree_profile_queue_print_jsonl_host_execution_events(
     FILE* file) {
   for (iree_host_size_t i = 0;
        i < context->queue_query.host_execution_event_count; ++i) {
-    const iree_hal_profile_host_execution_event_t* event =
-        &context->queue_query.host_execution_events[i].record;
+    const iree_profile_host_execution_event_row_t* event_row =
+        &context->queue_query.host_execution_events[i];
+    const iree_hal_profile_host_execution_event_t* event = &event_row->record;
     if (id_filter >= 0 && event->submission_id != (uint64_t)id_filter) {
       continue;
     }
@@ -2254,7 +2225,8 @@ static void iree_profile_queue_print_jsonl_host_execution_events(
     const int64_t duration_ns =
         is_valid ? event->end_host_time_ns - event->start_host_time_ns : 0;
     fprintf(file,
-            "{\"type\":\"host_execution_event\",\"event_id\":%" PRIu64
+            "{\"type\":\"host_execution_event\",\"session_id\":%" PRIu64
+            ",\"event_id\":%" PRIu64
             ",\"op\":\"%s\",\"flags\":%u,\"status_code\":%u"
             ",\"submission_id\":%" PRIu64 ",\"command_buffer_id\":%" PRIu64
             ",\"command_index\":%u,\"executable_id\":%" PRIu64
@@ -2267,15 +2239,15 @@ static void iree_profile_queue_print_jsonl_host_execution_events(
             ",\"host_time_domain\":\"iree_host_time_ns\""
             ",\"start_host_time_ns\":%" PRId64 ",\"end_host_time_ns\":%" PRId64
             ",\"duration_ns\":%" PRId64 ",\"valid\":%s}\n",
-            event->event_id, iree_profile_queue_event_type_name(event->type),
-            event->flags, event->status_code, event->submission_id,
-            event->command_buffer_id, event->command_index,
-            event->executable_id, event->function_ordinal, event->allocation_id,
-            event->physical_device_ordinal, event->queue_ordinal,
-            event->stream_id, event->operation_count, event->payload_length,
-            event->tile_count, event->tile_duration_sum_ns,
-            event->start_host_time_ns, event->end_host_time_ns, duration_ns,
-            is_valid ? "true" : "false");
+            event_row->session_id, event->event_id,
+            iree_profile_queue_event_type_name(event->type), event->flags,
+            event->status_code, event->submission_id, event->command_buffer_id,
+            event->command_index, event->executable_id, event->function_ordinal,
+            event->allocation_id, event->physical_device_ordinal,
+            event->queue_ordinal, event->stream_id, event->operation_count,
+            event->payload_length, event->tile_count,
+            event->tile_duration_sum_ns, event->start_host_time_ns,
+            event->end_host_time_ns, duration_ns, is_valid ? "true" : "false");
   }
 }
 
@@ -2284,14 +2256,16 @@ static void iree_profile_queue_print_jsonl_events(
     FILE* file) {
   for (iree_host_size_t i = 0; i < context->queue_query.queue_event_count;
        ++i) {
-    const iree_hal_profile_queue_event_t* event =
-        &context->queue_query.queue_events[i].record;
+    const iree_profile_queue_event_row_t* event_row =
+        &context->queue_query.queue_events[i];
+    const iree_hal_profile_queue_event_t* event = &event_row->record;
     if (id_filter >= 0 && event->submission_id != (uint64_t)id_filter) {
       continue;
     }
     fprintf(
         file,
-        "{\"type\":\"queue_event\",\"event_id\":%" PRIu64
+        "{\"type\":\"queue_event\",\"session_id\":%" PRIu64
+        ",\"event_id\":%" PRIu64
         ",\"op\":\"%s\",\"flags\":%u,\"dependency_strategy\":\"%s\""
         ",\"submission_id\":%" PRIu64 ",\"command_buffer_id\":%" PRIu64
         ",\"allocation_id\":%" PRIu64
@@ -2301,8 +2275,8 @@ static void iree_profile_queue_print_jsonl_events(
         ",\"host_time_domain\":\"iree_host_time_ns\""
         ",\"wait_count\":%u,\"signal_count\":%u,\"barrier_count\":%u"
         ",\"operation_count\":%u,\"payload_length\":%" PRIu64 "}\n",
-        event->event_id, iree_profile_queue_event_type_name(event->type),
-        event->flags,
+        event_row->session_id, event->event_id,
+        iree_profile_queue_event_type_name(event->type), event->flags,
         iree_profile_queue_dependency_strategy_name(event->dependency_strategy),
         event->submission_id, event->command_buffer_id, event->allocation_id,
         event->physical_device_ordinal, event->queue_ordinal, event->stream_id,
@@ -2403,6 +2377,10 @@ static iree_status_t iree_profile_projection_print(
                                                   file);
         return iree_ok_status();
       }
+      if (!is_text) {
+        return iree_profile_command_print_jsonl(context, filter, id_filter,
+                                                file);
+      }
       {
         iree_profile_projection_index_t index;
         iree_profile_projection_index_initialize(context->host_allocator,
@@ -2411,10 +2389,8 @@ static iree_status_t iree_profile_projection_print(
             iree_profile_projection_index_build_command_buffers(context,
                                                                 &index);
         if (iree_status_is_ok(status)) {
-          status = is_text ? iree_profile_command_print_text(
-                                 context, filter, id_filter, &index, file)
-                           : iree_profile_command_print_jsonl(
-                                 context, filter, id_filter, &index, file);
+          status = iree_profile_command_print_text(context, filter, id_filter,
+                                                   &index, file);
         }
         iree_profile_projection_index_deinitialize(&index);
         return status;

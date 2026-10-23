@@ -28,7 +28,8 @@ extern "C" {
 // profile format and not an independent device statistics API. Tooling can pass
 // the sink to iree_hal_device_profiling_begin, let the selected HAL producer
 // emit ordinary profile chunks, and then iterate the aggregate rows after
-// profiling has ended.
+// profiling has ended. A sink aggregates every profiling session written to it
+// for its lifetime; create a new sink to begin an independent aggregation.
 typedef struct iree_hal_profile_statistics_sink_t
     iree_hal_profile_statistics_sink_t;
 
@@ -118,6 +119,8 @@ typedef struct iree_hal_profile_statistics_row_t {
   iree_hal_profile_statistics_time_domain_t time_domain;
   // Flags specifying which aggregate fields are populated.
   iree_hal_profile_statistics_row_flags_t flags;
+  // Profiling session owning all session-local keys in this row.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal associated with this row.
   uint32_t physical_device_ordinal;
   // Session-local queue ordinal associated with this row, or UINT32_MAX.
@@ -201,7 +204,8 @@ IREE_API_EXPORT iree_status_t iree_hal_profile_statistics_sink_for_each_row(
 // Resolves an executable/function key to a borrowed function name when metadata
 // was present in the consumed profile stream.
 IREE_API_EXPORT bool iree_hal_profile_statistics_sink_find_function_name(
-    const iree_hal_profile_statistics_sink_t* sink, uint64_t executable_id,
+    const iree_hal_profile_statistics_sink_t* sink,
+    iree_hal_profile_session_id_t session_id, uint64_t executable_id,
     uint32_t function_ordinal, iree_string_view_t* out_name);
 
 // Scales |duration| from |row|'s time domain to nanoseconds when possible.

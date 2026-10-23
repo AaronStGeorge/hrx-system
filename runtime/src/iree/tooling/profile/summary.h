@@ -24,6 +24,8 @@ typedef struct iree_profile_device_metric_counts_t {
 } iree_profile_device_metric_counts_t;
 
 typedef struct iree_profile_device_summary_t {
+  // Profiling session owning all session-local keys in this summary.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal.
   uint32_t physical_device_ordinal;
   // Number of device metadata records seen for this ordinal.
@@ -95,6 +97,8 @@ typedef struct iree_profile_summary_t {
   iree_host_size_t device_count;
   // Capacity of |devices| in entries.
   iree_host_size_t device_capacity;
+  // Lookup index from session/device keys to |devices| entry indexes.
+  iree_profile_index_t device_index;
   // Total file records parsed.
   uint64_t file_record_count;
   // Session-begin records parsed.
@@ -104,7 +108,7 @@ typedef struct iree_profile_summary_t {
   // Session-end records with a non-OK session status code.
   uint64_t non_ok_session_end_count;
   // Session id of the first non-OK session-end record, or 0 when absent.
-  uint64_t first_non_ok_session_id;
+  iree_hal_profile_session_id_t first_non_ok_session_id;
   // Stream id of the first non-OK session-end record, or 0 when absent.
   uint64_t first_non_ok_stream_id;
   // Event id of the first non-OK session-end record, or 0 when absent.

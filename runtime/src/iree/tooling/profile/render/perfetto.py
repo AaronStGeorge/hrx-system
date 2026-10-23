@@ -23,6 +23,7 @@ from .common import (
     normalized_time_range,
     parse_integer,
     parse_ordinal,
+    profile_session_id,
     queue_key,
     relationship_endpoint_key,
     submission_key,
@@ -69,6 +70,7 @@ class PendingSlice:
     sequence_index: int
     start_time_ns: int
     end_time_ns: int
+    session_id: int
     physical_device_ordinal: int
     queue_ordinal: int
     name: str
@@ -299,38 +301,40 @@ class PerfettoTraceConverter:
         self.tracks = TrackRegistry(self.builder, perfetto.track_descriptor)
         self.stats = ConversionStats(records=len(records))
         self.clock_mappers = build_device_clock_mappers(records)
-        self.command_buffers_by_id: dict[int, dict[str, Any]] = {}
-        self.command_operations_by_command_buffer_id: dict[
-            int, list[dict[str, Any]]
+        self.command_buffers_by_key: dict[tuple[int, int], dict[str, Any]] = {}
+        self.command_operations_by_command_buffer_key: dict[
+            tuple[int, int], list[dict[str, Any]]
         ] = collections.defaultdict(list)
-        self.command_operations_by_key: dict[tuple[int, int], dict[str, Any]] = {}
-        self.executable_functions_by_key: dict[tuple[int, int], dict[str, Any]] = {}
-        self.counter_sets_by_id: dict[int, dict[str, Any]] = {}
-        self.counters_by_counter_set_id: dict[int, list[dict[str, Any]]] = (
-            collections.defaultdict(list)
-        )
-        self.device_metric_sources_by_id: dict[int, dict[str, Any]] = {}
+        self.command_operations_by_key: dict[tuple[int, int, int], dict[str, Any]] = {}
+        self.executable_functions_by_key: dict[
+            tuple[int, int, int], dict[str, Any]
+        ] = {}
+        self.counter_sets_by_key: dict[tuple[int, int], dict[str, Any]] = {}
+        self.counters_by_counter_set_key: dict[
+            tuple[int, int], list[dict[str, Any]]
+        ] = collections.defaultdict(list)
+        self.device_metric_sources_by_key: dict[tuple[int, int], dict[str, Any]] = {}
         self.device_metric_descriptors_by_key: dict[
-            tuple[int, int], dict[str, Any]
+            tuple[int, int, int], dict[str, Any]
         ] = {}
         self.root_uuid = self.tracks.uuid("iree", "root")
         self.diagnostics_uuid = self.tracks.uuid("iree", "diagnostics")
-        self.dispatch_lane_allocators: dict[tuple[int, int], LaneAllocator] = (
+        self.dispatch_lane_allocators: dict[tuple[int, int, int], LaneAllocator] = (
             collections.defaultdict(LaneAllocator)
         )
-        self.queue_device_lane_allocators: dict[tuple[int, int], LaneAllocator] = (
+        self.queue_device_lane_allocators: dict[tuple[int, int, int], LaneAllocator] = (
             collections.defaultdict(LaneAllocator)
         )
-        self.host_execution_lane_allocators: dict[tuple[int, int], LaneAllocator] = (
-            collections.defaultdict(LaneAllocator)
-        )
+        self.host_execution_lane_allocators: dict[
+            tuple[int, int, int], LaneAllocator
+        ] = collections.defaultdict(LaneAllocator)
         self.timeline_events: list[TimelineEvent] = []
         self.pending_slices: list[PendingSlice] = []
         self.all_timestamp_ns: list[int] = []
-        self.flow_ids_by_endpoint: dict[tuple[str, int, int, int, int], list[int]] = (
-            collections.defaultdict(list)
-        )
-        self.flow_ids_by_submission: dict[tuple[int, int, int, int], list[int]] = (
+        self.flow_ids_by_endpoint: dict[
+            tuple[str, int, int, int, int, int], list[int]
+        ] = collections.defaultdict(list)
+        self.flow_ids_by_submission: dict[tuple[int, int, int, int, int], list[int]] = (
             collections.defaultdict(list)
         )
         self.index_metadata_records()
@@ -349,45 +353,50 @@ class PerfettoTraceConverter:
     def index_metadata_records(self) -> None:
         for record in self.records:
             record_type = record.get("record_type")
+            session_id = profile_session_id(record)
             if record_type == "command_buffer":
                 command_buffer_id = parse_integer(record.get("command_buffer_id", 0))
                 if command_buffer_id:
-                    self.command_buffers_by_id[command_buffer_id] = record
+                    self.command_buffers_by_key[(session_id, command_buffer_id)] = (
+                        record
+                    )
             elif record_type == "command_operation":
                 command_buffer_id = parse_integer(record.get("command_buffer_id", 0))
                 if command_buffer_id:
-                    self.command_operations_by_command_buffer_id[
-                        command_buffer_id
+                    self.command_operations_by_command_buffer_key[
+                        (session_id, command_buffer_id)
                     ].append(record)
             elif record_type == "executable_function":
                 executable_id = parse_integer(record.get("executable_id", 0))
                 function_ordinal = parse_ordinal(record.get("function_ordinal"))
                 if executable_id and function_ordinal >= 0:
                     self.executable_functions_by_key[
-                        (executable_id, function_ordinal)
+                        (session_id, executable_id, function_ordinal)
                     ] = record
             elif record_type == "counter_set":
                 counter_set_id = parse_integer(record.get("counter_set_id", 0))
                 if counter_set_id:
-                    self.counter_sets_by_id[counter_set_id] = record
+                    self.counter_sets_by_key[(session_id, counter_set_id)] = record
             elif record_type == "counter":
                 counter_set_id = parse_integer(record.get("counter_set_id", 0))
                 counter_ordinal = parse_ordinal(record.get("counter_ordinal"))
                 if counter_set_id and counter_ordinal >= 0:
-                    self.counters_by_counter_set_id[counter_set_id].append(record)
+                    self.counters_by_counter_set_key[
+                        (session_id, counter_set_id)
+                    ].append(record)
             elif record_type == "device_metric_source":
                 source_id = parse_integer(record.get("source_id", 0))
                 if source_id:
-                    self.device_metric_sources_by_id[source_id] = record
+                    self.device_metric_sources_by_key[(session_id, source_id)] = record
             elif record_type == "device_metric_descriptor":
                 source_id = parse_integer(record.get("source_id", 0))
                 metric_id = parse_integer(record.get("metric_id", 0))
                 if source_id and metric_id:
-                    self.device_metric_descriptors_by_key[(source_id, metric_id)] = (
-                        record
-                    )
+                    self.device_metric_descriptors_by_key[
+                        (session_id, source_id, metric_id)
+                    ] = record
 
-        for operations in self.command_operations_by_command_buffer_id.values():
+        for operations in self.command_operations_by_command_buffer_key.values():
             operations.sort(
                 key=lambda operation: parse_integer(operation.get("command_index", 0))
             )
@@ -395,9 +404,13 @@ class PerfettoTraceConverter:
                 command_buffer_id = parse_integer(operation.get("command_buffer_id", 0))
                 command_index = parse_ordinal(operation.get("command_index"))
                 if command_buffer_id and command_index >= 0:
-                    operation_key = (command_buffer_id, command_index)
+                    operation_key = (
+                        profile_session_id(operation),
+                        command_buffer_id,
+                        command_index,
+                    )
                     self.command_operations_by_key[operation_key] = operation
-        for counters in self.counters_by_counter_set_id.values():
+        for counters in self.counters_by_counter_set_key.values():
             counters.sort(
                 key=lambda counter: parse_ordinal(counter.get("counter_ordinal"))
             )
@@ -421,22 +434,32 @@ class PerfettoTraceConverter:
             record_type = record.get("record_type")
             if record_type == "device":
                 self.ensure_device_track(
-                    parse_integer(record["physical_device_ordinal"]), record
+                    profile_session_id(record),
+                    parse_integer(record["physical_device_ordinal"]),
+                    record,
                 )
             elif record_type == "queue":
                 physical_device_ordinal, queue_ordinal = queue_key(record)
                 self.ensure_queue_tracks(
-                    physical_device_ordinal, queue_ordinal, record.get("stream_id")
+                    profile_session_id(record),
+                    physical_device_ordinal,
+                    queue_ordinal,
+                    record.get("stream_id"),
                 )
 
     def ensure_device_track(
-        self, physical_device_ordinal: int, record: dict[str, Any] | None = None
+        self,
+        session_id: int,
+        physical_device_ordinal: int,
+        record: dict[str, Any] | None = None,
     ) -> int:
-        device_uuid = self.tracks.uuid("iree", "device", physical_device_ordinal)
+        device_uuid = self.tracks.uuid(
+            "iree", "device", session_id, physical_device_ordinal
+        )
         device_name = (
-            "device[unknown]"
+            f"session[{session_id}] device[unknown]"
             if physical_device_ordinal < 0
-            else f"device[{physical_device_ordinal}]"
+            else f"session[{session_id}] device[{physical_device_ordinal}]"
         )
         if record is not None and record.get("physical_device_uuid_present"):
             device_name += f" {record.get('physical_device_uuid')}"
@@ -454,13 +477,14 @@ class PerfettoTraceConverter:
 
     def ensure_queue_tracks(
         self,
+        session_id: int,
         physical_device_ordinal: int,
         queue_ordinal: int,
         stream_id: Any | None = None,
     ) -> int:
-        device_uuid = self.ensure_device_track(physical_device_ordinal)
+        device_uuid = self.ensure_device_track(session_id, physical_device_ordinal)
         queue_uuid = self.tracks.uuid(
-            "iree", "queue", physical_device_ordinal, queue_ordinal
+            "iree", "queue", session_id, physical_device_ordinal, queue_ordinal
         )
         queue_name = (
             "device-scope events" if queue_ordinal < 0 else f"queue[{queue_ordinal}]"
@@ -477,7 +501,11 @@ class PerfettoTraceConverter:
         )
         self.tracks.define(
             self.tracks.uuid(
-                "iree", "queue-events", physical_device_ordinal, queue_ordinal
+                "iree",
+                "queue-events",
+                session_id,
+                physical_device_ordinal,
+                queue_ordinal,
             ),
             "host queue events",
             parent_uuid=queue_uuid,
@@ -487,6 +515,7 @@ class PerfettoTraceConverter:
             self.tracks.uuid(
                 "iree",
                 "command-operations",
+                session_id,
                 physical_device_ordinal,
                 queue_ordinal,
             ),
@@ -495,14 +524,20 @@ class PerfettoTraceConverter:
             sibling_order_rank=100,
         )
         self.tracks.define(
-            self.tracks.uuid("iree", "memory", physical_device_ordinal, queue_ordinal),
+            self.tracks.uuid(
+                "iree", "memory", session_id, physical_device_ordinal, queue_ordinal
+            ),
             "host memory events",
             parent_uuid=queue_uuid,
             sibling_order_rank=4000,
         )
         self.tracks.define(
             self.tracks.uuid(
-                "iree", "queue-allocation-bytes", physical_device_ordinal, queue_ordinal
+                "iree",
+                "queue-allocation-bytes",
+                session_id,
+                physical_device_ordinal,
+                queue_ordinal,
             ),
             "queue allocation bytes",
             parent_uuid=queue_uuid,
@@ -512,12 +547,13 @@ class PerfettoTraceConverter:
         return queue_uuid
 
     def command_operation_track(
-        self, physical_device_ordinal: int, queue_ordinal: int
+        self, session_id: int, physical_device_ordinal: int, queue_ordinal: int
     ) -> int:
-        self.ensure_queue_tracks(physical_device_ordinal, queue_ordinal)
+        self.ensure_queue_tracks(session_id, physical_device_ordinal, queue_ordinal)
         return self.tracks.uuid(
             "iree",
             "command-operations",
+            session_id,
             physical_device_ordinal,
             queue_ordinal,
         )
@@ -562,11 +598,22 @@ class PerfettoTraceConverter:
         return tuple(self.flow_ids_by_endpoint.get(endpoint_key, ()))
 
     def define_dispatch_lane(
-        self, physical_device_ordinal: int, queue_ordinal: int, lane_index: int
+        self,
+        session_id: int,
+        physical_device_ordinal: int,
+        queue_ordinal: int,
+        lane_index: int,
     ) -> int:
-        queue_uuid = self.ensure_queue_tracks(physical_device_ordinal, queue_ordinal)
+        queue_uuid = self.ensure_queue_tracks(
+            session_id, physical_device_ordinal, queue_ordinal
+        )
         track_uuid = self.tracks.uuid(
-            "iree", "dispatch", physical_device_ordinal, queue_ordinal, lane_index
+            "iree",
+            "dispatch",
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
+            lane_index,
         )
         self.tracks.define(
             track_uuid,
@@ -577,11 +624,22 @@ class PerfettoTraceConverter:
         return track_uuid
 
     def define_queue_device_lane(
-        self, physical_device_ordinal: int, queue_ordinal: int, lane_index: int
+        self,
+        session_id: int,
+        physical_device_ordinal: int,
+        queue_ordinal: int,
+        lane_index: int,
     ) -> int:
-        queue_uuid = self.ensure_queue_tracks(physical_device_ordinal, queue_ordinal)
+        queue_uuid = self.ensure_queue_tracks(
+            session_id, physical_device_ordinal, queue_ordinal
+        )
         track_uuid = self.tracks.uuid(
-            "iree", "queue-device", physical_device_ordinal, queue_ordinal, lane_index
+            "iree",
+            "queue-device",
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
+            lane_index,
         )
         self.tracks.define(
             track_uuid,
@@ -596,12 +654,19 @@ class PerfettoTraceConverter:
         return track_uuid
 
     def define_host_execution_lane(
-        self, physical_device_ordinal: int, queue_ordinal: int, lane_index: int
+        self,
+        session_id: int,
+        physical_device_ordinal: int,
+        queue_ordinal: int,
+        lane_index: int,
     ) -> int:
-        queue_uuid = self.ensure_queue_tracks(physical_device_ordinal, queue_ordinal)
+        queue_uuid = self.ensure_queue_tracks(
+            session_id, physical_device_ordinal, queue_ordinal
+        )
         track_uuid = self.tracks.uuid(
             "iree",
             "host-execution",
+            session_id,
             physical_device_ordinal,
             queue_ordinal,
             lane_index,
@@ -624,6 +689,7 @@ class PerfettoTraceConverter:
         record_family: str,
         start_time_ns: int,
         end_time_ns: int,
+        session_id: int,
         physical_device_ordinal: int,
         queue_ordinal: int,
         track_uuid: int,
@@ -665,6 +731,7 @@ class PerfettoTraceConverter:
                 (
                     1,
                     f"{record_family}_begin",
+                    session_id,
                     physical_device_ordinal,
                     queue_ordinal,
                     start_time_ns,
@@ -678,6 +745,7 @@ class PerfettoTraceConverter:
                 (
                     0,
                     f"{record_family}_end",
+                    session_id,
                     physical_device_ordinal,
                     queue_ordinal,
                     end_time_ns,
@@ -694,6 +762,7 @@ class PerfettoTraceConverter:
         record_family: str,
         start_time_ns: int,
         end_time_ns: int,
+        session_id: int,
         physical_device_ordinal: int,
         queue_ordinal: int,
         name: str,
@@ -707,6 +776,7 @@ class PerfettoTraceConverter:
                 sequence_index=len(self.pending_slices),
                 start_time_ns=start_time_ns,
                 end_time_ns=end_time_ns,
+                session_id=session_id,
                 physical_device_ordinal=physical_device_ordinal,
                 queue_ordinal=queue_ordinal,
                 name=name,
@@ -750,9 +820,13 @@ class PerfettoTraceConverter:
             self.stats.skipped_dispatches += 1
             return
         start_time_ns, end_time_ns = normalized_range
+        session_id = profile_session_id(record)
         physical_device_ordinal, queue_ordinal = queue_key(record)
         self.ensure_queue_tracks(
-            physical_device_ordinal, queue_ordinal, record.get("stream_id")
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
+            record.get("stream_id"),
         )
         name = str(record.get("key") or f"dispatch[{record.get('event_id', 0)}]")
         annotations = event_annotations(record)
@@ -762,6 +836,7 @@ class PerfettoTraceConverter:
             record_family="dispatch",
             start_time_ns=start_time_ns,
             end_time_ns=end_time_ns,
+            session_id=session_id,
             physical_device_ordinal=physical_device_ordinal,
             queue_ordinal=queue_ordinal,
             name=name,
@@ -781,9 +856,13 @@ class PerfettoTraceConverter:
             self.stats.skipped_queue_device_events += 1
             return
         start_time_ns, end_time_ns = normalized_range
+        session_id = profile_session_id(record)
         physical_device_ordinal, queue_ordinal = queue_key(record)
         self.ensure_queue_tracks(
-            physical_device_ordinal, queue_ordinal, record.get("stream_id")
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
+            record.get("stream_id"),
         )
         annotations = event_annotations(record)
         annotations["iree_perfetto_time_domain"] = time_domain
@@ -792,6 +871,7 @@ class PerfettoTraceConverter:
             record_family="queue_device",
             start_time_ns=start_time_ns,
             end_time_ns=end_time_ns,
+            session_id=session_id,
             physical_device_ordinal=physical_device_ordinal,
             queue_ordinal=queue_ordinal,
             name=f"queue-device:{record.get('op', 'event')}",
@@ -813,13 +893,18 @@ class PerfettoTraceConverter:
             self.stats.skipped_host_execution_events += 1
             return
         start_time_ns, end_time_ns = normalized_range
+        session_id = profile_session_id(record)
         physical_device_ordinal, queue_ordinal = queue_key(record)
         self.ensure_queue_tracks(
-            physical_device_ordinal, queue_ordinal, record.get("stream_id")
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
+            record.get("stream_id"),
         )
         command_buffer_id = parse_integer(record.get("command_buffer_id", 0))
-        command_operations = self.command_operations_by_command_buffer_id.get(
-            command_buffer_id, []
+        command_buffer_key = (session_id, command_buffer_id)
+        command_operations = self.command_operations_by_command_buffer_key.get(
+            command_buffer_key, []
         )
         name = self.host_execution_event_name(record, command_operations)
         annotations = event_annotations(record)
@@ -828,11 +913,12 @@ class PerfettoTraceConverter:
         )
         if record.get("op") == "execute":
             self.add_command_buffer_annotations(
-                annotations, command_buffer_id, command_operations
+                annotations, session_id, command_buffer_id, command_operations
             )
         self.collect_timed_command_operation_instant(
             record,
             start_time_ns,
+            session_id,
             physical_device_ordinal,
             queue_ordinal,
             command_buffer_id,
@@ -842,6 +928,7 @@ class PerfettoTraceConverter:
             record_family="host_execution",
             start_time_ns=start_time_ns,
             end_time_ns=end_time_ns,
+            session_id=session_id,
             physical_device_ordinal=physical_device_ordinal,
             queue_ordinal=queue_ordinal,
             name=name,
@@ -876,13 +963,16 @@ class PerfettoTraceConverter:
     def add_command_buffer_annotations(
         self,
         annotations: dict[str, Any],
+        session_id: int,
         command_buffer_id: int,
         command_operations: list[dict[str, Any]],
     ) -> None:
         if not command_buffer_id:
             return
         annotations["iree_command_buffer_id"] = command_buffer_id
-        command_buffer = self.command_buffers_by_id.get(command_buffer_id)
+        command_buffer = self.command_buffers_by_key.get(
+            (session_id, command_buffer_id)
+        )
         if command_buffer is not None:
             annotations["iree_command_buffer_flags"] = command_buffer.get("flags")
             annotations["iree_command_buffer_categories"] = command_buffer.get(
@@ -898,6 +988,7 @@ class PerfettoTraceConverter:
         self,
         record: dict[str, Any],
         start_time_ns: int,
+        session_id: int,
         physical_device_ordinal: int,
         queue_ordinal: int,
         command_buffer_id: int,
@@ -906,12 +997,12 @@ class PerfettoTraceConverter:
         if not command_buffer_id or command_index < 0:
             return
         operation = self.command_operations_by_key.get(
-            (command_buffer_id, command_index)
+            (session_id, command_buffer_id, command_index)
         )
         if operation is None:
             return
         track_uuid = self.command_operation_track(
-            physical_device_ordinal, queue_ordinal
+            session_id, physical_device_ordinal, queue_ordinal
         )
         operation_annotations = event_annotations(operation)
         operation_annotations["iree_host_execution_event_id"] = record.get("event_id")
@@ -932,6 +1023,7 @@ class PerfettoTraceConverter:
                 (
                     2,
                     "command-operation",
+                    session_id,
                     physical_device_ordinal,
                     queue_ordinal,
                     start_time_ns,
@@ -974,7 +1066,7 @@ class PerfettoTraceConverter:
         executable_id = parse_integer(operation.get("executable_id", 0))
         function_ordinal = parse_ordinal(operation.get("function_ordinal"))
         function_record = self.executable_functions_by_key.get(
-            (executable_id, function_ordinal)
+            (profile_session_id(operation), executable_id, function_ordinal)
         )
         if function_record is not None and function_record.get("name"):
             display_name = str(function_record["name"])
@@ -986,12 +1078,20 @@ class PerfettoTraceConverter:
         timestamp_ns = record.get("host_time_ns")
         if timestamp_ns is None:
             return
+        session_id = profile_session_id(record)
         physical_device_ordinal, queue_ordinal = queue_key(record)
         self.ensure_queue_tracks(
-            physical_device_ordinal, queue_ordinal, record.get("stream_id")
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
+            record.get("stream_id"),
         )
         track_uuid = self.tracks.uuid(
-            "iree", "queue-events", physical_device_ordinal, queue_ordinal
+            "iree",
+            "queue-events",
+            session_id,
+            physical_device_ordinal,
+            queue_ordinal,
         )
         event_time_ns = parse_integer(timestamp_ns)
         name = f"queue:{record.get('op', 'event')}"
@@ -1018,6 +1118,7 @@ class PerfettoTraceConverter:
                     (
                         2,
                         sort_label,
+                        session_id,
                         physical_device_ordinal,
                         queue_ordinal,
                         instant_time_ns,
@@ -1057,10 +1158,11 @@ class PerfettoTraceConverter:
         timestamp_ns = record.get("host_time_ns")
         if timestamp_ns is None:
             return
+        session_id = profile_session_id(record)
         physical_device_ordinal, queue_ordinal = queue_key(record)
-        self.ensure_queue_tracks(physical_device_ordinal, queue_ordinal)
+        self.ensure_queue_tracks(session_id, physical_device_ordinal, queue_ordinal)
         track_uuid = self.tracks.uuid(
-            "iree", "memory", physical_device_ordinal, queue_ordinal
+            "iree", "memory", session_id, physical_device_ordinal, queue_ordinal
         )
         event_time_ns = parse_integer(timestamp_ns)
         name = f"memory:{record.get('event_type', 'event')}"
@@ -1074,6 +1176,7 @@ class PerfettoTraceConverter:
                 (
                     2,
                     "memory",
+                    session_id,
                     physical_device_ordinal,
                     queue_ordinal,
                     event_time_ns,
@@ -1100,13 +1203,16 @@ class PerfettoTraceConverter:
         physical_device_ordinal = parse_ordinal(
             record.get("physical_device_ordinal"), 0
         )
-        self.ensure_device_track(physical_device_ordinal)
-        track_uuid = self.tracks.uuid("iree", "device", physical_device_ordinal)
+        session_id = profile_session_id(record)
+        self.ensure_device_track(session_id, physical_device_ordinal)
+        track_uuid = self.tracks.uuid(
+            "iree", "device", session_id, physical_device_ordinal
+        )
         annotations = event_annotations(record)
         self.timeline_events.append(
             TimelineEvent(
                 event_time_ns,
-                (2, "clock", physical_device_ordinal, event_time_ns),
+                (2, "clock", session_id, physical_device_ordinal, event_time_ns),
                 lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, annotations=annotations: (
                     add_instant(
                         self.builder,
@@ -1124,9 +1230,11 @@ class PerfettoTraceConverter:
 
     def collect_dispatch_scoped_counter_sample(self, record: dict[str, Any]) -> None:
         values = record.get("values", [])
+        session_id = profile_session_id(record)
         counter_set_id = parse_integer(record.get("counter_set_id", 0))
-        counter_set = self.counter_sets_by_id.get(counter_set_id)
-        counters = self.counters_by_counter_set_id.get(counter_set_id, [])
+        counter_set_key = (session_id, counter_set_id)
+        counter_set = self.counter_sets_by_key.get(counter_set_key)
+        counters = self.counters_by_counter_set_key.get(counter_set_key, [])
         if (
             record.get("device_tick_range_valid") is False
             or not isinstance(values, list)
@@ -1162,7 +1270,11 @@ class PerfettoTraceConverter:
                 continue
             counter_ordinal = parse_ordinal(counter.get("counter_ordinal"))
             track_uuid = self.define_dispatch_scoped_counter_track(
-                physical_device_ordinal, counter_set_id, counter_set, counter
+                session_id,
+                physical_device_ordinal,
+                counter_set_id,
+                counter_set,
+                counter,
             )
             annotations = self.dispatch_scoped_counter_annotations(
                 record, counter_set, counter, counter_value, time_domain
@@ -1173,6 +1285,7 @@ class PerfettoTraceConverter:
                     (
                         2,
                         "dispatch-scoped-counter",
+                        session_id,
                         physical_device_ordinal,
                         counter_set_id,
                         counter_ordinal,
@@ -1212,9 +1325,11 @@ class PerfettoTraceConverter:
 
     def collect_range_counter_sample(self, record: dict[str, Any]) -> None:
         values = record.get("values", [])
+        session_id = profile_session_id(record)
         counter_set_id = parse_integer(record.get("counter_set_id", 0))
-        counter_set = self.counter_sets_by_id.get(counter_set_id)
-        counters = self.counters_by_counter_set_id.get(counter_set_id, [])
+        counter_set_key = (session_id, counter_set_id)
+        counter_set = self.counter_sets_by_key.get(counter_set_key)
+        counters = self.counters_by_counter_set_key.get(counter_set_key, [])
         if (
             record.get("device_tick_range_valid") is False
             or not isinstance(values, list)
@@ -1250,7 +1365,11 @@ class PerfettoTraceConverter:
                 continue
             counter_ordinal = parse_ordinal(counter.get("counter_ordinal"))
             track_uuid = self.define_range_counter_track(
-                physical_device_ordinal, counter_set_id, counter_set, counter
+                session_id,
+                physical_device_ordinal,
+                counter_set_id,
+                counter_set,
+                counter,
             )
             annotations = self.range_counter_annotations(
                 record, counter_set, counter, counter_value, time_domain
@@ -1261,6 +1380,7 @@ class PerfettoTraceConverter:
                     (
                         2,
                         "range-counter",
+                        session_id,
                         physical_device_ordinal,
                         counter_set_id,
                         counter_ordinal,
@@ -1331,7 +1451,11 @@ class PerfettoTraceConverter:
         executable_id = parse_integer(sample_record.get("executable_id", 0))
         function_ordinal = parse_ordinal(sample_record.get("function_ordinal"))
         function_record = self.executable_functions_by_key.get(
-            (executable_id, function_ordinal)
+            (
+                profile_session_id(sample_record),
+                executable_id,
+                function_ordinal,
+            )
         )
         return {
             "iree_counter_sample_id": sample_record.get("sample_id"),
@@ -1365,11 +1489,14 @@ class PerfettoTraceConverter:
         }
 
     def ensure_dispatch_scoped_counter_group_track(
-        self, physical_device_ordinal: int
+        self, session_id: int, physical_device_ordinal: int
     ) -> int:
-        device_uuid = self.ensure_device_track(physical_device_ordinal)
+        device_uuid = self.ensure_device_track(session_id, physical_device_ordinal)
         track_uuid = self.tracks.uuid(
-            "iree", "dispatch-scoped-counters", physical_device_ordinal
+            "iree",
+            "dispatch-scoped-counters",
+            session_id,
+            physical_device_ordinal,
         )
         self.tracks.define(
             track_uuid,
@@ -1382,16 +1509,18 @@ class PerfettoTraceConverter:
 
     def define_dispatch_scoped_counter_set_track(
         self,
+        session_id: int,
         physical_device_ordinal: int,
         counter_set_id: int,
         counter_set: dict[str, Any],
     ) -> int:
         group_uuid = self.ensure_dispatch_scoped_counter_group_track(
-            physical_device_ordinal
+            session_id, physical_device_ordinal
         )
         track_uuid = self.tracks.uuid(
             "iree",
             "dispatch-scoped-counter-set",
+            session_id,
             physical_device_ordinal,
             counter_set_id,
         )
@@ -1409,18 +1538,20 @@ class PerfettoTraceConverter:
 
     def define_dispatch_scoped_counter_track(
         self,
+        session_id: int,
         physical_device_ordinal: int,
         counter_set_id: int,
         counter_set: dict[str, Any],
         counter: dict[str, Any],
     ) -> int:
         counter_set_uuid = self.define_dispatch_scoped_counter_set_track(
-            physical_device_ordinal, counter_set_id, counter_set
+            session_id, physical_device_ordinal, counter_set_id, counter_set
         )
         counter_ordinal = parse_ordinal(counter.get("counter_ordinal"))
         track_uuid = self.tracks.uuid(
             "iree",
             "dispatch-scoped-counter",
+            session_id,
             physical_device_ordinal,
             counter_set_id,
             counter_ordinal,
@@ -1438,9 +1569,13 @@ class PerfettoTraceConverter:
         )
         return track_uuid
 
-    def ensure_range_counter_group_track(self, physical_device_ordinal: int) -> int:
-        device_uuid = self.ensure_device_track(physical_device_ordinal)
-        track_uuid = self.tracks.uuid("iree", "range-counters", physical_device_ordinal)
+    def ensure_range_counter_group_track(
+        self, session_id: int, physical_device_ordinal: int
+    ) -> int:
+        device_uuid = self.ensure_device_track(session_id, physical_device_ordinal)
+        track_uuid = self.tracks.uuid(
+            "iree", "range-counters", session_id, physical_device_ordinal
+        )
         self.tracks.define(
             track_uuid,
             "range counters",
@@ -1452,13 +1587,20 @@ class PerfettoTraceConverter:
 
     def define_range_counter_set_track(
         self,
+        session_id: int,
         physical_device_ordinal: int,
         counter_set_id: int,
         counter_set: dict[str, Any],
     ) -> int:
-        group_uuid = self.ensure_range_counter_group_track(physical_device_ordinal)
+        group_uuid = self.ensure_range_counter_group_track(
+            session_id, physical_device_ordinal
+        )
         track_uuid = self.tracks.uuid(
-            "iree", "range-counter-set", physical_device_ordinal, counter_set_id
+            "iree",
+            "range-counter-set",
+            session_id,
+            physical_device_ordinal,
+            counter_set_id,
         )
         counter_set_name = str(
             counter_set.get("name") or f"counter set {counter_set_id}"
@@ -1474,18 +1616,20 @@ class PerfettoTraceConverter:
 
     def define_range_counter_track(
         self,
+        session_id: int,
         physical_device_ordinal: int,
         counter_set_id: int,
         counter_set: dict[str, Any],
         counter: dict[str, Any],
     ) -> int:
         counter_set_uuid = self.define_range_counter_set_track(
-            physical_device_ordinal, counter_set_id, counter_set
+            session_id, physical_device_ordinal, counter_set_id, counter_set
         )
         counter_ordinal = parse_ordinal(counter.get("counter_ordinal"))
         track_uuid = self.tracks.uuid(
             "iree",
             "range-counter",
+            session_id,
             physical_device_ordinal,
             counter_set_id,
             counter_ordinal,
@@ -1510,14 +1654,15 @@ class PerfettoTraceConverter:
             self.stats.skipped_device_metric_samples += 1
             return
         source_id = parse_integer(record.get("source_id", 0))
+        session_id = profile_session_id(record)
         physical_device_ordinal = parse_ordinal(
             record.get("physical_device_ordinal"), 0
         )
-        self.ensure_device_metric_group_track(physical_device_ordinal)
+        self.ensure_device_metric_group_track(session_id, physical_device_ordinal)
         sample_flags = parse_integer(record.get("flags", 0))
         if sample_flags & DEVICE_METRIC_SAMPLE_FLAG_PARTIAL:
             self.collect_partial_device_metric_sample(
-                record, event_time_ns, physical_device_ordinal
+                record, event_time_ns, session_id, physical_device_ordinal
             )
         for value_record in values:
             if not isinstance(value_record, dict):
@@ -1525,7 +1670,7 @@ class PerfettoTraceConverter:
                 continue
             metric_id = parse_integer(value_record.get("metric_id", 0))
             descriptor = self.device_metric_descriptor(
-                source_id, metric_id, value_record
+                session_id, source_id, metric_id, value_record
             )
             if descriptor is None:
                 self.stats.skipped_device_metric_samples += 1
@@ -1535,7 +1680,11 @@ class PerfettoTraceConverter:
                 self.stats.skipped_device_metric_samples += 1
                 continue
             track_uuid = self.define_device_metric_counter_track(
-                physical_device_ordinal, source_id, metric_id, descriptor
+                session_id,
+                physical_device_ordinal,
+                source_id,
+                metric_id,
+                descriptor,
             )
             annotations = self.device_metric_counter_annotations(
                 record, value_record, descriptor
@@ -1546,6 +1695,7 @@ class PerfettoTraceConverter:
                     (
                         2,
                         "device-metric-counter",
+                        session_id,
                         physical_device_ordinal,
                         source_id,
                         metric_id,
@@ -1571,11 +1721,14 @@ class PerfettoTraceConverter:
         self,
         record: dict[str, Any],
         event_time_ns: int,
+        session_id: int,
         physical_device_ordinal: int,
     ) -> None:
-        track_uuid = self.ensure_device_metric_group_track(physical_device_ordinal)
+        track_uuid = self.ensure_device_metric_group_track(
+            session_id, physical_device_ordinal
+        )
         source_id = parse_integer(record.get("source_id", 0))
-        source_record = self.device_metric_sources_by_id.get(source_id)
+        source_record = self.device_metric_sources_by_key.get((session_id, source_id))
         annotations = {
             "iree_metric_source_id": record.get("source_id"),
             "iree_metric_source_name": (
@@ -1593,6 +1746,7 @@ class PerfettoTraceConverter:
                 (
                     2,
                     "device-metric-partial-sample",
+                    session_id,
                     physical_device_ordinal,
                     source_id,
                     event_time_ns,
@@ -1615,11 +1769,14 @@ class PerfettoTraceConverter:
 
     def device_metric_descriptor(
         self,
+        session_id: int,
         source_id: int,
         metric_id: int,
         value_record: dict[str, Any],
     ) -> dict[str, Any] | None:
-        descriptor = self.device_metric_descriptors_by_key.get((source_id, metric_id))
+        descriptor = self.device_metric_descriptors_by_key.get(
+            (session_id, source_id, metric_id)
+        )
         if descriptor is not None:
             return descriptor
         if value_record.get("name") and value_record.get("value_kind"):
@@ -1657,7 +1814,9 @@ class PerfettoTraceConverter:
         descriptor: dict[str, Any],
     ) -> dict[str, Any]:
         source_id = parse_integer(sample_record.get("source_id", 0))
-        source_record = self.device_metric_sources_by_id.get(source_id)
+        source_record = self.device_metric_sources_by_key.get(
+            (profile_session_id(sample_record), source_id)
+        )
         return {
             "iree_metric_source_id": sample_record.get("source_id"),
             "iree_metric_source_name": (
@@ -1681,9 +1840,13 @@ class PerfettoTraceConverter:
             "iree_perfetto_timing_source": "device_metric_sample_midpoint",
         }
 
-    def ensure_device_metric_group_track(self, physical_device_ordinal: int) -> int:
-        device_uuid = self.ensure_device_track(physical_device_ordinal)
-        track_uuid = self.tracks.uuid("iree", "device-metrics", physical_device_ordinal)
+    def ensure_device_metric_group_track(
+        self, session_id: int, physical_device_ordinal: int
+    ) -> int:
+        device_uuid = self.ensure_device_track(session_id, physical_device_ordinal)
+        track_uuid = self.tracks.uuid(
+            "iree", "device-metrics", session_id, physical_device_ordinal
+        )
         self.tracks.define(
             track_uuid,
             "device metrics",
@@ -1695,15 +1858,19 @@ class PerfettoTraceConverter:
 
     def define_device_metric_counter_track(
         self,
+        session_id: int,
         physical_device_ordinal: int,
         source_id: int,
         metric_id: int,
         descriptor: dict[str, Any],
     ) -> int:
-        group_uuid = self.ensure_device_metric_group_track(physical_device_ordinal)
+        group_uuid = self.ensure_device_metric_group_track(
+            session_id, physical_device_ordinal
+        )
         track_uuid = self.tracks.uuid(
             "iree",
             "device-metric",
+            session_id,
             physical_device_ordinal,
             source_id,
             metric_id,
@@ -1768,6 +1935,7 @@ class PerfettoTraceConverter:
             self.pending_slices,
             key=lambda pending_slice: (
                 pending_slice.lane_family,
+                pending_slice.session_id,
                 pending_slice.physical_device_ordinal,
                 pending_slice.queue_ordinal,
                 pending_slice.start_time_ns,
@@ -1780,6 +1948,7 @@ class PerfettoTraceConverter:
                 record_family=pending_slice.record_family,
                 start_time_ns=pending_slice.start_time_ns,
                 end_time_ns=pending_slice.end_time_ns,
+                session_id=pending_slice.session_id,
                 physical_device_ordinal=pending_slice.physical_device_ordinal,
                 queue_ordinal=pending_slice.queue_ordinal,
                 track_uuid=track_uuid,
@@ -1790,6 +1959,7 @@ class PerfettoTraceConverter:
 
     def define_slice_track(self, pending_slice: PendingSlice) -> int:
         allocator_key = (
+            pending_slice.session_id,
             pending_slice.physical_device_ordinal,
             pending_slice.queue_ordinal,
         )
@@ -1798,6 +1968,7 @@ class PerfettoTraceConverter:
                 pending_slice.start_time_ns, pending_slice.end_time_ns
             )
             return self.define_dispatch_lane(
+                pending_slice.session_id,
                 pending_slice.physical_device_ordinal,
                 pending_slice.queue_ordinal,
                 lane_index,
@@ -1807,6 +1978,7 @@ class PerfettoTraceConverter:
                 pending_slice.start_time_ns, pending_slice.end_time_ns
             )
             return self.define_queue_device_lane(
+                pending_slice.session_id,
                 pending_slice.physical_device_ordinal,
                 pending_slice.queue_ordinal,
                 lane_index,
@@ -1816,6 +1988,7 @@ class PerfettoTraceConverter:
                 pending_slice.start_time_ns, pending_slice.end_time_ns
             )
             return self.define_host_execution_lane(
+                pending_slice.session_id,
                 pending_slice.physical_device_ordinal,
                 pending_slice.queue_ordinal,
                 lane_index,
@@ -1823,8 +1996,8 @@ class PerfettoTraceConverter:
         raise ValueError(f"unknown slice lane family: {pending_slice.lane_family}")
 
     def emit_queue_allocation_counters(self) -> None:
-        queue_allocation_bytes: dict[tuple[int, int], int] = collections.defaultdict(
-            int
+        queue_allocation_bytes: dict[tuple[int, int, int], int] = (
+            collections.defaultdict(int)
         )
         for record in sorted(
             (
@@ -1839,9 +2012,10 @@ class PerfettoTraceConverter:
                 continue
             if "host_time_ns" not in record:
                 continue
+            session_id = profile_session_id(record)
             physical_device_ordinal, queue_ordinal = queue_key(record)
-            self.ensure_queue_tracks(physical_device_ordinal, queue_ordinal)
-            key = (physical_device_ordinal, queue_ordinal)
+            self.ensure_queue_tracks(session_id, physical_device_ordinal, queue_ordinal)
+            key = (session_id, physical_device_ordinal, queue_ordinal)
             length = parse_integer(record.get("length", 0))
             if event_type == "queue_alloca":
                 queue_allocation_bytes[key] += length
@@ -1853,6 +2027,7 @@ class PerfettoTraceConverter:
             track_uuid = self.tracks.uuid(
                 "iree",
                 "queue-allocation-bytes",
+                session_id,
                 physical_device_ordinal,
                 queue_ordinal,
             )
@@ -1863,6 +2038,7 @@ class PerfettoTraceConverter:
                     (
                         2,
                         "counter",
+                        session_id,
                         physical_device_ordinal,
                         queue_ordinal,
                         event_time_ns,

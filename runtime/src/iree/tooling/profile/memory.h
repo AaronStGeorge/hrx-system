@@ -37,6 +37,8 @@ typedef struct iree_profile_memory_balance_t {
 } iree_profile_memory_balance_t;
 
 typedef struct iree_profile_memory_device_t {
+  // Capture-wide profiling session identifier owning this device row.
+  iree_hal_profile_session_id_t session_id;
   // Session-local physical device ordinal.
   uint32_t physical_device_ordinal;
   // Total memory events matched for this device.
@@ -93,6 +95,8 @@ typedef enum iree_profile_memory_lifecycle_kind_e {
 } iree_profile_memory_lifecycle_kind_t;
 
 typedef struct iree_profile_memory_pool_t {
+  // Capture-wide profiling session identifier owning this pool row.
+  iree_hal_profile_session_id_t session_id;
   // Lifecycle kind responsible for this aggregate.
   iree_profile_memory_lifecycle_kind_t kind;
   // Session-local physical device ordinal.
@@ -140,6 +144,8 @@ typedef struct iree_profile_memory_pool_t {
 } iree_profile_memory_pool_t;
 
 typedef struct iree_profile_memory_allocation_t {
+  // Capture-wide profiling session identifier owning this allocation row.
+  iree_hal_profile_session_id_t session_id;
   // Lifecycle kind represented by this allocation row.
   iree_profile_memory_lifecycle_kind_t kind;
   // Session-local physical device ordinal.
@@ -227,6 +233,8 @@ typedef struct iree_profile_memory_context_t {
 } iree_profile_memory_context_t;
 
 typedef struct iree_profile_memory_event_row_t {
+  // Capture-wide profiling session identifier owning this event.
+  iree_hal_profile_session_id_t session_id;
   // Memory event record valid only for the callback duration.
   const iree_hal_profile_memory_event_t* event;
   // True when the source chunk was marked truncated by the producer.
