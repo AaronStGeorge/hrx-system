@@ -751,6 +751,7 @@ iree_cc_library(
     iree::hal
     iree::hal::cts::util::registry
     iree::hal::drivers::amd::driver
+    iree::hal::drivers::amd::gpu::target::identity
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -850,6 +851,2102 @@ iree_cc_test(
   DEPS
     ::backends
     iree::hal::cts::queue::all_tests
+    iree::hal::cts::util::test_main
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx942"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx942"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx950"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx950"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1100"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1100"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1200"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1200"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1250"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1250"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1150"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1150"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx11-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx11-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx12-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx12-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx12-5-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx12-5-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx940"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx940"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx941"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx941"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1101"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1101"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1102"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1102"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1103"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1103"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1151"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1151"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1152"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1152"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1153"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1153"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1170"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1170"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1171"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1171"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1172"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1172"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1201"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1201"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1251"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1251"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx9-4-generic"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx9-4-generic"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx1250-a0"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx1250-a0"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE
+)
+
+loom_target_profile(
+  NAME
+    "cts_profile_gfx90a"
+  FAMILY
+    "amdgpu"
+  SELECTOR
+    "gfx90a"
+  REQUIRES
+    LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE
+)
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND (LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE))
+loom_module(
+  NAME
+    dispatch_source_command_buffer_dispatch_constants_bindings_test
+  SRCS
+    "command_buffer_dispatch_constants_bindings_test.loom"
+  MODE merge
+  OUTPUT_FORMAT bc
+  STRICT_DEPS
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND (LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE))
+loom_module(
+  NAME
+    dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  SRCS
+    "command_buffer_dispatch_multi_workgroup_test.loom"
+  MODE merge
+  OUTPUT_FORMAT bc
+  STRICT_DEPS
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND (LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE))
+loom_module(
+  NAME
+    dispatch_source_command_buffer_dispatch_test
+  SRCS
+    "command_buffer_dispatch_test.loom"
+  MODE merge
+  OUTPUT_FORMAT bc
+  STRICT_DEPS
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx942_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx942_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx942"
+  OUTPUT
+    "dispatch_gfx942/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx950_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx950_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx950"
+  OUTPUT
+    "dispatch_gfx950/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1100_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1100_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1100"
+  OUTPUT
+    "dispatch_gfx1100/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1200_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1200_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1200"
+  OUTPUT
+    "dispatch_gfx1200/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1250_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1250_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1250"
+  OUTPUT
+    "dispatch_gfx1250/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1150_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1150_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1150"
+  OUTPUT
+    "dispatch_gfx1150/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx11-generic_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx11-generic_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx11-generic"
+  OUTPUT
+    "dispatch_gfx11-generic/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx12-generic_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx12-generic_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx12-generic"
+  OUTPUT
+    "dispatch_gfx12-generic/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx12-5-generic_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx12-5-generic_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx12-5-generic"
+  OUTPUT
+    "dispatch_gfx12-5-generic/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx940_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx940_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx940"
+  OUTPUT
+    "dispatch_gfx940/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx941_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx941_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx941"
+  OUTPUT
+    "dispatch_gfx941/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1101_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1101_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1101"
+  OUTPUT
+    "dispatch_gfx1101/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1102_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1102_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1102"
+  OUTPUT
+    "dispatch_gfx1102/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1103_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1103_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1103"
+  OUTPUT
+    "dispatch_gfx1103/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1151_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1151_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1151"
+  OUTPUT
+    "dispatch_gfx1151/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1152_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1152_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1152"
+  OUTPUT
+    "dispatch_gfx1152/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1153_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1153_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1153"
+  OUTPUT
+    "dispatch_gfx1153/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1170_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1170_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1170"
+  OUTPUT
+    "dispatch_gfx1170/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1171_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1171_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1171"
+  OUTPUT
+    "dispatch_gfx1171/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1172_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1172_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1172"
+  OUTPUT
+    "dispatch_gfx1172/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1201_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1201_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1201"
+  OUTPUT
+    "dispatch_gfx1201/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1251_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1251_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1251"
+  OUTPUT
+    "dispatch_gfx1251/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx9-4-generic_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx9-4-generic_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx9-4-generic"
+  OUTPUT
+    "dispatch_gfx9-4-generic/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1250-a0_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1250-a0_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx1250-a0"
+  OUTPUT
+    "dispatch_gfx1250-a0/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx90a_command_buffer_dispatch_constants_bindings_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx90a_command_buffer_dispatch_constants_bindings_test"
+  TARGET
+    "::cts_profile_gfx90a"
+  OUTPUT
+    "dispatch_gfx90a/command_buffer_dispatch_constants_bindings_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_constants_bindings_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx942_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx942_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx942"
+  OUTPUT
+    "dispatch_gfx942/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx950_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx950_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx950"
+  OUTPUT
+    "dispatch_gfx950/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1100_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1100_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1100"
+  OUTPUT
+    "dispatch_gfx1100/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1200_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1200_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1200"
+  OUTPUT
+    "dispatch_gfx1200/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1250_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1250_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1250"
+  OUTPUT
+    "dispatch_gfx1250/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1150_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1150_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1150"
+  OUTPUT
+    "dispatch_gfx1150/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx11-generic_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx11-generic_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx11-generic"
+  OUTPUT
+    "dispatch_gfx11-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx12-generic_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx12-generic_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx12-generic"
+  OUTPUT
+    "dispatch_gfx12-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx12-5-generic_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx12-5-generic_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx12-5-generic"
+  OUTPUT
+    "dispatch_gfx12-5-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx940_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx940_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx940"
+  OUTPUT
+    "dispatch_gfx940/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx941_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx941_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx941"
+  OUTPUT
+    "dispatch_gfx941/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1101_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1101_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1101"
+  OUTPUT
+    "dispatch_gfx1101/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1102_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1102_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1102"
+  OUTPUT
+    "dispatch_gfx1102/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1103_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1103_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1103"
+  OUTPUT
+    "dispatch_gfx1103/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1151_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1151_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1151"
+  OUTPUT
+    "dispatch_gfx1151/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1152_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1152_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1152"
+  OUTPUT
+    "dispatch_gfx1152/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1153_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1153_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1153"
+  OUTPUT
+    "dispatch_gfx1153/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1170_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1170_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1170"
+  OUTPUT
+    "dispatch_gfx1170/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1171_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1171_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1171"
+  OUTPUT
+    "dispatch_gfx1171/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1172_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1172_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1172"
+  OUTPUT
+    "dispatch_gfx1172/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1201_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1201_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1201"
+  OUTPUT
+    "dispatch_gfx1201/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1251_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1251_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1251"
+  OUTPUT
+    "dispatch_gfx1251/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx9-4-generic_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx9-4-generic_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx9-4-generic"
+  OUTPUT
+    "dispatch_gfx9-4-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1250-a0_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1250-a0_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx1250-a0"
+  OUTPUT
+    "dispatch_gfx1250-a0/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx90a_command_buffer_dispatch_multi_workgroup_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx90a_command_buffer_dispatch_multi_workgroup_test"
+  TARGET
+    "::cts_profile_gfx90a"
+  OUTPUT
+    "dispatch_gfx90a/command_buffer_dispatch_multi_workgroup_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_multi_workgroup_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx942_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx942_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx942"
+  OUTPUT
+    "dispatch_gfx942/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx950_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx950_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx950"
+  OUTPUT
+    "dispatch_gfx950/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1100_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1100_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1100"
+  OUTPUT
+    "dispatch_gfx1100/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1200_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1200_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1200"
+  OUTPUT
+    "dispatch_gfx1200/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1250_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1250_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1250"
+  OUTPUT
+    "dispatch_gfx1250/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1150_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1150_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1150"
+  OUTPUT
+    "dispatch_gfx1150/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx11-generic_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx11-generic_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx11-generic"
+  OUTPUT
+    "dispatch_gfx11-generic/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx12-generic_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx12-generic_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx12-generic"
+  OUTPUT
+    "dispatch_gfx12-generic/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx12-5-generic_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx12-5-generic_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx12-5-generic"
+  OUTPUT
+    "dispatch_gfx12-5-generic/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx940_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx940_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx940"
+  OUTPUT
+    "dispatch_gfx940/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx941_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx941_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx941"
+  OUTPUT
+    "dispatch_gfx941/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1101_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1101_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1101"
+  OUTPUT
+    "dispatch_gfx1101/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1102_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1102_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1102"
+  OUTPUT
+    "dispatch_gfx1102/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1103_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1103_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1103"
+  OUTPUT
+    "dispatch_gfx1103/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1151_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1151_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1151"
+  OUTPUT
+    "dispatch_gfx1151/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1152_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1152_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1152"
+  OUTPUT
+    "dispatch_gfx1152/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1153_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1153_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1153"
+  OUTPUT
+    "dispatch_gfx1153/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1170_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1170_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1170"
+  OUTPUT
+    "dispatch_gfx1170/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1171_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1171_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1171"
+  OUTPUT
+    "dispatch_gfx1171/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1172_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1172_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1172"
+  OUTPUT
+    "dispatch_gfx1172/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1201_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1201_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1201"
+  OUTPUT
+    "dispatch_gfx1201/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1251_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1251_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1251"
+  OUTPUT
+    "dispatch_gfx1251/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx9-4-generic_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx9-4-generic_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx9-4-generic"
+  OUTPUT
+    "dispatch_gfx9-4-generic/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx1250-a0_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx1250-a0_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx1250-a0"
+  OUTPUT
+    "dispatch_gfx1250-a0/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE)
+loom_kernel_binary(
+  NAME
+    "dispatch_gfx90a_command_buffer_dispatch_test"
+  COMPONENT
+    "//runtime/src/iree/hal/drivers/amd/gpu/cts:dispatch_gfx90a_command_buffer_dispatch_test"
+  TARGET
+    "::cts_profile_gfx90a"
+  OUTPUT
+    "dispatch_gfx90a/command_buffer_dispatch_test.bin"
+  LIBRARIES
+    ::dispatch_source_command_buffer_dispatch_test
+  TESTONLY
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx942"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx942/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx942/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx942/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx942"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx942"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx950"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx950/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx950/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx950/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx950"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx950"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1100"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1100/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1100/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1100/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1100"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1100"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1200"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1200/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1200/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1200/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1200"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1200"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1250"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1250/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1250/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1250/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1250"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1250"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1150"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1150/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1150/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1150/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1150"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1150"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx11-generic"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx11-generic/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx11-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx11-generic/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx11_generic"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx11-generic"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx12-generic"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx12-generic/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx12-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx12-generic/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx12_generic"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx12-generic"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx12-5-generic"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx12-5-generic/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx12-5-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx12-5-generic/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx12_5_generic"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx12-5-generic"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx940"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx940/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx940/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx940/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx940"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx940"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx941"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx941/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx941/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx941/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx941"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx941"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1101"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1101/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1101/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1101/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1101"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1101"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1102"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1102/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1102/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1102/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1102"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1102"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1103"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1103/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1103/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1103/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1103"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1103"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1151"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1151/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1151/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1151/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1151"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1151"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1152"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1152/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1152/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1152/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1152"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1152"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1153"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1153/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1153/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1153/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1153"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1153"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1170"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1170/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1170/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1170/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1170"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1170"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1171"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1171/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1171/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1171/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1171"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1171"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1172"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1172/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1172/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1172/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1172"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1172"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1201"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1201/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1201/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1201/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1201"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1201"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1251"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1251/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1251/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1251/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1251"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1251"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx9-4-generic"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx9-4-generic/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx9-4-generic/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx9-4-generic/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx9_4_generic"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx9-4-generic"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx1250-a0"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1250-a0/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1250-a0/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx1250-a0/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx1250_a0"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx1250-a0"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_runtime_hal_cts_testdata(
+  NAME
+    "dispatch_data_gfx90a"
+  SRCS
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx90a/command_buffer_dispatch_constants_bindings_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx90a/command_buffer_dispatch_multi_workgroup_test.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/dispatch_gfx90a/command_buffer_dispatch_test.bin"
+  BACKEND_NAMES
+    "rdna"
+    "cdna"
+  TARGET_NAME
+    "gfx90a"
+  TARGET_FAMILY
+    "amdgpu"
+  TARGET_KEY
+    "gfx90a"
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND (LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE))
+set(_dispatch_testdata_platform_deps "")
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx940)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx941)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx942)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx950)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1100)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1101)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1102)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1103)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1200)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1201)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1250)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1150)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1151)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1152)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1153)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1170)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1171)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1172)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1251)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx90a)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx9-4-generic)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx11-generic)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx12-generic)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx12-5-generic)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE)
+  list(APPEND _dispatch_testdata_platform_deps ::dispatch_data_gfx1250-a0)
+endif()
+iree_cc_library(
+  NAME
+    dispatch_testdata
+  DEPS
+    ${_dispatch_testdata_platform_deps}
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND (LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1251_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX1250_A0_CORE))
+iree_cc_test(
+  NAME
+    queue_dispatch_test
+  DEPS
+    ::backends
+    ::dispatch_testdata
+    iree::hal::cts::queue::all_executable_tests
     iree::hal::cts::util::test_main
   LABELS
     "iree-build-requirement=libamdf"
