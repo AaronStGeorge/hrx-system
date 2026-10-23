@@ -295,7 +295,7 @@ loom_cc_library(
     visibility = _AMDGPU_TOOLING_VISIBILITY,
     deps = [
         ":target_identity",
-        "//loom/src/loom/target:profile",
+        "//loom/src/loom/target:types",
     ],
 )
 

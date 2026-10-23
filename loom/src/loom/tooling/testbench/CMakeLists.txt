@@ -17,7 +17,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
-    loom::ir::builders
+    loom::ir::headers
     loom::ops::check::op_defs
   PUBLIC
 )

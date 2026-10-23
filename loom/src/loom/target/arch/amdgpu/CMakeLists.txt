@@ -254,7 +254,7 @@ loom_cc_library(
     "profile_types.h"
   DEPS
     ::target_identity
-    loom::target::profile
+    loom::target::types
   PUBLIC
 )
 endif()
