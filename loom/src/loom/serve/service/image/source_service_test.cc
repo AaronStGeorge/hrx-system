@@ -930,6 +930,12 @@ TEST_P(SourceImageServiceTest, SelectionWaitsForWholeImageAndEncoderRelease) {
 
 TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
+  // A parameter-free model needs no device allocation until an invocation is
+  // admitted. Compilation and tokenizer preparation leave its timeline idle.
+  const auto loaded =
+      loom_serve_residency_frontier(loom_serve_image_model_residency(model_));
+  EXPECT_EQ(loaded.values[0], 0u);
+  EXPECT_EQ(loaded.values[1], 0u);
   loom_serve_image_prepared_t prepared;
   IREE_ASSERT_OK(
       PrepareSingle(IREE_SV(R"({"prompt":"x"})"), kWidth, kHeight, &prepared));

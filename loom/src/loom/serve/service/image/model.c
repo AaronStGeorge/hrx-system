@@ -10,7 +10,6 @@
 #include "iree/vm/buffer.h"
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
-#include "loom/serve/runtime/execution/retirement.h"
 #include "loom/serve/runtime/parameter/bank.h"
 #include "loom/serve/runtime/parameter/module.h"
 #include "loom/serve/runtime/parameter/sources.h"
@@ -44,8 +43,6 @@ struct loom_serve_image_model_t {
   loom_serve_device_t* owner;
   // Owned model work and feedback timelines, independent of other models.
   loom_serve_execution_t* execution;
-  // Final input/output view ownership before host payload release.
-  loom_serve_retirement_t retirement;
   // Owned checkpoint roots and plans, outliving borrowing invocation
   // residencies.
   loom_serve_parameter_bank_t* parameters;
@@ -61,8 +58,11 @@ struct loom_serve_image_model_t {
     uint32_t stage;
     // Source-owned next-part cursor; negative denotes terminal output.
     int32_t cursor;
-    // Atomically acquired output and independently releasable workspace.
-    iree_hal_pool_reservation_request_t storage[2];
+    // Atomically acquired input, output, and independently releasable
+    // workspace.
+    iree_hal_pool_reservation_request_t storage[3];
+    // Exact opaque input retained across every part, released after final work.
+    iree_hal_buffer_t* input;
     // Compiler live values preserved across parts, released after final work.
     iree_hal_buffer_t* workspace;
     // Independent result retained through the final feedback submission.
@@ -114,11 +114,19 @@ struct loom_serve_image_model_t {
     // Cold-resolved image-submission and feedback function.
     iree_vm_function_t generate;
   } control;
-  // Fixed-capacity opaque input; request output and workspace are queue-owned.
-  iree_hal_buffer_t* input;
   // Exact-size serialized invocation feedback, reused until the next prepare.
   iree_byte_span_t output;
 };
+
+static void loom_serve_image_model_release_buffers(
+    loom_serve_image_model_t* model) {
+  iree_hal_buffer_release(model->invocation.input);
+  model->invocation.input = NULL;
+  iree_hal_buffer_release(model->invocation.workspace);
+  model->invocation.workspace = NULL;
+  iree_hal_buffer_release(model->invocation.output);
+  model->invocation.output = NULL;
+}
 
 static void loom_serve_image_model_release_consumers(
     loom_serve_image_model_t* model) {
@@ -133,12 +141,7 @@ static void loom_serve_image_model_release_consumers(
   model->control.parameters = NULL;
   loom_serve_stage_table_free(model->stages.table);
   model->stages.table = NULL;
-  iree_hal_buffer_release(model->invocation.workspace);
-  model->invocation.workspace = NULL;
-  iree_hal_buffer_release(model->invocation.output);
-  model->invocation.output = NULL;
-  iree_hal_buffer_release(model->input);
-  model->input = NULL;
+  loom_serve_image_model_release_buffers(model);
 }
 
 void loom_serve_image_model_retire(loom_serve_image_model_t* model,
@@ -152,7 +155,6 @@ void loom_serve_image_model_retire(loom_serve_image_model_t* model,
     loom_serve_execution_set_retirement_observer(model->execution, wake,
                                                  user_data);
   }
-  loom_serve_retirement_set_observer(&model->retirement, wake, user_data);
   loom_serve_image_model_release_consumers(model);
   loom_serve_parameter_bank_retire(model->parameters, wake, user_data);
 }
@@ -165,7 +167,7 @@ bool loom_serve_image_model_is_retired(loom_serve_image_model_t* model) {
       !model->execution || loom_serve_execution_is_retired(model->execution);
   retired &= loom_serve_parameter_bank_is_retired(model->parameters);
   retired &= loom_serve_executables_is_retired(model->executables);
-  return retired && loom_serve_retirement_is_idle(&model->retirement);
+  return retired;
 }
 
 // Consumes a retired model or a load that never submitted device work. A failed
@@ -185,7 +187,6 @@ static iree_status_t loom_serve_image_model_destroy_resources(
   iree_status_t status = loom_serve_parameter_bank_free(model->parameters);
   if (iree_status_is_ok(status)) {
     model->parameters = NULL;
-    loom_serve_retirement_deinitialize(&model->retirement);
     iree_vm_buffer_release(model->control.tags);
     iree_vm_buffer_release(model->control.state);
     for (uint32_t i = 0; i < model->stages.count; ++i) {
@@ -219,7 +220,6 @@ iree_status_t loom_serve_image_model_free(loom_serve_image_model_t* model) {
   iree_status_t status = loom_serve_execution_drain(model->execution);
   loom_serve_parameter_bank_await_retirement(model->parameters);
   loom_serve_executables_await_retirement(model->executables);
-  loom_serve_retirement_await(&model->retirement);
   return iree_status_join(status,
                           loom_serve_image_model_destroy_resources(model));
 }
@@ -531,21 +531,9 @@ static iree_status_t loom_serve_image_model_link(
                     .command_quantum = model->command_quantum},
       .cache = model->specialization_cache,
       .parameter_cache = {16, 1024 * 1024 * 1024}};
-  iree_status_t status = loom_serve_stage_table_allocate(
+  IREE_RETURN_IF_ERROR(loom_serve_stage_table_allocate(
       &options.recording, NULL, model->stages.count, model->stages.values,
-      host_allocator, &model->stages.table);
-  if (iree_status_is_ok(status)) {
-    const iree_hal_pool_reservation_request_t request =
-        iree_hal_make_pool_reservation_request(model->input_capacity, 1);
-    status = loom_serve_execution_alloca_from_pool(
-        model->execution, loom_serve_device_storage_pool(model->owner), 1,
-        &request, &model->input);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_serve_retirement_track(&model->retirement, &model->input,
-                                         host_allocator);
-  }
-  IREE_RETURN_IF_ERROR(status);
+      host_allocator, &model->stages.table));
   IREE_RETURN_IF_ERROR(loom_serve_image_create_control(model, module));
   loom_serve_executable_options_t bound_options = options;
   bound_options.stages = model->stages.table;
@@ -716,7 +704,6 @@ iree_status_t loom_serve_image_load_allocate(
       host_allocator, sizeof(*load->model), (void**)&load->model);
   if (iree_status_is_ok(status)) {
     load->model->host_allocator = host_allocator;
-    loom_serve_retirement_initialize(&load->model->retirement);
     load->model->owner = device;
     load->model->command_quantum = options->command_quantum;
     load->model->specialization_cache = options->specialization_cache;
@@ -1040,7 +1027,7 @@ static iree_status_t loom_serve_image_model_submit_stage(
       iree_vm_variant_from_i32(model->invocation.cursor),
       iree_vm_variant_from_i64((int64_t)model->output.data_length),
       iree_hal_buffer_variant_from_ptr_borrowed(&model->control.hal_types,
-                                                model->input),
+                                                model->invocation.input),
       iree_hal_buffer_variant_from_ptr_borrowed(&model->control.hal_types,
                                                 model->invocation.output),
       iree_hal_buffer_variant_from_ptr_borrowed(&model->control.hal_types,
@@ -1170,29 +1157,35 @@ iree_status_t loom_serve_image_model_advance_batch(
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "image frame exceeds device address space");
     }
-    model->invocation.storage[0] = iree_hal_make_pool_reservation_request(
-        model->output.data_length, alignment);
     model->invocation.storage[1] = iree_hal_make_pool_reservation_request(
+        model->output.data_length, alignment);
+    model->invocation.storage[2] = iree_hal_make_pool_reservation_request(
         stage->transient.required_byte_length, alignment);
     const iree_device_size_t workspace_bytes =
         iree_device_align(model->output.data_length, alignment) +
         stage->transient.required_byte_length;
     const iree_device_size_t input_bytes =
-        iree_hal_buffer_byte_length(model->input);
-    if (input_bytes > IREE_DEVICE_SIZE_MAX - workspace_bytes) {
+        iree_vm_buffer_length(model->invocation.payload);
+    if (input_bytes > IREE_DEVICE_SIZE_MAX - (alignment - 1) ||
+        iree_device_align(input_bytes, alignment) >
+            IREE_DEVICE_SIZE_MAX - workspace_bytes) {
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "image invocation exceeds device address space");
     }
+    model->invocation.storage[0] =
+        iree_hal_make_pool_reservation_request(input_bytes, alignment);
+    const iree_device_size_t invocation_bytes =
+        iree_device_align(input_bytes, alignment) + workspace_bytes;
     // The output never escapes the invocation: collection follows both work
     // and feedback retirement. Its storage and all split command parts share
     // one private high-water until that collection releases the admission pin.
     IREE_RETURN_IF_ERROR(loom_serve_residency_prepare_working_set(
-        loom_serve_executables_residency(model->executables),
-        input_bytes + workspace_bytes, 0));
-    // Register geometry for both members of this allocation transaction so
+        loom_serve_executables_residency(model->executables), invocation_bytes,
+        0));
+    // Register geometry for every member of this allocation transaction so
     // they can occupy one backing range without sharing their lifetimes.
     return loom_serve_execution_reserve_workspace(model->execution,
-                                                  workspace_bytes, alignment);
+                                                  invocation_bytes, alignment);
   }
   return iree_ok_status();
 }
@@ -1202,13 +1195,14 @@ static iree_status_t loom_serve_image_begin(loom_serve_image_model_t* model) {
   iree_const_byte_span_t input = iree_const_byte_span_empty();
   IREE_RETURN_IF_ERROR(iree_vm_buffer_map_read(
       payload, 0, iree_vm_buffer_length(payload), &input));
-  const bool has_workspace = model->invocation.storage[1].allocation_size != 0;
-  iree_hal_buffer_t* buffers[2] = {NULL, NULL};
+  const bool has_workspace = model->invocation.storage[2].allocation_size != 0;
+  iree_hal_buffer_t* buffers[3] = {NULL, NULL, NULL};
   IREE_RETURN_IF_ERROR(
-      loom_serve_execution_alloca(model->execution, has_workspace ? 2 : 1,
+      loom_serve_execution_alloca(model->execution, has_workspace ? 3 : 2,
                                   model->invocation.storage, buffers));
-  model->invocation.output = buffers[0];
-  model->invocation.workspace = buffers[1];
+  model->invocation.input = buffers[0];
+  model->invocation.output = buffers[1];
+  model->invocation.workspace = buffers[2];
   if (!has_workspace) {
     // The invocation ABI still has a workspace binding when no live values
     // require storage. Preserve an empty view without allocating backing.
@@ -1219,7 +1213,7 @@ static iree_status_t loom_serve_image_begin(loom_serve_image_model_t* model) {
   iree_hal_transfer_operation_t upload = {0};
   upload.type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD;
   upload.upload.source = input.data;
-  upload.upload.target_buffer = model->input;
+  upload.upload.target_buffer = model->invocation.input;
   upload.upload.length = input.data_length;
   uint64_t completion = 0;
   IREE_RETURN_IF_ERROR(
@@ -1245,19 +1239,21 @@ iree_status_t loom_serve_image_model_submit(
     }
   }
   if (iree_status_is_ok(status) && model->invocation.cursor < 0) {
-    // Only compiler live values follow the work timeline. Feedback owns the
-    // independent output, so it cannot delay workspace reuse. Cancellation
+    // Input and compiler live values follow the work timeline. Feedback owns
+    // the independent output, so it cannot delay workspace reuse. Cancellation
     // between parts has the same last-work boundary and no output consumer.
-    if (model->invocation.workspace &&
-        model->invocation.storage[1].allocation_size) {
+    if (model->invocation.input) {
+      uint64_t completion = 0;
+      status = loom_serve_execution_dealloca(
+          model->execution, model->invocation.input, &completion);
+    }
+    if (iree_status_is_ok(status) && model->invocation.workspace &&
+        model->invocation.storage[2].allocation_size) {
       uint64_t completion = 0;
       status = loom_serve_execution_dealloca(
           model->execution, model->invocation.workspace, &completion);
     }
-    iree_hal_buffer_release(model->invocation.workspace);
-    model->invocation.workspace = NULL;
-    iree_hal_buffer_release(model->invocation.output);
-    model->invocation.output = NULL;
+    loom_serve_image_model_release_buffers(model);
   }
   if (iree_status_is_ok(status)) {
     *out_frontier = loom_serve_execution_frontier(model->execution);
