@@ -48,7 +48,7 @@ loom_generated_cc_library(
     "canonicalize.c"
     "facts.c"
     "location.c"
-    "source_abi.c"
+    "source_signature.c"
     "verify.c"
   TEXTUAL_HDRS
     "ops.inc"
@@ -59,7 +59,7 @@ loom_generated_cc_library(
   HDRS
     "location.h"
     "ops.h"
-    "source_abi.h"
+    "source_signature.h"
   ARGS
     "--dialect=func"
   EXTRA_OUTPUT_FLAGS

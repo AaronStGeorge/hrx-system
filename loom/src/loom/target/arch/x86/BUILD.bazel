@@ -81,9 +81,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "source_abi",
-    srcs = ["source_abi.c"],
-    hdrs = ["source_abi.h"],
+    name = "source_signature",
+    srcs = ["source_signature.c"],
+    hdrs = ["source_signature.h"],
     visibility = _X86_LOWER_VISIBILITY,
     deps = [
         "//loom/src/loom/ops/func",
@@ -92,10 +92,10 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "source_abi_test",
-    srcs = ["source_abi_test.cc"],
+    name = "source_signature_test",
+    srcs = ["source_signature_test.cc"],
     deps = [
-        ":source_abi",
+        ":source_signature",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//runtime/src/iree/base/internal:arena",

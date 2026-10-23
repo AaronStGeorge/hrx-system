@@ -97,4 +97,4 @@
     [LOOM_KW_CONFLICTS] = (const uint8_t*)"\x09" "conflicts",
     [LOOM_KW_RUN] = (const uint8_t*)"\x03" "run",
     [LOOM_KW_POOL] = (const uint8_t*)"\x04" "pool",
-    [LOOM_KW_SOURCE_ABI] = (const uint8_t*)"\x0a" "source_abi",
+    [LOOM_KW_SOURCE_SIGNATURE] = (const uint8_t*)"\x10" "source_signature",

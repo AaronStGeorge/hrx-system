@@ -57,11 +57,11 @@ endif()
 if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
-    source_abi
+    source_signature
   HDRS
-    "source_abi.h"
+    "source_signature.h"
   SRCS
-    "source_abi.c"
+    "source_signature.c"
   DEPS
     iree::base
     loom::ops::func
@@ -72,11 +72,11 @@ endif()
 if(LOOM_TARGET_ARCH_X86)
 loom_cc_test(
   NAME
-    source_abi_test
+    source_signature_test
   SRCS
-    "source_abi_test.cc"
+    "source_signature_test.cc"
   DEPS
-    ::source_abi
+    ::source_signature
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main

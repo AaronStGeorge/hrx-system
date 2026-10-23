@@ -12,11 +12,11 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
-    source_abi
+    source_signature
   HDRS
-    "source_abi.h"
+    "source_signature.h"
   SRCS
-    "source_abi.c"
+    "source_signature.c"
   DEPS
     iree::base
     iree::base::internal::arena
@@ -29,7 +29,7 @@ loom_cc_library(
     loom::target::arch::x86::call_abi
     loom::target::arch::x86::descriptors::entry
     loom::target::arch::x86::register_classes
-    loom::target::arch::x86::source_abi
+    loom::target::arch::x86::source_signature
     loom::target::registers
   PUBLIC
 )
@@ -52,7 +52,7 @@ loom_cc_library(
     "registry.c"
     "vector_construct.c"
   DEPS
-    ::source_abi
+    ::source_signature
     iree::base
     loom::codegen::low::descriptors
     loom::codegen::low::lower

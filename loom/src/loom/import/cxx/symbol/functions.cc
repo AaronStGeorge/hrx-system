@@ -28,7 +28,7 @@
 #include "loom/import/cxx/source/error.h"
 #include "loom/import/cxx/source/expressions.h"
 #include "loom/import/cxx/symbol/immutable_objects.h"
-#include "loom/import/cxx/symbol/source_abi.h"
+#include "loom/import/cxx/symbol/source_signature.h"
 #include "loom/import/cxx/value/signature.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
@@ -1173,8 +1173,8 @@ void Functions::build_declarations(Types& types, Locations& locations,
     auto bound_signature = bind_callable_signature(
         {symbol->canonical(), ImplicitObjectABI::None}, source, types, builder,
         arguments, results, tied_results, predicates);
-    const loom_attribute_t source_abi =
-        build_c_source_abi(unit_, diagnostics_, module_, symbol, source, types);
+    const loom_attribute_t source_signature = build_c_source_signature(
+        unit_, diagnostics_, module_, symbol, source, types);
 
     loom_func_decl_build_flags_t flags = 0;
     loom_string_id_t import_module = LOOM_STRING_ID_INVALID;
@@ -1204,7 +1204,7 @@ void Functions::build_declarations(Types& types, Locations& locations,
         import_symbol, annotated(symbol, "device") ? LOOM_FUNC_CC_DEVICE : 0,
         /*effect_contract=*/0, /*temperature=*/0,
         annotated(symbol, "force_inline") ? LOOM_INLINE_POLICY_INLINE : 0, {},
-        source_abi, /*abi=*/0, {}, LOOM_STRING_ID_INVALID, {},
+        source_signature, /*abi=*/0, {}, LOOM_STRING_ID_INVALID, {},
         callees_.at({symbol->canonical(), ImplicitObjectABI::None}),
         arguments.data(), arguments.size(), results.data(), results.size(),
         tied_results.data(), tied_results.size(), predicates.data(),
@@ -1425,7 +1425,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
     launches_.reject_ordinary_function(symbol);
     const bool link_once =
         exported_.contains(symbol) && symbol->canonical()->isInline();
-    const loom_attribute_t source_abi = build_c_source_abi(
+    const loom_attribute_t source_signature = build_c_source_signature(
         unit_, diagnostics_, module_, symbol, definition, types);
     check(loom_func_def_build(
         builder,
@@ -1443,7 +1443,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
         annotated(symbol, "device") ? LOOM_FUNC_CC_DEVICE : 0,
         /*effect_contract=*/0, /*temperature=*/0,
         annotated(symbol, "force_inline") ? LOOM_INLINE_POLICY_INLINE : 0, {},
-        source_abi, 0, {}, 0, {},
+        source_signature, 0, {}, 0, {},
         callees_.at({symbol->canonical(), instance.receiver_abi}),
         arguments.data(), arguments.size(), results.data(), results.size(),
         tied_results.data(), tied_results.size(), predicates.data(),

@@ -437,7 +437,7 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_effect_contract, 4, loom_callable_effe
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_temperature, 5, loom_func_temperature_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_inline_policy, 6, loom_inline_policy_t)
 LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_func_def_predicates, 7)
-LOOM_DEFINE_ATTR_PARAMETERIZED(loom_func_def_source_abi, 8)
+LOOM_DEFINE_ATTR_PARAMETERIZED(loom_func_def_source_signature, 8)
 LOOM_DEFINE_ATTR_SYMBOL(loom_func_def_target, 9)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_abi, 10, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_func_def_abi_attrs, 11)
@@ -472,7 +472,7 @@ iree_status_t loom_func_def_build(
     loom_optional uint8_t temperature,
     loom_optional uint8_t inline_policy,
     loom_optional loom_symbol_ref_t target,
-    loom_optional loom_attribute_t source_abi,
+    loom_optional loom_attribute_t source_signature,
     loom_optional uint8_t abi,
     loom_optional loom_named_attr_slice_t abi_attrs,
     loom_optional loom_string_id_t export_symbol,
@@ -505,7 +505,7 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_cc, 4, loom_func_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_effect_contract, 5, loom_callable_effect_contract_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_temperature, 6, loom_func_temperature_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_inline_policy, 7, loom_inline_policy_t)
-LOOM_DEFINE_ATTR_PARAMETERIZED(loom_func_decl_source_abi, 8)
+LOOM_DEFINE_ATTR_PARAMETERIZED(loom_func_decl_source_signature, 8)
 LOOM_DEFINE_ATTR_SYMBOL(loom_func_decl_target, 9)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_abi, 10, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_func_decl_abi_attrs, 11)
@@ -542,7 +542,7 @@ iree_status_t loom_func_decl_build(
     loom_optional uint8_t temperature,
     loom_optional uint8_t inline_policy,
     loom_optional loom_symbol_ref_t target,
-    loom_optional loom_attribute_t source_abi,
+    loom_optional loom_attribute_t source_signature,
     loom_optional uint8_t abi,
     loom_optional loom_named_attr_slice_t abi_attrs,
     loom_optional loom_string_id_t export_symbol,

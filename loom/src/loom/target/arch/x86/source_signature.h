@@ -6,33 +6,34 @@
 
 // x86-64 SysV classification for complete verified C source objects.
 
-#ifndef LOOM_TARGET_ARCH_X86_SOURCE_ABI_H_
-#define LOOM_TARGET_ARCH_X86_SOURCE_ABI_H_
+#ifndef LOOM_TARGET_ARCH_X86_SOURCE_SIGNATURE_H_
+#define LOOM_TARGET_ARCH_X86_SOURCE_SIGNATURE_H_
 
-#include "loom/ops/func/source_abi.h"
+#include "loom/ops/func/source_signature.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Maximum number of eightbytes carried by one native vector register.
-#define LOOM_X86_SOURCE_ABI_MAX_EIGHTBYTE_COUNT 8
+#define LOOM_X86_SOURCE_SIGNATURE_MAX_EIGHTBYTE_COUNT 8
 
 // SysV AMD64 classes used by the supported C object family. MEMORY is retained
-// explicitly while x87 and complex classes are rejected by the source ABI.
-typedef uint8_t loom_x86_source_abi_class_t;
-enum loom_x86_source_abi_class_e {
-  LOOM_X86_SOURCE_ABI_CLASS_NO_CLASS = 0,
-  LOOM_X86_SOURCE_ABI_CLASS_INTEGER = 1,
-  LOOM_X86_SOURCE_ABI_CLASS_SSE = 2,
-  LOOM_X86_SOURCE_ABI_CLASS_SSEUP = 3,
-  LOOM_X86_SOURCE_ABI_CLASS_MEMORY = 4,
+// explicitly while x87 and complex classes are rejected by the source
+// signature.
+typedef uint8_t loom_x86_source_signature_class_t;
+enum loom_x86_source_signature_class_e {
+  LOOM_X86_SOURCE_SIGNATURE_CLASS_NO_CLASS = 0,
+  LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER = 1,
+  LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE = 2,
+  LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP = 3,
+  LOOM_X86_SOURCE_SIGNATURE_CLASS_MEMORY = 4,
 };
-static_assert(LOOM_X86_SOURCE_ABI_CLASS_MEMORY <= UINT8_MAX,
-              "x86 source ABI classes must fit in one byte");
+static_assert(LOOM_X86_SOURCE_SIGNATURE_CLASS_MEMORY <= UINT8_MAX,
+              "x86 source signature classes must fit in one byte");
 
 // Complete classification of one root C source object.
-typedef struct loom_x86_source_abi_classification_t {
+typedef struct loom_x86_source_signature_classification_t {
   // Exact source object footprint in bytes.
   uint32_t byte_length;
   // Required source object alignment in bytes.
@@ -45,24 +46,24 @@ typedef struct loom_x86_source_abi_classification_t {
   // True when the complete object crosses the ABI through memory.
   bool is_memory;
   // Direct object classes in increasing byte-offset order.
-  loom_x86_source_abi_class_t
-      eightbytes[LOOM_X86_SOURCE_ABI_MAX_EIGHTBYTE_COUNT];
-} loom_x86_source_abi_classification_t;
-static_assert(sizeof(loom_x86_source_abi_classification_t) == 20,
-              "x86 source ABI classification must be exactly 20 bytes");
+  loom_x86_source_signature_class_t
+      eightbytes[LOOM_X86_SOURCE_SIGNATURE_MAX_EIGHTBYTE_COUNT];
+} loom_x86_source_signature_classification_t;
+static_assert(sizeof(loom_x86_source_signature_classification_t) == 20,
+              "x86 source signature classification must be exactly 20 bytes");
 
 // Classifies one root in a verified C source signature. |maximum_vector_bytes|
 // is 16, 32, or 64 when the selected profile can transport the corresponding
 // native vector class, and zero when it exposes no SIMD boundary registers.
 // Returns false only for source families deliberately outside the supported
 // x86 interop contract. ABI-mandated stack objects return true with is_memory.
-bool loom_x86_source_abi_classify(
+bool loom_x86_source_signature_classify(
     const loom_func_c_abi_signature_t* signature, uint32_t root_type_index,
     uint16_t maximum_vector_bytes,
-    loom_x86_source_abi_classification_t* out_classification);
+    loom_x86_source_signature_classification_t* out_classification);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_X86_SOURCE_ABI_H_
+#endif  // LOOM_TARGET_ARCH_X86_SOURCE_SIGNATURE_H_

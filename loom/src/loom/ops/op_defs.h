@@ -1143,7 +1143,7 @@ uint8_t loom_func_like_abi(loom_func_like_t func);
 
 // Returns the retained source-language ABI contract, or an absent attribute
 // when the callable has no source boundary contract.
-loom_attribute_t loom_func_like_source_abi(loom_func_like_t func);
+loom_attribute_t loom_func_like_source_signature(loom_func_like_t func);
 
 // Returns the target ABI payload attrs, or an empty slice if absent.
 loom_named_attr_slice_t loom_func_like_abi_attrs(loom_func_like_t func);

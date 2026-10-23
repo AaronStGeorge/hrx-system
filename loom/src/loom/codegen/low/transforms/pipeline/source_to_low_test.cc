@@ -19,8 +19,8 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/transforms/allocation.h"
 #include "loom/codegen/low/transforms/dce.h"
-#include "loom/codegen/low/transforms/pipeline/source_abi_test_policy.h"
 #include "loom/codegen/low/transforms/pipeline/source_invocation_facts.h"
+#include "loom/codegen/low/transforms/pipeline/source_signature_test_policy.h"
 #include "loom/codegen/pass_environment.h"
 #include "loom/error/error_catalog.h"
 #include "loom/format/text/parser.h"
@@ -1008,10 +1008,12 @@ TEST_F(LowLowerPassTest,
   IREE_ASSERT_OK(status);
 }
 
-TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
+TEST_F(LowLowerPassTest,
+       SourceSignatureProjectsDefinitionsDeclarationsAndCalls) {
   ModulePtr module = Parse(IREE_SV(
       "test.target<low_core> @target\n"
-      "func.def target(@target) source_abi(#func.abi.c.signature<arguments = "
+      "func.def target(@target) "
+      "source_signature(#func.abi.c.signature<arguments = "
       "[1], results = [1], types = [#func.abi.c.type<unsigned_integer, "
       "byte_length = 4, byte_alignment = 4, component_count = 1, bitwidth = "
       "32>, #func.abi.c.type<record, byte_length = 8, byte_alignment = 4, "
@@ -1022,7 +1024,8 @@ TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
       "i32) where [eq(%out_left, %right), eq(%out_right, %left)] {\n"
       "  func.return %right, %left : i32, i32\n"
       "}\n"
-      "func.decl target(@target) source_abi(#func.abi.c.signature<arguments = "
+      "func.decl target(@target) "
+      "source_signature(#func.abi.c.signature<arguments = "
       "[1], results = [1], types = [#func.abi.c.type<unsigned_integer, "
       "byte_length = 4, byte_alignment = 4, component_count = 1, bitwidth = "
       "32>, #func.abi.c.type<record, byte_length = 8, byte_alignment = 4, "
@@ -1032,7 +1035,8 @@ TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
       "@external_pair(%left: i32, %right: i32) -> (%out_left: i32, "
       "%out_right: i32) where [eq(%out_left, %right), eq(%out_right, "
       "%left)]\n"
-      "func.def target(@target) source_abi(#func.abi.c.signature<arguments = "
+      "func.def target(@target) "
+      "source_signature(#func.abi.c.signature<arguments = "
       "[1], results = [], types = [#func.abi.c.type<unsigned_integer, "
       "byte_length = 4, byte_alignment = 4, component_count = 1, bitwidth = "
       "32>, #func.abi.c.type<record, byte_length = 8, byte_alignment = 4, "
@@ -1058,9 +1062,9 @@ TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
       "}\n"));
 
   loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
-  policy.source_abi = {
-      .plan = loom_test_low_plan_source_abi,
-      .emit = loom_test_low_emit_source_abi,
+  policy.source_signature = {
+      .plan = loom_test_low_plan_source_signature,
+      .emit = loom_test_low_emit_source_signature,
   };
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {
@@ -1186,13 +1190,14 @@ TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
   EXPECT_EQ(result_assume_count, 2);
 }
 
-TEST_F(LowLowerPassTest, SourceAbiRequiresTargetObjectFunctionPolicy) {
-  ModulePtr module = Parse(IREE_SV(
-      "test.target<low_core> @target\n"
-      "func.def target(@target) source_abi(#func.abi.c.signature<arguments = "
-      "[], results = [], types = []>) @external_c() {\n"
-      "  func.return\n"
-      "}\n"));
+TEST_F(LowLowerPassTest, SourceSignatureRequiresTargetObjectFunctionPolicy) {
+  ModulePtr module =
+      Parse(IREE_SV("test.target<low_core> @target\n"
+                    "func.def target(@target) "
+                    "source_signature(#func.abi.c.signature<arguments = "
+                    "[], results = [], types = []>) @external_c() {\n"
+                    "  func.return\n"
+                    "}\n"));
 
   DiagnosticEmissionCollector collector;
   IREE_ASSERT_OK(RunSourceToLow(&policy_registry_, module.get(), &collector));

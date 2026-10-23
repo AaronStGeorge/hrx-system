@@ -161,8 +161,8 @@ TEST_F(LowLowerFunctionBoundaryTest,
       &module_builder, /*build_flags=*/0, /*visibility=*/0, /*linkage=*/0,
       /*retain=*/0,
       /*cc=*/0, /*effect_contract=*/0, /*temperature=*/0, /*inline_policy=*/0,
-      loom_symbol_ref_null(), /*source_abi=*/loom_attr_absent(), /*abi=*/0,
-      loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+      loom_symbol_ref_null(), /*source_signature=*/loom_attr_absent(),
+      /*abi=*/0, loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), symbol, argument_types,
       IREE_ARRAYSIZE(argument_types), &i32_type, 1, nullptr, 0, nullptr, 0,
       LOOM_LOCATION_UNKNOWN, &source_op));
@@ -279,11 +279,11 @@ TEST_F(LowLowerFunctionBoundaryTest,
 }
 
 TEST_F(LowLowerFunctionBoundaryTest,
-       SourceAbiWithoutProjectionUsesSelectedTargetBoundary) {
-  loom_attribute_t source_abi = loom_attr_absent();
+       SourceSignatureWithoutProjectionUsesSelectedTargetBoundary) {
+  loom_attribute_t source_signature = loom_attr_absent();
   IREE_ASSERT_OK(loom_func_abi_c_signature_attr_make(
       module_, loom_make_i64_array(nullptr, 0), loom_make_i64_array(nullptr, 0),
-      loom_parameterized_attr_array_empty(), &source_abi));
+      loom_parameterized_attr_array_empty(), &source_signature));
 
   loom_builder_t builder;
   loom_builder_initialize(module_, &module_->arena, loom_module_block(module_),
@@ -292,7 +292,7 @@ TEST_F(LowLowerFunctionBoundaryTest,
   IREE_ASSERT_OK(loom_func_def_build(
       &builder, /*build_flags=*/0, /*visibility=*/0, /*linkage=*/0,
       /*retain=*/0, /*cc=*/0, /*effect_contract=*/0, /*temperature=*/0,
-      /*inline_policy=*/0, loom_symbol_ref_null(), source_abi, /*abi=*/0,
+      /*inline_policy=*/0, loom_symbol_ref_null(), source_signature, /*abi=*/0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), AddSymbol(IREE_SV("external_c")),
       /*arg_types=*/nullptr, /*arg_count=*/0, /*result_types=*/nullptr,
@@ -312,7 +312,8 @@ TEST_F(LowLowerFunctionBoundaryTest,
 
   IREE_ASSERT_OK(loom_low_lower_function_boundary_validate(&mapping_context_));
   EXPECT_EQ(result_.error_count, 0u);
-  EXPECT_EQ(mapping_context_.lowering->boundary.source_abi_projection, nullptr);
+  EXPECT_EQ(mapping_context_.lowering->boundary.source_signature_projection,
+            nullptr);
   EXPECT_EQ(mapping_context_.lowering->boundary.argument_map, nullptr);
 }
 
@@ -332,8 +333,8 @@ TEST_F(LowLowerFunctionBoundaryTest,
           LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_SYMBOL,
       /*visibility=*/0, /*retain=*/0, import_module, import_symbol,
       /*cc=*/0, /*effect_contract=*/0, /*temperature=*/0, /*inline_policy=*/0,
-      loom_symbol_ref_null(), /*source_abi=*/loom_attr_absent(), /*abi=*/0,
-      loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+      loom_symbol_ref_null(), /*source_signature=*/loom_attr_absent(),
+      /*abi=*/0, loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), symbol, &i32_type, 1, &i32_type, 1,
       nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &source_op));
   const loom_func_like_t source_declaration =
@@ -436,8 +437,8 @@ TEST_P(LowLowerResultMappingTest, DefinitionConsumesPreparedBoundary) {
       &builder, /*build_flags=*/0, /*visibility=*/0, /*linkage=*/0,
       /*retain=*/0, /*cc=*/0,
       /*effect_contract=*/0, /*temperature=*/0, /*inline_policy=*/0,
-      loom_symbol_ref_null(), /*source_abi=*/loom_attr_absent(), /*abi=*/0,
-      loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+      loom_symbol_ref_null(), /*source_signature=*/loom_attr_absent(),
+      /*abi=*/0, loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), symbol, argument_types,
       IREE_ARRAYSIZE(argument_types), result_types, result_count, nullptr, 0,
       nullptr, 0, LOOM_LOCATION_UNKNOWN, &source_op));
@@ -571,8 +572,8 @@ TEST_P(LowLowerArgumentQueryTest, OnlyRequiredArgumentsEmitDiagnostics) {
       &builder, /*build_flags=*/0, /*visibility=*/0, /*linkage=*/0,
       /*retain=*/0, /*cc=*/0,
       /*effect_contract=*/0, /*temperature=*/0, /*inline_policy=*/0,
-      loom_symbol_ref_null(), /*source_abi=*/loom_attr_absent(), /*abi=*/0,
-      loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+      loom_symbol_ref_null(), /*source_signature=*/loom_attr_absent(),
+      /*abi=*/0, loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), AddSymbol(IREE_SV("arguments")),
       argument_types, IREE_ARRAYSIZE(argument_types), nullptr, 0, nullptr, 0,
       nullptr, 0, LOOM_LOCATION_UNKNOWN, &source_op));

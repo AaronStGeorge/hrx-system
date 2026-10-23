@@ -177,7 +177,7 @@ iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
       context, source_op, LOOM_ERR_TARGET_035, params, IREE_ARRAYSIZE(params));
 }
 
-iree_status_t loom_low_lower_emit_source_abi_unsupported(
+iree_status_t loom_low_lower_emit_source_signature_unsupported(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     iree_string_view_t reason) {
   const loom_diagnostic_param_t params[] = {loom_param_string(reason)};

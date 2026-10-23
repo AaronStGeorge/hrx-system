@@ -291,17 +291,17 @@ _ABI_FORMAT: list[FormatElement] = [
     ),
 ]
 
-_SOURCE_ABI_FORMAT: list[FormatElement] = [
+_SOURCE_SIGNATURE_FORMAT: list[FormatElement] = [
     OptionalGroup(
         [
-            kw("source_abi"),
+            kw("source_signature"),
             GLUE,
             LPAREN,
-            Attr("source_abi"),
+            Attr("source_signature"),
             GLUE,
             RPAREN,
         ],
-        anchor="source_abi",
+        anchor="source_signature",
     ),
 ]
 
@@ -371,7 +371,7 @@ _MODIFIER_ATTRS = [
 
 _CONTRACT_ATTRS = [
     AttrDef(
-        "source_abi",
+        "source_signature",
         "parameterized",
         optional=True,
         doc=("Source-language boundary contract retained independently of the selected output ABI."),
@@ -426,7 +426,7 @@ _FUNC_LIKE_COMMON: dict[str, Any] = dict(
 
 _FUNC_LIKE_CONTRACT: dict[str, Any] = dict(
     **_FUNC_LIKE_COMMON,
-    source_abi="source_abi",
+    source_signature="source_signature",
     target="target",
     abi="abi",
     abi_attrs="abi_attrs",
@@ -472,7 +472,7 @@ func_def = Op(
     format=[
         *_MODIFIER_FORMAT,
         *_TARGET_FORMAT,
-        *_SOURCE_ABI_FORMAT,
+        *_SOURCE_SIGNATURE_FORMAT,
         *_ABI_FORMAT,
         *_EXPORT_FORMAT,
         *_SIGNATURE_FORMAT,
@@ -519,7 +519,7 @@ func_decl = Op(
         OptionalGroup([Attr("temperature")], anchor="temperature"),
         OptionalGroup([Attr("inline_policy")], anchor="inline_policy"),
         *_TARGET_FORMAT,
-        *_SOURCE_ABI_FORMAT,
+        *_SOURCE_SIGNATURE_FORMAT,
         *_ABI_FORMAT,
         *_EXPORT_FORMAT,
         *_SIGNATURE_FORMAT,

@@ -10,7 +10,7 @@
 #include "loom/codegen/low/lower/call_predicates.h"
 #include "loom/codegen/low/lower/context.h"
 #include "loom/codegen/low/lower/representation_projection.h"
-#include "loom/codegen/low/lower/source_abi_projection.h"
+#include "loom/codegen/low/lower/source_signature_projection.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
@@ -27,7 +27,7 @@ struct loom_low_lower_source_invoke_plan_t {
 
 struct loom_low_lower_projected_call_plan_t {
   // Whole-callable physical projection shared with the callee boundary.
-  const loom_low_source_abi_projection_plan_t* projection;
+  const loom_low_source_signature_projection_plan_t* projection;
   // Proved logical preconditions and their formal correspondence.
   const loom_low_call_argument_contract_t* argument_contract;
   // Logical postconditions and their complete formal correspondence.
@@ -52,9 +52,9 @@ bool loom_low_lower_source_call_requires_projection(
   const loom_symbol_ref_t callee = loom_call_like_callee(
       loom_call_like_const_cast(context->module, source_op));
   return loom_symbol_ref_is_valid(callee) && callee.module_id == 0 &&
-         loom_low_source_abi_projection_index_find(
-             context->options->source_abi_projections, callee.symbol_id) !=
-             NULL;
+         loom_low_source_signature_projection_index_find(
+             context->options->source_signature_projections,
+             callee.symbol_id) != NULL;
 }
 
 iree_status_t loom_low_lower_source_call(loom_low_lower_context_t* context,
@@ -280,9 +280,9 @@ iree_status_t loom_low_lower_projected_call_plan(
   const loom_call_like_t call =
       loom_call_like_const_cast(context->module, source_op);
   const loom_symbol_ref_t callee_ref = loom_call_like_callee(call);
-  const loom_low_source_abi_projection_plan_t* projection =
-      loom_low_source_abi_projection_index_find(
-          context->options->source_abi_projections, callee_ref.symbol_id);
+  const loom_low_source_signature_projection_plan_t* projection =
+      loom_low_source_signature_projection_index_find(
+          context->options->source_signature_projections, callee_ref.symbol_id);
   IREE_ASSERT(projection != NULL);
   const iree_string_view_t callee_name =
       loom_low_source_call_symbol_name(context->module, callee_ref);
@@ -300,7 +300,7 @@ iree_status_t loom_low_lower_projected_call_plan(
 
   uint16_t logical_argument_count = 0;
   const loom_type_t* logical_argument_types =
-      loom_low_source_abi_projection_logical_argument_types(
+      loom_low_source_signature_projection_logical_argument_types(
           projection, &logical_argument_count);
   const loom_value_slice_t source_operands = loom_call_like_operands(call);
   if (source_operands.count != logical_argument_count) {
@@ -311,7 +311,7 @@ iree_status_t loom_low_lower_projected_call_plan(
 
   uint16_t logical_result_count = 0;
   const loom_type_t* logical_result_types =
-      loom_low_source_abi_projection_logical_result_types(
+      loom_low_source_signature_projection_logical_result_types(
           projection, &logical_result_count);
   const loom_value_slice_t source_results = loom_call_like_results(call);
   if (source_results.count != logical_result_count) {
@@ -365,8 +365,8 @@ iree_status_t loom_low_lower_projected_call_finalize(
   const loom_value_slice_t operands = loom_call_like_operands(call);
   uint16_t expected_count = 0;
   const loom_type_t* expected_types =
-      loom_low_source_abi_projection_logical_argument_types(plan->projection,
-                                                            &expected_count);
+      loom_low_source_signature_projection_logical_argument_types(
+          plan->projection, &expected_count);
   IREE_ASSERT_EQ(operands.count, expected_count);
   for (uint16_t i = 0; i < operands.count; ++i) {
     const loom_type_t actual_type =
@@ -390,7 +390,7 @@ iree_status_t loom_low_lower_projected_call(
   const loom_value_slice_t source_operands = loom_call_like_operands(call);
   uint16_t logical_argument_count = 0;
   const loom_type_t* logical_argument_types =
-      loom_low_source_abi_projection_logical_argument_types(
+      loom_low_source_signature_projection_logical_argument_types(
           plan->projection, &logical_argument_count);
   loom_value_id_t* logical_arguments = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(
@@ -400,28 +400,28 @@ iree_status_t loom_low_lower_projected_call(
       context, source_op, plan->argument_contract, logical_arguments));
 
   uint16_t physical_argument_count = 0;
-  (void)loom_low_source_abi_projection_physical_argument_types(
+  (void)loom_low_source_signature_projection_physical_argument_types(
       plan->projection, &physical_argument_count);
   loom_value_id_t* physical_arguments = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_emission_array(
       context, physical_argument_count, sizeof(*physical_arguments),
       (void**)&physical_arguments));
   void* call_state = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_source_abi_projection_emit(
+  IREE_RETURN_IF_ERROR(loom_low_source_signature_projection_emit(
       plan->projection, context,
-      LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_CALL_ARGUMENTS, source_op,
+      LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_CALL_ARGUMENTS, source_op,
       logical_arguments, logical_argument_count, physical_arguments,
       physical_argument_count, loom_low_lower_context_emission_arena(context),
       &call_state));
 
   uint16_t physical_result_count = 0;
   const loom_type_t* physical_result_types =
-      loom_low_source_abi_projection_physical_result_types(
+      loom_low_source_signature_projection_physical_result_types(
           plan->projection, &physical_result_count);
   uint16_t tied_result_count = 0;
   const loom_tied_result_t* tied_results =
-      loom_low_source_abi_projection_tied_results(plan->projection,
-                                                  &tied_result_count);
+      loom_low_source_signature_projection_tied_results(plan->projection,
+                                                        &tied_result_count);
   loom_low_func_call_build_flags_t build_flags = 0;
   const loom_callable_effect_contract_t effect_contract =
       loom_call_like_effect_contract(call);
@@ -444,9 +444,9 @@ iree_status_t loom_low_lower_projected_call(
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_emission_array(
       context, source_results.count, sizeof(*logical_results),
       (void**)&logical_results));
-  IREE_RETURN_IF_ERROR(loom_low_source_abi_projection_emit(
+  IREE_RETURN_IF_ERROR(loom_low_source_signature_projection_emit(
       plan->projection, context,
-      LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_CALL_RESULTS, source_op,
+      LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_CALL_RESULTS, source_op,
       loom_op_const_results(low_call_op), physical_result_count,
       logical_results, source_results.count,
       loom_low_lower_context_emission_arena(context), &call_state));

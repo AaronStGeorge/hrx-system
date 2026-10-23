@@ -5803,7 +5803,7 @@ class FuncLikeInterface(NamedTuple):
     # Optional ABI enum attr for concrete target-bound functions.
     abi: str | None = None
     # Optional source-language ABI contract, independent of the output ABI.
-    source_abi: str | None = None
+    source_signature: str | None = None
     # Optional ABI payload dictionary attr.
     abi_attrs: str | None = None
     # Optional exported symbol string attr.

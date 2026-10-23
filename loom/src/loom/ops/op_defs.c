@@ -860,12 +860,12 @@ uint8_t loom_func_like_abi(loom_func_like_t func) {
   return loom_attr_as_enum(attr);
 }
 
-loom_attribute_t loom_func_like_source_abi(loom_func_like_t func) {
+loom_attribute_t loom_func_like_source_signature(loom_func_like_t func) {
   if (!func.vtable ||
-      func.vtable->source_abi_attr_index == LOOM_ATTR_INDEX_NONE) {
+      func.vtable->source_signature_attr_index == LOOM_ATTR_INDEX_NONE) {
     return loom_attr_absent();
   }
-  return loom_op_attrs(func.op)[func.vtable->source_abi_attr_index];
+  return loom_op_attrs(func.op)[func.vtable->source_signature_attr_index];
 }
 
 loom_named_attr_slice_t loom_func_like_abi_attrs(loom_func_like_t func) {

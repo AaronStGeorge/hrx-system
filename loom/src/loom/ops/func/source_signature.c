@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/ops/func/source_abi.h"
+#include "loom/ops/func/source_signature.h"
 
 #include "loom/error/emitter.h"
 #include "loom/error/error_catalog.h"
@@ -15,11 +15,11 @@
 
 enum { LOOM_FUNC_C_ABI_MAX_NESTING = 64 };
 
-static iree_status_t loom_func_source_abi_emit_constraint(
+static iree_status_t loom_func_source_signature_emit_constraint(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     int64_t actual_value, iree_string_view_t expected_constraint) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(IREE_SV("source_abi")),
+      loom_param_string(IREE_SV("source_signature")),
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
@@ -32,14 +32,14 @@ static iree_status_t loom_func_source_abi_emit_constraint(
   return iree_diagnostic_emit(emitter, &emission);
 }
 
-static iree_status_t loom_func_source_abi_emit_type_mismatch(
+static iree_status_t loom_func_source_signature_emit_type_mismatch(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     iree_string_view_t value_name, loom_type_t actual_type,
     loom_type_t expected_type) {
   const loom_diagnostic_param_t params[] = {
       loom_param_string(value_name),
       loom_param_type(actual_type),
-      loom_param_string(IREE_SV("source_abi projection")),
+      loom_param_string(IREE_SV("source_signature projection")),
       loom_param_type(expected_type),
   };
   const loom_diagnostic_emission_t emission = {
@@ -175,7 +175,7 @@ static iree_status_t loom_func_c_abi_verify_type(
       (byte_alignment & (byte_alignment - 1)) != 0 ||
       byte_length % byte_alignment != 0 || component_count < 0 ||
       component_count > UINT16_MAX) {
-    return loom_func_source_abi_emit_constraint(
+    return loom_func_source_signature_emit_constraint(
         emitter, op, type_index,
         IREE_SV("a positive object size and power-of-two alignment dividing "
                 "that size, with at most 65535 projected components"));
@@ -186,7 +186,7 @@ static iree_status_t loom_func_c_abi_verify_type(
       if (!loom_func_c_abi_type_has_only(type, false, false, false, false,
                                          false, false, false, false) ||
           byte_length != 1 || component_count != 1) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index, IREE_SV("a one-byte boolean type node"));
       }
       break;
@@ -194,7 +194,7 @@ static iree_status_t loom_func_c_abi_verify_type(
     case LOOM_FUNC_ABI_C_TYPE_KIND_UNSIGNED_INTEGER: {
       if (!loom_func_c_abi_type_has_only(type, true, false, false, false, false,
                                          false, false, false)) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("an integer node with only bitwidth and object layout"));
       }
@@ -203,7 +203,7 @@ static iree_status_t loom_func_c_abi_verify_type(
           loom_func_c_abi_integer_type(bitwidth);
       if (scalar_type == LOOM_SCALAR_TYPE_NONE || bitwidth != byte_length * 8 ||
           component_count != 1) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("an 8-, 16-, 32-, or 64-bit integer matching its object "
                     "footprint"));
@@ -213,7 +213,7 @@ static iree_status_t loom_func_c_abi_verify_type(
     case LOOM_FUNC_ABI_C_TYPE_KIND_FLOATING: {
       if (!loom_func_c_abi_type_has_only(type, false, true, false, false, false,
                                          false, false, false)) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a floating node with only format and object layout"));
       }
@@ -223,7 +223,7 @@ static iree_status_t loom_func_c_abi_verify_type(
           loom_func_c_abi_scalar_byte_length(scalar_type) !=
               (uint64_t)byte_length ||
           component_count != 1) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a supported floating format matching its object "
                     "footprint"));
@@ -236,14 +236,14 @@ static iree_status_t loom_func_c_abi_verify_type(
               loom_func_abi_c_type_attr_has_address_space(type), false, false,
               false, false, false) ||
           (byte_length != 4 && byte_length != 8) || component_count != 2) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a four- or eight-byte pointer with at most an address "
                     "space"));
       }
       if (loom_func_abi_c_type_attr_has_address_space(type) &&
           loom_func_abi_c_type_attr_address_space(type) < 0) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a nonnegative source address space"));
       }
@@ -251,7 +251,7 @@ static iree_status_t loom_func_c_abi_verify_type(
     case LOOM_FUNC_ABI_C_TYPE_KIND_VECTOR: {
       if (!loom_func_c_abi_type_has_only(type, false, false, false, true, true,
                                          false, false, false)) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a vector node with element type and lane count"));
       }
@@ -260,7 +260,7 @@ static iree_status_t loom_func_c_abi_verify_type(
           loom_func_abi_c_type_attr_element_count(type);
       if (element_type < 0 || element_type >= type_index ||
           element_count <= 0 || element_count > LOOM_DIM_MAX_STATIC_SIZE) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a preceding scalar element type and positive supported "
                     "lane count"));
@@ -285,7 +285,7 @@ static iree_status_t loom_func_c_abi_verify_type(
           (uint64_t)byte_length <
               (uint64_t)element_count * element_byte_length ||
           component_count != 1) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("non-boolean scalar lanes fitting in the vector object"));
       }
@@ -294,7 +294,7 @@ static iree_status_t loom_func_c_abi_verify_type(
     case LOOM_FUNC_ABI_C_TYPE_KIND_ARRAY: {
       if (!loom_func_c_abi_type_has_only(type, false, false, false, true, true,
                                          true, false, false)) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("an array node with element type, count, and stride"));
       }
@@ -305,7 +305,7 @@ static iree_status_t loom_func_c_abi_verify_type(
           loom_func_abi_c_type_attr_element_stride(type);
       if (element_type < 0 || element_type >= type_index ||
           element_count <= 0 || element_stride <= 0) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a preceding element type and positive count and stride"));
       }
@@ -322,7 +322,7 @@ static iree_status_t loom_func_c_abi_verify_type(
            (uint64_t)element_count > UINT16_MAX / element_component_count) ||
           (uint64_t)component_count !=
               (uint64_t)element_count * element_component_count) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a dense C array layout with a representable logical "
                     "projection"));
@@ -334,7 +334,7 @@ static iree_status_t loom_func_c_abi_verify_type(
       const bool has_fields = loom_func_abi_c_type_attr_has_fields(type);
       if (!loom_func_c_abi_type_has_only(type, false, false, false, false,
                                          false, false, has_name, has_fields)) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a record node containing only a name and fields"));
       }
@@ -348,7 +348,7 @@ static iree_status_t loom_func_c_abi_verify_type(
         const int64_t field_offset =
             loom_func_abi_c_field_attr_byte_offset(field);
         if (field_type < 0 || field_type >= type_index || field_offset < 0) {
-          return loom_func_source_abi_emit_constraint(
+          return loom_func_source_signature_emit_constraint(
               emitter, op, type_index,
               IREE_SV("record fields with preceding types and nonnegative "
                       "offsets"));
@@ -363,7 +363,7 @@ static iree_status_t loom_func_c_abi_verify_type(
         if (offset < previous_end || offset > UINT64_MAX - field_byte_length ||
             offset + field_byte_length > (uint64_t)byte_length ||
             field_component_total > UINT16_MAX - field_component_count) {
-          return loom_func_source_abi_emit_constraint(
+          return loom_func_source_signature_emit_constraint(
               emitter, op, type_index,
               IREE_SV("ordered non-overlapping fields within the record "
                       "footprint and a representable logical projection"));
@@ -373,14 +373,14 @@ static iree_status_t loom_func_c_abi_verify_type(
       }
       if (field_component_total !=
           (uint64_t)loom_func_abi_c_type_attr_component_count(type)) {
-        return loom_func_source_abi_emit_constraint(
+        return loom_func_source_signature_emit_constraint(
             emitter, op, type_index,
             IREE_SV("a record component count equal to the sum of its fields"));
       }
       break;
     }
     default:
-      return loom_func_source_abi_emit_constraint(
+      return loom_func_source_signature_emit_constraint(
           emitter, op, type_index, IREE_SV("a supported C ABI type kind"));
   }
   return iree_ok_status();
@@ -397,7 +397,7 @@ static iree_status_t loom_func_c_abi_projection_emit(
     return iree_ok_status();
   }
   if (depth == LOOM_FUNC_C_ABI_MAX_NESTING) {
-    return loom_func_source_abi_emit_constraint(
+    return loom_func_source_signature_emit_constraint(
         emitter, op, depth,
         IREE_SV("a C ABI source type nesting depth below 64"));
   }
@@ -412,7 +412,7 @@ static iree_status_t loom_func_c_abi_projection_emit(
       const loom_type_t actual_type =
           loom_module_value_type(module, values.values[(*inout_value_index)++]);
       if (!loom_type_equal(actual_type, expected_type)) {
-        return loom_func_source_abi_emit_type_mismatch(
+        return loom_func_source_signature_emit_type_mismatch(
             emitter, op, value_name, actual_type, expected_type);
       }
       return iree_ok_status();
@@ -426,7 +426,7 @@ static iree_status_t loom_func_c_abi_projection_emit(
         const loom_type_t actual_type = loom_module_value_type(
             module, values.values[(*inout_value_index)++]);
         if (!loom_type_equal(actual_type, expected_types[i])) {
-          return loom_func_source_abi_emit_type_mismatch(
+          return loom_func_source_signature_emit_type_mismatch(
               emitter, op, value_name, actual_type, expected_types[i]);
         }
       }
@@ -468,13 +468,13 @@ static iree_status_t loom_func_c_abi_projection_count(
   for (iree_host_size_t i = 0; i < roots.count; ++i) {
     const int64_t root = roots.values[i];
     if (root < 0 || (uint64_t)root >= types.count) {
-      return loom_func_source_abi_emit_constraint(
+      return loom_func_source_signature_emit_constraint(
           emitter, op, root, IREE_SV("a valid root type index"));
     }
     const uint64_t component_count =
         (uint64_t)loom_func_abi_c_type_attr_component_count(types.values[root]);
     if (count > UINT16_MAX - component_count) {
-      return loom_func_source_abi_emit_constraint(
+      return loom_func_source_signature_emit_constraint(
           emitter, op, root,
           IREE_SV("at most 65535 flattened signature components"));
     }
@@ -484,21 +484,22 @@ static iree_status_t loom_func_c_abi_projection_count(
   return iree_ok_status();
 }
 
-iree_status_t loom_func_source_abi_verify(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          iree_diagnostic_emitter_t emitter) {
+iree_status_t loom_func_source_signature_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
   const loom_func_like_t function = loom_func_like_cast(module, (loom_op_t*)op);
-  const loom_attribute_t source_abi = loom_func_like_source_abi(function);
-  if (loom_attr_is_absent(source_abi)) {
+  const loom_attribute_t source_signature =
+      loom_func_like_source_signature(function);
+  if (loom_attr_is_absent(source_signature)) {
     return iree_ok_status();
   }
 
   loom_func_c_abi_signature_t signature = {0};
-  if (!loom_func_c_abi_signature_cast(source_abi, &signature)) {
+  if (!loom_func_c_abi_signature_cast(source_signature, &signature)) {
     return iree_ok_status();
   }
   if (op->tied_result_count != 0) {
-    return loom_func_source_abi_emit_constraint(
+    return loom_func_source_signature_emit_constraint(
         emitter, op, op->tied_result_count,
         IREE_SV("a C source boundary without tied logical results"));
   }
@@ -535,7 +536,7 @@ iree_status_t loom_func_source_abi_verify(const loom_module_t* module,
   if (iree_status_is_ok(status) &&
       (projected_argument_count != argument_values.count ||
        projected_result_count != result_values.count)) {
-    status = loom_func_source_abi_emit_constraint(
+    status = loom_func_source_signature_emit_constraint(
         emitter, op,
         ((int64_t)projected_argument_count << 32) | projected_result_count,
         IREE_SV("argument/result projections matching the callable's flat "

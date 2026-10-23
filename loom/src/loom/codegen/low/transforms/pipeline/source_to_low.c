@@ -12,8 +12,8 @@
 #include "loom/codegen/low/launch_config_program.h"
 #include "loom/codegen/low/lower/function_boundary.h"
 #include "loom/codegen/low/lower/representation_projection.h"
-#include "loom/codegen/low/lower/source_abi_projection.h"
 #include "loom/codegen/low/lower/source_selection.h"
+#include "loom/codegen/low/lower/source_signature_projection.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/transforms/pipeline/source_invocation_facts.h"
 #include "loom/ops/low/ops.h"
@@ -360,15 +360,16 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   const loom_low_representation_projection_plan_t** projection_plans = NULL;
   iree_host_size_t projection_count = 0;
   loom_low_representation_projection_index_t projection_index = {0};
-  const loom_low_source_abi_projection_plan_t** source_abi_plans = NULL;
-  iree_host_size_t source_abi_count = 0;
-  loom_low_source_abi_projection_index_t source_abi_index = {0};
+  const loom_low_source_signature_projection_plan_t** source_signature_plans =
+      NULL;
+  iree_host_size_t source_signature_count = 0;
+  loom_low_source_signature_projection_index_t source_signature_index = {0};
   loom_low_source_declaration_plan_t* declaration_plans = NULL;
   iree_host_size_t planned_declaration_count = 0;
   iree_host_size_t selected_declaration_count = 0;
   iree_host_size_t selected_function_count = 0;
   iree_host_size_t selected_projection_count = 0;
-  iree_host_size_t selected_source_abi_count = 0;
+  iree_host_size_t selected_source_signature_count = 0;
   for (iree_host_size_t i = 0;
        i < selection_list.count && iree_status_is_ok(status) &&
        !emitted_error_diagnostics;
@@ -383,8 +384,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     } else {
       ++selected_function_count;
     }
-    if (loom_low_source_abi_projection_required(selection->func)) {
-      ++selected_source_abi_count;
+    if (loom_low_source_signature_projection_required(selection->func)) {
+      ++selected_source_signature_count;
     }
     status = loom_low_source_to_low_record_target_specialization(compile_report,
                                                                  selection);
@@ -394,10 +395,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         &selection_arena, selected_projection_count, sizeof(*projection_plans),
         (void**)&projection_plans);
   }
-  if (iree_status_is_ok(status) && selected_source_abi_count != 0) {
+  if (iree_status_is_ok(status) && selected_source_signature_count != 0) {
     status = iree_arena_allocate_array(
-        &selection_arena, selected_source_abi_count, sizeof(*source_abi_plans),
-        (void**)&source_abi_plans);
+        &selection_arena, selected_source_signature_count,
+        sizeof(*source_signature_plans), (void**)&source_signature_plans);
   }
   for (iree_host_size_t i = 0;
        i < selection_list.count && iree_status_is_ok(status) &&
@@ -434,7 +435,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
        ++i) {
     const loom_low_source_selection_t* selection = &selection_list.values[i];
     if (selection->kind == LOOM_LOW_SOURCE_SELECTION_REPRESENTATION ||
-        !loom_low_source_abi_projection_required(selection->func)) {
+        !loom_low_source_signature_projection_required(selection->func)) {
       continue;
     }
     const loom_low_lower_options_t lower_options = {
@@ -452,23 +453,24 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .module_state = module_state,
     };
     loom_low_lower_result_t lower_result = {0};
-    const loom_low_source_abi_projection_plan_t* source_abi_plan = NULL;
-    status = loom_low_plan_source_abi_projection(
+    const loom_low_source_signature_projection_plan_t* source_signature_plan =
+        NULL;
+    status = loom_low_plan_source_signature_projection(
         module, selection->func, &lower_options, &selection_arena,
-        &lower_result, &source_abi_plan);
+        &lower_result, &source_signature_plan);
     statistics->errors += (int64_t)lower_result.error_count;
     statistics->remarks += (int64_t)lower_result.remark_count;
     emitted_error_diagnostics |= lower_result.error_count != 0;
     if (iree_status_is_ok(status) && !emitted_error_diagnostics &&
-        source_abi_plan != NULL) {
-      source_abi_plans[source_abi_count++] = source_abi_plan;
+        source_signature_plan != NULL) {
+      source_signature_plans[source_signature_count++] = source_signature_plan;
     }
     loom_low_lower_result_deinitialize(&lower_result);
   }
   if (iree_status_is_ok(status) && !emitted_error_diagnostics) {
-    status = loom_low_source_abi_projection_index_build(
-        module, source_abi_plans, source_abi_count, &selection_arena,
-        &source_abi_index);
+    status = loom_low_source_signature_projection_index_build(
+        module, source_signature_plans, source_signature_count,
+        &selection_arena, &source_signature_index);
   }
   loom_low_source_invocation_facts_t invocation_facts = {0};
   if (iree_status_is_ok(status) && !emitted_error_diagnostics) {
@@ -495,7 +497,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .target_facts = selection->target_facts,
         .descriptor_registry = descriptor_registry,
         .policy = selection->policy,
-        .source_abi_projections = &source_abi_index,
+        .source_signature_projections = &source_signature_index,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering
@@ -569,7 +571,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .fact_table = fact_table,
         .storage_access = &storage_access,
         .representation_projections = &projection_index,
-        .source_abi_projections = &source_abi_index,
+        .source_signature_projections = &source_signature_index,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering

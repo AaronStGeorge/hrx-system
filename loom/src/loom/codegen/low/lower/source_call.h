@@ -36,8 +36,8 @@ bool loom_low_lower_source_call_requires_projection(
 iree_status_t loom_low_lower_source_call(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op);
 
-// Retains the callee's physical source ABI plan, proves logical preconditions,
-// and fixes logical result carriers before Low construction.
+// Retains the callee's physical source signature plan, proves logical
+// preconditions, and fixes logical result carriers before Low construction.
 iree_status_t loom_low_lower_projected_call_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_projected_call_plan_t** out_plan);

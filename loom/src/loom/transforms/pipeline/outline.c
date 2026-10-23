@@ -143,7 +143,7 @@ static iree_status_t loom_pipeline_outline_strand(loom_rewriter_t* rewriter,
   IREE_RETURN_IF_ERROR(loom_func_def_build(
       &builder, LOOM_FUNC_DEF_BUILD_FLAG_HAS_INLINE_POLICY, 0, /*linkage=*/0, 0,
       0, 0, 0, LOOM_INLINE_POLICY_INLINE, loom_symbol_ref_null(),
-      /*source_abi=*/loom_attr_absent(), 0, loom_named_attr_slice_empty(),
+      /*source_signature=*/loom_attr_absent(), 0, loom_named_attr_slice_empty(),
       LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), symbol,
       capture_types, capture_count, NULL, 0, NULL, 0, NULL, 0, strand->location,
       &function));

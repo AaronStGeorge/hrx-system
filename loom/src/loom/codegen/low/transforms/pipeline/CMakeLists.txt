@@ -115,8 +115,8 @@ loom_cc_test(
   NAME
     source_to_low_test
   SRCS
-    "source_abi_test_policy.c"
-    "source_abi_test_policy.h"
+    "source_signature_test_policy.c"
+    "source_signature_test_policy.h"
     "source_to_low_test.cc"
   DEPS
     ::source_invocation_facts

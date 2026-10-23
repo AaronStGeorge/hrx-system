@@ -26,19 +26,20 @@
 #define LOOM_CODEGEN_LOW_LOWER_FUNCTION_BOUNDARY_H_
 
 #include "loom/codegen/low/lower/lower.h"
-#include "loom/codegen/low/lower/source_abi_projection.h"
+#include "loom/codegen/low/lower/source_signature_projection.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct loom_low_lower_function_boundary_t {
-  // Whole-callable physical source ABI projection, or NULL for the ordinary
-  // native Low boundary.
-  const loom_low_source_abi_projection_plan_t* source_abi_projection;
+  // Whole-callable physical source signature projection, or NULL for the
+  // ordinary native Low boundary.
+  const loom_low_source_signature_projection_plan_t*
+      source_signature_projection;
   // Target-owned state retained from projected definition entry emission for
   // every callable exit.
-  void* source_abi_state;
+  void* source_signature_state;
   // Source argument ABI mappings, in source argument order. Declarations have
   // no resource imports and retain only their direct signature below.
   loom_low_lower_abi_argument_t* argument_map;

@@ -70,7 +70,7 @@ class ResolveLaunchesTest : public ::testing::Test {
         /*visibility=*/0, /*linkage=*/0, /*retain=*/0, /*cc=*/0,
         effect_contract,
         /*temperature=*/0, /*inline_policy=*/0, loom_symbol_ref_null(),
-        /*source_abi=*/loom_attr_absent(), /*abi=*/0,
+        /*source_signature=*/loom_attr_absent(), /*abi=*/0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, &workload_type, 1, result_types,
         IREE_ARRAYSIZE(result_types), /*tied_results=*/nullptr,

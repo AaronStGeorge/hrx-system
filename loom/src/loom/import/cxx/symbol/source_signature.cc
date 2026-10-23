@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/import/cxx/symbol/source_abi.h"
+#include "loom/import/cxx/symbol/source_signature.h"
 
 #include <cxx/ast.h>
 #include <cxx/control.h>
@@ -28,10 +28,10 @@
 namespace loom::cxx_import {
 namespace {
 
-class CSourceAbiBuilder {
+class CSourceSignatureBuilder {
  public:
-  CSourceAbiBuilder(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
-                    loom_module_t* module, cxx::AST* source, Types& types)
+  CSourceSignatureBuilder(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+                          loom_module_t* module, cxx::AST* source, Types& types)
       : unit_(unit),
         diagnostics_(diagnostics),
         module_(module),
@@ -289,15 +289,15 @@ class CSourceAbiBuilder {
 
 }  // namespace
 
-loom_attribute_t build_c_source_abi(cxx::TranslationUnit& unit,
-                                    Diagnostics& diagnostics,
-                                    loom_module_t* module,
-                                    cxx::FunctionSymbol* function,
-                                    cxx::AST* source, Types& types) {
+loom_attribute_t build_c_source_signature(cxx::TranslationUnit& unit,
+                                          Diagnostics& diagnostics,
+                                          loom_module_t* module,
+                                          cxx::FunctionSymbol* function,
+                                          cxx::AST* source, Types& types) {
   if (!function->hasCLinkage()) {
     return loom_attr_absent();
   }
-  return CSourceAbiBuilder(unit, diagnostics, module, source, types)
+  return CSourceSignatureBuilder(unit, diagnostics, module, source, types)
       .Build(function);
 }
 

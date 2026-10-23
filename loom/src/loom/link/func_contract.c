@@ -326,9 +326,9 @@ static iree_status_t loom_link_func_contract_apply(
   }
 
   IREE_RETURN_IF_ERROR(loom_link_func_contract_check_exact_attr(
-      remap, source, source->function->source_abi_attr_index, selected,
-      selected->function->source_abi_attr_index, IREE_SV("source_abi"),
-      out_mismatch));
+      remap, source, source->function->source_signature_attr_index, selected,
+      selected->function->source_signature_attr_index,
+      IREE_SV("source_signature"), out_mismatch));
   if (loom_link_func_contract_mismatch_present(out_mismatch)) {
     return iree_ok_status();
   }

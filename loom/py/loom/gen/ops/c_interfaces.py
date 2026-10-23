@@ -163,8 +163,8 @@ INTERFACES: tuple[InterfaceSpec, ...] = (
             ),
             InterfaceFieldSpec("abi", "abi_attr_index", "attr"),
             InterfaceFieldSpec(
-                "source_abi",
-                "source_abi_attr_index",
+                "source_signature",
+                "source_signature_attr_index",
                 "attr",
                 expected_attr_type=ATTR_TYPE_PARAMETERIZED,
             ),

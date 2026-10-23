@@ -76,13 +76,13 @@ loom_generated_cc_library(
         "canonicalize.c",
         "facts.c",
         "location.c",
-        "source_abi.c",
+        "source_signature.c",
         "verify.c",
     ],
     hdrs = [
         "location.h",
         "ops.h",
-        "source_abi.h",
+        "source_signature.h",
     ],
     args = ["--dialect=func"],
     extra_output_flags = [

@@ -513,22 +513,22 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_lower_structural_op(
         context, source_op, values, source_op->operand_count,
         context->lowering->boundary.result_types, &low_values));
     loom_low_lower_function_boundary_t* boundary = &context->lowering->boundary;
-    if (boundary->source_abi_projection != NULL) {
+    if (boundary->source_signature_projection != NULL) {
       loom_value_id_t* physical_values = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_emission_array(
           context, boundary->physical_result_count, sizeof(*physical_values),
           (void**)&physical_values));
-      IREE_RETURN_IF_ERROR(loom_low_source_abi_projection_emit(
-          boundary->source_abi_projection, context,
-          LOOM_LOW_LOWER_SOURCE_ABI_EMISSION_DEFINITION_EXIT, source_op,
+      IREE_RETURN_IF_ERROR(loom_low_source_signature_projection_emit(
+          boundary->source_signature_projection, context,
+          LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_DEFINITION_EXIT, source_op,
           low_values, source_op->operand_count, physical_values,
           boundary->physical_result_count, context->function_arena,
-          &boundary->source_abi_state));
+          &boundary->source_signature_state));
       low_values = physical_values;
     }
     loom_op_t* low_return_op = NULL;
     return loom_low_return_build(&context->builder, low_values,
-                                 boundary->source_abi_projection != NULL
+                                 boundary->source_signature_projection != NULL
                                      ? boundary->physical_result_count
                                      : source_op->operand_count,
                                  source_op->location, &low_return_op);

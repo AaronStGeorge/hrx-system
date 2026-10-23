@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/x86/source_abi.h"
+#include "loom/target/arch/x86/source_signature.h"
 
 #include <initializer_list>
 #include <string>
@@ -25,7 +25,7 @@ struct TestField {
   uint32_t byte_offset;
 };
 
-class X86SourceAbiTest : public ::testing::Test {
+class X86SourceSignatureTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
@@ -42,9 +42,9 @@ class X86SourceAbiTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_register_parameterized_attrs(
         &context_, LOOM_DIALECT_FUNC, attrs, attr_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
-    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("source_abi_test"),
-                                        &block_pool_, NULL,
-                                        iree_allocator_system(), &module_));
+    IREE_ASSERT_OK(loom_module_allocate(
+        &context_, IREE_SV("source_signature_test"), &block_pool_, NULL,
+        iree_allocator_system(), &module_));
   }
 
   void TearDown() override {
@@ -136,25 +136,25 @@ class X86SourceAbiTest : public ::testing::Test {
                                                       field_attrs.size()));
   }
 
-  loom_x86_source_abi_classification_t Classify(uint32_t root,
-                                                uint16_t maximum_vector_bytes) {
+  loom_x86_source_signature_classification_t Classify(
+      uint32_t root, uint16_t maximum_vector_bytes) {
     const loom_func_c_abi_signature_t signature = {
         .types =
             loom_make_parameterized_attr_array(types_.data(), types_.size()),
     };
-    loom_x86_source_abi_classification_t classification;
-    EXPECT_TRUE(loom_x86_source_abi_classify(
+    loom_x86_source_signature_classification_t classification;
+    EXPECT_TRUE(loom_x86_source_signature_classify(
         &signature, root, maximum_vector_bytes, &classification));
     return classification;
   }
 
   void ExpectClasses(
-      const loom_x86_source_abi_classification_t& actual,
-      std::initializer_list<loom_x86_source_abi_class_t> expected) {
+      const loom_x86_source_signature_classification_t& actual,
+      std::initializer_list<loom_x86_source_signature_class_t> expected) {
     ASSERT_FALSE(actual.is_memory);
     ASSERT_EQ(actual.eightbyte_count, expected.size());
     size_t i = 0;
-    for (loom_x86_source_abi_class_t expected_class : expected) {
+    for (loom_x86_source_signature_class_t expected_class : expected) {
       EXPECT_EQ(actual.eightbytes[i++], expected_class);
     }
   }
@@ -165,7 +165,7 @@ class X86SourceAbiTest : public ::testing::Test {
   std::vector<loom_attribute_t> types_;
 };
 
-TEST_F(X86SourceAbiTest, ClassifiesCompleteScalarFamily) {
+TEST_F(X86SourceSignatureTest, ClassifiesCompleteScalarFamily) {
   const uint32_t boolean =
       AddType(/*flags=*/0, LOOM_FUNC_ABI_C_TYPE_KIND_BOOLEAN, 1, 1, 1);
   const uint32_t signed_i8 = AddInteger(8);
@@ -181,15 +181,16 @@ TEST_F(X86SourceAbiTest, ClassifiesCompleteScalarFamily) {
 
   for (uint32_t root : {boolean, signed_i8, unsigned_i16, signed_i32,
                         unsigned_i64, f8, pointer}) {
-    ExpectClasses(Classify(root, 32), {LOOM_X86_SOURCE_ABI_CLASS_INTEGER});
+    ExpectClasses(Classify(root, 32),
+                  {LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER});
   }
   for (uint32_t root : {f16, bf16, f32, f64}) {
-    ExpectClasses(Classify(root, 32), {LOOM_X86_SOURCE_ABI_CLASS_SSE});
+    ExpectClasses(Classify(root, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE});
   }
   EXPECT_EQ(Classify(pointer, 32).component_count, 2u);
 }
 
-TEST_F(X86SourceAbiTest, MergesRecordFieldsWithinEachEightbyte) {
+TEST_F(X86SourceSignatureTest, MergesRecordFieldsWithinEachEightbyte) {
   const uint32_t u32 = AddInteger(32, true);
   const uint32_t f32 = AddFloat(LOOM_FUNC_ABI_C_TYPE_FORMAT_F32, 4);
   const uint32_t f64 = AddFloat(LOOM_FUNC_ABI_C_TYPE_FORMAT_F64, 8);
@@ -202,15 +203,15 @@ TEST_F(X86SourceAbiTest, MergesRecordFieldsWithinEachEightbyte) {
   const uint32_t doubles =
       AddRecord(16, 8, 2, {{"first", f64, 0}, {"second", f64, 8}});
 
-  ExpectClasses(Classify(pair, 32), {LOOM_X86_SOURCE_ABI_CLASS_INTEGER});
-  ExpectClasses(Classify(mixed, 32), {LOOM_X86_SOURCE_ABI_CLASS_INTEGER});
-  ExpectClasses(Classify(split, 32), {LOOM_X86_SOURCE_ABI_CLASS_SSE,
-                                      LOOM_X86_SOURCE_ABI_CLASS_INTEGER});
-  ExpectClasses(Classify(doubles, 32),
-                {LOOM_X86_SOURCE_ABI_CLASS_SSE, LOOM_X86_SOURCE_ABI_CLASS_SSE});
+  ExpectClasses(Classify(pair, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER});
+  ExpectClasses(Classify(mixed, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER});
+  ExpectClasses(Classify(split, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                                      LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER});
+  ExpectClasses(Classify(doubles, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                                        LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE});
 }
 
-TEST_F(X86SourceAbiTest, DistinguishesNativeVectorsFromScalarArrays) {
+TEST_F(X86SourceSignatureTest, DistinguishesNativeVectorsFromScalarArrays) {
   const uint32_t f32 = AddFloat(LOOM_FUNC_ABI_C_TYPE_FORMAT_F32, 4);
   const uint32_t vector4 = AddVector(f32, 4, 16, 16);
   const uint32_t vector8 = AddVector(f32, 8, 32, 32);
@@ -219,30 +220,34 @@ TEST_F(X86SourceAbiTest, DistinguishesNativeVectorsFromScalarArrays) {
   const uint32_t array4 = AddArray(f32, 4, 4, 4, 4);
   const uint32_t array8 = AddArray(f32, 8, 4, 4, 8);
 
-  ExpectClasses(Classify(vector4, 32), {LOOM_X86_SOURCE_ABI_CLASS_SSE,
-                                        LOOM_X86_SOURCE_ABI_CLASS_SSEUP});
-  ExpectClasses(
-      Classify(vector8, 32),
-      {LOOM_X86_SOURCE_ABI_CLASS_SSE, LOOM_X86_SOURCE_ABI_CLASS_SSEUP,
-       LOOM_X86_SOURCE_ABI_CLASS_SSEUP, LOOM_X86_SOURCE_ABI_CLASS_SSEUP});
-  ExpectClasses(
-      Classify(wrapped_vector, 32),
-      {LOOM_X86_SOURCE_ABI_CLASS_SSE, LOOM_X86_SOURCE_ABI_CLASS_SSEUP,
-       LOOM_X86_SOURCE_ABI_CLASS_SSEUP, LOOM_X86_SOURCE_ABI_CLASS_SSEUP});
-  ExpectClasses(
-      Classify(vector16, 64),
-      {LOOM_X86_SOURCE_ABI_CLASS_SSE, LOOM_X86_SOURCE_ABI_CLASS_SSEUP,
-       LOOM_X86_SOURCE_ABI_CLASS_SSEUP, LOOM_X86_SOURCE_ABI_CLASS_SSEUP,
-       LOOM_X86_SOURCE_ABI_CLASS_SSEUP, LOOM_X86_SOURCE_ABI_CLASS_SSEUP,
-       LOOM_X86_SOURCE_ABI_CLASS_SSEUP, LOOM_X86_SOURCE_ABI_CLASS_SSEUP});
-  ExpectClasses(Classify(array4, 32),
-                {LOOM_X86_SOURCE_ABI_CLASS_SSE, LOOM_X86_SOURCE_ABI_CLASS_SSE});
+  ExpectClasses(Classify(vector4, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                                        LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP});
+  ExpectClasses(Classify(vector8, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                                        LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                                        LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                                        LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP});
+  ExpectClasses(Classify(wrapped_vector, 32),
+                {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP});
+  ExpectClasses(Classify(vector16, 64),
+                {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_SSEUP});
+  ExpectClasses(Classify(array4, 32), {LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE,
+                                       LOOM_X86_SOURCE_SIGNATURE_CLASS_SSE});
   EXPECT_TRUE(Classify(array8, 32).is_memory);
   EXPECT_TRUE(Classify(vector8, 16).is_memory);
   EXPECT_TRUE(Classify(vector16, 32).is_memory);
 }
 
-TEST_F(X86SourceAbiTest, SendsLargeAndUnalignedRecordsThroughMemory) {
+TEST_F(X86SourceSignatureTest, SendsLargeAndUnalignedRecordsThroughMemory) {
   const uint32_t u8 = AddInteger(8, true);
   const uint32_t u32 = AddInteger(32, true);
   const uint32_t u64 = AddInteger(64, true);
@@ -255,21 +260,22 @@ TEST_F(X86SourceAbiTest, SendsLargeAndUnalignedRecordsThroughMemory) {
   EXPECT_TRUE(Classify(packed, 32).is_memory);
 }
 
-TEST_F(X86SourceAbiTest, RetainsPaddingAsNoClass) {
+TEST_F(X86SourceSignatureTest, RetainsPaddingAsNoClass) {
   const uint32_t u32 = AddInteger(32, true);
   const uint32_t padded = AddRecord(16, 4, 1, {{"value", u32, 0}});
-  ExpectClasses(Classify(padded, 32), {LOOM_X86_SOURCE_ABI_CLASS_INTEGER,
-                                       LOOM_X86_SOURCE_ABI_CLASS_NO_CLASS});
+  ExpectClasses(Classify(padded, 32),
+                {LOOM_X86_SOURCE_SIGNATURE_CLASS_INTEGER,
+                 LOOM_X86_SOURCE_SIGNATURE_CLASS_NO_CLASS});
 }
 
-TEST_F(X86SourceAbiTest, RejectsEmptySourceObjects) {
+TEST_F(X86SourceSignatureTest, RejectsEmptySourceObjects) {
   const uint32_t empty = AddRecord(1, 1, 0, {});
   const loom_func_c_abi_signature_t signature = {
       .types = loom_make_parameterized_attr_array(types_.data(), types_.size()),
   };
-  loom_x86_source_abi_classification_t classification;
-  EXPECT_FALSE(
-      loom_x86_source_abi_classify(&signature, empty, 32, &classification));
+  loom_x86_source_signature_classification_t classification;
+  EXPECT_FALSE(loom_x86_source_signature_classify(&signature, empty, 32,
+                                                  &classification));
 }
 
 }  // namespace

@@ -34,7 +34,7 @@
 #include "loom/target/arch/x86/lower/contraction.h"
 #include "loom/target/arch/x86/lower/lower.h"
 #include "loom/target/arch/x86/lower/predicate_representation.h"
-#include "loom/target/arch/x86/lower/source_abi.h"
+#include "loom/target/arch/x86/lower/source_signature.h"
 #include "loom/target/arch/x86/lower/vector_construct.h"
 #include "loom/target/arch/x86/register_classes.h"
 
@@ -890,8 +890,8 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
                          IREE_ARRAYSIZE(kX86FunctionStorage)},
     .error_catalog = &loom_error_catalog_core,
     .map_abi_layout = {.fn = loom_x86_map_native_abi_layout},
-    .source_abi = {.plan = loom_x86_plan_source_abi,
-                   .emit = loom_x86_emit_source_abi},
+    .source_signature = {.plan = loom_x86_plan_source_signature,
+                         .emit = loom_x86_emit_source_signature},
     .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE,
     .emit_preamble = {.fn = loom_low_task_emit_kernel_preamble},
     .preselect_op = {.fn = loom_x86_preselect_op},
@@ -923,8 +923,8 @@ static const loom_low_lower_policy_t kX86Avx2LowLowerPolicy = {
                          IREE_ARRAYSIZE(kX86FunctionStorage)},
     .error_catalog = &loom_error_catalog_core,
     .map_abi_layout = {.fn = loom_x86_map_native_abi_layout},
-    .source_abi = {.plan = loom_x86_plan_source_abi,
-                   .emit = loom_x86_emit_source_abi},
+    .source_signature = {.plan = loom_x86_plan_source_signature,
+                         .emit = loom_x86_emit_source_signature},
     .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE,
     .emit_preamble = {.fn = loom_low_task_emit_kernel_preamble},
     .preselect_op = {.fn = loom_x86_preselect_op},
@@ -956,8 +956,8 @@ static const loom_low_lower_policy_t kX86Avx2FeaturesLowLowerPolicy = {
                          IREE_ARRAYSIZE(kX86FunctionStorage)},
     .error_catalog = &loom_error_catalog_core,
     .map_abi_layout = {.fn = loom_x86_map_native_abi_layout},
-    .source_abi = {.plan = loom_x86_plan_source_abi,
-                   .emit = loom_x86_emit_source_abi},
+    .source_signature = {.plan = loom_x86_plan_source_signature,
+                         .emit = loom_x86_emit_source_signature},
     .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE,
     .emit_preamble = {.fn = loom_low_task_emit_kernel_preamble},
     .preselect_op = {.fn = loom_x86_preselect_op},
@@ -993,8 +993,8 @@ static const loom_low_lower_policy_t kX86ScalarLowLowerPolicy = {
                          IREE_ARRAYSIZE(kX86FunctionStorage)},
     .error_catalog = &loom_error_catalog_core,
     .map_abi_layout = {.fn = loom_x86_map_native_abi_layout},
-    .source_abi = {.plan = loom_x86_plan_source_abi,
-                   .emit = loom_x86_emit_source_abi},
+    .source_signature = {.plan = loom_x86_plan_source_signature,
+                         .emit = loom_x86_emit_source_signature},
     .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE,
     .emit_preamble = {.fn = loom_low_task_emit_kernel_preamble},
     .preselect_op = {.fn = loom_low_task_select_kernel_builtin},
@@ -1032,8 +1032,8 @@ static const loom_low_lower_policy_t kX86Avx512FeaturesLowLowerPolicy = {
                          IREE_ARRAYSIZE(kX86FunctionStorage)},
     .error_catalog = &loom_error_catalog_core,
     .map_abi_layout = {.fn = loom_x86_map_native_abi_layout},
-    .source_abi = {.plan = loom_x86_plan_source_abi,
-                   .emit = loom_x86_emit_source_abi},
+    .source_signature = {.plan = loom_x86_plan_source_signature,
+                         .emit = loom_x86_emit_source_signature},
     .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE,
     .emit_preamble = {.fn = loom_low_task_emit_kernel_preamble},
     .preselect_op = {.fn = loom_x86_preselect_op},
