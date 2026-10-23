@@ -101,11 +101,11 @@ loom_generated_file(
 loom_generated_file(
     name = "native_abi_object",
     args = [
-        "$(location :native_abi_module)",
+        "$(location native_abi.loombc)",
         "--target=x86:avx2",
     ],
     generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = [":native_abi_module"],
+    inputs = ["native_abi.loombc"],
     output = "native_abi.o",
     output_flag = "--output=",
     target_compatible_with = _NATIVE_X86_COMPATIBLE_WITH,

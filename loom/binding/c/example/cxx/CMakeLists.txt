@@ -109,7 +109,7 @@ loom_generated_file(
     "${CMAKE_CURRENT_BINARY_DIR}/native_abi.loombc"
     "--target=x86:avx2"
   INPUTS
-    "native_abi_module"
+    "native_abi.loombc"
 )
 endif()
 

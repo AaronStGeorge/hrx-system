@@ -1460,4 +1460,5 @@ iree_status_t loom_x86_emit_source_signature(
     }
   }
   IREE_ASSERT_UNREACHABLE("unknown x86 source signature emission phase");
+  IREE_BUILTIN_UNREACHABLE();
 }
