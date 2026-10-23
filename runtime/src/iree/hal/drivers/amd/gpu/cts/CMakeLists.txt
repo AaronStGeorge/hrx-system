@@ -257,10 +257,14 @@ iree_cc_test(
   DEPS
     ::test_device
     ::testdata
+    iree::async
     iree::base
     iree::hal
     iree::hal::cts::util::pool_test_util
+    iree::hal::cts::util::test_base
     iree::hal::drivers::amd::gpu::image::asan_images
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::hal::drivers::amd::gpu::queue::signal
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
@@ -565,6 +569,7 @@ iree_cc_test(
   NAME
     native_test
   SRCS
+    "allocation_test.cc"
     "aql_program_test.cc"
     "dispatch_test.cc"
     "native_test.cc"
