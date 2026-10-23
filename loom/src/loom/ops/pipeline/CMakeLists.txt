@@ -35,6 +35,7 @@ loom_cc_library(
     loom::ir::builders
     loom::ir::types
     loom::ops::builders
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 

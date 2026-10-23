@@ -210,6 +210,7 @@ loom_cc_library(
     loom::util::adaptive_sort
     loom::util::bstring
     loom::util::segmented_storage
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 
@@ -235,6 +236,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 

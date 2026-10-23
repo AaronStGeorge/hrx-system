@@ -43,6 +43,7 @@ loom_cc_library(
     loom::ir::builders
     loom::ops::builders
     loom::util::stable_id
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 

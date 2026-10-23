@@ -43,6 +43,7 @@ loom_cc_library(
     ::op_defs
     loom::ir::builders
     loom::ops::builders
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 
@@ -113,6 +114,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::ir::builders
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 

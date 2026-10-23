@@ -37,6 +37,7 @@ loom_cc_library(
     loom::ir::types
     loom::ops::builders
     loom::ops::vocabulary
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 

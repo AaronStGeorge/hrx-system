@@ -40,6 +40,7 @@ loom_cc_library(
     loom::ops::builders
     loom::target::arch::x86::records::record_defs
     loom::target::types
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 endif()

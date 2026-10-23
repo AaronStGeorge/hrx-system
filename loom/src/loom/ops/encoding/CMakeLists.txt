@@ -34,6 +34,7 @@ loom_cc_library(
   DEPS
     loom::ir::builders
     loom::ops::builders
+  LINKABLE_MORE_THAN_ONCE
   PUBLIC
 )
 
