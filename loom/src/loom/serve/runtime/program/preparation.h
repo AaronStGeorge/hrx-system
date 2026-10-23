@@ -158,6 +158,13 @@ uint32_t loom_serve_preparation_source_count(
 iree_string_view_list_t loom_serve_preparation_source(
     const loom_serve_preparation_t* preparation, uint32_t ordinal);
 
+// Borrows this capture's new shard lists, excluding its immutable cold prefix.
+// Returns their count; their ordinals follow the prefix's source_count. NULL
+// has no sources. The finalized lists outlive cold indexing consumers.
+uint32_t loom_serve_preparation_local_sources(
+    const loom_serve_preparation_t* preparation,
+    const iree_string_view_list_t** out_sources);
+
 // Requested owned bytes, including spare array capacity and copied strings.
 // NULL has no storage. This query does not traverse declarations.
 iree_host_size_t loom_serve_preparation_storage_size(

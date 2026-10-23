@@ -1545,6 +1545,7 @@ loom_cc_test(
     loom::serve::runtime::parameter::activation
     loom::serve::runtime::parameter::bank
     loom::serve::runtime::parameter::residency
+    loom::serve::runtime::parameter::sources
     loom::serve::runtime::parameter::weights
     loom::serve::runtime::program
     loom::serve::runtime::program::jit
@@ -1611,6 +1612,7 @@ loom_cc_test(
     loom::serve::runtime::parameter::activation
     loom::serve::runtime::parameter::bank
     loom::serve::runtime::parameter::residency
+    loom::serve::runtime::parameter::sources
     loom::serve::runtime::parameter::weights
     loom::serve::runtime::program
     loom::serve::runtime::program::jit

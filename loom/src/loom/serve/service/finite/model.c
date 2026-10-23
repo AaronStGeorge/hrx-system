@@ -15,6 +15,7 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/parameter/bank.h"
+#include "loom/serve/runtime/parameter/sources.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
@@ -65,6 +66,8 @@ struct loom_serve_finite_model_t {
   loom_serve_jit_t* jit;
   // Owned source declarations, independent of the bootstrap VM and arguments.
   loom_serve_preparation_t* preparation;
+  // Owned immutable indexes shared by resident and demand-read consumers.
+  loom_serve_parameter_sources_t* parameter_sources;
   // Code generations and batch captures, independent of checkpoint residency.
   loom_serve_executables_t* executables;
   // Idle request-code policy captured independently of source-owned options.
@@ -177,6 +180,7 @@ static iree_status_t loom_serve_finite_model_destroy_resources(
     }
     iree_allocator_free(model->host_allocator, model->stages.values);
     loom_serve_preparation_free(model->preparation);
+    loom_serve_parameter_sources_release(model->parameter_sources);
     loom_serve_finite_result_release(model->invocation.result);
     iree_vm_buffer_release(model->invocation.payload);
     iree_vm_environment_free(model->control.environment);
@@ -482,6 +486,7 @@ static iree_status_t loom_serve_finite_model_link(
       .execution = model->execution,
       .residency = model->residency,
       .preparation = model->preparation,
+      .parameter_sources = model->parameter_sources,
       .parameters = model->parameters,
       .recording = {.queue_family = iree_hal_queue_family(dispatch),
                     .parameters =
@@ -573,6 +578,12 @@ static iree_status_t loom_serve_finite_load_prepare(
   IREE_RETURN_IF_ERROR(
       loom_serve_finite_prepare(model, &load->options, load->event.wake,
                                 load->event.user_data, &load->tokenizer_load));
+  const iree_string_view_list_t* paths = NULL;
+  const uint32_t source_count =
+      loom_serve_preparation_local_sources(model->preparation, &paths);
+  IREE_RETURN_IF_ERROR(loom_serve_parameter_sources_create(
+      NULL, &load->options.sources, source_count, paths, host_allocator,
+      &model->parameter_sources));
   const iree_vm_ref_type_table_t* table = NULL;
   IREE_RETURN_IF_ERROR(
       iree_hal_module_register_types(model->control.environment, &table));
@@ -718,7 +729,7 @@ iree_status_t loom_serve_finite_load_advance(
           status = loom_serve_weights_prepare_async(
               loom_serve_parameter_bank_weights(model->parameters, i), host,
               model->jit, load->command_mode, &load->options.sources, parameter,
-              loom_serve_finite_load_complete, load);
+              model->parameter_sources, loom_serve_finite_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
           load->phase = FINITE_LOAD_LINK;

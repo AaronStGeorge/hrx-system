@@ -51,6 +51,7 @@ class ExecutablesTest : public WeightsTest {
     iree_vm_module_release(runner_);
     loom_serve_stage_table_free(table_);
     loom_serve_preparation_free(preparation_);
+    loom_serve_parameter_sources_release(parameter_sources_);
     iree_vm_environment_free(environment_);
     loom_serve_parameter_bank_retire(bank_, nullptr, nullptr);
     loom_serve_parameter_bank_await_retirement(bank_);
@@ -153,6 +154,12 @@ class ExecutablesTest : public WeightsTest {
     const char* root_name = single_domain ? "raw" : "domains";
     IREE_RETURN_IF_ERROR(
         Declare(root_name, false, single_domain ? 1 : 2, 0, 0, &preparation_));
+    const iree_string_view_list_t* paths = nullptr;
+    const uint32_t source_count =
+        loom_serve_preparation_local_sources(preparation_, &paths);
+    IREE_RETURN_IF_ERROR(loom_serve_parameter_sources_create(
+        nullptr, &sources_, source_count, paths, host_allocator_,
+        &parameter_sources_));
     IREE_RETURN_IF_ERROR(Compile(0, root_name));
     IREE_RETURN_IF_ERROR(loom_serve_parameter_bank_allocate(
         device_owner_, loom_serve_jit_stage_program(compiled_[0]),
@@ -165,7 +172,7 @@ class ExecutablesTest : public WeightsTest {
           loom_serve_parameter_bank_weights(bank_, i),
           loom_serve_device_host(device_owner_), jit_,
           IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT, &sources_,
-          &declaration->parameters[i]);
+          &declaration->parameters[i], parameter_sources_);
     }
     IREE_RETURN_IF_ERROR(status);
     auto* group = loom_serve_parameter_bank_group(bank_);
@@ -179,6 +186,7 @@ class ExecutablesTest : public WeightsTest {
         .execution = execution_,
         .residency = residency_,
         .preparation = preparation_,
+        .parameter_sources = parameter_sources_,
         .parameters = bank_,
         .recording =
             {
@@ -314,6 +322,8 @@ class ExecutablesTest : public WeightsTest {
   iree_hal_module_types_t hal_types_ = {};
   // Immutable registration declarations.
   loom_serve_preparation_t* preparation_ = nullptr;
+  // Original checkpoint indexes shared by parameter banks and request choices.
+  loom_serve_parameter_sources_t* parameter_sources_ = nullptr;
   // Registration's independently loaded roots with colliding tensor names.
   loom_serve_parameter_bank_t* bank_ = nullptr;
   // Atomic admission for all registration-owned parameters.
@@ -573,6 +583,26 @@ TEST_P(ExecutablesTest, MissingNewCheckpointDoesNotPoisonNextSelection) {
   selected_checkpoint_.clear();
   IREE_ASSERT_OK(Select("raw", false, 1));
   ASSERT_NO_FATAL_FAILURE(Execute(90));
+}
+
+TEST_P(ExecutablesTest, SourceOnlyIndexFailurePreservesCodeAndColdWeights) {
+  IREE_ASSERT_OK(Create());
+  const auto commands = compilation_.commands;
+  const auto kernels = compilation_.kernels;
+  selected_checkpoint_ = "absent-checkpoint.safetensors";
+  IREE_ASSERT_OK(Begin("domains", false, 0, 0, 0, "sources_only"));
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_NOT_FOUND, Advance(false));
+  EXPECT_EQ(compilation_.commands, commands);
+  EXPECT_EQ(compilation_.kernels, kernels);
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).activity.activations, 0u);
+  loom_serve_executables_release(executables_);
+  selected_checkpoint_.clear();
+  IREE_ASSERT_OK(Begin("domains", false, 0, 0, 0, "sources_only"));
+  IREE_ASSERT_OK(Advance(false));
+  ASSERT_NO_FATAL_FAILURE(Execute(290, 3, 0));
+  EXPECT_EQ(compilation_.commands, commands);
+  EXPECT_EQ(compilation_.kernels, kernels);
 }
 
 TEST_P(ExecutablesTest, AdmissionRejectsCompleteSetBeforeAnyActivation) {

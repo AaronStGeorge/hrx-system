@@ -12,6 +12,7 @@
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
 #include "loom/serve/runtime/parameter/bank.h"
+#include "loom/serve/runtime/parameter/sources.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
@@ -72,6 +73,8 @@ struct loom_serve_image_model_t {
   loom_serve_jit_t* jit;
   // Owned source declarations, independent of the bootstrap VM and arguments.
   loom_serve_preparation_t* preparation;
+  // Owned immutable indexes shared by resident and demand-read consumers.
+  loom_serve_parameter_sources_t* parameter_sources;
   // Shared source-generation and request-code ownership.
   loom_serve_executables_t* executables;
   // Cold retained shapes sharing one parameter and issue-time buffer bank.
@@ -185,6 +188,7 @@ static iree_status_t loom_serve_image_model_destroy_resources(
     }
     iree_allocator_free(model->host_allocator, model->stages.values);
     loom_serve_preparation_free(model->preparation);
+    loom_serve_parameter_sources_release(model->parameter_sources);
     iree_vm_buffer_release(model->invocation.payload);
     iree_vm_environment_free(model->control.environment);
     loom_serve_execution_release(model->execution);
@@ -500,6 +504,7 @@ static iree_status_t loom_serve_image_model_link(
       .execution = model->execution,
       .residency = model->residency,
       .preparation = model->preparation,
+      .parameter_sources = model->parameter_sources,
       .parameters = model->parameters,
       .recording = {.queue_family = iree_hal_queue_family(
                         loom_serve_device_dispatch_queue(model->owner)),
@@ -608,6 +613,12 @@ static iree_status_t loom_serve_image_load_prepare(
           "image stages require command parameter reflection");
     }
   }
+  const iree_string_view_list_t* paths = NULL;
+  const uint32_t source_count =
+      loom_serve_preparation_local_sources(model->preparation, &paths);
+  IREE_RETURN_IF_ERROR(loom_serve_parameter_sources_create(
+      NULL, &load->options.sources, source_count, paths, host_allocator,
+      &model->parameter_sources));
   const iree_vm_ref_type_table_t* table = NULL;
   IREE_RETURN_IF_ERROR(
       iree_hal_module_register_types(model->control.environment, &table));
@@ -761,7 +772,7 @@ iree_status_t loom_serve_image_load_advance(loom_serve_image_load_t* load,
           status = loom_serve_weights_prepare_async(
               loom_serve_parameter_bank_weights(model->parameters, i), host,
               model->jit, load->command_mode, &load->options.sources, parameter,
-              loom_serve_image_load_complete, load);
+              model->parameter_sources, loom_serve_image_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
           load->phase = IMAGE_LOAD_LINK;

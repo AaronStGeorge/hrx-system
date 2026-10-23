@@ -89,21 +89,57 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
-    inputs
+    sources
   HDRS
-    "inputs.h"
+    "sources.h"
   SRCS
-    "inputs.c"
+    "sources.c"
   DEPS
     iree::base
     iree::io::parameter_index
     iree::io::parameter_index_provider
     iree::io::parameter_provider
     iree::tooling::parameter_util
-    iree::vm
-    loom::serve::runtime::program::preparation
     loom::serve::runtime::program::sources
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    inputs
+  HDRS
+    "inputs.h"
+  SRCS
+    "inputs.c"
+  DEPS
+    ::sources
+    iree::base
+    iree::io::parameter_index
+    iree::io::parameter_provider
+    iree::vm
+    loom::serve::runtime::program::preparation
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    sources_test
+  SRCS
+    "sources_test.cc"
+  DEPS
+    ::sources
+    iree::base
+    iree::io::parameter_index
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+    loom::serve::runtime::program::sources
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 
@@ -117,6 +153,7 @@ loom_cc_library(
     "weights.c"
   DEPS
     ::inputs
+    ::sources
     iree::async
     iree::base
     iree::base::threading
@@ -149,6 +186,7 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/inputs.loom"
   DEPS
     ::inputs
+    ::sources
     iree::base
     iree::base::tooling::flags
     iree::testing::gtest

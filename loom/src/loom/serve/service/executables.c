@@ -83,6 +83,8 @@ typedef struct loom_serve_choice_t {
   loom_serve_generation_t* generation;
   // Owned exact request key, borrowed by the compiler until completion.
   loom_serve_preparation_t* preparation;
+  // Owned indexed sources, retaining the model's immutable cold prefix.
+  loom_serve_parameter_sources_t* parameter_sources;
   // Pool entry receiving the terminal producer result.
   loom_serve_variant_entry_t* entry;
   // Shared immutable code, independent of this choice's checkpoint selection.
@@ -487,6 +489,7 @@ static void loom_serve_choice_free(void* value) {
     iree_allocator_free(executables->host_allocator, code);
   }
   loom_serve_preparation_free(choice->preparation);
+  loom_serve_parameter_sources_release(choice->parameter_sources);
   if (choice->accounted) {
     executables->cache.payload_bytes -= choice->storage_size;
   }
@@ -804,7 +807,7 @@ static iree_status_t loom_serve_checkpoint_allocate(
 }
 
 struct loom_serve_choice_job_t {
-  // Finite recording task following owner allocation and source preparation.
+  // Cold source-indexing task, reused for final recording after compilation.
   loomc_task_t task;
   // Unpublished choice, retained through terminal publication.
   loom_serve_choice_t* choice;
@@ -814,6 +817,8 @@ struct loom_serve_choice_job_t {
   bool pending;
   // A declaration needs owner-side bank resolution after compilation.
   bool needs_parameters;
+  // No existing request-code product matches the captured declarations.
+  bool needs_compilation;
   // Accepted compilation also completed recording using retained cold banks.
   bool recorded;
   // Owned producer outcome, consumed on the next serialized owner turn.
@@ -1004,6 +1009,38 @@ static void loom_serve_choice_compiled(void* user_data, iree_status_t status,
   loom_serve_choice_prepared(job, status);
 }
 
+static void loom_serve_choice_index_execute(loomc_task_t* task,
+                                            loomc_host_size_t worker) {
+  loom_serve_choice_job_t* job = (loom_serve_choice_job_t*)task;
+  loom_serve_choice_t* choice = job->choice;
+  const iree_string_view_list_t* paths = NULL;
+  const uint32_t count =
+      loom_serve_preparation_local_sources(choice->preparation, &paths);
+  job->status = loom_serve_parameter_sources_create(
+      choice->owner->options.parameter_sources, choice->owner->sources, count,
+      paths, choice->owner->host_allocator, &choice->parameter_sources);
+}
+
+static void loom_serve_choice_index_complete(loomc_task_t* task) {
+  loom_serve_choice_job_t* job = (loom_serve_choice_job_t*)task;
+  iree_status_t status = job->status;
+  job->status = iree_ok_status();
+  if (iree_status_is_ok(status) && job->needs_compilation) {
+    status = loom_serve_stage_set_compile_catalog_async(
+        job->choice->generation->jit, job->choice->preparation, NULL,
+        loom_serve_choice_compiled, job, job->choice->owner->host_allocator);
+    if (iree_status_is_ok(status)) {
+      return;
+    }
+  }
+  loom_serve_choice_prepared(job, status);
+}
+
+static const loomc_task_vtable_t loom_serve_choice_index_vtable = {
+    .execute = loom_serve_choice_index_execute,
+    .destroy = loom_serve_choice_index_complete,
+};
+
 static void loom_serve_choice_record_execute(loomc_task_t* task,
                                              loomc_host_size_t worker) {
   loom_serve_choice_job_t* job = (loom_serve_choice_job_t*)task;
@@ -1118,7 +1155,7 @@ static void loom_serve_choice_advance(loom_serve_executables_t* executables,
           loom_serve_device_host(executables->options.device),
           choice->generation->jit, executables->options.recording.command_mode,
           executables->sources, &job->preparing->declaration,
-          loom_serve_choice_prepared, job);
+          choice->parameter_sources, loom_serve_choice_prepared, job);
       if (iree_status_is_ok(status)) {
         return;
       }
@@ -1235,11 +1272,16 @@ static iree_status_t loom_serve_choice_begin(
                               sizeof(*choice->code), (void**)&choice->code);
     if (iree_status_is_ok(status)) {
       choice->code->users = 1;
-      job->pending = true;
-      status = loom_serve_stage_set_compile_catalog_async(
-          choice->generation->jit, choice->preparation, NULL,
-          loom_serve_choice_compiled, job, executables->host_allocator);
+      job->needs_compilation = true;
     }
+  }
+  if (iree_status_is_ok(status)) {
+    job->pending = true;
+    loomc_task_initialize(&loom_serve_choice_index_vtable, &job->task);
+    status = iree_status_from_loomc(loomc_task_sink_submit(
+        loom_serve_host_preparation_sink(
+            loom_serve_device_host(executables->options.device)),
+        &job->task));
   }
   if (!iree_status_is_ok(status)) {
     executables->invocation.job = NULL;

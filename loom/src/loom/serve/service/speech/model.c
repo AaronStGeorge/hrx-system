@@ -15,6 +15,7 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
+#include "loom/serve/runtime/parameter/sources.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
@@ -101,6 +102,8 @@ struct loom_serve_speech_model_t {
   loom_serve_jit_t* jit;
   // Owned source stage/configuration/checkpoint declarations.
   loom_serve_preparation_t* preparation;
+  // Owned immutable indexes shared by resident and demand-read consumers.
+  loom_serve_parameter_sources_t* parameter_sources;
   // Prepared numerical stages in source declaration order.
   struct {
     // Owned array extent, including partially initialized slots.
@@ -248,6 +251,7 @@ static iree_status_t loom_serve_speech_model_destroy_resources(
     }
     iree_allocator_free(model->host_allocator, model->stages.values);
     loom_serve_preparation_free(model->preparation);
+    loom_serve_parameter_sources_release(model->parameter_sources);
     while (model->invocations) {
       loom_serve_speech_invocation_t* invocation = model->invocations;
       model->invocations = invocation->next;
@@ -841,6 +845,12 @@ static iree_status_t loom_serve_speech_load_prepare(
       iree_vm_buffer_wrap(IREE_VM_BUFFER_ACCESS_FLAG_READ, model->output,
                           iree_vm_buffer_release_callback_null(),
                           host_allocator, &model->control.feedback));
+  const iree_string_view_list_t* paths = NULL;
+  const uint32_t source_count =
+      loom_serve_preparation_local_sources(model->preparation, &paths);
+  IREE_RETURN_IF_ERROR(loom_serve_parameter_sources_create(
+      NULL, &load->options.sources, source_count, paths, host_allocator,
+      &model->parameter_sources));
   const iree_vm_ref_type_table_t* table = NULL;
   IREE_RETURN_IF_ERROR(
       iree_hal_module_register_types(model->control.environment, &table));
@@ -985,7 +995,7 @@ iree_status_t loom_serve_speech_load_advance(
           iree_slim_mutex_unlock(&load->event.mutex);
           status = loom_serve_weights_prepare_async(
               model->weights.plans[i], host, model->jit, load->command_mode,
-              &load->options.sources, parameter,
+              &load->options.sources, parameter, model->parameter_sources,
               loom_serve_speech_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {

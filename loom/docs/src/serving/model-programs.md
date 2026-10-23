@@ -103,6 +103,11 @@ each additional shard. The files populate one index in declaration order.
 The same source can supply several resident bindings or stages without repeating
 the file list. Sources identify bytes, independently of resident placement or
 preparation policy; a source declaration by itself loads no parameter payload.
+Cold preparation opens each declared source once and shares its index and
+imported-file cache across consuming bindings. Request choices retain the cold
+prefix and index new sources on the preparation worker; warm execution does not
+reopen checkpoint paths. A missing or invalid checkpoint fails preparation
+before its parameter placement or activation.
 
 Each fixed binding declares its policy inputs once, densely from zero. A policy
 can combine independent checkpoints containing the same keys: its `weights`

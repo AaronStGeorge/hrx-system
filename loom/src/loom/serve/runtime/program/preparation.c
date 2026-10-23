@@ -17,13 +17,6 @@
 #include "loom/serve/runtime/program/parameter_layout.h"
 #include "loom/serve/runtime/program/program.h"
 
-typedef struct loom_serve_preparation_source_storage_t {
-  // Owned ordered shard paths, mutable only during declaration capture.
-  iree_string_view_list_t paths;
-  // Allocated shard-list capacity.
-  iree_host_size_t capacity;
-} loom_serve_preparation_source_storage_t;
-
 typedef struct loom_serve_preparation_stage_storage_t {
   // Public declaration; its array pointers refer to the owned storage below.
   loom_serve_preparation_stage_t declaration;
@@ -58,8 +51,10 @@ struct loom_serve_preparation_t {
   uint32_t source_count;
   // Allocated source capacity.
   iree_host_size_t source_capacity;
-  // Owned source records, independent of resident placement.
-  loom_serve_preparation_source_storage_t* sources;
+  // Owned ordered shard lists, independent of resident placement.
+  iree_string_view_list_t* sources;
+  // Allocated shard-list capacity for each owned source.
+  iree_host_size_t* path_capacities;
 };
 
 typedef struct loom_serve_preparation_module_t {
@@ -149,13 +144,14 @@ void loom_serve_preparation_free(loom_serve_preparation_t* preparation) {
     iree_allocator_free(host_allocator, stage->input_capacities);
   }
   for (uint32_t i = 0; i < preparation->source_count; ++i) {
-    const iree_string_view_list_t paths = preparation->sources[i].paths;
+    const iree_string_view_list_t paths = preparation->sources[i];
     for (iree_host_size_t p = 0; p < paths.count; ++p) {
       iree_allocator_free(host_allocator, (void*)paths.values[p].data);
     }
     iree_allocator_free(host_allocator, (void*)paths.values);
   }
   iree_allocator_free(host_allocator, preparation->sources);
+  iree_allocator_free(host_allocator, preparation->path_capacities);
   iree_allocator_free(host_allocator, preparation->stages);
   iree_allocator_free(host_allocator, preparation);
 }
@@ -369,21 +365,30 @@ static iree_status_t loom_serve_preparation_add_source(
                               "parameter source ordinal is not representable");
     }
     if (preparation->source_count == preparation->source_capacity) {
+      const iree_host_size_t previous_capacity = preparation->source_capacity;
       IREE_RETURN_IF_ERROR(loom_serve_preparation_grow_array(
           preparation, preparation->source_count + 1,
           sizeof(*preparation->sources), &preparation->source_capacity,
           (void**)&preparation->sources));
+      IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
+          preparation->host_allocator, preparation->source_capacity,
+          sizeof(*preparation->path_capacities),
+          (void**)&preparation->path_capacities));
+      preparation->storage_size +=
+          (preparation->source_capacity - previous_capacity) *
+          sizeof(*preparation->path_capacities);
     }
-    preparation->sources[preparation->source_count++] =
-        (loom_serve_preparation_source_storage_t){0};
+    preparation->sources[preparation->source_count] =
+        (iree_string_view_list_t){0};
+    preparation->path_capacities[preparation->source_count++] = 0;
   }
-  loom_serve_preparation_source_storage_t* source =
-      &preparation->sources[ordinal - preparation->first_source];
-  iree_string_view_list_t* files = &source->paths;
+  const uint32_t local = ordinal - preparation->first_source;
+  iree_string_view_list_t* files = &preparation->sources[local];
+  iree_host_size_t* capacity = &preparation->path_capacities[local];
   iree_string_view_t* paths = (iree_string_view_t*)files->values;
-  if (files->count == source->capacity) {
+  if (files->count == *capacity) {
     IREE_RETURN_IF_ERROR(loom_serve_preparation_grow_array(
-        preparation, files->count + 1, sizeof(*paths), &source->capacity,
+        preparation, files->count + 1, sizeof(*paths), capacity,
         (void**)&paths));
     files->values = paths;
   }
@@ -738,7 +743,14 @@ iree_string_view_list_t loom_serve_preparation_source(
   if (ordinal < preparation->first_source) {
     return loom_serve_preparation_source(preparation->base, ordinal);
   }
-  return preparation->sources[ordinal - preparation->first_source].paths;
+  return preparation->sources[ordinal - preparation->first_source];
+}
+
+uint32_t loom_serve_preparation_local_sources(
+    const loom_serve_preparation_t* preparation,
+    const iree_string_view_list_t** out_sources) {
+  *out_sources = preparation ? preparation->sources : NULL;
+  return preparation ? preparation->source_count : 0;
 }
 
 iree_host_size_t loom_serve_preparation_storage_size(
