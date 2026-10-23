@@ -546,6 +546,8 @@ low.func.def schedule(locked) target<amd.xdna.aie2p.core>(@target) @packed_extra
 // rematerialization under scalar pressure. A private zero feeding a fixed-r27
 // select must wait for arithmetic to release ordinary storage; exposing the
 // fixed copy alone does not make that setup actionable while it incurs debt.
+// Repair replays one condition move and coissues the final select with the
+// first store, preserving issue cycles for one additional two-byte slot.
 // RUN: emit aie2p-leaf @retained_scale_select report=emission
 
 aie2p.target<core> @target
@@ -730,9 +732,9 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @retained_scale_select(%record
 
 // ----
 issue cycles: 163
-code bytes: 746
-coissued bundles: 40
-coissued components: 80
+code bytes: 748
+coissued bundles: 41
+coissued components: 82
 
 // ====
 
