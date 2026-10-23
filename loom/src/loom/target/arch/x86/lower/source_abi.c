@@ -48,6 +48,8 @@ typedef struct loom_x86_source_abi_leaf_t {
   // True when a loaded GPR32 value must be reduced to one bit.
   bool normalize_i1;
 } loom_x86_source_abi_leaf_t;
+static_assert(sizeof(loom_x86_source_abi_leaf_t) == 16,
+              "x86 source ABI leaf recipes must be exactly 16 bytes");
 
 typedef struct loom_x86_source_abi_carrier_t {
   // Byte offset from the source object carried in the low bits.
@@ -55,6 +57,8 @@ typedef struct loom_x86_source_abi_carrier_t {
   // Physical x86 register class used by the Low signature.
   uint16_t register_class;
 } loom_x86_source_abi_carrier_t;
+static_assert(sizeof(loom_x86_source_abi_carrier_t) == 8,
+              "x86 source ABI carrier recipes must be exactly 8 bytes");
 
 typedef struct loom_x86_source_abi_object_t {
   // Complete SysV classification of this root source object.
@@ -76,6 +80,8 @@ typedef struct loom_x86_source_abi_object_t {
   // True when the complete argument crosses through stack memory.
   bool is_memory_argument;
 } loom_x86_source_abi_object_t;
+static_assert(sizeof(loom_x86_source_abi_object_t) == 40,
+              "x86 source ABI object recipes must be exactly 40 bytes");
 
 typedef struct loom_x86_source_abi_plan_t {
   // Descriptor vocabulary selected with the immutable representation view.

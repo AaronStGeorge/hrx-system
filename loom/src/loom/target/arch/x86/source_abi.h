@@ -20,13 +20,16 @@ extern "C" {
 
 // SysV AMD64 classes used by the supported C object family. MEMORY is retained
 // explicitly while x87 and complex classes are rejected by the source ABI.
-typedef enum loom_x86_source_abi_class_e {
+typedef uint8_t loom_x86_source_abi_class_t;
+enum loom_x86_source_abi_class_e {
   LOOM_X86_SOURCE_ABI_CLASS_NO_CLASS = 0,
   LOOM_X86_SOURCE_ABI_CLASS_INTEGER = 1,
   LOOM_X86_SOURCE_ABI_CLASS_SSE = 2,
   LOOM_X86_SOURCE_ABI_CLASS_SSEUP = 3,
   LOOM_X86_SOURCE_ABI_CLASS_MEMORY = 4,
-} loom_x86_source_abi_class_t;
+};
+static_assert(LOOM_X86_SOURCE_ABI_CLASS_MEMORY <= UINT8_MAX,
+              "x86 source ABI classes must fit in one byte");
 
 // Complete classification of one root C source object.
 typedef struct loom_x86_source_abi_classification_t {
@@ -45,6 +48,8 @@ typedef struct loom_x86_source_abi_classification_t {
   loom_x86_source_abi_class_t
       eightbytes[LOOM_X86_SOURCE_ABI_MAX_EIGHTBYTE_COUNT];
 } loom_x86_source_abi_classification_t;
+static_assert(sizeof(loom_x86_source_abi_classification_t) == 20,
+              "x86 source ABI classification must be exactly 20 bytes");
 
 // Classifies one root in a verified C source signature. |maximum_vector_bytes|
 // is 16, 32, or 64 when the selected profile can transport the corresponding
