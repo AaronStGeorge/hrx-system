@@ -106,6 +106,8 @@ struct loom_serve_finite_model_t {
     iree_vm_function_t prepare_request;
     // Cold-resolved cohort construction function.
     iree_vm_function_t prepare_batch;
+    // Optional source-selected request memory forecast, resolved at cold link.
+    iree_vm_function_t memory_forecast;
     // Cold-resolved device command submission function.
     iree_vm_function_t run;
   } control;
@@ -263,7 +265,10 @@ static iree_status_t loom_serve_finite_prepare(
         loom_serve_host_target_environment(
             loom_serve_device_host(model->owner)),
         model->control.environment, &options->sources, options->sources.prepare,
-        IREE_SV("prepare"), iree_vm_variant_span_from_array(arguments),
+        IREE_SV("prepare"),
+        LOOM_SERVE_PREPARATION_FLAG_PARAMETERS |
+            LOOM_SERVE_PREPARATION_FLAG_MEMORY_FORECAST,
+        iree_vm_variant_span_from_array(arguments),
         iree_vm_variant_span_from_array(results),
         (iree_vm_module_span_t){modules, 2}, &model->compilation,
         host_allocator, &model->preparation);
@@ -467,8 +472,23 @@ static iree_status_t loom_serve_finite_create_control(
        {NULL, 0},
        &model->control.run},
   };
-  return loom_serve_program_bind(model->control.program,
-                                 IREE_ARRAYSIZE(bindings), bindings);
+  IREE_RETURN_IF_ERROR(loom_serve_program_bind(
+      model->control.program, IREE_ARRAYSIZE(bindings), bindings));
+  const iree_string_view_t forecast_root =
+      loom_serve_preparation_memory_forecast(model->preparation);
+  if (!iree_string_view_is_empty(forecast_root)) {
+    const iree_vm_signature_type_t forecast_arguments[] = {buffer, buffer,
+                                                           buffer};
+    const iree_vm_signature_type_t forecast_results[] = {i64, i64, i64};
+    const loom_serve_program_binding_t forecast = {
+        forecast_root,
+        {forecast_arguments, IREE_ARRAYSIZE(forecast_arguments)},
+        {forecast_results, IREE_ARRAYSIZE(forecast_results)},
+        &model->control.memory_forecast};
+    IREE_RETURN_IF_ERROR(
+        loom_serve_program_bind(model->control.program, 1, &forecast));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_serve_finite_model_bind(
@@ -605,12 +625,15 @@ static iree_status_t loom_serve_finite_load_prepare(
   IREE_RETURN_IF_ERROR(
       iree_hal_module_types_resolve(table, &model->control.hal_types));
   const iree_string_view_t roots[] = {
-      IREE_SVL("prepare_request"), IREE_SVL("prepare_batch"), IREE_SVL("run")};
+      IREE_SVL("prepare_request"), IREE_SVL("prepare_batch"), IREE_SVL("run"),
+      loom_serve_preparation_memory_forecast(model->preparation)};
+  const iree_host_size_t root_count =
+      IREE_ARRAYSIZE(roots) - iree_string_view_is_empty(roots[3]);
   iree_status_t status = loom_serve_program_compile(
       loom_serve_host_target_environment(loom_serve_device_host(model->owner)),
       model->control.environment, &load->options.sources,
-      load->options.sources.control, IREE_ARRAYSIZE(roots), roots,
-      &model->compilation, host_allocator, &load->module);
+      load->options.sources.control, root_count, roots, &model->compilation,
+      host_allocator, &load->module);
   IREE_RETURN_IF_ERROR(status);
   return loom_serve_jit_create(
       loom_serve_device_handle(model->owner),
@@ -861,6 +884,61 @@ uint64_t loom_serve_finite_model_batch_limit(
 iree_host_size_t loom_serve_finite_model_input_capacity(
     const loom_serve_finite_model_t* model) {
   return model->input_capacity;
+}
+
+bool loom_serve_finite_model_has_memory_forecast(
+    const loom_serve_finite_model_t* model) {
+  return !iree_string_view_is_empty(
+      loom_serve_preparation_memory_forecast(model->preparation));
+}
+
+uint64_t loom_serve_finite_model_memory_limit(
+    const loom_serve_finite_model_t* model) {
+  const loom_serve_memory_pool_t* pool =
+      loom_serve_device_memory_pool(model->owner);
+  return pool ? loom_serve_memory_pool_limit(pool) : UINT64_MAX;
+}
+
+iree_status_t loom_serve_finite_model_forecast_memory(
+    loom_serve_finite_model_t* model, iree_vm_buffer_t* ranges,
+    iree_vm_buffer_t* descriptors,
+    loom_serve_finite_memory_forecast_t* out_forecast) {
+  *out_forecast = (loom_serve_finite_memory_forecast_t){0};
+  if (!loom_serve_finite_model_has_memory_forecast(model)) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "finite source declares no memory forecast");
+  }
+  iree_vm_variant_t arguments[] = {
+      iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,
+                                               model->control.state),
+      iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,
+                                               ranges),
+      iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,
+                                               descriptors)};
+  iree_vm_variant_t results[3] = {0};
+  iree_status_t status =
+      iree_vm_invoke(loom_serve_program_invocation(model->control.program),
+                     model->control.memory_forecast,
+                     iree_vm_variant_span_from_array(arguments),
+                     iree_vm_variant_span_from_array(results));
+  int64_t bytes[3] = {0};
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(bytes) && iree_status_is_ok(status); ++i) {
+    status = iree_vm_i64_from_variant(results[i], &bytes[i]);
+    if (iree_status_is_ok(status) && bytes[i] < 0) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "source memory forecast must be nonnegative");
+    }
+  }
+  iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
+  iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
+  if (iree_status_is_ok(status)) {
+    *out_forecast = (loom_serve_finite_memory_forecast_t){
+        .private_peak_bytes = (uint64_t)bytes[0],
+        .retained_bytes = (uint64_t)bytes[1],
+        .expanded_bytes = (uint64_t)bytes[2]};
+  }
+  return status;
 }
 
 const iree_tokenizer_t* loom_serve_finite_model_tokenizer(

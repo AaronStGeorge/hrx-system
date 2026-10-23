@@ -104,6 +104,7 @@ static iree_status_t loom_serve_text_prepare(
     status = loom_serve_preparation_allocate(
         target_environment, source->environment, &options->sources,
         options->sources.prepare, IREE_SV("prepare"),
+        LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
         iree_vm_variant_span_from_array(arguments),
         iree_vm_variant_span_from_array(results),
         iree_vm_module_span_from_array(modules), &source->compilation,

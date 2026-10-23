@@ -249,6 +249,13 @@ typedef struct loom_serve_memory_range_t {
   iree_device_size_t length;
 } loom_serve_memory_range_t;
 
+// Physical footprint of the caller-validated range union, including currently
+// unbacked slabs. Overlapping views count each slot once. Runs on the pool's
+// serialized owner without querying native availability, committing storage,
+// or changing trim/admission state. Saturates if the sum exceeds uint64_t.
+uint64_t loom_serve_memory_ranges_footprint(
+    iree_host_size_t range_count, const loom_serve_memory_range_t* ranges);
+
 // Admits and commits the union of missing slabs across all ranges. Overlapping
 // ranges and views sharing a slab are counted once. False is ordinary capacity
 // backpressure: no destination slabs were added. The pressure policy may have

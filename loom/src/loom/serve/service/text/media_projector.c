@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "loom/serve/media/image_request.h"
+#include "loom/serve/service/prepared_request.h"
 
 typedef struct loom_serve_text_media_image_t {
   // Owned cohort reference, independent of producer parameter residency.
@@ -35,6 +36,14 @@ struct loom_serve_text_media_request_t {
   iree_host_size_t first_image;
   // Current immutable view borrowed by epoch submission.
   loom_serve_text_media_input_t input;
+  // Captured language continuation footprint, excluding image features.
+  uint64_t consumer_bytes;
+  // Complete request forecast evaluated before decoding its first window.
+  loom_serve_finite_memory_forecast_t forecast;
+  // CPU planning has settled this request, including a failed forecast.
+  bool forecasted;
+  // CPU-only forecast result, transferred after the planning loan joins.
+  iree_status_t forecast_status;
   // Owned request rejection, transferred to the HTTP response owner.
   iree_status_t status;
 };
@@ -153,6 +162,7 @@ void loom_serve_text_media_request_free(
   for (iree_host_size_t i = 0; i < request->count; ++i) {
     loom_serve_finite_result_release(request->images[i].result);
   }
+  iree_status_ignore(request->forecast_status);
   iree_allocator_free(request->host_allocator, request);
 }
 
@@ -267,13 +277,14 @@ iree_status_t loom_serve_text_media_projector_allocate(
 
 bool loom_serve_text_media_projector_offer(
     loom_serve_text_media_projector_t* projector,
-    loom_serve_text_media_request_t* request) {
+    loom_serve_text_media_request_t* request, uint64_t consumer_bytes) {
   if (projector->phase != MEDIA_GATHER) {
     return false;
   }
   if (!iree_status_is_ok(request->status)) {
     return true;
   }
+  request->consumer_bytes = consumer_bytes;
   const iree_host_size_t budget =
       loom_serve_finite_model_input_capacity(projector->model);
   for (iree_host_size_t i = 0; i < request->input.span_count; ++i) {
@@ -307,12 +318,93 @@ bool loom_serve_text_media_projector_offer(
   return true;
 }
 
+// Forecast the complete suffix, not just this bounded decode window. A later
+// cohort can specialize different commands while earlier output roots remain
+// live. The source consumes image headers and its own resize metadata; no
+// pixels, device compilation, or parameter activation are needed here.
+static iree_status_t loom_serve_text_media_request_forecast(
+    loom_serve_text_media_request_t* request,
+    loom_serve_finite_model_t* model) {
+  request->forecasted = true;
+  const uint64_t limit = loom_serve_finite_model_memory_limit(model);
+  if (!loom_serve_finite_model_has_memory_forecast(model)) {
+    return limit == UINT64_MAX
+               ? iree_ok_status()
+               : iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                                  "bounded image composition requires a source "
+                                  "memory forecast");
+  }
+  const iree_host_size_t count = request->input.span_count;
+  loom_serve_prepared_request_t* descriptions = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(request->host_allocator,
+                                                   count, sizeof(*descriptions),
+                                                   (void**)&descriptions));
+  const iree_string_view_t metadata =
+      iree_string_builder_view(&request->chat->images.metadata);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
+    const loom_serve_text_chat_image_t* image =
+        &request->chat->images.values[request->first_image + i];
+    status = loom_serve_media_image_request_describe(
+        &image->info,
+        iree_make_const_byte_span(metadata.data + image->metadata_offset,
+                                  image->metadata_length),
+        image->feature_count, request->host_allocator, &descriptions[i].bytes);
+  }
+  iree_vm_buffer_t* ranges = NULL;
+  iree_vm_buffer_t* packed = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_prepared_requests_pack(
+        count, descriptions, request->host_allocator, &ranges, &packed);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_finite_model_forecast_memory(model, ranges, packed,
+                                                     &request->forecast);
+  }
+  iree_vm_buffer_release(ranges);
+  iree_vm_buffer_release(packed);
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    iree_vm_buffer_release(descriptions[i].bytes);
+  }
+  iree_allocator_free(request->host_allocator, descriptions);
+  if (iree_status_is_ok(status)) {
+    // Check the two sequential phases independently. This is impossible-alone
+    // preflight, not credit against peers or permission to overlap the phases.
+    const loom_serve_finite_memory_forecast_t forecast = request->forecast;
+    uint64_t available = limit;
+    if (forecast.retained_bytes > available) {
+      status = iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "retained image features exceed the serving memory limit");
+    } else {
+      available -= forecast.retained_bytes;
+      if (forecast.private_peak_bytes > available ||
+          forecast.expanded_bytes > available ||
+          request->consumer_bytes > available - forecast.expanded_bytes) {
+        status =
+            iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                             "image producer or language continuation exceeds "
+                             "the serving memory limit of %" PRIu64 " bytes",
+                             limit);
+      }
+    }
+  }
+  return status;
+}
+
 static iree_status_t loom_serve_text_media_projector_prepare(void* user_data) {
   loom_serve_text_media_projector_t* projector = user_data;
   iree_host_size_t valid_count = 0;
   for (iree_host_size_t i = 0; i < projector->count; ++i) {
     loom_serve_text_media_job_t* job = &projector->jobs[i];
     if (!job->request) {
+      continue;
+    }
+    if (!job->request->forecasted) {
+      job->request->forecast_status = loom_serve_text_media_request_forecast(
+          job->request, projector->model);
+    }
+    if (!iree_status_is_ok(job->request->forecast_status)) {
       continue;
     }
     const loom_serve_text_chat_t* chat = job->request->chat;
@@ -562,6 +654,14 @@ iree_status_t loom_serve_text_media_projector_advance(
     }
     *out_progress = true;
     if (projector->phase == MEDIA_PREPARING) {
+      for (iree_host_size_t i = 0; i < projector->count; ++i) {
+        loom_serve_text_media_request_t* request = projector->jobs[i].request;
+        if (request) {
+          request->status =
+              iree_status_join(request->status, request->forecast_status);
+          request->forecast_status = iree_ok_status();
+        }
+      }
       if (!iree_status_is_ok(status)) {
         for (iree_host_size_t i = 0; i < projector->count; ++i) {
           projector->cohort[i] = &projector->jobs[i];

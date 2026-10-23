@@ -655,6 +655,20 @@ void loom_serve_residency_free(loom_serve_residency_t* residency) {
   iree_allocator_free(residency->host_allocator, residency);
 }
 
+uint64_t loom_serve_residency_activation_footprint(
+    const loom_serve_residency_t* residency) {
+  uint64_t bytes = 0;
+  for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
+    const loom_serve_residency_group_t* group = residency->entries[i].group;
+    bytes += loom_serve_residency_group_statistics(group).reserved_bytes;
+    for (iree_host_size_t j = 0; j < group->weight_count; ++j) {
+      bytes += loom_serve_weights_activation_workspace(group->weights[j])
+                   .allocation_size;
+    }
+  }
+  return bytes;
+}
+
 iree_status_t loom_serve_residency_check_working_set(
     const loom_serve_residency_t* residency, iree_host_size_t extent_count,
     const iree_device_size_t* extents) {

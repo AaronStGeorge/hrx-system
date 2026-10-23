@@ -95,6 +95,8 @@ typedef struct loom_serve_memory_slab_t {
   bool keep;
   // Missing slab selected by the current serialized commitment transaction.
   bool pending_commit;
+  // Temporary union mark scoped to one serialized footprint query.
+  bool counted;
   // Accepted asynchronous operation excludes another editor of this slot.
   bool in_flight;
 } loom_serve_memory_slab_t;
@@ -690,6 +692,35 @@ static iree_device_size_t loom_serve_memory_slab_length(
     const loom_serve_virtual_buffer_t* buffer, iree_host_size_t index) {
   return iree_min(buffer->geometry.slab_size,
                   buffer->byte_length - index * buffer->geometry.slab_size);
+}
+
+uint64_t loom_serve_memory_ranges_footprint(
+    iree_host_size_t range_count, const loom_serve_memory_range_t* ranges) {
+  uint64_t bytes = 0;
+  for (iree_host_size_t r = 0; r < range_count; ++r) {
+    const loom_serve_memory_range_t* range = &ranges[r];
+    const iree_device_size_t slab_size = range->buffer->geometry.slab_size;
+    const iree_host_size_t end =
+        (range->offset + range->length - 1) / slab_size + 1;
+    for (iree_host_size_t i = range->offset / slab_size; i < end; ++i) {
+      loom_serve_memory_slab_t* slab = &range->buffer->slabs[i];
+      if (!slab->counted) {
+        slab->counted = true;
+        const uint64_t length = loom_serve_memory_slab_length(range->buffer, i);
+        bytes += iree_min(length, UINT64_MAX - bytes);
+      }
+    }
+  }
+  for (iree_host_size_t r = 0; r < range_count; ++r) {
+    const loom_serve_memory_range_t* range = &ranges[r];
+    const iree_device_size_t slab_size = range->buffer->geometry.slab_size;
+    const iree_host_size_t end =
+        (range->offset + range->length - 1) / slab_size + 1;
+    for (iree_host_size_t i = range->offset / slab_size; i < end; ++i) {
+      range->buffer->slabs[i].counted = false;
+    }
+  }
+  return bytes;
 }
 
 static uint64_t* loom_serve_memory_slab_demand(

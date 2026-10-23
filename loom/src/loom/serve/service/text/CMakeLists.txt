@@ -1154,6 +1154,7 @@ loom_cc_library(
     loom::serve::service
     loom::serve::service::finite::model
     loom::serve::service::finite::result
+    loom::serve::service::prepared_request
   PUBLIC
 )
 endif()

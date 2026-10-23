@@ -117,6 +117,12 @@ iree_status_t loom_serve_residency_check_working_set(
     const loom_serve_residency_t* residency, iree_host_size_t extent_count,
     const iree_device_size_t* extents);
 
+// Physical parameter footprint plus concurrent activation lanes. The source
+// plans are already prepared; this neither activates nor pins them. Shared
+// groups count once in this residency, not across independent callers.
+uint64_t loom_serve_residency_activation_footprint(
+    const loom_serve_residency_t* residency);
+
 // Borrowed admission/LRU owner, outliving this registration. Equal cache
 // identities share pressure; activity in another cache cannot release it.
 loom_serve_residency_cache_t* loom_serve_residency_cache(

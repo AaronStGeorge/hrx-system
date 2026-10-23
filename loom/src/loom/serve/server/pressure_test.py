@@ -86,8 +86,13 @@ def oracle(text):
         total += history
         position += 1
 
-    for character in text:
-        consume("abx#".index(character))
+    tokens = (
+        ("abx#".index(character) for character in text)
+        if isinstance(text, str)
+        else text
+    )
+    for token in tokens:
+        consume(token)
     result = ""
     for _ in range(2):
         if position % 11 == 0:
@@ -96,6 +101,48 @@ def oracle(text):
         result += "abx"[token]
         consume(token)
     return result
+
+
+def check_media(address, memory_bytes):
+    pam = (
+        "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
+        "UkdCCkVOREhEUgr/AAAA/wAAAP////8="
+    )
+    image = {
+        "type": "image_url",
+        "image_url": {
+            "url": "data:image/x-portable-arbitrarymap;base64," + pam,
+            "detail": "low",
+        },
+    }
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "a"},
+                image,
+                image,
+                {"type": "text", "text": "b"},
+            ],
+        }
+    ]
+    status, response = completion(address, "alpha", messages)
+    expected_status = 503 if memory_bytes == MODEL_BYTES else 200
+    assert status == expected_status, response
+    if status == 200:
+        # batch_units=1 requires two independently retained producer roots.
+        # The actual projector fingerprints both pixels and cohort width.
+        feature = struct.unpack("<I", struct.pack("<f", 511.0))[0]
+        assert output(response) == oracle([0, feature, feature, 1]), response
+    else:
+        assert "image producer or language continuation" in response, response
+        state = control(address, "GET", "/v1/status", 200)
+        alpha = next(item["loom"] for item in state["data"] if item["id"] == "alpha")
+        for component in ("primary", "image"):
+            parameters = alpha["parameters"][component]
+            assert not parameters.get("active", False), parameters
+            assert parameters.get("activations", 0) == 0, parameters
+    print(json.dumps({"media_limit": memory_bytes, "media_status": status}), flush=True)
 
 
 def check(server, source, directory, device, workers, memory_bytes, retention):
@@ -123,6 +170,15 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
                 "draft_depth": 0,
             },
         }
+        if retention == "none" and name == "alpha":
+            projector = source.parent / "projector"
+            model["definition"]["sources"].append(str(projector / "project.loom"))
+            model["definition"]["image"] = {
+                "prepare": str(projector / "prepare.loom"),
+                "control": str(projector / "control.loom"),
+                "assets": str(projector),
+                "options": {"batch_units": 1},
+            }
         document = directory / f"{name}.json"
         document.write_text(json.dumps(model))
         flags.append(f"--model={document.resolve()}")
@@ -150,6 +206,8 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
             ):
                 break
         messages = [{"role": "user", "content": "abxa"}]
+        if retention == "none":
+            check_media(address, memory_bytes)
         first = ""
         for index in range(4):
             first_status, first = completion(

@@ -72,9 +72,12 @@ iree_status_t loom_serve_text_media_projector_allocate(
 
 // Offers missing images in request order. False means the current window is
 // sealed/full, not request failure. Each occurrence is selected at most once.
+// consumer_bytes is the prepared language continuation's footprint, excluding
+// features. It is captured before the CPU forecast loan; no consumer state or
+// residency is accessed from that loan.
 bool loom_serve_text_media_projector_offer(
     loom_serve_text_media_projector_t* projector,
-    loom_serve_text_media_request_t* request);
+    loom_serve_text_media_request_t* request, uint64_t consumer_bytes);
 
 // Seals a gathered window without a batching timer or waiting for new arrivals.
 bool loom_serve_text_media_projector_start(

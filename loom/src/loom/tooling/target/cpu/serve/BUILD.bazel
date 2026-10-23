@@ -185,7 +185,7 @@ loom_py_test(
         "--source=$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
         "--device=task",
     ],
-    data = TEXT_SOURCES + [":loom-serve-test-tool"],
+    data = TEXT_SOURCES + PROJECTOR_SOURCES + [":loom-serve-test-tool"],
     main = "pressure_test.py",
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/target/arch:x86",
