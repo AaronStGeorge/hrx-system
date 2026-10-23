@@ -18,7 +18,7 @@ iree_status_t loom_test_low_plan_source_signature(
     const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
-    iree_arena_allocator_t* arena,
+    iree_arena_allocator_t* scratch_arena, iree_arena_allocator_t* result_arena,
     loom_low_lower_source_signature_target_plan_t* out_plan);
 
 iree_status_t loom_test_low_emit_source_signature(

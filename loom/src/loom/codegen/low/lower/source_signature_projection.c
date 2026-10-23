@@ -255,8 +255,8 @@ iree_status_t loom_low_plan_source_signature_projection(
     status = plan->callback.plan(
         plan->callback.user_data, &context, &plan->signature_layout,
         plan->logical_argument_types, plan->logical_argument_count,
-        plan->logical_result_types, plan->logical_result_count, arena,
-        &plan->target);
+        plan->logical_result_types, plan->logical_result_count, &function_arena,
+        arena, &plan->target);
   }
   if (iree_status_is_ok(status) && out_result->error_count == 0) {
     IREE_ASSERT(plan->target.argument_count == 0 ||
@@ -265,11 +265,8 @@ iree_status_t loom_low_plan_source_signature_projection(
                 plan->target.result_types != NULL);
     IREE_ASSERT(plan->target.tied_result_count == 0 ||
                 plan->target.tied_results != NULL);
-    iree_arena_allocator_t scratch_arena;
-    iree_arena_initialize(module->arena.block_pool, &scratch_arena);
     status = loom_low_source_signature_plan_layout(
-        &context, &plan->target, &scratch_arena, &plan->abi_layout);
-    iree_arena_deinitialize(&scratch_arena);
+        &context, &plan->target, &function_arena, &plan->abi_layout);
   }
   if (iree_status_is_ok(status) && out_result->error_count == 0) {
     *out_plan = plan;

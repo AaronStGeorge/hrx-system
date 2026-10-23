@@ -162,6 +162,38 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    c_abi_projection
+  HDRS
+    "abi/c/projection.h"
+  SRCS
+    "abi/c/projection.c"
+  DEPS
+    ::lower
+    iree::base
+    iree::base::internal::arena
+    loom::codegen::low::builder
+    loom::codegen::low::descriptors
+    loom::ir
+    loom::ops::low
+    loom::target::registers
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    c_abi_projection_test
+  SRCS
+    "abi/c/projection_test.cc"
+  DEPS
+    ::c_abi_projection
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::target::registers
+)
+
+loom_cc_library(
+  NAME
     source_selection
   HDRS
     "source_selection.h"

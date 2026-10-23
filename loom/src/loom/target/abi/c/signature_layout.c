@@ -115,9 +115,20 @@ static void loom_c_abi_layout_build_leaves(
       return;
     }
     default: {
+      const loom_func_abi_c_type_kind_t kind =
+          loom_func_abi_c_type_attr_kind(type);
       const uint16_t component_count =
           (uint16_t)loom_func_abi_c_type_attr_component_count(type);
       IREE_ASSERT_LE(component_count, UINT8_MAX);
+      loom_c_abi_leaf_flags_t flags =
+          naturally_aligned ? LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED : 0;
+      if (kind == LOOM_FUNC_ABI_C_TYPE_KIND_POINTER) {
+        flags |= LOOM_C_ABI_LEAF_FLAG_POINTER;
+      } else if (kind == LOOM_FUNC_ABI_C_TYPE_KIND_VECTOR) {
+        flags |= LOOM_C_ABI_LEAF_FLAG_VECTOR;
+      } else if (kind == LOOM_FUNC_ABI_C_TYPE_KIND_BOOLEAN) {
+        flags |= LOOM_C_ABI_LEAF_FLAG_BOOLEAN;
+      }
       loom_c_abi_leaf_t* leaf = &leaves[(*inout_leaf_count)++];
       *leaf = (loom_c_abi_leaf_t){
           .type_index = type_index,
@@ -125,8 +136,7 @@ static void loom_c_abi_layout_build_leaves(
           .byte_length = (uint64_t)loom_func_abi_c_type_attr_byte_length(type),
           .logical_offset = *inout_logical_offset,
           .logical_count = (uint8_t)component_count,
-          .flags =
-              naturally_aligned ? LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED : 0,
+          .flags = flags,
       };
       *inout_logical_offset += component_count;
       return;

@@ -6,17 +6,11 @@
 
 #include "loom/target/arch/x86/lower/source_signature.h"
 
-#include <string.h>
-
-#include "loom/codegen/low/builder.h"
-#include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/low/ops.h"
+#include "loom/codegen/low/lower/abi/c/projection.h"
 #include "loom/target/arch/x86/call_abi.h"
 #include "loom/target/arch/x86/descriptors/entry.h"
 #include "loom/target/arch/x86/register_classes.h"
 #include "loom/target/arch/x86/source_signature.h"
-#include "loom/target/registers.h"
 
 enum {
   LOOM_X86_SOURCE_SIGNATURE_INTEGER_ARGUMENT_REGISTER_COUNT = 6,
@@ -28,122 +22,42 @@ static const int64_t kLoomX86SourceSignatureIntegerArgumentRegisters[] = {
     7, 6, 2, 1, 8, 9};
 static const int64_t kLoomX86SourceSignatureIntegerResultRegisters[] = {0, 2};
 
-typedef enum loom_x86_source_signature_leaf_kind_e {
-  LOOM_X86_SOURCE_SIGNATURE_LEAF_SCALAR = 0,
-  LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR = 1,
-  LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER = 2,
-} loom_x86_source_signature_leaf_kind_t;
-
-typedef struct loom_x86_source_signature_leaf_t {
-  // First flat logical value carrying this source leaf.
-  uint16_t logical_offset;
-  // Number of flat logical values; pointers consume base and byte offset.
-  uint8_t logical_count;
-  // loom_x86_source_signature_leaf_kind_t.
-  uint8_t kind;
-  // Byte offset from the containing root object.
-  uint32_t byte_offset;
-  // Exact source object width of this leaf.
-  uint32_t byte_length;
-  // Physical carrier receiving the leaf, or UINT16_MAX for storage projection.
-  uint16_t physical_index;
-  // True when a loaded GPR32 value must be reduced to one bit.
-  bool normalize_i1;
-} loom_x86_source_signature_leaf_t;
-static_assert(sizeof(loom_x86_source_signature_leaf_t) == 16,
-              "x86 source signature leaf recipes must be exactly 16 bytes");
-
-typedef struct loom_x86_source_signature_carrier_t {
-  // Byte offset from the source object carried in the low bits.
-  uint32_t byte_offset;
-  // Physical x86 register class used by the Low signature.
-  uint16_t register_class;
-  // Number of source leaves projected into this carrier.
-  uint16_t leaf_count;
-} loom_x86_source_signature_carrier_t;
-static_assert(sizeof(loom_x86_source_signature_carrier_t) == 8,
-              "x86 source signature carrier recipes must be exactly 8 bytes");
-
-typedef struct loom_x86_source_signature_object_t {
-  // Complete SysV classification of this root source object.
-  loom_x86_source_signature_classification_t classification;
-  // First flat logical value carrying the source object.
-  uint16_t logical_offset;
-  // Number of flat logical values carrying the source object.
-  uint16_t logical_count;
-  // First leaf recipe in the corresponding argument or result leaf array.
-  uint16_t leaf_offset;
-  // Number of leaf recipes owned by this source object.
-  uint16_t leaf_count;
-  // First physical carrier in the corresponding argument or result array.
-  uint16_t physical_offset;
-  // Number of physical carriers for this object. An indirect result has none.
-  uint16_t physical_count;
-  // Private byte image required to pack or unpack this object safely.
-  uint32_t storage_byte_length;
-  // True when the complete argument crosses through stack memory.
-  bool is_memory_argument;
-  // True when every leaf has a direct register projection.
-  bool has_direct_projection;
-} loom_x86_source_signature_object_t;
-static_assert(sizeof(loom_x86_source_signature_object_t) == 40,
-              "x86 source signature object recipes must be exactly 40 bytes");
-
-typedef struct loom_x86_source_signature_plan_t {
-  // Descriptor vocabulary selected with the immutable representation view.
-  const loom_x86_entry_descriptors_t* entry;
-  // Flat logical argument and result carrier types retained by common lowering.
-  const loom_type_t* logical_argument_types;
-  const loom_type_t* logical_result_types;
-  // Source object recipes in signature order.
-  loom_x86_source_signature_object_t* arguments;
-  loom_x86_source_signature_object_t* results;
-  uint16_t argument_object_count;
-  uint16_t result_object_count;
-  // Leaf recipes in flat logical order.
-  loom_x86_source_signature_leaf_t* argument_leaves;
-  loom_x86_source_signature_leaf_t* result_leaves;
-  uint16_t argument_leaf_count;
-  uint16_t result_leaf_count;
-  // Physical carrier recipes parallel to the emitted Low signature.
-  loom_x86_source_signature_carrier_t* argument_carriers;
-  loom_x86_source_signature_carrier_t* result_carriers;
-  uint16_t argument_carrier_count;
-  uint16_t result_carrier_count;
-  // A memory-class result is returned through physical argument zero.
-  bool has_indirect_result;
-} loom_x86_source_signature_plan_t;
-
-typedef struct loom_x86_source_signature_emission_state_t {
-  // Private storage reserved by a call for an indirect result.
-  loom_value_id_t result_storage;
-  // Address passed by a caller or received by a definition for that result.
-  loom_value_id_t result_address;
-} loom_x86_source_signature_emission_state_t;
-
 typedef struct loom_x86_source_signature_plan_builder_t {
+  // Active source-signature lowering context.
   loom_low_lower_context_t* context;
+  // Arena retaining physical signatures and the common projection plan.
   iree_arena_allocator_t* arena;
-  loom_x86_source_signature_plan_t* plan;
-  // Physical Low and source-semantic signatures under construction.
+  // Common source-object projection under construction.
+  loom_low_c_abi_projection_plan_t* projection;
+  // Physical Low argument types under construction.
   loom_type_t* argument_types;
+  // Physical Low result types under construction.
   loom_type_t* result_types;
+  // Source-semantic argument types parallel to argument_types.
   loom_type_t* semantic_argument_types;
+  // Source-semantic result types parallel to result_types.
   loom_type_t* semantic_result_types;
-  // Exact placement arrays parallel to the physical signature.
+  // Exact register placements parallel to argument_types.
   int64_t* argument_registers;
+  // Exact stack placements parallel to argument_types.
   int64_t* argument_offsets;
+  // Exact register placements parallel to result_types.
   int64_t* result_registers;
-  // Current physical signature lengths.
+  // Number of populated physical arguments.
   uint16_t argument_count;
+  // Number of populated physical results.
   uint16_t result_count;
-  // Current register-bank consumption.
+  // Consumed integer argument registers.
   uint8_t integer_argument_count;
+  // Consumed SIMD argument registers.
   uint8_t sse_argument_count;
+  // Consumed integer result registers.
   uint8_t integer_result_count;
+  // Consumed SIMD result registers.
   uint8_t sse_result_count;
-  // Current stack argument geometry.
+  // Current stack argument byte length.
   uint32_t stack_bytes;
+  // Maximum stack argument alignment.
   uint8_t stack_alignment;
 } loom_x86_source_signature_plan_builder_t;
 
@@ -153,117 +67,37 @@ static iree_status_t loom_x86_source_signature_unsupported(
       context, loom_low_lower_context_source_function(context).op, reason);
 }
 
-static uint32_t loom_x86_source_signature_register_byte_length(
-    loom_type_t register_type) {
-  if (!loom_low_type_is_register(register_type) ||
-      loom_low_register_type_unit_count(register_type) != 1) {
-    return 0;
-  }
-  return loom_x86_call_abi_register_byte_length(
-      loom_low_register_type_class_id(register_type));
-}
-
 static iree_status_t loom_x86_source_signature_allocate_array(
     iree_arena_allocator_t* arena, iree_host_size_t count,
     iree_host_size_t element_size, void** out_ptr) {
   *out_ptr = NULL;
-  if (count == 0) {
-    return iree_ok_status();
-  }
-  return iree_arena_allocate_array(arena, count, element_size, out_ptr);
+  return count == 0
+             ? iree_ok_status()
+             : iree_arena_allocate_array(arena, count, element_size, out_ptr);
 }
 
-static void loom_x86_source_signature_copy_leaf(
-    const loom_c_abi_signature_layout_t* layout,
-    const loom_c_abi_leaf_t* source_leaf, const loom_type_t* logical_types,
-    uint16_t logical_count, loom_x86_source_signature_leaf_t* leaf,
-    uint32_t* inout_storage_byte_length) {
-  IREE_ASSERT_LT(source_leaf->type_index, layout->signature.types.count);
-  const loom_attribute_t type =
-      layout->signature.types.values[source_leaf->type_index];
-  const loom_func_abi_c_type_kind_t kind = loom_func_abi_c_type_attr_kind(type);
-  const bool pointer = kind == LOOM_FUNC_ABI_C_TYPE_KIND_POINTER;
-  IREE_ASSERT(kind != LOOM_FUNC_ABI_C_TYPE_KIND_ARRAY &&
-              kind != LOOM_FUNC_ABI_C_TYPE_KIND_RECORD);
-  IREE_ASSERT_LE(
-      (uint32_t)source_leaf->logical_offset + source_leaf->logical_count,
-      logical_count);
-  IREE_ASSERT_LE(source_leaf->byte_offset, UINT32_MAX);
-  IREE_ASSERT_LE(source_leaf->byte_length, UINT32_MAX);
-  *leaf = (loom_x86_source_signature_leaf_t){
-      .logical_offset = source_leaf->logical_offset,
-      .logical_count = source_leaf->logical_count,
-      .kind = pointer ? LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER
-              : kind == LOOM_FUNC_ABI_C_TYPE_KIND_VECTOR
-                  ? LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR
-                  : LOOM_X86_SOURCE_SIGNATURE_LEAF_SCALAR,
-      .byte_offset = (uint32_t)source_leaf->byte_offset,
-      .byte_length = (uint32_t)source_leaf->byte_length,
-      .physical_index = UINT16_MAX,
-      .normalize_i1 = kind == LOOM_FUNC_ABI_C_TYPE_KIND_BOOLEAN,
-  };
-  if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR) {
-    const uint32_t carrier_bytes =
-        loom_x86_source_signature_register_byte_length(
-            logical_types[source_leaf->logical_offset]);
-    IREE_ASSERT_NE(carrier_bytes, 0);
-    *inout_storage_byte_length =
-        iree_max(*inout_storage_byte_length, leaf->byte_offset + carrier_bytes);
-  }
-}
-
-static iree_status_t loom_x86_source_signature_plan_objects(
+static iree_status_t loom_x86_source_signature_classify_objects(
     loom_low_lower_context_t* context,
     const loom_c_abi_signature_layout_t* layout,
-    const loom_c_abi_object_t* source_objects, uint16_t object_count,
-    const loom_c_abi_leaf_t* source_leaves, uint16_t source_leaf_count,
-    const loom_type_t* logical_types, uint16_t logical_count,
-    uint16_t maximum_vector_bytes, iree_arena_allocator_t* arena,
-    loom_x86_source_signature_object_t** out_objects,
-    loom_x86_source_signature_leaf_t** out_leaves, uint16_t* out_leaf_count) {
-  *out_objects = NULL;
-  *out_leaves = NULL;
-  *out_leaf_count = 0;
-  loom_x86_source_signature_object_t* objects = NULL;
-  loom_x86_source_signature_leaf_t* leaves = NULL;
+    const loom_c_abi_object_t* objects, uint16_t object_count,
+    const loom_c_abi_leaf_t* leaves, uint16_t maximum_vector_bytes,
+    iree_arena_allocator_t* arena,
+    loom_x86_source_signature_classification_t** out_classifications) {
+  *out_classifications = NULL;
+  loom_x86_source_signature_classification_t* classifications = NULL;
   IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_array(
-      arena, object_count, sizeof(*objects), (void**)&objects));
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_array(
-      arena, source_leaf_count, sizeof(*leaves), (void**)&leaves));
-  if (object_count) {
-    memset(objects, 0, object_count * sizeof(*objects));
-  }
-  if (source_leaf_count) {
-    memset(leaves, 0, source_leaf_count * sizeof(*leaves));
-  }
-
+      arena, object_count, sizeof(*classifications), (void**)&classifications));
   for (uint16_t i = 0; i < object_count; ++i) {
-    const loom_c_abi_object_t* source_object = &source_objects[i];
-    loom_x86_source_signature_object_t* object = &objects[i];
     const loom_c_abi_leaf_t* object_leaves =
-        source_object->leaf_count ? source_leaves + source_object->leaf_offset
-                                  : NULL;
-    if (!loom_x86_source_signature_classify(layout, source_object,
-                                            object_leaves, maximum_vector_bytes,
-                                            &object->classification)) {
+        objects[i].leaf_count ? leaves + objects[i].leaf_offset : NULL;
+    if (!loom_x86_source_signature_classify(layout, &objects[i], object_leaves,
+                                            maximum_vector_bytes,
+                                            &classifications[i])) {
       return loom_x86_source_signature_unsupported(
           context, IREE_SV("source object is outside the x86-64 SysV family"));
     }
-    object->logical_offset = source_object->logical_offset;
-    object->logical_count = source_object->logical_count;
-    object->leaf_offset = source_object->leaf_offset;
-    object->leaf_count = source_object->leaf_count;
-    object->storage_byte_length = object->classification.byte_length;
-    for (uint16_t j = 0; j < source_object->leaf_count; ++j) {
-      loom_x86_source_signature_copy_leaf(
-          layout, &object_leaves[j], logical_types, logical_count,
-          &leaves[source_object->leaf_offset + j],
-          &object->storage_byte_length);
-    }
   }
-  *out_objects = objects;
-  *out_leaves = leaves;
-  *out_leaf_count = source_leaf_count;
+  *out_classifications = classifications;
   return iree_ok_status();
 }
 
@@ -302,46 +136,40 @@ static loom_type_t loom_x86_source_signature_vector_semantic_type(
 
 static iree_status_t loom_x86_source_signature_append_carrier(
     loom_x86_source_signature_plan_builder_t* builder, bool argument,
-    loom_x86_source_signature_object_t* object, uint32_t byte_offset,
-    uint16_t register_class, loom_type_t semantic_type,
-    int64_t register_location, int64_t stack_offset) {
+    uint16_t object_index, uint32_t byte_offset, uint16_t register_class,
+    loom_type_t semantic_type, int64_t register_location,
+    int64_t stack_offset) {
   loom_type_t physical_type;
   IREE_RETURN_IF_ERROR(loom_low_lower_make_register_type(
       builder->context, register_class, 1, &physical_type));
   const uint32_t register_bytes =
       loom_x86_call_abi_register_byte_length(register_class);
   IREE_ASSERT_NE(register_bytes, 0);
-  object->storage_byte_length =
-      iree_max(object->storage_byte_length, byte_offset + register_bytes);
   if (argument) {
-    const uint16_t index = builder->argument_count++;
+    const uint16_t index = loom_low_c_abi_projection_append_argument_carrier(
+        builder->projection, object_index, byte_offset, register_bytes);
+    IREE_ASSERT_EQ(index, builder->argument_count);
     builder->argument_types[index] = physical_type;
     builder->semantic_argument_types[index] = semantic_type;
     builder->argument_registers[index] = register_location;
     builder->argument_offsets[index] = stack_offset;
-    builder->plan->argument_carriers[index].byte_offset = byte_offset;
-    builder->plan->argument_carriers[index].register_class = register_class;
-    builder->plan->argument_carriers[index].leaf_count = 0;
+    ++builder->argument_count;
   } else {
-    const uint16_t index = builder->result_count++;
+    const uint16_t index = loom_low_c_abi_projection_append_result_carrier(
+        builder->projection, object_index, byte_offset, register_bytes);
+    IREE_ASSERT_EQ(index, builder->result_count);
     builder->result_types[index] = physical_type;
     builder->semantic_result_types[index] = semantic_type;
     builder->result_registers[index] = register_location;
-    builder->plan->result_carriers[index].byte_offset = byte_offset;
-    builder->plan->result_carriers[index].register_class = register_class;
-    builder->plan->result_carriers[index].leaf_count = 0;
+    ++builder->result_count;
   }
-  ++object->physical_count;
   return iree_ok_status();
 }
 
 static iree_status_t loom_x86_source_signature_append_direct_object(
     loom_x86_source_signature_plan_builder_t* builder, bool argument,
-    loom_x86_source_signature_object_t* object) {
-  const loom_x86_source_signature_classification_t* classification =
-      &object->classification;
-  object->physical_offset =
-      argument ? builder->argument_count : builder->result_count;
+    uint16_t object_index,
+    const loom_x86_source_signature_classification_t* classification) {
   for (uint8_t i = 0; i < classification->eightbyte_count; ++i) {
     const loom_x86_source_signature_class_t abi_class =
         classification->eightbytes[i];
@@ -357,8 +185,9 @@ static iree_status_t loom_x86_source_signature_append_direct_object(
           argument ? kLoomX86SourceSignatureIntegerArgumentRegisters[bank_index]
                    : kLoomX86SourceSignatureIntegerResultRegisters[bank_index];
       IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_carrier(
-          builder, argument, object, byte_offset, LOOM_X86_REGISTER_CLASS_GPR64,
-          loom_type_scalar(LOOM_SCALAR_TYPE_I64), location,
+          builder, argument, object_index, byte_offset,
+          LOOM_X86_REGISTER_CLASS_GPR64, loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+          location,
           /*stack_offset=*/-1));
       continue;
     }
@@ -373,8 +202,7 @@ static iree_status_t loom_x86_source_signature_append_direct_object(
     uint16_t register_class = LOOM_X86_REGISTER_CLASS_XMM;
     if (run_bytes == 32) {
       register_class = LOOM_X86_REGISTER_CLASS_YMM;
-    }
-    if (run_bytes == 64) {
+    } else if (run_bytes == 64) {
       register_class = LOOM_X86_REGISTER_CLASS_ZMM;
     }
     const uint32_t remaining_bytes = classification->byte_length - byte_offset;
@@ -386,18 +214,17 @@ static iree_status_t loom_x86_source_signature_append_direct_object(
     const uint8_t bank_index =
         argument ? builder->sse_argument_count++ : builder->sse_result_count++;
     IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_carrier(
-        builder, argument, object, byte_offset, register_class, semantic_type,
-        bank_index, /*stack_offset=*/-1));
+        builder, argument, object_index, byte_offset, register_class,
+        semantic_type, bank_index, /*stack_offset=*/-1));
     i += run_count - 1;
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_x86_source_signature_append_memory_argument(
-    loom_x86_source_signature_plan_builder_t* builder,
-    loom_x86_source_signature_object_t* object) {
-  const uint32_t alignment =
-      iree_max(8u, object->classification.byte_alignment);
+    loom_x86_source_signature_plan_builder_t* builder, uint16_t object_index,
+    const loom_x86_source_signature_classification_t* classification) {
+  const uint32_t alignment = iree_max(8u, classification->byte_alignment);
   if (alignment > UINT8_MAX) {
     return loom_x86_source_signature_unsupported(
         builder->context,
@@ -406,19 +233,17 @@ static iree_status_t loom_x86_source_signature_append_memory_argument(
   const uint64_t aligned_offset =
       iree_host_align(builder->stack_bytes, alignment);
   const uint64_t object_bytes =
-      iree_host_align(object->classification.byte_length, 8u);
+      iree_host_align(classification->byte_length, 8u);
   if (aligned_offset + object_bytes > UINT32_MAX) {
     return loom_x86_source_signature_unsupported(
         builder->context,
         IREE_SV("x86 source signature stack argument area exceeds 32 bits"));
   }
-  object->physical_offset = builder->argument_count;
-  object->is_memory_argument = true;
   const uint16_t carrier_count =
-      (uint16_t)((object->classification.byte_length + 7u) / 8u);
+      (uint16_t)((classification->byte_length + 7u) / 8u);
   for (uint16_t i = 0; i < carrier_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_carrier(
-        builder, /*argument=*/true, object, (uint32_t)i * 8u,
+        builder, /*argument=*/true, object_index, (uint32_t)i * 8u,
         LOOM_X86_REGISTER_CLASS_GPR64, loom_type_scalar(LOOM_SCALAR_TYPE_I64),
         /*register_location=*/-1,
         (int64_t)(aligned_offset + (uint64_t)i * 8u)));
@@ -427,55 +252,6 @@ static iree_status_t loom_x86_source_signature_append_memory_argument(
   builder->stack_alignment = (uint8_t)iree_max(
       (uint32_t)builder->stack_alignment, iree_max(16u, alignment));
   return iree_ok_status();
-}
-
-static void loom_x86_source_signature_bind_direct_projection(
-    loom_x86_source_signature_object_t* object,
-    loom_x86_source_signature_leaf_t* leaves, const loom_type_t* logical_types,
-    loom_x86_source_signature_carrier_t* carriers) {
-  object->has_direct_projection = true;
-  uint16_t local_carrier_index = 0;
-  for (uint16_t i = 0; i < object->leaf_count; ++i) {
-    loom_x86_source_signature_leaf_t* leaf = &leaves[object->leaf_offset + i];
-    const uint32_t leaf_byte_length =
-        leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER
-            ? 8
-            : leaf->byte_length;
-    while (local_carrier_index < object->physical_count) {
-      const loom_x86_source_signature_carrier_t* carrier =
-          &carriers[object->physical_offset + local_carrier_index];
-      const uint32_t carrier_byte_end =
-          local_carrier_index + 1 < object->physical_count
-              ? carriers[object->physical_offset + local_carrier_index + 1]
-                    .byte_offset
-              : object->classification.byte_length;
-      if (leaf->byte_offset >= carrier->byte_offset &&
-          leaf->byte_offset + leaf_byte_length <= carrier_byte_end) {
-        break;
-      }
-      ++local_carrier_index;
-    }
-    if (local_carrier_index == object->physical_count) {
-      object->has_direct_projection = false;
-      return;
-    }
-    const uint16_t physical_index =
-        object->physical_offset + local_carrier_index;
-    loom_x86_source_signature_carrier_t* carrier = &carriers[physical_index];
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR) {
-      const loom_type_t logical_type = logical_types[leaf->logical_offset];
-      if (!loom_low_type_is_register(logical_type) ||
-          loom_low_register_type_unit_count(logical_type) != 1 ||
-          loom_low_register_type_class_id(logical_type) !=
-              carrier->register_class ||
-          leaf->byte_offset != carrier->byte_offset) {
-        object->has_direct_projection = false;
-        return;
-      }
-    }
-    leaf->physical_index = physical_index;
-    ++carrier->leaf_count;
-  }
 }
 
 static iree_status_t loom_x86_source_signature_allocate_physical_arrays(
@@ -500,16 +276,104 @@ static iree_status_t loom_x86_source_signature_allocate_physical_arrays(
   IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_array(
       arena, argument_capacity, sizeof(*builder->argument_offsets),
       (void**)&builder->argument_offsets));
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_array(
+  return loom_x86_source_signature_allocate_array(
       arena, result_capacity, sizeof(*builder->result_registers),
-      (void**)&builder->result_registers));
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_array(
-      arena, argument_capacity, sizeof(*builder->plan->argument_carriers),
-      (void**)&builder->plan->argument_carriers));
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_array(
-      arena, result_capacity, sizeof(*builder->plan->result_carriers),
-      (void**)&builder->plan->result_carriers));
-  return iree_ok_status();
+      (void**)&builder->result_registers);
+}
+
+static void loom_x86_source_signature_projection_target_initialize(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_x86_entry_descriptors_t* entry,
+    loom_low_c_abi_move_descriptor_t moves[4], uint16_t* out_move_count,
+    loom_low_c_abi_vector_memory_descriptor_t vector_memory[3],
+    uint16_t* out_vector_memory_count,
+    loom_low_c_abi_projection_target_t* out_target) {
+  *out_move_count = 0;
+  if (entry->maximum_simd_byte_length >= 16) {
+    moves[(*out_move_count)++] = (loom_low_c_abi_move_descriptor_t){
+        .source_register_class = LOOM_X86_REGISTER_CLASS_XMM,
+        .result_register_class = LOOM_X86_REGISTER_CLASS_GPR32,
+        .descriptor = entry->move_xmm_u32,
+    };
+    moves[(*out_move_count)++] = (loom_low_c_abi_move_descriptor_t){
+        .source_register_class = LOOM_X86_REGISTER_CLASS_XMM,
+        .result_register_class = LOOM_X86_REGISTER_CLASS_GPR64,
+        .descriptor = entry->move_xmm_u64,
+    };
+    moves[(*out_move_count)++] = (loom_low_c_abi_move_descriptor_t){
+        .source_register_class = LOOM_X86_REGISTER_CLASS_GPR32,
+        .result_register_class = LOOM_X86_REGISTER_CLASS_XMM,
+        .descriptor = entry->move_u32_xmm,
+    };
+    moves[(*out_move_count)++] = (loom_low_c_abi_move_descriptor_t){
+        .source_register_class = LOOM_X86_REGISTER_CLASS_GPR64,
+        .result_register_class = LOOM_X86_REGISTER_CLASS_XMM,
+        .descriptor = entry->move_u64_xmm,
+    };
+  }
+  *out_vector_memory_count = 0;
+  if (entry->maximum_simd_byte_length >= 16) {
+    vector_memory[(*out_vector_memory_count)++] =
+        (loom_low_c_abi_vector_memory_descriptor_t){
+            .register_class = LOOM_X86_REGISTER_CLASS_XMM,
+            .register_byte_length = 16,
+            .load_descriptor = entry->load_128_xmm,
+            .store_descriptor = entry->store_128_xmm,
+        };
+  }
+  if (entry->maximum_simd_byte_length >= 32) {
+    vector_memory[(*out_vector_memory_count)++] =
+        (loom_low_c_abi_vector_memory_descriptor_t){
+            .register_class = LOOM_X86_REGISTER_CLASS_YMM,
+            .register_byte_length = 32,
+            .load_descriptor = entry->load_256_ymm,
+            .store_descriptor = entry->store_256_ymm,
+        };
+  }
+  if (entry->maximum_simd_byte_length >= 64) {
+    vector_memory[(*out_vector_memory_count)++] =
+        (loom_low_c_abi_vector_memory_descriptor_t){
+            .register_class = LOOM_X86_REGISTER_CLASS_ZMM,
+            .register_byte_length = 64,
+            .load_descriptor = entry->load_512_zmm,
+            .store_descriptor = entry->store_512_zmm,
+        };
+  }
+  *out_target = (loom_low_c_abi_projection_target_t){
+      .ops =
+          {
+              .register_descriptor_set_stable_id = descriptor_set->stable_id,
+              .bits32_register_class = LOOM_X86_REGISTER_CLASS_GPR32,
+              .bits64_register_class = LOOM_X86_REGISTER_CLASS_GPR64,
+              .address_register_class = LOOM_X86_REGISTER_CLASS_GPR64,
+              .address_byte_length = 8,
+              .byte_order = LOOM_LOW_C_ABI_BYTE_ORDER_LITTLE,
+              .load_u8 = entry->load_u8,
+              .load_u16 = entry->load_u16,
+              .load_u32 = entry->load_u32,
+              .load_u64 = entry->load_u64,
+              .store_u8 = entry->store_u8,
+              .store_u16 = entry->store_u16,
+              .store_u32 = entry->store_u32,
+              .store_u64 = entry->store_u64,
+              .add_address = entry->add_u64,
+              .mask_u32 = entry->mask_u32,
+              .widen_u32 = entry->widen_u32,
+              .truncate_u64 = entry->truncate_u64,
+              .shift_left_u64 = entry->shift_left_u64,
+              .shift_right_u64 = entry->shift_right_u64,
+              .or_u64 = entry->or_u64,
+              .constant_u64 = entry->constant_u64,
+              .memory_offset_name = "disp32",
+              .mask_name = "imm32",
+              .shift_name = "shift",
+              .constant_name = "imm64",
+          },
+      .moves = moves,
+      .move_count = *out_move_count,
+      .vector_memory = vector_memory,
+      .vector_memory_count = *out_vector_memory_count,
+  };
 }
 
 iree_status_t loom_x86_plan_source_signature(
@@ -517,61 +381,56 @@ iree_status_t loom_x86_plan_source_signature(
     const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
-    iree_arena_allocator_t* arena,
+    iree_arena_allocator_t* scratch_arena, iree_arena_allocator_t* result_arena,
     loom_low_lower_source_signature_target_plan_t* out_plan) {
   (void)user_data;
   *out_plan = (loom_low_lower_source_signature_target_plan_t){0};
-  const loom_x86_entry_descriptors_t* entry = loom_x86_entry_descriptors(
-      loom_low_lower_context_descriptor_set(context));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const loom_x86_entry_descriptors_t* entry =
+      loom_x86_entry_descriptors(descriptor_set);
   if (!entry) {
     return loom_x86_source_signature_unsupported(
         context,
         IREE_SV("x86 representation has no source signature vocabulary"));
   }
-  const loom_func_c_abi_signature_t* signature = &layout->signature;
-  if (signature->arguments.count > UINT16_MAX ||
-      signature->results.count > UINT16_MAX) {
+  if (layout->signature.arguments.count > UINT16_MAX ||
+      layout->signature.results.count > UINT16_MAX) {
     return loom_x86_source_signature_unsupported(
         context, IREE_SV("x86 source signature object count exceeds 65535"));
   }
-  if (signature->results.count > 1) {
+  if (layout->signature.results.count > 1) {
     return loom_x86_source_signature_unsupported(
         context,
         IREE_SV("C source signature requires at most one result object"));
   }
+  const uint16_t argument_object_count =
+      (uint16_t)layout->signature.arguments.count;
+  const uint16_t result_object_count =
+      (uint16_t)layout->signature.results.count;
 
-  loom_x86_source_signature_plan_t* plan = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizeof(*plan), (void**)&plan));
-  memset(plan, 0, sizeof(*plan));
-  plan->entry = entry;
-  plan->logical_argument_types = logical_argument_types;
-  plan->logical_result_types = logical_result_types;
-  plan->argument_object_count = (uint16_t)signature->arguments.count;
-  plan->result_object_count = (uint16_t)signature->results.count;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_plan_objects(
-      context, layout, layout->arguments, plan->argument_object_count,
-      layout->argument_leaves, layout->argument_leaf_count,
-      logical_argument_types, logical_argument_count,
-      entry->maximum_simd_byte_length, arena, &plan->arguments,
-      &plan->argument_leaves, &plan->argument_leaf_count));
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_plan_objects(
-      context, layout, layout->results, plan->result_object_count,
-      layout->result_leaves, layout->result_leaf_count, logical_result_types,
-      logical_result_count, entry->maximum_simd_byte_length, arena,
-      &plan->results, &plan->result_leaves, &plan->result_leaf_count));
+  loom_x86_source_signature_classification_t* argument_classifications = NULL;
+  loom_x86_source_signature_classification_t* result_classifications = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_source_signature_classify_objects(
+      context, layout, layout->arguments, argument_object_count,
+      layout->argument_leaves, entry->maximum_simd_byte_length, scratch_arena,
+      &argument_classifications));
+  IREE_RETURN_IF_ERROR(loom_x86_source_signature_classify_objects(
+      context, layout, layout->results, result_object_count,
+      layout->result_leaves, entry->maximum_simd_byte_length, scratch_arena,
+      &result_classifications));
 
-  plan->has_indirect_result = plan->result_object_count != 0 &&
-                              plan->results[0].classification.is_memory;
-  uint64_t argument_capacity = plan->has_indirect_result ? 1u : 0u;
-  for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
+  const bool has_indirect_result =
+      result_object_count != 0 && result_classifications[0].is_memory;
+  uint64_t argument_capacity = has_indirect_result ? 1u : 0u;
+  for (uint16_t i = 0; i < argument_object_count; ++i) {
     argument_capacity +=
-        ((uint64_t)plan->arguments[i].classification.byte_length + 7u) / 8u;
+        ((uint64_t)argument_classifications[i].byte_length + 7u) / 8u;
   }
-  uint64_t result_capacity = plan->has_indirect_result ? 1u : 0u;
-  if (plan->result_object_count != 0 && !plan->has_indirect_result) {
+  uint64_t result_capacity = has_indirect_result ? 1u : 0u;
+  if (result_object_count != 0 && !has_indirect_result) {
     result_capacity =
-        ((uint64_t)plan->results[0].classification.byte_length + 7u) / 8u;
+        ((uint64_t)result_classifications[0].byte_length + 7u) / 8u;
   }
   if (argument_capacity > UINT16_MAX || result_capacity > UINT16_MAX) {
     return loom_x86_source_signature_unsupported(
@@ -579,82 +438,89 @@ iree_status_t loom_x86_plan_source_signature(
         IREE_SV("x86 source signature physical signature exceeds 65535"));
   }
 
+  loom_low_c_abi_projection_plan_t* projection = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_c_abi_projection_plan_allocate(
+      layout, logical_argument_types, logical_argument_count,
+      logical_result_types, logical_result_count, (uint16_t)argument_capacity,
+      (uint16_t)result_capacity, result_arena, &projection));
   loom_x86_source_signature_plan_builder_t builder = {
       .context = context,
-      .arena = arena,
-      .plan = plan,
+      .arena = result_arena,
+      .projection = projection,
   };
   IREE_RETURN_IF_ERROR(loom_x86_source_signature_allocate_physical_arrays(
       &builder, (uint16_t)argument_capacity, (uint16_t)result_capacity));
 
-  if (plan->has_indirect_result) {
-    loom_x86_source_signature_object_t hidden_object = {
-        .storage_byte_length = 8,
-    };
+  if (has_indirect_result) {
     IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_carrier(
-        &builder, /*argument=*/true, &hidden_object, /*byte_offset=*/0,
-        LOOM_X86_REGISTER_CLASS_GPR64, loom_type_buffer(),
+        &builder, /*argument=*/true, LOOM_LOW_C_ABI_INDEX_NONE,
+        /*byte_offset=*/0, LOOM_X86_REGISTER_CLASS_GPR64, loom_type_buffer(),
         kLoomX86SourceSignatureIntegerArgumentRegisters[0],
         /*stack_offset=*/-1));
     builder.integer_argument_count = 1;
   }
 
-  for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
-    loom_x86_source_signature_object_t* object = &plan->arguments[i];
+  for (uint16_t i = 0; i < argument_object_count; ++i) {
+    const loom_x86_source_signature_classification_t* classification =
+        &argument_classifications[i];
     uint8_t required_integer = 0;
     uint8_t required_sse = 0;
     loom_x86_source_signature_direct_carrier_count(
-        &object->classification, &required_integer, &required_sse);
+        classification, &required_integer, &required_sse);
     const bool registers_available =
-        !object->classification.is_memory &&
+        !classification->is_memory &&
         builder.integer_argument_count + required_integer <=
             LOOM_X86_SOURCE_SIGNATURE_INTEGER_ARGUMENT_REGISTER_COUNT &&
         builder.sse_argument_count + required_sse <=
             LOOM_X86_SOURCE_SIGNATURE_SSE_ARGUMENT_REGISTER_COUNT;
     if (registers_available) {
       IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_direct_object(
-          &builder, /*argument=*/true, object));
+          &builder, /*argument=*/true, i, classification));
     } else {
-      IREE_RETURN_IF_ERROR(
-          loom_x86_source_signature_append_memory_argument(&builder, object));
+      IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_memory_argument(
+          &builder, i, classification));
     }
   }
 
-  if (plan->result_object_count != 0) {
-    loom_x86_source_signature_object_t* object = &plan->results[0];
-    if (plan->has_indirect_result) {
-      object->physical_offset = 0;
-      loom_x86_source_signature_object_t hidden_object = {
-          .storage_byte_length = 8,
-      };
+  if (result_object_count != 0) {
+    if (has_indirect_result) {
       IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_carrier(
-          &builder, /*argument=*/false, &hidden_object, /*byte_offset=*/0,
-          LOOM_X86_REGISTER_CLASS_GPR64, loom_type_buffer(),
+          &builder, /*argument=*/false, LOOM_LOW_C_ABI_INDEX_NONE,
+          /*byte_offset=*/0, LOOM_X86_REGISTER_CLASS_GPR64, loom_type_buffer(),
           kLoomX86SourceSignatureIntegerResultRegisters[0],
           /*stack_offset=*/-1));
+      loom_low_c_abi_projection_set_indirect_result(
+          projection, /*object_index=*/0, /*address_argument=*/0,
+          /*echo_result=*/0);
     } else {
       uint8_t required_integer = 0;
       uint8_t required_sse = 0;
       loom_x86_source_signature_direct_carrier_count(
-          &object->classification, &required_integer, &required_sse);
+          &result_classifications[0], &required_integer, &required_sse);
       IREE_ASSERT_LE(required_integer,
                      LOOM_X86_SOURCE_SIGNATURE_RESULT_REGISTER_COUNT);
       IREE_ASSERT_LE(required_sse,
                      LOOM_X86_SOURCE_SIGNATURE_RESULT_REGISTER_COUNT);
       IREE_RETURN_IF_ERROR(loom_x86_source_signature_append_direct_object(
-          &builder, /*argument=*/false, object));
+          &builder, /*argument=*/false, /*object_index=*/0,
+          &result_classifications[0]));
     }
   }
 
-  for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
-    loom_x86_source_signature_bind_direct_projection(
-        &plan->arguments[i], plan->argument_leaves,
-        plan->logical_argument_types, plan->argument_carriers);
-  }
-  if (plan->result_object_count != 0 && !plan->has_indirect_result) {
-    loom_x86_source_signature_bind_direct_projection(
-        &plan->results[0], plan->result_leaves, plan->logical_result_types,
-        plan->result_carriers);
+  loom_low_c_abi_move_descriptor_t moves[4];
+  loom_low_c_abi_vector_memory_descriptor_t vector_memory[3];
+  uint16_t move_count = 0;
+  uint16_t vector_memory_count = 0;
+  loom_low_c_abi_projection_target_t projection_target;
+  loom_x86_source_signature_projection_target_initialize(
+      descriptor_set, entry, moves, &move_count, vector_memory,
+      &vector_memory_count, &projection_target);
+  iree_string_view_t unsupported_reason;
+  if (!loom_low_c_abi_projection_plan_finalize(
+          projection, &projection_target, builder.argument_types,
+          builder.argument_count, builder.result_types, builder.result_count,
+          &unsupported_reason)) {
+    return loom_x86_source_signature_unsupported(context, unsupported_reason);
   }
 
   if (builder.stack_bytes != 0) {
@@ -671,10 +537,10 @@ iree_status_t loom_x86_plan_source_signature(
 
   const loom_tied_result_t* tied_results = NULL;
   uint16_t tied_result_count = 0;
-  if (plan->has_indirect_result) {
+  if (has_indirect_result) {
     loom_tied_result_t* tie = NULL;
     IREE_RETURN_IF_ERROR(
-        iree_arena_allocate(arena, sizeof(*tie), (void**)&tie));
+        iree_arena_allocate(result_arena, sizeof(*tie), (void**)&tie));
     *tie = (loom_tied_result_t){
         .result_index = 0,
         .operand_index = 0,
@@ -683,8 +549,6 @@ iree_status_t loom_x86_plan_source_signature(
     tied_results = tie;
     tied_result_count = 1;
   }
-  plan->argument_carrier_count = builder.argument_count;
-  plan->result_carrier_count = builder.result_count;
   *out_plan = (loom_low_lower_source_signature_target_plan_t){
       .argument_types = builder.argument_types,
       .argument_count = builder.argument_count,
@@ -693,632 +557,7 @@ iree_status_t loom_x86_plan_source_signature(
       .tied_results = tied_results,
       .tied_result_count = tied_result_count,
       .abi_layout = abi_layout,
-      .target_data = plan,
-  };
-  return iree_ok_status();
-}
-
-static loom_location_id_t loom_x86_source_signature_location(
-    const loom_op_t* source_op) {
-  return source_op ? source_op->location : LOOM_LOCATION_UNKNOWN;
-}
-
-static iree_status_t loom_x86_source_signature_emit_packet(
-    loom_low_lower_context_t* context, uint32_t descriptor_ref,
-    const loom_value_id_t* operands, uint16_t operand_count,
-    iree_string_view_t immediate_name, loom_attribute_t immediate,
-    loom_type_t result_type, bool tie_first_operand,
-    loom_location_id_t location, loom_value_id_t* out_value) {
-  if (out_value) {
-    *out_value = LOOM_VALUE_ID_INVALID;
-  }
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_low_lower_context_descriptor_set(context);
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ref);
-  loom_named_attr_t attr = {.value = immediate};
-  const uint16_t attr_count = iree_string_view_is_empty(immediate_name) ? 0 : 1;
-  if (attr_count) {
-    IREE_RETURN_IF_ERROR(loom_module_intern_string(
-        loom_low_lower_context_module(context), immediate_name, &attr.name_id));
-  }
-  const uint16_t result_count =
-      loom_type_kind(result_type) == LOOM_TYPE_NONE ? 0 : 1;
-  const loom_tied_result_t tie = {
-      .result_index = 0,
-      .operand_index = 0,
-      .has_type_change = false,
-  };
-  loom_op_t* op = NULL;
-  if (loom_low_descriptor_layout(descriptor_set, descriptor)->op_kind ==
-      LOOM_LOW_DESCRIPTOR_OP_KIND_CONST) {
-    IREE_ASSERT_EQ(result_count, 1);
-    IREE_RETURN_IF_ERROR(loom_low_build_resolved_descriptor_const(
-        loom_low_lower_context_builder(context), descriptor_set, descriptor,
-        loom_make_named_attr_slice(&attr, attr_count), result_type, location,
-        &op));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_low_build_resolved_descriptor_op(
-        loom_low_lower_context_builder(context), descriptor_set, descriptor,
-        /*access_flags=*/0, operands, operand_count,
-        loom_make_named_attr_slice(&attr, attr_count),
-        result_count ? &result_type : NULL, result_count,
-        tie_first_operand ? &tie : NULL, tie_first_operand ? 1 : 0, location,
-        &op));
-  }
-  if (out_value) {
-    *out_value = loom_op_results(op)[0];
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_make_register_type(
-    loom_low_lower_context_t* context, uint16_t register_class,
-    loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(context, register_class, 1,
-                                           out_type);
-}
-
-static iree_status_t loom_x86_source_signature_emit_load(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t base,
-    uint32_t byte_offset, uint32_t byte_length, loom_location_id_t location,
-    loom_value_id_t* out_value) {
-  const uint32_t descriptor_ref = byte_length == 1   ? entry->load_u8
-                                  : byte_length == 2 ? entry->load_u16
-                                  : byte_length == 4 ? entry->load_u32
-                                                     : entry->load_u64;
-  loom_type_t result_type;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-      context,
-      byte_length <= 4 ? LOOM_X86_REGISTER_CLASS_GPR32
-                       : LOOM_X86_REGISTER_CLASS_GPR64,
-      &result_type));
-  return loom_x86_source_signature_emit_packet(
-      context, descriptor_ref, &base, 1, IREE_SV("disp32"),
-      loom_attr_i64(byte_offset), result_type, /*tie_first_operand=*/false,
-      location, out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_store(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
-    loom_value_id_t base, uint32_t byte_offset, uint32_t byte_length,
-    loom_location_id_t location) {
-  const uint32_t descriptor_ref = byte_length == 1   ? entry->store_u8
-                                  : byte_length == 2 ? entry->store_u16
-                                  : byte_length == 4 ? entry->store_u32
-                                                     : entry->store_u64;
-  const loom_value_id_t operands[] = {value, base};
-  return loom_x86_source_signature_emit_packet(
-      context, descriptor_ref, operands, IREE_ARRAYSIZE(operands),
-      IREE_SV("disp32"), loom_attr_i64(byte_offset), loom_type_none(),
-      /*tie_first_operand=*/false, location, /*out_value=*/NULL);
-}
-
-static iree_status_t loom_x86_source_signature_emit_move(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t source,
-    loom_type_t result_type, loom_location_id_t location,
-    loom_value_id_t* out_value) {
-  const loom_type_t source_type =
-      loom_module_value_type(loom_low_lower_context_module(context), source);
-  const uint16_t source_class = loom_low_register_type_class_id(source_type);
-  const uint16_t result_class = loom_low_register_type_class_id(result_type);
-  if (source_class == result_class) {
-    *out_value = source;
-    return iree_ok_status();
-  }
-  uint32_t descriptor_ref = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  if (source_class == LOOM_X86_REGISTER_CLASS_XMM &&
-      result_class == LOOM_X86_REGISTER_CLASS_GPR32) {
-    descriptor_ref = entry->move_xmm_u32;
-  } else if (source_class == LOOM_X86_REGISTER_CLASS_XMM &&
-             result_class == LOOM_X86_REGISTER_CLASS_GPR64) {
-    descriptor_ref = entry->move_xmm_u64;
-  } else if (source_class == LOOM_X86_REGISTER_CLASS_GPR32 &&
-             result_class == LOOM_X86_REGISTER_CLASS_XMM) {
-    descriptor_ref = entry->move_u32_xmm;
-  } else if (source_class == LOOM_X86_REGISTER_CLASS_GPR64 &&
-             result_class == LOOM_X86_REGISTER_CLASS_XMM) {
-    descriptor_ref = entry->move_u64_xmm;
-  } else {
-    IREE_ASSERT_UNREACHABLE("unsupported x86 source signature register move");
-  }
-  return loom_x86_source_signature_emit_packet(
-      context, descriptor_ref, &source, 1, iree_string_view_empty(),
-      loom_attr_absent(), result_type, /*tie_first_operand=*/false, location,
-      out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_copy(
-    loom_low_lower_context_t* context, loom_value_id_t source,
-    loom_location_id_t location, loom_value_id_t* out_value) {
-  loom_op_t* copy = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_copy_build(
-      loom_low_lower_context_builder(context), source, /*detached=*/false,
-      loom_module_value_type(loom_low_lower_context_module(context), source),
-      location, &copy));
-  *out_value = loom_low_copy_result(copy);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_emit_mask_u32(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
-    uint32_t mask, loom_type_t result_type, loom_location_id_t location,
-    loom_value_id_t* out_value) {
-  return loom_x86_source_signature_emit_packet(
-      context, entry->mask_u32, &value, 1, IREE_SV("imm32"),
-      loom_attr_i64(mask), result_type, /*tie_first_operand=*/true, location,
-      out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_widen_u32(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
-    loom_location_id_t location, loom_value_id_t* out_value) {
-  loom_type_t result_type;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-      context, LOOM_X86_REGISTER_CLASS_GPR64, &result_type));
-  return loom_x86_source_signature_emit_packet(
-      context, entry->widen_u32, &value, 1, iree_string_view_empty(),
-      loom_attr_absent(), result_type, /*tie_first_operand=*/false, location,
-      out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_truncate_u64(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
-    loom_location_id_t location, loom_value_id_t* out_value) {
-  loom_type_t result_type;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-      context, LOOM_X86_REGISTER_CLASS_GPR32, &result_type));
-  return loom_x86_source_signature_emit_packet(
-      context, entry->truncate_u64, &value, 1, iree_string_view_empty(),
-      loom_attr_absent(), result_type, /*tie_first_operand=*/false, location,
-      out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_shift_u64(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, bool left, loom_value_id_t value,
-    uint32_t shift, loom_location_id_t location, loom_value_id_t* out_value) {
-  loom_type_t result_type;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-      context, LOOM_X86_REGISTER_CLASS_GPR64, &result_type));
-  return loom_x86_source_signature_emit_packet(
-      context, left ? entry->shift_left_u64 : entry->shift_right_u64, &value, 1,
-      IREE_SV("shift"), loom_attr_i64(shift), result_type,
-      /*tie_first_operand=*/true, location, out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_or_u64(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t lhs,
-    loom_value_id_t rhs, loom_location_id_t location,
-    loom_value_id_t* out_value) {
-  loom_type_t result_type;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-      context, LOOM_X86_REGISTER_CLASS_GPR64, &result_type));
-  const loom_value_id_t operands[] = {lhs, rhs};
-  return loom_x86_source_signature_emit_packet(
-      context, entry->or_u64, operands, IREE_ARRAYSIZE(operands),
-      iree_string_view_empty(), loom_attr_absent(), result_type,
-      /*tie_first_operand=*/true, location, out_value);
-}
-
-static iree_status_t loom_x86_source_signature_emit_pointer_address(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t base,
-    loom_value_id_t byte_offset, loom_location_id_t location,
-    loom_value_id_t* out_address) {
-  const loom_type_t base_type =
-      loom_module_value_type(loom_low_lower_context_module(context), base);
-  loom_value_id_t base_copy;
-  IREE_RETURN_IF_ERROR(
-      loom_x86_source_signature_emit_copy(context, base, location, &base_copy));
-  const loom_value_id_t operands[] = {base_copy, byte_offset};
-  return loom_x86_source_signature_emit_packet(
-      context, entry->add_u64, operands, IREE_ARRAYSIZE(operands),
-      iree_string_view_empty(), loom_attr_absent(), base_type,
-      /*tie_first_operand=*/true, location, out_address);
-}
-
-static iree_status_t loom_x86_source_signature_emit_zero_offset(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_type_t result_type,
-    loom_location_id_t location, loom_value_id_t* out_value) {
-  return loom_x86_source_signature_emit_packet(
-      context, entry->constant_u64, /*operands=*/NULL, /*operand_count=*/0,
-      IREE_SV("imm64"), loom_attr_i64(0), result_type,
-      /*tie_first_operand=*/false, location, out_value);
-}
-
-static iree_status_t loom_x86_source_signature_normalize_i1(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
-    loom_type_t result_type, loom_location_id_t location,
-    loom_value_id_t* out_value) {
-  return loom_x86_source_signature_emit_mask_u32(
-      context, entry, value, 1, result_type, location, out_value);
-}
-
-static iree_status_t loom_x86_source_signature_reserve_storage(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_object_t* object,
-    loom_location_id_t location, loom_value_id_t* out_storage,
-    loom_value_id_t* out_address) {
-  loom_builder_t* ir = loom_low_lower_context_builder(context);
-  loom_op_t* storage_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_storage_reserve_build(
-      ir, object->storage_byte_length, object->classification.byte_alignment,
-      loom_type_storage(LOOM_STORAGE_SPACE_PRIVATE), location, &storage_op));
-  *out_storage = loom_low_storage_reserve_storage(storage_op);
-  loom_type_t address_type;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-      context, LOOM_X86_REGISTER_CLASS_GPR64, &address_type));
-  loom_op_t* address_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_storage_address_build(
-      ir, *out_storage, /*offset=*/0, address_type, location, &address_op));
-  *out_address = loom_low_storage_address_result(address_op);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_emit_vector_store(
-    loom_low_lower_context_t* context,
-    const loom_x86_entry_descriptors_t* entry, loom_value_id_t value,
-    loom_value_id_t base, uint32_t byte_offset, loom_location_id_t location) {
-  const loom_type_t type =
-      loom_module_value_type(loom_low_lower_context_module(context), value);
-  const uint16_t register_class = loom_low_register_type_class_id(type);
-  const uint32_t descriptor_ref =
-      register_class == LOOM_X86_REGISTER_CLASS_XMM   ? entry->store_128_xmm
-      : register_class == LOOM_X86_REGISTER_CLASS_YMM ? entry->store_256_ymm
-                                                      : entry->store_512_zmm;
-  const loom_value_id_t operands[] = {value, base};
-  return loom_x86_source_signature_emit_packet(
-      context, descriptor_ref, operands, IREE_ARRAYSIZE(operands),
-      IREE_SV("disp32"), loom_attr_i64(byte_offset), loom_type_none(),
-      /*tie_first_operand=*/false, location, /*out_value=*/NULL);
-}
-
-static iree_status_t loom_x86_source_signature_pack_leaves(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_plan_t* plan,
-    const loom_x86_source_signature_object_t* object,
-    const loom_x86_source_signature_leaf_t* leaves,
-    const loom_value_id_t* logical_values, loom_value_id_t address,
-    loom_location_id_t location) {
-  for (uint16_t i = 0; i < object->leaf_count; ++i) {
-    const loom_x86_source_signature_leaf_t* leaf =
-        &leaves[object->leaf_offset + i];
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_vector_store(
-          context, plan->entry, logical_values[leaf->logical_offset], address,
-          leaf->byte_offset, location));
-      continue;
-    }
-    loom_value_id_t bits = logical_values[leaf->logical_offset];
-    uint32_t byte_length = leaf->byte_length;
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_pointer_address(
-          context, plan->entry, bits, logical_values[leaf->logical_offset + 1],
-          location, &bits));
-      byte_length = 8;
-    } else {
-      loom_type_t gpr_type;
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-          context,
-          byte_length <= 4 ? LOOM_X86_REGISTER_CLASS_GPR32
-                           : LOOM_X86_REGISTER_CLASS_GPR64,
-          &gpr_type));
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_move(
-          context, plan->entry, bits, gpr_type, location, &bits));
-    }
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_store(
-        context, plan->entry, bits, address, leaf->byte_offset, byte_length,
-        location));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_unpack_leaves(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_plan_t* plan,
-    const loom_x86_source_signature_object_t* object,
-    const loom_x86_source_signature_leaf_t* leaves,
-    const loom_type_t* logical_types, loom_value_id_t storage,
-    loom_value_id_t address, loom_value_id_t* logical_values,
-    loom_location_id_t location) {
-  for (uint16_t i = 0; i < object->leaf_count; ++i) {
-    const loom_x86_source_signature_leaf_t* leaf =
-        &leaves[object->leaf_offset + i];
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR) {
-      loom_op_t* reload = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_reload_build(
-          loom_low_lower_context_builder(context), storage, leaf->byte_offset,
-          logical_types[leaf->logical_offset], location, &reload));
-      logical_values[leaf->logical_offset] = loom_low_reload_result(reload);
-      continue;
-    }
-    const uint32_t byte_length =
-        leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER
-            ? 8
-            : leaf->byte_length;
-    loom_value_id_t bits;
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_load(
-        context, plan->entry, address, leaf->byte_offset, byte_length, location,
-        &bits));
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER) {
-      logical_values[leaf->logical_offset] = bits;
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_zero_offset(
-          context, plan->entry, logical_types[leaf->logical_offset + 1],
-          location, &logical_values[leaf->logical_offset + 1]));
-      continue;
-    }
-    if (leaf->normalize_i1) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_normalize_i1(
-          context, plan->entry, bits, logical_types[leaf->logical_offset],
-          location, &bits));
-    } else {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_move(
-          context, plan->entry, bits, logical_types[leaf->logical_offset],
-          location, &bits));
-    }
-    logical_values[leaf->logical_offset] = bits;
-  }
-  return iree_ok_status();
-}
-
-static bool loom_x86_source_signature_leaf_is_identity_projection(
-    const loom_x86_source_signature_leaf_t* leaf,
-    const loom_x86_source_signature_carrier_t* carrier,
-    loom_type_t logical_type) {
-  return leaf->kind != LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER &&
-         carrier->leaf_count == 1 &&
-         leaf->byte_offset == carrier->byte_offset &&
-         loom_low_type_is_register(logical_type) &&
-         loom_low_register_type_unit_count(logical_type) == 1 &&
-         loom_low_register_type_class_id(logical_type) ==
-             carrier->register_class;
-}
-
-static iree_status_t loom_x86_source_signature_pack_direct_object(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_plan_t* plan,
-    const loom_x86_source_signature_object_t* object,
-    const loom_x86_source_signature_leaf_t* leaves,
-    const loom_type_t* logical_types, const loom_value_id_t* logical_values,
-    const loom_x86_source_signature_carrier_t* carriers,
-    loom_value_id_t* physical_values, loom_location_id_t location) {
-  for (uint16_t i = 0; i < object->physical_count; ++i) {
-    physical_values[object->physical_offset + i] = LOOM_VALUE_ID_INVALID;
-  }
-  for (uint16_t i = 0; i < object->leaf_count; ++i) {
-    const loom_x86_source_signature_leaf_t* leaf =
-        &leaves[object->leaf_offset + i];
-    IREE_ASSERT_NE(leaf->physical_index, UINT16_MAX);
-    const loom_x86_source_signature_carrier_t* carrier =
-        &carriers[leaf->physical_index];
-    const loom_type_t logical_type = logical_types[leaf->logical_offset];
-    if (loom_x86_source_signature_leaf_is_identity_projection(leaf, carrier,
-                                                              logical_type)) {
-      physical_values[leaf->physical_index] =
-          logical_values[leaf->logical_offset];
-      continue;
-    }
-
-    loom_value_id_t fragment = logical_values[leaf->logical_offset];
-    const uint32_t byte_length =
-        leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER
-            ? 8
-            : leaf->byte_length;
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_pointer_address(
-          context, plan->entry, fragment,
-          logical_values[leaf->logical_offset + 1], location, &fragment));
-    } else {
-      IREE_ASSERT_NE(leaf->kind, LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR);
-      const uint16_t fragment_class = byte_length <= 4
-                                          ? LOOM_X86_REGISTER_CLASS_GPR32
-                                          : LOOM_X86_REGISTER_CLASS_GPR64;
-      loom_type_t fragment_type;
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-          context, fragment_class, &fragment_type));
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_move(
-          context, plan->entry, fragment, fragment_type, location, &fragment));
-      if (byte_length < 4) {
-        const uint32_t mask =
-            leaf->normalize_i1 ? 1u : (1u << (byte_length * 8u)) - 1u;
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_copy(
-            context, fragment, location, &fragment));
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_mask_u32(
-            context, plan->entry, fragment, mask, fragment_type, location,
-            &fragment));
-      }
-      if (byte_length <= 4) {
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_widen_u32(
-            context, plan->entry, fragment, location, &fragment));
-      }
-    }
-
-    const uint32_t shift = (leaf->byte_offset - carrier->byte_offset) * 8u;
-    if (shift != 0) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_shift_u64(
-          context, plan->entry, /*left=*/true, fragment, shift, location,
-          &fragment));
-    }
-    loom_value_id_t* accumulator = &physical_values[leaf->physical_index];
-    if (*accumulator == LOOM_VALUE_ID_INVALID) {
-      *accumulator = fragment;
-    } else {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_or_u64(
-          context, plan->entry, *accumulator, fragment, location, accumulator));
-    }
-  }
-
-  for (uint16_t i = 0; i < object->physical_count; ++i) {
-    const uint16_t physical_index = object->physical_offset + i;
-    const loom_x86_source_signature_carrier_t* carrier =
-        &carriers[physical_index];
-    loom_value_id_t value = physical_values[physical_index];
-    loom_type_t physical_type;
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-        context, carrier->register_class, &physical_type));
-    if (value == LOOM_VALUE_ID_INVALID) {
-      IREE_ASSERT_EQ(carrier->register_class, LOOM_X86_REGISTER_CLASS_GPR64);
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_zero_offset(
-          context, plan->entry, physical_type, location, &value));
-    } else {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_move(
-          context, plan->entry, value, physical_type, location, &value));
-    }
-    physical_values[physical_index] = value;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_unpack_direct_object(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_plan_t* plan,
-    const loom_x86_source_signature_object_t* object,
-    const loom_x86_source_signature_leaf_t* leaves,
-    const loom_type_t* logical_types,
-    const loom_x86_source_signature_carrier_t* carriers,
-    const loom_value_id_t* physical_values, loom_value_id_t* logical_values,
-    loom_location_id_t location) {
-  for (uint16_t i = 0; i < object->leaf_count; ++i) {
-    const loom_x86_source_signature_leaf_t* leaf =
-        &leaves[object->leaf_offset + i];
-    IREE_ASSERT_NE(leaf->physical_index, UINT16_MAX);
-    const loom_x86_source_signature_carrier_t* carrier =
-        &carriers[leaf->physical_index];
-    const loom_type_t logical_type = logical_types[leaf->logical_offset];
-    if (loom_x86_source_signature_leaf_is_identity_projection(leaf, carrier,
-                                                              logical_type)) {
-      logical_values[leaf->logical_offset] =
-          physical_values[leaf->physical_index];
-      continue;
-    }
-
-    loom_type_t gpr64_type;
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-        context, LOOM_X86_REGISTER_CLASS_GPR64, &gpr64_type));
-    loom_value_id_t fragment = physical_values[leaf->physical_index];
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_move(
-        context, plan->entry, fragment, gpr64_type, location, &fragment));
-    const uint32_t shift = (leaf->byte_offset - carrier->byte_offset) * 8u;
-    if (shift != 0) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_copy(
-          context, fragment, location, &fragment));
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_shift_u64(
-          context, plan->entry, /*left=*/false, fragment, shift, location,
-          &fragment));
-    }
-    if (leaf->kind == LOOM_X86_SOURCE_SIGNATURE_LEAF_POINTER) {
-      logical_values[leaf->logical_offset] = fragment;
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_zero_offset(
-          context, plan->entry, logical_types[leaf->logical_offset + 1],
-          location, &logical_values[leaf->logical_offset + 1]));
-      continue;
-    }
-
-    IREE_ASSERT_NE(leaf->kind, LOOM_X86_SOURCE_SIGNATURE_LEAF_VECTOR);
-    if (leaf->byte_length <= 4) {
-      IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_truncate_u64(
-          context, plan->entry, fragment, location, &fragment));
-      if (leaf->byte_length < 4) {
-        const uint32_t mask =
-            leaf->normalize_i1 ? 1u : (1u << (leaf->byte_length * 8u)) - 1u;
-        loom_type_t gpr32_type;
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-            context, LOOM_X86_REGISTER_CLASS_GPR32, &gpr32_type));
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_mask_u32(
-            context, plan->entry, fragment, mask, gpr32_type, location,
-            &fragment));
-      }
-    }
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_emit_move(
-        context, plan->entry, fragment, logical_type, location, &fragment));
-    logical_values[leaf->logical_offset] = fragment;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_pack_object(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_plan_t* plan,
-    const loom_x86_source_signature_object_t* object,
-    const loom_x86_source_signature_leaf_t* leaves,
-    const loom_type_t* logical_types, const loom_value_id_t* logical_values,
-    const loom_x86_source_signature_carrier_t* carriers,
-    loom_value_id_t* physical_values, loom_location_id_t location) {
-  if (object->has_direct_projection) {
-    return loom_x86_source_signature_pack_direct_object(
-        context, plan, object, leaves, logical_types, logical_values, carriers,
-        physical_values, location);
-  }
-  loom_value_id_t storage;
-  loom_value_id_t address;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_reserve_storage(
-      context, object, location, &storage, &address));
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_pack_leaves(
-      context, plan, object, leaves, logical_values, address, location));
-  for (uint16_t i = 0; i < object->physical_count; ++i) {
-    const uint16_t physical_index = object->physical_offset + i;
-    loom_type_t physical_type;
-    IREE_RETURN_IF_ERROR(loom_x86_source_signature_make_register_type(
-        context, carriers[physical_index].register_class, &physical_type));
-    loom_op_t* reload = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_low_reload_build(loom_low_lower_context_builder(context), storage,
-                              carriers[physical_index].byte_offset,
-                              physical_type, location, &reload));
-    physical_values[physical_index] = loom_low_reload_result(reload);
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_x86_source_signature_unpack_object(
-    loom_low_lower_context_t* context,
-    const loom_x86_source_signature_plan_t* plan,
-    const loom_x86_source_signature_object_t* object,
-    const loom_x86_source_signature_leaf_t* leaves,
-    const loom_type_t* logical_types,
-    const loom_x86_source_signature_carrier_t* carriers,
-    const loom_value_id_t* physical_values, loom_value_id_t* logical_values,
-    loom_location_id_t location) {
-  if (object->has_direct_projection) {
-    return loom_x86_source_signature_unpack_direct_object(
-        context, plan, object, leaves, logical_types, carriers, physical_values,
-        logical_values, location);
-  }
-  loom_value_id_t storage;
-  loom_value_id_t address;
-  IREE_RETURN_IF_ERROR(loom_x86_source_signature_reserve_storage(
-      context, object, location, &storage, &address));
-  for (uint16_t i = 0; i < object->physical_count; ++i) {
-    const uint16_t physical_index = object->physical_offset + i;
-    loom_op_t* spill = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_spill_build(
-        loom_low_lower_context_builder(context),
-        physical_values[physical_index], storage,
-        carriers[physical_index].byte_offset, location, &spill));
-  }
-  return loom_x86_source_signature_unpack_leaves(
-      context, plan, object, leaves, logical_types, storage, address,
-      logical_values, location);
-}
-
-static iree_status_t loom_x86_source_signature_state_allocate(
-    iree_arena_allocator_t* arena,
-    loom_x86_source_signature_emission_state_t** out_state) {
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizeof(**out_state), (void**)out_state));
-  **out_state = (loom_x86_source_signature_emission_state_t){
-      .result_storage = LOOM_VALUE_ID_INVALID,
-      .result_address = LOOM_VALUE_ID_INVALID,
+      .target_data = projection,
   };
   return iree_ok_status();
 }
@@ -1330,106 +569,7 @@ iree_status_t loom_x86_emit_source_signature(
     const loom_value_id_t* input_values, uint16_t input_count,
     loom_value_id_t* output_values, uint16_t output_count,
     iree_arena_allocator_t* state_arena, void** inout_state) {
-  (void)user_data;
-  const loom_x86_source_signature_plan_t* plan = target_plan;
-  const loom_location_id_t location =
-      loom_x86_source_signature_location(source_op);
-  switch (phase) {
-    case LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_DEFINITION_ENTRY: {
-      IREE_ASSERT_EQ(input_count, plan->argument_carrier_count);
-      uint16_t logical_count = 0;
-      for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
-        const loom_x86_source_signature_object_t* object = &plan->arguments[i];
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_unpack_object(
-            context, plan, object, plan->argument_leaves,
-            plan->logical_argument_types, plan->argument_carriers, input_values,
-            output_values, location));
-        logical_count += object->logical_count;
-      }
-      IREE_ASSERT_EQ(output_count, logical_count);
-      if (plan->has_indirect_result) {
-        loom_x86_source_signature_emission_state_t* state = NULL;
-        IREE_RETURN_IF_ERROR(
-            loom_x86_source_signature_state_allocate(state_arena, &state));
-        state->result_address = input_values[0];
-        *inout_state = state;
-      }
-      return iree_ok_status();
-    }
-    case LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_DEFINITION_EXIT: {
-      IREE_ASSERT_EQ(input_count, plan->result_object_count == 0
-                                      ? 0
-                                      : plan->results[0].logical_count);
-      IREE_ASSERT_EQ(output_count, plan->result_carrier_count);
-      if (plan->result_object_count == 0) {
-        return iree_ok_status();
-      }
-      const loom_x86_source_signature_object_t* object = &plan->results[0];
-      if (plan->has_indirect_result) {
-        const loom_x86_source_signature_emission_state_t* state = *inout_state;
-        IREE_ASSERT_NE(state, NULL);
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_pack_leaves(
-            context, plan, object, plan->result_leaves, input_values,
-            state->result_address, location));
-        output_values[0] = state->result_address;
-        return iree_ok_status();
-      }
-      return loom_x86_source_signature_pack_object(
-          context, plan, object, plan->result_leaves,
-          plan->logical_result_types, input_values, plan->result_carriers,
-          output_values, location);
-    }
-    case LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_CALL_ARGUMENTS: {
-      IREE_ASSERT_EQ(input_count,
-                     plan->argument_object_count == 0
-                         ? 0
-                         : plan->arguments[plan->argument_object_count - 1]
-                                   .logical_offset +
-                               plan->arguments[plan->argument_object_count - 1]
-                                   .logical_count);
-      IREE_ASSERT_EQ(output_count, plan->argument_carrier_count);
-      if (plan->has_indirect_result) {
-        loom_x86_source_signature_emission_state_t* state = NULL;
-        IREE_RETURN_IF_ERROR(
-            loom_x86_source_signature_state_allocate(state_arena, &state));
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_reserve_storage(
-            context, &plan->results[0], location, &state->result_storage,
-            &state->result_address));
-        output_values[0] = state->result_address;
-        *inout_state = state;
-      }
-      for (uint16_t i = 0; i < plan->argument_object_count; ++i) {
-        IREE_RETURN_IF_ERROR(loom_x86_source_signature_pack_object(
-            context, plan, &plan->arguments[i], plan->argument_leaves,
-            plan->logical_argument_types, input_values, plan->argument_carriers,
-            output_values, location));
-      }
-      return iree_ok_status();
-    }
-    case LOOM_LOW_LOWER_SOURCE_SIGNATURE_EMISSION_CALL_RESULTS: {
-      IREE_ASSERT_EQ(input_count, plan->result_carrier_count);
-      IREE_ASSERT_EQ(output_count, plan->result_object_count == 0
-                                       ? 0
-                                       : plan->results[0].logical_count);
-      if (plan->result_object_count == 0) {
-        return iree_ok_status();
-      }
-      const loom_x86_source_signature_object_t* object = &plan->results[0];
-      if (plan->has_indirect_result) {
-        loom_x86_source_signature_emission_state_t* state = *inout_state;
-        IREE_ASSERT_NE(state, NULL);
-        state->result_address = input_values[0];
-        return loom_x86_source_signature_unpack_leaves(
-            context, plan, object, plan->result_leaves,
-            plan->logical_result_types, state->result_storage,
-            state->result_address, output_values, location);
-      }
-      return loom_x86_source_signature_unpack_object(
-          context, plan, object, plan->result_leaves,
-          plan->logical_result_types, plan->result_carriers, input_values,
-          output_values, location);
-    }
-  }
-  IREE_ASSERT_UNREACHABLE("unknown x86 source signature emission phase");
-  IREE_BUILTIN_UNREACHABLE();
+  return loom_low_c_abi_projection_emit_source_signature(
+      user_data, context, phase, source_op, target_plan, input_values,
+      input_count, output_values, output_count, state_arena, inout_state);
 }

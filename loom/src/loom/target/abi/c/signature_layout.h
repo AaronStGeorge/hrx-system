@@ -22,6 +22,12 @@ enum loom_c_abi_leaf_flag_bits_e {
   // alignment. Platform classifiers can reject packed objects without
   // reconstructing the source type graph.
   LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED = 1u << 0,
+  // Leaf is one source pointer projecting to a buffer base and byte offset.
+  LOOM_C_ABI_LEAF_FLAG_POINTER = 1u << 1,
+  // Leaf is one native vector value.
+  LOOM_C_ABI_LEAF_FLAG_VECTOR = 1u << 2,
+  // Leaf has C Boolean semantics and must normalize loaded bits to zero or one.
+  LOOM_C_ABI_LEAF_FLAG_BOOLEAN = 1u << 3,
 };
 
 // One terminal scalar, vector, or pointer occurrence inside a root C object.

@@ -20,17 +20,13 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
-    loom::codegen::low::builder
-    loom::codegen::low::descriptors
     loom::codegen::low::lower
+    loom::codegen::low::lower::c_abi_projection
     loom::ir
-    loom::ops::func
-    loom::ops::low
     loom::target::arch::x86::call_abi
     loom::target::arch::x86::descriptors::entry
     loom::target::arch::x86::register_classes
     loom::target::arch::x86::source_signature
-    loom::target::registers
   PUBLIC
 )
 endif()

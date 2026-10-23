@@ -98,9 +98,10 @@ iree_status_t loom_test_low_plan_source_signature(
     const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
-    iree_arena_allocator_t* arena,
+    iree_arena_allocator_t* scratch_arena, iree_arena_allocator_t* result_arena,
     loom_low_lower_source_signature_target_plan_t* out_plan) {
   (void)user_data;
+  (void)scratch_arena;
   *out_plan = (loom_low_lower_source_signature_target_plan_t){0};
   const loom_func_c_abi_signature_t* signature = &layout->signature;
   if (signature->arguments.count > UINT16_MAX ||
@@ -114,19 +115,19 @@ iree_status_t loom_test_low_plan_source_signature(
   loom_type_t* physical_results = NULL;
   if (argument_group_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, argument_group_count, sizeof(*physical_arguments),
+        result_arena, argument_group_count, sizeof(*physical_arguments),
         (void**)&physical_arguments));
   }
   if (result_group_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, result_group_count,
-                                                   sizeof(*physical_results),
-                                                   (void**)&physical_results));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        result_arena, result_group_count, sizeof(*physical_results),
+        (void**)&physical_results));
   }
   loom_test_low_source_signature_plan_t* plan = NULL;
   const iree_host_size_t group_count =
       (iree_host_size_t)argument_group_count + result_group_count;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(
-      arena, sizeof(*plan) + group_count * sizeof(*plan->groups),
+      result_arena, sizeof(*plan) + group_count * sizeof(*plan->groups),
       (void**)&plan));
   memset(plan, 0, sizeof(*plan));
   plan->logical_argument_types = logical_argument_types;
@@ -144,8 +145,8 @@ iree_status_t loom_test_low_plan_source_signature(
     return iree_ok_status();
   }
   loom_named_attr_t* abi_layout = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizeof(*abi_layout), (void**)&abi_layout));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(result_arena, sizeof(*abi_layout),
+                                           (void**)&abi_layout));
   loom_string_id_t projection_key = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(loom_low_lower_context_module(context),

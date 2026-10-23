@@ -180,6 +180,35 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "c_abi_projection",
+    srcs = ["abi/c/projection.c"],
+    hdrs = ["abi/c/projection.h"],
+    visibility = _LOWER_VISIBILITY,
+    deps = [
+        ":lower",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "c_abi_projection_test",
+    srcs = ["abi/c/projection_test.cc"],
+    deps = [
+        ":c_abi_projection",
+        "//loom/src/loom/target:registers",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "source_selection",
     srcs = ["source_selection.c"],
     hdrs = ["source_selection.h"],

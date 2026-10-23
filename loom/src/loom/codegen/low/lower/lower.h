@@ -393,7 +393,7 @@ typedef struct loom_low_lower_map_abi_layout_callback_t {
 } loom_low_lower_map_abi_layout_callback_t;
 
 // Target-owned physical signature selected for one verified source signature.
-// All arrays belong to the caller-provided planning arena. Logical source
+// All retained arrays belong to the callback's |result_arena|. Logical source
 // values remain flat inside source-to-Low; these carriers describe only the
 // external callable edge.
 typedef struct loom_low_lower_source_signature_target_plan_t {
@@ -425,7 +425,7 @@ typedef iree_status_t (*loom_low_lower_plan_source_signature_fn_t)(
     const loom_c_abi_signature_layout_t* layout,
     const loom_type_t* logical_argument_types, uint16_t logical_argument_count,
     const loom_type_t* logical_result_types, uint16_t logical_result_count,
-    iree_arena_allocator_t* arena,
+    iree_arena_allocator_t* scratch_arena, iree_arena_allocator_t* result_arena,
     loom_low_lower_source_signature_target_plan_t* out_plan);
 
 typedef enum loom_low_lower_source_signature_emission_phase_e {
@@ -450,6 +450,8 @@ typedef iree_status_t (*loom_low_lower_emit_source_signature_fn_t)(
 typedef struct loom_low_lower_source_signature_callback_t {
   // Classifies one complete verified source signature. This runs once per
   // selected symbol before declarations, definitions, or calls are emitted.
+  // Temporary classification state belongs to |scratch_arena|. Every pointer
+  // retained in |out_plan| belongs to |result_arena| or immutable storage.
   loom_low_lower_plan_source_signature_fn_t plan;
   // Emits explicit Low pack/unpack operations from the retained target plan.
   // Definition entry may retain per-function state in |state_arena| for every

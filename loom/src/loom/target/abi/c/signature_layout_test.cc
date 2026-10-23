@@ -86,6 +86,21 @@ class CAbiSignatureLayoutTest : public ::testing::Test {
                    /*component_count=*/2);
   }
 
+  uint32_t AddBoolean() {
+    return AddType(/*flags=*/0, LOOM_FUNC_ABI_C_TYPE_KIND_BOOLEAN,
+                   /*byte_length=*/1, /*byte_alignment=*/1,
+                   /*component_count=*/1);
+  }
+
+  uint32_t AddVector(uint32_t element_type, uint32_t element_count,
+                     uint32_t byte_length, uint32_t byte_alignment) {
+    return AddType(LOOM_FUNC_ABI_C_TYPE_ATTR_BUILD_FLAG_HAS_ELEMENT_TYPE |
+                       LOOM_FUNC_ABI_C_TYPE_ATTR_BUILD_FLAG_HAS_ELEMENT_COUNT,
+                   LOOM_FUNC_ABI_C_TYPE_KIND_VECTOR, byte_length,
+                   byte_alignment, /*component_count=*/1, /*bitwidth=*/0,
+                   element_type, element_count);
+  }
+
   uint32_t AddArray(uint32_t element_type, uint32_t element_count,
                     uint32_t element_stride, uint32_t byte_alignment,
                     uint32_t component_count) {
@@ -182,7 +197,8 @@ TEST_F(CAbiSignatureLayoutTest, FlattensObjectsIntoTerminalLeaves) {
   EXPECT_EQ(data.byte_length, 8u);
   EXPECT_EQ(data.logical_offset, 0u);
   EXPECT_EQ(data.logical_count, 2u);
-  EXPECT_EQ(data.flags, LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED);
+  EXPECT_EQ(data.flags, LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED |
+                            LOOM_C_ABI_LEAF_FLAG_POINTER);
   EXPECT_EQ(layout.argument_leaves[1].byte_offset, 8u);
   EXPECT_EQ(layout.argument_leaves[1].logical_offset, 2u);
   EXPECT_EQ(layout.argument_leaves[2].byte_offset, 12u);
@@ -193,6 +209,9 @@ TEST_F(CAbiSignatureLayoutTest, FlattensObjectsIntoTerminalLeaves) {
   EXPECT_EQ(layout.results[0].logical_offset, 0u);
   EXPECT_EQ(layout.result_leaves[0].logical_offset, 0u);
   EXPECT_EQ(layout.result_leaves[0].logical_count, 2u);
+  EXPECT_EQ(
+      layout.result_leaves[0].flags,
+      LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED | LOOM_C_ABI_LEAF_FLAG_POINTER);
 }
 
 TEST_F(CAbiSignatureLayoutTest, RetainsNestedPackedLeafAlignment) {
@@ -209,6 +228,22 @@ TEST_F(CAbiSignatureLayoutTest, RetainsNestedPackedLeafAlignment) {
             LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED);
   EXPECT_EQ(layout.argument_leaves[1].byte_offset, 1u);
   EXPECT_EQ(layout.argument_leaves[1].flags, 0u);
+}
+
+TEST_F(CAbiSignatureLayoutTest, RetainsTerminalProjectionKinds) {
+  const uint32_t u32 = AddInteger(32, true);
+  const uint32_t boolean = AddBoolean();
+  const uint32_t vector = AddVector(u32, 4, 16, 16);
+
+  const loom_c_abi_signature_layout_t layout =
+      BuildLayout({boolean, vector}, {});
+  ASSERT_EQ(layout.argument_leaf_count, 2u);
+  EXPECT_EQ(
+      layout.argument_leaves[0].flags,
+      LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED | LOOM_C_ABI_LEAF_FLAG_BOOLEAN);
+  EXPECT_EQ(
+      layout.argument_leaves[1].flags,
+      LOOM_C_ABI_LEAF_FLAG_NATURALLY_ALIGNED | LOOM_C_ABI_LEAF_FLAG_VECTOR);
 }
 
 }  // namespace
