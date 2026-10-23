@@ -34,6 +34,25 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    source_scf_projection
+  HDRS
+    "source_scf_projection.h"
+  SRCS
+    "source_scf_projection.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::codegen::low::lower
+    loom::ir
+    loom::ops::index
+    loom::ops::scf
+    loom::rewrite::rewriter
+    loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     source_to_low
   HDRS
     "source_to_low.h"
@@ -41,6 +60,7 @@ loom_cc_library(
     "source_to_low.c"
   DEPS
     ::source_invocation_facts
+    ::source_scf_projection
     iree::base
     iree::base::internal::arena
     loom::analysis::storage_access

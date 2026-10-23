@@ -16,6 +16,7 @@
 #include "loom/codegen/low/lower/source_signature_projection.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/transforms/pipeline/source_invocation_facts.h"
+#include "loom/codegen/low/transforms/pipeline/source_scf_projection.h"
 #include "loom/ops/low/ops.h"
 #include "loom/pass/options.h"
 #include "loom/pass/pipeline.h"
@@ -126,7 +127,11 @@ static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
   V(statistics_type, remarks, "remarks",                                     \
     "Number of lowering remarks emitted.")                                   \
   V(statistics_type, declarations, "declarations",                           \
-    "Number of source function declarations lowered.")
+    "Number of source function declarations lowered.")                       \
+  V(statistics_type, lookups_projected, "lookups-projected",                 \
+    "Number of scf.lookup ops projected to conditional selections.")         \
+  V(statistics_type, switches_projected, "switches-projected",               \
+    "Number of scf.switch ops projected to structured conditions.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_low_source_to_low_statistics,
                             loom_low_source_to_low_statistics_t,
@@ -312,6 +317,35 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_source_to_low_project_scf(
+    loom_pass_t* pass, loom_module_t* module,
+    const loom_low_source_to_low_pass_state_t* state,
+    const loom_low_source_selection_list_t* selections,
+    loom_low_source_to_low_statistics_t* statistics) {
+  const loom_low_control_flow_lowering_t control_flow_lowering =
+      state ? state->control_flow_lowering : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG;
+  bool changed = false;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < selections->count && iree_status_is_ok(status); ++i) {
+    const loom_low_source_selection_t* selection = &selections->values[i];
+    if (selection->kind != LOOM_LOW_SOURCE_SELECTION_FUNCTION) {
+      continue;
+    }
+    loom_low_source_scf_projection_result_t result;
+    status = loom_low_source_scf_projection_run(
+        module, selection->func, control_flow_lowering, pass->arena, &result);
+    statistics->lookups_projected += result.lookups_projected;
+    statistics->switches_projected += result.switches_projected;
+    changed |= result.lookups_projected != 0 || result.switches_projected != 0;
+  }
+  if (changed) {
+    loom_pass_value_fact_owner_invalidate(pass->value_facts);
+    loom_pass_mark_changed(pass);
+  }
+  return status;
+}
+
 iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
                                          loom_module_t* module) {
   const loom_low_source_to_low_pass_state_t* state =
@@ -344,7 +378,6 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   iree_arena_allocator_t access_arena;
   iree_arena_initialize(module->arena.block_pool, &access_arena);
   loom_storage_access_scope_t storage_access;
-  loom_storage_access_scope_initialize(module, &access_arena, &storage_access);
   loom_low_lower_module_state_t* module_state = NULL;
   loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
@@ -356,6 +389,11 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   };
   iree_status_t status = loom_low_select_lowering_symbols(
       module, &selection_options, &selection_arena, &selection_list);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_source_to_low_project_scf(pass, module, state,
+                                                &selection_list, statistics);
+  }
+  loom_storage_access_scope_initialize(module, &access_arena, &storage_access);
   bool emitted_error_diagnostics = false;
   const loom_low_representation_projection_plan_t** projection_plans = NULL;
   iree_host_size_t projection_count = 0;
