@@ -152,10 +152,12 @@ iree_runtime_cc_library(
     testonly = True,
     srcs = ["testdata.cc"],
     hdrs = ["testdata.h"],
+    visibility = ["//runtime/src/iree/hal/drivers/amd/cts:__pkg__"],
     deps = [
         "//libamdf:headers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal/cts/util:registry",
+        "//runtime/src/iree/hal/drivers/amd/gpu/target:code_object",
         "//runtime/src/iree/hal/drivers/amd/gpu/target:identity",
     ],
 )
@@ -238,6 +240,7 @@ iree_runtime_cc_test(
     srcs = ["asan_test.cc"],
     deps = [
         ":test_device",
+        ":testdata",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:pool_test_util",
@@ -325,6 +328,7 @@ iree_runtime_cc_test(
     srcs = ["file_transfer_test.cc"],
     deps = [
         ":test_device",
+        ":testdata",
         "//libamdf:headers",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
@@ -379,6 +383,7 @@ iree_runtime_cc_benchmark(
     # Explicit measurement iteration counts override the smoke's minimum time.
     args = ["--benchmark_dry_run"],
     deps = [
+        ":testdata",
         "//libamdf:amdf_static",
         "//libamdf:headers",
         "//runtime/src/iree/async",
@@ -435,6 +440,7 @@ iree_runtime_cc_test(
     }),
     deps = [
         ":test_device",
+        ":testdata",
         "//libamdf:amdf_static",
         "//libamdf:headers",
         "//runtime/src/iree/async",
@@ -476,6 +482,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/drivers/amd:status",
         "//runtime/src/iree/hal/drivers/amd/fabric",
         "//runtime/src/iree/hal/drivers/amd/gpu:code",
@@ -496,6 +503,7 @@ iree_runtime_cc_test(
     srcs = ["recording_test.cc"],
     deps = [
         ":test_device",
+        ":testdata",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd/gpu/image:hip_images",
@@ -540,6 +548,7 @@ iree_runtime_cc_test(
     srcs = ["profile_test.cc"],
     deps = [
         ":test_device",
+        ":testdata",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:profile_test_util",

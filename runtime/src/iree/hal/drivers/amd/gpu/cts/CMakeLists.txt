@@ -7050,6 +7050,7 @@ iree_cc_library(
     amdf::headers
     iree::base
     iree::hal::cts::util::registry
+    iree::hal::drivers::amd::gpu::target::code_object
     iree::hal::drivers::amd::gpu::target::identity
   TESTONLY
   PUBLIC
@@ -7174,6 +7175,7 @@ iree_cc_test(
     "asan_test.cc"
   DEPS
     ::test_device
+    ::testdata
     iree::base
     iree::hal
     iree::hal::cts::util::pool_test_util
@@ -7319,6 +7321,7 @@ iree_cc_test(
     "file_transfer_test.cc"
   DEPS
     ::test_device
+    ::testdata
     amdf::headers
     iree::async
     iree::async::util::proactor_pool
@@ -7406,6 +7409,7 @@ iree_cc_binary_benchmark(
   SRCS
     "queue_benchmark.cc"
   DEPS
+    ::testdata
     amdf::amdf_static
     amdf::headers
     iree::async
@@ -7476,6 +7480,7 @@ iree_cc_test(
     "timestamp_test.cc"
   DEPS
     ::test_device
+    ::testdata
     amdf::amdf_static
     amdf::headers
     iree::async
@@ -7526,6 +7531,7 @@ iree_cc_library(
     iree::async::util::proactor_pool
     iree::base
     iree::hal
+    iree::hal::cts::util::test_base
     iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::gpu::code
     iree::hal::drivers::amd::gpu::completion
@@ -7551,6 +7557,7 @@ iree_cc_test(
     "recording_test.cc"
   DEPS
     ::test_device
+    ::testdata
     iree::base
     iree::hal
     iree::hal::drivers::amd::gpu::image::hip_images
@@ -7614,6 +7621,7 @@ iree_cc_test(
     "profile_test.cc"
   DEPS
     ::test_device
+    ::testdata
     iree::base
     iree::hal
     iree::hal::cts::util::profile_test_util
