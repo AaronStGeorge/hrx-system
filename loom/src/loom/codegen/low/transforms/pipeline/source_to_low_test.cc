@@ -1091,6 +1091,13 @@ TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
   EXPECT_EQ(loom_low_register_type_unit_count(loom_module_value_type(
                 module.get(), loom_op_const_results(swap_op)[0])),
             2u);
+  const loom_named_attr_slice_t swap_abi_layout =
+      loom_low_func_def_abi_layout(swap_op);
+  ASSERT_EQ(swap_abi_layout.count, 1u);
+  EXPECT_EQ(
+      swap_abi_layout.entries[0].name_id,
+      loom_module_lookup_string(module.get(), IREE_SV("source_projection")));
+  EXPECT_TRUE(loom_attr_as_bool(swap_abi_layout.entries[0].value));
 
   loom_block_t* swap_entry = loom_region_entry_block(loom_func_like_body(swap));
   ASSERT_NE(swap_entry, nullptr);
@@ -1116,6 +1123,13 @@ TEST_F(LowLowerPassTest, SourceAbiProjectsDefinitionsDeclarationsAndCalls) {
   ASSERT_TRUE(loom_low_func_decl_isa(external_op));
   EXPECT_EQ(external_op->operand_count, 1u);
   EXPECT_EQ(external_op->result_count, 1u);
+  const loom_named_attr_slice_t external_abi_layout =
+      loom_low_func_decl_abi_layout(external_op);
+  ASSERT_EQ(external_abi_layout.count, 1u);
+  EXPECT_EQ(
+      external_abi_layout.entries[0].name_id,
+      loom_module_lookup_string(module.get(), IREE_SV("source_projection")));
+  EXPECT_TRUE(loom_attr_as_bool(external_abi_layout.entries[0].value));
 
   const loom_symbol_ref_t kernel_ref =
       FindSymbolRef(module.get(), IREE_SV("kernel_linkage"));

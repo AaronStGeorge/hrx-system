@@ -127,17 +127,19 @@ static iree_status_t loom_low_source_abi_plan_layout(
     iree_arena_allocator_t* scratch_arena,
     loom_named_attr_slice_t* out_layout) {
   *out_layout = loom_named_attr_slice_empty();
-  if (context->policy->map_abi_layout.fn == NULL) {
-    return iree_ok_status();
-  }
-  loom_named_attr_slice_t layout = loom_named_attr_slice_empty();
-  IREE_RETURN_IF_ERROR(context->policy->map_abi_layout.fn(
-      context->policy->map_abi_layout.user_data, context,
-      LOOM_LOW_LOWER_ABI_LAYOUT_KIND_FUNC, target->argument_types,
-      target->argument_count, target->result_types, target->result_count,
-      scratch_arena, &layout));
-  if (context->result->error_count != 0) {
-    return iree_ok_status();
+  loom_named_attr_slice_t layout = target->abi_layout;
+  if (layout.count == 0) {
+    if (context->policy->map_abi_layout.fn == NULL) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(context->policy->map_abi_layout.fn(
+        context->policy->map_abi_layout.user_data, context,
+        LOOM_LOW_LOWER_ABI_LAYOUT_KIND_FUNC, target->argument_types,
+        target->argument_count, target->result_types, target->result_count,
+        scratch_arena, &layout));
+    if (context->result->error_count != 0) {
+      return iree_ok_status();
+    }
   }
   loom_attribute_t canonical_layout = loom_attr_absent();
   IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(

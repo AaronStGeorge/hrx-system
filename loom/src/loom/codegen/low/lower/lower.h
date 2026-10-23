@@ -409,6 +409,13 @@ typedef struct loom_low_lower_source_abi_target_plan_t {
   const loom_tied_result_t* tied_results;
   // Number of physical result ties.
   uint16_t tied_result_count;
+  // Exact target-owned Low function ABI layout for the physical signature.
+  // A nonempty layout replaces the generic map_abi_layout result so that
+  // whole-callable decisions such as aggregate register rollback and stack
+  // placement survive without downstream reclassification. Entries may live
+  // in the planning arena; the common planner canonicalizes them into module
+  // storage before retaining the plan.
+  loom_named_attr_slice_t abi_layout;
   // Immutable target state consumed only by the retained emitter.
   const void* target_data;
 } loom_low_lower_source_abi_target_plan_t;

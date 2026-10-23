@@ -144,11 +144,23 @@ iree_status_t loom_test_low_plan_source_abi(
   if (loom_low_lower_context_error_count(context) != 0) {
     return iree_ok_status();
   }
+  loom_named_attr_t* abi_layout = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, sizeof(*abi_layout), (void**)&abi_layout));
+  loom_string_id_t projection_key = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(loom_low_lower_context_module(context),
+                                IREE_SV("source_projection"), &projection_key));
+  *abi_layout = (loom_named_attr_t){
+      .name_id = projection_key,
+      .value = loom_attr_bool(true),
+  };
   *out_plan = (loom_low_lower_source_abi_target_plan_t){
       .argument_types = physical_arguments,
       .argument_count = argument_group_count,
       .result_types = physical_results,
       .result_count = result_group_count,
+      .abi_layout = loom_make_named_attr_slice(abi_layout, 1),
       .target_data = plan,
   };
   return iree_ok_status();
