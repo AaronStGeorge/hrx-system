@@ -69,6 +69,7 @@ build:opt --host_features=optimize_for_speed
 # The SDK has one native feature set, independent of worktree configuration.
 # Optimization and instrumentation remain separate profiles so every wheel
 # variant exposes the same devices, compiler targets, and media formats.
+build:loom-sdk --features=dynamic_link_msvcrt_release
 build:loom-sdk --//runtime/config/hal:drivers=task,amd
 build:loom-sdk --//libamdf/config:enabled=true
 build:loom-sdk --//libamdf/config:families=rdna,cdna,xdna

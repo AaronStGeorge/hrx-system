@@ -78,6 +78,10 @@ The `amdgpu2`, `rdna`, `cdna`, and `xdna` drivers use libamdf. The legacy `amdgp
 driver is excluded from this configuration. Instrumentation and optimization
 are selected separately, as shown below.
 
+Windows SDK profiles use the redistributable dynamic C runtime. The debug
+profile keeps unoptimized code and assertions without requiring Visual Studio's
+development-only debug runtime.
+
 Installed users need Python, the wheel, and the platform prerequisites in the
 [package description](PYPI_README.md); Bazel is a package-author build tool.
 `loom-serve --device=task --model=./model/model.json` loads the fetched card's
