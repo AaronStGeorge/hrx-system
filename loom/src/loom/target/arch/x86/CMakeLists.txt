@@ -57,6 +57,39 @@ endif()
 if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
+    source_abi
+  HDRS
+    "source_abi.h"
+  SRCS
+    "source_abi.c"
+  DEPS
+    iree::base
+    loom::ops::func
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86)
+loom_cc_test(
+  NAME
+    source_abi_test
+  SRCS
+    "source_abi_test.cc"
+  DEPS
+    ::source_abi
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::func
+  LABELS
+    "iree-build-requirement=loom.target.arch.x86"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86)
+loom_cc_library(
+  NAME
     math_policy
   HDRS
     "math_policy.h"
