@@ -11,8 +11,10 @@ from build_tools.bazel_to_cmake import deps
 
 class ExportedDependenciesTest(unittest.TestCase):
     def test_exported_test_frameworks_survive_non_root_resolution(self):
-        root = Path(__file__).parents[2]
-        fragment = root / "build_tools/third_party/deps.MODULE.bazel"
+        # Runfiles can link data to source while retaining a copied test script.
+        # The parser's repository root must own the resolved module fragment.
+        fragment = Path(__file__).with_name("deps.MODULE.bazel").resolve()
+        root = fragment.parents[2]
         dependencies = {
             dependency.name: dependency
             for dependency in deps.ModuleParser(root).parse(fragment)
