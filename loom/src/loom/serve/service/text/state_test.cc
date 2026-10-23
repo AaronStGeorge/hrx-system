@@ -162,17 +162,19 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
         continue;
       }
       for (size_t row = 0; row < state.row_count; ++row) {
-        const size_t offset = row * state.storage.blocks_per_row;
-        std::vector<uint8_t> expected(state.rows[row].block_count * 4);
-        if (expected.empty()) {
+        const size_t block_count = state.rows[row].block_count;
+        if (!block_count) {
           continue;
         }
-        for (size_t i = 0; i < state.rows[row].block_count; ++i) {
-          iree_unaligned_store_le_u32(expected.data() + i * 4,
+        const size_t offset = row * state.storage.blocks_per_row;
+        std::vector<uint8_t> expected(block_count * sizeof(uint32_t));
+        for (size_t i = 0; i < block_count; ++i) {
+          iree_unaligned_store_le_u32(expected.data() + i * sizeof(uint32_t),
                                       state.cache.maps[offset + i]);
         }
-        ASSERT_NO_FATAL_FAILURE(
-            CheckBytes(table, state.storage.map_origin + offset * 4, expected));
+        ASSERT_NO_FATAL_FAILURE(CheckBytes(
+            table, state.storage.map_origin + offset * sizeof(uint32_t),
+            expected));
       }
     }
   }
