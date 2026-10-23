@@ -91,7 +91,20 @@ static loom_target_abi_kind_t loom_low_source_abi_function_abi(
           function, function.vtable->abi_attr_index)) {
     return (loom_target_abi_kind_t)loom_func_like_abi(function);
   }
-  return loom_low_lower_context_bundle(context)->export_plan->abi_kind;
+  const loom_target_abi_kind_t target_abi =
+      loom_low_lower_context_bundle(context)->export_plan->abi_kind;
+  if (target_abi != LOOM_TARGET_ABI_UNKNOWN) {
+    return target_abi;
+  }
+  // Internal and imported callees inherit execution target facts without the
+  // artifact root's export overlay. A native target that owns a complete source
+  // ABI projection still gives those retained C boundaries object semantics.
+  return context->policy->import_decl_kind ==
+                     LOOM_LOW_FUNC_DECL_IMPORT_KIND_NATIVE &&
+                 context->policy->source_abi.plan != NULL &&
+                 context->policy->source_abi.emit != NULL
+             ? LOOM_TARGET_ABI_OBJECT_FUNCTION
+             : LOOM_TARGET_ABI_UNKNOWN;
 }
 
 static iree_status_t loom_low_source_abi_emit_unavailable(

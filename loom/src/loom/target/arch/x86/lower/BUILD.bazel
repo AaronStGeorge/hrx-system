@@ -18,6 +18,28 @@ package(
 _X86_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/x86:__pkg__"]
 
 loom_cc_library(
+    name = "source_abi",
+    srcs = ["source_abi.c"],
+    hdrs = ["source_abi.h"],
+    visibility = _X86_ROOT_VISIBILITY,
+    deps = [
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/x86:call_abi",
+        "//loom/src/loom/target/arch/x86:register_classes",
+        "//loom/src/loom/target/arch/x86:source_abi",
+        "//loom/src/loom/target/arch/x86/descriptors:entry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "lower",
     srcs = [
         "contraction.c",
@@ -34,6 +56,7 @@ loom_cc_library(
     textual_hdrs = ["//loom/src/loom/target/arch/x86/contracts:tables.inl"],
     visibility = _X86_ROOT_VISIBILITY,
     deps = [
+        ":source_abi",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/codegen/low/lower:representation_observer",

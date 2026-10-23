@@ -71,6 +71,17 @@ typedef struct loom_x86_call_abi_layout_t {
   bool is_exact_sysv;
 } loom_x86_call_abi_layout_t;
 
+// Builds the canonical exact SysV layout consumed by native x86 emission.
+// Placement arrays correspond one-to-one with the physical semantic types and
+// only need to remain live for the duration of this call. The returned slice
+// borrows canonical module storage.
+iree_status_t loom_x86_call_abi_layout_make(
+    loom_module_t* module, const loom_type_t* argument_types,
+    uint16_t argument_count, const loom_type_t* result_types,
+    uint16_t result_count, int64_t* argument_registers,
+    int64_t* argument_offsets, int64_t* result_registers, uint32_t stack_bytes,
+    uint8_t stack_alignment, loom_named_attr_slice_t* out_layout);
+
 // Parses and validates the shared x86 ABI layout vocabulary. Empty and
 // signature-only layouts are admitted for ordinary Loom call boundaries.
 // Exact layouts use a nested `sysv` dictionary with argument/result placement

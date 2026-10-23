@@ -1264,6 +1264,7 @@ loom_check_test_suite(
   NAME
     x86_compiler_test
   SRCS
+    "x86_c_abi_lowering.cxx-test"
     "x86_lowering.cxx-test"
 )
 endif()

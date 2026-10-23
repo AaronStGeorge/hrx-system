@@ -22,6 +22,59 @@ static const loom_attribute_t* loom_x86_call_abi_find_attr(
   return NULL;
 }
 
+iree_status_t loom_x86_call_abi_layout_make(
+    loom_module_t* module, const loom_type_t* argument_types,
+    uint16_t argument_count, const loom_type_t* result_types,
+    uint16_t result_count, int64_t* argument_registers,
+    int64_t* argument_offsets, int64_t* result_registers, uint32_t stack_bytes,
+    uint8_t stack_alignment, loom_named_attr_slice_t* out_layout) {
+  *out_layout = loom_named_attr_slice_empty();
+  loom_type_t signature;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_function_type(module, argument_types, argument_count,
+                                       result_types, result_count, &signature));
+
+  loom_named_attr_t sysv_entries[5];
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, IREE_SV("argument_offsets"), &sysv_entries[0].name_id));
+  sysv_entries[0].value = loom_attr_i64_array(argument_offsets, argument_count);
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, IREE_SV("argument_registers"), &sysv_entries[1].name_id));
+  sysv_entries[1].value =
+      loom_attr_i64_array(argument_registers, argument_count);
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, IREE_SV("result_registers"), &sysv_entries[2].name_id));
+  sysv_entries[2].value = loom_attr_i64_array(result_registers, result_count);
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, IREE_SV("stack_alignment"), &sysv_entries[3].name_id));
+  sysv_entries[3].value = loom_attr_i64(stack_alignment);
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(module, IREE_SV("stack_bytes"),
+                                                 &sysv_entries[4].name_id));
+  sysv_entries[4].value = loom_attr_i64(stack_bytes);
+  loom_attribute_t sysv;
+  IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(sysv_entries, IREE_ARRAYSIZE(sysv_entries)),
+      &sysv));
+
+  loom_named_attr_t layout_entries[2];
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(module, IREE_SV("signature"),
+                                                 &layout_entries[0].name_id));
+  layout_entries[0].value =
+      loom_attr_type(loom_module_lookup_type_id(module, signature));
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(module, IREE_SV("sysv"),
+                                                 &layout_entries[1].name_id));
+  layout_entries[1].value = sysv;
+  loom_attribute_t layout;
+  IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(layout_entries,
+                                 IREE_ARRAYSIZE(layout_entries)),
+      &layout));
+  *out_layout = loom_attr_as_dict(layout);
+  return iree_ok_status();
+}
+
 bool loom_x86_call_abi_layout_parse(const loom_module_t* module,
                                     loom_named_attr_slice_t layout,
                                     uint16_t argument_count,

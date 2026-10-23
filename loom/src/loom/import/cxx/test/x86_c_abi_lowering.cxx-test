@@ -1,0 +1,197 @@
+// RUN: emit source-low target=x86:avx2 output=low
+
+struct Pair {
+  unsigned first;
+  unsigned second;
+};
+
+extern "C" Pair pair_identity(Pair value) { return value; }
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (i64) -> (i64), sysv = {argument_offsets = [-1], argument_registers = [7], result_registers = [0], stack_alignment = 0, stack_bytes = 0}}) @pair_identity(%4: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm {
+  %6 = storage {byte_alignment = 4, byte_length = 8} : low.storage<private>
+  %7 = storage_address %6 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %4, %6 : reg<x86.gpr64>, low.storage<private>
+  %value_first = mov.load.gpr32 %7 {disp32 = 0}
+  %value_second = mov.load.gpr32 %7 {disp32 = 4}
+  %10 = storage {byte_alignment = 4, byte_length = 8} : low.storage<private>
+  %11 = storage_address %10 : low.storage<private> -> reg<x86.gpr64>
+  mov.store.gpr32 %value_first, %11 {disp32 = 0}
+  mov.store.gpr32 %value_second, %11 {disp32 = 4}
+  %12 = low.reload %10 : low.storage<private> -> reg<x86.gpr64>
+  return %12
+}
+
+// ====
+
+struct Mixed {
+  float value;
+  unsigned tag;
+};
+
+extern "C" Mixed mixed_identity(Mixed value) { return value; }
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (i64) -> (i64), sysv = {argument_offsets = [-1], argument_registers = [7], result_registers = [0], stack_alignment = 0, stack_bytes = 0}}) @mixed_identity(%4: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm {
+  %6 = storage {byte_alignment = 4, byte_length = 8} : low.storage<private>
+  %7 = storage_address %6 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %4, %6 : reg<x86.gpr64>, low.storage<private>
+  %8 = mov.load.gpr32 %7 {disp32 = 0}
+  %value_value = vmovd.xmm.gpr32 %8
+  %value_tag = mov.load.gpr32 %7 {disp32 = 4}
+  %11 = storage {byte_alignment = 4, byte_length = 8} : low.storage<private>
+  %12 = storage_address %11 : low.storage<private> -> reg<x86.gpr64>
+  %13 = vmovd.gpr32.xmm %value_value
+  mov.store.gpr32 %13, %12 {disp32 = 0}
+  mov.store.gpr32 %value_tag, %12 {disp32 = 4}
+  %14 = low.reload %11 : low.storage<private> -> reg<x86.gpr64>
+  return %14
+}
+
+// ====
+
+struct Split {
+  double value;
+  unsigned long long tag;
+};
+
+extern "C" Split split_identity(Split value) { return value; }
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (f64, i64) -> (f64, i64), sysv = {argument_offsets = [-1, -1], argument_registers = [0, 7], result_registers = [0, 0], stack_alignment = 0, stack_bytes = 0}}) @split_identity(%4: reg<x86.xmm>, %5: reg<x86.gpr64>) -> (reg<x86.xmm>, reg<x86.gpr64>) asm {
+  %8 = storage {byte_alignment = 8, byte_length = 16} : low.storage<private>
+  %9 = storage_address %8 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %4, %8 : reg<x86.xmm>, low.storage<private>
+  low.spill %5, %8 {offset = 8} : reg<x86.gpr64>, low.storage<private>
+  %10 = mov.load.gpr64 %9 {disp32 = 0}
+  %value_value = vmovq.xmm.gpr64 %10
+  %value_tag = mov.load.gpr64 %9 {disp32 = 8}
+  %13 = storage {byte_alignment = 8, byte_length = 16} : low.storage<private>
+  %14 = storage_address %13 : low.storage<private> -> reg<x86.gpr64>
+  %15 = vmovq.gpr64.xmm %value_value
+  mov.store.gpr64 %15, %14 {disp32 = 0}
+  mov.store.gpr64 %value_tag, %14 {disp32 = 8}
+  %16 = low.reload %13 : low.storage<private> -> reg<x86.xmm>
+  %17 = low.reload %13 {offset = 8} : low.storage<private> -> reg<x86.gpr64>
+  return %16, %17
+}
+
+// ====
+
+struct Wide {
+  unsigned long long first;
+  unsigned long long second;
+};
+
+extern "C" unsigned long long register_rollback(unsigned long long first, unsigned long long second, unsigned long long third, unsigned long long fourth, unsigned long long fifth, Wide wide, unsigned long long tail) {
+  return wide.first + tail;
+}
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (i64, i64, i64, i64, i64, i64, i64, i64) -> (i64), sysv = {argument_offsets = [-1, -1, -1, -1, -1, 0, 8, -1], argument_registers = [7, 6, 2, 1, 8, -1, -1, 9], result_registers = [0], stack_alignment = 16, stack_bytes = 16}}) @register_rollback(%10: reg<x86.gpr64>, %11: reg<x86.gpr64>, %12: reg<x86.gpr64>, %13: reg<x86.gpr64>, %14: reg<x86.gpr64>, %15: reg<x86.gpr64>, %16: reg<x86.gpr64>, %17: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm {
+  %19 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  low.spill %10, %19 : reg<x86.gpr64>, low.storage<private>
+  %22 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  low.spill %11, %22 : reg<x86.gpr64>, low.storage<private>
+  %25 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  low.spill %12, %25 : reg<x86.gpr64>, low.storage<private>
+  %28 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  low.spill %13, %28 : reg<x86.gpr64>, low.storage<private>
+  %31 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  low.spill %14, %31 : reg<x86.gpr64>, low.storage<private>
+  %34 = storage {byte_alignment = 8, byte_length = 16} : low.storage<private>
+  %35 = storage_address %34 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %15, %34 : reg<x86.gpr64>, low.storage<private>
+  low.spill %16, %34 {offset = 8} : reg<x86.gpr64>, low.storage<private>
+  %wide_first = mov.load.gpr64 %35 {disp32 = 0}
+  %38 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  %39 = storage_address %38 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %17, %38 : reg<x86.gpr64>, low.storage<private>
+  %tail = mov.load.gpr64 %39 {disp32 = 0}
+  %41 = copy %wide_first : reg<x86.gpr64> -> reg<x86.gpr64>
+  %42 = add.gpr64 %41, %tail
+  %43 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  %44 = storage_address %43 : low.storage<private> -> reg<x86.gpr64>
+  mov.store.gpr64 %42, %44 {disp32 = 0}
+  %45 = low.reload %43 : low.storage<private> -> reg<x86.gpr64>
+  return %45
+}
+
+// ====
+
+struct Large {
+  unsigned long long first;
+  unsigned long long second;
+  unsigned long long third;
+};
+
+extern "C" Large large_identity(Large value) { return value; }
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (buffer, i64, i64, i64) -> (buffer), sysv = {argument_offsets = [-1, 0, 8, 16], argument_registers = [7, -1, -1, -1], result_registers = [0], stack_alignment = 16, stack_bytes = 32}}) @large_identity(%6: reg<x86.gpr64>, %7: reg<x86.gpr64>, %8: reg<x86.gpr64>, %9: reg<x86.gpr64>) -> (%6 as reg<x86.gpr64>) asm {
+  %11 = storage {byte_alignment = 8, byte_length = 24} : low.storage<private>
+  %12 = storage_address %11 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %7, %11 : reg<x86.gpr64>, low.storage<private>
+  low.spill %8, %11 {offset = 8} : reg<x86.gpr64>, low.storage<private>
+  low.spill %9, %11 {offset = 16} : reg<x86.gpr64>, low.storage<private>
+  %value_first = mov.load.gpr64 %12 {disp32 = 0}
+  %value_second = mov.load.gpr64 %12 {disp32 = 8}
+  %value_third = mov.load.gpr64 %12 {disp32 = 16}
+  mov.store.gpr64 %value_first, %6 {disp32 = 0}
+  mov.store.gpr64 %value_second, %6 {disp32 = 8}
+  mov.store.gpr64 %value_third, %6 {disp32 = 16}
+  return %6
+}
+
+// ====
+
+extern "C" const unsigned* advance_pointer(const unsigned* base) {
+  return base + 3;
+}
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (i64) -> (i64), sysv = {argument_offsets = [-1], argument_registers = [7], result_registers = [0], stack_alignment = 0, stack_bytes = 0}}) @advance_pointer(%13: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm {
+  %15 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  %16 = storage_address %15 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %13, %15 : reg<x86.gpr64>, low.storage<private>
+  %base = mov.load.gpr64 %16 {disp32 = 0}
+  %base_byte_offset = mov.imm64 0
+  %19 = copy %base_byte_offset : reg<x86.gpr64> -> reg<x86.gpr64>
+  %20 = add.imm.gpr64 %19 {imm32 = 12}
+  %21 = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
+  %22 = storage_address %21 : low.storage<private> -> reg<x86.gpr64>
+  %23 = copy %base : reg<x86.gpr64> -> reg<x86.gpr64>
+  %24 = add.gpr64 %23, %20
+  mov.store.gpr64 %24, %22 {disp32 = 0}
+  %25 = low.reload %21 : low.storage<private> -> reg<x86.gpr64>
+  return %25
+}
+
+// ====
+
+struct Pair {
+  unsigned first;
+  unsigned second;
+};
+
+extern "C" Pair external_pair(Pair value);
+
+Pair call_external_pair(Pair value) { return external_pair(value); }
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) @call_external_pair(%value_first: reg<x86.gpr32>, %value_second: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>) asm {
+  %16 = storage {byte_alignment = 4, byte_length = 8} : low.storage<private>
+  %17 = storage_address %16 : low.storage<private> -> reg<x86.gpr64>
+  mov.store.gpr32 %value_first, %17 {disp32 = 0}
+  mov.store.gpr32 %value_second, %17 {disp32 = 4}
+  %18 = low.reload %16 : low.storage<private> -> reg<x86.gpr64>
+  %19 = low.func.call @external_pair(%18) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  %20 = storage {byte_alignment = 4, byte_length = 8} : low.storage<private>
+  %21 = storage_address %20 : low.storage<private> -> reg<x86.gpr64>
+  low.spill %19, %20 : reg<x86.gpr64>, low.storage<private>
+  %22 = mov.load.gpr32 %21 {disp32 = 0}
+  %23 = mov.load.gpr32 %21 {disp32 = 4}
+  return %22, %23
+}
+
+low.func.decl target<x86.avx2.core> abi_layout({signature = (i64) -> (i64), sysv = {argument_offsets = [-1], argument_registers = [7], result_registers = [0], stack_alignment = 0, stack_bytes = 0}}) @external_pair(%10: reg<x86.gpr64>) -> (reg<x86.gpr64>)
