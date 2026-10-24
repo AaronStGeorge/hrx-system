@@ -75,8 +75,9 @@ class MemoryTestEnvironment : public ::testing::Environment {
 
 extern MemoryTestEnvironment* const memory_test_environment;
 
-// Exercises mapping rejection after real queue allocation has been accepted.
-// The storage owner uses only allocation, deallocation, and mapping operations.
+// Observes and gates real mapping submissions, or rejects one before
+// acceptance. The storage owner uses only allocation, deallocation, and mapping
+// operations.
 class MappingQueue : public iree_hal_queue_t {
  public:
   ~MappingQueue() { Reset(); }
@@ -120,9 +121,33 @@ class MappingQueue : public iree_hal_queue_t {
                const iree_hal_memory_mapping_t* mappings,
                iree_hal_queue_map_flags_t flags) {
               auto* self = static_cast<MappingQueue*>(base);
+              if (self->observe_mappings) {
+                self->mapping_waits.emplace_back();
+                for (iree_host_size_t i = 0; i < waits.count; ++i) {
+                  self->mapping_waits.back().push_back(waits.semaphores[i]);
+                  EXPECT_EQ(waits.payload_values[i], 1u);
+                }
+                EXPECT_EQ(signals.count, 1u);
+                self->mapping_signals.push_back(signals.semaphores[0]);
+              }
               if (self->fail_next_map) {
                 self->fail_next_map = false;
                 return iree_status_from_code(IREE_STATUS_RESOURCE_EXHAUSTED);
+              }
+              if (self->gate_next_mapping) {
+                std::vector<iree_hal_semaphore_t*> semaphores;
+                std::vector<uint64_t> values;
+                for (iree_host_size_t i = 0; i < waits.count; ++i) {
+                  semaphores.push_back(waits.semaphores[i]);
+                  values.push_back(waits.payload_values[i]);
+                }
+                semaphores.push_back(self->gate_next_mapping);
+                values.push_back(1);
+                self->gate_next_mapping = nullptr;
+                return iree_hal_queue_map(
+                    self->queue_,
+                    {semaphores.size(), semaphores.data(), values.data()},
+                    signals, count, mappings, flags);
               }
               return iree_hal_queue_map(self->queue_, waits, signals, count,
                                         mappings, flags);
@@ -140,6 +165,14 @@ class MappingQueue : public iree_hal_queue_t {
 
   // Rejects one mapping submission without changing its signal semaphores.
   bool fail_next_map = false;
+  // Borrowed prerequisite added to exactly one real mapping submission.
+  iree_hal_semaphore_t* gate_next_mapping = nullptr;
+  // Records dependencies before the real queue captures a mapping batch.
+  bool observe_mappings = false;
+  // Borrowed wait identities, inspected while operations retain their stages.
+  std::vector<std::vector<iree_hal_semaphore_t*>> mapping_waits;
+  // Borrowed mapping-stage identities, inspected before operation retirement.
+  std::vector<iree_hal_semaphore_t*> mapping_signals;
 
  private:
   // Retained native queue used for all accepted operations.

@@ -292,7 +292,9 @@ iree_status_t loom_serve_memory_pool_try_commit(
 // The caller keeps every reservation and its accounting alive until the
 // returned operation retires, independently of readiness success/failure. No
 // other commitment or trim may touch its pending slabs. Ranges are copied; the
-// readiness semaphore is retained. Completion may precede return. Inline
+// readiness semaphore is retained. Mapping edits to one reservation are ordered
+// even for disjoint slabs; source allocations and separate reservations remain
+// independent. Completion may precede return. Inline
 // readiness callbacks may schedule the owner but cannot collect or await this
 // operation; the owner joins publication through is_complete before freeing it.
 iree_status_t loom_serve_memory_pool_commit_async(

@@ -4,6 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
+#include <utility>
+
 #include "loom/serve/runtime/parameter/residency.h"
 #include "loom/serve/runtime/storage/memory_test_fixture.h"
 
@@ -1216,6 +1219,98 @@ TEST_F(MemoryTest, FailedReadinessDoesNotReleaseNativeOperationOwnership) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, kSlabSize, kSlabSize));
   RoundTrip(loom_serve_virtual_buffer_handle(first), kSlabSize, 0x87654321);
   CheckRetained(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
+}
+
+TEST_F(MemoryTest, DisjointMappingsFollowTheirReservationNotTheSharedPool) {
+  mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
+  ASSERT_NO_FATAL_FAILURE(UseBacking(false, 4 * kSlabSize, &mapping_queue));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      &statistics[1], &second));
+  // Captures borrow private semaphores from the operations kept alive below.
+  auto& mapping_waits = mapping_queue.mapping_waits;
+  auto& mapping_signals = mapping_queue.mapping_signals;
+  mapping_queue.observe_mappings = true;
+  auto release_gate = [](iree_hal_semaphore_t* semaphore) {
+    IREE_EXPECT_OK(iree_hal_semaphore_signal(semaphore, 1, nullptr));
+    iree_hal_semaphore_release(semaphore);
+  };
+  const std::pair<bool, bool> transitions[] = {
+      {false, false}, {false, true}, {true, false}};
+  for (auto [release_first, release_next] : transitions) {
+    if (release_first || release_next) {
+      IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+    }
+    iree_hal_semaphore_t* semaphore = nullptr;
+    IREE_ASSERT_OK(iree_hal_semaphore_create(
+        loom_serve_device_handle(device), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
+        IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &semaphore));
+    std::unique_ptr<iree_hal_semaphore_t, decltype(release_gate)> gate(
+        semaphore, release_gate);
+    mapping_queue.gate_next_mapping = semaphore;
+    mapping_waits.clear();
+    mapping_signals.clear();
+    loom_serve_memory_operation_t* operations[3] = {};
+    loom_serve_memory_admission_t admission;
+    if (release_first) {
+      loom_serve_virtual_buffer_begin_trim(first);
+      IREE_ASSERT_OK(loom_serve_memory_pool_trim_async(pool, 1, &first, nullptr,
+                                                       0, &operations[0]));
+    } else {
+      const loom_serve_memory_range_t range = {first, kSlabSize, kSlabSize};
+      IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+          pool, 1, &range, nullptr, 0, &admission, &operations[0]));
+      ASSERT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
+    }
+    if (release_next) {
+      loom_serve_virtual_buffer_begin_trim(first);
+      loom_serve_virtual_buffer_keep(first, kSlabSize, kSlabSize);
+      IREE_ASSERT_OK(loom_serve_memory_pool_trim_async(pool, 1, &first, nullptr,
+                                                       0, &operations[1]));
+    } else {
+      const loom_serve_memory_range_t next = {first, 2 * kSlabSize, kSlabSize};
+      IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+          pool, 1, &next, nullptr, 0, &admission, &operations[1]));
+      ASSERT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
+    }
+    ASSERT_EQ(mapping_waits.size(), 2u);
+    EXPECT_NE(std::find(mapping_waits[1].begin(), mapping_waits[1].end(),
+                        mapping_signals[0]),
+              mapping_waits[1].end());
+    // The mapping owner emits dependencies even if physical allocation is
+    // still pending. No scheduling luck or native mapping race is required.
+    EXPECT_FALSE(loom_serve_memory_operation_is_complete(operations[0]));
+    const loom_serve_memory_range_t independent = {second, 0, kSlabSize};
+    IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+        pool, 1, &independent, nullptr, 0, &admission, &operations[2]));
+    ASSERT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
+    ASSERT_EQ(mapping_waits.size(), 3u);
+    EXPECT_EQ(mapping_waits[2].size(), 1u);  // Only its own allocation.
+    loom_serve_memory_operation_await(operations[2]);
+    IREE_ASSERT_OK(loom_serve_memory_operation_query_status(operations[2]));
+    RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
+    gate.reset();
+    for (auto* operation : operations) {
+      loom_serve_memory_operation_await(operation);
+      IREE_EXPECT_OK(loom_serve_memory_operation_query_status(operation));
+      loom_serve_memory_operation_free(operation);
+    }
+    if (!release_first) {
+      RoundTrip(loom_serve_virtual_buffer_handle(first), kSlabSize, 0xabcdef01);
+    }
+    if (!release_next) {
+      RoundTrip(loom_serve_virtual_buffer_handle(first), 2 * kSlabSize,
+                0x87654321);
+    }
+    loom_serve_virtual_buffer_begin_trim(first);
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+    loom_serve_virtual_buffer_begin_trim(second);
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(second));
+  }
+  mapping_queue.observe_mappings = false;
 }
 
 TEST_F(MemoryTest, NativeAllocationFailurePreservesWarmWorkAndAllowsRetry) {
