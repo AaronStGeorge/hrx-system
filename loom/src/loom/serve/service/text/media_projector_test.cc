@@ -17,6 +17,45 @@
 
 namespace {
 
+TEST(MediaRequestTest, BindsOptionalMetadataAtItsImageOffset) {
+  const auto host_allocator = iree_allocator_system();
+  for (const auto metadata : {IREE_SV(""), IREE_SV("image-metadata")}) {
+    loom_serve_text_chat_t chat = {};
+    loom_serve_text_chat_image_t image = {};
+    iree_string_builder_initialize(host_allocator, &chat.images.metadata);
+    if (metadata.size) {
+      IREE_ASSERT_OK(
+          iree_string_builder_append_cstring(&chat.images.metadata, "skip"));
+      IREE_ASSERT_OK(
+          iree_string_builder_append_string(&chat.images.metadata, metadata));
+      image.metadata_offset = 4;
+      image.metadata_length = metadata.size;
+    }
+    chat.images.count = 1;
+    chat.images.values = &image;
+    loom_serve_text_media_span_t span = {.input_count = 1};
+    const loom_serve_text_input_t input = {
+        .media_spans = &span,
+        .media_span_count = 1,
+    };
+    loom_serve_text_media_request_t* request = nullptr;
+    IREE_ASSERT_OK(loom_serve_text_media_request_allocate(&chat, host_allocator,
+                                                          &request));
+    EXPECT_FALSE(loom_serve_text_media_request_bind(request, &input, 0));
+    const auto* bound = loom_serve_text_media_request_input(request);
+    ASSERT_EQ(bound->span_count, 1u);
+    const auto bytes = bound->spans[0].metadata;
+    EXPECT_EQ(bytes.data_length, metadata.size);
+    if (metadata.size) {
+      EXPECT_EQ(std::memcmp(bytes.data, metadata.data, metadata.size), 0);
+    } else {
+      EXPECT_EQ(bytes.data, nullptr);
+    }
+    loom_serve_text_media_request_free(request);
+    iree_string_builder_deinitialize(&chat.images.metadata);
+  }
+}
+
 class MediaProjectorTest : public ::testing::Test {
  protected:
   void SetUp() override {

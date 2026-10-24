@@ -104,7 +104,9 @@ bool loom_serve_text_media_request_bind(
         .request_index = projected->result_index,
         .result = projected->result,
         .metadata = iree_make_const_byte_span(
-            metadata.data + image->metadata_offset, image->metadata_length),
+            image->metadata_length ? metadata.data + image->metadata_offset
+                                   : NULL,
+            image->metadata_length),
     };
     ready &= projected->result != NULL;
   }

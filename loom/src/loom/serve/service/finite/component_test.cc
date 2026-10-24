@@ -122,11 +122,14 @@ class ComponentOwner {
 
 class FiniteComponentTest : public ::testing::Test {
  protected:
+  // Small physical quantum compatible with CPU and GPU mapping granularity.
+  static constexpr uint32_t kSlabSize = 64 * 1024;
+
   void SetUp() override {
     auto application_options = loom_serve_test_application_options_default();
-    application_options.slab_size = 4096;
+    application_options.slab_size = kSlabSize;
     if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
-      application_options.memory_limit = 16 * 1024;
+      application_options.memory_limit = 4 * kSlabSize;
     }
     loom_serve_test_application_t* application = nullptr;
     IREE_ASSERT_OK(loom_serve_test_application_acquire(
@@ -338,7 +341,7 @@ class FiniteComponentTest : public ::testing::Test {
   void CheckDiscardedOutput(bool retire_producer) {
     loom_serve_finite_model_t* model = nullptr;
     IREE_ASSERT_OK(Prepare(component_, &model));
-    ASSERT_NO_FATAL_FAILURE(PrepareBatch(model, 0, 8192));
+    ASSERT_NO_FATAL_FAILURE(PrepareBatch(model, 0, 2 * kSlabSize));
     ASSERT_NO_FATAL_FAILURE(Admit(model));
     loom_serve_residency_admission_t admission;
     loom_serve_execution_frontier_t ready;
@@ -350,7 +353,7 @@ class FiniteComponentTest : public ::testing::Test {
         device_, &options_, owner_.observer(), host_allocator_, &peer));
     loom_serve_finite_model_t* peer_model = nullptr;
     IREE_ASSERT_OK(Prepare(peer, &peer_model));
-    ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, 8192));
+    ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, 2 * kSlabSize));
     auto* peer_residency = loom_serve_finite_model_residency(peer_model);
     IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
     if (loom_serve_device_memory_pool(device_)) {
@@ -634,8 +637,8 @@ TEST_F(FiniteComponentTest, UnjoinedDemandReadsRetireWithRejectedInvocation) {
 TEST_F(FiniteComponentTest, PeerAdmissionWaitsForCapturedOutputRetirement) {
   loom_serve_finite_model_t* model = nullptr;
   IREE_ASSERT_OK(Prepare(component_, &model));
-  ASSERT_NO_FATAL_FAILURE(Submit(model, 0, 8192));
-  EXPECT_EQ(loom_serve_finite_result_output_length(results_[0]), 8192u);
+  ASSERT_NO_FATAL_FAILURE(Submit(model, 0, 2 * kSlabSize));
+  EXPECT_EQ(loom_serve_finite_result_output_length(results_[0]), 2 * kSlabSize);
   IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
@@ -665,9 +668,9 @@ TEST_F(FiniteComponentTest, PeerAdmissionWaitsForCapturedOutputRetirement) {
   loom_serve_finite_model_t* peer_model = nullptr;
   IREE_ASSERT_OK(Prepare(peer, &peer_model));
   auto* peer_residency = loom_serve_finite_model_residency(peer_model);
-  // Carried output + peer weights + peer output exactly fill the ceiling.
-  // The peer's input and command-private scratch still need headroom.
-  ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, 4096));
+  // Carried output plus peer input, output, and scratch crosses a workspace
+  // slab boundary. Adding the peer's weights then exceeds the ceiling.
+  ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, kSlabSize));
   loom_serve_residency_admission_t admission;
   IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
   EXPECT_EQ(admission, loom_serve_device_memory_pool(device_)
