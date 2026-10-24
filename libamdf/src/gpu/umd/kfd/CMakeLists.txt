@@ -263,6 +263,7 @@ iree_cc_library(
   DEPS
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_amdgpu_uapi>
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
+    ::buffer
     ::device_state
     amdf::headers
     libamdf::src::allocator

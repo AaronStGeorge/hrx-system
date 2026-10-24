@@ -521,6 +521,29 @@ TEST_F(KfdBufferNativeTest, FailedImportedSourceReleaseRetainsResidency) {
   native_.gem_live = false;
 }
 
+TEST_F(KfdBufferNativeTest, CompletesInterruptedAllocationBeforeMapping) {
+  native_.allocation_errors = {EINTR, EINTR, 0};
+  expected_metadata_free_count_ = 2;
+  for (const auto flags :
+       {KFD_IOC_ALLOC_MEM_FLAGS_GTT, KFD_IOC_ALLOC_MEM_FLAGS_VRAM}) {
+    SCOPED_TRACE(flags);
+    create_info_.native_flags = flags;
+    native_.allocation_attempts.clear();
+    native_.map_progress.clear();
+    ASSERT_EQ(Create(), AMDF_STATUS_OK);
+    EXPECT_EQ(native_.allocation_attempts.size(), 3u);
+    for (const auto& attempt : native_.allocation_attempts) {
+      EXPECT_EQ(attempt.va_addr, native_.address);
+      EXPECT_EQ(attempt.size, create_info_.byte_length);
+      EXPECT_EQ(attempt.flags, flags);
+      EXPECT_EQ(attempt.handle, 0u);
+    }
+    EXPECT_EQ(native_.map_progress, (std::vector<uint32_t>{0}));
+    ASSERT_EQ(Destroy(), AMDF_STATUS_OK);
+  }
+  EXPECT_EQ(native_.free_count, 2u);
+}
+
 TEST_F(KfdBufferNativeTest, CompletesInterruptedMapWithNativeProgress) {
   native_.map_interruptions = 2;
   ASSERT_EQ(Create(), AMDF_STATUS_OK);
@@ -560,6 +583,7 @@ TEST_F(KfdBufferNativeTest, PartialGroupMapRollsBackOnlyTheMappedPrefix) {
 }
 
 TEST_F(KfdBufferNativeTest, RegisteredGroupPreservesCallerPagesThroughUnmap) {
+  native_.allocation_errors = {EINTR, EINTR, 0};
   void* pages = mmap(nullptr, 12288, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   ASSERT_NE(pages, MAP_FAILED);
@@ -578,6 +602,7 @@ TEST_F(KfdBufferNativeTest, RegisteredGroupPreservesCallerPagesThroughUnmap) {
   native_.byte_length = 8192;
   native_.gpu_ids = {19, 23};
   ASSERT_EQ(Create(), AMDF_STATUS_OK);
+  EXPECT_EQ(native_.allocation_attempts.size(), 3u);
   EXPECT_EQ(native_.allocation.flags, create_info_.native_flags);
   EXPECT_EQ(native_.allocation.mmap_offset, reinterpret_cast<uintptr_t>(pages));
   EXPECT_EQ(result_.device_address, native_.address + 2051);
@@ -601,9 +626,9 @@ TEST_F(KfdBufferNativeTest, RestartsInvalidatedUserPagesWithoutNewOwnership) {
   pages[0] = 0xA7;
   pages[sizeof(pages) - 1] = 0x69;
   UseRegisteredPages(pages);
-  native_.allocation_errors = {EAGAIN, EAGAIN, 0};
+  native_.allocation_errors = {EINTR, EAGAIN, EINTR, EAGAIN, 0};
   EXPECT_EQ(Create(), AMDF_STATUS_OK);
-  EXPECT_EQ(native_.allocation_attempts.size(), 3u);
+  EXPECT_EQ(native_.allocation_attempts.size(), 5u);
   for (const auto& attempt : native_.allocation_attempts) {
     EXPECT_EQ(attempt.va_addr, native_.address);
     EXPECT_EQ(attempt.mmap_offset, reinterpret_cast<uintptr_t>(pages));
@@ -658,18 +683,6 @@ TEST_F(KfdBufferNativeTest, NonUserPageAllocationDoesNotRestartEagain) {
   EXPECT_EQ(native_.reservation_release_count, 2u);
 }
 
-TEST_F(KfdBufferNativeTest, UserPageAllocationDoesNotRestartInterruption) {
-  alignas(4096) uint8_t pages[4096] = {};
-  UseRegisteredPages(pages);
-  native_.allocation_errors = {EINTR, 0};
-  EXPECT_EQ(Create(), amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, EINTR));
-  EXPECT_EQ(native_.allocation_attempts.size(), 1u);
-  EXPECT_EQ(buffer_, nullptr);
-  EXPECT_TRUE(native_.map_progress.empty());
-  EXPECT_EQ(native_.free_count, 0u);
-  EXPECT_EQ(native_.reservation_release_count, 1u);
-}
-
 TEST_F(KfdBufferNativeTest, UserPageRestartRollsBackLaterMapFailure) {
   alignas(4096) uint8_t pages[4096] = {};
   UseRegisteredPages(pages);
@@ -683,10 +696,10 @@ TEST_F(KfdBufferNativeTest, UserPageRestartRollsBackLaterMapFailure) {
   EXPECT_EQ(native_.reservation_release_count, 1u);
 }
 
-TEST_F(KfdBufferNativeTest, UserPageRestartYieldsToEnrolledRelease) {
+TEST_F(KfdBufferNativeTest, AllocationRestartYieldsToEnrolledRelease) {
   alignas(4096) uint8_t pages[4096] = {};
   UseRegisteredPages(pages);
-  native_.allocation_errors = {EAGAIN, 0};
+  native_.allocation_errors = {EAGAIN, EINTR, 0};
   bool release_completed = false;
   std::thread release;
   native_.observe_allocation = [&] {
@@ -716,7 +729,7 @@ TEST_F(KfdBufferNativeTest, UserPageRestartYieldsToEnrolledRelease) {
   EXPECT_EQ(Create(), AMDF_STATUS_OK);
   release.join();
   EXPECT_TRUE(release_completed);
-  EXPECT_EQ(native_.allocation_attempts.size(), 2u);
+  EXPECT_EQ(native_.allocation_attempts.size(), 3u);
   if (buffer_) {
     EXPECT_EQ(Destroy(), AMDF_STATUS_OK);
   }
