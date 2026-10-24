@@ -118,6 +118,11 @@ class SourceMemoryByteOffsetMaterializer:
     ``increment`` descriptor lets shared loop planning advance a carried byte
     offset by a constant without rebuilding its canonical terms.
 
+    Increment-capable materializers using the same physical carrier must agree
+    on their constant, add, and increment recipe within a composed target
+    policy. The contract-index generator enforces that shared-lowering
+    invariant.
+
     Both constant forms bind ``constant_immediate`` so that a target cannot
     accidentally encode the same byte offset with different immediate fields.
     """

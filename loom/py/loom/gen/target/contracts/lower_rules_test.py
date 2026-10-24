@@ -16,6 +16,9 @@ from loom.dialect.vector import defs as vector
 from loom.dsl import EncodingOperandSummaryDef, Op
 from loom.error.target import ERR_TARGET_003
 from loom.gen.support.string_pool import CStringBank
+from loom.gen.target.contracts.contract_index import (
+    validate_source_memory_recurrence_materializers,
+)
 from loom.gen.target.contracts.lower_rule_rows import (
     attr_copy_row,
     descriptor_ref_keys,
@@ -3021,3 +3024,40 @@ def test_source_memory_conversion_rows_keep_source_kind_and_selector() -> None:
         ),
     )
     assert set(descriptor_ref_keys(table, contract)) == set(references)
+
+
+def test_contract_index_rejects_conflicting_recurrence_recipes() -> None:
+    increment = replace(
+        TEST_LOW_REMATERIALIZE_I32_DESCRIPTOR,
+        key="test.increment.i32",
+        immediates=(
+            Immediate(
+                "increment",
+                ImmediateKind.SIGNED,
+                bit_width=8,
+                signed_min=-128,
+                unsigned_max=127,
+            ),
+        ),
+    )
+    materializer = SourceMemoryByteOffsetMaterializer(
+        constant=TEST_LOW_CONST_I32_DESCRIPTOR,
+        add=TEST_LOW_ADD_I32_DESCRIPTOR,
+        multiply=TEST_LOW_MUL_I32_DESCRIPTOR,
+        shift_left=None,
+        increment=increment,
+        constant_immediate="i32_value",
+        increment_immediate="increment",
+    )
+    validate_source_memory_recurrence_materializers("TEST_CONTRACT", (("first", materializer), ("second", materializer)))
+    conflicting = replace(
+        materializer,
+        increment=replace(increment, key="test.other.increment.i32"),
+    )
+    _expect_value_error(
+        lambda: validate_source_memory_recurrence_materializers(
+            "TEST_CONTRACT",
+            (("first", materializer), ("second", conflicting)),
+        ),
+        "conflicting recipes in fragments 'first' and 'second'",
+    )

@@ -664,6 +664,25 @@ static bool loom_low_lower_selected_plan_storage_required(
   return false;
 }
 
+static bool loom_low_lower_selected_plan_result_storage_required(
+    const loom_low_lower_context_t* context,
+    const loom_low_lower_selected_plan_t* selected_plan) {
+  const uint8_t source_node_count = selected_plan->source_node_count != 0
+                                        ? selected_plan->source_node_count
+                                        : 1;
+  for (uint8_t i = 0; i < source_node_count; ++i) {
+    const loom_op_t* source_op = selected_plan->source_op;
+    if (i != 0) {
+      IREE_ASSERT(selected_plan->data.source_nodes != NULL);
+      source_op = selected_plan->data.source_nodes[i];
+    }
+    if (loom_low_lower_source_op_result_storage_required(context, source_op)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_low_lower_can_elide_selected_plan(
     const loom_low_lower_context_t* context,
     const loom_low_lower_selected_plan_t* selected_plan) {
@@ -750,7 +769,7 @@ bool loom_low_lower_source_value_storage_plans_preserve_fact_demands(
   return true;
 }
 
-void loom_low_lower_source_value_storage_prepare_refinement(
+static void loom_low_lower_source_value_storage_reset_demands(
     loom_low_lower_context_t* context) {
   loom_low_lower_source_plan_t* source_plan = &context->lowering->source_plan;
   const loom_value_ordinal_t value_count =
@@ -759,14 +778,46 @@ void loom_low_lower_source_value_storage_prepare_refinement(
     source_plan->value_flags[i] &=
         LOOM_LOW_LOWER_VALUE_STORAGE_FACT_REFERENCE |
         LOOM_LOW_LOWER_VALUE_STORAGE_BASELINE_REQUIRED |
-        LOOM_LOW_LOWER_VALUE_INHERITED_TYPE;
+        LOOM_LOW_LOWER_VALUE_INHERITED_TYPE |
+        LOOM_LOW_LOWER_VALUE_MEMORY_RECURRENCE_PRODUCER;
     if (iree_any_bit_set(source_plan->value_flags[i],
                          LOOM_LOW_LOWER_VALUE_STORAGE_BASELINE_REQUIRED)) {
       source_plan->value_flags[i] |= LOOM_LOW_LOWER_VALUE_STORAGE_REQUIRED;
     }
   }
+}
+
+void loom_low_lower_source_value_storage_prepare_refinement(
+    loom_low_lower_context_t* context) {
+  loom_low_lower_source_value_storage_reset_demands(context);
+  loom_low_lower_source_plan_t* source_plan = &context->lowering->source_plan;
   source_plan->memory.cursor = source_plan->memory.first;
   source_plan->memory.current = NULL;
   source_plan->selected_plan_count = 0;
   source_plan->selected_plan_emit_index = 0;
+}
+
+void loom_low_lower_source_value_storage_refine_selected_plans(
+    loom_low_lower_context_t* context) {
+  loom_low_lower_source_value_storage_reset_demands(context);
+  loom_low_lower_source_plan_t* source_plan = &context->lowering->source_plan;
+  // Newly selected realizations may retain source dependencies after the first
+  // storage pass. Reactivate their producers before the reverse demand walk so
+  // each producer can propagate demand to its own operands. Claimed results are
+  // supplied by their realization and remain elided.
+  for (iree_host_size_t i = 0; i < source_plan->selected_plan_count; ++i) {
+    loom_low_lower_selected_plan_t* selected_plan =
+        &source_plan->selected_plans[i];
+    if (!iree_all_bits_set(selected_plan->flags,
+                           LOOM_LOW_LOWER_SELECTED_PLAN_ELIDED) ||
+        iree_any_bit_set(selected_plan->flags,
+                         LOOM_LOW_LOWER_SELECTED_PLAN_CLAIMED)) {
+      continue;
+    }
+    if (loom_low_lower_selected_plan_result_storage_required(context,
+                                                             selected_plan)) {
+      selected_plan->flags &= ~LOOM_LOW_LOWER_SELECTED_PLAN_ELIDED;
+    }
+  }
+  loom_low_lower_source_value_storage_analyze(context);
 }

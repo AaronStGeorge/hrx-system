@@ -503,8 +503,8 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op(
             emit_source_memory_access);
     IREE_RETURN_IF_ERROR(loom_low_lower_record_memory_packet(
         context, low_op, resolved_emit->descriptor.descriptor,
-        selected_source_memory->origin, emit_source_memory_access, &geometry,
-        loom_value_facts_exact_i64(0)));
+        selected_source_memory->record->origin, emit_source_memory_access,
+        &geometry, loom_value_facts_exact_i64(0)));
   }
   loom_value_slice_t low_results = loom_low_op_results(low_op);
   return loom_low_lower_rule_bind_results(context, rule_set, source_op, state,
