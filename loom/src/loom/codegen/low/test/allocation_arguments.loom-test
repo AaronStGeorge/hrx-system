@@ -744,3 +744,42 @@ entry moves: 2
 classes:
   test.i32: assignments=3 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
   test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
+
+// ====
+
+// A scalar input can vacate a narrower class without moving another argument.
+// RUN: emit low-allocation @entry_scalar_blocks_narrow entry=0:test.explicit32:physical_register:0
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @entry_scalar_blocks_narrow(%input: reg<test.explicit32>, %narrow: reg<test.fixed.r0>) -> (reg<test.explicit32>, reg<test.fixed.r0>) asm {
+  return %input, %narrow
+}
+
+// ----
+low-allocation @entry_scalar_blocks_narrow
+target: target
+descriptor_set: test.low.core
+mode: virtual
+assignments: 2
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+entry moves: 1
+  test.explicit32:physical_register:2 <- test.explicit32:physical_register:0
+classes:
+  test.explicit32: assignments=1 units=1 target_ids=0 physical=3 spill_slots=0 unassigned=0
+  test.fixed.r0: assignments=1 units=1 target_ids=0 physical=1 spill_slots=0 unassigned=0
+
+// ====
+
+// Every candidate in the unspillable physical class is occupied. Moving an
+// incoming value cannot create capacity for another live scalar.
+// RUN: emit low-allocation @entry_physical_shortage entry=0:test.explicit32:physical_register:0 entry=1:test.explicit32:physical_register:1 entry=2:test.explicit32:physical_register:2 entry=3:test.explicit32:physical_register:3
+
+test.target<low_core> @target
+
+// ERROR@+1: BACKEND/005 {function_name="entry_physical_shortage", value_class="test.explicit32", budget="4", peak="5", failure_code="unspillable-register-exhausted"}
+low.func.def target<test.low.core>(@target) @entry_physical_shortage(%a: reg<test.explicit32>, %b: reg<test.explicit32>, %c: reg<test.explicit32>, %d: reg<test.explicit32>, %e: reg<test.explicit32>) -> (reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>) asm {
+  return %a, %b, %c, %d, %e
+}
