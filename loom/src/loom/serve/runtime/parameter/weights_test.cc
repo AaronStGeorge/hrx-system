@@ -500,7 +500,7 @@ TEST_P(WeightsTest, InitialBackingRetirementMatchesAcceptedWork) {
     ASSERT_NO_FATAL_FAILURE(allocate_and_release_view());
     EXPECT_TRUE(loom_serve_weights_is_retired(plans_[0]));
   }
-  loom_serve_weights_await_retirement(plans_[0]);
+  IREE_ASSERT_OK(loom_serve_weights_await_retirement(plans_[0]));
   EXPECT_TRUE(loom_serve_weights_is_retired(plans_[0]));
 }
 
@@ -1502,7 +1502,7 @@ TEST_P(WeightsTest, MutableGrowthReclaimsIdleParametersWithoutDiscardingState) {
 }
 
 TEST_P(WeightsTest,
-       DeviceTrimPrefersIdleWorkspaceAndPreservesPinnedParameters) {
+       DeviceTrimRetiresIdleWorkspaceAndPreservesPinnedParameters) {
   for (iree_host_size_t i = 0; i < 2; ++i) {
     IREE_ASSERT_OK(Compile(i, "target"));
     const auto root = Root(i, 0);
@@ -1527,19 +1527,21 @@ TEST_P(WeightsTest,
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
   const auto before = loom_serve_device_memory_statistics(device_owner_);
   EXPECT_EQ(before.retained.committed_bytes, GetParam() ? 2 * kSlabBytes : 0);
+  if (GetParam()) {
+    // Under the two-slab cap, scratch and the pinned model share the domain;
+    // the other model's unpinned parameter slab was reclaimed for scratch.
+    EXPECT_EQ(loom_serve_weights_statistics(plans_[1]).committed_bytes, 0u);
+  }
   // The shared workspace keeps its registered slab geometry after a trim.
   // Earlier streaming cases may have registered a larger geometry.
   EXPECT_GE(before.workspace.bytes_committed, kSlabBytes);
   IREE_ASSERT_OK(
-      loom_serve_device_trim(device_owner_, before.retained.committed_bytes));
-  const auto idle = loom_serve_device_memory_statistics(device_owner_);
-  ASSERT_EQ(idle.retained.committed_bytes, before.retained.committed_bytes);
+      loom_serve_device_trim(device_owner_, GetParam() ? kSlabBytes : 0));
   DrainNativeReturns();
   EXPECT_EQ(loom_serve_device_memory_statistics(device_owner_)
                 .workspace.bytes_committed,
             0u);
   ASSERT_NO_FATAL_FAILURE(Run(0, 70));
-  ASSERT_NO_FATAL_FAILURE(Run(1, 70));
 
   IREE_ASSERT_OK(
       loom_serve_execution_alloca(execution_, 1, &request, &workspace_));
@@ -1550,7 +1552,7 @@ TEST_P(WeightsTest,
   const auto pinned = loom_serve_device_memory_statistics(device_owner_);
   EXPECT_EQ(pinned.workspace.bytes_committed, before.workspace.bytes_committed);
   EXPECT_EQ(pinned.workspace.reservation_count, 1u);
-  EXPECT_EQ(pinned.retained.committed_bytes, GetParam() ? kSlabBytes : 0);
+  EXPECT_EQ(pinned.retained.committed_bytes, GetParam() ? 2 * kSlabBytes : 0);
   if (GetParam()) {
     EXPECT_EQ(loom_serve_weights_statistics(plans_[1]).committed_bytes, 0u);
   }

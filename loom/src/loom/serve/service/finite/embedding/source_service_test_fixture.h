@@ -52,6 +52,8 @@ struct loom_serve_test_embedding_model_lifecycle_t {
   // Borrowed capacity domain whose wakes keep this owner runnable under
   // pressure.
   loom_serve_memory_pool_t* pool = nullptr;
+  // Borrowed queue workspace advanced by this same serialized owner.
+  loom_serve_workspace_t* workspace = nullptr;
   // Optional live service advanced by this same serialized pool owner.
   loom_serve_service_t* service = nullptr;
   // Owned in-progress load, consumed at its terminal owner turn.

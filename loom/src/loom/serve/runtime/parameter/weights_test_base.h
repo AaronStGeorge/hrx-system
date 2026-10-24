@@ -390,7 +390,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
       }
     }
     for (auto* plan : plans_) {
-      loom_serve_weights_await_retirement(plan);
+      IREE_EXPECT_OK(loom_serve_weights_await_retirement(plan));
     }
     for (auto* residency : residencies_) {
       loom_serve_residency_free(residency);
@@ -423,7 +423,10 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     IREE_EXPECT_OK(loom_serve_device_trim(device_owner_, 0));
     DrainNativeReturns();
     const auto memory = loom_serve_device_memory_statistics(device_owner_);
-    EXPECT_EQ(memory.retained.reserved_bytes, 0u);
+    EXPECT_EQ(memory.retained.reserved_bytes,
+              loom_serve_workspace_memory_usage(
+                  loom_serve_device_workspace(device_owner_))
+                  .reserved_bytes);
     EXPECT_EQ(memory.retained.committed_bytes, 0u);
     EXPECT_EQ(memory.workspace.bytes_committed, 0u);
     if (path_.Exists()) {
@@ -475,8 +478,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
         group, scope, deferred_backing_, transfer_, geometries, memory_limit,
         host_allocator_, &owned_pool_));
     pool_ = owned_pool_;
-    IREE_ASSERT_OK(loom_serve_residency_cache_allocate(pool_, host_allocator_,
-                                                       &owned_cache_));
+    IREE_ASSERT_OK(loom_serve_residency_cache_allocate(
+        pool_, nullptr, host_allocator_, &owned_cache_));
   }
 
   loom_serve_residency_cache_t* ResidencyCache() {

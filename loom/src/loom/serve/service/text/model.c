@@ -673,7 +673,8 @@ iree_status_t loom_serve_text_model_free(loom_serve_text_model_t* model) {
                              ? loom_serve_execution_drain(model->execution)
                              : iree_ok_status();
   for (iree_host_size_t i = 0; i < model->parameters.count; ++i) {
-    loom_serve_weights_await_retirement(model->parameters.plans[i]);
+    status = iree_status_join(status, loom_serve_weights_await_retirement(
+                                          model->parameters.plans[i]));
   }
   loom_serve_text_state_await_retirement(&model->state);
   return iree_status_join(status, loom_serve_text_model_free_retired(model));

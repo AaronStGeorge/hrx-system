@@ -429,7 +429,11 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
             ):
                 break
             assert all(not model["loom"].get("error") for model in final["data"]), final
-        assert memory["reserved_bytes"] == memory["pending_bytes"] == 0, memory
+        assert memory["pending_bytes"] == 0, memory
+        # Model removal leaves the shared workspace's reusable address ranges.
+        # Physical trim must preserve those addresses while returning backing.
+        workspace_virtual_bytes = memory["reserved_bytes"]
+        assert workspace_virtual_bytes > 0, memory
         control(
             address,
             "POST",
@@ -441,7 +445,8 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         while memory["committed_bytes"]:
             final = control(address, "GET", "/v1/status", 200)
             memory = final["server"]["resources"]["devices"][0]["memory"]["retained"]
-        assert memory["reserved_bytes"] == memory["committed_bytes"] == 0, memory
+        assert memory["reserved_bytes"] == workspace_virtual_bytes, memory
+        assert memory["committed_bytes"] == 0, memory
         assert memory["peak_bytes"] <= memory_bytes, memory
         assert control(address, "GET", "/readyz", 200) == {"status": "ready"}
 

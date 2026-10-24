@@ -60,6 +60,7 @@ loom_cc_library(
     visibility = ["//loom/src/loom/serve:implementation"],
     deps = [
         "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/execution:workspace",
         "//loom/src/loom/serve/runtime/host",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",

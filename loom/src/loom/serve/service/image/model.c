@@ -218,8 +218,10 @@ iree_status_t loom_serve_image_model_free(loom_serve_image_model_t* model) {
   }
   loom_serve_image_model_retire(model, NULL, NULL);
   iree_status_t status = loom_serve_execution_drain(model->execution);
-  loom_serve_parameter_bank_await_retirement(model->parameters);
-  loom_serve_executables_await_retirement(model->executables);
+  status = iree_status_join(
+      status, loom_serve_parameter_bank_await_retirement(model->parameters));
+  status = iree_status_join(
+      status, loom_serve_executables_await_retirement(model->executables));
   return iree_status_join(status,
                           loom_serve_image_model_destroy_resources(model));
 }

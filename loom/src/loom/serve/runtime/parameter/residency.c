@@ -12,6 +12,8 @@ struct loom_serve_residency_cache_t {
   iree_allocator_t host_allocator;
   // Borrowed physical budget; NULL for explicitly fixed allocations.
   loom_serve_memory_pool_t* pool;
+  // Borrowed logical workspace sharing pool, or NULL without shared backing.
+  loom_serve_workspace_t* workspace;
   // Serializes final output-credit returns with owner observation/detachment.
   iree_slim_mutex_t output_mutex;
   // Accepted output bounds, including independent downstream queue captures.
@@ -239,6 +241,8 @@ void loom_serve_residency_set_reclaimer(
 bool loom_serve_residency_cache_is_reclaiming(
     const loom_serve_residency_cache_t* cache) {
   if (cache->releasing_count ||
+      (cache->workspace &&
+       loom_serve_workspace_is_reclaiming(cache->workspace)) ||
       (cache->pool && loom_serve_memory_pool_is_pending(cache->pool))) {
     return true;
   }
@@ -521,6 +525,16 @@ iree_status_t loom_serve_residency_cache_trim(
 static iree_status_t loom_serve_residency_reclaim(void* user_data,
                                                   uint64_t target_bytes) {
   loom_serve_residency_cache_t* cache = user_data;
+  if (cache->workspace) {
+    iree_device_size_t retained = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_serve_workspace_trim(cache->workspace, &retained));
+    if (loom_serve_workspace_is_reclaiming(cache->workspace)) {
+      // Keep model data while idle workspace is returning. Cold acquisitions
+      // progress outside this reclaimer, avoiding recursive physical admission.
+      return iree_ok_status();
+    }
+  }
   uint64_t remaining = loom_serve_residency_cache_projected_bytes(cache);
   uint64_t pinned_bytes = 0;
   for (loom_serve_residency_group_t* entry = cache->groups.oldest;
@@ -559,6 +573,13 @@ static iree_status_t loom_serve_residency_reclaim(void* user_data,
   return iree_ok_status();
 }
 
+static uint64_t loom_serve_residency_workspace_footprint(
+    const loom_serve_residency_cache_t* cache, uint64_t byte_length) {
+  return cache->workspace
+             ? loom_serve_workspace_round_size(cache->workspace, byte_length)
+             : byte_length;
+}
+
 static uint64_t loom_serve_residency_activation_workspace(
     const loom_serve_residency_t* residency) {
   uint64_t bytes = 0;
@@ -573,14 +594,15 @@ static uint64_t loom_serve_residency_activation_workspace(
 }
 
 iree_status_t loom_serve_residency_cache_allocate(
-    loom_serve_memory_pool_t* pool, iree_allocator_t host_allocator,
-    loom_serve_residency_cache_t** out_cache) {
+    loom_serve_memory_pool_t* pool, loom_serve_workspace_t* workspace,
+    iree_allocator_t host_allocator, loom_serve_residency_cache_t** out_cache) {
   *out_cache = NULL;
   loom_serve_residency_cache_t* cache = NULL;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*cache), (void**)&cache));
   cache->host_allocator = host_allocator;
   cache->pool = pool;
+  cache->workspace = workspace;
   iree_slim_mutex_initialize(&cache->output_mutex);
   if (pool) {
     loom_serve_memory_pool_set_reclaimer(
@@ -659,6 +681,7 @@ iree_status_t loom_serve_residency_allocate(
       }
       remaining -= required;
     }
+    const uint64_t staging_capacity = remaining;
     // Independent weight plans stream concurrently. Their input lanes overlap
     // all final parameter roots even though consumers can reuse those lanes'
     // storage after importing activation readiness.
@@ -677,6 +700,12 @@ iree_status_t loom_serve_residency_allocate(
         }
         remaining -= required;
       }
+    }
+    if (loom_serve_residency_workspace_footprint(
+            cache, staging_capacity - remaining) > staging_capacity) {
+      return iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "model activation staging slabs exceed the serving memory limit");
     }
   }
   loom_serve_residency_t* residency = NULL;
@@ -757,12 +786,10 @@ uint64_t loom_serve_residency_activation_footprint(
   for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
     const loom_serve_residency_group_t* group = residency->entries[i].group;
     bytes += loom_serve_residency_group_statistics(group).reserved_bytes;
-    for (iree_host_size_t j = 0; j < group->weight_count; ++j) {
-      bytes += loom_serve_weights_activation_workspace(group->weights[j])
-                   .allocation_size;
-    }
   }
-  return bytes;
+  return bytes + loom_serve_residency_workspace_footprint(
+                     residency->cache,
+                     loom_serve_residency_activation_workspace(residency));
 }
 
 iree_status_t loom_serve_residency_check_working_set(
@@ -780,6 +807,7 @@ iree_status_t loom_serve_residency_check_working_set(
     // Registration established that the distinct parameter groups fit alone.
     remaining -= required;
   }
+  const uint64_t workspace_capacity = remaining;
   for (iree_host_size_t i = 0; i < extent_count; ++i) {
     if (extents[i] > remaining) {
       return iree_make_status(
@@ -789,6 +817,15 @@ iree_status_t loom_serve_residency_check_working_set(
           limit);
     }
     remaining -= extents[i];
+  }
+  if (loom_serve_residency_workspace_footprint(residency->cache,
+                                               workspace_capacity - remaining) >
+      workspace_capacity) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "model invocation workspace slabs exceed the serving memory limit of "
+        "%" PRIu64 " bytes",
+        limit);
   }
   return iree_ok_status();
 }
@@ -861,8 +898,15 @@ static bool loom_serve_residency_admit_working_set(
   }
   // No observation above collects native operations: every counter belongs to
   // the same serialized owner snapshot, including pending range commitments.
+  // Workspace backing already fulfills the private/output bounds below; it
+  // must not be charged a second time as model-owned mutable state.
+  const loom_serve_memory_usage_t workspace =
+      cache->workspace ? loom_serve_workspace_memory_usage(cache->workspace)
+                       : (loom_serve_memory_usage_t){0};
   const uint64_t mutable_bytes =
-      loom_serve_memory_pool_live_bytes(cache->pool) - parameter_bytes;
+      loom_serve_memory_pool_live_bytes(cache->pool) - parameter_bytes -
+      workspace.committed_bytes - workspace.pending_bytes;
+  const uint64_t workspace_capacity = remaining;
   iree_slim_mutex_lock(&cache->output_mutex);
   const uint64_t output_bytes = cache->output_bytes;
   iree_slim_mutex_unlock(&cache->output_mutex);
@@ -882,10 +926,19 @@ static bool loom_serve_residency_admit_working_set(
     }
   }
   const uint64_t output = residency->pin_count ? 0 : residency->output_bytes;
-  if (output > remaining || additional_state > remaining - output) {
+  if (output > remaining) {
     return false;
   }
-  remaining -= output + additional_state;
+  remaining -= output;
+  // Logical peers can pack into the same slab; round their aggregate once.
+  // Even a small cold request needs a complete slab before its queue can run.
+  const uint64_t workspace_bytes = loom_serve_residency_workspace_footprint(
+      cache, workspace_capacity - remaining);
+  if (workspace_bytes > workspace_capacity ||
+      additional_state > workspace_capacity - workspace_bytes) {
+    return false;
+  }
+  remaining = workspace_capacity - workspace_bytes - additional_state;
   if (mutable_bytes <= remaining) {
     return true;
   }

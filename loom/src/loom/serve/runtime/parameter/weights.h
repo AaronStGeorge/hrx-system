@@ -232,7 +232,9 @@ bool loom_serve_weights_is_retired(loom_serve_weights_t* weights);
 
 // Cold outer-thread join of the ownership above, independent of readiness.
 // Live owners use the wake and query instead of waiting on a shared worker.
-void loom_serve_weights_await_retirement(loom_serve_weights_t* weights);
+// Cold workspace progress failures return only after all views have retired.
+iree_status_t loom_serve_weights_await_retirement(
+    loom_serve_weights_t* weights);
 
 // Destruction after is_retired or await_retirement proved every consumer and
 // activation view retired. Native unmapping/release is synchronous; no queue or

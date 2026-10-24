@@ -364,7 +364,11 @@ iree_hal_pool_stats_t loom_serve_workspace_statistics(
         &backing);
     total.bytes_reserved += statistics.bytes_reserved;
     total.bytes_free += statistics.bytes_free + backing.bytes_free;
-    total.bytes_committed += backing.bytes_committed;
+    total.bytes_committed +=
+        workspace->virtual_pool
+            ? loom_serve_virtual_pool_memory_usage(workspace->virtual_pool)
+                  .committed_bytes
+            : backing.bytes_committed;
     total.bytes_quarantined += statistics.bytes_quarantined;
     total.reservation_count += statistics.reservation_count;
     total.slab_count += backing.slab_count;
@@ -476,14 +480,20 @@ static iree_device_size_t loom_serve_workspace_trim_locked(
   return retained_bytes;
 }
 
-iree_device_size_t loom_serve_workspace_trim(
-    loom_serve_workspace_t* workspace) {
+iree_status_t loom_serve_workspace_trim(
+    loom_serve_workspace_t* workspace, iree_device_size_t* out_retained_bytes) {
   iree_slim_mutex_lock(&workspace->mutex);
   loom_serve_workspace_collect(workspace, WORKSPACE_COLLECTION_COMPLETE);
-  const iree_device_size_t retained =
-      loom_serve_workspace_trim_locked(workspace);
+  *out_retained_bytes = loom_serve_workspace_trim_locked(workspace);
   iree_slim_mutex_unlock(&workspace->mutex);
-  return retained;
+  return workspace->virtual_pool
+             ? loom_serve_virtual_pool_reclaim(workspace->virtual_pool)
+             : iree_ok_status();
+}
+
+bool loom_serve_workspace_is_reclaiming(loom_serve_workspace_t* workspace) {
+  return workspace->virtual_pool &&
+         loom_serve_virtual_pool_is_reclaiming(workspace->virtual_pool);
 }
 
 bool loom_serve_workspace_trim_idle(loom_serve_workspace_t* workspace,
@@ -505,6 +515,20 @@ void loom_serve_workspace_set_observer(loom_serve_workspace_t* workspace,
   if (workspace->virtual_pool) {
     loom_serve_virtual_pool_set_observer(workspace->virtual_pool, observer);
   }
+}
+
+loom_serve_memory_usage_t loom_serve_workspace_memory_usage(
+    const loom_serve_workspace_t* workspace) {
+  return workspace->virtual_pool
+             ? loom_serve_virtual_pool_memory_usage(workspace->virtual_pool)
+             : (loom_serve_memory_usage_t){0};
+}
+
+uint64_t loom_serve_workspace_round_size(
+    const loom_serve_workspace_t* workspace, uint64_t byte_length) {
+  return workspace->virtual_pool ? loom_serve_virtual_pool_round_size(
+                                       workspace->virtual_pool, byte_length)
+                                 : byte_length;
 }
 
 iree_status_t loom_serve_workspace_advance(loom_serve_workspace_t* workspace) {
@@ -530,4 +554,19 @@ iree_status_t loom_serve_workspace_wait(loom_serve_workspace_t* workspace,
              : iree_hal_semaphore_wait(semaphore, value,
                                        iree_infinite_timeout(),
                                        IREE_ASYNC_WAIT_FLAG_NONE);
+}
+
+static bool loom_serve_workspace_is_retired(void* user_data) {
+  return loom_serve_retirement_is_idle(user_data);
+}
+
+iree_status_t loom_serve_workspace_await_retirement(
+    loom_serve_workspace_t* workspace, loom_serve_retirement_t* retirement) {
+  if (!workspace->virtual_pool) {
+    loom_serve_retirement_await(retirement);
+    return iree_ok_status();
+  }
+  return loom_serve_virtual_pool_await(
+      workspace->virtual_pool, &retirement->notification,
+      loom_serve_workspace_is_retired, retirement);
 }

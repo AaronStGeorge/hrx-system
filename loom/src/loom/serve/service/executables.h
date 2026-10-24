@@ -69,7 +69,7 @@ iree_status_t loom_serve_executables_allocate(
 // terminal submission failure. NULL is accepted.
 void loom_serve_executables_retire(loom_serve_executables_t* executables);
 bool loom_serve_executables_is_retired(loom_serve_executables_t* executables);
-void loom_serve_executables_await_retirement(
+iree_status_t loom_serve_executables_await_retirement(
     loom_serve_executables_t* executables);
 // Native release failure preserves the owner and outstanding banks for retry.
 iree_status_t loom_serve_executables_free(

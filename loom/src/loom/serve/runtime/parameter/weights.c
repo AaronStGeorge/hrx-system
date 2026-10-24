@@ -1467,7 +1467,9 @@ iree_status_t loom_serve_weights_await(loom_serve_weights_t* weights) {
                                           weights->activation.semaphores[i],
                                           weights->activation.values[i]));
   }
-  loom_serve_retirement_await(&weights->activation.retirement);
+  status = iree_status_join(
+      status, loom_serve_workspace_await_retirement(
+                  weights->workspace, &weights->activation.retirement));
   loom_serve_weights_await_backing(weights);
   return iree_status_join(
       status, iree_status_clone(weights->activation.backing_status));
@@ -1586,13 +1588,18 @@ bool loom_serve_weights_is_retired(loom_serve_weights_t* weights) {
           loom_serve_retirement_is_idle(&weights->activation.retirement));
 }
 
-void loom_serve_weights_await_retirement(loom_serve_weights_t* weights) {
-  if (weights) {
-    loom_serve_weights_await_backing(weights);
-    loom_serve_memory_operation_await(weights->deactivation);
-    loom_serve_retirement_await(&weights->retirement);
-    loom_serve_retirement_await(&weights->activation.retirement);
+iree_status_t loom_serve_weights_await_retirement(
+    loom_serve_weights_t* weights) {
+  if (!weights) {
+    return iree_ok_status();
   }
+  loom_serve_weights_await_backing(weights);
+  loom_serve_memory_operation_await(weights->deactivation);
+  iree_status_t status = loom_serve_workspace_await_retirement(
+      weights->workspace, &weights->retirement);
+  return iree_status_join(
+      status, loom_serve_workspace_await_retirement(
+                  weights->workspace, &weights->activation.retirement));
 }
 
 iree_status_t loom_serve_weights_free(loom_serve_weights_t* weights) {

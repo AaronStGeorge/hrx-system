@@ -294,12 +294,12 @@ class SourceSpeechServiceTest : public ::testing::TestWithParam<bool> {
     return iree_ok_status();
   }
 
-  static iree_status_t Wait(const loom_serve_execution_frontier_t& frontier) {
+  iree_status_t Wait(const loom_serve_execution_frontier_t& frontier) {
     iree_status_t status = iree_ok_status();
     for (size_t i = 0; i < 2 && iree_status_is_ok(status); ++i) {
-      status = iree_hal_semaphore_wait(
-          frontier.semaphores[i], frontier.values[i], iree_infinite_timeout(),
-          IREE_ASYNC_WAIT_FLAG_NONE);
+      status = loom_serve_workspace_wait(
+          loom_serve_device_workspace(loom_serve_device_group_at(group_, 0)),
+          frontier.semaphores[i], frontier.values[i]);
     }
     return status;
   }
@@ -664,7 +664,10 @@ TEST_P(SourceSpeechServiceTest, CohortsPreserveIndependentResidentProgress) {
   uint64_t full_live_bytes = 0;
   auto* device = loom_serve_device_group_at(group_, 0);
   const auto initial = loom_serve_device_memory_statistics(device).retained;
-  EXPECT_EQ(initial.committed_bytes, initial.cached_bytes);
+  const auto workspace =
+      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device));
+  EXPECT_EQ(initial.committed_bytes,
+            initial.cached_bytes + workspace.committed_bytes);
   bool live = true;
   while (live) {
     if (tick < 4) {

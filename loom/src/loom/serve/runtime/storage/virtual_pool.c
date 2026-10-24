@@ -525,7 +525,7 @@ static iree_status_t loom_serve_virtual_pool_create_entry(
                                              sizeof(*entry), (void**)&entry));
   entry->pool = pool;
   const iree_device_size_t aligned_length =
-      iree_device_align(length, pool->geometry.slab_size);
+      loom_serve_virtual_pool_round_size(pool, length);
   iree_status_t status = loom_serve_virtual_buffer_allocate(
       pool->memory_pool, pool->geometry, aligned_length,
       pool->geometry.granularity, &pool->memory, &entry->storage);
@@ -610,6 +610,25 @@ iree_status_t loom_serve_virtual_pool_allocate(
 iree_hal_pool_t* loom_serve_virtual_pool_handle(
     loom_serve_virtual_pool_t* pool) {
   return &pool->source->base;
+}
+
+uint64_t loom_serve_virtual_pool_round_size(
+    const loom_serve_virtual_pool_t* pool, uint64_t byte_length) {
+  const uint64_t padding = pool->geometry.slab_size - 1;
+  return byte_length > UINT64_MAX - padding
+             ? UINT64_MAX
+             : iree_device_align(byte_length, pool->geometry.slab_size);
+}
+
+loom_serve_memory_usage_t loom_serve_virtual_pool_memory_usage(
+    const loom_serve_virtual_pool_t* pool) {
+  return (loom_serve_memory_usage_t){
+      .reserved_bytes = pool->memory.reserved_bytes,
+      .committed_bytes = pool->memory.committed_bytes,
+      .pending_bytes = pool->memory.pending_bytes,
+      .releasing_bytes = pool->memory.releasing_bytes,
+      .released_bytes = pool->memory.released_bytes,
+  };
 }
 
 static void loom_serve_virtual_pool_finish_acquire(
@@ -849,6 +868,18 @@ bool loom_serve_virtual_pool_is_pending(loom_serve_virtual_pool_t* pool) {
   return pending;
 }
 
+iree_status_t loom_serve_virtual_pool_reclaim(loom_serve_virtual_pool_t* pool) {
+  loom_serve_virtual_pool_advance_trim(pool);
+  return iree_status_clone(pool->failure);
+}
+
+bool loom_serve_virtual_pool_is_reclaiming(loom_serve_virtual_pool_t* pool) {
+  iree_slim_mutex_lock(&pool->mutex);
+  const bool pending = pool->trim_requested;
+  iree_slim_mutex_unlock(&pool->mutex);
+  return pending;
+}
+
 typedef struct loom_serve_virtual_pool_wait_t {
   // Borrowed physical owner, also providing this wait's notification.
   loom_serve_virtual_pool_t* pool;
@@ -912,6 +943,43 @@ iree_status_t loom_serve_virtual_pool_wait(loom_serve_virtual_pool_t* pool,
   loom_serve_memory_pool_set_observer(pool->memory_pool, previous.wake,
                                       previous.user_data);
   return iree_status_join(status, wait.status);
+}
+
+static void loom_serve_virtual_pool_notify_waiter(void* user_data) {
+  iree_notification_post(user_data, IREE_ALL_WAITERS);
+}
+
+iree_status_t loom_serve_virtual_pool_await(loom_serve_virtual_pool_t* pool,
+                                            iree_notification_t* notification,
+                                            iree_condition_fn_t condition,
+                                            void* user_data) {
+  iree_slim_mutex_lock(&pool->mutex);
+  const loom_serve_wake_callback_t previous = pool->observer;
+  pool->observer = (loom_serve_wake_callback_t){
+      loom_serve_virtual_pool_notify_waiter, notification};
+  iree_slim_mutex_unlock(&pool->mutex);
+  const loom_serve_wake_callback_t previous_capacity =
+      loom_serve_memory_pool_set_observer(pool->memory_pool,
+                                          loom_serve_virtual_pool_notify_waiter,
+                                          notification);
+  iree_status_t status = iree_ok_status();
+  bool complete = false;
+  while (!complete) {
+    const iree_wait_token_t token =
+        iree_notification_prepare_wait(notification);
+    status = iree_status_join(status, loom_serve_virtual_pool_advance(pool));
+    complete = condition(user_data);
+    if (complete) {
+      iree_notification_cancel_wait(notification);
+    } else {
+      iree_notification_commit_wait(notification, token, IREE_DURATION_ZERO,
+                                    IREE_TIME_INFINITE_FUTURE);
+    }
+  }
+  loom_serve_virtual_pool_set_observer(pool, previous);
+  loom_serve_memory_pool_set_observer(pool->memory_pool, previous_capacity.wake,
+                                      previous_capacity.user_data);
+  return status;
 }
 
 iree_status_t loom_serve_virtual_pool_free(loom_serve_virtual_pool_t* pool) {

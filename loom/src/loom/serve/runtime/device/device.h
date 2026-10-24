@@ -71,8 +71,10 @@ iree_status_t loom_serve_device_group_allocate(
 // Releases all device resources and the host reference without an implicit
 // device wait. The caller first drains every model domain and releases all
 // model/JIT/VM resources while host I/O remains alive. NULL is permitted.
-// Any outstanding virtual reservation preserves the entire group and returns
-// failure before partial teardown can invalidate another device's resources.
+// Outstanding model reservations preserve the entire group and return failure
+// before partial teardown. The group's own idle workspace reservations are
+// released before its physical owner; a native cleanup error preserves the
+// remaining group resources for outer-owner cleanup.
 iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group);
 
 // Number of immutable device records owned by the group.
@@ -86,11 +88,12 @@ loom_serve_device_t* loom_serve_device_group_at(
 
 // Serving-managed backing across every model sharing this device. Virtual
 // statistics are zero for fixed backing. Workspace statistics are atomic HAL
-// observations, not a coherent device-wide snapshot. The sum of commitments
-// excludes host snapshots, fixed buffers, loader storage and driver overhead;
-// HAL providers may also hide physical allocation padding.
+// observations, not a coherent device-wide snapshot. With elastic backing,
+// workspace is a subset of retained, not additional physical consumption.
+// Reported commitments exclude host snapshots, fixed buffers, loader storage,
+// and driver overhead; HAL providers may also hide physical allocation padding.
 typedef struct loom_serve_device_memory_statistics_t {
-  // Virtual parameter/state reservations and their physical slab backing.
+  // All virtual reservations and backing, including weights, state, workspace.
   loom_serve_memory_statistics_t retained;
   // Shared command workspace, including reusable idle backing.
   iree_hal_pool_stats_t workspace;

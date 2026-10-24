@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/serve/runtime/parameter/residency.h"
 #include "loom/serve/runtime/storage/memory_test_fixture.h"
 
 namespace {
@@ -898,6 +899,94 @@ TEST_F(MemoryTest, FailedReclamationRetainsSharedFailureAndRemainingOwnership) {
   // and releases the remaining ownership through the ordinary native path.
 }
 
+TEST_F(DeviceMemoryTest, StateAndWorkspaceReuseOnePhysicalSlab) {
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      &statistics[0], &first));
+  auto* const state = loom_serve_virtual_buffer_handle(first);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+  RoundTrip(state, 0, 0x12345678);
+  loom_serve_virtual_buffer_begin_trim(first);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).cached_bytes, kSlabSize);
+
+  const iree_hal_pool_reservation_request_t request = {
+      .allocation_size = kSlabSize / 2,
+      .min_alignment = 256,
+  };
+  IREE_ASSERT_OK(
+      loom_serve_execution_alloca(execution, 1, &request, &workspace));
+  RoundTrip(workspace, 0, 0xABCDEF01);
+  const auto active = loom_serve_device_memory_statistics(device);
+  EXPECT_EQ(active.retained.committed_bytes, kSlabSize);
+  EXPECT_EQ(active.retained.cached_bytes, 0u);
+  EXPECT_EQ(active.workspace.bytes_committed, kSlabSize);
+
+  uint64_t completion = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_dealloca(execution, workspace, &completion));
+  iree_hal_buffer_release(workspace);
+  workspace = nullptr;
+  IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+  auto* shared_workspace = loom_serve_device_workspace(device);
+  iree_device_size_t retained = 0;
+  IREE_ASSERT_OK(loom_serve_workspace_trim(shared_workspace, &retained));
+  EXPECT_EQ(retained, 0u);
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  IREE_ASSERT_OK(loom_serve_workspace_advance(shared_workspace));
+  const auto detached = loom_serve_workspace_memory_usage(shared_workspace);
+  EXPECT_GT(detached.reserved_bytes, 0u);
+  EXPECT_EQ(detached.committed_bytes, 0u);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).cached_bytes, kSlabSize);
+
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+  EXPECT_EQ(loom_serve_virtual_buffer_handle(first), state);
+  RoundTrip(state, 0, 0x87654321);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, kSlabSize);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).cached_bytes, 0u);
+}
+
+TEST_F(DeviceMemoryTest, AdmissionIncludesWorkspaceSlabGranularity) {
+  const uint64_t state_bytes = 5 * kSlabSize / 2;
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, loom_serve_device_state_geometry(device), state_bytes, 256,
+      &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, state_bytes));
+  loom_serve_residency_t* residency = nullptr;
+  IREE_ASSERT_OK(loom_serve_residency_allocate(
+      loom_serve_device_residency_cache(device), execution, 0, nullptr,
+      iree_allocator_system(), &residency));
+  std::unique_ptr<loom_serve_residency_t, decltype(&loom_serve_residency_free)>
+      claim(residency, loom_serve_residency_free);
+  IREE_ASSERT_OK(loom_serve_residency_prepare_working_set(residency, 256, 0));
+  loom_serve_residency_admission_t admission;
+  IREE_ASSERT_OK(loom_serve_residency_try_admit(residency, &admission));
+  // Half a slab remains, but even this small invocation needs one whole
+  // workspace slab. Reject it before any queue allocation is accepted.
+  EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);
+  if (admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
+    loom_serve_residency_release(residency);
+  }
+  EXPECT_EQ(loom_serve_execution_frontier(execution).values[0], 0u);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_free(first));
+  first = nullptr;
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residency));
+  const auto request = iree_hal_make_pool_reservation_request(256, 256);
+  IREE_ASSERT_OK(
+      loom_serve_execution_alloca(execution, 1, &request, &workspace));
+  RoundTrip(workspace, 0, 0x12345678);
+  uint64_t completion = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_dealloca(execution, workspace, &completion));
+  iree_hal_buffer_release(workspace);
+  workspace = nullptr;
+  IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+  loom_serve_residency_release(residency);
+  IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(device, 0));
+}
+
 TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
       pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
@@ -915,12 +1004,12 @@ TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
         loom_serve_execution_alloca(execution, 1, &request, &workspace));
     RoundTrip(workspace, 0, 0x12345678);
     const auto before = loom_serve_device_memory_statistics(device);
-    EXPECT_EQ(before.retained.committed_bytes, kSlabSize);
+    EXPECT_EQ(before.retained.committed_bytes, 2 * kSlabSize);
     EXPECT_EQ(before.workspace.bytes_committed, kSlabSize);
     EXPECT_EQ(before.workspace.reservation_count, 1u);
     IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(device, 0));
     const auto live = loom_serve_device_memory_statistics(device);
-    EXPECT_EQ(live.retained.committed_bytes, kSlabSize);
+    EXPECT_EQ(live.retained.committed_bytes, 2 * kSlabSize);
     EXPECT_EQ(live.workspace.bytes_committed, kSlabSize);
     EXPECT_EQ(live.workspace.reservation_count, 1u);
     // A real consumer still reaches the allocation after an unreachable trim.

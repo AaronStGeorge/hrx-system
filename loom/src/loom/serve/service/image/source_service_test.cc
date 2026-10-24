@@ -69,6 +69,7 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     auto application_options = loom_serve_test_application_options_default();
     if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
       // Small fixture images fit, but a 64x64 float image does not.
+      application_options.slab_size = 4096;
       application_options.memory_limit = 32 * 1024;
     }
     loom_serve_test_application_t* application = nullptr;
@@ -156,6 +157,14 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     };
     IREE_ASSERT_OK(
         loom_serve_image_model_allocate(device_, &options, allocator, &model_));
+  }
+
+  void Wait(loom_serve_execution_frontier_t frontier) {
+    for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
+      IREE_ASSERT_OK(loom_serve_workspace_wait(
+          loom_serve_device_workspace(device_), frontier.semaphores[i],
+          frontier.values[i]));
+    }
   }
 
   void StartManaged() {
@@ -800,9 +809,7 @@ TEST_P(SourceImageServiceTest, PreparedShapePinsCodeAcrossSelectionAndRemoval) {
     while (!finished) {
       loom_serve_execution_frontier_t frontier;
       IREE_ASSERT_OK(generator.submit(generator.self, 0, &frontier, &finished));
-      IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
-          {2, frontier.semaphores, frontier.values}, iree_infinite_timeout(),
-          IREE_ASYNC_WAIT_FLAG_NONE));
+      ASSERT_NO_FATAL_FAILURE(Wait(frontier));
       ++parts;
     }
     EXPECT_EQ(parts, expected_parts);
@@ -1694,9 +1701,7 @@ class ImageSpecializationTest : public SourceImageServiceTest {
           generator.self,
           cancel && parts ? LOOM_SERVE_IMAGE_SUBMIT_FLAG_CANCEL : 0, &frontier,
           &complete));
-      IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
-          {2, frontier.semaphores, frontier.values}, iree_infinite_timeout(),
-          IREE_ASYNC_WAIT_FLAG_NONE));
+      ASSERT_NO_FATAL_FAILURE(Wait(frontier));
       ++parts;
     }
     EXPECT_EQ(parts, GetParam() ? 2u : 1u);
@@ -1808,9 +1813,7 @@ TEST_P(ImageSpecializationTest, PeerAdmissionRetainsWholeInvocationWorkingSet) {
     while (!complete) {
       loom_serve_execution_frontier_t frontier;
       IREE_ASSERT_OK(generator.submit(generator.self, 0, &frontier, &complete));
-      IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
-          {2, frontier.semaphores, frontier.values}, iree_infinite_timeout(),
-          IREE_ASYNC_WAIT_FLAG_NONE));
+      ASSERT_NO_FATAL_FAILURE(Wait(frontier));
       if (check_peer) {
         // Intermediate command parts and final device readiness both retain
         // the accepted invocation until its owner collects the output.

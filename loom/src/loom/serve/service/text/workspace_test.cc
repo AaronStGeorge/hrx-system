@@ -34,7 +34,7 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
       "%tokens) : (view<1xi32>, buffer, buffer, buffer, buffer, buffer)\n"
       "  kernel.launch @select(%residual, %metadata, %origins, %arena, "
       "%outputs)",
-      "  %bytes = index.constant 8192 : offset\n"
+      "  %bytes = index.constant 4194304 : offset\n"
       "  %temporary = buffer.alloca<global> align(16) %bytes : buffer\n"
       "  kernel.launch @consume(%bias, %temporary, %metadata, %origins, "
       "%arena, "
@@ -74,8 +74,9 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
       nullptr, release_peer);
   const auto activity = loom_serve_text_model_weight_activity(model_);
   if (pool) {
-    // The existing rows and parameters fit. Only the replacement's new 8 KiB
-    // transient exceeds the 4 KiB left by this independently retained peer.
+    // The existing rows and parameters fit. The replacement's 4 MiB
+    // transient exceeds both reusable workspace backing and the 4 KiB left
+    // by this independently retained peer.
     const uint64_t peer_bytes = loom_serve_memory_pool_limit(pool) -
                                 loom_serve_memory_pool_live_bytes(pool) - 4096;
     loom_serve_virtual_buffer_t* buffer = nullptr;
@@ -109,14 +110,26 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
       host_allocator_, &peer_residency));
   std::unique_ptr<loom_serve_residency_t, decltype(&loom_serve_residency_free)>
       peer_claim(peer_residency, loom_serve_residency_free);
+  const auto peer_bytes = [&] {
+    const auto workspace =
+        loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_));
+    // Logical claims reuse workspace backing; only retained model state and
+    // parameters consume capacity independently of those claims.
+    const uint64_t available = loom_serve_memory_pool_limit(pool) -
+                               loom_serve_memory_pool_live_bytes(pool) +
+                               workspace.committed_bytes +
+                               workspace.pending_bytes;
+    const uint64_t slab_size =
+        loom_serve_device_weight_geometry(device_).slab_size;
+    // A partial physical slab cannot back the peer. Leave room for the
+    // original command inside the complete slabs available to both claims.
+    return (available / slab_size) * slab_size - 4096;
+  };
   if (pool) {
     // Independently prepared work uses ordinary admission. The selected text
     // transient must remain charged between epochs, not only during selection.
-    IREE_ASSERT_OK(loom_serve_residency_prepare_working_set(
-        peer_residency,
-        loom_serve_memory_pool_limit(pool) -
-            loom_serve_memory_pool_live_bytes(pool) - 4096,
-        0));
+    IREE_ASSERT_OK(loom_serve_residency_prepare_working_set(peer_residency,
+                                                            peer_bytes(), 0));
     loom_serve_residency_admission_t admission;
     IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
     EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);
@@ -156,11 +169,8 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
       cold_row, LOOM_SERVE_TEXT_RESERVE_FRESH, nullptr, 32, &admitted));
   ASSERT_TRUE(admitted);
   if (pool) {
-    IREE_ASSERT_OK(loom_serve_residency_prepare_working_set(
-        peer_residency,
-        loom_serve_memory_pool_limit(pool) -
-            loom_serve_memory_pool_live_bytes(pool) - 4096,
-        0));
+    IREE_ASSERT_OK(loom_serve_residency_prepare_working_set(peer_residency,
+                                                            peer_bytes(), 0));
     loom_serve_residency_admission_t admission;
     IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
     EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);

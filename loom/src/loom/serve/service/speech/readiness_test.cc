@@ -773,9 +773,9 @@ TEST_F(SpeechReadinessTest, ClosedNativeHandleRetainsAcceptedEncodingStorage) {
   // the outer test thread before holding the workers for the encoding cut.
   const auto frontier = loom_serve_execution_frontier(execution_);
   for (size_t i = 0; i < 2; ++i) {
-    IREE_ASSERT_OK(iree_hal_semaphore_wait(
-        frontier.semaphores[i], frontier.values[i], iree_infinite_timeout(),
-        IREE_ASYNC_WAIT_FLAG_NONE));
+    IREE_ASSERT_OK(loom_serve_workspace_wait(
+        loom_serve_device_workspace(loom_serve_device_group_at(group_, 0)),
+        frontier.semaphores[i], frontier.values[i]));
   }
   for (int i = 0; i < SpeechWorkerCount(); ++i) {
     workers.push_back(std::make_unique<loom_serve::testing::WorkerGate>(

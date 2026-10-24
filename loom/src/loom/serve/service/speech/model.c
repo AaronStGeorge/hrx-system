@@ -289,7 +289,8 @@ iree_status_t loom_serve_speech_model_free(loom_serve_speech_model_t* model) {
   loom_serve_speech_model_retire(model, NULL, NULL);
   iree_status_t status = loom_serve_execution_drain(model->execution);
   for (iree_host_size_t i = 0; i < model->weights.count; ++i) {
-    loom_serve_weights_await_retirement(model->weights.plans[i]);
+    status = iree_status_join(
+        status, loom_serve_weights_await_retirement(model->weights.plans[i]));
   }
   loom_serve_rows_await_retirement(&model->state);
   return iree_status_join(status,

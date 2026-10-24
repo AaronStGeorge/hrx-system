@@ -9,6 +9,7 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "loom/serve/runtime/execution/retirement.h"
 #include "loom/serve/runtime/storage/virtual_pool.h"
 
 #ifdef __cplusplus
@@ -107,13 +108,31 @@ void loom_serve_workspace_scope_retire(loom_serve_workspace_scope_t* scope);
 iree_hal_pool_stats_t loom_serve_workspace_statistics(
     loom_serve_workspace_t* workspace);
 
-// Returns idle backing without waiting on device
-// work. Logical returns propagate directly through the backing cache; native
+// Physical-owner ledger for virtual workspace ranges, without collecting or
+// querying native work. Zero for fixed backing. Called on the serialized owner.
+loom_serve_memory_usage_t loom_serve_workspace_memory_usage(
+    const loom_serve_workspace_t* workspace);
+
+// Rounds a declared simultaneous workspace peak to physical slab bytes for
+// admission. Fixed backing leaves the bound unchanged. This uses immutable
+// geometry, not allocator availability or currently retained backing.
+uint64_t loom_serve_workspace_round_size(
+    const loom_serve_workspace_t* workspace, uint64_t byte_length);
+
+// Returns idle backing without waiting on device work. Logical returns
+// propagate directly through the backing cache; native
 // freeing follows the source driver's allocation mechanism. Live roots and
-// their source pools remain protected. Returns the bytes still retained by the
+// their source pools remain protected. Reports the bytes still retained by the
 // logical pools after trim for budgeting further reclamation. Detached native
 // returns are excluded from workspace accounting.
-iree_device_size_t loom_serve_workspace_trim(loom_serve_workspace_t* workspace);
+// Starts virtual detaches on the serialized physical owner, without advancing
+// acquisitions. Platform failure propagates while retaining cleanup ownership.
+iree_status_t loom_serve_workspace_trim(loom_serve_workspace_t* workspace,
+                                        iree_device_size_t* out_retained_bytes);
+
+// Whether requested physical returns still await history or native completion.
+// Cold acquisitions alone are not reclamation and cannot defer their own work.
+bool loom_serve_workspace_is_reclaiming(loom_serve_workspace_t* workspace);
 
 // Schedules cached backing trim after all workspace allocations have retired
 // and remained idle for timeout nanoseconds. The caller supplies a positive
@@ -138,6 +157,12 @@ bool loom_serve_workspace_is_pending(loom_serve_workspace_t* workspace);
 iree_status_t loom_serve_workspace_wait(loom_serve_workspace_t* workspace,
                                         iree_hal_semaphore_t* semaphore,
                                         uint64_t value);
+
+// Joins final consumer ownership while advancing cold backing even after a
+// failed readiness timeline. Only an exclusive outer physical owner may wait;
+// shared task workers instead keep advancing until retirement is idle.
+iree_status_t loom_serve_workspace_await_retirement(
+    loom_serve_workspace_t* workspace, loom_serve_retirement_t* retirement);
 
 #ifdef __cplusplus
 }  // extern "C"

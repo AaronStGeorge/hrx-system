@@ -156,6 +156,7 @@ loom_cc_library(
     loom::serve::runtime::execution
     loom::serve::runtime::execution::queues
     loom::serve::runtime::execution::workspace
+    loom::serve::runtime::parameter::residency
     loom::serve::testing::device
     loom::serve::testing::native_allocator
   TESTONLY

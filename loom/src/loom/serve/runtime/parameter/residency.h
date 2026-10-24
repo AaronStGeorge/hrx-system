@@ -7,6 +7,7 @@
 #define LOOM_SERVE_RUNTIME_PARAMETER_RESIDENCY_H_
 
 #include "loom/serve/runtime/execution/execution.h"
+#include "loom/serve/runtime/execution/workspace.h"
 #include "loom/serve/runtime/parameter/weights.h"
 
 #ifdef __cplusplus
@@ -23,11 +24,12 @@ typedef struct loom_serve_residency_cache_t loom_serve_residency_cache_t;
 typedef struct loom_serve_residency_group_t loom_serve_residency_group_t;
 typedef struct loom_serve_residency_t loom_serve_residency_t;
 
-// Borrows pool. NULL pool supports fixed-backed consumers but
-// cannot reclaim their storage. Installs the pool's sole pressure policy.
+// Borrows pool and its optional shared workspace. NULL pool supports
+// fixed-backed consumers but cannot reclaim their storage. Installs the pool's
+// sole pressure policy; idle workspace backing is reclaimed before model data.
 iree_status_t loom_serve_residency_cache_allocate(
-    loom_serve_memory_pool_t* pool, iree_allocator_t host_allocator,
-    loom_serve_residency_cache_t** out_cache);
+    loom_serve_memory_pool_t* pool, loom_serve_workspace_t* workspace,
+    iree_allocator_t host_allocator, loom_serve_residency_cache_t** out_cache);
 
 // All residencies, groups, and downstream output views must have retired.
 // Removes pressure policy.
@@ -120,10 +122,12 @@ void loom_serve_residency_free(loom_serve_residency_t* residency);
 
 // Checks whether one invocation can fit by itself, before acquiring any pins
 // or submitting activation. Each extent describes additional simultaneously
-// live storage beyond the distinct parameter groups: model state, cohort I/O,
-// and the peak of ordered private commands. This checks the configured serving
-// ceiling, not available HAL memory, and neither reserves credit nor admits
-// work against other invocations. Fixed backing has no configured ceiling.
+// live workspace beyond the distinct parameter groups: cohort I/O and the peak
+// of ordered private commands. Their aggregate is rounded to the workspace's
+// physical slab geometry. This checks the configured serving ceiling, not
+// available HAL memory, and neither reserves credit nor admits work against
+// other invocations. Mutable state is accounted at admission. Fixed backing has
+// no configured ceiling.
 iree_status_t loom_serve_residency_check_working_set(
     const loom_serve_residency_t* residency, iree_host_size_t extent_count,
     const iree_device_size_t* extents);

@@ -29,8 +29,8 @@ using loom_serve::testing::StalledStderr;
 
 class ElasticEmbeddingServiceTest : public SourceEmbeddingServiceTest {
  protected:
-  // 4096 parameter bytes + two (16 + 52 * 32)-byte invocations fit in
-  // 7680 bytes. Two parameter pages still cannot fit, preserving eviction.
+  // Two (16 + 52 * 32)-byte invocations share one 4096-byte workspace slab.
+  // A second parameter slab cannot coexist with that live workspace.
   uint64_t BatchUnits() const override { return 32; }
 
   void SetUp() override {
@@ -241,8 +241,11 @@ TEST_F(ElasticEmbeddingServiceTest,
   loom_serve_http_server_request_stop(server_);
   IREE_ASSERT_OK(http_.Join());
   const auto memory = loom_serve_device_memory_statistics(device_).retained;
-  EXPECT_EQ(memory.reserved_bytes, 0u);
-  EXPECT_EQ(memory.committed_bytes, memory.cached_bytes);
+  const auto workspace =
+      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_));
+  EXPECT_EQ(memory.reserved_bytes, workspace.reserved_bytes);
+  EXPECT_EQ(memory.committed_bytes,
+            memory.cached_bytes + workspace.committed_bytes);
   EXPECT_EQ(retired_counters_.completed, 3u);
 }
 
@@ -405,7 +408,10 @@ TEST_F(ElasticEmbeddingServiceTest,
       loom_serve_device_memory_statistics(device_).retained;
   EXPECT_EQ(after_removal.reserved_bytes,
             before_removal.reserved_bytes - reservation_bytes);
-  EXPECT_EQ(after_removal.committed_bytes, kSlabBytes);
+  EXPECT_EQ(after_removal.committed_bytes,
+            kSlabBytes + loom_serve_workspace_memory_usage(
+                             loom_serve_device_workspace(device_))
+                             .committed_bytes);
 
   // Final removal retains reusable physical backing without any model owning
   // it. The same device and host executor remain available for replacements.
@@ -417,8 +423,11 @@ TEST_F(ElasticEmbeddingServiceTest,
   IREE_ASSERT_OK(removal_status);
   EXPECT_EQ(model_, nullptr);
   const auto empty = loom_serve_device_memory_statistics(device_).retained;
-  EXPECT_EQ(empty.reserved_bytes, 0u);
-  EXPECT_EQ(empty.committed_bytes, empty.cached_bytes);
+  const auto workspace =
+      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_));
+  EXPECT_EQ(empty.reserved_bytes, workspace.reserved_bytes);
+  EXPECT_EQ(empty.committed_bytes,
+            empty.cached_bytes + workspace.committed_bytes);
 }
 
 }  // namespace loom_serve::testing::embedding

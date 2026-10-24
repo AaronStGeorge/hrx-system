@@ -23,7 +23,7 @@ IREE_FLAG(bool, test_elastic, false,
 
 namespace {
 
-constexpr uint64_t kRecognitionSlabSize = 2 * 1024 * 1024;
+constexpr uint64_t kRecognitionSlabSize = 4096;
 
 class SourceRecognitionModelTest : public ::testing::Test {
  protected:
@@ -92,14 +92,14 @@ class SourceRecognitionModelTest : public ::testing::Test {
     }
   }
 
-  static iree_status_t Wait(const loom_serve_execution_frontier_t& frontier) {
+  iree_status_t Wait(const loom_serve_execution_frontier_t& frontier) {
     iree_status_t status = iree_ok_status();
     for (size_t i = 0;
          i < IREE_ARRAYSIZE(frontier.semaphores) && iree_status_is_ok(status);
          ++i) {
-      status = iree_hal_semaphore_wait(
-          frontier.semaphores[i], frontier.values[i], iree_infinite_timeout(),
-          IREE_ASYNC_WAIT_FLAG_NONE);
+      status =
+          loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+                                    frontier.semaphores[i], frontier.values[i]);
     }
     return status;
   }

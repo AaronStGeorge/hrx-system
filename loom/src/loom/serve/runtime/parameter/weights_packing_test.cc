@@ -298,6 +298,9 @@ TEST_P(WeightPackingTest,
     EXPECT_EQ(phase, LOOM_SERVE_ACTIVATION_LOADING);
     IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
   }
+  // The outer physical owner services cold staging while joining the accepted
+  // activation; its completion callback still owns the cancellation boundary.
+  IREE_ASSERT_OK(loom_serve_residency_await(residencies_[0]));
   wake.Await();
   IREE_ASSERT_OK(loom_serve_activation_advance(
       activation, LOOM_SERVE_ACTIVATION_FLAG_CANCEL, &phase));
@@ -339,7 +342,7 @@ TEST_P(WeightPackingTest,
                         loom_serve_weights_await(plans_[0]));
   iree_hal_buffer_release(buffers_[0][0]);
   buffers_[0][0] = nullptr;
-  loom_serve_weights_await_retirement(plans_[0]);
+  IREE_ASSERT_OK(loom_serve_weights_await_retirement(plans_[0]));
   EXPECT_TRUE(loom_serve_weights_is_retired(plans_[0]));
   const auto before = loom_serve_weights_activity(plans_[0]);
   IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0]));

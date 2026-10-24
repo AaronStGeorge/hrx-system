@@ -200,7 +200,10 @@ class MemoryTest : public ::testing::Test {
       iree_status_ignore(loom_serve_memory_pool_await(pool));
       const auto statistics = loom_serve_memory_pool_statistics(pool);
       EXPECT_EQ(statistics.committed_bytes, 0u);
-      EXPECT_EQ(statistics.reserved_bytes, 0u);
+      const auto workspace_usage = loom_serve_workspace_memory_usage(
+          loom_serve_device_workspace(device));
+      EXPECT_EQ(statistics.reserved_bytes,
+                owned_pool ? 0u : workspace_usage.reserved_bytes);
     }
     loom_serve_memory_pool_free(owned_pool);
     iree_hal_pool_release(deferred_backing);

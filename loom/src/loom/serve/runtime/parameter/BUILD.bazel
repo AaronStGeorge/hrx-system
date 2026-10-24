@@ -65,6 +65,7 @@ loom_cc_library(
     deps = [
         ":weights",
         "//loom/src/loom/serve/runtime/execution",
+        "//loom/src/loom/serve/runtime/execution:workspace",
         "//loom/src/loom/serve/runtime/storage:memory",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",

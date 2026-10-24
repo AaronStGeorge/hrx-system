@@ -18,6 +18,7 @@ loom_cc_library(
   SRCS
     "workspace.c"
   DEPS
+    ::retirement
     iree::base
     iree::base::internal
     iree::base::threading

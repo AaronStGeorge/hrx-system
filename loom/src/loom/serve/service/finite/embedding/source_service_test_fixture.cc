@@ -45,6 +45,8 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::Drain(
     iree_task_process_drain_result_t* result) {
   auto* self = static_cast<loom_serve_test_embedding_model_lifecycle_t*>(
       process->user_data);
+  self->status = iree_status_join(
+      self->status, loom_serve_workspace_advance(self->workspace));
   if (!self->complete && self->retiring) {
     if (!self->retirement_started) {
       self->retirement_started = true;
@@ -52,10 +54,11 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::Drain(
     }
     self->complete = loom_serve_finite_model_is_retired(self->model);
     if (self->complete) {
-      self->status = loom_serve_finite_model_free_retired(self->model);
-      if (iree_status_is_ok(self->status)) {
+      iree_status_t status = loom_serve_finite_model_free_retired(self->model);
+      if (iree_status_is_ok(status)) {
         self->model = nullptr;
       }
+      self->status = iree_status_join(self->status, status);
     }
   } else if (!self->complete) {
     self->status = iree_status_join(
@@ -78,14 +81,14 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::Drain(
           loom_serve_finite_load_free(std::exchange(self->load, nullptr)));
     }
   }
-  bool pending = false;
+  bool pending = loom_serve_workspace_is_pending(self->workspace);
   if (self->service) {
     const auto flags =
         self->complete ? 0 : LOOM_SERVE_SERVICE_FLAG_SHARED_ACTIVITY;
     self->status = iree_status_join(
         self->status,
         self->service->advance(self->service->self, flags, &result->did_work));
-    pending = self->service->is_pending(self->service->self);
+    pending |= self->service->is_pending(self->service->self);
   }
   if (self->pool) {
     pending |= loom_serve_memory_pool_is_pending(self->pool);
@@ -93,6 +96,9 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::Drain(
   result->completed = self->complete && !pending;
   if (result->completed && self->pool) {
     loom_serve_memory_pool_set_observer(self->pool, nullptr, nullptr);
+  }
+  if (result->completed) {
+    loom_serve_workspace_set_observer(self->workspace, {});
   }
   return iree_ok_status();
 }
@@ -131,6 +137,8 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::RunOwner(
     service->set_observer(service->self, {Wake, this});
   }
   pool = loom_serve_device_memory_pool(device);
+  workspace = loom_serve_device_workspace(device);
+  loom_serve_workspace_set_observer(workspace, {Wake, this});
   if (pool) {
     loom_serve_memory_pool_set_observer(pool, Wake, this);
   }
@@ -152,11 +160,11 @@ void SourceEmbeddingServiceTest::SetUp() {
   auto application_options = loom_serve_test_application_options_default();
   application_options.device_count = DeviceCount();
   if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
-    // One parameter page plus a 64-unit invocation fits. The concurrent
-    // pressure cases use 32-unit invocations so two also fit. Two parameter
-    // pages do not: a weighted peer must reuse backing after deactivation.
+    // One parameter slab plus one shared workspace slab fits. The concurrent
+    // pressure cases use 32-unit invocations so two pack into that workspace.
+    // Two parameter slabs plus invocation workspace do not fit.
     application_options.slab_size = 4096;
-    application_options.memory_limit = 7680;
+    application_options.memory_limit = 8192;
   }
   loom_serve_test_application_t* application = nullptr;
   IREE_ASSERT_OK(loom_serve_test_application_acquire(
@@ -232,6 +240,8 @@ void SourceEmbeddingServiceTest::CreateService(
       },
       this};
   interface_.set_observer(interface_.self, observer);
+  loom_serve_workspace_set_observer(loom_serve_device_workspace(device_),
+                                    observer);
   if (auto* pool = loom_serve_device_memory_pool(device_)) {
     loom_serve_memory_pool_set_observer(pool, observer.wake,
                                         observer.user_data);
@@ -251,6 +261,7 @@ void SourceEmbeddingServiceTest::TearDown() {
   loom_serve_http_server_free(server_);
   IREE_EXPECT_OK(loom_serve_finite_model_free(model_));
   IREE_EXPECT_OK(loom_serve_finite_model_free(retained_));
+  loom_serve_workspace_set_observer(loom_serve_device_workspace(device_), {});
   if (auto* pool = loom_serve_device_memory_pool(device_)) {
     loom_serve_memory_pool_set_observer(pool, nullptr, nullptr);
   }
@@ -299,10 +310,13 @@ void SourceEmbeddingServiceTest::Accept(
 
 bool SourceEmbeddingServiceTest::Step(loom_serve_service_flags_t flags) {
   const uint64_t previous = wakes_.load();
+  auto* workspace = loom_serve_device_workspace(device_);
+  IREE_EXPECT_OK(loom_serve_workspace_advance(workspace));
   bool progress = false;
   IREE_EXPECT_OK(interface_.advance(interface_.self, flags, &progress));
   auto* pool = loom_serve_device_memory_pool(device_);
   if (interface_.is_active(interface_.self) ||
+      loom_serve_workspace_is_pending(workspace) ||
       (pool && loom_serve_memory_pool_is_pending(pool))) {
     struct loom_serve_test_embedding_wait_t {
       // Shared release counter.
