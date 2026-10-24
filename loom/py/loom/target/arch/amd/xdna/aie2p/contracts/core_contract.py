@@ -231,6 +231,21 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
             index.index_rotri, core_rules._INDEX, rotate_left=False
         ),
         *(
+            core_rules._zero_compare_rule(
+                index.index_cmp,
+                type_pattern,
+                predicate,
+                descriptor_key,
+                zero_field=zero_field,
+            )
+            for type_pattern in (core_rules._INDEX, core_rules._OFFSET)
+            for predicate, descriptor_key in (
+                ("eq", "amd.xdna.aie2p.cmp.eqz.i32"),
+                ("ne", "amd.xdna.aie2p.cmp.nez.i32"),
+            )
+            for zero_field in ("rhs", "lhs")
+        ),
+        *(
             core_rules._compare_rule(
                 index.index_cmp,
                 type_pattern,
@@ -1186,21 +1201,29 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
             "amd.xdna.aie2p.ashl.i32",
         ),
         core_rules._zero_compare_rule(
+            scalar_comparison.scalar_cmpi,
+            core_rules._I32,
             "eq",
             "amd.xdna.aie2p.cmp.eqz.i32",
             zero_field="rhs",
         ),
         core_rules._zero_compare_rule(
+            scalar_comparison.scalar_cmpi,
+            core_rules._I32,
             "eq",
             "amd.xdna.aie2p.cmp.eqz.i32",
             zero_field="lhs",
         ),
         core_rules._zero_compare_rule(
+            scalar_comparison.scalar_cmpi,
+            core_rules._I32,
             "ne",
             "amd.xdna.aie2p.cmp.nez.i32",
             zero_field="rhs",
         ),
         core_rules._zero_compare_rule(
+            scalar_comparison.scalar_cmpi,
+            core_rules._I32,
             "ne",
             "amd.xdna.aie2p.cmp.nez.i32",
             zero_field="lhs",
