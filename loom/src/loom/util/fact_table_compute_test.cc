@@ -18,6 +18,7 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/facts.h"
 #include "loom/util/fact_cfg.h"
 #include "loom/util/fact_induction.h"
 #include "loom/util/fact_table.h"
@@ -1236,6 +1237,59 @@ TEST_F(FactTableComputeTest, DependentResultsPublishOnlyFinalChanges) {
 
 class FactEntryInputTest : public FactTableComputeTest,
                            public ::testing::WithParamInterface<bool> {};
+
+TEST_F(FactTableComputeTest, SingleLaneTargetMakesScalarArgumentsUniform) {
+  std::vector<loom_type_t> arg_types;
+  for (loom_scalar_type_t scalar_type = LOOM_SCALAR_TYPE_NONE + 1;
+       scalar_type < LOOM_SCALAR_TYPE_COUNT_; ++scalar_type) {
+    arg_types.push_back(loom_type_scalar(scalar_type));
+  }
+  loom_string_id_t name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("uniform"), &name));
+  uint16_t symbol = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name, &symbol));
+  loom_op_t* definition = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &builder_, 0, 0, 0, {0, symbol}, arg_types.data(), arg_types.size(),
+      nullptr, 0, nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &definition));
+  const auto function = loom_func_like_cast(module_, definition);
+  loom_region_t* body = loom_func_like_body(function);
+  loom_builder_enter_region(&builder_, definition, body);
+  loom_op_t* terminator = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &terminator));
+  const loom_value_id_t index_argument = loom_region_entry_arg_id(body, 0);
+  loom_value_fact_table_t inputs;
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&inputs, &arena_, 0));
+  IREE_ASSERT_OK(loom_value_fact_table_define(
+      &inputs, index_argument, loom_value_facts_make(-8, 64, 4)));
+
+  for (uint32_t subgroup_size : {0u, 1u, 32u}) {
+    SCOPED_TRACE(subgroup_size);
+    loom_value_fact_table_clear_scope(&table_);
+    IREE_ASSERT_OK(loom_value_fact_table_seed_values(
+        &table_, {&inputs, &index_argument, 1}, module_));
+    loom_target_facts_t target = {};
+    target.storage.snapshot.index_bitwidth = 32;
+    target.storage.snapshot.subgroup_size = subgroup_size;
+    table_.context.target_facts = &target;
+    IREE_ASSERT_OK(loom_value_fact_table_compute(&table_, module_, function));
+    const loom_value_facts_t index_facts =
+        loom_value_fact_table_lookup(&table_, index_argument);
+    EXPECT_EQ(index_facts.range_lo, -8);
+    EXPECT_EQ(index_facts.range_hi, 64);
+    EXPECT_EQ(index_facts.known_divisor, 4);
+    const loom_block_t* entry_block = loom_region_const_entry_block(body);
+    for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
+      SCOPED_TRACE(i);
+      EXPECT_EQ(
+          loom_value_facts_is_subgroup_uniform(loom_value_fact_table_lookup(
+              &table_, loom_region_entry_arg_id(body, i))),
+          subgroup_size == 1);
+    }
+  }
+}
 
 TEST_P(FactEntryInputTest, RefreshWithdrawsExtentConstraints) {
   const loom_type_t scalar_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);

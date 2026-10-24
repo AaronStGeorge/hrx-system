@@ -580,6 +580,7 @@ loom_cc_test(
     loom::ops::scf
     loom::ops::test
     loom::ops::vector
+    loom::target::facts
 )
 
 loom_cc_library(
