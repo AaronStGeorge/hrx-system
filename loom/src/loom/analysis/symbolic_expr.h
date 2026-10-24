@@ -231,8 +231,8 @@ typedef struct loom_symbolic_expr_context_t {
     iree_host_size_t capacity;
   } integer_casts;
 
-  // Exact products owned by this context. Only nonlinear multiplications
-  // allocate records; their memo slots retain indices into this array.
+  // Exact products owned by this context. Their memo slots retain indices into
+  // this sparse array without widening every memoized value.
   struct {
     // Arena-owned records; growth preserves previously returned summaries.
     loom_symbolic_product_t* values;

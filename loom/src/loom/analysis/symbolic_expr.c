@@ -46,9 +46,8 @@ struct loom_symbolic_expr_memo_entry_t {
   // Current memo state for this value ID.
   uint8_t state;
 
-  // Projected, product, and integer-cast values materialize themselves: their
-  // expressions are one SSA term with no constant and need only a retained
-  // proof index.
+  // Proof-bearing values retain their proof and materialization together in
+  // the indexed sparse record selected by state.
   union {
     // SSA value materializing the dynamic terms, or invalid, for READY.
     loom_value_id_t materialized_dynamic_value_id;
@@ -111,9 +110,16 @@ loom_symbolic_expr_ready_memo_entry(const loom_symbolic_expr_context_t* context,
 static loom_value_id_t loom_symbolic_expr_memo_materialized_dynamic_value(
     const loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_memo_entry_t* entry, loom_value_id_t value_id) {
+  if (loom_symbolic_expr_is_constant(&entry->expression)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
   if (entry->state == LOOM_SYMBOLIC_EXPR_MEMO_READY_COMPONENT) {
     return context->materializations.values[entry->result.proof_index]
         .dynamic_value_id;
+  }
+  if (entry->state == LOOM_SYMBOLIC_EXPR_MEMO_PRODUCT) {
+    return context->products.values[entry->result.proof_index]
+        .materialized_expression_value_id;
   }
   return IREE_UNLIKELY(entry->state > LOOM_SYMBOLIC_EXPR_MEMO_READY_COMPONENT)
              ? value_id
@@ -126,6 +132,9 @@ static loom_value_id_t loom_symbolic_expr_memo_materialized_component_value(
   return entry->state == LOOM_SYMBOLIC_EXPR_MEMO_READY_COMPONENT
              ? context->materializations.values[entry->result.proof_index]
                    .component_value_id
+         : entry->state == LOOM_SYMBOLIC_EXPR_MEMO_PRODUCT
+             ? context->products.values[entry->result.proof_index]
+                   .materialized_component_value_id
              : LOOM_VALUE_ID_INVALID;
 }
 
@@ -1863,9 +1872,7 @@ static iree_status_t loom_symbolic_expr_expansion_step(
       loom_symbolic_expr_propagate_relation_value(
           &frame->intermediate_expression, &operand_expression, frame->value_id,
           out_expression);
-      if (frame->kind == LOOM_SYMBOLIC_EXPR_EXPANSION_MULTIPLY &&
-          loom_symbolic_expr_is_result_symbol(out_expression,
-                                              frame->value_id)) {
+      if (frame->kind == LOOM_SYMBOLIC_EXPR_EXPANSION_MULTIPLY) {
         IREE_RETURN_IF_ERROR(loom_symbolic_expr_retain_product(
             context, frame, &operand_expression, out_expression));
       }
@@ -2015,6 +2022,14 @@ iree_status_t loom_symbolic_expr_from_value(
       loom_symbolic_expr_memo_entry_t* completed_entry =
           context->memo.entries[frames[frame_count - 1].value_ordinal];
       completed_entry->expression = expression;
+      if (frames[frame_count - 1].proof_state ==
+          LOOM_SYMBOLIC_EXPR_MEMO_PRODUCT) {
+        loom_symbolic_product_t* product =
+            &context->products
+                 .values[frames[frame_count - 1].retained.proof_index];
+        product->materialized_expression_value_id = dynamic_value;
+        product->materialized_component_value_id = component_value;
+      }
       if (IREE_UNLIKELY(frames[frame_count - 1].proof_state !=
                         LOOM_SYMBOLIC_EXPR_MEMO_EMPTY)) {
         completed_entry->result.proof_index =
