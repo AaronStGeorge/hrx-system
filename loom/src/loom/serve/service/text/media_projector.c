@@ -51,6 +51,17 @@ struct loom_serve_text_media_request_t {
   iree_status_t status;
 };
 
+static iree_const_byte_span_t loom_serve_text_media_image_metadata(
+    const loom_serve_text_chat_t* chat,
+    const loom_serve_text_chat_image_t* image) {
+  return iree_make_const_byte_span(
+      image->metadata_length
+          ? iree_string_builder_buffer(&chat->images.metadata) +
+                image->metadata_offset
+          : NULL,
+      image->metadata_length);
+}
+
 iree_status_t loom_serve_text_media_request_allocate(
     const loom_serve_text_chat_t* chat, iree_allocator_t host_allocator,
     loom_serve_text_media_request_t** out_request) {
@@ -82,8 +93,6 @@ bool loom_serve_text_media_request_bind(
     const loom_serve_text_input_t* input, iree_host_size_t consumed) {
   request->first_image = request->count;
   request->input = (loom_serve_text_media_input_t){.spans = request->spans};
-  const iree_string_view_t metadata =
-      iree_string_builder_view(&request->chat->images.metadata);
   bool ready = true;
   for (iree_host_size_t i = 0; i < input->media_span_count; ++i) {
     const loom_serve_text_media_span_t* span = &input->media_spans[i];
@@ -103,10 +112,7 @@ bool loom_serve_text_media_request_bind(
         .input_count = span->input_count,
         .request_index = projected->result_index,
         .result = projected->result,
-        .metadata = iree_make_const_byte_span(
-            image->metadata_length ? metadata.data + image->metadata_offset
-                                   : NULL,
-            image->metadata_length),
+        .metadata = loom_serve_text_media_image_metadata(request->chat, image),
     };
     ready &= projected->result != NULL;
   }
@@ -347,16 +353,13 @@ static iree_status_t loom_serve_text_media_request_forecast(
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(request->host_allocator,
                                                    count, sizeof(*descriptions),
                                                    (void**)&descriptions));
-  const iree_string_view_t metadata =
-      iree_string_builder_view(&request->chat->images.metadata);
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
     const loom_serve_text_chat_image_t* image =
         &request->chat->images.values[request->first_image + i];
     status = loom_serve_media_image_request_describe(
         &image->info,
-        iree_make_const_byte_span(metadata.data + image->metadata_offset,
-                                  image->metadata_length),
+        loom_serve_text_media_image_metadata(request->chat, image),
         image->feature_count, request->host_allocator, &descriptions[i].bytes);
   }
   iree_vm_buffer_t* ranges = NULL;
@@ -429,13 +432,10 @@ static iree_status_t loom_serve_text_media_projector_prepare(void* user_data) {
     if (!iree_status_is_ok(job->status)) {
       continue;
     }
-    const iree_string_view_t metadata =
-        iree_string_builder_view(&chat->images.metadata);
     projector->cohort[valid_count] = job;
     projector->requests[valid_count++] = (loom_serve_media_image_request_t){
         .image = &job->input,
-        .metadata = iree_make_const_byte_span(
-            metadata.data + image->metadata_offset, image->metadata_length),
+        .metadata = loom_serve_text_media_image_metadata(chat, image),
         .output_rows = image->feature_count,
     };
   }
