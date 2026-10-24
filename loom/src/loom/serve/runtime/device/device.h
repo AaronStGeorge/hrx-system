@@ -22,7 +22,7 @@ extern "C" {
 typedef struct loom_serve_device_group_t loom_serve_device_group_t;
 
 // Borrowed device record within the application group. Its queues, workspace,
-// retained-memory budget and residency cache are independent of other records.
+// physical-memory budget and residency cache are independent of other records.
 // One task owner serializes model calls and physical residency transitions;
 // models sharing this record share its allocation budget, not their timelines.
 typedef struct loom_serve_device_t loom_serve_device_t;
@@ -41,7 +41,7 @@ typedef struct loom_serve_device_options_t {
   iree_string_view_t uri;
   // Physical backing strategy for all models sharing this owner.
   loom_serve_device_backing_t backing;
-  // Bulk parameter slab bytes; zero selects the allocator recommendation.
+  // Parameter/workspace slab bytes; zero selects the allocator recommendation.
   iree_device_size_t weight_slab_size;
   // Sparse state slab bytes; zero selects the allocator recommendation.
   iree_device_size_t state_slab_size;
@@ -60,7 +60,7 @@ typedef struct loom_serve_device_options_t {
 // the host executor instead of creating private workers.
 // Devices provision feedback for authored kernel assertions; sanitizer runtime
 // state remains a separate driver policy. Runtime-service allocations are
-// driver overhead outside the retained-memory budget. Retains host through all
+// driver overhead outside the serving-memory budget. Retains host through all
 // device and asynchronous service lifetimes. Failure returns no group and
 // releases partial state, including earlier devices.
 iree_status_t loom_serve_device_group_allocate(

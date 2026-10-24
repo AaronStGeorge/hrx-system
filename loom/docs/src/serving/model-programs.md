@@ -94,6 +94,7 @@ configuration and checkpoint domains. Shared preparation capabilities include:
 | `config(stage, key, value)` | Bind a public Loom configuration value in textual syntax. |
 | `config_i64(stage, key, value)` | Bind a signed integer configuration value. |
 | `workspace_limit(stage, bytes)` | Bound command workspace, including compatible live replacements. |
+| `memory_forecast(root)` | Select a finite component's host control entry for complete-request memory estimates. |
 | `source(directory, path)` | Declare the first shard of a checkpoint and return its source ordinal. |
 | `source_append(source, directory, path)` | Append a shard to that checkpoint's ordered index. |
 | `parameter(stage, binding, input, source, policy)` | Bind a checkpoint to one policy-local input of a reflected fixed parameter binding. |
@@ -477,6 +478,29 @@ defines the host control records separately from device features. Projector
 weights and completed features have independent lifetimes; live requests retain
 features only until their language consumers finish.
 
+With a finite serving memory limit, the projector's cold preparation selects a
+control entry with `prepare.memory_forecast(root)`. The selected function has
+this signature:
+
+```text
+forecast_memory(state, ranges, descriptors)
+    -> (private_peak_bytes, retained_bytes, expanded_bytes)
+```
+
+The three inputs are buffers. The range table uses little-endian i64
+offset/length pairs for descriptors containing image headers and source metadata,
+without decoded pixel planes. The three results are nonnegative i64 byte
+estimates for the complete logical request: the producer's private peak
+(parameters, activation staging, input and command workspace), all retained
+output roots, and gathered output rows with 16-byte row alignment. Retained
+output is excluded from the private peak and includes padded/shared roots;
+gather storage includes separate copies of aliased rows.
+
+These trusted source estimates let the server reject a request that cannot fit
+alone before pixel decoding or weight activation. It checks producer and
+language-consumer phases separately. The forecast does not reserve future
+capacity against concurrent requests; each phase still passes ordinary admission.
+
 ## Recognize continuing audio
 
 A recognition package accepts a continuing sequence of normalized F32 PCM frames
@@ -577,6 +601,11 @@ part of the port; current key/extent checks do not establish model identity.
 
 Private command workspace comes from compiler reflection and queue-ordered
 allocation. It is not a permanently resident per-session tensor arena.
+Under elastic backing it draws from the same physical pool and serving budget
+as parameters and model state. Stable workspace addresses can survive physical
+trim without retaining the pages. Prepared working-set peaks drive admission;
+the physical slab size determines the minimum commitment, not each small
+logical allocation's size.
 Escaping output remains live through its final device or transfer consumer;
 copied host feedback survives CPU encoding. A slow network reader receives
 copied response storage rather than retaining device workspace.
