@@ -103,7 +103,12 @@ from loom.target.contracts import (
     compile_lower_rule_set,
 )
 from loom.target.contracts.diagnostics import DiagnosticParamKind
-from loom.target.low_descriptors import Immediate, ImmediateKind, descriptor_stable_id
+from loom.target.low_descriptors import (
+    Immediate,
+    ImmediateFlag,
+    ImmediateKind,
+    descriptor_stable_id,
+)
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_F32_DESCRIPTOR,
     TEST_LOW_ADD_I32_DESCRIPTOR,
@@ -2883,14 +2888,36 @@ def test_source_memory_rows_split_byte_offset_materializer() -> None:
 def test_source_memory_rows_emit_optional_byte_offset_descriptors() -> None:
     multiply_add = replace(TEST_LOW_ADD_I32_DESCRIPTOR, key="test.multiply_add.i32")
     static_bias = replace(TEST_LOW_CONST_I32_DESCRIPTOR, key="test.static_bias.i32")
+    increment = replace(
+        TEST_LOW_REMATERIALIZE_I32_DESCRIPTOR,
+        key="test.increment.i32",
+        immediates=(
+            Immediate(
+                "optional",
+                ImmediateKind.UNSIGNED,
+                flags=(ImmediateFlag.DEFAULT_VALUE,),
+                bit_width=1,
+                unsigned_max=1,
+            ),
+            Immediate(
+                "increment",
+                ImmediateKind.SIGNED,
+                bit_width=8,
+                signed_min=-128,
+                unsigned_max=127,
+            ),
+        ),
+    )
     materializer = SourceMemoryByteOffsetMaterializer(
         constant=TEST_LOW_CONST_I32_DESCRIPTOR,
         add=TEST_LOW_ADD_I32_DESCRIPTOR,
         multiply=TEST_LOW_MUL_I32_DESCRIPTOR,
         shift_left=None,
+        increment=increment,
         multiply_add=multiply_add,
         static_bias=static_bias,
         constant_immediate="i32_value",
+        increment_immediate="increment",
     )
     descriptor_refs = {
         TEST_LOW_CONST_I32_DESCRIPTOR.key: 0,
@@ -2898,6 +2925,7 @@ def test_source_memory_rows_emit_optional_byte_offset_descriptors() -> None:
         TEST_LOW_MUL_I32_DESCRIPTOR.key: 2,
         multiply_add.key: 3,
         static_bias.key: 4,
+        increment.key: 5,
     }
 
     materializer_fields = source_memory_byte_offset_materializer_row(
@@ -2909,6 +2937,8 @@ def test_source_memory_rows_emit_optional_byte_offset_descriptors() -> None:
 
     assert ".multiply_add_descriptor_ref = 3" in materializer_fields
     assert ".static_bias_descriptor_ref = 4" in materializer_fields
+    assert ".increment_descriptor_ref = 5" in materializer_fields
+    assert ".increment_immediate_ordinal = 1" in materializer_fields
 
 
 def test_source_memory_conversion_rows_keep_source_kind_and_selector() -> None:
