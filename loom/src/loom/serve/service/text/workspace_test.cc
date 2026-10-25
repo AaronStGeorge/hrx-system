@@ -154,8 +154,9 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
   // The same authored commands loaded initially, instead of hot-swapped, must
   // publish the same private peak. Reuse this device and the pressure claimant.
   auto options = ModelOptions();
-  options.sources.count = 1;
-  options.sources.values = &provider;
+  const iree_string_view_t providers[] = {provider, IREE_SV("storage.loom")};
+  options.sources.count = IREE_ARRAYSIZE(providers);
+  options.sources.values = providers;
   loom_serve_text_model_t* cold_model = nullptr;
   IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
                                                 host_allocator_, &cold_model));

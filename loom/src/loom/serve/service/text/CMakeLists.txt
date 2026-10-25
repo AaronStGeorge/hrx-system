@@ -27,6 +27,7 @@ iree_py_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/native.card.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/service.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/storage.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/tokenizer.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/weights.loom"
     "loom::serve::testing::text_request_check"

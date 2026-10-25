@@ -133,6 +133,9 @@ struct loom_serve_virtual_buffer_t {
   loom_serve_memory_statistics_t* statistics;
   // Owned stable virtual reservation or range view, independent of backing.
   iree_hal_buffer_t* handle;
+  // Previous standalone reservation retained through cold growth mapping.
+  // Failed growth keeps both targets until checked teardown.
+  iree_hal_buffer_t* previous_handle;
   // Shared native-target state, or owned trailing state for a standalone root.
   loom_serve_memory_target_t* target;
   // Borrowed address allocator, NULL when this buffer owns its reservation.
@@ -141,6 +144,8 @@ struct loom_serve_virtual_buffer_t {
   iree_hal_memory_tlsf_block_index_t block_index;
   // Validated physical geometry, independent of other reservations.
   loom_serve_memory_geometry_t geometry;
+  // Required virtual base alignment, preserved across reservation growth.
+  iree_device_size_t alignment;
   // Native-aligned reservation extent, including its exact short tail.
   iree_device_size_t byte_length;
   // Number of slots spanning the reservation, including an optional short tail.
@@ -151,8 +156,8 @@ struct loom_serve_virtual_buffer_t {
   uint8_t regular_class;
   // Physical class of the last slot, which may be shorter than a regular slab.
   uint8_t tail_class;
-  // Physical ownership and retained-range marks for each virtual slot.
-  loom_serve_memory_slab_t slabs[];
+  // Owned physical-slot directory, replaceable only at a retired boundary.
+  loom_serve_memory_slab_t* slabs;
 };
 
 typedef struct loom_serve_memory_edit_t {
@@ -199,6 +204,9 @@ struct loom_serve_memory_operation_t {
   uint64_t value;
   // Release existing physical ownership instead of constructing new backing.
   bool releasing;
+  // Cold reservation growth, with unchanged physical ownership; null for
+  // ordinary commitments and returns. Both stages are mapping operations.
+  loom_serve_virtual_buffer_t* growing;
   // Joins completion and observer access before the caller releases the job.
   iree_slim_mutex_t mutex;
   // Outer-thread wait only; shared task workers never wait here.
@@ -808,15 +816,22 @@ static iree_status_t loom_serve_virtual_buffer_allocate_metadata(
                             "virtual buffer metadata is too large");
   }
   loom_serve_virtual_buffer_t* buffer = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      pool->host_allocator,
-      base_size + count * sizeof(loom_serve_memory_slab_t), (void**)&buffer));
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(pool->host_allocator, base_size, (void**)&buffer));
+  iree_status_t status = iree_allocator_malloc_array(
+      pool->host_allocator, count, sizeof(*buffer->slabs),
+      (void**)&buffer->slabs);
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(pool->host_allocator, buffer);
+    return status;
+  }
   buffer->pool = pool;
   buffer->statistics = statistics;
   buffer->arena = arena;
-  buffer->target = arena ? &arena->target
-                         : (loom_serve_memory_target_t*)(buffer->slabs + count);
+  buffer->target =
+      arena ? &arena->target : (loom_serve_memory_target_t*)(buffer + 1);
   buffer->geometry = geometry;
+  buffer->alignment = alignment;
   buffer->byte_length = byte_length;
   buffer->slab_count = (iree_host_size_t)count;
   buffer->regular_class = loom_serve_memory_pool_class(pool, geometry.slab_size,
@@ -850,6 +865,7 @@ iree_status_t loom_serve_virtual_buffer_allocate(
     statistics->reserved_bytes += buffer->byte_length;
     *out_buffer = buffer;
   } else {
+    iree_allocator_free(pool->host_allocator, buffer->slabs);
     iree_allocator_free(pool->host_allocator, buffer);
   }
   return status;
@@ -933,6 +949,7 @@ iree_status_t loom_serve_virtual_buffer_allocate_in_arena(
     statistics->reserved_bytes += buffer->byte_length;
     *out_buffer = buffer;
   } else {
+    iree_allocator_free(arena->pool->host_allocator, buffer->slabs);
     iree_allocator_free(arena->pool->host_allocator, buffer);
   }
   return status;
@@ -1056,8 +1073,27 @@ static void loom_serve_memory_pool_collect(loom_serve_memory_pool_t* pool) {
     }
     iree_hal_semaphore_t* mapping_completion =
         operation->stages[operation->releasing ? 0 : 1].semaphore;
+    if (operation->growing) {
+      loom_serve_virtual_buffer_t* buffer = operation->growing;
+      iree_hal_semaphore_release(buffer->target->mapping_completion);
+      buffer->target->mapping_completion = NULL;
+      if (iree_status_is_ok(operation->status)) {
+        const uint64_t previous_length =
+            iree_hal_buffer_byte_length(buffer->previous_handle);
+        pool->statistics.reserved_bytes -= previous_length;
+        buffer->statistics->reserved_bytes -= previous_length;
+        iree_hal_buffer_release(buffer->previous_handle);
+        buffer->previous_handle = NULL;
+      } else {
+        buffer->target->failure = iree_status_clone(operation->status);
+      }
+    }
     for (iree_host_size_t i = 0; i < operation->count; ++i) {
       const loom_serve_memory_edit_t* edit = &operation->edits[i];
+      if (operation->growing) {
+        edit->buffer->slabs[edit->index].in_flight = false;
+        continue;
+      }
       if (edit->buffer->target->mapping_completion == mapping_completion) {
         iree_hal_semaphore_release(edit->buffer->target->mapping_completion);
         edit->buffer->target->mapping_completion = NULL;
@@ -1108,7 +1144,8 @@ static void loom_serve_memory_operation_complete(
   }
   const bool first_ok = iree_status_is_ok(operation->stages[0].status);
   const bool second_ok = iree_status_is_ok(operation->stages[1].status);
-  for (iree_host_size_t i = 0; i < operation->count; ++i) {
+  for (iree_host_size_t i = 0; !operation->growing && i < operation->count;
+       ++i) {
     loom_serve_memory_slab_t* result = &operation->edits[i].result;
     if (operation->releasing) {
       if (first_ok) {
@@ -1233,14 +1270,18 @@ static void loom_serve_memory_operation_enqueue(
                                             &value};
   iree_hal_semaphore_t* mapping_completion =
       operation->stages[operation->releasing ? 0 : 1].semaphore;
-  if (!operation->releasing) {
+  if (operation->growing) {
+    operation->growing->target->mapping_completion = mapping_completion;
+    iree_hal_semaphore_retain(mapping_completion);
+  } else if (!operation->releasing) {
     operation->mapping_waits.semaphores[0] = first.semaphores[0];
     operation->mapping_waits.payload_values[0] = 1;
     operation->mapping_waits.count = 1;
   }
   for (iree_host_size_t i = 0; i < operation->count; ++i) {
     loom_serve_memory_edit_t* edit = &operation->edits[i];
-    if (edit->buffer->target->mapping_completion != mapping_completion) {
+    if (!operation->growing &&
+        edit->buffer->target->mapping_completion != mapping_completion) {
       if (edit->buffer->target->mapping_completion) {
         // Transfer the reservation's predecessor reference until queue_map
         // captures it. Repeated slabs in this batch share one dependency.
@@ -1256,7 +1297,7 @@ static void loom_serve_memory_operation_enqueue(
         loom_serve_memory_slab_length(edit->buffer, edit->index);
     operation->requests[i] = iree_hal_make_pool_reservation_request(
         length, edit->buffer->geometry.granularity);
-    if (operation->releasing) {
+    if (operation->releasing || operation->growing) {
       operation->sources[i] = edit->result.physical;
     }
     operation->mappings[i] = (iree_hal_memory_mapping_t){
@@ -1270,10 +1311,13 @@ static void loom_serve_memory_operation_enqueue(
                          ? IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND
                          : IREE_HAL_MEMORY_MAPPING_OPERATION_BIND,
     };
+    if (operation->growing) {
+      operation->mappings[i].source = operation->sources[i];
+    }
   }
   if (iree_status_is_ok(status)) {
     status =
-        operation->releasing
+        operation->releasing || operation->growing
             ? iree_hal_queue_map(pool->queue, operation->mapping_waits, first,
                                  operation->count, operation->mappings, 0)
             : iree_hal_queue_alloca(pool->queue,
@@ -1284,6 +1328,16 @@ static void loom_serve_memory_operation_enqueue(
   if (!iree_status_is_ok(status)) {
     iree_hal_semaphore_fail(operation->stages[0].semaphore,
                             iree_status_clone(status));
+  } else if (operation->growing) {
+    for (iree_host_size_t i = 0; i < operation->count; ++i) {
+      operation->mappings[i].target = operation->growing->previous_handle;
+      operation->mappings[i].source = NULL;
+      operation->mappings[i].access = IREE_HAL_MEMORY_ACCESS_NONE;
+      operation->mappings[i].operation =
+          IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND;
+    }
+    status = iree_hal_queue_map(pool->queue, first, second, operation->count,
+                                operation->mappings, 0);
   } else if (operation->releasing) {
     status = iree_hal_queue_dealloca(pool->queue, first, second,
                                      operation->count, operation->sources);
@@ -1304,6 +1358,81 @@ static void loom_serve_memory_operation_enqueue(
   }
   // Final handoff: an inline completion can now publish and release capture.
   loom_serve_memory_operation_complete(operation);
+}
+
+iree_status_t loom_serve_virtual_buffer_grow_async(
+    loom_serve_virtual_buffer_t* buffer, iree_device_size_t length,
+    iree_hal_semaphore_t* readiness, uint64_t value,
+    loom_serve_memory_operation_t** out_operation) {
+  *out_operation = NULL;
+  // Shared-arena ranges have independent consumers; replacing their parent's
+  // address interval is not a single-buffer growth operation.
+  IREE_ASSERT(!buffer->arena);
+  loom_serve_memory_pool_t* pool = buffer->pool;
+  loom_serve_memory_pool_collect(pool);
+  IREE_RETURN_IF_ERROR(iree_status_clone(buffer->target->failure));
+  if (length <= buffer->byte_length) {
+    return iree_ok_status();
+  }
+  const iree_device_size_t slab_size = buffer->geometry.slab_size;
+  if (buffer->byte_length % slab_size || length > INT64_MAX - slab_size) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "growth requires a whole-slab reservation extent");
+  }
+  IREE_ASSERT(!buffer->target->mapping_completion && !buffer->previous_handle);
+  const iree_device_size_t byte_length = iree_device_align(length, slab_size);
+  const uint64_t count = byte_length / slab_size;
+  if (count > IREE_HOST_SIZE_MAX / sizeof(*buffer->slabs)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "virtual buffer metadata is too large");
+  }
+  loom_serve_memory_slab_t* slabs = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+      pool->host_allocator, count, sizeof(*slabs), (void**)&slabs));
+  memcpy(slabs, buffer->slabs, buffer->slab_count * sizeof(*slabs));
+  const iree_hal_virtual_buffer_options_t options = {
+      .byte_length = byte_length,
+      .min_alignment = buffer->alignment,
+      .mapping_granularity = slab_size,
+  };
+  iree_hal_buffer_t* handle = NULL;
+  iree_status_t status = iree_hal_virtual_buffer_create(
+      pool->group, pool->scope, &options, pool->host_allocator, &handle);
+  loom_serve_memory_operation_t* operation = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_memory_operation_allocate(
+        pool, buffer->backed_regular_count, &operation);
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_hal_buffer_release(handle);
+    iree_allocator_free(pool->host_allocator, slabs);
+    return status;
+  }
+  operation->growing = buffer;
+  operation->readiness = readiness;
+  operation->value = value;
+  iree_hal_semaphore_retain(readiness);
+  iree_host_size_t edit_count = 0;
+  for (iree_host_size_t i = 0; i < buffer->slab_count; ++i) {
+    IREE_ASSERT(!slabs[i].in_flight);
+    if (slabs[i].physical) {
+      operation->edits[edit_count++] =
+          (loom_serve_memory_edit_t){buffer, i, slabs[i]};
+      slabs[i].in_flight = true;
+    }
+  }
+  buffer->previous_handle = buffer->handle;
+  buffer->handle = handle;
+  iree_allocator_free(pool->host_allocator, buffer->slabs);
+  buffer->slabs = slabs;
+  buffer->slab_count = count;
+  buffer->byte_length = byte_length;
+  buffer->tail_class = buffer->regular_class;
+  pool->statistics.reserved_bytes += byte_length;
+  buffer->statistics->reserved_bytes += byte_length;
+  *out_operation = operation;
+  loom_serve_memory_operation_enqueue(pool, operation);
+  return iree_ok_status();
 }
 
 iree_status_t loom_serve_memory_pool_commit_async(
@@ -1602,6 +1731,16 @@ iree_status_t loom_serve_virtual_buffer_free(
     IREE_ASSERT(!buffer->backed_regular_count &&
                 !buffer->slabs[buffer->slab_count - 1].physical);
   }
+  if (buffer->previous_handle) {
+    IREE_RETURN_IF_ERROR(iree_hal_virtual_buffer_detach(buffer->previous_handle,
+                                                        pool->mapping_scope));
+    const uint64_t previous_length =
+        iree_hal_buffer_byte_length(buffer->previous_handle);
+    pool->statistics.reserved_bytes -= previous_length;
+    buffer->statistics->reserved_bytes -= previous_length;
+    iree_hal_buffer_release(buffer->previous_handle);
+    buffer->previous_handle = NULL;
+  }
   // Checked removal remains available after a partial failed mapping batch.
   // Sources stay owned if detach fails, so the caller can retry cleanup. A
   // clean, empty reservation has no mapping to remove; in particular its
@@ -1628,6 +1767,7 @@ iree_status_t loom_serve_virtual_buffer_free(
     pool->statistics.reserved_bytes -= buffer->byte_length;
   }
   buffer->statistics->reserved_bytes -= buffer->byte_length;
+  iree_allocator_free(pool->host_allocator, buffer->slabs);
   iree_allocator_free(pool->host_allocator, buffer);
   return iree_ok_status();
 }

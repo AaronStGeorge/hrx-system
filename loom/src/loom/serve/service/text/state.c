@@ -130,10 +130,12 @@ iree_status_t loom_serve_text_state_allocate(
         elastic |= state->storage.regions[j].allocation == i;
       }
       if (state->memory.pool && state->cache.capacity && elastic) {
+        const loom_serve_memory_geometry_t geometry =
+            loom_serve_device_state_geometry(device);
         status = loom_serve_virtual_buffer_allocate(
-            state->memory.pool, loom_serve_device_state_geometry(device),
-            length, alignment, &state->memory.statistics,
-            &state->memory.buffers[i]);
+            state->memory.pool, geometry,
+            iree_device_align(length, geometry.slab_size), alignment,
+            &state->memory.statistics, &state->memory.buffers[i]);
         if (iree_status_is_ok(status)) {
           *allocation =
               loom_serve_virtual_buffer_handle(state->memory.buffers[i]);

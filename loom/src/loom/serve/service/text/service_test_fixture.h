@@ -178,7 +178,7 @@ class SourceTextServiceTest : public ::testing::Test {
       const std::string& name, const std::string& source,
       const char* admission = "open", const std::string& definition_fields = "",
       const std::vector<std::string>& additional_sources = {}) {
-    std::string sources = "\"advance.loom\"";
+    std::string sources = "\"advance.loom\",\"storage.loom\"";
     for (const auto& path : additional_sources) {
       sources += ",\"" + path + "\"";
     }

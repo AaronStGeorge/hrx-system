@@ -15,9 +15,6 @@ using loom_serve::testing::text::SourceTextServiceTest;
 
 class ElasticTextServiceTest : public SourceTextServiceTest {
  protected:
-  // Four private rows and ten recurrent slots precede the KV plane.
-  static constexpr size_t kPrivateBytes = 4 * 768 + 10 * 256;
-
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
     // Cold-allocation holds must not depend on a previous test's cached slabs.
@@ -60,12 +57,11 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
     };
     const std::unique_ptr<loom_serve_text_model_t, decltype(release_model)>
         owner(source, release_model);
-    // The fixture places four 768-byte private rows and ten 256-byte recurrent
-    // slots before its four-byte-per-token KV plane. Fill exactly one slab;
+    // Private state occupies its own slab after the four-byte-per-token KV
+    // plane. Fill exactly one KV slab;
     // a new COW tail must acquire native backing, not reuse an existing page.
-    const size_t extents[] = {
-        4, options.context_capacity,
-        (slab_size - kPrivateBytes) / 4 - 4 - options.context_capacity};
+    const size_t extents[] = {4, options.context_capacity,
+                              slab_size / 4 - 4 - options.context_capacity};
     for (size_t i = 0; i < IREE_ARRAYSIZE(extents); ++i) {
       bool admitted = false;
       IREE_ASSERT_OK(loom_serve_text_row_try_reserve(
@@ -81,7 +77,7 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
     IREE_ASSERT_OK(
         loom_serve_text_row_prefill(warm, IREE_ARRAYSIZE(tokens), tokens));
     ASSERT_EQ(loom_serve_text_model_memory_statistics(source).committed_bytes,
-              slab_size);
+              2 * slab_size);
     loom_serve_text_checkpoint_t* checkpoint = nullptr;
     loom_serve_execution_frontier_t frontier;
     {
@@ -292,11 +288,11 @@ TEST_F(ElasticTextServiceTest,
   const iree_device_size_t slab_size =
       loom_serve_test_application_options_default().slab_size;
   auto options = ModelOptions();
-  // Reserve exactly three physical slabs. Four full row reservations touch all
-  // three, but only three tokens in the upper half survive. Both trim phases
-  // must return full reusable slabs; no long prompt is executed.
+  // Reserve three KV slabs and one private-state slab. Four full reservations
+  // touch two KV slabs, but only three tokens in the upper half survive. Both
+  // trim phases return full reusable slabs; no long prompt is executed.
   options.context_capacity = slab_size / 8;
-  options.pool_capacity = (3 * slab_size - kPrivateBytes) / 4;
+  options.pool_capacity = 3 * slab_size / 4;
   loom_serve_text_model_t* sparse = nullptr;
   IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
                                                 host_allocator_, &sparse));
@@ -383,7 +379,7 @@ TEST_F(ElasticTextServiceTest,
     const auto physical = loom_serve_memory_pool_statistics(
         loom_serve_device_memory_pool(device_));
     const auto returned = loom_serve_text_model_memory_statistics(sparse);
-    EXPECT_EQ(returned.committed_bytes, slab_size);
+    EXPECT_EQ(returned.committed_bytes, 2 * slab_size);
     EXPECT_EQ(returned.releasing_bytes, 0u);
     EXPECT_GE(physical.releasing_bytes, slab_size);
     ASSERT_NO_FATAL_FAILURE(advance_warm());
@@ -394,7 +390,7 @@ TEST_F(ElasticTextServiceTest,
   ASSERT_TRUE(complete);
   EXPECT_EQ(result.released_bytes, 2 * slab_size);
   EXPECT_EQ(loom_serve_text_model_memory_statistics(sparse).committed_bytes,
-            slab_size);
+            2 * slab_size);
 
   // The compacted page is still shared. Appending detaches its partial tail;
   // restoring the immutable endpoint must retain the original prediction.

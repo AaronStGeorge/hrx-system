@@ -5,7 +5,8 @@
     "prepare": "prepare.loom",
     "control": "control.loom",
     "sources": [
-      "advance.loom"
+      "advance.loom",
+      "storage.loom"
     ],
     "weights": "weights.safetensors",
     "tokenizer": "tokenizer.json",

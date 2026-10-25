@@ -78,8 +78,8 @@ TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
 TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
   const auto package = iree::testing::MakeTempFilePath("failed_text_link");
   ASSERT_TRUE(std::filesystem::create_directory(package));
-  for (const char* file : {"prepare.loom", "advance.loom", "model.json",
-                           "weights.loom", "tokenizer.json"}) {
+  for (const char* file : {"prepare.loom", "advance.loom", "storage.loom",
+                           "model.json", "weights.loom", "tokenizer.json"}) {
     ASSERT_TRUE(std::filesystem::copy_file(directory_ + "/" + file,
                                            package + "/" + file));
   }

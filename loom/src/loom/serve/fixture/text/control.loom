@@ -451,12 +451,12 @@ func.def public @encode_state(%bindings: buffer, %count: i32, %origins: buffer) 
   %length = index.cast %bounded_count : i32 to index
   %origin_length = buffer.length %origins
   %origin_length64 = index.cast %origin_length : offset to i64
-  %stride = scalar.constant 32 : i64
+  %stride = scalar.constant 40 : i64
   %capacity64 = scalar.divui %origin_length64, %stride : i64
   %bounded_capacity = scalar.assume %capacity64 [range(%capacity64, 1, 2147483647)] : i64
   %capacity = index.cast %bounded_capacity : i64 to index
   %records = buffer.view %bindings[%origin] : buffer -> view<[%length]x4xi64>
-  %rows = buffer.view %origins[%origin] : buffer -> view<[%capacity]x4xi64>
+  %rows = buffer.view %origins[%origin] : buffer -> view<[%capacity]x5xi64>
   scf.for %i = [%c0 to %length step %c1] {
     %row64 = view.load %records[%i, 0] : view<[%length]x4xi64> -> i64
     %row_bound = scalar.assume %row64 [range(%row64, 0, 2147483646)] : i64
@@ -465,9 +465,9 @@ func.def public @encode_state(%bindings: buffer, %count: i32, %origins: buffer) 
     %read = view.load %records[%i, 1] : view<[%length]x4xi64> -> i64
     %write = view.load %records[%i, 2] : view<[%length]x4xi64> -> i64
     %position = view.load %records[%i, 3] : view<[%length]x4xi64> -> i64
-    view.store %read, %rows[%row, 0] : i64, view<[%capacity]x4xi64>
-    view.store %write, %rows[%row, 1] : i64, view<[%capacity]x4xi64>
-    view.store %position, %rows[%row, 3] : i64, view<[%capacity]x4xi64>
+    view.store %read, %rows[%row, 0] : i64, view<[%capacity]x5xi64>
+    view.store %write, %rows[%row, 1] : i64, view<[%capacity]x5xi64>
+    view.store %position, %rows[%row, 3] : i64, view<[%capacity]x5xi64>
   }
   func.return
 }
@@ -707,4 +707,18 @@ func.def public @epoch(%control_state: buffer, %shape: i32, %proposes: i32, %ver
   %length = scalar.muli %count64, %c4_i64 : i64
   %feedback = func.call @feedback(%c0, %outputs, %c0_i64, %length) : (i32, hal.buffer, i64, i64) -> (i64)
   func.return %completion : i64
+}
+
+func.decl @fixture_storage(%maximum: i64, %span_capacity: i64, %context: i64, %pool: i64, %rows: i64, %pins: i64) -> (buffer, buffer, buffer, buffer, buffer)
+
+func.def public @resize_state(%state: buffer, %rows: i64) -> (buffer, buffer, buffer, buffer, buffer, buffer) {
+  %layout_origin = index.constant 88 : offset
+  %layout = buffer.view %state[%layout_origin] : buffer -> view<5xi64>
+  %maximum = view.load %layout[0] : view<5xi64> -> i64
+  %span_capacity = view.load %layout[1] : view<5xi64> -> i64
+  %context = view.load %layout[2] : view<5xi64> -> i64
+  %pool = view.load %layout[3] : view<5xi64> -> i64
+  %pins = view.load %layout[4] : view<5xi64> -> i64
+  %allocations, %views, %origins, %draft, %geometry = func.call @fixture_storage(%maximum, %span_capacity, %context, %pool, %rows, %pins) : (i64, i64, i64, i64, i64, i64) -> (buffer, buffer, buffer, buffer, buffer)
+  func.return %state, %allocations, %views, %origins, %draft, %geometry : buffer, buffer, buffer, buffer, buffer, buffer
 }

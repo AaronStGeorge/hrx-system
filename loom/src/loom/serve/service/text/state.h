@@ -186,7 +186,7 @@ struct loom_serve_text_state_t {
     iree_device_size_t
         private_lengths[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
   } memory;
-  // Private row views followed by pooled KV, or dense row KV.
+  // Source-positioned private views, recurrent slots, and target KV planes.
   iree_hal_buffer_t* row_arena;
   // Model-wide residual storage serialized by the execution timeline.
   iree_hal_buffer_t* residual;

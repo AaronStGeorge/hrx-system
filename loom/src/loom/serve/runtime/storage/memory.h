@@ -256,6 +256,20 @@ void loom_serve_memory_arena_free(loom_serve_memory_arena_t* arena);
 iree_hal_buffer_t* loom_serve_virtual_buffer_handle(
     const loom_serve_virtual_buffer_t* buffer);
 
+// Enlarges a standalone whole-slab reservation (not a shared-arena range) at a
+// successfully retired consumer and
+// mapping boundary. The wrapper and physical slab identities remain stable;
+// the borrowed HAL handle changes. The caller excludes use and mutation until
+// operation completion, then rebuilds its views from handle(). No payload is
+// copied and no physical capacity is acquired. Ordinary producer/consumer
+// visibility must already be established; mapping readiness publishes only
+// translations. Both reservations survive a failed edit for checked cleanup.
+// A length within the current reservation is a no-op returning NULL.
+iree_status_t loom_serve_virtual_buffer_grow_async(
+    loom_serve_virtual_buffer_t* buffer, iree_device_size_t length,
+    iree_hal_semaphore_t* readiness, uint64_t value,
+    loom_serve_memory_operation_t** out_operation);
+
 // Independent physical replacement size in this root.
 iree_device_size_t loom_serve_virtual_buffer_slab_size(
     const loom_serve_virtual_buffer_t* buffer);

@@ -385,7 +385,7 @@ TEST_F(RegisteredSequenceServiceTest,
   const std::string declaration =
       "{\"name\":\"fixture-text\",\"base_directory\":\"" +
       std::filesystem::absolute(directory_).string() +
-      R"(","definition":{"kind":"sequence","prepare":"prepare.loom","control":"control.loom","sources":["advance.loom"],"weights":")" +
+      R"(","definition":{"kind":"sequence","prepare":"prepare.loom","control":"control.loom","sources":["advance.loom","storage.loom"],"weights":")" +
       weights_ +
       R"(","rows":4,"context_capacity":96,"pool_capacity":256,"prefill_capacity":32,"checkpoint_capacity":4,"session_cache_capacity":1}})";
   auto response = Read(Send(declaration, "", "/v1/models/register"));

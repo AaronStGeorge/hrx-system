@@ -214,6 +214,7 @@ def test_native_selected_closure():
         "prepare.loom",
         "control.loom",
         "service.loom",
+        "storage.loom",
         "advance.loom",
         "weights.loom",
         "metadata.safetensors",

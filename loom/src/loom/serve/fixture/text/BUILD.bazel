@@ -36,12 +36,19 @@ loom_library(
         "control.loom",
         "prepare.loom",
         "service.loom",
+        "storage.loom",
     ],
 )
 
 loom_library(
     name = "control_module",
     srcs = ["control.loom"],
+    deps = [":storage_module"],
+)
+
+loom_library(
+    name = "storage_module",
+    srcs = ["storage.loom"],
 )
 
 loom_library(
@@ -67,6 +74,7 @@ filegroup(
         "control.loom",
         "prepare.loom",
         "service.loom",
+        "storage.loom",
         ":native_card_assets",
     ],
     visibility = ["//visibility:public"],
@@ -87,6 +95,7 @@ filegroup(
     srcs = [
         "prepare.loom",
         "service.loom",
+        "storage.loom",
         ":advance_module",
         ":control_module",
         ":native_card_assets",
@@ -137,6 +146,7 @@ loom_model(
         "control.loom": "control.loom",
         "prepare.loom": "prepare.loom",
         "service.loom": "service.loom",
+        "storage.loom": "storage.loom",
     },
     model_name = "fixture-text",
     preset = "check",
@@ -172,6 +182,7 @@ loom_generated_file(
             "control.loom": "control.loom",
             "prepare.loom": "prepare.loom",
             "service.loom": "service.loom",
+            "storage.loom": "storage.loom",
         },
         model_name = "fixture-text",
         partition = "other side",
@@ -200,6 +211,7 @@ loom_model(
         ":control_module": "control_module.loombc",
         "prepare.loom": "prepare.loom",
         "service.loom": "service.loom",
+        "storage.loom": "storage.loom",
     },
     model_name = "fixture-text",
     preset = "check",
@@ -223,6 +235,7 @@ loom_model(
             "control.loom": "control.loom",
             "prepare.loom": "prepare.loom",
             "service.loom": "service.loom",
+            "storage.loom": "storage.loom",
         },
         model_name = "fixture-sequence",
         preset = "encode",
@@ -247,11 +260,13 @@ loom_model(
             ":control_module": "control_module.loombc",
             "prepare.loom": "prepare.loom",
             "service.loom": "service.loom",
+            "storage.loom": "storage.loom",
         } if programs == "mixed" else {
             "advance.loom": "advance.loom",
             "control.loom": "control.loom",
             "prepare.loom": "prepare.loom",
             "service.loom": "service.loom",
+            "storage.loom": "storage.loom",
         },
         lockfile = "native.card.json.lock",
         model_name = "fixture-text",
@@ -274,6 +289,7 @@ loom_library(
         "control.loom",
         "prepare.loom",
         "service.loom",
+        "storage.loom",
         "//loom/src/loom/serve/fixture/projector:control.loom",
         "//loom/src/loom/serve/fixture/projector:project.loom",
         "//loom/src/loom/serve/fixture/projector:service.loom",
@@ -299,6 +315,7 @@ loom_library(
             "//loom/src/loom/serve/fixture/projector:weighted_project.loom": "image/weighted_project.loom",
             "prepare.loom": "prepare.loom",
             "service.loom": "service.loom",
+            "storage.loom": "storage.loom",
         } | ({
             ":advance_module": "advance_module.loombc",
             ":control_module": "control_module.loombc",
