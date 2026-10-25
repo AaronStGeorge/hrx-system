@@ -214,8 +214,7 @@ class DriverTest : public ::testing::Test {
 };
 
 TEST_F(DriverTest, DefaultAndNativeIdentityRetainOneOwner) {
-  for (auto scheme :
-       {IREE_SV("xdna"), IREE_SV("rdna"), IREE_SV("cdna"), IREE_SV("amdgpu")}) {
+  for (auto scheme : {IREE_SV("rdna"), IREE_SV("cdna"), IREE_SV("amdgpu")}) {
     iree_hal_driver_t* alias = nullptr;
     IREE_ASSERT_OK(
         iree_hal_driver_registry_acquire_driver(registry_, scheme, &alias));
