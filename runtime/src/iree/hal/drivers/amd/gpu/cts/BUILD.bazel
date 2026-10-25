@@ -4,14 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/amdgpu:descriptor_sets.bzl", "loom_amdgpu_selected_descriptor_set_values")
-load("//loom/build_tools/amdgpu:target_config.bzl", "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES", "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET", "LOOM_AMDGPU_SUPPORTED_TARGETS")
+load("//loom/build_tools/amdgpu:target_config.bzl", "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
-load("//loom/build_tools/bazel:defs.bzl", "loom_kernel_binary", "loom_library", "loom_target_profile")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
-load("//runtime/build_tools/bazel:hal_cts.bzl", "iree_runtime_hal_cts_testdata")
+load(":testdata.bzl", "iree_hal_amd_gpu_cts_testdata")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -35,117 +33,51 @@ _EXECUTABLE_COMPATIBLE_WITH = loom_config_compatible_with([
     ["@platforms//:incompatible"],
 )]))
 
-_CORPORA = {
-    "asan_report": {
-        "backends": ["amd_gpu_asan_report"],
-        "programs": {"asan_report": "asan_report.loom"},
-    },
-    "code": {
-        "backends": ["amd_gpu_code"],
-        "programs": {
-            "transform": "//libamdf/cts/gpu/kernels:transform.loom",
-            "transform_alternate": "//libamdf/cts/gpu/kernels:transform_alternate.loom",
-        },
-    },
-    "dispatch": {
-        "backends": [
-            "rdna",
-            "cdna",
-        ],
-        "programs": {
-            "command_buffer_dispatch_constants_bindings_test": "command_buffer_dispatch_constants_bindings_test.loom",
-            "command_buffer_dispatch_multi_workgroup_test": "command_buffer_dispatch_multi_workgroup_test.loom",
-            "command_buffer_dispatch_test": "command_buffer_dispatch_test.loom",
-        },
-    },
-    "feedback": {
-        "backends": ["amd_gpu_feedback"],
-        "programs": {"feedback": "feedback.loom"},
-    },
-    "scratch": {
-        "backends": ["amd_gpu_scratch"],
-        "programs": {"scratch": "scratch.loom"},
-    },
-    "tsan": {
-        "backends": ["amd_gpu_tsan"],
-        "programs": {"tsan": "tsan.loom"},
-    },
-}
+iree_hal_amd_gpu_cts_testdata(
+    name = "asan_report_testdata",
+    srcs = ["asan_report.loom"],
+    backend_names = ["amd_gpu_asan_report"],
+)
 
-_TARGET_COMPATIBLE_WITH = {
-    target: loom_config_compatible_with([
-        "//loom/config/target:amdgpu_artifacts",
-        "//loom/config/target/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target],
-    ])
-    for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-}
+iree_hal_amd_gpu_cts_testdata(
+    name = "code_testdata",
+    srcs = [
+        "//libamdf/cts/gpu/kernels:transform.loom",
+        "//libamdf/cts/gpu/kernels:transform_alternate.loom",
+    ],
+    backend_names = ["amd_gpu_code"],
+)
 
-[
-    loom_target_profile(
-        name = "cts_profile_" + target,
-        family = "amdgpu",
-        selector = target,
-        target_compatible_with = _TARGET_COMPATIBLE_WITH[target],
-    )
-    for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-]
+iree_hal_amd_gpu_cts_testdata(
+    name = "dispatch_testdata",
+    srcs = [
+        "command_buffer_dispatch_constants_bindings_test.loom",
+        "command_buffer_dispatch_multi_workgroup_test.loom",
+        "command_buffer_dispatch_test.loom",
+    ],
+    backend_names = [
+        "rdna",
+        "cdna",
+    ],
+)
 
-[
-    loom_library(
-        name = collection + "_source_" + program,
-        srcs = [source],
-        tags = ["manual"],
-        target_compatible_with = _EXECUTABLE_COMPATIBLE_WITH,
-    )
-    for collection, corpus in _CORPORA.items()
-    for program, source in corpus["programs"].items()
-]
+iree_hal_amd_gpu_cts_testdata(
+    name = "feedback_testdata",
+    srcs = ["feedback.loom"],
+    backend_names = ["amd_gpu_feedback"],
+)
 
-[
-    loom_kernel_binary(
-        name = collection + "_" + target + "_" + program,
-        testonly = True,
-        out = collection + "_" + target + "/" + program + ".bin",
-        target = ":cts_profile_" + target,
-        target_compatible_with = _TARGET_COMPATIBLE_WITH[target],
-        deps = [":" + collection + "_source_" + program],
-    )
-    for collection, corpus in _CORPORA.items()
-    for program in corpus["programs"]
-    for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-]
+iree_hal_amd_gpu_cts_testdata(
+    name = "scratch_testdata",
+    srcs = ["scratch.loom"],
+    backend_names = ["amd_gpu_scratch"],
+)
 
-[
-    iree_runtime_hal_cts_testdata(
-        name = collection + "_data_" + target,
-        srcs = [":" + collection + "_" + target + "_" + program for program in corpus["programs"]],
-        backend_names = corpus["backends"],
-        target_compatible_with = _TARGET_COMPATIBLE_WITH[target],
-        target_family = "amdgpu",
-        target_key = target,
-        target_name = target.replace("-", "_"),
-    )
-    for collection, corpus in _CORPORA.items()
-    for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-]
-
-[
-    iree_runtime_cc_library(
-        name = collection + "_testdata",
-        testonly = True,
-        target_compatible_with = _EXECUTABLE_COMPATIBLE_WITH,
-        deps = loom_amdgpu_selected_descriptor_set_values({
-            capability: [
-                ":" + collection + "_data_" + target
-                for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-                if LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target] == capability
-            ]
-            for capability in LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES
-        }),
-        alwayslink = True,
-    )
-    for collection in _CORPORA
-]
+iree_hal_amd_gpu_cts_testdata(
+    name = "tsan_testdata",
+    srcs = ["tsan.loom"],
+    backend_names = ["amd_gpu_tsan"],
+)
 
 iree_runtime_cc_library(
     name = "testdata",
