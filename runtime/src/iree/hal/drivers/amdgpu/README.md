@@ -1,7 +1,7 @@
 # Legacy AMD GPU HAL Driver (`legacy-amdgpu`)
 
 The ROCr-based driver uses the runtime name `legacy-amdgpu`. The native
-libamdf driver provides `rdna`, `cdna`, and the unified `amdgpu2` selector.
+libamdf driver provides `rdna`, `cdna`, and the unified `amdgpu` selector.
 Build options for this driver retain the `amdgpu` name, and both drivers
 consume the `amdgpu` executable target family.
 

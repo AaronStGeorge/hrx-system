@@ -89,7 +89,7 @@ The [profile definitions](../devtools/ci_config.py) specify the package scope
 and resources for each.
 
 AMD profiles forward `HAL_VISIBLE_XDNA_DEVICES`, `HAL_VISIBLE_RDNA_DEVICES`,
-`HAL_VISIBLE_CDNA_DEVICES`, and `HAL_VISIBLE_AMDGPU2_DEVICES` into Bazel test
+`HAL_VISIBLE_CDNA_DEVICES`, and `HAL_VISIBLE_AMDGPU_DEVICES` into Bazel test
 actions. Each list selects that HAL scheme's unmasked supported device ordinals;
 the lists are independent, and empty values remain empty. For example, a runner
 can set `HAL_VISIBLE_RDNA_DEVICES=1` so ordinary `--device=rdna` callers use its

@@ -1112,7 +1112,7 @@ class CiTest(unittest.TestCase):
             "HAL_VISIBLE_XDNA_DEVICES": "",
             "HAL_VISIBLE_RDNA_DEVICES": "1,0",
             "HAL_VISIBLE_CDNA_DEVICES": "0",
-            "HAL_VISIBLE_AMDGPU2_DEVICES": "2,1",
+            "HAL_VISIBLE_AMDGPU_DEVICES": "2,1",
             "AMDF_CTS_GPU_NATIVE_IDENTITY": "linux_device:226:144",
         }
         with mock.patch.dict(ci.os.environ, device_visibility, clear=True):
@@ -1138,7 +1138,7 @@ class CiTest(unittest.TestCase):
             "HAL_VISIBLE_XDNA_DEVICES": "",
             "HAL_VISIBLE_RDNA_DEVICES": "1,0",
             "HAL_VISIBLE_CDNA_DEVICES": "0",
-            "HAL_VISIBLE_AMDGPU2_DEVICES": "2,1",
+            "HAL_VISIBLE_AMDGPU_DEVICES": "2,1",
             "AMDF_CTS_GPU_NATIVE_IDENTITY": "windows_adapter:123456:0",
         }
         profiles = (

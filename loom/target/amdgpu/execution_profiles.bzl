@@ -57,7 +57,7 @@ AMDGPU_HARDWARE_PROFILE = amdgpu_execution_profile(
     name = "amdgpu_hardware",
 )
 
-def amd_gpu_execution_profile(name, runner_args = [], tags = [], device = "amdgpu2"):
+def amd_gpu_execution_profile(name, runner_args = [], tags = [], device = "amdgpu"):
     """Defines native AMD GPU execution with libamdf hardware requirements."""
     return loom_execution_profile(
         name = name,
@@ -89,14 +89,14 @@ AMD_GPU_ASAN_PROFILE = amd_gpu_execution_profile(
 AMD_GPU_TSAN_PROFILE = amd_gpu_execution_profile(
     name = "amd_gpu_tsan",
     tags = ["requires-amd-gpu-feedback"],
-    device = "amdgpu2://?tsan_report_policy=report-only",
+    device = "amdgpu://?tsan_report_policy=report-only",
     runner_args = ["--sanitizer=tsan", "--sanitizer-reporting=report-only"],
 )
 
 AMD_GPU_TSAN_CAPACITY_PROFILE = amd_gpu_execution_profile(
     name = "amd_gpu_tsan_capacity",
     tags = ["requires-amd-gpu-feedback"],
-    device = "amdgpu2://?tsan_report_policy=report-only&tsan_shadow_size=1440",
+    device = "amdgpu://?tsan_report_policy=report-only&tsan_shadow_size=1440",
     runner_args = ["--sanitizer=tsan", "--sanitizer-reporting=report-only"],
 )
 

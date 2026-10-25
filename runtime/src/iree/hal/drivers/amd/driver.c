@@ -31,7 +31,7 @@ static const iree_hal_amd_driver_scheme_t iree_hal_amd_driver_schemes[] = {
      AMDF_GPU_ARCHITECTURE_RDNA},
     {IREE_SVL("cdna"), "HAL_VISIBLE_CDNA_DEVICES", AMDF_ENGINE_KIND_GPU,
      AMDF_GPU_ARCHITECTURE_CDNA},
-    {IREE_SVL("amdgpu2"), "HAL_VISIBLE_AMDGPU2_DEVICES", AMDF_ENGINE_KIND_GPU,
+    {IREE_SVL("amdgpu"), "HAL_VISIBLE_AMDGPU_DEVICES", AMDF_ENGINE_KIND_GPU,
      AMDF_GPU_ARCHITECTURE_UNKNOWN},
 };
 

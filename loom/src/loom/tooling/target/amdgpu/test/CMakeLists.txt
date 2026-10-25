@@ -299,7 +299,7 @@ loom_execution_test(
   MODULE
     "::amd_gpu_hal_tests_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
@@ -1028,7 +1028,7 @@ loom_execution_test(
   MODULE
     "::asan_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
     "--sanitizer=asan"
     "--sanitizer-reporting=report-only"
     "--config=asan_launch_bound.tile_capacity=1"
@@ -1095,7 +1095,7 @@ loom_execution_test(
   MODULE
     "::ubsan_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
   LABELS
     "requires-amd-gpu-feedback"
     "iree-build-requirement=libamdf"
@@ -1429,7 +1429,7 @@ loom_execution_test(
   MODULE
     "::tsan_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1497,7 +1497,7 @@ loom_execution_test(
   MODULE
     "::tsan_collective_publication_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1565,7 +1565,7 @@ loom_execution_test(
   MODULE
     "::tsan_fragment_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1633,7 +1633,7 @@ loom_execution_test(
   MODULE
     "::tsan_subgroup_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1735,7 +1735,7 @@ loom_execution_test(
   MODULE
     "::tsan_capacity_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only&tsan_shadow_size=1440"
+    "--device=amdgpu://?tsan_report_policy=report-only&tsan_shadow_size=1440"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS

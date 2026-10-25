@@ -119,7 +119,7 @@ loom_execution_test(
   MODULE
     "::hardware_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
@@ -201,7 +201,7 @@ loom_execution_test(
   MODULE
     "::scenario_compare_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"

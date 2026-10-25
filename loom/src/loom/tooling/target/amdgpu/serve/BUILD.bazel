@@ -143,7 +143,7 @@ _SERVING_DEVICES = [
     (
         "gpu_",
         ":test_device_gpu",
-        "amdgpu2",
+        "amdgpu",
         [
             "//runtime/config/hal:driver_amd",
             "//libamdf/config:enabled_setting",
