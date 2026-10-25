@@ -259,7 +259,10 @@ static bool loom_serve_text_begin_preparation_at(
   loom_serve_text_session_t* session = loom_serve_text_session_select(
       service->row_count, service->sessions, pending->name,
       pending->chat.policy && !pending->checkpoint ? &pending->chat : NULL);
-  if (!session || session->preparing) {
+  if (!session) {
+    return loom_serve_text_service_capacity_begin(service);
+  }
+  if (session->preparing) {
     return false;
   }
   service->pending.prepared.request = pending;

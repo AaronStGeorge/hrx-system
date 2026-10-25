@@ -16,6 +16,7 @@
 #include "loom/serve/service/text/pending_queue.h"
 #include "loom/serve/service/text/readiness.h"
 #include "loom/serve/service/text/service.h"
+#include "loom/serve/service/text/service_capacity.h"
 #include "loom/serve/telemetry/tracing.h"
 
 // Device work retained until readiness is consumed by the model owner.
@@ -27,6 +28,7 @@ typedef enum loom_serve_text_work_e {
   TEXT_WORK_RESERVE,
   TEXT_WORK_RETAIN,
   TEXT_WORK_PREFIX,
+  TEXT_WORK_GROW,
 } loom_serve_text_work_t;
 
 // Exclusive host/VM borrow; input preparation may overlap an accepted epoch.
@@ -35,6 +37,7 @@ typedef enum loom_serve_text_cpu_work_e {
   TEXT_CPU_WORK_PREPARE,
   TEXT_CPU_WORK_OUTPUT,
   TEXT_CPU_WORK_INPUT_COUNT,
+  TEXT_CPU_WORK_GROW,
 } loom_serve_text_cpu_work_t;
 
 // Serialized service ownership shared by request admission, device epochs,
@@ -59,6 +62,8 @@ struct loom_serve_text_service_t {
   loom_serve_packing_shape_t isolated_shape;
   // Number of allocated device/session rows.
   iree_host_size_t row_count;
+  // Cold replacement directory, private to its CPU task until readiness joins.
+  loom_serve_text_service_capacity_t growth;
   // Output bound when the client omits one.
   iree_host_size_t default_max_tokens;
   // Immutable model epoch geometry and execution choices.

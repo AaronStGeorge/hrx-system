@@ -131,8 +131,8 @@ typedef struct loom_serve_text_options_t {
   iree_string_view_t weights_path;
   // Hugging Face tokenizer.json loaded once during creation.
   iree_string_view_t tokenizer_path;
-  // Number of addressable retained rows in one stable state arena. Independent
-  // of epoch shape capacity; source-visible identities fit a positive i32.
+  // Initial addressable resident capacity, independent of epoch shape capacity.
+  // Service demand grows it; source-visible identities fit a positive i32.
   iree_host_size_t row_count;
   // Maximum explicitly retained endpoints; zero keeps no checkpoint reserve.
   // Requires pooled execution. Source reserves reader/writer slot headroom;

@@ -26,7 +26,8 @@ typedef struct loom_serve_text_service_options_t {
   // activation and ordinary requests do not start its preparation. Accepted
   // preparation is advanced/joined by the service's serialized owner.
   loom_serve_finite_component_t* image;
-  // Number of reusable execution rows, matching the model residency.
+  // Initial resident capacity, matching the model at service creation. The
+  // directory grows as requests arrive; memory credit gates active requests.
   iree_host_size_t row_count;
   // Maximum known input tokens admitted from one row in an epoch.
   iree_host_size_t chunk_size;
@@ -62,7 +63,8 @@ typedef struct loom_serve_text_service_t loom_serve_text_service_t;
 
 // Creates host session/admission state around a borrowed model. CPU work shares
 // the host executor; reporting shares its proactor. No per-model thread is
-// created. Capacities match the model. Calls use its one serialized host owner.
+// created. Initial capacity matches the model; subsequent growth retains the
+// same programs and parameters. Calls use its one serialized host owner.
 // A non-null stream lends registration history through destruction; NULL
 // creates a service-owned history for a borrowed single-model deployment.
 iree_status_t loom_serve_text_service_allocate(

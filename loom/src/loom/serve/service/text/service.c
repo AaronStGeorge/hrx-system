@@ -813,6 +813,7 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   loom_serve_text_media_projector_free(service->projector);
   const iree_allocator_t host_allocator = service->host_allocator;
   loom_serve_execution_reconfiguration_free(service->reconfiguration);
+  loom_serve_text_service_capacity_discard(service);
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
     loom_serve_text_session_deinitialize(service->sessions[i]);
   }
@@ -842,6 +843,10 @@ iree_status_t loom_serve_text_service_allocate(
     loom_serve_telemetry_stream_t* stream, iree_allocator_t host_allocator,
     loom_serve_text_service_t** out_service) {
   *out_service = NULL;
+  if (options->row_count != loom_serve_text_model_row_count(model)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "initial service capacity must match its model");
+  }
   const iree_host_size_t draft_depth = loom_serve_text_model_draft_depth(model);
   const loom_serve_text_mode_t model_mode = loom_serve_text_model_mode(model);
   if (model_mode == LOOM_SERVE_TEXT_MODE_ENCODE &&
@@ -1036,6 +1041,9 @@ static iree_status_t loom_serve_text_advance_work(
     IREE_RETURN_IF_ERROR(status);
     if (work == TEXT_CPU_WORK_OUTPUT) {
       loom_serve_text_complete_output(service);
+    } else if (work == TEXT_CPU_WORK_GROW) {
+      IREE_RETURN_IF_ERROR(loom_serve_text_service_capacity_await(service));
+      yield_preparation = true;
     }
   }
   if (service->completion.work != TEXT_WORK_NONE) {
@@ -1067,6 +1075,9 @@ static iree_status_t loom_serve_text_advance_work(
         break;
       case TEXT_WORK_TRIM:
         status = loom_serve_text_complete_trim(service);
+        break;
+      case TEXT_WORK_GROW:
+        loom_serve_text_service_capacity_publish(service);
         break;
       case TEXT_WORK_RESERVE:
         status = loom_serve_text_complete_reservation(service, flags);

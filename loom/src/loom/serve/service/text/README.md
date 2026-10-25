@@ -81,6 +81,22 @@ Insufficient capacity queues or rejects the request before successful output
 headers. Slow output readers backpressure their own row without preventing
 credited peers from advancing.
 
+Resident identities are independent of epoch shape. The initial `rows` value
+sizes a directory, not an admission ceiling. When all residents have borrowers,
+[capacity growth](service_capacity.h) evaluates source `resize_state` on the
+shared task pool at a retired model boundary. Existing session records and
+state IDs remain stable; the owner publishes new directory entries only after
+CPU release and the captured device frontier. Prepared media continuations
+defer growth until their address-dependent plans retire. The same model, JIT
+artifacts, and parameters serve the enlarged directory.
+
+Source returns new control state and the five ordinary storage records. Private
+views, recurrent slots, and cache planes are append-stable. Virtual reservations
+retain existing physical slabs; fixed backing allocates a replacement and copies
+retained bytes. The small carry checkpoint bank follows resident entries and
+moves independently. No state copy or directory allocation occurs per epoch.
+Actual request memory admission remains separate from directory capacity.
+
 ## Image projection
 
 The optional [finite component](../finite/component.h) owns image preparation

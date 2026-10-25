@@ -330,9 +330,9 @@ iree_status_t loom_serve_text_load_allocate(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "text resident count must fit a positive i32");
   }
-  if (options->prefill_capacity < 1 ||
-      options->context_capacity < options->prefill_capacity ||
-      options->context_capacity > 262144 || options->epoch_count > INT32_MAX ||
+  if (options->prefill_capacity < 1 || options->prefill_capacity > INT32_MAX ||
+      options->context_capacity < 1 || options->context_capacity > 262144 ||
+      options->epoch_count > INT32_MAX ||
       options->epoch_count > SIZE_MAX / (2 * sizeof(int64_t)) ||
       options->draft_depth > 7 ||
       (options->draft_depth && !options->epoch_count) ||

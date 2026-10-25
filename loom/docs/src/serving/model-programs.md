@@ -288,6 +288,17 @@ and speculative verifier work. Token capacity and independently advancing span
 capacity are separate. The source reports completed progress; native ownership
 commits it after readiness.
 
+Resident capacity grows independently of those epoch shapes. Source control
+exports `resize_state(control_state, resident_capacity)`, returning replacement
+control state followed by the same five storage records used at preparation.
+Existing private views, recurrent slots, and KV planes retain their byte offsets;
+only the resident directory, its tables, and append-only storage grow. The native
+owner joins accepted work before growth and publishes the replacement after its
+queue frontier completes. Programs and weights remain loaded. Virtual backing
+remaps the same physical slabs; fixed backing copies retained bytes at this cold
+boundary and temporarily requires both allocations. Unused virtual capacity does
+not acquire physical memory until request admission needs it.
+
 Shared prefixes and explicit checkpoints keep immutable endpoint references.
 A branch needs a private recurrent writer without copying the entire KV prefix.
 The tiny text package exercises a partial-page frontier, an unconsumed pending
@@ -329,7 +340,7 @@ result bytes explicitly, without asking the server to sample or feed them back.
 
 Preparation retains the text model's nine-result ABI. The terminal-token marker
 may be null. Control exports `epoch`, `encode_epoch`, `publish_epoch`,
-`encode_state`, `bind_request`, `request_defaults`, `request_options`, and
+`encode_state`, `resize_state`, `bind_request`, `request_defaults`, `request_options`, and
 `capture_epoch`. Isolated `step`, tokenizer/chat roots, and drafting are not
 required. Every submitted span has selection/proposal flags zero, and completed
 progress contains no native output-token selection.

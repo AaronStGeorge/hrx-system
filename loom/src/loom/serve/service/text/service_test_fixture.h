@@ -62,6 +62,10 @@ class SourceTextServiceTest : public ::testing::Test {
   // runs can exercise the same owner contract with additional workers.
   virtual iree_host_size_t WorkerCount() const { return 1; }
 
+  virtual loom_serve_http_server_options_t ServerOptions() const {
+    return loom_serve_http_server_options_default();
+  }
+
   // Document ownership covers every asynchronous native load in this fixture.
   loom_serve::testing::ModelDocument document_;
 

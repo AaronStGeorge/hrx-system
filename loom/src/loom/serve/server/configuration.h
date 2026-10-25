@@ -43,7 +43,8 @@ typedef struct loom_serve_text_configuration_t {
   // Optional finite image component, prepared by media demand or explicit
   // component activation, independently of primary text preparation.
   loom_serve_finite_component_configuration_t image;
-  // Maximum simultaneous execution rows for this model.
+  // Initial resident directory capacity; fitting active requests demand-grow
+  // it.
   iree_host_size_t rows;
   // Successful overtakes per blocked oldest text request; zero is FIFO.
   iree_host_size_t admission_overtakes;

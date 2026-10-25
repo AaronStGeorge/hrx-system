@@ -54,7 +54,7 @@ void SourceTextServiceTest::SetUp() {
     IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
                                                   host_allocator_, &model_));
   }
-  auto server_options = loom_serve_http_server_options_default();
+  auto server_options = ServerOptions();
   IREE_ASSERT_OK(loom_serve_http_server_allocate(
       loom_serve_host_proactor_pool(host_), &server_options, host_allocator_,
       &server_));

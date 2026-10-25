@@ -119,8 +119,7 @@ static iree_status_t loom_serve_text_prepare(
     status = iree_vm_i32_from_variant(results[1], &shared_stage_count);
   }
   if (iree_status_is_ok(status) &&
-      (prefill_capacity < 1 ||
-       (uint64_t)prefill_capacity > options->context_capacity ||
+      (prefill_capacity < 1 || prefill_capacity > INT32_MAX ||
        shared_stage_count < 1 ||
        (iree_host_size_t)shared_stage_count >
            loom_serve_preparation_stage_count(source->preparation))) {

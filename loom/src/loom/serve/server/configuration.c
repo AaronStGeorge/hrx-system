@@ -291,12 +291,6 @@ static iree_status_t loom_serve_model_configuration_text(
   IREE_RETURN_IF_ERROR(
       loom_serve_model_configuration_size(&fields[DEFINITION_PREFILL_CAPACITY],
                                           1, 262144, &text->prefill_capacity));
-  // Cross-field checks require the canonical defaults from the selected card.
-  // Individual authored field bounds are already checked during admission.
-  if (!pending && text->prefill_capacity > text->context_capacity) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "prefill capacity exceeds context capacity");
-  }
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[DEFINITION_CHECKPOINT_CAPACITY], 0, INT32_MAX,
       &text->checkpoint_capacity));
