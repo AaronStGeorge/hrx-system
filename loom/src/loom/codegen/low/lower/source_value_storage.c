@@ -429,6 +429,17 @@ static void loom_low_lower_mark_source_memory_access_storage_demands(
   }
 }
 
+void loom_low_lower_require_source_memory_complete_byte_offset_storage(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* access) {
+  loom_low_lower_mark_value_storage_required(context, access->root_value_id);
+  const loom_low_lower_source_memory_t source_memory = {
+      .flags = LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_REUSE_VIEW_BASE,
+  };
+  loom_low_lower_mark_source_memory_access_storage_demands(
+      context, &source_memory, /*address_materializer=*/NULL, access);
+}
+
 static void loom_low_lower_mark_rule_storage_demands(
     loom_low_lower_context_t* context,
     const loom_low_lower_selected_plan_t* selected_plan) {
