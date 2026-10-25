@@ -209,6 +209,12 @@ iree_status_t loom_serve_weights_deactivate(loom_serve_weights_t* weights,
 loom_serve_memory_statistics_t loom_serve_weights_statistics(
     loom_serve_weights_t* weights);
 
+// Copies already-published reservation accounting without collecting native
+// operations. Admission can combine multiple plans and the shared range ledger
+// in one owner snapshot; callbacks do not mutate any of these counters.
+loom_serve_memory_usage_t loom_serve_weights_memory_usage(
+    const loom_serve_weights_t* weights);
+
 // Copies cumulative submission counters on the serialized activation owner.
 loom_serve_weight_activity_t loom_serve_weights_activity(
     const loom_serve_weights_t* weights);
@@ -226,7 +232,9 @@ bool loom_serve_weights_is_retired(loom_serve_weights_t* weights);
 
 // Cold outer-thread join of the ownership above, independent of readiness.
 // Live owners use the wake and query instead of waiting on a shared worker.
-void loom_serve_weights_await_retirement(loom_serve_weights_t* weights);
+// Cold workspace progress failures return only after all views have retired.
+iree_status_t loom_serve_weights_await_retirement(
+    loom_serve_weights_t* weights);
 
 // Destruction after is_retired or await_retirement proved every consumer and
 // activation view retired. Native unmapping/release is synchronous; no queue or

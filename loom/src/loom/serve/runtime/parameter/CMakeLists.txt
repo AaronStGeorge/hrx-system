@@ -59,7 +59,10 @@ loom_cc_library(
   DEPS
     ::weights
     iree::base
+    iree::base::threading
+    iree::hal
     loom::serve::runtime::execution
+    loom::serve::runtime::execution::workspace
     loom::serve::runtime::storage::memory
   PUBLIC
 )

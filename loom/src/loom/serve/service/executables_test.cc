@@ -22,16 +22,18 @@ namespace loom_serve::testing {
 
 class ExecutablesTest : public WeightsTest {
  protected:
+  virtual uint64_t SlabCount() const { return 2; }
+
   void SetUpDevice() override {
-    // Native geometry is known after device construction. Select a budget for
-    // two small roots, reusing the process-owned configurations throughout.
+    // Native geometry is known after device construction. Reuse the
+    // process-owned configurations for the required number of physical slabs.
     ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpDevice());
     if (GetParam()) {
       const uint64_t root_bytes = loom_serve_device_weight_geometry(
                                       loom_serve_device_group_at(group_, 0))
                                       .minimum_size;
-      IREE_ASSERT_OK(
-          AcquireWeightDeviceGroup(true, kSlabBytes, 2 * root_bytes, &group_));
+      IREE_ASSERT_OK(AcquireWeightDeviceGroup(
+          true, kSlabBytes, SlabCount() * root_bytes, &group_));
     }
   }
 
@@ -46,7 +48,7 @@ class ExecutablesTest : public WeightsTest {
       loom_serve_executables_release(executables_);
     }
     loom_serve_executables_retire(executables_);
-    loom_serve_executables_await_retirement(executables_);
+    IREE_EXPECT_OK(loom_serve_executables_await_retirement(executables_));
     IREE_EXPECT_OK(loom_serve_executables_free(executables_));
     loom_serve_program_free(control_);
     iree_vm_module_release(runner_);
@@ -56,7 +58,7 @@ class ExecutablesTest : public WeightsTest {
     loom_serve_parameter_sources_release(parameter_sources_);
     iree_vm_environment_free(environment_);
     loom_serve_parameter_bank_retire(bank_, nullptr, nullptr);
-    loom_serve_parameter_bank_await_retirement(bank_);
+    IREE_EXPECT_OK(loom_serve_parameter_bank_await_retirement(bank_));
     loom_serve_residency_free(residency_);
     IREE_EXPECT_OK(loom_serve_parameter_bank_free(bank_));
     iree_notification_deinitialize(&notification_);
@@ -477,7 +479,13 @@ TEST_P(ExecutablesTest, LayoutMismatchDoesNotPoisonSharedCode) {
   ASSERT_NO_FATAL_FAILURE(Execute(290));
 }
 
-TEST_P(ExecutablesTest, SharedCodeChecksEachRequestsWorkspaceLimit) {
+class WorkspaceExecutablesTest : public ExecutablesTest {
+ protected:
+  // Two parameter roots and a shared command workspace slab coexist.
+  uint64_t SlabCount() const override { return 3; }
+};
+
+TEST_P(WorkspaceExecutablesTest, SharedCodeChecksEachRequestsWorkspaceLimit) {
   IREE_ASSERT_OK(Create());
   IREE_ASSERT_OK(Select("domains_workspace", false));
   ASSERT_NO_FATAL_FAILURE(Execute(870, 9));
@@ -684,7 +692,7 @@ TEST_P(ExecutablesTest, PinnedBanksSurviveCodeEvictionAndDrainReloads) {
       loom_serve_executables_parameters(executables_).activity.activations, 4u);
 }
 
-TEST_P(ExecutablesTest, RepeatedDomainSharesOnePhysicalBank) {
+TEST_P(WorkspaceExecutablesTest, RepeatedDomainSharesOnePhysicalBank) {
   IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
   iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
   WriteCheckpoint(checkpoint.path(), 200);
@@ -846,5 +854,6 @@ TEST_P(ExecutablesTest, ReplacementRecordingsRetireBeforeCheckpointJoin) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Native, ExecutablesTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(Native, WorkspaceExecutablesTest, ::testing::Bool());
 
 }  // namespace loom_serve::testing

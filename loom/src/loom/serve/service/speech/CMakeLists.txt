@@ -157,6 +157,7 @@ loom_cc_library(
     loom::serve::runtime::execution
     loom::serve::runtime::host
     loom::serve::runtime::parameter::residency
+    loom::serve::runtime::storage::memory
     loom::serve::server::model_registration
     loom::serve::server::registry
     loom::serve::server::router

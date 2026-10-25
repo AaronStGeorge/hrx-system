@@ -335,13 +335,16 @@ bool loom_serve_executables_is_retired(loom_serve_executables_t* executables) {
   return retired;
 }
 
-void loom_serve_executables_await_retirement(
+iree_status_t loom_serve_executables_await_retirement(
     loom_serve_executables_t* executables) {
+  iree_status_t status = iree_ok_status();
   for (loom_serve_checkpoint_t* entry =
            executables ? executables->parameters.retired : NULL;
        entry; entry = entry->next) {
-    loom_serve_parameter_bank_await_retirement(entry->bank);
+    status = iree_status_join(
+        status, loom_serve_parameter_bank_await_retirement(entry->bank));
   }
+  return status;
 }
 
 iree_status_t loom_serve_executables_free(

@@ -7,6 +7,7 @@
 #include "loom/serve/service/finite/component.h"
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <cstdlib>
 #include <filesystem>
@@ -36,6 +37,8 @@ class ComponentOwner {
                     std::function<iree_status_t(bool*)> advance) {
     executor_ = loom_serve_host_executor(loom_serve_device_host(device));
     pool_ = loom_serve_device_memory_pool(device);
+    workspace_ = loom_serve_device_workspace(device);
+    cache_ = loom_serve_device_residency_cache(device);
     advance_ = std::move(advance);
     complete_ = false;
     released_ = false;
@@ -45,6 +48,8 @@ class ComponentOwner {
     if (pool_) {
       loom_serve_memory_pool_set_observer(pool_, Wake, this);
     }
+    loom_serve_workspace_set_observer(workspace_, observer());
+    loom_serve_residency_cache_set_observer(cache_, observer());
     Wake(this);
     std::unique_lock<std::mutex> lock(mutex_);
     condition_.wait(lock, [&] { return released_; });
@@ -61,17 +66,25 @@ class ComponentOwner {
                              const iree_task_worker_context_t* context,
                              iree_task_process_drain_result_t* result) {
     auto* owner = static_cast<ComponentOwner*>(process->user_data);
+    owner->status_ = iree_status_join(
+        owner->status_, loom_serve_workspace_advance(owner->workspace_));
+    owner->complete_ |= !iree_status_is_ok(owner->status_);
     if (!owner->complete_) {
       owner->status_ = owner->advance_(&owner->complete_);
       owner->complete_ |= !iree_status_is_ok(owner->status_);
     }
     const bool pending =
-        owner->pool_ && loom_serve_memory_pool_is_pending(owner->pool_);
+        loom_serve_workspace_is_pending(owner->workspace_) ||
+        (owner->pool_ && loom_serve_memory_pool_is_pending(owner->pool_));
     result->completed = owner->complete_ && !pending;
     if (result->completed && owner->pool_) {
       owner->status_ = iree_status_join(
           owner->status_, loom_serve_memory_pool_query_status(owner->pool_));
       loom_serve_memory_pool_set_observer(owner->pool_, nullptr, nullptr);
+    }
+    if (result->completed) {
+      loom_serve_workspace_set_observer(owner->workspace_, {});
+      loom_serve_residency_cache_set_observer(owner->cache_, {});
     }
     return iree_ok_status();
   }
@@ -87,6 +100,10 @@ class ComponentOwner {
   iree_task_executor_t* executor_ = nullptr;
   // Borrowed native-capacity owner, joined before releasing its wake target.
   loom_serve_memory_pool_t* pool_ = nullptr;
+  // Borrowed shared workspace whose cold requests progress on this owner.
+  loom_serve_workspace_t* workspace_ = nullptr;
+  // Borrowed admission owner, publishing retirement and capacity progress.
+  loom_serve_residency_cache_t* cache_ = nullptr;
   // Current serialized operation, retaining its captures through release.
   std::function<iree_status_t(bool*)> advance_;
   // Terminal outcome returned only after the executor releases the process.
@@ -105,9 +122,15 @@ class ComponentOwner {
 
 class FiniteComponentTest : public ::testing::Test {
  protected:
+  // Small physical quantum compatible with CPU and GPU mapping granularity.
+  static constexpr uint32_t kSlabSize = 64 * 1024;
+
   void SetUp() override {
     auto application_options = loom_serve_test_application_options_default();
-    application_options.slab_size = 65536;
+    application_options.slab_size = kSlabSize;
+    if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+      application_options.memory_limit = 4 * kSlabSize;
+    }
     loom_serve_test_application_t* application = nullptr;
     IREE_ASSERT_OK(loom_serve_test_application_acquire(
         &application_options, host_allocator_, &application));
@@ -143,6 +166,14 @@ class FiniteComponentTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    if (device_) {
+      loom_serve_residency_cache_set_observer(
+          loom_serve_device_residency_cache(device_), {});
+    }
+    if (gate_) {
+      IREE_EXPECT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
+      iree_hal_semaphore_release(gate_);
+    }
     if (consumer_) {
       IREE_EXPECT_OK(loom_serve_execution_drain(consumer_));
       loom_serve_execution_release(consumer_);
@@ -204,17 +235,19 @@ class FiniteComponentTest : public ::testing::Test {
     });
   }
 
-  void Submit(loom_serve_finite_model_t* model, size_t ordinal,
-              bool reject_after_gather = false) {
+  void PrepareBatch(loom_serve_finite_model_t* model, size_t ordinal,
+                    uint32_t output_length = 16,
+                    bool reject_after_gather = false) {
     iree_vm_buffer_t* input = nullptr;
-    IREE_ASSERT_OK(iree_vm_buffer_create(16, 16, host_allocator_, &input));
+    IREE_ASSERT_OK(iree_vm_buffer_create(20, 16, host_allocator_, &input));
     iree_byte_span_t bytes;
-    IREE_ASSERT_OK(iree_vm_buffer_map_write(input, 0, 16, &bytes));
+    IREE_ASSERT_OK(iree_vm_buffer_map_write(input, 0, 20, &bytes));
     for (uint32_t i = 0; i < 4; ++i) {
       iree_unaligned_store_le_f32(bytes.data + i * 4,
                                   static_cast<float>(i + 1 + ordinal * 4) *
                                       (reject_after_gather ? -1.0f : 1.0f));
     }
+    iree_unaligned_store_le_u32(bytes.data + 16, output_length);
     loom_serve_prepared_request_t prepared = {};
     IREE_ASSERT_OK(
         loom_serve_finite_model_prepare_request(model, input, &prepared));
@@ -227,10 +260,30 @@ class FiniteComponentTest : public ::testing::Test {
     }));
     iree_vm_buffer_release(prepared.bytes);
     iree_vm_buffer_release(input);
+  }
+
+  void Submit(loom_serve_finite_model_t* model, size_t ordinal,
+              uint32_t output_length = 16, bool reject_after_gather = false) {
+    ASSERT_NO_FATAL_FAILURE(
+        PrepareBatch(model, ordinal, output_length, reject_after_gather));
+    ASSERT_NO_FATAL_FAILURE(
+        SubmitPrepared(model, ordinal, reject_after_gather));
+  }
+
+  void Admit(loom_serve_finite_model_t* model) {
     loom_serve_residency_admission_t admission;
-    IREE_ASSERT_OK(loom_serve_residency_try_admit(
-        loom_serve_finite_model_residency(model), &admission));
+    IREE_ASSERT_OK(owner_.Run(device_, [&](bool* complete) {
+      auto status = loom_serve_residency_try_admit(
+          loom_serve_finite_model_residency(model), &admission);
+      *complete = admission != LOOM_SERVE_RESIDENCY_ADMISSION_DEFERRED;
+      return status;
+    }));
     ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+  }
+
+  void SubmitPrepared(loom_serve_finite_model_t* model, size_t ordinal,
+                      bool reject_after_gather = false) {
+    ASSERT_NO_FATAL_FAILURE(Admit(model));
     loom_serve_execution_frontier_t frontier;
     if (reject_after_gather) {
       IREE_EXPECT_STATUS_IS(
@@ -243,9 +296,11 @@ class FiniteComponentTest : public ::testing::Test {
         loom_serve_finite_model_submit(model, &results_[ordinal], &frontier));
     EXPECT_EQ(frontier.values[1], 0u);
     // Only this outer application thread joins device completion.
-    IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
-        {2, frontier.semaphores, frontier.values}, iree_infinite_timeout(),
-        IREE_ASYNC_WAIT_FLAG_NONE));
+    for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
+      IREE_ASSERT_OK(loom_serve_workspace_wait(
+          loom_serve_device_workspace(device_), frontier.semaphores[i],
+          frontier.values[i]));
+    }
     loom_serve_finite_model_complete(model);
   }
 
@@ -283,6 +338,53 @@ class FiniteComponentTest : public ::testing::Test {
     loom_serve_finite_result_release(std::exchange(results_[0], nullptr));
   }
 
+  void CheckDiscardedOutput(bool retire_producer) {
+    loom_serve_finite_model_t* model = nullptr;
+    IREE_ASSERT_OK(Prepare(component_, &model));
+    ASSERT_NO_FATAL_FAILURE(PrepareBatch(model, 0, 2 * kSlabSize));
+    ASSERT_NO_FATAL_FAILURE(Admit(model));
+    loom_serve_residency_admission_t admission;
+    loom_serve_execution_frontier_t ready;
+    IREE_ASSERT_OK(loom_serve_finite_model_submit(model, &results_[0], &ready));
+    loom_serve_finite_result_release(std::exchange(results_[0], nullptr));
+
+    loom_serve_finite_component_t* peer = nullptr;
+    IREE_ASSERT_OK(loom_serve_finite_component_allocate(
+        device_, &options_, owner_.observer(), host_allocator_, &peer));
+    loom_serve_finite_model_t* peer_model = nullptr;
+    IREE_ASSERT_OK(Prepare(peer, &peer_model));
+    ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, 2 * kSlabSize));
+    auto* peer_residency = loom_serve_finite_model_residency(peer_model);
+    IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
+    if (loom_serve_device_memory_pool(device_)) {
+      EXPECT_NE(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+    } else {
+      EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+    }
+    if (admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
+      IREE_ASSERT_OK(loom_serve_residency_await(peer_residency));
+      loom_serve_residency_release(peer_residency);
+    }
+    if (retire_producer) {
+      // Cancellation follows actual queue ownership, not failed readiness or
+      // result metadata lifetime. It need not call the successful completion.
+      IREE_ASSERT_OK(Retire(component_));
+      loom_serve_finite_component_free(std::exchange(component_, nullptr));
+    } else {
+      for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
+        IREE_ASSERT_OK(
+            loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+                                      ready.semaphores[i], ready.values[i]));
+      }
+      loom_serve_finite_model_complete(model);
+    }
+    ASSERT_NO_FATAL_FAILURE(SubmitPrepared(peer_model, 0));
+    ASSERT_NO_FATAL_FAILURE(CheckResult(0));
+    loom_serve_finite_result_release(std::exchange(results_[0], nullptr));
+    IREE_ASSERT_OK(Retire(peer));
+    loom_serve_finite_component_free(peer);
+  }
+
   // Allocation policy for this real source/JIT/device fixture.
   iree_allocator_t host_allocator_ = iree_allocator_system();
   // Borrowed physical owner shared by both tested components.
@@ -303,6 +405,10 @@ class FiniteComponentTest : public ::testing::Test {
   std::array<loom_serve_finite_result_t*, 2> results_ = {};
   // Independent consumer used after component release or reconstruction.
   loom_serve_execution_t* consumer_ = nullptr;
+  // Explicit final-consumer dependency, signalled even after a failed check.
+  iree_hal_semaphore_t* gate_ = nullptr;
+  // Final-output wakes observed after joining the consumer and callback.
+  std::atomic<uint64_t> output_wakes_{0};
   // Only the oracle observation downloads result payloads, after device reuse.
   std::array<float, 4> output_ = {};
 };
@@ -516,7 +622,7 @@ TEST_F(FiniteComponentTest, UnjoinedDemandReadsRetireWithRejectedInvocation) {
   ASSERT_NO_FATAL_FAILURE(UseDemandSources());
   loom_serve_finite_model_t* model = nullptr;
   IREE_ASSERT_OK(Prepare(component_, &model));
-  ASSERT_NO_FATAL_FAILURE(Submit(model, 0, true));
+  ASSERT_NO_FATAL_FAILURE(Submit(model, 0, 16, true));
   // Source rejected after submitting both reads, without joining either one.
   // Removal releases the source VM before waiting for captured storage users.
   IREE_ASSERT_OK(Retire(component_));
@@ -526,6 +632,95 @@ TEST_F(FiniteComponentTest, UnjoinedDemandReadsRetireWithRejectedInvocation) {
   IREE_ASSERT_OK(Prepare(component_, &model));
   ASSERT_NO_FATAL_FAILURE(Submit(model, 1));
   ASSERT_NO_FATAL_FAILURE(CheckResult(1, 4.0f));
+}
+
+TEST_F(FiniteComponentTest, PeerAdmissionWaitsForCapturedOutputRetirement) {
+  loom_serve_finite_model_t* model = nullptr;
+  IREE_ASSERT_OK(Prepare(component_, &model));
+  ASSERT_NO_FATAL_FAILURE(Submit(model, 0, 2 * kSlabSize));
+  EXPECT_EQ(loom_serve_finite_result_output_length(results_[0]), 2 * kSlabSize);
+  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  IREE_ASSERT_OK(iree_hal_semaphore_create(
+      loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
+      IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));
+  uint64_t gate_value = 1;
+  IREE_ASSERT_OK(
+      loom_serve_execution_barrier(consumer_, {1, &gate_, &gate_value}));
+  const auto row = loom_serve_finite_result_row(results_[0], 0, 0);
+  const iree_hal_transfer_operation_t download = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      .download =
+          {
+              .source_buffer = row.buffer,
+              .source_offset = row.offset,
+              .target = output_.data(),
+              .length = row.length,
+          },
+  };
+  uint64_t value = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_transfer(consumer_, 1, &download, &value));
+  loom_serve_finite_result_release(std::exchange(results_[0], nullptr));
+
+  loom_serve_finite_component_t* peer = nullptr;
+  IREE_ASSERT_OK(loom_serve_finite_component_allocate(
+      device_, &options_, owner_.observer(), host_allocator_, &peer));
+  loom_serve_finite_model_t* peer_model = nullptr;
+  IREE_ASSERT_OK(Prepare(peer, &peer_model));
+  auto* peer_residency = loom_serve_finite_model_residency(peer_model);
+  // Carried output plus peer input, output, and scratch crosses a workspace
+  // slab boundary. Adding the peer's weights then exceeds the ceiling.
+  ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, kSlabSize));
+  loom_serve_residency_admission_t admission;
+  IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
+  EXPECT_EQ(admission, loom_serve_device_memory_pool(device_)
+                           ? LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY
+                           : LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+  IREE_ASSERT_OK(Retire(component_));
+  loom_serve_finite_component_free(std::exchange(component_, nullptr));
+  // Removing the producer cannot return credit still held by another queue.
+  EXPECT_EQ(loom_serve_residency_cache_is_pending(
+                loom_serve_device_residency_cache(device_)),
+            loom_serve_device_memory_pool(device_) != nullptr);
+  if (admission != LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
+    IREE_ASSERT_OK(loom_serve_residency_try_admit(peer_residency, &admission));
+    EXPECT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY);
+  }
+  loom_serve_residency_cache_set_observer(
+      loom_serve_device_residency_cache(device_),
+      {[](void* user_data) {
+         static_cast<std::atomic<uint64_t>*>(user_data)->fetch_add(1);
+       },
+       &output_wakes_});
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
+  iree_hal_semaphore_release(std::exchange(gate_, nullptr));
+  IREE_ASSERT_OK(loom_serve_execution_drain(consumer_));
+  loom_serve_residency_cache_set_observer(
+      loom_serve_device_residency_cache(device_), {});
+  EXPECT_EQ(output_wakes_.load(),
+            loom_serve_device_memory_pool(device_) ? 1u : 0u);
+  EXPECT_FALSE(loom_serve_residency_cache_is_pending(
+      loom_serve_device_residency_cache(device_)));
+  if (admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
+    IREE_ASSERT_OK(loom_serve_residency_await(peer_residency));
+    loom_serve_residency_release(peer_residency);
+  }
+  for (uint32_t i = 0; i < output_.size(); ++i) {
+    EXPECT_EQ(output_[i], static_cast<float>((i + 1) * 2));
+  }
+  ASSERT_NO_FATAL_FAILURE(SubmitPrepared(peer_model, 0));
+  ASSERT_NO_FATAL_FAILURE(CheckResult(0));
+  loom_serve_finite_result_release(std::exchange(results_[0], nullptr));
+  IREE_ASSERT_OK(Retire(peer));
+  loom_serve_finite_component_free(peer);
+}
+
+TEST_F(FiniteComponentTest, DiscardedOutputKeepsProducerCreditUntilCompletion) {
+  ASSERT_NO_FATAL_FAILURE(CheckDiscardedOutput(false));
+}
+
+TEST_F(FiniteComponentTest, DiscardedOutputKeepsProducerCreditUntilRemoval) {
+  ASSERT_NO_FATAL_FAILURE(CheckDiscardedOutput(true));
 }
 
 }  // namespace

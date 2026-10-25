@@ -72,8 +72,7 @@ typedef struct loom_serve_preparation_t loom_serve_preparation_t;
 
 // Creates the source-facing "prepare" declaration capability. The caller
 // serializes begin/take with VM invocation and retains the module while linked.
-// No declaration storage is allocated until source code declares a stage or
-// source.
+// No declaration storage is allocated until the first source declaration.
 iree_status_t loom_serve_preparation_module_create(
     iree_vm_environment_t* environment, iree_allocator_t host_allocator,
     iree_vm_module_t** out_module);
@@ -83,6 +82,9 @@ enum loom_serve_preparation_flag_bits_e {
   // Cold construction prepares the declared roots; request choices reuse or
   // prepare compatible domains before recording.
   LOOM_SERVE_PREPARATION_FLAG_PARAMETERS = 1u << 0,
+  // Allows the service to capture a host memory-forecast entry point. The
+  // service owns that entry's signature and invokes it before scheduling work.
+  LOOM_SERVE_PREPARATION_FLAG_MEMORY_FORECAST = 1u << 1,
 };
 typedef uint32_t loom_serve_preparation_flags_t;
 
@@ -113,6 +115,7 @@ loom_serve_preparation_t* loom_serve_preparation_module_take(
 //   source(buffer directory, buffer path) -> i32 source
 //   source_append(i32 source, buffer directory, buffer path)
 //   parameter(i32 stage, i32 binding, i32 input, i32 source, buffer policy)
+//   memory_forecast(buffer root)
 // All string buffers exclude NUL bytes. Config values use the public loomc
 // textual value syntax; config_i64 formats signed decimal values. Parameter
 // sources join directory and path in the server filesystem namespace. source
@@ -130,6 +133,9 @@ loom_serve_preparation_t* loom_serve_preparation_module_take(
 // dispatch declares a buffer-only kernel with a source-specialized launch
 // configuration. stage declares a command program with parameter reflection.
 // No device compilation, allocation or parameter IO occurs here.
+// flags selects declaration capabilities; unsupported declarations fail at
+// their source call. memory_forecast selects one host entry in the control
+// program, not a command/kernel root or a compiler-enforced workspace limit.
 // On failure all partial declarations are released and *out_preparation is
 // NULL.
 // report receives copied compiler diagnostics independently of this outcome.
@@ -139,9 +145,9 @@ iree_status_t loom_serve_preparation_allocate(
     loomc_target_environment_t* target_environment,
     iree_vm_environment_t* environment, const loom_serve_sources_t* sources,
     iree_string_view_t source_path, iree_string_view_t entry,
-    iree_vm_variant_span_t arguments, iree_vm_variant_span_t results,
-    iree_vm_module_span_t libraries, loom_serve_compilation_report_t* report,
-    iree_allocator_t host_allocator,
+    loom_serve_preparation_flags_t flags, iree_vm_variant_span_t arguments,
+    iree_vm_variant_span_t results, iree_vm_module_span_t libraries,
+    loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
     loom_serve_preparation_t** out_preparation);
 
 void loom_serve_preparation_free(loom_serve_preparation_t* preparation);
@@ -168,6 +174,10 @@ uint32_t loom_serve_preparation_local_sources(
 // Requested owned bytes, including spare array capacity and copied strings.
 // NULL has no storage. This query does not traverse declarations.
 iree_host_size_t loom_serve_preparation_storage_size(
+    const loom_serve_preparation_t* preparation);
+
+// Borrowed source-selected host entry, or empty when none was declared.
+iree_string_view_t loom_serve_preparation_memory_forecast(
     const loom_serve_preparation_t* preparation);
 
 // Exact ordered declaration identity, including configuration spelling,

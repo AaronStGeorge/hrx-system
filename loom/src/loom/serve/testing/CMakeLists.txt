@@ -71,6 +71,7 @@ loom_cc_library(
     iree::base::threading
     iree::hal
     loom::serve::runtime::device
+    loom::serve::runtime::execution::workspace
     loom::serve::runtime::host
   TESTONLY
   PUBLIC

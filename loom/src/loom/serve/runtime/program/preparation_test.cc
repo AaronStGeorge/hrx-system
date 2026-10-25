@@ -54,8 +54,9 @@ TEST_F(PreparationTest, TextConfigurationCopiesValueSpelling) {
   IREE_ASSERT_OK(loom_serve_preparation_allocate(
       target_environment, environment, &sources,
       iree_make_cstring_view(FLAG_boundary_source), IREE_SV("text_config"),
-      iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
-      iree_vm_module_span_empty(), &compilation, host_allocator, &preparation));
+      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS, iree_vm_variant_span_empty(),
+      iree_vm_variant_span_empty(), iree_vm_module_span_empty(), &compilation,
+      host_allocator, &preparation));
   const auto* stage = loom_serve_preparation_stage(preparation, 0);
   EXPECT_EQ(stage->kind, LOOM_SERVE_PREPARATION_STAGE_COMMAND);
   ASSERT_EQ(stage->config.binding_count, 1);
@@ -67,8 +68,9 @@ TEST_F(PreparationTest, DirectDeclarationRetainsProductAndSpecialization) {
   IREE_ASSERT_OK(loom_serve_preparation_allocate(
       target_environment, environment, &sources,
       iree_make_cstring_view(FLAG_boundary_source), IREE_SV("direct_config"),
-      iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
-      iree_vm_module_span_empty(), &compilation, host_allocator, &preparation));
+      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS, iree_vm_variant_span_empty(),
+      iree_vm_variant_span_empty(), iree_vm_module_span_empty(), &compilation,
+      host_allocator, &preparation));
   ASSERT_EQ(loom_serve_preparation_stage_count(preparation), 1u);
   const auto* stage = loom_serve_preparation_stage(preparation, 0);
   EXPECT_EQ(stage->kind, LOOM_SERVE_PREPARATION_STAGE_DISPATCH);
@@ -83,9 +85,9 @@ TEST_F(PreparationTest, WorkspaceLimitConstrainsCompilerReflection) {
   IREE_ASSERT_OK(loom_serve_preparation_allocate(
       target_environment, environment, &sources,
       iree_make_cstring_view(FLAG_boundary_source),
-      IREE_SV("workspace_constrained"), iree_vm_variant_span_empty(),
-      iree_vm_variant_span_empty(), iree_vm_module_span_empty(), &compilation,
-      host_allocator, &preparation));
+      IREE_SV("workspace_constrained"), LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
+      iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
+      iree_vm_module_span_empty(), &compilation, host_allocator, &preparation));
   const auto* stage = loom_serve_preparation_stage(preparation, 0);
   EXPECT_EQ(stage->workspace_limit_bytes, 1073741824u);
   IREE_EXPECT_OK(loom_serve_preparation_stage_check_workspace(
@@ -114,9 +116,9 @@ TEST_F(PreparationTest, CatalogGrowthPreservesEveryDeclaration) {
   IREE_ASSERT_OK(loom_serve_preparation_allocate(
       target_environment, environment, &sources,
       iree_make_cstring_view(FLAG_boundary_source), IREE_SV("large_catalog"),
-      iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
-      iree_vm_module_span_empty(), &compilation, bounded_allocator,
-      &preparation));
+      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS, iree_vm_variant_span_empty(),
+      iree_vm_variant_span_empty(), iree_vm_module_span_empty(), &compilation,
+      bounded_allocator, &preparation));
   ASSERT_EQ(loom_serve_preparation_stage_count(preparation), 33);
   for (size_t i = 0; i < 33; ++i) {
     const auto* stage = loom_serve_preparation_stage(preparation, i);
@@ -179,8 +181,9 @@ TEST_F(PreparationTest, IndependentSourcesPreserveShardOrderAndDuplicateNames) {
   IREE_ASSERT_OK(loom_serve_preparation_allocate(
       target_environment, environment, &sources,
       iree_make_cstring_view(FLAG_boundary_source), IREE_SV("many_sources"),
-      iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
-      iree_vm_module_span_empty(), &compilation, host_allocator, &preparation));
+      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS, iree_vm_variant_span_empty(),
+      iree_vm_variant_span_empty(), iree_vm_module_span_empty(), &compilation,
+      host_allocator, &preparation));
   const auto* stage = loom_serve_preparation_stage(preparation, 0);
   ASSERT_EQ(stage->parameter_count, 1);
   const auto& parameter = stage->parameters[0];
@@ -222,9 +225,11 @@ TEST_F(PreparationTest, InvalidDeclarationsReleasePartialOwnership) {
         loom_serve_preparation_allocate(
             target_environment, environment, &sources,
             iree_make_cstring_view(FLAG_boundary_source),
-            iree_make_cstring_view(test.entry), iree_vm_variant_span_empty(),
-            iree_vm_variant_span_empty(), iree_vm_module_span_empty(),
-            &compilation, host_allocator, &preparation));
+            iree_make_cstring_view(test.entry),
+            LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
+            iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
+            iree_vm_module_span_empty(), &compilation, host_allocator,
+            &preparation));
     EXPECT_EQ(preparation, nullptr);
   }
 }
@@ -238,6 +243,7 @@ TEST_F(PreparationTest, EmbeddedNulCannotTruncateDeclarationStrings) {
         loom_serve_preparation_allocate(
             target_environment, environment, &sources,
             iree_make_cstring_view(FLAG_boundary_source), IREE_SV("nul_string"),
+            LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
             iree_vm_variant_span_from_array(arguments),
             iree_vm_variant_span_empty(), iree_vm_module_span_empty(),
             &compilation, host_allocator, &preparation));
@@ -258,7 +264,8 @@ class PreparationCaptureTest : public PreparationTest {
                                         IREE_SV("shared_source"),
                                         IREE_SV("cold_source"),
                                         IREE_SV("bind_source"),
-                                        IREE_SV("append_source")};
+                                        IREE_SV("append_source"),
+                                        IREE_SV("declare_forecast")};
     IREE_ASSERT_OK(loom_serve_program_allocate(
         target_environment, environment, &sources,
         iree_make_cstring_view(FLAG_boundary_source), IREE_ARRAYSIZE(roots),
@@ -371,6 +378,47 @@ TEST_F(PreparationCaptureTest, EmptyCaptureNeedsNoDeclarationStorage) {
   EXPECT_EQ(loom_serve_preparation_storage_size(preparation), 0u);
   EXPECT_TRUE(loom_serve_preparation_equal(preparation, nullptr));
   EXPECT_TRUE(loom_serve_preparation_code_equal(preparation, nullptr));
+}
+
+TEST_F(PreparationCaptureTest, ForecastBelongsToColdControlNotDeviceIdentity) {
+  iree_vm_variant_t arguments[] = {iree_vm_variant_from_i32(0)};
+  loom_serve_preparation_module_begin(module, 0, nullptr, 0);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Invoke(IREE_SV("declare_forecast"),
+                               iree_vm_variant_span_from_array(arguments)));
+  EXPECT_EQ(loom_serve_preparation_module_take(module), nullptr);
+  const iree_status_code_t expected[] = {
+      IREE_STATUS_OK, IREE_STATUS_INVALID_ARGUMENT,
+      IREE_STATUS_INVALID_ARGUMENT, IREE_STATUS_ALREADY_EXISTS, IREE_STATUS_OK};
+  for (int32_t mode = 0; mode < IREE_ARRAYSIZE(expected); ++mode) {
+    SCOPED_TRACE(mode);
+    arguments[0] = iree_vm_variant_from_i32(mode);
+    loom_serve_preparation_module_begin(
+        module, 0, nullptr, LOOM_SERVE_PREPARATION_FLAG_MEMORY_FORECAST);
+    IREE_EXPECT_STATUS_IS(expected[mode],
+                          Invoke(IREE_SV("declare_forecast"),
+                                 iree_vm_variant_span_from_array(arguments)));
+    auto* captured = loom_serve_preparation_module_take(module);
+    if (!mode) {
+      preparation = captured;
+    } else if (mode == 4) {
+      second = captured;
+    } else {
+      loom_serve_preparation_free(captured);
+    }
+  }
+  ASSERT_NE(preparation, nullptr);
+  ASSERT_NE(second, nullptr);
+  EXPECT_FALSE(loom_serve_preparation_equal(preparation, second));
+  EXPECT_TRUE(loom_serve_preparation_code_equal(preparation, second));
+  loom_serve_program_free(program);
+  program = nullptr;
+  iree_vm_module_release(module);
+  module = nullptr;
+  const auto root = loom_serve_preparation_memory_forecast(preparation);
+  EXPECT_EQ(std::string(root.data, root.size), "stage_root");
+  const auto other = loom_serve_preparation_memory_forecast(second);
+  EXPECT_EQ(std::string(other.data, other.size), "feature.enabled");
 }
 
 TEST_F(PreparationCaptureTest, IdentityAndStorageBelongToOwnedDeclarations) {

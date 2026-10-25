@@ -1458,12 +1458,18 @@ iree_status_t loom_serve_weights_import_readiness(
 }
 
 iree_status_t loom_serve_weights_await(loom_serve_weights_t* weights) {
-  iree_status_t status = iree_hal_semaphore_list_wait(
-      (iree_hal_semaphore_list_t){weights->activation.count,
-                                  weights->activation.semaphores,
-                                  weights->activation.values},
-      iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE);
-  loom_serve_retirement_await(&weights->activation.retirement);
+  iree_status_t status = iree_ok_status();
+  // Every accepted lane must retire even if another lane fails. The outer
+  // owner also services cold staging requests from those queues.
+  for (iree_host_size_t i = 0; i < weights->activation.count; ++i) {
+    status = iree_status_join(
+        status, loom_serve_workspace_wait(weights->workspace,
+                                          weights->activation.semaphores[i],
+                                          weights->activation.values[i]));
+  }
+  status = iree_status_join(
+      status, loom_serve_workspace_await_retirement(
+                  weights->workspace, &weights->activation.retirement));
   loom_serve_weights_await_backing(weights);
   return iree_status_join(
       status, iree_status_clone(weights->activation.backing_status));
@@ -1541,6 +1547,17 @@ loom_serve_memory_statistics_t loom_serve_weights_statistics(
   return weights->statistics;
 }
 
+loom_serve_memory_usage_t loom_serve_weights_memory_usage(
+    const loom_serve_weights_t* weights) {
+  return (loom_serve_memory_usage_t){
+      .reserved_bytes = weights->statistics.reserved_bytes,
+      .committed_bytes = weights->statistics.committed_bytes,
+      .pending_bytes = weights->statistics.pending_bytes,
+      .releasing_bytes = weights->statistics.releasing_bytes,
+      .released_bytes = weights->statistics.released_bytes,
+  };
+}
+
 loom_serve_weight_activity_t loom_serve_weights_activity(
     const loom_serve_weights_t* weights) {
   return weights->activity;
@@ -1571,13 +1588,18 @@ bool loom_serve_weights_is_retired(loom_serve_weights_t* weights) {
           loom_serve_retirement_is_idle(&weights->activation.retirement));
 }
 
-void loom_serve_weights_await_retirement(loom_serve_weights_t* weights) {
-  if (weights) {
-    loom_serve_weights_await_backing(weights);
-    loom_serve_memory_operation_await(weights->deactivation);
-    loom_serve_retirement_await(&weights->retirement);
-    loom_serve_retirement_await(&weights->activation.retirement);
+iree_status_t loom_serve_weights_await_retirement(
+    loom_serve_weights_t* weights) {
+  if (!weights) {
+    return iree_ok_status();
   }
+  loom_serve_weights_await_backing(weights);
+  loom_serve_memory_operation_await(weights->deactivation);
+  iree_status_t status = loom_serve_workspace_await_retirement(
+      weights->workspace, &weights->retirement);
+  return iree_status_join(
+      status, loom_serve_workspace_await_retirement(
+                  weights->workspace, &weights->activation.retirement));
 }
 
 iree_status_t loom_serve_weights_free(loom_serve_weights_t* weights) {

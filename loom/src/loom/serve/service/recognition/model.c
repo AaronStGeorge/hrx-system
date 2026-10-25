@@ -50,8 +50,6 @@ typedef struct loom_serve_recognition_invocation_t {
   iree_vm_buffer_t* payload;
   // Stable resident row, independent of its ordinal in any numerical batch.
   iree_host_size_t row_index;
-  // State admission result retained through activation readiness.
-  loom_serve_memory_admission_t admission;
   // Source next-work bytes, refreshed at each retired model selection cut.
   iree_vm_buffer_t* work;
   // Input position acknowledged by successfully retired source work.
@@ -309,7 +307,8 @@ iree_status_t loom_serve_recognition_model_free(
   loom_serve_recognition_model_retire(model, NULL, NULL);
   iree_status_t status = loom_serve_execution_drain(model->execution);
   for (iree_host_size_t i = 0; i < model->weights.count; ++i) {
-    loom_serve_weights_await_retirement(model->weights.plans[i]);
+    status = iree_status_join(
+        status, loom_serve_weights_await_retirement(model->weights.plans[i]));
   }
   loom_serve_rows_await_retirement(&model->state);
   return iree_status_join(
@@ -359,7 +358,8 @@ static iree_status_t loom_serve_recognition_prepare(
         loom_serve_host_target_environment(
             loom_serve_device_host(model->owner)),
         model->control.environment, &options->sources, options->sources.prepare,
-        IREE_SV("prepare"), iree_vm_variant_span_from_array(arguments),
+        IREE_SV("prepare"), LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
+        iree_vm_variant_span_from_array(arguments),
         iree_vm_variant_span_from_array(results),
         (iree_vm_module_span_t){modules, 2}, &model->compilation,
         host_allocator, &model->preparation);
@@ -596,6 +596,25 @@ static iree_status_t loom_serve_recognition_create_control(
                                  options, host_allocator, &native_modules[0]);
   }
   iree_allocator_free(host_allocator, stages);
+  if (iree_status_is_ok(status)) {
+    uint64_t private_bytes = model->batch_input_capacity;
+    if (!iree_checked_add_u64(private_bytes, model->output_capacity,
+                              &private_bytes) ||
+        !iree_checked_add_u64(
+            private_bytes,
+            loom_serve_module_workspace_requirement(native_modules[0])
+                .allocation_size,
+            &private_bytes)) {
+      status =
+          iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                           "recognition working set exceeds address space");
+    } else {
+      // One serialized numerical cohort serves all resident rows. State is
+      // admitted separately as an exact range union; scratch is charged once.
+      status = loom_serve_residency_prepare_working_set(model->residency,
+                                                        private_bytes, 0);
+    }
+  }
   if (iree_status_is_ok(status)) {
     status = loom_serve_input_module_create(model->control.environment,
                                             model->tokenizer, host_allocator,
@@ -1257,72 +1276,58 @@ static iree_status_t loom_serve_recognition_generator_admit(
   *out_frontier = (loom_serve_execution_frontier_t){0};
   loom_serve_recognition_model_t* model = self;
   loom_serve_recognition_invocation_t* invocation = opaque_invocation;
-  IREE_RETURN_IF_ERROR(
-      loom_serve_residency_try_admit(model->residency, out_admission));
+  IREE_RETURN_IF_ERROR(loom_serve_rows_try_reserve(
+      &model->state, invocation->row_index, model->residency, out_admission));
   if (*out_admission != LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
     return iree_ok_status();
   }
-  // Activation already owns a pin and may have accepted device work. Even a
-  // state-capacity denial retains that pin until complete_admit.
-  IREE_RETURN_IF_ERROR(loom_serve_rows_try_reserve(
-      &model->state, invocation->row_index, &invocation->admission));
-  if (invocation->admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
-    iree_const_byte_span_t payload;
+  iree_const_byte_span_t payload;
+  IREE_RETURN_IF_ERROR(iree_vm_buffer_map_read(
+      invocation->payload, 0, iree_vm_buffer_length(invocation->payload),
+      &payload));
+  iree_hal_transfer_operation_t uploads[2];
+  iree_host_size_t upload_count = 0;
+  if (payload.data_length) {
+    uploads[upload_count++] = (iree_hal_transfer_operation_t){
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
+        .upload = {
+            .source = payload.data,
+            .target_buffer =
+                loom_serve_rows_buffer(&model->state, LOOM_SERVE_ROWS_INPUT),
+            .target_offset = invocation->row_index * model->input_capacity,
+            .length = payload.data_length}};
+  }
+  if (!model->conditioning_initialized) {
+    iree_const_byte_span_t initial;
     IREE_RETURN_IF_ERROR(iree_vm_buffer_map_read(
-        invocation->payload, 0, iree_vm_buffer_length(invocation->payload),
-        &payload));
-    iree_hal_transfer_operation_t uploads[2];
-    iree_host_size_t upload_count = 0;
-    if (payload.data_length) {
+        model->control.initial_conditioning, 0,
+        iree_vm_buffer_length(model->control.initial_conditioning), &initial));
+    if (initial.data_length) {
       uploads[upload_count++] = (iree_hal_transfer_operation_t){
           .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
-          .upload = {
-              .source = payload.data,
-              .target_buffer =
-                  loom_serve_rows_buffer(&model->state, LOOM_SERVE_ROWS_INPUT),
-              .target_offset = invocation->row_index * model->input_capacity,
-              .length = payload.data_length}};
+          .upload = {.source = initial.data,
+                     .target_buffer = loom_serve_rows_buffer(
+                         &model->state, LOOM_SERVE_ROWS_CONDITIONING),
+                     .length = initial.data_length}};
     }
-    if (!model->conditioning_initialized) {
-      iree_const_byte_span_t initial;
-      IREE_RETURN_IF_ERROR(iree_vm_buffer_map_read(
-          model->control.initial_conditioning, 0,
-          iree_vm_buffer_length(model->control.initial_conditioning),
-          &initial));
-      if (initial.data_length) {
-        uploads[upload_count++] = (iree_hal_transfer_operation_t){
-            .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
-            .upload = {.source = initial.data,
-                       .target_buffer = loom_serve_rows_buffer(
-                           &model->state, LOOM_SERVE_ROWS_CONDITIONING),
-                       .length = initial.data_length}};
-      }
-    }
-    if (upload_count) {
-      uint64_t value = 0;
-      IREE_RETURN_IF_ERROR(loom_serve_execution_transfer(
-          model->execution, upload_count, uploads, &value));
-    }
-    // A failed timeline terminates the model; partial initialization is never
-    // published as a reusable cache entry by source completion.
-    model->conditioning_initialized = true;
   }
+  if (upload_count) {
+    uint64_t value = 0;
+    IREE_RETURN_IF_ERROR(loom_serve_execution_transfer(
+        model->execution, upload_count, uploads, &value));
+  }
+  // A failed timeline terminates the model; partial initialization is never
+  // published as a reusable cache entry by source completion.
+  model->conditioning_initialized = true;
   *out_frontier = loom_serve_execution_frontier(model->execution);
   return iree_ok_status();
 }
 
-static loom_serve_memory_admission_t
-loom_serve_recognition_generator_complete_admit(void* self,
-                                                void* opaque_invocation) {
+static void loom_serve_recognition_generator_complete_admit(
+    void* self, void* opaque_invocation) {
   loom_serve_recognition_model_t* model = self;
-  loom_serve_recognition_invocation_t* invocation = opaque_invocation;
   loom_serve_rows_complete_backing(&model->state);
-  if (invocation->admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE) {
-    loom_serve_residency_cancel_admission(model->residency);
-  } else {
-    loom_serve_residency_release(model->residency);
-  }
-  return invocation->admission;
+  loom_serve_residency_cancel_admission(model->residency);
 }
 
 static iree_status_t loom_serve_recognition_generator_prepare_work(
