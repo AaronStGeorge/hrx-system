@@ -57,7 +57,7 @@ typedef struct loom_serve_text_session_lifetime_t {
 typedef struct loom_serve_text_session_t {
   // Allocator for this session's reusable host storage.
   iree_allocator_t host_allocator;
-  // Borrowed private device row in the shared model residency.
+  // Borrowed private device row, bound by the owner before session publication.
   loom_serve_text_row_t* row;
   // Immutable history/output contract shared with the owning model.
   loom_serve_text_mode_t mode;
@@ -148,13 +148,13 @@ loom_serve_http_request_snapshot_t loom_serve_text_session_request_snapshot(
     const loom_serve_text_session_t* session);
 
 // Allocates reusable host tokens and, for generation, decoder/response storage.
-// The borrowed row and tokenizer outlive the session; encoding needs no
-// tokenizer. No device storage is acquired. The caller deinitializes the result
-// on success or failure.
+// The tokenizer outlives initialization; encoding needs no tokenizer. Device
+// storage is not acquired. The owner binds row before publishing the session.
+// The caller deinitializes the result on success or failure, even if unbound.
 iree_status_t loom_serve_text_session_initialize(
-    loom_serve_text_row_t* row, loom_serve_text_mode_t mode,
-    const iree_tokenizer_t* tokenizer, iree_host_size_t context_capacity,
-    iree_allocator_t host_allocator, loom_serve_text_session_t* out_session);
+    loom_serve_text_mode_t mode, const iree_tokenizer_t* tokenizer,
+    iree_host_size_t context_capacity, iree_allocator_t host_allocator,
+    loom_serve_text_session_t* out_session);
 
 // Releases host storage only. The caller has retired CPU borrowers and released
 // every consumer receipt; native row/reservation ownership remains with the

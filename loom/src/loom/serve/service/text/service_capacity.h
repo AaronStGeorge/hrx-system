@@ -14,9 +14,10 @@
 extern "C" {
 #endif
 
-// Cold growth borrows the model on a CPU task, then its queue frontier. Public
-// inspection continues to see the old directory until the owner publishes the
-// replacement. Existing records remain stable throughout either loan.
+// A CPU task prepares source/host storage without touching the shared pool.
+// The serialized owner submits native growth, then joins its queue frontier.
+// Public inspection sees the old directory until publication. Existing records
+// remain stable throughout either loan.
 typedef struct loom_serve_text_service_capacity_t {
   // Requested next capacity, independent of epoch shape and live KV extent.
   iree_host_size_t requested;
@@ -26,17 +27,16 @@ typedef struct loom_serve_text_service_capacity_t {
   loom_serve_text_session_t** sessions;
   // Owned zeroed readiness entries for the next directory.
   loom_serve_ready_span_t* ready;
-  // Whether native growth was submitted instead of deferred for a borrower.
-  bool submitted;
-  // Accepted native work, published by CPU task release.
-  loom_serve_execution_frontier_t frontier;
+  // Owned source preparation, null when a model borrower deferred growth.
+  loom_serve_text_resize_t* resize;
 } loom_serve_text_service_capacity_t;
 
 // Called after selection found no idle resident. A successful retired owner
 // starts amortized growth; accepted epochs and prepared continuations defer it.
 bool loom_serve_text_service_capacity_begin(loom_serve_text_service_t* service);
 
-// After successful CPU readiness, imports the submitted device frontier.
+// After CPU readiness, submits native growth on the shared pool's owner and
+// imports its device frontier. Never waits for native completion.
 iree_status_t loom_serve_text_service_capacity_await(
     loom_serve_text_service_t* service);
 

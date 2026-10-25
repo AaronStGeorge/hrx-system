@@ -268,11 +268,27 @@ TEST_F(GrowingTextServiceTest, GrowthKeepsLiveHistoriesHandlesAndCheckpoints) {
   const auto activity = loom_serve_text_model_weight_activity(model_);
   const auto initial = loom_serve_text_model_memory_statistics(model_);
   for (size_t capacity : {17u, 129u}) {
-    bool submitted = false;
+    const auto previous_count = loom_serve_text_model_row_count(model_);
+    const auto previous = loom_serve_text_model_memory_statistics(model_);
+    loom_serve_text_resize_t* resize = nullptr;
+    IREE_ASSERT_OK(
+        loom_serve_text_model_prepare_resize(model_, capacity, &resize));
+    ASSERT_NE(resize, nullptr);
+    // The worker prepares host state only. Pool accounting and visible model
+    // ownership remain unchanged until the serialized owner submits growth.
+    EXPECT_EQ(loom_serve_text_model_row_count(model_), previous_count);
+    EXPECT_EQ(loom_serve_text_model_row(model_, 0), original);
+    const auto prepared = loom_serve_text_model_memory_statistics(model_);
+    EXPECT_EQ(prepared.reserved_bytes, previous.reserved_bytes);
+    EXPECT_EQ(prepared.committed_bytes, previous.committed_bytes);
+    EXPECT_EQ(prepared.pending_bytes, previous.pending_bytes);
+    EXPECT_EQ(prepared.releasing_bytes, previous.releasing_bytes);
+    EXPECT_EQ(prepared.released_bytes, previous.released_bytes);
     loom_serve_execution_frontier_t frontier;
-    IREE_ASSERT_OK(loom_serve_text_model_submit_resize(model_, capacity,
-                                                       &submitted, &frontier));
-    ASSERT_TRUE(submitted);
+    auto status =
+        loom_serve_text_model_submit_resize(model_, resize, &frontier);
+    loom_serve_text_resize_free(resize);
+    IREE_ASSERT_OK(status);
     for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
       IREE_ASSERT_OK(loom_serve_workspace_wait(
           loom_serve_device_workspace(device_), frontier.semaphores[i],

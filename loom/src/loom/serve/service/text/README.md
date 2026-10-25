@@ -83,12 +83,14 @@ credited peers from advancing.
 
 Resident identities are independent of epoch shape. The initial `rows` value
 sizes a directory, not an admission ceiling. When all residents have borrowers,
-[capacity growth](service_capacity.h) evaluates source `resize_state` on the
-shared task pool at a retired model boundary. Existing session records and
-state IDs remain stable; the owner publishes new directory entries only after
-CPU release and the captured device frontier. Prepared media continuations
-defer growth until their address-dependent plans retire. The same model, JIT
-artifacts, and parameters serve the enlarged directory.
+[capacity growth](service_capacity.h) evaluates source `resize_state` and
+allocates host session records on the shared task pool at a retired model
+boundary. This worker does not touch shared memory-pool accounting. After CPU
+release, the serialized server owner submits native growth without waiting for
+device completion. Existing session records and state IDs remain stable; new
+directory entries publish only after the captured device frontier. Prepared
+media continuations defer growth until their address-dependent plans retire.
+The same model, JIT artifacts, and parameters serve the enlarged directory.
 
 Source returns new control state and the five ordinary storage records. Private
 views, recurrent slots, and cache planes are append-stable. Virtual reservations

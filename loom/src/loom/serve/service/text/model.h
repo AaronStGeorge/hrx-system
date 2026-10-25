@@ -333,16 +333,30 @@ iree_status_t loom_serve_text_model_complete_trim(
 iree_status_t loom_serve_text_model_trim(
     loom_serve_text_model_t* model, loom_serve_text_trim_result_t* out_result);
 
-// Enlarges the resident directory at a successful retired model frontier,
-// without changing programs, parameters, epoch shapes, or existing handles.
-// Source computes append-stable storage and preserves its host policy. Virtual
-// backing retains physical slabs; fixed backing copies at this cold boundary.
-// The owner excludes other CPU/device work through complete_resize. Prepared
-// continuations postpone growth without mutation (out_submitted is false).
-// Submission failure retains accepted work for normal model retirement.
-iree_status_t loom_serve_text_model_submit_resize(
+// Owned source layout and control state for one retired-frontier growth.
+typedef struct loom_serve_text_resize_t loom_serve_text_resize_t;
+
+// Evaluates append-stable source storage without changing model directories,
+// device bindings, or shared pool accounting. May run on a CPU worker with an
+// exclusive model VM borrow. Prepared continuations defer growth by returning
+// NULL. The caller excludes other model mutation through submission/completion
+// or frees the prepared result without submitting it.
+iree_status_t loom_serve_text_model_prepare_resize(
     loom_serve_text_model_t* model, iree_host_size_t row_count,
-    bool* out_submitted, loom_serve_execution_frontier_t* out_frontier);
+    loom_serve_text_resize_t** out_resize);
+
+// Releases unconsumed source results. Safe after submission on success/failure;
+// accepted native work retains everything it borrowed independently.
+void loom_serve_text_resize_free(loom_serve_text_resize_t* resize);
+
+// Applies a prepared growth on the serialized server/pool owner. Programs,
+// parameters, epoch shapes, and existing handles survive. Virtual backing
+// retains slabs; fixed backing copies at this cold boundary. Returns accepted
+// queue readiness without waiting. Submission failure retains accepted work
+// for normal model retirement. The prepared result is consumed, not freed.
+iree_status_t loom_serve_text_model_submit_resize(
+    loom_serve_text_model_t* model, loom_serve_text_resize_t* resize,
+    loom_serve_execution_frontier_t* out_frontier);
 
 // Called after ALL resize readiness succeeds, before admitting new residents.
 void loom_serve_text_model_complete_resize(loom_serve_text_model_t* model);

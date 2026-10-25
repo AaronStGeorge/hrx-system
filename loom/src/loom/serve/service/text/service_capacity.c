@@ -15,10 +15,9 @@ static iree_status_t loom_serve_text_service_capacity_run(void* user_data) {
   loom_serve_text_service_t* service = user_data;
   loom_serve_text_service_capacity_t* growth = &service->growth;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, loom_serve_text_model_submit_resize(service->model, growth->requested,
-                                              &growth->submitted,
-                                              &growth->frontier));
-  if (!growth->submitted) {
+      z0, loom_serve_text_model_prepare_resize(
+              service->model, growth->requested, &growth->resize));
+  if (!growth->resize) {
     IREE_TRACE_ZONE_END(z0);
     return iree_ok_status();
   }
@@ -42,7 +41,6 @@ static iree_status_t loom_serve_text_service_capacity_run(void* user_data) {
     if (iree_status_is_ok(status)) {
       ++growth->count;
       status = loom_serve_text_session_initialize(
-          loom_serve_text_model_row(service->model, i),
           service->scheduling.model_mode,
           loom_serve_text_model_tokenizer(service->model),
           service->scheduling.context_capacity, service->host_allocator,
@@ -74,11 +72,20 @@ bool loom_serve_text_service_capacity_begin(
 
 iree_status_t loom_serve_text_service_capacity_await(
     loom_serve_text_service_t* service) {
-  if (!service->growth.submitted) {
+  if (!service->growth.resize) {
     loom_serve_text_service_capacity_discard(service);
     return iree_ok_status();
   }
-  service->completion.frontier = service->growth.frontier;
+  const iree_status_t status = loom_serve_text_model_submit_resize(
+      service->model, service->growth.resize, &service->completion.frontier);
+  loom_serve_text_resize_free(service->growth.resize);
+  service->growth.resize = NULL;
+  IREE_RETURN_IF_ERROR(status);
+  for (iree_host_size_t i = service->row_count; i < service->growth.count;
+       ++i) {
+    service->growth.sessions[i]->row =
+        loom_serve_text_model_row(service->model, i);
+  }
   return loom_serve_text_await_work(service, TEXT_WORK_GROW);
 }
 
@@ -95,6 +102,7 @@ void loom_serve_text_service_capacity_publish(
 
 void loom_serve_text_service_capacity_discard(
     loom_serve_text_service_t* service) {
+  loom_serve_text_resize_free(service->growth.resize);
   for (iree_host_size_t i = service->row_count; i < service->growth.count;
        ++i) {
     loom_serve_text_session_deinitialize(service->growth.sessions[i]);

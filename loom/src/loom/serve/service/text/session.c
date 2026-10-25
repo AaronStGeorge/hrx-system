@@ -61,12 +61,11 @@ bool loom_serve_text_session_has_history(
 }
 
 iree_status_t loom_serve_text_session_initialize(
-    loom_serve_text_row_t* row, loom_serve_text_mode_t mode,
-    const iree_tokenizer_t* tokenizer, iree_host_size_t context_capacity,
-    iree_allocator_t host_allocator, loom_serve_text_session_t* out_session) {
+    loom_serve_text_mode_t mode, const iree_tokenizer_t* tokenizer,
+    iree_host_size_t context_capacity, iree_allocator_t host_allocator,
+    loom_serve_text_session_t* out_session) {
   *out_session = (loom_serve_text_session_t){
       .host_allocator = host_allocator,
-      .row = row,
       .mode = mode,
   };
   iree_string_builder_initialize(host_allocator, &out_session->response);
@@ -100,9 +99,6 @@ void loom_serve_text_session_release_request(
 }
 
 void loom_serve_text_session_deinitialize(loom_serve_text_session_t* session) {
-  if (!session->row) {
-    return;
-  }
   loom_serve_text_session_release_request(session);
   iree_allocator_free(session->host_allocator, session->decoder_storage.data);
   iree_allocator_free(session->host_allocator, session->tokens);

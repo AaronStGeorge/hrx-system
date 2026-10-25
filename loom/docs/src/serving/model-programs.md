@@ -293,8 +293,11 @@ exports `resize_state(control_state, resident_capacity)`, returning replacement
 control state followed by the same five storage records used at preparation.
 Existing private views, recurrent slots, and KV planes retain their byte offsets;
 only the resident directory, its tables, and append-only storage grow. The native
-owner joins accepted work before growth and publishes the replacement after its
-queue frontier completes. Programs and weights remain loaded. Virtual backing
+owner joins accepted model work before growth. A task evaluates source layout
+and allocates host session records, then the server owner submits native growth
+and publishes the replacement after its queue frontier completes. Other models
+remain schedulable throughout preparation and the asynchronous device wait.
+Programs and weights remain loaded. Virtual backing
 remaps the same physical slabs; fixed backing copies retained bytes at this cold
 boundary and temporarily requires both allocations. Unused virtual capacity does
 not acquire physical memory until request admission needs it.

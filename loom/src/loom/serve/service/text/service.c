@@ -739,11 +739,11 @@ static iree_status_t loom_serve_text_service_initialize(
     if (iree_status_is_ok(status)) {
       ++service->row_count;
       status = loom_serve_text_session_initialize(
-          loom_serve_text_model_row(service->model, i),
           service->scheduling.model_mode,
           loom_serve_text_model_tokenizer(service->model),
           service->scheduling.context_capacity, service->host_allocator,
           service->sessions[i]);
+      service->sessions[i]->row = loom_serve_text_model_row(service->model, i);
     }
   }
   return status;
@@ -1042,7 +1042,11 @@ static iree_status_t loom_serve_text_advance_work(
     if (work == TEXT_CPU_WORK_OUTPUT) {
       loom_serve_text_complete_output(service);
     } else if (work == TEXT_CPU_WORK_GROW) {
-      IREE_RETURN_IF_ERROR(loom_serve_text_service_capacity_await(service));
+      if (iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING)) {
+        loom_serve_text_service_capacity_discard(service);
+      } else {
+        IREE_RETURN_IF_ERROR(loom_serve_text_service_capacity_await(service));
+      }
       yield_preparation = true;
     }
   }

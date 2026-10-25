@@ -9,6 +9,26 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/service/text/model_instance.h"
 
+struct loom_serve_text_resize_t {
+  // Allocator for this prepared source result.
+  iree_allocator_t host_allocator;
+  // New resident directory capacity, independent of dispatch geometry.
+  iree_host_size_t row_count;
+  // Owned replacement source policy state, moved into the model at submission.
+  iree_vm_buffer_t* control_state;
+  // Validated source storage records; preparation acquires no device memory.
+  loom_serve_text_storage_t storage;
+};
+
+void loom_serve_text_resize_free(loom_serve_text_resize_t* resize) {
+  if (!resize) {
+    return;
+  }
+  iree_vm_buffer_release(resize->control_state);
+  loom_serve_text_storage_deinitialize(&resize->storage);
+  iree_allocator_free(resize->host_allocator, resize);
+}
+
 // Only resident bindings and origins scale here. Epoch packet/feedback buffers
 // stay bounded by the compiled cohort, not the number of retained histories.
 static iree_status_t loom_serve_text_resize_host_buffer(
@@ -32,12 +52,11 @@ static iree_status_t loom_serve_text_resize_host_buffer(
   return status;
 }
 
-iree_status_t loom_serve_text_model_submit_resize(
+iree_status_t loom_serve_text_model_prepare_resize(
     loom_serve_text_model_t* model, iree_host_size_t row_count,
-    bool* out_submitted, loom_serve_execution_frontier_t* out_frontier) {
+    loom_serve_text_resize_t** out_resize) {
   IREE_TRACE_ZONE_BEGIN(z0);
-  *out_submitted = false;
-  *out_frontier = (loom_serve_execution_frontier_t){0};
+  *out_resize = NULL;
   if (row_count <= model->row_count || row_count > INT32_MAX) {
     IREE_RETURN_AND_END_ZONE(
         z0, iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -47,22 +66,26 @@ iree_status_t loom_serve_text_model_submit_resize(
     IREE_TRACE_ZONE_END(z0);
     return iree_ok_status();
   }
+  loom_serve_text_resize_t* resize = NULL;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_allocator_malloc(model->host_allocator, sizeof(*resize),
+                                (void**)&resize));
+  resize->host_allocator = model->host_allocator;
+  resize->row_count = row_count;
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_borrowed(&model->source.vm_types,
                                                model->source.control_state),
       iree_vm_variant_from_i64((int64_t)row_count)};
   iree_vm_variant_t results[1 + LOOM_SERVE_TEXT_STORAGE_RESULT_COUNT] = {0};
-  iree_vm_buffer_t* control_state = NULL;
-  loom_serve_text_storage_t storage = {0};
   iree_status_t status = iree_vm_invoke(
       loom_serve_program_invocation(model->control.program),
       model->control.resize_state, iree_vm_variant_span_from_array(arguments),
       iree_vm_variant_span_from_array(results));
   if (iree_status_is_ok(status)) {
-    status = iree_vm_buffer_ptr_from_variant_move(&model->source.vm_types,
-                                                  &results[0], &control_state);
+    status = iree_vm_buffer_ptr_from_variant_move(
+        &model->source.vm_types, &results[0], &resize->control_state);
   }
-  if (iree_status_is_ok(status) && !control_state) {
+  if (iree_status_is_ok(status) && !resize->control_state) {
     status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "resized source control state must not be null");
   }
@@ -70,19 +93,30 @@ iree_status_t loom_serve_text_model_submit_resize(
     status = loom_serve_text_storage_initialize(
         &model->source.vm_types, results + 1, row_count,
         model->context_capacity, model->state.cache.capacity,
-        model->host_allocator, &storage);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_serve_text_state_resize(&model->state, model->device_owner,
-                                          row_count, &storage);
+        model->host_allocator, &resize->storage);
   }
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
-  loom_serve_text_storage_deinitialize(&storage);
+  if (iree_status_is_ok(status)) {
+    *out_resize = resize;
+  } else {
+    loom_serve_text_resize_free(resize);
+  }
+  IREE_RETURN_AND_END_ZONE(z0, status);
+}
+
+iree_status_t loom_serve_text_model_submit_resize(
+    loom_serve_text_model_t* model, loom_serve_text_resize_t* resize,
+    loom_serve_execution_frontier_t* out_frontier) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  *out_frontier = (loom_serve_execution_frontier_t){0};
+  const iree_host_size_t row_count = resize->row_count;
+  iree_status_t status = loom_serve_text_state_resize(
+      &model->state, model->device_owner, row_count, &resize->storage);
   if (iree_status_is_ok(status)) {
     iree_vm_buffer_release(model->source.control_state);
-    model->source.control_state = control_state;
-    control_state = NULL;
+    model->source.control_state = resize->control_state;
+    resize->control_state = NULL;
     status = loom_serve_text_resize_host_buffer(
         model, TEXT_HOST_STATE_BINDINGS, row_count * 4 * sizeof(int64_t), NULL);
   }
@@ -112,9 +146,7 @@ iree_status_t loom_serve_text_model_submit_resize(
       ++model->row_count;
     }
   }
-  iree_vm_buffer_release(control_state);
   if (iree_status_is_ok(status)) {
-    *out_submitted = true;
     *out_frontier = loom_serve_execution_frontier(model->execution);
   }
   IREE_RETURN_AND_END_ZONE(z0, status);

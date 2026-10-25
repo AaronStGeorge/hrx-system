@@ -136,6 +136,9 @@ TEST_F(TextServiceCapacityTest, StoppingJoinsAcceptedCapacityGrowth) {
   }));
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil(
       interface_, [&] { return Idle(); }, LOOM_SERVE_SERVICE_FLAG_STOPPING));
+  // Stopping joins the host task and discards its unbound session records;
+  // there is no reason to acquire native storage for cancelled demand.
+  EXPECT_EQ(loom_serve_text_model_row_count(model_), 4u);
   EXPECT_EQ(interface_.telemetry.counters->cancelled, 5u);
   EXPECT_EQ(interface_.telemetry.counters->failed, 0u);
   for (int client : clients) {
