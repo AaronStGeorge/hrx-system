@@ -992,7 +992,7 @@ static iree_status_t loom_serve_text_registration_create(
   const loom_serve_model_registration_options_t* options = self;
   const loom_serve_text_configuration_t* text = &configuration->text;
   const iree_host_size_t shape_count =
-      loom_serve_text_default_shapes(text->rows, text->prefill_capacity, NULL);
+      loom_serve_text_default_shapes(text->prefill_capacity, NULL);
   iree_host_size_t total = 0, shapes_offset = 0;
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
       sizeof(loom_serve_text_registration_t), &total,
@@ -1010,8 +1010,7 @@ static iree_status_t loom_serve_text_registration_create(
   registration->stream = stream;
   registration->shapes =
       (loom_serve_packing_shape_t*)((uint8_t*)registration + shapes_offset);
-  loom_serve_text_default_shapes(text->rows, text->prefill_capacity,
-                                 registration->shapes);
+  loom_serve_text_default_shapes(text->prefill_capacity, registration->shapes);
   const loom_serve_text_options_t model_options = {
       .mode = configuration->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE
                   ? LOOM_SERVE_TEXT_MODE_ENCODE

@@ -7,19 +7,16 @@
 #include "loom/serve/service/text/schedule.h"
 
 iree_host_size_t loom_serve_text_default_shapes(
-    iree_host_size_t row_count, iree_host_size_t token_capacity,
-    loom_serve_packing_shape_t* shapes) {
+    iree_host_size_t token_capacity, loom_serve_packing_shape_t* shapes) {
   iree_host_size_t count = 0;
   for (iree_host_size_t tokens = 1;;
        tokens = iree_min(tokens * 2, token_capacity)) {
-    for (iree_host_size_t spans = 1;; spans = iree_min(spans * 2, row_count)) {
-      if (spans <= tokens) {
-        if (shapes) {
-          shapes[count] = (loom_serve_packing_shape_t){tokens, spans};
-        }
-        ++count;
+    for (iree_host_size_t spans = 1;; spans = iree_min(spans * 2, tokens)) {
+      if (shapes) {
+        shapes[count] = (loom_serve_packing_shape_t){tokens, spans};
       }
-      if (spans == row_count) {
+      ++count;
+      if (spans == tokens) {
         break;
       }
     }

@@ -27,40 +27,34 @@ TEST(TextScheduleTest, DefaultCatalogCoversTheCapacityFamily) {
       capacities.push_back(tokens + 1);
     }
   }
-  for (iree_host_size_t rows :
-       {1u, 2u, 3u, 7u, 15u, 16u, 17u, 31u, 32u, 33u, 64u, 100u, 129u}) {
-    for (iree_host_size_t tokens : capacities) {
-      SCOPED_TRACE(rows);
-      SCOPED_TRACE(tokens);
-      const iree_host_size_t count =
-          loom_serve_text_default_shapes(rows, tokens, nullptr);
-      std::vector<loom_serve_packing_shape_t> shapes(count + 1);
-      EXPECT_EQ(loom_serve_text_default_shapes(rows, tokens, shapes.data()),
-                count);
-      ASSERT_GT(count, 0);
-      EXPECT_EQ(shapes[count].token_capacity, 0);
-      EXPECT_EQ(shapes[count].span_capacity, 0);
-      EXPECT_EQ(shapes[0].token_capacity, 1);
-      EXPECT_EQ(shapes[0].span_capacity, 1);
-      EXPECT_EQ(shapes[count - 1].token_capacity, tokens);
-      if (rows <= tokens) {
-        EXPECT_EQ(shapes[count - 1].span_capacity, rows);
-      }
-      for (iree_host_size_t i = 0; i < count; ++i) {
-        const auto shape = shapes[i];
-        EXPECT_LE(shape.token_capacity, tokens);
-        EXPECT_LE(shape.span_capacity, rows);
-        EXPECT_LE(shape.span_capacity, shape.token_capacity);
-        if (i) {
-          const auto previous = shapes[i - 1];
-          if (previous.token_capacity == shape.token_capacity) {
-            EXPECT_EQ(shape.span_capacity,
-                      iree_min(previous.span_capacity * 2, rows));
-          } else {
-            EXPECT_EQ(shape.token_capacity,
-                      iree_min(previous.token_capacity * 2, tokens));
-            EXPECT_EQ(shape.span_capacity, 1);
-          }
+  capacities.push_back(INT32_MAX);
+  for (iree_host_size_t tokens : capacities) {
+    SCOPED_TRACE(tokens);
+    const iree_host_size_t count =
+        loom_serve_text_default_shapes(tokens, nullptr);
+    std::vector<loom_serve_packing_shape_t> shapes(count + 1);
+    EXPECT_EQ(loom_serve_text_default_shapes(tokens, shapes.data()), count);
+    ASSERT_GT(count, 0);
+    EXPECT_EQ(shapes[count].token_capacity, 0);
+    EXPECT_EQ(shapes[count].span_capacity, 0);
+    EXPECT_EQ(shapes[0].token_capacity, 1);
+    EXPECT_EQ(shapes[0].span_capacity, 1);
+    EXPECT_EQ(shapes[count - 1].token_capacity, tokens);
+    EXPECT_EQ(shapes[count - 1].span_capacity, tokens);
+    for (iree_host_size_t i = 0; i < count; ++i) {
+      const auto shape = shapes[i];
+      EXPECT_LE(shape.token_capacity, tokens);
+      EXPECT_LE(shape.span_capacity, shape.token_capacity);
+      if (i) {
+        const auto previous = shapes[i - 1];
+        if (previous.token_capacity == shape.token_capacity) {
+          EXPECT_EQ(shape.span_capacity,
+                    iree_min(previous.span_capacity * 2, shape.token_capacity));
+        } else {
+          EXPECT_EQ(previous.span_capacity, previous.token_capacity);
+          EXPECT_EQ(shape.token_capacity,
+                    iree_min(previous.token_capacity * 2, tokens));
+          EXPECT_EQ(shape.span_capacity, 1);
         }
       }
     }
@@ -69,10 +63,10 @@ TEST(TextScheduleTest, DefaultCatalogCoversTheCapacityFamily) {
 
 TEST(TextScheduleTest, DefaultCatalogShrinksBothAxesWithLiveReadiness) {
   const iree_host_size_t shape_count =
-      loom_serve_text_default_shapes(16, 512, nullptr);
+      loom_serve_text_default_shapes(512, nullptr);
   std::vector<loom_serve_packing_shape_t> shapes(shape_count);
-  loom_serve_text_default_shapes(16, 512, shapes.data());
-  ASSERT_EQ(shape_count, 40);
+  loom_serve_text_default_shapes(512, shapes.data());
+  ASSERT_EQ(shape_count, 55);
   loom_serve_packed_span_t spans[16], scratch[16];
   for (iree_host_size_t active = 1; active <= 16; ++active) {
     for (iree_host_size_t minimum = 1; minimum <= 8; ++minimum) {
@@ -111,6 +105,39 @@ TEST(TextScheduleTest, DefaultCatalogShrinksBothAxesWithLiveReadiness) {
   EXPECT_EQ(shapes[shape].token_capacity, 512);
   EXPECT_EQ(shapes[shape].span_capacity, 16);
   EXPECT_EQ(spans[15].token_count, 452);
+}
+
+TEST(TextScheduleTest, SameCatalogFillsWiderCohortsAsResidentsGrow) {
+  const iree_host_size_t token_capacity = 128;
+  const iree_host_size_t shape_count =
+      loom_serve_text_default_shapes(token_capacity, nullptr);
+  std::vector<loom_serve_packing_shape_t> shapes(shape_count);
+  loom_serve_text_default_shapes(token_capacity, shapes.data());
+  for (iree_host_size_t residents : {1u, 4u, 17u, 65u, 100u, 129u, 257u}) {
+    SCOPED_TRACE(residents);
+    std::vector<loom_serve_ready_span_t> ready(residents, {1, 1});
+    std::vector<loom_serve_packed_span_t> spans(token_capacity);
+    std::vector<loom_serve_packed_span_t> scratch(token_capacity);
+    iree_host_size_t cursor = 0, shape = 0;
+    const iree_host_size_t expected = iree_min(residents, token_capacity);
+    EXPECT_EQ(loom_serve_pack_shapes(residents, ready.data(), shape_count,
+                                     shapes.data(), token_capacity, &cursor,
+                                     spans.data(), scratch.data(), &shape),
+              expected);
+    iree_host_size_t bucket = 1;
+    while (bucket < expected) {
+      bucket *= 2;
+    }
+    EXPECT_EQ(shapes[shape].token_capacity, bucket);
+    EXPECT_EQ(shapes[shape].span_capacity, bucket);
+    for (iree_host_size_t i = 0; i < expected; ++i) {
+      EXPECT_EQ(spans[i].row_index, i);
+      EXPECT_EQ(spans[i].token_count, 1);
+    }
+    if (residents > token_capacity) {
+      EXPECT_EQ(cursor, token_capacity);
+    }
+  }
 }
 
 TEST(TextScheduleTest, CompletionReservationCoversLegalWriteHighWater) {
