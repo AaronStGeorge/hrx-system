@@ -8,7 +8,8 @@
 
 #include <stdio.h>
 
-#include "loom/tooling/context/context.h"
+#include "loom/ir/context.h"
+#include "loom/ops/test/registry.h"
 #include "loom/tools/loom-check/main.h"
 #include "loom/tools/loom-check/source_low.h"
 #include "loom/transforms/cleanup/configured.h"
@@ -70,6 +71,20 @@ static iree_status_t loom_check_provider_append_requirement_providers(
   return iree_ok_status();
 }
 
+// Developer tools accept test.* syntax independently of the optional provider
+// that adds synthetic target descriptors, passes, and lowering rules.
+static iree_status_t loom_check_provider_register_test_dialect(
+    loom_context_t* context) {
+  if (loom_context_is_dialect_registered(context, LOOM_DIALECT_TEST)) {
+    return iree_ok_status();
+  }
+  return loom_test_dialect_register(context);
+}
+
+static const loom_target_provider_t kLoomCheckSyntaxProvider = {
+    .register_context = loom_check_provider_register_test_dialect,
+};
+
 static iree_status_t loom_check_provider_environment_state_initialize(
     const loom_check_provider_set_t* provider_set,
     loom_check_provider_environment_state_t* out_state) {
@@ -93,6 +108,8 @@ static iree_status_t loom_check_provider_environment_state_initialize(
         &out_state->target_provider_storage,
         provider_set->target_provider_set));
   }
+  IREE_RETURN_IF_ERROR(loom_target_provider_set_storage_append(
+      &out_state->target_provider_storage, &kLoomCheckSyntaxProvider));
   IREE_RETURN_IF_ERROR(
       iree_status_from_loomc(loomc_target_environment_create_from_provider_set(
           &out_state->target_provider_storage.provider_set,
@@ -103,17 +120,9 @@ static iree_status_t loom_check_provider_environment_state_initialize(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_provider_register_context(
-    void* user_data, loom_context_t* context) {
-  loom_check_provider_environment_state_t* state =
-      (loom_check_provider_environment_state_t*)user_data;
-  return loom_tooling_context_register_tool_dialects_with_target_environment(
-      state->native_target_environment, context);
-}
-
 int loom_check_provider_main(int argc, char** argv,
                              const loom_check_provider_set_t* provider_set,
-                             loom_input_provider_list_t input_providers) {
+                             loom_input_format_list_t input_formats) {
   loom_check_provider_environment_state_t state;
   iree_status_t status =
       loom_check_provider_environment_state_initialize(provider_set, &state);
@@ -124,12 +133,7 @@ int loom_check_provider_main(int argc, char** argv,
   }
 
   const loom_check_environment_t environment = {
-      .input_providers = input_providers,
-      .register_context =
-          {
-              .fn = loom_check_provider_register_context,
-              .user_data = &state,
-          },
+      .input_formats = input_formats,
       .target_environment = state.native_target_environment,
       .cleanup_pattern_provider_set =
           loom_cleanup_configured_pattern_provider_set(),

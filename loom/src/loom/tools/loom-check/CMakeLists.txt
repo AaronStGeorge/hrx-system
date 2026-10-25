@@ -35,7 +35,6 @@ loom_cc_library(
     "compile_diagnostics.h"
     "diagnostics.h"
     "execute.h"
-    "input.h"
     "low_emit.h"
     "low_report.h"
     "requirements.h"
@@ -47,7 +46,6 @@ loom_cc_library(
     "diagnostics.c"
     "emit.c"
     "execute.c"
-    "input.c"
     "low_emit.c"
     "low_report.c"
     "requirements.c"
@@ -75,16 +73,12 @@ loom_cc_library(
     loom::codegen::low::frame
     loom::codegen::low::function
     loom::codegen::low::function_model
-    loom::codegen::low::lower
     loom::codegen::low::operand_ties
     loom::codegen::low::packet_json
-    loom::codegen::low::pipeline::legalizer_registry
     loom::codegen::low::schedule
     loom::codegen::low::schedule::json
     loom::codegen::low::target_binding
     loom::codegen::low::text_asm
-    loom::codegen::low::verify
-    loom::codegen::pass_environment
     loom::error::diagnostic
     loom::error::emitter
     loom::error::error_defs
@@ -92,7 +86,6 @@ loom_cc_library(
     loom::error::parameter
     loom::error::renderer
     loom::error::source
-    loom::format::text::parser
     loom::format::text::printer
     loom::ir
     loom::ops::buffer
@@ -103,11 +96,9 @@ loom_cc_library(
     loom::ops::pipeline
     loom::ops::target
     loom::ops::type_registry
-    loom::pass::builtin_registry
     loom::pass::pipeline
     loom::pass::registry
     loom::pass::report
-    loom::pass::tooling
     loom::rewrite::rewriter
     loom::sanitizer::options
     loom::target::entry_selection
@@ -119,28 +110,25 @@ loom_cc_library(
     loom::target::math_policy
     loom::target::pipeline
     loom::target::pipeline_options
-    loom::target::predicate
     loom::target::provider
     loom::target::reporting::format
     loom::target::reporting::low
     loom::target::reporting::report
     loom::target::selection
-    loom::target::specialization
     loom::target::types
     loom::testing::test_diagnostic
     loom::testing::test_diagnostic_loomc
     loom::testing::test_diagnostic_native
     loom::testing::test_file
     loom::tooling::cli::loomc_diagnostic_json
-    loom::tooling::input
+    loom::tooling::input::format
+    loom::tooling::input::loomc
+    loom::tooling::io::module_format
     loom::tooling::io::source_path
-    loom::tools::loom-format::convert
-    loom::transforms::cleanup::patterns
     loom::util::diff
     loom::util::fact_table
     loom::util::json
     loom::util::stream
-    loom::verify
   PUBLIC
 )
 
@@ -156,7 +144,6 @@ loom_cc_library(
     ::report
     iree::base
     iree::base::internal::arena
-    loom::ir
     loom::testing::test_file
   TESTONLY
   PUBLIC
@@ -193,10 +180,8 @@ loom_cc_test(
     loom::binding::c::interop
     loom::binding::c::loomc
     loom::error::parameter
-    loom::ir
     loom::target::provider
     loom::target::test::provider
-    loom::testing::context
     loom::testing::test_file
     loom::transforms::cleanup::configured
 )
@@ -304,8 +289,8 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::io::file_handle
-    loom::ir
     loom::testing::test_file
+    loom::tooling::input::format
     loom::tooling::io::file
     loom::tooling::io::source_path
     loom::util::stream
@@ -318,6 +303,7 @@ loom_cc_test(
   SRCS
     "file_test.cc"
   DEPS
+    ::execute
     ::file
     iree::base
     iree::base::internal::arena
@@ -325,9 +311,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::testing::temp_file
-    loom::ir
+    loom::binding::c::interop
+    loom::binding::c::loomc
     loom::target::provider
-    loom::testing::context
 )
 
 iree_execution_test_suite(
@@ -362,7 +348,7 @@ loom_cc_library(
     loom::tooling::cli::help
     loom::tooling::cli::loomc_options
     loom::tooling::config::input
-    loom::tooling::context
+    loom::tooling::input::format
   PUBLIC
 )
 
@@ -379,9 +365,10 @@ loom_cc_library(
     iree::base
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::ir::builders
+    loom::ops::test
     loom::target::provider
-    loom::tooling::context
-    loom::tooling::input
+    loom::tooling::input::format
     loom::transforms::cleanup::configured
   PUBLIC
 )
@@ -488,7 +475,6 @@ loomc_cc_binary(
     loom::target::arch::cmd::check::check_provider
     loom::target::configured::compiler_provider_set
     loom::tooling::export::cxx::loom_check
-    loom::tooling::input::configured
     loom::tooling::input::loomc_configured
     ${_loom_check_platform_deps}
 )
@@ -564,7 +550,6 @@ loomc_cc_binary(
     loom::target::arch::cmd::check::check_provider
     loom::target::configured::compiler_provider_set
     loom::tooling::export::cxx::loom_check
-    loom::tooling::input::configured
     loom::tooling::input::loomc_configured
     ${_loom_check_test_platform_deps}
   TESTONLY
