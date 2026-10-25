@@ -23,8 +23,8 @@ load(
 load(
     "//runtime/requirements:defs.bzl",
     "AMDGPU_RESOURCE",
-    "HAL_AMD",
     "HAL_AMDGPU",
+    "HAL_AMD_GPU",
 )
 
 def amdgpu_execution_profile(
@@ -67,7 +67,7 @@ def amd_gpu_execution_profile(name, runner_args = [], tags = [], device = "amdgp
             TARGET_ARCH_AMDGPU,
             EMIT_AMDGPU,
             EXECUTE_IREE_HAL,
-            HAL_AMD,
+            HAL_AMD_GPU,
         ],
         executor = "hardware",
         resource_group = GPU_DEVICE_RESOURCE_GROUP,

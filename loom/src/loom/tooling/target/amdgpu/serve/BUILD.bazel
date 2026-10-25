@@ -145,7 +145,7 @@ _SERVING_DEVICES = [
         ":test_device_gpu",
         "amdgpu",
         [
-            "//runtime/config/hal:driver_amd",
+            "//runtime/config/hal:driver_amd_gpu",
             "//libamdf/config:enabled_setting",
             "//libamdf/config/family:gpu",
         ],
@@ -180,7 +180,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["test_device_gpu.c"],
     target_compatible_with = loom_config_compatible_with([
-        "//runtime/config/hal:driver_amd",
+        "//runtime/config/hal:driver_amd_gpu",
         "//libamdf/config:enabled_setting",
         "//libamdf/config/family:gpu",
     ]),

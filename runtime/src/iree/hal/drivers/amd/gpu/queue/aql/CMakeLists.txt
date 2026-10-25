@@ -373,7 +373,7 @@ iree_cc_library(
   PUBLIC
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     code
@@ -426,7 +426,7 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     ring
@@ -455,7 +455,7 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     ring_test
@@ -470,7 +470,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_binary_benchmark(
   NAME
     ring_benchmark
@@ -486,7 +486,7 @@ iree_cc_binary_benchmark(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     signal
@@ -503,7 +503,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     signal_test
@@ -524,7 +524,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     dispatch
@@ -540,7 +540,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     indirect
@@ -556,7 +556,7 @@ iree_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE AND AMDF_BUILD)
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA2_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX9_4_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_GENERIC_CORE AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX12_5_GENERIC_CORE AND IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     indirect_test
@@ -575,7 +575,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     dispatch_test
@@ -607,7 +607,7 @@ iree_cc_library(
   PUBLIC
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     command_buffer
@@ -631,7 +631,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     submission
@@ -669,7 +669,7 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     submission_test
@@ -693,7 +693,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     growth
@@ -711,7 +711,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     scratch
@@ -726,7 +726,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     queue
@@ -782,7 +782,7 @@ iree_cc_library(
   PUBLIC
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     queue_test
@@ -813,7 +813,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     program

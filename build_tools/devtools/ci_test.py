@@ -305,6 +305,22 @@ class CiTest(unittest.TestCase):
                         ci.platform_coverage_build_steps(step), expected_steps
                     )
 
+    def test_native_amd_engine_composition_matches_between_build_systems(self):
+        for drivers, gpu, xdna in (
+            ((), False, False),
+            (("amd",), True, True),
+            (("amd-gpu",), True, False),
+            (("amd-xdna",), False, True),
+            (("amd-gpu", "amd-xdna"), True, True),
+        ):
+            with self.subTest(drivers=drivers):
+                bazel = ci.bazel_configure_step(enabled_drivers=drivers).argv
+                cmake = ci.cmake_configure_step("example", enabled_drivers=drivers).argv
+                for engine, enabled in (("GPU", gpu), ("XDNA", xdna)):
+                    option = f"-DIREE_HAL_DRIVER_AMD_{engine}="
+                    self.assertEqual(option + "ON" in bazel, enabled)
+                    self.assertIn(option + ("ON" if enabled else "OFF"), cmake)
+
     def test_codec_policy_precedes_explicit_job_overrides(self):
         with mock.patch.object(ci, "codec_options", return_value=("--choice=default",)):
             override = ("--choice=job",)
