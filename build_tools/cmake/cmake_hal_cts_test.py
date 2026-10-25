@@ -37,7 +37,7 @@ class CMakeHalCtsTest(unittest.TestCase):
                     "-DCTS_COMPILED_CORPUS=ON",
                     f"-DCTS_EXTRA_TARGET={extra_target}",
                 )
-                build_project(build, "iree_fixture_probe")
+                build_project(build, "iree_hal_drivers_amd_gpu_cts_probe")
                 probe = (build / f"probe-{CONFIGURATION}.txt").read_text().strip()
                 run_command(probe, str(target_count))
                 self.assertEqual(len(list(build.glob("*_source_*.loombc"))), 3)
@@ -49,7 +49,7 @@ class CMakeHalCtsTest(unittest.TestCase):
                     .stat()
                     .st_mtime_ns
                 )
-                build_project(build, "iree_fixture_probe")
+                build_project(build, "iree_hal_drivers_amd_gpu_cts_probe")
                 self.assertEqual(
                     (build / "primary_corpus_first-exact/one.kernel.bin")
                     .stat()
@@ -59,9 +59,13 @@ class CMakeHalCtsTest(unittest.TestCase):
 
     def test_embedded_corpus_preserves_alias_registrations(self):
         with tempfile.TemporaryDirectory(prefix="hal cts ") as temporary:
-            build = Path(temporary)
+            # Match the package build-directory depth in repository CI. The
+            # fixture also uses the real qualified target and corpus names, so
+            # linking exercises MSVC's relative object-path limit.
+            root = Path(temporary)
+            build = root / ("b" * max(1, 120 - len(str(root)) - 1))
             configure_project(FIXTURE, build)
-            build_project(build, "iree_fixture_probe")
+            build_project(build, "iree_hal_drivers_amd_gpu_cts_probe")
             probe = (build / f"probe-{CONFIGURATION}.txt").read_text().strip()
             run_command(probe)
 

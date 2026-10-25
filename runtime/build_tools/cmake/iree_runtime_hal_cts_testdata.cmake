@@ -17,12 +17,17 @@ function(iree_runtime_hal_cts_testdata)
 
   string(REPLACE "-" "_" _IDENTIFIER "${_RULE_NAME}")
   string(REPLACE "." "_" _IDENTIFIER "${_IDENTIFIER}")
+  # CMake repeats the qualified target name in each object directory. Keep the
+  # private source basenames compact so MSVC can open the resulting link inputs.
+  string(SHA256 _FILE_KEY "${_RULE_NAME}")
+  string(SUBSTRING "${_FILE_KEY}" 0 16 _FILE_KEY)
+  set(_FILE_NAME "cts_${_FILE_KEY}")
   set(_DATA_NAME "${_RULE_NAME}_data")
   iree_c_embed_data(
     NAME "${_DATA_NAME}"
     SRCS ${_RULE_SRCS}
-    C_FILE_OUTPUT "${_DATA_NAME}.c"
-    H_FILE_OUTPUT "${_DATA_NAME}.h"
+    C_FILE_OUTPUT "${_FILE_NAME}.c"
+    H_FILE_OUTPUT "${_FILE_NAME}.h"
     IDENTIFIER "${_IDENTIFIER}"
     FLATTEN
     TESTONLY
@@ -36,7 +41,7 @@ function(iree_runtime_hal_cts_testdata)
   foreach(_FIELD HEADER_PATH IDENTIFIER TARGET_FAMILY TARGET_FUNC_NAME
       TARGET_KEY TARGET_NAME TARGET_VAR_NAME)
     if(_FIELD STREQUAL "HEADER_PATH")
-      set(_VALUE "${_DATA_NAME}.h")
+      set(_VALUE "${_FILE_NAME}.h")
     elseif(_FIELD STREQUAL "TARGET_FAMILY")
       set(_VALUE "${_RULE_TARGET_FAMILY}")
     elseif(_FIELD STREQUAL "TARGET_KEY")
@@ -51,7 +56,7 @@ function(iree_runtime_hal_cts_testdata)
   set(_REGISTRATIONS)
   set(_ORDINAL 0)
   foreach(_BACKEND IN LISTS _RULE_BACKEND_NAMES)
-    set(_REGISTRATION "${_RULE_NAME}_reg${_ORDINAL}.cc")
+    set(_REGISTRATION "${_FILE_NAME}_${_ORDINAL}.cc")
     math(EXPR _ORDINAL "${_ORDINAL} + 1")
     string(REPLACE "{BACKEND_NAME}" "${_BACKEND}" _REGISTRATION_CONTENT "${_CONTENT}")
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${_REGISTRATION}" "${_REGISTRATION_CONTENT}")

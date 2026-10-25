@@ -7,7 +7,7 @@ project(iree_cmake_hal_cts_test C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(IREE_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(IREE_PACKAGE_ROOT_PREFIX "iree/fixture")
+set(IREE_PACKAGE_ROOT_PREFIX "iree/hal/drivers/amd/gpu/cts")
 set(IREE_BUILD_TESTS ON)
 include("${IREE_REPO_ROOT}/build_tools/cmake/iree_macros.cmake")
 include("${IREE_REPO_ROOT}/build_tools/cmake/iree_copts.cmake")
@@ -51,15 +51,16 @@ else()
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/products")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/products/kernel.bin" "kernel bytes")
 iree_runtime_hal_cts_testdata(
-  NAME fixture-data
+  NAME asan_report_testdata_gfx12-5-generic
   SRCS "${CMAKE_CURRENT_BINARY_DIR}/products/kernel.bin"
   BACKEND_NAMES primary alias
   TARGET_NAME target
   TARGET_FAMILY family
   TARGET_KEY family:target
 )
-iree_cc_binary(NAME probe SRCS main.cc DEPS ::fixture-data)
+iree_cc_binary(NAME probe SRCS main.cc
+  DEPS ::asan_report_testdata_gfx12-5-generic)
 endif()
 iree_finalize_target_dependencies()
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/probe-$<CONFIG>.txt"
-  CONTENT "$<TARGET_FILE:iree_fixture_probe>\n")
+  CONTENT "$<TARGET_FILE:iree_hal_drivers_amd_gpu_cts_probe>\n")
