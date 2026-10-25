@@ -556,7 +556,10 @@ loom_cc_library_group(
     name = "construction_boundary_deps",
     testonly = True,
     visibility = ["//visibility:private"],
-    deps = [":type_builders"] + [
+    deps = [
+        ":type_builders",
+        "//loom/src/loom/pass:builder",
+    ] + [
         "//loom/src/loom/ops/%s:builders" % dialect
         for dialect in _DIALECTS
     ] + select({
@@ -582,6 +585,7 @@ loom_cc_library_group(
 
 iree_assert_dependency_boundary(
     name = "construction_dependency_boundary",
+    allowed_dependencies = ["//loom/src/loom/pass:builder"],
     forbidden_dependencies = [
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
