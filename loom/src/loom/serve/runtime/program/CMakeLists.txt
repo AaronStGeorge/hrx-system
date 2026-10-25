@@ -359,11 +359,17 @@ loom_cc_test(
   NAME
     program_test
   SRCS
+    "jit_vm_test.cc"
     "program_test.cc"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/binding.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/compilation/invalid.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/control.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/private_vm_helper.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/vm_helpers.loom"
   DEPS
     ::input
+    ::jit
     ::program
     iree::base
     iree::base::tooling::flags
@@ -375,6 +381,8 @@ loom_cc_test(
     loom::binding::c::target::vm
   ARGS
     "--binding_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/binding.loom}}"
+    "--vm_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/control.loom}}"
+    "--vm_invalid_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/compilation/invalid.loom}}"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

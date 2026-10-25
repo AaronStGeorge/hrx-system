@@ -172,10 +172,6 @@ loom_cc_library(
     "source_cache_test.cc"
   DEPS
     ::source_service_fixture
-    iree::base::internal::arena
-    iree::vm::test_support
-    loom::serve::media::image_codec
-    loom::serve::media::image_codecs
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -465,6 +461,36 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    chat_policy_test
+  SRCS
+    "chat_policy_test.cc"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/control.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/tokenizer.json"
+  DEPS
+    ::chat
+    ::input
+    iree::base
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm::test_support
+    loom::serve::media::image_codec
+    loom::serve::media::image_codecs
+    loom::serve::runtime::program::compilation
+    loom::serve::testing::text_policy
+    loom::util::stream
+  ENV
+    "LOOM_SERVE_TEST_CHAT_CONTROL={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/control.loom}}"
+    "LOOM_SERVE_TEST_CHAT_TOKENIZER={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/tokenizer.json}}"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

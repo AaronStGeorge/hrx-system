@@ -959,7 +959,6 @@ loom_cc_test(
         "//loom/src/loom/serve/runtime/program:testdata/jit/config.loom",
         "//loom/src/loom/serve/runtime/program:testdata/jit/control.loom",
         "//loom/src/loom/serve/runtime/program:testdata/jit/preparation.loom",
-        "//loom/src/loom/serve/runtime/program:testdata/jit/private_vm_helper.loom",
         "//loom/src/loom/serve/runtime/program:testdata/jit/stage.loom",
         "//loom/src/loom/serve/runtime/program:testdata/jit/vm_helpers.loom",
     ],
