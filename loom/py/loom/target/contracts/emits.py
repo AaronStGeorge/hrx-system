@@ -657,6 +657,7 @@ class EmitDescriptorOp:
                 materializer.add,
                 materializer.multiply,
                 materializer.shift_left,
+                materializer.increment,
                 materializer.multiply_add,
                 materializer.static_bias,
                 *(
@@ -1188,6 +1189,21 @@ def _validate_byte_offset_materializer(
                 input_carriers=(carrier, carrier),
                 result_carrier=carrier,
             )
+    if (materializer.increment is None) != (materializer.increment_immediate is None):
+        raise ValueError(
+            f"{source_op.name}: source-memory byte-offset increment descriptor "
+            "and immediate must be specified together"
+        )
+    if materializer.increment is not None:
+        _validate_materializer_descriptor(
+            source_op,
+            materializer.increment,
+            subject="source-memory byte-offset increment",
+            op_kind=DescriptorOpKind.OP,
+            input_carriers=(carrier,),
+            result_carrier=carrier,
+            bound_immediate=materializer.increment_immediate,
+        )
     if materializer.multiply_add is not None:
         _validate_materializer_descriptor(
             source_op,

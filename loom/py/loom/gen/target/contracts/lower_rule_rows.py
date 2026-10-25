@@ -510,12 +510,17 @@ def source_memory_byte_offset_materializer_row(
     immediate_string_ref: str,
     conversion_immediate_string_refs: Mapping[str, str],
 ) -> list[str]:
+    increment_immediate_ordinal = "LOOM_LOW_ID_NONE"
+    if row.increment is not None and row.increment_immediate is not None:
+        increment_immediate_ordinal = str(next(index for index, immediate in enumerate(row.increment.immediates) if immediate.field_name == row.increment_immediate))
     return [
         _source_memory_integer_conversion_rows(descriptor_refs, row.integer_conversions, conversion_immediate_string_refs),
         f".constant_immediate_string_ref = {immediate_string_ref}",
+        f".increment_immediate_ordinal = {increment_immediate_ordinal}",
         f".constant_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.constant)}",
         f".add_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.add)}",
         f".multiply_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.multiply)}",
+        f".increment_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.increment)}",
         f".multiply_add_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.multiply_add)}",
         f".static_bias_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.static_bias)}",
         f".shift_left_descriptor_ref = {_descriptor_ref_index(descriptor_refs, row.shift_left)}",
@@ -559,6 +564,7 @@ def descriptor_ref_keys(table: CompiledLowerRuleSet, source_contract: ContractFr
                     materializer.add,
                     materializer.multiply,
                     materializer.shift_left,
+                    materializer.increment,
                     materializer.multiply_add,
                     materializer.static_bias,
                     *(conversion.descriptor for conversion in materializer.integer_conversions),

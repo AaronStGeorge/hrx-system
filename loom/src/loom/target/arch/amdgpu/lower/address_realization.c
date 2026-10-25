@@ -411,7 +411,9 @@ typedef struct loom_amdgpu_global_address_replacement_t {
 } loom_amdgpu_global_address_replacement_t;
 
 static iree_status_t loom_amdgpu_apply_global_address_realizations(
-    loom_low_lower_context_t* context, const loom_op_t* source_op, void* data) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_realization_t* realization, void* data) {
+  (void)realization;
   const loom_amdgpu_global_address_replacement_t* replacement = data;
   loom_amdgpu_memory_access_t candidate = *replacement->access;
   candidate.address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT;
