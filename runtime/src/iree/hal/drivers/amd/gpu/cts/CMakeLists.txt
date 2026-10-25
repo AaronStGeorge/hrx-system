@@ -257,10 +257,14 @@ iree_cc_test(
   DEPS
     ::test_device
     ::testdata
+    iree::async
     iree::base
     iree::hal
     iree::hal::cts::util::pool_test_util
+    iree::hal::cts::util::test_base
     iree::hal::drivers::amd::gpu::image::asan_images
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::hal::drivers::amd::gpu::queue::signal
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
@@ -563,40 +567,192 @@ endif()
 if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_test(
   NAME
-    native_test
+    allocation_test
+  SRCS
+    "allocation_test.cc"
+  DEPS
+    ::test_device
+    iree::async
+    iree::base
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amd::fabric
+    iree::hal::drivers::amd::gpu::device
+    iree::hal::drivers::amd::gpu::image::hip_images
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::hal::drivers::amd::gpu::queue::signal
+    iree::hal::drivers::amd::status
+    iree::hal::memory::fixed_block_pool
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    aql_program_test
   SRCS
     "aql_program_test.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::base::internal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::context
+    iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::aql::program
+    iree::hal::drivers::amd::gpu::queue::aql::ring
+    iree::hal::drivers::amd::gpu::queue::user_queue
+    iree::hal::drivers::amd::status
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    dispatch_test
+  SRCS
     "dispatch_test.cc"
-    "native_test.cc"
-    "protocol_test.cc"
-    "queue_lifetime_test.cc"
-    "timestamp_test.cc"
   DEPS
     ::test_device
     ::testdata
-    amdf::amdf_static
-    amdf::headers
     iree::async
     iree::base
-    iree::base::internal
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amd::gpu::image::hip_images
+    iree::hal::drivers::amd::gpu::image::hsaco
+    iree::hal::drivers::amd::gpu::kernarg
+    iree::hal::drivers::amd::gpu::queue::aql::command_buffer
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    native_test
+  SRCS
+    "native_test.cc"
+  DEPS
+    ::test_device
+    iree::async
+    iree::base
     iree::hal
     iree::hal::cts::util::test_base
     iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::device
     iree::hal::drivers::amd::gpu::image::hip_images
-    iree::hal::drivers::amd::gpu::image::hsaco
-    iree::hal::drivers::amd::gpu::kernarg
-    iree::hal::drivers::amd::gpu::queue::aql::code
-    iree::hal::drivers::amd::gpu::queue::aql::command_buffer
-    iree::hal::drivers::amd::gpu::queue::aql::program
-    iree::hal::drivers::amd::gpu::queue::aql::ring
-    iree::hal::drivers::amd::gpu::queue::pm4::queue
     iree::hal::drivers::amd::gpu::queue::semaphore
     iree::hal::drivers::amd::gpu::queue::signal
-    iree::hal::drivers::amd::gpu::queue::user_queue
     iree::hal::drivers::amd::status
     iree::hal::memory::fixed_block_pool
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    protocol_test
+  SRCS
+    "protocol_test.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amd::gpu::context
+    iree::hal::drivers::amd::gpu::device
+    iree::hal::drivers::amd::gpu::queue::pm4::queue
+    iree::hal::drivers::amd::status
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    queue_lifetime_test
+  SRCS
+    "queue_lifetime_test.cc"
+  DEPS
+    ::test_device
+    iree::async
+    iree::base
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    timestamp_test
+  SRCS
+    "timestamp_test.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

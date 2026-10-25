@@ -208,6 +208,7 @@ amdf_cc_library(
     target_compatible_with = KFD_COMPATIBILITY,
     visibility = ["//libamdf/src/gpu/umd/kfd/target:__pkg__"],
     deps = [
+        ":buffer",
         ":device_state",
         "//libamdf/src:allocator",
         "//libamdf/src/platform/linux:file",

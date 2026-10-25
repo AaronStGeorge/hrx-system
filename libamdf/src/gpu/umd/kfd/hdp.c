@@ -13,6 +13,7 @@
 #include <sys/mman.h>
 
 #include "libamdf/src/allocator.h"
+#include "libamdf/src/gpu/umd/kfd/buffer.h"
 #include "libamdf/src/platform/linux/file.h"
 
 // Register access which completes a posted HDP flush write.
@@ -175,15 +176,8 @@ amdf_status_t amdf_gpu_kfd_hdp_create(amdf_gpu_umd_device_t* device,
                KFD_IOC_ALLOC_MEM_FLAGS_COHERENT,
   };
   if (amdf_status_is_ok(status)) {
-    amdf_gpu_kfd_device_lock_memory(device,
-                                    AMDF_GPU_KFD_MEMORY_PRIORITY_ACQUIRE);
-    const int result =
-        ioctl(device->descriptor, AMDKFD_IOC_ALLOC_MEMORY_OF_GPU, &allocate);
-    const int error = errno;
-    amdf_gpu_kfd_device_unlock_memory(device);
-    if (result != 0) {
-      status = amdf_linux_error(error);
-    } else {
+    status = amdf_gpu_kfd_buffer_allocate_native(device, &allocate);
+    if (amdf_status_is_ok(status)) {
       hdp->handle = allocate.handle;
       if (hdp->handle == 0) {
         status = amdf_linux_error(EPROTO);
