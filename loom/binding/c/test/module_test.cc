@@ -203,7 +203,8 @@ func.def @entry() {
   auto module =
       DeserializeTextModule(context.get(), workspace.get(), source.get());
   for (auto presentation : {LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT,
-                            LOOMC_MODULE_TEXT_PRESENTATION_GENERIC}) {
+                            LOOMC_MODULE_TEXT_PRESENTATION_GENERIC,
+                            LOOMC_MODULE_TEXT_PRESENTATION_PRESERVE}) {
     for (bool print_locations : {false, true}) {
       const loomc_module_serialize_options_t options = {
           .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,

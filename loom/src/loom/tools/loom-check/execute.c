@@ -32,7 +32,6 @@
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/input.h"
 #include "loom/tools/loom-check/requirements.h"
-#include "loom/tools/loom-format/convert.h"
 #include "loom/transforms/cleanup/patterns.h"
 #include "loom/util/diff.h"
 #include "loom/util/json.h"
@@ -272,7 +271,7 @@ iree_status_t loom_check_execute_case(
     }
     case LOOM_TEST_MODE_FORMAT: {
       IREE_RETURN_IF_ERROR(loom_check_execute_format(
-          test_case, filename, input_request, environment, context, block_pool,
+          test_case, filename, input_request, environment, block_pool,
           allocator, result));
       break;
     }
@@ -882,93 +881,4 @@ iree_status_t loom_check_execute_compile_report(
       test_case, case_index, report, filename, input_request, environment,
       context, block_pool, allocator, result,
       LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT);
-}
-
-iree_status_t loom_check_execute_format(
-    const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
-    const loom_check_environment_t* environment, loom_context_t* context,
-    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
-    loom_check_result_t* result) {
-  loom_module_format_t format = LOOM_MODULE_FORMAT_AUTO;
-  IREE_RETURN_IF_ERROR(loom_module_format_parse(test_case->format_target,
-                                                /*allow_auto=*/false, &format));
-
-  loom_check_diagnostic_capture_t diagnostic_capture = {
-      .detail = &result->detail,
-      .result = result,
-  };
-  const loom_target_low_descriptor_registry_t low_registry =
-      loom_target_environment_low_descriptor_registry(
-          environment->target_environment);
-  loom_text_low_asm_environment_t low_asm_environment = {0};
-  loom_low_descriptor_text_asm_environment_storage_t low_asm_storage = {0};
-  loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
-      &low_registry.registry,
-      loom_target_environment_low_asm_diagnostic_provider_list(
-          environment->target_environment),
-      &low_asm_storage, &low_asm_environment);
-  const loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
-                          .user_data = &diagnostic_capture},
-      .low_asm_environment = low_asm_environment,
-      .max_errors = 20,
-  };
-  loom_input_module_t input = {0};
-  iree_status_t status =
-      loom_check_load_input(test_case, input_request, environment, context,
-                            block_pool, &parse_options, allocator, &input);
-  if (iree_status_is_ok(status) && !input.module) {
-    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "input failed to produce a module");
-  }
-  if (iree_status_is_ok(status)) {
-    const loom_verify_options_t verify_options = {
-        .sink = parse_options.diagnostic_sink,
-        .source_resolver = loom_input_module_source_resolver(&input),
-    };
-    loom_verify_result_t verification = {0};
-    status = loom_verify_module(input.module, &verify_options, &verification);
-    if (iree_status_is_ok(status) && verification.error_count) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "input module failed verification");
-    }
-  }
-  loom_format_output_t formatted_output = {0};
-  if (iree_status_is_ok(status)) {
-    status = loom_format_write_module(
-        input.module, format,
-        LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_PRESERVE_LOW_ASM, block_pool,
-        low_asm_environment, &formatted_output, allocator);
-  }
-  loom_input_module_deinitialize(&input);
-
-  loom_format_output_t text_output = {0};
-  loom_format_convert_options_t to_text_options = {
-      .input_format = format,
-      .output_format = LOOM_MODULE_FORMAT_TEXT,
-      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
-                          .user_data = &diagnostic_capture},
-      .low_asm_environment = low_asm_environment,
-  };
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_format_convert(iree_make_const_byte_span(formatted_output.data,
-                                                      formatted_output.length),
-                            filename, context, block_pool, &to_text_options,
-                            &text_output, allocator);
-  }
-  loom_format_output_deinitialize(&formatted_output, allocator);
-
-  if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_string(
-        &result->actual_output,
-        iree_make_string_view((const char*)text_output.data,
-                              text_output.length));
-  }
-  loom_format_output_deinitialize(&text_output, allocator);
-  IREE_RETURN_IF_ERROR(status);
-  result->has_actual_output = true;
-
-  return loom_check_compare_output(test_case, allocator, result);
 }

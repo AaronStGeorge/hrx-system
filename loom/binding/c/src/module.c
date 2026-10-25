@@ -223,6 +223,7 @@ loomc_status_t loomc_module_validate_serialize_options(
     case LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT:
     case LOOMC_MODULE_TEXT_PRESENTATION_GENERIC:
     case LOOMC_MODULE_TEXT_PRESENTATION_LOW_ASM:
+    case LOOMC_MODULE_TEXT_PRESENTATION_PRESERVE:
       break;
     default:
       return loomc_make_status(

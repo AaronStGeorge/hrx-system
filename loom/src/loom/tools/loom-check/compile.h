@@ -42,9 +42,9 @@ typedef struct loom_check_compile_provider_t {
   void* import_user_data;
 } loom_check_compile_provider_t;
 
-// Lazily prepared public compiler state shared by checker cases. Initializing a
-// session does not construct a target environment, context, workspace, or
-// compiler; the first public compile operation prepares all four together.
+// Lazily prepared public compiler state shared by checker cases. The runner
+// supplies the retained target environment; the first use prepares the context,
+// workspace, and compiler together.
 typedef struct loom_check_compile_session_t {
   // Binary-owned compiler integrations used when the session is prepared.
   const loom_check_compile_provider_t* provider;
@@ -52,11 +52,11 @@ typedef struct loom_check_compile_session_t {
   iree_allocator_t host_allocator;
   // Retained public target environment composed by the checker runner.
   loomc_target_environment_t* target_environment;
-  // Public context, or NULL before the first compile operation.
+  // Public context, or NULL before the first use.
   loomc_context_t* context;
-  // Reusable invocation workspace, or NULL before the first compile operation.
+  // Reusable invocation workspace, or NULL before the first use.
   loomc_workspace_t* workspace;
-  // Prepared compiler, or NULL before the first compile operation.
+  // Prepared compiler, or NULL before the first use.
   loomc_compiler_t* compiler;
   // Cached empty, source-to-Low CFG, and source-to-Low structured programs.
   loomc_pass_program_t* artifact_pass_programs[3];

@@ -133,8 +133,8 @@ loom_cc_library(
     loom::testing::test_file
     loom::tooling::cli::loomc_diagnostic_json
     loom::tooling::input
+    loom::tooling::io::module_format
     loom::tooling::io::source_path
-    loom::tools::loom-format::convert
     loom::transforms::cleanup::patterns
     loom::util::diff
     loom::util::fact_table
