@@ -55,6 +55,11 @@ TEST_P(TextReservationTest,
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
       loom_serve_text_checkpoint_submit_suspend(checkpoint_, &frontier));
+  bool resizing = false;
+  IREE_ASSERT_OK(loom_serve_text_model_submit_resize(
+      model_, 2 * loom_serve_text_model_row_count(model_), &resizing,
+      &frontier));
+  EXPECT_FALSE(resizing);
 
   // Cancellation returns COW and cold-restore IDs without consuming the source.
   loom_serve_text_reservation_deinitialize(&reservation_);

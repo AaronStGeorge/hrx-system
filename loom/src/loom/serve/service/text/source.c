@@ -203,6 +203,7 @@ iree_status_t loom_serve_text_source_initialize(
                                                  IREE_SVL("encode_epoch"),
                                                  IREE_SVL("publish_epoch"),
                                                  IREE_SVL("encode_state"),
+                                                 IREE_SVL("resize_state"),
                                                  IREE_SVL("render_tool"),
                                                  IREE_SVL("prepare_input"),
                                                  IREE_SVL("output_next"),
@@ -216,14 +217,12 @@ iree_status_t loom_serve_text_source_initialize(
                                                  IREE_SVL("request_defaults"),
                                                  IREE_SVL("request_options"),
                                                  IREE_SVL("bind_request")};
-  const iree_string_view_t encoding_roots[] = {IREE_SVL("epoch"),
-                                               IREE_SVL("encode_epoch"),
-                                               IREE_SVL("publish_epoch"),
-                                               IREE_SVL("encode_state"),
-                                               IREE_SVL("bind_request"),
-                                               IREE_SVL("capture_epoch"),
-                                               IREE_SVL("request_defaults"),
-                                               IREE_SVL("request_options")};
+  const iree_string_view_t encoding_roots[] = {
+      IREE_SVL("epoch"),          IREE_SVL("encode_epoch"),
+      IREE_SVL("publish_epoch"),  IREE_SVL("encode_state"),
+      IREE_SVL("resize_state"),   IREE_SVL("bind_request"),
+      IREE_SVL("capture_epoch"),  IREE_SVL("request_defaults"),
+      IREE_SVL("request_options")};
   const bool encodes = options->mode == LOOM_SERVE_TEXT_MODE_ENCODE;
   return loom_serve_program_compile_service(
       target_environment, out_source->environment, &options->sources,

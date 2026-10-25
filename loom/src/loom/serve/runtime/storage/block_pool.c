@@ -32,6 +32,32 @@ void loom_serve_block_pool_deinitialize(loom_serve_block_pool_t* pool) {
   memset(pool, 0, sizeof(*pool));
 }
 
+iree_status_t loom_serve_block_pool_grow(loom_serve_block_pool_t* pool,
+                                         uint32_t capacity) {
+  if (capacity == pool->capacity) {
+    return iree_ok_status();
+  }
+  uint32_t* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+      pool->host_allocator, capacity, 2 * sizeof(*storage), (void**)&storage));
+  const uint32_t added = capacity - pool->capacity;
+  for (uint32_t i = 0; i < added; ++i) {
+    storage[i] = capacity - i - 1;
+  }
+  if (pool->capacity) {
+    memcpy(storage + added, pool->free_blocks,
+           pool->available * sizeof(*storage));
+    memcpy(storage + capacity, pool->references,
+           pool->capacity * sizeof(*storage));
+  }
+  iree_allocator_free(pool->host_allocator, pool->free_blocks);
+  pool->free_blocks = storage;
+  pool->references = storage + capacity;
+  pool->capacity = capacity;
+  pool->available += added;
+  return iree_ok_status();
+}
+
 void loom_serve_block_pool_acquire(loom_serve_block_pool_t* pool,
                                    uint32_t count, uint32_t* out_blocks) {
   for (uint32_t i = 0; i < count; ++i) {

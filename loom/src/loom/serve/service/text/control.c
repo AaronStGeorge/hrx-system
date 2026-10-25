@@ -161,6 +161,9 @@ iree_status_t loom_serve_text_control_initialize(
       buffer, buffer, i32,    i32,    i32,    i32,
       i32,    buffer, buffer, buffer, buffer, buffer};
   const iree_vm_signature_type_t state_arguments[] = {buffer, i32, buffer};
+  const iree_vm_signature_type_t resize_arguments[] = {buffer, i64};
+  const iree_vm_signature_type_t resize_results[] = {buffer, buffer, buffer,
+                                                     buffer, buffer, buffer};
   const iree_vm_signature_type_t epoch_arguments[] = {
       buffer,        i32,           i32,           i32,           i32,
       i32,           i32,           i32,           i32,           i32,
@@ -184,6 +187,10 @@ iree_status_t loom_serve_text_control_initialize(
        {state_arguments, IREE_ARRAYSIZE(state_arguments)},
        {NULL, 0},
        &control->bind_request},
+      {IREE_SVL("resize_state"),
+       {resize_arguments, IREE_ARRAYSIZE(resize_arguments)},
+       {resize_results, IREE_ARRAYSIZE(resize_results)},
+       &control->resize_state},
       {IREE_SVL("epoch"),
        {epoch_arguments, IREE_ARRAYSIZE(epoch_arguments)},
        {&i64, 1},

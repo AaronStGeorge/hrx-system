@@ -51,6 +51,8 @@ typedef struct loom_serve_text_control_t {
   iree_vm_function_t publish_epoch;
   // Row-table encoding after recurrent slot ownership changes.
   iree_vm_function_t encode_state;
+  // Cold retained-layout growth and migration of source-owned host policy.
+  iree_vm_function_t resize_state;
   // Request options to retained row policy.
   iree_vm_function_t bind_request;
   // Source-owned ranges for independent known-input activation capture.

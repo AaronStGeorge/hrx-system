@@ -240,6 +240,82 @@ class WideCohortTextServiceTest : public SourceTextServiceTest {
   const loom_serve_packing_shape_t wide_shapes_[2] = {{1, 1}, {256, 129}};
 };
 
+class GrowingTextServiceTest : public SourceTextServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.context_capacity = 256;
+    options.pool_capacity = 4096;
+    options.epoch_count = IREE_ARRAYSIZE(growth_shapes_);
+    options.epoch_shapes = growth_shapes_;
+    return options;
+  }
+
+  // Large input staging makes 129 residents cross physical slab boundaries,
+  // while the actual numerical workload remains a few tokens per resident.
+  const loom_serve_packing_shape_t growth_shapes_[1] = {{4096, 129}};
+};
+
+TEST_F(GrowingTextServiceTest, GrowthKeepsLiveHistoriesHandlesAndCheckpoints) {
+  std::vector<Oracle> references(129);
+  auto* original = loom_serve_text_model_row(model_, 0);
+  const int32_t prompt[] = {0, 1, 2};
+  IREE_ASSERT_OK(loom_serve_text_row_prefill(original, 3, prompt));
+  references[0].Consume("abx");
+  loom_serve_text_checkpoint_t* checkpoint = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_row_try_pin(original, &checkpoint));
+  ASSERT_NE(checkpoint, nullptr);
+  const auto activity = loom_serve_text_model_weight_activity(model_);
+  const auto initial = loom_serve_text_model_memory_statistics(model_);
+  for (size_t capacity : {17u, 129u}) {
+    bool submitted = false;
+    loom_serve_execution_frontier_t frontier;
+    IREE_ASSERT_OK(loom_serve_text_model_submit_resize(model_, capacity,
+                                                       &submitted, &frontier));
+    ASSERT_TRUE(submitted);
+    for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
+      IREE_ASSERT_OK(loom_serve_workspace_wait(
+          loom_serve_device_workspace(device_), frontier.semaphores[i],
+          frontier.values[i]));
+    }
+    loom_serve_text_model_complete_resize(model_);
+    EXPECT_EQ(loom_serve_text_model_row_count(model_), capacity);
+    EXPECT_EQ(loom_serve_text_model_row(model_, 0), original);
+    EXPECT_EQ(loom_serve_text_model_memory_statistics(model_).committed_bytes,
+              initial.committed_bytes);
+    std::vector<int32_t> tokens(capacity);
+    std::vector<loom_serve_text_span_t> spans(capacity);
+    for (size_t i = 0; i < capacity; ++i) {
+      tokens[i] = i % 3;
+      references[i].Consume(tokens[i]);
+      spans[i] = {i, 1, &tokens[i], LOOM_SERVE_TEXT_SPAN_FLAG_SELECT};
+    }
+    IREE_ASSERT_OK(
+        loom_serve_text_model_epoch(model_, 0, capacity, spans.data()));
+    for (size_t i = 0; i < capacity; ++i) {
+      EXPECT_EQ(loom_serve_text_row_token(loom_serve_text_model_row(model_, i)),
+                references[i].Predict())
+          << i;
+    }
+  }
+  auto* fork = loom_serve_text_model_row(model_, 128);
+  IREE_ASSERT_OK(loom_serve_text_row_reset(fork));
+  bool restored = false;
+  IREE_ASSERT_OK(loom_serve_text_row_try_restore(fork, checkpoint, &restored));
+  ASSERT_TRUE(restored);
+  Oracle fork_reference;
+  fork_reference.Consume("abx");
+  EXPECT_EQ(loom_serve_text_row_token(fork), fork_reference.Predict());
+  IREE_ASSERT_OK(loom_serve_text_row_decode(fork));
+  fork_reference.Consume(fork_reference.Predict());
+  EXPECT_EQ(loom_serve_text_row_token(fork), fork_reference.Predict());
+  EXPECT_EQ(loom_serve_text_row_token(original), references[0].Predict());
+  loom_serve_text_checkpoint_release(checkpoint);
+  const auto after = loom_serve_text_model_weight_activity(model_);
+  EXPECT_EQ(after.activations, activity.activations);
+  EXPECT_EQ(after.read_bytes, activity.read_bytes);
+}
+
 TEST_F(WideCohortTextServiceTest, WideEpochsPreserveSparseResidentsAndForks) {
   constexpr size_t kCount = 129;
   std::vector<Oracle> references(kCount);

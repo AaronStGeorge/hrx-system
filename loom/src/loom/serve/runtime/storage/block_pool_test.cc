@@ -85,6 +85,34 @@ TEST(BlockPoolTest, WarmReuseKeepsBackingAndHandlesEmptyExtents) {
   loom_serve_block_pool_deinitialize(&pool);
 }
 
+TEST(BlockPoolTest, CapacityGrowthPreservesSharedIdsAndFreeOrder) {
+  loom_serve_block_pool_t pool;
+  IREE_ASSERT_OK(
+      loom_serve_block_pool_initialize(0, iree_allocator_system(), &pool));
+  IREE_ASSERT_OK(loom_serve_block_pool_grow(&pool, 4));
+  uint32_t held[3] = {};
+  loom_serve_block_pool_acquire(&pool, 3, held);
+  loom_serve_block_pool_retain(&pool, 1, &held[1]);
+  loom_serve_block_pool_release(&pool, 1, &held[0]);
+  IREE_ASSERT_OK(loom_serve_block_pool_grow(&pool, 129));
+  EXPECT_EQ(pool.references[held[1]], 2u);
+  EXPECT_EQ(pool.references[held[2]], 1u);
+  std::array<uint32_t, 127> free;
+  loom_serve_block_pool_acquire(&pool, free.size(), free.data());
+  EXPECT_EQ(free[0], held[0]);
+  EXPECT_EQ(free[1], 3u);
+  EXPECT_EQ(free[2], 4u);
+  EXPECT_EQ(free.back(), 128u);
+  const std::set<uint32_t> unique(free.begin(), free.end());
+  EXPECT_EQ(unique.size(), free.size());
+  EXPECT_EQ(unique.count(held[1]), 0u);
+  EXPECT_EQ(unique.count(held[2]), 0u);
+  auto* backing = pool.free_blocks;
+  IREE_ASSERT_OK(loom_serve_block_pool_grow(&pool, 129));
+  EXPECT_EQ(backing, pool.free_blocks);
+  loom_serve_block_pool_deinitialize(&pool);
+}
+
 TEST(BlockPoolTest, SharedOwnersSurviveCompactionAndLastRelease) {
   loom_serve_block_pool_t pool;
   IREE_ASSERT_OK(

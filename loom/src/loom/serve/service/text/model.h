@@ -333,6 +333,24 @@ iree_status_t loom_serve_text_model_complete_trim(
 iree_status_t loom_serve_text_model_trim(
     loom_serve_text_model_t* model, loom_serve_text_trim_result_t* out_result);
 
+// Enlarges the resident directory at a successful retired model frontier,
+// without changing programs, parameters, epoch shapes, or existing handles.
+// Source computes append-stable storage and preserves its host policy. Virtual
+// backing retains physical slabs; fixed backing copies at this cold boundary.
+// The owner excludes other CPU/device work through complete_resize. Prepared
+// continuations postpone growth without mutation (out_submitted is false).
+// Submission failure retains accepted work for normal model retirement.
+iree_status_t loom_serve_text_model_submit_resize(
+    loom_serve_text_model_t* model, iree_host_size_t row_count,
+    bool* out_submitted, loom_serve_execution_frontier_t* out_frontier);
+
+// Called after ALL resize readiness succeeds, before admitting new residents.
+void loom_serve_text_model_complete_resize(loom_serve_text_model_t* model);
+
+// Published resident capacity, independent of compiled epoch width.
+iree_host_size_t loom_serve_text_model_row_count(
+    const loom_serve_text_model_t* model);
+
 // Owner-driven preparation on shared CPU/JIT workers and proactor waits.
 typedef struct loom_serve_text_load_t loom_serve_text_load_t;
 

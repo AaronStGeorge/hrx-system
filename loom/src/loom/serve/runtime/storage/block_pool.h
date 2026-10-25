@@ -17,13 +17,13 @@ extern "C" {
 // geometry, logical mappings, admission credit and execution retirement belong
 // to the caller. Warm ownership changes allocate no host or device memory.
 typedef struct loom_serve_block_pool_t {
-  // Allocator owning the fixed free-ID and reference arrays.
+  // Allocator owning the growable free-ID and reference arrays.
   iree_allocator_t host_allocator;
   // Total number of physical block IDs in this pool.
   uint32_t capacity;
   // Number of unowned IDs at the front of free_blocks.
   uint32_t available;
-  // Fixed free-ID stack; acquired entries beyond available are not read.
+  // Free-ID stack; acquired entries beyond available are not read.
   uint32_t* free_blocks;
   // References per ID; zero denotes an ID on the free stack. Borrows backing.
   uint32_t* references;
@@ -38,6 +38,12 @@ iree_status_t loom_serve_block_pool_initialize(
 
 // Releases metadata after every consumer of acquired IDs has retired.
 void loom_serve_block_pool_deinitialize(loom_serve_block_pool_t* pool);
+
+// Appends IDs without changing live identities or references. Metadata growth
+// occurs only on the serialized owner; allocation failure leaves it unchanged.
+// The caller establishes capacity >= the current capacity and owns backing.
+iree_status_t loom_serve_block_pool_grow(loom_serve_block_pool_t* pool,
+                                         uint32_t capacity);
 
 // Acquires count IDs into caller-owned mapping storage. The caller has already
 // established count <= available for the whole transaction before mutation.

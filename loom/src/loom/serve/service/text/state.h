@@ -172,6 +172,17 @@ struct loom_serve_text_state_t {
       // Last admitted native readiness value.
       uint64_t value;
     } backing;
+    // Independent native mapping borrowers during cold reservation growth.
+    // Each owns its own readiness value; completion of one cannot publish
+    // another reservation's translations.
+    struct {
+      // Owned native operations, joined before replacing their directories.
+      loom_serve_memory_operation_t*
+          operations[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
+      // Owned readiness semaphores imported into the model timeline.
+      iree_hal_semaphore_t*
+          semaphores[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
+    } growth;
     // Compaction spans native releases and device copies on one model owner.
     struct {
       // Action admitted after successful readiness of the preceding phase.
@@ -229,6 +240,23 @@ void loom_serve_text_state_initialize(const loom_serve_text_options_t* options,
 iree_status_t loom_serve_text_state_allocate(loom_serve_text_state_t* state,
                                              loom_serve_device_t* device,
                                              loom_serve_execution_t* execution);
+
+// Source slot to its owned root, shared by allocation and cold maintenance.
+iree_hal_buffer_t** loom_serve_text_state_allocation(
+    loom_serve_text_state_t* state, iree_host_size_t index);
+
+// Moves a validated enlarged source layout into retired state. Existing
+// private views, recurrent slots, and cache planes retain their byte offsets.
+// The caller has joined CPU/device consumers and prepared reservations.
+// Accepted copies and mappings remain owned through normal terminal cleanup.
+iree_status_t loom_serve_text_state_resize(loom_serve_text_state_t* state,
+                                           loom_serve_device_t* device,
+                                           iree_host_size_t row_count,
+                                           loom_serve_text_storage_t* storage);
+
+// Releases cold layout payloads and native mapping borrowers after successful
+// completion of the captured resize frontier.
+void loom_serve_text_state_complete_resize(loom_serve_text_state_t* state);
 
 // Begins irreversible retirement after external row/checkpoint users and
 // cached commands relinquish their references. Releases owned device views

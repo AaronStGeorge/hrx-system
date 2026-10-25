@@ -648,6 +648,7 @@ loom_cc_library(
     "variant.h"
     "warmup.h"
   SRCS
+    "capacity.c"
     "control.c"
     "epoch_plan.c"
     "media_epoch.c"
@@ -658,6 +659,7 @@ loom_cc_library(
     "source.c"
     "stages.c"
     "state.c"
+    "state_resize.c"
     "variant.c"
     "warmup.c"
   DEPS

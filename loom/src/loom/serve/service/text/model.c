@@ -347,8 +347,7 @@ iree_status_t loom_serve_text_load_allocate(
   }
   for (iree_host_size_t i = 0; i < options->epoch_count; ++i) {
     const loom_serve_packing_shape_t shape = options->epoch_shapes[i];
-    if (shape.token_capacity < 1 ||
-        shape.token_capacity > options->context_capacity ||
+    if (shape.token_capacity < 1 || shape.token_capacity > INT32_MAX ||
         shape.span_capacity < 1 || shape.span_capacity > shape.token_capacity) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "epoch %zu has invalid token/span capacities", i);

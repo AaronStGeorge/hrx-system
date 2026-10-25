@@ -29,7 +29,7 @@ void loom_serve_text_state_initialize(const loom_serve_text_options_t* options,
 
 // Source allocation slots name the same exported roots during creation,
 // maintenance and execution. Every root carries state retirement tracking.
-static iree_hal_buffer_t** loom_serve_text_allocation(
+iree_hal_buffer_t** loom_serve_text_state_allocation(
     loom_serve_text_state_t* state, iree_host_size_t index) {
   iree_hal_buffer_t** allocations[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT] = {
       &state->residual,
@@ -99,7 +99,7 @@ iree_status_t loom_serve_text_state_allocate(
   for (iree_host_size_t i = 0; i < LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT &&
                                iree_status_is_ok(status);
        ++i) {
-    iree_hal_buffer_t** allocation = loom_serve_text_allocation(state, i);
+    iree_hal_buffer_t** allocation = loom_serve_text_state_allocation(state, i);
     const uint8_t* record =
         state->storage.bytes[LOOM_SERVE_TEXT_STORAGE_ALLOCATIONS].data + i * 24;
     const uint64_t length = iree_unaligned_load_le_u64(record);
@@ -196,7 +196,8 @@ iree_status_t loom_serve_text_state_allocate(
       if (clear_lengths[i]) {
         transfers[transfer_count++] = (iree_hal_transfer_operation_t){
             .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
-            .fill = {.target_buffer = *loom_serve_text_allocation(state, i),
+            .fill = {.target_buffer =
+                         *loom_serve_text_state_allocation(state, i),
                      .length = clear_lengths[i],
                      .pattern = &zero,
                      .pattern_length = sizeof(zero)},
@@ -336,6 +337,11 @@ void loom_serve_text_state_retire(loom_serve_text_state_t* state,
   loom_serve_retirement_set_observer(&state->retirement, wake, user_data);
   loom_serve_memory_operation_set_observer(state->memory.backing.operation,
                                            wake, user_data);
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT;
+       ++i) {
+    loom_serve_memory_operation_set_observer(state->memory.growth.operations[i],
+                                             wake, user_data);
+  }
   if (state->rows) {
     for (iree_host_size_t i = 0; i < state->row_count; ++i) {
       if (!state->rows[i]) {
@@ -368,19 +374,28 @@ void loom_serve_text_state_retire(loom_serve_text_state_t* state,
   state->draft.next_results = NULL;
   for (iree_host_size_t i = 0; i < LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT;
        ++i) {
-    iree_hal_buffer_release(*loom_serve_text_allocation(state, i));
-    *loom_serve_text_allocation(state, i) = NULL;
+    iree_hal_buffer_release(*loom_serve_text_state_allocation(state, i));
+    *loom_serve_text_state_allocation(state, i) = NULL;
   }
 }
 
 bool loom_serve_text_state_is_retired(loom_serve_text_state_t* state) {
-  return loom_serve_memory_operation_is_complete(
-             state->memory.backing.operation) &&
-         loom_serve_retirement_is_idle(&state->retirement);
+  bool complete =
+      loom_serve_memory_operation_is_complete(state->memory.backing.operation);
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT;
+       ++i) {
+    complete &= loom_serve_memory_operation_is_complete(
+        state->memory.growth.operations[i]);
+  }
+  return complete && loom_serve_retirement_is_idle(&state->retirement);
 }
 
 void loom_serve_text_state_await_retirement(loom_serve_text_state_t* state) {
   loom_serve_memory_operation_await(state->memory.backing.operation);
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT;
+       ++i) {
+    loom_serve_memory_operation_await(state->memory.growth.operations[i]);
+  }
   loom_serve_retirement_await(&state->retirement);
 }
 
@@ -389,6 +404,7 @@ iree_status_t loom_serve_text_state_deinitialize(
   IREE_ASSERT(loom_serve_text_state_is_retired(state));
   loom_serve_memory_operation_free(state->memory.backing.operation);
   state->memory.backing.operation = NULL;
+  loom_serve_text_state_complete_resize(state);
   iree_hal_semaphore_release(state->memory.backing.semaphore);
   state->memory.backing.semaphore = NULL;
   iree_status_t status = iree_ok_status();
@@ -637,8 +653,9 @@ static iree_status_t loom_serve_text_submit_compaction(
     uint64_t copied_bytes = 0;
     status = loom_serve_block_region_relocate(
         state->execution,
-        *loom_serve_text_allocation(state, region->allocation), &region->blocks,
-        state->cache.pool.capacity, copy_destinations, &copied_bytes);
+        *loom_serve_text_state_allocation(state, region->allocation),
+        &region->blocks, state->cache.pool.capacity, copy_destinations,
+        &copied_bytes);
     out_result->copied_bytes += copied_bytes;
   }
   // Map uploads follow every accepted copy on the model timeline. Keep both
@@ -888,7 +905,7 @@ iree_status_t loom_serve_text_state_row_suspend(
       row->block_count, blocks, state->host_allocator, &range_count, &ranges));
   iree_hal_buffer_t* buffers[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(buffers); ++i) {
-    buffers[i] = *loom_serve_text_allocation(state, i);
+    buffers[i] = *loom_serve_text_state_allocation(state, i);
   }
   iree_status_t status = loom_serve_snapshot_capture(
       state->execution, IREE_ARRAYSIZE(buffers), buffers, range_count, ranges,
@@ -953,7 +970,7 @@ iree_status_t loom_serve_text_state_row_try_resume(
   if (iree_status_is_ok(status) && admitted) {
     iree_hal_buffer_t* buffers[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(buffers); ++i) {
-      buffers[i] = *loom_serve_text_allocation(state, i);
+      buffers[i] = *loom_serve_text_state_allocation(state, i);
     }
     status = loom_serve_snapshot_restore(row->snapshot, state->execution,
                                          IREE_ARRAYSIZE(buffers), buffers,
@@ -1107,7 +1124,7 @@ iree_status_t loom_serve_text_state_checkpoint_submit_suspend(
       checkpoint, &range_count, &ranges));
   iree_hal_buffer_t* buffers[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(buffers); ++i) {
-    buffers[i] = *loom_serve_text_allocation(state, i);
+    buffers[i] = *loom_serve_text_state_allocation(state, i);
   }
   iree_status_t status = loom_serve_snapshot_capture(
       state->execution, IREE_ARRAYSIZE(buffers), buffers, range_count, ranges,
@@ -1191,7 +1208,7 @@ static iree_status_t loom_serve_text_checkpoint_try_resume(
   if (iree_status_is_ok(status) && admitted) {
     iree_hal_buffer_t* buffers[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
     for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(buffers); ++i) {
-      buffers[i] = *loom_serve_text_allocation(state, i);
+      buffers[i] = *loom_serve_text_state_allocation(state, i);
     }
     status = loom_serve_snapshot_restore(checkpoint->snapshot, state->execution,
                                          IREE_ARRAYSIZE(buffers), buffers,
@@ -1317,7 +1334,7 @@ static iree_status_t loom_serve_text_fork_cache_block(
        r < state->storage.region_count && iree_status_is_ok(status); ++r) {
     const loom_serve_text_cache_region_t* region = &state->storage.regions[r];
     iree_hal_buffer_t* buffer =
-        *loom_serve_text_allocation(state, region->allocation);
+        *loom_serve_text_state_allocation(state, region->allocation);
     for (iree_host_size_t plane = 0;
          plane < region->blocks.count && iree_status_is_ok(status); ++plane) {
       const iree_device_size_t origin =
@@ -1728,7 +1745,7 @@ iree_status_t loom_serve_text_state_reservation_submit(
     if (iree_status_is_ok(status) && reservation->cold) {
       iree_hal_buffer_t* buffers[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
       for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(buffers); ++i) {
-        buffers[i] = *loom_serve_text_allocation(state, i);
+        buffers[i] = *loom_serve_text_state_allocation(state, i);
       }
       status = loom_serve_snapshot_restore(
           checkpoint->snapshot, state->execution, IREE_ARRAYSIZE(buffers),
