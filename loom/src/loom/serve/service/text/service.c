@@ -429,9 +429,9 @@ static void loom_serve_text_separate_ready(
       continue;
     }
     const loom_serve_text_request_phase_t phase =
-        service->sessions[first].request.phase;
+        service->sessions[first]->request.phase;
     for (iree_host_size_t row = 0; row < service->row_count; ++row) {
-      if (service->sessions[row].request.phase != phase) {
+      if (service->sessions[row]->request.phase != phase) {
         ready[row] = (loom_serve_ready_span_t){0};
       }
     }
@@ -450,7 +450,7 @@ static iree_status_t loom_serve_text_submit_epoch(
   loom_serve_text_epoch_row_t* rows = service->epoch.planning.rows;
   for (iree_host_size_t i = 0; i < count; ++i) {
     const iree_host_size_t row = scheduled[i].row_index;
-    const loom_serve_text_session_t* session = &service->sessions[row];
+    const loom_serve_text_session_t* session = service->sessions[row];
     const bool prefill =
         session->request.phase == LOOM_SERVE_TEXT_REQUEST_PREFILL;
     rows[i] = (loom_serve_text_epoch_row_t){
@@ -514,7 +514,7 @@ static void loom_serve_text_publish_epoch(loom_serve_text_service_t* service) {
   loom_serve_text_observe(service, "output");
   for (iree_host_size_t i = 0; i < service->epoch.count; ++i) {
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     const bool prefill = service->epoch.prefill[i];
     if (prefill) {
       session->request.input_offset += service->epoch.results[i].known_count;
@@ -547,7 +547,7 @@ static iree_status_t loom_serve_text_process_output(void* user_data) {
        i < service->epoch.count && iree_status_is_ok(status); ++i) {
     const loom_serve_text_result_t* output = &service->epoch.results[i];
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     if (session->mode == LOOM_SERVE_TEXT_MODE_ENCODE) {
       const bool final =
           session->request.input_offset == session->request.input_count;
@@ -580,7 +580,7 @@ static void loom_serve_text_complete_output(
   service->capture = NULL;
   for (iree_host_size_t i = 0; i < service->epoch.count; ++i) {
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     if (session->request.diagnostic.code) {
       loom_serve_telemetry_record_t record = {
           .time_ns = iree_time_now(),
@@ -623,7 +623,7 @@ static iree_status_t loom_serve_text_capture_prefix(
   for (iree_host_size_t i = 0;
        i < service->epoch.count && iree_status_is_ok(status); ++i) {
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     const iree_host_size_t count =
         session->request.input_origin + session->request.input_offset;
     if (!service->epoch.prefill[i] ||
@@ -703,7 +703,8 @@ static iree_status_t loom_serve_text_complete_epoch(
 }
 
 static iree_status_t loom_serve_text_service_initialize(
-    loom_serve_text_service_t* service, loom_serve_telemetry_stream_t* stream) {
+    loom_serve_text_service_t* service, iree_host_size_t initial_count,
+    loom_serve_telemetry_stream_t* stream) {
   iree_host_size_t span_capacity = 0;
   for (iree_host_size_t i = 0; i < service->scheduling.shape_count; ++i) {
     span_capacity =
@@ -730,14 +731,20 @@ static iree_status_t loom_serve_text_service_initialize(
       service->pending.admission.budget, service->host_allocator,
       &service->pending));
   iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       i < service->row_count && iree_status_is_ok(status); ++i) {
-    status = loom_serve_text_session_initialize(
-        loom_serve_text_model_row(service->model, i),
-        service->scheduling.model_mode,
-        loom_serve_text_model_tokenizer(service->model),
-        service->scheduling.context_capacity, service->host_allocator,
-        &service->sessions[i]);
+  for (iree_host_size_t i = 0; i < initial_count && iree_status_is_ok(status);
+       ++i) {
+    status = iree_arena_allocate(&service->session_records,
+                                 sizeof(**service->sessions),
+                                 (void**)&service->sessions[i]);
+    if (iree_status_is_ok(status)) {
+      ++service->row_count;
+      status = loom_serve_text_session_initialize(
+          loom_serve_text_model_row(service->model, i),
+          service->scheduling.model_mode,
+          loom_serve_text_model_tokenizer(service->model),
+          service->scheduling.context_capacity, service->host_allocator,
+          service->sessions[i]);
+    }
   }
   return status;
 }
@@ -751,7 +758,7 @@ static void loom_serve_text_stop(loom_serve_text_service_t* service,
   loom_serve_residency_cancel_admission(
       loom_serve_text_model_residency(service->model));
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    loom_serve_text_session_t* session = &service->sessions[i];
+    loom_serve_text_session_t* session = service->sessions[i];
     if (session->request.consumer.self) {
       // Failed device readiness keeps pins and reserved views until model
       // destruction actually retires accepted work. Normal shutdown is at a
@@ -807,8 +814,11 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   const iree_allocator_t host_allocator = service->host_allocator;
   loom_serve_execution_reconfiguration_free(service->reconfiguration);
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    loom_serve_text_session_deinitialize(&service->sessions[i]);
+    loom_serve_text_session_deinitialize(service->sessions[i]);
   }
+  iree_arena_deinitialize(&service->session_records);
+  iree_allocator_free(host_allocator, service->sessions);
+  iree_allocator_free(host_allocator, service->ready);
   loom_serve_text_readiness_deinitialize(&service->readiness);
   loom_serve_text_tool_calls_deinitialize(&service->tool_calls);
   loom_serve_text_chat_scratch_deinitialize(&service->completion_scratch);
@@ -872,16 +882,9 @@ iree_status_t loom_serve_text_service_allocate(
   IREE_RETURN_IF_ERROR(iree_async_proactor_pool_get(
       loom_serve_host_proactor_pool(host), 0, &proactor));
   loom_serve_text_service_t* service = NULL;
-  iree_host_size_t total = 0, sessions_offset = 0, ready_offset = 0;
-  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
-      sizeof(*service), &total,
-      IREE_STRUCT_FIELD(options->row_count, loom_serve_text_session_t,
-                        &sessions_offset),
-      IREE_STRUCT_FIELD(options->row_count, loom_serve_ready_span_t,
-                        &ready_offset)));
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      host_allocator, total, iree_alignof(loom_serve_text_service_t), 0,
-      (void**)&service));
+      host_allocator, sizeof(*service), iree_alignof(loom_serve_text_service_t),
+      0, (void**)&service));
   *service = (loom_serve_text_service_t){
       .host_allocator = host_allocator,
       .model = model,
@@ -889,10 +892,6 @@ iree_status_t loom_serve_text_service_allocate(
       .name = options->name,
       .isolated_shape = {loom_serve_text_model_prefill_capacity(model),
                          options->row_count},
-      .row_count = options->row_count,
-      .sessions =
-          (loom_serve_text_session_t*)((uint8_t*)service + sessions_offset),
-      .ready = (loom_serve_ready_span_t*)((uint8_t*)service + ready_offset),
       .default_max_tokens = options->default_max_tokens,
       .pending = {.capacity = options->pending_capacity,
                   .admission = {.budget = options->admission_overtakes}},
@@ -920,7 +919,20 @@ iree_status_t loom_serve_text_service_allocate(
   loom_serve_text_tool_calls_initialize(host_allocator, &service->tool_calls);
   loom_serve_text_chat_scratch_initialize(host_allocator,
                                           &service->completion_scratch);
-  iree_status_t status = loom_serve_text_service_initialize(service, stream);
+  iree_arena_initialize(loom_serve_host_block_pool(host),
+                        &service->session_records);
+  iree_status_t status = iree_allocator_malloc_array(
+      host_allocator, options->row_count, sizeof(*service->sessions),
+      (void**)&service->sessions);
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(host_allocator, options->row_count,
+                                         sizeof(*service->ready),
+                                         (void**)&service->ready);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_serve_text_service_initialize(service, options->row_count, stream);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_serve_execution_reconfiguration_allocate(
         loom_serve_text_model_execution_update(model),
@@ -979,7 +991,7 @@ static bool loom_serve_text_is_active(void* self) {
     return true;
   }
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    if (service->sessions[i].request.consumer.self) {
+    if (service->sessions[i]->request.consumer.self) {
       return true;
     }
   }
@@ -1091,7 +1103,7 @@ static iree_status_t loom_serve_text_advance_work(
     }
     *out_progress |= service->pending.count || service->control.consumer.self;
     for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-      *out_progress |= service->sessions[i].request.consumer.self != NULL;
+      *out_progress |= service->sessions[i]->request.consumer.self != NULL;
     }
     loom_serve_text_stop(service, service->telemetry.failure_code);
     return iree_ok_status();
@@ -1135,7 +1147,7 @@ static iree_status_t loom_serve_text_advance_work(
   memset(ready, 0, service->row_count * sizeof(*ready));
   for (iree_host_size_t i = 0;
        i < service->row_count && iree_status_is_ok(status); ++i) {
-    status = loom_serve_text_prepare_ready(service, &service->sessions[i],
+    status = loom_serve_text_prepare_ready(service, service->sessions[i],
                                            out_progress, &ready[i]);
   }
   if (iree_status_is_ok(status)) {
@@ -1340,7 +1352,7 @@ static bool loom_serve_text_request_at(
         .counters = {.requests = 1}};
   } else if (index - service->pending.count < service->row_count) {
     *out_snapshot = loom_serve_text_session_request_snapshot(
-        &service->sessions[index - service->pending.count]);
+        service->sessions[index - service->pending.count]);
   } else if (index - service->pending.count == service->row_count) {
     *out_snapshot = (loom_serve_http_request_snapshot_t){
         .id = service->control.consumer.self ? service->control.receipt.serial

@@ -42,7 +42,7 @@ iree_status_t loom_serve_text_control_initialize(
   }
   for (iree_host_size_t i = 0; i < state->row_count; ++i) {
     const iree_device_size_t length =
-        iree_hal_buffer_byte_length(state->rows[i].buffers[TEXT_TOKENS]);
+        iree_hal_buffer_byte_length(state->rows[i]->buffers[TEXT_TOKENS]);
     const iree_host_size_t minimum =
         (packed ? 1 : source->prefill_capacity) * sizeof(int32_t);
     if (length < minimum || length > IREE_HOST_SIZE_MAX) {

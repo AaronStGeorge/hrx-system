@@ -15,7 +15,7 @@
 // copied once into a contiguous host stream. Source owns all device packet
 // offsets, logical positions and selection policy.
 iree_host_size_t loom_serve_text_epoch_plan_write(
-    const loom_serve_text_state_row_t* rows, iree_byte_span_t plan,
+    loom_serve_text_state_row_t* const* rows, iree_byte_span_t plan,
     iree_byte_span_t input, iree_host_size_t span_count,
     const loom_serve_text_span_t* spans, const uint32_t* output_limits,
     const uint32_t* first_indices, iree_host_size_t record_begin,
@@ -28,7 +28,7 @@ iree_host_size_t loom_serve_text_epoch_plan_write(
         span->token_ids && !(first_indices && generates)
             ? (generates ? 1 : span->token_count)
             : 0;
-    const loom_serve_text_state_row_t* row = &rows[span->row_index];
+    const loom_serve_text_state_row_t* row = rows[span->row_index];
     const uint32_t fields[TEXT_PLAN_FIELD_COUNT] = {
         [TEXT_PLAN_FIELD_LENGTH] = (uint32_t)span->token_count,
         [TEXT_PLAN_FIELD_POSITION] = row->position,

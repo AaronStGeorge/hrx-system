@@ -12,11 +12,13 @@
 namespace {
 
 TEST(TextEpochPlanTest, KnownAndSpeculativeContinuationsPreserveSourceFacts) {
-  loom_serve_text_state_row_t rows[2] = {};
-  rows[0].position = 7;
-  rows[0].source_position = 31;
-  rows[1].position = 9;
-  rows[1].source_position = 45;
+  loom_serve_text_state_row_t records[2] = {};
+  // Directory identity, not physical record order, selects each retained state.
+  loom_serve_text_state_row_t* rows[] = {&records[1], &records[0]};
+  rows[0]->position = 7;
+  rows[0]->source_position = 31;
+  rows[1]->position = 9;
+  rows[1]->source_position = 45;
   uint8_t plan[4 * TEXT_PLAN_FIELD_COUNT * 4] = {};
   uint8_t input[16 * 4] = {};
   const auto plan_bytes = iree_make_byte_span(plan, sizeof(plan));

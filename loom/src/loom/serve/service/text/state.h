@@ -7,6 +7,7 @@
 #ifndef LOOM_SERVE_SERVICE_TEXT_STATE_H_
 #define LOOM_SERVE_SERVICE_TEXT_STATE_H_
 
+#include "iree/base/internal/arena.h"
 #include "loom/serve/runtime/execution/retirement.h"
 #include "loom/serve/runtime/storage/block_pool.h"
 #include "loom/serve/service/text/model.h"
@@ -48,6 +49,8 @@ typedef struct loom_serve_text_state_t loom_serve_text_state_t;
 typedef struct loom_serve_text_state_row_t {
   // Borrowed single-owner state arena, outliving this row.
   loom_serve_text_state_t* owner;
+  // Stable source-visible identity, independent of this record's address.
+  iree_host_size_t index;
   // Private views in slots 1, 3-5; recurrence borrows its owned pool slot.
   // Residual borrows model-wide storage.
   iree_hal_buffer_t* buffers[TEXT_BINDING_COUNT];
@@ -111,10 +114,12 @@ struct loom_serve_text_state_t {
   loom_serve_retirement_t retirement;
   // Enabled packed and speculative storage roles.
   loom_serve_text_state_flags_t flags;
-  // Number of fixed row records and source-defined private views.
+  // Number of published resident records and source-defined private views.
   iree_host_size_t row_count;
-  // Owned rows, stable through final queue retirement.
-  loom_serve_text_state_row_t* rows;
+  // Stable records allocated from the shared application's host block pool.
+  iree_arena_allocator_t row_records;
+  // Owned directory; records outlive every asynchronous borrower.
+  loom_serve_text_state_row_t** rows;
   // Prepared logical plans whose selected IDs exclude compaction until freed.
   iree_host_size_t prepared_reservations;
   // Validated source geometry and retained initialization payloads.

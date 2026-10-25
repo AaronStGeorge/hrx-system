@@ -87,7 +87,8 @@ void loom_serve_text_telemetry_epoch(
     loom_serve_text_telemetry_t* telemetry,
     loom_serve_text_heartbeat_t* heartbeat,
     const loom_serve_text_epoch_options_t* options,
-    const loom_serve_text_epoch_t* cohort, loom_serve_text_session_t* sessions);
+    const loom_serve_text_epoch_t* cohort,
+    loom_serve_text_session_t* const* sessions);
 
 // Owned arguments published only by the serialized service owner. CPU jobs
 // return measurements through their existing completion handoff. No record

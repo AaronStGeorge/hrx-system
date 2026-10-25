@@ -46,7 +46,7 @@ enum {
 // host buffers. A continuation supplies first_indices and writes after the
 // first plan and its known IDs. Returns the next free input ordinal.
 iree_host_size_t loom_serve_text_epoch_plan_write(
-    const struct loom_serve_text_state_row_t* rows, iree_byte_span_t plan,
+    struct loom_serve_text_state_row_t* const* rows, iree_byte_span_t plan,
     iree_byte_span_t input, iree_host_size_t span_count,
     const loom_serve_text_span_t* spans, const uint32_t* output_limits,
     const uint32_t* first_indices, iree_host_size_t record_begin,

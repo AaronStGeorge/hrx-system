@@ -44,11 +44,11 @@ class TextStateReservationTest
   void Reserve(size_t index, size_t extent) {
     loom_serve_memory_admission_t admission;
     IREE_ASSERT_OK(loom_serve_text_state_row_submit_reserve(
-        &state_.rows[index], LOOM_SERVE_TEXT_RESERVE_FRESH, nullptr, extent,
+        state_.rows[index], LOOM_SERVE_TEXT_RESERVE_FRESH, nullptr, extent,
         nullptr, nullptr, &admission));
     ASSERT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
     IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
-    loom_serve_text_state_row_complete_reserve(&state_.rows[index]);
+    loom_serve_text_state_row_complete_reserve(state_.rows[index]);
   }
 
   // Owned source description outliving native state.
@@ -62,7 +62,7 @@ class TextStateReservationTest
 };
 
 TEST_F(TextStateReservationTest, PreparationOwnsIdsWithoutSubmittingOrMapping) {
-  auto* row = &state_.rows[0];
+  auto* row = state_.rows[0];
   const auto before = loom_serve_execution_frontier(execution_);
   const auto memory = state_.memory.statistics;
   const auto pages = state_.cache.pool.available;
@@ -98,7 +98,7 @@ TEST_F(TextStateReservationTest, PreparationOwnsIdsWithoutSubmittingOrMapping) {
 TEST_F(TextStateReservationTest,
        DeniedPreparedContinuationKeepsItsExactPlanThroughPeerProgress) {
   ASSERT_NO_FATAL_FAILURE(Reserve(0, 16));
-  auto* row = &state_.rows[0];
+  auto* row = state_.rows[0];
   const std::vector<uint32_t> old_blocks(state_.cache.maps,
                                          state_.cache.maps + row->block_count);
   const auto pages = state_.cache.pool.available;
@@ -146,7 +146,7 @@ TEST_F(TextStateReservationTest,
   // Independent rows can acquire/submit/retire between planning and commit.
   // This does not replan the protected destination or steal its selected IDs.
   ASSERT_NO_FATAL_FAILURE(Reserve(1, 16));
-  loom_serve_text_state_row_reset(&state_.rows[1]);
+  loom_serve_text_state_row_reset(state_.rows[1]);
   const auto commit = [](void* user_data, iree_host_size_t count,
                          const loom_serve_memory_range_t* ranges,
                          iree_hal_semaphore_t* readiness, uint64_t value,

@@ -9,6 +9,10 @@
 #include "loom/serve/service/text/model_instance.h"
 #include "loom/serve/service/text/reservation.h"
 
+iree_host_size_t loom_serve_text_row_index(const loom_serve_text_row_t* row) {
+  return row->state->index;
+}
+
 iree_host_size_t loom_serve_text_row_pool_usage(
     const loom_serve_text_row_t* row) {
   return (iree_host_size_t)row->state->block_count *
@@ -29,8 +33,8 @@ iree_host_size_t loom_serve_text_row_pool_reclaimable(
     const loom_serve_text_row_t* row) {
   const loom_serve_text_state_t* state = &row->model->state;
   iree_host_size_t count = 0;
-  const iree_host_size_t map = (iree_host_size_t)(row->state - state->rows) *
-                               state->storage.blocks_per_row;
+  const iree_host_size_t map =
+      row->state->index * state->storage.blocks_per_row;
   for (uint32_t i = 0; i < row->state->block_count; ++i) {
     count += !loom_serve_block_pool_is_shared(&state->cache.pool,
                                               state->cache.maps[map + i]);

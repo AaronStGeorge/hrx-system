@@ -164,7 +164,7 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
         continue;
       }
       for (size_t row = 0; row < state.row_count; ++row) {
-        const size_t block_count = state.rows[row].block_count;
+        const size_t block_count = state.rows[row]->block_count;
         if (!block_count) {
           continue;
         }
@@ -183,7 +183,7 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
 
   void CacheContents(loom_serve_text_state_row_t* row, bool upload) {
     const uint32_t* blocks =
-        state.cache.maps + (row - state.rows) * state.storage.blocks_per_row;
+        state.cache.maps + row->index * state.storage.blocks_per_row;
     for (size_t region = 0; region < state.storage.region_count; ++region) {
       const auto& layout = state.storage.regions[region];
       auto* buffer =
@@ -240,7 +240,7 @@ TEST_P(TextStateTest, OptionalRootsRetainOriginsMapsAndCheckpointCarry) {
   IREE_ASSERT_OK(loom_serve_text_state_grow(&state, 1, &span, &extent));
   IREE_ASSERT_OK(loom_serve_execution_drain(execution));
   ASSERT_NO_FATAL_FAILURE(CheckMaps());
-  auto* row = &state.rows[0];
+  auto* row = state.rows[0];
   ASSERT_NO_FATAL_FAILURE(CacheContents(row, true));
   const std::vector<uint8_t> recurrent(16, 0x58);
   IREE_ASSERT_OK(Upload(row->buffers[TEXT_RECURRENT], 0, recurrent));
@@ -263,7 +263,7 @@ TEST_P(TextStateTest, OptionalRootsRetainOriginsMapsAndCheckpointCarry) {
   if (!carry.empty()) {
     IREE_ASSERT_OK(Upload(state.carry, 0, changed));
   }
-  auto* fork = &state.rows[1];
+  auto* fork = state.rows[1];
   bool restored = false;
   IREE_ASSERT_OK(
       loom_serve_text_state_row_try_restore(fork, checkpoint, &restored));

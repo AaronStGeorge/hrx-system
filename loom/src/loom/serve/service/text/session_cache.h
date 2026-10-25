@@ -40,7 +40,7 @@ typedef struct loom_serve_text_session_cache_t {
 // zero marks an empty/unpublished slot. No native row or checkpoint is queried.
 bool loom_serve_text_session_cache_inspect(
     const loom_serve_text_session_cache_t* cache, iree_host_size_t row_count,
-    const loom_serve_text_session_t* rows, iree_host_size_t index,
+    loom_serve_text_session_t* const* rows, iree_host_size_t index,
     loom_serve_http_session_snapshot_t* out_snapshot);
 
 // Allocates host records only. Zero disables automatic retention. The caller
@@ -102,7 +102,7 @@ void loom_serve_text_session_cache_release(
 // alone does not make physical backing available. No device work is submitted.
 bool loom_serve_text_session_cache_evict(
     loom_serve_text_session_cache_t* cache, iree_host_size_t row_count,
-    loom_serve_text_session_t* rows,
+    loom_serve_text_session_t* const* rows,
     const loom_serve_text_session_t* protected_row,
     const loom_serve_text_session_cache_entry_t* protected_entry,
     loom_serve_text_telemetry_t* telemetry);

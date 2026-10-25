@@ -49,7 +49,7 @@ void loom_serve_text_pending_queue_deinitialize(
 iree_status_t loom_serve_text_pending_queue_select_request(
     const loom_serve_text_pending_queue_t* queue, iree_string_view_t name,
     iree_string_view_t checkpoint_name, iree_host_size_t row_count,
-    loom_serve_text_session_t* sessions,
+    loom_serve_text_session_t* const* sessions,
     loom_serve_text_checkpoint_registry_t* checkpoints,
     loom_serve_text_checkpoint_entry_t** out_checkpoint) {
   *out_checkpoint = NULL;
@@ -143,7 +143,7 @@ loom_serve_text_input_prefix_t loom_serve_text_pending_queue_prefix(
 iree_status_t loom_serve_text_pending_queue_prepare(
     loom_serve_text_pending_queue_t* queue, iree_string_view_t name,
     iree_host_size_t default_max_tokens, iree_host_size_t row_count,
-    loom_serve_text_session_t* sessions,
+    loom_serve_text_session_t* const* sessions,
     const loom_serve_text_pool_usage_t* geometry) {
   IREE_TRACE_ZONE_BEGIN(z0);
   IREE_TRACE_ZONE_APPEND_TEXT(z0, name.data, name.size);
@@ -178,8 +178,7 @@ iree_status_t loom_serve_text_pending_queue_prepare(
 
 iree_status_t loom_serve_text_pending_queue_admit(
     loom_serve_text_pending_queue_t* queue,
-    loom_serve_text_session_cache_t* cache, loom_serve_text_session_t* sessions,
-    iree_string_view_t model_name) {
+    loom_serve_text_session_cache_t* cache, iree_string_view_t model_name) {
   loom_serve_text_pending_request_t* pending = queue->prepared.request;
   loom_serve_text_session_t* session = queue->prepared.session;
   loom_serve_text_prefix_entry_t* prefix = queue->prepared.prefix;
@@ -222,8 +221,9 @@ iree_status_t loom_serve_text_pending_queue_admit(
   session->lifetime.serial = request.receipt.serial;
   if (!session->lifetime.id) {
     session->lifetime.id = session->lifetime.serial;
-    loom_serve_text_session_record_t value = {.session = session->lifetime.id,
-                                              .row = session - sessions};
+    loom_serve_text_session_record_t value = {
+        .session = session->lifetime.id,
+        .row = loom_serve_text_row_index(session->row)};
     memcpy(value.name, session->lifetime.name, sizeof(value.name));
     loom_serve_text_record(queue->telemetry->stream,
                            &LOOM_SERVE_TEXT_SESSION_BEGIN,
@@ -256,7 +256,7 @@ iree_status_t loom_serve_text_pending_queue_admit(
         loom_serve_text_model_pool_usage(queue->model);
     const loom_serve_text_admission_record_t value = {
         .session = session->lifetime.id,
-        .row = session - sessions,
+        .row = loom_serve_text_row_index(session->row),
         .retained_tokens = retained_count,
         .appended_tokens = input_count,
         .reservation_tokens = reservation,

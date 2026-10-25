@@ -73,10 +73,12 @@ struct loom_serve_text_model_t {
   iree_host_size_t context_capacity;
   // Proposed tokens after each known anchor; zero disables drafting.
   iree_host_size_t draft_depth;
-  // Number of preallocated rows.
+  // Number of published retained-state handles.
   iree_host_size_t row_count;
-  // Fixed row records, owned by this model.
-  loom_serve_text_row_t* rows;
+  // Owned identity directory; handle addresses never depend on this allocation.
+  loom_serve_text_row_t** rows;
+  // Stable public handles allocated from the shared application block pool.
+  iree_arena_allocator_t row_records;
   // Fixed semantic endpoint records paired with the state's checkpoint IDs.
   loom_serve_text_checkpoint_t* checkpoints;
   // Retained device state, mappings and final queue ownership.

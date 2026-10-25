@@ -134,7 +134,7 @@ typedef struct loom_serve_text_session_t {
 // through selection and the caller's preparation/admission borrow. Returns
 // null when there is neither a named match nor an idle row.
 loom_serve_text_session_t* loom_serve_text_session_select(
-    iree_host_size_t count, loom_serve_text_session_t* sessions,
+    iree_host_size_t count, loom_serve_text_session_t* const* sessions,
     iree_string_view_t name, const loom_serve_text_chat_t* chat);
 
 // Whether this idle row has a complete continuation under its source contract.

@@ -668,6 +668,7 @@ loom_cc_library(
     iree::async
     iree::async::util::proactor_pool
     iree::base
+    iree::base::internal::arena
     iree::base::threading
     iree::hal
     iree::module::hal::types
@@ -679,6 +680,7 @@ loom_cc_library(
     loom::serve::runtime::device
     loom::serve::runtime::execution
     loom::serve::runtime::execution::retirement
+    loom::serve::runtime::host
     loom::serve::runtime::parameter::activation
     loom::serve::runtime::parameter::module
     loom::serve::runtime::parameter::residency

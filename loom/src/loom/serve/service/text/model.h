@@ -726,6 +726,9 @@ iree_status_t loom_serve_text_row_decode(loom_serve_text_row_t* row);
 // a shared epoch's duration belongs to the batch, not to each constituent row.
 int32_t loom_serve_text_row_token(const loom_serve_text_row_t* row);
 bool loom_serve_text_row_is_eos(const loom_serve_text_row_t* row);
+// Stable source-visible identity, independent of handle allocation and cohort.
+iree_host_size_t loom_serve_text_row_index(const loom_serve_text_row_t* row);
+
 iree_host_size_t loom_serve_text_row_position(const loom_serve_text_row_t* row);
 loom_serve_text_metrics_t loom_serve_text_row_metrics(
     const loom_serve_text_row_t* row);

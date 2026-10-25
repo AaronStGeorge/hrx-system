@@ -7,6 +7,7 @@
 #ifndef LOOM_SERVE_SERVICE_TEXT_SERVICE_OWNER_H_
 #define LOOM_SERVE_SERVICE_TEXT_SERVICE_OWNER_H_
 
+#include "iree/base/internal/arena.h"
 #include "loom/serve/service/execution_reconfiguration.h"
 #include "loom/serve/service/text/checkpoint_request.h"
 #include "loom/serve/service/text/epoch.h"
@@ -123,8 +124,10 @@ struct loom_serve_text_service_t {
   loom_serve_text_tool_calls_t tool_calls;
   // Completion parser/formatter backing reused by all serialized output jobs.
   loom_serve_text_chat_scratch_t completion_scratch;
-  // Stable retained records sharing one model, command set and timeline.
-  loom_serve_text_session_t* sessions;
+  // Stable retained records backed by the shared application host block pool.
+  iree_arena_allocator_t session_records;
+  // Owned directory sharing one model, command set and timeline.
+  loom_serve_text_session_t** sessions;
   // Reusable readiness entries, indexed by resident identity, not span ordinal.
   loom_serve_ready_span_t* ready;
 };

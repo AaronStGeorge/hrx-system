@@ -25,12 +25,12 @@ bool loom_serve_text_session_name_valid(iree_string_view_t name) {
 }
 
 loom_serve_text_session_t* loom_serve_text_session_select(
-    iree_host_size_t count, loom_serve_text_session_t* sessions,
+    iree_host_size_t count, loom_serve_text_session_t* const* sessions,
     iree_string_view_t name, const loom_serve_text_chat_t* chat) {
   loom_serve_text_session_t* oldest = NULL;
   loom_serve_text_session_t* continuation = NULL;
   for (iree_host_size_t i = 0; i < count; ++i) {
-    loom_serve_text_session_t* session = &sessions[i];
+    loom_serve_text_session_t* session = sessions[i];
     if (name.size &&
         iree_string_view_equal(
             name, iree_make_cstring_view(session->lifetime.name))) {
