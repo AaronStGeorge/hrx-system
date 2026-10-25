@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD)) AND LOOM_TARGET_ARCH_VM)
+if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)) AND LOOM_TARGET_ARCH_VM)
 iree_execution_test_suite(
   NAME
     benchmark_scenario_correctness_test
@@ -28,7 +28,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD)) AND LOOM_TARGET_ARCH_VM AND IREE_HAL_DRIVER_AMDGPU)
+if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)) AND LOOM_TARGET_ARCH_VM AND IREE_HAL_DRIVER_AMDGPU)
 iree_execution_test_suite(
   NAME
     benchmark_profile_policy_test
@@ -292,21 +292,21 @@ loom_test_module(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     amd_gpu_hal_tests_execute_amd_gpu_hardware_test
   MODULE
     "::amd_gpu_hal_tests_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_hardware"
@@ -1021,14 +1021,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     asan_test_execute_amd_gpu_asan_test
   MODULE
     "::asan_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
     "--sanitizer=asan"
     "--sanitizer-reporting=report-only"
     "--config=asan_launch_bound.tile_capacity=1"
@@ -1040,7 +1040,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_asan"
@@ -1088,14 +1088,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     ubsan_test_execute_amd_gpu_hardware_test
   MODULE
     "::ubsan_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2"
+    "--device=amdgpu"
   LABELS
     "requires-amd-gpu-feedback"
     "iree-build-requirement=libamdf"
@@ -1103,7 +1103,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_hardware"
@@ -1422,14 +1422,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     tsan_test_execute_amd_gpu_tsan_test
   MODULE
     "::tsan_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1439,7 +1439,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_tsan"
@@ -1490,14 +1490,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     tsan_collective_publication_test_execute_amd_gpu_tsan_test
   MODULE
     "::tsan_collective_publication_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1507,7 +1507,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_tsan"
@@ -1558,14 +1558,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     tsan_fragment_test_execute_amd_gpu_tsan_test
   MODULE
     "::tsan_fragment_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1575,7 +1575,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_tsan"
@@ -1626,14 +1626,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     tsan_subgroup_test_execute_amd_gpu_tsan_test
   MODULE
     "::tsan_subgroup_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only"
+    "--device=amdgpu://?tsan_report_policy=report-only"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1643,7 +1643,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_tsan"
@@ -1728,14 +1728,14 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     tsan_capacity_test_execute_amd_gpu_tsan_capacity_test
   MODULE
     "::tsan_capacity_test_module"
   RUNNER_ARGS
-    "--device=amdgpu2://?tsan_report_policy=report-only&tsan_shadow_size=1440"
+    "--device=amdgpu://?tsan_report_policy=report-only&tsan_shadow_size=1440"
     "--sanitizer=tsan"
     "--sanitizer-reporting=report-only"
   LABELS
@@ -1745,7 +1745,7 @@ loom_execution_test(
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amd"
+    "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
     "runtime-resource=amd-gpu"
     "loom-execution-profile=amd_gpu_tsan_capacity"
@@ -1758,7 +1758,7 @@ loom_execution_test(
 endif()
 endif()
 
-if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD)))
+if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)))
 iree_execution_test_suite(
   NAME
     check_requirements_test
@@ -1775,7 +1775,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD)))
+if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)))
 iree_execution_test_suite(
   NAME
     check_target_requirements_test

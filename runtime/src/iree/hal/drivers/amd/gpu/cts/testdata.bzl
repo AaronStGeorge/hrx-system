@@ -27,6 +27,7 @@ def iree_hal_amd_gpu_cts_testdata(name, srcs, backend_names, target_compatible_w
     """
     compatibility = target_compatible_with + loom_config_compatible_with([
         "//loom/config/target:amdgpu_artifacts",
+        "//runtime/config/hal:driver_amd_gpu",
     ])
     programs = {}
     for src in srcs:
@@ -48,6 +49,7 @@ def iree_hal_amd_gpu_cts_testdata(name, srcs, backend_names, target_compatible_w
         profile_compatibility = loom_config_compatible_with([
             "//loom/config/target:amdgpu_artifacts",
             "//loom/config/target/amdgpu:" + capability,
+            "//runtime/config/hal:driver_amd_gpu",
         ])
         if not native.existing_rule(profile):
             loom_target_profile(

@@ -75,7 +75,7 @@ if(NOT DEFINED IREE_HAL_DRIVER_WEBGPU_DEFAULT)
   set(IREE_HAL_DRIVER_WEBGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
 endif()
 option(IREE_HAL_DRIVER_AMDGPU
-  "Enables the amdgpu runtime HAL driver."
+  "Enables the legacy-amdgpu runtime HAL driver."
   ${IREE_HAL_DRIVER_AMDGPU_DEFAULT})
 option(IREE_HAL_DRIVER_TASK
   "Enables the task runtime HAL driver."
@@ -91,7 +91,13 @@ option(IREE_HAL_DRIVER_WEBGPU
   "Enables the WebGPU runtime HAL driver."
   ${IREE_HAL_DRIVER_WEBGPU_DEFAULT})
 option(IREE_HAL_DRIVER_AMD
-  "Enables the native libamdf AMD runtime HAL driver." OFF)
+  "Default value for the native libamdf AMD GPU and XDNA HAL engines." OFF)
+option(IREE_HAL_DRIVER_AMD_GPU
+  "Enables the native AMD GPU HAL (amdgpu, rdna, and cdna)."
+  ${IREE_HAL_DRIVER_AMD})
+option(IREE_HAL_DRIVER_AMD_XDNA
+  "Enables the native AMD XDNA HAL (xdna)."
+  ${IREE_HAL_DRIVER_AMD})
 
 option(IREE_HAL_EXECUTABLE_LOADER_DEFAULTS
   "Sets the default value for all runtime HAL executable loaders." ON)

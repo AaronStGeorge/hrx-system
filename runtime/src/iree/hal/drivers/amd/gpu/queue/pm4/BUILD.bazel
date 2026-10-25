@@ -17,10 +17,10 @@ package(
     licenses = ["notice"],
 )
 
-# Native device integration requires libamdf; pure image/packet/queue utilities
+# Native device integration requires the GPU HAL; pure image/packet/queue utilities
 # remain available in CPU-only builds.
 _NATIVE_DEVICE_COMPATIBLE_WITH = select({
-    "//libamdf/config:enabled_setting": [],
+    "//runtime/config/hal:driver_amd_gpu": [],
     "//conditions:default": ["@platforms//:incompatible"],
 })
 

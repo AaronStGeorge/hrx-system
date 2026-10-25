@@ -305,6 +305,22 @@ class CiTest(unittest.TestCase):
                         ci.platform_coverage_build_steps(step), expected_steps
                     )
 
+    def test_native_amd_engine_composition_matches_between_build_systems(self):
+        for drivers, gpu, xdna in (
+            ((), False, False),
+            (("amd",), True, True),
+            (("amd-gpu",), True, False),
+            (("amd-xdna",), False, True),
+            (("amd-gpu", "amd-xdna"), True, True),
+        ):
+            with self.subTest(drivers=drivers):
+                bazel = ci.bazel_configure_step(enabled_drivers=drivers).argv
+                cmake = ci.cmake_configure_step("example", enabled_drivers=drivers).argv
+                for engine, enabled in (("GPU", gpu), ("XDNA", xdna)):
+                    option = f"-DIREE_HAL_DRIVER_AMD_{engine}="
+                    self.assertEqual(option + "ON" in bazel, enabled)
+                    self.assertIn(option + ("ON" if enabled else "OFF"), cmake)
+
     def test_codec_policy_precedes_explicit_job_overrides(self):
         with mock.patch.object(ci, "codec_options", return_value=("--choice=default",)):
             override = ("--choice=job",)
@@ -1112,7 +1128,7 @@ class CiTest(unittest.TestCase):
             "HAL_VISIBLE_XDNA_DEVICES": "",
             "HAL_VISIBLE_RDNA_DEVICES": "1,0",
             "HAL_VISIBLE_CDNA_DEVICES": "0",
-            "HAL_VISIBLE_AMDGPU2_DEVICES": "2,1",
+            "HAL_VISIBLE_AMDGPU_DEVICES": "2,1",
             "AMDF_CTS_GPU_NATIVE_IDENTITY": "linux_device:226:144",
         }
         with mock.patch.dict(ci.os.environ, device_visibility, clear=True):
@@ -1138,7 +1154,7 @@ class CiTest(unittest.TestCase):
             "HAL_VISIBLE_XDNA_DEVICES": "",
             "HAL_VISIBLE_RDNA_DEVICES": "1,0",
             "HAL_VISIBLE_CDNA_DEVICES": "0",
-            "HAL_VISIBLE_AMDGPU2_DEVICES": "2,1",
+            "HAL_VISIBLE_AMDGPU_DEVICES": "2,1",
             "AMDF_CTS_GPU_NATIVE_IDENTITY": "windows_adapter:123456:0",
         }
         profiles = (

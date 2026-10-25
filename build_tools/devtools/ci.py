@@ -37,12 +37,16 @@ BAZEL_HAL_DRIVER_DEFINES = (
     ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
     ("webgpu", "IREE_HAL_DRIVER_WEBGPU"),
     ("amd", "IREE_HAL_DRIVER_AMD"),
+    ("amd-gpu", "IREE_HAL_DRIVER_AMD_GPU"),
+    ("amd-xdna", "IREE_HAL_DRIVER_AMD_XDNA"),
 )
 CMAKE_HAL_DRIVER_DEFINES = (
     ("amdgpu", "IREE_HAL_DRIVER_AMDGPU"),
     ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
     ("webgpu", "IREE_HAL_DRIVER_WEBGPU"),
     ("amd", "IREE_HAL_DRIVER_AMD"),
+    ("amd-gpu", "IREE_HAL_DRIVER_AMD_GPU"),
+    ("amd-xdna", "IREE_HAL_DRIVER_AMD_XDNA"),
 )
 CMAKE_LOOM_TARGET_DEFINES = (
     ("amdgpu", "LOOM_TARGET_AMDGPU"),
@@ -263,7 +267,7 @@ AMD_DEVICE_VISIBILITY_ENV_VARS = (
     "HAL_VISIBLE_XDNA_DEVICES",
     "HAL_VISIBLE_RDNA_DEVICES",
     "HAL_VISIBLE_CDNA_DEVICES",
-    "HAL_VISIBLE_AMDGPU2_DEVICES",
+    "HAL_VISIBLE_AMDGPU_DEVICES",
     "AMDF_CTS_GPU_NATIVE_IDENTITY",
 )
 
@@ -338,6 +342,8 @@ def validate_enabled_drivers(enabled_drivers: tuple[str, ...]) -> frozenset[str]
         raise ValueError(
             "unsupported CI HAL driver(s): " + ", ".join(sorted(unsupported_drivers))
         )
+    if "amd" in enabled_driver_set:
+        enabled_driver_set |= {"amd-gpu", "amd-xdna"}
     return enabled_driver_set
 
 
@@ -789,7 +795,7 @@ def xdna_steps(targets: tuple[str, ...], config: str | None) -> list[CiStep]:
     # Native ELF consumers and the HAL share the XDNA provider.
     options = (
         "--//libamdf/config:families=xdna",
-        "--//runtime/config/hal:drivers=task,amd",
+        "--//runtime/config/hal:drivers=task,amd-xdna",
         "--//loom/config/execute:enable=iree_hal",
     )
     return [
@@ -881,7 +887,7 @@ def amdgpu_test_steps(
             # compiler-only coverage keeps its independent target selection.
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
-            "--//runtime/config/hal:drivers=task,amd",
+            "--//runtime/config/hal:drivers=task,amd-gpu",
         )
     )
     host_sanitizer_tag_filters = (
@@ -1013,7 +1019,7 @@ def amdgpu_steps(
 ) -> list[CiStep]:
     return [
         bazel_configure_step(
-            enabled_drivers=("amd",),
+            enabled_drivers=("amd-gpu",),
             enabled_loom_targets=("amdgpu", "vm"),
             enabled_loom_importers=enabled_loom_importers,
         ),
@@ -1215,7 +1221,7 @@ def cmake_xdna_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     steps = [
         cmake_configure_step(
             command_name,
-            enabled_drivers=("amd",),
+            enabled_drivers=("amd-xdna",),
             enabled_loom_targets=("vm", "xdna"),
             sanitizer=sanitizer,
             extra_options=(
@@ -1275,7 +1281,7 @@ def cmake_amdgpu_steps(
     steps = [
         cmake_configure_step(
             command_name,
-            enabled_drivers=("amd",),
+            enabled_drivers=("amd-gpu",),
             enabled_loom_targets=("amdgpu", "vm"),
             sanitizer=sanitizer,
             extra_options=(
@@ -1637,7 +1643,7 @@ def _steps_from_args(args: argparse.Namespace) -> list[CiStep]:
         if sanitizer is not None:
             return [
                 bazel_configure_step(
-                    enabled_drivers=("amd",),
+                    enabled_drivers=("amd-gpu",),
                     enabled_loom_targets=("amdgpu", "vm"),
                     enabled_loom_importers=enabled_loom_importers,
                 ),

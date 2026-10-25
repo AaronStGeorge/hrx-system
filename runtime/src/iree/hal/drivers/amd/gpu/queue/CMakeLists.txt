@@ -64,7 +64,7 @@ iree_cc_library(
   PUBLIC
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     allocation
@@ -88,7 +88,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     memory_mapping
@@ -111,7 +111,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     file_transfer
@@ -136,7 +136,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     file_staging
@@ -158,7 +158,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     allocation_test
@@ -183,7 +183,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     host_call
@@ -201,7 +201,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     host_call_test
@@ -221,7 +221,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     file_transfer_test
@@ -466,7 +466,7 @@ iree_cc_binary_benchmark(
   TESTONLY
 )
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     user_queue
@@ -485,7 +485,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     user_queue_test
@@ -498,7 +498,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     membership
@@ -524,7 +524,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     backing
@@ -790,7 +790,7 @@ iree_cc_test(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     program
@@ -809,7 +809,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD)
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     program_test

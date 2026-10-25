@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
           .provider = loomc_amdgpu_iree_hal_target_provider(),
       },
       {
-          .driver_name = IREE_SV("amdgpu2"),
+          .driver_name = IREE_SV("amdgpu"),
           .provider = loomc_amdgpu_iree_hal_target_provider(),
       },
       {
