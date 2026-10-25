@@ -35,7 +35,6 @@ loom_cc_library(
     "compile_diagnostics.h"
     "diagnostics.h"
     "execute.h"
-    "input.h"
     "low_emit.h"
     "low_report.h"
     "requirements.h"
@@ -47,7 +46,6 @@ loom_cc_library(
     "diagnostics.c"
     "emit.c"
     "execute.c"
-    "input.c"
     "low_emit.c"
     "low_report.c"
     "requirements.c"
@@ -88,7 +86,6 @@ loom_cc_library(
     loom::error::parameter
     loom::error::renderer
     loom::error::source
-    loom::format::text::parser
     loom::format::text::printer
     loom::ir
     loom::ops::buffer
@@ -146,7 +143,6 @@ loom_cc_library(
     ::report
     iree::base
     iree::base::internal::arena
-    loom::ir
     loom::testing::test_file
   TESTONLY
   PUBLIC
@@ -183,10 +179,8 @@ loom_cc_test(
     loom::binding::c::interop
     loom::binding::c::loomc
     loom::error::parameter
-    loom::ir
     loom::target::provider
     loom::target::test::provider
-    loom::testing::context
     loom::testing::test_file
     loom::transforms::cleanup::configured
 )
@@ -294,7 +288,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::io::file_handle
-    loom::ir
     loom::testing::test_file
     loom::tooling::io::file
     loom::tooling::io::source_path
@@ -308,6 +301,7 @@ loom_cc_test(
   SRCS
     "file_test.cc"
   DEPS
+    ::execute
     ::file
     iree::base
     iree::base::internal::arena
@@ -315,9 +309,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::testing::temp_file
-    loom::ir
+    loom::binding::c::interop
+    loom::binding::c::loomc
     loom::target::provider
-    loom::testing::context
 )
 
 iree_execution_test_suite(
@@ -352,7 +346,6 @@ loom_cc_library(
     loom::tooling::cli::help
     loom::tooling::cli::loomc_options
     loom::tooling::config::input
-    loom::tooling::context
   PUBLIC
 )
 
@@ -372,7 +365,6 @@ loom_cc_library(
     loom::ir::builders
     loom::ops::test
     loom::target::provider
-    loom::tooling::context
     loom::tooling::input
     loom::transforms::cleanup::configured
   PUBLIC

@@ -50,7 +50,7 @@ static iree_status_t loom_check_process_file(
     iree_string_view_t path, iree_string_view_t filename,
     iree_string_view_t source, bool is_stdin,
     const loom_check_process_options_t* options,
-    const loom_check_environment_t* environment, loom_context_t* context,
+    const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_arena_allocator_t* arena,
     iree_allocator_t allocator, iree_host_size_t* pass_count,
     iree_host_size_t* fail_count, iree_host_size_t* skip_count) {
@@ -136,8 +136,8 @@ static iree_status_t loom_check_process_file(
           environment, block_pool, allocator, &results[i]);
     } else {
       status = loom_check_execute_case(test_case, i, &report, filename,
-                                       &input_request, environment, context,
-                                       block_pool, allocator, &results[i]);
+                                       &input_request, environment, block_pool,
+                                       allocator, &results[i]);
     }
     if (!iree_status_is_ok(status)) {
       break;
@@ -230,7 +230,7 @@ static iree_status_t loom_check_process_file(
 
 iree_status_t loom_check_read_and_process(
     iree_string_view_t path, const loom_check_process_options_t* options,
-    const loom_check_environment_t* environment, loom_context_t* context,
+    const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
     iree_host_size_t* pass_count, iree_host_size_t* fail_count,
     iree_host_size_t* skip_count) {
@@ -251,10 +251,9 @@ iree_status_t loom_check_read_and_process(
     if (iree_status_is_ok(status)) {
       iree_arena_allocator_t arena;
       iree_arena_initialize(block_pool, &arena);
-      status = loom_check_process_file(path, filename, source, is_stdin,
-                                       options, environment, context,
-                                       block_pool, &arena, host_allocator,
-                                       pass_count, fail_count, skip_count);
+      status = loom_check_process_file(
+          path, filename, source, is_stdin, options, environment, block_pool,
+          &arena, host_allocator, pass_count, fail_count, skip_count);
       iree_arena_deinitialize(&arena);
     }
     iree_allocator_free(host_allocator, filename_storage);

@@ -75,7 +75,6 @@ class InputTest : public ::testing::Test {
     compile_session_.provider = &compile_provider_;
     compile_session_.host_allocator = iree_allocator_system();
     environment_.input_providers = {kInputs, IREE_ARRAYSIZE(kInputs)};
-    environment_.register_context.fn = RegisterContext;
     environment_.target_environment = loomc_target_environment_get_interop_view(
         compile_session_.target_environment);
     environment_.compile_session = &compile_session_;
@@ -395,14 +394,14 @@ TEST_F(InputTest, UpdatePreservesInputAndIsIdempotent) {
   loom_check_process_options_t options = {.mode = LOOM_CHECK_PROCESS_UPDATE};
   iree_host_size_t passed = 0, failed = 0, skipped = 0;
   IREE_ASSERT_OK(loom_check_read_and_process(
-      path.path_view(), &options, &environment_, &context_, &pool_,
+      path.path_view(), &options, &environment_, &pool_,
       iree_allocator_system(), &passed, &failed, &skipped));
   const std::string updated = Read(path.path());
   EXPECT_EQ(updated.substr(0, source.size()), source);
   EXPECT_NE(updated.find("// ----\nfunc.def public @entry"), std::string::npos);
   passed = failed = skipped = 0;
   IREE_ASSERT_OK(loom_check_read_and_process(
-      path.path_view(), &options, &environment_, &context_, &pool_,
+      path.path_view(), &options, &environment_, &pool_,
       iree_allocator_system(), &passed, &failed, &skipped));
   EXPECT_EQ(passed, 1u);
   EXPECT_EQ(failed, 0u);

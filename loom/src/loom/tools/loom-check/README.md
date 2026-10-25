@@ -18,6 +18,11 @@ Roundtrip mode and successful pass IR output are reparsed and printed again
 before comparison. An expectation can only be updated when the output parses
 and its canonical text remains stable.
 
+All modes share LoomC's module admission, context, and reusable workspace.
+Roundtrip and format modes use the same text and bytecode APIs as other Loom
+tools. Native inspection providers borrow admitted modules; they do not parse
+another copy or register a second compiler context.
+
 ## Choosing The Test Boundary
 
 C++ unit tests own API contracts and focused functionality. IR programs belong

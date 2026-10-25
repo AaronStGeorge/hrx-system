@@ -63,6 +63,10 @@ typedef struct loom_check_compile_session_t {
   loomc_pass_program_t* artifact_pass_programs[3];
 } loom_check_compile_session_t;
 
+// Prepares the session's context, workspace, and compiler on first use.
+iree_status_t loom_check_compile_session_prepare(
+    loom_check_compile_session_t* session);
+
 typedef struct loom_check_compile_options_t {
   // Lazily prepared public compiler state owned by the runner.
   loom_check_compile_session_t* session;

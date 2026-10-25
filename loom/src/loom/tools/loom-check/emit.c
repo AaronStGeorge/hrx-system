@@ -1579,7 +1579,7 @@ iree_status_t loom_check_execute_emit(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
     const loom_input_request_t* input_request,
-    const loom_check_environment_t* environment, loom_context_t* context,
+    const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
   iree_arena_allocator_t diagnostic_arena;
@@ -1670,7 +1670,6 @@ iree_status_t loom_check_execute_emit(
       .target_options = provider_target_options,
       .filename = filename,
       .test_case = test_case,
-      .context = context,
       .environment = environment,
       .low_registry = &low_registry,
       .diagnostic_collector = &diagnostic_collector,

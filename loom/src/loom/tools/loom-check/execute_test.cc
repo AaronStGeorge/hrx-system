@@ -13,10 +13,8 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/error/parameter.h"
-#include "loom/ir/context.h"
 #include "loom/target/provider.h"
 #include "loom/target/test/provider.h"
-#include "loom/testing/context.h"
 #include "loom/testing/test_file.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/diagnostics.h"
@@ -50,14 +48,6 @@ static iree_string_view_t LookupArrayElement(iree_string_view_t array,
   iree_string_view_t value = iree_string_view_empty();
   IREE_EXPECT_OK(iree_json_array_get(array, index, &value));
   return value;
-}
-
-iree_status_t RegisterTestContext(void* user_data, loom_context_t* context) {
-  (void)user_data;
-  // loom-check execute tests are integration coverage for the test runner's
-  // production registration surface plus the synthetic test dialect providers.
-  // Narrow parser/printer/unit tests should not copy this helper.
-  return loom_testing_context_register_all_dialects(context);
 }
 
 const loom_target_provider_t* const kTestTargetProviders[] = {
@@ -287,11 +277,6 @@ iree_status_t TestForeignInputImport(
 
 const loom_check_environment_t kExecuteTestEnvironment = {
     .input_providers = {},
-    .register_context =
-        {
-            .fn = RegisterTestContext,
-            .user_data = nullptr,
-        },
     .target_environment = {},
     .compile_session = nullptr,
     .cleanup_pattern_provider_set =
@@ -300,11 +285,6 @@ const loom_check_environment_t kExecuteTestEnvironment = {
 
 const loom_check_environment_t kExecuteTestProviderEnvironment = {
     .input_providers = {},
-    .register_context =
-        {
-            .fn = RegisterTestContext,
-            .user_data = nullptr,
-        },
     .target_environment = {},
     .compile_session = nullptr,
     .cleanup_pattern_provider_set =
@@ -350,13 +330,9 @@ class ExecuteTest : public ::testing::Test {
     provider_environment_ = kExecuteTestProviderEnvironment;
     provider_environment_.target_environment = target_environment_;
     provider_environment_.compile_session = &compile_session_;
-    loom_context_initialize(iree_allocator_system(), &context_);
-    IREE_ASSERT_OK(loom_check_context_register_and_finalize(
-        &execute_environment_, &context_));
   }
 
   void TearDown() override {
-    loom_context_deinitialize(&context_);
     loom_check_compile_session_deinitialize(&compile_session_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
@@ -394,8 +370,8 @@ class ExecuteTest : public ::testing::Test {
       loom_input_request_t input_request = {.path = IREE_SV("test.loom-test")};
       status = loom_check_execute_case(
           &file.cases[0], 0, &report, iree_make_cstring_view("test.loom-test"),
-          &input_request, environment, &context_, &block_pool_,
-          iree_allocator_system(), out_result);
+          &input_request, environment, &block_pool_, iree_allocator_system(),
+          out_result);
     }
     iree_arena_deinitialize(&arena);
     if (!iree_status_is_ok(status) && result_initialized) {
@@ -446,7 +422,6 @@ class ExecuteTest : public ::testing::Test {
   }
 
   iree_arena_block_pool_t block_pool_;
-  loom_context_t context_;
   loom_target_provider_set_t target_provider_set_;
   const loom_target_environment_t* target_environment_;
   loom_check_compile_session_t compile_session_;
@@ -581,13 +556,13 @@ TEST_F(ExecuteTest, RoundtripActualOutputPopulated) {
 TEST_F(ExecuteTest, PrintedIRMustParseBeforeUpdating) {
   loom_check_result_t result;
   loom_check_result_initialize(iree_allocator_system(), &result);
-  const loom_text_print_options_t options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT,
-      .low_asm_environment = {},
+  const loomc_module_serialize_options_t options = {
+      .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
+      .structure_size = sizeof(options),
   };
   bool valid = true;
   IREE_ASSERT_OK(loom_check_validate_printed_ir(IREE_SV("%undefined\n"),
-                                                &context_, &block_pool_,
+                                                &compile_session_, &block_pool_,
                                                 &options, &result, &valid));
   EXPECT_FALSE(valid);
   EXPECT_FALSE(result.has_actual_output);
@@ -600,13 +575,13 @@ TEST_F(ExecuteTest, PrintedIRMustParseBeforeUpdating) {
 TEST_F(ExecuteTest, PrintedIRMustBeStableBeforeUpdating) {
   loom_check_result_t result;
   loom_check_result_initialize(iree_allocator_system(), &result);
-  const loom_text_print_options_t options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT,
-      .low_asm_environment = {},
+  const loomc_module_serialize_options_t options = {
+      .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
+      .structure_size = sizeof(options),
   };
   bool valid = true;
   IREE_ASSERT_OK(loom_check_validate_printed_ir(IREE_SV("func.def @f() {}"),
-                                                &context_, &block_pool_,
+                                                &compile_session_, &block_pool_,
                                                 &options, &result, &valid));
   EXPECT_FALSE(valid);
   EXPECT_FALSE(result.has_actual_output);

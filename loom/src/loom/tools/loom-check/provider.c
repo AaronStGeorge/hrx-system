@@ -10,7 +10,6 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/test/registry.h"
-#include "loom/tooling/context/context.h"
 #include "loom/tools/loom-check/main.h"
 #include "loom/tools/loom-check/source_low.h"
 #include "loom/transforms/cleanup/configured.h"
@@ -121,14 +120,6 @@ static iree_status_t loom_check_provider_environment_state_initialize(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_provider_register_context(
-    void* user_data, loom_context_t* context) {
-  loom_check_provider_environment_state_t* state =
-      (loom_check_provider_environment_state_t*)user_data;
-  return loom_tooling_context_register_tool_dialects_with_target_environment(
-      state->native_target_environment, context);
-}
-
 int loom_check_provider_main(int argc, char** argv,
                              const loom_check_provider_set_t* provider_set,
                              loom_input_provider_list_t input_providers) {
@@ -143,11 +134,6 @@ int loom_check_provider_main(int argc, char** argv,
 
   const loom_check_environment_t environment = {
       .input_providers = input_providers,
-      .register_context =
-          {
-              .fn = loom_check_provider_register_context,
-              .user_data = &state,
-          },
       .target_environment = state.native_target_environment,
       .cleanup_pattern_provider_set =
           loom_cleanup_configured_pattern_provider_set(),

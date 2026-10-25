@@ -30,7 +30,7 @@ void loom_check_compile_session_deinitialize(
   *session = (loom_check_compile_session_t){0};
 }
 
-static iree_status_t loom_check_compile_session_prepare(
+iree_status_t loom_check_compile_session_prepare(
     loom_check_compile_session_t* session) {
   if (session->compiler != NULL) {
     return iree_ok_status();

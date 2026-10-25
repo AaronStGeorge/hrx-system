@@ -18,7 +18,6 @@
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/cli/loomc_options.h"
 #include "loom/tooling/config/input.h"
-#include "loom/tooling/context/context.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/file.h"
 #include "loom/tools/loom-check/json_output.h"
@@ -405,10 +404,6 @@ int loom_check_main(
   const iree_string_view_t target =
       iree_string_view_trim(iree_make_cstring_view(FLAG_target));
   const bool compile_enabled = !iree_string_view_is_empty(target);
-  loom_context_t context = {0};
-  if (!compile_enabled) {
-    loom_context_initialize(host_allocator, &context);
-  }
   iree_status_t status = iree_ok_status();
   if (argc > 2) {
     status = iree_make_status(
@@ -416,10 +411,6 @@ int loom_check_main(
         "loom-check accepts at most one input file or '-' for stdin; got %d "
         "inputs",
         argc - 1);
-  }
-  if (iree_status_is_ok(status) && !compile_enabled) {
-    status =
-        loom_check_context_register_and_finalize(base_environment, &context);
   }
   const iree_flag_string_list_t config_files = FLAG_config_file_list();
   const iree_flag_string_list_t configs = FLAG_config_list();
@@ -492,14 +483,13 @@ int loom_check_main(
     if (argc < 2) {
       // No positional args: read from stdin.
       status = loom_check_read_and_process(
-          iree_string_view_empty(), &process_options, &environment, &context,
-          &block_pool, host_allocator, &pass_count, &fail_count, &skip_count);
+          iree_string_view_empty(), &process_options, &environment, &block_pool,
+          host_allocator, &pass_count, &fail_count, &skip_count);
     } else {
       for (int i = 1; iree_status_is_ok(status) && i < argc; ++i) {
         status = loom_check_read_and_process(
             iree_make_cstring_view(argv[i]), &process_options, &environment,
-            &context, &block_pool, host_allocator, &pass_count, &fail_count,
-            &skip_count);
+            &block_pool, host_allocator, &pass_count, &fail_count, &skip_count);
       }
     }
   }
@@ -514,9 +504,6 @@ int loom_check_main(
     iree_status_free(status);
   }
 
-  if (!compile_enabled) {
-    loom_context_deinitialize(&context);
-  }
   loomc_target_profile_release(target_profile);
   loom_check_compile_session_deinitialize(&compile_session);
   iree_allocator_free(host_allocator, config_bindings);
