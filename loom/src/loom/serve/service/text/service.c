@@ -447,13 +447,13 @@ static iree_status_t loom_serve_text_submit_epoch(
   IREE_TRACE_ZONE_APPEND_VALUE_I64(
       z0,
       loom_serve_telemetry_stream_identity(service->telemetry.stream).ordinal);
-  loom_serve_text_epoch_row_t rows[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  loom_serve_text_epoch_row_t* rows = service->epoch.planning.rows;
   for (iree_host_size_t i = 0; i < count; ++i) {
     const iree_host_size_t row = scheduled[i].row_index;
     const loom_serve_text_session_t* session = &service->sessions[row];
     const bool prefill =
         session->request.phase == LOOM_SERVE_TEXT_REQUEST_PREFILL;
-    rows[row] = (loom_serve_text_epoch_row_t){
+    rows[i] = (loom_serve_text_epoch_row_t){
         .input_tokens = prefill
                             ? session->tokens + session->request.input_origin +
                                   session->request.input_offset
@@ -472,7 +472,7 @@ static iree_status_t loom_serve_text_submit_epoch(
         .token = prefill ? 0 : loom_serve_text_row_token(session->row),
     };
   }
-  loom_serve_text_epoch_continuation_t continuation;
+  loom_serve_text_continuation_t continuation;
   loom_serve_text_epoch_prepare(&service->scheduling, rows, shape_index, count,
                                 scheduled, &service->epoch, &continuation);
   loom_serve_text_observe(service, "execute");
@@ -704,6 +704,13 @@ static iree_status_t loom_serve_text_complete_epoch(
 
 static iree_status_t loom_serve_text_service_initialize(
     loom_serve_text_service_t* service, loom_serve_telemetry_stream_t* stream) {
+  iree_host_size_t span_capacity = 0;
+  for (iree_host_size_t i = 0; i < service->scheduling.shape_count; ++i) {
+    span_capacity =
+        iree_max(span_capacity, service->scheduling.shapes[i].span_capacity);
+  }
+  IREE_RETURN_IF_ERROR(loom_serve_text_epoch_initialize(
+      span_capacity, service->host_allocator, &service->epoch));
   IREE_RETURN_IF_ERROR(loom_serve_text_telemetry_initialize(
       stream, service->host_allocator, &service->telemetry));
   IREE_RETURN_IF_ERROR(loom_serve_text_input_count_initialize(
@@ -811,6 +818,7 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   loom_serve_text_checkpoint_registry_deinitialize(&service->checkpoints);
   loom_serve_text_session_cache_deinitialize(&service->cache);
   loom_serve_text_prefix_cache_deinitialize(&service->prefixes);
+  loom_serve_text_epoch_deinitialize(&service->epoch);
   loom_serve_text_heartbeat_deinitialize(&service->heartbeat);
   if (service->telemetry.owns_stream) {
     loom_serve_telemetry_stream_free(service->telemetry.stream);

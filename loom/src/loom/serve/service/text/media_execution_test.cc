@@ -204,6 +204,9 @@ TEST_F(MediaExecutionTest, RaggedCohortConditionsPackedAndIsolatedTextChunks) {
         .shape_count = IREE_ARRAYSIZE(shapes_),
     };
     std::array<size_t, 3> offsets = {};
+    loom_serve_text_epoch_t epoch;
+    IREE_ASSERT_OK(
+        loom_serve_text_epoch_initialize(3, iree_allocator_system(), &epoch));
     for (size_t chunk = 0; chunk < 2; ++chunk) {
       loom_serve_text_epoch_row_t rows[3] = {};
       loom_serve_packed_span_t scheduled[3];
@@ -218,8 +221,7 @@ TEST_F(MediaExecutionTest, RaggedCohortConditionsPackedAndIsolatedTextChunks) {
         };
         scheduled[row] = {row, chunk ? rows[row].input_count : (row ? 2u : 3u)};
       }
-      loom_serve_text_epoch_t epoch;
-      loom_serve_text_epoch_continuation_t continuation;
+      loom_serve_text_continuation_t continuation;
       loom_serve_text_epoch_prepare(&options, rows, 1, 3, scheduled, &epoch,
                                     &continuation);
       do {
@@ -240,6 +242,7 @@ TEST_F(MediaExecutionTest, RaggedCohortConditionsPackedAndIsolatedTextChunks) {
         offsets[row] += scheduled[row].token_count;
       }
     }
+    loom_serve_text_epoch_deinitialize(&epoch);
     for (size_t row = 0; row < 3; ++row) {
       Oracle oracle;
       for (int32_t value : expected[row]) {

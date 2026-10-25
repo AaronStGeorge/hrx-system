@@ -37,9 +37,10 @@ typedef struct loom_serve_text_epoch_options_t {
   iree_host_size_t shape_count;
 } loom_serve_text_epoch_options_t;
 
-// Snapshot of a credited row at a completed model boundary. Only rows selected
-// by the packed partition are read. Zero input_count identifies decode; a
-// nonzero count is remaining prefill, including a one-token prompt tail.
+// Snapshot of a credited participant at a completed model boundary. Snapshots
+// are in packed partition order, not indexed by resident identity. Zero
+// input_count identifies decode; a nonzero count is remaining prefill,
+// including a one-token prompt tail.
 typedef struct loom_serve_text_epoch_row_t {
   // Borrowed input IDs, stable until all cohort spans have been submitted.
   const int32_t* input_tokens;
@@ -60,8 +61,12 @@ typedef struct loom_serve_text_epoch_row_t {
 // One immutable cohort and its completed feedback. The owner retains this
 // storage until successful device readiness and response CPU release. Planning
 // has no HTTP side effects, allocations, native mutation or synchronization.
-// Span anchors borrow decode_tokens, so a prepared cohort is not movable.
+// Span anchors borrow the stable allocation containing decode_tokens.
 typedef struct loom_serve_text_epoch_t {
+  // Allocator owning the reusable host allocation, never used by planning.
+  iree_allocator_t host_allocator;
+  // Owned backing for retained arrays and temporary continuation planning.
+  void* storage;
   // Number of admitted spans; zero when no cohort is retained.
   iree_host_size_t count;
   // Cached command-program bucket for the first epoch.
@@ -87,40 +92,56 @@ typedef struct loom_serve_text_epoch_t {
   // Total first-epoch input slots, including speculative proposals.
   iree_host_size_t input_count;
   // Retained row associations, known IDs and selection flags.
-  loom_serve_text_span_t spans[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  loom_serve_text_span_t* spans;
   // Per-span feedback filled only after successful readiness.
-  loom_serve_text_result_t results[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  loom_serve_text_result_t* results;
   // Stable anchors for later isolated submissions.
-  int32_t decode_tokens[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  int32_t* decode_tokens;
   // Consumed positions before submission, used by accounting.
-  iree_host_size_t positions[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  iree_host_size_t* positions;
   // Total output credit, including the optional second epoch.
-  uint32_t output_limits[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  uint32_t* output_limits;
   // Original input phase, independent of length-one span shape.
-  bool prefill[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  bool* prefill;
+  // Submission-only storage reused after the native model captures a plan.
+  struct {
+    // Compact participant snapshots filled by the service before planning.
+    loom_serve_text_epoch_row_t* rows;
+    // Remaining work indexed by the first cohort's ordinal.
+    loom_serve_ready_span_t* ready;
+    // Winning continuation partition, still in first-cohort ordinals.
+    loom_serve_packed_span_t* scheduled;
+    // Candidate partition reused for each continuation shape.
+    loom_serve_packed_span_t* candidate;
+    // Following spans retaining the original resident identities.
+    loom_serve_text_span_t* spans;
+    // Following per-span output limits across both epochs.
+    uint32_t* output_limits;
+  } planning;
 } loom_serve_text_epoch_t;
 
-// Submission-only second-epoch storage. The native model copies these inputs
-// during submit; unlike the cohort feedback, this may live on the caller stack.
-// continuation borrows this object's arrays, so the object is not movable.
-typedef struct loom_serve_text_epoch_continuation_t {
-  // Borrowed view over the following arrays; zero spans means absent.
-  loom_serve_text_continuation_t continuation;
-  // Known input or device-fed verifier spans in the next shape.
-  loom_serve_text_span_t spans[LOOM_SERVE_TEXT_ROW_CAPACITY];
-  // Per-span output limits across both epochs.
-  uint32_t output_limits[LOOM_SERVE_TEXT_ROW_CAPACITY];
-} loom_serve_text_epoch_continuation_t;
+// Allocates one reusable host block for a positive maximum cohort width. This
+// width describes the prepared dispatch catalog, not resident session count.
+// Partial/zero initialization may be deinitialized; no preparation allocates.
+iree_status_t loom_serve_text_epoch_initialize(
+    iree_host_size_t span_capacity, iree_allocator_t host_allocator,
+    loom_serve_text_epoch_t* out_epoch);
+
+// All submitted work and response CPU borrowers must have retired first.
+void loom_serve_text_epoch_deinitialize(loom_serve_text_epoch_t* epoch);
 
 // Converts an already credited, nonempty packed partition into model inputs.
-// The partition, source capacities and row snapshots are trusted owner state.
+// The partition, source capacities and compact snapshots are trusted owner
+// state. rows has count entries in scheduled order, independent of row IDs.
 // Caller supplies start identity/time after planning and before submission.
+// epoch has capacity for count entries. continuation borrows epoch's reusable
+// planning storage until the native submission captures it.
 void loom_serve_text_epoch_prepare(
     const loom_serve_text_epoch_options_t* options,
     const loom_serve_text_epoch_row_t* rows, iree_host_size_t shape_index,
     iree_host_size_t count, const loom_serve_packed_span_t* scheduled,
     loom_serve_text_epoch_t* epoch,
-    loom_serve_text_epoch_continuation_t* continuation);
+    loom_serve_text_continuation_t* continuation);
 
 // Submits a packed cohort or the current isolated span without waiting.
 // continuation is required for packed execution and unused for isolated modes.
@@ -129,7 +150,7 @@ void loom_serve_text_epoch_prepare(
 iree_status_t loom_serve_text_epoch_submit(
     loom_serve_text_model_t* model, loom_serve_text_schedule_mode_t mode,
     const loom_serve_text_epoch_t* epoch,
-    const loom_serve_text_epoch_continuation_t* continuation,
+    const loom_serve_text_continuation_t* continuation,
     loom_serve_text_capture_t** out_capture,
     loom_serve_execution_frontier_t* out_frontier);
 
