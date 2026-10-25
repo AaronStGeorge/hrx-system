@@ -416,6 +416,7 @@ loom_cc_library(
         "lower/shuffle.c",
         "lower/transpose.c",
         "lower/vector_construct.c",
+        "lower/vector_load.c",
         "lower/vector_packet.c",
     ],
     hdrs = [
@@ -429,6 +430,7 @@ loom_cc_library(
         "lower/shuffle.h",
         "lower/transpose.h",
         "lower/vector_construct.h",
+        "lower/vector_load.h",
         "lower/vector_packet.h",
     ],
     textual_hdrs = ["//loom/src/loom/target/arch/amd/xdna/aie2p/contracts:core_index.inl"],
@@ -437,6 +439,8 @@ loom_cc_library(
         ":gather",
         ":vector_carrier",
         "//loom/src/loom/analysis:contract_vector",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:source_memory_plan",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/codegen/low/lower:representation_observer",
         "//loom/src/loom/error:error_defs",
@@ -455,6 +459,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amd/xdna/aie2p/ops",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
     ],
 )
 
@@ -1026,6 +1031,8 @@ loom_check_test_suite(
         "test/source_low/vector_index_conversion.loom-test",
         "test/source_low/vector_interleave.loom-test",
         "test/source_low/vector_large_insert.loom-test",
+        "test/source_low/vector_load_underaligned.loom-test",
+        "test/source_low/vector_load_underaligned_family.loom-test",
         "test/source_low/vector_mask_select.loom-test",
         "test/source_low/vector_memory.loom-test",
         "test/source_low/vector_partial_carriers.loom-test",

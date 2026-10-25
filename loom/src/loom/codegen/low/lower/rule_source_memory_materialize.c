@@ -9,6 +9,7 @@
 #include "loom/codegen/low/lower/rule_descriptor.h"
 #include "loom/codegen/low/lower/rule_match.h"
 #include "loom/codegen/low/lower/rule_source_memory.h"
+#include "loom/codegen/low/lower/source_memory.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
@@ -613,13 +614,17 @@ loom_low_lower_rule_materialize_source_memory_complete_byte_offset(
     loom_value_id_t* out_value_id) {
   *out_value_id = LOOM_VALUE_ID_INVALID;
   IREE_ASSERT(source_memory_access != NULL);
-  IREE_ASSERT_GT(source_memory_access->dynamic_term_count, 0);
   const loom_low_lower_source_memory_byte_offset_materializer_t* materializer =
       loom_low_lower_rule_set_source_memory_byte_offset_materializer(
           rule_set, source_memory);
   const int64_t static_byte_offset =
       loom_low_lower_rule_source_memory_static_byte_offset(
           source_memory, source_memory_access);
+  if (source_memory_access->dynamic_term_count == 0) {
+    return loom_low_lower_rule_source_memory_emit_static_bias(
+        context, rule_set, materializer, static_byte_offset,
+        source_op->location, out_value_id);
+  }
   const loom_low_source_memory_dynamic_term_t* term =
       &source_memory_access->dynamic_terms[0];
   const bool term_requires_multiply =
@@ -661,6 +666,28 @@ loom_low_lower_rule_materialize_source_memory_complete_byte_offset(
   return loom_low_lower_rule_source_memory_emit_binary_op(
       context, rule_set, materializer->add_descriptor_ref, dynamic_byte_offset,
       static_value, source_op->location, out_value_id);
+}
+
+iree_status_t loom_low_lower_materialize_source_memory_complete_byte_offset(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_source_memory_byte_offset_materializer_t* materializer,
+    const loom_op_t* source_op,
+    const loom_low_source_memory_access_plan_t* access,
+    loom_value_id_t* out_value_id) {
+  IREE_ASSERT(materializer >=
+              rule_set->source_memory_byte_offset_materializers);
+  const iree_host_size_t materializer_index =
+      (iree_host_size_t)(materializer -
+                         rule_set->source_memory_byte_offset_materializers);
+  IREE_ASSERT_LT(materializer_index,
+                 rule_set->source_memory_byte_offset_materializer_count);
+  const loom_low_lower_source_memory_t source_memory = {
+      .byte_offset_materializer_ordinal = (uint8_t)(materializer_index + 1),
+      .flags = LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_REUSE_VIEW_BASE,
+  };
+  return loom_low_lower_rule_materialize_source_memory_complete_byte_offset(
+      context, rule_set, source_op, &source_memory, access, out_value_id);
 }
 
 static iree_status_t

@@ -15,6 +15,8 @@ extern "C" {
 #endif
 
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
+typedef struct loom_low_lower_source_memory_byte_offset_materializer_t
+    loom_low_lower_source_memory_byte_offset_materializer_t;
 typedef struct loom_low_lower_source_memory_builder_t
     loom_low_lower_source_memory_builder_t;
 
@@ -107,6 +109,25 @@ const loom_low_source_memory_access_plan_t* loom_low_lower_source_memory_access(
 // source-memory record is active or its relative origin is not representable.
 const loom_low_lower_memory_origin_t* loom_low_lower_source_memory_origin(
     const loom_low_lower_context_t* context);
+
+// Marks exactly the source values needed to materialize a canonical complete
+// byte offset together with its storage root. Target-prepared memory plans use
+// this instead of conservatively retaining every authored index operand.
+void loom_low_lower_require_source_memory_complete_byte_offset_storage(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* access);
+
+// Materializes a canonical complete byte offset with one generated rule-set
+// arithmetic contract. The materializer must belong to |rule_set|. Producer-
+// retained complete view-base expressions are reused when they replace a
+// multi-term reconstruction.
+iree_status_t loom_low_lower_materialize_source_memory_complete_byte_offset(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_source_memory_byte_offset_materializer_t* materializer,
+    const loom_op_t* source_op,
+    const loom_low_source_memory_access_plan_t* access,
+    loom_value_id_t* out_value_id);
 
 // Returns the current access's retained loop-invariant canonical term set.
 uint16_t loom_low_lower_source_memory_invariant_terms(

@@ -499,6 +499,7 @@ loom_cc_library(
     "lower/shuffle.h"
     "lower/transpose.h"
     "lower/vector_construct.h"
+    "lower/vector_load.h"
     "lower/vector_packet.h"
   TEXTUAL_HDRS
     "${IREE_BINARY_DIR}/loom/src/loom/target/arch/amd/xdna/aie2p/contracts/core_index.inl"
@@ -513,15 +514,19 @@ loom_cc_library(
     "lower/shuffle.c"
     "lower/transpose.c"
     "lower/vector_construct.c"
+    "lower/vector_load.c"
     "lower/vector_packet.c"
   DEPS
     ::core_descriptors
     ::gather
     ::vector_carrier
     iree::base
+    iree::base::internal
     loom::analysis::contract_vector
+    loom::codegen::low::builder
     loom::codegen::low::lower
     loom::codegen::low::lower::representation_observer
+    loom::codegen::low::source_memory_plan
     loom::error::error_defs
     loom::ir
     loom::ir::facts
@@ -1207,6 +1212,8 @@ loom_check_test_suite(
     "test/source_low/vector_index_conversion.loom-test"
     "test/source_low/vector_interleave.loom-test"
     "test/source_low/vector_large_insert.loom-test"
+    "test/source_low/vector_load_underaligned.loom-test"
+    "test/source_low/vector_load_underaligned_family.loom-test"
     "test/source_low/vector_mask_select.loom-test"
     "test/source_low/vector_memory.loom-test"
     "test/source_low/vector_partial_carriers.loom-test"
