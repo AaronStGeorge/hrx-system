@@ -123,10 +123,7 @@ extern "C" {
 // The accepting_bitmap uses uint64_t which requires 8-byte alignment on
 // strict architectures (ARM, SPARC). Unaligned data will be rejected by
 // iree_tokenizer_regex_dfa_load() with INVALID_ARGUMENT status.
-#define IREE_TOKENIZER_UTIL_REGEX_DFA_VERSION 1
-
-// Maximum supported DFA version (for forward compatibility).
-#define IREE_TOKENIZER_UTIL_REGEX_DFA_MAX_VERSION 1
+#define IREE_TOKENIZER_UTIL_REGEX_DFA_VERSION 2
 
 // Sentinel value for "no transition" in the transition table.
 #define IREE_TOKENIZER_UTIL_REGEX_NO_TRANSITION 0xFFFFu
@@ -335,10 +332,14 @@ typedef uint8_t iree_tokenizer_regex_lookahead_flags_t;
 // For LOOKAHEAD_NEG_SHORTHAND: data encodes the shorthand type.
 // For LOOKAHEAD_NEG_CLASS: data is offset into extended lookahead bitmap table.
 typedef struct iree_tokenizer_regex_lookahead_t {
+  // Predicate evaluated against the next codepoint.
   iree_tokenizer_regex_lookahead_type_t type;
-  uint8_t data;                                  // Type-specific data
-  iree_tokenizer_regex_lookahead_flags_t flags;  // PCRE-compatibility flags
-  uint8_t reserved;                              // Padding for alignment
+  // Character or shorthand selected by the predicate type.
+  uint8_t data;
+  // Ordering of conditional and unconditional accept paths.
+  iree_tokenizer_regex_lookahead_flags_t flags;
+  // Highest-priority unconditional accept for WITH_FALLBACK states.
+  uint8_t fallback_branch;
 } iree_tokenizer_regex_lookahead_t;
 static_assert(sizeof(iree_tokenizer_regex_lookahead_t) == 4,
               "lookahead entry must be 4 bytes");

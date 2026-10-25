@@ -203,12 +203,11 @@ iree_status_t iree_tokenizer_regex_dfa_load(
   }
 
   // Validate version.
-  if (header->version < 1 ||
-      header->version > IREE_TOKENIZER_UTIL_REGEX_DFA_MAX_VERSION) {
+  if (header->version != IREE_TOKENIZER_UTIL_REGEX_DFA_VERSION) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "unsupported DFA version: %u (supported: 1-%u)",
+                            "unsupported DFA version: %u (supported: %u)",
                             header->version,
-                            IREE_TOKENIZER_UTIL_REGEX_DFA_MAX_VERSION);
+                            IREE_TOKENIZER_UTIL_REGEX_DFA_VERSION);
   }
 
   // Validate state count.
@@ -450,6 +449,16 @@ iree_status_t iree_tokenizer_regex_dfa_validate(
                                 "LOOKAHEAD_NEG_CLASS at state %u requires "
                                 "bitmap support (not yet implemented)",
                                 state);
+      }
+      if (dfa->accepting_branches &&
+          type >= IREE_TOKENIZER_UTIL_REGEX_LOOKAHEAD_NEG_CHAR_WITH_FALLBACK) {
+        uint8_t branch = dfa->lookahead[state].fallback_branch;
+        if (branch >= 64 ||
+            !(dfa->accepting_branches[state] & (1ULL << branch))) {
+          return iree_make_status(
+              IREE_STATUS_DATA_LOSS,
+              "fallback branch %u does not accept at state %u", branch, state);
+        }
       }
     }
   }

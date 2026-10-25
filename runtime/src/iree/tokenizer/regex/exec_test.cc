@@ -294,14 +294,16 @@ TEST(DfaLoad, InvalidMagic) {
 }
 
 TEST(DfaLoad, UnsupportedVersion) {
-  auto data = BuildAbcDfa();
-  // Set version to 99.
-  auto* header = (iree_tokenizer_regex_dfa_header_t*)data.data();
-  header->version = 99;
-  iree_tokenizer_regex_dfa_t dfa;
-  iree_status_t status = iree_tokenizer_regex_dfa_load(
-      iree_make_const_byte_span(data.data(), data.size()), &dfa);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  for (uint16_t version : {0, 1, 3}) {
+    SCOPED_TRACE(version);
+    auto data = BuildAbcDfa();
+    auto* header = (iree_tokenizer_regex_dfa_header_t*)data.data();
+    header->version = version;
+    iree_tokenizer_regex_dfa_t dfa;
+    iree_status_t status = iree_tokenizer_regex_dfa_load(
+        iree_make_const_byte_span(data.data(), data.size()), &dfa);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  }
 }
 
 TEST(DfaLoad, TruncatedData) {
