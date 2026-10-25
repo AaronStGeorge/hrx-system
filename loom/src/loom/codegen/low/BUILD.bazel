@@ -637,6 +637,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/allocation:assignment_map",
         "//loom/src/loom/codegen/low/allocation:call",
         "//loom/src/loom/codegen/low/allocation:coalescing",
+        "//loom/src/loom/codegen/low/allocation:concat_affinity",
         "//loom/src/loom/codegen/low/allocation:copy_decision",
         "//loom/src/loom/codegen/low/allocation:destructive_reuse",
         "//loom/src/loom/codegen/low/allocation:diagnostics",

@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/allocation/concat_affinity.h"
 #include "loom/codegen/low/allocation/copy_decision.h"
 #include "loom/codegen/low/allocation/destructive_reuse.h"
 #include "loom/codegen/low/allocation/edge_copy.h"

@@ -50,6 +50,33 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    concat_affinity
+  HDRS
+    "concat_affinity.h"
+  SRCS
+    "concat_affinity.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::codegen::low::placement
+    loom::util::segmented_storage
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    concat_affinity_test
+  SRCS
+    "concat_affinity_test.cc"
+  DEPS
+    ::concat_affinity
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     placement
   HDRS
     "placement.h"
@@ -69,7 +96,6 @@ loom_cc_library(
     loom::codegen::low::storage_relation
     loom::ir
     loom::ops::low
-    loom::util::segmented_storage
   PUBLIC
 )
 
@@ -441,6 +467,7 @@ loom_cc_library(
   DEPS
     ::assignment
     ::assignment_map
+    ::concat_affinity
     ::concat_reservation
     ::edge_alias
     ::live_range

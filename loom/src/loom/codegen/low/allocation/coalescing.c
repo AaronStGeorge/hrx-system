@@ -6,11 +6,11 @@
 
 #include "loom/codegen/low/allocation/coalescing.h"
 
+#include "loom/codegen/low/allocation/concat_affinity.h"
 #include "loom/codegen/low/allocation/concat_reservation.h"
 #include "loom/codegen/low/allocation/edge_alias.h"
 #include "loom/codegen/low/allocation/live_range.h"
 #include "loom/codegen/low/allocation/physical_domains.h"
-#include "loom/codegen/low/allocation/placement.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/codegen/low/storage_relation.h"
