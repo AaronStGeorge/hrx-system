@@ -43,7 +43,6 @@ loom_cc_library(
   DEPS
     ::program_plan
     iree::base
-    loom::target::arch::cmd::provider
     loom::tools::loom-check::provider
   PUBLIC
 )

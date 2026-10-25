@@ -21,8 +21,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_X86_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/x86/check:__pkg__"]
-
 _X86_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/x86/lower:__pkg__"]
 
 _X86_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
@@ -38,7 +36,7 @@ _X86_FACTS_VISIBILITY = _X86_NATIVE_VISIBILITY + _X86_OPS_VISIBILITY + [
 _X86_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
-] + _X86_CHECK_PACKAGE_VISIBILITY
+]
 
 #===------------------------------------------------------------------------===#
 # x86 target support

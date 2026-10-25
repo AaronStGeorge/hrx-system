@@ -40,7 +40,6 @@ loom_cc_library(
     visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
     deps = [
         ":program_plan",
-        "//loom/src/loom/target/arch/cmd:provider",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
