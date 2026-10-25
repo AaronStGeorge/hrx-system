@@ -143,6 +143,12 @@ specialization or transformation, and verify successful pipeline output before
 comparison. Input verification errors use the same diagnostic annotations as
 `verify` mode and prevent the pipeline from running.
 
+These modes use LoomC's prepared programs and module-owned compilation state.
+Pass IR output inspects the transformed module directly; unlike durable module
+serialization, it does not materialize retained target facts as new definitions.
+Pass and compile reports are consumed while their module and target providers
+remain live.
+
 Pass, pass-report, and compile-report modes accept the same target selection
 before the pipeline. An optional `entry=@function` selects an explicit entry;
 otherwise the sole definition or unique public function or kernel entry is

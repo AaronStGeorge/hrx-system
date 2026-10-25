@@ -1294,53 +1294,18 @@ TEST_F(ExecuteTest, PassModePassesOptionsToPassCreate) {
 }
 
 TEST_F(ExecuteTest, PassModeRejectsOptionsForUnsupportedPass) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: pass dce{max-iterations=1}\n"
-                   "func.def @f() {\n"
-                   "  func.return\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
-  loom_check_result_deinitialize(&result);
+  ExpectFirstFailsWithDetail("// RUN: pass dce{max-iterations=1}\n",
+                             "pass 'dce' does not accept options");
 }
 
 TEST_F(ExecuteTest, PassModeRejectsMalformedOptions) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: pass canonicalize{bogus=1}\n"
-                   "func.def @f() {\n"
-                   "  func.return\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: pass canonicalize{max-iterations=1\n"
-                   "func.def @f() {\n"
-                   "  func.return\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-
-  IREE_ASSERT_OK(ExecuteFirst(
-      "// RUN: pass canonicalize{max-iterations=1,max-iterations=2}\n"
-      "func.def @f() {\n"
-      "  func.return\n"
-      "}\n",
-      &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
-  loom_check_result_deinitialize(&result);
+  ExpectFirstFailsWithDetail("// RUN: pass canonicalize{bogus=1}\n",
+                             "unknown option 'bogus'");
+  ExpectFirstFailsWithDetail("// RUN: pass canonicalize{max-iterations=1\n",
+                             "unterminated");
+  ExpectFirstFailsWithDetail(
+      "// RUN: pass canonicalize{max-iterations=1,max-iterations=2}\n",
+      "duplicate option 'max-iterations'");
 }
 
 TEST_F(ExecuteTest, RequiresUnavailableSkipsCaseBeforeParsingIr) {

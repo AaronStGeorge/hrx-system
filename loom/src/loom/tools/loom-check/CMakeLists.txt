@@ -75,16 +75,12 @@ loom_cc_library(
     loom::codegen::low::frame
     loom::codegen::low::function
     loom::codegen::low::function_model
-    loom::codegen::low::lower
     loom::codegen::low::operand_ties
     loom::codegen::low::packet_json
-    loom::codegen::low::pipeline::legalizer_registry
     loom::codegen::low::schedule
     loom::codegen::low::schedule::json
     loom::codegen::low::target_binding
     loom::codegen::low::text_asm
-    loom::codegen::low::verify
-    loom::codegen::pass_environment
     loom::error::diagnostic
     loom::error::emitter
     loom::error::error_defs
@@ -103,11 +99,9 @@ loom_cc_library(
     loom::ops::pipeline
     loom::ops::target
     loom::ops::type_registry
-    loom::pass::builtin_registry
     loom::pass::pipeline
     loom::pass::registry
     loom::pass::report
-    loom::pass::tooling
     loom::rewrite::rewriter
     loom::sanitizer::options
     loom::target::entry_selection
@@ -119,13 +113,11 @@ loom_cc_library(
     loom::target::math_policy
     loom::target::pipeline
     loom::target::pipeline_options
-    loom::target::predicate
     loom::target::provider
     loom::target::reporting::format
     loom::target::reporting::low
     loom::target::reporting::report
     loom::target::selection
-    loom::target::specialization
     loom::target::types
     loom::testing::test_diagnostic
     loom::testing::test_diagnostic_loomc
@@ -135,12 +127,10 @@ loom_cc_library(
     loom::tooling::input
     loom::tooling::io::module_format
     loom::tooling::io::source_path
-    loom::transforms::cleanup::patterns
     loom::util::diff
     loom::util::fact_table
     loom::util::json
     loom::util::stream
-    loom::verify
   PUBLIC
 )
 

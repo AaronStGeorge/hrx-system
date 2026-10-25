@@ -291,7 +291,7 @@ struct loom_check_environment_t {
   loom_check_register_context_callback_t register_context;
   // Composed target environment used by target-aware check modes.
   const loom_target_environment_t* target_environment;
-  // Lazy public session for verification, format conversion, and compilation.
+  // Lazy public session for verification, formatting, passes, and compilation.
   loom_check_compile_session_t* compile_session;
   // Cleanup rewrite providers linked into this runner.
   const loom_cleanup_pattern_provider_set_t* cleanup_pattern_provider_set;

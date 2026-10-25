@@ -56,8 +56,14 @@ static iree_status_t loom_check_compile_session_prepare(
   iree_status_t status = iree_status_from_loomc(
       loomc_context_create(&context_options, allocator, &session->context));
   if (iree_status_is_ok(status)) {
+    // Keep compiler scratch on the checker's small-case arena block policy.
+    const loomc_workspace_options_t workspace_options = {
+        .type = LOOMC_STRUCTURE_TYPE_WORKSPACE_OPTIONS,
+        .structure_size = sizeof(workspace_options),
+        .block_size = 32 * 1024,
+    };
     status = iree_status_from_loomc(loomc_workspace_create(
-        /*options=*/NULL, allocator, &session->workspace));
+        &workspace_options, allocator, &session->workspace));
   }
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(loomc_compiler_create(
@@ -332,7 +338,7 @@ static iree_status_t loom_check_compile_prepare_source_low_program(
   return status;
 }
 
-static iree_status_t loom_check_compile_select_source_function(
+iree_status_t loom_check_compile_select_source_function(
     const loom_module_t* module, iree_string_view_t function_name,
     iree_string_view_t* out_function_name) {
   if (!iree_string_view_is_empty(function_name)) {
@@ -371,7 +377,7 @@ static iree_status_t loom_check_compile_select_source_function(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_compile_project_module(
+iree_status_t loom_check_compile_project_module(
     loomc_module_t* module, loom_check_diagnostic_collector_t* collector,
     iree_allocator_t allocator, loomc_module_interop_view_t* out_view,
     bool* out_succeeded) {

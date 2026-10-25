@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Offline compiler qualification, independent of execution resources.
+// Public module ownership and compiler invocation for checker modes.
 
 #ifndef LOOM_TOOLS_LOOM_CHECK_COMPILE_H_
 #define LOOM_TOOLS_LOOM_CHECK_COMPILE_H_
@@ -15,6 +15,7 @@
 #include "loom/tools/loom-check/execute.h"
 #include "loomc/compile.h"
 #include "loomc/compile_report.h"
+#include "loomc/interop.h"
 #include "loomc/sanitizer.h"
 #include "loomc/target.h"
 
@@ -162,6 +163,20 @@ iree_status_t loom_check_compile_admit_module(
     loom_check_diagnostic_collector_t* diagnostic_collector,
     iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
     loomc_module_t** out_module);
+
+// Selects the explicit function name, sole definition, or unique public/kernel
+// entry among private helpers. The returned name borrows module storage.
+iree_status_t loom_check_compile_select_source_function(
+    const loom_module_t* module, iree_string_view_t function_name,
+    iree_string_view_t* out_function_name);
+
+// Borrows verified IR for native inspection. The view remains valid until the
+// public module is mutated or released. Rejection diagnostics are copied into
+// |collector| and reported through |out_succeeded|.
+iree_status_t loom_check_compile_project_module(
+    loomc_module_t* module, loom_check_diagnostic_collector_t* collector,
+    iree_allocator_t allocator, loomc_module_interop_view_t* out_view,
+    bool* out_succeeded);
 
 // Projects, invokes, and re-verifies the admitted public module in |request|.
 // Public verification diagnostics suppress the callback and return OK for
