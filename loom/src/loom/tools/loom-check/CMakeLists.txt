@@ -365,9 +365,6 @@ loom_cc_library(
     iree::base
     loom::binding::c::interop
     loom::binding::c::loomc
-    loom::ir::builders
-    loom::ops::test
-    loom::target::provider
     loom::tooling::input::format
     loom::transforms::cleanup::configured
   PUBLIC
@@ -384,7 +381,6 @@ loom_cc_library(
     ::execute
     ::provider
     iree::base
-    loom::target::test::provider
     loom::tools::loom-check::test::config::providers
     loom::tools::loom-check::test::low::providers
   TESTONLY
@@ -413,14 +409,8 @@ set(_loom_check_platform_copts "")
 if(LOOM_EMIT_AMDGPU)
   list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_AMDGPU=1")
 endif()
-if(LOOM_TARGET_ARCH_SPIRV)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1")
-endif()
 if(LOOM_EMIT_SPIRV)
   list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_SPIRV=1")
-endif()
-if(LOOM_TARGET_ARCH_WASM)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_WASM=1")
 endif()
 if(LOOM_TARGET_ARCH_VM)
   list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_VM=1")
@@ -438,17 +428,10 @@ set(_loom_check_platform_deps "")
 if(LOOM_EMIT_AMDGPU)
   list(APPEND _loom_check_platform_deps loom::target::arch::amdgpu::check::provider)
 endif()
-if(LOOM_TARGET_ARCH_SPIRV)
-  list(APPEND _loom_check_platform_deps loom::target::arch::spirv::check::check_provider)
-endif()
 if(LOOM_EMIT_SPIRV)
   list(APPEND _loom_check_platform_deps loom::tooling::target::spirv::check_provider)
 endif()
-if(LOOM_TARGET_ARCH_WASM)
-  list(APPEND _loom_check_platform_deps loom::target::arch::wasm::check::check_provider)
-endif()
 if(LOOM_TARGET_ARCH_VM)
-  list(APPEND _loom_check_platform_deps loom::target::arch::vm::check::check_provider)
   list(APPEND _loom_check_platform_deps loom::tooling::target::vm::check_provider)
 endif()
 if(LOOM_EMIT_WASM)
@@ -472,8 +455,13 @@ loomc_cc_binary(
     ::execute
     ::provider
     iree::base
+    loom::binding::c::interop
+    loom::binding::c::loomc
+    loom::binding::c::target::configured
+    loom::binding::c::target::configured::target
+    loom::ops::test
     loom::target::arch::cmd::check::check_provider
-    loom::target::configured::compiler_provider_set
+    loom::target::provider
     loom::tooling::export::cxx::loom_check
     loom::tooling::input::loomc_configured
     ${_loom_check_platform_deps}
@@ -483,14 +471,8 @@ set(_loom_check_test_platform_copts "")
 if(LOOM_EMIT_AMDGPU)
   list(APPEND _loom_check_test_platform_copts "-DLOOM_CHECK_HAVE_EMIT_AMDGPU=1")
 endif()
-if(LOOM_TARGET_ARCH_SPIRV)
-  list(APPEND _loom_check_test_platform_copts "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1")
-endif()
 if(LOOM_EMIT_SPIRV)
   list(APPEND _loom_check_test_platform_copts "-DLOOM_CHECK_HAVE_EMIT_SPIRV=1")
-endif()
-if(LOOM_TARGET_ARCH_WASM)
-  list(APPEND _loom_check_test_platform_copts "-DLOOM_CHECK_HAVE_TARGET_WASM=1")
 endif()
 if(LOOM_TARGET_ARCH_VM)
   list(APPEND _loom_check_test_platform_copts "-DLOOM_CHECK_HAVE_TARGET_VM=1")
@@ -508,17 +490,10 @@ set(_loom_check_test_platform_deps "")
 if(LOOM_EMIT_AMDGPU)
   list(APPEND _loom_check_test_platform_deps loom::target::arch::amdgpu::check::provider)
 endif()
-if(LOOM_TARGET_ARCH_SPIRV)
-  list(APPEND _loom_check_test_platform_deps loom::target::arch::spirv::check::check_provider)
-endif()
 if(LOOM_EMIT_SPIRV)
   list(APPEND _loom_check_test_platform_deps loom::tooling::target::spirv::check_provider)
 endif()
-if(LOOM_TARGET_ARCH_WASM)
-  list(APPEND _loom_check_test_platform_deps loom::target::arch::wasm::check::check_provider)
-endif()
 if(LOOM_TARGET_ARCH_VM)
-  list(APPEND _loom_check_test_platform_deps loom::target::arch::vm::check::check_provider)
   list(APPEND _loom_check_test_platform_deps loom::tooling::target::vm::check_provider)
 endif()
 if(LOOM_EMIT_WASM)
@@ -547,8 +522,14 @@ loomc_cc_binary(
     ::provider
     ::test_provider
     iree::base
+    loom::binding::c::interop
+    loom::binding::c::loomc
+    loom::binding::c::target::configured
+    loom::binding::c::target::configured::target
+    loom::ops::test
     loom::target::arch::cmd::check::check_provider
-    loom::target::configured::compiler_provider_set
+    loom::target::provider
+    loom::target::test::provider
     loom::tooling::export::cxx::loom_check
     loom::tooling::input::loomc_configured
     ${_loom_check_test_platform_deps}

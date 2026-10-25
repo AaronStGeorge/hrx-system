@@ -23,6 +23,13 @@ Roundtrip and format modes use the same text and bytecode APIs as other Loom
 tools. Native inspection providers borrow admitted modules; they do not parse
 another copy or register a second compiler context.
 
+The final binary composes configured target and compiler support through
+LoomC. Target capabilities and artifact emitters are selected separately.
+Check providers contribute only inspection and requirement handlers; they
+borrow that environment rather than registering compiler capabilities. The
+test binary separately adds its synthetic target and passes. The shipping
+binary accepts `test.*` syntax without those synthetic compiler extensions.
+
 ## Choosing The Test Boundary
 
 C++ unit tests own API contracts and focused functionality. IR programs belong

@@ -24,8 +24,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
-
 _AMDGPU_ANALYSIS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/analysis:__pkg__"]
 
 _AMDGPU_DESCRIPTORS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/descriptors:__pkg__"]
@@ -55,7 +53,7 @@ _AMDGPU_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/configured:__pkg__",
     "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
     "//loom/src/loom/tooling/target/amdgpu:__pkg__",
-] + _AMDGPU_BINDING_VISIBILITY + _AMDGPU_CHECK_VISIBILITY
+] + _AMDGPU_BINDING_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # AMDGPU low descriptors

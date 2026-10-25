@@ -765,7 +765,6 @@ loom_cc_library(
     ::encoding
     ::leaf_compile
     ::machine
-    ::provider
     iree::base
     iree::schemas::xdna_executable
     loom::analysis::symbol_facts
@@ -805,7 +804,7 @@ loom_cc_library(
     loom::ops::low
     loom::pass::report
     loom::target::pass_environment
-    loom::tools::loom-check::provider
+    loom::target::provider
   TESTONLY
   PUBLIC
 )

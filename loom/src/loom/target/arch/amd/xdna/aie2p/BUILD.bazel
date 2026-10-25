@@ -658,7 +658,6 @@ loom_cc_library(
         ":encoding",
         ":leaf_compile",
         ":machine",
-        ":provider",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function_requirements",
@@ -694,7 +693,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/pass:report",
         "//loom/src/loom/target:pass_environment",
-        "//loom/src/loom/tools/loom-check:provider",
+        "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",
     ],
 )

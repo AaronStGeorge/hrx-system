@@ -28,20 +28,6 @@ _EMIT_AMDGPU_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_TARGET_SPIRV_CHECK_COPTS = iree_select({
-    "//loom/config/target/arch:spirv": [
-        "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1",
-    ],
-    "//conditions:default": [],
-})
-
-_TARGET_SPIRV_CHECK_DEPS = iree_select({
-    "//loom/config/target/arch:spirv": [
-        "//loom/src/loom/target/arch/spirv/check:check_provider",
-    ],
-    "//conditions:default": [],
-})
-
 _EMIT_SPIRV_CHECK_COPTS = iree_select({
     "//loom/config/emit:spirv": [
         "-DLOOM_CHECK_HAVE_EMIT_SPIRV=1",
@@ -56,13 +42,6 @@ _EMIT_SPIRV_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_TARGET_WASM_CHECK_COPTS = iree_select({
-    "//loom/config/target/arch:wasm": [
-        "-DLOOM_CHECK_HAVE_TARGET_WASM=1",
-    ],
-    "//conditions:default": [],
-})
-
 _TARGET_VM_CHECK_COPTS = iree_select({
     "//loom/config/target/arch:vm": ["-DLOOM_CHECK_HAVE_TARGET_VM=1"],
     "//conditions:default": [],
@@ -70,15 +49,7 @@ _TARGET_VM_CHECK_COPTS = iree_select({
 
 _TARGET_VM_CHECK_DEPS = iree_select({
     "//loom/config/target/arch:vm": [
-        "//loom/src/loom/target/arch/vm/check:check_provider",
         "//loom/src/loom/tooling/target/vm:check_provider",
-    ],
-    "//conditions:default": [],
-})
-
-_TARGET_WASM_CHECK_DEPS = iree_select({
-    "//loom/config/target/arch:wasm": [
-        "//loom/src/loom/target/arch/wasm/check:check_provider",
     ],
     "//conditions:default": [],
 })
@@ -132,9 +103,7 @@ _TARGET_XDNA_CHECK_TEST_DEPS = iree_select({
 
 _LOOM_CHECK_PROVIDER_COPTS = (
     _EMIT_AMDGPU_CHECK_COPTS +
-    _TARGET_SPIRV_CHECK_COPTS +
     _EMIT_SPIRV_CHECK_COPTS +
-    _TARGET_WASM_CHECK_COPTS +
     _TARGET_VM_CHECK_COPTS +
     _EMIT_WASM_CHECK_COPTS +
     _TARGET_X86_CHECK_COPTS +
@@ -143,9 +112,7 @@ _LOOM_CHECK_PROVIDER_COPTS = (
 
 _LOOM_CHECK_PROVIDER_DEPS = (
     _EMIT_AMDGPU_CHECK_DEPS +
-    _TARGET_SPIRV_CHECK_DEPS +
     _EMIT_SPIRV_CHECK_DEPS +
-    _TARGET_WASM_CHECK_DEPS +
     _TARGET_VM_CHECK_DEPS +
     _EMIT_WASM_CHECK_DEPS +
     _TARGET_X86_CHECK_DEPS +
@@ -471,9 +438,6 @@ loom_cc_library(
         ":source_low",
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
-        "//loom/src/loom/ir:builders",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/input:format",
         "//loom/src/loom/transforms/cleanup:configured",
         "//runtime/src/iree/base",
@@ -495,7 +459,6 @@ loom_cc_library(
     deps = [
         ":execute",
         ":provider",
-        "//loom/src/loom/target/test:provider",
         "//loom/src/loom/tools/loom-check/test/config:providers",
         "//loom/src/loom/tools/loom-check/test/low:providers",
         "//runtime/src/iree/base",
@@ -527,8 +490,13 @@ loomc_cc_binary(
     deps = [
         ":execute",
         ":provider",
+        "//loom/binding/c:interop",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/configured",
+        "//loom/binding/c/target/configured:target",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/cmd/check:check_provider",
-        "//loom/src/loom/target/configured:compiler_provider_set",
         "//loom/src/loom/tooling/export/cxx:loom_check",
         "//loom/src/loom/tooling/input:loomc_configured",
         "//runtime/src/iree/base",
@@ -545,8 +513,14 @@ loomc_cc_binary(
         ":execute",
         ":provider",
         ":test_provider",
+        "//loom/binding/c:interop",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/configured",
+        "//loom/binding/c/target/configured:target",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/cmd/check:check_provider",
-        "//loom/src/loom/target/configured:compiler_provider_set",
+        "//loom/src/loom/target/test:provider",
         "//loom/src/loom/tooling/export/cxx:loom_check",
         "//loom/src/loom/tooling/input:loomc_configured",
         "//runtime/src/iree/base",

@@ -601,6 +601,7 @@ iree_cc_library(
     loom::ops::test::builders
     loom::ops::vector::builders
     loom::ops::view::builders
+    loom::pass::builder
     ${_construction_boundary_deps_platform_deps}
   TESTONLY
   PUBLIC
