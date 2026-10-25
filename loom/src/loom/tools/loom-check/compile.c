@@ -99,7 +99,7 @@ static iree_status_t loom_check_compile_append_result(
 
 iree_status_t loom_check_compile_admit_module(
     const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     loom_check_compile_session_t* session,
     const loom_check_environment_t* environment, uint32_t max_errors,
     loom_check_diagnostic_collector_t* collector,
@@ -114,9 +114,10 @@ iree_status_t loom_check_compile_admit_module(
     format = test_case->input_options.format;
     input_options = test_case->input_options.arguments;
   }
-  const loom_input_provider_t* provider = NULL;
-  IREE_RETURN_IF_ERROR(loom_input_provider_select(
-      environment->input_providers, format, input_request->path, &provider));
+  const loom_input_format_t* input_format = NULL;
+  IREE_RETURN_IF_ERROR(loom_input_format_select(
+      environment->input_formats, format, input_request->path, &input_format,
+      /*out_ordinal=*/NULL));
 
   loomc_source_format_t source_format = LOOMC_SOURCE_FORMAT_UNKNOWN;
   iree_string_view_t source_identifier = input_request->path;
@@ -124,7 +125,7 @@ iree_status_t loom_check_compile_admit_module(
   iree_string_builder_t stripped_source;
   iree_string_builder_initialize(host_allocator, &stripped_source);
   iree_status_t status = iree_ok_status();
-  if (provider == &loom_input_text_provider) {
+  if (iree_string_view_equal(input_format->name, loom_input_text_format.name)) {
     if (!iree_string_view_is_empty(input_options)) {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -136,7 +137,8 @@ iree_status_t loom_check_compile_admit_module(
     source_format = LOOMC_SOURCE_FORMAT_TEXT;
     source_identifier = filename;
     source_contents = iree_string_builder_view(&stripped_source);
-  } else if (provider == &loom_input_bytecode_provider) {
+  } else if (iree_string_view_equal(input_format->name,
+                                    loom_input_bytecode_format.name)) {
     if (!iree_string_view_is_empty(input_options)) {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -163,8 +165,7 @@ iree_status_t loom_check_compile_admit_module(
         &source_options, loomc_allocator_from_iree(host_allocator), &source));
   }
   if (iree_status_is_ok(status)) {
-    if (provider == &loom_input_text_provider ||
-        provider == &loom_input_bytecode_provider) {
+    if (source_format != LOOMC_SOURCE_FORMAT_UNKNOWN) {
       const loomc_module_deserialize_options_t options = {
           .type = LOOMC_STRUCTURE_TYPE_MODULE_DESERIALIZE_OPTIONS,
           .structure_size = sizeof(options),
@@ -175,7 +176,7 @@ iree_status_t loom_check_compile_admit_module(
           loomc_allocator_from_iree(host_allocator), &module, &result));
     } else if (session->provider != NULL && session->provider->import != NULL) {
       status = session->provider->import(
-          session->provider->import_user_data, provider->format->name,
+          session->provider->import_user_data, input_format->name,
           input_options, &input_request->source_path_options, session->context,
           session->workspace, source, block_pool, host_allocator, &module,
           &result);
@@ -183,7 +184,7 @@ iree_status_t loom_check_compile_admit_module(
       status = iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
           "input format '%.*s' has no LoomC importer linked into this runner",
-          (int)provider->format->name.size, provider->format->name.data);
+          (int)input_format->name.size, input_format->name.data);
     }
   }
   bool admitted = false;
@@ -673,7 +674,7 @@ iree_status_t loom_check_compile_artifact(
 iree_status_t loom_check_execute_compile(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_compile_options_t* options,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,

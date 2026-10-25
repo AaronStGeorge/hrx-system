@@ -10,6 +10,7 @@
 
 #include "iree/io/file_contents.h"
 #include "loom/testing/test_file.h"
+#include "loom/tooling/input/format.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tools/loom-check/json_output.h"
 #include "loom/tools/loom-check/output.h"
@@ -63,7 +64,7 @@ static iree_status_t loom_check_process_file(
       iree_string_view_is_empty(options->input_format)
           ? iree_string_view_ends_with(path, IREE_SV(".loombc"))
           : iree_string_view_equal(options->input_format,
-                                   loom_input_bytecode_provider.format->name);
+                                   loom_input_bytecode_format.name);
   iree_status_t status = iree_ok_status();
   loom_test_case_t bytecode_case = {.input = source};
   if (bytecode) {
@@ -124,8 +125,7 @@ static iree_status_t loom_check_process_file(
 
     loom_check_result_initialize(allocator, &results[i]);
     ++initialized_result_count;
-    const loom_input_request_t input_request = {
-        .source = test_case->input,
+    const loom_check_input_t input_request = {
         .path = is_stdin ? IREE_SV("<stdin>") : path,
         .format = options->input_format,
         .source_path_options = options->source_path_options,

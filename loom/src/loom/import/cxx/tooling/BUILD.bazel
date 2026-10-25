@@ -15,6 +15,7 @@ loom_cc_test(
     deps = [
         ":input",
         ":loomc_input",
+        ":options",
         ":source_capture_test_data",
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",

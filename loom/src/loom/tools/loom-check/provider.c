@@ -122,7 +122,7 @@ static iree_status_t loom_check_provider_environment_state_initialize(
 
 int loom_check_provider_main(int argc, char** argv,
                              const loom_check_provider_set_t* provider_set,
-                             loom_input_provider_list_t input_providers) {
+                             loom_input_format_list_t input_formats) {
   loom_check_provider_environment_state_t state;
   iree_status_t status =
       loom_check_provider_environment_state_initialize(provider_set, &state);
@@ -133,7 +133,7 @@ int loom_check_provider_main(int argc, char** argv,
   }
 
   const loom_check_environment_t environment = {
-      .input_providers = input_providers,
+      .input_formats = input_formats,
       .target_environment = state.native_target_environment,
       .cleanup_pattern_provider_set =
           loom_cleanup_configured_pattern_provider_set(),

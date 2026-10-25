@@ -10,7 +10,6 @@
 #include "loom/target/arch/cmd/check/provider.h"
 #include "loom/target/configured/compiler_provider_set.h"
 #include "loom/tooling/export/cxx/loom_check.h"
-#include "loom/tooling/input/configured.h"
 #include "loom/tooling/input/loomc_configured.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/provider.h"
@@ -126,7 +125,7 @@ int main(int argc, char** argv) {
       .compile_provider = &compile_provider,
   };
   const int exit_code = loom_check_provider_main(
-      argc, argv, &provider_set, loom_configured_input_providers());
+      argc, argv, &provider_set, loom_configured_input_loomc_formats());
   IREE_TRACE_ZONE_END(z0);
   IREE_TRACE_APP_EXIT(exit_code);
   return exit_code;

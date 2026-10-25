@@ -200,16 +200,16 @@ iree_status_t loom_check_diagnostic_capture_sink(
 iree_status_t loom_check_execute_case(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
-  const loom_input_provider_t* input_provider = NULL;
-  IREE_RETURN_IF_ERROR(loom_input_provider_select(
-      environment->input_providers,
+  const loom_input_format_t* input_format = NULL;
+  IREE_RETURN_IF_ERROR(loom_input_format_select(
+      environment->input_formats,
       test_case->input_options.format.size ? test_case->input_options.format
                                            : input_request->format,
-      input_request->path, &input_provider));
+      input_request->path, &input_format, /*out_ordinal=*/NULL));
   bool continue_execution = true;
   IREE_RETURN_IF_ERROR(loom_check_preflight_requirements(
       test_case, environment, allocator, result, &continue_execution));
@@ -415,7 +415,7 @@ static iree_status_t loom_check_parse_pass_target(
 static iree_status_t loom_check_execute_pass_with_output(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result, loom_check_pass_output_kind_t output_kind) {
@@ -681,7 +681,7 @@ static iree_status_t loom_check_execute_pass_with_output(
 iree_status_t loom_check_execute_pass(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
@@ -693,7 +693,7 @@ iree_status_t loom_check_execute_pass(
 iree_status_t loom_check_execute_pass_report(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
@@ -705,7 +705,7 @@ iree_status_t loom_check_execute_pass_report(
 iree_status_t loom_check_execute_compile_report(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {

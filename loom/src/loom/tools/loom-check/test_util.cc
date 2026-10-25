@@ -73,7 +73,7 @@ iree_status_t LoomCheckHarness::ExecuteFirst(iree_string_view_t source,
   if (iree_status_is_ok(status)) {
     loom_check_result_initialize(iree_allocator_system(), out_result);
     result_initialized = true;
-    loom_input_request_t input_request = {.path = filename};
+    loom_check_input_t input_request = {.path = filename};
     status = loom_check_execute_case(&file.cases[0], 0, &report, filename,
                                      &input_request, environment_, &block_pool_,
                                      iree_allocator_system(), out_result);

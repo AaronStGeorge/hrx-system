@@ -18,6 +18,7 @@ loom_cc_test(
   DEPS
     ::input
     ::loomc_input
+    ::options
     ::source_capture_test_data
     iree::base
     iree::base::internal::arena

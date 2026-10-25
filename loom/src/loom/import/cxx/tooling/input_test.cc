@@ -18,6 +18,7 @@
 #include "loom/format/location.h"
 #include "loom/import/cxx/import.h"
 #include "loom/import/cxx/tooling/loomc_input.h"
+#include "loom/import/cxx/tooling/options.h"
 #include "loom/import/cxx/tooling/source_capture_test_data.h"
 #include "loom/ops/func/location.h"
 #include "loom/ops/func/location_capture.h"
@@ -57,7 +58,7 @@ iree_status_t RegisterContext(void*, loom_context_t* context) {
   return loom_op_registry_register_all_dialects(context);
 }
 
-const loom_input_provider_t* const kInputs[] = {&loom_cxx_input_provider};
+const loom_input_format_t* const kInputFormats[] = {&loom_cxx_input_format};
 
 class InputTest : public ::testing::Test {
  protected:
@@ -74,7 +75,7 @@ class InputTest : public ::testing::Test {
             &compile_session_.target_environment)));
     compile_session_.provider = &compile_provider_;
     compile_session_.host_allocator = iree_allocator_system();
-    environment_.input_providers = {kInputs, IREE_ARRAYSIZE(kInputs)};
+    environment_.input_formats = {kInputFormats, IREE_ARRAYSIZE(kInputFormats)};
     environment_.target_environment = loomc_target_environment_get_interop_view(
         compile_session_.target_environment);
     environment_.compile_session = &compile_session_;

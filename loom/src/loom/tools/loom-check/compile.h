@@ -12,6 +12,7 @@
 #include "loom/sanitizer/options.h"
 #include "loom/target/pipeline_options.h"
 #include "loom/target/reporting/report.h"
+#include "loom/tooling/input/loomc.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loomc/compile.h"
 #include "loomc/compile_report.h"
@@ -23,22 +24,11 @@
 extern "C" {
 #endif
 
-// Imports one optional foreign source format through LoomC. Builtin Loom text
-// and bytecode admission do not use this callback.
-typedef iree_status_t (*loom_check_compile_import_fn_t)(
-    void* user_data, iree_string_view_t format,
-    iree_string_view_t input_options,
-    const loom_tooling_source_path_options_t* source_path_options,
-    loomc_context_t* context, loomc_workspace_t* workspace,
-    const loomc_source_t* source, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t host_allocator, loomc_module_t** out_module,
-    loomc_result_t** out_result);
-
 // Compiler integrations supplied by the final loom-check binary. The generic
 // runner does not choose a configured target set or optional source frontend.
 typedef struct loom_check_compile_provider_t {
   // Optional foreign-source importer dispatch.
-  loom_check_compile_import_fn_t import;
+  loom_tooling_input_import_loomc_fn_t import;
   // Opaque state forwarded to |import|.
   void* import_user_data;
 } loom_check_compile_provider_t;
@@ -161,7 +151,7 @@ iree_status_t loom_check_compile_session_select_target_profile(
 // apply the request's path policy to sources they discover.
 iree_status_t loom_check_compile_admit_module(
     const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     loom_check_compile_session_t* session,
     const loom_check_environment_t* environment, uint32_t max_errors,
     loom_check_diagnostic_collector_t* diagnostic_collector,
@@ -215,7 +205,7 @@ iree_status_t loom_check_compile_source_low(
 iree_status_t loom_check_execute_compile(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_compile_options_t* options,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,

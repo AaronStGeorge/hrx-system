@@ -18,6 +18,7 @@
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/cli/loomc_options.h"
 #include "loom/tooling/config/input.h"
+#include "loom/tooling/input/format.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/file.h"
 #include "loom/tools/loom-check/json_output.h"
@@ -365,19 +366,18 @@ int loom_check_main(
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   if (FLAG_list_input_formats) {
-    const loom_input_provider_t* const builtin_providers[] = {
-        &loom_input_text_provider, &loom_input_bytecode_provider};
-    const iree_host_size_t builtin_count = IREE_ARRAYSIZE(builtin_providers);
+    const loom_input_format_t* const builtin_formats[] = {
+        &loom_input_text_format, &loom_input_bytecode_format};
+    const iree_host_size_t builtin_count = IREE_ARRAYSIZE(builtin_formats);
     for (iree_host_size_t i = 0;
-         i < builtin_count + base_environment->input_providers.count; ++i) {
-      const loom_input_provider_t* provider =
+         i < builtin_count + base_environment->input_formats.count; ++i) {
+      const loom_input_format_t* format =
           i < builtin_count
-              ? builtin_providers[i]
-              : base_environment->input_providers.values[i - builtin_count];
-      printf("%.*s:", (int)provider->format->name.size,
-             provider->format->name.data);
-      for (iree_host_size_t j = 0; j < provider->format->suffixes.count; ++j) {
-        iree_string_view_t suffix = provider->format->suffixes.values[j];
+              ? builtin_formats[i]
+              : base_environment->input_formats.values[i - builtin_count];
+      printf("%.*s:", (int)format->name.size, format->name.data);
+      for (iree_host_size_t j = 0; j < format->suffixes.count; ++j) {
+        iree_string_view_t suffix = format->suffixes.values[j];
         printf(" %.*s", (int)suffix.size, suffix.data);
       }
       printf("\n");

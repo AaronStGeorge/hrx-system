@@ -121,7 +121,8 @@ loom_cc_library(
     loom::testing::test_diagnostic_native
     loom::testing::test_file
     loom::tooling::cli::loomc_diagnostic_json
-    loom::tooling::input
+    loom::tooling::input::format
+    loom::tooling::input::loomc
     loom::tooling::io::module_format
     loom::tooling::io::source_path
     loom::util::diff
@@ -289,6 +290,7 @@ loom_cc_library(
     iree::base::internal::arena
     iree::io::file_handle
     loom::testing::test_file
+    loom::tooling::input::format
     loom::tooling::io::file
     loom::tooling::io::source_path
     loom::util::stream
@@ -346,6 +348,7 @@ loom_cc_library(
     loom::tooling::cli::help
     loom::tooling::cli::loomc_options
     loom::tooling::config::input
+    loom::tooling::input::format
   PUBLIC
 )
 
@@ -365,7 +368,7 @@ loom_cc_library(
     loom::ir::builders
     loom::ops::test
     loom::target::provider
-    loom::tooling::input
+    loom::tooling::input::format
     loom::transforms::cleanup::configured
   PUBLIC
 )
@@ -472,7 +475,6 @@ loomc_cc_binary(
     loom::target::arch::cmd::check::check_provider
     loom::target::configured::compiler_provider_set
     loom::tooling::export::cxx::loom_check
-    loom::tooling::input::configured
     loom::tooling::input::loomc_configured
     ${_loom_check_platform_deps}
 )
@@ -548,7 +550,6 @@ loomc_cc_binary(
     loom::target::arch::cmd::check::check_provider
     loom::target::configured::compiler_provider_set
     loom::tooling::export::cxx::loom_check
-    loom::tooling::input::configured
     loom::tooling::input::loomc_configured
     ${_loom_check_test_platform_deps}
   TESTONLY

@@ -97,7 +97,7 @@ iree_status_t loom_check_validate_printed_ir(
 
 iree_status_t loom_check_execute_roundtrip(
     const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
@@ -184,7 +184,7 @@ static iree_status_t loom_check_format_verify_module(
 
 iree_status_t loom_check_execute_format(
     const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {

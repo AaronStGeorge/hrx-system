@@ -201,37 +201,17 @@ const loom_check_emit_provider_t* const kTestEmitProviders[] = {
     &kTestNativeEmitProvider,
 };
 
-iree_status_t TestForeignInputNativeLoad(const loom_input_request_t* request,
-                                         loom_input_source_capture_t capture,
-                                         loom_context_t* context,
-                                         iree_arena_block_pool_t* block_pool,
-                                         iree_allocator_t host_allocator,
-                                         loom_module_t** out_module) {
-  (void)request;
-  (void)capture;
-  (void)context;
-  (void)block_pool;
-  (void)host_allocator;
-  *out_module = nullptr;
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "foreign input bypassed public admission");
-}
-
 const loom_input_format_t kTestForeignInputFormat = {
     .name = IREE_SVL("test-foreign"),
     .suffixes = {},
 };
 
-const loom_input_provider_t kTestForeignInputProvider = {
-    .format = &kTestForeignInputFormat,
-    .load = TestForeignInputNativeLoad,
-};
-
-const loom_input_provider_t* const kTestForeignInputProviders[] = {
-    &kTestForeignInputProvider,
+const loom_input_format_t* const kTestForeignInputFormats[] = {
+    &kTestForeignInputFormat,
 };
 
 struct TestForeignImportState {
+  // Number of public importer invocations for the selected check case.
   iree_host_size_t import_count = 0;
 };
 
@@ -276,7 +256,7 @@ iree_status_t TestForeignInputImport(
 }
 
 const loom_check_environment_t kExecuteTestEnvironment = {
-    .input_providers = {},
+    .input_formats = {},
     .target_environment = {},
     .compile_session = nullptr,
     .cleanup_pattern_provider_set =
@@ -284,7 +264,7 @@ const loom_check_environment_t kExecuteTestEnvironment = {
 };
 
 const loom_check_environment_t kExecuteTestProviderEnvironment = {
-    .input_providers = {},
+    .input_formats = {},
     .target_environment = {},
     .compile_session = nullptr,
     .cleanup_pattern_provider_set =
@@ -367,7 +347,7 @@ class ExecuteTest : public ::testing::Test {
     if (iree_status_is_ok(status)) {
       loom_check_result_initialize(iree_allocator_system(), out_result);
       result_initialized = true;
-      loom_input_request_t input_request = {.path = IREE_SV("test.loom-test")};
+      loom_check_input_t input_request = {.path = IREE_SV("test.loom-test")};
       status = loom_check_execute_case(
           &file.cases[0], 0, &report, iree_make_cstring_view("test.loom-test"),
           &input_request, environment, &block_pool_, iree_allocator_system(),
@@ -1296,6 +1276,16 @@ TEST_F(ExecuteTest, RequiresUnavailableSkipsCaseBeforeParsingIr) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, UnknownInputFormatFailsBeforeRequirementSkip) {
+  loom_check_result_t result;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      ExecuteFirstWithEnvironment("// INPUT: missing-format\n"
+                                  "// RUN: roundtrip\n"
+                                  "// REQUIRES: fake-target\n",
+                                  &provider_environment_, &result));
+}
+
 TEST_F(ExecuteTest, UnknownRequiresWithProviderListsSupportedNames) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
@@ -1379,9 +1369,9 @@ TEST_F(ExecuteTest, NativeEmitProviderUsesOnePublicAdmission) {
       .import_user_data = &import_state,
   };
   compile_session_.provider = &compile_provider;
-  provider_environment_.input_providers = {
-      .values = kTestForeignInputProviders,
-      .count = IREE_ARRAYSIZE(kTestForeignInputProviders),
+  provider_environment_.input_formats = {
+      .values = kTestForeignInputFormats,
+      .count = IREE_ARRAYSIZE(kTestForeignInputFormats),
   };
 
   loom_check_result_t result;

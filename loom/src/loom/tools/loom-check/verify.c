@@ -17,7 +17,7 @@
 iree_status_t loom_check_execute_verify(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {

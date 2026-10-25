@@ -16,7 +16,7 @@
 
 #include "iree/base/api.h"
 #include "loom/target/provider.h"
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 
 struct loom_check_compile_provider_t;
 
@@ -60,7 +60,7 @@ typedef struct loom_check_provider_set_t {
 // contributions.
 int loom_check_provider_main(int argc, char** argv,
                              const loom_check_provider_set_t* provider_set,
-                             loom_input_provider_list_t input_providers);
+                             loom_input_format_list_t input_formats);
 
 #ifdef __cplusplus
 }  // extern "C"

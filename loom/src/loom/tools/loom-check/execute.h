@@ -31,7 +31,7 @@
 #include "loom/error/source.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/testing/test_file.h"
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
 #include "loom/util/json.h"
@@ -47,10 +47,22 @@ typedef struct loom_target_environment_t loom_target_environment_t;
 typedef struct loom_check_diagnostic_collector_t
     loom_check_diagnostic_collector_t;
 typedef struct loom_check_compile_session_t loom_check_compile_session_t;
+typedef struct loom_module_t loom_module_t;
 
 //===----------------------------------------------------------------------===//
 // Types
 //===----------------------------------------------------------------------===//
+
+// Source selection accompanying a parsed check case. All views are borrowed
+// for execution; source bytes and per-case options come from the test case.
+typedef struct loom_check_input_t {
+  // Physical source path used for suffix selection and relative include lookup.
+  iree_string_view_t path;
+  // Explicit input format, overridden by a case's INPUT directive when present.
+  iree_string_view_t format;
+  // Display remapping for sources discovered by an optional importer.
+  loom_tooling_source_path_options_t source_path_options;
+} loom_check_input_t;
 
 // Whether a single test case passed, failed, or was skipped by an unavailable
 // declared requirement.
@@ -268,8 +280,8 @@ typedef struct loom_check_requirement_provider_registry_t {
 
 // Execution environment supplied by each loom-check binary or embedding.
 struct loom_check_environment_t {
-  // Optional source input providers linked into this runner.
-  loom_input_provider_list_t input_providers;
+  // Optional source format metadata linked into this runner.
+  loom_input_format_list_t input_formats;
   // Composed target environment used by target-aware check modes.
   const loom_target_environment_t* target_environment;
   // Lazy public session shared by all check modes.
@@ -331,7 +343,7 @@ iree_status_t loom_check_result_append_annotation_edit(
 iree_status_t loom_check_execute_case(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -349,7 +361,7 @@ iree_status_t loom_check_validate_printed_ir(
 // and copies the printed output to result->actual_output for --update.
 iree_status_t loom_check_execute_roundtrip(
     const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -361,7 +373,7 @@ iree_status_t loom_check_execute_roundtrip(
 iree_status_t loom_check_execute_verify(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -373,7 +385,7 @@ iree_status_t loom_check_execute_verify(
 iree_status_t loom_check_execute_pass(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -384,7 +396,7 @@ iree_status_t loom_check_execute_pass(
 iree_status_t loom_check_execute_pass_report(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -396,7 +408,7 @@ iree_status_t loom_check_execute_pass_report(
 iree_status_t loom_check_execute_compile_report(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -407,7 +419,7 @@ iree_status_t loom_check_execute_compile_report(
 // as roundtrip.
 iree_status_t loom_check_execute_format(
     const loom_test_case_t* test_case, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
@@ -418,7 +430,7 @@ iree_status_t loom_check_execute_format(
 iree_status_t loom_check_execute_emit(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    const loom_input_request_t* input_request,
+    const loom_check_input_t* input_request,
     const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
