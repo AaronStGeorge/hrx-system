@@ -17,6 +17,7 @@ loom_cc_test(
     "input_test.cc"
   DEPS
     ::input
+    ::loomc_input
     ::source_capture_test_data
     iree::base
     iree::base::internal::arena
@@ -24,6 +25,8 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::testing::temp_file
+    loom::binding::c::interop
+    loom::binding::c::loomc
     loom::error::source
     loom::format::location
     loom::import::cxx

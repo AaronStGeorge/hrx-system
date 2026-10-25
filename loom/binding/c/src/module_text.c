@@ -22,6 +22,7 @@ static loomc_status_t loomc_module_decode_text_source(
   const loomc_byte_span_t contents = loomc_source_contents(source);
   loom_text_parse_options_t parse_options = {
       .diagnostic_sink = diagnostic_sink,
+      .max_errors = options->max_errors,
   };
   loomc_target_pass_environment_initialize_text_asm_environment(
       loomc_context_target_pass_environment(context),

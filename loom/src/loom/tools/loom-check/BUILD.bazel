@@ -485,6 +485,8 @@ loom_cc_library(
         ":source_low",
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
+        "//loom/src/loom/ir:builders",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/context",
         "//loom/src/loom/tooling/input",

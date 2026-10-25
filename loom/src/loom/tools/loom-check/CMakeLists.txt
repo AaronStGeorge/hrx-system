@@ -379,6 +379,8 @@ loom_cc_library(
     iree::base
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::ir::builders
+    loom::ops::test
     loom::target::provider
     loom::tooling::context
     loom::tooling::input

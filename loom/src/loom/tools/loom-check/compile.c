@@ -11,7 +11,6 @@
 #include "loom/ops/op_defs.h"
 #include "loom/target/pipeline.h"
 #include "loom/testing/test_file.h"
-#include "loom/tooling/io/source_path.h"
 #include "loom/tools/loom-check/compile_diagnostics.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loomc/artifact.h"
@@ -96,7 +95,7 @@ iree_status_t loom_check_compile_admit_module(
     const loom_test_case_t* test_case, iree_string_view_t filename,
     const loom_input_request_t* input_request,
     loom_check_compile_session_t* session,
-    const loom_check_environment_t* environment,
+    const loom_check_environment_t* environment, uint32_t max_errors,
     loom_check_diagnostic_collector_t* collector,
     iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
     loomc_module_t** out_module) {
@@ -144,14 +143,6 @@ iree_status_t loom_check_compile_admit_module(
   loomc_module_t* module = NULL;
   loomc_result_t* result = NULL;
   loomc_source_t* source = NULL;
-  char* source_identifier_storage = NULL;
-  if (iree_status_is_ok(status) &&
-      (provider == &loom_input_text_provider ||
-       provider == &loom_input_bytecode_provider)) {
-    status = loom_tooling_source_path_remap(
-        source_identifier, &input_request->source_path_options, host_allocator,
-        &source_identifier, &source_identifier_storage);
-  }
   if (iree_status_is_ok(status)) {
     const loomc_source_options_t source_options = {
         .type = LOOMC_STRUCTURE_TYPE_SOURCE_OPTIONS,
@@ -168,8 +159,13 @@ iree_status_t loom_check_compile_admit_module(
   if (iree_status_is_ok(status)) {
     if (provider == &loom_input_text_provider ||
         provider == &loom_input_bytecode_provider) {
+      const loomc_module_deserialize_options_t options = {
+          .type = LOOMC_STRUCTURE_TYPE_MODULE_DESERIALIZE_OPTIONS,
+          .structure_size = sizeof(options),
+          .max_errors = max_errors,
+      };
       status = iree_status_from_loomc(loomc_module_deserialize_from_source(
-          session->context, session->workspace, source, /*options=*/NULL,
+          session->context, session->workspace, source, &options,
           loomc_allocator_from_iree(host_allocator), &module, &result));
     } else if (session->provider != NULL && session->provider->import != NULL) {
       status = session->provider->import(
@@ -195,7 +191,6 @@ iree_status_t loom_check_compile_admit_module(
   loomc_result_release(result);
   loomc_module_release(module);
   loomc_source_release(source);
-  iree_allocator_free(host_allocator, source_identifier_storage);
   iree_string_builder_deinitialize(&stripped_source);
   return status;
 }
@@ -689,7 +684,7 @@ iree_status_t loom_check_execute_compile(
   loomc_module_t* module = NULL;
   iree_status_t status = loom_check_compile_admit_module(
       test_case, filename, input_request, options->session, environment,
-      &collector, block_pool, allocator, &module);
+      /*max_errors=*/0, &collector, block_pool, allocator, &module);
 
   loomc_result_t* operation_result = NULL;
   if (iree_status_is_ok(status) && module != NULL) {

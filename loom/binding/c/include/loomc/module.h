@@ -402,6 +402,11 @@ typedef struct loomc_module_deserialize_options_t {
   /// Identifier used for diagnostics and module provenance. Empty uses the
   /// input source identifier, filesystem path, or a format-specific default.
   loomc_string_view_t identifier;
+
+  /// Maximum text parsing errors to report; zero selects the library default.
+  /// Requires structure_size to include this field; absent fields default to
+  /// zero. Bytecode decoding does not use this limit.
+  uint32_t max_errors;
 } loomc_module_deserialize_options_t;
 
 /// Retains an opaque module for another owner.

@@ -291,7 +291,7 @@ struct loom_check_environment_t {
   loom_check_register_context_callback_t register_context;
   // Composed target environment used by target-aware check modes.
   const loom_target_environment_t* target_environment;
-  // Lazy public compiler session used to admit every module-dependent case.
+  // Lazy public compiler session used by verify, emit, and offline compilation.
   loom_check_compile_session_t* compile_session;
   // Cleanup rewrite providers linked into this runner.
   const loom_cleanup_pattern_provider_set_t* cleanup_pattern_provider_set;
@@ -388,7 +388,7 @@ iree_status_t loom_check_execute_verify(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
     const loom_input_request_t* input_request,
-    const loom_check_environment_t* environment, loom_context_t* context,
+    const loom_check_environment_t* environment,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
 

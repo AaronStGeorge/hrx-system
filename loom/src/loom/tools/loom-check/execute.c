@@ -249,7 +249,7 @@ iree_status_t loom_check_execute_case(
     case LOOM_TEST_MODE_VERIFY: {
       IREE_RETURN_IF_ERROR(loom_check_execute_verify(
           test_case, case_index, report, filename, input_request, environment,
-          context, block_pool, allocator, result));
+          block_pool, allocator, result));
       break;
     }
     case LOOM_TEST_MODE_PASS: {

@@ -1680,8 +1680,8 @@ iree_status_t loom_check_execute_emit(
   };
   status = loom_check_compile_admit_module(
       test_case, filename, input_request, environment->compile_session,
-      environment, &diagnostic_collector, block_pool, allocator,
-      &provider_request.public_module);
+      environment, /*max_errors=*/0, &diagnostic_collector, block_pool,
+      allocator, &provider_request.public_module);
   if (!iree_status_is_ok(status)) {
     loom_check_emit_release_public_module(&provider_request);
     status = loom_check_emit_finish_status_failure(

@@ -148,13 +148,17 @@ iree_status_t loom_check_compile_session_select_target_profile(
     loomc_target_profile_t** out_target_profile);
 
 // Admits one checker case through the shared public compiler session. Public
-// diagnostics are appended to |diagnostic_collector|. A successful module is
+// diagnostics are appended to |diagnostic_collector|. |max_errors| limits text
+// parser recovery; zero selects the parser default. A successful module is
 // owned by the caller and must be released with loomc_module_release.
+// |filename| is the reader's logical source identity, already path-mapped.
+// Foreign importers receive |input_request->path| for include resolution and
+// apply the request's path policy to sources they discover.
 iree_status_t loom_check_compile_admit_module(
     const loom_test_case_t* test_case, iree_string_view_t filename,
     const loom_input_request_t* input_request,
     loom_check_compile_session_t* session,
-    const loom_check_environment_t* environment,
+    const loom_check_environment_t* environment, uint32_t max_errors,
     loom_check_diagnostic_collector_t* diagnostic_collector,
     iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
     loomc_module_t** out_module);
