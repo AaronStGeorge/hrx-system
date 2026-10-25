@@ -123,8 +123,10 @@ struct loom_serve_text_service_t {
   loom_serve_text_tool_calls_t tool_calls;
   // Completion parser/formatter backing reused by all serialized output jobs.
   loom_serve_text_chat_scratch_t completion_scratch;
-  // Fixed retained rows sharing one model, command set and execution timeline.
-  loom_serve_text_session_t sessions[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  // Stable retained records sharing one model, command set and timeline.
+  loom_serve_text_session_t* sessions;
+  // Reusable readiness entries, indexed by resident identity, not span ordinal.
+  loom_serve_ready_span_t* ready;
 };
 
 // Whether a CPU or device loan excludes another model-owner operation.

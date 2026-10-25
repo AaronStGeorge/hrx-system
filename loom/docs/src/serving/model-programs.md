@@ -334,6 +334,15 @@ may be null. Control exports `epoch`, `encode_epoch`, `publish_epoch`,
 required. Every submitted span has selection/proposal flags zero, and completed
 progress contains no native output-token selection.
 
+Text and sequence plans are compact arrays of nine little-endian u32 fields
+per span. The first epoch's records occupy `[0, first_count)`; optional
+continuation records immediately follow at `first_count`. A record's resident
+state ID is independent of its plan ordinal. The eighth argument to
+`publish_epoch` is a buffer of little-endian u32 continuation flags indexed by
+first-plan ordinal, not a bitmask indexed by state ID. Source programs size
+their tables and results from the requested resident and cohort capacities;
+neither coordinate has a built-in sixteen-entry limit.
+
 `encode_epoch` writes metadata and input packets, then returns
 `(output_count, transfer_plan, byte_offset, byte_length)`. The plan view contains
 little-endian u64 records

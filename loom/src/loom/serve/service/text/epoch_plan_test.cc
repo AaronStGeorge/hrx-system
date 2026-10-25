@@ -17,7 +17,7 @@ TEST(TextEpochPlanTest, KnownAndSpeculativeContinuationsPreserveSourceFacts) {
   rows[0].source_position = 31;
   rows[1].position = 9;
   rows[1].source_position = 45;
-  uint8_t plan[32 * TEXT_PLAN_FIELD_COUNT * 4] = {};
+  uint8_t plan[4 * TEXT_PLAN_FIELD_COUNT * 4] = {};
   uint8_t input[16 * 4] = {};
   const auto plan_bytes = iree_make_byte_span(plan, sizeof(plan));
   const auto input_bytes = iree_make_byte_span(input, sizeof(input));
@@ -52,13 +52,13 @@ TEST(TextEpochPlanTest, KnownAndSpeculativeContinuationsPreserveSourceFacts) {
   const uint32_t first_indices[] = {1, 0};
   EXPECT_EQ(
       loom_serve_text_epoch_plan_write(rows, plan_bytes, input_bytes, 2, next,
-                                       next_limits, first_indices, 16, 3),
+                                       next_limits, first_indices, 2, 3),
       4u);
-  EXPECT_EQ(field(16, TEXT_PLAN_FIELD_FIRST_SPAN), 1u);
-  EXPECT_EQ(field(16, TEXT_PLAN_FIELD_INPUT_COUNT), 0u);
-  EXPECT_EQ(field(17, TEXT_PLAN_FIELD_FIRST_SPAN), 0u);
-  EXPECT_EQ(field(17, TEXT_PLAN_FIELD_INPUT_BEGIN), 3u);
-  EXPECT_EQ(field(17, TEXT_PLAN_FIELD_SOURCE_POSITION), 45u);
+  EXPECT_EQ(field(2, TEXT_PLAN_FIELD_FIRST_SPAN), 1u);
+  EXPECT_EQ(field(2, TEXT_PLAN_FIELD_INPUT_COUNT), 0u);
+  EXPECT_EQ(field(3, TEXT_PLAN_FIELD_FIRST_SPAN), 0u);
+  EXPECT_EQ(field(3, TEXT_PLAN_FIELD_INPUT_BEGIN), 3u);
+  EXPECT_EQ(field(3, TEXT_PLAN_FIELD_SOURCE_POSITION), 45u);
   for (size_t i = 0; i < 4; ++i) {
     EXPECT_EQ(iree_unaligned_load_le_u32(input + i * 4), tokens[i]);
   }

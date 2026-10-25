@@ -14,8 +14,6 @@
 #include "loom/serve/service/text/stages.h"
 #include "loom/serve/service/text/state.h"
 
-enum { TEXT_ROW_CAPACITY = LOOM_SERVE_TEXT_ROW_CAPACITY };
-
 enum loom_serve_text_epoch_flag_bits_e {
   TEXT_EPOCH_FLAG_VERIFY = 1u << 0,
   TEXT_EPOCH_FLAG_CONTINUATION = 1u << 1,
@@ -91,12 +89,14 @@ struct loom_serve_text_model_t {
   struct {
     // Number of first-plan spans, zero after successful completion.
     iree_host_size_t span_count;
-    // Resident row identity in first-plan caller order.
-    iree_host_size_t row_indices[TEXT_ROW_CAPACITY];
+    // Resident identities in caller order; owns this planning allocation.
+    iree_host_size_t* row_indices;
+    // Temporary worst-case state growth in first-plan order.
+    uint32_t* extents;
+    // First-plan ordinals for the compact continuation plan.
+    uint32_t* next_indices;
     // Source publication mode selected by the submitted plan.
     loom_serve_text_epoch_flags_t flags;
-    // First-plan span bits with device-fed speculative continuation.
-    uint32_t continued_speculative_mask;
     // Exact mixed-input host plan and packet records; empty for text-only.
     loom_serve_text_media_epoch_t media;
   } invocation;
@@ -107,6 +107,14 @@ struct loom_serve_text_row_t {
   loom_serve_text_model_t* model;
   // Borrowed retained row state, owned by the model-wide state arena.
   loom_serve_text_state_row_t* state;
+  // Reusable submission lookup. An ordinal is valid only when the current
+  // caller's span at that ordinal names this row; no per-epoch table clear.
+  struct {
+    // Most recently examined first-plan ordinal.
+    iree_host_size_t first;
+    // Most recently examined continuation-plan ordinal.
+    iree_host_size_t next;
+  } planning;
   // Whether the latest completed work selected a token at the current position.
   bool has_prediction;
   // Completed stage counts and end-to-end host durations.

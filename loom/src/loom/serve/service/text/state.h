@@ -57,6 +57,8 @@ typedef struct loom_serve_text_state_row_t {
     uint32_t slot;
     // Owned reader until the cohort retires, or UINT32_MAX when in-place.
     uint32_t anchor;
+    // Changed origins not yet captured by the source state encoder.
+    bool dirty;
   } recurrent;
   // Old partial KV tail owned through COW retirement, or UINT32_MAX.
   uint32_t retiring_tail;
@@ -134,8 +136,8 @@ struct loom_serve_text_state_t {
     loom_serve_block_pool_t pool;
     // Owned arena subviews, stable through final queue retirement.
     iree_hal_buffer_t** buffers;
-    // Rows whose new byte origins need source encoding before packed work.
-    uint32_t dirty_rows;
+    // Number of rows with unpublished origins; zero skips the row scan.
+    iree_host_size_t dirty_count;
   } recurrent;
   // Referenced page ownership shared by target and draft cache planes.
   struct {
@@ -147,6 +149,8 @@ struct loom_serve_text_state_t {
     uint32_t* maps;
     // Cold compaction plan indexed by original physical ID.
     uint32_t* destinations;
+    // Reusable target/draft map uploads, at most two per participating row.
+    iree_hal_transfer_operation_t* uploads;
   } cache;
   // Physical commitment, separate from logical row/block ownership.
   struct {

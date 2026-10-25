@@ -423,8 +423,7 @@ TEST_F(MediaExecutionTest, DenseRangesCoalesceAcrossRequestsAndContinuation) {
   iree_const_byte_span_t plan;
   IREE_ASSERT_OK(iree_vm_buffer_map_read(
       packet_.plan, 0, iree_vm_buffer_length(packet_.plan), &plan));
-  EXPECT_EQ(iree_unaligned_load_le_u32(plan.data + 2 * 28),
-            LOOM_SERVE_TEXT_ROW_CAPACITY);
+  EXPECT_EQ(iree_unaligned_load_le_u32(plan.data + 2 * 28), 2u);
   loom_serve_text_media_epoch_deinitialize(&packet_);
 
   // Already consumed images leave no metadata, packet, or transfer allocation.

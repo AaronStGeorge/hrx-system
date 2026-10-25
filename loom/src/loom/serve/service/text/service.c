@@ -872,9 +872,16 @@ iree_status_t loom_serve_text_service_allocate(
   IREE_RETURN_IF_ERROR(iree_async_proactor_pool_get(
       loom_serve_host_proactor_pool(host), 0, &proactor));
   loom_serve_text_service_t* service = NULL;
+  iree_host_size_t total = 0, sessions_offset = 0, ready_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(*service), &total,
+      IREE_STRUCT_FIELD(options->row_count, loom_serve_text_session_t,
+                        &sessions_offset),
+      IREE_STRUCT_FIELD(options->row_count, loom_serve_ready_span_t,
+                        &ready_offset)));
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      host_allocator, sizeof(*service), iree_alignof(loom_serve_text_service_t),
-      0, (void**)&service));
+      host_allocator, total, iree_alignof(loom_serve_text_service_t), 0,
+      (void**)&service));
   *service = (loom_serve_text_service_t){
       .host_allocator = host_allocator,
       .model = model,
@@ -883,6 +890,9 @@ iree_status_t loom_serve_text_service_allocate(
       .isolated_shape = {loom_serve_text_model_prefill_capacity(model),
                          options->row_count},
       .row_count = options->row_count,
+      .sessions =
+          (loom_serve_text_session_t*)((uint8_t*)service + sessions_offset),
+      .ready = (loom_serve_ready_span_t*)((uint8_t*)service + ready_offset),
       .default_max_tokens = options->default_max_tokens,
       .pending = {.capacity = options->pending_capacity,
                   .admission = {.budget = options->admission_overtakes}},
@@ -1121,7 +1131,8 @@ static iree_status_t loom_serve_text_advance_work(
     *out_progress = true;
     return status;
   }
-  loom_serve_ready_span_t ready[LOOM_SERVE_TEXT_ROW_CAPACITY] = {0};
+  loom_serve_ready_span_t* ready = service->ready;
+  memset(ready, 0, service->row_count * sizeof(*ready));
   for (iree_host_size_t i = 0;
        i < service->row_count && iree_status_is_ok(status); ++i) {
     status = loom_serve_text_prepare_ready(service, &service->sessions[i],
@@ -1135,8 +1146,8 @@ static iree_status_t loom_serve_text_advance_work(
     if (service->scheduling.packing_mode == LOOM_SERVE_TEXT_PACKING_SEPARATE) {
       loom_serve_text_separate_ready(service, ready);
     }
-    loom_serve_packed_span_t spans[LOOM_SERVE_TEXT_ROW_CAPACITY];
-    loom_serve_packed_span_t scratch[LOOM_SERVE_TEXT_ROW_CAPACITY];
+    loom_serve_packed_span_t* spans = service->epoch.planning.scheduled;
+    loom_serve_packed_span_t* scratch = service->epoch.planning.candidate;
     iree_host_size_t shape_index = 0;
     const iree_host_size_t count = loom_serve_pack_shapes(
         service->row_count, ready, service->scheduling.shape_count,

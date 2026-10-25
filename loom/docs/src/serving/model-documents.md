@@ -297,7 +297,7 @@ Native capacity fields are:
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `rows` | `4` | Concurrent execution rows, from 1 through 16. |
+| `rows` | `4` | Addressable resident state records, independent of the token/span capacity of an epoch. Positive signed 32-bit count; source layout and available memory must support it. |
 | `context_capacity` | `16384` | Per-row logical context limit in token positions, at most 262144. |
 | `pool_capacity` | `65536` | Shared logical cache token positions, in whole source-defined pages. |
 | `prefill_capacity` | `512` | Largest automatically specialized packed token shape; not a prompt-length limit. |

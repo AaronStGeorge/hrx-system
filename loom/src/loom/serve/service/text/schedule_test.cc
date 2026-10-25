@@ -27,16 +27,17 @@ TEST(TextScheduleTest, DefaultCatalogCoversTheCapacityFamily) {
       capacities.push_back(tokens + 1);
     }
   }
-  for (iree_host_size_t rows = 1; rows <= 16; ++rows) {
+  for (iree_host_size_t rows :
+       {1u, 2u, 3u, 7u, 15u, 16u, 17u, 31u, 32u, 33u, 64u, 100u, 129u}) {
     for (iree_host_size_t tokens : capacities) {
       SCOPED_TRACE(rows);
       SCOPED_TRACE(tokens);
-      loom_serve_packing_shape_t
-          shapes[LOOM_SERVE_TEXT_DEFAULT_SHAPE_CAPACITY + 1] = {};
       const iree_host_size_t count =
-          loom_serve_text_default_shapes(rows, tokens, shapes);
+          loom_serve_text_default_shapes(rows, tokens, nullptr);
+      std::vector<loom_serve_packing_shape_t> shapes(count + 1);
+      EXPECT_EQ(loom_serve_text_default_shapes(rows, tokens, shapes.data()),
+                count);
       ASSERT_GT(count, 0);
-      ASSERT_LE(count, LOOM_SERVE_TEXT_DEFAULT_SHAPE_CAPACITY);
       EXPECT_EQ(shapes[count].token_capacity, 0);
       EXPECT_EQ(shapes[count].span_capacity, 0);
       EXPECT_EQ(shapes[0].token_capacity, 1);
@@ -67,9 +68,10 @@ TEST(TextScheduleTest, DefaultCatalogCoversTheCapacityFamily) {
 }
 
 TEST(TextScheduleTest, DefaultCatalogShrinksBothAxesWithLiveReadiness) {
-  loom_serve_packing_shape_t shapes[LOOM_SERVE_TEXT_DEFAULT_SHAPE_CAPACITY];
   const iree_host_size_t shape_count =
-      loom_serve_text_default_shapes(16, 512, shapes);
+      loom_serve_text_default_shapes(16, 512, nullptr);
+  std::vector<loom_serve_packing_shape_t> shapes(shape_count);
+  loom_serve_text_default_shapes(16, 512, shapes.data());
   ASSERT_EQ(shape_count, 40);
   loom_serve_packed_span_t spans[16], scratch[16];
   for (iree_host_size_t active = 1; active <= 16; ++active) {
@@ -82,8 +84,8 @@ TEST(TextScheduleTest, DefaultCatalogShrinksBothAxesWithLiveReadiness) {
       while (expected_spans < active) {
         expected_spans *= 2;
       }
-      ASSERT_EQ(loom_serve_pack_shapes(16, ready, shape_count, shapes, 512,
-                                       &cursor, spans, scratch, &shape),
+      ASSERT_EQ(loom_serve_pack_shapes(16, ready, shape_count, shapes.data(),
+                                       512, &cursor, spans, scratch, &shape),
                 active);
       iree_host_size_t expected_tokens = 1;
       while (expected_tokens < active * minimum) {
@@ -103,8 +105,8 @@ TEST(TextScheduleTest, DefaultCatalogShrinksBothAxesWithLiveReadiness) {
   }
   ready[15] = {1000, 1};
   iree_host_size_t cursor = 0, shape = 0;
-  ASSERT_EQ(loom_serve_pack_shapes(16, ready, shape_count, shapes, 512, &cursor,
-                                   spans, scratch, &shape),
+  ASSERT_EQ(loom_serve_pack_shapes(16, ready, shape_count, shapes.data(), 512,
+                                   &cursor, spans, scratch, &shape),
             16);
   EXPECT_EQ(shapes[shape].token_capacity, 512);
   EXPECT_EQ(shapes[shape].span_capacity, 16);

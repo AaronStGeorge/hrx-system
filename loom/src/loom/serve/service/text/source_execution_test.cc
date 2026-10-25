@@ -225,6 +225,77 @@ class PooledTextServiceTest
   }
 };
 
+class WideCohortTextServiceTest : public SourceTextServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.context_capacity = 256;
+    options.pool_capacity = 4096;
+    options.row_count = 257;
+    options.epoch_count = IREE_ARRAYSIZE(wide_shapes_);
+    options.epoch_shapes = wide_shapes_;
+    return options;
+  }
+
+  const loom_serve_packing_shape_t wide_shapes_[2] = {{1, 1}, {256, 129}};
+};
+
+TEST_F(WideCohortTextServiceTest, WideEpochsPreserveSparseResidentsAndForks) {
+  constexpr size_t kCount = 129;
+  std::vector<Oracle> references(kCount);
+  std::vector<int32_t> tokens(2 * kCount);
+  std::vector<loom_serve_text_span_t> spans(kCount);
+  for (size_t epoch = 0; epoch < 3; ++epoch) {
+    for (size_t i = 0; i < kCount; ++i) {
+      const size_t row = 256 - 2 * i;
+      const size_t count = epoch ? 1 : 1 + i % 2;
+      tokens[2 * i] = epoch ? references[i].Predict() : i % 3;
+      tokens[2 * i + 1] = (i + 1) % 3;
+      for (size_t j = 0; j < count; ++j) {
+        references[i].Consume(tokens[2 * i + j]);
+      }
+      spans[i] = {row, count, &tokens[2 * i], LOOM_SERVE_TEXT_SPAN_FLAG_SELECT};
+    }
+    const loom_serve_text_span_t duplicate[] = {spans[0], spans[0]};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_text_model_epoch(model_, 1, 2, duplicate));
+    IREE_ASSERT_OK(
+        loom_serve_text_model_epoch(model_, 1, kCount, spans.data()));
+    for (size_t i = 0; i < kCount; ++i) {
+      EXPECT_EQ(loom_serve_text_row_token(
+                    loom_serve_text_model_row(model_, spans[i].row_index)),
+                references[i].Predict());
+    }
+  }
+
+  // Retained identity 256 forks into 255, neither a bit in a machine word nor
+  // an ordinal in the previous cohort. Each writer must detach shared state.
+  auto* original = loom_serve_text_model_row(model_, 256);
+  auto* fork = loom_serve_text_model_row(model_, 255);
+  loom_serve_text_checkpoint_t* checkpoint = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_row_try_pin(original, &checkpoint));
+  ASSERT_NE(checkpoint, nullptr);
+  bool restored = false;
+  IREE_ASSERT_OK(loom_serve_text_row_try_restore(fork, checkpoint, &restored));
+  ASSERT_TRUE(restored);
+  const int32_t a = 0, b = 1;
+  const loom_serve_text_span_t branches[] = {
+      {255, 1, &a, LOOM_SERVE_TEXT_SPAN_FLAG_SELECT},
+      {256, 1, &b, LOOM_SERVE_TEXT_SPAN_FLAG_SELECT}};
+  IREE_ASSERT_OK(loom_serve_text_model_epoch(model_, 1, 2, branches));
+  Oracle fork_reference = references[0];
+  fork_reference.Consume(a);
+  references[0].Consume(b);
+  EXPECT_EQ(loom_serve_text_row_token(fork), fork_reference.Predict());
+  EXPECT_EQ(loom_serve_text_row_token(original), references[0].Predict());
+  loom_serve_text_checkpoint_release(checkpoint);
+  for (size_t i = 0; i < 257; ++i) {
+    IREE_ASSERT_OK(
+        loom_serve_text_row_reset(loom_serve_text_model_row(model_, i)));
+  }
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 4096u);
+}
+
 INSTANTIATE_TEST_SUITE_P(PoolCapacity, PooledTextServiceTest,
                          ::testing::Values(iree_host_size_t{256},
                                            iree_host_size_t{4194308},

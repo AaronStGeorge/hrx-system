@@ -14,7 +14,10 @@ iree_host_size_t loom_serve_text_default_shapes(
        tokens = iree_min(tokens * 2, token_capacity)) {
     for (iree_host_size_t spans = 1;; spans = iree_min(spans * 2, row_count)) {
       if (spans <= tokens) {
-        shapes[count++] = (loom_serve_packing_shape_t){tokens, spans};
+        if (shapes) {
+          shapes[count] = (loom_serve_packing_shape_t){tokens, spans};
+        }
+        ++count;
       }
       if (spans == row_count) {
         break;

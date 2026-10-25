@@ -447,20 +447,27 @@ func.def public @encode_state(%bindings: buffer, %count: i32, %origins: buffer) 
   %origin = index.constant 0 : offset
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
-  %bounded_count = scalar.assume %count [range(%count, 1, 16)] : i32
+  %bounded_count = scalar.assume %count [range(%count, 1, 2147483647)] : i32
   %length = index.cast %bounded_count : i32 to index
-  %records = buffer.view %bindings[%origin] : buffer -> view<16x4xi64>
-  %rows = buffer.view %origins[%origin] : buffer -> view<16x4xi64>
+  %origin_length = buffer.length %origins
+  %origin_length64 = index.cast %origin_length : offset to i64
+  %stride = scalar.constant 32 : i64
+  %capacity64 = scalar.divui %origin_length64, %stride : i64
+  %bounded_capacity = scalar.assume %capacity64 [range(%capacity64, 1, 2147483647)] : i64
+  %capacity = index.cast %bounded_capacity : i64 to index
+  %records = buffer.view %bindings[%origin] : buffer -> view<[%length]x4xi64>
+  %rows = buffer.view %origins[%origin] : buffer -> view<[%capacity]x4xi64>
   scf.for %i = [%c0 to %length step %c1] {
-    %row64 = view.load %records[%i, 0] : view<16x4xi64> -> i64
-    %bounded_row = scalar.assume %row64 [range(%row64, 0, 15)] : i64
-    %row = index.cast %bounded_row : i64 to index
-    %read = view.load %records[%i, 1] : view<16x4xi64> -> i64
-    %write = view.load %records[%i, 2] : view<16x4xi64> -> i64
-    %position = view.load %records[%i, 3] : view<16x4xi64> -> i64
-    view.store %read, %rows[%row, 0] : i64, view<16x4xi64>
-    view.store %write, %rows[%row, 1] : i64, view<16x4xi64>
-    view.store %position, %rows[%row, 3] : i64, view<16x4xi64>
+    %row64 = view.load %records[%i, 0] : view<[%length]x4xi64> -> i64
+    %row_bound = scalar.assume %row64 [range(%row64, 0, 2147483646)] : i64
+    %row_value = index.cast %row_bound : i64 to index
+    %row = index.assume %row_value [lt(%row_value, %capacity)] : index
+    %read = view.load %records[%i, 1] : view<[%length]x4xi64> -> i64
+    %write = view.load %records[%i, 2] : view<[%length]x4xi64> -> i64
+    %position = view.load %records[%i, 3] : view<[%length]x4xi64> -> i64
+    view.store %read, %rows[%row, 0] : i64, view<[%capacity]x4xi64>
+    view.store %write, %rows[%row, 1] : i64, view<[%capacity]x4xi64>
+    view.store %position, %rows[%row, 3] : i64, view<[%capacity]x4xi64>
   }
   func.return
 }
@@ -471,12 +478,12 @@ func.def public @capture_epoch(%state: buffer, %shape: i32, %count: i32, %plan: 
   %origin = index.constant 0 : offset
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
-  %bounded = scalar.assume %count [range(%count, 1, 16)] : i32
+  %bounded = scalar.assume %count [range(%count, 1, 2147483647)] : i32
   %spans = index.cast %bounded : i32 to index
   %count64 = scalar.extui %bounded : i32 to i64
   %record_bytes = scalar.constant 48 : i64
   %bytes64 = scalar.muli %count64, %record_bytes : i64
-  %bounded_bytes = scalar.assume %bytes64 [range(%bytes64, 48, 768)] : i64
+  %bounded_bytes = scalar.assume %bytes64 [range(%bytes64, 48, 103079215056)] : i64
   %length = index.cast %bounded_bytes : i64 to offset
   %storage = buffer.alloca<private> align(8) %length : buffer
   %records = buffer.view %storage[%origin] : buffer -> view<[%spans]x2x3xi64>
@@ -496,25 +503,35 @@ func.def public @capture_epoch(%state: buffer, %shape: i32, %count: i32, %plan: 
   func.return %storage : buffer
 }
 
+func.def @plan_capacity(%plan: buffer) -> (index) {
+  %bytes = buffer.length %plan
+  %bytes64 = index.cast %bytes : offset to i64
+  %stride = scalar.constant 36 : i64
+  %records = scalar.divui %bytes64, %stride : i64
+  %bounded = scalar.assume %records [range(%records, 1, 2147483647)] : i64
+  %capacity = index.cast %bounded : i64 to index
+  func.return %capacity : index
+}
+
 func.def @encode_mixed_plan(%plan: buffer, %inputs: buffer, %record_begin: index, %span_count: i32, %input_count: i32, %packet_capacity: i32, %packet: buffer) {
   %origin = index.constant 0 : offset
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
-  %bounded_span_count = scalar.assume %span_count [range(%span_count, 0, 16)] : i32
+  %bounded_span_count = scalar.assume %span_count [range(%span_count, 0, 2147483647)] : i32
   %span_extent = index.cast %bounded_span_count : i32 to index
   %bounded_input_count = scalar.assume %input_count [range(%input_count, 1, 524288)] : i32
   %input_extent = index.cast %bounded_input_count : i32 to index
   %bounded_packet_capacity = scalar.assume %packet_capacity [range(%packet_capacity, 1, 524288)] : i32
   %packet_extent = index.cast %bounded_packet_capacity : i32 to index
-  %requests = buffer.view %plan[%origin] : buffer -> view<32x9xi32>
+  %plan_extent = func.call @plan_capacity(%plan) : (buffer) -> (index)
+  %requests = buffer.view %plan[%origin] : buffer -> view<[%plan_extent]x9xi32>
   %ids = buffer.view %inputs[%origin] : buffer -> view<[%input_extent]xi32>
   %records = buffer.view %packet[%origin] : buffer -> view<[%packet_extent]x8xi32>
-  %bounded_record_begin = index.assume %record_begin [range(%record_begin, 0, 16)] : index
   scf.for %i = [%c0 to %span_extent step %c1] {
-    %request_value = index.add %bounded_record_begin, %i : index
-    %request = index.assume %request_value [range(%request_value, 0, 31)] : index
-    %input_begin32 = view.load %requests[%request, 4] : view<32x9xi32> -> i32
-    %input_length32 = view.load %requests[%request, 5] : view<32x9xi32> -> i32
+    %request_value = index.add %record_begin, %i : index
+    %request = index.assume %request_value [range(%request_value, 0, 2147483646), lt(%request_value, %plan_extent)] : index
+    %input_begin32 = view.load %requests[%request, 4] : view<[%plan_extent]x9xi32> -> i32
+    %input_length32 = view.load %requests[%request, 5] : view<[%plan_extent]x9xi32> -> i32
     %bounded_begin = scalar.assume %input_begin32 [range(%input_begin32, 0, 524287)] : i32
     %bounded_length = scalar.assume %input_length32 [range(%input_length32, 0, 524288)] : i32
     %input_begin = index.cast %bounded_begin : i32 to index
@@ -538,7 +555,8 @@ func.def @encode_mixed_media(%plan: buffer, %media_plan: buffer, %media_count: i
   %media_extent = index.cast %bounded_media_count : i32 to index
   %bounded_packet_capacity = scalar.assume %packet_capacity [range(%packet_capacity, 1, 524288)] : i32
   %packet_extent = index.cast %bounded_packet_capacity : i32 to index
-  %requests = buffer.view %plan[%origin] : buffer -> view<32x9xi32>
+  %plan_extent = func.call @plan_capacity(%plan) : (buffer) -> (index)
+  %requests = buffer.view %plan[%origin] : buffer -> view<[%plan_extent]x9xi32>
   %media = buffer.view %media_plan[%origin] : buffer -> view<[%media_extent]x7xi32>
   %records = buffer.view %packet[%origin] : buffer -> view<[%packet_extent]x8xi32>
   scf.for %i = [%c0 to %media_extent step %c1] {
@@ -547,11 +565,12 @@ func.def @encode_mixed_media(%plan: buffer, %media_plan: buffer, %media_count: i
     %feature_offset = view.load %media[%i, 2] : view<[%media_extent]x7xi32> -> i32
     %feature_length = view.load %media[%i, 3] : view<[%media_extent]x7xi32> -> i32
     %feature_index = view.load %media[%i, 6] : view<[%media_extent]x7xi32> -> i32
-    %bounded_plan_index = scalar.assume %plan_index32 [range(%plan_index32, 0, 31)] : i32
+    %plan_index_bound = scalar.assume %plan_index32 [range(%plan_index32, 0, 2147483646)] : i32
+    %plan_index_value = index.cast %plan_index_bound : i32 to index
     %bounded_relative = scalar.assume %relative32 [range(%relative32, 0, 524287)] : i32
-    %plan_index = index.cast %bounded_plan_index : i32 to index
+    %plan_index = index.assume %plan_index_value [lt(%plan_index_value, %plan_extent)] : index
     %relative = index.cast %bounded_relative : i32 to index
-    %input_begin32 = view.load %requests[%plan_index, 4] : view<32x9xi32> -> i32
+    %input_begin32 = view.load %requests[%plan_index, 4] : view<[%plan_extent]x9xi32> -> i32
     %bounded_begin = scalar.assume %input_begin32 [range(%input_begin32, 0, 524287)] : i32
     %input_begin = index.cast %bounded_begin : i32 to index
     %position = index.add %input_begin, %relative : index
@@ -595,8 +614,9 @@ func.def public @encode_epoch(%control_state: buffer, %plan: buffer, %inputs: bu
     func.call @encode_mixed_plan(%plan, %inputs, %c0_index, %first_count, %input_count, %packet_capacity, %tokens) : (buffer, buffer, index, i32, i32, i32, buffer)
     %has_next = scalar.cmpi ne, %next_count, %c0 : i32
     scf.if %has_next {
-      %c16 = index.constant 16 : index
-      func.call @encode_mixed_plan(%plan, %inputs, %c16, %next_count, %input_count, %packet_capacity, %tokens) : (buffer, buffer, index, i32, i32, i32, buffer)
+      %bounded_first = scalar.assume %first_count [range(%first_count, 1, 2147483647)] : i32
+      %next_begin = index.cast %bounded_first : i32 to index
+      func.call @encode_mixed_plan(%plan, %inputs, %next_begin, %next_count, %input_count, %packet_capacity, %tokens) : (buffer, buffer, index, i32, i32, i32, buffer)
     }
     func.call @encode_mixed_media(%plan, %media_plan, %media_count, %packet_capacity, %tokens) : (buffer, buffer, i32, i32, buffer)
   } else {
@@ -623,7 +643,7 @@ func.def public @encode_epoch(%control_state: buffer, %plan: buffer, %inputs: bu
   func.return %first_count, %control_state, %transfer_begin, %transfer_length : i32, buffer, i64, i64
 }
 
-func.def public @publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative_mask: i32, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
+func.def public @publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative: buffer, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
   %origin = index.constant 0 : offset
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
@@ -632,27 +652,29 @@ func.def public @publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, 
   %c2_i32 = scalar.constant 2 : i32
   %progress_bytes = buffer.length %progress
   buffer.fill %c0_i32, %progress[%origin], %progress_bytes : i32
-  %bounded_count = scalar.assume %count [range(%count, 1, 16)] : i32
+  %bounded_count = scalar.assume %count [range(%count, 1, 2147483647)] : i32
   %length = index.cast %bounded_count : i32 to index
-  %requests = buffer.view %plan[%origin] : buffer -> view<32x9xi32>
-  %outputs = buffer.view %ordinary[%origin] : buffer -> view<16xi32>
-  %published = buffer.view %progress[%origin] : buffer -> view<16x21xi32>
+  %plan_extent = func.call @plan_capacity(%plan) : (buffer) -> (index)
+  %requests = buffer.view %plan[%origin] : buffer -> view<[%plan_extent]x9xi32>
+  %outputs = buffer.view %ordinary[%origin] : buffer -> view<[%length]xi32>
+  %published = buffer.view %progress[%origin] : buffer -> view<[%length]x21xi32>
   scf.for %i = [%c0 to %length step %c1] {
-    %consumed = view.load %requests[%i, 0] : view<32x9xi32> -> i32
-    %source_position = view.load %requests[%i, 2] : view<32x9xi32> -> i32
+    %request = index.assume %i [lt(%i, %plan_extent)] : index
+    %consumed = view.load %requests[%request, 0] : view<[%plan_extent]x9xi32> -> i32
+    %source_position = view.load %requests[%request, 2] : view<[%plan_extent]x9xi32> -> i32
     %source_advance = scalar.muli %consumed, %c2_i32 : i32
     %next_source_position = scalar.addi %source_position, %source_advance : i32
-    %flags = view.load %requests[%i, 6] : view<32x9xi32> -> i32
+    %flags = view.load %requests[%request, 6] : view<[%plan_extent]x9xi32> -> i32
     %bits = scalar.andi %flags, %c1_i32 : i32
     %selected = scalar.cmpi ne, %bits, %c0_i32 : i32
     %selected_count = scalar.extui %selected : i1 to i32
-    view.store %consumed, %published[%i, 0] : i32, view<16x21xi32>
-    view.store %consumed, %published[%i, 1] : i32, view<16x21xi32>
-    view.store %selected_count, %published[%i, 2] : i32, view<16x21xi32>
-    view.store %next_source_position, %published[%i, 4] : i32, view<16x21xi32>
+    view.store %consumed, %published[%i, 0] : i32, view<[%length]x21xi32>
+    view.store %consumed, %published[%i, 1] : i32, view<[%length]x21xi32>
+    view.store %selected_count, %published[%i, 2] : i32, view<[%length]x21xi32>
+    view.store %next_source_position, %published[%i, 4] : i32, view<[%length]x21xi32>
     scf.if %selected {
-      %token = view.load %outputs[%i] : view<16xi32> -> i32
-      view.store %token, %published[%i, 5] : i32, view<16x21xi32>
+      %token = view.load %outputs[%i] : view<[%length]xi32> -> i32
+      view.store %token, %published[%i, 5] : i32, view<[%length]x21xi32>
     }
   }
   func.return

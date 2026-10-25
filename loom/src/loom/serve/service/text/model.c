@@ -244,6 +244,23 @@ static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
     model->rows[i].model = model;
     model->rows[i].state = &model->state.rows[i];
   }
+  iree_host_size_t span_capacity = 1;
+  for (iree_host_size_t i = 0; i < model->shape_count; ++i) {
+    span_capacity = iree_max(span_capacity, model->shapes[i].span_capacity);
+  }
+  iree_host_size_t total = 0, indices_offset = 0, extents_offset = 0;
+  iree_host_size_t next_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      0, &total,
+      IREE_STRUCT_FIELD(span_capacity, iree_host_size_t, &indices_offset),
+      IREE_STRUCT_FIELD(span_capacity, uint32_t, &extents_offset),
+      IREE_STRUCT_FIELD(span_capacity, uint32_t, &next_offset)));
+  uint8_t* storage = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(model->host_allocator, total, (void**)&storage));
+  model->invocation.row_indices = (iree_host_size_t*)(storage + indices_offset);
+  model->invocation.extents = (uint32_t*)(storage + extents_offset);
+  model->invocation.next_indices = (uint32_t*)(storage + next_offset);
   if (model->state.checkpoints.capacity) {
     IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
         model->host_allocator, model->state.checkpoints.capacity,
@@ -299,9 +316,9 @@ iree_status_t loom_serve_text_load_allocate(
                             "encoding requires packed epochs without a "
                             "tokenizer or draft stages");
   }
-  if (options->row_count < 1 || options->row_count > TEXT_ROW_CAPACITY) {
+  if (options->row_count < 1 || options->row_count > INT32_MAX) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "text row count must be in [1, 16]");
+                            "text resident count must fit a positive i32");
   }
   if (options->prefill_capacity < 1 ||
       options->context_capacity < options->prefill_capacity ||
@@ -322,7 +339,7 @@ iree_status_t loom_serve_text_load_allocate(
     const loom_serve_packing_shape_t shape = options->epoch_shapes[i];
     if (shape.token_capacity < 1 ||
         shape.token_capacity > options->context_capacity ||
-        shape.span_capacity < 1 || shape.span_capacity > TEXT_ROW_CAPACITY) {
+        shape.span_capacity < 1 || shape.span_capacity > shape.token_capacity) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "epoch %zu has invalid token/span capacities", i);
     }
@@ -658,6 +675,7 @@ iree_status_t loom_serve_text_model_free_retired(
   loom_serve_text_media_epoch_deinitialize(&model->invocation.media);
   loom_serve_text_control_deinitialize(&model->control);
   iree_allocator_free(model->host_allocator, model->rows);
+  iree_allocator_free(model->host_allocator, model->invocation.row_indices);
   iree_allocator_free(model->host_allocator, model->checkpoints);
   loom_serve_execution_release(model->execution);
   loom_serve_text_source_deinitialize(&model->source);
@@ -926,15 +944,16 @@ static iree_status_t loom_serve_text_submit_step(
 // record offsets; native state contributes its already validated byte ranges.
 static iree_status_t loom_serve_text_publish_state_bindings(
     loom_serve_text_model_t* model) {
-  if (!model->state.recurrent.dirty_rows) {
+  if (!model->state.recurrent.dirty_count) {
     return iree_ok_status();
   }
   uint32_t count = 0;
   for (iree_host_size_t i = 0; i < model->row_count; ++i) {
-    if (!(model->state.recurrent.dirty_rows & (1u << i))) {
+    loom_serve_text_state_row_t* row = &model->state.rows[i];
+    if (!row->recurrent.dirty) {
       continue;
     }
-    const loom_serve_text_state_row_t* row = &model->state.rows[i];
+    row->recurrent.dirty = false;
     const uint64_t origin =
         iree_hal_buffer_byte_offset(row->buffers[TEXT_RECURRENT]);
     const uint64_t read_origin =
@@ -975,7 +994,7 @@ static iree_status_t loom_serve_text_publish_state_bindings(
     IREE_RETURN_IF_ERROR(loom_serve_execution_transfer(model->execution, 1,
                                                        &upload, &completion));
   }
-  model->state.recurrent.dirty_rows = 0;
+  model->state.recurrent.dirty_count = 0;
   return iree_ok_status();
 }
 
@@ -1031,12 +1050,12 @@ iree_status_t loom_serve_text_model_submit_epoch(
   }
   // Validate the caller's plan before changing reusable payloads or submitting
   // any work. The device consumes this one established partition invariant.
-  uint32_t resident_mask = 0;
   iree_host_size_t token_count = 0;
-  uint32_t extents[TEXT_ROW_CAPACITY];
-  uint32_t first_indices[TEXT_ROW_CAPACITY];
-  uint32_t next_indices[TEXT_ROW_CAPACITY];
-  uint32_t continued_speculative_mask = 0;
+  uint32_t* extents = model->invocation.extents;
+  uint32_t* next_indices = model->invocation.next_indices;
+  uint8_t* continued = model->control.host.bytes[TEXT_HOST_CONTINUATIONS].data;
+  memset(continued, 0, span_count * sizeof(uint32_t));
+  bool continued_speculative = false;
   const iree_host_size_t epoch_count = continuation ? 2 : 1;
   const iree_host_size_t width = model->draft_depth + 1;
   bool proposes = false;
@@ -1052,12 +1071,12 @@ iree_status_t loom_serve_text_model_submit_epoch(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "invalid text epoch span %zu", i);
     }
-    const uint32_t resident_bit = 1u << span->row_index;
     if (model->rows[span->row_index].state->snapshot) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "epoch row %zu is suspended", span->row_index);
     }
-    if (resident_mask & resident_bit) {
+    const iree_host_size_t prior = model->rows[span->row_index].planning.first;
+    if (prior < i && spans[prior].row_index == span->row_index) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "epoch repeats resident row %zu",
                               span->row_index);
@@ -1089,8 +1108,7 @@ iree_status_t loom_serve_text_model_submit_epoch(
       }
     }
     extents[i] = (uint32_t)span->token_count;
-    first_indices[span->row_index] = (uint32_t)i;
-    resident_mask |= resident_bit;
+    model->rows[span->row_index].planning.first = i;
     token_count += span->token_count;
     proposes |= generates;
     has_media_input |= span->media != NULL;
@@ -1108,7 +1126,6 @@ iree_status_t loom_serve_text_model_submit_epoch(
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "continuation span count exceeds capacity");
     }
-    uint32_t next_mask = 0;
     iree_host_size_t next_tokens = 0;
     for (iree_host_size_t i = 0; i < continuation->span_count; ++i) {
       const loom_serve_text_span_t* span = &continuation->spans[i];
@@ -1119,13 +1136,16 @@ iree_status_t loom_serve_text_model_submit_epoch(
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "invalid continuation span %zu", i);
       }
-      const uint32_t bit = 1u << span->row_index;
-      if (!(resident_mask & bit) || (next_mask & bit)) {
+      loom_serve_text_row_t* resident = &model->rows[span->row_index];
+      const iree_host_size_t first = resident->planning.first;
+      const iree_host_size_t next = resident->planning.next;
+      if (first >= span_count || spans[first].row_index != span->row_index ||
+          (next < i &&
+           continuation->spans[next].row_index == span->row_index)) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
             "continuation must use distinct first-plan rows");
       }
-      const uint32_t first = first_indices[span->row_index];
       const loom_serve_text_span_t* prior = &spans[first];
       const uint32_t limit = continuation->output_limits[i];
       const iree_host_size_t remaining =
@@ -1148,7 +1168,8 @@ iree_status_t loom_serve_text_model_submit_epoch(
             output_limits[first] ? iree_min(2 * width, limit + width - 2)
                                  : prior->token_count + width;
         extents[first] = (uint32_t)iree_min(remaining, extent);
-        continued_speculative_mask |= 1u << first;
+        iree_unaligned_store_le_u32(continued + first * sizeof(uint32_t), 1);
+        continued_speculative = true;
       } else {
         if (!span->token_ids || output_limits[first] || prior->flags ||
             iree_any_bit_set(span->flags, LOOM_SERVE_TEXT_SPAN_FLAG_PROPOSE)) {
@@ -1162,8 +1183,8 @@ iree_status_t loom_serve_text_model_submit_epoch(
         }
         extents[first] += (uint32_t)span->token_count;
       }
-      next_indices[i] = first;
-      next_mask |= bit;
+      next_indices[i] = (uint32_t)first;
+      resident->planning.next = i;
       next_tokens += span->token_count;
       has_media_input |= span->media != NULL;
     }
@@ -1209,7 +1230,7 @@ iree_status_t loom_serve_text_model_submit_epoch(
         model->state.rows, model->control.host.bytes[TEXT_HOST_PLAN],
         model->control.host.bytes[TEXT_HOST_INPUT], continuation->span_count,
         continuation->spans, continuation->output_limits, next_indices,
-        TEXT_ROW_CAPACITY, input_count);
+        span_count, input_count);
   }
   loom_serve_text_capture_t* capture = NULL;
   if (encodes) {
@@ -1235,7 +1256,6 @@ iree_status_t loom_serve_text_model_submit_epoch(
   model->invocation.span_count = span_count;
   model->invocation.flags = (output_limits ? TEXT_EPOCH_FLAG_VERIFY : 0) |
                             (continuation ? TEXT_EPOCH_FLAG_CONTINUATION : 0);
-  model->invocation.continued_speculative_mask = continued_speculative_mask;
   for (iree_host_size_t i = 0; i < span_count; ++i) {
     model->invocation.row_indices[i] = spans[i].row_index;
   }
@@ -1374,7 +1394,7 @@ iree_status_t loom_serve_text_model_submit_epoch(
       iree_vm_variant_from_i32((int32_t)epoch_count),
       iree_vm_variant_from_i32(continuation ? (int32_t)continuation->shape_index
                                             : 0),
-      iree_vm_variant_from_i32(continued_speculative_mask != 0),
+      iree_vm_variant_from_i32(continued_speculative),
       iree_vm_variant_from_i32((int32_t)invocation_media->first_feature_count),
       iree_vm_variant_from_i32((int32_t)invocation_media->next_feature_count),
   };
@@ -1426,8 +1446,9 @@ iree_status_t loom_serve_text_model_complete_epoch(
           iree_any_bit_set(model->invocation.flags, TEXT_EPOCH_FLAG_VERIFY)),
       iree_vm_variant_from_i32(iree_any_bit_set(model->invocation.flags,
                                                 TEXT_EPOCH_FLAG_CONTINUATION)),
-      iree_vm_variant_from_i32(
-          (int32_t)model->invocation.continued_speculative_mask),
+      iree_vm_buffer_variant_from_ptr_borrowed(
+          &model->source.vm_types,
+          model->control.host.buffers[TEXT_HOST_CONTINUATIONS]),
       iree_vm_buffer_variant_from_ptr_borrowed(
           &model->source.vm_types,
           model->control.host.buffers[TEXT_HOST_OUTPUTS]),

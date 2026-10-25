@@ -83,9 +83,6 @@ void loom_serve_text_variant_free(loom_serve_text_variant_t* variant);
 const loom_serve_compilation_report_t* loom_serve_text_variant_report(
     const loom_serve_text_variant_t* variant);
 
-// Retained arenas are sized to row_count, not this control-payload bound.
-enum { LOOM_SERVE_TEXT_ROW_CAPACITY = 16 };
-
 typedef enum loom_serve_text_mode_e {
   // Tokenizer/chat policy and optional local token prediction.
   LOOM_SERVE_TEXT_MODE_GENERATE = 0,
@@ -134,7 +131,8 @@ typedef struct loom_serve_text_options_t {
   iree_string_view_t weights_path;
   // Hugging Face tokenizer.json loaded once during creation.
   iree_string_view_t tokenizer_path;
-  // Number of addressable retained rows in one stable state arena (1-16).
+  // Number of addressable retained rows in one stable state arena. Independent
+  // of epoch shape capacity; source-visible identities fit a positive i32.
   iree_host_size_t row_count;
   // Maximum explicitly retained endpoints; zero keeps no checkpoint reserve.
   // Requires pooled execution. Source reserves reader/writer slot headroom;

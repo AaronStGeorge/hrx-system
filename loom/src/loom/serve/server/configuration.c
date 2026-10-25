@@ -276,7 +276,7 @@ static iree_status_t loom_serve_model_configuration_text(
         &fields[DEFINITION_TOKENIZER], host_allocator, &text->tokenizer));
   }
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
-      &fields[DEFINITION_ROWS], 1, 16, &text->rows));
+      &fields[DEFINITION_ROWS], 1, INT32_MAX, &text->rows));
   text->admission_overtakes = text->rows;
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[DEFINITION_ADMISSION_OVERTAKES], 0, INT32_MAX,

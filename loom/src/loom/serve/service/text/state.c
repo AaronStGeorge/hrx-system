@@ -221,6 +221,11 @@ iree_status_t loom_serve_text_state_allocate(
         iree_allocator_malloc_array(state->host_allocator, state->row_count,
                                     sizeof(*state->rows), (void**)&state->rows);
   }
+  if (iree_status_is_ok(status) && state->cache.capacity) {
+    status = iree_allocator_malloc_array(
+        state->host_allocator, state->row_count,
+        2 * sizeof(*state->cache.uploads), (void**)&state->cache.uploads);
+  }
   if (iree_status_is_ok(status) && state->checkpoints.capacity) {
     status = loom_serve_block_pool_initialize(state->checkpoints.capacity,
                                               state->host_allocator,
@@ -390,6 +395,7 @@ iree_status_t loom_serve_text_state_deinitialize(
     loom_serve_block_pool_deinitialize(&state->cache.pool);
     iree_allocator_free(state->host_allocator, state->rows);
     iree_allocator_free(state->host_allocator, state->cache.maps);
+    iree_allocator_free(state->host_allocator, state->cache.uploads);
   }
   return status;
 }
@@ -718,13 +724,19 @@ void loom_serve_text_state_row_trim(loom_serve_text_state_row_t* row) {
   row->block_count = keep;
 }
 
+static void loom_serve_text_row_dirty_recurrent(
+    loom_serve_text_state_row_t* row) {
+  row->owner->recurrent.dirty_count += !row->recurrent.dirty;
+  row->recurrent.dirty = true;
+}
+
 static void loom_serve_text_row_acquire_recurrent(
     loom_serve_text_state_row_t* row) {
   loom_serve_text_state_t* state = row->owner;
   loom_serve_block_pool_acquire(&state->recurrent.pool, 1,
                                 &row->recurrent.slot);
   row->buffers[TEXT_RECURRENT] = state->recurrent.buffers[row->recurrent.slot];
-  state->recurrent.dirty_rows |= 1u << (row - state->rows);
+  loom_serve_text_row_dirty_recurrent(row);
 }
 
 static void loom_serve_text_row_release_recurrent(
@@ -737,7 +749,8 @@ static void loom_serve_text_row_release_recurrent(
                                 &row->recurrent.slot);
   row->recurrent.slot = UINT32_MAX;
   row->buffers[TEXT_RECURRENT] = NULL;
-  state->recurrent.dirty_rows &= ~(1u << (row - state->rows));
+  state->recurrent.dirty_count -= row->recurrent.dirty;
+  row->recurrent.dirty = false;
 }
 
 void loom_serve_text_state_row_release_reservation(
@@ -752,7 +765,7 @@ void loom_serve_text_state_row_release_reservation(
     row->recurrent.anchor = UINT32_MAX;
     row->buffers[TEXT_RECURRENT] =
         state->recurrent.buffers[row->recurrent.slot];
-    state->recurrent.dirty_rows |= 1u << (row - state->rows);
+    loom_serve_text_row_dirty_recurrent(row);
   }
   row->reserved_extent = 0;
   loom_serve_text_state_row_trim(row);
@@ -1215,9 +1228,9 @@ iree_status_t loom_serve_text_state_row_try_restore(
   row->recurrent.slot = checkpoint->recurrent_slot;
   row->buffers[TEXT_RECURRENT] = state->recurrent.buffers[row->recurrent.slot];
   loom_serve_block_pool_retain(&state->recurrent.pool, 1, &row->recurrent.slot);
-  const iree_host_size_t row_index = (iree_host_size_t)(row - state->rows);
-  state->recurrent.dirty_rows |= 1u << row_index;
+  loom_serve_text_row_dirty_recurrent(row);
   row->block_count = checkpoint->block_count;
+  const iree_host_size_t row_index = (iree_host_size_t)(row - state->rows);
   const iree_host_size_t map_index = row_index * state->storage.blocks_per_row;
   uint32_t* blocks = state->cache.maps + map_index;
   memcpy(blocks, checkpoint->blocks, row->block_count * sizeof(*blocks));
@@ -1686,7 +1699,7 @@ iree_status_t loom_serve_text_state_reservation_submit(
     row->retiring_tail = reservation->tail;
     row->buffers[TEXT_RECURRENT] =
         state->recurrent.buffers[reservation->writer];
-    state->recurrent.dirty_rows |= 1u << index;
+    loom_serve_text_row_dirty_recurrent(row);
     reservation->installed = true;
     if (state->memory.backing.operation) {
       status = loom_serve_execution_barrier(
@@ -1825,7 +1838,7 @@ iree_status_t loom_serve_text_state_grow(loom_serve_text_state_t* state,
                                          iree_host_size_t span_count,
                                          const loom_serve_text_span_t* spans,
                                          const uint32_t* extents) {
-  iree_hal_transfer_operation_t uploads[2 * LOOM_SERVE_TEXT_ROW_CAPACITY] = {0};
+  iree_hal_transfer_operation_t* uploads = state->cache.uploads;
   iree_host_size_t upload_count = 0;
   for (iree_host_size_t i = 0; i < span_count; ++i) {
     const loom_serve_text_span_t* span = &spans[i];

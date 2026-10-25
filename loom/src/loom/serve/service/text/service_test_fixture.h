@@ -212,6 +212,12 @@ class SourceTextServiceTest : public ::testing::Test {
                          : state.find(marker) != std::string::npos) {
         return state;
       }
+      if (state.find(R"("registration":"failed")") != std::string::npos) {
+        [&] {
+          FAIL() << "Model failed before reaching " << marker << ": " << state;
+        }();
+        return {};
+      }
     }
     return {};
   }

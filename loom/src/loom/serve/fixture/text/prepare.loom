@@ -24,6 +24,8 @@ global.rodata.def @context_key = bytes("666978747572652e636f6e74657874")
 
 global.rodata.def @rows_key = bytes("666978747572652e726f7773")
 
+global.rodata.def @spans_key = bytes("666978747572652e7370616e73")
+
 global.rodata.def @tokens_key = bytes("666978747572652e746f6b656e73")
 
 global.rodata.def @media_key = bytes("666978747572652e6d65646961")
@@ -109,19 +111,25 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
   %bounded_count = scalar.assume %shape_count [range(%shape_count, 1, 2147483647)] : i64
   %count = index.cast %bounded_count : i64 to index
   %shape_view = buffer.view %shapes[%origin] : buffer -> view<[%count]x2xi64>
-  %maximum = scf.for %i = [%c0 to %count step %c1](%previous = %c0_i64 : i64) -> (i64) {
+  %maximum, %span_capacity = scf.for %i = [%c0 to %count step %c1](%previous = %c0_i64 : i64, %previous_spans = %c0_i64 : i64) -> (i64, i64) {
     %tokens = view.load %shape_view[%i, 0] : view<[%count]x2xi64> -> i64
     %larger = scalar.cmpi ugt, %tokens, %previous : i64
     %next = scf.select %larger, %tokens, %previous : i64
-    scf.yield %next : i64
+    %spans = view.load %shape_view[%i, 1] : view<[%count]x2xi64> -> i64
+    %more_spans = scalar.cmpi ugt, %spans, %previous_spans : i64
+    %next_spans = scf.select %more_spans, %spans, %previous_spans : i64
+    scf.yield %next, %next_spans : i64, i64
   }
   %smaller = scalar.cmpi ult, %maximum, %prefill : i64
   %effective = scf.select %smaller, %maximum, %prefill : i64
   %tokens_key = global.load @tokens_key : buffer
+  %spans_key = global.load @spans_key : buffer
+  func.call @config_i64(%stage, %spans_key, %span_capacity) : (i32, buffer, i64)
+  func.call @config_i64(%media_stage, %spans_key, %span_capacity) : (i32, buffer, i64)
   func.call @config_i64(%stage, %tokens_key, %maximum) : (i32, buffer, i64)
   %media_tokens = scalar.addi %maximum, %maximum : i64
   func.call @config_i64(%media_stage, %tokens_key, %media_tokens) : (i32, buffer, i64)
-  %bounded_rows = scalar.assume %rows [range(%rows, 1, 16)] : i64
+  %bounded_rows = scalar.assume %rows [range(%rows, 1, 2147483647)] : i64
   %row_count = index.cast %bounded_rows : i64 to index
   %slot_stride = scalar.constant 256 : i64
   %token_bytes = scalar.muli %maximum, %c4_i64 : i64
@@ -145,7 +153,8 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
   %blocks = scalar.divui %padded, %c4_i64 : i64
   %map_entries = scalar.muli %rows, %blocks : i64
   %map_bytes = scalar.muli %map_entries, %c4_i64 : i64
-  %map_origin = scalar.constant 512 : i64
+  %origin_stride = scalar.constant 32 : i64
+  %map_origin = scalar.muli %bounded_rows, %origin_stride : i64
   %table_bytes = scalar.addi %map_origin, %map_bytes : i64
   %allocation_bytes = index.constant 264 : offset
   %allocations = buffer.alloca<private> align(8) %allocation_bytes : buffer
@@ -153,8 +162,11 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
   scf.for %i = [%c0 to %allocation_count step %c1] {
     func.call @allocation(%allocations, %i, %c0_i64, %c0_i64) : (buffer, index, i64, i64)
   }
-  %residual_bytes = scalar.constant 64 : i64
-  %metadata_bytes = scalar.constant 592 : i64
+  %residual_bytes = scalar.muli %span_capacity, %c4_i64 : i64
+  %header_bytes = scalar.constant 16 : i64
+  %record_bytes = scalar.constant 36 : i64
+  %plan_bytes = scalar.muli %span_capacity, %record_bytes : i64
+  %metadata_bytes = scalar.addi %header_bytes, %plan_bytes : i64
   %c2 = index.constant 2 : index
   %c3 = index.constant 3 : index
   %c4 = index.constant 4 : index
@@ -170,10 +182,10 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
   %view_bytes = index.scale %row_count, %view_stride : index, offset -> offset
   %views = buffer.alloca<private> align(8) %view_bytes : buffer
   %view_records = buffer.view %views[%origin] : buffer -> view<[%row_count]x4x2xi64>
-  %origin_bytes = index.constant 512 : offset
+  %origin_bytes = index.cast %map_origin : i64 to offset
   %origins = buffer.alloca<private> align(8) %origin_bytes : buffer
   buffer.fill %c0_i32, %origins[%origin], %origin_bytes : i32
-  %origin_records = buffer.view %origins[%origin] : buffer -> view<16x4xi64>
+  %origin_records = buffer.view %origins[%origin] : buffer -> view<[%row_count]x4xi64>
   %control_bytes = scalar.constant 12 : i64
   %progress_bytes = scalar.constant 32 : i64
   scf.for %row = [%c0 to %row_count step %c1] {
@@ -189,7 +201,7 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
     view.store %token_bytes, %view_records[%row, 2, 1] : i64, view<[%row_count]x4x2xi64>
     view.store %progress, %view_records[%row, 3, 0] : i64, view<[%row_count]x4x2xi64>
     view.store %progress_bytes, %view_records[%row, 3, 1] : i64, view<[%row_count]x4x2xi64>
-    view.store %private_bytes, %origin_records[%row, 2] : i64, view<16x4xi64>
+    view.store %private_bytes, %origin_records[%row, 2] : i64, view<[%row_count]x4xi64>
   }
   %geometry_bytes = index.constant 104 : offset
   %geometry = buffer.alloca<private> align(8) %geometry_bytes : buffer

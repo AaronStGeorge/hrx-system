@@ -25,9 +25,11 @@ iree_status_t loom_serve_text_control_initialize(
   // Both dense padding and semantic packed inputs belong to the single model
   // invocation. Only the final prediction persists independently in each row.
   iree_host_size_t input_length = 0;
+  iree_host_size_t span_capacity = 1;
   for (iree_host_size_t i = 0; i < shape_count; ++i) {
     input_length =
         iree_max(input_length, 2 * shapes[i].token_capacity * sizeof(int32_t));
+    span_capacity = iree_max(span_capacity, shapes[i].span_capacity);
   }
   const bool packed =
       state->cache.capacity ||
@@ -52,8 +54,7 @@ iree_status_t loom_serve_text_control_initialize(
     }
   }
   const iree_host_size_t lengths[TEXT_HOST_BUFFER_COUNT] = {
-      2 * LOOM_SERVE_TEXT_ROW_CAPACITY * TEXT_PLAN_FIELD_COUNT *
-          sizeof(int32_t),
+      2 * span_capacity * TEXT_PLAN_FIELD_COUNT * sizeof(int32_t),
       input_length,
       shape_count ? iree_hal_buffer_byte_length(state->epoch.buffers[1]) : 0,
       shape_count ? iree_hal_buffer_byte_length(state->epoch.buffers[4]) : 0,
@@ -64,12 +65,12 @@ iree_status_t loom_serve_text_control_initialize(
       iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_DRAFT)
           ? iree_hal_buffer_byte_length(state->draft.next_results)
           : 0,
-      LOOM_SERVE_TEXT_ROW_CAPACITY * TEXT_PROGRESS_FIELD_COUNT *
-          sizeof(int32_t),
-      LOOM_SERVE_TEXT_ROW_CAPACITY * 4 * sizeof(int64_t),
+      span_capacity * TEXT_PROGRESS_FIELD_COUNT * sizeof(int32_t),
+      state->row_count * 4 * sizeof(int64_t),
       shape_count ? state->storage.bytes[LOOM_SERVE_TEXT_STORAGE_TARGET_ORIGINS]
                         .data_length
                   : 0,
+      span_capacity * sizeof(int32_t),
   };
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
@@ -158,7 +159,7 @@ iree_status_t loom_serve_text_control_initialize(
   const iree_vm_signature_type_t encode_results[] = {i32, buffer, i64, i64};
   const iree_vm_signature_type_t publish_arguments[] = {
       buffer, buffer, i32,    i32,    i32,    i32,
-      i32,    i32,    buffer, buffer, buffer, buffer};
+      i32,    buffer, buffer, buffer, buffer, buffer};
   const iree_vm_signature_type_t state_arguments[] = {buffer, i32, buffer};
   const iree_vm_signature_type_t epoch_arguments[] = {
       buffer,        i32,           i32,           i32,           i32,
