@@ -24,9 +24,9 @@ static_assert(LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY +
               "source-memory recurrence candidates must fit their count");
 
 typedef struct loom_low_lower_memory_component_candidate_t {
-  // Access that published this exact source realization.
+  // Access that published this exact source component.
   loom_low_lower_source_memory_record_t* record;
-  // Realization borrowed from a function-owned canonical access record.
+  // Term borrowed from a function-owned canonical access record.
   const loom_low_source_memory_dynamic_term_t* term;
   // Canonical members in the publishing record.
   uint16_t term_mask;
@@ -613,6 +613,34 @@ static iree_status_t loom_low_lower_memory_retain_recurrences(
 static iree_status_t loom_low_lower_memory_components_publish(
     loom_low_lower_source_memory_builder_t* builder,
     loom_low_lower_source_memory_record_t* record) {
+  const loom_low_source_memory_access_plan_t* access = &record->access;
+  // A one-term view base is already its own exact realization. View carriers
+  // are producers, not memory demands, and cannot activate sharing alone.
+  // Unit-stride values have no repeated arithmetic to remove and must not
+  // displace a larger authored realization. Compound authored view bases
+  // arrive through dynamic_realizations below.
+  if (access->operation_kind != LOOM_LOW_SOURCE_MEMORY_OPERATION_VIEW_CARRIER &&
+      access->dynamic_view_base_term_count == 1 &&
+      (access->dynamic_terms[0].byte_stride != 1 ||
+       access->dynamic_terms[0].stride_value_count != 0)) {
+    const uint16_t mask = 1;
+    loom_low_lower_memory_component_entry_t* entry = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_memory_component_intern(builder, access, mask, &entry));
+    if (entry->candidate == NULL) {
+      loom_low_lower_memory_component_candidate_t* candidate = NULL;
+      IREE_RETURN_IF_ERROR(iree_arena_allocate(
+          builder->arena, sizeof(*candidate), (void**)&candidate));
+      *candidate = (loom_low_lower_memory_component_candidate_t){
+          .record = record,
+          .term = &access->dynamic_terms[0],
+          .term_mask = mask,
+      };
+      entry->candidate = candidate;
+      entry->scope_next = builder->scope->first;
+      builder->scope->first = entry;
+    }
+  }
   for (uint8_t i = 0; i < record->access.dynamic_realization_count; ++i) {
     const loom_low_source_memory_dynamic_realization_t* realization =
         &record->access.dynamic_realizations[i];
@@ -728,6 +756,13 @@ iree_status_t loom_low_lower_source_memory_observe(
         loom_low_lower_memory_invariant_terms(context, record, &loop_index);
     loom_low_lower_memory_component_select(builder, record,
                                            record->invariant_term_mask);
+    if (record->access.retained_component.term == NULL &&
+        record->access.dynamic_view_base_term_count != 0) {
+      loom_low_lower_memory_component_select(
+          builder, record,
+          loom_low_lower_memory_term_range(
+              0, record->access.dynamic_view_base_term_count));
+    }
     for (uint8_t i = 0; record->access.retained_component.term == NULL &&
                         i < record->access.dynamic_realization_count;
          ++i) {

@@ -989,6 +989,9 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadFactorsScaledViewBase) {
   EXPECT_EQ(plan.dynamic_terms[0].index, element);
   EXPECT_EQ(plan.dynamic_terms[0].byte_stride, 4);
   EXPECT_EQ(plan.dynamic_terms[0].byte_shift, 2u);
+  EXPECT_EQ(plan.dynamic_view_base_byte_facts.range_lo, 0);
+  EXPECT_EQ(plan.dynamic_view_base_byte_facts.range_hi, 4092);
+  EXPECT_EQ(plan.dynamic_view_base_byte_facts.known_divisor, 4);
 }
 
 TEST_F(SourceMemoryPlanTest, DynamicDenseLoadPreservesWidePowerOfTwoStride) {

@@ -1030,6 +1030,7 @@ static bool loom_low_source_memory_access_add_view_region_byte_offset(
     plan->dynamic_view_base_term_count = 1;
     plan->dynamic_view_base_value_id = term.index;
     plan->dynamic_view_base_value_static_byte_offset = 0;
+    plan->dynamic_view_base_byte_facts = term.byte_facts;
     return loom_low_source_memory_access_append_dynamic_term(plan, &term,
                                                              diagnostic);
   }
@@ -1045,36 +1046,35 @@ static bool loom_low_source_memory_access_add_view_region_byte_offset(
   *inout_static_byte_offset = static_byte_offset;
 
   const uint8_t dynamic_view_base_begin = plan->dynamic_term_count;
-  // Multi-term bases can carry relational bounds in the analyzed complete
-  // expression that independent canonical terms cannot represent. Accumulate
-  // canonical facts during construction so taking the tighter range requires
-  // neither source rediscovery nor another term traversal.
+  // Retain the complete canonical facts while constructing the term prefix so
+  // later consumers never have to recover them with another traversal.
+  // Multi-term bases can additionally carry relational bounds in the analyzed
+  // complete expression that independent canonical terms cannot represent.
   const bool can_refine_dynamic_view_base_facts =
       view_region->base_begin_byte_offset.term_count +
               view_region->projection_byte_offset.term_count >=
           2 &&
       !loom_value_facts_is_unknown(view_region->begin_byte_offset.facts);
-  loom_value_facts_t canonical_view_base_byte_facts;
-  loom_value_facts_t* combined_view_base_byte_facts = NULL;
-  if (can_refine_dynamic_view_base_facts) {
-    canonical_view_base_byte_facts = loom_value_facts_exact_i64(0);
-    combined_view_base_byte_facts = &canonical_view_base_byte_facts;
-  }
+  loom_value_facts_t canonical_view_base_byte_facts =
+      loom_value_facts_exact_i64(0);
   if (!loom_low_source_memory_access_add_view_region_expression_terms(
           fact_table, vector_access,
           LOOM_LOW_SOURCE_MEMORY_VIEW_EXPRESSION_ROOT_BASE,
           &view_region->base_begin_byte_offset, plan, diagnostic,
-          combined_view_base_byte_facts) ||
+          &canonical_view_base_byte_facts) ||
       !loom_low_source_memory_access_add_view_region_expression_terms(
           fact_table, vector_access,
           LOOM_LOW_SOURCE_MEMORY_VIEW_EXPRESSION_PROJECTION,
           &view_region->projection_byte_offset, plan, diagnostic,
-          combined_view_base_byte_facts)) {
+          &canonical_view_base_byte_facts)) {
     return false;
   }
   const uint8_t dynamic_view_base_count =
       (uint8_t)(plan->dynamic_term_count - dynamic_view_base_begin);
   plan->dynamic_view_base_term_count = dynamic_view_base_count;
+  if (dynamic_view_base_count != 0) {
+    plan->dynamic_view_base_byte_facts = canonical_view_base_byte_facts;
+  }
   if (can_refine_dynamic_view_base_facts) {
     // The canonical static contribution is already represented separately in
     // the access plan, so retain only the analyzed dynamic contribution.
@@ -1088,7 +1088,8 @@ static bool loom_low_source_memory_access_add_view_region_byte_offset(
     const loom_value_facts_t refined_view_base_byte_facts =
         loom_low_source_memory_access_intersect_index_facts(
             canonical_view_base_byte_facts, analyzed_view_base_byte_facts);
-    if (loom_low_source_memory_facts_are_stronger(
+    if (dynamic_view_base_count != 0 &&
+        loom_low_source_memory_facts_are_stronger(
             refined_view_base_byte_facts, canonical_view_base_byte_facts)) {
       plan->dynamic_view_base_byte_facts = refined_view_base_byte_facts;
     }

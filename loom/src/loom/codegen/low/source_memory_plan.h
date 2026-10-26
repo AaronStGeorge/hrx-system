@@ -260,8 +260,8 @@ typedef struct loom_low_source_memory_access_plan_t {
   // term instead of the authored complete view-base expression.
   int64_t dynamic_view_base_value_static_byte_offset;
   // Facts for the complete dynamic view-base byte contribution, excluding
-  // |static_view_base_byte_offset|. Unknown when only independent canonical
-  // term facts are available.
+  // |static_view_base_byte_offset|. These combine canonical term facts and
+  // any stronger relational facts retained by view-region analysis.
   loom_value_facts_t dynamic_view_base_byte_facts;
   // Minimum power-of-two byte alignment at this access, combining proved
   // address facts and the typed access requirement. Carriers, prefetch hints,
