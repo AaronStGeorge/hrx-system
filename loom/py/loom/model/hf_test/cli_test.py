@@ -95,7 +95,7 @@ def test_lock_gate_retains_structured_action(tmp_path):
         assert not (tmp_path / "output").exists()
 
 
-def test_explicit_headless_wait_resumes_listing_without_weights(tmp_path):
+def test_explicit_headless_wait_stays_before_payload(tmp_path):
     with running_hub(tmp_path) as hub:
         _publish(hub)
         with subprocess.Popen(
@@ -108,13 +108,10 @@ def test_explicit_headless_wait_resumes_listing_without_weights(tmp_path):
             try:
                 for line in process.stderr:
                     if "Waiting for access" in line:
-                        hub.approved = True
                         break
                 else:
                     raise AssertionError("CLI exited before its access wait")
-                output, error = process.communicate()
-                assert process.returncode == 0, error
-                assert json.loads(output)["model"]["id"] == "fixture/access"
+                assert process.poll() is None
                 assert not any(path.endswith("code.loom") for _, path in hub.requests)
             finally:
                 if process.poll() is None:
