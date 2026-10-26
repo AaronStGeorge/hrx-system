@@ -733,7 +733,9 @@ iree_cc_library(
     queue
   HDRS
     "queue.h"
+    "state.h"
   SRCS
+    "lifecycle.c"
     "queue.c"
   DEPS
     ::growth

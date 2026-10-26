@@ -508,8 +508,14 @@ iree_runtime_cc_library(
 
 iree_runtime_cc_library(
     name = "queue",
-    srcs = ["queue.c"],
-    hdrs = ["queue.h"],
+    srcs = [
+        "lifecycle.c",
+        "queue.c",
+    ],
+    hdrs = [
+        "queue.h",
+        "state.h",
+    ],
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":backing",
