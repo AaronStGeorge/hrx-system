@@ -1520,6 +1520,14 @@ class Translator final : private Initialization::Evaluation {
         }
       }
       if (!locals_.contains(destination->binding)) {
+        if (references_.contains(destination->binding)) {
+          auto traits = unit_.typeTraits();
+          if (preserve_identity || traits.is_class(expression->type) ||
+              traits.is_array(expression->type)) {
+            return {expression->type, object_address(expression)};
+          }
+          return {expression->type, address(expression)};
+        }
         if (!values_.contains(destination->binding)) {
           fail(owner, "mutation requires an owned automatic source binding");
         }

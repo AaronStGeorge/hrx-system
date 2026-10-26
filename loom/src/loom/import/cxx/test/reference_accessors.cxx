@@ -87,6 +87,41 @@ static unsigned default_reference_value(unsigned input, unsigned amount) {
   return result * 100u + value;
 }
 
+struct ReferenceNestedState {
+  unsigned value;
+};
+
+struct ReferenceMemberState {
+  unsigned scalar;
+  unsigned lanes[3];
+  ReferenceNestedState nested;
+};
+
+static unsigned observe_member(const unsigned& value) { return value; }
+
+static unsigned sum_members(const unsigned (&values)[3]) {
+  return values[0] + values[1] + values[2];
+}
+
+static unsigned inspect_members(const ReferenceMemberState& state) {
+  return observe_member(state.scalar) + sum_members(state.lanes) +
+         observe_member(state.nested.value);
+}
+
+static void update_members(ReferenceMemberState& state) {
+  state.scalar += observe_member(state.nested.value);
+  state.lanes[1] = observe_member(state.scalar);
+  state.nested.value = observe_member(state.lanes[2]);
+}
+
+static unsigned reference_member_access(unsigned input) {
+  ReferenceMemberState state{input, {2u, 3u, 4u}, {7u}};
+  unsigned before = inspect_members(state);
+  update_members(state);
+  return before * 1000u + state.scalar * 100u + state.lanes[1] * 10u +
+         state.nested.value;
+}
+
 LOOM_CHECK_CASE(reference_accessors) {
   const auto local = local_alias_value(4u);
   const auto storage = storage_alias(11u, 4u, 2u);
@@ -94,10 +129,12 @@ LOOM_CHECK_CASE(reference_accessors) {
   const auto array = array_access(13u, 3);
   const auto matrix = matrix_access(17u, 1u, 2u);
   const auto defaulted = default_reference_value(19u, 5u);
+  const auto members = reference_member_access(5u);
   loom::check::expect_equal(local, 28u);
   loom::check::expect_equal(storage, 21u);
   loom::check::expect_equal(forwarded, 10u);
   loom::check::expect_equal(array, 15u);
   loom::check::expect_equal(matrix, 34u);
   loom::check::expect_equal(defaulted, 2424u);
+  loom::check::expect_equal(members, 22324u);
 }
