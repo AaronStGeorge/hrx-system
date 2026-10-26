@@ -150,25 +150,21 @@ iree_status_t DeviceAllocator::Control(void* self_pointer,
 NativeMemoryGate::~NativeMemoryGate() {
   EXPECT_EQ(usage_.live_bytes, 0u);
   EXPECT_TRUE(allocations_.empty());
-  if (active_ == this) {
-    active_ = nullptr;
-  }
+  NativeMemoryGate* expected = this;
+  active_.compare_exchange_strong(expected, nullptr);
 }
 
 iree_status_t NativeMemoryGate::CreateFabric(iree_hal_amd_fabric_t** out_fabric,
                                              uint64_t maximum_byte_length,
                                              amdf_native_lifetime_t lifetime) {
-  IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST,
-                     &native_api_),
-      "amdf_query_api"));
-  forwarding_api_ = *native_api_;
-  maximum_byte_length_ = maximum_byte_length;
+  const amdf_api_t* native_api = nullptr;
+  IREE_RETURN_IF_ERROR(QueryNativeApi(&native_api));
+  forwarding_api_ = *native_api;
   forwarding_api_.memory_scope_query_device_profile = QueryDeviceProfile;
   forwarding_api_.memory_scope_query_pair_info = QueryProfilePair;
   forwarding_api_.memory_create = CreateMemory;
   forwarding_api_.memory_destroy = DestroyMemory;
-  active_ = this;
+  Activate(maximum_byte_length);
   if (lifetime == AMDF_NATIVE_LIFETIME_PROCESS) {
     return AcquireProcessFabric(out_fabric);
   }
@@ -176,16 +172,35 @@ iree_status_t NativeMemoryGate::CreateFabric(iree_hal_amd_fabric_t** out_fabric,
                                     iree_allocator_system(), out_fabric);
 }
 
+void NativeMemoryGate::Activate(uint64_t maximum_byte_length) {
+  maximum_byte_length_.store(maximum_byte_length);
+  active_.store(this);
+}
+
+void NativeMemoryGate::Deactivate() {
+  NativeMemoryGate* expected = this;
+  active_.compare_exchange_strong(expected, nullptr);
+}
+
+iree_status_t NativeMemoryGate::QueryNativeApi(const amdf_api_t** out_api) {
+  std::call_once(native_api_once_, [] {
+    native_api_status_ = amdf_query_api(AMDF_ABI_VERSION_LATEST,
+                                        AMDF_ABI_VERSION_LATEST, &native_api_);
+  });
+  IREE_RETURN_IF_ERROR(
+      IREE_HAL_AMD_STATUS_FROM_AMDF(native_api_status_, "amdf_query_api"));
+  *out_api = native_api_;
+  return iree_ok_status();
+}
+
 iree_status_t NativeMemoryGate::AcquireProcessFabric(
     iree_hal_amd_fabric_t** out_fabric) {
   struct ProcessFabric {
     ProcessFabric() {
-      status = IREE_HAL_AMD_STATUS_FROM_AMDF(
-          amdf_query_api(AMDF_ABI_VERSION_LATEST, AMDF_ABI_VERSION_LATEST,
-                         &native_api_),
-          "amdf_query_api");
+      const amdf_api_t* native_api = nullptr;
+      status = QueryNativeApi(&native_api);
       if (iree_status_is_ok(status)) {
-        api = *native_api_;
+        api = *native_api;
         api.memory_scope_query_device_profile = QueryDeviceProfile;
         api.memory_scope_query_pair_info = QueryProfilePair;
         api.memory_create = CreateMemory;
@@ -218,14 +233,14 @@ amdf_status_t AMDF_CALL NativeMemoryGate::QueryDeviceProfile(
     const amdf_memory_device_access_t* accesses,
     amdf_memory_profile_t* out_profile,
     amdf_memory_access_capabilities_t* out_access_capabilities) {
-  auto* self = active_;
+  auto* self = active_.load();
   const amdf_status_t status = native_api_->memory_scope_query_device_profile(
       scope, profile_ordinal, access_count, accesses, out_profile,
       out_access_capabilities);
   if (self && amdf_status_is_ok(status)) {
     out_profile->allocation.maximum_byte_length =
         iree_min(out_profile->allocation.maximum_byte_length,
-                 self->maximum_byte_length_);
+                 self->maximum_byte_length_.load());
   }
   return status;
 }
@@ -233,7 +248,8 @@ amdf_status_t AMDF_CALL NativeMemoryGate::QueryDeviceProfile(
 amdf_status_t AMDF_CALL NativeMemoryGate::QueryProfilePair(
     amdf_memory_scope_t* scope, const amdf_memory_profile_pair_query_t* query,
     amdf_memory_pair_info_t* out_info) {
-  if (active_ && active_->require_code_upload_ &&
+  auto* self = active_.load();
+  if (self && self->require_code_upload_.load() &&
       (query->required_flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) &&
       query->producer.kind == AMDF_MEMORY_SITE_KIND_HOST) {
     for (uint32_t i = 0; i < query->access_count; ++i) {
@@ -251,12 +267,12 @@ amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
   if (out_release_info) {
     *out_release_info = {};
   }
-  auto* self = active_;
+  auto* self = active_.load();
   if (!self) {
     return native_api_->memory_create(scope, info, out_memory,
                                       out_release_info);
   }
-  if (info->byte_length > self->maximum_byte_length_) {
+  if (info->byte_length > self->maximum_byte_length_.load()) {
     return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
   }
   const bool held = self->hold_.exchange(false);
@@ -297,7 +313,7 @@ amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
 
 amdf_status_t AMDF_CALL NativeMemoryGate::DestroyMemory(
     amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info) {
-  auto* self = active_;
+  auto* self = active_.load();
   if (!self) {
     return native_api_->memory_destroy(memory, out_release_info);
   }
@@ -477,11 +493,18 @@ void GpuNativeTest::SetUp() {
               api->endpoint_query_queue_family_info(endpoint, family, &native),
               "endpoint_query_queue_family_info");
           if (iree_status_is_ok(status)) {
-            supported =
-                command_type() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
-                    ? iree_hal_amd_gpu_aql_queue_publication_modes(&native) != 0
-                    : iree_hal_amd_gpu_pm4_queue_publication_modes(&native) !=
-                          0;
+            if (command_type() == AMDF_QUEUE_COMMAND_TYPE_UNKNOWN) {
+              supported =
+                  iree_hal_amd_gpu_aql_queue_publication_modes(&native) != 0 ||
+                  iree_hal_amd_gpu_pm4_queue_publication_modes(&native) != 0;
+            } else {
+              supported =
+                  command_type() == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
+                      ? iree_hal_amd_gpu_aql_queue_publication_modes(&native) !=
+                            0
+                      : iree_hal_amd_gpu_pm4_queue_publication_modes(&native) !=
+                            0;
+            }
           }
         }
       }

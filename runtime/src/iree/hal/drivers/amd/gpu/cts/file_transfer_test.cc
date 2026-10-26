@@ -5,11 +5,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <algorithm>
+#include <array>
 #include <condition_variable>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #include "iree/async/operations/scheduling.h"
@@ -31,6 +32,7 @@
 
 namespace {
 using iree::hal::amd::gpu::cts::GpuNativeTest;
+using iree::hal::amd::gpu::cts::NativeMemoryGate;
 using iree::hal::cts::Ref;
 
 enum class FileBacking {
@@ -46,29 +48,182 @@ enum class FileBacking {
   kVirtualMixedRegistered,
 };
 
-using FileTestParameters = std::tuple<amdf_queue_command_type_t, FileBacking>;
-
-std::string FileTestName(
-    const ::testing::TestParamInfo<FileTestParameters>& info) {
+std::string FileTestName(const ::testing::TestParamInfo<FileBacking>& info) {
   constexpr const char* backings[] = {
       "PhysicalHost",          "VirtualHost",       "VirtualPrivate",
       "PhysicalRegistered",    "VirtualRegistered", "PhysicalPrivate",
       "NestedPrivate",         "NestedHost",        "VirtualMixed",
       "VirtualMixedRegistered"};
-  return std::string(std::get<0>(info.param) == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL
-                         ? "Aql"
-                         : "Pm4") +
-         backings[static_cast<size_t>(std::get<1>(info.param))];
+  return backings[static_cast<size_t>(info.param)];
 }
 
-class GpuNativeFileTest
-    : public GpuNativeTest,
-      public ::testing::WithParamInterface<FileTestParameters> {
- protected:
-  amdf_queue_command_type_t command_type() const override {
-    return std::get<0>(GetParam());
+// Owns one native device construction across all file cases with the same
+// provisioning contract. Individual cases only borrow these resources and
+// keep all mutable file, pool, buffer, and semaphore state local.
+class SharedGpuNativeDevice final : public GpuNativeTest {
+ public:
+  SharedGpuNativeDevice(amdf_native_lifetime_t native_lifetime,
+                        iree_async_proactor_pool_options_t proactor_options,
+                        iree_hal_amd_fabric_t* fabric)
+      : native_lifetime_(native_lifetime) {
+    proactor_options_ = proactor_options;
+    fabric_ = fabric;
   }
-  FileBacking backing_kind() const { return std::get<1>(GetParam()); }
+
+  void Initialize() {
+    attempted_ = true;
+    GpuNativeTest::SetUp();
+    if (HasFatalFailure() || IsSkipped()) {
+      unavailable_ = IsSkipped();
+      return;
+    }
+    native_device_ = context_->device;
+    gfx_major_ = context_->target_info.gfx_ip.major;
+    gfx_minor_ = context_->target_info.gfx_ip.minor;
+    gfx_stepping_ = context_->target_info.gfx_ip.stepping;
+    Create();
+    ready_ = !HasFatalFailure() && !IsSkipped();
+    unavailable_ = IsSkipped();
+  }
+
+  void Deinitialize() {
+    if (!attempted_) {
+      return;
+    }
+    GpuNativeTest::TearDown();
+    attempted_ = false;
+    ready_ = false;
+  }
+
+  void TestBody() override {}
+
+  bool ready() const { return ready_; }
+  bool unavailable() const { return unavailable_; }
+  iree_hal_amd_fabric_t* fabric() const { return fabric_; }
+  iree_async_proactor_pool_t* proactors() const { return proactors_; }
+  iree_async_frontier_tracker_t* tracker() const { return tracker_; }
+  iree_hal_device_t* device() const { return device_; }
+  iree_hal_device_group_t* group() const { return group_; }
+  const std::array<iree_hal_queue_t*, 2>& queues() const { return queues_; }
+  amdf_device_t* native_device() const { return native_device_; }
+  uint32_t gfx_major() const { return gfx_major_; }
+  uint32_t gfx_minor() const { return gfx_minor_; }
+  uint32_t gfx_stepping() const { return gfx_stepping_; }
+
+ protected:
+  // File transfer uses the device-wide SDMA owner. Select the production
+  // default compute family so RDNA exercises PM4 and CDNA exercises AQL.
+  amdf_queue_command_type_t command_type() const override {
+    return AMDF_QUEUE_COMMAND_TYPE_UNKNOWN;
+  }
+
+  amdf_native_lifetime_t native_lifetime() const override {
+    return native_lifetime_;
+  }
+
+ private:
+  amdf_native_lifetime_t native_lifetime_;
+  amdf_device_t* native_device_ = nullptr;
+  uint32_t gfx_major_ = 0;
+  uint32_t gfx_minor_ = 0;
+  uint32_t gfx_stepping_ = 0;
+  bool attempted_ = false;
+  bool ready_ = false;
+  bool unavailable_ = false;
+};
+
+class SharedFileDeviceCache {
+ public:
+  SharedFileDeviceCache(NativeMemoryGate* memory_gate,
+                        amdf_native_lifetime_t native_lifetime,
+                        uint64_t maximum_native_allocation,
+                        iree_async_proactor_pool_options_t proactor_options)
+      : memory_gate_(memory_gate),
+        native_lifetime_(native_lifetime),
+        maximum_native_allocation_(maximum_native_allocation),
+        proactor_options_(proactor_options) {}
+
+  iree_status_t Acquire(SharedGpuNativeDevice** out_device) {
+    Activate();
+    if (!device_) {
+      iree_hal_amd_fabric_t* fabric = nullptr;
+      IREE_RETURN_IF_ERROR(memory_gate_->CreateFabric(
+          &fabric, maximum_native_allocation_, native_lifetime_));
+      device_ = std::make_unique<SharedGpuNativeDevice>(
+          native_lifetime_, proactor_options_, fabric);
+      device_->Initialize();
+    }
+    *out_device = device_.get();
+    return iree_ok_status();
+  }
+
+  NativeMemoryGate& memory_gate() { return *memory_gate_; }
+
+  void Activate() { memory_gate_->Activate(maximum_native_allocation_); }
+
+  void Reset() {
+    Activate();
+    if (device_) {
+      device_->Deinitialize();
+      device_.reset();
+    }
+  }
+
+ private:
+  NativeMemoryGate* memory_gate_;
+  amdf_native_lifetime_t native_lifetime_;
+  uint64_t maximum_native_allocation_;
+  iree_async_proactor_pool_options_t proactor_options_;
+  std::unique_ptr<SharedGpuNativeDevice> device_;
+};
+
+class FileDeviceCacheEnvironment final : public ::testing::Environment {
+ public:
+  FileDeviceCacheEnvironment()
+      : process_(&memory_gate_, AMDF_NATIVE_LIFETIME_PROCESS, UINT64_MAX,
+                 iree_async_proactor_pool_options_default()),
+        instance_(&memory_gate_, AMDF_NATIVE_LIFETIME_INSTANCE, UINT64_MAX,
+                  iree_async_proactor_pool_options_default()),
+        limited_(&memory_gate_, AMDF_NATIVE_LIFETIME_PROCESS, 8 * 1024 * 1024,
+                 iree_async_proactor_pool_options_default()) {}
+
+  SharedFileDeviceCache& process() { return process_; }
+  SharedFileDeviceCache& instance() { return instance_; }
+  SharedFileDeviceCache& limited() { return limited_; }
+
+  void TearDown() override {
+    limited_.Reset();
+    instance_.Reset();
+    process_.Reset();
+    memory_gate_.Activate();
+    const auto usage = memory_gate_.QueryUsage();
+    EXPECT_EQ(usage.live_bytes, 0u);
+    EXPECT_EQ(usage.destroy_failures, 0u);
+    memory_gate_.Deactivate();
+  }
+
+ private:
+  NativeMemoryGate memory_gate_;
+  SharedFileDeviceCache process_;
+  SharedFileDeviceCache instance_;
+  SharedFileDeviceCache limited_;
+};
+
+FileDeviceCacheEnvironment* file_device_caches = nullptr;
+
+::testing::Environment* RegisterFileDeviceCaches() {
+  auto* environment = new FileDeviceCacheEnvironment;
+  file_device_caches = environment;
+  return ::testing::AddGlobalTestEnvironment(environment);
+}
+
+[[maybe_unused]] ::testing::Environment* file_device_cache_environment =
+    RegisterFileDeviceCaches();
+
+class GpuNativeFileTest : public GpuNativeTest,
+                          public ::testing::WithParamInterface<FileBacking> {
+ protected:
+  FileBacking backing_kind() const { return GetParam(); }
   bool is_physical() const {
     return backing_kind() == FileBacking::kPhysicalHost ||
            backing_kind() == FileBacking::kPhysicalRegistered ||
@@ -91,27 +246,32 @@ class GpuNativeFileTest
            backing_kind() == FileBacking::kVirtualMixedRegistered;
   }
 
+  virtual SharedFileDeviceCache& device_cache() const {
+    return file_device_caches->process();
+  }
+
   void SetUp() override {
-    // The registered driver shares process-scoped native connections. File
-    // staging uses the same ownership when registering ordinary host pages.
-    if (!fabric_) {
-      IREE_ASSERT_OK(
-          iree::hal::amd::gpu::cts::NativeMemoryGate::AcquireProcessFabric(
-              &fabric_));
-    }
-    GpuNativeTest::SetUp();
+    device_cache_ = &device_cache();
+    IREE_ASSERT_OK(device_cache_->Acquire(&shared_device_));
     if (HasFatalFailure() || IsSkipped()) {
       return;
     }
-    const auto gfx = context_->target_info.gfx_ip;
-    RecordProperty("gfx_ip_major", gfx.major);
-    RecordProperty("gfx_ip_minor", gfx.minor);
-    RecordProperty("gfx_ip_stepping", gfx.stepping);
-    native_device_ = context_->device;
-    Create();
-    if (HasFatalFailure() || IsSkipped()) {
-      return;
+    if (shared_device_->unavailable()) {
+      GTEST_SKIP() << "Native AMD GPU packet family is unavailable";
     }
+    ASSERT_TRUE(shared_device_->ready());
+    device_cache_->Activate();
+    IREE_ASSERT_OK(iree_hal_device_trim(shared_device_->device()));
+    fabric_ = shared_device_->fabric();
+    proactors_ = shared_device_->proactors();
+    tracker_ = shared_device_->tracker();
+    device_ = shared_device_->device();
+    group_ = shared_device_->group();
+    queues_ = shared_device_->queues();
+    native_device_ = shared_device_->native_device();
+    RecordProperty("gfx_ip_major", shared_device_->gfx_major());
+    RecordProperty("gfx_ip_minor", shared_device_->gfx_minor());
+    RecordProperty("gfx_ip_stepping", shared_device_->gfx_stepping());
     iree_hal_pool_family_access_t family = {
         .family = iree_hal_queue_family(queues_[0]),
         .usage = IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE,
@@ -180,7 +340,18 @@ class GpuNativeFileTest
     if (path_.Exists()) {
       EXPECT_TRUE(path_.Remove());
     }
-    GpuNativeTest::TearDown();
+    if (shared_device_ && shared_device_->ready()) {
+      device_cache_->Activate();
+      IREE_EXPECT_OK(iree_hal_device_trim(device_));
+    }
+    fabric_ = nullptr;
+    proactors_ = nullptr;
+    tracker_ = nullptr;
+    device_ = nullptr;
+    group_ = nullptr;
+    queues_.fill(nullptr);
+    shared_device_ = nullptr;
+    device_cache_ = nullptr;
   }
 
   void Allocate(size_t length, iree_hal_buffer_t** out_buffer) {
@@ -392,14 +563,23 @@ class GpuNativeFileTest
     return count == 1 ? frontier.entries[0].epoch : 0;
   }
 
-  void BufferedRoundTrip();
+  void BufferedRoundTrip(size_t length);
 
   // Logical range begins inside the allocation, independently of file offset.
   static constexpr size_t kBufferOffset = 128;
+  // Small non-page-multiple range used by tests whose contract is independent
+  // of physical staging-window growth.
+  static constexpr size_t kCorrectnessLength = 64 * 1024 + 12;
+  // Crosses the 4 MiB virtual-source partition and the 2 MiB staging window.
+  static constexpr size_t kMultiWindowLength = 4 * 1024 * 1024 + 12;
+  // Exceeds the native allocation limit while remaining streamable in chunks.
+  static constexpr size_t kLimitedBackingLength = 8 * 1024 * 1024 + 12;
+  // Process-owned device selected by the fixture's construction contract.
+  SharedGpuNativeDevice* shared_device_ = nullptr;
+  // Cache owning the shared device and its native observation policy.
+  SharedFileDeviceCache* device_cache_ = nullptr;
   // Native identity borrowed from the context transferred into the HAL device.
   amdf_device_t* native_device_ = nullptr;
-  // Multiple staging chunks with a non-power-of-two final tail.
-  static constexpr size_t kLength = 8 * 1024 * 1024 + 12;
   // Native file owns its path through independent output verification.
   iree::testing::TempFilePath path_{"iree_gpu_file_transfer"};
   // Explicit host/device backing contract, released after captured uses end.
@@ -429,15 +609,15 @@ class GpuNativeFileTest
   const iree_hal_queue_barriers_t barriers_ = {&empty_, &empty_};
 };
 
-void GpuNativeFileTest::BufferedRoundTrip() {
+void GpuNativeFileTest::BufferedRoundTrip(size_t length) {
   Ref<iree_hal_buffer_t> buffer;
-  ASSERT_NO_FATAL_FAILURE(Allocate(kLength + 256, buffer.out()));
+  ASSERT_NO_FATAL_FAILURE(Allocate(length + 256, buffer.out()));
   const uint64_t accumulate_offset =
-      is_mixed() ? mappings_[1].target_range.byte_offset + kBufferOffset
+      is_mixed() ? mappings_.back().target_range.byte_offset + kBufferOffset
                  : kBufferOffset;
   const size_t accumulated_index =
       16 + (accumulate_offset - kBufferOffset) / sizeof(uint32_t);
-  std::vector<uint32_t> expected(kLength / 4 + 32);
+  std::vector<uint32_t> expected(length / 4 + 32);
   for (size_t i = 0; i < expected.size(); ++i) {
     expected[i] = uint32_t(i * 37 + 3);
   }
@@ -447,14 +627,14 @@ void GpuNativeFileTest::BufferedRoundTrip() {
   uint64_t one = 1, two = 2, three = 3, four = 4, five = 5, six = 6;
   uint32_t sentinel = 0xCDCDCDCDu;
   IREE_ASSERT_OK(iree_hal_queue_fill(queues_[0], {}, {1, &semaphore, &one},
-                                     buffer, 0, kLength + 256, &sentinel,
+                                     buffer, 0, length + 256, &sentinel,
                                      sizeof(sentinel), nullptr, 0));
   ASSERT_NO_FATAL_FAILURE(Accumulate(buffer, one, two, 7, accumulate_offset));
   ASSERT_NO_FATAL_FAILURE(Wait(two));
   const uint64_t before_read = Publications();
   IREE_ASSERT_OK(iree_hal_queue_read(queues_[0], {1, &semaphore, &two},
                                      {1, &semaphore, &three}, file, 64, buffer,
-                                     kBufferOffset, kLength, &barriers_, 0));
+                                     kBufferOffset, length, &barriers_, 0));
   ASSERT_NO_FATAL_FAILURE(Wait(three));
   RecordProperty("read_queue_publications", Publications() - before_read);
   if (file_io_capable_) {
@@ -467,7 +647,7 @@ void GpuNativeFileTest::BufferedRoundTrip() {
   expected[accumulated_index] += 19;
   IREE_ASSERT_OK(iree_hal_queue_write(
       queues_[0], {1, &semaphore, &four}, {1, &semaphore, &five}, buffer,
-      kBufferOffset, file, 64, kLength, &barriers_, 0));
+      kBufferOffset, file, 64, length, &barriers_, 0));
   ASSERT_NO_FATAL_FAILURE(Wait(five));
   RecordProperty("write_queue_publications", Publications() - before_write);
   if (file_io_capable_) {
@@ -476,14 +656,14 @@ void GpuNativeFileTest::BufferedRoundTrip() {
   ASSERT_NO_FATAL_FAILURE(ExpectFile(expected));
 
   // Check both allocation guards through the public GPU transfer path.
-  std::vector<uint32_t> observed((kLength + 256) / 4);
+  std::vector<uint32_t> observed((length + 256) / 4);
   IREE_ASSERT_OK(iree_hal_queue_download(
       queues_[0], {1, &semaphore, &five}, {1, &semaphore, &six}, buffer, 0,
       observed.data(), observed.size() * 4, nullptr));
   ASSERT_NO_FATAL_FAILURE(Wait(six));
   for (size_t i = 0; i < observed.size(); ++i) {
     ASSERT_EQ(observed[i],
-              i >= kBufferOffset / 4 && i < (kBufferOffset + kLength) / 4
+              i >= kBufferOffset / 4 && i < (kBufferOffset + length) / 4
                   ? expected[i - kBufferOffset / 4 + 16]
                   : sentinel)
         << i;
@@ -503,39 +683,41 @@ void GpuNativeFileTest::BufferedRoundTrip() {
                                       mappings_.data(), 0));
     IREE_ASSERT_OK(iree_hal_queue_read(
         queues_[0], {1, &semaphore, &seven}, {1, &semaphore, &eight}, file, 64,
-        buffer, kBufferOffset, kLength, &barriers_, 0));
+        buffer, kBufferOffset, length, &barriers_, 0));
     ASSERT_NO_FATAL_FAILURE(
         Accumulate(buffer, eight, nine, 11, accumulate_offset));
     IREE_ASSERT_OK(iree_hal_queue_write(
         queues_[0], {1, &semaphore, &nine}, {1, &semaphore, &ten}, buffer,
-        kBufferOffset, file, 64, kLength, &barriers_, 0));
+        kBufferOffset, file, 64, length, &barriers_, 0));
     ASSERT_NO_FATAL_FAILURE(Wait(ten));
     expected[accumulated_index] += 11;
     ASSERT_NO_FATAL_FAILURE(ExpectFile(expected));
 
     // An unmapped middle range rejects the whole operation during preparation,
     // before an earlier readable prefix can alter the destination file.
-    auto hole = mappings_[1];
-    hole.source = nullptr;
-    hole.source_offset = 0;
-    hole.access = 0;
-    hole.operation = IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND;
-    IREE_ASSERT_OK(iree_hal_queue_map(queues_[0], {1, &semaphore, &ten},
-                                      {1, &semaphore, &eleven}, 1, &hole, 0));
-    IREE_ASSERT_OK(iree_hal_queue_write(
-        queues_[0], {1, &semaphore, &eleven}, {1, &semaphore, &twelve}, buffer,
-        kBufferOffset, file, 64, kLength, &barriers_, 0));
-    IREE_EXPECT_STATUS_IS(
-        IREE_STATUS_FAILED_PRECONDITION,
-        iree_hal_semaphore_wait(timeline_, twelve, iree_infinite_timeout(), 0));
-    ASSERT_NO_FATAL_FAILURE(ExpectFile(expected));
+    if (mappings_.size() > 1) {
+      auto hole = mappings_[1];
+      hole.source = nullptr;
+      hole.source_offset = 0;
+      hole.access = 0;
+      hole.operation = IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND;
+      IREE_ASSERT_OK(iree_hal_queue_map(queues_[0], {1, &semaphore, &ten},
+                                        {1, &semaphore, &eleven}, 1, &hole, 0));
+      IREE_ASSERT_OK(iree_hal_queue_write(
+          queues_[0], {1, &semaphore, &eleven}, {1, &semaphore, &twelve},
+          buffer, kBufferOffset, file, 64, length, &barriers_, 0));
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                            iree_hal_semaphore_wait(
+                                timeline_, twelve, iree_infinite_timeout(), 0));
+      ASSERT_NO_FATAL_FAILURE(ExpectFile(expected));
+    }
   }
 }
 
 TEST_P(GpuNativeFileTest, PendingWriteRetiresCapturedBufferBeforeSignal) {
   Ref<iree_hal_buffer_t> buffer;
-  ASSERT_NO_FATAL_FAILURE(Allocate(kLength + 256, buffer.out()));
-  std::vector<uint32_t> expected(kLength / 4, 0);
+  ASSERT_NO_FATAL_FAILURE(Allocate(kCorrectnessLength + 256, buffer.out()));
+  std::vector<uint32_t> expected(kCorrectnessLength / 4, 0);
   Ref<iree_hal_file_t> file;
   IREE_ASSERT_OK(Open(expected, file.out()));
   Ref<iree_hal_semaphore_t> gate;
@@ -547,11 +729,11 @@ TEST_P(GpuNativeFileTest, PendingWriteRetiresCapturedBufferBeforeSignal) {
   // references disappear from the caller before either operation can run.
   IREE_ASSERT_OK(iree_hal_queue_write(
       queues_[0], {1, &semaphore, &two}, {1, &semaphore, &three}, buffer,
-      kBufferOffset, file, 0, kLength, &barriers_, 0));
+      kBufferOffset, file, 0, kCorrectnessLength, &barriers_, 0));
   uint32_t value = 0x12345678u;
   IREE_ASSERT_OK(iree_hal_queue_fill(
       queues_[0], {1, &gate_handle, &one}, {1, &semaphore, &one}, buffer, 0,
-      kLength + 256, &value, sizeof(value), nullptr, 0));
+      kCorrectnessLength + 256, &value, sizeof(value), nullptr, 0));
   ASSERT_NO_FATAL_FAILURE(Accumulate(buffer, one, two, 7));
   buffer.reset();
   file.reset();
@@ -569,9 +751,9 @@ TEST_P(GpuNativeFileTest, PendingWriteRetiresCapturedBufferBeforeSignal) {
 
 TEST_P(GpuNativeFileTest, TruncatedReadEndsCapturedUsesBeforeFailure) {
   Ref<iree_hal_buffer_t> buffer;
-  ASSERT_NO_FATAL_FAILURE(Allocate(kLength, buffer.out()));
+  ASSERT_NO_FATAL_FAILURE(Allocate(kCorrectnessLength, buffer.out()));
   Ref<iree_hal_file_t> file;
-  std::vector<uint32_t> contents(kLength / 4, 0xABCDu);
+  std::vector<uint32_t> contents(kCorrectnessLength / 4, 0xABCDu);
   IREE_ASSERT_OK(Open(contents, file.out()));
   Ref<iree_hal_semaphore_t> gate;
   CreateSemaphore(gate.out());
@@ -580,7 +762,7 @@ TEST_P(GpuNativeFileTest, TruncatedReadEndsCapturedUsesBeforeFailure) {
   uint64_t one = 1;
   IREE_ASSERT_OK(iree_hal_queue_read(queues_[0], {1, &gate_handle, &one},
                                      {1, &semaphore, &one}, file, 0, buffer, 0,
-                                     kLength, &barriers_, 0));
+                                     kCorrectnessLength, &barriers_, 0));
   buffer.reset();
   file.reset();
   // File length can change after public range validation but before the
@@ -659,6 +841,10 @@ class GpuInstanceFileAccessTest : public GpuNativeFileAccessTest {
   amdf_native_lifetime_t native_lifetime() const override {
     return AMDF_NATIVE_LIFETIME_INSTANCE;
   }
+
+  SharedFileDeviceCache& device_cache() const override {
+    return file_device_caches->instance();
+  }
 };
 
 class GpuNativeGlobalFileTest : public GpuNativeFileTest {};
@@ -727,7 +913,7 @@ TEST_P(GpuNativeGlobalFileTest, NestedExecutableGlobalRoundTrip) {
 
 void GpuNativeFileAccessTest::RoundTrip(bool direct) {
   constexpr size_t kAlignment = 4096;
-  constexpr size_t kBytes = 8 * 1024 * 1024 + kAlignment;
+  constexpr size_t kBytes = 64 * 1024 + kAlignment;
   const size_t buffer_offset = kAlignment - (is_nested() ? 256 : 0);
   Ref<iree_hal_buffer_t> buffer;
   ASSERT_NO_FATAL_FAILURE(Allocate(kBytes + 2 * kAlignment, buffer.out()));
@@ -833,14 +1019,7 @@ TEST_P(GpuInstanceFileAccessTest, BufferedFileRoundTripThroughGpuBacking) {
 
 class GpuNativeFileProgressTest : public GpuNativeFileTest {
  protected:
-  void SetUp() override {
-    IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_, UINT64_MAX,
-                                             AMDF_NATIVE_LIFETIME_PROCESS));
-    GpuNativeFileTest::SetUp();
-  }
-
-  // Native dependency gate, joined by base TearDown before table destruction.
-  iree::hal::amd::gpu::cts::NativeMemoryGate memory_gate_;
+  NativeMemoryGate& memory_gate() { return device_cache().memory_gate(); }
 };
 
 TEST_P(GpuNativeFileProgressTest,
@@ -871,7 +1050,7 @@ TEST_P(GpuNativeFileProgressTest,
   auto* large = large_completion.get();
   std::vector<uint32_t> observed(kSmall / 4);
   {
-    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold hold(&memory_gate_);
+    NativeMemoryGate::Hold hold(&memory_gate());
     IREE_ASSERT_OK(iree_hal_queue_read(queues_[0], {}, {1, &large, &one}, file,
                                        0, buffer, kBufferOffset + kSmall,
                                        kLarge, &barriers_, 0));
@@ -903,35 +1082,25 @@ TEST_P(GpuNativeFileProgressTest,
 
 class GpuNativeFileLimitTest : public GpuNativeFileTest {
  protected:
-  void SetUp() override {
-    IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_, 8 * 1024 * 1024,
-                                             AMDF_NATIVE_LIFETIME_PROCESS));
-    GpuNativeFileTest::SetUp();
+  SharedFileDeviceCache& device_cache() const override {
+    return file_device_caches->limited();
   }
-
-  // Physical staging blocks obey the advertised native allocation limit.
-  iree::hal::amd::gpu::cts::NativeMemoryGate memory_gate_;
 };
 
-TEST_P(GpuNativeFileTest, BufferedReadWritePreservesInternalCacheHandoffs) {
-  ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip());
+TEST_P(GpuNativeFileTest, BufferedReadWriteRoundTrip) {
+  ASSERT_NO_FATAL_FAILURE(
+      BufferedRoundTrip(is_mixed() ? kMultiWindowLength : kCorrectnessLength));
 }
 
-class GpuUnregisteredFileTest : public GpuNativeFileTest {
- public:
-  GpuUnregisteredFileTest() {
-    proactor_options_.proactor_options.allowed_capabilities &=
-        ~IREE_ASYNC_PROACTOR_CAPABILITY_CONCURRENT_BUFFER_REGISTRATION;
-  }
-};
+class GpuNativeFileStagingWindowTest : public GpuNativeFileTest {};
 
-TEST_P(GpuUnregisteredFileTest, BufferedReadWriteWithoutPreparedPins) {
-  ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip());
-  IREE_ASSERT_OK(iree_hal_device_trim(device_));
+TEST_P(GpuNativeFileStagingWindowTest,
+       MultiWindowReadWritePreservesInternalCacheHandoffs) {
+  ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip(kMultiWindowLength));
 }
 
 TEST_P(GpuNativeFileLimitTest, StagingFitsNativeBackingLimit) {
-  ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip());
+  ASSERT_NO_FATAL_FAILURE(BufferedRoundTrip(kLimitedBackingLength));
 }
 
 TEST_P(GpuNativeFileTest, ConcurrentRangesSurviveRingWrapAndTrim) {
@@ -1072,6 +1241,25 @@ class FileDetachGate {
     };
   }
 
+  // Reuses the process-lifetime forwarding table after the preceding fixture
+  // has released its file owner and joined every intercepted callback.
+  void Reset() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    EXPECT_FALSE(armed_);
+    EXPECT_FALSE(closed_);
+    EXPECT_EQ(callback_.fn, nullptr);
+    EXPECT_TRUE(iree_status_is_ok(status_));
+    iree_status_ignore(status_);
+    armed_ = false;
+    closed_ = false;
+    completed_ = false;
+    following_ = false;
+    duplicates_ = 0;
+    entry_ = nullptr;
+    callback_ = {};
+    status_ = iree_ok_status();
+  }
+
   class Hold {
    public:
     explicit Hold(FileDetachGate* owner) : owner_(owner) {
@@ -1193,19 +1381,26 @@ class FileDetachGate {
   iree_status_t status_ = iree_ok_status();
 };
 
+FileDetachGate& SharedFileDetachGate() {
+  // Constructed by the first lifecycle fixture and destroyed only after all
+  // global test environments have released their shared devices.
+  static FileDetachGate gate;
+  return gate;
+}
+
 // Independent file owners use the ordinary imported-file contract. The last
 // completed file operation permits its caller to stop that file's poll runner.
 class GpuSharedFileStagingTest : public GpuNativeFileProgressTest {
  protected:
   void SetUp() override {
-    IREE_ASSERT_OK(memory_gate_.CreateFabric(&fabric_, UINT64_MAX,
-                                             AMDF_NATIVE_LIFETIME_PROCESS));
     GpuNativeFileTest::SetUp();
     if (HasFatalFailure() || IsSkipped()) {
       return;
     }
+    detach_gate_ = &SharedFileDetachGate();
+    detach_gate_->Reset();
     auto options = extra_proactor_options_;
-    options.runner = detach_gate_.runner();
+    options.runner = detach_gate_->runner();
     IREE_ASSERT_OK(iree_async_proactor_pool_create(
         1, nullptr, options, iree_allocator_system(), &extra_proactors_));
     IREE_ASSERT_OK(
@@ -1215,6 +1410,8 @@ class GpuSharedFileStagingTest : public GpuNativeFileProgressTest {
   void TearDown() override {
     GpuNativeFileTest::TearDown();
     iree_async_proactor_pool_release(extra_proactors_);
+    extra_proactors_ = nullptr;
+    extra_proactor_ = nullptr;
   }
 
   // Owned independent runner, released after its file operations complete.
@@ -1225,7 +1422,8 @@ class GpuSharedFileStagingTest : public GpuNativeFileProgressTest {
   // Borrowed independent file I/O owner.
   iree_async_proactor_t* extra_proactor_ = nullptr;
   // Real dependency callback hold, alive through the independent runner.
-  FileDetachGate detach_gate_;
+  // Process-lifetime callback interceptor outliving the shared device.
+  FileDetachGate* detach_gate_ = nullptr;
 };
 
 class GpuUnregisteredFileOwnerTest : public GpuSharedFileStagingTest {
@@ -1316,14 +1514,14 @@ TEST_P(GpuSharedFileStagingTest,
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       readback_pool, iree_hal_make_pool_reservation_request(kTotal, 64),
       iree_infinite_timeout(), readback.out()));
-  const auto baseline = memory_gate_.ResetPeak();
+  const auto baseline = memory_gate().ResetPeak();
   auto* primary = timeline_.get();
   uint64_t one = 1, two = 2, three = 3, four = 4, five = 5;
   IREE_ASSERT_OK(iree_hal_queue_read(queues_[0], {}, {1, &primary, &one},
                                      primary_file, 0, buffer, kBufferOffset,
                                      kSmall, &barriers_, 0));
   ASSERT_NO_FATAL_FAILURE(Wait(one));
-  const auto prepared = memory_gate_.QueryUsage();
+  const auto prepared = memory_gate().QueryUsage();
   ASSERT_GT(prepared.live_bytes, baseline.live_bytes);
   RecordProperty("staging_file_io_capable",
                  iree_any_bit_set(prepared.last_allocation.flags,
@@ -1344,11 +1542,11 @@ TEST_P(GpuSharedFileStagingTest,
       kBufferOffset + kSmall, kSmall, &barriers_, 0));
   IREE_ASSERT_OK(
       iree_hal_semaphore_wait(extra, one, iree_infinite_timeout(), 0));
-  const auto shared = memory_gate_.QueryUsage();
+  const auto shared = memory_gate().QueryUsage();
   EXPECT_EQ(shared.allocation_count, prepared.allocation_count);
   EXPECT_EQ(shared.live_bytes, prepared.live_bytes);
   {
-    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold native(&memory_gate_);
+    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold native(&memory_gate());
     IREE_ASSERT_OK(iree_hal_queue_read(
         queues_[0], {}, {1, &large, &one}, primary_file, 2 * kSmall, buffer,
         kBufferOffset + 2 * kSmall, kLarge, &barriers_, 0));
@@ -1364,7 +1562,7 @@ TEST_P(GpuSharedFileStagingTest,
           queues_[0], {1, &primary, &one}, {1, &primary, &two}, primary_file, 0,
           buffer, kBufferOffset, kSmall, &barriers_, 0));
       ASSERT_NO_FATAL_FAILURE(Wait(two));
-      EXPECT_EQ(memory_gate_.QueryUsage().allocation_count,
+      EXPECT_EQ(memory_gate().QueryUsage().allocation_count,
                 prepared.allocation_count);
       uint64_t value = UINT64_MAX;
       IREE_ASSERT_OK(iree_hal_semaphore_query(large, &value));
@@ -1383,7 +1581,7 @@ TEST_P(GpuSharedFileStagingTest,
   IREE_ASSERT_OK(
       iree_hal_buffer_map_read(readback, 0, observed.data(), kTotal));
   EXPECT_EQ(observed, expected);
-  const auto trimmed = memory_gate_.WaitForBytes(baseline.live_bytes);
+  const auto trimmed = memory_gate().WaitForBytes(baseline.live_bytes);
   EXPECT_EQ(trimmed.destroy_failures, 0u);
   EXPECT_LE(trimmed.peak_bytes - baseline.live_bytes, native_budget);
   RecordProperty("staging_peak_native_bytes",
@@ -1395,14 +1593,14 @@ TEST_P(GpuSharedFileStagingTest,
                                      primary_file, 0, buffer, kBufferOffset,
                                      4096, &barriers_, 0));
   ASSERT_NO_FATAL_FAILURE(Wait(four));
-  const auto rewarmed = memory_gate_.QueryUsage();
+  const auto rewarmed = memory_gate().QueryUsage();
   EXPECT_GT(rewarmed.live_bytes, baseline.live_bytes);
   IREE_ASSERT_OK(
       iree_hal_queue_read(queues_[0], {}, {1, &extra, &three}, extra_file, 0,
                           buffer, kBufferOffset + kSmall, 4096, &barriers_, 0));
   IREE_ASSERT_OK(
       iree_hal_semaphore_wait(extra, three, iree_infinite_timeout(), 0));
-  EXPECT_EQ(memory_gate_.QueryUsage().allocation_count,
+  EXPECT_EQ(memory_gate().QueryUsage().allocation_count,
             rewarmed.allocation_count);
   std::vector<uint32_t> small(4096 / 4);
   IREE_ASSERT_OK(iree_hal_queue_copy(
@@ -1418,7 +1616,7 @@ TEST_P(GpuSharedFileStagingTest,
   extra_proactors_ = nullptr;
   extra_proactor_ = nullptr;
   IREE_ASSERT_OK(iree_hal_device_trim(device_));
-  EXPECT_EQ(memory_gate_.WaitForBytes(baseline.live_bytes).destroy_failures,
+  EXPECT_EQ(memory_gate().WaitForBytes(baseline.live_bytes).destroy_failures,
             0u);
 }
 
@@ -1433,7 +1631,7 @@ TEST_P(GpuSharedVirtualFileStagingTest,
   }
   constexpr uint64_t kSmall = 1024 * 1024;
   Ref<iree_hal_buffer_t> buffer;
-  ASSERT_NO_FATAL_FAILURE(Allocate(kLength + 256, buffer.out()));
+  ASSERT_NO_FATAL_FAILURE(Allocate(kLimitedBackingLength + 256, buffer.out()));
   if (file_io_capable_) {
     GTEST_SKIP() << "Direct host ranges do not require physical staging";
   }
@@ -1455,7 +1653,7 @@ TEST_P(GpuSharedVirtualFileStagingTest,
                                      primary_file, 0, buffer, offset, kSmall,
                                      &barriers_, 0));
   ASSERT_NO_FATAL_FAILURE(Wait(one));
-  if (!iree_any_bit_set(memory_gate_.QueryUsage().last_allocation.flags,
+  if (!iree_any_bit_set(memory_gate().QueryUsage().last_allocation.flags,
                         AMDF_MEMORY_FLAG_HOST_FILE_IO)) {
     GTEST_SKIP() << "Native staging does not provide registered file backing";
   }
@@ -1467,27 +1665,27 @@ TEST_P(GpuSharedVirtualFileStagingTest,
   auto* allocated_handle = allocated.get();
   Ref<iree_hal_buffer_t> cold;
   {
-    FileDetachGate::Hold detach(&detach_gate_);
+    FileDetachGate::Hold detach(detach_gate_);
     // One operation crosses physical ranges: the first uses the prepared small
     // block, and the second grows staging while retaining the first view. Hold
     // old-block detach until final completion also relinquishes the new view.
     IREE_ASSERT_OK(iree_hal_queue_read(
         queues_[0], {}, {1, &completed_handle, &one}, extra_file, 0, buffer,
         offset, length, &barriers_, 0));
-    detach_gate_.WaitForCompletedDetach();
-    detach_gate_.WaitForFollowingDetach();
-    EXPECT_EQ(detach_gate_.duplicates(), 0u);
+    detach_gate_->WaitForCompletedDetach();
+    detach_gate_->WaitForFollowingDetach();
+    EXPECT_EQ(detach_gate_->duplicates(), 0u);
     uint64_t value = UINT64_MAX;
     IREE_ASSERT_OK(iree_hal_semaphore_query(completed, &value));
     EXPECT_EQ(value, 0u);
 
-    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold allocation(&memory_gate_);
+    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold allocation(&memory_gate());
     const auto request = iree_hal_make_pool_reservation_request(4096, 64);
     IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[1], {},
                                          {1, &allocated_handle, &one}, pool_, 1,
                                          &request, cold.out()));
     allocation.WaitEntered();
-    detach_gate_.Open();
+    detach_gate_->Open();
     IREE_ASSERT_OK(
         iree_hal_semaphore_wait(completed, one, iree_infinite_timeout(), 0));
     IREE_ASSERT_OK(iree_hal_semaphore_query(allocated, &value));
@@ -1520,7 +1718,7 @@ class GpuNativeRegisteredFileProgressTest : public GpuNativeFileProgressTest {};
 TEST_P(GpuNativeRegisteredFileProgressTest,
        ReusedBackingMapsWhileColdRegistrationWaitsForFileOwner) {
   Ref<iree_hal_buffer_t> buffer;
-  ASSERT_NO_FATAL_FAILURE(Allocate(kLength + 256, buffer.out()));
+  ASSERT_NO_FATAL_FAILURE(Allocate(kCorrectnessLength + 256, buffer.out()));
   auto* timeline = timeline_.get();
   uint64_t one = 1, two = 2, three = 3, four = 4;
   auto unmaps = mappings_;
@@ -1545,7 +1743,7 @@ TEST_P(GpuNativeRegisteredFileProgressTest,
     HeldFileOwner file_owner;
     IREE_ASSERT_OK(file_owner.Hold(file_proactor));
     {
-      iree::hal::amd::gpu::cts::NativeMemoryGate::Hold native(&memory_gate_);
+      iree::hal::amd::gpu::cts::NativeMemoryGate::Hold native(&memory_gate());
       const auto request = iree_hal_make_pool_reservation_request(4096, 64);
       IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[1], {},
                                            {1, &acquired_handle, &one}, pool_,
@@ -1562,18 +1760,19 @@ TEST_P(GpuNativeRegisteredFileProgressTest,
     ASSERT_NO_FATAL_FAILURE(Wait(two));
     IREE_ASSERT_OK(iree_hal_queue_fill(
         queues_[0], {1, &timeline, &two}, {1, &timeline, &three}, buffer,
-        kBufferOffset, kLength, &kPattern, sizeof(kPattern), nullptr, 0));
+        kBufferOffset, kCorrectnessLength, &kPattern, sizeof(kPattern), nullptr,
+        0));
     ASSERT_NO_FATAL_FAILURE(Wait(three));
   }
   IREE_ASSERT_OK(
       iree_hal_semaphore_wait(acquired, one, iree_infinite_timeout(), 0));
 
-  std::vector<uint32_t> expected(kLength / 4, 0);
+  std::vector<uint32_t> expected(kCorrectnessLength / 4, 0);
   Ref<iree_hal_file_t> file;
   IREE_ASSERT_OK(Open(expected, file.out()));
   IREE_ASSERT_OK(iree_hal_queue_write(
       queues_[0], {1, &timeline, &three}, {1, &timeline, &four}, buffer,
-      kBufferOffset, file, 0, kLength, &barriers_, 0));
+      kBufferOffset, file, 0, kCorrectnessLength, &barriers_, 0));
   ASSERT_NO_FATAL_FAILURE(Wait(four));
   std::fill(expected.begin(), expected.end(), kPattern);
   ASSERT_NO_FATAL_FAILURE(ExpectFile(expected));
@@ -1588,8 +1787,8 @@ TEST_P(GpuNativeRegisteredFileProgressTest,
 TEST_P(GpuNativeFileProgressTest,
        ReadShaderAndWriteCompleteWhileUnrelatedAllocationIsHeld) {
   Ref<iree_hal_buffer_t> buffer;
-  ASSERT_NO_FATAL_FAILURE(Allocate(kLength + 256, buffer.out()));
-  std::vector<uint32_t> expected(kLength / 4 + 32);
+  ASSERT_NO_FATAL_FAILURE(Allocate(kCorrectnessLength + 256, buffer.out()));
+  std::vector<uint32_t> expected(kCorrectnessLength / 4 + 32);
   for (size_t i = 0; i < expected.size(); ++i) {
     expected[i] = uint32_t(i * 37 + 3);
   }
@@ -1598,13 +1797,13 @@ TEST_P(GpuNativeFileProgressTest,
   auto* semaphore = timeline_.get();
   auto read_update_write = [&](uint64_t before) {
     uint64_t read = before + 1, dispatch = before + 2, write = before + 3;
-    IREE_ASSERT_OK(iree_hal_queue_read(queues_[0], {1, &semaphore, &before},
-                                       {1, &semaphore, &read}, file, 64, buffer,
-                                       kBufferOffset, kLength, &barriers_, 0));
+    IREE_ASSERT_OK(iree_hal_queue_read(
+        queues_[0], {1, &semaphore, &before}, {1, &semaphore, &read}, file, 64,
+        buffer, kBufferOffset, kCorrectnessLength, &barriers_, 0));
     ASSERT_NO_FATAL_FAILURE(Accumulate(buffer, read, dispatch, 19));
     IREE_ASSERT_OK(iree_hal_queue_write(
         queues_[0], {1, &semaphore, &dispatch}, {1, &semaphore, &write}, buffer,
-        kBufferOffset, file, 64, kLength, &barriers_, 0));
+        kBufferOffset, file, 64, kCorrectnessLength, &barriers_, 0));
     ASSERT_NO_FATAL_FAILURE(Wait(write));
     expected[16] += 19;
     ASSERT_NO_FATAL_FAILURE(ExpectFile(expected));
@@ -1627,7 +1826,7 @@ TEST_P(GpuNativeFileProgressTest,
   auto* allocated_handle = allocated.get();
   uint64_t one = 1, two = 2;
   {
-    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold hold(&memory_gate_);
+    iree::hal::amd::gpu::cts::NativeMemoryGate::Hold hold(&memory_gate());
     const auto request = iree_hal_make_pool_reservation_request(4096, 64);
     IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[1], {},
                                          {1, &allocated_handle, &one}, pool_, 1,
@@ -1650,107 +1849,72 @@ TEST_P(GpuNativeFileProgressTest,
 
 INSTANTIATE_TEST_SUITE_P(
     PhysicalAndVirtual, GpuNativeFileTest,
-    ::testing::Combine(
-        ::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                          AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-        ::testing::Values(
-            FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
-            FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
-            FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
-            FileBacking::kNestedPrivate, FileBacking::kNestedHost,
-            FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered)),
+    ::testing::Values(
+        FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
+        FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
+        FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
+        FileBacking::kNestedPrivate, FileBacking::kNestedHost,
+        FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered),
     FileTestName);
+
+INSTANTIATE_TEST_SUITE_P(VirtualPrivate, GpuNativeFileStagingWindowTest,
+                         ::testing::Values(FileBacking::kVirtualPrivate),
+                         FileTestName);
 
 INSTANTIATE_TEST_SUITE_P(
     PhysicalAndVirtual, GpuNativeFileProgressTest,
-    ::testing::Combine(
-        ::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                          AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-        ::testing::Values(
-            FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
-            FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
-            FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
-            FileBacking::kNestedPrivate, FileBacking::kNestedHost,
-            FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered)),
+    ::testing::Values(
+        FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
+        FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
+        FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
+        FileBacking::kNestedPrivate, FileBacking::kNestedHost,
+        FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered),
     FileTestName);
 
 INSTANTIATE_TEST_SUITE_P(
     PhysicalAndVirtual, GpuNativeFileAccessTest,
-    ::testing::Combine(
-        ::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                          AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-        ::testing::Values(
-            FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
-            FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
-            FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
-            FileBacking::kNestedPrivate, FileBacking::kNestedHost,
-            FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered)),
+    ::testing::Values(
+        FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
+        FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
+        FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
+        FileBacking::kNestedPrivate, FileBacking::kNestedHost,
+        FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered),
     FileTestName);
 
 INSTANTIATE_TEST_SUITE_P(
     InstancePhysicalAndVirtual, GpuInstanceFileAccessTest,
-    ::testing::Combine(
-        ::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                          AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-        ::testing::Values(
-            FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
-            FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
-            FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
-            FileBacking::kNestedPrivate, FileBacking::kNestedHost,
-            FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered)),
+    ::testing::Values(
+        FileBacking::kPhysicalHost, FileBacking::kVirtualHost,
+        FileBacking::kVirtualPrivate, FileBacking::kPhysicalRegistered,
+        FileBacking::kVirtualRegistered, FileBacking::kPhysicalPrivate,
+        FileBacking::kNestedPrivate, FileBacking::kNestedHost,
+        FileBacking::kVirtualMixed, FileBacking::kVirtualMixedRegistered),
     FileTestName);
 
-INSTANTIATE_TEST_SUITE_P(
-    PrivateBacking, GpuSharedFileStagingTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kPhysicalPrivate,
-                                         FileBacking::kVirtualPrivate)),
-    FileTestName);
+INSTANTIATE_TEST_SUITE_P(PrivateBacking, GpuSharedFileStagingTest,
+                         ::testing::Values(FileBacking::kPhysicalPrivate,
+                                           FileBacking::kVirtualPrivate),
+                         FileTestName);
 
-INSTANTIATE_TEST_SUITE_P(
-    PhysicalAndVirtual, GpuUnregisteredFileTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kPhysicalHost,
-                                         FileBacking::kVirtualPrivate,
-                                         FileBacking::kPhysicalPrivate)),
-    FileTestName);
+INSTANTIATE_TEST_SUITE_P(PrivateBacking, GpuUnregisteredFileOwnerTest,
+                         ::testing::Values(FileBacking::kPhysicalPrivate,
+                                           FileBacking::kVirtualPrivate),
+                         FileTestName);
 
-INSTANTIATE_TEST_SUITE_P(
-    PrivateBacking, GpuUnregisteredFileOwnerTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kPhysicalPrivate,
-                                         FileBacking::kVirtualPrivate)),
-    FileTestName);
+INSTANTIATE_TEST_SUITE_P(VirtualPrivate, GpuSharedVirtualFileStagingTest,
+                         ::testing::Values(FileBacking::kVirtualPrivate),
+                         FileTestName);
 
-INSTANTIATE_TEST_SUITE_P(
-    VirtualPrivate, GpuSharedVirtualFileStagingTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kVirtualPrivate)),
-    FileTestName);
+INSTANTIATE_TEST_SUITE_P(RegisteredVirtual, GpuNativeRegisteredFileProgressTest,
+                         ::testing::Values(FileBacking::kVirtualRegistered),
+                         FileTestName);
 
-INSTANTIATE_TEST_SUITE_P(
-    RegisteredVirtual, GpuNativeRegisteredFileProgressTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kVirtualRegistered)),
-    FileTestName);
+INSTANTIATE_TEST_SUITE_P(VirtualPrivate, GpuNativeFileLimitTest,
+                         ::testing::Values(FileBacking::kVirtualPrivate),
+                         FileTestName);
 
-INSTANTIATE_TEST_SUITE_P(
-    VirtualPrivate, GpuNativeFileLimitTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kVirtualPrivate)),
-    FileTestName);
-
-INSTANTIATE_TEST_SUITE_P(
-    Executable, GpuNativeGlobalFileTest,
-    ::testing::Combine(::testing::Values(AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
-                                         AMDF_QUEUE_COMMAND_TYPE_GPU_AQL),
-                       ::testing::Values(FileBacking::kPhysicalHost)),
-    FileTestName);
+INSTANTIATE_TEST_SUITE_P(Executable, GpuNativeGlobalFileTest,
+                         ::testing::Values(FileBacking::kPhysicalHost),
+                         FileTestName);
 
 }  // namespace
