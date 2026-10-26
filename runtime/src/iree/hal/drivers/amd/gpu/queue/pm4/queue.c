@@ -96,6 +96,9 @@ static void iree_hal_amd_gpu_pm4_wake_shutdown(
     iree_hal_amd_gpu_pm4_queue_t* queue) {
   if (IREE_UNLIKELY(
           iree_atomic_load(&queue->closed, iree_memory_order_acquire))) {
+    if (iree_hal_amd_gpu_context_wake_failure(queue->context)) {
+      return;
+    }
     const amdf_status_t status =
         iree_hal_amd_gpu_context_signal(queue->context);
     if (!amdf_status_is_ok(status)) {
@@ -1712,7 +1715,7 @@ static void iree_hal_amd_gpu_pm4_fail_native(
     // A publishing caller hands off before its existing closed-queue wake.
     // Failure fanout then runs on completion, never on a competing observer.
     iree_hal_amd_gpu_pm4_queue_close(&queue->base);
-    iree_hal_amd_gpu_context_report(queue->context, status, operation);
+    iree_hal_amd_gpu_context_fail_execution(queue->context, status, operation);
   }
   iree_hal_amd_gpu_publication_notify(queue->options.publication,
                                       queue->options.source_ordinal);

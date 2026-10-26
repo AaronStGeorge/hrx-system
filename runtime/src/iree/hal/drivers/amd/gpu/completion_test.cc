@@ -631,7 +631,7 @@ TEST_F(CompletionTest, FinalReleaseJoinsTerminalOwnerOutsideDrainMutex) {
     IREE_EXPECT_OK(iree_hal_amd_gpu_completion_deinitialize(&completion_));
     joined.store(true, std::memory_order_release);
   });
-  event_.AwaitSignalCount(2);
+  event_.AwaitSignalCount(1);
   EXPECT_FALSE(joined.load(std::memory_order_acquire));
   terminal.finish.release();
   owner.join();
@@ -650,8 +650,8 @@ TEST_F(CompletionTest,
       EXPECT_EQ(status, native_failure);
       ++failures;
     } else if (fail.exchange(false)) {
-      EXPECT_EQ(iree_hal_amd_gpu_completion_request_failure(&completion_,
-                                                            native_failure),
+      iree_hal_amd_gpu_completion_request_failure(&completion_, native_failure);
+      EXPECT_EQ(iree_hal_amd_gpu_completion_request_stop(&completion_),
                 AMDF_STATUS_OK);
     }
     return false;

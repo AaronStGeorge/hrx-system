@@ -201,11 +201,13 @@ iree_status_t iree_hal_amd_gpu_aql_code_publish(
     // existing target reachable from this closed cache-publication owner.
     code->unretired = *memory;
     *memory = (iree_hal_amd_fabric_memory_t){.info = memory->info};
-    iree_hal_amd_gpu_context_report(
-        code->context, failure,
-        "code publication retirement unproven; preserving native backing");
   }
   iree_slim_mutex_unlock(&code->mutex);
+  if (!amdf_status_is_ok(failure)) {
+    iree_hal_amd_gpu_context_fail_execution(
+        code->context, failure, "AQL instruction-cache publication");
+    iree_hal_amd_gpu_context_wake_failure(code->context);
+  }
   IREE_TRACE_ZONE_END(z0);
   return IREE_HAL_AMD_STATUS_FROM_AMDF(failure,
                                        "publish AQL instruction caches");

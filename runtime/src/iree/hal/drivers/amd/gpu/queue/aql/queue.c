@@ -77,6 +77,9 @@ static void iree_hal_amd_gpu_aql_wake_terminal(
   if (iree_atomic_load(&queue->closed, iree_memory_order_acquire) ||
       iree_atomic_load(&queue->failure, iree_memory_order_acquire) ||
       iree_hal_amd_gpu_aql_feedback_failure(queue)) {
+    if (iree_hal_amd_gpu_context_wake_failure(queue->context)) {
+      return;
+    }
     const amdf_status_t status =
         iree_hal_amd_gpu_context_signal(queue->context);
     if (!amdf_status_is_ok(status)) {
@@ -343,6 +346,9 @@ typedef enum iree_hal_amd_gpu_aql_publish_result_e {
 
 static void iree_hal_amd_gpu_aql_fail_queue(iree_hal_amd_gpu_aql_queue_t* queue,
                                             iree_status_t status);
+static void iree_hal_amd_gpu_aql_fail_native(
+    iree_hal_amd_gpu_aql_queue_t* queue, amdf_status_t status,
+    const char* operation);
 
 static amdf_status_t iree_hal_amd_gpu_aql_write_packet(
     iree_hal_amd_gpu_aql_ring_t* ring,
@@ -358,9 +364,8 @@ static amdf_status_t iree_hal_amd_gpu_aql_write_packet(
 static void iree_hal_amd_gpu_aql_publish_notify(
     iree_hal_amd_gpu_aql_queue_t* queue, amdf_status_t status) {
   if (IREE_UNLIKELY(!amdf_status_is_ok(status))) {
-    iree_hal_amd_gpu_aql_fail_queue(
-        queue,
-        IREE_HAL_AMD_STATUS_FROM_AMDF(status, "flush AQL command publication"));
+    iree_hal_amd_gpu_aql_fail_native(queue, status,
+                                     "flush AQL command publication");
   } else {
     iree_hal_amd_gpu_aql_ring_notify(&queue->producer.ring);
   }
@@ -1352,24 +1357,36 @@ static void iree_hal_amd_gpu_aql_process_submission(
   }
 }
 
-static void iree_hal_amd_gpu_aql_fail_queue(iree_hal_amd_gpu_aql_queue_t* queue,
-                                            iree_status_t status) {
+static bool iree_hal_amd_gpu_aql_record_failure(
+    iree_hal_amd_gpu_aql_queue_t* queue, iree_status_code_t code) {
   int32_t expected = 0;
-  if (iree_atomic_compare_exchange_strong(
-          &queue->failure, &expected, iree_status_code(status),
-          iree_memory_order_acq_rel, iree_memory_order_relaxed)) {
-    iree_hal_amd_gpu_context_report_status(
-        queue->context, queue->base.queue_family->device, status);
+  if (iree_atomic_compare_exchange_strong(&queue->failure, &expected, code,
+                                          iree_memory_order_acq_rel,
+                                          iree_memory_order_relaxed)) {
     iree_hal_amd_gpu_host_wait_set_cancel(&queue->pending.waits);
     iree_hal_amd_gpu_aql_capacity_available(queue);
-    const amdf_status_t event_status =
-        iree_hal_amd_gpu_context_signal(queue->context);
-    if (!amdf_status_is_ok(event_status)) {
-      iree_hal_amd_gpu_context_report(queue->context, event_status,
-                                      "AQL failure wake");
-    }
+    iree_hal_amd_gpu_aql_wake_terminal(queue);
+    return true;
+  }
+  return false;
+}
+
+static void iree_hal_amd_gpu_aql_fail_queue(iree_hal_amd_gpu_aql_queue_t* queue,
+                                            iree_status_t status) {
+  if (iree_hal_amd_gpu_aql_record_failure(queue, iree_status_code(status))) {
+    iree_hal_amd_gpu_context_report_status(
+        queue->context, queue->base.queue_family->device, status);
   }
   iree_status_free(status);
+}
+
+static void iree_hal_amd_gpu_aql_fail_native(
+    iree_hal_amd_gpu_aql_queue_t* queue, amdf_status_t status,
+    const char* operation) {
+  iree_hal_amd_gpu_context_fail_execution(queue->context, status, operation);
+  iree_status_t hal_status = IREE_HAL_AMD_STATUS_FROM_AMDF(status, NULL);
+  iree_hal_amd_gpu_aql_record_failure(queue, iree_status_code(hal_status));
+  iree_status_free(hal_status);
 }
 
 iree_status_t iree_hal_amd_gpu_aql_queue_set_profile(
@@ -1529,10 +1546,14 @@ static void iree_hal_amd_gpu_aql_process_entry(
       break;
     }
     case IREE_HAL_AMD_GPU_AQL_ENTRY_SCRATCH: {
-      iree_status_t status =
-          iree_hal_amd_gpu_aql_scratch_resume(&queue->scratch);
-      if (!iree_status_is_ok(status)) {
-        iree_hal_amd_gpu_aql_fail_queue(queue, status);
+      if (iree_atomic_load(&queue->failure, iree_memory_order_acquire)) {
+        iree_hal_amd_gpu_aql_scratch_abandon(&queue->scratch);
+      } else {
+        iree_status_t status =
+            iree_hal_amd_gpu_aql_scratch_resume(&queue->scratch);
+        if (!iree_status_is_ok(status)) {
+          iree_hal_amd_gpu_aql_fail_queue(queue, status);
+        }
       }
       break;
     }
@@ -1616,9 +1637,8 @@ static bool iree_hal_amd_gpu_aql_retire(
     wait_status = iree_hal_amd_gpu_aql_scratch_poll(&queue->scratch);
   }
   if (!amdf_status_is_ok(wait_status)) {
-    iree_hal_amd_gpu_aql_fail_queue(
-        queue,
-        IREE_HAL_AMD_STATUS_FROM_AMDF(wait_status, "AQL completion/scratch"));
+    iree_hal_amd_gpu_aql_fail_native(queue, wait_status,
+                                     "AQL completion/scratch");
   }
   const iree_status_code_t failure = (iree_status_code_t)iree_atomic_load(
       &queue->failure, iree_memory_order_acquire);
@@ -1963,8 +1983,7 @@ amdf_status_t iree_hal_amd_gpu_aql_queue_trim_scratch(iree_hal_queue_t* base) {
       status = iree_hal_amd_gpu_aql_scratch_trim(&queue->scratch);
     }
     if (!amdf_status_is_ok(status)) {
-      iree_hal_amd_gpu_aql_fail_queue(
-          queue, IREE_HAL_AMD_STATUS_FROM_AMDF(status, "AQL scratch trim"));
+      iree_hal_amd_gpu_aql_fail_native(queue, status, "AQL scratch trim");
     }
   }
   if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {

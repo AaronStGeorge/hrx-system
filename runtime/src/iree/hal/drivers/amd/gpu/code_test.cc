@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include "iree/hal/drivers/amd/gpu/device_failure.h"
 #include "iree/hal/drivers/amd/gpu/queue/aql/code.h"
 #include "iree/hal/drivers/amd/gpu/queue/sdma/queue.h"
 #include "iree/testing/gtest.h"
@@ -209,6 +210,12 @@ class CodeTest : public ::testing::Test {
         &context_, 0, AMDF_QUEUE_PUBLICATION_MODE_KERNEL, &staging_,
         &publication_, 0, iree_allocator_system(), &queue_));
     source_ = iree_hal_amd_gpu_sdma_queue_publication_source(queue_);
+    membership_.context = &context_;
+    membership_.host_allocator = iree_allocator_system();
+    iree_hal_amd_gpu_queue_membership_initialize(&membership_);
+    iree_hal_amd_gpu_device_failure_initialize(
+        &context_, nullptr, 30000, &publication_, &completion_, &membership_,
+        queue_, nullptr, &failure_);
     IREE_ASSERT_OK(iree_hal_amd_gpu_publication_initialize(
         1, &source_, {}, iree_allocator_system(), &publication_));
   }
@@ -223,6 +230,8 @@ class CodeTest : public ::testing::Test {
     retired_ = submitted_;
     EXPECT_EQ(iree_hal_amd_gpu_sdma_queue_free(queue_), AMDF_STATUS_OK);
     iree_hal_amd_gpu_context_deinitialize_memory(&context_);
+    iree_hal_amd_gpu_device_failure_deinitialize(&failure_);
+    EXPECT_TRUE(iree_hal_amd_gpu_queue_membership_deinitialize(&membership_));
     iree_hal_amd_fabric_release(fabric_);
     for (const auto& memory : memories_) {
       EXPECT_FALSE(memory.allocated);
@@ -240,10 +249,32 @@ class CodeTest : public ::testing::Test {
                                          &upload_);
   }
 
+  void JoinFailure() {
+    // This fixture has no healthy observer. Deliver the same final source
+    // failure and terminal callback used by the real completion worker.
+    const auto source = iree_hal_amd_gpu_sdma_queue_completion_source(queue_);
+    iree_hal_amd_gpu_completion_wait_t wait = {};
+    const amdf_status_t error =
+        amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+    iree_hal_amd_gpu_context_fail_execution(&context_, error, "native wait");
+    source.fn(source.user_data, error, &wait);
+    context_.execution_failure.join(context_.execution_failure.user_data,
+                                    error);
+    EXPECT_EQ(membership_.terminal.status, AMDF_STATUS_OK);
+    iree_hal_amd_gpu_publication_deinitialize(&publication_);
+  }
+
   // Native API dependencies used by both the loader and real SDMA transport.
   amdf_api_t api_ = {};
   // Native GPU submission dependency.
   amdf_gpu_api_t gpu_ = {};
+  // Real terminal ownership registry; this fixture has only its SDMA/code
+  // owners.
+  iree_hal_amd_gpu_queue_membership_t membership_ = {};
+  // Native observation is explicitly driven by the fixture, without a worker.
+  iree_hal_amd_gpu_completion_t completion_ = {};
+  // Installed before publication, as required by the production contract.
+  iree_hal_amd_gpu_device_failure_t failure_ = {};
   // Queue control, final code, and temporary staging, in acquisition order.
   std::array<Memory, 3> memories_;
   // Number of native acquisition attempts, including rejected requests.
@@ -378,10 +409,7 @@ TEST_F(CodeTest, AcceptedCopyFailurePreservesBothNativeOperands) {
   EXPECT_TRUE(memories_[2].allocated);
   EXPECT_TRUE(memories_[2].mapped);
   EXPECT_FALSE(iree_hal_amd_gpu_sdma_queue_is_idle(queue_));
-  amdf_status_t status = AMDF_STATUS_OK;
-  ASSERT_TRUE(iree_hal_amd_gpu_sdma_queue_try_inactivate(queue_, &status));
-  ASSERT_EQ(status, AMDF_STATUS_OK);
-  ASSERT_TRUE(iree_hal_amd_gpu_sdma_queue_retire_failed(queue_));
+  JoinFailure();
   iree_hal_amd_gpu_context_join_memory(&context_);
   EXPECT_EQ(retired_.load(), 0u);
   EXPECT_FALSE(memories_[1].allocated);
@@ -430,6 +458,7 @@ TEST_F(CodeTest, FailedCachePublicationKeepsItsTargetUntilNativeStop) {
   gpu_.event_wait = [](amdf_gpu_event_t*, uint64_t) {
     return amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
   };
+  gpu_.event_signal = [](amdf_gpu_event_t*) { return AMDF_STATUS_OK; };
   gpu_.event_destroy = [](amdf_gpu_event_t*) { return AMDF_STATUS_OK; };
   gpu_.user_queue_create = [](amdf_device_t* device,
                               const amdf_gpu_user_queue_create_info_t*,
@@ -475,13 +504,12 @@ TEST_F(CodeTest, FailedCachePublicationKeepsItsTargetUntilNativeStop) {
   iree_hal_amd_gpu_aql_code_t* cache = nullptr;
   IREE_ASSERT_OK(iree_hal_amd_gpu_aql_code_allocate(
       &context_, 0, &staging_, iree_allocator_system(), &cache));
+  failure_.code = cache;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_DATA_LOSS,
                         iree_hal_amd_gpu_aql_code_publish(cache, &code_));
   EXPECT_EQ(code_.handle, nullptr);
   EXPECT_TRUE(memories_[1].allocated);
-  amdf_status_t status = AMDF_STATUS_OK;
-  ASSERT_TRUE(iree_hal_amd_gpu_aql_code_try_inactivate(cache, &status));
-  ASSERT_EQ(status, AMDF_STATUS_OK);
+  JoinFailure();
   EXPECT_EQ(native.stops, 1u);
   EXPECT_TRUE(memories_[1].allocated);
   EXPECT_EQ(iree_hal_amd_gpu_aql_code_free(cache), AMDF_STATUS_OK);

@@ -16,7 +16,6 @@ void iree_hal_amd_gpu_failure_initialize(
                                           .event_sink = event_sink,
                                           .device = device,
                                           .timeout_ms = timeout_ms};
-  iree_slim_mutex_initialize(&failure->mutex);
   iree_notification_initialize(&failure->changed);
 }
 
@@ -26,14 +25,12 @@ void iree_hal_amd_gpu_failure_deinitialize(
     return;
   }
   iree_notification_deinitialize(&failure->changed);
-  iree_slim_mutex_deinitialize(&failure->mutex);
   failure->endpoint = NULL;
 }
 
 bool iree_hal_amd_gpu_failure_begin(iree_hal_amd_gpu_failure_t* failure,
                                     amdf_status_t status, const char* operation,
                                     iree_time_t now) {
-  iree_slim_mutex_lock(&failure->mutex);
   const bool first =
       !iree_atomic_load(&failure->status, iree_memory_order_relaxed);
   if (first) {
@@ -48,7 +45,6 @@ bool iree_hal_amd_gpu_failure_begin(iree_hal_amd_gpu_failure_t* failure,
         failure, IREE_HAL_AMD_GPU_FAILURE_CLOSING, UINT32_MAX, 0, 0);
     iree_atomic_store(&failure->status, status, iree_memory_order_release);
   }
-  iree_slim_mutex_unlock(&failure->mutex);
   return first;
 }
 
@@ -88,21 +84,28 @@ iree_time_t iree_hal_amd_gpu_failure_poll(iree_hal_amd_gpu_failure_t* failure,
   static const char* const phases[] = {"closing", "inactivating", "retiring",
                                        "joining callbacks", "finished"};
   const amdf_endpoint_info_t* endpoint = failure->endpoint;
+  const uint32_t ordinal = (uint32_t)(position >> 32);
+  const char* owner = ordinal < 256               ? "compute"
+                      : ordinal == UINT32_MAX - 1 ? "transfer"
+                      : (uint32_t)position == IREE_HAL_AMD_GPU_FAILURE_CLOSING
+                          ? "device"
+                          : "code";
   char message[768];
-  iree_snprintf(
-      message, sizeof(message),
-      "GPU terminal cleanup exceeded %u ms (%" PRId64
-      " ms elapsed) for %s (%016" PRIx64 "%016" PRIx64
-      "): phase=%s queue=%u progress=%u/%u original=%s status=0x%016" PRIx64
-      "; unproven native/callback ownership remains retained",
-      failure->timeout_ms, (int64_t)((now - failure->started) / 1000000),
-      endpoint->name, endpoint->id.words[0], endpoint->id.words[1],
-      phases[(uint32_t)position], (uint32_t)(position >> 32),
-      (uint32_t)iree_atomic_load(&failure->completed_count,
-                                 iree_memory_order_relaxed),
-      (uint32_t)iree_atomic_load(&failure->total_count,
-                                 iree_memory_order_relaxed),
-      failure->operation, status);
+  iree_snprintf(message, sizeof(message),
+                "GPU terminal cleanup exceeded %u ms (%" PRId64
+                " ms elapsed) for %s (%016" PRIx64 "%016" PRIx64
+                "): phase=%s queue=%u progress=%u/%u owner=%s original=%s "
+                "status=0x%016" PRIx64
+                "; unproven native/callback ownership remains retained",
+                failure->timeout_ms,
+                (int64_t)((now - failure->started) / 1000000), endpoint->name,
+                endpoint->id.words[0], endpoint->id.words[1],
+                phases[(uint32_t)position], ordinal,
+                (uint32_t)iree_atomic_load(&failure->completed_count,
+                                           iree_memory_order_relaxed),
+                (uint32_t)iree_atomic_load(&failure->total_count,
+                                           iree_memory_order_relaxed),
+                owner, failure->operation, status);
   const iree_hal_device_driver_failure_event_t payload = {
       .record_length = sizeof(payload),
       .abi_version = IREE_HAL_DEVICE_DRIVER_FAILURE_EVENT_ABI_VERSION_0,

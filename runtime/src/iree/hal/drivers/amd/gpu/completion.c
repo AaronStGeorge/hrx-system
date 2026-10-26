@@ -130,8 +130,7 @@ static int iree_hal_amd_gpu_completion_main(void* user_data) {
         iree_hal_amd_gpu_context_fail_execution(context, status,
                                                 "kernel completion wait");
       }
-      if (amdf_status_is_ok(
-              iree_hal_amd_gpu_completion_query_status(completion))) {
+      if (!context->execution_failure.notify) {
         // A construction/test context may have no enclosing terminal owner.
         iree_hal_amd_gpu_completion_request_failure(completion, status);
       }
@@ -214,13 +213,15 @@ amdf_status_t iree_hal_amd_gpu_completion_query_status(
                                          iree_memory_order_acquire);
 }
 
-amdf_status_t iree_hal_amd_gpu_completion_request_failure(
+void iree_hal_amd_gpu_completion_request_failure(
     iree_hal_amd_gpu_completion_t* completion, amdf_status_t status) {
   int64_t expected = 0;
   iree_atomic_compare_exchange_strong(&completion->failure, &expected, status,
                                       iree_memory_order_release,
                                       iree_memory_order_relaxed);
-  return iree_hal_amd_gpu_completion_request_stop(completion);
+  iree_atomic_fetch_or(&completion->state,
+                       IREE_HAL_AMD_GPU_COMPLETION_STOP_REQUESTED,
+                       iree_memory_order_release);
 }
 
 amdf_status_t iree_hal_amd_gpu_completion_request_stop(

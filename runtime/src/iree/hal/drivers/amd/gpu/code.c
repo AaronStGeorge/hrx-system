@@ -280,9 +280,11 @@ iree_status_t iree_hal_amd_gpu_code_publish(
     }
     iree_slim_mutex_unlock(&upload->mutex);
     status = IREE_HAL_AMD_STATUS_FROM_AMDF(copy_status, "upload local code");
-    offset += upload->copy.length;
-    upload->copy.source += upload->copy.length;
-    upload->copy.target += upload->copy.length;
+    if (iree_status_is_ok(status)) {
+      offset += upload->copy.length;
+      upload->copy.source += upload->copy.length;
+      upload->copy.target += upload->copy.length;
+    }
   }
   iree_hal_amd_gpu_code_upload_free(context, upload);
   IREE_TRACE_ZONE_END(z0);

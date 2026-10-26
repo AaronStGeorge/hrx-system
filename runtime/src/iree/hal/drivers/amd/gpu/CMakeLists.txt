@@ -51,6 +51,7 @@ iree_cc_library(
     ::code
     ::completion
     ::context
+    ::device_failure
     ::executable
     ::feedback
     ::profile
@@ -123,6 +124,7 @@ iree_cc_test(
   DEPS
     ::code
     ::context
+    ::device_failure
     ::publication
     amdf::headers
     iree::base
@@ -131,6 +133,7 @@ iree_cc_test(
     iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::fabric::memory
     iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::membership
     iree::hal::drivers::amd::gpu::queue::sdma::queue
     iree::testing::gtest
     iree::testing::gtest_main
@@ -558,5 +561,56 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+
+if(IREE_HAL_DRIVER_AMD_GPU)
+iree_cc_library(
+  NAME
+    device_failure
+  HDRS
+    "device_failure.h"
+  SRCS
+    "device_failure.c"
+  DEPS
+    ::completion
+    ::context
+    ::failure
+    ::publication
+    amdf::headers
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::gpu::queue::aql::code
+    iree::hal::drivers::amd::gpu::queue::membership
+    iree::hal::drivers::amd::gpu::queue::sdma::queue
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU)
+iree_cc_test(
+  NAME
+    device_failure_test
+  SRCS
+    "device_failure_test.cc"
+  DEPS
+    ::completion
+    ::context
+    ::device_failure
+    ::publication
+    iree::async::util::semaphore_wait
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::gpu::queue::backing
+    iree::hal::drivers::amd::gpu::queue::host_wait
+    iree::hal::drivers::amd::gpu::queue::membership
+    iree::hal::drivers::amd::gpu::queue::pm4::queue
+    iree::hal::drivers::amd::gpu::queue::pm4::submission
+    iree::hal::drivers::amd::gpu::queue::publisher
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

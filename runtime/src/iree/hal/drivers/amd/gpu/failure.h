@@ -8,7 +8,6 @@
 #define IREE_HAL_DRIVERS_AMD_GPU_FAILURE_H_
 
 #include "amdf/amdf.h"
-#include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
 #include "iree/hal/device_event.h"
 
@@ -37,8 +36,6 @@ typedef struct iree_hal_amd_gpu_failure_t {
   iree_hal_device_t* device;
   // Software join budget and native-stall reporting threshold in milliseconds.
   uint32_t timeout_ms;
-  // Serializes first-fault initialization only; never held across native calls.
-  iree_slim_mutex_t mutex;
   // Host progress/callback notification, independent of the failed native wake.
   iree_notification_t changed;
   // First native error, release-published after immutable timing facts.
@@ -65,15 +62,17 @@ void iree_hal_amd_gpu_failure_initialize(
     iree_hal_amd_gpu_failure_t* failure);
 void iree_hal_amd_gpu_failure_deinitialize(iree_hal_amd_gpu_failure_t* failure);
 
-// Records the first fault and its timing facts. True selects the one caller
-// that arms independent monitoring and reports the original error. Later faults
-// preserve that original outcome. operation stays live through the worker join.
+// Records the first fault and its timing facts under caller serialization.
+// True selects the one caller that arms independent monitoring and reports the
+// original error. Later faults preserve that original outcome. operation stays
+// live through the worker join.
 bool iree_hal_amd_gpu_failure_begin(iree_hal_amd_gpu_failure_t* failure,
                                     amdf_status_t status, const char* operation,
                                     iree_time_t now);
 
 // Updates cached diagnostics before a native call or software ownership join.
-// UINT32_MAX denotes a shared internal native owner rather than a HAL queue.
+// Ordinals below 256 are compute queues. UINT32_MAX - 1 denotes the transfer
+// queue; UINT32_MAX denotes the private code queue or initial device closure.
 void iree_hal_amd_gpu_failure_set_phase(iree_hal_amd_gpu_failure_t* failure,
                                         iree_hal_amd_gpu_failure_phase_t phase,
                                         uint32_t queue_ordinal,

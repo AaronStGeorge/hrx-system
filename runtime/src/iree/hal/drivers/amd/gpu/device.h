@@ -40,6 +40,10 @@ typedef struct iree_hal_amd_gpu_device_options_t {
   // Zero uses native events immediately. Applies only to coherent USER queue
   // records; KERNEL queues retain native event/status observation.
   uint32_t completion_spin_ns;
+  // Terminal software join budget and blocked native-stop diagnostic threshold
+  // in milliseconds. Native kernel calls cannot be cancelled by this timeout;
+  // expiry preserves potentially live ownership. Zero reports immediately.
+  uint32_t failure_timeout_ms;
   // Initial per-queue storage. Native growth uses the fabric allocation owner.
   struct {
     // Native command storage capacity in bytes, or zero for the protocol's

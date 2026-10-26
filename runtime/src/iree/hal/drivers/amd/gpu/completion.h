@@ -142,11 +142,11 @@ void iree_hal_amd_gpu_completion_set_sources(
 amdf_status_t iree_hal_amd_gpu_completion_query_status(
     iree_hal_amd_gpu_completion_t* completion);
 
-// Excludes new helper drains and wakes the existing completion worker to join
-// terminal ownership. May run inside a source callback: it never acquires the
-// drain mutex or waits for publishers. The first native error remains sticky.
-// The parent arms its independent deadline monitor before requesting this.
-amdf_status_t iree_hal_amd_gpu_completion_request_failure(
+// Latches the first native error and excludes new healthy helper drains. Pure
+// host publication: no drain lock, native call, or publisher wait. The parent
+// arms its independent monitor first, then wakes host release waiters after
+// this publication, and uses request_stop to interrupt a parked native worker.
+void iree_hal_amd_gpu_completion_request_failure(
     iree_hal_amd_gpu_completion_t* completion, amdf_status_t status);
 
 // Requests exit after the current source round and wakes a parked worker.

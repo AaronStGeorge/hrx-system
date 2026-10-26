@@ -138,13 +138,17 @@ bool iree_hal_amd_gpu_sdma_queue_supports_cache_control(
 static void iree_hal_amd_gpu_sdma_queue_fail(
     iree_hal_amd_gpu_sdma_queue_t* queue, amdf_status_t status) {
   int64_t expected = 0;
-  iree_atomic_compare_exchange_strong(
+  const bool first = iree_atomic_compare_exchange_strong(
       &queue->failure, &expected, (int64_t)status, iree_memory_order_release,
       iree_memory_order_relaxed);
   iree_atomic_fetch_or(&queue->observer, IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED,
                        iree_memory_order_acq_rel);
   iree_hal_amd_gpu_publication_notify(queue->publication,
                                       queue->publication_ordinal);
+  if (first) {
+    iree_hal_amd_gpu_context_fail_execution(queue->context, status,
+                                            "SDMA execution/publication");
+  }
 }
 
 // Only the deferred source reports failures after the completion owner stops.
@@ -177,6 +181,7 @@ static void iree_hal_amd_gpu_sdma_queue_fail_copies(
   iree_atomic_fetch_and(&queue->observer,
                         ~IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE,
                         iree_memory_order_release);
+  iree_hal_amd_gpu_context_wake_failure(queue->context);
 }
 
 static uint32_t* iree_hal_amd_gpu_sdma_fence(
@@ -402,7 +407,12 @@ static bool iree_hal_amd_gpu_sdma_queue_publish(void* user_data) {
     }
   }
   iree_hal_amd_gpu_sdma_queue_fail_copies(queue);
-  return iree_hal_amd_gpu_sdma_queue_handoff(queue, remainder, completed);
+  const bool ready =
+      iree_hal_amd_gpu_sdma_queue_handoff(queue, remainder, completed);
+  if (iree_atomic_load(&queue->failure, iree_memory_order_acquire)) {
+    iree_hal_amd_gpu_context_wake_failure(queue->context);
+  }
+  return ready;
 }
 
 void iree_hal_amd_gpu_sdma_queue_submit(iree_hal_amd_gpu_sdma_queue_t* queue,

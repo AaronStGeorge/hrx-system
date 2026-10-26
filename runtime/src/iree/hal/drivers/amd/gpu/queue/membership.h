@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_AMD_GPU_QUEUE_MEMBERSHIP_H_
 
 #include "iree/hal/drivers/amd/gpu/completion.h"
+#include "iree/hal/drivers/amd/gpu/failure.h"
 #include "iree/hal/drivers/amd/gpu/profile.h"
 #include "iree/hal/drivers/amd/gpu/queue/backing.h"
 #include "iree/hal/drivers/amd/gpu/queue/program.h"
@@ -24,6 +25,10 @@ typedef struct iree_hal_amd_gpu_queue_lifecycle_t {
   void (*close)(iree_hal_queue_t* queue);
   // Proves every accepted native/host owner has retired.
   bool (*is_idle)(iree_hal_queue_t* queue);
+  // Joins the publisher and stops native access without releasing captures.
+  bool (*try_inactivate)(iree_hal_queue_t* queue, amdf_status_t* out_status);
+  // Releases failed issued captures only after every native owner stopped.
+  bool (*retire_failed)(iree_hal_queue_t* queue, iree_status_code_t code);
   // Joins native consumption and destroys queue-specific backing.
   amdf_status_t (*shutdown)(iree_hal_queue_t* queue);
   // Returns unused backing without blocking publication.
@@ -84,6 +89,8 @@ typedef struct iree_hal_amd_gpu_queue_membership_t {
   iree_hal_amd_gpu_publication_t* publication;
   // Borrowed sole retirement owner and source-lifetime handoff.
   iree_hal_amd_gpu_completion_t* completion;
+  // Borrowed first-fault deadline and host ownership notification.
+  iree_hal_amd_gpu_failure_t* failure;
   // Borrowed registry of resident recordings requiring publisher coordinates.
   iree_hal_amd_gpu_program_pool_t* programs;
   // Immutable exact protocol ownership contract.
@@ -98,7 +105,7 @@ typedef struct iree_hal_amd_gpu_queue_membership_t {
   iree_hal_queue_t** provisioned;
   // Serializes acquisition, release, and cold changes without execution locks.
   iree_slim_mutex_t mutex;
-  // Protects live slot pointers during bounded failure fanout only.
+  // Serializes native construction/destruction with terminal traversal.
   iree_slim_mutex_t slots_mutex;
   // Stable slots retained until final device cleanup, newest first.
   iree_hal_amd_gpu_queue_slot_t* slots;
@@ -138,6 +145,13 @@ typedef struct iree_hal_amd_gpu_queue_membership_t {
     // Terminal native observation status, read after completed.
     amdf_status_t status;
   } join;
+  // Terminal ownership result, distinct from the failed execution result.
+  struct {
+    // Release-publishes the cleanup attempt's result, including failure.
+    iree_atomic_int32_t completed;
+    // Native cleanup outcome; failure preserves the entire remaining graph.
+    amdf_status_t status;
+  } terminal;
 } iree_hal_amd_gpu_queue_membership_t;
 
 void iree_hal_amd_gpu_queue_membership_initialize(
@@ -166,6 +180,22 @@ iree_status_t iree_hal_amd_gpu_queue_membership_assign_frontier(
 // Cold failure fanout over acquired queues; provisioned queues are separate.
 void iree_hal_amd_gpu_queue_membership_notify_failure(
     iree_hal_amd_gpu_queue_membership_t* membership);
+
+// Completion's terminal owner visits every provisioned/acquired queue after
+// healthy observers are excluded. False means a CPU publisher, constructor, or
+// callback tail still owns state. True supplies the phase's native result.
+// CLOSING closes admission and cancels deferred waits; INACTIVATING stops
+// native access; RETIRING releases failed captures; JOINING checks CPU callback
+// tails. All native queues (including non-compute owners) must stop before
+// RETIRING.
+bool iree_hal_amd_gpu_queue_membership_try_failure(
+    iree_hal_amd_gpu_queue_membership_t* membership,
+    iree_hal_amd_gpu_failure_phase_t phase, iree_status_code_t code,
+    amdf_status_t* out_status);
+
+// Publishes the terminal lifetime result to acquired-queue final releases.
+void iree_hal_amd_gpu_queue_membership_finish_failure(
+    iree_hal_amd_gpu_queue_membership_t* membership, amdf_status_t status);
 // Trims provisioned and acquired queues, including idle native scratch. Native
 // detachment runs on the calling thread; ready publication remains independent.
 amdf_status_t iree_hal_amd_gpu_queue_membership_trim(
