@@ -178,6 +178,18 @@ static const amdf_user_queue_vtable_t amdf_gpu_user_queue_vtable = {
     .destroy_native = amdf_gpu_user_queue_destroy_native,
 };
 
+amdf_status_t AMDF_CALL
+amdf_gpu_user_queue_inactivate(amdf_user_queue_t* base_queue) {
+  if (base_queue == NULL) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  }
+  if (base_queue->vtable != &amdf_gpu_user_queue_vtable) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+  }
+  return amdf_gpu_umd_user_queue_inactivate(
+      ((amdf_gpu_user_queue_t*)base_queue)->umd);
+}
+
 static amdf_status_t amdf_gpu_user_queue_validate_scratch(
     amdf_device_t* device, amdf_queue_roles_t roles,
     const amdf_gpu_queue_scratch_t* scratch,

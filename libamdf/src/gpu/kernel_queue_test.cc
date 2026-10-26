@@ -210,6 +210,27 @@ TEST_P(GpuKernelQueueTest, CommandAlignmentIsCheckedBeforeNativeAdmission) {
   }
 }
 
+TEST_P(GpuKernelQueueTest,
+       InactivationAllowsDestroyWithoutInventingRetirement) {
+  uint64_t point = 0;
+  ASSERT_EQ(Submit(&point), AMDF_STATUS_OK);
+  ASSERT_EQ(point, 1u);
+  EXPECT_EQ(amdf_kernel_queue_destroy(queue),
+            amdf_make_api_status(AMDF_STATUS_CODE_BUSY));
+  EXPECT_EQ(amdf_gpu_kernel_queue_inactivate(nullptr),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  ASSERT_EQ(amdf_gpu_kernel_queue_inactivate(queue), AMDF_STATUS_OK);
+  auto status = Query();
+  EXPECT_EQ(status.retired_submission, 0u);
+  EXPECT_EQ(status.terminal_status,
+            amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION));
+  EXPECT_EQ(Submit(&point), status.terminal_status);
+  EXPECT_EQ(device.native.queue.submitted, 1u);
+  ASSERT_EQ(amdf_kernel_queue_destroy(queue), AMDF_STATUS_OK);
+  queue = nullptr;
+  EXPECT_EQ(device.native.queue.destroy_count, 1u);
+}
+
 TEST_P(GpuKernelQueueTest, MappingAndCommandsShareProgressAndCapacity) {
   ASSERT_EQ(CreateQueue(2), AMDF_STATUS_OK);
   uint64_t command_point = 0;
@@ -781,6 +802,13 @@ amdf_status_t amdf_gpu_umd_kernel_queue_destroy(
     amdf_gpu_umd_kernel_queue_t* queue) {
   ++queue->destroy_count;
   return queue->destroy_status;
+}
+
+amdf_status_t amdf_gpu_umd_kernel_queue_inactivate(
+    amdf_gpu_umd_kernel_queue_t* queue) {
+  queue->terminal_status =
+      amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION);
+  return AMDF_STATUS_OK;
 }
 
 }  // extern "C"

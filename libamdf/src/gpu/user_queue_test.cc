@@ -256,6 +256,22 @@ TEST_F(GpuUserQueueTest, RejectsUnknownPlacementBeforeNativeCreation) {
   EXPECT_EQ(queue_, nullptr);
 }
 
+TEST_F(GpuUserQueueTest, InactivationPreservesLiveQueueAndMappingOwnership) {
+  auto create = MakeCreateInfo();
+  ASSERT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create, &queue_),
+            AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_user_queue_map(queue_, nullptr, &mapping_), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_gpu_user_queue_inactivate(nullptr),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  ASSERT_EQ(amdf_gpu_user_queue_inactivate(queue_), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_child_tracker_count(&queue_->mappings), 1u);
+  EXPECT_EQ(amdf_child_tracker_count(&consumer_.base.children), 1u);
+  EXPECT_EQ(amdf_user_queue_destroy(queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_BUSY));
+  EXPECT_EQ(amdf_gpu_user_queue_inactivate(queue_), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_child_tracker_count(&queue_->mappings), 1u);
+}
+
 TEST_F(GpuUserQueueTest, RetainsQueueAcrossRejectedDestruction) {
   const amdf_gpu_user_queue_create_info_t create_info = MakeCreateInfo();
   ASSERT_EQ(amdf_gpu_user_queue_create(&consumer_.base, &create_info, &queue_),
@@ -834,6 +850,11 @@ amdf_status_t amdf_gpu_umd_user_queue_wait_consumed(
 amdf_status_t amdf_gpu_umd_user_queue_destroy(
     amdf_gpu_umd_user_queue_t* queue) {
   return queue->state->destroy_status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_inactivate(
+    amdf_gpu_umd_user_queue_t* queue) {
+  return queue->state->query_status;
 }
 
 }  // extern "C"

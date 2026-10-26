@@ -34,6 +34,10 @@ amdf_gpu_user_queue_trim_scratch(amdf_user_queue_t* queue);
 amdf_status_t AMDF_CALL amdf_gpu_user_queue_set_dispatch_timestamps(
     amdf_user_queue_t* queue, uint32_t enabled);
 
+// Stops native execution while preserving queue and mapping ownership.
+amdf_status_t AMDF_CALL
+amdf_gpu_user_queue_inactivate(amdf_user_queue_t* queue);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

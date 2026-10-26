@@ -31,6 +31,8 @@ typedef struct amdf_gpu_kernel_queue_t {
   amdf_atomic_uint64_t submitted;
   // Greatest accepted point with independently confirmed native completion.
   amdf_atomic_uint64_t retired;
+  // Successful exclusive native stop permits destruction without completion.
+  bool inactivated;
 } amdf_gpu_kernel_queue_t;
 
 _Static_assert(offsetof(amdf_gpu_kernel_queue_t, base) == 0,
@@ -127,8 +129,9 @@ static amdf_status_t amdf_gpu_kernel_queue_wait(
 static amdf_status_t amdf_gpu_kernel_queue_destroy_native(
     amdf_kernel_queue_t* base_queue) {
   amdf_gpu_kernel_queue_t* queue = (amdf_gpu_kernel_queue_t*)base_queue;
-  if (amdf_gpu_kernel_queue_refresh_retirement(queue) <
-      amdf_atomic_uint64_load_acquire(&queue->submitted)) {
+  if (!queue->inactivated &&
+      amdf_gpu_kernel_queue_refresh_retirement(queue) <
+          amdf_atomic_uint64_load_acquire(&queue->submitted)) {
     return amdf_make_api_status(AMDF_STATUS_CODE_BUSY);
   }
   const amdf_status_t status = amdf_gpu_umd_kernel_queue_destroy(queue->umd);
@@ -205,6 +208,20 @@ static const amdf_kernel_queue_vtable_t amdf_gpu_kernel_queue_vtable = {
     .destroy_native = amdf_gpu_kernel_queue_destroy_native,
     .update_memory = amdf_gpu_kernel_queue_update_memory,
 };
+
+amdf_status_t AMDF_CALL
+amdf_gpu_kernel_queue_inactivate(amdf_kernel_queue_t* base_queue) {
+  if (base_queue == NULL) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  }
+  if (base_queue->vtable != &amdf_gpu_kernel_queue_vtable) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+  }
+  amdf_gpu_kernel_queue_t* queue = (amdf_gpu_kernel_queue_t*)base_queue;
+  const amdf_status_t status = amdf_gpu_umd_kernel_queue_inactivate(queue->umd);
+  queue->inactivated = amdf_status_is_ok(status);
+  return status;
+}
 
 amdf_status_t AMDF_CALL amdf_gpu_kernel_queue_create(
     amdf_device_t* device,

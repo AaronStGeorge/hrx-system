@@ -7,11 +7,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "amdf/amdf.h"
 #include "amdf/gpu.h"
 #include "gtest/gtest.h"
+#include "libamdf/cts/gpu/gpu_device_fixture.h"
 #include "util/device_cache.h"
 #include "util/provider.h"
 
@@ -30,6 +32,77 @@ const amdf_gpu_api_t* QueryGpuApi(const amdf_api_t* api) {
       api->query_extension(AMDF_EXTENSION_GPU, AMDF_GPU_EXTENSION_VERSION_1,
                            AMDF_GPU_EXTENSION_VERSION_LATEST, &extension_api)));
   return static_cast<const amdf_gpu_api_t*>(extension_api);
+}
+
+TEST_F(GpuDeviceFixture, InactivatesAdvertisedQueuesBeforeReleasingOwners) {
+  amdf_endpoint_info_t endpoint_info = {
+      .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
+      .structure_size = sizeof(endpoint_info),
+  };
+  ASSERT_EQ(api_->endpoint_query_info(endpoint_, &endpoint_info),
+            AMDF_STATUS_OK);
+  for (uint32_t ordinal = 0; ordinal < endpoint_info.queue_family_count;
+       ++ordinal) {
+    SCOPED_TRACE(ordinal);
+    amdf_queue_family_info_t family = {
+        .type = AMDF_STRUCTURE_TYPE_QUEUE_FAMILY_INFO,
+        .structure_size = sizeof(family),
+    };
+    ASSERT_EQ(
+        api_->endpoint_query_queue_family_info(endpoint_, ordinal, &family),
+        AMDF_STATUS_OK);
+    if (family.user_queue_capabilities &
+        AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER) {
+      const amdf_gpu_user_queue_create_info_t create = {
+          .type = AMDF_STRUCTURE_TYPE_GPU_USER_QUEUE_CREATE_INFO,
+          .structure_size = sizeof(create),
+          .queue_family_ordinal = ordinal,
+          .priority = AMDF_QUEUE_PRIORITY_NORMAL,
+          .producer_mode = AMDF_QUEUE_PRODUCER_MODE_SINGLE,
+          .required_capabilities = AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER,
+      };
+      amdf_user_queue_t* queue = nullptr;
+      ASSERT_EQ(gpu_api_->user_queue_create(device_, &create, &queue),
+                AMDF_STATUS_OK);
+      const auto release = [this](amdf_user_queue_t* value) {
+        EXPECT_EQ(api_->user_queue_destroy(value), AMDF_STATUS_OK);
+      };
+      const std::unique_ptr<amdf_user_queue_t, decltype(release)> owner(
+          queue, release);
+      amdf_user_queue_mapping_t* mapping = nullptr;
+      ASSERT_EQ(api_->user_queue_map(queue, nullptr, &mapping), AMDF_STATUS_OK);
+      const auto unmap = [this](amdf_user_queue_mapping_t* value) {
+        EXPECT_EQ(api_->user_queue_mapping_destroy(value), AMDF_STATUS_OK);
+      };
+      const std::unique_ptr<amdf_user_queue_mapping_t, decltype(unmap)> view(
+          mapping, unmap);
+      ASSERT_EQ(gpu_api_->user_queue_inactivate(queue), AMDF_STATUS_OK);
+      EXPECT_EQ(gpu_api_->user_queue_inactivate(queue), AMDF_STATUS_OK);
+      amdf_user_queue_mapping_info_t info = {
+          .type = AMDF_STRUCTURE_TYPE_USER_QUEUE_MAPPING_INFO,
+          .structure_size = sizeof(info),
+      };
+      EXPECT_EQ(api_->user_queue_mapping_query_info(mapping, &info),
+                AMDF_STATUS_OK);
+    }
+    if (family.publication_modes & AMDF_QUEUE_PUBLICATION_MODE_KERNEL) {
+      const amdf_gpu_kernel_queue_create_info_t create = {
+          .type = AMDF_STRUCTURE_TYPE_GPU_KERNEL_QUEUE_CREATE_INFO,
+          .structure_size = sizeof(create),
+          .queue_family_ordinal = ordinal,
+      };
+      amdf_kernel_queue_t* queue = nullptr;
+      ASSERT_EQ(gpu_api_->kernel_queue_create(device_, &create, &queue),
+                AMDF_STATUS_OK);
+      const auto release = [this](amdf_kernel_queue_t* value) {
+        EXPECT_EQ(api_->kernel_queue_destroy(value), AMDF_STATUS_OK);
+      };
+      const std::unique_ptr<amdf_kernel_queue_t, decltype(release)> owner(
+          queue, release);
+      ASSERT_EQ(gpu_api_->kernel_queue_inactivate(queue), AMDF_STATUS_OK);
+      EXPECT_EQ(gpu_api_->kernel_queue_inactivate(queue), AMDF_STATUS_OK);
+    }
+  }
 }
 
 TEST(GpuExtensionTest, ReportsCompiledAvailabilityBeforeCreatingInstance) {
@@ -58,6 +131,8 @@ TEST(GpuExtensionTest, ReportsCompiledAvailabilityBeforeCreatingInstance) {
   EXPECT_NE(gpu_api->user_queue_resume_scratch, nullptr);
   EXPECT_NE(gpu_api->user_queue_trim_scratch, nullptr);
   EXPECT_NE(gpu_api->user_queue_set_dispatch_timestamps, nullptr);
+  EXPECT_NE(gpu_api->user_queue_inactivate, nullptr);
+  EXPECT_NE(gpu_api->kernel_queue_inactivate, nullptr);
 }
 
 TEST(GpuExtensionTest, NegotiatesOriginalTableExtent) {
@@ -105,6 +180,22 @@ TEST(GpuExtensionTest, PreservesVersionThreeTableBoundary) {
   EXPECT_EQ(gpu->structure_size,
             offsetof(amdf_gpu_api_t, user_queue_query_scratch));
   EXPECT_NE(gpu->event_destroy, nullptr);
+}
+
+TEST(GpuExtensionTest, PreservesVersionFiveTableBoundary) {
+  const amdf_api_t* api = QueryApi();
+  ASSERT_NE(api, nullptr);
+  const void* extension = nullptr;
+  ASSERT_EQ(
+      api->query_extension(AMDF_EXTENSION_GPU, AMDF_GPU_EXTENSION_VERSION_5,
+                           AMDF_GPU_EXTENSION_VERSION_5, &extension),
+      AMDF_STATUS_OK);
+  const auto* gpu = static_cast<const amdf_gpu_api_t*>(extension);
+  ASSERT_NE(gpu, nullptr);
+  EXPECT_EQ(gpu->extension_version, AMDF_GPU_EXTENSION_VERSION_5);
+  EXPECT_EQ(gpu->structure_size,
+            offsetof(amdf_gpu_api_t, user_queue_inactivate));
+  EXPECT_NE(gpu->user_queue_set_dispatch_timestamps, nullptr);
 }
 
 TEST(GpuExtensionTest, PreservesVersionFourTableBoundary) {

@@ -34,8 +34,11 @@ typedef struct amdf_gpu_event_t amdf_gpu_event_t;
 /// Adds caller-quiesced control of native AQL dispatch timestamps.
 #define AMDF_GPU_EXTENSION_VERSION_5 5u
 
+/// Adds synchronous native queue inactivation without consuming queue objects.
+#define AMDF_GPU_EXTENSION_VERSION_6 6u
+
 /// The most recent GPU extension version described by this header.
-#define AMDF_GPU_EXTENSION_VERSION_LATEST AMDF_GPU_EXTENSION_VERSION_5
+#define AMDF_GPU_EXTENSION_VERSION_LATEST AMDF_GPU_EXTENSION_VERSION_6
 
 /// An `amdf_gpu_endpoint_info_t` output structure.
 #define AMDF_STRUCTURE_TYPE_GPU_ENDPOINT_INFO \
@@ -1052,6 +1055,40 @@ typedef struct amdf_gpu_api_t {
   /// the queue.
   amdf_status_t(AMDF_CALL* user_queue_set_dispatch_timestamps)(
       amdf_user_queue_t* queue, uint32_t enabled);
+
+  /// Permanently stops a directly published GPU queue. Requires version 6.
+  ///
+  /// The caller joins CPU producers, queue operations, and other host users
+  /// before entry, and joins device producers executing on other queues.
+  /// Published work may be outstanding. Success synchronously establishes
+  /// cessation of this queue's execution and memory accesses, including work
+  /// spawned by its commands. It does not establish successful execution or
+  /// the validity of command results. Other queues retain independent uses.
+  ///
+  /// The queue object, mappings, and their backing remain owned by the caller.
+  /// Previously reported execution failure remains observable; an otherwise
+  /// healthy queue becomes FAILED with FAILED_PRECONDITION. No publication,
+  /// scratch service, or reactivation is permitted afterward. Mappings may be
+  /// destroyed and the queue released through user_queue_destroy after native
+  /// uses from every producer have ended. Unconsumed packets do not prevent
+  /// destruction after successful inactivation.
+  ///
+  /// This exclusive cold operation may block inside the native driver. There
+  /// is no native-call timeout, allocation, worker creation, or retry of native
+  /// queue removal.
+  /// Failure preserves the library object and backing, but may consume its
+  /// native identifier; it does not permit storage reuse. Repeated calls return
+  /// the original inactivation result without another native removal attempt.
+  amdf_status_t(AMDF_CALL* user_queue_inactivate)(amdf_user_queue_t* queue);
+
+  /// Permanently stops a kernel-published GPU queue. Requires version 6.
+  ///
+  /// The same access-cessation, exclusive-host-access, failure, and blocking
+  /// contract as user_queue_inactivate applies. Accepted submissions need not
+  /// have retired. The library queue remains owned and terminal; retirement
+  /// counters retain only independently completed work. Successful
+  /// inactivation permits kernel_queue_destroy despite unretired submissions.
+  amdf_status_t(AMDF_CALL* kernel_queue_inactivate)(amdf_kernel_queue_t* queue);
 } amdf_gpu_api_t;
 
 #ifdef __cplusplus

@@ -45,6 +45,10 @@ struct amdf_gpu_umd_kernel_queue_t {
   // Native point whose notification a waiter can reuse, or zero when idle.
   // Older registrations may still signal the same event after a consumed wake.
   uint64_t wait_event_submission;
+  // Checked progress preserved before native fence storage is removed.
+  uint64_t inactivated_progress;
+  // First native removal result, reused after native becomes NULL.
+  amdf_status_t inactivation_status;
 };
 
 amdf_status_t amdf_gpu_umd_kernel_queue_create(
@@ -368,8 +372,11 @@ amdf_status_t amdf_gpu_umd_kernel_queue_wait(
 
 amdf_status_t amdf_gpu_umd_kernel_queue_destroy(
     amdf_gpu_umd_kernel_queue_t* queue) {
-  amdf_status_t status = amdf_gpu_wddm_wkmi_adapter_destroy_kernel_queue(
-      &queue->device->wkmi_adapter, queue->native);
+  amdf_status_t status = queue->inactivation_status;
+  if (queue->native != NULL) {
+    status = amdf_gpu_wddm_wkmi_adapter_destroy_kernel_queue(
+        &queue->device->wkmi_adapter, queue->native);
+  }
   // Accepted work is retired and no waiter borrows the event. Its release is
   // independent of native queue removal; preserve the first cleanup error.
   if (!CloseHandle(queue->wait_event) && amdf_status_is_ok(status)) {
@@ -377,4 +384,30 @@ amdf_status_t amdf_gpu_umd_kernel_queue_destroy(
   }
   amdf_free(queue->device->host_allocator, queue);
   return status;
+}
+
+amdf_status_t amdf_gpu_umd_kernel_queue_inactivate(
+    amdf_gpu_umd_kernel_queue_t* queue) {
+  if (queue->native == NULL) {
+    return queue->inactivation_status;
+  }
+  // Native removal consumes the fence mapping. Keep subsequent status queries
+  // on the last checked prefix without manufacturing completion of aborted
+  // work.
+  queue->inactivated_progress = amdf_gpu_umd_kernel_queue_query_progress(queue);
+  queue->progress_fence_pointer = &queue->inactivated_progress;
+  const amdf_status_t failure =
+      amdf_gpu_umd_kernel_queue_query_terminal_status(queue);
+  uint64_t expected = AMDF_STATUS_OK;
+  amdf_atomic_uint64_compare_exchange_acq_rel(
+      &queue->failure, &expected,
+      amdf_status_is_ok(failure)
+          ? amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION)
+          : failure);
+  queue->inactivation_status = amdf_gpu_wddm_wkmi_adapter_destroy_kernel_queue(
+      &queue->device->wkmi_adapter, queue->native);
+  // The bridge consumes its owner on every result. A failed removal cannot be
+  // retried through a native handle that may already have been reused.
+  queue->native = NULL;
+  return queue->inactivation_status;
 }

@@ -754,6 +754,106 @@ TEST_F(KfdUserQueueTest, WaitAndDestroyRequireConsumedPublication) {
             (std::vector<size_t>{4, 3, 2, 1, 0}));
 }
 
+TEST_F(KfdUserQueueTest, InactivationStopsUnconsumedWorkAndPreservesMappings) {
+  for (const auto command_type :
+       {AMDF_QUEUE_COMMAND_TYPE_GPU_PM4, AMDF_QUEUE_COMMAND_TYPE_GPU_AQL,
+        AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA}) {
+    SCOPED_TRACE(command_type);
+    if (command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_AQL) {
+      SelectAqlTopology();
+    }
+    ASSERT_NO_FATAL_FAILURE(CreateQueue(command_type));
+    ASSERT_NO_FATAL_FAILURE(MapQueue());
+    const size_t buffer_count = native_state_.LiveBufferCount();
+    amdf_atomic_uint64_store_release(WriteIndex(), 8);
+    amdf_atomic_uint64_store_release(ReadIndex(), 4);
+
+    ASSERT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), AMDF_STATUS_OK);
+    EXPECT_EQ(native_state_.queue_destroy_count, 1);
+    EXPECT_EQ(native_state_.buffer_destroy_count, 1);
+    EXPECT_EQ(native_state_.LiveBufferCount(), buffer_count - 1);
+    EXPECT_TRUE(native_state_.buffers[0].live);
+    EXPECT_TRUE(native_state_.buffers[1].live);
+    EXPECT_EQ(native_state_.doorbell_unmap_count, 0);
+    EXPECT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), AMDF_STATUS_OK);
+    EXPECT_EQ(native_state_.queue_destroy_count, 1);
+
+    amdf_user_queue_status_t status;
+    ASSERT_EQ(amdf_gpu_umd_user_queue_query_status(queue_, &status),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(status.state, AMDF_QUEUE_STATE_FAILED);
+    EXPECT_EQ(status.terminal_status,
+              amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION));
+    EXPECT_EQ(status.producer_index, 8u);
+    EXPECT_EQ(status.consumed_index, 4u);
+    ASSERT_EQ(amdf_gpu_umd_user_queue_mapping_destroy(mapping_),
+              AMDF_STATUS_OK);
+    mapping_ = nullptr;
+    ASSERT_EQ(amdf_gpu_umd_user_queue_destroy(queue_), AMDF_STATUS_OK);
+    queue_ = nullptr;
+    EXPECT_EQ(native_state_.queue_destroy_count, 1);
+    EXPECT_EQ(native_state_.LiveBufferCount(), 0u);
+    ASSERT_NO_FATAL_FAILURE(SetUp());
+  }
+}
+
+TEST_F(KfdUserQueueTest, FailedInactivationNeverRetriesNativeRemoval) {
+  for (const int error : {EBUSY, ETIME, EIO}) {
+    SCOPED_TRACE(error);
+    ASSERT_NO_FATAL_FAILURE(CreateQueue());
+    ASSERT_NO_FATAL_FAILURE(MapQueue());
+    amdf_atomic_uint64_store_release(WriteIndex(), 8);
+    const amdf_status_t failure =
+        amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, error);
+    native_state_.queue_destroy_status = failure;
+    EXPECT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), failure);
+    EXPECT_EQ(native_state_.queue_destroy_count, 1);
+    EXPECT_EQ(native_state_.buffer_destroy_count, 0);
+    EXPECT_EQ(native_state_.LiveBufferCount(), 5u);
+    native_state_.queue_destroy_status = AMDF_STATUS_OK;
+    EXPECT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), failure);
+    ASSERT_EQ(amdf_gpu_umd_user_queue_mapping_destroy(mapping_),
+              AMDF_STATUS_OK);
+    mapping_ = nullptr;
+    EXPECT_EQ(amdf_gpu_umd_user_queue_destroy(queue_), failure);
+    queue_ = nullptr;
+    EXPECT_EQ(native_state_.queue_destroy_count, 1);
+    EXPECT_EQ(native_state_.LiveBufferCount(), 5u);
+    EXPECT_EQ(native_state_.abandoned_buffer_indices,
+              (std::vector<size_t>{0, 1, 2, 3, 4}));
+    ASSERT_NO_FATAL_FAILURE(SetUp());
+  }
+}
+
+TEST_F(KfdUserQueueTest, InactivationRequiresSuccessfulNativeAccessDrain) {
+  ASSERT_NO_FATAL_FAILURE(CreateQueue());
+  native_state_.failed_buffer_destroy_call = 1;
+  const amdf_status_t failure = native_state_.buffer_destroy_failure;
+  EXPECT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), failure);
+  EXPECT_EQ(native_state_.queue_destroy_count, 1);
+  EXPECT_EQ(native_state_.LiveBufferCount(), 5u);
+  native_state_.failed_buffer_destroy_call = 0;
+  EXPECT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), failure);
+  EXPECT_EQ(amdf_gpu_umd_user_queue_destroy(queue_), failure);
+  queue_ = nullptr;
+  EXPECT_EQ(native_state_.queue_destroy_count, 1);
+  EXPECT_EQ(native_state_.buffer_destroy_count, 1);
+  EXPECT_EQ(native_state_.LiveBufferCount(), 5u);
+}
+
+TEST_F(KfdUserQueueTest, InactivationPreservesOriginalExecutionFailure) {
+  ASSERT_NO_FATAL_FAILURE(CreateQueue());
+  ASSERT_NO_FATAL_FAILURE(MapQueue());
+  const amdf_status_t failure = amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, EIO);
+  native_state_.host_publication.status = failure;
+  ASSERT_EQ(amdf_gpu_umd_user_queue_mapping_flush(mapping_), failure);
+  ASSERT_EQ(amdf_gpu_umd_user_queue_inactivate(queue_), AMDF_STATUS_OK);
+  amdf_user_queue_status_t status;
+  ASSERT_EQ(amdf_gpu_umd_user_queue_query_status(queue_, &status),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(status.terminal_status, failure);
+}
+
 TEST_F(KfdUserQueueTest, NativeRemovalFailureConsumesOwnerAndPreservesBacking) {
   // These errors include both retained and consumed native identifiers. None
   // supplies proof that queue-reachable storage is safe to release.

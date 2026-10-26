@@ -25,6 +25,10 @@ amdf_status_t AMDF_CALL amdf_gpu_kernel_queue_submit(
     const amdf_gpu_kernel_queue_submission_info_t* submission_info,
     uint64_t* out_submission);
 
+// Stops native execution while preserving the library queue owner.
+amdf_status_t AMDF_CALL
+amdf_gpu_kernel_queue_inactivate(amdf_kernel_queue_t* queue);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
