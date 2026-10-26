@@ -14,6 +14,7 @@
 // semaphore_sync_test.cc.
 
 #include <atomic>
+#include <string>
 #include <thread>
 
 #include "iree/async/cts/util/registry.h"
@@ -682,40 +683,35 @@ TEST_P(SemaphoreAsyncTest, WaitRetainsSemaphoreUntilCompletion) {
   IREE_EXPECT_OK(tracker.ConsumeStatus());
 }
 
-// Wait on already-failed semaphore completes immediately with failure.
+// Failure outranks an already-satisfied timeline as well as a pending value.
 TEST_P(SemaphoreAsyncTest, WaitSemaphoreAlreadyFailed) {
-  iree_async_semaphore_t* semaphore = nullptr;
-  IREE_ASSERT_OK(iree_async_semaphore_create(
-      proactor_,
-      /*initial_value=*/0, IREE_ASYNC_SEMAPHORE_DEFAULT_FRONTIER_CAPACITY,
-      iree_allocator_system(), &semaphore));
+  for (const auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
+    SCOPED_TRACE(mode);
+    for (uint64_t initial_value : {0u, 10u}) {
+      SCOPED_TRACE(initial_value);
+      iree_async_semaphore_t* semaphore = nullptr;
+      IREE_ASSERT_OK(iree_async_semaphore_create(
+          proactor_, initial_value,
+          IREE_ASYNC_SEMAPHORE_DEFAULT_FRONTIER_CAPACITY,
+          iree_allocator_system(), &semaphore));
+      iree_async_semaphore_fail(
+          semaphore, iree_make_status(IREE_STATUS_ABORTED, "pre-failed"));
 
-  // Fail the semaphore before submitting wait.
-  iree_async_semaphore_fail(
-      semaphore, iree_make_status(IREE_STATUS_ABORTED, "pre-failed"));
+      uint64_t target_value = 10;
+      CompletionTracker tracker;
+      iree_async_semaphore_wait_operation_t wait_op = {};
+      InitWaitOp(&wait_op, &semaphore, &target_value, mode,
+                 CompletionTracker::Callback, &tracker);
+      IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait_op.base));
+      PollUntil(/*min_completions=*/1);
 
-  iree_async_semaphore_t* semaphore_ptr = semaphore;
-  uint64_t target_value = 10;
-
-  CompletionTracker tracker;
-  iree_async_semaphore_wait_operation_t wait_op;
-  memset(&wait_op, 0, sizeof(wait_op));
-  wait_op.base.type = IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_WAIT;
-  wait_op.base.completion_fn = CompletionTracker::Callback;
-  wait_op.base.user_data = &tracker;
-  wait_op.semaphores = &semaphore_ptr;
-  wait_op.values = &target_value;
-  wait_op.count = 1;
-  wait_op.mode = IREE_ASYNC_WAIT_MODE_ALL;
-
-  IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait_op.base));
-
-  PollUntil(/*min_completions=*/1);
-
-  EXPECT_EQ(tracker.call_count, 1);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED, tracker.ConsumeStatus());
-
-  iree_async_semaphore_release(semaphore);
+      EXPECT_EQ(tracker.call_count, 1);
+      iree::Status status(tracker.ConsumeStatus());
+      EXPECT_EQ(status.code(), iree::StatusCode::kAborted);
+      EXPECT_NE(status.ToString().find("pre-failed"), std::string::npos);
+      iree_async_semaphore_release(semaphore);
+    }
+  }
 }
 
 // Submit wait, cancel, completes with CANCELLED.

@@ -9,6 +9,7 @@
 #include <array>
 #include <barrier>
 #include <cstddef>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -131,6 +132,87 @@ class SemaphoreWaitTest : public ::testing::Test {
   // Independent test references, released after all wait borrowers have joined.
   std::vector<iree_async_semaphore_t*> semaphores_;
 };
+
+TEST_F(SemaphoreWaitTest, PollEmptyCompletesImmediately) {
+  for (const auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
+    auto wait = MakeWait(0, nullptr, nullptr, mode);
+    bool ready = false;
+    IREE_ASSERT_OK(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+    EXPECT_TRUE(ready);
+  }
+}
+
+TEST_F(SemaphoreWaitTest, PollAllRequiresEveryValue) {
+  std::array semaphores = {Semaphore(3), Semaphore(6)};
+  std::array<uint64_t, 2> values = {3, 7};
+  auto wait = MakeWait(values.size(), semaphores.data(), values.data());
+  bool ready = true;
+  IREE_ASSERT_OK(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+  EXPECT_FALSE(ready);
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[1], 7, nullptr));
+  IREE_ASSERT_OK(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+  EXPECT_TRUE(ready);
+}
+
+TEST_F(SemaphoreWaitTest, PollAnyReportsFirstSatisfiedIndex) {
+  std::array semaphores = {Semaphore(2), Semaphore(6), Semaphore(8)};
+  std::array<uint64_t, 3> values = {3, 7, 9};
+  auto wait = MakeWait(values.size(), semaphores.data(), values.data(),
+                       IREE_ASYNC_WAIT_MODE_ANY);
+  bool ready = true;
+  IREE_ASSERT_OK(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+  EXPECT_FALSE(ready);
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[1], 7, nullptr));
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[2], 9, nullptr));
+  IREE_ASSERT_OK(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+  EXPECT_TRUE(ready);
+  EXPECT_EQ(wait.operation.satisfied_index, 1u);
+}
+
+TEST_F(SemaphoreWaitTest, PollPreservesFailureAfterPendingValue) {
+  for (const auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
+    for (uint64_t failed_value : {0u, 7u}) {
+      SCOPED_TRACE(mode);
+      SCOPED_TRACE(failed_value);
+      std::array semaphores = {Semaphore(), Semaphore(failed_value)};
+      std::array<uint64_t, 2> values = {3, 7};
+      auto wait =
+          MakeWait(values.size(), semaphores.data(), values.data(), mode);
+      iree_async_semaphore_fail(semaphores[1],
+                                iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                                 "producer allocation failed"));
+      bool ready = true;
+      Status status(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+      EXPECT_FALSE(ready);
+      EXPECT_EQ(status.code(), StatusCode::kResourceExhausted);
+      EXPECT_NE(status.ToString().find("producer allocation failed"),
+                std::string::npos);
+    }
+  }
+}
+
+TEST_F(SemaphoreWaitTest, PollNativeFailureEncodingIsNotSatisfaction) {
+  auto* semaphore = Semaphore();
+  uint64_t value = 10;
+  auto wait = MakeWait(1, &semaphore, &value);
+  iree_async_semaphore_fail(
+      semaphore, iree_make_status(IREE_STATUS_ABORTED, "native failure"));
+
+  // HAL query overrides may encode failure above every usable timeline value.
+  // Keep the real semaphore's failure publication and ownership unchanged.
+  const auto* original_vtable = semaphore->vtable;
+  auto native_vtable = *original_vtable;
+  native_vtable.query = [](iree_async_semaphore_t* semaphore) -> uint64_t {
+    return UINT64_MAX;
+  };
+  semaphore->vtable = &native_vtable;
+  bool ready = true;
+  Status status(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+  semaphore->vtable = original_vtable;
+  EXPECT_FALSE(ready);
+  EXPECT_EQ(status.code(), StatusCode::kAborted);
+  EXPECT_NE(status.ToString().find("native failure"), std::string::npos);
+}
 
 TEST_F(SemaphoreWaitTest, AlreadyReachedCompletesOnRegisteringThread) {
   std::array semaphores = {Semaphore(3), Semaphore(7)};

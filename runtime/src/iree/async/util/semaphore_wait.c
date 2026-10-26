@@ -9,6 +9,36 @@
 #include <limits.h>
 #include <string.h>
 
+iree_status_t iree_async_semaphore_wait_poll(
+    iree_async_semaphore_wait_operation_t* operation, bool* out_ready) {
+  *out_ready = false;
+  bool all_satisfied = true;
+  for (iree_host_size_t i = 0; i < operation->count; ++i) {
+    iree_async_semaphore_t* semaphore = operation->semaphores[i];
+    // Native query overrides may encode failure as a large unsigned value.
+    // Use the host-published timeline, as timepoint registration does, and
+    // sample sticky failure after it so failure cannot satisfy the wait.
+    uint64_t current_value = (uint64_t)iree_atomic_load(
+        &semaphore->timeline_value, iree_memory_order_acquire);
+    iree_status_t failure = (iree_status_t)iree_atomic_load(
+        &semaphore->failure_status, iree_memory_order_acquire);
+    if (!iree_status_is_ok(failure)) {
+      return iree_status_clone(failure);
+    }
+    if (current_value >= operation->values[i]) {
+      if (operation->mode == IREE_ASYNC_WAIT_MODE_ANY) {
+        operation->satisfied_index = i;
+        *out_ready = true;
+        return iree_ok_status();
+      }
+    } else {
+      all_satisfied = false;
+    }
+  }
+  *out_ready = all_satisfied;
+  return iree_ok_status();
+}
+
 enum iree_async_semaphore_wait_completion_state_e {
   IREE_ASYNC_SEMAPHORE_WAIT_COMPLETION_STATE_PENDING = 0,
   IREE_ASYNC_SEMAPHORE_WAIT_COMPLETION_STATE_CLAIMED = 1,

@@ -1071,29 +1071,12 @@ static void iree_async_proactor_posix_commit_semaphore_wait(
     iree_async_semaphore_wait_operation_t* wait_op) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // Check for immediate satisfaction before allocating a tracker.
-  bool immediately_satisfied = false;
-  bool all_satisfied = true;
-  for (iree_host_size_t i = 0; i < wait_op->count; ++i) {
-    uint64_t current = iree_async_semaphore_query(wait_op->semaphores[i]);
-    if (current >= wait_op->values[i]) {
-      if (wait_op->mode == IREE_ASYNC_WAIT_MODE_ANY) {
-        wait_op->satisfied_index = i;
-        immediately_satisfied = true;
-        break;
-      }
-    } else {
-      all_satisfied = false;
-    }
-  }
-  if (!immediately_satisfied && all_satisfied) {
-    immediately_satisfied = true;
-  }
-  if (immediately_satisfied) {
+  bool ready = false;
+  iree_status_t status = iree_async_semaphore_wait_poll(wait_op, &ready);
+  if (!iree_status_is_ok(status) || ready) {
     IREE_TRACE_ZONE_END(z0);
     iree_async_proactor_posix_publish_completion(
-        proactor, &wait_op->base, iree_ok_status(),
-        IREE_ASYNC_COMPLETION_FLAG_NONE);
+        proactor, &wait_op->base, status, IREE_ASYNC_COMPLETION_FLAG_NONE);
     return;
   }
 
@@ -1104,7 +1087,7 @@ static void iree_async_proactor_posix_commit_semaphore_wait(
       .user_data = proactor,
   };
   iree_async_semaphore_wait_tracker_t* tracker = NULL;
-  iree_status_t status = iree_async_semaphore_wait_tracker_allocate(
+  status = iree_async_semaphore_wait_tracker_allocate(
       &proactor->semaphore_wait_context, wait_op, enqueue_callback,
       proactor->base.allocator, &tracker);
   if (!iree_status_is_ok(status)) {
