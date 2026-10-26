@@ -76,6 +76,32 @@ static amdf_status_t amdf_gpu_kfd_read_number(int directory, const char* name,
   return AMDF_STATUS_OK;
 }
 
+static amdf_status_t amdf_gpu_kfd_read_driver_version(
+    const amdf_platform_endpoint_t* endpoint,
+    amdf_gpu_kfd_topology_t* topology) {
+  char version[sizeof(topology->driver_version)];
+  const amdf_status_t status = amdf_gpu_kfd_read_attribute(
+      endpoint->instance->sysfs_descriptor, "module/amdgpu/version", version,
+      sizeof(version));
+  if (status == amdf_linux_error(ENOENT) ||
+      status == amdf_linux_error(EACCES) ||
+      status == amdf_linux_error(EOVERFLOW)) {
+    // In-tree modules need not publish a version, and containers may hide it.
+    // An overlong identifier cannot match a shorter exact denylist entry.
+    // None of these observations establishes a known driver restriction.
+    return AMDF_STATUS_OK;
+  }
+  if (!amdf_status_is_ok(status)) {
+    return status;
+  }
+  size_t length = strlen(version);
+  if (length != 0 && version[length - 1] == '\n') {
+    version[--length] = 0;
+  }
+  memcpy(topology->driver_version, version, length + 1);
+  return AMDF_STATUS_OK;
+}
+
 // KFD installs the CWSR trap in the process context, independently of the
 // compiler descriptor. Its read-only module parameter determines the extra
 // SGPR reservation on the CDNA devices admitted by our compute queue plans.
@@ -638,6 +664,9 @@ amdf_status_t amdf_gpu_kfd_topology_initialize(
   }
   if (amdf_status_is_ok(status) && found) {
     status = amdf_gpu_kfd_read_scalar_register_features(endpoint, &topology);
+  }
+  if (amdf_status_is_ok(status) && found) {
+    status = amdf_gpu_kfd_read_driver_version(endpoint, &topology);
   }
   uint32_t final_generation = 0;
   if (amdf_status_is_ok(status)) {

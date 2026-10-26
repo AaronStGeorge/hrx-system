@@ -228,6 +228,7 @@ TEST_F(KfdTopologyTest, DiscoversMemoryAndSdmaWithoutComputeStorageMetadata) {
   EXPECT_EQ(topology.properties.gfx_ip.minor, 4u);
   EXPECT_EQ(topology.properties.gfx_ip.stepping, 2u);
   EXPECT_FALSE(topology.gc_ip.exact);
+  EXPECT_STREQ(topology.driver_version, "");
   EXPECT_EQ(topology.properties.compute.compute_unit_count, 304u);
   EXPECT_EQ(topology.properties.compute.wavefront_size, 64u);
   EXPECT_EQ(topology.properties.topology.xcc_count, 8u);
@@ -264,6 +265,60 @@ TEST_F(KfdTopologyTest, NativeGcIdentityDoesNotUseCompilerTargetAliases) {
   EXPECT_EQ(topology.properties.gfx_ip.stepping, 2u);
   EXPECT_FALSE(topology.sdma.ip.exact);
   amdf_gpu_kfd_topology_deinitialize(&topology, amdf_allocator_system());
+}
+
+TEST_F(KfdTopologyTest,
+       ModuleIdentityRestrictsOnlyAffectedProfileCapabilities) {
+  WriteProperties(
+      "cwsr_size 19185664\nctl_stack_size 16384\n"
+      "num_sdma_engines 2\nnum_sdma_xgmi_engines 14\n"
+      "num_sdma_queues_per_engine 8\n");
+  const auto gc =
+      directory_ / "dev/char/226:160/device/ip_discovery/die/0/11/0";
+  std::filesystem::create_directories(gc);
+  WriteAttribute(gc / "major", "9\n");
+  WriteAttribute(gc / "minor", "4\n");
+  WriteAttribute(gc / "revision", "3\n");
+  const auto module = directory_ / "module/amdgpu";
+  std::filesystem::create_directories(module);
+  for (const std::string& version :
+       {std::string("6.16.13\n"), std::string("6.16.13"),
+        std::string("6.16.14\n"), std::string("6.16.13-custom\n"),
+        std::string("6.16.13\nextra\n"), std::string(128, 'x')}) {
+    SCOPED_TRACE(version);
+    WriteAttribute(module / "version", version);
+    amdf_gpu_endpoint_profile_t* profile = nullptr;
+    ASSERT_EQ(amdf_gpu_umd_create_endpoint_profile(
+                  &endpoint_, amdf_allocator_system(), &profile),
+              AMDF_STATUS_OK);
+    ASSERT_EQ(profile->queue_family_count, 2u);
+    EXPECT_EQ(profile->queue_families[0].command_type,
+              AMDF_QUEUE_COMMAND_TYPE_GPU_AQL);
+    EXPECT_EQ(profile->queue_families[0].user_queue_capabilities,
+              AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER |
+                  AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER);
+    EXPECT_EQ(profile->queue_families[1].command_type,
+              AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
+    const bool restricted = version == "6.16.13\n" || version == "6.16.13";
+    EXPECT_EQ(
+        profile->queue_families[1].user_queue_capabilities,
+        AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER |
+            (restricted ? 0 : AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER));
+    amdf_free(amdf_allocator_system(), profile);
+  }
+}
+
+TEST_F(KfdTopologyTest, ModuleReadFailureDoesNotPublishTopology) {
+  WriteProperties("");
+  // Opening a directory succeeds, but reading it as an attribute fails.
+  std::filesystem::create_directories(directory_ / "module/amdgpu/version");
+  amdf_gpu_kfd_topology_t topology;
+  std::memset(&topology, 0xA5, sizeof(topology));
+  const auto original = topology;
+  EXPECT_EQ(amdf_gpu_kfd_topology_initialize(
+                &endpoint_, amdf_allocator_system(), &topology),
+            amdf_linux_error(EISDIR));
+  EXPECT_EQ(std::memcmp(&topology, &original, sizeof(topology)), 0);
 }
 
 TEST_F(KfdTopologyTest, ScalarReservationFollowsNativeTrapPolicy) {
