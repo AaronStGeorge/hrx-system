@@ -16,7 +16,10 @@ bazel_dep(
 single_version_override(
     module_name = "google_benchmark",
     patch_strip = 1,
-    patches = ["//build_tools/third_party/google_benchmark:source_version.patch"],
+    patches = [
+        "//build_tools/third_party/google_benchmark:source_version.patch",
+        "//build_tools/third_party/google_benchmark:instance_limit.patch",
+    ],
     version = "1.9.5",
 )
 

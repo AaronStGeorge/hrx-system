@@ -10,7 +10,10 @@ load(":cc.bzl", "iree_cc_binary")
 load(":cc_attrs.bzl", "cc_attrs")
 load(":executable.bzl", "iree_executable_test")
 
-_SMOKE_TEST_ARGS = ["--benchmark_min_time=0s"]
+_SMOKE_TEST_ARGS = [
+    "--benchmark_dry_run",
+    "--benchmark_max_instances_per_family=1",
+]
 
 def _iree_cc_benchmark_impl(
         name,
@@ -75,8 +78,9 @@ iree_cc_benchmark = macro(
     doc = """Defines a C/C++ benchmark binary and smoke test.
 
     The benchmark binary is emitted as `<name>`. A companion `<name>_test`
-    target runs the benchmark with `--benchmark_min_time=0s` so ordinary test
-    runs verify that the benchmark starts without collecting timing data.
+    target runs one iteration of the first matching instance in every registered
+    benchmark family. This verifies each benchmark body without expanding its
+    argument, thread, and iteration matrix or collecting timing data.
 
     This shared macro does not select a benchmark framework. Project-specific
     wrappers add the framework dependency that matches their benchmark harness.

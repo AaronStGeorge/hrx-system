@@ -59,6 +59,7 @@ set(IREE_DEP_GOOGLE_BENCHMARK_STRIP_PREFIX "benchmark-1.9.5")
 set(IREE_DEP_GOOGLE_BENCHMARK_BUILD_FILE "")
 set(IREE_DEP_GOOGLE_BENCHMARK_PATCHES
   "//build_tools/third_party/google_benchmark:source_version.patch"
+  "//build_tools/third_party/google_benchmark:instance_limit.patch"
 )
 set(IREE_DEP_GOOGLE_BENCHMARK_PATCH_ARGS
   "-p1"

@@ -10,7 +10,8 @@
 #
 # It's good to test that benchmarks run, but it's really annoying to run a
 # billion iterations of them every time you try to run tests. So we create these
-# as binaries and then invoke them as tests with `--benchmark_min_time=0s`.
+# as binaries and invoke one iteration of one instance from each registered
+# benchmark family in tests.
 #
 # Mirrors the bzl function of the same name. See iree_cc_binary and iree_cc_test
 # for more details on those rules
@@ -86,7 +87,8 @@ function(iree_cc_binary_benchmark)
     NAME
       ${_RULE_NAME}_test
     ARGS
-      "--benchmark_min_time=0s"
+      "--benchmark_dry_run"
+      "--benchmark_max_instances_per_family=1"
       ${_RULE_ARGS}
     SRC
       ::${_RULE_NAME}
