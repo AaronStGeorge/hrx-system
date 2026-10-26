@@ -169,24 +169,28 @@ TEST_F(SemaphoreWaitTest, PollAnyReportsFirstSatisfiedIndex) {
   EXPECT_EQ(wait.operation.satisfied_index, 1u);
 }
 
-TEST_F(SemaphoreWaitTest, PollPreservesFailureAfterPendingValue) {
+TEST_F(SemaphoreWaitTest, PollPreservesFailureAfterPendingOrSatisfiedValue) {
   for (const auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
-    for (uint64_t failed_value : {0u, 7u}) {
-      SCOPED_TRACE(mode);
-      SCOPED_TRACE(failed_value);
-      std::array semaphores = {Semaphore(), Semaphore(failed_value)};
-      std::array<uint64_t, 2> values = {3, 7};
-      auto wait =
-          MakeWait(values.size(), semaphores.data(), values.data(), mode);
-      iree_async_semaphore_fail(semaphores[1],
-                                iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                                                 "producer allocation failed"));
-      bool ready = true;
-      Status status(iree_async_semaphore_wait_poll(&wait.operation, &ready));
-      EXPECT_FALSE(ready);
-      EXPECT_EQ(status.code(), StatusCode::kResourceExhausted);
-      EXPECT_NE(status.ToString().find("producer allocation failed"),
-                std::string::npos);
+    for (uint64_t first_value : {0u, 3u}) {
+      for (uint64_t failed_value : {0u, 7u}) {
+        SCOPED_TRACE(mode);
+        SCOPED_TRACE(first_value);
+        SCOPED_TRACE(failed_value);
+        std::array semaphores = {Semaphore(first_value),
+                                 Semaphore(failed_value)};
+        std::array<uint64_t, 2> values = {3, 7};
+        auto wait =
+            MakeWait(values.size(), semaphores.data(), values.data(), mode);
+        iree_async_semaphore_fail(
+            semaphores[1], iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                            "producer allocation failed"));
+        bool ready = true;
+        Status status(iree_async_semaphore_wait_poll(&wait.operation, &ready));
+        EXPECT_FALSE(ready);
+        EXPECT_EQ(status.code(), StatusCode::kResourceExhausted);
+        EXPECT_NE(status.ToString().find("producer allocation failed"),
+                  std::string::npos);
+      }
     }
   }
 }

@@ -24,7 +24,8 @@ typedef struct iree_async_semaphore_wait_tracker_t
 
 // Checks for immediate completion without allocating a tracker or registering
 // timepoints. Returns a clone of the first observed failure, or OK with
-// |out_ready| indicating satisfaction. A successful ANY wait also sets
+// |out_ready| indicating satisfaction. Every operand's failure is observed
+// before success, including for ANY. A successful ANY wait also sets
 // operation->satisfied_index. The caller keeps the operation and its semaphore
 // references alive through the call; pending waits still require registration.
 iree_status_t iree_async_semaphore_wait_poll(

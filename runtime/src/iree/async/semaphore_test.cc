@@ -1068,6 +1068,36 @@ TEST(MultiWaitTest, ImmediateTimeoutPollAnyOneSatisfied) {
   }
 }
 
+TEST(MultiWaitTest, FailureOutranksSatisfiedPeerInEitherOrder) {
+  for (const auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
+    for (iree_host_size_t failed_index : {0u, 1u}) {
+      SCOPED_TRACE(mode);
+      SCOPED_TRACE(failed_index);
+      std::array<iree_async_semaphore_t*, 2> semaphores = {};
+      std::array<uint64_t, 2> values = {10, 10};
+      for (auto& semaphore : semaphores) {
+        IREE_ASSERT_OK(iree_async_semaphore_create(
+            test_proactor(), 10, IREE_ASYNC_SEMAPHORE_DEFAULT_FRONTIER_CAPACITY,
+            iree_allocator_system(), &semaphore));
+      }
+      iree_async_semaphore_fail(
+          semaphores[failed_index],
+          iree_make_status(IREE_STATUS_ABORTED, "already failed"));
+      for (const auto timeout :
+           {iree_immediate_timeout(), iree_infinite_timeout()}) {
+        IREE_EXPECT_STATUS_IS(
+            IREE_STATUS_ABORTED,
+            iree_async_semaphore_multi_wait(
+                mode, semaphores.data(), values.data(), values.size(), timeout,
+                IREE_ASYNC_WAIT_FLAG_NONE, iree_allocator_system()));
+      }
+      for (auto* semaphore : semaphores) {
+        iree_async_semaphore_release(semaphore);
+      }
+    }
+  }
+}
+
 TEST(MultiWaitTest, ImmediateTimeoutPollAllNoneSatisfied) {
   constexpr int kCount = 2;
   iree_async_semaphore_t* sems[kCount] = {};

@@ -714,6 +714,41 @@ TEST_P(SemaphoreAsyncTest, WaitSemaphoreAlreadyFailed) {
   }
 }
 
+// An already-failed operand cannot be hidden by an earlier ANY success.
+TEST_P(SemaphoreAsyncTest, WaitFailureOutranksSatisfiedPeerInEitherOrder) {
+  for (const auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
+    for (iree_host_size_t failed_index : {0u, 1u}) {
+      SCOPED_TRACE(mode);
+      SCOPED_TRACE(failed_index);
+      iree_async_semaphore_t* semaphores[2] = {};
+      uint64_t values[2] = {10, 10};
+      for (auto& semaphore : semaphores) {
+        IREE_ASSERT_OK(iree_async_semaphore_create(
+            proactor_, 10, IREE_ASYNC_SEMAPHORE_DEFAULT_FRONTIER_CAPACITY,
+            iree_allocator_system(), &semaphore));
+      }
+      iree_async_semaphore_fail(
+          semaphores[failed_index],
+          iree_make_status(IREE_STATUS_ABORTED, "pre-failed"));
+
+      CompletionTracker tracker;
+      iree_async_semaphore_wait_operation_t wait_op = {};
+      InitWaitOp(&wait_op, semaphores, values, mode,
+                 CompletionTracker::Callback, &tracker);
+      wait_op.count = IREE_ARRAYSIZE(semaphores);
+      IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait_op.base));
+      PollUntil(/*min_completions=*/1);
+      EXPECT_EQ(tracker.call_count, 1);
+      iree::Status status(tracker.ConsumeStatus());
+      EXPECT_EQ(status.code(), iree::StatusCode::kAborted);
+      EXPECT_NE(status.ToString().find("pre-failed"), std::string::npos);
+      for (auto* semaphore : semaphores) {
+        iree_async_semaphore_release(semaphore);
+      }
+    }
+  }
+}
+
 // Submit wait, cancel, completes with CANCELLED.
 TEST_P(SemaphoreAsyncTest, WaitCancellation) {
   iree_async_semaphore_t* semaphore = nullptr;

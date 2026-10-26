@@ -893,43 +893,27 @@ IREE_API_EXPORT iree_status_t iree_async_semaphore_multi_wait(
     // Poll all semaphores without blocking. Uses raw timeline_value rather
     // than the vtable query to avoid failure sentinel encoding that could
     // falsely satisfy comparisons.
-    bool any_satisfied = false;
+    iree_host_size_t satisfied_count = 0;
     for (iree_host_size_t i = 0; i < count; ++i) {
+      uint64_t current_value = (uint64_t)iree_atomic_load(
+          &semaphores[i]->timeline_value, iree_memory_order_acquire);
       iree_status_t failure = (iree_status_t)iree_atomic_load(
           &semaphores[i]->failure_status, iree_memory_order_acquire);
       if (!iree_status_is_ok(failure)) {
         IREE_TRACE_ZONE_END(z0);
         return iree_status_from_code(iree_status_code(failure));
       }
-      uint64_t current_value = (uint64_t)iree_atomic_load(
-          &semaphores[i]->timeline_value, iree_memory_order_acquire);
       if (current_value >= minimum_values[i]) {
-        any_satisfied = true;
-        if (wait_mode == IREE_ASYNC_WAIT_MODE_ANY) {
-          IREE_TRACE_ZONE_END(z0);
-          return iree_ok_status();
-        }
+        ++satisfied_count;
       }
     }
     IREE_TRACE_ZONE_END(z0);
-    if (wait_mode == IREE_ASYNC_WAIT_MODE_ALL && any_satisfied) {
-      // Some satisfied but not all — recheck all for ALL mode.
-      for (iree_host_size_t i = 0; i < count; ++i) {
-        iree_status_t failure = (iree_status_t)iree_atomic_load(
-            &semaphores[i]->failure_status, iree_memory_order_acquire);
-        if (!iree_status_is_ok(failure)) {
-          return iree_status_from_code(iree_status_code(failure));
-        }
-        uint64_t current_value = (uint64_t)iree_atomic_load(
-            &semaphores[i]->timeline_value, iree_memory_order_acquire);
-        if (current_value < minimum_values[i]) {
-          return iree_status_from_code(IREE_STATUS_DEADLINE_EXCEEDED);
-        }
-      }
-      return iree_ok_status();
-    }
-    return iree_status_from_code(any_satisfied ? IREE_STATUS_OK
-                                               : IREE_STATUS_DEADLINE_EXCEEDED);
+    // A pre-existing failure wins even when another operand satisfies ANY.
+    const bool satisfied = wait_mode == IREE_ASYNC_WAIT_MODE_ALL
+                               ? satisfied_count == count
+                               : satisfied_count != 0;
+    return iree_status_from_code(satisfied ? IREE_STATUS_OK
+                                           : IREE_STATUS_DEADLINE_EXCEEDED);
   }
 
   // Allocate timepoint storage. Use stack for small counts.

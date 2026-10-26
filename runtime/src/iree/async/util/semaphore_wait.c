@@ -13,6 +13,7 @@ iree_status_t iree_async_semaphore_wait_poll(
     iree_async_semaphore_wait_operation_t* operation, bool* out_ready) {
   *out_ready = false;
   bool all_satisfied = true;
+  iree_host_size_t first_satisfied = operation->count;
   for (iree_host_size_t i = 0; i < operation->count; ++i) {
     iree_async_semaphore_t* semaphore = operation->semaphores[i];
     // Native query overrides may encode failure as a large unsigned value.
@@ -26,16 +27,22 @@ iree_status_t iree_async_semaphore_wait_poll(
       return iree_status_clone(failure);
     }
     if (current_value >= operation->values[i]) {
-      if (operation->mode == IREE_ASYNC_WAIT_MODE_ANY) {
-        operation->satisfied_index = i;
-        *out_ready = true;
-        return iree_ok_status();
+      if (first_satisfied == operation->count) {
+        first_satisfied = i;
       }
     } else {
       all_satisfied = false;
     }
   }
-  *out_ready = all_satisfied;
+  // Observe every failure before publishing ANY success. Array order selects
+  // the successful index, not whether an already-failed operand is noticed.
+  if (operation->mode == IREE_ASYNC_WAIT_MODE_ANY &&
+      first_satisfied < operation->count) {
+    operation->satisfied_index = first_satisfied;
+    *out_ready = true;
+  } else {
+    *out_ready = all_satisfied;
+  }
   return iree_ok_status();
 }
 
