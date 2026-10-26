@@ -243,15 +243,10 @@ static iree_status_t loom_wasm_testbench_compile_product(
                             "Wasm scenario signature exceeds u32");
   }
 
-  iree_string_view_t export_name = iree_string_view_empty();
-  iree_status_t status = loom_wasm_testbench_resolve_export_name(
-      testbench, function_name, &export_name);
   loomc_module_t* module = NULL;
-  if (iree_status_is_ok(status)) {
-    status = iree_status_from_loomc(loomc_module_clone(
-        testbench->compilation.module, testbench->compilation.workspace,
-        loomc_allocator_from_iree(testbench->host_allocator), &module));
-  }
+  iree_status_t status = iree_status_from_loomc(loomc_module_clone(
+      testbench->compilation.module, testbench->compilation.workspace,
+      loomc_allocator_from_iree(testbench->host_allocator), &module));
 
   const loomc_string_view_t root = loomc_string_view_from_iree(function_name);
   const loomc_emit_options_t emit_options = {
@@ -289,6 +284,11 @@ static iree_status_t loom_wasm_testbench_compile_product(
   const loomc_artifact_t* artifact = NULL;
   if (iree_status_is_ok(status)) {
     status = loom_wasm_testbench_select_artifact(result, &artifact);
+  }
+  iree_string_view_t export_name = iree_string_view_empty();
+  if (iree_status_is_ok(status)) {
+    status = loom_wasm_testbench_resolve_export_name(testbench, function_name,
+                                                     &export_name);
   }
   loomc_byte_span_t cloned_contents = loomc_byte_span_empty();
   loomc_byte_span_t contents = loomc_byte_span_empty();

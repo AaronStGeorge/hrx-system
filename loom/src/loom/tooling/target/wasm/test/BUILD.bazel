@@ -9,6 +9,7 @@
 # bazel-to-cmake: skip
 
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:defs.bzl", "loom_test")
 load("//loom/src/loom/tooling/target/wasm:execution_profiles.bzl", "WASM_HOSTED_PROFILE")
@@ -30,6 +31,19 @@ iree_executable_test(
         "//loom/config/target/arch:vm",
         "//loom/config/target/arch:wasm",
     ]),
+)
+
+iree_execution_test_suite(
+    name = "hosted_diagnostics_test",
+    data = ["unresolved_function.loom"],
+    manifests = ["hosted_diagnostics.test.json"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:vm",
+        "//loom/config/target/arch:wasm",
+    ]),
+    tools = {
+        "loom-test": "//loom/src/loom/tools/loom-test:loom-test-wasi",
+    },
 )
 
 loom_test(

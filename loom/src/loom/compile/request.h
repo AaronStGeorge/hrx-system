@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/error/emitter.h"
 #include "loom/error/source.h"
 #include "loom/ir/module.h"
 #include "loom/target/entry_selection.h"
@@ -53,6 +54,8 @@ typedef struct loom_compile_request_options_t {
   // Canonical root names to exclude after entry-category inference and before
   // specialization and materialization. Cannot be combined with |roots|.
   iree_string_view_list_t excluded_roots;
+  // Structured diagnostic emitter for source-backed request errors.
+  iree_diagnostic_emitter_t diagnostic_emitter;
 } loom_compile_request_options_t;
 
 // Fully resolved compile request borrowing immutable configured state.
@@ -80,11 +83,15 @@ typedef enum loom_compile_request_source_ownership_e {
 // because they require the LoomC command-program transaction. Exclusions apply
 // after inference and derived names are copied into |arena|. Emitter resolution
 // never probes an emitter by compiling. An omitted format selects the target
-// family's unique canonical kernel or module emitter.
+// family's unique canonical kernel or module emitter. Source-backed request
+// errors are emitted through |options| and counted in |out_error_count|;
+// status is reserved for request misuse and infrastructure failures. A nonzero
+// error count leaves |out_request| empty.
 iree_status_t loom_compile_request_resolve(
     const loom_module_t* module, const loom_compile_request_options_t* options,
     const loom_target_environment_t* target_environment,
-    iree_arena_allocator_t* arena, loom_compile_request_t* out_request);
+    iree_arena_allocator_t* arena, loom_compile_request_t* out_request,
+    uint32_t* out_error_count);
 
 // Materializes the roots selected by a resolved compile request and applies an
 // explicit target at the compile boundary.

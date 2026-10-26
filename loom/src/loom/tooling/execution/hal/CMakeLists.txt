@@ -10,6 +10,19 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+iree_execution_test_suite(
+  NAME
+    compile_diagnostics_test
+  MANIFESTS
+    "compile_diagnostics.test.json"
+  TOOLS
+    "loom-test=loom::tools::loom-test"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/unresolved_kernel.loom"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
     "command_count_observations_test"

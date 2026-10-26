@@ -19,6 +19,9 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::error::emitter
+    loom::error::error_defs
+    loom::error::parameter
     loom::error::source
     loom::ir
     loom::link::linker
@@ -43,6 +46,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::error::error_defs
     loom::format::text::parser
     loom::ir
     loom::target::test::target_record_table

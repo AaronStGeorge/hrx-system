@@ -1,0 +1,11 @@
+func.decl @unresolved(%input: i32) -> (i32)
+
+check.scenario @probe {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@unresolved>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
