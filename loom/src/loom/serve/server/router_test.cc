@@ -329,6 +329,61 @@ TEST_P(HttpRouterTest, InvalidLiveAcknowledgementOnlyClosesItsPeer) {
   EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
 }
 
+class HttpRouterLiveChurnTest : public HttpRouterTest {
+ protected:
+  void SetUp() override {
+    request_quota_ = 1;
+    HttpRouterTest::SetUp();
+  }
+};
+
+TEST_P(HttpRouterLiveChurnTest, RetirementPreservesPeerCreditAndReadmission) {
+  for (int round = 0; round < 3; ++round) {
+    SCOPED_TRACE(round);
+    ObservationClient first, middle, last;
+    for (auto* observer : {&first, &middle, &last}) {
+      ASSERT_NO_FATAL_FAILURE(observer->OpenLive(server_));
+      ASSERT_NO_FATAL_FAILURE(observer->ReadUpgrade());
+      EXPECT_NE(observer->WebSocketFrame().find("\"sequence\":\"1\""),
+                std::string::npos);
+    }
+    // All readers hold application credit. Retiring a middle record must not
+    // change the last reader's sequence, ACK, or independently owned socket.
+    middle.WriteFrame(1, "2");
+    middle.Join();
+    first.WriteFrame(8, "");
+    EXPECT_EQ(first.WebSocketFrame(8), "");
+    first.Join();
+    last.WriteFrame(9, "still here");
+    EXPECT_EQ(last.WebSocketFrame(10), "still here");
+    last.WriteFrame(1, "1");
+    const auto second = last.WebSocketFrame();
+    EXPECT_NE(second.find("\"sequence\":\"2\""), std::string::npos);
+
+    ObservationClient replacement;
+    ASSERT_NO_FATAL_FAILURE(replacement.OpenLive(server_));
+    ASSERT_NO_FATAL_FAILURE(replacement.ReadUpgrade());
+    const auto initial = replacement.WebSocketFrame();
+    EXPECT_NE(initial.find("\"sequence\":\"1\""), std::string::npos);
+    last.Ack(second);
+    replacement.Ack(initial);
+    EXPECT_NE(last.WebSocketFrame().find("\"sequence\":\"3\""),
+              std::string::npos);
+    EXPECT_NE(replacement.WebSocketFrame().find("\"sequence\":\"2\""),
+              std::string::npos);
+    for (auto* observer : {&last, &replacement}) {
+      observer->WriteFrame(8, "");
+      EXPECT_EQ(observer->WebSocketFrame(8), "");
+      observer->Join();
+    }
+    EXPECT_NE(Read(Send("GET", "/v1/status")).find("\"observers\":0"),
+              std::string::npos);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterLiveChurnTest,
+                         ::testing::Values(1, 4));
+
 TEST_P(HttpRouterTest, LiveActivitySamplesOwnersWithoutAMetricsScrape) {
   const int held = Send("POST", "/v1/test", R"({"model":"held"})");
   held_.WaitSubmitted();

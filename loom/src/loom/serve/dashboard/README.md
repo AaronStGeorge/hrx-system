@@ -56,10 +56,12 @@ latest-state cache retains one copied payload per source; exact byte comparison
 detects changes. Payload size is bounded by the fixed formatting extent; retained
 buffers grow geometrically and are reused, including across slot retirement/reuse.
 No per-token or per-reader snapshot allocation occurs. One shared 16 KiB
-formatting buffer and a fixed reader table serve all clients. The existing
+formatting buffer and a fixed reader table serve all clients. Active readers
+form a dense prefix, so scheduling visits current viewers rather than configured
+HTTP capacity; zero viewers leave only pending timer retirement, with no source
+sampling or reader scan. The existing
 WebSocket receiver owns bounded message allocations for acknowledgements and
-controls. A page is copied into
-the carrier's ordinary send storage; no service,
+controls. A page is copied into the carrier's ordinary send storage; no service,
 parameter, session, or ring pointer survives that synchronous copy.
 
 ## WebSocket projection

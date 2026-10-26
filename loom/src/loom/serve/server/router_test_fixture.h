@@ -523,7 +523,7 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
           iree_allocator_system(), &registry));
       status_ = loom_serve_router_run(
           executor_, server_, registry,
-          {.request_quota = 4,
+          {.request_quota = request_quota_,
            .holding_capacity = holding_capacity_,
            .resources = {.listener_count = 1, .listeners = &listener_},
            .observation_origins = observation_origins_},
@@ -608,6 +608,8 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
   }
   // Tight-capacity cases change this before the production server starts.
   iree_host_size_t connection_capacity_ = 64;
+  // Maximum ordinary requests or observation steps in one owner turn.
+  iree_host_size_t request_quota_ = 4;
   // Zero-budget cases reject instead of retaining requests behind the gate.
   iree_host_size_t holding_capacity_ = 2;
   // Managed slots supplied only by registration-lifecycle cases.

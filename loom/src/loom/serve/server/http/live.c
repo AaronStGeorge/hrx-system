@@ -15,7 +15,7 @@
 #include "loom/serve/transport/websocket/handshake.h"
 
 typedef struct loom_serve_http_live_reader_t {
-  // Owned claim, or NULL for a vacant reader slot.
+  // Owned claim, cleared when this reader retires.
   loom_serve_http_connection_t* connection;
   // Protocol storage borrowed through the connection claim.
   loom_serve_websocket_t* socket;
@@ -52,9 +52,7 @@ struct loom_serve_http_live_t {
   iree_time_t sample_time_ns;
   // Start of the in-progress sweep, published only when that sweep completes.
   iree_time_t sample_start_ns;
-  // Total slots, one fewer than transport capacity to reserve control credit.
-  iree_host_size_t capacity;
-  // Occupied reader slots.
+  // Dense active prefix of the transport-capacity-bounded reader table.
   iree_host_size_t count;
   // Rotating reader priority under the router's per-turn quota.
   iree_host_size_t cursor;
@@ -82,7 +80,6 @@ iree_status_t loom_serve_http_live_allocate(
   live->host_allocator = host_allocator;
   live->server = server;
   live->origins = origins;
-  live->capacity = capacity;
   loom_serve_timer_initialize(&live->timer);
   iree_async_proactor_t* proactor = NULL;
   iree_status_t status = iree_async_proactor_pool_get(
@@ -145,19 +142,14 @@ void loom_serve_http_live_accept(loom_serve_http_live_t* live,
           connection, iree_string_builder_view(&output));
     }
     if (iree_status_is_ok(status)) {
-      for (iree_host_size_t i = 0; i < live->capacity; ++i) {
-        if (!live->readers[i].connection) {
-          live->readers[i] = (loom_serve_http_live_reader_t){
-              .connection = connection, .socket = socket};
-          // A new reader's baseline must not predate its admission, even when
-          // another reader kept the shared cache alive through disconnection.
-          live->sample_cursor = 0;
-          live->sampling = true;
-          live->sample_start_ns = iree_time_now();
-          ++live->count;
-          break;
-        }
-      }
+      // The router admits this claim within the shared control-reserving bound.
+      live->readers[live->count++] = (loom_serve_http_live_reader_t){
+          .connection = connection, .socket = socket};
+      // A new reader's baseline must not predate its admission, even when
+      // another reader kept the shared cache alive through disconnection.
+      live->sample_cursor = 0;
+      live->sampling = true;
+      live->sample_start_ns = iree_time_now();
     } else {
       loom_serve_http_live_failure(live, connection, status);
     }
@@ -221,6 +213,11 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
       &live->timer, stopping, live->count != 0, &timer_progress, &tick);
   *out_progress |= timer_progress;
   stopping |= !iree_status_is_ok(timer_status);
+  if (!live->count) {
+    live->sample_cursor = 0;
+    live->sampling = false;
+    return timer_status;
+  }
   if (tick && !live->sampling) {
     live->sampling = true;
     live->sample_start_ns = iree_time_now();
@@ -253,25 +250,24 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
   }
   const uint64_t generation =
       loom_serve_observation_revision(live->observation);
-  const iree_host_size_t start = live->cursor;
-  for (iree_host_size_t i = 0; i < live->capacity; ++i) {
-    const iree_host_size_t index = (start + i) % live->capacity;
-    loom_serve_http_live_reader_t* reader = &live->readers[index];
-    if (!reader->connection) {
-      continue;
+  iree_host_size_t index = live->cursor;
+  for (iree_host_size_t remaining = live->count; remaining; --remaining) {
+    if (index >= live->count) {
+      index = 0;
     }
+    loom_serve_http_live_reader_t* reader = &live->readers[index];
     if (stopping || loom_serve_http_connection_failed(reader->connection)) {
       loom_serve_http_connection_abort(reader->connection);
-      reader->connection = NULL;
-      --live->count;
+      *reader = live->readers[--live->count];
       *out_progress = true;
       continue;
     }
     if (!quota || !loom_serve_http_connection_can_send(reader->connection)) {
+      ++index;
       continue;
     }
     --quota;
-    live->cursor = (index + 1) % live->capacity;
+    live->cursor = index + 1;
     iree_status_t status = loom_serve_http_live_receive(reader, out_progress);
     const iree_time_t now = iree_time_now();
     const bool sweep =
@@ -331,7 +327,12 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
       reader->connection = NULL;
     }
     if (!reader->connection) {
-      --live->count;
+      // No callback borrows a reader's table address. Keep active records dense
+      // without moving protocol storage or allocating a separate ready list.
+      *reader = live->readers[--live->count];
+      live->cursor = index;
+    } else {
+      ++index;
     }
   }
   return timer_status;

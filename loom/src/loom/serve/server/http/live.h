@@ -27,11 +27,11 @@ iree_status_t loom_serve_http_live_allocate(
     loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
     loom_serve_http_live_t** out_live);
 
-// Upgrades a validated route, consuming the connection on every path. Origin
-// allowlisting is mandatory for browsers; loom.observe.v1 is negotiated when
-// offered by the client.
-// Native clients may omit Origin. Allocation/handshake failures affect only
-// this peer and are recorded through the HTTP diagnostic stream.
+// Upgrades a validated route within the router's shared claim bound, consuming
+// the connection on every path. Origin allowlisting is mandatory for browsers;
+// loom.observe.v1 is negotiated when offered. Native clients may omit Origin.
+// Allocation/handshake failures affect only this peer and are recorded through
+// the HTTP diagnostic stream.
 void loom_serve_http_live_accept(loom_serve_http_live_t* live,
                                  loom_serve_http_connection_t* connection,
                                  const loom_serve_http_request_t* request);
@@ -43,6 +43,7 @@ void loom_serve_http_live_accept(loom_serve_http_live_t* live,
 // small heartbeat settles rates at one hertz for five seconds, then one/minute.
 // No unchanged snapshot traffic or per-reader service sampling. Only timer
 // failure propagates; observation failures cannot fail model execution.
+// Reader visits are bounded by the current reader count, not HTTP capacity.
 iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
                                            bool stopping,
                                            iree_host_size_t quota,
