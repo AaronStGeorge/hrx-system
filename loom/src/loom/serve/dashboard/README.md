@@ -65,6 +65,15 @@ or failing model execution.
 
 The browser retains 512 samples per chart, discards retired model cards, and
 uses the server identity and model incarnation to reset counter baselines.
+Rates use exact counter differences across a five-second rolling window, retaining
+64 counter/time pairs per rate. The first sample at or before the window boundary
+anchors the delta; warm-up uses the available observed duration. Reconnect,
+counter reset, non-increasing time, or a gap longer than the window clears that
+baseline. Rates are never unweighted means of differently sized intervals.
+Serving mix groups recent successful-request rates by modality, independently
+of current active/queued gauges. Short requests can finish between gauge samples;
+a zero current count does not imply zero work over the rate window. Logical KV
+occupancy is token-position accounting, not whole-device or process memory.
 Missing observations produce gaps rather than interpolated work. Rendering
 is sample-driven, pixel ratio is capped at two, and hiding the page releases
 its subscription.

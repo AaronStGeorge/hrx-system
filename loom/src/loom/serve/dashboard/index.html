@@ -4,169 +4,215 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Loom · Live</title>
+    <title>Loom · Serve</title>
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="app.js"></script>
   </head>
   <body>
-    <aside>
-      <a class="brand" href="./" aria-label="Loom live overview"
-        ><span class="mark">≋</span> loom<span class="brand-dot">.</span></a
-      >
-      <div class="section-label">SERVE / OBSERVE</div>
-      <a class="nav active" href="#overview"
-        ><span>◈</span> Overview <span class="nav-arrow">↗</span></a
-      >
-      <a class="nav" href="#models"><span>▧</span> Models</a>
-      <div class="sidebar-bottom">
-        <span class="small-dot"></span> Native. Local. Live.
-        <p>One server. Every modality.</p>
-      </div>
-    </aside>
-    <main id="overview">
+    <main>
       <header>
-        <div class="breadcrumb">LOOM SERVE <span>/</span> OBSERVABILITY</div>
-        <div class="connection">
-          <span id="connection-dot" class="dot"></span
-          ><span id="connection">Connecting</span
-          ><button id="pause" type="button">Pause</button>
+        <a class="brand" href="./">loom<span>/ serve</span></a>
+        <span id="endpoint" class="endpoint">—</span>
+        <div class="controls">
+          <span id="connection-dot" class="dot"></span>
+          <span id="connection">Connecting</span>
+          <button id="pause" type="button">Pause</button>
+          <button
+            id="window"
+            type="button"
+            aria-label="Change chart time range"
+          >
+            30 SEC
+          </button>
+          <time id="clock">—</time>
         </div>
       </header>
-      <section class="intro">
-        <div>
-          <div class="eyebrow">THE PULSE OF YOUR SERVER</div>
-          <h1>Everything in motion<span>.</span></h1>
-          <p>Live work, resident state, and the models making it happen.</p>
-        </div>
-        <div class="clock">
-          <span id="clock">—</span><small>LOCAL TIME</small>
-        </div>
-      </section>
       <div id="notice" role="status" hidden></div>
       <section class="stats" aria-label="Server counters">
         <article class="stat">
-          <div class="stat-label">
-            OUTPUT THROUGHPUT <span class="accent cyan">↗</span>
-          </div>
-          <div class="stat-value">
+          <div class="stat-label">Output throughput <span>5s avg</span></div>
+          <div class="stat-value cyan">
             <strong id="output-rate">—</strong><span>tok/s</span>
           </div>
           <canvas
             id="output-spark"
-            aria-label="Output token rate history"
-          ></canvas
-          ><small>Selected tokens, including EOS</small>
+            aria-label="Rolling output token rate"
+          ></canvas>
+          <small><span id="output-total">—</span> tokens total</small>
+        </article>
+        <article
+          class="stat"
+          title="Tokens consumed by completed model work, including decode input; not only prompt tokens."
+        >
+          <div class="stat-label">Input work <span>5s avg</span></div>
+          <div class="stat-value orange">
+            <strong id="input-rate">—</strong><span>tok/s</span>
+          </div>
+          <canvas
+            id="input-spark"
+            aria-label="Rolling input token work rate"
+          ></canvas>
+          <small><span id="input-total">—</span> tokens total</small>
         </article>
         <article class="stat">
-          <div class="stat-label">
-            COMPLETIONS <span class="accent orange">↗</span>
-          </div>
+          <div class="stat-label">Completions <span>5s avg</span></div>
           <div class="stat-value">
             <strong id="request-rate">—</strong><span>req/s</span>
           </div>
           <canvas
             id="request-spark"
-            aria-label="Successful request rate history"
-          ></canvas
-          ><small
-            ><span id="completed">—</span> successful responses since
-            startup</small
+            aria-label="Rolling successful request rate"
+          ></canvas>
+          <small
+            ><span id="completed">—</span> completed ·
+            <span id="batches">—</span> batches</small
           >
         </article>
-        <article class="stat">
-          <div class="stat-label">
-            ACTIVE REQUESTS <span class="accent violet">◉</span>
-          </div>
-          <div class="stat-value">
+        <article
+          class="stat"
+          title="Current request ownership, not device utilization. Short requests can finish between observations."
+        >
+          <div class="stat-label">Active requests <span>now</span></div>
+          <div class="stat-value violet">
             <strong id="active">—</strong><span>in flight</span>
           </div>
-          <canvas id="active-spark" aria-label="Active request history"></canvas
-          ><small
-            ><span id="queued">—</span> queued · <span id="held">—</span> held
-            for admission</small
+          <canvas
+            id="active-spark"
+            aria-label="Current active request history"
+          ></canvas>
+          <small
+            ><span id="queued">—</span> queued ·
+            <span id="held">—</span> held</small
+          >
+        </article>
+        <article
+          class="stat"
+          title="Resident logical token positions across observed text pools; not physical RAM usage."
+        >
+          <div class="stat-label">KV occupancy <span>now</span></div>
+          <div class="stat-value green">
+            <strong id="kv">—</strong><span>% resident</span>
+          </div>
+          <canvas
+            id="kv-spark"
+            aria-label="Logical KV occupancy history"
+          ></canvas>
+          <small
+            ><span id="kv-resident">—</span> /
+            <span id="kv-capacity">—</span> positions ·
+            <span id="kv-reserved">—</span> reserved</small
           >
         </article>
         <article class="stat">
-          <div class="stat-label">
-            ELASTIC TEXT STATE <span class="accent green">▤</span>
-          </div>
-          <div class="stat-value">
-            <strong id="memory">—</strong><span id="memory-unit">MiB</span>
+          <div class="stat-label">Failed requests <span>total</span></div>
+          <div class="stat-value red">
+            <strong id="errors">—</strong><span>failed</span>
           </div>
           <canvas
-            id="memory-spark"
-            aria-label="Text state committed bytes history"
-          ></canvas
-          ><small>Committed backing · excludes fixed buffers</small>
+            id="error-spark"
+            aria-label="Cumulative failed requests"
+          ></canvas>
+          <small
+            ><span id="rejected">—</span> rejected ·
+            <span id="cancelled">—</span> cancelled</small
+          >
         </article>
       </section>
-      <section class="middle">
-        <article class="panel throughput">
+      <section class="charts" aria-label="Serving histories">
+        <article class="panel">
           <div class="panel-heading">
-            <div>
-              <h2>Token flow</h2>
-              <p>Completed model work · tokens / second</p>
-            </div>
-            <div class="legend">
-              <span class="cyan">●</span> Output
-              <span class="orange">●</span> Input
-              <button
-                class="window"
-                id="window"
-                type="button"
-                aria-label="Change chart time range"
-              >
-                30 SEC
-              </button>
-            </div>
+            <h2>Token throughput</h2>
+            <span class="muted">tok/s · 5s avg</span>
+          </div>
+          <div class="legend">
+            <span class="cyan">● Output</span
+            ><span class="orange">● Input work</span>
           </div>
           <canvas
             id="flow"
-            aria-label="Input and output token throughput history"
+            class="chart"
+            aria-label="Rolling input and output token throughput"
           ></canvas>
           <div class="chart-footer">
             <span>−30s</span><span>−22.5s</span><span>−15s</span
             ><span>−7.5s</span><span>NOW</span>
           </div>
         </article>
-        <article class="panel activity">
+        <article class="panel">
           <div class="panel-heading">
-            <div>
-              <h2>Serving mix</h2>
-              <p>Current request ownership</p>
-            </div>
-            <span class="live-label">LIVE</span>
+            <h2>Request throughput</h2>
+            <span class="muted">req/s · 5s avg</span>
           </div>
-          <div id="mix" class="mix">
-            <p class="empty">Waiting for model observations.</p>
+          <div class="legend">
+            <span class="orange">● Successful completions</span>
           </div>
-          <div class="activity-note">
-            Activity is scheduler ownership, not GPU utilization. Preparation
-            and output encoding can also be active.
+          <canvas
+            id="request-flow"
+            class="chart"
+            aria-label="Rolling successful request throughput"
+          ></canvas>
+          <div class="chart-footer">
+            <span>−30s</span><span>−22.5s</span><span>−15s</span
+            ><span>−7.5s</span><span>NOW</span>
+          </div>
+        </article>
+        <article
+          class="panel"
+          title="Point-in-time samples can miss requests that finish between observations."
+        >
+          <div class="panel-heading">
+            <h2>Request activity</h2>
+            <span class="muted">sampled now</span>
+          </div>
+          <div class="legend">
+            <span class="violet">● Active</span
+            ><span class="orange">● Queued + held</span>
+          </div>
+          <canvas
+            id="activity-flow"
+            class="chart"
+            aria-label="Current active and waiting requests"
+          ></canvas>
+          <div class="chart-footer">
+            <span>−30s</span><span>−22.5s</span><span>−15s</span
+            ><span>−7.5s</span><span>NOW</span>
           </div>
         </article>
       </section>
-      <section id="models">
-        <div class="models-heading">
-          <div>
-            <div class="eyebrow">SOURCE BY SOURCE</div>
-            <h2>The model floor <span id="model-count">0</span></h2>
+      <section class="sources">
+        <div id="models">
+          <div class="models-heading">
+            <h2>Models <span id="model-count">0</span></h2>
+            <span class="muted"
+              >Rates: 5s avg · counts: now or lifetime totals</span
+            >
           </div>
-          <span class="muted">Independent lifetimes. Shared view.</span>
-        </div>
-        <div id="model-grid" class="model-grid">
-          <div class="panel empty">
-            No model observations yet. Registered models appear here
-            automatically.
+          <div id="model-grid" class="model-grid">
+            <div class="panel empty">Waiting for models.</div>
           </div>
         </div>
+        <article class="panel activity">
+          <div class="panel-heading">
+            <h2>Serving mix</h2>
+            <span class="muted">req/s · 5s avg</span>
+          </div>
+          <div id="mix" class="mix">
+            <p class="empty">Waiting for models.</p>
+          </div>
+          <div class="cache-summary">
+            <h2>Text cache</h2>
+            <dl>
+              <dt>Cached sessions</dt>
+              <dd id="cached-sessions">—</dd>
+              <dt>Cached prefixes</dt>
+              <dd id="cached-prefixes">—</dd>
+            </dl>
+          </div>
+        </article>
       </section>
       <footer>
-        <span
-          ><span class="small-dot"></span>
-          <span id="endpoint">Same-origin live feed</span></span
-        ><span id="delivery">Bounded history · no persistent storage</span
-        ><span id="freshness">Awaiting first sample</span>
+        <span id="freshness">Awaiting first sample</span
+        ><span id="delivery">—</span>
       </footer>
     </main>
   </body>

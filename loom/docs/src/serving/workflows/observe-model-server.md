@@ -22,11 +22,15 @@ loom-serve --device=task --pool_backing=fixed \
 
 The dashboard is embedded in the executable: no frontend installation,
 external assets, database, or second listener. Models appear as they register.
-Token and completion rates, active requests, per-model sparklines, logical KV
-occupancy, and source-defined numeric observations come from the running
-services. Elastic text-state bytes exclude fixed buffers, weights, and
-workspace; they are not whole-device memory usage. A modality without a
-particular observation leaves it unavailable rather than inventing a value.
+Token and completion rates use a five-second rolling window, with the available
+observed duration during warm-up. Serving mix shows recent completions by
+modality. Active and queued requests remain current samples: short requests can
+finish between observations even while throughput is nonzero. Per-model
+sparklines, logical KV occupancy, cache counts, and expandable source counters
+come from the running services. Logical KV positions are not physical RAM usage;
+elastic text-state bytes exclude fixed buffers, weights, and workspace. A modality
+without a particular observation leaves it unavailable rather than inventing a
+value.
 
 The browser retains a fixed history and redraws canvas plots as samples arrive.
 The chart's time-range button switches between 30 seconds and two minutes.
