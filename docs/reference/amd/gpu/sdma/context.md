@@ -216,6 +216,12 @@ address. Thus access width, process-relative ID, BAR DWORD index and encoded
 byte offset are distinct quantities. [Doorbell selection][doorbell-owner]
 [Index conversion][doorbell-index]
 
+On GC 9.4.3, 9.4.4, and 9.5.0, shader-originated notifications additionally
+require the assigned index's 32-byte routing block to belong to the intended
+engine. KFD's corrected allocator aligns the engine base before assigning
+queue slots. The [shader-routing description](device-publication.md#shader-routing-on-gc-943-944-and-950)
+distinguishes this requirement from CPU notification and GPUVM accessibility.
+
 Linux describes `sdma_phase_quantum` in units of 1K GPU clock cycles, with
 default 32 and zero meaning no change. The MQD builder itself always stores
 the masked field value, including zero. This SDMA context-switch phase

@@ -83,6 +83,27 @@ every peer notification PTE. Same-GPU reach, peer payload reach and peer
 doorbell reach are separate mapping questions.
 [Peer route and attachment][peer-attachment] [Attachment flags][peer-flags]
 
+### Shader routing on GC 9.4.3, 9.4.4, and 9.5.0
+
+These GC IPs route shader-originated notifications by the containing 32-byte
+block: four eight-byte doorbell indices. Their native engine ranges begin at
+QWORD index `0x100 + 10 * physical_engine`. An odd engine's first two indices
+share a routing block with the preceding engine and reach that engine instead.
+CPU-originated notifications are unaffected. [Routing defect and repair][routing-fix]
+
+KFD assigns each queue `engine_base + (queue_slot >> 1)`, with another 512
+indices for odd queue slots. The corrected allocator rounds `engine_base`
+up to four indices first. For engine 1, the first mirror changes from indices
+266–269 to 268–271; the second mirror has the same alignment. Each engine
+uses four of its ten indices, leaving room for this adjustment.
+[Corrected allocator][routing-allocator]
+
+The assigned address belongs to the native queue. Rounding a shader's address
+alone changes which doorbell it writes without changing the queue's installed
+selection. Successful GPUVM mapping or CPU notification therefore does not
+establish a valid shader notification route. The actual assignment and routing
+rule determine that independently of the command-memory release sequence.
+
 ## Command memory and pre-WPTR visibility
 
 XIO's device-producer ring allocation requests nonpaged, host-accessible,
@@ -268,3 +289,5 @@ permission to notify another device's queue.
 [pte11]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdgpu/gmc_v11_0.c#L468-L512
 [pte12]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdgpu/gmc_v12_0.c#L507-L548
 [copy-contract]: https://github.com/ROCm/rocm-systems/blob/8d57824901ffa7d961c00a37d055a108723b93ca/projects/rocr-runtime/runtime/hsa-runtime/inc/hsa_ext_amd.h#L2090-L2153
+[routing-fix]: https://github.com/torvalds/linux/commit/f145d5b3f740de05d85257acdc82f6877180f5c6
+[routing-allocator]: https://github.com/torvalds/linux/blob/f145d5b3f740de05d85257acdc82f6877180f5c6/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c#L575-L600
