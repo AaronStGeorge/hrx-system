@@ -552,6 +552,10 @@ jobs:
       - name: Check Windows host capabilities
         shell: powershell
         run: |
+          Get-CimInstance Win32_ComputerSystem -ErrorAction Stop |
+            Format-List Manufacturer, Model, NumberOfProcessors, NumberOfLogicalProcessors, TotalPhysicalMemory
+          Get-CimInstance Win32_Processor -ErrorAction Stop |
+            Format-Table Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed -AutoSize
           $fileSystemPolicy = Get-Item -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -ErrorAction Stop
           Write-Output "LongPathsEnabled=$($fileSystemPolicy.GetValue('LongPathsEnabled', '<unset>'))"
           python build_tools/bazel/configure.py --check-windows-host
@@ -594,11 +598,18 @@ jobs:
             Out-File -FilePath .bazelrc.local -Encoding ascii -Append
           "common --repository_cache=$env:IREE_CI_BAZEL_REPOSITORY_CACHE" |
             Out-File -FilePath .bazelrc.local -Encoding ascii -Append
+          if ("${{ matrix.kind }}" -eq "repository") {
+            # The Azure runner pod reserves 40 CPUs, while Windows exposes all
+            # 48 or 96 logical processors on its Kubernetes node. Keep one
+            # repository job from scheduling work against another pod's CPUs.
+            "build --jobs=40" |
+              Out-File -FilePath .bazelrc.local -Encoding ascii -Append
+          }
           if ("${{ matrix.kind }}" -eq "repository" -and
               "${{ matrix.host_toolchain }}" -eq "msvc") {
             # MSVC repository tests need process-launch headroom; bound test
             # actions independently while builds retain the full pool.
-            "test --local_test_jobs=HOST_CPUS*.875" |
+            "test --local_test_jobs=35" |
               Out-File -FilePath .bazelrc.local -Encoding ascii -Append
           }
           if ("${{ matrix.host_toolchain }}" -eq "msvc") {
