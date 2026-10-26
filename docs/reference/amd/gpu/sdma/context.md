@@ -289,6 +289,15 @@ separate [command-buffer chapter](command-buffers.md) explains SDMA IB
 execution; an application IB does not perform this native context installation.
 [Run-list owner][runlist] [Unmap and completion][unmap-hws]
 
+The v9 `MAP_QUEUES` builder supplies the SDMA engine selection, doorbell offset,
+MQD address, and process WPTR address as separate packet fields. The firmware
+therefore receives a way to inspect published work independently of a doorbell
+write. This packet layout does not define when firmware rereads WPTR or promise
+that it will rescue a missed notification. The v9 MQD initializer zeroes the
+descriptor, and its update routine does not enable WPTR polling in
+`sdmax_rlcx_rb_wptr_poll_cntl`. Neither source establishes periodic polling
+for every active SDMA queue. [v9 map packet][map9] [v9 MQD policy][mqd9]
+
 Linux discovery enables MES for GC11.0.0–11.0.4, GC11.5.0–11.5.4,
 GC11.5.6, GC11.7.0/11.7.1, GC12.0.0/12.0.1 and GC12.1.0 in the cited
 switch. KFD's shared resources carry that selected `enable_mes` value.
@@ -442,6 +451,7 @@ retains every object, nor that it completed the application's transfers.
 [mes121]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdgpu/mes_v12_1.c#L289-L348
 [remove-mes]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c#L284-L329
 [runlist]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c#L99-L287
+[map9]: https://github.com/ROCm/amdgpu/blob/e5865b4307629a6ad1e44fe2343be68b08818915/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c#L227-L300
 [unmap-hws]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c#L2650-L2726
 [destroy-hws]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c#L2793-L2896
 [mqd-allocation]: https://github.com/torvalds/linux/blob/50d05c7c76c96b90462f24debacca971d2e86713/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager.c#L65-L98

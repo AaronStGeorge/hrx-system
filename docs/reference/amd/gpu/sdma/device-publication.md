@@ -104,6 +104,26 @@ selection. Successful GPUVM mapping or CPU notification therefore does not
 establish a valid shader notification route. The actual assignment and routing
 rule determine that independently of the command-memory release sequence.
 
+The correction is present in Linux stable 7.2.11 and 6.12.113. The separate
+ROCm driver tree at the shared `rocm-7.2.3` / `rocm-7.2.4` revision still uses
+the unaligned assignment. These are source identities, not interchangeable
+version thresholds: a separately installed AMDGPU/KFD module has its own
+patch history. [Stable 7.2 backport][routing-stable72]
+[Stable 6.12 backport][routing-stable612] [ROCm allocator][routing-rocm]
+
+The native assignment also participates in checkpoint restore. KFD compares
+the saved doorbell ID with the newly calculated ID and rejects a mismatch
+with `-EINVAL`. An old checkpoint retaining an affected odd-engine address
+cannot be accepted merely by changing the allocator: the restored process
+would still hold its old notification address. [Restore consequence][routing-fix]
+
+Queue completion does not identify how work was discovered. The CP scheduler's
+`MAP_QUEUES` packet carries the WPTR address separately from the doorbell
+selection, while manual installation reads the current WPTR before enabling
+the ring. These are independent WPTR observers; their existence does not
+establish a periodic-polling guarantee or validate a shader notification route.
+[Installation and WPTR consumers](context.md#installation-and-write-pointer-consumers)
+
 ## Command memory and pre-WPTR visibility
 
 XIO's device-producer ring allocation requests nonpaged, host-accessible,
@@ -291,3 +311,6 @@ permission to notify another device's queue.
 [copy-contract]: https://github.com/ROCm/rocm-systems/blob/8d57824901ffa7d961c00a37d055a108723b93ca/projects/rocr-runtime/runtime/hsa-runtime/inc/hsa_ext_amd.h#L2090-L2153
 [routing-fix]: https://github.com/torvalds/linux/commit/f145d5b3f740de05d85257acdc82f6877180f5c6
 [routing-allocator]: https://github.com/torvalds/linux/blob/f145d5b3f740de05d85257acdc82f6877180f5c6/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c#L575-L600
+[routing-stable72]: https://cdn.kernel.org/pub/linux/kernel/v7.x/ChangeLog-7.2.11
+[routing-stable612]: https://cdn.kernel.org/pub/linux/kernel/v6.x/ChangeLog-6.12.113
+[routing-rocm]: https://github.com/ROCm/amdgpu/blob/e5865b4307629a6ad1e44fe2343be68b08818915/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c#L474-L497
