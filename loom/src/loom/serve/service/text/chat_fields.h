@@ -54,10 +54,6 @@ iree_status_t loom_serve_text_chat_fields_read(
 iree_status_t loom_serve_text_chat_required(
     const loom_serve_text_chat_field_t* field);
 
-// Function and XML parameter names use literal ASCII identifiers of 1..128
-// bytes, consisting of letters, digits, underscores, hyphens, and periods.
-bool loom_serve_text_chat_is_identifier(iree_string_view_t name);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

@@ -89,17 +89,6 @@ iree_status_t loom_serve_text_chat_policy_initialize(
 void loom_serve_text_chat_policy_deinitialize(
     loom_serve_text_chat_policy_t* policy);
 
-// Creates the optional tools.parse_xml(schemas, text) -> buffer capability.
-// Both inputs are UTF-8 buffers. The result is a JSON array of standard
-// function tool calls, with JSON-encoded argument strings and no assigned IDs.
-// The codec validates declared names and scalar/container parameter types.
-// Source explicitly selects this grammar by importing it; native chat handling
-// consumes only the returned function records. The environment outlives the
-// module and every returned buffer.
-iree_status_t loom_serve_text_chat_tools_module_create(
-    iree_vm_environment_t* environment, iree_allocator_t host_allocator,
-    iree_vm_module_t** out_module);
-
 // Source input format. Rendered text passes through unchanged; user content
 // receives one user envelope and the assistant generation prefix.
 typedef enum loom_serve_text_chat_input_format_e {

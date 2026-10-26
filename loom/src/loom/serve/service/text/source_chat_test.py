@@ -196,7 +196,7 @@ class RequestTest(unittest.TestCase):
             ),
             self.request(
                 tools=[
-                    {"type": "function", "function": {"name": "read", "parameters": {}}}
+                    {"type": "function", "function": {"name": "read", "strict": True}}
                 ]
             ),
             self.request(enable_thinking=True).replace(

@@ -17,19 +17,18 @@ extern "C" {
 // allocated only for the declarations present in a request.
 #define LOOM_SERVE_TEXT_CHAT_MAX_TOOL_COUNT 4096
 
-// Indexed function-tool schema borrowing the request body. Names are literal
-// ASCII identifiers. The optional XML codec uses property types to recover
-// generated JSON values; the agent owns execution and full schema validation.
+// Indexed function declaration. Parameter schemas remain opaque to the request
+// boundary; a model-selected codec may consult them for representation hints.
 typedef struct loom_serve_text_chat_tool_t {
-  // Literal function name, without JSON quotes.
+  // Decoded function name, borrowing the request unless it contains escapes.
   iree_string_view_t name;
-  // JSON object mapping parameter names to schemas.
-  iree_string_view_t properties;
-  // JSON array of required parameter names, or empty when absent.
-  iree_string_view_t required;
+  // Opaque parameter schema object, or empty when absent or null.
+  iree_string_view_t parameters;
+  // Owned name bytes only when JSON decoding required storage.
+  char* name_storage;
 } loom_serve_text_chat_tool_t;
 
-// Validated schema index owning descriptors and borrowing caller-owned JSON.
+// Function-envelope index owning descriptors and borrowing caller-owned JSON.
 // Sorting descriptors for lookup never changes the original declaration order
 // observed by source rendering.
 typedef struct loom_serve_text_tool_schemas_t {
@@ -39,7 +38,7 @@ typedef struct loom_serve_text_tool_schemas_t {
   iree_host_size_t count;
   // Allocated descriptor capacity.
   iree_host_size_t capacity;
-  // Validated descriptors sorted by literal function name.
+  // Function envelopes sorted by decoded function name.
   loom_serve_text_chat_tool_t* values;
 } loom_serve_text_tool_schemas_t;
 

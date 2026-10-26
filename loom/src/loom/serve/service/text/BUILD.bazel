@@ -384,22 +384,69 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "chat_fields",
+    srcs = ["chat_fields.c"],
+    hdrs = ["chat_fields.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+    ],
+)
+
+loom_cc_library(
+    name = "tool_schemas",
+    srcs = ["tool_schemas.c"],
+    hdrs = ["tool_schemas.h"],
+    deps = [
+        ":chat_fields",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+    ],
+)
+
+loom_cc_library(
+    name = "tool_xml",
+    srcs = ["tool_xml.c"],
+    hdrs = ["tool_xml.h"],
+    deps = [
+        ":tool_schemas",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/base/internal:unicode",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "tool_xml_test",
+    srcs = ["tool_xml_test.cc"],
+    deps = [
+        ":tool_xml",
+        "//loom/src/loom/serve/runtime/program",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
     name = "chat",
     srcs = [
         "chat.c",
-        "chat_fields.c",
         "media.c",
         "tool_calls.c",
-        "tool_schemas.c",
     ],
     hdrs = [
         "chat.h",
-        "chat_fields.h",
         "media.h",
         "tool_calls.h",
-        "tool_schemas.h",
     ],
     deps = [
+        ":chat_fields",
+        ":tool_schemas",
         "//loom/src/loom/serve/media:digest",
         "//loom/src/loom/serve/media:image",
         "//loom/src/loom/serve/runtime/program",
@@ -428,11 +475,9 @@ loom_cc_test(
     srcs = ["chat_test.cc"],
     deps = [
         ":chat",
-        "//loom/src/loom/serve/runtime/program",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-        "//runtime/src/iree/vm",
     ],
 )
 
@@ -478,7 +523,7 @@ loom_cc_test(
     name = "tool_schemas_test",
     srcs = ["tool_schemas_test.cc"],
     deps = [
-        ":chat",
+        ":tool_schemas",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -605,6 +650,7 @@ loom_cc_library(
         ":epoch_upload",
         ":packing",
         ":storage",
+        ":tool_xml",
         "//loom/binding/c:loomc",
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",

@@ -317,6 +317,7 @@ loom_cc_library(
     loom::serve::runtime::program::json
     loom::serve::runtime::program::sources
     loom::serve::service::text::chat
+    loom::serve::service::text::tool_xml
   TESTONLY
   PUBLIC
 )

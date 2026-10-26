@@ -18,7 +18,7 @@ CONTROL = Path(sys.argv.pop(1)).resolve()
 
 
 class ToolPolicyTest(unittest.TestCase):
-    def execute(self, calls, stream=True, messages=None):
+    def execute(self, calls, stream=True, messages=None, tools=None):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             tokenizer = directory / "tokenizer.json"
@@ -41,7 +41,9 @@ class ToolPolicyTest(unittest.TestCase):
                         "model": "portable-chat",
                         "messages": messages or [{"role": "user", "content": "hello"}],
                         "stream": stream,
-                        "tools": [
+                        "tools": tools
+                        if tools is not None
+                        else [
                             {
                                 "type": "function",
                                 "function": {
@@ -64,6 +66,7 @@ class ToolPolicyTest(unittest.TestCase):
                     f"--tokenizer={tokenizer}",
                     f"--request={request}",
                     f"--response={response}",
+                    "--response_chunk_size=7",
                 ],
                 capture_output=True,
                 text=True,
@@ -120,6 +123,103 @@ class ToolPolicyTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stdout, "")
                 self.assertIn("INVALID_ARGUMENT", result.stderr)
+
+    def test_argument_strings_are_opaque_to_the_protocol(self):
+        calls = [
+            self.call("unknown_tool", '{"q":"where?"}'),
+            self.call(arguments='{"path":"one","path":"two"}'),
+            self.call(arguments='{"path":'),
+        ]
+        for stream in (False, True):
+            with self.subTest(stream=stream):
+                result = self.execute(json.dumps(calls), stream=stream)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                value = json.loads(result.stdout)
+                self.assertEqual(
+                    [call["function"] for call in value["tool_calls"]],
+                    [call["function"] for call in calls],
+                )
+                self.assertFalse(value["reusable"])
+
+    def test_harness_repairs_read_without_replaying_completed_image(self):
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "parameters": {
+                        "$defs": {"path": {"type": "string"}},
+                        "properties": {
+                            "path": {"$ref": "#/$defs/path"},
+                            "offset": {
+                                "anyOf": [{"type": "integer"}, {"type": "null"}]
+                            },
+                        },
+                        "required": ["path"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {"type": "function", "function": {"name": "generate_image"}},
+        ]
+        image = {
+            "id": "call_previous_0",
+            **self.call("generate_image", '{"prompt":"CI dashboard"}'),
+        }
+        for stream in (False, True):
+            with self.subTest(stream=stream):
+                messages = [
+                    {
+                        "role": "user",
+                        "content": "Generate a dashboard, then read its CSS.",
+                    },
+                    {"role": "assistant", "content": None, "tool_calls": [image]},
+                    {
+                        "role": "tool",
+                        "tool_call_id": image["id"],
+                        "content": '{"image":"already-created.png"}',
+                    },
+                ]
+                result = self.execute(
+                    json.dumps([self.call(arguments='{"q":"styles.css"}')]),
+                    stream=stream,
+                    messages=messages,
+                    tools=tools,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                failed_call = json.loads(result.stdout)["tool_calls"][0]
+                failed_call.pop("index", None)
+                messages.extend(
+                    [
+                        {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [failed_call],
+                        },
+                        {
+                            "role": "tool",
+                            "tool_call_id": failed_call["id"],
+                            "content": "Invalid arguments for read: missing required property path",
+                        },
+                    ]
+                )
+                corrected = self.call(arguments='{"path":"styles.css"}')
+                result = self.execute(
+                    json.dumps([corrected]),
+                    stream=stream,
+                    messages=messages,
+                    tools=tools,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                value = json.loads(result.stdout)
+                self.assertEqual(len(value["tool_calls"]), 1)
+                self.assertEqual(
+                    value["tool_calls"][0]["function"], corrected["function"]
+                )
+                self.assertEqual(value["prompt"].count("generate_image:"), 1)
+                self.assertIn("already-created.png", value["prompt"])
+                self.assertIn('read: {"q":"styles.css"}', value["prompt"])
+                self.assertIn("missing required property path", value["prompt"])
 
     def test_history_and_generated_calls_share_decoded_function_fields(self):
         call = {"id": "call_1_0", **self.call(arguments="{}")}

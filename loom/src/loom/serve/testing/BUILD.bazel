@@ -267,6 +267,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/program:json",
         "//loom/src/loom/serve/runtime/program:sources",
         "//loom/src/loom/serve/service/text:chat",
+        "//loom/src/loom/serve/service/text:tool_xml",
         "//runtime/src/iree/base",
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/tokenizer",
