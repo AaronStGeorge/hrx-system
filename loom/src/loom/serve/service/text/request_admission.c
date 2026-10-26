@@ -372,8 +372,8 @@ static iree_status_t loom_serve_text_prepare_media(
       return iree_ok_status();
     }
     if (!service->image) {
-      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                              "model has no image component");
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "model does not accept image input");
     }
     IREE_RETURN_IF_ERROR(loom_serve_text_media_request_allocate(
         &pending->chat, service->host_allocator, &pending->media));

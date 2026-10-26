@@ -89,7 +89,7 @@ static iree_status_t loom_serve_text_chat_content_record(
     uint32_t display_height, loom_serve_text_chat_image_detail_t detail) {
   if (content->count >= LOOM_SERVE_TEXT_CHAT_MAX_CONTENT_PART_COUNT) {
     return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
+        IREE_STATUS_INVALID_ARGUMENT,
         "chat messages support at most %d ordered content parts",
         LOOM_SERVE_TEXT_CHAT_MAX_CONTENT_PART_COUNT);
   }
@@ -133,7 +133,7 @@ static iree_status_t loom_serve_text_chat_image_part(
     loom_serve_text_chat_content_t* content, iree_host_size_t content_ordinal,
     iree_string_view_t value) {
   if (content->message_ordinal > UINT32_MAX || content_ordinal > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "chat content ordinal exceeds 32 bits");
   }
   if (!content->chat->policy->images.maximum_count) {
@@ -143,7 +143,7 @@ static iree_status_t loom_serve_text_chat_image_part(
   if (content->chat->images.count >=
       content->chat->policy->images.maximum_count) {
     return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
+        IREE_STATUS_INVALID_ARGUMENT,
         "chat request supports at most %zu image occurrences",
         content->chat->policy->images.maximum_count);
   }
@@ -215,14 +215,14 @@ static iree_status_t loom_serve_text_chat_ordered_content_part(
                               "text content parts cannot contain image_url");
     }
     if (content->text->size > UINT32_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "decoded chat content exceeds 4 GiB");
     }
     const uint32_t offset = (uint32_t)content->text->size;
     IREE_RETURN_IF_ERROR(
         loom_serve_text_chat_append_decoded(content->text, fields[1].value));
     if (content->text->size > UINT32_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "decoded chat content exceeds 4 GiB");
     }
     const iree_host_size_t length = content->text->size - offset;

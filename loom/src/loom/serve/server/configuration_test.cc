@@ -576,6 +576,22 @@ TEST_F(ConfigurationTest, RequiredProgramsAndPublicNamesRejectBeforeIo) {
   }
 }
 
+TEST_F(ConfigurationTest, MissingDefinitionNamesTheRequiredObject) {
+  for (
+      const char* json : {
+          R"({"name":"speaker"})",
+          R"({"name":"speaker","model":{"path":"unread.json","preset":"streaming"}})",
+      }) {
+    iree::Status status(Parse(json));
+    EXPECT_EQ(status.code(), iree::StatusCode::kInvalidArgument);
+    EXPECT_NE(status.ToString().find("model requires 'definition' object"),
+              std::string::npos)
+        << status.ToString();
+    EXPECT_EQ(model_.name.data, nullptr);
+    EXPECT_EQ(model_.sources.values, nullptr);
+  }
+}
+
 TEST_F(ConfigurationTest,
        TextDefaultsAndSpecializationsRemainModelIndependent) {
   IREE_ASSERT_OK(Parse(Text()));

@@ -50,7 +50,7 @@ static iree_status_t loom_serve_media_image_data_url_decode(
           sizeof("data:image/x-portable-arbitrarymap;base64,") - 1,
           &maximum_data_url_length) ||
       data_url_length > maximum_data_url_length) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "image data URL exceeds the compressed byte bound");
   }
   if (!data_url_length) {
@@ -99,7 +99,7 @@ static iree_status_t loom_serve_media_image_data_url_decode(
     if (!decoded_length || decoded_length == IREE_HOST_SIZE_MAX ||
         decoded_length > maximum_length) {
       status = iree_make_status(
-          IREE_STATUS_RESOURCE_EXHAUSTED,
+          IREE_STATUS_INVALID_ARGUMENT,
           "compressed image must contain between 1 and %" PRIhsz " bytes",
           maximum_length);
     }
@@ -144,7 +144,7 @@ static iree_status_t loom_serve_media_image_inspect_compressed(
     if (!out_info->width || !out_info->height ||
         out_info->width > limits->width || out_info->height > limits->height ||
         pixel_count > limits->pixels) {
-      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "image geometry %" PRIu32 "x%" PRIu32
                                 " exceeds the configured bound",
                                 out_info->width, out_info->height);
@@ -152,7 +152,7 @@ static iree_status_t loom_serve_media_image_inspect_compressed(
   }
   if (iree_status_is_ok(status)) {
     if (pixel_count > IREE_HOST_SIZE_MAX / out_info->pixel_format) {
-      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                                 "image pixel storage size overflow");
     }
   }

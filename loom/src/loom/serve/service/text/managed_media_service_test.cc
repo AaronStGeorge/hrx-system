@@ -411,6 +411,64 @@ TEST_P(ManagedMediaServiceTest, FailedImageWarmupLeavesTextAvailable) {
   EXPECT_FALSE(http_.failed());
 }
 
+TEST_P(ManagedMediaServiceTest, InvalidInputsPreserveHealthAndServingPeers) {
+  if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
+    return;
+  }
+  ASSERT_NO_FATAL_FAILURE(Register());
+  ASSERT_NO_FATAL_FAILURE(Control("undrain"));
+  ASSERT_EQ(
+      Read(Send(Declaration("peer", directory_), "", "/v1/models/register"))
+          .find("HTTP/1.1 202"),
+      0u);
+  const auto image =
+      ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b");
+  std::string five_images = image;
+  for (size_t i = 1; i < 5; ++i) {
+    five_images += "," + image;
+  }
+  // Inspecting an excessive geometry must reject before raster allocation.
+  const char* wide =
+      "UDcKV0lEVEggNDA5NwpIRUlHSFQgMQpERVBUSCAzCk1BWFZBTCAyNTUKVFVQ"
+      "TFRZUEUgUkdCCkVOREhEUgr/AAA=";
+  const auto wide_image =
+      ImageMessage("a", "image/x-portable-arbitrarymap", wide, "low", "b");
+  auto unsupported_image = Request(image, 4);
+  unsupported_image.replace(unsupported_image.find("fixture-text"),
+                            sizeof("fixture-text") - 1, "peer");
+  auto peer_request = Request(Message("user", "xbab"), 4);
+  peer_request.replace(peer_request.find("fixture-text"),
+                       sizeof("fixture-text") - 1, "peer");
+  for (const auto& [body, diagnostic] :
+       std::vector<std::pair<std::string, const char*>>{
+           {Request(five_images, 4), "at most 4 image occurrences"},
+           {Request(wide_image, 4), "image geometry 4097x1"},
+           {unsupported_image, "model does not accept image input"},
+       }) {
+    SCOPED_TRACE(diagnostic);
+    const int peer = Send(peer_request);
+    const auto rejected = Read(Send(body));
+    EXPECT_EQ(rejected.find("HTTP/1.1 400"), 0u) << rejected;
+    EXPECT_NE(rejected.find(diagnostic), std::string::npos) << rejected;
+    EXPECT_EQ(Content(Read(peer)), Oracle::Complete("xbab", 4));
+    EXPECT_EQ(Read(Send("", "", "/healthz", "GET")).find("HTTP/1.1 200"), 0u);
+    EXPECT_EQ(Content(Read(Send(Request(Message("user", "abxa"), 4)))),
+              Oracle::Complete("abxa", 4));
+  }
+  const auto missing = Read(Send(
+      R"({"name":"broken","model":{"path":"unread.json","preset":"streaming"}})",
+      "", "/v1/models/register"));
+  EXPECT_EQ(missing.find("HTTP/1.1 400"), 0u) << missing;
+  EXPECT_NE(missing.find("model requires 'definition' object"),
+            std::string::npos)
+      << missing;
+  EXPECT_EQ(Read(Send("", "", "/healthz", "GET")).find("HTTP/1.1 200"), 0u);
+  EXPECT_EQ(Content(Read(Send(peer_request))), Oracle::Complete("xbab", 4));
+  EXPECT_EQ(Content(Read(Send(Request(Message("user", "abxa"), 4)))),
+            Oracle::Complete("abxa", 4));
+  EXPECT_FALSE(http_.failed());
+}
+
 TEST_P(ManagedMediaServiceTest, ComponentSelectorsValidateTheDeclaredBoundary) {
   ASSERT_NO_FATAL_FAILURE(Register());
   for (const char* fields : {R"("component":"missing")", R"("component":0)",
