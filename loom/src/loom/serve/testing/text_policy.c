@@ -10,6 +10,7 @@
 #include "loom/model/card.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
+#include "loom/serve/service/text/tool_xml.h"
 #include "loomc/iree.h"
 #include "loomc/target/vm.h"
 
@@ -88,7 +89,7 @@ iree_status_t loom_serve_test_text_policy_allocate(
                                            &libraries[1]);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_text_chat_tools_module_create(
+    status = loom_serve_text_tool_xml_module_create(
         policy->environment, host_allocator, &libraries[2]);
   }
   const iree_string_view_t roots[] = {

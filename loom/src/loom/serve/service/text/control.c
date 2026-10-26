@@ -13,6 +13,7 @@
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
 #include "loom/serve/service/text/epoch_plan.h"
+#include "loom/serve/service/text/tool_xml.h"
 
 iree_status_t loom_serve_text_control_initialize(
     const loom_serve_text_source_t* source, loom_serve_execution_t* execution,
@@ -116,7 +117,7 @@ iree_status_t loom_serve_text_control_initialize(
         source->parameter_sources, host_allocator, &libraries[3]);
   }
   if (iree_status_is_ok(status) && generates) {
-    status = loom_serve_text_chat_tools_module_create(
+    status = loom_serve_text_tool_xml_module_create(
         source->environment, host_allocator, &libraries[4]);
   }
   if (iree_status_is_ok(status)) {
