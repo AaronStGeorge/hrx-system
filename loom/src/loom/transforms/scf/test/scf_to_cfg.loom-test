@@ -1,5 +1,64 @@
 // RUN: pass scf-to-cfg
 
+func.def @lowers_callable_exit(%done: i1, %value: i32) -> (i32) {
+  func.exit %done : i1 {
+    %returned = test.addi %value, %value : i32
+    func.return %returned : i32
+  }
+  %fallthrough = test.addi %value, %value : i32
+  func.return %fallthrough : i32
+}
+
+// ----
+func.def @lowers_callable_exit(%done: i1, %value: i32) -> (i32) {
+  cfg.cond_br %done, ^_bb1, ^_bb2
+^_bb1:
+  %returned = test.addi %value, %value : i32
+  func.return %returned : i32
+^_bb2:
+  %fallthrough = test.addi %value, %value : i32
+  func.return %fallthrough : i32
+}
+
+// ====
+
+func.def @lowers_callable_exit_from_counted_loop(%limit: index, %fallback: i32) -> (i32) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  scf.for %index = [%c0 to %limit step %c1] {
+    %found = index.cmp eq, %index, %c0 : index
+    func.exit %found : i1 {
+      %returned = index.cast %index : index to i32
+      func.return %returned : i32
+    }
+  }
+  func.return %fallback : i32
+}
+
+// ----
+func.def @lowers_callable_exit_from_counted_loop(%limit: index, %fallback: i32) -> (i32) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  cfg.br ^_bb1(%c0: index)
+^_bb1(%8: index):
+  %10 = index.cmp slt, %8, %limit : index
+  cfg.cond_br %10, ^_bb2, ^_bb5
+^_bb2:
+  %index = index.assume %8 [range(%8, 0, 9223372036854775806), lt(%8, %limit)] : index
+  %found = index.cmp eq, %index, %c0 : index
+  cfg.cond_br %found, ^_bb3, ^_bb4
+^_bb3:
+  %returned = index.cast %index : index to i32
+  func.return %returned : i32
+^_bb4:
+  %11 = index.add %index, %c1 : index
+  cfg.br ^_bb1(%11: index)
+^_bb5:
+  func.return %fallback : i32
+}
+
+// ====
+
 func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
   %result = scf.if %cond -> (i32) {
     %then = test.addi %a, %b : i32

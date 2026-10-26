@@ -392,7 +392,8 @@ enum {
   LOOM_OP_FUNC_CALL = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 2),
   LOOM_OP_FUNC_RETURN = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 3),
   LOOM_OP_FUNC_LOCATION = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 4),
-  LOOM_OP_FUNC_COUNT_ = 5,
+  LOOM_OP_FUNC_EXIT = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 5),
+  LOOM_OP_FUNC_COUNT_ = 6,
 };
 
 // Symbol visibility. Absent (0) means private (module-internal).
@@ -627,6 +628,22 @@ iree_status_t loom_func_location_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_func_location_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_FUNC_EXIT: Conditionally return from the nearest enclosing function or kernel body. The exit region uses the return terminator declared by that body and evaluates only when the condition is true.
+// func.exit %done : i1 {
+//   func.return
+// }
+LOOM_DEFINE_ISA(loom_func_exit_isa, LOOM_OP_FUNC_EXIT)
+LOOM_DEFINE_OPERAND(loom_func_exit_condition, 0)
+LOOM_DEFINE_REGION(loom_func_exit_body, 0)
+iree_status_t loom_func_exit_build(
+    loom_builder_t* builder,
+    loom_value_id_t condition,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_func_exit_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

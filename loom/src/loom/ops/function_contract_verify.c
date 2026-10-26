@@ -401,6 +401,72 @@ iree_status_t loom_function_call_contract_verify(
                                                        &boundary, emitter);
 }
 
+iree_status_t loom_function_exit_contract_verify(
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_op_t* exit_op, iree_diagnostic_emitter_t emitter) {
+  IREE_ASSERT(loom_func_like_isa(function));
+  if (exit_op->operand_count != function.op->result_count) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_u32(exit_op->operand_count),
+        loom_param_u32(function.op->result_count),
+    };
+    return loom_function_contract_emit_related(emitter, exit_op, function.op,
+                                               LOOM_ERR_STRUCTURE_008, params,
+                                               IREE_ARRAYSIZE(params));
+  }
+  if (exit_op->operand_count == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* expected_values = loom_op_const_results(function.op);
+  const loom_value_id_t* actual_values = loom_op_const_operands(exit_op);
+  const loom_type_value_remap_t remap = {
+      .source_values = expected_values,
+      .target_values = actual_values,
+      .count = exit_op->operand_count,
+      .flags = LOOM_TYPE_VALUE_REMAP_FLAG_SOURCE_DEFINITION_SLICE,
+  };
+  loom_type_remap_lookup_t lookup;
+  bool lookup_initialized = false;
+  iree_status_t status = iree_ok_status();
+  for (uint16_t i = 0; i < exit_op->operand_count; ++i) {
+    const loom_type_t actual_type =
+        loom_module_value_type(module, actual_values[i]);
+    const loom_type_t expected_type =
+        loom_module_value_type(module, expected_values[i]);
+    bool equal = false;
+    if (loom_type_remap_requires_lookup(expected_type)) {
+      if (!lookup_initialized) {
+        loom_type_remap_lookup_initialize(module, &remap, &lookup);
+        lookup_initialized = true;
+      }
+      status = loom_type_remap_lookup_equal(&lookup, expected_type, actual_type,
+                                            &equal);
+    } else {
+      equal = loom_type_equal_after_value_remap(module, expected_type,
+                                                actual_type, &remap);
+    }
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (equal) {
+      continue;
+    }
+    const loom_diagnostic_param_t params[] = {
+        loom_param_type(actual_type),
+        loom_param_type(expected_type),
+    };
+    status = loom_function_contract_emit_related(emitter, exit_op, function.op,
+                                                 LOOM_ERR_TYPE_009, params,
+                                                 IREE_ARRAYSIZE(params));
+    break;
+  }
+  if (lookup_initialized) {
+    loom_type_remap_lookup_deinitialize(&lookup);
+  }
+  return status;
+}
+
 static iree_status_t loom_function_provider_family_contract_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {

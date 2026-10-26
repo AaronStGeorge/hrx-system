@@ -13,6 +13,7 @@ Top-level (module-level symbols):
   func.decl      — External function declaration (no body, callable by name).
 Body ops:
   func.call      — Runtime function call.
+  func.exit      — Conditional return from enclosing function or kernel body.
   func.return    — Return values from function body.
   func.location  — Materialize captured source provenance as a buffer.
 """
@@ -32,12 +33,14 @@ from loom.assembly import (
     FuncArgs,
     OptionalGroup,
     PredicateList,
+    Ref,
     Refs,
     Region,
     ResultType,
     ResultTypeList,
     Scope,
     SymbolRef,
+    TypeOf,
     TypesOf,
     kw,
 )
@@ -46,6 +49,7 @@ from loom.dialect.target.defs import ExportAbiKind
 from loom.dsl import (
     ANY,
     BUFFER,
+    I1,
     ISOLATED_FROM_ABOVE,
     POISON_BOUNDARY,
     PURE,
@@ -65,6 +69,7 @@ from loom.dsl import (
     OpPhase,
     ParameterizedAttrDef,
     RegionDef,
+    RegionExecution,
     Result,
     SymbolDefinition,
     SymbolDefinitionFlag,
@@ -601,6 +606,39 @@ func_call = Op(
 )
 
 # ============================================================================
+# func.exit — conditional return from enclosing function or kernel body
+# ============================================================================
+
+func_exit = Op(
+    "func.exit",
+    group=func_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Conditionally return from the nearest enclosing function or kernel body. The exit region uses the return terminator declared by that body and evaluates only when the condition is true."),
+    operands=[Operand("condition", I1)],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Work and returned values evaluated only on the taken exit.",
+            single_block=True,
+            execution=RegionExecution.EXIT,
+        )
+    ],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_func_exit_verify",
+    format=[
+        Ref("condition"),
+        COLON,
+        TypeOf("condition"),
+        Region("body"),
+    ],
+    examples=[
+        "func.exit %done : i1 {\n  func.return\n}",
+        "func.exit %found : i1 {\n  func.return %value : i32\n}",
+        "func.exit %done : i1 {\n  kernel.return\n}",
+    ],
+)
+
+# ============================================================================
 # func.return — return from function body
 # ============================================================================
 
@@ -755,4 +793,5 @@ ALL_FUNC_OPS: tuple[Op, ...] = (
     func_call,
     func_return,
     func_location,
+    func_exit,
 )

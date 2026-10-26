@@ -54,6 +54,13 @@ iree_status_t loom_function_call_contract_verify(
     loom_function_call_argument_match_flags_t argument_match_flags,
     iree_diagnostic_emitter_t emitter);
 
+// Verifies a callable exit terminator against its enclosing function-like
+// result tuple. The exit operands are compared after remapping dependent result
+// types to the returned values; function arguments retain their in-body IDs.
+iree_status_t loom_function_exit_contract_verify(
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_op_t* exit_op, iree_diagnostic_emitter_t emitter);
+
 // Tests one call argument against its function contract type after applying
 // |value_remap|. Execution boundaries that own storage materialization may
 // allow tensor/view values to satisfy buffer ABI arguments.

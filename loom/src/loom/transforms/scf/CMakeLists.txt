@@ -147,6 +147,7 @@ loom_cc_library(
     loom::error::parameter
     loom::ir
     loom::ops::cfg
+    loom::ops::func::op_defs
     loom::ops::index
     loom::ops::op_defs
     loom::ops::scalar

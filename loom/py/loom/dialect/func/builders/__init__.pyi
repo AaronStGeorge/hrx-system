@@ -94,3 +94,10 @@ class FuncBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def exit(
+        self,
+        *,
+        condition: ValueRef,
+        body: Region | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
