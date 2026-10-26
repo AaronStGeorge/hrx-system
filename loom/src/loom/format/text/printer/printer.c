@@ -13,18 +13,27 @@
 #include "loom/ir/module_record.h"
 
 static loom_print_context_t loom_print_context_make(
-    const loom_module_t* module, loom_output_stream_t* stream,
-    const loom_text_print_options_t* options,
-    loom_print_name_plan_t* name_plan) {
+    loom_text_printer_t* printer, loom_output_stream_t* stream,
+    const loom_text_print_options_t* options) {
   loom_print_context_t context = {0};
   context.stream = stream;
-  context.module = module;
-  context.name_plan = name_plan;
+  context.module = printer->module;
+  context.printer = printer;
   context.flags = options ? options->flags : LOOM_TEXT_PRINT_DEFAULT;
   if (options) {
     context.low_asm_environment = options->low_asm_environment;
   }
   return context;
+}
+
+void loom_text_printer_initialize(const loom_module_t* module,
+                                  loom_text_printer_t* out_printer) {
+  *out_printer = (loom_text_printer_t){.module = module};
+}
+
+void loom_text_printer_deinitialize(loom_text_printer_t* printer) {
+  loom_print_name_plan_discard(printer);
+  printer->module = NULL;
 }
 
 static bool loom_module_has_printable_content(const loom_module_t* module) {
@@ -76,17 +85,17 @@ iree_status_t loom_text_print_module_with_options(
   if (!module || !module->body) {
     return iree_ok_status();
   }
-  loom_print_name_plan_t name_plan;
-  IREE_RETURN_IF_ERROR(loom_print_name_plan_initialize(module, &name_plan));
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
+  IREE_RETURN_IF_ERROR(loom_print_name_plan_prepare(&printer));
   loom_module_record_plan_t module_record_plan;
   iree_status_t status =
       loom_module_record_plan_initialize(module, &module_record_plan);
   if (!iree_status_is_ok(status)) {
-    loom_print_name_plan_deinitialize(&name_plan);
+    loom_text_printer_deinitialize(&printer);
     return status;
   }
-  loom_print_context_t ctx =
-      loom_print_context_make(module, stream, options, &name_plan);
+  loom_print_context_t ctx = loom_print_context_make(&printer, stream, options);
   iree_host_size_t file_header_line_count = 0;
   (void)loom_module_file_header(module, &file_header_line_count);
   status = loom_print_file_header(module, stream);
@@ -101,7 +110,7 @@ iree_status_t loom_text_print_module_with_options(
     status = loom_print_module_body(&ctx, module->body, &module_record_plan);
   }
   loom_module_record_plan_deinitialize(&module_record_plan);
-  loom_print_name_plan_deinitialize(&name_plan);
+  loom_text_printer_deinitialize(&printer);
   return status;
 }
 
@@ -118,18 +127,26 @@ iree_status_t loom_text_print_operation(const loom_module_t* module,
 iree_status_t loom_text_print_operation_with_options(
     const loom_module_t* module, const loom_op_t* op,
     loom_output_stream_t* stream, const loom_text_print_options_t* options) {
-  if (!module || !op) {
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
+  iree_status_t status =
+      loom_text_printer_write_operation(&printer, op, stream, options);
+  loom_text_printer_deinitialize(&printer);
+  return status;
+}
+
+iree_status_t loom_text_printer_write_operation(
+    loom_text_printer_t* printer, const loom_op_t* op,
+    loom_output_stream_t* stream, const loom_text_print_options_t* options) {
+  if (!printer->module || !op) {
     return iree_ok_status();
   }
-  loom_print_name_plan_t name_plan;
-  IREE_RETURN_IF_ERROR(loom_print_name_plan_initialize(module, &name_plan));
-  loom_print_context_t ctx =
-      loom_print_context_make(module, stream, options, &name_plan);
+  IREE_RETURN_IF_ERROR(loom_print_name_plan_prepare(printer));
+  loom_print_context_t ctx = loom_print_context_make(printer, stream, options);
   iree_status_t status = loom_print_op_comments(&ctx, op);
   if (iree_status_is_ok(status)) {
     status = loom_print_op(&ctx, op, NULL);
   }
-  loom_print_name_plan_deinitialize(&name_plan);
   return status;
 }
 
@@ -171,12 +188,13 @@ iree_status_t loom_text_print_operation_with_field_callback(
     loom_print_field_callback_t callback) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
-  loom_print_name_plan_t name_plan;
-  IREE_RETURN_IF_ERROR(loom_print_name_plan_initialize(module, &name_plan));
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
+  IREE_RETURN_IF_ERROR(loom_print_name_plan_prepare(&printer));
   loom_print_context_t ctx = {
       .stream = &stream,
       .module = module,
-      .name_plan = &name_plan,
+      .printer = &printer,
       .flags = flags,
       .field_callback = callback,
   };
@@ -184,6 +202,6 @@ iree_status_t loom_text_print_operation_with_field_callback(
   if (iree_status_is_ok(status)) {
     status = loom_print_op(&ctx, op, NULL);
   }
-  loom_print_name_plan_deinitialize(&name_plan);
+  loom_text_printer_deinitialize(&printer);
   return status;
 }

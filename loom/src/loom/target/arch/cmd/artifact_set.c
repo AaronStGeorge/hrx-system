@@ -182,17 +182,21 @@ iree_status_t loom_cmd_program_plan_format_listing(
   };
   loom_low_descriptor_text_asm_environment_initialize(
       &registry.registry, &print_options.low_asm_environment);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(builder, &stream);
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(plan->root_module, &printer);
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        i < plan->root_count && iree_status_is_ok(status); ++i) {
     if (i != 0) {
-      status = iree_string_builder_append_cstring(builder, "\n");
+      status = loom_output_stream_write_char(&stream, '\n');
     }
     if (iree_status_is_ok(status)) {
-      status = loom_text_print_operation_to_builder_with_options(
-          plan->root_module, plan->roots[i].function_op, builder,
-          &print_options);
+      status = loom_text_printer_write_operation(
+          &printer, plan->roots[i].function_op, &stream, &print_options);
     }
   }
+  loom_text_printer_deinitialize(&printer);
   return status;
 }
