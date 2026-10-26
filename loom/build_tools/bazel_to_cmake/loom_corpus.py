@@ -392,7 +392,7 @@ class LoomCorpusBuildFileFunctions:
                 run_requirements=profile.run_requirements,
                 resource_group=profile.resource_group,
             )
-            labels = list(tags or []) + profile.tags
+            labels = ["loom-corpus"] + list(tags or []) + profile.tags
             labels.extend(policy.tags(include_run_requirements=True))
             labels.extend(
                 [

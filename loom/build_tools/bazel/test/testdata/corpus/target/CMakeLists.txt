@@ -112,6 +112,7 @@ loom_corpus_test(
   RUNNER_ARGS
     "--max-samples-per-case=1"
   LABELS
+    "loom-corpus"
     "manual"
     "loom-execution-profile=reference"
     "loom-target-family=test"
@@ -130,6 +131,7 @@ loom_corpus_test(
     "sample/excluded.loom"
     "This fixture proves whole-source execution exclusion."
   LABELS
+    "loom-corpus"
     "manual"
     "loom-execution-profile=selected_reference"
     "loom-target-family=test"

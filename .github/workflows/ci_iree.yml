@@ -681,13 +681,9 @@ jobs:
             $env:CXX = $env:CC
             $env:AR = Join-Path $env:BAZEL_LLVM 'bin\llvm-lib.exe'
           }
-          $pythonTestArgs = @()
-          if ("${{ matrix.platform_coverage }}" -ne 'true') {
-            $pythonTestArgs += '--exclude-python-tests'
-          }
           $repositoryResultsDir = Join-Path $env:RUNNER_TEMP "repository-test-results-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           python build_tools/devtools/ci.py iree-bazel-repository-integration `
-            @pythonTestArgs --amdgpu-target gfx11-generic `
+            --amdgpu-target gfx11-generic `
             --bazel-test-results-dir $repositoryResultsDir `
             --bazel-profile-dir "$env:RUNNER_TEMP\bazel-profiles" --keep-going
           exit $LASTEXITCODE
