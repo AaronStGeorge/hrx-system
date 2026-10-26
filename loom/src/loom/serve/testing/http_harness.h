@@ -55,6 +55,8 @@ class HttpHarness {
   void Start(std::function<iree_status_t()> run);
   bool joinable() const { return thread_.joinable(); }
   // The caller requests shutdown before joining an active service.
+  // An intentionally terminal owner is joined before response waits: accepted
+  // transport sends may still drain after the service owner returns.
   iree_status_t Join();
 
   // A transport failure ends this client's observation lifetime. Polling
