@@ -154,9 +154,11 @@ Focused design documents describe the contracts:
 
 libamdf requires the native interfaces used by its providers and accepts
 compatible newer drivers without a release allowlist. Hardware capabilities and
-native interface support determine which operations are available; driver
-package versions do not select implementation paths. The
-[XDNA native requirements](docs/xdna.md#native-requirements) describe the NPU
+native interface support determine which operations are available. Known driver
+defects can disable individual capabilities while preserving the device's other
+services. Discovery and resource creation apply the same restrictions.
+
+The [XDNA native requirements](docs/xdna.md#native-requirements) describe the NPU
 interface floor, including Windows discovery of direct and metadata partition
 admission. The baseline Windows metadata interface supports drivers that do not
 populate the private adapter query. Drivers that lack required execution

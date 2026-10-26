@@ -30,6 +30,9 @@ typedef struct amdf_gpu_kfd_topology_t {
   uint32_t gpu_id;
   // Exact graphics/compute IP identity from native discovery.
   amdf_gpu_kfd_ip_version_t gc_ip;
+  // Loaded amdgpu module version, without its trailing newline. Empty when
+  // unavailable or too long for exact matching; distinct from kernel release.
+  char driver_version[64];
   // Host atomic widths supported by every reported CPU-facing native route.
   struct {
     // Whether enabled CPU routes support naturally aligned 32-bit words.

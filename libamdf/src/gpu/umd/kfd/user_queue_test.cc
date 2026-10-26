@@ -378,6 +378,35 @@ TEST_F(KfdUserQueueTest, DeviceConstructionHasNoPartialCapabilityResult) {
   }
 }
 
+TEST_F(KfdUserQueueTest, RestrictedDevicePublicationPreservesHostQueues) {
+  device_.topology.gc_ip = {9, 4, 3, true};
+  device_.topology.sdma.ip = {4, 4, 2, true};
+  std::strcpy(device_.topology.driver_version, "6.16.13");
+  auto create = MakeCreateInfo(AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
+  create.required_capabilities |= AMDF_USER_QUEUE_CAPABILITY_DEVICE_PRODUCER;
+  auto* const sentinel =
+      reinterpret_cast<amdf_gpu_umd_user_queue_t*>(uintptr_t{1});
+  auto* output = sentinel;
+  amdf_gpu_umd_user_queue_result_t result;
+  std::memset(&result, 0xA5, sizeof(result));
+  const auto original = result;
+  EXPECT_EQ(amdf_gpu_umd_user_queue_create(&device_, &create, &output, &result),
+            amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
+  EXPECT_EQ(output, sentinel);
+  EXPECT_EQ(std::memcmp(&result, &original, sizeof(result)), 0);
+  EXPECT_EQ(native_state_.queue_create_count, 0);
+  EXPECT_EQ(native_state_.LiveBufferCount(), 0u);
+  EXPECT_EQ(native_state_.device_doorbell.create_count, 0u);
+
+  ASSERT_NO_FATAL_FAILURE(CreateQueue(AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA));
+  ASSERT_NO_FATAL_FAILURE(MapQueue());
+  EXPECT_EQ(queue_result_.capabilities,
+            AMDF_USER_QUEUE_CAPABILITY_HOST_PRODUCER);
+  EXPECT_NE(mapping_result_.doorbell_address, 0u);
+  EXPECT_EQ(native_state_.queue_create_count, 1);
+  EXPECT_EQ(native_state_.device_doorbell.create_count, 0u);
+}
+
 TEST_F(KfdUserQueueTest, DeviceViewFollowsTerminalQueueOwnership) {
   for (int failure_stage : {0, 1, 2}) {
     SCOPED_TRACE(failure_stage);
