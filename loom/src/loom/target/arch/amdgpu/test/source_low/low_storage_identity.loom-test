@@ -218,7 +218,8 @@ low.func.def target<amdgpu.rdna3_5.core>(@target) @copy_after_last_write(%seed: 
   s_endpgm
 
 // ====
-// Full-register reads still observe the high half before a partial write.
+// The snapshot's independent reader can retire before the partial write,
+// preserving the old high half without allocating a saved register.
 // RUN: emit amdgpu-assembly @capture_before_partial_write strategy=source
 
 amdgpu.target<gfx1151> @target
@@ -233,9 +234,8 @@ low.func.def target<amdgpu.rdna3_5.core>(@target) @capture_before_partial_write(
 }
 
 // ----
-  v_mov_b32 v2, v0
+  global_store_b32 v1, v0, s[0:1] offset:0
   ds_load_u16_d16_hi v0, v1 offset:0
-  global_store_b32 v1, v2, s[0:1] offset:0
   s_waitcnt vmcnt(63) lgkmcnt(0)
   global_store_b32 v1, v0, s[0:1] offset:4
   s_waitcnt_vscnt vscnt(0)

@@ -180,9 +180,9 @@ static void loom_low_schedule_setup_order_mark_continuation_source(
           &state->values[source_ordinal])) {
     return;
   }
-  // Rematerialization explicitly licenses moving this pure producer beside its
-  // use even when its input and result pressure domains differ. Restrict this
-  // exception to the exact result retained by a storage continuation.
+  // Replayability permits moving the producer, but does not justify keeping
+  // larger inputs alive in another pressure domain. The partial write obeys
+  // the same storage-footprint contract as the rest of its setup chain.
   const loom_value_ordinal_t* result_ordinals =
       loom_low_schedule_node_const_result_ordinals(node);
   for (uint16_t result_index = 0; result_index < node->result_count;
@@ -190,18 +190,17 @@ static void loom_low_schedule_setup_order_mark_continuation_source(
     if (result_ordinals[result_index] == source_ordinal &&
         loom_low_descriptor_result_can_rematerialize(
             state->target.descriptor_set, node->descriptor, result_index)) {
-      node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
-      state->setup_order.has_members = true;
+      (void)loom_low_schedule_setup_order_mark_node(state, node);
       return;
     }
   }
 }
 
 // A storage continuation writes one register part while preserving a disjoint
-// part supplied by its tied source. Keep both partial writes in the setup chain
-// ending at the completed value's sole consumer. The chain's other
-// prerequisites can then close before either partial value occupies required
-// physical storage.
+// part supplied by its tied source. Keep pressure-preserving partial writes
+// in the setup chain ending at the completed value's sole consumer. Other
+// prerequisites close before these writes occupy required physical storage;
+// contracting producers remain available to retire their larger inputs.
 static void loom_low_schedule_setup_order_classify_storage_continuation(
     loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node) {
   if (node->descriptor == NULL || node->op->tied_result_count == 0) {
