@@ -481,7 +481,7 @@ static iree_status_t loom_check_execute_pass_with_output(
   loom_pass_report_t pass_report = {0};
   if (iree_status_is_ok(status) &&
       output_kind == LOOM_CHECK_PASS_OUTPUT_PASS_REPORT) {
-    loom_pass_report_initialize(allocator, &pass_report);
+    loom_pass_report_initialize(block_pool, &pass_report);
   }
   loom_target_compile_report_t compile_report = {0};
   if (iree_status_is_ok(status) &&
@@ -596,8 +596,10 @@ static iree_status_t loom_check_execute_pass_with_output(
   } else if (emit_output && output_kind == LOOM_CHECK_PASS_OUTPUT_PASS_REPORT) {
     // Wall-clock duration is observational data, not part of the stable
     // compiler-semantic contract checked by golden fixtures.
-    for (iree_host_size_t i = 0; i < pass_report.invocation_count; ++i) {
-      pass_report.invocations[i].duration_nanoseconds = 0;
+    for (loom_pass_report_invocation_t* invocation =
+             pass_report.invocation_head;
+         invocation; invocation = invocation->next) {
+      invocation->duration_nanoseconds = 0;
     }
     loom_output_stream_t output_stream;
     loom_output_stream_for_builder(&result->actual_output, &output_stream);

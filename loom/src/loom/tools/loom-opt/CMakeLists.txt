@@ -16,6 +16,7 @@ loomc_cc_binary(
     "loom-opt.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     iree::base::tooling::flags
     loom::binding::c::interop
     loom::binding::c::loomc

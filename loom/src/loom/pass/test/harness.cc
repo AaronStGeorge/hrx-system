@@ -61,11 +61,13 @@ PassProgramStorage::~PassProgramStorage() {
 }
 
 PassReportStorage::PassReportStorage() {
-  loom_pass_report_initialize(iree_allocator_system(), &report);
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool_);
+  loom_pass_report_initialize(&block_pool_, &report);
 }
 
 PassReportStorage::~PassReportStorage() {
   loom_pass_report_deinitialize(&report);
+  iree_arena_block_pool_deinitialize(&block_pool_);
 }
 
 loom_pass_predicate_provider_t PassTestTargetPredicateProvider(

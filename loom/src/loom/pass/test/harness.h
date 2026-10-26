@@ -47,6 +47,10 @@ class PassReportStorage {
 
   // Report owned by this storage object.
   loom_pass_report_t report = {};
+
+ private:
+  // Reusable blocks backing the report's scoped storage.
+  iree_arena_block_pool_t block_pool_ = {};
 };
 
 struct PassTestPredicateCapture {

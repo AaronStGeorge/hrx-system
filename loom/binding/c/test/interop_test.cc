@@ -119,8 +119,17 @@ PassProgramPtr PrepareText(loomc_context_t* context, const char* text) {
 }
 
 struct PassReport {
-  PassReport() { loom_pass_report_initialize(iree_allocator_system(), &value); }
-  ~PassReport() { loom_pass_report_deinitialize(&value); }
+  explicit PassReport(iree_host_size_t block_size = 4096) {
+    iree_arena_block_pool_initialize(block_size, iree_allocator_system(),
+                                     &block_pool);
+    loom_pass_report_initialize(&block_pool, &value);
+  }
+  ~PassReport() {
+    loom_pass_report_deinitialize(&value);
+    iree_arena_block_pool_deinitialize(&block_pool);
+  }
+  // Reusable blocks backing native report records.
+  iree_arena_block_pool_t block_pool = {};
   // Invocation records owned by this execution.
   loom_pass_report_t value = {};
 };
@@ -603,7 +612,7 @@ TEST(InteropTest, ComposesReportsAndTraceForRunAndCompile) {
         EXPECT_EQ(loomc_result_diagnostic_count(result.get()), fail ? 1u : 0u);
       }
       ASSERT_EQ(passes.value.invocation_count, 4u);
-      EXPECT_EQ(passes.value.invocations[1].status_code,
+      EXPECT_EQ(passes.value.invocation_head->next->status_code,
                 fail ? IREE_STATUS_OUT_OF_RANGE : IREE_STATUS_OK);
       ASSERT_EQ(compilation.value.target_capability_rows.count, fail ? 4u : 2u);
       const auto* rows = static_cast<
@@ -618,7 +627,7 @@ TEST(InteropTest, ComposesReportsAndTraceForRunAndCompile) {
         module.reset();
       }
       program.reset();
-      const auto& invocation = passes.value.invocations[0];
+      const auto& invocation = *passes.value.invocation_head;
       ASSERT_EQ(invocation.detail_count, 1u);
       EXPECT_TRUE(iree_string_view_equal(
           invocation.details->fields[0].string_value, IREE_SV("identity")));
@@ -634,10 +643,10 @@ TEST(InteropTest, RetainsCompletedReportsWhenTraceOrReportAllocationFails) {
   auto program = PrepareText(context.get(), "dce,cse");
   for (bool fail_trace : {false, true}) {
     auto module = Deserialize(context.get(), workspace.get(), source.get());
-    PassReport passes;
+    PassReport passes(128);
     // Fail subsequent record allocation after the first completed invocation.
     if (!fail_trace) {
-      passes.value.allocator = {
+      passes.block_pool.block_allocator = {
           .self = &passes.value,
           .ctl =
               [](void* self, iree_allocator_command_t command,
@@ -682,9 +691,9 @@ TEST(InteropTest, RetainsCompletedReportsWhenTraceOrReportAllocationFails) {
                                &options, loomc_allocator_system(), &result));
     EXPECT_EQ(result, nullptr);
     ASSERT_EQ(passes.value.invocation_count, 1u);
-    EXPECT_TRUE(iree_string_view_equal(passes.value.invocations[0].pass_key,
+    EXPECT_TRUE(iree_string_view_equal(passes.value.invocation_head->pass_key,
                                        IREE_SV("dce")));
-    EXPECT_EQ(passes.value.invocations[0].status_code, IREE_STATUS_OK);
+    EXPECT_EQ(passes.value.invocation_head->status_code, IREE_STATUS_OK);
   }
 }
 
@@ -831,7 +840,7 @@ TEST(InteropTest,
   EXPECT_GT(trace_writes, 0);
   ASSERT_EQ(passes.value.invocation_count, 2u);
   EXPECT_TRUE(iree_string_view_equal(
-      passes.value.invocations[0].details->fields[0].string_value,
+      passes.value.invocation_head->details->fields[0].string_value,
       IREE_SV("identity")));
 
   CompileReport compilation;

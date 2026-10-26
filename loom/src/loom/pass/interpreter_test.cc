@@ -184,7 +184,7 @@ TEST_F(PassInterpreterTest, StopsExecutionAtFailedTraceBoundary) {
         ASSERT_EQ(report_storage.report.invocation_count,
                   !fail_before && enable_report ? 1u : 0u);
         if (!fail_before && enable_report) {
-          EXPECT_EQ(report_storage.report.invocations[0].status_code,
+          EXPECT_EQ(report_storage.report.invocation_head->status_code,
                     IREE_STATUS_OK);
         }
       }
@@ -387,7 +387,7 @@ TEST_F(PassInterpreterTest, AppendsExecutionReportRecords) {
 
   ASSERT_EQ(report_storage.report.invocation_count, 2u);
   const loom_pass_report_invocation_t& module_record =
-      report_storage.report.invocations[0];
+      *report_storage.report.invocation_head;
   EXPECT_TRUE(iree_string_view_equal(module_record.pass_key,
                                      IREE_SV("test.module-noop")));
   EXPECT_TRUE(iree_string_view_equal(module_record.pipeline_symbol,
@@ -403,7 +403,7 @@ TEST_F(PassInterpreterTest, AppendsExecutionReportRecords) {
   EXPECT_EQ(module_record.statistics[0].value, 1);
 
   const loom_pass_report_invocation_t& function_record =
-      report_storage.report.invocations[1];
+      *report_storage.report.invocation_head->next;
   EXPECT_TRUE(iree_string_view_equal(function_record.pass_key,
                                      IREE_SV("test.mark-changed")));
   EXPECT_TRUE(
@@ -466,7 +466,7 @@ TEST_F(PassInterpreterTest, ReportsValueFactReuseAndInvalidation) {
 
   ASSERT_EQ(report_storage.report.invocation_count, 4u);
   const loom_pass_report_detail_t* first_acquire = FindReportDetail(
-      report_storage.report.invocations[0], IREE_SV("value-facts"));
+      *report_storage.report.invocation_head, IREE_SV("value-facts"));
   ASSERT_NE(first_acquire, nullptr);
   const loom_pass_report_detail_field_t* first_recomputation =
       FindReportDetailField(first_acquire, IREE_SV("recomputation_count"));
@@ -478,15 +478,16 @@ TEST_F(PassInterpreterTest, ReportsValueFactReuseAndInvalidation) {
   EXPECT_GT(first_computed_values->uint64_value, 0u);
 
   const loom_pass_report_detail_t* second_acquire = FindReportDetail(
-      report_storage.report.invocations[1], IREE_SV("value-facts"));
+      *report_storage.report.invocation_head->next, IREE_SV("value-facts"));
   ASSERT_NE(second_acquire, nullptr);
   const loom_pass_report_detail_field_t* cache_hits =
       FindReportDetailField(second_acquire, IREE_SV("cache_hit_count"));
   ASSERT_NE(cache_hits, nullptr);
   EXPECT_EQ(cache_hits->uint64_value, 1u);
 
-  const loom_pass_report_detail_t* invalidation = FindReportDetail(
-      report_storage.report.invocations[2], IREE_SV("value-facts"));
+  const loom_pass_report_detail_t* invalidation =
+      FindReportDetail(*report_storage.report.invocation_head->next->next,
+                       IREE_SV("value-facts"));
   ASSERT_NE(invalidation, nullptr);
   const loom_pass_report_detail_field_t* invalidation_count =
       FindReportDetailField(invalidation, IREE_SV("invalidation_count"));
@@ -502,7 +503,7 @@ TEST_F(PassInterpreterTest, ReportsValueFactReuseAndInvalidation) {
   EXPECT_EQ(cleared_values->uint64_value, first_computed_values->uint64_value);
 
   const loom_pass_report_detail_t* reacquire = FindReportDetail(
-      report_storage.report.invocations[3], IREE_SV("value-facts"));
+      *report_storage.report.invocation_tail, IREE_SV("value-facts"));
   ASSERT_NE(reacquire, nullptr);
   const loom_pass_report_detail_field_t* reacquire_recomputation =
       FindReportDetailField(reacquire, IREE_SV("recomputation_count"));

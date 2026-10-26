@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
 #include "loom/config/text_binding.h"
 #include "loom/pass/registry.h"
@@ -845,6 +846,7 @@ int main(int argc, char** argv) {
   loom_opt_pipeline_kind_t pipeline_kind = LOOM_OPT_PIPELINE_NONE;
   loomc_source_format_t output_format = LOOMC_SOURCE_FORMAT_TEXT;
   loom_pass_report_t pass_report = {0};
+  iree_arena_block_pool_t pass_report_block_pool = {0};
   bool pass_report_initialized = false;
   loom_tooling_loomc_pass_trace_t pass_trace = {0};
   bool pipeline_attempted = false;
@@ -943,7 +945,9 @@ int main(int argc, char** argv) {
   }
   if (iree_status_is_ok(status) && !metadata_only &&
       pass_report_mode != LOOM_OPT_PASS_REPORT_NONE) {
-    loom_pass_report_initialize(allocator, &pass_report);
+    iree_arena_block_pool_initialize(LOOM_OPT_BLOCK_POOL_BLOCK_SIZE, allocator,
+                                     &pass_report_block_pool);
+    loom_pass_report_initialize(&pass_report_block_pool, &pass_report);
     pass_report_initialized = true;
   }
 
@@ -1147,6 +1151,7 @@ int main(int argc, char** argv) {
 
   if (pass_report_initialized) {
     loom_pass_report_deinitialize(&pass_report);
+    iree_arena_block_pool_deinitialize(&pass_report_block_pool);
   }
   loom_config_text_binding_set_deinitialize(&config_set);
   loomc_result_release(public_result);
