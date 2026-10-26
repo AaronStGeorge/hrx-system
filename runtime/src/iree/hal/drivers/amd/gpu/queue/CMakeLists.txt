@@ -1033,6 +1033,7 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     file_completion
@@ -1047,7 +1048,9 @@ iree_cc_library(
     iree::hal::drivers::amd::status
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     file_completion_test
@@ -1060,6 +1063,7 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(

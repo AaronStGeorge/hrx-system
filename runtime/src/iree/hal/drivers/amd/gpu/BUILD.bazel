@@ -31,6 +31,7 @@ iree_runtime_cc_library(
     name = "publication",
     srcs = ["publication.c"],
     hdrs = ["publication.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":failure",
         "//runtime/src/iree/base",
@@ -44,6 +45,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "publication_test",
     srcs = ["publication_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":publication",
         "//runtime/src/iree/base",
@@ -491,6 +493,7 @@ iree_runtime_cc_library(
     name = "failure",
     srcs = ["failure.c"],
     hdrs = ["failure.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     visibility = ["//runtime/src/iree/hal/drivers/amd/gpu:__subpackages__"],
     deps = [
         "//libamdf:headers",
@@ -503,6 +506,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "failure_test",
     srcs = ["failure_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":failure",
         ":publication",

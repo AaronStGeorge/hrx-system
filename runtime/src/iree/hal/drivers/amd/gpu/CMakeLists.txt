@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     publication
@@ -25,7 +26,9 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::queue::publisher
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     publication_test
@@ -38,6 +41,7 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
@@ -535,6 +539,7 @@ iree_cc_binary_benchmark(
 )
 endif()
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(
   NAME
     failure
@@ -549,7 +554,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     failure_test
@@ -561,6 +568,7 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_library(

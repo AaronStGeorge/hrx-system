@@ -838,6 +838,7 @@ iree_cc_test(
 )
 endif()
 
+if(IREE_HAL_DRIVER_AMD_GPU)
 iree_cc_test(
   NAME
     lifecycle_test
@@ -855,5 +856,6 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

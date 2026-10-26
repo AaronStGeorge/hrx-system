@@ -658,6 +658,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "lifecycle_test",
     srcs = ["lifecycle_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":queue",
         ":submission",
