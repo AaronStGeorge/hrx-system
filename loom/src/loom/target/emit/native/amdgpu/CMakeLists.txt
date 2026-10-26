@@ -117,10 +117,10 @@ loom_cc_library(
   DEPS
     ::assembly
     ::encoding
-    ::hal_kernel_library
     ::spill_lowering
     iree::base
     iree::base::core_headers
+    loom::binding::c::loomc
     loom::codegen::low::allocation_json
     loom::codegen::low::diagnostics
     loom::codegen::low::frame

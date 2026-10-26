@@ -14,6 +14,7 @@ static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
     {
         &loom_amdgpu_bank_service_loom_check_emit_provider,
         &loom_amdgpu_occupancy_loom_check_emit_provider,
+        &loom_amdgpu_kernel_loom_check_emit_provider,
         &loom_amdgpu_native_loom_check_emit_provider,
 };
 

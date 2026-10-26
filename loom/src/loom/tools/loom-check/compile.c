@@ -655,6 +655,28 @@ iree_status_t loom_check_compile_artifact(
   return status;
 }
 
+iree_status_t loom_check_emit_artifact(
+    const loom_check_emit_provider_request_t* request,
+    const loomc_emit_options_t* options, loomc_result_t** out_result) {
+  *out_result = NULL;
+  loom_check_compile_session_t* session = request->environment->compile_session;
+  loomc_result_t* result = NULL;
+  iree_status_t status = iree_status_from_loomc(loomc_emit_module(
+      session->target_environment, session->workspace, request->public_module,
+      options, loomc_allocator_from_iree(request->host_allocator), &result));
+  bool emitted = false;
+  if (iree_status_is_ok(status)) {
+    status = loom_check_compile_append_result(request->diagnostic_collector,
+                                              result, &emitted);
+  }
+  if (iree_status_is_ok(status) && emitted) {
+    *out_result = result;
+    result = NULL;
+  }
+  loomc_result_release(result);
+  return status;
+}
+
 iree_status_t loom_check_compile_select_artifact(
     const loomc_result_t* result, loomc_artifact_kind_t kind,
     iree_string_view_t format, const loomc_artifact_t** out_artifact) {

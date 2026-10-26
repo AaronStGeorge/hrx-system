@@ -190,6 +190,13 @@ iree_status_t loom_check_compile_artifact(
     const loom_check_compile_artifact_options_t* options,
     loomc_result_t** out_result);
 
+// Emits artifacts from the request's prepared public module without running
+// passes or materializing roots. Result ownership and diagnostic handling are
+// the same as loom_check_compile_artifact.
+iree_status_t loom_check_emit_artifact(
+    const loom_check_emit_provider_request_t* request,
+    const loomc_emit_options_t* options, loomc_result_t** out_result);
+
 // Selects a required output from a successful compiler result by kind and
 // format. The returned artifact borrows |result|. Missing requested output is
 // a check failure, including optional outputs unsupported by an emitter.
