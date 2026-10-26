@@ -11,13 +11,26 @@ iree_add_all_subdirs()
 
 loom_check_test_suite(
   NAME
-    test
+    generic_test
   SRCS
     "exponent.loom-test"
     "grouped_product_evaluation.loom-test"
     "legalize.loom-test"
-    "trigonometry.loom-test"
     "widen_f32_round.loom-test"
 )
+
+if(LOOM_TARGET_AMDGPU AND LOOM_TARGET_XDNA)
+iree_native_test(
+  NAME
+    "trigonometry"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/trigonometry.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
