@@ -18,13 +18,37 @@ the Prometheus exporter and current-state pages consume this interface. No
 collector-side text/image switch or parsing of private service JSON is needed.
 
 [`server/observation.c`](../server/observation.c) visits the existing registry
-on its serialized owner. A sweep starts with common server counters, then
-copies one model per page while scanning at most 64 registry positions per
-model page. The server aggregate uses the registry's existing capacity scan.
+on its serialized owner. A sweep starts with common server counters, then copies
+one application-owned device per page, then one model per page while scanning at
+most 64 registry positions per model page. The server aggregate uses the
+registry's existing capacity scan.
 Pages carry explicit scanned ranges: absence applies only to that range,
 and an entire sweep is not an atomic inventory. Display names are capped at
 256 bytes with an explicit truncation flag. Slot and incarnation identify a
 model, independently of its name.
+
+Device membership is immutable for the application lifetime. Device pages carry
+an index, deployment key, hardware/backend labels, backing mode, and numeric
+pool topics supplied by [`server/resources.c`](../server/resources.c). Managed
+model pages reference their resolved device index; borrowed services without a
+binding use null. The index is scoped to the stream's server identity, not a
+physical device identifier. Device keys are display labels capped at 256 bytes
+with an explicit truncation flag; truncation never merges owner identities.
+The resource sampler uses the same transport-independent typed sink as services;
+JSON framing is a separate projection, not the source's numeric interface.
+
+`storage` is the device owner's native retained-buffer pool. `elastic`, when
+present, is a distinct physical backing owner with its own budget. `workspace`
+is a child view backed by `storage` in fixed mode or by `elastic` otherwise.
+Pool identity is the pair (device index, owner role); models refer to these
+owners rather than duplicating their totals. The browser plots native and
+elastic commitment once each and annotates workspace as included, never added.
+Zero budget means unbounded, not exhausted. Virtual reserved bytes are address
+extent, not committed RAM. Pending, releasing, abandoned, reusable, and atomic
+workspace samples do not form a disjoint partition. The UI does not infer a
+weights/KV/other split, physical addresses, or shared hardware capacity from
+these aggregate observations. Device request activity is explicitly distinct
+from hardware utilization and native queue depth.
 
 The HTTP adapter schedules sampling at four hertz while readers exist. Sources
 are sampled/formatted once per sweep, independently of reader count. A shared
@@ -45,7 +69,7 @@ parameter, session, or ring pointer survives that synchronous copy.
 configuration; native clients can omit Origin. A text frame contains:
 
 ```json
-{"version":1,"server":"1790000000000000000:1","sequence":"1","page":{"type":"server","model_capacity":32,"counters":null,"since_ns":null},"time_ns":"1000000000","revision":"1","previous_revision":"0","previous_time_ns":"0"}
+{"version":1,"server":"1790000000000000000:1","sequence":"1","page":{"type":"server","model_capacity":32,"device_count":0,"counters":null,"since_ns":null},"time_ns":"1000000000","revision":"1","previous_revision":"0","previous_time_ns":"0"}
 ```
 
 The client applies the page, then sends a text frame containing only its
@@ -59,6 +83,11 @@ Model pages have `type:"models"`, a half-open `[first,next)` slot range,
 common counters, and source-owned `topics`. All 64-bit counters, times, and
 incarnations are decimal strings. The browser differences counters as `BigInt`
 before converting an interval into a plotted rate.
+
+Device pages have `type:"device"` and one source's copied facts. They share the
+same revision, capture-time, output-size, and acknowledgement rules. They do not
+hold native resources through delivery; the application resource owner outlives
+the router's join. Model removal cannot retire a device or a memory-pool card.
 
 Server and model sources carry an immutable `since_ns` counter epoch, or null
 when unavailable. Model stream construction establishes its zero-counter epoch.

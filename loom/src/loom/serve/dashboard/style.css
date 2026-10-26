@@ -297,6 +297,87 @@ h2 {
   color: var(--muted);
   margin-top: 3px;
 }
+.device-link {
+  color: var(--cyan);
+  font:
+    10px ui-monospace,
+    monospace;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.kind .device-link {
+  margin-left: 8px;
+}
+.device-link:hover {
+  text-decoration: underline;
+}
+.resources {
+  margin-top: 10px;
+}
+.device-grid,
+.pool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+.device,
+.memory-pool {
+  padding: 10px 11px;
+  min-width: 0;
+  scroll-margin-top: 12px;
+}
+.device:target,
+.memory-pool:target {
+  border-color: var(--cyan);
+}
+.resource-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.resource-head h3 {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.device-identity {
+  flex: 1;
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.device-activity {
+  margin-top: 8px;
+  font-size: 11px;
+}
+.device-pools {
+  margin-top: 6px;
+  display: flex;
+  gap: 12px;
+}
+.memory-heading {
+  margin-top: 12px;
+}
+.memory-pool canvas {
+  width: 100%;
+  height: 32px;
+  display: block;
+  margin-top: 4px;
+}
+.memory-pool .pool-value {
+  font:
+    20px ui-monospace,
+    monospace;
+  color: var(--green);
+}
+.memory-pool .pool-total {
+  margin-top: 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
 .phase {
   margin-left: auto;
   font-size: 10px;
@@ -360,12 +441,14 @@ h2 {
   line-height: 1.6;
   margin-top: 5px;
 }
-.model details {
+.model details,
+.memory-pool details {
   font-size: 10px;
   margin-top: 8px;
   color: var(--muted);
 }
-.model summary {
+.model summary,
+.memory-pool summary {
   cursor: pointer;
 }
 table {

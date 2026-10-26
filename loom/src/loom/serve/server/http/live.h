@@ -8,6 +8,7 @@
 #define LOOM_SERVE_SERVER_HTTP_LIVE_H_
 
 #include "loom/serve/server/registry.h"
+#include "loom/serve/server/resources.h"
 #include "loom/serve/transport/http/server.h"
 
 #ifdef __cplusplus
@@ -18,14 +19,13 @@ typedef struct loom_serve_http_live_t loom_serve_http_live_t;
 
 // Allocates bounded reader metadata, shared current-state copies, and one 16
 // KiB formatting buffer. No timer runs without readers. Server, registry,
-// origins, and wake target remain borrowed until shutdown advance retires the
-// timer and every reader.
-iree_status_t loom_serve_http_live_allocate(loom_serve_http_server_t* server,
-                                            loom_serve_registry_t* registry,
-                                            iree_string_view_list_t origins,
-                                            loom_serve_wake_callback_t observer,
-                                            iree_allocator_t host_allocator,
-                                            loom_serve_http_live_t** out_live);
+// resources, origins, and wake target remain borrowed until shutdown advance
+// retires the timer and every reader.
+iree_status_t loom_serve_http_live_allocate(
+    loom_serve_http_server_t* server, loom_serve_registry_t* registry,
+    const loom_serve_resources_t* resources, iree_string_view_list_t origins,
+    loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
+    loom_serve_http_live_t** out_live);
 
 // Upgrades a validated route, consuming the connection on every path. Origin
 // allowlisting is mandatory for browsers; loom.observe.v1 is negotiated when

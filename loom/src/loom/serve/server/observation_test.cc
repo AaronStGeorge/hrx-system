@@ -53,7 +53,7 @@ class ObservationTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_serve_registry_allocate(
         1, &service, 130, {}, iree_allocator_system(), &registry_));
     IREE_ASSERT_OK(loom_serve_observation_allocate(
-        registry_, allocator_.allocator(), &observation_));
+        registry_, &resources_, allocator_.allocator(), &observation_));
     iree_string_builder_initialize_with_storage(storage_, sizeof(storage_),
                                                 &output_);
   }
@@ -88,6 +88,8 @@ class ObservationTest : public ::testing::Test {
   loom_serve_telemetry_stream_t* stream_ = nullptr;
   // Copied source cache independent of service storage and reader count.
   loom_serve_observation_t* observation_ = nullptr;
+  // Borrowed application resources; service-only tests have no device binding.
+  loom_serve_resources_t resources_ = {};
   // Allocation commands from the shared cache, excluding registry ownership.
   iree::vm::testing::CountingAllocator allocator_;
   // Caller-owned fixed wire-size formatting extent.

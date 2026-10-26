@@ -133,6 +133,7 @@ loom_cc_library(
     "observation.c"
   DEPS
     ::registry
+    ::resources
     iree::base
     loom::serve::service
     loom::serve::service::kind
@@ -163,6 +164,7 @@ loom_cc_library(
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::storage::memory
+    loom::serve::telemetry::sample
     loom::serve::transport::http::listener
     loom::util::json
     loom::util::stream
@@ -170,7 +172,7 @@ loom_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
     observation_test
@@ -192,7 +194,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
     maintenance_test
@@ -217,12 +219,17 @@ loom_cc_test(
   SRCS
     "resources_test.cc"
   DEPS
+    ::observation
+    ::registry
     ::resources
     iree::base
+    iree::base::internal::json
     iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm::test_support
     loom::serve::runtime::device
+    loom::serve::runtime::execution
     loom::serve::runtime::host
     loom::util::stream
   LABELS

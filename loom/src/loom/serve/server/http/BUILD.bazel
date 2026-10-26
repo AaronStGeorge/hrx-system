@@ -36,6 +36,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/host:wake",
         "//loom/src/loom/serve/server:observation",
         "//loom/src/loom/serve/server:registry",
+        "//loom/src/loom/serve/server:resources",
         "//loom/src/loom/serve/telemetry:stream",
         "//loom/src/loom/serve/transport/http:request",
         "//loom/src/loom/serve/transport/http:server",

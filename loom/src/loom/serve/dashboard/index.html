@@ -267,6 +267,24 @@
           </article>
         </div>
       </section>
+      <section class="resources" aria-label="Devices and serving memory">
+        <div class="models-heading">
+          <h2>Devices <span id="device-count">0</span></h2>
+          <span class="muted"
+            >Request activity · hardware counters unavailable</span
+          >
+        </div>
+        <div id="device-grid" class="device-grid">
+          <div class="panel empty">Waiting for devices.</div>
+        </div>
+        <div class="models-heading memory-heading">
+          <h2>Memory pools <span id="pool-count">0</span></h2>
+          <span class="muted"
+            >Serving allocations · workspace included in backing</span
+          >
+        </div>
+        <div id="pool-grid" class="pool-grid"></div>
+      </section>
       <footer>
         <span id="freshness">Awaiting first sample</span
         ><span id="delivery">—</span>

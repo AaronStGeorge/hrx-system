@@ -45,6 +45,7 @@ loom_cc_library(
     loom::serve::runtime::host::wake
     loom::serve::server::observation
     loom::serve::server::registry
+    loom::serve::server::resources
     loom::serve::telemetry::stream
     loom::serve::transport::http::request
     loom::serve::transport::http::server

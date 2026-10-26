@@ -1228,7 +1228,8 @@ static iree_status_t loom_serve_router_accept(
     }
     if (!router->live) {
       iree_status_t status = loom_serve_http_live_allocate(
-          router->server, router->registry, router->observation_origins,
+          router->server, router->registry, &router->resources,
+          router->observation_origins,
           (loom_serve_wake_callback_t){loom_serve_router_wake, router},
           router->host_allocator, &router->live);
       if (!iree_status_is_ok(status)) {

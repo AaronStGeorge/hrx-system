@@ -65,12 +65,11 @@ struct loom_serve_http_live_t {
   loom_serve_http_live_reader_t readers[];
 };
 
-iree_status_t loom_serve_http_live_allocate(loom_serve_http_server_t* server,
-                                            loom_serve_registry_t* registry,
-                                            iree_string_view_list_t origins,
-                                            loom_serve_wake_callback_t observer,
-                                            iree_allocator_t host_allocator,
-                                            loom_serve_http_live_t** out_live) {
+iree_status_t loom_serve_http_live_allocate(
+    loom_serve_http_server_t* server, loom_serve_registry_t* registry,
+    const loom_serve_resources_t* resources, iree_string_view_list_t origins,
+    loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
+    loom_serve_http_live_t** out_live) {
   *out_live = NULL;
   const iree_host_size_t capacity =
       loom_serve_http_server_connection_capacity(server) - 1;
@@ -89,8 +88,8 @@ iree_status_t loom_serve_http_live_allocate(loom_serve_http_server_t* server,
   iree_status_t status = iree_async_proactor_pool_get(
       loom_serve_http_server_proactor_pool(server), 0, &proactor);
   if (iree_status_is_ok(status)) {
-    status = loom_serve_observation_allocate(registry, host_allocator,
-                                             &live->observation);
+    status = loom_serve_observation_allocate(
+        registry, resources, host_allocator, &live->observation);
   }
   if (iree_status_is_ok(status)) {
     loom_serve_timer_configure(&live->timer, proactor,

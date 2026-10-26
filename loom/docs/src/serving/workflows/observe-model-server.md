@@ -40,6 +40,18 @@ elastic text-state bytes exclude fixed buffers, weights, and workspace. A modali
 without a particular observation leaves it unavailable rather than inventing a
 value.
 
+Model badges link to their configured device. The Devices section groups current
+request activity by that placement; these counts are not hardware utilization or
+native queue depth. Device and pool cards remain when models are unregistered.
+
+Memory pools show committed serving allocations, retained peaks, reusable backing,
+and commitment histories. Native storage and elastic backing are separate owners;
+workspace is shown inside its backing pool, not added to the total. Elastic
+virtual reservations are address space, not physical RAM. These views exclude
+driver allocations and other processes, and do not invent a shared RAM capacity
+or a weights/KV/workspace partition from overlapping observations. Expand a pool
+to inspect its source counters.
+
 Unchanged snapshots stay off the wire. A small heartbeat settles the rate window,
 then backs off to once per minute while idle. New activity still appears at the
 normal sampling cadence; it does not wait for the idle heartbeat.

@@ -25,29 +25,40 @@ struct loom_serve_observation_t {
   iree_allocator_t host_allocator;
   // Borrowed registration truth, accessed only by the serialized owner.
   loom_serve_registry_t* registry;
-  // Number of model slots, excluding the leading server source.
+  // Borrowed application resources, live until every observer has retired.
+  const loom_serve_resources_t* resources;
+  // Immutable resource sources preceding model slots.
+  iree_host_size_t device_count;
+  // Number of registry slots, excluding server and device sources.
   iree_host_size_t capacity;
   // Monotonic revision advanced by exact source-content changes.
   uint64_t revision;
-  // Server totals followed by registry-slot sources; empty content is absence.
+  // Server, device, then registry-slot sources; empty model content is absence.
   loom_serve_observation_source_t sources[];
 };
 
 iree_status_t loom_serve_observation_allocate(
-    loom_serve_registry_t* registry, iree_allocator_t host_allocator,
+    loom_serve_registry_t* registry, const loom_serve_resources_t* resources,
+    iree_allocator_t host_allocator,
     loom_serve_observation_t** out_observation) {
   *out_observation = NULL;
   const iree_host_size_t capacity = loom_serve_registry_capacity(registry);
+  const iree_host_size_t device_count =
+      loom_serve_resources_observation_count(resources);
   loom_serve_observation_t* observation = NULL;
-  // The already allocated registry has larger entries for this same capacity.
+  // The registry has larger entries for this capacity; device membership is
+  // separately bounded by the HAL topology device limit at construction.
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(
       host_allocator,
-      sizeof(*observation) + (capacity + 1) * sizeof(*observation->sources),
+      sizeof(*observation) +
+          (capacity + device_count + 1) * sizeof(*observation->sources),
       (void**)&observation));
   observation->host_allocator = host_allocator;
   observation->registry = registry;
+  observation->resources = resources;
+  observation->device_count = device_count;
   observation->capacity = capacity;
-  for (iree_host_size_t i = 0; i <= capacity; ++i) {
+  for (iree_host_size_t i = 0; i <= capacity + device_count; ++i) {
     iree_string_builder_initialize(host_allocator,
                                    &observation->sources[i].content);
   }
@@ -59,7 +70,8 @@ void loom_serve_observation_free(loom_serve_observation_t* observation) {
   if (!observation) {
     return;
   }
-  for (iree_host_size_t i = 0; i <= observation->capacity; ++i) {
+  for (iree_host_size_t i = 0;
+       i <= observation->capacity + observation->device_count; ++i) {
     iree_string_builder_deinitialize(&observation->sources[i].content);
   }
   iree_allocator_free(observation->host_allocator, observation);
@@ -143,6 +155,13 @@ static iree_status_t loom_serve_observation_model(
       loom_serve_model_kind_name(service->kind)));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       &stream, iree_make_cstring_view(snapshot.phase)));
+  if (model->configuration.device.size) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        output, ",\"device\":%zu", model->configuration.device_index));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(output, ",\"device\":null"));
+  }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output,
       ",\"queued\":%zu,\"active\":%zu,\"held\":%zu,\"admission_open\":%s,"
@@ -187,8 +206,10 @@ iree_status_t loom_serve_observation_sample(
     loom_serve_telemetry_counters_t counters;
     const bool available = loom_serve_registry_counters(registry, &counters);
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        output, "{\"type\":\"server\",\"model_capacity\":%zu,\"counters\":",
-        loom_serve_registry_capacity(registry)));
+        output,
+        "{\"type\":\"server\",\"model_capacity\":%zu,\"device_count\":%zu,"
+        "\"counters\":",
+        loom_serve_registry_capacity(registry), observation->device_count));
     IREE_RETURN_IF_ERROR(
         loom_serve_observation_counters(available ? &counters : NULL, output));
     IREE_RETURN_IF_ERROR(loom_serve_observation_epoch(
@@ -199,7 +220,15 @@ iree_status_t loom_serve_observation_sample(
     *cursor = 1;
     return iree_ok_status();
   }
-  const iree_host_size_t first = *cursor - 1;
+  if (*cursor <= observation->device_count) {
+    IREE_RETURN_IF_ERROR(loom_serve_resources_write_observation(
+        observation->resources, *cursor - 1, output));
+    IREE_RETURN_IF_ERROR(loom_serve_observation_update(
+        observation, *cursor, now, iree_string_builder_view(output)));
+    ++*cursor;
+    return iree_ok_status();
+  }
+  const iree_host_size_t first = *cursor - observation->device_count - 1;
   const iree_host_size_t capacity = loom_serve_registry_capacity(registry);
   const iree_host_size_t end = first + iree_min(capacity - first, 64);
   iree_host_size_t next = first;
@@ -211,15 +240,16 @@ iree_status_t loom_serve_observation_sample(
       status = loom_serve_observation_model(model, next - 1, output);
     }
     if (iree_status_is_ok(status)) {
-      status = loom_serve_observation_update(observation, next, now,
-                                             iree_string_builder_view(output));
+      status = loom_serve_observation_update(
+          observation, next + observation->device_count, now,
+          iree_string_builder_view(output));
     }
     if (model->service.name.size) {
       break;
     }
   }
   if (iree_status_is_ok(status)) {
-    *cursor = next == capacity ? 0 : next + 1;
+    *cursor = next == capacity ? 0 : next + observation->device_count + 1;
   }
   return status;
 }
@@ -229,22 +259,23 @@ iree_status_t loom_serve_observation_write_page(
     iree_string_builder_t* output,
     loom_serve_observation_version_t* out_version) {
   *out_version = (loom_serve_observation_version_t){0};
-  if (!*cursor) {
-    const loom_serve_observation_source_t* source = &observation->sources[0];
+  if (*cursor <= observation->device_count) {
+    const loom_serve_observation_source_t* source =
+        &observation->sources[*cursor];
     IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
         output, iree_string_builder_view(&source->content)));
     *out_version = source->version;
-    *cursor = 1;
+    ++*cursor;
     return iree_ok_status();
   }
-  const iree_host_size_t first = *cursor - 1;
+  const iree_host_size_t first = *cursor - observation->device_count - 1;
   const iree_host_size_t capacity = observation->capacity;
   const iree_host_size_t end = first + iree_min(capacity - first, 64);
   iree_host_size_t next = first;
   const loom_serve_observation_source_t* source = NULL;
   while (next < end && !source) {
     const loom_serve_observation_source_t* candidate =
-        &observation->sources[++next];
+        &observation->sources[++next + observation->device_count];
     if (iree_string_builder_size(&candidate->content)) {
       source = candidate;
     }
@@ -261,8 +292,9 @@ iree_status_t loom_serve_observation_write_page(
     *out_version = source->version;
   } else {
     // Empty ranges were sampled too; sending later does not refresh absence.
-    out_version->time_ns = observation->sources[next].version.time_ns;
+    out_version->time_ns =
+        observation->sources[next + observation->device_count].version.time_ns;
   }
-  *cursor = next == capacity ? 0 : next + 1;
+  *cursor = next == capacity ? 0 : next + observation->device_count + 1;
   return iree_ok_status();
 }

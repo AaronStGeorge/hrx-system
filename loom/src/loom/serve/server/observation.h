@@ -8,6 +8,7 @@
 #define LOOM_SERVE_SERVER_OBSERVATION_H_
 
 #include "loom/serve/server/registry.h"
+#include "loom/serve/server/resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,20 +29,23 @@ typedef struct loom_serve_observation_version_t {
 } loom_serve_observation_version_t;
 
 // Allocates shared latest-state metadata, with one entry per registry slot plus
-// server totals. Content size is bounded by the formatting extent; storage
-// grows geometrically and is reused across samples and readers. No
+// server totals and immutable device sources. Resources remain borrowed through
+// observation destruction. Content size is bounded by the formatting extent;
+// storage grows geometrically and is reused across samples and readers. No
 // service-owned pointers survive sampling. The serialized registry owner
 // advances sampling and reads pages.
 iree_status_t loom_serve_observation_allocate(
-    loom_serve_registry_t* registry, iree_allocator_t host_allocator,
+    loom_serve_registry_t* registry, const loom_serve_resources_t* resources,
+    iree_allocator_t host_allocator,
     loom_serve_observation_t** out_observation);
 void loom_serve_observation_free(loom_serve_observation_t* observation);
 
-// Samples server totals at cursor zero, then at most 64 slots and one model per
-// call. Returning cursor zero completes a sweep. Scratch is caller-owned fixed
-// storage; its capacity bounds each source. Exact byte comparison identifies
-// unchanged state. A failed sample leaves its cursor unchanged and propagates
-// output/allocation failure to the observation owner, never a model service.
+// Samples server totals at cursor zero, then one device per call, then at most
+// 64 slots and one model per call. Returning cursor zero completes a sweep.
+// Scratch is caller-owned fixed storage; its capacity bounds each source.
+// Exact byte comparison identifies unchanged state. A failed sample leaves its
+// cursor unchanged and propagates output/allocation failure to the observation
+// owner, never a model service.
 iree_status_t loom_serve_observation_sample(
     loom_serve_observation_t* observation, iree_time_t now,
     iree_host_size_t* cursor, iree_string_builder_t* scratch);

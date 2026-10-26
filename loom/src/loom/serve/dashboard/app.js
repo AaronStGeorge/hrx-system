@@ -197,6 +197,8 @@ const history = Object.fromEntries(
   ),
 );
 const models = new Map();
+const devices = new Map();
+const pools = new Map();
 const pendingPlots = new Set();
 const serverRates = Object.fromEntries(
   ["output_tokens", "input_tokens", "completed"].map((key) => [
@@ -349,7 +351,10 @@ function draw(canvas, series, now, grid = false) {
 
 function redraw(all = false) {
   dirty = true;
-  if (all) for (const model of models.values()) pendingPlots.add(model);
+  if (all) {
+    for (const model of models.values()) pendingPlots.add(model);
+    for (const pool of pools.values()) pendingPlots.add(pool);
+  }
   if (framePending || document.hidden) return;
   framePending = true;
   requestAnimationFrame(() => {
@@ -398,6 +403,198 @@ function element(tag, className, text) {
   return node;
 }
 
+function updateTopicFields(topics, state) {
+  const fields = new Map();
+  for (const topic of topics)
+    for (const field of topic.fields) {
+      const key = `${topic.topic}.${field.name}`;
+      fields.set(key, field);
+      if (!state.cells.has(key)) {
+        const row = element("tr");
+        const cell = element("td");
+        row.append(element("td", "", key.replaceAll("_", " ")), cell);
+        state.table.append(row);
+        state.cells.set(key, cell);
+      }
+      const cell = state.cells.get(key);
+      cell.textContent =
+        field.unit === "bytes"
+          ? bytes(Number(field.value))
+          : field.unit === "nanoseconds"
+            ? scaled(Number(field.value), 1000, ["ns", "µs", "ms", "s"])
+            : `${integer(field.value)} ${field.unit}`;
+      cell.title = `${field.value} ${field.unit}`;
+    }
+  for (const [key, cell] of state.cells) {
+    if (!fields.has(key)) {
+      cell.parentElement.remove();
+      state.cells.delete(key);
+    }
+  }
+  return fields;
+}
+
+function deviceLabel(device) {
+  return device.key + (device.key_truncated ? "…" : "");
+}
+
+function updatePlacement(state) {
+  const index = state.model.device;
+  const device = devices.get(index);
+  state.placement.textContent = device
+    ? deviceLabel(device.source)
+    : index === null || index === undefined
+      ? "unassigned"
+      : `device ${index}`;
+  if (device) state.placement.setAttribute("href", `#device-${index}`);
+  else state.placement.removeAttribute("href");
+}
+
+function summarizeDevices() {
+  const activity = new Map(
+    [...devices.keys()].map((index) => [
+      index,
+      { models: 0, active: 0, queued: 0, held: 0 },
+    ]),
+  );
+  for (const state of models.values()) {
+    updatePlacement(state);
+    const totals = activity.get(state.model.device);
+    if (!totals) continue;
+    ++totals.models;
+    totals.active += state.model.active;
+    totals.queued += state.model.queued;
+    totals.held += state.model.held;
+  }
+  for (const [index, totals] of activity) {
+    devices.get(index).activity.textContent =
+      `${totals.models} models · ${totals.active} active · ${totals.queued} queued · ${totals.held} held`;
+  }
+}
+
+function createPool(device, role) {
+  const card = element("article", "panel memory-pool");
+  card.id = `pool-${device.index}-${role}`;
+  const heading = element("div", "resource-head");
+  const link = element("a", "device-link", deviceLabel(device));
+  link.href = `#device-${device.index}`;
+  heading.append(
+    element(
+      "h3",
+      "",
+      role === "elastic" ? "Elastic backing" : "Native storage",
+    ),
+    link,
+  );
+  const total = element("div", "pool-total");
+  const committed = element("strong", "pool-value", "—");
+  const peak = element("span", "muted");
+  peak.title =
+    role === "elastic"
+      ? "Storage-owner lifetime peak."
+      : "Highest commitment observed in this page session.";
+  total.append(committed, peak);
+  const canvas = element("canvas");
+  canvas.setAttribute(
+    "aria-label",
+    `${deviceLabel(device)} ${role} committed bytes`,
+  );
+  const budget = element("div", "model-facts");
+  const reservations = element("div", "model-facts");
+  const workspace = element("div", "model-facts");
+  workspace.title =
+    "Workspace is backed by this pool. It is not additional physical usage; atomic samples need not agree at the same instant.";
+  const details = element("details");
+  const table = element("table");
+  details.append(element("summary", "", "All pool counters"), table);
+  card.append(heading, total, canvas, budget, reservations, workspace, details);
+  $("pool-grid").append(card);
+  return {
+    card,
+    committed,
+    peak,
+    canvas,
+    budget,
+    reservations,
+    workspace,
+    table,
+    cells: new Map(),
+    ring: new Ring(),
+    color: COLORS.memory,
+  };
+}
+
+function updateDevice(device, time, recordHistory) {
+  let state = devices.get(device.index);
+  if (!state) {
+    if (!devices.size) $("device-grid").replaceChildren();
+    const card = element("article", "panel device");
+    card.id = `device-${device.index}`;
+    const heading = element("div", "resource-head");
+    const identity = element(
+      "span",
+      "device-identity",
+      `${device.name} · ${device.driver} / ${device.backend}`,
+    );
+    heading.append(
+      element("h3", "", deviceLabel(device)),
+      identity,
+      element("span", "muted", device.backing),
+    );
+    const activity = element("div", "device-activity");
+    const links = element("div", "device-pools");
+    card.append(heading, activity, links);
+    $("device-grid").append(card);
+    state = { source: device, card, activity, links };
+    devices.set(device.index, state);
+  }
+  const workspace = device.topics.find((topic) => topic.topic === "workspace");
+  const parent = device.backing === "elastic" ? "elastic" : "storage";
+  for (const topic of device.topics) {
+    if (topic.topic !== "storage" && topic.topic !== "elastic") continue;
+    const role = topic.topic,
+      key = `${device.index}/${role}`;
+    let pool = pools.get(key);
+    if (!pool) {
+      pool = createPool(device, role);
+      pools.set(key, pool);
+      const link = element(
+        "a",
+        "device-link",
+        role === "elastic" ? "Elastic backing" : "Native storage",
+      );
+      link.href = `#${pool.card.id}`;
+      state.links.append(link);
+    }
+    const topics = role === parent && workspace ? [topic, workspace] : [topic];
+    const fields = updateTopicFields(topics, pool);
+    const value = (name, source = role) =>
+      fields.has(`${source}.${name}`)
+        ? Number(fields.get(`${source}.${name}`).value)
+        : NaN;
+    const committed = value("committed_bytes");
+    pool.committed.textContent = bytes(committed);
+    if (recordHistory) {
+      pool.ring.push(time, committed);
+      pendingPlots.add(pool);
+    }
+    pool.peak.textContent = `peak ${bytes(role === "elastic" ? value("peak_bytes") : pool.ring.peak)}`;
+    const limit = value("budget_limit");
+    pool.budget.textContent = `Committed · ${limit > 0 ? `${bytes(limit)} budget` : "no pool budget"}`;
+    pool.reservations.textContent =
+      role === "elastic"
+        ? `${bytes(value("reserved_bytes"))} virtual reserved · ${bytes(value("cached_bytes"))} reusable`
+        : `${bytes(value("reserved_bytes"))} charged · ${bytes(value("free_bytes"))} reusable`;
+    pool.workspace.textContent =
+      role === parent && workspace
+        ? `Workspace: ${bytes(value("reserved_bytes", "workspace"))} charged · ${bytes(value("committed_bytes", "workspace"))} retained (included)`
+        : "";
+  }
+  $("device-count").textContent = devices.size;
+  $("pool-count").textContent = pools.size;
+  summarizeDevices();
+}
+
 function createModel(model) {
   if (!models.size) $("model-grid").replaceChildren();
   const card = element("article", "panel model");
@@ -408,7 +605,10 @@ function createModel(model) {
     model.name + (model.name_truncated ? "…" : ""),
   );
   const identity = element("div");
-  identity.append(name, element("div", "kind", model.kind));
+  const kind = element("div", "kind", model.kind);
+  const placement = element("a", "device-link");
+  kind.append(placement);
+  identity.append(name, kind);
   const phase = element("span", "phase", model.phase);
   heading.append(identity, phase);
   const metrics = element("div", "model-metrics");
@@ -472,6 +672,7 @@ function createModel(model) {
     id: model.incarnation,
     card,
     phase,
+    placement,
     numbers,
     peaks,
     averages,
@@ -514,33 +715,7 @@ function updateModel(model, time, timeNs, version, recordHistory) {
     state = createModel(model);
     models.set(model.slot, state);
   }
-  const fields = new Map();
-  for (const topic of model.topics)
-    for (const field of topic.fields) {
-      const key = `${topic.topic}.${field.name}`;
-      fields.set(key, field);
-      if (!state.cells.has(key)) {
-        const row = element("tr");
-        const cell = element("td");
-        row.append(element("td", "", key.replaceAll("_", " ")), cell);
-        state.table.append(row);
-        state.cells.set(key, cell);
-      }
-      const cell = state.cells.get(key);
-      cell.textContent =
-        field.unit === "bytes"
-          ? bytes(Number(field.value))
-          : field.unit === "nanoseconds"
-            ? scaled(Number(field.value), 1000, ["ns", "µs", "ms", "s"])
-            : `${integer(field.value)} ${field.unit}`;
-      cell.title = `${field.value} ${field.unit}`;
-    }
-  for (const [key, cell] of state.cells) {
-    if (!fields.has(key)) {
-      cell.parentElement.remove();
-      state.cells.delete(key);
-    }
-  }
+  const fields = updateTopicFields(model.topics, state);
   const value = (key) =>
     fields.has(key) ? Number(fields.get(key).value) : NaN;
   const imageTotal = fields.get("image.generated_images")?.value;
@@ -612,6 +787,7 @@ function updateModel(model, time, timeNs, version, recordHistory) {
 }
 
 function summarize(time, recordHistory) {
+  summarizeDevices();
   let active = 0,
     queued = 0,
     held = 0,
@@ -798,7 +974,13 @@ function apply(frame) {
     activePeak = 0;
     pendingPlots.clear();
     models.clear();
+    devices.clear();
+    pools.clear();
     $("model-grid").replaceChildren();
+    $("device-grid").replaceChildren();
+    $("pool-grid").replaceChildren();
+    $("device-count").textContent = "0";
+    $("pool-count").textContent = "0";
     for (const key of Object.keys(history)) history[key] = new Ring();
     latestTime = 0;
     historyTime = 0;
@@ -824,6 +1006,10 @@ function apply(frame) {
   if (recordHistory) historyTime = latestTime;
   if (page.type === "server") {
     updateServer(page, time, timeNs, frame, recordHistory);
+    if (!page.device_count)
+      $("device-grid").textContent = "No application-owned devices.";
+  } else if (page.type === "device") {
+    updateDevice(page, time, recordHistory);
   } else if (page.type === "models") {
     // A live page establishes absence only for its explicitly scanned slots.
     for (let slot = page.first; slot < page.next; ++slot) {
@@ -908,6 +1094,7 @@ function connect() {
     if (socket !== peer) return;
     for (const ring of Object.values(history)) ring.push(latestTime, NaN);
     for (const model of models.values()) model.ring.push(latestTime, NaN);
+    for (const pool of pools.values()) pool.ring.push(latestTime, NaN);
     state(paused ? "Paused" : "Disconnected");
     if (!paused && !document.hidden) {
       $("notice").textContent =

@@ -11,6 +11,7 @@
 #include "iree/base/internal/json.h"
 #include "loom/serve/runtime/execution/workspace.h"
 #include "loom/serve/runtime/parameter/residency.h"
+#include "loom/serve/telemetry/sample.h"
 #include "loom/util/json.h"
 
 void loom_serve_resources_set_observer(const loom_serve_resources_t* resources,
@@ -77,6 +78,156 @@ bool loom_serve_resources_is_pending(const loom_serve_resources_t* resources) {
     }
   }
   return pending;
+}
+
+iree_host_size_t loom_serve_resources_observation_count(
+    const loom_serve_resources_t* resources) {
+  return resources->device_group
+             ? loom_serve_device_group_count(resources->device_group)
+             : 0;
+}
+
+static iree_status_t loom_serve_resources_pool_topic(
+    const char* name, const iree_hal_pool_stats_t* statistics,
+    loom_serve_telemetry_sample_sink_t sink) {
+  static const loom_serve_telemetry_metric_t fields[] = {
+      {"reserved_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"committed_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"free_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"quarantined_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"abandoned_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"budget_limit", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"reservation_count", "reservations", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"slab_count", "slabs", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"reserve_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"release_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"reuse_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"reuse_miss_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"fresh_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"exhausted_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"over_budget_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"wait_count", "reservations", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"quarantine_eviction_count", "reservations",
+       LOOM_SERVE_TELEMETRY_COUNTER},
+  };
+  const loom_serve_telemetry_topic_t topic = {name, 1, IREE_ARRAYSIZE(fields),
+                                              fields};
+  const uint64_t values[] = {
+      statistics->bytes_reserved,
+      statistics->bytes_committed,
+      statistics->bytes_free,
+      statistics->bytes_quarantined,
+      statistics->bytes_abandoned,
+      statistics->budget_limit,
+      statistics->reservation_count,
+      statistics->slab_count,
+      statistics->reserve_count,
+      statistics->release_count,
+      statistics->reuse_count,
+      statistics->reuse_miss_count,
+      statistics->fresh_count,
+      statistics->exhausted_count,
+      statistics->over_budget_count,
+      statistics->wait_count,
+      statistics->quarantine_eviction_count,
+  };
+  return sink.emit(sink.self, &topic, values);
+}
+
+iree_status_t loom_serve_resources_sample(
+    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    loom_serve_telemetry_sample_sink_t sink) {
+  loom_serve_device_t* device =
+      loom_serve_device_group_at(resources->device_group, device_index);
+  const loom_serve_memory_pool_t* retained =
+      loom_serve_device_memory_pool(device);
+  const loom_serve_device_memory_statistics_t memory =
+      loom_serve_device_memory_statistics(device);
+  IREE_RETURN_IF_ERROR(
+      loom_serve_resources_pool_topic("storage", &memory.storage, sink));
+  if (retained) {
+    static const loom_serve_telemetry_metric_t fields[] = {
+        {"reserved_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"committed_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"cached_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"pending_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"releasing_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"abandoned_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"peak_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"budget_limit", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+        {"released_bytes", "bytes", LOOM_SERVE_TELEMETRY_COUNTER},
+    };
+    const loom_serve_telemetry_topic_t topic = {"elastic", 1,
+                                                IREE_ARRAYSIZE(fields), fields};
+    const uint64_t limit = loom_serve_memory_pool_limit(retained);
+    const uint64_t values[] = {
+        memory.retained.reserved_bytes,  memory.retained.committed_bytes,
+        memory.retained.cached_bytes,    memory.retained.pending_bytes,
+        memory.retained.releasing_bytes, memory.retained.abandoned_bytes,
+        memory.retained.peak_bytes,      limit == UINT64_MAX ? 0 : limit,
+        memory.retained.released_bytes,
+    };
+    IREE_RETURN_IF_ERROR(sink.emit(sink.self, &topic, values));
+  }
+  return loom_serve_resources_pool_topic("workspace", &memory.workspace, sink);
+}
+
+typedef struct loom_serve_resources_topic_writer_t {
+  // Borrowed formatter bounded by the current-state page extent.
+  iree_string_builder_t* output;
+  // Separates topics without assuming any particular provider's first topic.
+  bool has_topic;
+} loom_serve_resources_topic_writer_t;
+
+static iree_status_t loom_serve_resources_write_topic(
+    void* self, const loom_serve_telemetry_topic_t* topic,
+    const uint64_t* values) {
+  loom_serve_resources_topic_writer_t* writer = self;
+  if (writer->has_topic) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(writer->output, ","));
+  }
+  writer->has_topic = true;
+  return loom_serve_telemetry_sample_write_json(topic, values, writer->output);
+}
+
+iree_status_t loom_serve_resources_write_observation(
+    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    iree_string_builder_t* output) {
+  loom_serve_device_t* device =
+      loom_serve_device_group_at(resources->device_group, device_index);
+  const iree_hal_device_identity_spec_t* identity =
+      iree_hal_device_spec_identity(
+          iree_hal_device_spec(loom_serve_device_handle(device)));
+  const iree_string_view_t key = loom_serve_device_name(device);
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output, "{\"type\":\"device\",\"index\":%zu,\"key\":", device_index));
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(output, &stream);
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, iree_string_view_substr(key, 0, 256)));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output,
+      ",\"key_truncated\":%s,\"name\":", key.size > 256 ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, identity->display_name));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(output, ",\"driver\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, identity->driver_id));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(output, ",\"backend\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, identity->backend_id));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output, ",\"backing\":\"%s\",\"topics\":[",
+      loom_serve_device_memory_pool(device) ? "elastic" : "fixed"));
+  loom_serve_resources_topic_writer_t writer = {.output = output};
+  IREE_RETURN_IF_ERROR(loom_serve_resources_sample(
+      resources, device_index,
+      (loom_serve_telemetry_sample_sink_t){&writer,
+                                           loom_serve_resources_write_topic}));
+  return iree_string_builder_append_cstring(output, "]}");
 }
 
 static iree_status_t loom_serve_resources_write_physical_devices(
