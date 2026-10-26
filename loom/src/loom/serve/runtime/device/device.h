@@ -9,6 +9,7 @@
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/host/host.h"
 #include "loom/serve/runtime/parameter/residency.h"
+#include "loom/serve/runtime/program/jit.h"
 #include "loom/serve/runtime/storage/memory.h"
 
 #ifdef __cplusplus
@@ -188,6 +189,14 @@ loom_serve_memory_geometry_t loom_serve_device_state_geometry(
 // Borrowed parameter admission, pinning and LRU policy shared by all models.
 loom_serve_residency_cache_t* loom_serve_device_residency_cache(
     const loom_serve_device_t* device);
+
+// Creates a model-local source catalog backed by this device's immutable
+// compilation cache. The model retains the returned catalog and its private
+// report/callback state; the device owns reusable completed products.
+iree_status_t loom_serve_device_create_jit(
+    loom_serve_device_t* device, const loom_serve_sources_t* sources,
+    const loomc_sanitizer_options_t* sanitizer,
+    loom_serve_compilation_report_t* report, loom_serve_jit_t** out_jit);
 
 #ifdef __cplusplus
 }  // extern "C"

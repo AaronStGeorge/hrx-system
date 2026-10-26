@@ -60,7 +60,8 @@ typedef struct loom_serve_compilation_report_t {
   // Native compilations accepted directly or by command products, excluding
   // exact-input reuse.
   uint64_t kernels;
-  // Requests reusing an exact native input within the same JIT catalog.
+  // Native entries satisfied by exact input or complete-stage reuse instead
+  // of new compiler work in this model's JIT catalog.
   uint64_t reused_kernels;
   // Successfully bound native entries across both stage kinds.
   uint64_t entries;

@@ -238,7 +238,8 @@ TEST_F(SourceTextServiceTest, FailedNativeVariantsLeaveCurrentModelUsable) {
   EXPECT_EQ(retained.activations, weights.activations);
 }
 
-TEST_F(SourceTextServiceTest, IndependentCandidatesShareOnlyModelResources) {
+TEST_F(SourceTextServiceTest,
+       EquivalentCandidateReusesCompilationWithIndependentReportAndState) {
   const auto modified_path =
       iree::testing::MakeTempFilePath("independent_variant", ".loom");
   const std::string original_path = directory_ + "/advance.loom";
@@ -260,7 +261,8 @@ TEST_F(SourceTextServiceTest, IndependentCandidatesShareOnlyModelResources) {
       loom_serve_text_variant_report(original.variant());
   EXPECT_NE(modified_report, original_report);
   EXPECT_GT(modified_report->kernels, 0u);
-  EXPECT_GT(original_report->kernels, 0u);
+  EXPECT_EQ(original_report->kernels, 0u);
+  EXPECT_GT(original_report->reused_kernels, 0u);
 
   auto* row = loom_serve_text_model_row(model_, 0);
   bool admitted = false;

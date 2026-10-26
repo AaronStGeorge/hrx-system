@@ -156,11 +156,9 @@ static void loom_serve_text_variant_compiled(void* user_data,
 static void loom_serve_text_variant_execute(loomc_task_t* task,
                                             loomc_host_size_t worker_ordinal) {
   loom_serve_text_variant_job_t* job = (loom_serve_text_variant_job_t*)task;
-  job->status = loom_serve_jit_create(
-      loom_serve_device_handle(job->device),
-      loom_serve_device_dispatch_queue(job->device),
-      loom_serve_device_host(job->device), &job->sources, job->sanitizer,
-      &job->variant->compilation, job->variant->host_allocator, &job->jit);
+  job->status =
+      loom_serve_device_create_jit(job->device, &job->sources, job->sanitizer,
+                                   &job->variant->compilation, &job->jit);
 }
 
 static void loom_serve_text_variant_release(loomc_task_t* task) {

@@ -20,6 +20,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_serve_jit_t loom_serve_jit_t;
+
 // Source-selected inputs and preparation policy for one parameter bank, or a
 // fixed binding naming an arena without selecting one bank as its contents.
 typedef struct loom_serve_preparation_parameter_t {
@@ -187,6 +189,16 @@ iree_status_t loom_serve_preparation_allocate(
     loom_serve_preparation_flags_t flags, iree_vm_variant_span_t arguments,
     iree_vm_variant_span_t results, iree_vm_module_span_t libraries,
     loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
+    loom_serve_preparation_t** out_preparation);
+
+// Catalog-backed counterpart. Compilation may reuse immutable bytecode, while
+// evaluation always creates fresh process state and captures new declarations.
+iree_status_t loom_serve_preparation_allocate_cached(
+    loom_serve_jit_t* jit, iree_vm_environment_t* environment,
+    const loom_serve_sources_t* sources, iree_string_view_t source_path,
+    iree_string_view_t entry, loom_serve_preparation_flags_t flags,
+    iree_vm_variant_span_t arguments, iree_vm_variant_span_t results,
+    iree_vm_module_span_t libraries, iree_allocator_t host_allocator,
     loom_serve_preparation_t** out_preparation);
 
 // Evaluates already compiled preparation bytecode in a fresh linked process.

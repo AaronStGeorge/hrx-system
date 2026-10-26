@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/serve/media/digest.h"
+#include "loom/util/digest.h"
 
 #include <string>
 
@@ -12,7 +12,7 @@
 
 namespace {
 
-std::string Hex(const loom_serve_media_digest_t& digest) {
+std::string Hex(const loom_sha256_t& digest) {
   static constexpr char kDigits[] = "0123456789abcdef";
   std::string value(sizeof(digest.bytes) * 2, '0');
   for (iree_host_size_t i = 0; i < sizeof(digest.bytes); ++i) {
@@ -22,10 +22,10 @@ std::string Hex(const loom_serve_media_digest_t& digest) {
   return value;
 }
 
-loom_serve_media_digest_t Digest(iree_string_view_t value) {
-  loom_serve_media_digest_t digest;
-  loom_serve_media_digest_compute(
-      iree_make_const_byte_span(value.data, value.size), &digest);
+loom_sha256_t Digest(iree_string_view_t value) {
+  loom_sha256_t digest;
+  loom_sha256_compute(iree_make_const_byte_span(value.data, value.size),
+                      &digest);
   return digest;
 }
 
@@ -45,9 +45,22 @@ TEST(DigestTest, StandardVectors) {
 TEST(DigestTest, CompleteIdentityComparison) {
   const auto first = Digest(IREE_SV("first"));
   auto second = first;
-  EXPECT_TRUE(loom_serve_media_digest_equal(&first, &second));
+  EXPECT_TRUE(loom_sha256_equal(&first, &second));
   second.bytes[31] ^= 1;
-  EXPECT_FALSE(loom_serve_media_digest_equal(&first, &second));
+  EXPECT_FALSE(loom_sha256_equal(&first, &second));
+}
+
+TEST(DigestTest, IncrementalInputMatchesCompleteBytes) {
+  const auto expected = Digest(IREE_SV("split across digest blocks and calls"));
+  loom_sha256_state_t state;
+  loom_sha256_initialize(&state);
+  for (const auto part : {IREE_SV("split "), IREE_SV("across digest "),
+                          IREE_SV("blocks and calls")}) {
+    loom_sha256_update(&state, iree_make_const_byte_span(part.data, part.size));
+  }
+  loom_sha256_t actual;
+  loom_sha256_finalize(&state, &actual);
+  EXPECT_TRUE(loom_sha256_equal(&expected, &actual));
 }
 
 }  // namespace

@@ -23,6 +23,7 @@ extern "C" {
 // requests. Native modules own any asynchronous resources submitted by the
 // program.
 typedef struct loom_serve_program_t loom_serve_program_t;
+typedef struct loom_serve_jit_t loom_serve_jit_t;
 
 // One synchronous host call into a source-defined model program. Scalar fields
 // have exact VM widths; reference fields carry canonical environment
@@ -92,6 +93,12 @@ iree_status_t loom_serve_program_compile_service(
     iree_string_view_t source_path, iree_host_size_t root_count,
     const iree_string_view_t* roles, iree_string_view_list_t additional_roots,
     loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module);
+iree_status_t loom_serve_program_compile_service_cached(
+    loom_serve_jit_t* jit, iree_vm_environment_t* environment,
+    const loom_serve_sources_t* sources, iree_string_view_t source_path,
+    iree_host_size_t root_count, const iree_string_view_t* roles,
+    iree_string_view_list_t additional_roots, iree_allocator_t host_allocator,
     iree_vm_module_t** out_module);
 iree_status_t loom_serve_program_link_service(
     iree_vm_module_t* module, loom_model_card_t* card,

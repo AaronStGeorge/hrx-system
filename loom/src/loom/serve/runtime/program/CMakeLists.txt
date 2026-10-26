@@ -278,8 +278,10 @@ loom_cc_library(
     jit
   HDRS
     "jit.h"
+    "jit_cache.h"
   SRCS
     "jit.c"
+    "jit_cache.c"
   DEPS
     ::compilation
     ::executable
@@ -296,6 +298,7 @@ loom_cc_library(
     loom::serve::runtime::host
     loom::target::arch::cmd::hal_command_buffer
     loom::target::arch::cmd::program
+    loom::util::digest
   PUBLIC
 )
 endif()

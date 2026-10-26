@@ -123,6 +123,29 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    digest
+  HDRS
+    "digest.h"
+  SRCS
+    "digest.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    digest_test
+  SRCS
+    "digest_test.cc"
+  DEPS
+    ::digest
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     json
   HDRS
     "json.h"

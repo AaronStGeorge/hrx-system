@@ -1325,7 +1325,18 @@ TEST_P(SourceImageServiceTest, DynamicImageAdmissionRetirementAndReuse) {
             std::string::npos);
   const auto ready = ModelStatus("pixels");
   EXPECT_NE(ready.find(R"("registration":"ready")"), std::string::npos);
-  EXPECT_NE(ready.find(R"("kernels":2)"), std::string::npos);
+  // The process-owned device cache may already contain this exact source
+  // generation. Both native entries must be accounted as one complete cold
+  // compilation or one complete-stage reuse, never a partial mixture.
+  const bool compiled =
+      ready.find(
+          R"("commands":1,"kernels":2,"reused_kernels":0,"entries":2)") !=
+      std::string::npos;
+  const bool reused =
+      ready.find(
+          R"("commands":1,"kernels":0,"reused_kernels":2,"entries":2)") !=
+      std::string::npos;
+  EXPECT_NE(compiled, reused) << ready;
   const auto log = Read(Send("GET", "/logz", "", "X-Loom-Model: pixels\r\n"));
   EXPECT_NE(log.find(R"("event":"stream_begin","sequence":0)"),
             std::string::npos);

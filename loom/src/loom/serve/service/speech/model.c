@@ -352,15 +352,14 @@ static iree_status_t loom_serve_speech_prepare(
   const iree_host_size_t capacity_count = version == 2 ? 13 : 11;
   iree_vm_variant_t results[17] = {0};
   if (iree_status_is_ok(status)) {
-    status = loom_serve_preparation_allocate(
-        loom_serve_host_target_environment(
-            loom_serve_device_host(model->owner)),
-        model->control.environment, &options->sources, options->sources.prepare,
-        IREE_SV("prepare"), LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
+    status = loom_serve_preparation_allocate_cached(
+        model->jit, model->control.environment, &options->sources,
+        options->sources.prepare, IREE_SV("prepare"),
+        LOOM_SERVE_PREPARATION_FLAG_PARAMETERS,
         iree_vm_variant_span_from_array(arguments),
         (iree_vm_variant_span_t){results, capacity_count + 4},
-        (iree_vm_module_span_t){modules, 2}, &model->compilation,
-        host_allocator, &model->preparation);
+        (iree_vm_module_span_t){modules, 2}, host_allocator,
+        &model->preparation);
   }
   int64_t capacities[13] = {0};
   for (iree_host_size_t i = 0; i < capacity_count && iree_status_is_ok(status);
@@ -891,6 +890,9 @@ static iree_status_t loom_serve_speech_load_prepare(
   loom_serve_speech_model_t* model = load->model;
   const iree_allocator_t host_allocator = model->host_allocator;
   IREE_RETURN_IF_ERROR(
+      loom_serve_device_create_jit(model->owner, &load->options.sources, NULL,
+                                   &model->compilation, &model->jit));
+  IREE_RETURN_IF_ERROR(
       loom_serve_speech_prepare(model, &load->options, load->event.wake,
                                 load->event.user_data, &load->tokenizer_load));
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(
@@ -914,18 +916,12 @@ static iree_status_t loom_serve_speech_load_prepare(
       IREE_SVL("prepare_request"), IREE_SVL("prepare_work"),
       IREE_SVL("prepare_batch"),   IREE_SVL("generate"),
       IREE_SVL("complete"),        IREE_SVL("prepare_voice")};
-  iree_status_t status = loom_serve_program_compile_service(
-      loom_serve_host_target_environment(loom_serve_device_host(model->owner)),
-      model->control.environment, &load->options.sources,
+  iree_status_t status = loom_serve_program_compile_service_cached(
+      model->jit, model->control.environment, &load->options.sources,
       load->options.sources.control, model->voice_capacity ? 6 : 5, roots,
-      (iree_string_view_list_t){0}, &model->compilation, host_allocator,
-      &load->module);
+      (iree_string_view_list_t){0}, host_allocator, &load->module);
   IREE_RETURN_IF_ERROR(status);
-  return loom_serve_jit_create(
-      loom_serve_device_handle(model->owner),
-      loom_serve_device_dispatch_queue(model->owner),
-      loom_serve_device_host(model->owner), &load->options.sources, NULL,
-      &model->compilation, host_allocator, &model->jit);
+  return iree_ok_status();
 }
 
 static void loom_serve_speech_load_execute(loomc_task_t* task,

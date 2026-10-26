@@ -487,6 +487,74 @@ TEST_P(JitCacheTest, FailedDirectNativesRetainDiagnosticsWithoutCaching) {
 
 INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitCacheTest, ::testing::Values(1, 4));
 
+TEST_P(JitTest, DeviceCacheSharesCompleteStagesAcrossModelCatalogs) {
+  loom_serve_jit_release(jit_);
+  jit_ = nullptr;
+  const iree_string_view_t providers[] = {IREE_SV("config.loom"),
+                                          IREE_SV("stage.loom")};
+  const loom_serve_sources_t sources = {
+      .base_directory = iree_make_cstring_view(directory_.c_str()),
+      .count = IREE_ARRAYSIZE(providers),
+      .values = providers,
+  };
+  const loomc_config_options_t config = {
+      nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
+  auto compile_direct = [&](loom_serve_jit_stage_t** out_stage) {
+    loom_serve_test_compilation_t job;
+    job.jit = jit_;
+    job.direct_dispatch = true;
+    job.root = IREE_SV("increment_0");
+    job.config = &config;
+    job.Start(loom_serve_host_executor(loom_serve_device_host(device_owner_)));
+    return job.Await(out_stage);
+  };
+  loom_serve_compilation_report_t first_report = {};
+  IREE_ASSERT_OK(loom_serve_device_create_jit(device_owner_, &sources, nullptr,
+                                              &first_report, &jit_));
+  loom_serve_jit_stage_t* first = nullptr;
+  IREE_ASSERT_OK(
+      loom_serve_jit_compile(jit_, IREE_SV("advance"), &config, &first));
+  ASSERT_NE(first, nullptr);
+  EXPECT_GT(first_report.kernels, 0u);
+  EXPECT_EQ(first_report.reused_kernels, 0u);
+  loom_serve_jit_stage_t* first_direct = nullptr;
+  IREE_ASSERT_OK(compile_direct(&first_direct));
+  ASSERT_NE(first_direct, nullptr);
+  loom_serve_jit_release(jit_);
+  jit_ = nullptr;
+
+  loom_serve_compilation_report_t second_report = {};
+  IREE_ASSERT_OK(loom_serve_device_create_jit(device_owner_, &sources, nullptr,
+                                              &second_report, &jit_));
+  loom_serve_jit_stage_t* second = nullptr;
+  IREE_ASSERT_OK(
+      loom_serve_jit_compile(jit_, IREE_SV("advance"), &config, &second));
+  EXPECT_EQ(second, first);
+  loom_serve_jit_stage_t* second_direct = nullptr;
+  IREE_ASSERT_OK(compile_direct(&second_direct));
+  EXPECT_EQ(second_direct, first_direct);
+  EXPECT_EQ(second_report.commands, 1u);
+  EXPECT_EQ(second_report.kernels, 0u);
+  EXPECT_GT(second_report.reused_kernels, 0u);
+  EXPECT_EQ(second_report.entries, first_report.entries);
+
+  const loomc_config_binding_t binding = {
+      loomc_make_cstring_view("increment.delta"), loomc_make_cstring_view("3")};
+  const loomc_config_options_t changed_config = {
+      &binding, 1, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
+  loom_serve_jit_stage_t* changed = nullptr;
+  IREE_ASSERT_OK(loom_serve_jit_compile(jit_, IREE_SV("advance"),
+                                        &changed_config, &changed));
+  EXPECT_NE(changed, first);
+  EXPECT_GT(second_report.kernels, 0u);
+
+  loom_serve_jit_stage_free(changed);
+  loom_serve_jit_stage_free(second_direct);
+  loom_serve_jit_stage_free(first_direct);
+  loom_serve_jit_stage_free(second);
+  loom_serve_jit_stage_free(first);
+}
+
 TEST_P(JitTest, SourceFailureOutlivesUnconstructedCatalogAndVm) {
 #if defined(__linux__)
   loom_serve::testing::StalledStderr blocked;

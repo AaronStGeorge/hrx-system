@@ -1084,6 +1084,25 @@ iree_status_t loom_serve_preparation_allocate(
   return status;
 }
 
+iree_status_t loom_serve_preparation_allocate_cached(
+    loom_serve_jit_t* jit, iree_vm_environment_t* environment,
+    const loom_serve_sources_t* sources, iree_string_view_t source_path,
+    iree_string_view_t entry, loom_serve_preparation_flags_t flags,
+    iree_vm_variant_span_t arguments, iree_vm_variant_span_t results,
+    iree_vm_module_span_t libraries, iree_allocator_t host_allocator,
+    loom_serve_preparation_t** out_preparation) {
+  *out_preparation = NULL;
+  iree_vm_module_t* module = NULL;
+  IREE_RETURN_IF_ERROR(loom_serve_program_compile_service_cached(
+      jit, environment, sources, source_path, 1, &entry,
+      (iree_string_view_list_t){0}, host_allocator, &module));
+  iree_status_t status = loom_serve_preparation_evaluate(
+      environment, module, sources, entry, flags, arguments, results, libraries,
+      host_allocator, out_preparation);
+  iree_vm_module_release(module);
+  return status;
+}
+
 iree_status_t loom_serve_preparation_evaluate(
     iree_vm_environment_t* environment, iree_vm_module_t* module,
     const loom_serve_sources_t* sources, iree_string_view_t entry,

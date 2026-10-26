@@ -220,9 +220,8 @@ static iree_status_t loom_serve_text_source_evaluate_cache(
 }
 
 iree_status_t loom_serve_text_source_initialize(
-    loomc_target_environment_t* target_environment,
-    const loom_serve_text_options_t* options, iree_allocator_t host_allocator,
-    loom_serve_text_source_t* out_source,
+    loom_serve_jit_t* jit, const loom_serve_text_options_t* options,
+    iree_allocator_t host_allocator, loom_serve_text_source_t* out_source,
     loom_serve_text_storage_t* out_storage) {
   memset(out_source, 0, sizeof(*out_source));
   memset(out_storage, 0, sizeof(*out_storage));
@@ -238,10 +237,10 @@ iree_status_t loom_serve_text_source_initialize(
   const iree_string_view_t prepare = IREE_SV("prepare");
   loom_serve_text_source_sizing_t sizing = {
       .options = options, .source = out_source, .storage = out_storage};
-  IREE_RETURN_IF_ERROR(loom_serve_program_compile_service(
-      target_environment, out_source->environment, &options->sources,
-      options->sources.prepare, 1, &prepare, (iree_string_view_list_t){0},
-      &out_source->compilation, host_allocator, &sizing.module));
+  IREE_RETURN_IF_ERROR(loom_serve_program_compile_service_cached(
+      jit, out_source->environment, &options->sources, options->sources.prepare,
+      1, &prepare, (iree_string_view_list_t){0}, host_allocator,
+      &sizing.module));
   iree_status_t status = loom_serve_text_cache_select(
       &options->cache, options->checkpoint_capacity,
       loom_serve_text_source_evaluate_cache, &sizing, &out_source->cache);
@@ -284,13 +283,12 @@ iree_status_t loom_serve_text_source_initialize(
       IREE_SVL("capture_epoch"),  IREE_SVL("request_defaults"),
       IREE_SVL("request_options")};
   const bool encodes = options->mode == LOOM_SERVE_TEXT_MODE_ENCODE;
-  return loom_serve_program_compile_service(
-      target_environment, out_source->environment, &options->sources,
-      options->sources.control,
+  return loom_serve_program_compile_service_cached(
+      jit, out_source->environment, &options->sources, options->sources.control,
       encodes ? IREE_ARRAYSIZE(encoding_roots)
               : IREE_ARRAYSIZE(generation_roots),
       encodes ? encoding_roots : generation_roots, (iree_string_view_list_t){0},
-      &out_source->compilation, host_allocator, &out_source->module);
+      host_allocator, &out_source->module);
 }
 
 void loom_serve_text_source_deinitialize(loom_serve_text_source_t* source) {

@@ -128,10 +128,12 @@ static iree_status_t loom_serve_text_load_prepare(
                                   model->shape_count * sizeof(*model->shapes)),
         (void**)&model->shapes));
   }
+  IREE_RETURN_IF_ERROR(loom_serve_device_create_jit(
+      model->device_owner, &options->sources, &options->kernel_sanitizer,
+      &model->compilation, &model->jit));
   IREE_RETURN_IF_ERROR(loom_serve_text_source_initialize(
-      loom_serve_host_target_environment(
-          loom_serve_device_host(model->device_owner)),
-      options, model->host_allocator, &model->source, &model->state.storage));
+      model->jit, options, model->host_allocator, &model->source,
+      &model->state.storage));
   model->state.checkpoints.capacity =
       (uint32_t)model->source.cache.checkpoint_capacity;
   const iree_host_size_t stage_count =
@@ -148,11 +150,7 @@ static iree_status_t loom_serve_text_load_prepare(
       model->host_allocator, stage_count, sizeof(*model->stages),
       (void**)&model->stages));
   model->stage_count = stage_count;
-  return loom_serve_jit_create(model->device, model->dispatch,
-                               loom_serve_device_host(model->device_owner),
-                               &options->sources, &options->kernel_sanitizer,
-                               &model->source.compilation,
-                               model->host_allocator, &model->jit);
+  return iree_ok_status();
 }
 
 static void loom_serve_text_load_execute(loomc_task_t* task,
@@ -569,7 +567,7 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
 
 const loom_serve_compilation_report_t* loom_serve_text_load_report(
     const loom_serve_text_load_t* load) {
-  return &load->model->source.compilation;
+  return &load->model->compilation;
 }
 
 loom_serve_text_model_t* loom_serve_text_load_take_model(

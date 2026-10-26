@@ -3,6 +3,7 @@
 // Licensed under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/serve/runtime/device/device.h"
 #include "loom/serve/service/text/service_test_fixture.h"
 #include "loom/serve/service/text/source.h"
 #include "loom/serve/service/text/state.h"
@@ -21,9 +22,11 @@ class TextStateReservationTest
     ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
     const auto options = ModelOptions();
     loom_serve_text_state_initialize(&options, host_allocator_, &state_);
+    IREE_ASSERT_OK(loom_serve_device_create_jit(device_, &options.sources,
+                                                &options.kernel_sanitizer,
+                                                &compilation_, &jit_));
     IREE_ASSERT_OK(loom_serve_text_source_initialize(
-        loom_serve_host_target_environment(host_), &options, host_allocator_,
-        &source_, &state_.storage));
+        jit_, &options, host_allocator_, &source_, &state_.storage));
     IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &execution_));
     IREE_ASSERT_OK(
         loom_serve_text_state_allocate(&state_, device_, execution_));
@@ -37,6 +40,7 @@ class TextStateReservationTest
     loom_serve_text_state_await_retirement(&state_);
     IREE_EXPECT_OK(loom_serve_text_state_deinitialize(&state_));
     loom_serve_execution_release(execution_);
+    loom_serve_jit_release(jit_);
     loom_serve_text_source_deinitialize(&source_);
     SourceTextServiceTest::TearDown();
   }
@@ -53,6 +57,10 @@ class TextStateReservationTest
 
   // Owned source description outliving native state.
   loom_serve_text_source_t source_ = {};
+  // Model-local compilation evidence outliving its source JIT.
+  loom_serve_compilation_report_t compilation_ = {};
+  // Owned production source catalog supplying cached VM compilation.
+  loom_serve_jit_t* jit_ = nullptr;
   // Owned source-defined pooled state under test.
   loom_serve_text_state_t state_ = {};
   // Owned device timeline, shared by all rows of this state.

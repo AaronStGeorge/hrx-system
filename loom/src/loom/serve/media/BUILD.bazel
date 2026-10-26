@@ -22,20 +22,8 @@ package(
 
 loom_cc_library(
     name = "digest",
-    srcs = ["digest.c"],
     hdrs = ["digest.h"],
-    deps = ["//runtime/src/iree/base"],
-)
-
-loom_cc_test(
-    name = "digest_test",
-    srcs = ["digest_test.cc"],
-    deps = [
-        ":digest",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
+    deps = ["//loom/src/loom/util:digest"],
 )
 
 loom_cc_library(
