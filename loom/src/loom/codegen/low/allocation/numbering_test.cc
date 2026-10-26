@@ -73,6 +73,13 @@ class LowAllocationNumberingTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_low_allocation_number_registers(&context_, &arena_));
   }
 
+  loom_low_allocation_numbering_analysis_t Analyze() {
+    loom_low_allocation_numbering_analysis_t analysis = {};
+    IREE_EXPECT_OK(
+        loom_low_allocation_numbering_analyze(&context_, &arena_, &analysis));
+    return analysis;
+  }
+
   void ExpectImproved() {
     EXPECT_NE(assignments_[0].location_base & 3,
               assignments_[1].location_base & 3);
@@ -162,6 +169,29 @@ class LowAllocationNumberingTest : public ::testing::Test {
 TEST_F(LowAllocationNumberingTest, ImprovesCostWithoutGrowingStorage) {
   Number();
   ExpectImproved();
+}
+
+TEST_F(LowAllocationNumberingTest, DistinguishesMovablePreferenceCost) {
+  const auto analysis = Analyze();
+  EXPECT_EQ(analysis.instruction_cost, 1u);
+  EXPECT_EQ(analysis.unavoidable_instruction_cost, 0u);
+  EXPECT_EQ(analysis.scheduled_pair_cost, 0u);
+  EXPECT_EQ(analysis.unavoidable_scheduled_pair_cost, 0u);
+  ExpectIdentity();
+}
+
+TEST_F(LowAllocationNumberingTest, ReportsOverlapConnectedPreferenceCost) {
+  loom_low_allocation_storage_lease_t instance = {
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 3,
+      .location_count = 2,
+  };
+  leases_.instances = &instance;
+  leases_.instance_count = 1;
+  const auto analysis = Analyze();
+  EXPECT_EQ(analysis.instruction_cost, 1u);
+  EXPECT_EQ(analysis.unavoidable_instruction_cost, 1u);
+  ExpectIdentity();
 }
 
 TEST_F(LowAllocationNumberingTest, EntryIdentitiesKeepExternalCoordinates) {

@@ -50,6 +50,30 @@ typedef struct loom_low_allocation_numbering_context_t {
   iree_host_size_t move_count;
 } loom_low_allocation_numbering_context_t;
 
+// Costs that the completed assignment presents to physical numbering.
+// Instruction and scheduled-pair costs remain separate because only
+// instruction costs justify replacing an otherwise successful coloring.
+typedef struct loom_low_allocation_numbering_analysis_t {
+  // Cost of instruction preferences at the assignment's current locations.
+  uint64_t instruction_cost;
+  // Cost of scheduled-pair preferences at the current locations.
+  uint64_t scheduled_pair_cost;
+  // Instruction cost fixed by overlap-connected physical ranges.
+  uint64_t unavoidable_instruction_cost;
+  // Scheduled-pair cost fixed by overlap-connected physical ranges.
+  uint64_t unavoidable_scheduled_pair_cost;
+} loom_low_allocation_numbering_analysis_t;
+
+// Analyzes the preference costs exposed by one completed assignment without
+// changing any physical coordinates. Unavoidable costs include only clauses
+// whose violations are invariant under every rigid block permutation, making
+// them a conservative lower bound for final numbering. Scratch storage is
+// released before return.
+iree_status_t loom_low_allocation_numbering_analyze(
+    const loom_low_allocation_numbering_context_t* context,
+    iree_arena_allocator_t* scratch_arena,
+    loom_low_allocation_numbering_analysis_t* out_analysis);
+
 // Improves retained instruction costs with a bounded search over bijections
 // within the existing physical extent. Every assignment/lease remains rigid,
 // every class stays within its original extent, and no preference exceeds its
