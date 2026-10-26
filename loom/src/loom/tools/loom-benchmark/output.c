@@ -182,6 +182,33 @@ iree_host_size_t loom_benchmark_artifact_bundle_file_count(
   return count;
 }
 
+iree_status_t loom_benchmark_artifact_bundle_write_file(
+    loom_benchmark_artifact_bundle_t* bundle,
+    loom_benchmark_bundle_file_kind_t kind, iree_string_view_t directory,
+    iree_string_view_t leaf, const iree_byte_sequence_t* contents,
+    iree_allocator_t allocator, char** out_path) {
+  *out_path = NULL;
+  char* path = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_tooling_file_path_join(directory, leaf, allocator, &path));
+  iree_status_t status = loom_tooling_create_parent_directory(
+      iree_make_cstring_view(path), allocator);
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_write_output_byte_sequence(
+        iree_make_cstring_view(path), contents, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_benchmark_artifact_bundle_record_file(
+        bundle, kind, iree_make_cstring_view(path));
+  }
+  if (iree_status_is_ok(status)) {
+    *out_path = path;
+  } else {
+    iree_allocator_free(allocator, path);
+  }
+  return status;
+}
+
 iree_status_t loom_benchmark_file_provider_initialize(
     iree_string_view_t filename, iree_string_view_t run_id,
     iree_string_view_t explicit_output_root,

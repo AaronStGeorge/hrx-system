@@ -1415,6 +1415,7 @@ iree_status_t loom_run_hal_testbench_command_scenario_product_prepare(
         .structure_size = sizeof(options),
         .root_symbols = &root_symbol,
         .root_symbol_count = 1,
+        .artifact_flags = provider_options->emit_artifact_flags,
         .config = provider_options->compilation->config
                       ? *provider_options->compilation->config
                       : (loomc_config_options_t){0},

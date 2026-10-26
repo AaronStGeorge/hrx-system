@@ -24,8 +24,8 @@
 #include "loom/ir/module.h"
 #include "loom/link/module_index.h"
 #include "loom/pass/builtin_registry.h"
-#include "loom/target/arch/cmd/artifact_builder.h"
 #include "loom/target/arch/cmd/artifact_set.h"
+#include "loom/target/arch/cmd/lower/program_plan_index.h"
 #include "loom/transforms/cleanup/configured.h"
 #include "loom/transforms/kernel/kernel_class_materializer.h"
 #include "loomc/compile.h"
@@ -97,6 +97,19 @@ static bool loomc_cmd_program_product_any_flag_set(
   return (flags & bits) != 0;
 }
 
+static loomc_status_t loomc_cmd_program_validate_artifact_flags(
+    loomc_emit_artifact_flags_t flags) {
+  const loomc_emit_artifact_flags_t known_flags =
+      LOOMC_EMIT_ARTIFACT_FLAG_PRIMARY |
+      LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING;
+  if ((flags & ~known_flags) != 0) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "command product options contain unknown artifact flags");
+  }
+  return loomc_ok_status();
+}
+
 static loomc_status_t loomc_cmd_program_product_validate_options(
     loomc_workspace_t* workspace,
     const loomc_cmd_program_product_options_t* options,
@@ -125,6 +138,8 @@ static loomc_status_t loomc_cmd_program_product_validate_options(
   }
   LOOMC_RETURN_IF_ERROR(loomc_target_specialization_options_resolve(
       options->next, out_target_specialization));
+  LOOMC_RETURN_IF_ERROR(
+      loomc_cmd_program_validate_artifact_flags(options->artifact_flags));
   if (options->link_index == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "link_index must not be NULL");
@@ -202,6 +217,8 @@ static loomc_status_t loomc_cmd_program_product_validate_request_options(
   }
   LOOMC_RETURN_IF_ERROR(loomc_target_specialization_options_resolve(
       options->next, out_target_specialization));
+  LOOMC_RETURN_IF_ERROR(
+      loomc_cmd_program_validate_artifact_flags(options->artifact_flags));
   if (options->library_index != NULL) {
     if (loomc_link_index_context(options->library_index) != context) {
       return loomc_make_status(
@@ -250,6 +267,8 @@ static loomc_status_t loomc_cmd_program_product_validate_module_options(
   }
   LOOMC_RETURN_IF_ERROR(loomc_target_specialization_options_resolve(
       options->next, out_target_specialization));
+  LOOMC_RETURN_IF_ERROR(
+      loomc_cmd_program_validate_artifact_flags(options->artifact_flags));
   loomc_context_t* context = loomc_module_context(module);
   if (context == NULL || loomc_module_const_loom_module(module) == NULL) {
     return loomc_make_status(LOOMC_STATUS_FAILED_PRECONDITION,
@@ -613,6 +632,31 @@ static loomc_status_t loomc_cmd_program_product_create(
   return loomc_ok_status();
 }
 
+static loomc_status_t loomc_cmd_program_capture_listing(
+    const loom_cmd_program_plan_t* plan, loomc_result_t* result) {
+  const loomc_allocator_t allocator = loomc_result_allocator(result);
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_from_loomc(allocator),
+                                 &builder);
+  loomc_status_t status = loomc_status_from_iree(
+      loom_cmd_program_plan_format_listing(plan, &builder));
+  char* storage = NULL;
+  if (loomc_status_is_ok(status)) {
+    const iree_host_size_t length = iree_string_builder_size(&builder);
+    storage = iree_string_builder_take_storage(&builder);
+    status = loomc_result_add_artifact_take_contents(
+        result, LOOMC_ARTIFACT_KIND_TEXT,
+        loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING),
+        loomc_make_cstring_view("command-program.listing"),
+        loomc_make_byte_span(storage, length));
+  }
+  if (!loomc_status_is_ok(status)) {
+    loomc_allocator_free(allocator, storage);
+  }
+  iree_string_builder_deinitialize(&builder);
+  return status;
+}
+
 static loomc_status_t loomc_cmd_program_product_build_indexed(
     loomc_context_t* context, loomc_workspace_t* workspace,
     const loom_link_module_index_t* module_index,
@@ -620,10 +664,12 @@ static loomc_status_t loomc_cmd_program_product_build_indexed(
     iree_host_size_t root_symbol_count,
     const loom_link_plan_materialization_environment_t*
         materialization_environment,
-    loomc_request_sink_t request_sink, iree_arena_allocator_t* scratch_arena,
-    loomc_result_t* result, loomc_allocator_t allocator,
-    loomc_product_t** out_product) {
+    loomc_request_sink_t request_sink,
+    loomc_emit_artifact_flags_t artifact_flags,
+    iree_arena_allocator_t* scratch_arena, loomc_result_t* result,
+    loomc_allocator_t allocator, loomc_product_t** out_product) {
   *out_product = NULL;
+  loom_cmd_program_plan_t plan = {0};
   loom_cmd_program_artifact_set_t artifact_set = {0};
   loomc_product_t* product = NULL;
   loomc_cmd_program_product_invocation_t invocation = {
@@ -636,7 +682,6 @@ static loomc_status_t loomc_cmd_program_product_build_indexed(
       .result = result,
       .request_sink = request_sink,
   };
-  loomc_status_t status = loomc_ok_status();
   loom_cmd_program_plan_index_options_t plan_options;
   loom_cmd_program_plan_index_options_initialize(&plan_options);
   plan_options.verification.fn = loomc_cmd_program_product_verify_module;
@@ -659,27 +704,21 @@ static loomc_status_t loomc_cmd_program_product_build_indexed(
   bool plan_valid = false;
   const loomc_host_size_t diagnostic_count_before =
       loomc_result_diagnostic_count(result);
-  if (loomc_status_is_ok(status)) {
-    const iree_status_t plan_status =
-        loom_cmd_program_artifact_set_build_from_index(
-            module_index, root_symbol_ordinals, root_symbol_count,
-            &(loom_cmd_program_artifact_builder_options_t){
-                .plan_options = &plan_options,
-                .pass_registry = loom_pass_builtin_registry(),
-                .cleanup_pattern_provider_set =
-                    loom_cleanup_configured_pattern_provider_set(),
-                .diagnostic_emitter =
-                    {
-                        .fn = loomc_cmd_program_product_capture_diagnostic,
-                        .user_data = &invocation,
-                    },
-                .materialization_environment = materialization_environment,
-            },
-            scratch_arena, &plan_valid, &artifact_set,
-            iree_allocator_from_loomc(allocator));
-    status = loomc_cmd_program_product_translate_plan_status(
-        &invocation, diagnostic_count_before, plan_status);
+  iree_status_t plan_status = loom_cmd_program_plan_build_from_index(
+      module_index, root_symbol_ordinals, root_symbol_count, &plan_options,
+      loom_pass_builtin_registry(),
+      loom_cleanup_configured_pattern_provider_set(),
+      (iree_diagnostic_emitter_t){
+          .fn = loomc_cmd_program_product_capture_diagnostic,
+          .user_data = &invocation,
+      },
+      materialization_environment, scratch_arena, &plan_valid, &plan);
+  if (iree_status_is_ok(plan_status) && plan_valid) {
+    plan_status = loom_cmd_program_artifact_set_build(
+        &plan, &artifact_set, iree_allocator_from_loomc(allocator));
   }
+  loomc_status_t status = loomc_cmd_program_product_translate_plan_status(
+      &invocation, diagnostic_count_before, plan_status);
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
       !plan_valid) {
     if (loomc_result_diagnostic_count(result) == diagnostic_count_before) {
@@ -690,6 +729,11 @@ static loomc_status_t loomc_cmd_program_product_build_indexed(
       loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
     }
   }
+  if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
+      (artifact_flags & LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING)) {
+    status = loomc_cmd_program_capture_listing(&plan, result);
+  }
+  loom_cmd_program_plan_deinitialize(&plan);
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status =
         loomc_cmd_program_product_create(&artifact_set, allocator, &product);
@@ -758,7 +802,8 @@ loomc_status_t loomc_cmd_program_product_build(
         loomc_link_index_context(options->link_index), workspace,
         loomc_link_index_module_index(options->link_index),
         root_symbol_ordinals, root_symbol_count, &materialization_environment,
-        options->request_sink, &scratch_arena, result, allocator, &product);
+        options->request_sink, options->artifact_flags, &scratch_arena, result,
+        allocator, &product);
   }
   if (loomc_status_is_ok(status)) {
     *out_product = product;
@@ -851,7 +896,7 @@ loomc_status_t loomc_cmd_program_product_build_module(
     status = loomc_cmd_program_product_build_indexed(
         context, workspace, module_index, root_symbol_ordinals,
         root_symbol_count, &materialization_environment, options->request_sink,
-        &scratch_arena, result, allocator, &product);
+        options->artifact_flags, &scratch_arena, result, allocator, &product);
   }
   if (loomc_status_is_ok(status)) {
     *out_product = product;
@@ -918,8 +963,8 @@ loomc_status_t loomc_cmd_program_product_build_request(
     status = loomc_cmd_program_product_build_indexed(
         context, workspace, request_overlay.module_index,
         request_overlay.root_symbol_ordinals, request_overlay.root_symbol_count,
-        &materialization_environment, options->request_sink, &scratch_arena,
-        result, allocator, &product);
+        &materialization_environment, options->request_sink,
+        options->artifact_flags, &scratch_arena, result, allocator, &product);
   }
   if (loomc_status_is_ok(status)) {
     *out_product = product;

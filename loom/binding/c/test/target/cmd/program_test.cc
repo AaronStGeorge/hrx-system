@@ -223,6 +223,7 @@ command.program.def public @public_root() launch(%storage: buffer) {
   ProductPtr product(product_raw);
   ResultPtr result(result_raw);
   ExpectSucceededResult(result.get());
+  EXPECT_EQ(loomc_result_artifact_count(result.get()), 0u);
 
   ASSERT_EQ(loomc_cmd_program_product_program_count(product.get()), 2u);
   loomc_cmd_program_t private_program = {};
@@ -236,6 +237,49 @@ command.program.def public @public_root() launch(%storage: buffer) {
   EXPECT_EQ(ToString(public_program.symbol), "public_root");
   EXPECT_EQ(public_program.entry_requirement_count, 2u);
   EXPECT_EQ(capture.requests.size(), 2u);
+
+  auto listing_options = options;
+  listing_options.artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING;
+  LOOMC_ASSERT_OK(loomc_cmd_program_product_build_module(
+      workspace.get(), module.get(), &listing_options, loomc_allocator_system(),
+      &product_raw, &result_raw));
+  ProductPtr listing_product(product_raw);
+  ResultPtr listing_result(result_raw);
+  ExpectSucceededResult(listing_result.get());
+  ASSERT_EQ(loomc_result_artifact_count(listing_result.get()), 1u);
+  const loomc_artifact_t* listing =
+      loomc_result_artifact_at(listing_result.get(), 0);
+  EXPECT_EQ(listing->kind, LOOMC_ARTIFACT_KIND_TEXT);
+  EXPECT_EQ(ToString(listing->format),
+            LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING);
+  EXPECT_EQ(ToString(listing->identifier), "command-program.listing");
+  const std::string listing_text = ToString(listing->contents);
+  EXPECT_FALSE(listing_text.empty());
+  ASSERT_EQ(loomc_product_artifact_count(listing_product.get()), 2u);
+  for (loomc_host_size_t i = 0; i < 2; ++i) {
+    EXPECT_EQ(
+        ToString(loomc_product_artifact_at(product.get(), i)->contents),
+        ToString(
+            loomc_product_artifact_at(listing_product.get(), i)->contents));
+  }
+  EXPECT_EQ(capture.requests.size(), 4u);
+
+  listing_options.artifact_flags = 1u << 31;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      loomc_cmd_program_product_build_module(
+          workspace.get(), module.get(), &listing_options,
+          loomc_allocator_system(), &product_raw, &result_raw));
+  EXPECT_EQ(product_raw, nullptr);
+  EXPECT_EQ(result_raw, nullptr);
+
+  module.reset();
+  source.reset();
+  workspace.reset();
+  context.reset();
+  listing_product.reset();
+  EXPECT_EQ(ToString(listing->contents), listing_text);
+  EXPECT_FALSE(ToString(private_program.artifact.contents).empty());
 }
 
 TEST(TargetCmdProgramTest,
@@ -342,6 +386,7 @@ template.def<@request.schedule> priority(1) @small(%size: index) {
       .root_symbol_ordinals = explicit_roots,
       .root_symbol_count = std::size(explicit_roots),
       .flags = LOOMC_CMD_PROGRAM_PRODUCT_FLAG_INCLUDE_INPUT_EXPORTS,
+      .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING,
       .config = {},
       .request_sink =
           {
@@ -359,6 +404,13 @@ template.def<@request.schedule> priority(1) @small(%size: index) {
   ResultPtr result_ptr(result);
   ExpectSucceededResult(result_ptr.get());
   ASSERT_TRUE(result_ptr && loomc_result_succeeded(result_ptr.get()));
+  ASSERT_EQ(loomc_result_artifact_count(result_ptr.get()), 1u);
+  const loomc_artifact_t* listing =
+      loomc_result_artifact_at(result_ptr.get(), 0);
+  EXPECT_EQ(ToString(listing->format),
+            LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING);
+  const std::string listing_text = ToString(listing->contents);
+  EXPECT_FALSE(listing_text.empty());
 
   EXPECT_EQ(loomc_product_descriptor(product_ptr.get()),
             loomc_cmd_program_product_descriptor());
@@ -481,6 +533,8 @@ template.def<@request.schedule> priority(1) @small(%size: index) {
   schedule_source.reset();
   workspace.reset();
   context.reset();
+
+  EXPECT_EQ(ToString(listing->contents), listing_text);
 
   ContextPtr restored_context = CreateContext();
   for (const RequestPtr& request : capture.requests) {

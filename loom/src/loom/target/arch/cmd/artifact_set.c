@@ -8,8 +8,11 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/text_asm.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/arch/cmd/descriptors/low_registry.h"
 #include "loom/target/arch/cmd/lower/serialize.h"
 
 static iree_string_view_t loom_cmd_program_artifact_set_symbol_name(
@@ -168,4 +171,28 @@ void loom_cmd_program_artifact_set_deinitialize(
   iree_allocator_free(artifact_set->host_allocator,
                       artifact_set->programs.values);
   *artifact_set = (loom_cmd_program_artifact_set_t){0};
+}
+
+iree_status_t loom_cmd_program_plan_format_listing(
+    const loom_cmd_program_plan_t* plan, iree_string_builder_t* builder) {
+  loom_target_low_descriptor_registry_t registry;
+  loom_cmd_low_descriptor_registry_initialize(&registry);
+  loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
+  };
+  loom_low_descriptor_text_asm_environment_initialize(
+      &registry.registry, &print_options.low_asm_environment);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < plan->root_count && iree_status_is_ok(status); ++i) {
+    if (i != 0) {
+      status = iree_string_builder_append_cstring(builder, "\n");
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_text_print_operation_to_builder_with_options(
+          plan->root_module, plan->roots[i].function_op, builder,
+          &print_options);
+    }
+  }
+  return status;
 }

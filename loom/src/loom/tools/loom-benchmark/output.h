@@ -12,6 +12,7 @@
 #include <stdio.h>
 
 #include "iree/base/api.h"
+#include "iree/base/byte_sequence.h"
 #include "iree/io/stream.h"
 #include "loom/tools/loom-benchmark/options.h"
 
@@ -163,6 +164,15 @@ iree_status_t loom_benchmark_append_sanitized_path_component(
 iree_status_t loom_benchmark_artifact_bundle_record_file(
     loom_benchmark_artifact_bundle_t* bundle,
     loom_benchmark_bundle_file_kind_t kind, iree_string_view_t path);
+
+// Writes artifact bytes and records their path in an enabled bundle. The
+// caller selects the directory and leaf according to the active bundle policy.
+// On success |out_path| owns the joined path using |allocator|.
+iree_status_t loom_benchmark_artifact_bundle_write_file(
+    loom_benchmark_artifact_bundle_t* bundle,
+    loom_benchmark_bundle_file_kind_t kind, iree_string_view_t directory,
+    iree_string_view_t leaf, const iree_byte_sequence_t* contents,
+    iree_allocator_t allocator, char** out_path);
 
 // Counts files observed in one artifact bundle manifest bucket.
 iree_host_size_t loom_benchmark_artifact_bundle_file_count(
