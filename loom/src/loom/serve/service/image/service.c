@@ -295,13 +295,12 @@ static loom_serve_telemetry_outcome_t loom_serve_image_response_send(
 static iree_status_t loom_serve_image_rejection_response(
     loom_serve_image_service_t* service,
     loom_serve_http_connection_t* connection, uint64_t request,
-    const char* code, iree_string_view_t message) {
+    const char* code, const char* type, iree_string_view_t message) {
   iree_status_t status =
       loom_serve_image_response_begin(&service->response, code);
   if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_cstring(
-        &service->response,
-        "{\"error\":{\"type\":\"image_request_error\",\"message\":");
+    status = iree_string_builder_append_format(
+        &service->response, "{\"error\":{\"type\":\"%s\",\"message\":", type);
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_image_quote(&service->response, message);
@@ -325,7 +324,7 @@ static iree_status_t loom_serve_image_reject(
     loom_serve_http_connection_t* connection, const loom_serve_image_job_t* job,
     const char* code, iree_string_view_t message) {
   const iree_status_t status = loom_serve_image_rejection_response(
-      service, connection, job->id, code, message);
+      service, connection, job->id, code, "image_request_error", message);
   loom_serve_image_request_end(service, job, LOOM_SERVE_TELEMETRY_REJECTED,
                                status);
   return status;
@@ -517,6 +516,36 @@ static iree_status_t loom_serve_image_service_submit(
   return iree_ok_status();
 }
 
+// Detaches the HTTP owner without releasing accepted CPU/device borrowers.
+// Execution failures have a response; ordinary cancellation just closes the
+// connection. Called on the serving owner, never on a native callback thread.
+static void loom_serve_image_job_disconnect(loom_serve_image_service_t* service,
+                                            loom_serve_image_job_t* job,
+                                            const iree_status_t status) {
+  if (!job->connection) {
+    return;
+  }
+  if (iree_status_is_ok(status)) {
+    loom_serve_http_connection_abort(job->connection);
+  } else {
+    iree_string_view_t message = iree_status_message(status);
+    if (!message.size) {
+      message = iree_make_cstring_view(
+          iree_status_code_string(iree_status_code(status)));
+    }
+    iree_status_t response_status = loom_serve_image_rejection_response(
+        service, job->connection, job->id,
+        iree_status_is_resource_exhausted(status) ? "503 Service Unavailable"
+                                                  : "500 Internal Server Error",
+        "loom_execution_error", message);
+    if (!iree_status_is_ok(response_status)) {
+      loom_serve_image_diagnose(service, job->id, response_status);
+      iree_status_free(response_status);
+    }
+  }
+  job->connection = NULL;
+}
+
 static void loom_serve_image_job_finish(
     loom_serve_image_service_t* service, loom_serve_image_job_t* job,
     loom_serve_telemetry_outcome_t outcome) {
@@ -531,7 +560,9 @@ static void loom_serve_image_job_finish(
                                                     job->id, job->arrival_time);
       }
     } else {
-      loom_serve_http_connection_abort(job->connection);
+      loom_serve_image_job_disconnect(
+          service, job,
+          iree_status_is_ok(job->status) ? service->status : job->status);
     }
   } else if (outcome == LOOM_SERVE_TELEMETRY_COMPLETED) {
     outcome = service->telemetry.failure_code ? LOOM_SERVE_TELEMETRY_FAILED
@@ -565,9 +596,9 @@ static void loom_serve_image_reject_cohort(loom_serve_image_service_t* service,
     loom_serve_image_job_t* job = service->cohort.jobs[i];
     if (job->connection) {
       service->status = iree_status_join(
-          service->status,
-          loom_serve_image_rejection_response(service, job->connection, job->id,
-                                              code, message));
+          service->status, loom_serve_image_rejection_response(
+                               service, job->connection, job->id, code,
+                               "image_request_error", message));
       job->connection = NULL;
       loom_serve_image_job_finish(service, job, LOOM_SERVE_TELEMETRY_REJECTED);
     } else {
@@ -601,7 +632,8 @@ static void loom_serve_image_preparation_complete(
       service->status = iree_status_join(
           service->status,
           loom_serve_image_rejection_response(service, job->connection, job->id,
-                                              "400 Bad Request", message));
+                                              "400 Bad Request",
+                                              "image_request_error", message));
       job->connection = NULL;
       loom_serve_image_job_finish(service, job, LOOM_SERVE_TELEMETRY_REJECTED);
     } else {
@@ -915,6 +947,7 @@ static iree_status_t loom_serve_image_accept(
     service->pending[service->pending_count++] = job;
     ++service->count;
   } else {
+    loom_serve_http_connection_abort(connection);
     loom_serve_image_request_end(service, &receipt, LOOM_SERVE_TELEMETRY_FAILED,
                                  status);
     loom_serve_image_request_deinitialize(&receipt.request);
@@ -996,10 +1029,7 @@ static void loom_serve_image_stop(loom_serve_image_service_t* service) {
   for (iree_host_size_t i = service->cohort.next; i < service->cohort.count;
        ++i) {
     loom_serve_image_job_t* job = service->cohort.jobs[i];
-    if (job->connection) {
-      loom_serve_http_connection_abort(job->connection);
-      job->connection = NULL;
-    }
+    loom_serve_image_job_disconnect(service, job, service->status);
   }
 }
 

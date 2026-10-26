@@ -955,9 +955,13 @@ static iree_status_t loom_serve_router_admit(
   }
   const loom_serve_service_t* service =
       &loom_serve_router_model_at(router, service_index)->service;
-  return service->accept(
-      service->self, connection, request,
-      loom_serve_router_service_flags(router, service_index));
+  iree_status_t status =
+      service->accept(service->self, connection, request,
+                      loom_serve_router_service_flags(router, service_index));
+  return iree_status_is_ok(status)
+             ? status
+             : loom_serve_registry_fail(router->registry, service_index,
+                                        status);
 }
 
 static void loom_serve_router_held_collect(loom_serve_router_t* router,
@@ -1245,7 +1249,8 @@ static iree_status_t loom_serve_router_accept(
           loom_serve_router_model_at(router, i);
       if (!model->service.name.size ||
           (!include_status && (model->phase != LOOM_SERVE_REGISTRATION_READY ||
-                               model->removal != LOOM_SERVE_REMOVAL_NONE))) {
+                               model->removal != LOOM_SERVE_REMOVAL_NONE ||
+                               !iree_status_is_ok(model->status)))) {
         continue;
       }
       if (!first) {
@@ -1511,16 +1516,24 @@ static void loom_serve_router_advance(loom_serve_router_t* router,
           loom_serve_router_service_flags(router, index) |
           loom_serve_registry_service_flags(model) |
           (router->stopping ? LOOM_SERVE_SERVICE_FLAG_STOPPING : 0);
-      router->status = iree_status_join(
-          router->status, service->advance(service->self, flags, &progress));
+      iree_status_t status = service->advance(service->self, flags, &progress);
+      if (!iree_status_is_ok(status)) {
+        // The first failure requires another turn to stop admission. Repeated
+        // terminal status is not progress while accepted borrowers retire.
+        progress |= iree_status_is_ok(model->status);
+        status = loom_serve_registry_fail(router->registry, index, status);
+      }
+      router->status = iree_status_join(router->status, status);
       router->stopping |= !iree_status_is_ok(router->status);
       *out_progress |= progress;
     }
     bool variant_progress = false;
     router->status = iree_status_join(
-        router->status, loom_serve_http_variants_advance(
-                            router->variants, index, router->stopping,
-                            &router->output, &variant_progress));
+        router->status,
+        loom_serve_http_variants_advance(
+            router->variants, index,
+            router->stopping || !iree_status_is_ok(model->status),
+            &router->output, &variant_progress));
     router->stopping |= !iree_status_is_ok(router->status);
     *out_progress |= variant_progress;
     bool progress = false;

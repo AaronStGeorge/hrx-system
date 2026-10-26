@@ -26,7 +26,7 @@ every model. The status fields answer different questions:
 | `loom.parameter_operation` | Is an explicit activation/deactivation waiting or in progress? |
 | `loom.parameters` | What reloadable weight plans are active and how much retained backing do they account for? |
 | `loom.variants` | Which native executable choice is preferred, and how many choices are retained? |
-| `loom.error` | Did preparation or a lifecycle operation fail? |
+| `loom.error` | Did preparation, execution, or a lifecycle operation fail? |
 
 The registration wire values are `registered`, `preparing`, `ready`, `retiring`,
 `failed` and `release_failed`. Scheduler phases are modality-specific and are
@@ -45,6 +45,16 @@ disconnect does not cancel that registration; `/v1/status` reports its outcome.
 A failed source package remains inspectable without stopping healthy peers.
 After correcting its inputs, unregistering and registering again starts an
 explicit new attempt with a new incarnation.
+
+A terminal execution or weight-loading error also retires the affected model,
+while healthy models continue serving. For example, a native allocation failure
+returns HTTP 503 for the affected image or embedding request; the failed model
+remains in `/v1/status` with `loom.error`, but is removed from `/v1/models`.
+Unregistering and registering it again starts an explicit recovery attempt after
+the cause has been addressed. Sessions and checkpoints owned by that failed
+registration are not preserved, and requests are not automatically replayed.
+An error in a shared resource can affect several models and requires the server
+to drain instead; model-local recovery does not reset a failed device.
 
 The [model-document reference](../model-documents.md) applies equally
 to startup `--model` arguments and HTTP registration. HTTP changes live state;

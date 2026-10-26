@@ -245,6 +245,17 @@ the tools. Invalid generated tool syntax fails rather than publishing a
 partially executable call. The client executes tools and returns their results
 in the next full conversation history.
 
+An output translation failure returns an error object with
+`"type":"loom_output_error"`: HTTP 500 for a nonstreaming completion, or an SSE
+error followed by `[DONE]` after streaming has begun. This is distinct from
+`loom_request_error`, which describes a rejected request. The XML tool codec
+names undeclared tools, undeclared arguments, and duplicate arguments in its
+diagnostic. A failed tool-call list publishes no partial structured calls.
+Earlier successful tool results remain the client's conversation history;
+resuming an unfinished turn preserves those results and any created artifacts
+rather than repeating their side effects. The server does not automatically
+retry generation or execute a repaired call.
+
 ### Image input
 
 An image-capable text deployment reports both `text` and `image` input

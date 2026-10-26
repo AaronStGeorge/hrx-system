@@ -451,7 +451,7 @@ TEST(ImageTest, RejectsAnimationsBeforePixelAllocation) {
   }
 }
 
-TEST(ImageTest, RejectsMimeSignatureMismatchAndResourceExcess) {
+TEST(ImageTest, RejectsMimeSignatureMismatch) {
   loom_serve_media_image_info_t info;
   const std::string mismatch = DataUrl("image/x-portable-arbitrarymap", kPng);
   if (Available(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM, mismatch)) {
@@ -460,17 +460,40 @@ TEST(ImageTest, RejectsMimeSignatureMismatchAndResourceExcess) {
         loom_serve_media_image_inspect(View(mismatch), &kLimits,
                                        iree_allocator_system(), &info));
   }
+}
 
-  auto narrow_limits = kLimits;
-  narrow_limits.width = 1;
+TEST(ImageTest, RequestBoundsAreInvalidInputAndLeaveInspectionReusable) {
   const std::string pam = DataUrl("image/x-portable-arbitrarymap", kPam);
   if (!Available(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM, pam)) {
     return;
   }
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      loom_serve_media_image_inspect(View(pam), &narrow_limits,
-                                     iree_allocator_system(), &info));
+  // The last two limits exercise rejection before and after base64 sizing.
+  const loom_serve_media_image_limits_t limits[] = {
+      {.compressed_bytes = 2048, .width = 1, .height = 64, .pixels = 4096},
+      {.compressed_bytes = 2048, .width = 64, .height = 1, .pixels = 4096},
+      {.compressed_bytes = 2048, .width = 64, .height = 64, .pixels = 3},
+      {.compressed_bytes = 1, .width = 64, .height = 64, .pixels = 4096},
+      {
+          .compressed_bytes =
+              iree_base64_decoded_size(iree_make_cstring_view(kPam)) - 1,
+          .width = 64,
+          .height = 64,
+          .pixels = 4096,
+      },
+  };
+  for (const auto& limit : limits) {
+    loom_serve_media_image_info_t info;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        loom_serve_media_image_inspect(View(pam), &limit,
+                                       iree_allocator_system(), &info));
+    EXPECT_EQ(info.width, 0u);
+    EXPECT_EQ(info.height, 0u);
+    IREE_ASSERT_OK(loom_serve_media_image_inspect(
+        View(pam), &kLimits, iree_allocator_system(), &info));
+    EXPECT_EQ(info.width, 2u);
+    EXPECT_EQ(info.height, 2u);
+  }
 }
 
 TEST(ImageTest, OwnsInspectedBytesAfterTransportReuse) {

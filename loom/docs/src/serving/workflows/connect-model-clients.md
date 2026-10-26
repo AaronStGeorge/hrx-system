@@ -142,6 +142,8 @@ providers:
     compat:
       supportsDeveloperRole: false
       supportsReasoningEffort: false
+      qwenPreserveThinking: false
+      qwenTemplateReasoningEffort: false
       maxTokensField: max_completion_tokens
     discovery:
       type: openai-models-list
@@ -152,22 +154,84 @@ providers:
 ```
 
 Change the URL and `scout` to match the client-visible server and selected text
-deployment. `omp models --kind all` refreshes and displays every discovered
-kind. Oh My Pi consumes Loom's existing modality and limit fields: text-output
-rows become chat models, image-only rows become image runners and
-embedding-only rows become embedding runners. The ordinary model picker remains
-a chat-model view rather than presenting every server deployment as chat.
+deployment. `omp models refresh` refreshes discovery; `omp models --kind all`
+displays every discovered kind. Oh My Pi consumes Loom's modality and limit
+fields: text-output rows become chat models, image-only rows become image runners,
+and embedding-only rows become embedding runners. The ordinary model picker
+remains a chat-model view rather than presenting every server deployment as chat.
 
-For a Qwen package that supports Loom's `enable_thinking` option, extend its
-override with `reasoning: true` and this model-local compatibility setting:
+The Qwen compatibility flags suppress `preserve_thinking` and template
+`reasoning_effort`, which are not Loom chat fields. They do not disable thinking.
+OMP can otherwise emit these fields based on the model's name and local URL.
+In particular, `reasoning: false` does not suppress `preserve_thinking`. Its
+[compatibility reference](https://github.com/can1357/oh-my-pi/blob/main/docs/provider-compat-reference.md)
+describes those automatic policies.
+
+For a package supporting Loom's `enable_thinking`, add an entry under that
+provider's `modelOverrides`. The key is the exact deployment ID, including any
+slashes:
 
 ```yaml
-        compat:
-          thinkingFormat: qwen
+modelOverrides:
+  "Qwen/Qwen3.8-27B":
+    reasoning: true
+    compat:
+      thinkingFormat: qwen
+      supportsReasoningParams: true
 ```
 
-Keep `temperature: 0`; the current Loom execution profile is greedy and rejects
-nonzero temperature and other sampling controls.
+OMP's thinking control then sends `enable_thinking` rather than an effort or
+template-options object. `supportsReasoningParams: false` would suppress that
+toggle too. A fixed `compat.extraBody.enable_thinking` overrides the toggle;
+leaving it unset keeps the client's thinking control effective. The model's
+source policy determines whether either value is supported.
+
+`temperature: 0` in the initial example is an explicit smoke-test choice, not
+a server restriction. Omitted sampling fields use model defaults; supported
+`temperature`, `top_p`, `top_k`, and `seed` values belong to the package's
+[chat policy](../http-profiles.md#chat-completions).
+
+### Select exact models and enable image tools
+
+OMP selectors include the provider: a server deployment named
+`Qwen/Qwen3.8-27B` has selector `loom/Qwen/Qwen3.8-27B`, but its HTTP `model`
+value and `modelOverrides` key remain `Qwen/Qwen3.8-27B`. A `loom/*` glob does
+not span the extra slash. Explicit selectors also distinguish identical IDs
+served by different providers.
+
+With that text deployment and `illustrator` registered, these settings in
+`~/.omp/agent/config.yml` select chat and image generation independently:
+
+```yaml
+enabledModels:
+  - loom/Qwen/Qwen3.8-27B
+modelRoles:
+  default: loom/Qwen/Qwen3.8-27B
+  image: loom/illustrator
+generate_image:
+  enabled: true
+```
+
+Provider definitions belong in `models.yml`; role selection and tool settings
+belong in `config.yml`. `enabledModels` scopes chat selection, not the image
+runner. See OMP's [model configuration](https://github.com/can1357/oh-my-pi/blob/main/docs/models.md)
+and [settings](https://github.com/can1357/oh-my-pi/blob/main/docs/settings.md).
+
+Discovery alone does not give an agent a tool or permission to execute it.
+OMP's [image tool](https://github.com/can1357/oh-my-pi/blob/main/docs/tools/generate_image.md)
+is disabled by default; a session with an explicit tool allowlist must also
+include `generate_image`. Its existing approval policy still applies. An
+explicit tool `model` selects one image runner, so a useful first request is:
+
+```text
+Use generate_image with model loom/illustrator to create a red fox in snow
+at 1024x1024. Return the saved image path from the tool result.
+```
+
+The `image` role generates pictures; a `vision` role analyzes images using an
+image-capable chat deployment. A text description extracted by vision and then
+sent to image generation is not image editing. Reference-image or edit inputs
+require a compatible endpoint, client transport, and model package.
 
 ## Give Open WebUI one model for each operation
 
@@ -220,8 +284,8 @@ Open WebUI's workspace instead of applying one global default.
 
 Open WebUI persists administrator changes. On an existing data volume, set the
 same values in its OpenAI connection, Images and Documents settings; a stored
-value takes precedence over a changed environment default. Keep nonzero
-sampling controls disabled in model settings.
+value takes precedence over a changed environment default. Sampling settings
+follow the selected model's source policy, independently of thinking controls.
 
 ## Speech clients
 
@@ -233,7 +297,7 @@ complete request and a streaming player. It also explains independent requests,
 backpressure and cancellation. Available voice IDs and conditioning behavior
 belong to the selected package.
 
-Open WebUI's [ordinary TTS adapter](https://github.com/open-webui/open-webui/blob/f8ae8a6c328946dc62cd0712961a0632574581bf/backend/open_webui/routers/audio/__init__.py#L431)
+Open WebUI's [ordinary TTS adapter](https://github.com/open-webui/open-webui/blob/main/backend/open_webui/routers/audio/__init__.py)
 awaits the complete provider response before returning a cached audio file.
 Its full installation transcodes Loom's
 `audio/pcm;rate=24000;channels=1` response to browser-playable MP3 using FFmpeg.
@@ -260,7 +324,7 @@ bypassing preprocessing leaves a headerless file that browsers cannot play.
 The adapter buffers each complete provider response before playback, so
 incremental server output does not start playback within that request.
 
-Its [realtime voice path](https://github.com/open-webui/open-webui/blob/f8ae8a6c328946dc62cd0712961a0632574581bf/backend/open_webui/routers/audio/realtime.py#L403)
+Its [realtime voice path](https://github.com/open-webui/open-webui/blob/main/backend/open_webui/routers/audio/realtime.py)
 additionally needs session events, microphone input, transcription, turn
 detection and interruption. Configuring a speech model on the ordinary OpenAI
 chat connection does not supply those capabilities.
@@ -290,7 +354,7 @@ under **Admin Settings → Audio → Speech-to-Text** in Open WebUI:
 | STT Model | `recognizer` |
 | Request Format | Multipart Upload |
 
-Open WebUI's [transcription adapter](https://github.com/open-webui/open-webui/blob/f8ae8a6c328946dc62cd0712961a0632574581bf/backend/open_webui/routers/audio/__init__.py#L817)
+Open WebUI's [transcription adapter](https://github.com/open-webui/open-webui/blob/main/backend/open_webui/routers/audio/__init__.py)
 sends multipart audio and reads the returned `text`. Its full installation
 uses FFmpeg to prepare browser recordings as MP3 before forwarding them. Keep
 `BYPASS_PYDUB_PREPROCESSING=false` and enable MP3 input in the Loom server.
@@ -301,6 +365,26 @@ Chunked multipart transfer is accepted, but recognition begins after the upload
 completes. The endpoint returns finalized text; appendable microphone sessions,
 provisional transcripts, turn detection, and interruption require a realtime
 session protocol in addition to this upload endpoint.
+
+## Verify the completed workflow
+
+A catalog entry, an assistant's success claim, and a zero client exit code
+describe different things. A useful end-to-end check retains the actual tool
+results and output artifacts:
+
+| Boundary | Evidence of completion |
+| --- | --- |
+| Chat transport | Complete JSON, or SSE terminal events with no error object. HTTP 200 alone does not prove a stream succeeded; an error can precede `[DONE]`. |
+| Tool execution | A result for each executed call, with no tool error or cancellation. The assistant's prose is not a substitute for that result. |
+| Generated media | Nonempty returned image/audio data or a readable saved artifact. For OMP image generation, check `details.imageCount` and `details.imagePaths`; a zero-image result is not necessarily a tool error. |
+| Task outcome | Inspect the artifact against the requested content. Successful execution does not prove that an image followed every instruction. |
+
+An image saved before a later chat failure remains a successful tool result.
+For example, a `loom_output_error` while the assistant asks to inspect that
+image does not invalidate the image or authorize another generation. Retaining
+the tool result and artifact path lets the client resume inspection instead of
+repeating completed side effects. The [chat error contract](../http-profiles.md#chat-completions)
+distinguishes malformed generated output from rejected client input.
 
 ## Diagnose the boundary
 
@@ -317,6 +401,6 @@ Then test the operation directly with the exact model ID. The
 fields for chat, image, embedding, speech and transcription operations. Loom
 deliberately rejects unknown or unsupported options instead of silently changing
 their meaning.
-Common configuration failures are a nonzero sampling parameter, an image size
-unsupported by the model's source, an operation using a model of another kind,
-or a client base URL that duplicates or omits `/v1`.
+Common configuration failures are unsupported reasoning/template fields, a
+sampling value or image size rejected by the model's source, an operation using
+a model of another kind, or a client base URL that duplicates or omits `/v1`.

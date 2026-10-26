@@ -722,6 +722,11 @@ static iree_status_t loom_serve_model_configuration_model_parse(
                                                      fields};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
       object, loom_serve_model_configuration_field_visit, &context));
+  if (!fields[1].value.data) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "model requires 'definition' object with a 'kind' field");
+  }
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
       &fields[0], host_allocator, &out_model->name));
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(

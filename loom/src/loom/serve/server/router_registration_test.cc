@@ -735,28 +735,31 @@ TEST_P(HttpRouterRegistrationTest, UnsupportedWarmupKeepsFailureModelLocal) {
   Remove();
 }
 
-TEST_P(HttpRouterRegistrationTest, ActivationFailureDrainsIndependentOwners) {
+TEST_P(HttpRouterRegistrationTest, ActivationFailureRetiresOnlyItsModel) {
   Declare();
   const int peer = Send("POST", "/v1/test", R"({"model":"held"})");
   held_.WaitSubmitted();
   EXPECT_EQ(Control("activate", "dynamic").find("HTTP/1.1 202"), 0u);
   managed_.WaitActivating();
-  expected_code_ = IREE_STATUS_UNAVAILABLE;
   managed_.ReleaseActivation(
       iree_make_status(IREE_STATUS_UNAVAILABLE, "parameter read failed"));
-  held_.WaitStopping();
   managed_.WaitRetiring();
   EXPECT_EQ(managed_.destroyed.load(), 0u);
   EXPECT_FALSE(returned_.load());
+  EXPECT_NE(Read(Send("GET", "/v1/status")).find("parameter read failed"),
+            std::string::npos);
+  EXPECT_EQ(Read(Send("POST", "/v1/test", R"({"model":"dynamic"})"))
+                .find("HTTP/1.1 503"),
+            0u);
+  EXPECT_EQ(
+      Read(Send("POST", "/v1/test", R"({"model":"a"})")).find("HTTP/1.1 200"),
+      0u);
   held_.Release();
-  EXPECT_TRUE(Read(peer).empty());
+  EXPECT_EQ(Read(peer).find("HTTP/1.1 200"), 0u);
   EXPECT_FALSE(returned_.load());
   EXPECT_EQ(managed_.destroyed.load(), 0u);
-  managed_.ReleaseRetirement();
-  owner_.join();
+  Remove();
   EXPECT_EQ(managed_.destroyed.load(), 1u);
-  EXPECT_NE(iree::Status::ToString(status_).find("parameter read failed"),
-            std::string::npos);
 }
 
 TEST_P(HttpRouterRegistrationTest,
@@ -834,25 +837,25 @@ TEST_P(HttpRouterRegistrationTest,
   Remove();
 }
 
-TEST_P(HttpRouterRegistrationTest, DeactivationFailureDrainsIndependentOwners) {
+TEST_P(HttpRouterRegistrationTest, DeactivationFailureRetiresOnlyItsModel) {
   managed_.fail_deactivation = true;
   Register();
   const int peer = Send("POST", "/v1/test", R"({"model":"held"})");
   held_.WaitSubmitted();
   Control("drain", "dynamic");
-  expected_code_ = IREE_STATUS_UNAVAILABLE;
   EXPECT_EQ(Control("deactivate", "dynamic").find("HTTP/1.1 202"), 0u);
-  held_.WaitStopping();
   managed_.WaitRetiring();
   EXPECT_EQ(managed_.destroyed.load(), 0u);
-  managed_.ReleaseRetirement();
+  EXPECT_NE(Read(Send("GET", "/v1/status")).find("parameter release failed"),
+            std::string::npos);
+  EXPECT_EQ(Read(Send("POST", "/v1/test", R"({"model":"dynamic"})"))
+                .find("HTTP/1.1 503"),
+            0u);
   EXPECT_FALSE(returned_.load());
   held_.Release();
-  EXPECT_TRUE(Read(peer).empty());
-  owner_.join();
+  EXPECT_EQ(Read(peer).find("HTTP/1.1 200"), 0u);
+  Remove();
   EXPECT_EQ(managed_.destroyed.load(), 1u);
-  EXPECT_NE(iree::Status::ToString(status_).find("parameter release failed"),
-            std::string::npos);
 }
 
 TEST_P(HttpRouterRegistrationTest, LocalPreparationFailureKeepsPeersServing) {

@@ -180,7 +180,7 @@ TEST_P(TextHttpTest, TranslationFailureDiscardsUnpublishedOutput) {
   ASSERT_NO_FATAL_FAILURE(Publish());
   const auto response = Finish(IREE_STATUS_INVALID_ARGUMENT);
   const std::string error =
-      R"({"error":{"message":"invalid \"tool\"","type":"loom_request_error"}})";
+      R"({"error":{"message":"invalid \"tool\"","type":"loom_output_error"}})";
   const auto headers_end = response.find("\r\n\r\n");
   ASSERT_NE(headers_end, std::string::npos) << response;
   if (GetParam()) {

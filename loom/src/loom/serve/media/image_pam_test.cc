@@ -179,14 +179,14 @@ TEST_F(PamTest, RejectsMalformedAndNonvisualHeadersBeforeRealization) {
     EXPECT_EQ(input_.allocation, nullptr);
     EXPECT_EQ(input_.info.width, 0u);
   }
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, Open(""));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Open(""));
 }
 
 TEST_F(PamTest, AppliesFacadeGeometryBoundsBeforeAllocatingPixels) {
   for (const char* width : {"65", "4294967295"}) {
     std::string bytes = Header("RGB", 3, 255);
     bytes.replace(bytes.find("WIDTH 2"), 7, std::string("WIDTH ") + width);
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, Open(bytes));
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Open(bytes));
     EXPECT_EQ(input_.allocation, nullptr);
   }
 }

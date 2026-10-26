@@ -728,14 +728,13 @@ TEST_F(SourceTextServiceTest, RejectsImagesWithoutProjection) {
   const std::string message =
       ImageMessage("a", "image/x-portable-arbitrarymap", kPam, "low", "b");
   const std::string response = Read(Send(Request(message, 2)));
-  EXPECT_NE(response.find("501 Not Implemented"), std::string::npos)
-      << response;
+  EXPECT_NE(response.find("400 Bad Request"), std::string::npos) << response;
   EXPECT_EQ(response.find("chat.completion"), std::string::npos) << response;
   EXPECT_EQ(Content(Read(Send(Request(Message("user", "ab"), 2)))),
             Oracle::Complete("ab", 2));
 }
 
-TEST_F(SourceTextServiceTest, InputResourceLimitDoesNotRetireTheModel) {
+TEST_F(SourceTextServiceTest, InputContentLimitDoesNotRetireTheModel) {
   Start();
   std::string message = R"({"role":"user","content":[)";
   for (size_t i = 0; i <= LOOM_SERVE_TEXT_CHAT_MAX_CONTENT_PART_COUNT; ++i) {
@@ -746,8 +745,7 @@ TEST_F(SourceTextServiceTest, InputResourceLimitDoesNotRetireTheModel) {
   }
   message += "]}";
   const std::string response = Read(Send(Request(message, 2)));
-  EXPECT_NE(response.find("503 Service Unavailable"), std::string::npos)
-      << response;
+  EXPECT_NE(response.find("400 Bad Request"), std::string::npos) << response;
   EXPECT_NE(response.find("ordered content parts"), std::string::npos)
       << response;
   EXPECT_EQ(Content(Read(Send(Request(Message("user", "ab"), 2)))),

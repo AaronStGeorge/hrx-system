@@ -109,10 +109,17 @@ copy owner state without polling hardware or waiting for device completion.
 registered model; `/v1/status` carries each model's preparation and failure
 state. `/v1/models` lists prepared deployments available for inference.
 
-Invalid packages remain inspectable while other models continue serving.
+Invalid packages remain inspectable while other models continue serving. A
+managed model's terminal execution or parameter-operation failure closes its
+admission and retires its service, utility, and native borrowers. Its failed
+registration and diagnostic remain visible until explicit unregister; registering
+again creates a new attempt without resetting shared queues or replaying work.
+Borrowed services have no registry-owned destructor, so terminal errors return
+to their external owner after draining.
+
 Failure affecting shared backing instead stops admission and drains accepted
-work. The registry's callback contract distinguishes these cases using the
-resource owner's evidence, not by guessing from an error code.
+work across the server. The registry's callback contract distinguishes these
+cases using the resource owner's evidence, not by guessing from an error code.
 
 Adjacent tests exercise document parsing and the real router, carriers and
 task system with controlled model dependencies. Source-defined catalog tests

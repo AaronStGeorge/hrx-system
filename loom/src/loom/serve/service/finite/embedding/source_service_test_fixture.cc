@@ -504,15 +504,25 @@ void SourceEmbeddingServiceTest::CheckInvalidSubmissionRetirement(
                 .find("HTTP/1.1 200"),
             0u);
 
-  // Only successfully admitted work can reach the invalid second stage and
-  // terminate the router. Assertion exits instead stop it in TearDown.
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, http_.Join());
-  EXPECT_TRUE(Read(broken.release(), /*allow_empty=*/true).empty());
-  EXPECT_TRUE(Read(cold.release(), /*allow_empty=*/true).empty());
-  // The cold request never left the router's holding set and is observed
-  // through its aborted claim, not a model's execution counters.
-  EXPECT_EQ(retired_counters_.requests, 1u);
+  // The invalid second stage fails only its model. Retirement still joins the
+  // first accepted command, and the independent held request remains usable.
+  const auto failed = Read(broken.release());
+  EXPECT_EQ(failed.find("HTTP/1.1 500"), 0u) << failed;
+  EXPECT_NE(failed.find(R"("type":"loom_execution_error")"), std::string::npos);
+  ASSERT_NO_FATAL_FAILURE(
+      WaitModelState("broken", R"("registration":"failed")"));
+  EXPECT_EQ(Read(Send({}, "/healthz", "GET")).find("HTTP/1.1 200"), 0u);
+  ASSERT_NO_FATAL_FAILURE(WaitModelState("cold", R"("held_requests":1)"));
+  ASSERT_EQ(Read(Send(R"({"model":"cold"})", "/v1/models/undrain"))
+                .find("HTTP/1.1 200"),
+            0u);
+  EXPECT_NE(Read(cold.release()).find(R"("embedding":[1,1,1,1])"),
+            std::string::npos);
+  loom_serve_http_server_request_stop(server_);
+  IREE_ASSERT_OK(http_.Join());
+  EXPECT_EQ(retired_counters_.requests, 2u);
   EXPECT_EQ(retired_counters_.failed, 1u);
+  EXPECT_EQ(retired_counters_.completed, 1u);
   EXPECT_EQ(retired_counters_.cancelled, 0u);
   // Queue allocation records may still own backing after model retirement.
   // Trim is nonblocking; group destruction joins the remaining records.
