@@ -31,15 +31,6 @@ CMAKE_SANITIZER_OPTIONS = {
     "tsan": ("-DIREE_ENABLE_TSAN=ON",),
     "ubsan": ("-DIREE_ENABLE_UBSAN=ON",),
 }
-BAZEL_HAL_DRIVER_DEFINES = (
-    ("amdgpu", "IREE_HAL_DRIVER_AMDGPU"),
-    ("task", "IREE_HAL_DRIVER_TASK"),
-    ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
-    ("webgpu", "IREE_HAL_DRIVER_WEBGPU"),
-    ("amd", "IREE_HAL_DRIVER_AMD"),
-    ("amd-gpu", "IREE_HAL_DRIVER_AMD_GPU"),
-    ("amd-xdna", "IREE_HAL_DRIVER_AMD_XDNA"),
-)
 CMAKE_HAL_DRIVER_DEFINES = (
     ("amdgpu", "IREE_HAL_DRIVER_AMDGPU"),
     ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
@@ -61,7 +52,9 @@ CMAKE_LOOM_IMPORTER_DEFINES = (
     ("mlir", "LOOM_IMPORT_MLIR"),
     ("tilelang", "LOOM_IMPORT_TILELANG"),
 )
-CI_SUPPORTED_HAL_DRIVERS = frozenset(driver for driver, _ in BAZEL_HAL_DRIVER_DEFINES)
+CI_SUPPORTED_HAL_DRIVERS = frozenset(
+    ("task", *(driver for driver, _ in CMAKE_HAL_DRIVER_DEFINES))
+)
 REPOSITORY_BUILD_HAL_DRIVERS = (
     "amd",
     "amdgpu",
@@ -388,11 +381,12 @@ def bazel_configure_step(
     extra_options: tuple[str, ...] = (),
 ) -> CiStep:
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
-    command = ["bazel", "configure"]
-    for driver, define in BAZEL_HAL_DRIVER_DEFINES:
-        enabled = driver in enabled_driver_set
-        if enabled or driver in ("amd", "amd-gpu", "amd-xdna"):
-            command.append(f"-D{define}={'ON' if enabled else 'OFF'}")
+    drivers = sorted((enabled_driver_set | {"task"}) - {"amd"})
+    command = [
+        "bazel",
+        "configure",
+        "--//runtime/config/hal:drivers=" + ",".join(drivers),
+    ]
     if "amdgpu" in enabled_driver_set:
         command.append(ROCM_PINNED_DEPENDENCY_MODE_OPTION)
         rocm_root = os.environ.get("HRX_ROCM_ROOT")
