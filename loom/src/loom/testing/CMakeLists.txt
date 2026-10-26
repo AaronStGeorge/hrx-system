@@ -86,6 +86,20 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    test_diagnostic_loomc_test
+  SRCS
+    "test_diagnostic_loomc_test.cc"
+  DEPS
+    ::test_diagnostic_loomc
+    iree::base
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+)
+
 loom_cc_library(
   NAME
     target_environment

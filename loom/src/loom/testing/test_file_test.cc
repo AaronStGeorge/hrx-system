@@ -616,6 +616,7 @@ TEST_F(TestFileParseTest, AnnotationWithDomainAndCode) {
   EXPECT_EQ(ann.severity, LOOM_DIAGNOSTIC_ERROR);
   EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_TYPE);
   EXPECT_EQ(ann.code, 1);
+  EXPECT_TRUE(iree_string_view_is_empty(ann.public_code));
   EXPECT_EQ(ann.target_line, 3);  // Line 2 targets line 3 (+1).
 }
 
@@ -1192,12 +1193,17 @@ TEST_F(TestFileParseTest, AnnotationParamMatcherRequiresQuotedValue) {
                               "  %x = test.bad : i32\n"));
 }
 
-TEST_F(TestFileParseTest, AnnotationNonNumericCodeErrors) {
-  // "TYPE/abc" — non-numeric code after '/' must be rejected.
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// RUN: verify\n"
-                              "// ERROR: TYPE/abc\n"
-                              "  %x = test.bad : i32\n"));
+TEST_F(TestFileParseTest, AnnotationWithSymbolicPublicCode) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: verify\n"
+            "// ERROR: SPIRV/PROFILE\n"
+            "  %x = test.bad : i32\n"));
+  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+  const auto& ann = file_.cases[0].annotations[0];
+  EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_COUNT_);
+  EXPECT_EQ(ann.code, 0);
+  EXPECT_TRUE(
+      iree_string_view_equal(ann.public_code, IREE_SV("SPIRV/PROFILE")));
 }
 
 TEST_F(TestFileParseTest, AnnotationEmptyCodeAfterSlashErrors) {
@@ -1208,12 +1214,17 @@ TEST_F(TestFileParseTest, AnnotationEmptyCodeAfterSlashErrors) {
                               "  %x = test.bad : i32\n"));
 }
 
-TEST_F(TestFileParseTest, AnnotationUnknownDomainErrors) {
-  // "BOGUS/001" — domain name not in the known set must be rejected.
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// RUN: verify\n"
-                              "// ERROR: BOGUS/001\n"
-                              "  %x = test.bad : i32\n"));
+TEST_F(TestFileParseTest, AnnotationWithExternalPublicCodeDomain) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: verify\n"
+            "// ERROR: CONFIG/INVALID\n"
+            "  %x = test.bad : i32\n"));
+  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+  const auto& ann = file_.cases[0].annotations[0];
+  EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_COUNT_);
+  EXPECT_EQ(ann.code, 0);
+  EXPECT_TRUE(
+      iree_string_view_equal(ann.public_code, IREE_SV("CONFIG/INVALID")));
 }
 
 TEST_F(TestFileParseTest, AnnotationUnknownDomainWithoutCodeErrors) {

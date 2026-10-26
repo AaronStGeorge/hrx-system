@@ -657,17 +657,19 @@ static iree_status_t loom_test_file_parse_param_matchers(
   }
 }
 
-// Parses the matcher part of an annotation: DOMAIN/CODE followed by an optional
-// structured param matcher and zero or more quoted substrings, OR just one or
-// more quoted substrings, OR a bare DOMAIN. All components are independently
-// optional. Multiple substrings are AND-combined against the rendered
-// diagnostic message. Multiple parameter matchers are AND-combined against
-// structured diagnostic params.
+// Parses the matcher part of an annotation: a generated DOMAIN/CODE or exact
+// public diagnostic code followed by an optional structured param matcher and
+// zero or more quoted substrings, OR just one or more quoted substrings, OR a
+// bare generated DOMAIN. All components are independently optional. Multiple
+// substrings are AND-combined against the rendered diagnostic message.
+// Multiple parameter matchers are AND-combined against structured diagnostic
+// params.
 //
 // Examples:
 //   TYPE/001                         — domain + code only
 //   TYPE/001 {field_a="lhs"}          — domain + code + param matcher
 //   TYPE/001 "operand 3" "result 0"  — domain + code + two substrings
+//   SPIRV/PROFILE                    — exact public diagnostic code
 //   "fragment"                       — substring only (any diagnostic)
 //   PARSE                            — domain only (any code, any message)
 static iree_status_t loom_test_file_parse_matcher(iree_string_view_t text,
@@ -687,9 +689,9 @@ static iree_status_t loom_test_file_parse_matcher(iree_string_view_t text,
     return loom_test_file_parse_substring_list(text, out);
   }
 
-  // Otherwise expect DOMAIN or DOMAIN/CODE, optionally followed by structured
-  // param matchers and quoted substrings. Isolate the DOMAIN/CODE token (ends
-  // at space or end of string).
+  // Otherwise expect a diagnostic code or generated domain, optionally
+  // followed by structured param matchers and quoted substrings. Isolate the
+  // code token (ends at space or end of string).
   iree_string_view_t domain_code = text;
   iree_string_view_t after_code = iree_string_view_empty();
   iree_host_size_t space = iree_string_view_find_char(text, ' ', 0);
@@ -699,16 +701,19 @@ static iree_status_t loom_test_file_parse_matcher(iree_string_view_t text,
         iree_string_view_substr(text, space + 1, IREE_HOST_SIZE_MAX));
   }
 
-  // Split DOMAIN/CODE on '/'. No slash means domain-only.
+  // Split DOMAIN/CODE on '/'. Known domains with numeric codes retain their
+  // compact generated identity. Other complete tokens are public diagnostic
+  // codes owned by optional LoomC components and remain opaque here. No slash
+  // means a generated domain-only matcher.
   iree_string_view_t domain_str;
   iree_string_view_t code_str;
   intptr_t slash =
       iree_string_view_split(domain_code, '/', &domain_str, &code_str);
   if (slash >= 0) {
-    if (!loom_error_domain_from_name(domain_str, &out->domain)) {
+    if (iree_string_view_is_empty(domain_str)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unknown error domain in annotation: '%.*s'",
-                              (int)domain_str.size, domain_str.data);
+                              "empty domain before '/' in annotation: '%.*s'",
+                              (int)domain_code.size, domain_code.data);
     }
     if (iree_string_view_is_empty(code_str)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -716,16 +721,17 @@ static iree_status_t loom_test_file_parse_matcher(iree_string_view_t text,
                               (int)domain_code.size, domain_code.data);
     }
     int32_t code_value = 0;
-    if (!iree_string_view_atoi_int32_base(code_str, 10, &code_value)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "non-numeric code in annotation: '%.*s'",
-                              (int)code_str.size, code_str.data);
+    if (loom_error_domain_from_name(domain_str, &out->domain) &&
+        iree_string_view_atoi_int32_base(code_str, 10, &code_value)) {
+      if (code_value < 0 || code_value > UINT16_MAX) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "annotation code out of range: %d", code_value);
+      }
+      out->code = (uint16_t)code_value;
+    } else {
+      out->domain = LOOM_ERROR_DOMAIN_COUNT_;
+      out->public_code = domain_code;
     }
-    if (code_value < 0 || code_value > UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "annotation code out of range: %d", code_value);
-    }
-    out->code = (uint16_t)code_value;
   } else {
     // Bare domain name without a code (e.g., "// ERROR: TYPE").
     if (!loom_error_domain_from_name(domain_code, &out->domain)) {

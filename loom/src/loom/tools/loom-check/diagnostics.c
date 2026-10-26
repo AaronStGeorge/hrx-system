@@ -245,19 +245,31 @@ static const char* loom_check_annotation_severity_name(
   return "ERROR";
 }
 
+static iree_status_t loom_check_append_collected_diagnostic_code(
+    const loom_check_collected_diagnostic_t* diagnostic,
+    bool include_zero_generated_code, iree_string_builder_t* builder) {
+  if (!iree_string_view_is_empty(diagnostic->public_code)) {
+    return iree_string_builder_append_string(builder, diagnostic->public_code);
+  }
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      builder, loom_error_domain_name(diagnostic->domain)));
+  if (diagnostic->code != 0 || include_zero_generated_code) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_format(builder, "/%03u", diagnostic->code));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_append_diagnostic_annotation_line(
     const loom_check_collected_diagnostic_t* diagnostic,
     iree_host_size_t line_offset, iree_string_view_t indentation,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(builder, indentation));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      builder, "// %s@+%zu: %s",
-      loom_check_annotation_severity_name(diagnostic->severity), line_offset,
-      loom_error_domain_name(diagnostic->domain)));
-  if (diagnostic->code != 0) {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_format(builder, "/%03u", diagnostic->code));
-  }
+      builder, "// %s@+%zu: ",
+      loom_check_annotation_severity_name(diagnostic->severity), line_offset));
+  IREE_RETURN_IF_ERROR(loom_check_append_collected_diagnostic_code(
+      diagnostic, /*include_zero_generated_code=*/false, builder));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
   return iree_ok_status();
 }
@@ -483,8 +495,13 @@ static iree_status_t loom_check_assemble_diagnostic_match_detail(
     const loom_test_annotation_t* annotation = &annotations[a];
     const char* severity_name =
         loom_diagnostic_severity_name(annotation->severity);
-    if (annotation->domain != LOOM_ERROR_DOMAIN_COUNT_ &&
-        annotation->code != 0) {
+    if (!iree_string_view_is_empty(annotation->public_code)) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          detail, "unmatched annotation line %zu: expected %s %.*s",
+          annotation->target_line, severity_name,
+          (int)annotation->public_code.size, annotation->public_code.data));
+    } else if (annotation->domain != LOOM_ERROR_DOMAIN_COUNT_ &&
+               annotation->code != 0) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           detail, "unmatched annotation line %zu: expected %s %s/%03u",
           annotation->target_line, severity_name,
@@ -521,9 +538,12 @@ static iree_status_t loom_check_assemble_diagnostic_match_detail(
     const char* severity_name =
         loom_diagnostic_severity_name(diagnostic->severity);
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        detail, "unexpected %s at line %u: [%s/%03u] %.*s\n", severity_name,
-        diagnostic->origin.line, loom_error_domain_name(diagnostic->domain),
-        diagnostic->code, (int)diagnostic->message.size,
+        detail, "unexpected %s at line %u: [", severity_name,
+        diagnostic->origin.line));
+    IREE_RETURN_IF_ERROR(loom_check_append_collected_diagnostic_code(
+        diagnostic, /*include_zero_generated_code=*/true, detail));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        detail, "] %.*s\n", (int)diagnostic->message.size,
         diagnostic->message.data));
     if (!iree_string_view_is_empty(diagnostic->formatted_diagnostic)) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
