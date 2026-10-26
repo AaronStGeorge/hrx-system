@@ -19,6 +19,22 @@
 extern "C" {
 #endif
 
+// Returns schedule state that must outlive frame construction to record the
+// details requested by |report|. Frame producers OR these flags into their
+// schedule options; summary and disabled reports require no retained state.
+static inline loom_low_schedule_flags_t
+loom_target_compile_report_required_schedule_flags(
+    const loom_target_compile_report_t* report) {
+  const loom_target_compile_report_detail_flags_t producer_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS;
+  return report != NULL && iree_any_bit_set(report->requested_detail_flags,
+                                            producer_detail_flags)
+             ? LOOM_LOW_SCHEDULE_FLAG_RETAIN_VALUE_PRODUCER_NODES
+             : 0;
+}
+
 // Records schedule, allocation, pressure-row, and spill-row summaries for one
 // packetized low function.
 iree_status_t loom_target_compile_report_record_low_emission_frame(

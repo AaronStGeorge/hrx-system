@@ -130,6 +130,8 @@ static iree_status_t loom_x86_module_encode_function(
       .schedule_strategy = has_processor_schedule_model
                                ? LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL
                                : LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+      .schedule_flags =
+          loom_target_compile_report_required_schedule_flags(report),
       .allocation_entry_locations = abi->call_contract.arguments,
       .allocation_entry_location_count = abi->call_contract.argument_count,
       .allocation_exit_locations = abi->call_contract.results,

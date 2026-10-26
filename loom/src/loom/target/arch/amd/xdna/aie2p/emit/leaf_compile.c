@@ -77,7 +77,9 @@ static iree_status_t loom_aie2p_leaf_build_frame(
       .loop_execution = options->loop_execution,
       .schedule_structural_models = loom_aie2p_low_structural_schedule_models(),
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
-      .schedule_flags = LOOM_LOW_SCHEDULE_FLAG_RETAIN_DEPENDENCY_INDEX,
+      .schedule_flags = LOOM_LOW_SCHEDULE_FLAG_RETAIN_DEPENDENCY_INDEX |
+                        loom_target_compile_report_required_schedule_flags(
+                            options->compile_report),
       .emitter = options->diagnostic_emitter,
       .statistics =
           options->compile_report != NULL ? &planning_statistics : NULL,

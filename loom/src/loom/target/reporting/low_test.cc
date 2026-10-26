@@ -721,6 +721,10 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       },
   };
   const uint32_t scheduled_node_indices[] = {0, 1, 2, 3, 4, 5, 6, 7};
+  const uint32_t value_producer_nodes[] = {
+      LOOM_LOW_SCHEDULE_NODE_NONE, 0, 1, LOOM_LOW_SCHEDULE_NODE_NONE,
+      LOOM_LOW_SCHEDULE_NODE_NONE,
+  };
   loom_target_facts_t target_facts = {};
   const loom_target_bundle_t* target_bundle = loom_target_bundle_table_lookup(
       &loom_test_target_bundles, LOOM_TEST_TARGET_KIND_LOW_CORE);
@@ -743,6 +747,9 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   loom_low_schedule_table_t schedule = {
       .module = module,
       .target = target,
+      .value_ids = liveness_value_ids,
+      .value_count = IREE_ARRAYSIZE(liveness_value_ids),
+      .value_producer_nodes = value_producer_nodes,
       .blocks = schedule_blocks,
       .block_count = IREE_ARRAYSIZE(schedule_blocks),
       .nodes = schedule_nodes,
@@ -832,6 +839,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
 
   IREE_ASSERT_OK(
       loom_target_compile_report_record_low_emission_frame(&report, &frame));
+  EXPECT_FALSE(loom_module_value_ordinal_scratch_is_active(module));
 
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
@@ -1331,6 +1339,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS;
   IREE_ASSERT_OK(loom_target_compile_report_record_low_allocation(
       &allocation_report, &frame.allocation));
+  EXPECT_FALSE(loom_module_value_ordinal_scratch_is_active(module));
   EXPECT_TRUE(iree_string_view_equal(allocation_report.function_name,
                                      report.function_name));
   EXPECT_TRUE(iree_string_view_equal(allocation_report.target_bundle_name,

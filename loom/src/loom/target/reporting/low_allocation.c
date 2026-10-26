@@ -173,39 +173,6 @@ loom_target_compile_report_pressure_origin_from_value(
   };
 }
 
-static iree_status_t loom_target_compile_report_build_pressure_origin_infos(
-    const loom_low_schedule_table_t* schedule,
-    loom_target_compile_report_pressure_origin_info_t* origin_infos,
-    iree_host_size_t origin_info_count) {
-  if (schedule == NULL || origin_infos == NULL) {
-    return iree_ok_status();
-  }
-  const loom_module_t* module = schedule->module;
-  const loom_low_descriptor_set_t* descriptor_set =
-      schedule->target.descriptor_set;
-  for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
-    const loom_low_schedule_node_t* node = &schedule->nodes[i];
-    if (node->result_count == 0) {
-      continue;
-    }
-    const loom_target_compile_report_pressure_origin_info_t info =
-        loom_target_compile_report_pressure_origin_from_node(
-            module, descriptor_set, node);
-    const loom_value_ordinal_t* result_ordinals =
-        loom_low_schedule_node_const_result_ordinals(node);
-    for (uint16_t j = 0; j < node->result_count; ++j) {
-      const loom_value_ordinal_t result_ordinal = result_ordinals[j];
-      if (result_ordinal >= origin_info_count) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "low schedule result ordinal exceeds liveness value domain");
-      }
-      origin_infos[result_ordinal] = info;
-    }
-  }
-  return iree_ok_status();
-}
-
 static bool loom_target_compile_report_schedule_band_matches(
     const loom_target_compile_report_schedule_band_row_t* row,
     const loom_target_compile_report_pressure_origin_info_t* info) {
@@ -534,10 +501,56 @@ static bool loom_target_compile_report_pressure_origin_row_matches(
          iree_string_view_equal(row->semantic_tag, candidate->semantic_tag);
 }
 
+static loom_target_compile_report_pressure_origin_info_t
+loom_target_compile_report_pressure_origin_for_value_ordinal(
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_schedule_table_t* origin_schedule,
+    loom_value_ordinal_t value_ordinal) {
+  IREE_ASSERT_LT(value_ordinal, liveness->value_count);
+  loom_target_compile_report_pressure_origin_info_t origin_info =
+      loom_target_compile_report_pressure_origin_from_value(
+          liveness->module, liveness->value_ids[value_ordinal]);
+  if (origin_schedule == NULL) {
+    return origin_info;
+  }
+  IREE_ASSERT_EQ(origin_schedule->value_count, liveness->value_count);
+  IREE_ASSERT_EQ(origin_schedule->value_ids[value_ordinal],
+                 liveness->value_ids[value_ordinal]);
+  const uint32_t node_index =
+      loom_low_schedule_value_producer_node(origin_schedule, value_ordinal);
+  if (node_index == LOOM_LOW_SCHEDULE_NODE_NONE) {
+    return origin_info;
+  }
+  IREE_ASSERT_LT(node_index, origin_schedule->node_count);
+  return loom_target_compile_report_pressure_origin_from_node(
+      origin_schedule->module, origin_schedule->target.descriptor_set,
+      &origin_schedule->nodes[node_index]);
+}
+
+static loom_target_compile_report_pressure_origin_info_t
+loom_target_compile_report_pressure_origin_for_liveness_value(
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_schedule_table_t* origin_schedule,
+    loom_value_id_t value_id) {
+  if (origin_schedule == NULL) {
+    return loom_target_compile_report_pressure_origin_from_value(
+        liveness->module, value_id);
+  }
+  IREE_ASSERT(loom_module_value_ordinal_scratch_is_active(liveness->module));
+  const loom_value_ordinal_t value_ordinal =
+      loom_module_value_ordinal_scratch_lookup(liveness->module, value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
+    return loom_target_compile_report_pressure_origin_from_value(
+        liveness->module, value_id);
+  }
+  return loom_target_compile_report_pressure_origin_for_value_ordinal(
+      liveness, origin_schedule, value_ordinal);
+}
+
 static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
     loom_target_compile_report_t* report,
     const loom_liveness_analysis_t* liveness,
-    const loom_low_schedule_table_t* schedule,
+    const loom_low_schedule_table_t* origin_schedule,
     const loom_low_descriptor_set_t* descriptor_set) {
   if (!loom_target_compile_report_wants_details(
           report, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS)) {
@@ -548,14 +561,6 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
   if (liveness->value_count == 0 || liveness->pressure_summary_count == 0 ||
       iree_allocator_is_null(report->allocator)) {
     return iree_ok_status();
-  }
-  iree_host_size_t origin_info_bytes = 0;
-  if (!iree_host_size_checked_mul(
-          liveness->value_count,
-          sizeof(loom_target_compile_report_pressure_origin_info_t),
-          &origin_info_bytes)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "pressure origin info table is too large");
   }
   iree_host_size_t row_bytes = 0;
   if (!iree_host_size_checked_mul(
@@ -569,18 +574,9 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
   iree_arena_initialize(liveness->module->arena.block_pool, &scratch_arena);
   const iree_allocator_t scratch_allocator =
       iree_arena_allocator(&scratch_arena);
-  loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
   loom_target_compile_report_pressure_origin_row_t* rows = NULL;
-  iree_status_t status = iree_allocator_malloc(
-      scratch_allocator, origin_info_bytes, (void**)&origin_infos);
-  if (iree_status_is_ok(status)) {
-    memset(origin_infos, 0, origin_info_bytes);
-    status = loom_target_compile_report_build_pressure_origin_infos(
-        schedule, origin_infos, liveness->value_count);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_allocator_malloc(scratch_allocator, row_bytes, (void**)&rows);
-  }
+  iree_status_t status =
+      iree_allocator_malloc(scratch_allocator, row_bytes, (void**)&rows);
   for (iree_host_size_t summary_index = 0;
        iree_status_is_ok(status) &&
        summary_index < liveness->pressure_summary_count;
@@ -603,13 +599,9 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
               summary->peak_point)) {
         continue;
       }
-      loom_target_compile_report_pressure_origin_info_t origin_info =
-          origin_infos[value_ordinal];
-      if (origin_info.kind ==
-          LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN) {
-        origin_info = loom_target_compile_report_pressure_origin_from_value(
-            liveness->module, interval->value_id);
-      }
+      const loom_target_compile_report_pressure_origin_info_t origin_info =
+          loom_target_compile_report_pressure_origin_for_value_ordinal(
+              liveness, origin_schedule, (loom_value_ordinal_t)value_ordinal);
       loom_target_compile_report_pressure_origin_row_t candidate = {
           .function_name = report->function_name,
           .register_class = loom_target_compile_report_value_class_name(
@@ -657,64 +649,6 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
   return status;
 }
 
-static bool loom_target_compile_report_liveness_value_ordinal(
-    const loom_liveness_analysis_t* liveness, loom_value_id_t value_id,
-    loom_value_ordinal_t* out_value_ordinal) {
-  if (liveness == NULL || liveness->value_ids == NULL) {
-    return false;
-  }
-  for (iree_host_size_t i = 0; i < liveness->value_count; ++i) {
-    if (liveness->value_ids[i] == value_id) {
-      *out_value_ordinal = (loom_value_ordinal_t)i;
-      return true;
-    }
-  }
-  return false;
-}
-
-static loom_target_compile_report_pressure_origin_info_t
-loom_target_compile_report_pressure_origin_for_liveness_value(
-    const loom_module_t* module, const loom_liveness_analysis_t* liveness,
-    const loom_target_compile_report_pressure_origin_info_t* origin_infos,
-    loom_value_id_t value_id) {
-  loom_target_compile_report_pressure_origin_info_t origin_info =
-      loom_target_compile_report_pressure_origin_from_value(module, value_id);
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  if (origin_infos != NULL &&
-      loom_target_compile_report_liveness_value_ordinal(liveness, value_id,
-                                                        &value_ordinal) &&
-      value_ordinal < liveness->value_count &&
-      origin_infos[value_ordinal].kind !=
-          LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN) {
-    origin_info = origin_infos[value_ordinal];
-  }
-  return origin_info;
-}
-
-static iree_status_t loom_target_compile_report_acquire_pressure_origin_infos(
-    iree_allocator_t scratch_allocator,
-    const loom_liveness_analysis_t* liveness,
-    const loom_low_schedule_table_t* schedule,
-    loom_target_compile_report_pressure_origin_info_t** out_origin_infos) {
-  *out_origin_infos = NULL;
-  if (schedule == NULL || liveness == NULL || liveness->value_count == 0) {
-    return iree_ok_status();
-  }
-  iree_host_size_t origin_info_bytes = 0;
-  if (!iree_host_size_checked_mul(
-          liveness->value_count,
-          sizeof(loom_target_compile_report_pressure_origin_info_t),
-          &origin_info_bytes)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "pressure origin info table is too large");
-  }
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      scratch_allocator, origin_info_bytes, (void**)out_origin_infos));
-  memset(*out_origin_infos, 0, origin_info_bytes);
-  return loom_target_compile_report_build_pressure_origin_infos(
-      schedule, *out_origin_infos, liveness->value_count);
-}
-
 static iree_status_t loom_target_compile_report_record_pressure_rows(
     loom_target_compile_report_t* report,
     const loom_liveness_analysis_t* liveness,
@@ -760,7 +694,7 @@ static iree_status_t loom_target_compile_report_record_pressure_rows(
 static iree_status_t loom_target_compile_report_record_spill_rows(
     loom_target_compile_report_t* report,
     const loom_low_allocation_table_t* allocation,
-    const loom_low_schedule_table_t* schedule) {
+    const loom_low_schedule_table_t* origin_schedule) {
   if (!loom_target_compile_report_wants_details(
           report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
     return iree_ok_status();
@@ -768,15 +702,8 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
   if (allocation->spill_plan_count == 0) {
     return iree_ok_status();
   }
-  iree_arena_allocator_t scratch_arena;
-  iree_arena_initialize(allocation->module->arena.block_pool, &scratch_arena);
-  const iree_allocator_t scratch_allocator =
-      iree_arena_allocator(&scratch_arena);
   const loom_liveness_analysis_t* liveness = &allocation->liveness;
-  loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
-  iree_status_t status =
-      loom_target_compile_report_acquire_pressure_origin_infos(
-          scratch_allocator, liveness, schedule, &origin_infos);
+  iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < allocation->spill_plan_count; ++i) {
     const loom_low_allocation_spill_plan_t* spill_plan =
@@ -785,7 +712,7 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
         &allocation->assignments[spill_plan->assignment_index];
     const loom_target_compile_report_pressure_origin_info_t origin_info =
         loom_target_compile_report_pressure_origin_for_liveness_value(
-            allocation->module, liveness, origin_infos, spill_plan->value_id);
+            liveness, origin_schedule, spill_plan->value_id);
     const loom_target_compile_report_spill_row_t row = {
         .kind = LOOM_TARGET_COMPILE_REPORT_SPILL_ROW_PLANNED,
         .function_name = report->function_name,
@@ -813,13 +740,13 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
     };
     status = loom_target_compile_report_record_spill_row(report, &row);
   }
-  iree_arena_deinitialize(&scratch_arena);
   return status;
 }
 
-iree_status_t loom_target_compile_report_record_materialized_spill_rows(
+static iree_status_t loom_target_compile_report_record_materialized_spill_rows(
     loom_target_compile_report_t* report,
-    const loom_low_emission_frame_t* frame) {
+    const loom_low_emission_frame_t* frame,
+    const loom_low_schedule_table_t* origin_schedule) {
   if (!loom_target_compile_report_wants_details(
           report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
     return iree_ok_status();
@@ -827,15 +754,8 @@ iree_status_t loom_target_compile_report_record_materialized_spill_rows(
   if (frame->materialized_spills.record_count == 0) {
     return iree_ok_status();
   }
-  iree_arena_allocator_t scratch_arena;
-  iree_arena_initialize(frame->module->arena.block_pool, &scratch_arena);
-  const iree_allocator_t scratch_allocator =
-      iree_arena_allocator(&scratch_arena);
   const loom_liveness_analysis_t* liveness = &frame->allocation.liveness;
-  loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
-  iree_status_t status =
-      loom_target_compile_report_acquire_pressure_origin_infos(
-          scratch_allocator, liveness, &frame->schedule, &origin_infos);
+  iree_status_t status = iree_ok_status();
   for (const loom_low_allocation_materialized_spill_vec_t* vec =
            frame->materialized_spills.head;
        iree_status_is_ok(status) && vec != NULL; vec = vec->next) {
@@ -844,7 +764,7 @@ iree_status_t loom_target_compile_report_record_materialized_spill_rows(
       const loom_low_allocation_materialized_spill_t* spill = &vec->records[i];
       loom_target_compile_report_pressure_origin_info_t origin_info =
           loom_target_compile_report_pressure_origin_for_liveness_value(
-              frame->module, liveness, origin_infos, spill->value_id);
+              liveness, origin_schedule, spill->value_id);
       if (origin_info.kind ==
               LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN &&
           iree_all_bits_set(
@@ -880,7 +800,6 @@ iree_status_t loom_target_compile_report_record_materialized_spill_rows(
       status = loom_target_compile_report_record_spill_row(report, &row);
     }
   }
-  iree_arena_deinitialize(&scratch_arena);
   return status;
 }
 
@@ -1152,7 +1071,7 @@ static iree_status_t
 loom_target_compile_report_record_allocation_high_water_rows(
     loom_target_compile_report_t* report,
     const loom_low_allocation_table_t* allocation,
-    const loom_low_schedule_table_t* schedule) {
+    const loom_low_schedule_table_t* origin_schedule) {
   if (!loom_target_compile_report_wants_details(
           report,
           LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS)) {
@@ -1189,12 +1108,6 @@ loom_target_compile_report_record_allocation_high_water_rows(
   }
 
   const loom_liveness_analysis_t* liveness = &allocation->liveness;
-  loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
-  if (iree_status_is_ok(status)) {
-    status = loom_target_compile_report_acquire_pressure_origin_infos(
-        scratch_allocator, liveness, schedule, &origin_infos);
-  }
-
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
@@ -1246,7 +1159,7 @@ loom_target_compile_report_record_allocation_high_water_rows(
                 LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND);
     const loom_target_compile_report_pressure_origin_info_t origin_info =
         loom_target_compile_report_pressure_origin_for_liveness_value(
-            allocation->module, liveness, origin_infos, assignment->value_id);
+            liveness, origin_schedule, assignment->value_id);
     const loom_target_compile_report_allocation_high_water_row_t row = {
         .function_name = report->function_name,
         .value_name = loom_target_compile_report_value_name(
@@ -1297,7 +1210,6 @@ loom_target_compile_report_record_allocation_high_water_rows(
   }
 
   iree_arena_deinitialize(&scratch_arena);
-
   return status;
 }
 
@@ -1413,11 +1325,12 @@ static void loom_target_compile_report_record_low_allocation_identity(
   loom_target_compile_report_record_target_bundle(report, bundle);
 }
 
-iree_status_t loom_target_compile_report_record_low_allocation_contents(
+static iree_status_t loom_target_compile_report_record_low_allocation_contents(
     loom_target_compile_report_t* report,
     const loom_low_allocation_table_t* allocation,
     const loom_low_schedule_table_t* schedule,
-    const loom_target_compile_report_low_dynamic_context_t* dynamic_context) {
+    const loom_target_compile_report_low_dynamic_context_t* dynamic_context,
+    const loom_low_schedule_table_t* origin_schedule) {
   const loom_liveness_analysis_t* liveness = &allocation->liveness;
   loom_target_compile_report_record_allocation(
       report, allocation->assignment_count, allocation->spill_count,
@@ -1430,7 +1343,7 @@ iree_status_t loom_target_compile_report_record_low_allocation_contents(
       report, liveness, allocation->target.descriptor_set);
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_pressure_origin_rows(
-        report, liveness, schedule, allocation->target.descriptor_set);
+        report, liveness, origin_schedule, allocation->target.descriptor_set);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_schedule_band_rows(
@@ -1438,7 +1351,7 @@ iree_status_t loom_target_compile_report_record_low_allocation_contents(
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_spill_rows(report, allocation,
-                                                          schedule);
+                                                          origin_schedule);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_allocation_failure_rows(
@@ -1446,7 +1359,36 @@ iree_status_t loom_target_compile_report_record_low_allocation_contents(
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_allocation_high_water_rows(
-        report, allocation, schedule);
+        report, allocation, origin_schedule);
+  }
+  return status;
+}
+
+iree_status_t loom_target_compile_report_record_low_frame_allocation(
+    loom_target_compile_report_t* report,
+    const loom_low_emission_frame_t* frame,
+    const loom_target_compile_report_low_dynamic_context_t* dynamic_context) {
+  const loom_low_schedule_table_t* origin_schedule = NULL;
+  if (frame->schedule.value_count != 0 &&
+      iree_any_bit_set(
+          loom_target_compile_report_required_schedule_flags(report),
+          LOOM_LOW_SCHEDULE_FLAG_RETAIN_VALUE_PRODUCER_NODES)) {
+    IREE_ASSERT(frame->schedule.value_producer_nodes != NULL);
+    origin_schedule = &frame->schedule;
+  }
+  iree_status_t status =
+      loom_target_compile_report_record_low_allocation_contents(
+          report, &frame->allocation, &frame->schedule, dynamic_context,
+          origin_schedule);
+  if (iree_status_is_ok(status)) {
+    loom_target_compile_report_record_allocation_materialization(
+        report, frame->materialized_spill_storage_count,
+        frame->materialized_spill_storage_bytes,
+        frame->materialized_spill_store_count,
+        frame->materialized_spill_store_bytes, frame->materialized_reload_count,
+        frame->materialized_reload_bytes);
+    status = loom_target_compile_report_record_materialized_spill_rows(
+        report, frame, origin_schedule);
   }
   return status;
 }
@@ -1456,5 +1398,6 @@ iree_status_t loom_target_compile_report_record_low_allocation(
     const loom_low_allocation_table_t* allocation) {
   loom_target_compile_report_record_low_allocation_identity(report, allocation);
   return loom_target_compile_report_record_low_allocation_contents(
-      report, allocation, /*schedule=*/NULL, /*dynamic_context=*/NULL);
+      report, allocation, /*schedule=*/NULL, /*dynamic_context=*/NULL,
+      /*origin_schedule=*/NULL);
 }

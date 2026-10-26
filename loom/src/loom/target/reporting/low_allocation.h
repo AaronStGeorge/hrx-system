@@ -14,17 +14,12 @@
 extern "C" {
 #endif  // __cplusplus
 
-// Records allocation, pressure, schedule-band, spill, and failure evidence.
-iree_status_t loom_target_compile_report_record_low_allocation_contents(
+// Records allocation, pressure, schedule-band, spill, and failure evidence for
+// a complete emission frame.
+iree_status_t loom_target_compile_report_record_low_frame_allocation(
     loom_target_compile_report_t* report,
-    const loom_low_allocation_table_t* allocation,
-    const loom_low_schedule_table_t* schedule,
+    const loom_low_emission_frame_t* frame,
     const loom_target_compile_report_low_dynamic_context_t* dynamic_context);
-
-// Records spill operations materialized in the final emission frame.
-iree_status_t loom_target_compile_report_record_materialized_spill_rows(
-    loom_target_compile_report_t* report,
-    const loom_low_emission_frame_t* frame);
 
 #ifdef __cplusplus
 }  // extern "C"

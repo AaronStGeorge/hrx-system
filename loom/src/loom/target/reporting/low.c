@@ -606,20 +606,8 @@ loom_target_compile_report_record_low_emission_frame_with_dynamic_context(
     loom_target_compile_report_record_move_causes(report, frame);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_target_compile_report_record_low_allocation_contents(
-        report, &frame->allocation, &frame->schedule, dynamic_context);
-  }
-  if (iree_status_is_ok(status)) {
-    loom_target_compile_report_record_allocation_materialization(
-        report, frame->materialized_spill_storage_count,
-        frame->materialized_spill_storage_bytes,
-        frame->materialized_spill_store_count,
-        frame->materialized_spill_store_bytes, frame->materialized_reload_count,
-        frame->materialized_reload_bytes);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_target_compile_report_record_materialized_spill_rows(report,
-                                                                       frame);
+    status = loom_target_compile_report_record_low_frame_allocation(
+        report, frame, dynamic_context);
   }
   loom_low_allocation_release_value_scratch(&value_scratch);
   return status;
