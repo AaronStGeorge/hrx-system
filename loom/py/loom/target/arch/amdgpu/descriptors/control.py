@@ -315,10 +315,11 @@ def _s_sendmsg_rtn_overlay(bits: int) -> AmdgpuDescriptorOverlay:
         operands=(AmdgpuOperandOverlay("SDST", _sgpr_result(units=bits // 32)),),
         immediate_fields=("SSRC0",),
         immediates=(_SENDMSG_RTN_MESSAGE_IMMEDIATE,),
-        # The message has no memory alias, but writes SDST asynchronously through
-        # LGKM/KM. Its explicit counter also owns the result storage lease.
+        # Message issue orders execution without completing memory operations.
+        # SDST arrives asynchronously through LGKM/KM; the read counter owns its
+        # storage lease independently of memory aliases.
         effects=(
-            _CACHE_CONTROL_EFFECT,
+            _EXECUTION_BARRIER_EFFECT,
             Effect(EffectKind.READ, counter_id=_COUNTER_SMEM),
         ),
         flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.BARRIER),
