@@ -96,6 +96,8 @@ enum loomc_pass_report_flag_bits_e {
   /// is zero and collection performs no clock reads.
   LOOMC_PASS_REPORT_FLAG_TIMING = 1u << 0,
 };
+
+/// Bitmask of `loomc_pass_report_flag_bits_e`.
 typedef uint32_t loomc_pass_report_flags_t;
 
 /// Requests a result-owned JSON report of executed passes.
