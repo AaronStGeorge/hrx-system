@@ -14,12 +14,12 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 0, direc
   %output = resource<hal_binding> {extent = 64, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %27 = v_mov_b32 0
   %28 = global_load_b128_saddr %27, %input {offset = 64}
-  %30 = global_load_b128_saddr %27, %input {offset = 80}
-  %32 = global_load_b128_saddr %27, %input {offset = 96}
-  %34 = global_load_b128_saddr %27, %input {offset = 112}
+  %29 = global_load_b128_saddr %27, %input {offset = 80}
+  %30 = global_load_b128_saddr %27, %input {offset = 96}
+  %31 = global_load_b128_saddr %27, %input {offset = 112}
   global_store_b128_saddr %27, %28, %output
-  global_store_b128_saddr %27, %30, %output {offset = 16}
-  global_store_b128_saddr %27, %32, %output {offset = 32}
-  global_store_b128_saddr %27, %34, %output {offset = 48}
+  global_store_b128_saddr %27, %29, %output {offset = 16}
+  global_store_b128_saddr %27, %30, %output {offset = 32}
+  global_store_b128_saddr %27, %31, %output {offset = 48}
   return
 }

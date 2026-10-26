@@ -102,7 +102,7 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direc
   %53 = concat(%49, %51) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   %54 = v_mov_b32 0
   %55 = global_load_b128_saddr %54, %53
-  %57 = global_load_b128_saddr %54, %53 {offset = 16}
+  %56 = global_load_b128_saddr %54, %53 {offset = 16}
   %59 = s_lshl_b32_rhs_inline %44, 1
   %60 = slice %outputs[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %61 = slice %outputs[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -110,7 +110,7 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direc
   %65, %66 = s_addc_u32 %61, %48, %64
   %67 = concat(%63, %65) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   global_store_b128_saddr %54, %55, %67
-  global_store_b128_saddr %54, %57, %67 {offset = 16}
+  global_store_b128_saddr %54, %56, %67 {offset = 16}
   low.br ^_bb2
 ^_bb2:
   return
@@ -168,9 +168,9 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 0, direc
   %47 = v_lshl_add_u32_shift_imm %row, %column, 9
   %48 = v_lshlrev_b32_src0_inline %47, 1
   %49 = global_load_b128_saddr %48, %inputs
-  %51 = global_load_b128_saddr %48, %inputs {offset = 16}
+  %50 = global_load_b128_saddr %48, %inputs {offset = 16}
   global_store_b128_saddr %48, %49, %outputs
-  global_store_b128_saddr %48, %51, %outputs {offset = 16}
+  global_store_b128_saddr %48, %50, %outputs {offset = 16}
   low.br ^_bb2
 ^_bb2:
   s_mov_b64_exec %45

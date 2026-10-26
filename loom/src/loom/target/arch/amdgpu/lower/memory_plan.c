@@ -399,20 +399,32 @@ iree_status_t loom_amdgpu_select_memory_store_plan(
   return loom_amdgpu_select_memory_plan(context, source_op, out_plan);
 }
 
-static bool loom_amdgpu_memory_accesses_share_saddr_terms(
+static bool loom_amdgpu_memory_accesses_share_address_recipe(
     const loom_amdgpu_memory_access_t* lhs,
     const loom_amdgpu_memory_access_t* rhs) {
-  if (lhs->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR ||
-      rhs->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR ||
-      lhs->source != rhs->source ||
+  if (lhs->address_form != rhs->address_form || lhs->source != rhs->source ||
+      lhs->dynamic_term_plans != rhs->dynamic_term_plans ||
       lhs->retained_component_kind != rhs->retained_component_kind ||
       lhs->vaddr_realization_mask != rhs->vaddr_realization_mask ||
-      lhs->realization.vaddr != rhs->realization.vaddr) {
+      lhs->realization.vaddr != rhs->realization.vaddr ||
+      lhs->realization.descriptor != rhs->realization.descriptor ||
+      lhs->realization.soffset != rhs->realization.soffset ||
+      lhs->buffer_extent != rhs->buffer_extent) {
     return false;
   }
   return memcmp(lhs->dynamic_term_kinds, rhs->dynamic_term_kinds,
                 lhs->source->dynamic_term_count *
                     sizeof(*lhs->dynamic_term_kinds)) == 0;
+}
+
+static bool loom_amdgpu_memory_accesses_materialize_same_address(
+    const loom_amdgpu_memory_access_t* lhs,
+    const loom_amdgpu_memory_access_t* rhs) {
+  return loom_amdgpu_memory_accesses_share_address_recipe(lhs, rhs) &&
+         lhs->vaddr_static_byte_offset == rhs->vaddr_static_byte_offset &&
+         lhs->scalar_byte_offset == rhs->scalar_byte_offset &&
+         lhs->scalar_base_byte_offset == rhs->scalar_base_byte_offset &&
+         lhs->scalar_offset_placement == rhs->scalar_offset_placement;
 }
 
 static bool loom_amdgpu_memory_access_offset_immediate_info(
@@ -422,14 +434,17 @@ static bool loom_amdgpu_memory_access_offset_immediate_info(
   const uint32_t descriptor_ordinal =
       loom_low_descriptor_set_descriptor_ordinal(descriptor_set,
                                                  access->descriptor);
+  const loom_low_immediate_kind_t expected_kind =
+      access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM
+          ? LOOM_LOW_IMMEDIATE_KIND_UNSIGNED
+          : LOOM_LOW_IMMEDIATE_KIND_SIGNED;
   return descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE &&
          loom_amdgpu_descriptor_offset_immediate_info(
-             descriptor_set, descriptor_ordinal, 1,
-             LOOM_LOW_IMMEDIATE_KIND_SIGNED, out_info) &&
+             descriptor_set, descriptor_ordinal, 1, expected_kind, out_info) &&
          out_info->unit_byte_count == 1;
 }
 
-static bool loom_amdgpu_memory_plan_try_share_saddr(
+static bool loom_amdgpu_memory_plan_try_rebias_shared_scalar_address(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_memory_access_plan_t* plan) {
   const loom_amdgpu_memory_access_t* first = &plan->packets[0].access;
@@ -441,7 +456,7 @@ static bool loom_amdgpu_memory_plan_try_share_saddr(
   int64_t immediate_offsets[LOOM_AMDGPU_MAX_MEMORY_PACKET_COUNT];
   for (uint32_t i = 0; i < plan->packet_count; ++i) {
     const loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
-    if (!loom_amdgpu_memory_accesses_share_saddr_terms(first, access)) {
+    if (!loom_amdgpu_memory_accesses_share_address_recipe(first, access)) {
       return false;
     }
     loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
@@ -464,8 +479,14 @@ static bool loom_amdgpu_memory_plan_try_share_saddr(
     }
   }
 
+  const bool place_offset_in_base =
+      common_base_byte_offset > UINT32_MAX ||
+      (first->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM &&
+       !loom_amdgpu_source_memory_offset_fits_u32(first->source,
+                                                  common_base_byte_offset));
+
   for (uint32_t i = 0; i < plan->packet_count; ++i) {
-    loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
+    const loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
     loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
     if (!loom_amdgpu_memory_access_offset_immediate_info(descriptor_set, access,
                                                          &offset_info)) {
@@ -475,7 +496,11 @@ static bool loom_amdgpu_memory_plan_try_share_saddr(
                               common_base_byte_offset, &immediate_offsets[i])) {
       return false;
     }
-    if (immediate_offsets[i] < offset_info.signed_min ||
+    const int64_t immediate_minimum =
+        offset_info.kind == LOOM_LOW_IMMEDIATE_KIND_SIGNED
+            ? offset_info.signed_min
+            : 0;
+    if (immediate_offsets[i] < immediate_minimum ||
         (immediate_offsets[i] >= 0 &&
          (uint64_t)immediate_offsets[i] > offset_info.unsigned_max)) {
       return false;
@@ -485,7 +510,7 @@ static bool loom_amdgpu_memory_plan_try_share_saddr(
   for (uint32_t i = 0; i < plan->packet_count; ++i) {
     loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
     access->immediate_offset = immediate_offsets[i];
-    if (common_base_byte_offset <= UINT32_MAX) {
+    if (!place_offset_in_base) {
       access->scalar_byte_offset = (uint32_t)common_base_byte_offset;
       access->scalar_base_byte_offset = 0;
       access->scalar_offset_placement =
@@ -495,6 +520,36 @@ static bool loom_amdgpu_memory_plan_try_share_saddr(
       access->scalar_base_byte_offset = (uint64_t)common_base_byte_offset;
       access->scalar_offset_placement =
           LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_BASE;
+    }
+  }
+  return true;
+}
+
+static bool loom_amdgpu_memory_plan_try_share_address(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_memory_access_plan_t* plan) {
+  const loom_amdgpu_memory_access_t* first = &plan->packets[0].access;
+  // M0 writes require state-aware CSE; packet-address reuse only carries
+  // ordinary SSA address operands.
+  if (first->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
+    return false;
+  }
+  // A shared complete flat pointer extends a VGPR pair across every packet and
+  // can cross an allocation cliff. Keep complete flat pointers packet-local.
+  if (first->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT) {
+    return false;
+  }
+  if (first->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR ||
+      first->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM) {
+    if (!loom_amdgpu_memory_plan_try_rebias_shared_scalar_address(
+            descriptor_set, plan)) {
+      return false;
+    }
+  }
+  for (uint32_t i = 1; i < plan->packet_count; ++i) {
+    if (!loom_amdgpu_memory_accesses_materialize_same_address(
+            first, &plan->packets[i].access)) {
+      return false;
     }
   }
   return true;
@@ -517,9 +572,9 @@ iree_status_t loom_amdgpu_finalize_memory_plan(
     plan->packets[i].access.buffer_extent = buffer_extent;
   }
   if (plan->packet_count > 1 &&
-      loom_amdgpu_memory_plan_try_share_saddr(
+      loom_amdgpu_memory_plan_try_share_address(
           loom_low_lower_context_descriptor_set(context), plan)) {
-    plan->flags |= LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_SHARED_SADDR;
+    plan->flags |= LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_SHARED_ADDRESS;
   }
   return iree_ok_status();
 }
