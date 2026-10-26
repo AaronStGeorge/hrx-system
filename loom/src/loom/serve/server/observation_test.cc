@@ -13,12 +13,15 @@
 #include "iree/vm/test_allocator.h"
 #include "loom/serve/service/service.h"
 #include "loom/serve/telemetry/sample.h"
+#include "loom/serve/telemetry/stream.h"
 
 namespace {
 
 class ObservationTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    IREE_ASSERT_OK(loom_serve_telemetry_stream_allocate(
+        4, iree_allocator_system(), &stream_));
     const loom_serve_service_t service = {
         .name = IREE_SV("model"),
         .self = this,
@@ -33,6 +36,7 @@ class ObservationTest : public ::testing::Test {
             },
         .telemetry =
             {
+                .stream = stream_,
                 .counters = &counters_,
                 .sample =
                     [](void* self, loom_serve_telemetry_sample_sink_t sink) {
@@ -58,6 +62,7 @@ class ObservationTest : public ::testing::Test {
     iree_string_builder_deinitialize(&output_);
     loom_serve_observation_free(observation_);
     IREE_EXPECT_OK(loom_serve_registry_free(registry_));
+    loom_serve_telemetry_stream_free(stream_);
   }
 
   void Sample(iree_time_t now) {
@@ -79,6 +84,8 @@ class ObservationTest : public ::testing::Test {
 
   // Real registry and observation owner; the service dependency supplies facts.
   loom_serve_registry_t* registry_ = nullptr;
+  // Real borrowed telemetry lifetime, owned until registry retirement.
+  loom_serve_telemetry_stream_t* stream_ = nullptr;
   // Copied source cache independent of service storage and reader count.
   loom_serve_observation_t* observation_ = nullptr;
   // Allocation commands from the shared cache, excluding registry ownership.
@@ -96,6 +103,30 @@ class ObservationTest : public ::testing::Test {
   // Counts provider sampling, independently of observation-page reads.
   size_t samples_ = 0;
 };
+
+TEST_F(ObservationTest, LifetimeEpochIsCopiedAndIndependentOfReaderAdmission) {
+  const auto since = loom_serve_telemetry_stream_identity(stream_).created_ns;
+  EXPECT_EQ(loom_serve_registry_counters_since_ns(registry_), since);
+  counters_.requests = counters_.completed = 17;
+  Sample(since + 1000000000);
+  iree_host_size_t cursor = 0;
+  loom_serve_observation_version_t version;
+  const std::string epoch = "\"since_ns\":\"" + std::to_string(since) + "\"";
+  EXPECT_NE(Page(cursor, version).find(epoch), std::string::npos);
+  EXPECT_NE(Page(cursor, version).find(epoch), std::string::npos);
+  Sample(since + 100000000000);
+  cursor = 0;
+  EXPECT_NE(Page(cursor, version).find(epoch), std::string::npos);
+  EXPECT_NE(Page(cursor, version).find(epoch), std::string::npos);
+}
+
+TEST_F(ObservationTest, MissingModelEpochIsUnavailableNotSamplingTime) {
+  loom_serve_registry_at(registry_, 0)->service.telemetry.stream = nullptr;
+  Sample(100);
+  iree_host_size_t cursor = 1;
+  loom_serve_observation_version_t version;
+  EXPECT_NE(Page(cursor, version).find("\"since_ns\":null"), std::string::npos);
+}
 
 TEST_F(ObservationTest, IdleSamplesRetainRevisionsAndAdvanceCaptureTime) {
   Sample(100);

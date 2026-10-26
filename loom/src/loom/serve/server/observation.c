@@ -10,6 +10,7 @@
 
 #include "loom/serve/service/kind.h"
 #include "loom/serve/telemetry/sample.h"
+#include "loom/serve/telemetry/stream.h"
 #include "loom/util/json.h"
 
 typedef struct loom_serve_observation_source_t {
@@ -115,6 +116,14 @@ static iree_status_t loom_serve_observation_topic(
   return loom_serve_telemetry_sample_write_json(topic, values, output);
 }
 
+static iree_status_t loom_serve_observation_epoch(
+    iree_time_t since_ns, iree_string_builder_t* output) {
+  return since_ns
+             ? iree_string_builder_append_format(
+                   output, ",\"since_ns\":\"%" PRId64 "\"", since_ns)
+             : iree_string_builder_append_cstring(output, ",\"since_ns\":null");
+}
+
 static iree_status_t loom_serve_observation_model(
     const loom_serve_registered_model_t* model, iree_host_size_t index,
     iree_string_builder_t* output) {
@@ -142,6 +151,12 @@ static iree_status_t loom_serve_observation_model(
       model->closed ? "false" : "true"));
   IREE_RETURN_IF_ERROR(
       loom_serve_observation_counters(service->telemetry.counters, output));
+  IREE_RETURN_IF_ERROR(loom_serve_observation_epoch(
+      service->telemetry.stream
+          ? loom_serve_telemetry_stream_identity(service->telemetry.stream)
+                .created_ns
+          : 0,
+      output));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(output, ",\"topics\":["));
   static const loom_serve_telemetry_metric_t fields[] = {
@@ -176,6 +191,8 @@ iree_status_t loom_serve_observation_sample(
         loom_serve_registry_capacity(registry)));
     IREE_RETURN_IF_ERROR(
         loom_serve_observation_counters(available ? &counters : NULL, output));
+    IREE_RETURN_IF_ERROR(loom_serve_observation_epoch(
+        loom_serve_registry_counters_since_ns(registry), output));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}"));
     IREE_RETURN_IF_ERROR(loom_serve_observation_update(
         observation, 0, now, iree_string_builder_view(output)));

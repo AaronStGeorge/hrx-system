@@ -180,7 +180,8 @@ typedef struct loom_serve_service_t {
     const loom_serve_telemetry_stream_t* stream;
     // Cumulative work owned by this named service, copied only on serialized
     // owner turns, never replayed from history. Non-NULL whenever stream is
-    // present; counters may also be published without an event stream.
+    // present; counters may also be published without an event stream. When
+    // present, stream creation is the zero-counter epoch for these totals.
     const loom_serve_telemetry_counters_t* counters;
     // Optional cumulative request latency, independent of ring retention.
     // Managed services publish this alongside counters. Borrowed application

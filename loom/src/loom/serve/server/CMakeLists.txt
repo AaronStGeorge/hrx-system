@@ -138,6 +138,7 @@ loom_cc_library(
     loom::serve::service::kind
     loom::serve::telemetry::record
     loom::serve::telemetry::sample
+    loom::serve::telemetry::stream
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -185,6 +186,7 @@ loom_cc_test(
     loom::serve::service
     loom::serve::telemetry::record
     loom::serve::telemetry::sample
+    loom::serve::telemetry::stream
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )
@@ -411,6 +413,7 @@ loom_cc_test(
     loom::serve::service
     loom::serve::service::recognition::request
     loom::serve::service::speech::request
+    loom::serve::telemetry::stream
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

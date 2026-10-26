@@ -17,6 +17,7 @@
 #include "loom/serve/service/recognition/request.h"
 #include "loom/serve/service/service.h"
 #include "loom/serve/service/speech/request.h"
+#include "loom/serve/telemetry/stream.h"
 
 namespace {
 
@@ -31,10 +32,52 @@ TEST(RegistryTimeTest, BorrowedServicesShareRegistrationTimestamp) {
                                    iree_allocator_system(), &registry));
   const int64_t registered =
       loom_serve_registry_at(registry, 0)->registered_unix_seconds;
+  EXPECT_EQ(loom_serve_registry_counters_since_ns(registry), 0);
   for (size_t i = 0; i < IREE_ARRAYSIZE(services); ++i) {
     const auto* model = loom_serve_registry_at(registry, i);
     EXPECT_EQ(model->registered_unix_seconds, registered);
   }
+  IREE_EXPECT_OK(loom_serve_registry_free(registry));
+}
+
+TEST(RegistryTimeTest, CounterEpochIncludesBorrowedHistory) {
+  loom_serve_telemetry_stream_t* streams[2] = {};
+  for (auto& stream : streams) {
+    IREE_ASSERT_OK(loom_serve_telemetry_stream_allocate(
+        4, iree_allocator_system(), &stream));
+  }
+  // Reverse order ensures the aggregate does not simply select the first slot.
+  const loom_serve_telemetry_counters_t counters[2] = {};
+  const loom_serve_service_t services[] = {
+      {
+          .name = IREE_SV("newer"),
+          .telemetry = {.stream = streams[1], .counters = &counters[1]},
+      },
+      {
+          .name = IREE_SV("older"),
+          .telemetry = {.stream = streams[0], .counters = &counters[0]},
+      },
+  };
+  loom_serve_registry_t* registry = nullptr;
+  IREE_ASSERT_OK(
+      loom_serve_registry_allocate(IREE_ARRAYSIZE(services), services, 0, {},
+                                   iree_allocator_system(), &registry));
+  EXPECT_EQ(loom_serve_registry_counters_since_ns(registry),
+            loom_serve_telemetry_stream_identity(streams[0]).created_ns);
+  IREE_EXPECT_OK(loom_serve_registry_free(registry));
+  for (auto* stream : streams) {
+    loom_serve_telemetry_stream_free(stream);
+  }
+}
+
+TEST(RegistryTimeTest, EmptyRegistryHasAnEpochBeforeAnyRegistration) {
+  const auto before = iree_time_now();
+  loom_serve_registry_t* registry = nullptr;
+  IREE_ASSERT_OK(loom_serve_registry_allocate(
+      0, nullptr, 2, {}, iree_allocator_system(), &registry));
+  const auto since = loom_serve_registry_counters_since_ns(registry);
+  EXPECT_GE(since, before);
+  EXPECT_LE(since, iree_time_now());
   IREE_EXPECT_OK(loom_serve_registry_free(registry));
 }
 
