@@ -552,10 +552,16 @@ jobs:
       - name: Check Windows host capabilities
         shell: powershell
         run: |
-          Get-CimInstance Win32_ComputerSystem -ErrorAction Stop |
+          $computerSystem = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+          $computerSystem |
             Format-List Manufacturer, Model, NumberOfProcessors, NumberOfLogicalProcessors, TotalPhysicalMemory
           Get-CimInstance Win32_Processor -ErrorAction Stop |
             Format-Table Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed -AutoSize
+          $bazelJobs = [Math]::Min(40, [int]$computerSystem.NumberOfLogicalProcessors)
+          if ($bazelJobs -lt 1) { throw 'Windows host did not report any logical processors.' }
+          "IREE_CI_BAZEL_JOBS=$bazelJobs" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "Windows Bazel jobs=$bazelJobs"
           $fileSystemPolicy = Get-Item -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -ErrorAction Stop
           Write-Output "LongPathsEnabled=$($fileSystemPolicy.GetValue('LongPathsEnabled', '<unset>'))"
           python build_tools/bazel/configure.py --check-windows-host
@@ -598,13 +604,11 @@ jobs:
             Out-File -FilePath .bazelrc.local -Encoding ascii -Append
           "common --repository_cache=$env:IREE_CI_BAZEL_REPOSITORY_CACHE" |
             Out-File -FilePath .bazelrc.local -Encoding ascii -Append
-          if ("${{ matrix.kind }}" -eq "repository") {
-            # The Azure runner pod reserves 40 CPUs, while Windows exposes all
-            # 48 or 96 logical processors on its Kubernetes node. Keep one
-            # repository job from scheduling work against another pod's CPUs.
-            "build --jobs=40" |
-              Out-File -FilePath .bazelrc.local -Encoding ascii -Append
-          }
+          # Large Windows hosts exhaust process-creation resources before
+          # scaling to every logical processor. Smaller hardware hosts retain
+          # their native processor count.
+          "build --jobs=$env:IREE_CI_BAZEL_JOBS" |
+            Out-File -FilePath .bazelrc.local -Encoding ascii -Append
           if ("${{ matrix.kind }}" -eq "repository" -and
               "${{ matrix.host_toolchain }}" -eq "msvc") {
             # MSVC repository tests need process-launch headroom; bound test
