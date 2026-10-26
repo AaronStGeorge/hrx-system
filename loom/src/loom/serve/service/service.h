@@ -13,6 +13,7 @@
 #include "loom/serve/service/kind.h"
 #include "loom/serve/service/reconfiguration.h"
 #include "loom/serve/telemetry/latency.h"
+#include "loom/serve/telemetry/sample.h"
 #include "loom/serve/telemetry/stream.h"
 #include "loom/serve/transport/http/server.h"
 
@@ -185,6 +186,11 @@ typedef struct loom_serve_service_t {
     // Managed services publish this alongside counters. Borrowed application
     // services may omit it; missing observations are never reported as zero.
     const loom_serve_telemetry_latency_t* latency;
+    // Optional source-defined numeric topics, sampled on the serialized owner.
+    // The sink consumes copied values synchronously; no model borrow escapes.
+    // Common request counters and latency remain in their dedicated contracts.
+    iree_status_t (*sample)(void* self,
+                            loom_serve_telemetry_sample_sink_t sink);
   } telemetry;
 } loom_serve_service_t;
 

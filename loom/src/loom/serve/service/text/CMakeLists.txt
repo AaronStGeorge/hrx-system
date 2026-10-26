@@ -886,6 +886,7 @@ loom_cc_library(
     loom::serve::runtime::parameter::weights
     loom::serve::runtime::storage::memory
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
     loom::serve::telemetry::stream
   PUBLIC
 )
@@ -907,6 +908,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::serve::runtime::host::timer
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
     loom::serve::telemetry::stream
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
@@ -1476,6 +1478,7 @@ loom_cc_library(
     loom::serve::service::finite::component
     loom::serve::service::kind
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
     loom::serve::telemetry::stream
     loom::serve::telemetry::tracing
     loom::serve::transport::http::request

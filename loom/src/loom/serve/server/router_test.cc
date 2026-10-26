@@ -253,6 +253,10 @@ loom_serve_server_latency_available 0
 # TYPE loom_serve_model_request_duration_seconds histogram
 # HELP loom_serve_model_first_output_seconds Model protocol receipt through first meaningful output accepted by the carrier, not peer receipt.
 # TYPE loom_serve_model_first_output_seconds histogram
+# HELP loom_serve_model_observation Source-defined current ownership; unit identifies the value scale.
+# TYPE loom_serve_model_observation gauge
+# HELP loom_serve_model_observation_total Source-defined cumulative work within this incarnation; unit identifies the value scale.
+# TYPE loom_serve_model_observation_total counter
 )");
   const auto log = Read(Send("GET", "/logz"));
   EXPECT_NE(log.find("\"counters_available\":false"), std::string::npos);
@@ -845,6 +849,11 @@ TEST_P(HttpRouterCountersTest, ServerTotalsPreserveIntegerPrecisionAndScope) {
                            "kind=\"embedding\"} 9007199254740993\n"),
               std::string::npos);
     EXPECT_NE(metrics.find("loom_serve_server_requests_total 15\n"),
+              std::string::npos);
+    EXPECT_NE(metrics.find("loom_serve_model_observation_total{model=\"a\","
+                           "kind=\"embedding\",topic=\"work\",schema=\"1\","
+                           "field=\"consumed\",unit=\"tokens\"} "
+                           "9007199254740993\n"),
               std::string::npos);
     EXPECT_NE(metrics.find(
                   "loom_serve_server_input_tokens_total 45035996273704975\n"),

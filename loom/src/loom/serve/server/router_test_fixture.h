@@ -356,6 +356,15 @@ struct loom_serve_test_model_service_t {
     return status;
   }
 
+  static iree_status_t Sample(void* self,
+                              loom_serve_telemetry_sample_sink_t sink) {
+    const auto* service = static_cast<loom_serve_test_model_service_t*>(self);
+    const loom_serve_telemetry_metric_t field = {"consumed", "tokens",
+                                                 LOOM_SERVE_TELEMETRY_COUNTER};
+    const loom_serve_telemetry_topic_t topic = {"work", 1, 1, &field};
+    return sink.emit(sink.self, &topic, &service->counters->input_tokens);
+  }
+
   loom_serve_service_t Interface(const iree_tokenizer_t* tokenizer,
                                  const void* capacity_domain) {
     return {.name = iree_make_cstring_view(name),
@@ -370,7 +379,9 @@ struct loom_serve_test_model_service_t {
             .endpoint = "/v1/test",
             .snapshot = Snapshot,
             .capacity_domain = capacity_domain,
-            .telemetry = {.counters = counters, .latency = latency}};
+            .telemetry = {.counters = counters,
+                          .latency = latency,
+                          .sample = counters ? Sample : nullptr}};
   }
 };
 

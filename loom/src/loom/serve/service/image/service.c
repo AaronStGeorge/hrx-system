@@ -955,6 +955,12 @@ static iree_status_t loom_serve_image_accept(
   return status;
 }
 
+static iree_status_t loom_serve_image_sample(
+    void* self, loom_serve_telemetry_sample_sink_t sink) {
+  loom_serve_image_service_t* service = self;
+  return loom_serve_image_sample_totals(&service->telemetry.totals, sink);
+}
+
 static loom_serve_service_snapshot_t loom_serve_image_snapshot(void* self) {
   const loom_serve_image_service_t* service = self;
   const iree_time_t now = iree_time_now();
@@ -1194,7 +1200,8 @@ loom_serve_service_t loom_serve_image_service_interface(
           service->reconfiguration),
       .telemetry = {.stream = service->telemetry.stream,
                     .counters = &service->telemetry.counters,
-                    .latency = &service->telemetry.latency},
+                    .latency = &service->telemetry.latency,
+                    .sample = loom_serve_image_sample},
       .capacity_domain = service->generator.capacity_domain};
 }
 

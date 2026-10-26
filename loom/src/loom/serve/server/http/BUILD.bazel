@@ -21,6 +21,7 @@ loom_cc_library(
         "//loom/src/loom/serve/service:kind",
         "//loom/src/loom/serve/telemetry:latency",
         "//loom/src/loom/serve/telemetry:record",
+        "//loom/src/loom/serve/telemetry:sample",
         "//runtime/src/iree/base",
     ],
 )

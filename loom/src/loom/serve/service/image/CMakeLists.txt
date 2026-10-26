@@ -102,6 +102,7 @@ loom_cc_library(
     ::generator
     iree::base
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
     loom::serve::telemetry::stream
   PUBLIC
 )
@@ -138,6 +139,7 @@ loom_cc_library(
     loom::serve::service::kind
     loom::serve::telemetry::latency
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
     loom::serve::telemetry::stream
     loom::serve::telemetry::tracing
     loom::serve::transport::http::request
@@ -145,6 +147,23 @@ loom_cc_library(
     loom::util::json
     loom::util::stream
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    telemetry_test
+  SRCS
+    "telemetry_test.cc"
+  DEPS
+    ::telemetry
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::telemetry::sample
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 

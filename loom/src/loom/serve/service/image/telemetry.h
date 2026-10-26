@@ -8,6 +8,7 @@
 #define LOOM_SERVE_SERVICE_IMAGE_TELEMETRY_H_
 
 #include "loom/serve/service/image/generator.h"
+#include "loom/serve/telemetry/sample.h"
 #include "loom/serve/telemetry/stream.h"
 
 #ifdef __cplusplus
@@ -46,6 +47,12 @@ typedef struct loom_serve_image_totals_t {
   // once.
   loom_serve_image_work_t work;
 } loom_serve_image_totals_t;
+
+// Samples cumulative completed work on the serialized service owner. Shared
+// cohort work is counted once; no in-flight CPU job is inspected.
+iree_status_t loom_serve_image_sample_totals(
+    const loom_serve_image_totals_t* totals,
+    loom_serve_telemetry_sample_sink_t sink);
 
 extern const loom_serve_telemetry_event_t LOOM_SERVE_IMAGE_STARTED;
 extern const loom_serve_telemetry_event_t LOOM_SERVE_IMAGE_SUBMITTED;

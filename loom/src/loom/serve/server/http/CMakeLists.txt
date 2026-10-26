@@ -23,6 +23,7 @@ loom_cc_library(
     loom::serve::service::kind
     loom::serve::telemetry::latency
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
   PUBLIC
 )
 endif()
