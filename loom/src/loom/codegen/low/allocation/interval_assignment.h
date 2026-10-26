@@ -101,6 +101,9 @@ typedef struct loom_low_allocation_interval_assignment_context_t {
   // attempt. Reaching the limit ends the attempt with a partial result that
   // the comparison caller must discard. Null leaves the attempt unbounded.
   const uint64_t* spill_traffic_exclusive_limit;
+  // Optional register classes whose scalar/aggregate topology is repacked by
+  // FRAGMENTATION_REPAIR. An empty bitmap repairs every applicable class.
+  iree_bitmap_t fragmentation_repair_reg_classes;
   // Concrete-location ordering for this whole-function assignment attempt.
   loom_low_allocation_search_strategy_t search_strategy;
 } loom_low_allocation_interval_assignment_context_t;

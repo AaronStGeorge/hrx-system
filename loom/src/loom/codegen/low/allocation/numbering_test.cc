@@ -73,10 +73,11 @@ class LowAllocationNumberingTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_low_allocation_number_registers(&context_, &arena_));
   }
 
-  loom_low_allocation_numbering_analysis_t Analyze() {
+  loom_low_allocation_numbering_analysis_t Analyze(
+      iree_bitmap_t unavoidable_reg_classes = {}) {
     loom_low_allocation_numbering_analysis_t analysis = {};
-    IREE_EXPECT_OK(
-        loom_low_allocation_numbering_analyze(&context_, &arena_, &analysis));
+    IREE_EXPECT_OK(loom_low_allocation_numbering_analyze(
+        &context_, unavoidable_reg_classes, &arena_, &analysis));
     return analysis;
   }
 
@@ -188,10 +189,32 @@ TEST_F(LowAllocationNumberingTest, ReportsOverlapConnectedPreferenceCost) {
   };
   leases_.instances = &instance;
   leases_.instance_count = 1;
-  const auto analysis = Analyze();
+  uint64_t class_words[1] = {};
+  iree_bitmap_t classes = {IREE_ARRAYSIZE(classes_), class_words};
+  const auto analysis = Analyze(classes);
   EXPECT_EQ(analysis.instruction_cost, 1u);
   EXPECT_EQ(analysis.unavoidable_instruction_cost, 1u);
+  EXPECT_TRUE(iree_bitmap_test(classes, 0));
+  EXPECT_FALSE(iree_bitmap_test(classes, 1));
   ExpectIdentity();
+}
+
+TEST_F(LowAllocationNumberingTest, IncludesAliasedClassesInRepairSpace) {
+  classes_[0].alias_set_id = classes_[1].alias_set_id = 1;
+  assignments_[1].descriptor_reg_class_id = 1;
+  loom_low_allocation_storage_lease_t instance = {
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 3,
+      .location_count = 2,
+  };
+  leases_.instances = &instance;
+  leases_.instance_count = 1;
+  uint64_t class_words[1] = {};
+  iree_bitmap_t classes = {IREE_ARRAYSIZE(classes_), class_words};
+  const auto analysis = Analyze(classes);
+  EXPECT_EQ(analysis.unavoidable_instruction_cost, 1u);
+  EXPECT_TRUE(iree_bitmap_test(classes, 0));
+  EXPECT_TRUE(iree_bitmap_test(classes, 1));
 }
 
 TEST_F(LowAllocationNumberingTest, EntryIdentitiesKeepExternalCoordinates) {

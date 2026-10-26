@@ -88,6 +88,7 @@ loom_low_allocation_make_interval_assignment_context(
     loom_low_allocation_build_state_t* state,
     const loom_low_function_model_t* model,
     loom_low_allocation_search_strategy_t search_strategy,
+    iree_bitmap_t fragmentation_repair_reg_classes,
     iree_arena_allocator_t* arena,
     loom_low_allocation_target_constraints_t* target_constraints,
     loom_low_allocation_storage_lease_state_t* storage_leases,
@@ -117,6 +118,7 @@ loom_low_allocation_make_interval_assignment_context(
       .arena = arena,
       .function_cfg_graph = &model->cfg_graph,
       .spill_traffic_exclusive_limit = spill_traffic_exclusive_limit,
+      .fragmentation_repair_reg_classes = fragmentation_repair_reg_classes,
       .search_strategy = search_strategy,
   };
 }
@@ -128,6 +130,8 @@ static iree_status_t loom_low_allocation_try_alternative_assignment(
     const loom_low_function_model_t* model,
     const loom_local_value_domain_t* value_domain,
     loom_low_allocation_search_strategy_t search_strategy,
+    iree_bitmap_t fragmentation_repair_reg_classes,
+    const loom_low_allocation_numbering_analysis_t* baseline_numbering,
     const iree_arena_checkpoint_t* assignment_checkpoint,
     iree_arena_allocator_t* decision_arena) {
   iree_arena_allocator_t scratch_arena;
@@ -181,8 +185,9 @@ static iree_status_t loom_low_allocation_try_alternative_assignment(
   if (iree_status_is_ok(status)) {
     const loom_low_allocation_interval_assignment_context_t scratch_context =
         loom_low_allocation_make_interval_assignment_context(
-            state, model, search_strategy, &scratch_arena,
-            &scratch_target_constraints, &scratch_storage_leases,
+            state, model, search_strategy, fragmentation_repair_reg_classes,
+            &scratch_arena, &scratch_target_constraints,
+            &scratch_storage_leases,
             state->target_constraints.error_count == 0
                 ? &state->interval_assignment.spill_traffic_bytes
                 : NULL);
@@ -190,13 +195,54 @@ static iree_status_t loom_low_allocation_try_alternative_assignment(
         &scratch_context, decision_arena, &scratch_result);
   }
   if (iree_status_is_ok(status)) {
-    const bool use_repair =
+    bool use_repair = false;
+    if (baseline_numbering != NULL &&
         !scratch_result.reached_spill_traffic_limit &&
         scratch_target_constraints.error_count == 0 &&
-        (scratch_result.spill_count == 0 ||
-         (state->target_constraints.error_count == 0 &&
-          scratch_result.spill_traffic_bytes <
-              state->interval_assignment.spill_traffic_bytes));
+        scratch_result.spill_count == 0 &&
+        scratch_result.spill_plan_count == 0) {
+      const uint32_t* baseline_extents =
+          state->target_constraints.max_assigned_location_end_by_reg_class;
+      const uint32_t* candidate_extents =
+          scratch_target_constraints.max_assigned_location_end_by_reg_class;
+      bool preserves_resources = true;
+      for (iree_host_size_t i = 0; i < reg_class_count; ++i) {
+        preserves_resources &= candidate_extents[i] <= baseline_extents[i];
+      }
+      loom_low_allocation_numbering_analysis_t candidate_numbering = {0};
+      if (preserves_resources) {
+        const loom_low_allocation_numbering_context_t numbering_context = {
+            .placement = &state->placement,
+            .preferences = &state->preferences,
+            .target_constraints = &scratch_target_constraints,
+            .entry_locations = state->options->entry_locations,
+            .entry_location_count = state->options->entry_location_count,
+            .unit_liveness = &state->unit_liveness,
+            .interval_assignment = &scratch_result,
+            .storage_leases = &scratch_storage_leases,
+        };
+        status = loom_low_allocation_numbering_analyze(
+            &numbering_context,
+            /*unavoidable_instruction_reg_classes=*/(iree_bitmap_t){0},
+            decision_arena, &candidate_numbering);
+      }
+      use_repair = iree_status_is_ok(status) && preserves_resources &&
+                   candidate_numbering.unavoidable_instruction_cost <
+                       baseline_numbering->unavoidable_instruction_cost &&
+                   candidate_numbering.instruction_cost <=
+                       baseline_numbering->instruction_cost &&
+                   candidate_numbering.unavoidable_scheduled_pair_cost <=
+                       baseline_numbering->unavoidable_scheduled_pair_cost &&
+                   candidate_numbering.scheduled_pair_cost <=
+                       baseline_numbering->scheduled_pair_cost;
+    } else {
+      use_repair = !scratch_result.reached_spill_traffic_limit &&
+                   scratch_target_constraints.error_count == 0 &&
+                   (scratch_result.spill_count == 0 ||
+                    (state->target_constraints.error_count == 0 &&
+                     scratch_result.spill_traffic_bytes <
+                         state->interval_assignment.spill_traffic_bytes));
+    }
     if (use_repair) {
       iree_arena_checkpoint_restore(assignment_checkpoint);
       iree_arena_transfer(&scratch_arena, state->arena);
@@ -778,7 +824,8 @@ static iree_status_t loom_low_allocate_function_impl(
     const loom_low_allocation_interval_assignment_context_t
         interval_assignment_context =
             loom_low_allocation_make_interval_assignment_context(
-                &state, model, search_strategy, arena,
+                &state, model, search_strategy,
+                /*fragmentation_repair_reg_classes=*/(iree_bitmap_t){0}, arena,
                 &state.target_constraints, &state.storage_leases,
                 /*spill_traffic_exclusive_limit=*/NULL);
     status = loom_low_allocation_interval_assignment_build(
@@ -797,7 +844,60 @@ static iree_status_t loom_low_allocate_function_impl(
     status = loom_low_allocation_try_alternative_assignment(
         &state, model, value_domain,
         LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_PRESSURE_EFFICIENCY,
-        &interval_assignment_checkpoint, &decision_arena);
+        /*fragmentation_repair_reg_classes=*/(iree_bitmap_t){0},
+        /*baseline_numbering=*/NULL, &interval_assignment_checkpoint,
+        &decision_arena);
+  }
+  // Physical numbering can permute independent ranges but cannot separate
+  // overlap-connected aggregates. Recolor a successful first-fit assignment
+  // only when that topology fixes a nonzero instruction cost, and retain the
+  // alternative only when it lowers that bound without worsening any current
+  // preference or register-class extent.
+  if (retained_location_table == NULL && iree_status_is_ok(status) &&
+      state.target_constraints.error_count == 0 &&
+      state.interval_assignment.spill_count == 0 &&
+      state.interval_assignment.spill_plan_count == 0 &&
+      state.interval_assignment.has_packable_aggregates &&
+      state.preferences.instruction_use_count != 0) {
+    const loom_low_allocation_numbering_context_t numbering_context = {
+        .placement = &state.placement,
+        .preferences = &state.preferences,
+        .target_constraints = &state.target_constraints,
+        .entry_locations = options->entry_locations,
+        .entry_location_count = options->entry_location_count,
+        .unit_liveness = &state.unit_liveness,
+        .interval_assignment = &state.interval_assignment,
+        .storage_leases = &state.storage_leases,
+    };
+    const iree_host_size_t reg_class_count =
+        state.target.descriptor_set->reg_class_count;
+    iree_bitmap_t repair_reg_classes = {.bit_count = reg_class_count};
+    if (reg_class_count != 0) {
+      const iree_host_size_t word_count =
+          iree_bitmap_calculate_words(reg_class_count);
+      status = iree_arena_allocate_array(&decision_arena, word_count,
+                                         sizeof(*repair_reg_classes.words),
+                                         (void**)&repair_reg_classes.words);
+      if (iree_status_is_ok(status)) {
+        memset(repair_reg_classes.words, 0,
+               word_count * sizeof(*repair_reg_classes.words));
+      }
+    }
+    loom_low_allocation_numbering_analysis_t baseline_numbering = {0};
+    if (iree_status_is_ok(status)) {
+      status = loom_low_allocation_numbering_analyze(
+          &numbering_context, repair_reg_classes, &decision_arena,
+          &baseline_numbering);
+    }
+    if (iree_status_is_ok(status) &&
+        baseline_numbering.unavoidable_instruction_cost != 0 &&
+        iree_bitmap_any_set(repair_reg_classes)) {
+      status = loom_low_allocation_try_alternative_assignment(
+          &state, model, value_domain,
+          LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR,
+          repair_reg_classes, &baseline_numbering,
+          &interval_assignment_checkpoint, &decision_arena);
+    }
   }
   // Required register values can fail placement through fragmentation just as
   // spillable values can. Their retained failure is provisional until the
@@ -811,7 +911,9 @@ static iree_status_t loom_low_allocate_function_impl(
     status = loom_low_allocation_try_alternative_assignment(
         &state, model, value_domain,
         LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR,
-        &interval_assignment_checkpoint, &decision_arena);
+        /*fragmentation_repair_reg_classes=*/(iree_bitmap_t){0},
+        /*baseline_numbering=*/NULL, &interval_assignment_checkpoint,
+        &decision_arena);
   }
   // Backedge placement belongs to the final physical assignment. Spill repair
   // rewrites the IR and rebuilds the frame, so relocating a provisional spill

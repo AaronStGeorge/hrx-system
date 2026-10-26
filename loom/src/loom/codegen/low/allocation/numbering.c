@@ -105,6 +105,18 @@ static uint32_t loom_low_numbering_space_index(
                         : (uint32_t)descriptors->reg_class_count + class_id;
 }
 
+static void loom_low_numbering_mark_storage_space_classes(
+    const loom_low_numbering_state_t* state, uint16_t class_id,
+    iree_bitmap_t classes) {
+  const uint32_t space_index =
+      loom_low_numbering_space_index(state->descriptors, class_id);
+  for (uint16_t i = 0; i < state->descriptors->reg_class_count; ++i) {
+    if (loom_low_numbering_space_index(state->descriptors, i) == space_index) {
+      iree_bitmap_set(classes, i);
+    }
+  }
+}
+
 static const loom_low_allocation_assignment_t* loom_low_numbering_binding(
     const loom_low_numbering_state_t* state, uint32_t binding_index) {
   const loom_low_allocation_interval_assignment_result_t* allocation =
@@ -443,7 +455,8 @@ static bool loom_low_numbering_predicate_unavoidably_violated(
 }
 
 static uint32_t loom_low_numbering_unavoidable_use_cost(
-    const loom_low_numbering_state_t* state, uint32_t use_index) {
+    const loom_low_numbering_state_t* state, uint32_t use_index,
+    iree_bitmap_t unavoidable_reg_classes) {
   const loom_low_placement_preference_use_t* use =
       &state->context->preferences->uses[use_index];
   const loom_low_placement_preference_t* preference = use->preference;
@@ -474,6 +487,28 @@ static uint32_t loom_low_numbering_unavoidable_use_cost(
       const uint32_t contribution = (uint32_t)clause->weight * use->priority;
       score =
           contribution > UINT32_MAX - score ? UINT32_MAX : score + contribution;
+      if (unavoidable_reg_classes.bit_count != 0) {
+        for (uint16_t j = 0; j < clause->predicate_count; ++j) {
+          const loom_low_placement_predicate_t* predicate =
+              &preference->predicates[clause->predicate_start + j];
+          const uint32_t result_index = use->binding_start + predicate->result;
+          const uint32_t source_index = use->binding_start + predicate->source;
+          if (!loom_low_numbering_predicate_unavoidably_violated(
+                  state, predicate, result_index, source_index)) {
+            continue;
+          }
+          loom_low_numbering_mark_storage_space_classes(
+              state,
+              loom_low_numbering_binding(state, result_index)
+                  ->descriptor_reg_class_id,
+              unavoidable_reg_classes);
+          loom_low_numbering_mark_storage_space_classes(
+              state,
+              loom_low_numbering_binding(state, source_index)
+                  ->descriptor_reg_class_id,
+              unavoidable_reg_classes);
+        }
+      }
     }
   }
   return score;
@@ -843,9 +878,16 @@ static iree_status_t loom_low_numbering_initialize_spaces(
 
 iree_status_t loom_low_allocation_numbering_analyze(
     const loom_low_allocation_numbering_context_t* context,
+    iree_bitmap_t unavoidable_instruction_reg_classes,
     iree_arena_allocator_t* scratch_arena,
     loom_low_allocation_numbering_analysis_t* out_analysis) {
   *out_analysis = (loom_low_allocation_numbering_analysis_t){0};
+  if (unavoidable_instruction_reg_classes.bit_count != 0) {
+    IREE_ASSERT_EQ(
+        unavoidable_instruction_reg_classes.bit_count,
+        context->target_constraints->target->descriptor_set->reg_class_count);
+    iree_bitmap_reset_all(unavoidable_instruction_reg_classes);
+  }
   const loom_low_placement_preference_index_t* preferences =
       context->preferences;
   if (preferences->instruction_use_count == 0) {
@@ -901,7 +943,11 @@ iree_status_t loom_low_allocation_numbering_analyze(
         const uint64_t cost =
             loom_low_numbering_score_use(&state, i, state.bases);
         const uint64_t unavoidable_cost =
-            loom_low_numbering_unavoidable_use_cost(&state, i);
+            loom_low_numbering_unavoidable_use_cost(
+                &state, i,
+                i < preferences->instruction_use_count
+                    ? unavoidable_instruction_reg_classes
+                    : (iree_bitmap_t){0});
         if (i < preferences->instruction_use_count) {
           out_analysis->instruction_cost += cost;
           out_analysis->unavoidable_instruction_cost += unavoidable_cost;

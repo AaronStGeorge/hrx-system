@@ -67,10 +67,13 @@ typedef struct loom_low_allocation_numbering_analysis_t {
 // Analyzes the preference costs exposed by one completed assignment without
 // changing any physical coordinates. Unavoidable costs include only clauses
 // whose violations are invariant under every rigid block permutation, making
-// them a conservative lower bound for final numbering. Scratch storage is
-// released before return.
+// them a conservative lower bound for final numbering. When
+// |unavoidable_instruction_reg_classes| is nonempty, the analysis resets it
+// and marks every register class sharing physical storage with an unavoidable
+// instruction predicate. Scratch storage is released before return.
 iree_status_t loom_low_allocation_numbering_analyze(
     const loom_low_allocation_numbering_context_t* context,
+    iree_bitmap_t unavoidable_instruction_reg_classes,
     iree_arena_allocator_t* scratch_arena,
     loom_low_allocation_numbering_analysis_t* out_analysis);
 

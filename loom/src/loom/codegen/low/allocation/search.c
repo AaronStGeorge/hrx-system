@@ -861,7 +861,10 @@ loom_low_allocation_search_find_linear_location_for_release_policy(
     loom_low_allocation_storage_release_policy_t release_policy,
     loom_low_allocation_search_location_choice_t* out_choice) {
   if (IREE_UNLIKELY(candidate_template->unit_count > 1 &&
-                    context->scalar_packing.frontiers_by_reg_class != NULL)) {
+                    context->scalar_packing.frontiers_by_reg_class != NULL &&
+                    context->scalar_packing.frontiers_by_reg_class
+                            [candidate_template->descriptor_reg_class_id] !=
+                        0)) {
     loom_low_allocation_search_find_dense_aggregate_location(
         context, candidate_template, query, minimum_base, last_base, alignment,
         release_policy, out_choice);
