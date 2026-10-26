@@ -221,18 +221,25 @@ AMD_GPU_WEIGHTS_TARGET = "//loom/src/loom/tooling/target/amdgpu/serve:gpu_weight
 # The complete weights suite exercises shader assertions. Windows runs its
 # streaming cases separately without requesting the unavailable feedback service.
 AMD_GPU_WINDOWS_BAZEL_TARGETS = AMD_GPU_BAZEL_TARGETS + ("-" + AMD_GPU_WEIGHTS_TARGET,)
-AMD_GPU_WINDOWS_TEST_TAG_FILTERS = ("-requires-amd-gpu-feedback",)
-# Compiler-only fixtures cover the complete supported target vocabulary, even
-# when hardware execution and HIP images select a single target family.
-AMD_GPU_LOOM_TARGETS = ("loom_defaults",)
+# Broad package patterns discover hardware tests as they are added. The positive
+# resource filter keeps host/compiler coverage on the platform lane instead of
+# rerunning it on an architecture-specific hardware worker.
+AMD_GPU_WINDOWS_TEST_TAG_FILTERS = (
+    AMD_GPU_RUN_REQUIREMENT_TAG,
+    "-requires-amd-gpu-feedback",
+)
+# The mixed Windows AMD client lane has no single GPU target selector. Retain
+# complete compile-target visibility there; dedicated hardware lanes scope Loom
+# to their selected physical target.
+AMD_CLIENT_GPU_LOOM_TARGETS = ("loom_defaults",)
 # Single-family hardware jobs select only that family's HAL CTS instances.
 # Multi-family selectors retain both; queue transport tests are independent.
 AMD_GPU_CTS_TARGET_PREFIXES = {
     "rdna": ("rdna", "gfx10", "gfx11", "gfx12"),
     "cdna": ("cdna", "gfx9"),
 }
-AMD_GPU_BAZEL_OPTIONS = (
-    "--//loom/config/target/amdgpu:targets=" + ",".join(AMD_GPU_LOOM_TARGETS),
+AMD_CLIENT_GPU_BAZEL_OPTIONS = (
+    "--//loom/config/target/amdgpu:targets=" + ",".join(AMD_CLIENT_GPU_LOOM_TARGETS),
 )
 AMD_CLIENT_WINDOWS_BAZEL_TARGETS = (
     AMD_CLIENT_BAZEL_TARGETS

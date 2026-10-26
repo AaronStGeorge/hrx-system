@@ -773,6 +773,34 @@ class CiTest(unittest.TestCase):
             ci.steps_from_args(args)
         plan.assert_called_once_with(("//example:custom",), "gfx1201", "asan")
 
+    def test_native_gpu_ci_admits_only_gpu_resource_tests(self):
+        args = ci.parse_arguments(
+            ["iree-bazel-amdgpu-native-asan", "--amdgpu-target", "gfx1201"]
+        )
+        with (
+            mock.patch.object(ci.sys, "platform", "win32"),
+            mock.patch.object(ci.shutil, "which", return_value=None),
+        ):
+            steps = ci.steps_from_args(args)
+
+        test_step = next(
+            step for step in steps if step.name == "Test IREE / Windows AMDGPU / ASAN"
+        )
+        tag_filter = next(
+            argument
+            for argument in test_step.argv
+            if argument.startswith("--test_tag_filters=")
+        )
+        positive_tags = [
+            tag
+            for tag in tag_filter.split("=", 1)[1].split(",")
+            if not tag.startswith("-")
+        ]
+        self.assertEqual(
+            positive_tags,
+            [ci_config.AMD_GPU_RUN_REQUIREMENT_TAG],
+        )
+
     def test_bazel_profile_names_must_be_unique(self):
         duplicate_steps = [
             ci.bazel_build_step("Compile IREE", ("//runtime/...",)),
@@ -1104,7 +1132,7 @@ class CiTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only supported for AMDGPU"):
             ci.steps_from_args(args)
 
-    def test_amdgpu_execution_selector_is_independent_of_compiler_targets(self):
+    def test_amdgpu_hardware_selector_scopes_loom_targets(self):
         for platform, command in (
             ("linux", "iree-bazel-amdgpu"),
             ("win32", "iree-bazel-amdgpu-native"),
@@ -1112,11 +1140,6 @@ class CiTest(unittest.TestCase):
             with (
                 self.subTest(platform=platform),
                 mock.patch.object(ci.sys, "platform", platform),
-                mock.patch.object(
-                    ci_config,
-                    "AMD_GPU_BAZEL_OPTIONS",
-                    ("--//loom/config/target/amdgpu:targets=compiler-source",),
-                ),
             ):
                 steps = ci.steps_from_args(
                     ci.parse_arguments(
@@ -1129,14 +1152,13 @@ class CiTest(unittest.TestCase):
                     test_step.argv,
                 )
                 self.assertIn(
-                    "--//loom/config/target/amdgpu:targets=compiler-source",
+                    "--//loom/config/target/amdgpu:targets=selected-hardware",
                     test_step.argv,
                 )
-                if platform == "linux":
-                    self.assertIn(
-                        "--//runtime/src/iree/hal/drivers/amdgpu:targets=selected-hardware",
-                        test_step.argv,
-                    )
+                self.assertIn(
+                    "--//runtime/src/iree/hal/drivers/amdgpu:targets=selected-hardware",
+                    test_step.argv,
+                )
 
     def test_amdgpu_loom_importers_are_forwarded_to_configuration(self):
         args = ci.parse_arguments(
@@ -2019,19 +2041,18 @@ fi
             configure_step.argv,
         )
 
-    def test_cmake_amdgpu_serializes_image_and_compiler_selectors_independently(self):
-        with mock.patch.object(ci_config, "AMD_GPU_LOOM_TARGETS", ("compiler-source",)):
-            steps = ci.steps_from_args(
-                ci.parse_arguments(
-                    ["iree-cmake-amdgpu", "--amdgpu-target", "selected-hardware"]
-                )
+    def test_cmake_amdgpu_scopes_loom_to_hardware_selector(self):
+        steps = ci.steps_from_args(
+            ci.parse_arguments(
+                ["iree-cmake-amdgpu", "--amdgpu-target", "selected-hardware"]
             )
+        )
         configure_step = steps[0]
         self.assertIn(
             "-DIREE_HAL_AMD_GPU_TARGETS=selected-hardware", configure_step.argv
         )
         self.assertIn(
-            "-DLOOM_TARGET_AMDGPU_TARGETS=compiler-source", configure_step.argv
+            "-DLOOM_TARGET_AMDGPU_TARGETS=selected-hardware", configure_step.argv
         )
         self.assertIn(
             "-DIREE_HAL_AMDGPU_TARGETS=selected-hardware", configure_step.argv
