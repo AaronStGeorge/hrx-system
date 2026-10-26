@@ -56,6 +56,9 @@ typedef struct iree_hal_amd_gpu_publication_t {
       ready[(IREE_HAL_AMD_GPU_PUBLICATION_MAX_SOURCES + 63) / 64];
   // Stop and source-replacement requests, handled between bounded turns.
   iree_atomic_int32_t state;
+  // First-fault monitor, installed once before its control-bit publication.
+  // The device joins this worker before releasing the borrowed failure state.
+  struct iree_hal_amd_gpu_failure_t* failure_watch;
   // Parks the worker when no queue has an enrolled ready turn.
   iree_notification_t notification;
   // One externally serialized cold handoff, release-published through state.
@@ -99,6 +102,14 @@ void iree_hal_amd_gpu_publication_set_sources(
 // The caller keeps publication and its queue alive through this final access.
 void iree_hal_amd_gpu_publication_notify(
     iree_hal_amd_gpu_publication_t* publication, uint32_t source_ordinal);
+
+// Arms the first native execution fault's independent terminal deadline.
+// The existing worker reports a stalled native stop through the device sink;
+// healthy publication has no deadline. Called once after failure timing is
+// initialized, before the completion worker can enter blocking native removal.
+void iree_hal_amd_gpu_publication_watch_failure(
+    iree_hal_amd_gpu_publication_t* publication,
+    struct iree_hal_amd_gpu_failure_t* failure);
 
 // Transfers a completed native result to its queue's existing typed FIFO.
 // The caller keeps the publisher alive through enqueue, independently of the

@@ -17,6 +17,7 @@ iree_cc_library(
   SRCS
     "publication.c"
   DEPS
+    ::failure
     iree::base
     iree::base::internal
     iree::base::threading
@@ -530,5 +531,32 @@ iree_cc_binary_benchmark(
   TESTONLY
 )
 endif()
+
+iree_cc_library(
+  NAME
+    failure
+  HDRS
+    "failure.h"
+  SRCS
+    "failure.c"
+  DEPS
+    amdf::headers
+    iree::base
+    iree::base::threading
+    iree::hal
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    failure_test
+  SRCS
+    "failure_test.cc"
+  DEPS
+    ::failure
+    ::publication
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

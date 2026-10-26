@@ -7,10 +7,12 @@
 #include "iree/hal/drivers/amd/gpu/publication.h"
 
 #include "iree/base/internal/math.h"
+#include "iree/hal/drivers/amd/gpu/failure.h"
 
 enum {
   IREE_HAL_AMD_GPU_PUBLICATION_STOP_REQUESTED = 1 << 0,
   IREE_HAL_AMD_GPU_PUBLICATION_REPLACE_SOURCES = 1 << 1,
+  IREE_HAL_AMD_GPU_PUBLICATION_WATCH_FAILURE = 1 << 2,
 };
 
 static bool iree_hal_amd_gpu_publication_is_ready(void* user_data) {
@@ -28,14 +30,28 @@ static bool iree_hal_amd_gpu_publication_is_ready(void* user_data) {
 
 static int iree_hal_amd_gpu_publication_main(void* user_data) {
   iree_hal_amd_gpu_publication_t* publication = user_data;
+  iree_hal_amd_gpu_failure_t* watch = NULL;
+  iree_time_t deadline = IREE_TIME_INFINITE_FUTURE;
   while (true) {
     iree_notification_await(&publication->notification,
                             iree_hal_amd_gpu_publication_is_ready, publication,
-                            iree_infinite_timeout());
+                            iree_make_deadline(deadline));
     const int32_t state =
         iree_atomic_load(&publication->state, iree_memory_order_acquire);
     if (iree_any_bit_set(state, IREE_HAL_AMD_GPU_PUBLICATION_STOP_REQUESTED)) {
       break;
+    }
+    if (iree_any_bit_set(state, IREE_HAL_AMD_GPU_PUBLICATION_WATCH_FAILURE)) {
+      watch = publication->failure_watch;
+      iree_atomic_fetch_and(&publication->state,
+                            ~IREE_HAL_AMD_GPU_PUBLICATION_WATCH_FAILURE,
+                            iree_memory_order_release);
+    }
+    if (watch) {
+      deadline = iree_hal_amd_gpu_failure_poll(watch, iree_time_now());
+      if (deadline == IREE_TIME_INFINITE_FUTURE) {
+        watch = NULL;
+      }
     }
     if (iree_any_bit_set(state, IREE_HAL_AMD_GPU_PUBLICATION_REPLACE_SOURCES)) {
       publication->sources = publication->replacement.sources;
@@ -140,6 +156,16 @@ void iree_hal_amd_gpu_publication_enqueue(
       iree_hal_amd_gpu_publication_notify(publication, source_ordinal);
     }
   }
+}
+
+void iree_hal_amd_gpu_publication_watch_failure(
+    iree_hal_amd_gpu_publication_t* publication,
+    iree_hal_amd_gpu_failure_t* failure) {
+  publication->failure_watch = failure;
+  iree_atomic_fetch_or(&publication->state,
+                       IREE_HAL_AMD_GPU_PUBLICATION_WATCH_FAILURE,
+                       iree_memory_order_release);
+  iree_notification_post(&publication->notification, 1);
 }
 
 void iree_hal_amd_gpu_publication_deinitialize(
