@@ -409,7 +409,6 @@ loom_cc_library(
     srcs = ["tool_xml.c"],
     hdrs = ["tool_xml.h"],
     deps = [
-        ":chat_fields",
         ":tool_schemas",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",

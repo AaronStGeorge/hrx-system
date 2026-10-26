@@ -479,7 +479,6 @@ loom_cc_library(
   SRCS
     "tool_xml.c"
   DEPS
-    ::chat_fields
     ::tool_schemas
     iree::base
     iree::base::internal::json

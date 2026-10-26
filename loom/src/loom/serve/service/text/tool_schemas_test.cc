@@ -26,13 +26,15 @@ TEST(ToolSchemasTest, LookupBorrowsInputWithoutReorderingDeclarations) {
       loom_serve_text_tool_schemas_find(&schemas, IREE_SV("write"));
   ASSERT_NE(write, nullptr);
   EXPECT_EQ(write->name.data, input.data() + input.find("write"));
-  EXPECT_TRUE(iree_string_view_equal(write->properties,
-                                     IREE_SV(R"({"text":{"type":"string"}})")));
-  EXPECT_TRUE(iree_string_view_equal(write->required, IREE_SV(R"(["text"])")));
+  EXPECT_TRUE(iree_string_view_equal(
+      write->parameters,
+      IREE_SV(
+          R"({"type":"object","properties":{"text":{"type":"string"}},"required":["text"]})")));
+  EXPECT_EQ(write->name_storage, nullptr);
   const auto* read =
       loom_serve_text_tool_schemas_find(&schemas, IREE_SV("read"));
   ASSERT_NE(read, nullptr);
-  EXPECT_EQ(read->required.data, nullptr);
+  EXPECT_EQ(read->name_storage, nullptr);
   EXPECT_EQ(loom_serve_text_tool_schemas_find(&schemas, IREE_SV("unknown")),
             nullptr);
   EXPECT_EQ(input, declarations);
@@ -42,11 +44,11 @@ TEST(ToolSchemasTest, LookupBorrowsInputWithoutReorderingDeclarations) {
 TEST(ToolSchemasTest, RejectsInvalidTailWithoutRetainingPartialDescriptors) {
   const char* invalid_functions[] = {
       R"({"name":"read","parameters":{"type":"object","properties":{}}})",
-      R"({"name":"write","parameters":{"type":"array","properties":{}}})",
-      R"({"name":"write","parameters":{"type":"object"}})",
+      R"({"parameters":{}})",
+      R"({"name":42})",
+      R"({"name":"write","parameters":[]})",
       R"({"name":"write","parameters":{"type":"object","properties":{}},"strict":true})",
-      R"({"name":"bad name","parameters":{"type":"object","properties":{}}})",
-      R"({"name":"wr\u0069te","parameters":{"type":"object","properties":{}}})",
+      R"({"name":"re\u0061d"})",
       R"({"name":"write","name":"other","parameters":{"type":"object","properties":{}}})",
   };
   for (const char* function : invalid_functions) {
@@ -62,6 +64,29 @@ TEST(ToolSchemasTest, RejectsInvalidTailWithoutRetainingPartialDescriptors) {
                               iree_allocator_system(), &schemas));
     EXPECT_EQ(schemas.values, nullptr);
     EXPECT_EQ(schemas.count, 0);
+    loom_serve_text_tool_schemas_deinitialize(&schemas);
+  }
+}
+
+TEST(ToolSchemasTest, ParameterSchemasAreOpaqueAndNamesAreDecoded) {
+  const char* functions[] = {
+      R"({"name":"wr\u0069te"})",
+      R"({"name":"write","parameters":{},"strict":false})",
+      R"({"name":"write","parameters":null,"strict":null})",
+      R"({"name":"write","parameters":{"$ref":"#/$defs/args","$defs":{"args":{"oneOf":[{"type":"object"},{"type":"null"}]}}}})",
+      R"({"name":"write","parameters":{"type":"array","properties":false,"required":42},"description":null,"metadata":{"tag":"pass through"}})",
+  };
+  for (const char* function : functions) {
+    SCOPED_TRACE(function);
+    const std::string input =
+        std::string(R"([{"type":"function","function":)") + function + "}]";
+    loom_serve_text_tool_schemas_t schemas;
+    IREE_ASSERT_OK(loom_serve_text_tool_schemas_initialize(
+        iree_make_string_view(input.data(), input.size()),
+        iree_allocator_system(), &schemas));
+    EXPECT_EQ(schemas.count, 1u);
+    EXPECT_NE(loom_serve_text_tool_schemas_find(&schemas, IREE_SV("write")),
+              nullptr);
     loom_serve_text_tool_schemas_deinitialize(&schemas);
   }
 }

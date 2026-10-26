@@ -333,6 +333,38 @@ encoding uses each request's dimensions.
 The [image source contract](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/service/image/model.h)
 defines entry signatures, alignment and cancellation.
 
+### Tool-call translation
+
+Text policy owns the generated grammar and canonical history. Its `parse_tools`
+root returns function records with a name and an opaque argument string; generic
+chat handling assigns IDs and encodes the same records for HTTP and SSE. The
+server does not execute tools, validate executable arguments, or repair calls.
+Those operations belong to the harness. `render_tool` must preserve the call
+data when formatting the next turn, and `complete_text` can authorize retained
+state reuse only when its canonical bytes match the generated history.
+
+A source program can import `tools.parse_xml(schemas, text) -> buffer` for the
+`<tool_call><function=NAME><parameter=NAME>VALUE</parameter>…</function></tool_call>`
+grammar. This is an optional codec, not a model-wide protocol requirement.
+It validates framing and UTF-8, preserves duplicate parameter members in order,
+and uses property schemas only to distinguish representations:
+
+| Hint | Argument representation |
+| --- | --- |
+| String, including string-capable unions | Literal text, even when it looks like a number or JSON. |
+| Explicit nullable hint with `null` text | JSON null. |
+| Non-string hint with a complete JSON value | Original JSON spelling, without numeric conversion or type enforcement. |
+| Unknown property/tool, opaque schema, or non-JSON text | Literal string. |
+
+Hints cover direct types, nullable type arrays, and `anyOf`/`oneOf` branches;
+they are not a JSON Schema evaluator or reference resolver. One framing newline
+on each side of a parameter is removed; other string whitespace, JSON-looking
+text, and XML entities remain literal. Malformed framing fails the complete call
+list without publishing a prefix. Missing required arguments, unknown names,
+and schema-invalid values are representable calls for the harness to handle.
+Other grammars can return argument strings directly, including malformed JSON,
+provided their source history formatter can retain those strings faithfully.
+
 ## Known-token stages
 
 A `sequence` deployment uses retained rows, packed epochs, block pools, and

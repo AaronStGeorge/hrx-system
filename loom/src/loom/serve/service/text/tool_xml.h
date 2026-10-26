@@ -18,7 +18,10 @@ extern "C" {
 // Creates the optional tools.parse_xml(schemas, text) -> buffer capability.
 // Both inputs are UTF-8 buffers. The result is a JSON array of standard
 // function tool calls, with JSON-encoded argument strings and no assigned IDs.
-// The codec validates declared names and scalar/container parameter types.
+// Parameter type hints distinguish literal strings from JSON values; they do
+// not constrain generated names or arguments. Unknown arguments remain literal
+// strings, and duplicate members retain their original order. The harness owns
+// required-field, schema, permission, and execution validation.
 // Source explicitly selects this grammar by importing it; native chat handling
 // consumes only the returned function records. The environment outlives the
 // module and every returned buffer.

@@ -148,6 +148,10 @@ TEST_P(TextHttpTest, SemanticChannelsAndCallsReachTheSameClaim) {
       Append(LOOM_SERVE_TEXT_CHAT_OUTPUT_CONTENT, IREE_SV("yes")));
   IREE_ASSERT_OK(loom_serve_text_tool_calls_append(&calls_, 7, IREE_SV("read"),
                                                    IREE_SV(R"({"path":"a"})")));
+  IREE_ASSERT_OK(loom_serve_text_tool_calls_append(
+      &calls_, 7, IREE_SV("read"), IREE_SV(R"({"q":"a","q":"b"})")));
+  IREE_ASSERT_OK(loom_serve_text_tool_calls_append(
+      &calls_, 7, IREE_SV("unknown_tool"), IREE_SV(R"({"path":)")));
   IREE_ASSERT_OK(consumer_.vtable->complete(consumer_.self, &response_,
                                             &content_, &reasoning_, &calls_,
                                             IREE_SV("tool_calls"), &scratch_));
@@ -168,6 +172,14 @@ TEST_P(TextHttpTest, SemanticChannelsAndCallsReachTheSameClaim) {
       std::string::npos);
   EXPECT_NE(response.find(R"("finish_reason":"tool_calls")"),
             std::string::npos);
+  EXPECT_NE(
+      response.find(
+          R"("id":"call_7_1","type":"function","function":{"name":"read","arguments":"{\"q\":\"a\",\"q\":\"b\"}"})"),
+      std::string::npos);
+  EXPECT_NE(
+      response.find(
+          R"("id":"call_7_2","type":"function","function":{"name":"unknown_tool","arguments":"{\"path\":"})"),
+      std::string::npos);
   EXPECT_EQ(response.find("data: [DONE]\n\n") != std::string::npos, GetParam());
 }
 

@@ -59,17 +59,3 @@ iree_status_t loom_serve_text_chat_required(
   }
   return iree_ok_status();
 }
-
-bool loom_serve_text_chat_is_identifier(iree_string_view_t name) {
-  if (!name.size || name.size > 128) {
-    return false;
-  }
-  for (iree_host_size_t i = 0; i < name.size; ++i) {
-    const char c = name.data[i];
-    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-          (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.')) {
-      return false;
-    }
-  }
-  return true;
-}

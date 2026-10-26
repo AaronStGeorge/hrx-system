@@ -49,12 +49,20 @@ class ToolXmlTest : public ::testing::Test {
   }
 
   iree_status_t Parse(iree_string_view_t text, std::string* out_calls) {
-    out_calls->clear();
-    iree_vm_variant_t arguments[] = {
-        Text(IREE_SV(R"([{"type":"function","function":{"name":"search",
+    return Parse(text,
+                 IREE_SV(
+                     R"([{"type":"function","function":{"name":"search",
           "parameters":{"type":"object","properties":{
             "query":{"type":"string"},"limit":{"type":"integer"}},
-            "required":["query"]}}}])")),
+            "required":["query"]}}}])"),
+                 out_calls);
+  }
+
+  iree_status_t Parse(iree_string_view_t text, iree_string_view_t schemas,
+                      std::string* out_calls) {
+    out_calls->clear();
+    iree_vm_variant_t arguments[] = {
+        Text(schemas),
         Text(text),
     };
     iree_vm_variant_t result = iree_vm_variant_empty();
@@ -120,14 +128,11 @@ TEST_F(ToolXmlTest, InvalidLaterCallPublishesNothingAndInvocationIsReusable) {
     const char* message;
   };
   const Failure failures[] = {
-      {"<tool_call><function=search><parameter=q>query</parameter>"
-       "</function></tool_call>",
-       "generated tool 'search' uses undeclared parameter 'q'"},
-      {"<tool_call><function=search><parameter=query>first</parameter>"
-       "<parameter=query>second</parameter></function></tool_call>",
-       "generated tool 'search' repeats parameter 'query'"},
-      {"<tool_call><function=undeclared></function></tool_call>",
-       "generated tool 'undeclared' is not declared"},
+      {"<tool_call><function=search", "unterminated generated tool name"},
+      {"<tool_call><function=search><parameter=query>cut off",
+       "unterminated generated parameter"},
+      {"<tool_call><function=search></function>",
+       "generated tool call expected '</tool_call>'; got ''"},
   };
   for (const auto& failure : failures) {
     SCOPED_TRACE(failure.text);
@@ -137,7 +142,9 @@ TEST_F(ToolXmlTest, InvalidLaterCallPublishesNothingAndInvocationIsReusable) {
         Parse(iree_make_string_view(text.data(), text.size()), &calls);
     EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
     const auto message = iree_status_message(status);
-    EXPECT_EQ(std::string(message.data, message.size), failure.message);
+    const std::string diagnostic(message.data, message.size);
+    EXPECT_NE(diagnostic.find(failure.message), std::string::npos);
+    EXPECT_NE(diagnostic.find("tool call 1 at byte "), std::string::npos);
     iree_status_free(status);
     EXPECT_TRUE(calls.empty());
     IREE_ASSERT_OK(
@@ -145,6 +152,143 @@ TEST_F(ToolXmlTest, InvalidLaterCallPublishesNothingAndInvocationIsReusable) {
     EXPECT_EQ(
         calls,
         R"([{"type":"function","function":{"name":"search","arguments":"{\"query\":\"kept\"}"}}])");
+  }
+}
+
+TEST_F(ToolXmlTest, EmptyOutputDoesNotInspectUnusedSchemas) {
+  std::string calls;
+  IREE_ASSERT_OK(Parse(IREE_SV("\r\n\t"), IREE_SV("unused"), &calls));
+  EXPECT_EQ(calls, "[]");
+}
+
+TEST_F(ToolXmlTest, NamesAreDataAndEscapesOnlyBelongToJson) {
+  std::string calls;
+  IREE_ASSERT_OK(
+      Parse(IREE_SV("<tool_call><function=namespace/read>"
+                    "<parameter=line count>3</parameter>"
+                    "<parameter=λ>kept</parameter></function></tool_call>"),
+            IREE_SV(R"([{"type":"function","function":{"name":"namespace\/read",
+        "parameters":{"properties":{"line\u0020count":{"type":"integer"}}}}}])"),
+            &calls));
+  EXPECT_EQ(
+      calls,
+      R"([{"type":"function","function":{"name":"namespace/read","arguments":"{\"line count\":3,\"λ\":\"kept\"}"}}])");
+}
+
+TEST_F(ToolXmlTest, InvalidUtf8PublishesNoResultAndNextCallWorks) {
+  std::string calls;
+  const char invalid[] = {'<', '\xFF'};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Parse(iree_make_string_view(invalid, sizeof(invalid)), &calls));
+  EXPECT_TRUE(calls.empty());
+  IREE_ASSERT_OK(Parse(
+      IREE_SV("<tool_call><function=search></function></tool_call>"), &calls));
+  EXPECT_EQ(
+      calls,
+      R"([{"type":"function","function":{"name":"search","arguments":"{}"}}])");
+}
+
+TEST_F(ToolXmlTest, SemanticMistakesReachTheHarnessWithoutRepair) {
+  std::string calls;
+  IREE_ASSERT_OK(Parse(
+      IREE_SV("<tool_call><function=search><parameter=q>where?</parameter>"
+              "</function></tool_call>"
+              "<tool_call><function=search><parameter=query>first</parameter>"
+              "<parameter=query>second</parameter></function></tool_call>"
+              "<tool_call><function=undeclared><parameter=path>123</parameter>"
+              "</function></tool_call>"
+              "<tool_call><function=search><parameter=limit>many</parameter>"
+              "</function></tool_call>"
+              "<tool_call><function=search></function></tool_call>"),
+      &calls));
+  EXPECT_EQ(
+      calls,
+      R"([{"type":"function","function":{"name":"search","arguments":"{\"q\":\"where?\"}"}},{"type":"function","function":{"name":"search","arguments":"{\"query\":\"first\",\"query\":\"second\"}"}},{"type":"function","function":{"name":"undeclared","arguments":"{\"path\":\"123\"}"}},{"type":"function","function":{"name":"search","arguments":"{\"limit\":\"many\"}"}},{"type":"function","function":{"name":"search","arguments":"{}"}}])");
+}
+
+TEST_F(ToolXmlTest,
+       CodingAndImageArgumentsUseRepresentationHintsNotConstraints) {
+  const auto schemas = IREE_SV(R"([
+    {"type":"function","function":{"name":"edit","parameters":{
+      "type":"object","properties":{
+        "path":{"type":"string"},
+        "replacement":{"type":"string"},
+        "offset":{"anyOf":[{"type":"integer","minimum":1},{"type":"null"}]},
+        "limit":{"type":["integer","null"],"maximum":100},
+        "dry_run":{"type":"boolean"},
+        "edits":{"type":"array","items":{"$ref":"#/$defs/edit"}}},
+      "required":["path","replacement"],"additionalProperties":false}}},
+    {"type":"function","function":{"name":"generate_image","parameters":{
+      "properties":{
+        "prompt":{"oneOf":[{"type":"string"},{"type":"null"}]},
+        "size":{"type":"string","enum":["1024x1024"]},
+        "seed":{"type":"integer"},"options":{"type":"object"}}}}}
+  ])");
+  std::string calls;
+  IREE_ASSERT_OK(Parse(
+      IREE_SV("<tool_call><function=edit>"
+              "<parameter=path>123</parameter>"
+              "<parameter=replacement>\n  return \"λ\";\n\n</parameter>"
+              "<parameter=offset>-1</parameter>"
+              "<parameter=limit>null</parameter>"
+              "<parameter=dry_run>FALSE</parameter>"
+              "<parameter=edits>[{\"old\":\"a\",\"new\":\"b\"}]</parameter>"
+              "</function></tool_call>"
+              "<tool_call><function=generate_image>"
+              "<parameter=prompt>null</parameter>"
+              "<parameter=size>1536x1024</parameter>"
+              "<parameter=seed>18446744073709551616</parameter>"
+              "<parameter=options>{\"scale\":1.25e2}</parameter>"
+              "</function></tool_call>"),
+      schemas, &calls));
+  EXPECT_EQ(
+      calls,
+      R"([{"type":"function","function":{"name":"edit","arguments":"{\"path\":\"123\",\"replacement\":\"  return \\\"λ\\\";\\n\",\"offset\":-1,\"limit\":null,\"dry_run\":\"FALSE\",\"edits\":[{\"old\":\"a\",\"new\":\"b\"}]}"}},{"type":"function","function":{"name":"generate_image","arguments":"{\"prompt\":null,\"size\":\"1536x1024\",\"seed\":18446744073709551616,\"options\":{\"scale\":1.25e2}}"}}])");
+}
+
+TEST_F(ToolXmlTest, StringsAreLiteralAndNonJsonValuesAreNotGuessed) {
+  const auto schemas = IREE_SV(R"([{"type":"function","function":{
+    "name":"values","parameters":{"properties":{
+      "string":{"type":"string"},"number":{"type":"number"},
+      "object":{"type":"object"},"nullable":{"type":["string","null"]}
+    }}}}])");
+  std::string calls;
+  IREE_ASSERT_OK(Parse(IREE_SV("<tool_call><function=values>"
+                               "<parameter=string>null</parameter>"
+                               "<parameter=string>{\"a\":1}</parameter>"
+                               "<parameter=string>&lt;tag&gt;</parameter>"
+                               "<parameter=number>3 trailing</parameter>"
+                               "<parameter=object>{broken</parameter>"
+                               "<parameter=nullable>123</parameter>"
+                               "<parameter=unknown></parameter>"
+                               "</function></tool_call>"),
+                       schemas, &calls));
+  EXPECT_EQ(
+      calls,
+      R"([{"type":"function","function":{"name":"values","arguments":"{\"string\":\"null\",\"string\":\"{\\\"a\\\":1}\",\"string\":\"&lt;tag&gt;\",\"number\":\"3 trailing\",\"object\":\"{broken\",\"nullable\":\"123\",\"unknown\":\"\"}"}}])");
+}
+
+TEST_F(ToolXmlTest, OpaqueSchemaStringsAreNotReparsedAsJson) {
+  const char* parameters[] = {
+      R"({"properties":"{opaque"})",
+      R"({"properties":{"value":{"type":"[opaque","anyOf":"{opaque"}}})",
+      R"({"properties":{"value":{"type":null}}})",
+  };
+  for (const char* parameter_schema : parameters) {
+    SCOPED_TRACE(parameter_schema);
+    const std::string schemas =
+        std::string(
+            R"([{"type":"function","function":{"name":"read","parameters":)") +
+        parameter_schema + "}}]";
+    std::string calls;
+    IREE_ASSERT_OK(Parse(
+        IREE_SV("<tool_call><function=read><parameter=value>null</parameter>"
+                "</function></tool_call>"),
+        iree_make_string_view(schemas.data(), schemas.size()), &calls));
+    EXPECT_EQ(
+        calls,
+        R"([{"type":"function","function":{"name":"read","arguments":"{\"value\":\"null\"}"}}])");
   }
 }
 

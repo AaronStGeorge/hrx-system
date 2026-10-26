@@ -6,13 +6,10 @@
 
 #include "loom/serve/service/text/tool_xml.h"
 
-#include <string.h>
-
 #include "iree/base/internal/json.h"
 #include "iree/base/internal/unicode.h"
 #include "iree/vm/buffer.h"
 #include "iree/vm/reflection.h"
-#include "loom/serve/service/text/chat_fields.h"
 #include "loom/serve/service/text/tool_schemas.h"
 #include "loom/util/json.h"
 
@@ -55,157 +52,181 @@ static iree_status_t loom_serve_text_tool_xml_name(
   }
   *out_name = iree_string_view_substr(*cursor, 0, end);
   *cursor = iree_string_view_substr(*cursor, end + 1, IREE_HOST_SIZE_MAX);
-  if (!loom_serve_text_chat_is_identifier(*out_name)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "generated tool name is not an identifier");
+  return iree_ok_status();
+}
+
+typedef struct loom_serve_text_tool_xml_field_t {
+  // Decoded field name to find in a borrowed JSON object.
+  iree_string_view_t name;
+  // Borrowed matching value, or empty when absent.
+  iree_string_view_t value;
+  // JSON type supplied by the parser, never inferred from a stripped value.
+  iree_json_value_type_t type;
+  // Reusable decoding storage for JSON-escaped field names.
+  iree_string_builder_t* scratch;
+} loom_serve_text_tool_xml_field_t;
+
+static iree_status_t loom_serve_text_tool_xml_field_visit(
+    void* user_data, iree_string_view_t key, iree_json_value_type_t type,
+    iree_string_view_t value) {
+  loom_serve_text_tool_xml_field_t* field = user_data;
+  if (iree_string_view_find_char(key, '\\', 0) != IREE_STRING_VIEW_NPOS) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_reserve(field->scratch, key.size));
+    iree_host_size_t length = 0;
+    IREE_RETURN_IF_ERROR(iree_json_unescape_string(
+        key, field->scratch->capacity, field->scratch->buffer, &length));
+    key = iree_make_string_view(field->scratch->buffer, length);
+  }
+  if (iree_string_view_equal(key, field->name)) {
+    field->value = value;
+    field->type = type;
+    return iree_status_from_code(IREE_STATUS_CANCELLED);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_serve_text_tool_xml_field(
+    iree_string_view_t object, iree_string_view_t name,
+    iree_string_builder_t* scratch,
+    loom_serve_text_tool_xml_field_t* out_field) {
+  *out_field =
+      (loom_serve_text_tool_xml_field_t){.name = name, .scratch = scratch};
+  if (!object.size) {
+    return iree_ok_status();
+  }
+  return iree_json_enumerate_object_typed(
+      object, loom_serve_text_tool_xml_field_visit, out_field);
+}
+
+// XML has no JSON type tags. Hints choose a representation, not whether a
+// value is valid for execution. Schema constraints belong to the harness.
+enum loom_serve_text_tool_xml_hint_bits_e {
+  LOOM_SERVE_TEXT_TOOL_XML_HINT_STRING = 1u << 0,
+  LOOM_SERVE_TEXT_TOOL_XML_HINT_NULL = 1u << 1,
+  LOOM_SERVE_TEXT_TOOL_XML_HINT_JSON = 1u << 2,
+};
+
+static iree_status_t loom_serve_text_tool_xml_hints(
+    iree_json_value_type_t type, iree_string_view_t schema,
+    iree_string_builder_t* scratch, uint32_t* hints) {
+  if (type == IREE_JSON_VALUE_TYPE_STRING) {
+    if (iree_string_view_equal(schema, IREE_SV("string"))) {
+      *hints |= LOOM_SERVE_TEXT_TOOL_XML_HINT_STRING;
+    } else if (iree_string_view_equal(schema, IREE_SV("null"))) {
+      *hints |= LOOM_SERVE_TEXT_TOOL_XML_HINT_NULL;
+    } else if (iree_string_view_equal(schema, IREE_SV("number")) ||
+               iree_string_view_equal(schema, IREE_SV("integer")) ||
+               iree_string_view_equal(schema, IREE_SV("boolean")) ||
+               iree_string_view_equal(schema, IREE_SV("object")) ||
+               iree_string_view_equal(schema, IREE_SV("array"))) {
+      *hints |= LOOM_SERVE_TEXT_TOOL_XML_HINT_JSON;
+    }
+  } else if (type == IREE_JSON_VALUE_TYPE_OBJECT) {
+    const iree_string_view_t keys[] = {IREE_SVL("type"), IREE_SVL("anyOf"),
+                                       IREE_SVL("oneOf")};
+    iree_status_t status = iree_ok_status();
+    for (iree_host_size_t i = 0;
+         i < IREE_ARRAYSIZE(keys) && iree_status_is_ok(status); ++i) {
+      loom_serve_text_tool_xml_field_t child;
+      uint32_t child_hints = 0;
+      status = loom_serve_text_tool_xml_field(schema, keys[i], scratch, &child);
+      if (iree_status_is_ok(status)) {
+        status = loom_serve_text_tool_xml_hints(child.type, child.value,
+                                                scratch, &child_hints);
+      }
+      *hints |= child_hints;
+      if (child_hints) {
+        break;
+      }
+    }
+    return status;
+  } else if (type == IREE_JSON_VALUE_TYPE_ARRAY) {
+    iree_string_view_t cursor =
+        iree_string_view_substr(schema, 1, schema.size - 2);
+    iree_status_t status = iree_json_consume_insignificant(&cursor);
+    while (iree_status_is_ok(status) && cursor.size) {
+      const iree_json_value_type_t child_type =
+          iree_json_infer_value_type(cursor.data[0]);
+      iree_string_view_t child = iree_string_view_empty();
+      status = iree_json_consume_value(&cursor, &child);
+      if (iree_status_is_ok(status)) {
+        status =
+            loom_serve_text_tool_xml_hints(child_type, child, scratch, hints);
+      }
+      if (iree_status_is_ok(status)) {
+        status = iree_json_consume_insignificant(&cursor);
+      }
+      if (!iree_string_view_consume_prefix_char(&cursor, ',')) {
+        break;
+      }
+      if (iree_status_is_ok(status)) {
+        status = iree_json_consume_insignificant(&cursor);
+      }
+    }
+    return status;
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_serve_text_tool_xml_parameter_value(
-    const loom_serve_text_chat_tool_t* tool, iree_string_view_t name,
-    iree_string_view_t value, iree_string_builder_t* arguments) {
-  char name_storage[129];
-  memcpy(name_storage, name.data, name.size);
-  name_storage[name.size] = 0;
-  loom_serve_text_chat_field_t property = {name_storage,
-                                           LOOM_SERVE_TEXT_CHAT_OBJECT};
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
-      tool->properties, 1, &property,
-      LOOM_SERVE_TEXT_CHAT_FIELDS_IGNORE_UNKNOWN));
-  if (!property.value.data) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "generated tool '%.*s' uses undeclared parameter '%.*s'",
-        (int)tool->name.size, tool->name.data, (int)name.size, name.data);
+    iree_string_view_t properties, iree_string_view_t name,
+    iree_string_view_t value, iree_string_builder_t* key_scratch,
+    iree_string_builder_t* arguments) {
+  loom_serve_text_tool_xml_field_t property;
+  IREE_RETURN_IF_ERROR(
+      loom_serve_text_tool_xml_field(properties, name, key_scratch, &property));
+  uint32_t hints = 0;
+  if (property.type == IREE_JSON_VALUE_TYPE_OBJECT) {
+    IREE_RETURN_IF_ERROR(loom_serve_text_tool_xml_hints(
+        property.type, property.value, key_scratch, &hints));
   }
-  loom_serve_text_chat_field_t schema[] = {
-      {"type", LOOM_SERVE_TEXT_CHAT_STRING}};
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
-      property.value, IREE_ARRAYSIZE(schema), schema,
-      LOOM_SERVE_TEXT_CHAT_FIELDS_IGNORE_UNKNOWN));
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&schema[0]));
-  if (iree_string_view_equal(schema[0].value, IREE_SV("string"))) {
-    return loom_serve_text_tool_xml_quote(arguments, value);
+  const iree_string_view_t trimmed = iree_string_view_trim(value);
+  if (iree_any_bit_set(hints, LOOM_SERVE_TEXT_TOOL_XML_HINT_NULL) &&
+      iree_string_view_equal(trimmed, IREE_SV("null"))) {
+    return iree_string_builder_append_cstring(arguments, "null");
   }
-  value = iree_string_view_trim(value);
-  if (!value.size) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "empty non-string tool parameter");
-  }
-  const iree_json_value_type_t type = iree_json_infer_value_type(value.data[0]);
-  const bool integer =
-      iree_string_view_equal(schema[0].value, IREE_SV("integer"));
-  const bool matches =
-      (type == IREE_JSON_VALUE_TYPE_NUMBER &&
-       (integer ||
-        iree_string_view_equal(schema[0].value, IREE_SV("number")))) ||
-      ((type == IREE_JSON_VALUE_TYPE_TRUE ||
-        type == IREE_JSON_VALUE_TYPE_FALSE) &&
-       iree_string_view_equal(schema[0].value, IREE_SV("boolean"))) ||
-      (type == IREE_JSON_VALUE_TYPE_OBJECT &&
-       iree_string_view_equal(schema[0].value, IREE_SV("object"))) ||
-      (type == IREE_JSON_VALUE_TYPE_ARRAY &&
-       iree_string_view_equal(schema[0].value, IREE_SV("array")));
-  if (!matches) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "generated parameter '%.*s' does not match schema type '%.*s'",
-        (int)name.size, name.data, (int)schema[0].value.size,
-        schema[0].value.data);
-  }
-  iree_string_view_t cursor = value;
-  iree_string_view_t parsed;
-  IREE_RETURN_IF_ERROR(iree_json_consume_value(&cursor, &parsed));
-  IREE_RETURN_IF_ERROR(iree_json_consume_insignificant(&cursor));
-  if (cursor.size) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "trailing data in generated tool parameter");
-  }
-  if (integer) {
-    int64_t number = 0;
-    IREE_RETURN_IF_ERROR(iree_json_parse_int64(value, &number));
-  }
-  return iree_string_builder_append_string(arguments, value);
-}
-
-typedef struct loom_serve_text_tool_xml_parameter_names_t {
-  // Host allocator owning the name array.
-  iree_allocator_t host_allocator;
-  // Number of generated parameters already parsed.
-  iree_host_size_t count;
-  // Allocated name capacity.
-  iree_host_size_t capacity;
-  // Inline storage covering ordinary function schemas without allocation.
-  iree_string_view_t inline_values[32];
-  // Borrowed names in generation order, used for duplicate/required checks.
-  iree_string_view_t* values;
-} loom_serve_text_tool_xml_parameter_names_t;
-
-static iree_status_t loom_serve_text_tool_xml_required_parameter(
-    void* user_data, iree_host_size_t index, iree_json_value_type_t type,
-    iree_string_view_t value) {
-  const loom_serve_text_tool_xml_parameter_names_t* names = user_data;
-  if (type != IREE_JSON_VALUE_TYPE_STRING ||
-      !loom_serve_text_chat_is_identifier(value)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "required tool parameters must be literal names");
-  }
-  for (iree_host_size_t i = 0; i < names->count; ++i) {
-    if (iree_string_view_equal(names->values[i], value)) {
-      return iree_ok_status();
+  if (iree_any_bit_set(hints, LOOM_SERVE_TEXT_TOOL_XML_HINT_JSON) &&
+      !iree_any_bit_set(hints, LOOM_SERVE_TEXT_TOOL_XML_HINT_STRING)) {
+    iree_string_view_t cursor = trimmed;
+    iree_string_view_t parsed;
+    iree_status_t status = iree_json_consume_value(&cursor, &parsed);
+    if (iree_status_is_ok(status)) {
+      status = iree_json_consume_insignificant(&cursor);
+    }
+    const bool is_json = iree_status_is_ok(status) && !cursor.size;
+    // Non-JSON XML text is still a value. Preserve it as a string rather than
+    // guessing spelling, dropping it, or enforcing the harness's schema.
+    iree_status_ignore(status);
+    if (is_json) {
+      return iree_string_builder_append_string(arguments, trimmed);
     }
   }
-  return iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT,
-      "generated tool call omitted required parameter '%.*s'", (int)value.size,
-      value.data);
+  return loom_serve_text_tool_xml_quote(arguments, value);
 }
 
 static iree_status_t loom_serve_text_tool_xml_parameters_parse(
     iree_string_view_t* cursor, const loom_serve_text_chat_tool_t* tool,
     iree_string_builder_t* arguments) {
-  loom_serve_text_tool_xml_parameter_names_t names = {.host_allocator =
-                                                          arguments->allocator};
-  names.capacity = IREE_ARRAYSIZE(names.inline_values);
-  names.values = names.inline_values;
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(arguments, "{"));
+  iree_string_builder_t key_scratch;
+  iree_string_builder_initialize(arguments->allocator, &key_scratch);
+  iree_string_view_t properties = iree_string_view_empty();
   iree_status_t status = iree_ok_status();
+  if (tool) {
+    loom_serve_text_tool_xml_field_t field;
+    status = loom_serve_text_tool_xml_field(
+        tool->parameters, IREE_SV("properties"), &key_scratch, &field);
+    if (field.type == IREE_JSON_VALUE_TYPE_OBJECT) {
+      properties = field.value;
+    }
+  }
+  iree_host_size_t count = 0;
   *cursor = iree_string_view_trim(*cursor);
   while (iree_string_view_starts_with(*cursor, IREE_SV("<parameter=")) &&
          iree_status_is_ok(status)) {
     iree_string_view_t name;
     status =
         loom_serve_text_tool_xml_name(cursor, IREE_SV("<parameter="), &name);
-    for (iree_host_size_t i = 0; i < names.count && iree_status_is_ok(status);
-         ++i) {
-      if (iree_string_view_equal(names.values[i], name)) {
-        status = iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "generated tool '%.*s' repeats parameter '%.*s'",
-            (int)tool->name.size, tool->name.data, (int)name.size, name.data);
-      }
-    }
-    iree_host_size_t required_capacity = 0;
-    if (iree_status_is_ok(status) &&
-        !iree_host_size_checked_add(names.count, 1, &required_capacity)) {
-      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "parameter name capacity overflow");
-    }
-    if (iree_status_is_ok(status) && required_capacity > names.capacity) {
-      iree_string_view_t* values =
-          names.values == names.inline_values ? NULL : names.values;
-      status = iree_allocator_grow_array(
-          names.host_allocator, required_capacity, sizeof(*names.values),
-          &names.capacity, (void**)&values);
-      if (iree_status_is_ok(status) && names.values == names.inline_values) {
-        memcpy(values, names.inline_values,
-               names.count * sizeof(*names.values));
-      }
-      if (iree_status_is_ok(status)) {
-        names.values = values;
-      }
-    }
     const iree_string_view_t end_tag = IREE_SV("</parameter>");
     const iree_host_size_t end = iree_string_view_find(*cursor, end_tag, 0);
     if (iree_status_is_ok(status) && end == IREE_STRING_VIEW_NPOS) {
@@ -221,7 +242,7 @@ static iree_status_t loom_serve_text_tool_xml_parameters_parse(
       if (!iree_string_view_consume_suffix(&value, IREE_SV("\r\n"))) {
         iree_string_view_consume_suffix(&value, IREE_SV("\n"));
       }
-      if (names.count) {
+      if (count) {
         status = iree_string_builder_append_cstring(arguments, ",");
       }
       if (iree_status_is_ok(status)) {
@@ -231,26 +252,20 @@ static iree_status_t loom_serve_text_tool_xml_parameters_parse(
         status = iree_string_builder_append_cstring(arguments, ":");
       }
       if (iree_status_is_ok(status)) {
-        status = loom_serve_text_tool_xml_parameter_value(tool, name, value,
-                                                          arguments);
+        status = loom_serve_text_tool_xml_parameter_value(
+            properties, name, value, &key_scratch, arguments);
       }
       if (iree_status_is_ok(status)) {
-        names.values[names.count++] = name;
+        ++count;
         *cursor = iree_string_view_trim(iree_string_view_substr(
             *cursor, end + end_tag.size, IREE_HOST_SIZE_MAX));
       }
     }
   }
-  if (iree_status_is_ok(status) && tool->required.data) {
-    status = iree_json_enumerate_array_typed(
-        tool->required, loom_serve_text_tool_xml_required_parameter, &names);
-  }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(arguments, "}");
   }
-  if (names.values != names.inline_values) {
-    iree_allocator_free(names.host_allocator, names.values);
-  }
+  iree_string_builder_deinitialize(&key_scratch);
   return status;
 }
 
@@ -276,11 +291,6 @@ static iree_status_t loom_serve_text_tool_xml_parse(
         tool_count >= LOOM_SERVE_TEXT_CHAT_MAX_TOOL_COUNT) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "too many generated tool calls");
-    }
-    if (iree_status_is_ok(status) && !tool) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "generated tool '%.*s' is not declared",
-                                (int)name.size, name.data);
     }
     iree_string_builder_reset(&arguments);
     if (iree_status_is_ok(status)) {
@@ -320,6 +330,15 @@ static iree_status_t loom_serve_text_tool_xml_parse(
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(tool_calls, "]");
+  } else {
+    // HTTP exposes the primary message, not internal status annotations.
+    const iree_string_view_t message = iree_status_message(status);
+    iree_status_t contextual =
+        iree_make_status(iree_status_code(status),
+                         "tool call %" PRIhsz " at byte %" PRIhsz ": %.*s",
+                         tool_count, text.size - cursor.size, (int)message.size,
+                         message.data ? message.data : "");
+    status = iree_status_join(contextual, status);
   }
   iree_string_builder_deinitialize(&arguments);
   return status;
@@ -361,11 +380,14 @@ static iree_status_t loom_serve_text_tool_xml_start(
                               "tool input must be UTF-8");
     }
   }
-  loom_serve_text_tool_schemas_t schemas;
+  loom_serve_text_tool_schemas_t schemas = {0};
   iree_string_builder_t output;
   iree_string_builder_initialize(module->host_allocator, &output);
-  iree_status_t status = loom_serve_text_tool_schemas_initialize(
-      inputs[0], module->host_allocator, &schemas);
+  iree_status_t status = iree_ok_status();
+  if (iree_string_view_trim(inputs[1]).size) {
+    status = loom_serve_text_tool_schemas_initialize(
+        inputs[0], module->host_allocator, &schemas);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_serve_text_tool_xml_parse(&schemas, inputs[1], &output);
   }

@@ -13,14 +13,14 @@
 extern "C" {
 #endif
 
-// One validated function call. Views borrow the completed call table, not the
+// One framed function call. Views borrow the completed call table, not the
 // source VM, request body, or transport encoding.
 typedef struct loom_serve_text_tool_call_t {
   // Stable request-derived identifier shared by every output representation.
   iree_string_view_t id;
   // Decoded function name.
   iree_string_view_t name;
-  // Decoded JSON argument document, without an enclosing JSON string escape.
+  // Opaque argument string after JSON unescaping, not schema-validated here.
   iree_string_view_t arguments;
 } loom_serve_text_tool_call_t;
 
@@ -45,7 +45,7 @@ void loom_serve_text_tool_calls_deinitialize(
     loom_serve_text_tool_calls_t* calls);
 void loom_serve_text_tool_calls_reset(loom_serve_text_tool_calls_t* calls);
 
-// Copies one decoded call after the source boundary establishes its validity
+// Copies one decoded call after the source boundary establishes its shape
 // and the protocol count bound. Allocation failure can leave scratch bytes but
 // never exposes an incomplete record; the transaction owner resets on failure.
 iree_status_t loom_serve_text_tool_calls_append(
