@@ -29,9 +29,15 @@ def _cache_directory() -> Path:
     if "LOOM_CACHE_HOME" in os.environ:
         return Path(os.environ["LOOM_CACHE_HOME"])
     if os.name == "nt":
-        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        if "LOCALAPPDATA" in os.environ:
+            root = Path(os.environ["LOCALAPPDATA"])
+        else:
+            root = Path.home() / "AppData" / "Local"
     else:
-        root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        if "XDG_CACHE_HOME" in os.environ:
+            root = Path(os.environ["XDG_CACHE_HOME"])
+        else:
+            root = Path.home() / ".cache"
     return root / "loom"
 
 
