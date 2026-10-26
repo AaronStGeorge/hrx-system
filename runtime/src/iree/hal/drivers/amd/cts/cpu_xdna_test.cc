@@ -13,11 +13,12 @@
 #include "iree/async/util/proactor_pool.h"
 #include "iree/base/internal/shm.h"
 #include "iree/hal/api.h"
-#include "iree/hal/drivers/amd/cts/cpu_executable.h"
+#include "iree/hal/drivers/amd/cts/cpu_add.h"
 #include "iree/hal/drivers/amd/registration/driver_module.h"
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32.h"
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32_npu4.h"
 #include "iree/hal/drivers/task/device.h"
+#include "iree/hal/drivers/task/executable/loaders/embedded_elf_loader.h"
 #include "iree/task/executor.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -58,11 +59,20 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
     create_params.proactor_pool = cpu_proactor_pool_;
     iree_hal_task_device_params_t task_params;
     iree_hal_task_device_params_initialize(&task_params);
-    IREE_ASSERT_OK(iree_hal_task_device_create(
-        IREE_SV("cpu"), &task_params, 1, &cpu_executor_, 0, nullptr,
-        cpu_allocator_, &create_params, iree_allocator_system(), &cpu_device_));
+    iree_hal_executable_loader_t* cpu_loader = nullptr;
+    IREE_ASSERT_OK(iree_hal_embedded_elf_loader_create(iree_allocator_system(),
+                                                       &cpu_loader));
+    status = iree_hal_task_device_create(
+        IREE_SV("cpu"), &task_params, 1, &cpu_executor_, 1, &cpu_loader,
+        cpu_allocator_, &create_params, iree_allocator_system(), &cpu_device_);
+    iree_hal_executable_loader_release(cpu_loader);
+    IREE_ASSERT_OK(status);
     cpu_queue_ = iree_hal_device_queue(cpu_device_, 0, 0);
-    cpu_executable_ = CreateCpuAddExecutable(iree_hal_queue_family(cpu_queue_));
+    const auto* cpu_image = iree_hal_amd_cts_cpu_add_create();
+    ASSERT_EQ(iree_hal_amd_cts_cpu_add_size(), 1u);
+    ASSERT_NO_FATAL_FAILURE(LoadExecutable(cpu_device_, IREE_SV("cpu"),
+                                           cpu_image[0], IREE_SV("add_u32"),
+                                           &cpu_executable_, &cpu_function_));
   }
 
   void TearDown() override {
@@ -133,25 +143,44 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
     ASSERT_NE(queue_, nullptr);
   }
 
+  void LoadExecutable(iree_hal_device_t* device,
+                      iree_string_view_t target_family,
+                      const iree_file_toc_t& image,
+                      iree_string_view_t function_name,
+                      iree_hal_executable_t** out_executable,
+                      iree_hal_executable_function_t* out_function) {
+    const iree_hal_executable_target_selection_t selection = {
+        .family = target_family,
+    };
+    const auto target = iree_hal_device_spec_select_executable_target(
+        iree_hal_device_spec(device), &selection);
+    ASSERT_EQ(target.outcome,
+              IREE_HAL_EXECUTABLE_TARGET_SELECTION_OUTCOME_SELECTED);
+    std::vector<uint8_t> bytes(image.data, image.data + image.size);
+    iree_hal_executable_load_params_t params;
+    iree_hal_executable_load_params_initialize(&params);
+    params.executable_data =
+        iree_make_const_byte_span(bytes.data(), bytes.size());
+    IREE_ASSERT_OK(
+        iree_hal_executable_load(iree_hal_device_queue_family(device, 0),
+                                 target.target, &params, out_executable));
+    std::fill(bytes.begin(), bytes.end(), 0xCC);
+    IREE_ASSERT_OK(iree_hal_executable_lookup_function_by_name(
+        *out_executable, function_name, out_function));
+  }
+
   void LoadMultiply() {
     const auto* targets =
         iree_hal_device_spec_executables(iree_hal_device_spec(device_));
     ASSERT_EQ(targets->target_count, 1u);
     const bool halo = iree_string_view_equal(
         targets->targets[0].target_key, IREE_SV("amd.xdna.strix_halo.17f0_11"));
-    const auto* toc = halo ? iree_hal_amd_xdna_test_mul_i32_create()
-                           : iree_hal_amd_xdna_test_mul_i32_npu4_create();
-    std::vector<uint8_t> bytes(toc[0].data, toc[0].data + toc[0].size);
-    iree_hal_executable_load_params_t params;
-    iree_hal_executable_load_params_initialize(&params);
-    params.executable_data =
-        iree_make_const_byte_span(bytes.data(), bytes.size());
-    IREE_ASSERT_OK(
-        iree_hal_executable_load(iree_hal_device_queue_family(device_, 0),
-                                 &targets->targets[0], &params, &executable_));
-    std::fill(bytes.begin(), bytes.end(), 0xCC);
-    IREE_ASSERT_OK(iree_hal_executable_lookup_function_by_name(
-        executable_, IREE_SV("mul_i32"), &function_));
+    const auto* image_table =
+        halo ? iree_hal_amd_xdna_test_mul_i32_create()
+             : iree_hal_amd_xdna_test_mul_i32_npu4_create();
+    ASSERT_NO_FATAL_FAILURE(LoadExecutable(device_, IREE_SV("xdna"),
+                                           image_table[0], IREE_SV("mul_i32"),
+                                           &executable_, &function_));
   }
 
   void MakeSemaphore(iree_hal_semaphore_t** out_semaphore) {
@@ -261,8 +290,7 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
       IREE_ASSERT_OK(iree_hal_command_buffer_barrier(*out_commands, &barrier));
     }
     IREE_ASSERT_OK(iree_hal_command_buffer_dispatch(
-        *out_commands, cpu_executable_,
-        iree_hal_executable_function_from_index(0),
+        *out_commands, cpu_executable_, cpu_function_,
         iree_hal_make_static_dispatch_config(16, 1, 1),
         iree_make_const_byte_span(&addend, sizeof(addend)), {1, &reference},
         IREE_HAL_DISPATCH_FLAG_NONE));
@@ -373,6 +401,9 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
   iree_hal_queue_t* cpu_queue_ = nullptr;
   // Compiled CPU arithmetic kernel and immutable ABI metadata.
   iree_hal_executable_t* cpu_executable_ = nullptr;
+  // Reflected CPU entry point.
+  iree_hal_executable_function_t cpu_function_ =
+      iree_hal_executable_function_invalid();
   // Recorded programs retained across three changing-input replays.
   std::vector<iree_hal_command_buffer_t*> commands_;
   // Independently opened host mapping retained through native attachment
@@ -486,7 +517,7 @@ TEST_P(CpuXdnaNativeTest, CpuNpuCpuKernelsShareOneBacking) {
       const uint32_t addend = 100;
       IREE_ASSERT_OK(iree_hal_queue_dispatch(
           cpu_queue_, {1, &progress, &computed}, {1, &progress, &consumed},
-          cpu_executable_, iree_hal_executable_function_from_index(0),
+          cpu_executable_, cpu_function_,
           iree_hal_make_static_dispatch_config(16, 1, 1),
           iree_make_const_byte_span(&addend, sizeof(addend)),
           {1, &npu_bindings[2]},
@@ -505,7 +536,7 @@ TEST_P(CpuXdnaNativeTest, CpuNpuCpuKernelsShareOneBacking) {
       const uint32_t addend = 7;
       IREE_ASSERT_OK(iree_hal_queue_dispatch(
           cpu_queue_, {1, &progress, &updated}, {1, &progress, &produced},
-          cpu_executable_, iree_hal_executable_function_from_index(0),
+          cpu_executable_, cpu_function_,
           iree_hal_make_static_dispatch_config(16, 1, 1),
           iree_make_const_byte_span(&addend, sizeof(addend)),
           {1, &npu_bindings[0]},
