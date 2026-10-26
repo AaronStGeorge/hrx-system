@@ -14,7 +14,6 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function_requirements.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/parser.h"
@@ -454,67 +453,6 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @entry(%input: reg<aie2p.ep>, 
       EXPECT_EQ(writes[1].second, test_case.second_constant);
     }
   }
-}
-
-TEST_F(Aie2pProgramCompileTest, RetainsConsumedPredicateWithoutCloning) {
-  ModulePtr module = ParseModule(IREE_SV(R"(
-aie2p.target<core> @target
-low.func.def target<amd.xdna.aie2p.core>(@target) @partial_placement(%live: reg<aie2p.elpredicate>, %lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
-  %low = vge.u32x16.el.low32 %lhs, %rhs
-  %predicate = predicate.complete.zero.high32 %low, 0
-  %prepared = vsel.32.mask64 %lhs, %rhs, %live
-  %result = vsel.32.mask64 %lhs, %prepared, %predicate
-  return %result
-}
-)"));
-  loom_op_t* function =
-      FindFunction(module.get(), IREE_SV("partial_placement"));
-  ASSERT_NE(function, nullptr);
-  loom_block_t* block =
-      loom_region_entry_block(loom_low_func_def_body(function));
-  loom_op_t* partial = loom_block_op(block, 0);
-  loom_op_t* complete = loom_block_op(block, 1);
-  loom_op_t* prerequisite = loom_block_op(block, 2);
-  const loom_low_allocation_budget_t budget = {
-      .register_class = IREE_SV("aie2p.elpredicate"),
-      .max_units = 1,
-  };
-  loom_low_planning_statistics_t statistics = {};
-  const loom_low_emission_frame_options_t options = {
-      .descriptor_registry = &low_registry_.registry,
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
-      .allocation_budgets = &budget,
-      .allocation_budget_count = 1,
-      .statistics = &statistics,
-  };
-  const loom_low_emission_frame_spill_free_options_t spill_free_options = {
-      .materialization_options =
-          {
-              .has_supported_storage_spaces = true,
-              .supported_storage_spaces = LOOM_LOW_STORAGE_SPACE_SET_NONE,
-          },
-  };
-  loom_low_emission_frame_t frame = {};
-  bool accepted = false;
-  IREE_ASSERT_OK(loom_low_emission_frame_build_spill_free(
-      module.get(), function, &options, &spill_free_options, &program_arena_,
-      &frame, &accepted));
-  ASSERT_TRUE(accepted);
-  EXPECT_EQ(statistics.repair.retained_placement_count, 1u);
-  EXPECT_EQ(statistics.repair.rematerialized_operand_count, 0u);
-  EXPECT_EQ(block->op_count, 5u);
-  EXPECT_EQ(loom_block_op(block, 0), partial);
-  EXPECT_EQ(loom_block_op(block, 1), complete);
-  EXPECT_EQ(loom_op_const_operands(complete)[0],
-            loom_op_const_results(partial)[0]);
-  const auto* partial_node =
-      loom_low_schedule_node_for_op(&frame.schedule, partial);
-  const auto* prerequisite_node =
-      loom_low_schedule_node_for_op(&frame.schedule, prerequisite);
-  ASSERT_NE(partial_node, nullptr);
-  ASSERT_NE(prerequisite_node, nullptr);
-  EXPECT_LT(prerequisite_node->scheduled_ordinal,
-            partial_node->scheduled_ordinal);
 }
 
 TEST_F(Aie2pProgramCompileTest,

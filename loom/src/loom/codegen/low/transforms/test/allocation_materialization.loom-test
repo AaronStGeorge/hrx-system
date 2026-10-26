@@ -575,7 +575,7 @@ low.func.def target<test.low.core>(@test_target) @unsupported_stack_spill_space(
 
 test.target<low_core> @test_target
 
-// REMARK@+1: BACKEND/045 {function_name="rematerialize_live_frontier", trigger_value_class="test.packed.narrow", trigger_kind="allocation-failure", repaired_value_count="2", cloned_packet_count="3", rewritten_operand_count="3", retained_placement_count="0", reason_key="producer-rematerializable"}
+// REMARK@+1: BACKEND/045 {function_name="rematerialize_live_frontier", trigger_value_class="test.packed.narrow", trigger_kind="allocation-failure", repaired_value_count="1", cloned_packet_count="2", rewritten_operand_count="2", retained_placement_count="0", reason_key="producer-rematerializable"}
 low.func.def target<test.low.core>(@test_target) @rematerialize_live_frontier(%blocker: reg<test.packed.narrow>) -> (reg<test.i32>) asm {
   %literal = test.const.packed.narrow 7
   %seed = copy %literal : reg<test.packed.narrow> -> reg<test.i32>

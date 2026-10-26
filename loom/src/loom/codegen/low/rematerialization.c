@@ -1221,6 +1221,9 @@ typedef struct loom_low_rematerialization_candidate_t {
   // Cross-block demand repairs precede the local failure frontier so a
   // sufficient cross-block batch does not clone additional local values.
   bool is_cross_block_pressure;
+  // Failure-frontier recipes with inputs follow input-free repairs and a new
+  // allocation attempt. Predicted spill repairs keep one consumer-first batch.
+  bool defers_for_input_free_repair;
 } loom_low_rematerialization_candidate_t;
 
 static bool loom_low_rematerialization_candidate_less(
@@ -1228,6 +1231,9 @@ static bool loom_low_rematerialization_candidate_less(
     const loom_low_rematerialization_candidate_t* rhs) {
   if (lhs->is_cross_block_pressure != rhs->is_cross_block_pressure) {
     return lhs->is_cross_block_pressure;
+  }
+  if (lhs->defers_for_input_free_repair != rhs->defers_for_input_free_repair) {
+    return !lhs->defers_for_input_free_repair;
   }
   if (lhs->block_preorder != rhs->block_preorder) {
     return lhs->block_preorder > rhs->block_preorder;
@@ -1241,6 +1247,7 @@ LOOM_DEFINE_ADAPTIVE_SORT(loom_low_rematerialization_candidate_sort,
 
 static iree_status_t loom_low_rematerialization_plan_failure_batch(
     loom_module_t* module, const loom_low_allocation_table_t* table,
+    const loom_low_rematerialization_facts_t* facts,
     iree_arena_allocator_t* arena,
     loom_low_rematerialization_candidate_t** out_candidates,
     iree_host_size_t* out_count, iree_host_size_t* out_cross_block_count) {
@@ -1249,6 +1256,14 @@ static iree_status_t loom_low_rematerialization_plan_failure_batch(
   *out_cross_block_count = 0;
   const loom_liveness_analysis_t* liveness = &table->liveness;
   const loom_low_descriptor_set_t* descriptors = table->target.descriptor_set;
+  const loom_value_ordinal_t* storage_origins =
+      table->placement.tied_storage_origins_by_value_ordinal;
+  const loom_value_ordinal_t failure_ordinal =
+      loom_low_rematerialization_ordinal(facts, table->failure.value_id);
+  const loom_value_ordinal_t failure_origin =
+      storage_origins != NULL && failure_ordinal != LOOM_VALUE_ORDINAL_INVALID
+          ? storage_origins[failure_ordinal]
+          : failure_ordinal;
   uint8_t* pressure_classes = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, descriptors->reg_class_count, sizeof(*pressure_classes),
@@ -1288,8 +1303,12 @@ static iree_status_t loom_low_rematerialization_plan_failure_batch(
         &liveness->intervals[interval_index];
     const uint32_t assignment_index =
         table->assignment_indices_by_value_ordinal[ordinal];
+    // A later tied result extends the failed owner's physical lifetime even
+    // before that result's own SSA interval begins. Repair the complete
+    // ownership chain, not only values already live at its first definition.
     const bool in_failure_frontier =
-        interval->value_id == table->failure.value_id ||
+        (storage_origins != NULL ? storage_origins[ordinal] : ordinal) ==
+            failure_origin ||
         (assignment_index != UINT32_MAX &&
          loom_low_allocation_assignment_is_live_at_point(
              table, &table->assignments[assignment_index],
@@ -1306,11 +1325,12 @@ static iree_status_t loom_low_rematerialization_plan_failure_batch(
     if (!in_failure_frontier && !is_cross_block_pressure) {
       continue;
     }
-    loom_op_t* defining_op = NULL;
-    if (!loom_low_rematerialization_packet_is_eligible(
-            module, &table->target, interval->value_id, &defining_op)) {
+    if (!iree_any_bit_set(facts->value_flags[ordinal],
+                          LOOM_LOW_REMATERIALIZATION_VALUE_ELIGIBLE)) {
       continue;
     }
+    const loom_op_t* defining_op =
+        loom_value_def_op(loom_module_value(module, interval->value_id));
     const uint16_t block_index = loom_liveness_block_index_at_point(
         liveness, interval->definition_point);
     const loom_cfg_block_info_t* block =
@@ -1329,6 +1349,7 @@ static iree_status_t loom_low_rematerialization_plan_failure_batch(
         .definition_point = interval->definition_point,
         .block_preorder = block != NULL ? block->preorder : 0,
         .is_cross_block_pressure = is_cross_block_pressure,
+        .defers_for_input_free_repair = defining_op->operand_count != 0,
     };
     *out_cross_block_count += is_cross_block_pressure;
   }
@@ -1346,15 +1367,20 @@ static iree_status_t loom_low_rematerialization_apply_batch(
     loom_low_rematerialization_state_t* state, iree_arena_allocator_t* arena,
     loom_low_rematerialization_facts_t* facts,
     loom_low_rematerialization_batch_result_t* out_result) {
-  // Consumer-first application lets producers see uses created by earlier
-  // clones. Only immutable ordering/value facts survive between candidates;
-  // each individual rewrite captures its current uses immediately before apply.
+  // Consumer-first application within a repair tier lets producers see uses
+  // created by earlier clones. Only immutable ordering/value facts survive
+  // between candidates; each rewrite captures its current uses before apply.
   // Placement-only repairs can consult the completed schedule until the first
   // rewrite invalidates it. Later candidates still use fresh IR for cloning.
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; i < candidate_count && iree_status_is_ok(status);
        ++i) {
     const loom_low_rematerialization_candidate_t* candidate = &candidates[i];
+    if (i != 0 && candidate->defers_for_input_free_repair &&
+        !candidates[i - 1].defers_for_input_free_repair &&
+        out_result->repaired_value_count != 0) {
+      break;
+    }
     const iree_arena_checkpoint_t checkpoint =
         iree_arena_checkpoint_save(arena);
     loom_low_value_rematerialization_result_t result = {0};
@@ -1433,14 +1459,6 @@ iree_status_t loom_low_allocation_rematerialize_failure(
           &table->failure)) {
     return iree_ok_status();
   }
-  loom_low_rematerialization_candidate_t* candidates = NULL;
-  iree_host_size_t candidate_count = 0;
-  iree_host_size_t cross_block_count = 0;
-  IREE_RETURN_IF_ERROR(loom_low_rematerialization_plan_failure_batch(
-      module, table, arena, &candidates, &candidate_count, &cross_block_count));
-  if (candidate_count == 0) {
-    return iree_ok_status();
-  }
   loom_low_rematerialization_facts_t facts = {
       .module = module,
       .value_ids = table->liveness.value_ids,
@@ -1451,9 +1469,17 @@ iree_status_t loom_low_allocation_rematerialize_failure(
   };
   IREE_RETURN_IF_ERROR(loom_low_rematerialization_facts_initialize(
       &facts, &table->target, arena));
-  iree_status_t status = loom_low_rematerialization_apply_batch(
-      module, candidates, cross_block_count, schedule,
-      /*spill_allocation=*/NULL, state, arena, &facts, out_result);
+  loom_low_rematerialization_candidate_t* candidates = NULL;
+  iree_host_size_t candidate_count = 0;
+  iree_host_size_t cross_block_count = 0;
+  iree_status_t status = loom_low_rematerialization_plan_failure_batch(
+      module, table, &facts, arena, &candidates, &candidate_count,
+      &cross_block_count);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_rematerialization_apply_batch(
+        module, candidates, cross_block_count, schedule,
+        /*spill_allocation=*/NULL, state, arena, &facts, out_result);
+  }
   if (iree_status_is_ok(status) && out_result->repaired_value_count == 0 &&
       candidate_count != cross_block_count) {
     status = loom_low_rematerialization_apply_batch(

@@ -1755,8 +1755,8 @@ void loom_low_schedule_pressure_score_candidate(
   bool has_per_user_placement = false;
   bool short_replayable_register_move = iree_any_bit_set(
       node->flags, LOOM_LOW_SCHEDULE_NODE_FLAG_SHORT_REGISTER_MOVE);
-  bool rematerializable_setup =
-      node->descriptor != NULL &&
+  bool rematerializable_leaf =
+      node->descriptor != NULL && node->operand_count == 0 &&
       !iree_any_bit_set(node->traits, LOOM_TRAIT_OBSERVABLE_EFFECT);
   const uint16_t storage_relation_count = node->storage_relation_count;
 
@@ -1867,8 +1867,8 @@ void loom_low_schedule_pressure_score_candidate(
           value_id < per_user_placement_values.bit_count &&
           iree_bitmap_test(per_user_placement_values, value_id);
       ++produced_live_value_count;
-      rematerializable_setup =
-          rematerializable_setup &&
+      rematerializable_leaf =
+          rematerializable_leaf &&
           loom_low_descriptor_result_can_rematerialize(
               state->target.descriptor_set, node->descriptor, result_index);
       if (short_replayable_register_move) {
@@ -1984,9 +1984,8 @@ void loom_low_schedule_pressure_score_candidate(
           (short_replayable_register_move && produced_live_value_count != 0
                ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_SHORT_REPLAYABLE_REGISTER_MOVE
                : 0) |
-          (rematerializable_setup && produced_live_value_count != 0 &&
-                   (node->operand_count == 0 || has_per_user_placement)
-               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_SETUP
+          (rematerializable_leaf && produced_live_value_count != 0
+               ? LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF
                : 0),
   };
   loom_low_schedule_target_pressure_score_candidate(state, pressure_state,

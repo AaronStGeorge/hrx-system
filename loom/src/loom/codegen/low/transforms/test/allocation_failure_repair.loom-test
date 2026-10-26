@@ -1,0 +1,64 @@
+// Replaying the constant releases the needed register without extending the
+// captured source. The input-bearing recipe remains shared across the branch.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.explicit32=2,spill-storage-spaces=none}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @input_free_repair_first(%source: reg<test.i32>, %late: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %constant = test.const.explicit32 7
+  %captured = test.rematerialize.explicit32 %source
+  %needed = copy %late : reg<test.i32> -> reg<test.explicit32>
+  low.br ^consume
+^consume:
+  %needed_value = copy %needed : reg<test.explicit32> -> reg<test.i32>
+  %constant_value = copy %constant : reg<test.explicit32> -> reg<test.i32>
+  %captured_value = copy %captured : reg<test.explicit32> -> reg<test.i32>
+  return %needed_value, %constant_value, %captured_value
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @input_free_repair_first(%source: reg<test.i32>, %late: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %captured = test.rematerialize.explicit32 %source
+  %needed = copy %late : reg<test.i32> -> reg<test.explicit32>
+  low.br ^consume
+^consume:
+  %needed_value = copy %needed : reg<test.explicit32> -> reg<test.i32>
+  %constant_remat = test.const.explicit32 7
+  %constant_value = copy %constant_remat : reg<test.explicit32> -> reg<test.i32>
+  %captured_value = copy %captured : reg<test.explicit32> -> reg<test.i32>
+  return %needed_value, %constant_value, %captured_value
+}
+
+// ====
+
+// Failure occurs at the first producer, before either tied result exists.
+// Both later results extend that same physical lifetime. Replaying the final
+// value's complete recipe after the blockers retire repairs the root failure.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.explicit32=2,spill-storage-spaces=none}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @completed_tied_lifetime(%first: reg<test.explicit32>, %second: reg<test.explicit32>, %source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %producer = test.rematerialize.explicit32 %source
+  %middle = test.rematerialize.tied.explicit32 %producer
+  %completed = test.rematerialize.tied.explicit32 %middle
+  %first_value = copy %first : reg<test.explicit32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.explicit32> -> reg<test.i32>
+  %result = copy %completed : reg<test.explicit32> -> reg<test.i32>
+  return %first_value, %second_value, %result
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @completed_tied_lifetime(%first: reg<test.explicit32>, %second: reg<test.explicit32>, %source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %first_value = copy %first : reg<test.explicit32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.explicit32> -> reg<test.i32>
+  %producer_remat = test.rematerialize.explicit32 %source
+  %middle_remat = test.rematerialize.tied.explicit32 %producer_remat
+  %completed_remat = test.rematerialize.tied.explicit32 %middle_remat
+  %result = copy %completed_remat : reg<test.explicit32> -> reg<test.i32>
+  return %first_value, %second_value, %result
+}

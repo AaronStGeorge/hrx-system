@@ -401,10 +401,10 @@ enum loom_low_schedule_candidate_flag_bits_e {
   // Candidate establishes storage for a later operation. Storage setup is
   // actionable only when it also advances storage or unlocks a descriptor.
   LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP = 1u << 7,
-  // Candidate is an input-free descriptor or retained private setup whose live
-  // results can all be rematerialized. Keep it behind ordinary work so replay
-  // remains demand-driven instead of being hoisted across unrelated work.
-  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_SETUP = 1u << 8,
+  // Candidate is an input-free descriptor whose live results can all be
+  // rematerialized. Captured-input producers retain ordinary pressure scoring
+  // so they can retire inputs instead of deferring their complete live range.
+  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF = 1u << 8,
   // Candidate has exact identity with the selected active register-packing
   // completion.
   LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXACT_PACKING_COMPLETION = 1u << 9,

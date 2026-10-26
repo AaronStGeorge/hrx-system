@@ -13,6 +13,7 @@ loom_check_test_suite(
   NAME
     test
   SRCS
+    "allocation_failure_repair.loom-test"
     "allocation_materialization.loom-test"
     "allocation_storage_prefix.loom-test"
     "attr_projection.loom-test"

@@ -677,25 +677,23 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_advances_retain
 block 0 order: 0, 3
 
 // ====
-// A retained private placement that can be replayed remains demand driven.
-// Advancing it before an unrelated call would force its result to survive the
-// call even though its only consumer follows the boundary.
-// RUN: emit low-schedule-query @resource_stall_defers_replayable_retained_value strategy=resource-stall per-user-placement-values=%private required-register-values=%physical order=1,0
+// A replayable producer with a captured input advances the same retained
+// transaction as a copy. Treating it as an input-free leaf would open unrelated
+// work first instead of releasing the source through its physical consumer.
+// RUN: emit low-schedule-query @resource_stall_advances_replayable_retained_value strategy=resource-stall test.i32=2 per-user-placement-values=%private required-register-values=%physical order=0,3
 
 test.target<low_core> @test_target
 
-low.func.decl pure target<test.low.core>(@test_target) @helper()
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_defers_replayable_retained_value(%source: reg<test.i32>) -> (reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @resource_stall_advances_replayable_retained_value(%source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
   %private = test.rematerialize.i32 %source
-  low.func.call pure @helper() : ()
   %physical = copy %private : reg<test.i32> -> reg<test.explicit32>
   %result = copy %physical : reg<test.explicit32> -> reg<test.i32>
-  return %result
+  %independent = test.const.zero.i32
+  return %result, %independent
 }
 
 // ----
-block 0 order: 1, 0
+block 0 order: 0, 3
 
 // ====
 // Once allocation repair has materialized spill traffic, mandatory helpers can

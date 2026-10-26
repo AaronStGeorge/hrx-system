@@ -1587,7 +1587,6 @@ loom_cc_test(
         ":provider",
         ":relocation",
         ":tile_link",
-        "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low:function_requirements",
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/format/text:parser",

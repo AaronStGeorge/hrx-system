@@ -204,10 +204,10 @@ static void loom_low_schedule_setup_order_mark_continuation_source(
 }
 
 // A storage continuation writes one register part while preserving a disjoint
-// part supplied by its tied source. Keep pressure-preserving partial writes
-// in the setup chain ending at the completed value's sole consumer. Other
-// prerequisites close before these writes occupy required physical storage;
-// contracting producers remain available to retire their larger inputs.
+// part supplied by its tied source. Explicit repair retains the connected
+// partial writes through their completed value's consumer. Ordinary partial
+// writes stay pressure-scheduled: forcing them behind every prerequisite can
+// keep unrelated vector intermediates live while their consumers are blocked.
 static void loom_low_schedule_setup_order_classify_storage_continuation(
     loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node) {
   if (node->descriptor == NULL || node->op->tied_result_count == 0) {
@@ -229,6 +229,14 @@ static void loom_low_schedule_setup_order_classify_storage_continuation(
     const loom_value_ordinal_t source_ordinal =
         operand_ordinals[tied.operand_index];
     const uint32_t producer = state->value_producer_nodes[source_ordinal];
+    bool requires_register = false;
+    if (!loom_low_schedule_setup_order_has_per_user_placement(
+            state, node, &requires_register) &&
+        (producer == LOOM_LOW_SCHEDULE_NODE_NONE ||
+         !loom_low_schedule_setup_order_has_per_user_placement(
+             state, &state->nodes[producer], &requires_register))) {
+      continue;
+    }
     // Input-free constant recipes remain available to pressure scheduling.
     // Forcing their partial writes behind consumer prerequisites can retain
     // those inputs while the constant is constructed. Explicit private

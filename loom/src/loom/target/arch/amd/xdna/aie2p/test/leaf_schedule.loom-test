@@ -201,8 +201,8 @@ block 0 order: 0, 7, 8, 1, 2, 3, 4, 5, 6, 9
 
 // ====
 
-// Completing a partial predicate waits for the select's other input, but its
-// vector comparison remains free to retire inputs in another pressure domain.
+// Ordinary partial writes use pressure scheduling without adding prerequisites
+// from the select's other input. The producer can retire its wide inputs.
 // RUN: emit low-schedule-query @storage_continuation_transaction strategy=resource-stall order=* kind=order consumer=0,1
 
 aie2p.target<core> @target
@@ -218,13 +218,13 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @storage_continuation_transact
 // ----
 block 0 order: 0, 2, 1, 3, 4
 node 0 <- none
-node 1 <- 2
+node 1 <- none
 
 // ====
 
 // Delaying the comparison until the independent vector is prepared would
 // retain eight vector units. Consuming its inputs first fits the six-unit
-// budget without moving the completion ahead of its consumer prerequisites.
+// budget. Both predicate writes remain available to pressure scheduling.
 // RUN: emit low-schedule-query @contracting_partial_producer strategy=resource-stall aie2p.vec256=6 order=* kind=order consumer=0,1 scheduled-pressure=aie2p.vec256
 
 aie2p.target<core> @target
@@ -238,10 +238,10 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @contracting_partial_producer(
 }
 
 // ----
-block 0 order: 0, 2, 1, 3, 4
+block 0 order: 0, 1, 2, 3, 4
 scheduled pressure aie2p.vec256: peak-live-units=6 peak-live-values=3
 node 0 <- none
-node 1 <- 2
+node 1 <- none
 
 // ====
 
@@ -747,3 +747,25 @@ node 1 issue-cycle: 0
 node 2 issue-cycle: 1
 node 3 issue-cycle: 2
 node 4 issue-cycle: 3
+
+// ====
+
+// A retained computed predicate keeps its original consuming write. Its wide
+// inputs stay available while the select that releases the competing predicate
+// runs first; explicit placement does not require cloning the consumed value.
+// RUN: emit low-schedule-query @retained_partial_predicate strategy=source order=* kind=order consumer=0,1 per-user-placement-values=%low
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @retained_partial_predicate(%live: reg<aie2p.elpredicate>, %lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %low = vge.u32x16.el.low32 %lhs, %rhs
+  %predicate = predicate.complete.zero.high32 %low, 0
+  %prepared = vsel.32.mask64 %lhs, %rhs, %live
+  %result = vsel.32.mask64 %lhs, %prepared, %predicate
+  return %result
+}
+
+// ----
+block 0 order: 2, 0, 1, 3, 4
+node 0 <- 2
+node 1 <- none

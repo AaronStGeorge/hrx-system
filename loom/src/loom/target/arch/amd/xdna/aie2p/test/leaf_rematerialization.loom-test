@@ -732,9 +732,9 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @retained_scale_select(%record
 
 // ----
 issue cycles: 163
-code bytes: 748
-coissued bundles: 41
-coissued components: 82
+code bytes: 746
+coissued bundles: 40
+coissued components: 80
 
 // ====
 
@@ -974,3 +974,31 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @restricted_zero(%input: reg<a
 }
 // ----
 code: 98 15 04 00 98 95 04 00 98 15 05 00 98 95 05 00 98 15 06 00 98 35 04 00 98 55 04 00 98 75 04 00 98 b5 04 00 98 d5 04 00 98 f5 04 00 98 35 05 00 98 55 05 00 98 75 05 00 98 b5 05 00 98 d5 05 00 98 f5 05 00 98 35 06 00 98 55 06 00 98 75 06 00 00 00 00 00 00 00 00 00 00 00 00 00 98 06 04 09 98 86 04 09 98 06 05 09 98 86 05 09 98 06 06 09 98 26 04 09 98 46 04 09 98 66 04 09 98 a6 04 09 98 c6 04 09 98 e6 04 09 98 26 05 09 98 46 05 09 98 66 05 09 98 a6 05 09 98 c6 05 09 98 e6 05 09 98 26 06 09 98 46 06 09 98 66 06 09 00 00 00 00 00 00 08 1d e0 00 00 00 00 00 00 00 18 00 28 10 00 00 98 06 04 09 00 00 00 00 00 00
+
+// ====
+
+// The completing write extends the partial predicate's physical lifetime.
+// Repair the complete recipe after the competing predicate use; the result
+// still contains exactly one comparison, one completion, and two selects.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=aie2p.elpredicate=1,spill-storage-spaces=none}
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @partial_predicate_lifetime(%live: reg<aie2p.elpredicate>, %lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %low = vge.u32x16.el.low32 %lhs, %rhs
+  %predicate = predicate.complete.zero.high32 %low, 0
+  %prepared = vsel.32.mask64 %lhs, %rhs, %live
+  %result = vsel.32.mask64 %lhs, %prepared, %predicate
+  return %result
+}
+
+// ----
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @partial_predicate_lifetime(%live: reg<aie2p.elpredicate>, %lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %prepared = vsel.32.mask64 %lhs, %rhs, %live
+  %low_remat = vge.u32x16.el.low32 %lhs, %rhs
+  %predicate_remat = predicate.complete.zero.high32 %low_remat, 0
+  %result = vsel.32.mask64 %lhs, %prepared, %predicate_remat
+  return %result
+}
