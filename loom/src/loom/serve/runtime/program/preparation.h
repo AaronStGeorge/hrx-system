@@ -189,6 +189,19 @@ iree_status_t loom_serve_preparation_allocate(
     loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
     loom_serve_preparation_t** out_preparation);
 
+// Evaluates already compiled preparation bytecode in a fresh linked process.
+// Each call isolates source globals while sharing immutable bytecode. The
+// caller supplies fresh mutable arguments and retains environment and module
+// through the call. Captured declarations and returned references have the
+// same ownership as allocate. No source compilation or parameter I/O occurs.
+iree_status_t loom_serve_preparation_evaluate(
+    iree_vm_environment_t* environment, iree_vm_module_t* module,
+    const loom_serve_sources_t* sources, iree_string_view_t entry,
+    loom_serve_preparation_flags_t flags, iree_vm_variant_span_t arguments,
+    iree_vm_variant_span_t results, iree_vm_module_span_t libraries,
+    iree_allocator_t host_allocator,
+    loom_serve_preparation_t** out_preparation);
+
 void loom_serve_preparation_free(loom_serve_preparation_t* preparation);
 
 iree_host_size_t loom_serve_preparation_stage_count(

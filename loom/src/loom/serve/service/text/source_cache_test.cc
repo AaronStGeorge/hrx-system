@@ -15,6 +15,72 @@ using loom_serve::testing::text::RegisteredSourceTextServiceTest;
 using loom_serve::testing::text::SourceTextServiceTest;
 using loom_serve::testing::text::StalledClient;
 
+class AutomaticCacheTextServiceTest : public SourceTextServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.checkpoint_capacity = 0;
+    options.cache = {65536, LOOM_SERVE_TEXT_CACHE_AUTOMATIC,
+                     LOOM_SERVE_TEXT_CACHE_AUTOMATIC};
+    return options;
+  }
+
+  loom_serve_text_service_options_t ServiceOptions() const override {
+    auto options = SourceTextServiceTest::ServiceOptions();
+    const auto selected = loom_serve_text_model_cache_selection(model_);
+    options.row_count = loom_serve_text_model_row_count(model_);
+    options.session_cache_capacity = selected.session_capacity;
+    options.prefix_cache_capacity = selected.prefix_capacity;
+    return options;
+  }
+};
+
+TEST_F(AutomaticCacheTextServiceTest,
+       SelectedSourceStateServesAndRestoresHistory) {
+  const auto selected = loom_serve_text_model_cache_selection(model_);
+  EXPECT_EQ(selected.prefix_capacity, 2u);
+  EXPECT_GT(selected.session_capacity, 8u);
+  EXPECT_LE(selected.session_capacity, 64u);
+  EXPECT_EQ(selected.checkpoint_capacity, selected.session_capacity + 3);
+  EXPECT_GT(selected.additional_bytes, 0u);
+  EXPECT_LE(selected.additional_bytes, 65536u);
+  EXPECT_EQ(loom_serve_text_model_checkpoint_capacity(model_),
+            selected.checkpoint_capacity);
+  loom_serve_text_resize_t* resize = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_model_prepare_resize(model_, 8, &resize));
+  ASSERT_NE(resize, nullptr);
+  loom_serve_execution_frontier_t frontier;
+  auto status = loom_serve_text_model_submit_resize(model_, resize, &frontier);
+  loom_serve_text_resize_free(resize);
+  IREE_ASSERT_OK(status);
+  for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
+    IREE_ASSERT_OK(
+        loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+                                  frontier.semaphores[i], frontier.values[i]));
+  }
+  loom_serve_text_model_complete_resize(model_);
+  EXPECT_EQ(loom_serve_text_model_row_count(model_), 8u);
+  EXPECT_EQ(loom_serve_text_model_checkpoint_capacity(model_),
+            selected.checkpoint_capacity);
+  Start();
+  std::vector<std::string> replies;
+  for (int i = 0; i < 12; ++i) {
+    const auto response =
+        Read(Send(Request(Message("user", "abxa"), 2),
+                  "X-Loom-Session: agent-" + std::to_string(i) + "\r\n"));
+    replies.push_back(Content(response));
+    EXPECT_EQ(replies.back(), Oracle::Complete("abxa", 2));
+  }
+  const auto response = Read(Send(
+      Request(Message("user", "abxa") + "," + Message("assistant", replies[0]) +
+                  "," + Message("user", "b"),
+              2),
+      "X-Loom-Session: agent-0\r\n"));
+  EXPECT_EQ(Content(response), Oracle::Complete("abxa" + replies[0] + "#b", 2));
+  EXPECT_NE(response.find(R"("cached_tokens":5})"), std::string::npos)
+      << response;
+}
+
 class UntaggedTextServiceTest : public SourceTextServiceTest {
  protected:
   loom_serve_text_options_t ModelOptions() const override {

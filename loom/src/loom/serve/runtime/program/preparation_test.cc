@@ -66,6 +66,34 @@ TEST_F(PreparationTest, TextConfigurationCopiesValueSpelling) {
   EXPECT_EQ(std::string(value.data, value.size), "true");
 }
 
+TEST_F(PreparationTest, CompiledPreparationRetainsIndependentCaptures) {
+  const iree_string_view_t entry = IREE_SV("direct_config");
+  iree_vm_module_t* module = nullptr;
+  IREE_ASSERT_OK(loom_serve_program_compile_service(
+      target_environment, environment, &sources,
+      iree_make_cstring_view(FLAG_boundary_source), 1, &entry, {}, &compilation,
+      host_allocator, &module));
+  for (int i = 0; i < 3; ++i) {
+    loom_serve_preparation_t* candidate = nullptr;
+    IREE_EXPECT_OK(loom_serve_preparation_evaluate(
+        environment, module, &sources, entry,
+        LOOM_SERVE_PREPARATION_FLAG_PARAMETERS, iree_vm_variant_span_empty(),
+        iree_vm_variant_span_empty(), iree_vm_module_span_empty(),
+        host_allocator, &candidate));
+    if (candidate) {
+      EXPECT_EQ(loom_serve_preparation_stage_count(candidate), 1u);
+      EXPECT_EQ(loom_serve_preparation_stage(candidate, 0)->tag, 17u);
+      // The previous capture remains valid after the next process retires.
+      if (preparation) {
+        EXPECT_EQ(loom_serve_preparation_stage(preparation, 0)->tag, 17u);
+      }
+    }
+    loom_serve_preparation_free(preparation);
+    preparation = candidate;
+  }
+  iree_vm_module_release(module);
+}
+
 TEST_F(PreparationTest, DirectDeclarationRetainsProductAndSpecialization) {
   IREE_ASSERT_OK(loom_serve_preparation_allocate(
       target_environment, environment, &sources,
