@@ -95,6 +95,14 @@ class _TransferWorker:
         # Interpreter, working directory, and environment captured by this child.
         self.context = context
         executable, directory, environment = context
+        if os.name == "nt" and os.path.normcase(executable) != os.path.normcase(
+            sys._base_executable
+        ):
+            # A Windows venv executable redirects to another process. Own the
+            # interpreter directly so kill/wait joins the actual file writer,
+            # while retaining the venv identity as CPython multiprocessing does.
+            environment = {**environment, "__PYVENV_LAUNCHER__": executable}
+            executable = sys._base_executable
         # One child exclusively borrowed for one synchronous operation at a time.
         self.process = subprocess.Popen(
             [executable, "-m", "loom.model.fetch_transfer", directory],

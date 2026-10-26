@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from loom.model.fetch_source import FetchError
-from loom.model.fetch_transfer import run_transfer
+from loom.model.fetch_transfer import _pool, run_transfer
 
 
 def _context():
@@ -26,6 +26,10 @@ def _context():
 
 def _echo(value):
     return value
+
+
+def _interpreter_context():
+    return os.getpid(), sys.executable, sys.prefix, sys.base_prefix
 
 
 def _expected_error():
@@ -50,6 +54,17 @@ def _retain_connection(address):
 
 
 class TestTransferLifetimes(unittest.TestCase):
+    def test_owned_process_is_the_interpreter_and_preserves_the_environment(self):
+        process_id, executable, prefix, base_prefix = run_transfer(
+            _interpreter_context, (), threading.Event()
+        )
+        assert process_id in {worker.process.pid for worker in _pool.workers}
+        assert (executable, prefix, base_prefix) == (
+            sys.executable,
+            sys.prefix,
+            sys.base_prefix,
+        )
+
     def test_serial_requests_reuse_imports_and_frame_large_results(self):
         cancelled = threading.Event()
         with patch.dict(os.environ, {"LOOM_TRANSFER_TEST_CONTEXT": "reuse"}):
