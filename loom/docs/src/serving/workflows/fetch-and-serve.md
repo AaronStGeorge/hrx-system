@@ -50,7 +50,10 @@ loom-fetch "$modelUrl/model.json" --preset=streaming --output=./moonshine
 ```
 
 Fetch reads the adjacent `model.json.lock`, resolves the selected dependencies,
-and verifies their identities before publishing the installed card. The output
+and verifies identities within the lock's declared scope before publishing the
+installed card. An asset-scoped lock protects weights, tokenizers, and other
+assets while leaving programs editable. A complete publication lock additionally
+checks program bytes. The output
 contains local program and asset paths and retains the chosen preset. Supply a
 new output directory for another selection; a changed selection never silently
 replaces an installed model.
@@ -63,6 +66,14 @@ an installation or using a filesystem that cannot share them.
 `--materialize=share` also shares programs with their source or cache, so edits
 can affect other installations. Keep the backing cache and local source files
 available while using shared files.
+
+With an asset-scoped lock, editing a program requires no lock update, and a
+repeat fetch into the same installation preserves that edit. Git can version
+and share the model's source files. Program origin aliases, such as `@library`,
+do not require per-file hashes in an asset-scoped lock. `--offline` reuses cached
+assets and the last fetched source bytes for a new installation, without
+network requests. The [model format reference](https://github.com/ROCm/hrx-system/tree/main/loom/py/loom/model#acquisition)
+describes lock updates and complete publication coverage.
 
 Hugging Face gating is handled during acquisition. If access is required,
 fetch displays the repository's access URL and authentication guidance. Use

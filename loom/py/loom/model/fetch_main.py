@@ -47,8 +47,8 @@ def _overrides(values: list[str]) -> dict[str, str]:
     return result
 
 
-def _update_publication_lock(args, document, card, cache, snapshot):
-    publication = plan_lock(
+def _update_all_variants_lock(args, document, card, cache, snapshot):
+    plan = plan_lock(
         document,
         card,
         cache,
@@ -56,24 +56,25 @@ def _update_publication_lock(args, document, card, cache, snapshot):
         overrides=_overrides(args.origin),
         lock_location=args.lockfile,
         offline=args.offline,
+        lock_scope=args.lock_scope or "assets",
     )
-    result = publication.summary()
+    result = plan.summary()
     if snapshot is not None:
         result["catalog"] = snapshot.summary()
     if not args.dry_run:
-        update_lock(publication, cache, preserve_sources=args.preserve_sources)
+        update_lock(plan, cache, preserve_sources=args.preserve_sources)
     if args.json:
         sys.stdout.write(json.dumps(result, indent=2) + "\n")
     elif args.dry_run:
         sys.stdout.write(
-            f"{display_text(publication.model_id)}: "
-            f"{len(publication.selections)} choices, "
-            f"{len(publication.sources)} unique outputs\n"
+            f"{display_text(plan.model_id)}: "
+            f"{len(plan.selections)} choices, "
+            f"{len(plan.sources)} unique outputs\n"
         )
-        for source in publication.sources.values():
+        for source in plan.sources.values():
             sys.stdout.write("  " + display_text(json.dumps(source.origin)) + "\n")
     else:
-        sys.stdout.write(display_text(str(publication.path)) + "\n")
+        sys.stdout.write(display_text(str(plan.path)) + "\n")
     return 0
 
 
@@ -166,6 +167,12 @@ def main(argv: list[str] | None = None) -> int:
         help="replace the lock with exactly the selected verified sources",
     )
     parser.add_argument(
+        "--lock-scope",
+        choices=("assets", "all"),
+        help="with --update-lock: assets (default) leaves programs editable; "
+        "all also records program and auxiliary file identities for publication",
+    )
+    parser.add_argument(
         "--all-variants",
         action="store_true",
         help="with --update-lock, publish a lock for every declared variant, "
@@ -198,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
         "code and other input checks; requires a new installation",
     )
     args = parser.parse_args(argv)
+    if args.lock_scope is not None and not args.update_lock:
+        parser.error("--lock-scope requires --update-lock")
     if args.no_verify_parameters and (args.no_lock or args.update_lock):
         parser.error(
             "--no-verify-parameters cannot be combined with --no-lock or --update-lock"
@@ -282,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
             _list_card(card, json_output=args.json)
             return 0
         if args.all_variants:
-            return _update_publication_lock(args, document, card, cache, snapshot)
+            return _update_all_variants_lock(args, document, card, cache, snapshot)
         select = (
             card.select
             if picker is None
@@ -306,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
             offline=args.offline,
             no_lock=args.no_lock,
             update_lock=args.update_lock,
+            lock_scope=args.lock_scope,
             no_verify_parameters=args.no_verify_parameters,
             catalog=snapshot.summary() if snapshot else None,
         )

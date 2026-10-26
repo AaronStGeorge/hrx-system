@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 
 from loom.model import ModelCard
-from loom.model.lock import FileIdentity, ModelLock, file_digest
+from loom.model.lock import FileIdentity, ModelLock, file_digest, lock_files
 from model_card_test import check_model
 
 
@@ -143,6 +143,37 @@ def main():
                 assert "SHA-256" in failed.stderr, failed.stderr
                 assert not (root / "tampered/model.json").exists()
                 assert not (root / "tampered/prepare.loom").exists()
+                program.write_bytes(original)
+
+                # Authored locks protect assets while programs remain editable.
+                assets = lock_files(card.select("check", programs="source"), "assets")
+                (publication / "model.json.lock").write_text(
+                    json.dumps(
+                        ModelLock.snapshot(
+                            {},
+                            [
+                                identity
+                                for identity in identities
+                                if identity.origin in assets
+                            ],
+                            scope="assets",
+                        )
+                    )
+                )
+                editable = root / "editable"
+                command = [*common, "--programs=source", "--output=" + str(editable)]
+                subprocess.run(command, check=True, capture_output=True, text=True)
+                before_lock = (editable / "model.json.lock").read_bytes()
+                advance = editable / "advance.loom"
+                text = advance.read_text()
+                previous = "%c5_i32 = scalar.constant 5 : i32"
+                replacement = "%c5_i32 = scalar.constant 6 : i32"
+                assert text.count(previous) == 1
+                advance.write_text(text.replace(previous, replacement))
+                subprocess.run(command, check=True, capture_output=True, text=True)
+                assert advance.read_text() == text.replace(previous, replacement)
+                assert (editable / "model.json.lock").read_bytes() == before_lock
+                assert (outputs[0] / "advance.loom").read_text() == text
             finally:
                 server.shutdown()
                 thread.join()
@@ -159,6 +190,9 @@ def main():
         outputs.append(offline)
         for output in outputs:
             check_model(serve, output / "model.json", "abab")
+        # The multiplier edit changes the recurrence's four-token result while
+        # the exact same checkpoint and preset remain selected.
+        check_model(serve, editable / "model.json", "abbb")
 
 
 if __name__ == "__main__":

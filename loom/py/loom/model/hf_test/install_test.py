@@ -224,7 +224,7 @@ def test_publication_resolves_one_snapshot_and_checks_each_shared_source_once(tm
         cache = _cache(tmp_path, hub)
         document = cache.read_document(str(card_path), offline=False)
         card = ModelCard.parse(document.text)
-        plan = plan_lock(document, card, cache)
+        plan = plan_lock(document, card, cache, lock_scope="all")
         assert len(plan.selections) == 4
         assert len(plan.sources) == 3
         assert sum("/revision/main" in path for _, path in hub.requests) == 1
@@ -326,7 +326,8 @@ def test_hf_origin_update_records_revision_and_only_selected_files(tmp_path):
         assert lock.origins == {
             "hub": {"requested": root, "resolved": {"revision": hub.revision}}
         }
-        assert len(lock.cover(selection)) == 2
+        assert lock.scope == "assets"
+        assert set(lock.cover(selection)) == {"weights.data"}
         assert not any("unused.data" in path for _, path in hub.requests)
         assert (installed.parent / "weights.data").read_bytes() == b"weights"
 

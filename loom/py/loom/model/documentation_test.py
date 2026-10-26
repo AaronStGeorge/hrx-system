@@ -12,7 +12,7 @@ import pytest
 
 from loom.model import ManifestError, ModelCard
 from loom.model.documentation import main, render_markdown
-from loom.model.lock import FileIdentity, ModelLock
+from loom.model.lock import FileIdentity, ModelLock, file_key, lock_files
 
 
 def _card():
@@ -211,6 +211,37 @@ def test_lock_covers_every_choice_and_matches_roots():
     }
     with pytest.raises(ManifestError, match=r"does not cover 'swatch\.data'"):
         render_markdown(card, lock=lock)
+
+
+def test_asset_lock_renders_program_sources_without_program_commitments():
+    document = _card().document
+    document["origins"]["code"] = {
+        "kind": "hf",
+        "repository": "org/programs",
+        "revision": "dev",
+    }
+    card = ModelCard(document)
+    complete = _lock(card)
+    assets = {
+        file_key(file.origin, file.transform)
+        for choice in card.choices()
+        for file in lock_files(card.select(**choice), "assets").values()
+    }
+    lock = ModelLock(
+        ModelLock.snapshot(
+            complete.origins,
+            [identity for key, identity in complete.files.items() if key in assets],
+            scope="assets",
+        )
+    )
+    rendered = render_markdown(card, lock=lock)
+    assert (
+        "https://huggingface.co/org/programs/resolve/dev/program/prepare.cxx"
+        in rendered
+    )
+    assert "<code>assets</code> scope" in rendered
+    assert "| <code>program/prepare.cxx</code> | 12 |" not in rendered
+    assert "| <code>vocabulary.data</code> | 12 |" in rendered
 
 
 def test_inline_local_relative_and_http_sources_are_literal_without_payload_reads():

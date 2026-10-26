@@ -22,7 +22,7 @@ from .fetch_hf import HuggingFace, hf_url_source
 from .fetch_safetensors import repack
 from .fetch_source import Document, FetchError, Source, document_source, open_source
 from .fetch_transfer import run_transfer
-from .lock import FileIdentity, file_digest, file_key
+from .lock import FileIdentity, ModelLock, file_digest, file_key
 from .manifest import ManifestError, parse_json
 
 # Document limits protect the public metadata boundary; payloads stream instead.
@@ -448,24 +448,53 @@ class ContentCache:
             ):
                 raise ManifestError(f"integrity mismatch for local source {path}")
             return AcquiredFile(path, observed)
-        if identity is not None:
-            cached = self.find(identity)
-            if cached is not None:
-                return AcquiredFile(cached, identity)
-        temporary_directory = self.root / "temporary"
-        temporary_directory.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary_name = tempfile.mkstemp(dir=temporary_directory)
-        os.close(descriptor)
-        temporary = Path(temporary_name)
-        try:
-            arguments = (source, identity, offline, temporary)
-            size, digest = (
-                run_transfer(_copy_source, arguments, self.cancelled)
-                if kind == "url" and not offline
-                else _copy_source(*arguments)
+        receipt = None
+        if kind == "url":
+            key = hashlib.sha256(file_key(source.transport).encode()).hexdigest()
+            receipt = self.root / "source" / (key + ".json")
+            if offline and identity is None:
+                if not receipt.is_file():
+                    raise FetchError("--offline source is not cached")
+                document = self.read_document(str(receipt), offline=True)
+                recorded = ModelLock.parse(document.text)
+                identity = recorded.files.get(file_key(source.transport))
+                if (
+                    recorded.scope != "all"
+                    or len(recorded.files) != 1
+                    or identity is None
+                ):
+                    raise FetchError("cached source receipt does not match the source")
+                identity = replace(
+                    identity, origin=source.origin, resolved=source.resolved
+                )
+        cached = self.find(identity) if identity is not None else None
+        if cached is not None:
+            acquired = AcquiredFile(cached, identity)
+        else:
+            temporary_directory = self.root / "temporary"
+            temporary_directory.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary_name = tempfile.mkstemp(dir=temporary_directory)
+            os.close(descriptor)
+            temporary = Path(temporary_name)
+            try:
+                arguments = (source, identity, offline, temporary)
+                size, digest = (
+                    run_transfer(_copy_source, arguments, self.cancelled)
+                    if kind == "url" and not offline
+                    else _copy_source(*arguments)
+                )
+                observed = FileIdentity(source.origin, size, digest, source.resolved)
+                path = self._publish(temporary, observed)
+                acquired = AcquiredFile(path, observed)
+            finally:
+                temporary.unlink(missing_ok=True)
+        if receipt is not None and not offline:
+            # This cache-local observation supports offline editable sources;
+            # it is not an authored commitment and never suppresses an online
+            # refresh when the caller did not supply a locked byte identity.
+            observed = replace(acquired.identity, origin=source.transport)
+            atomic_write(
+                receipt,
+                (json.dumps(ModelLock.snapshot({}, [observed])) + "\n").encode(),
             )
-            observed = FileIdentity(source.origin, size, digest, source.resolved)
-            path = self._publish(temporary, observed)
-            return AcquiredFile(path, observed)
-        finally:
-            temporary.unlink(missing_ok=True)
+        return acquired
