@@ -116,6 +116,9 @@ TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   EXPECT_EQ(resolved.text.context_capacity, 64u);
   EXPECT_EQ(resolved.text.prefill_capacity, 32u);
   EXPECT_EQ(resolved.text.max_tokens, 4u);
+  EXPECT_EQ(resolved.text.session_cache_capacity, IREE_HOST_SIZE_MAX);
+  EXPECT_EQ(resolved.text.prefix_cache_capacity, IREE_HOST_SIZE_MAX);
+  EXPECT_EQ(resolved.text.cache_target_bytes, IREE_HOST_SIZE_MAX);
   EXPECT_EQ(resolved.text.tokenizer.size, 0u);
   EXPECT_EQ(std::string(resolved.sources.package_directory.data,
                         resolved.sources.package_directory.size),
@@ -124,6 +127,36 @@ TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   ASSERT_NE(resolved.sources.card, nullptr);
   EXPECT_EQ(loom_model_card_selection(resolved.sources.card)->inputs.count, 2u);
   loom_serve_model_configuration_deinitialize(&resolved);
+}
+
+TEST_F(ModelResolutionTest, DeploymentCanDisableCardCacheDefaults) {
+  std::string card = kCard;
+  card.insert(
+      card.find("\"max_tokens\""),
+      R"("session_cache_capacity":4,"prefix_cache_capacity":2,"cache_target_bytes":65536,)");
+  for (bool disabled : {false, true}) {
+    SCOPED_TRACE(disabled);
+    std::string deployment = kDeployment;
+    if (disabled) {
+      deployment.insert(
+          deployment.find("\"rows\""),
+          R"("session_cache_capacity":0,"prefix_cache_capacity":0,"cache_target_bytes":0,)");
+    }
+    Initialize(card, deployment);
+    loom_serve_model_resolution_t* resolution = nullptr;
+    IREE_ASSERT_OK(loom_serve_model_resolution_start(
+        Sink(), &configuration_, Observer(), allocator_, &resolution));
+    Execute();
+    loom_serve_model_configuration_t resolved = {};
+    iree_status_t status = iree_ok_status();
+    ASSERT_TRUE(
+        loom_serve_model_resolution_take(&resolution, &status, &resolved));
+    IREE_ASSERT_OK(status);
+    EXPECT_EQ(resolved.text.session_cache_capacity, disabled ? 0u : 4u);
+    EXPECT_EQ(resolved.text.prefix_cache_capacity, disabled ? 0u : 2u);
+    EXPECT_EQ(resolved.text.cache_target_bytes, disabled ? 0u : 65536u);
+    loom_serve_model_configuration_deinitialize(&resolved);
+  }
 }
 
 TEST_F(ModelResolutionTest, DeploymentMaximumCapsCardInitialRows) {

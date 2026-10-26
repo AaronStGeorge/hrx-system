@@ -1073,6 +1073,25 @@ iree_status_t loom_serve_preparation_allocate(
     loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
     loom_serve_preparation_t** out_preparation) {
   *out_preparation = NULL;
+  iree_vm_module_t* module = NULL;
+  IREE_RETURN_IF_ERROR(loom_serve_program_compile_service(
+      target_environment, environment, sources, source_path, 1, &entry,
+      (iree_string_view_list_t){0}, report, host_allocator, &module));
+  iree_status_t status = loom_serve_preparation_evaluate(
+      environment, module, sources, entry, flags, arguments, results, libraries,
+      host_allocator, out_preparation);
+  iree_vm_module_release(module);
+  return status;
+}
+
+iree_status_t loom_serve_preparation_evaluate(
+    iree_vm_environment_t* environment, iree_vm_module_t* module,
+    const loom_serve_sources_t* sources, iree_string_view_t entry,
+    loom_serve_preparation_flags_t flags, iree_vm_variant_span_t arguments,
+    iree_vm_variant_span_t results, iree_vm_module_span_t libraries,
+    iree_allocator_t host_allocator,
+    loom_serve_preparation_t** out_preparation) {
+  *out_preparation = NULL;
   iree_vm_module_t* library = NULL;
   IREE_RETURN_IF_ERROR(loom_serve_preparation_module_create(
       environment, sources->card, sources->component, host_allocator,
@@ -1087,10 +1106,10 @@ iree_status_t loom_serve_preparation_allocate(
     for (iree_host_size_t i = 0; i < libraries.count; ++i) {
       linked[i + 1] = libraries.data[i];
     }
-    status = loom_serve_program_allocate_service(
-        target_environment, environment, sources, source_path, 1, &entry,
-        (iree_vm_module_span_t){linked, libraries.count + 1}, report,
-        host_allocator, &program);
+    status = loom_serve_program_link_service(
+        module, sources->card, sources->component,
+        (iree_vm_module_span_t){linked, libraries.count + 1}, host_allocator,
+        &program);
   }
   iree_allocator_free(host_allocator, linked);
   if (iree_status_is_ok(status)) {

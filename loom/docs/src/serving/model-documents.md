@@ -308,8 +308,9 @@ Native capacity fields are:
 | `pool_capacity` | `65536` | Shared logical cache token positions, in whole source-defined pages. |
 | `prefill_capacity` | `512` | Largest automatically specialized packed token shape; not a prompt-length limit. |
 | `checkpoint_capacity` | `0` | Explicit pinned endpoint slots, independent of execution rows. |
-| `session_cache_capacity` | `0` | Evictable idle endpoints beyond execution rows; nonzero values also reserve one admission-exchange endpoint. |
-| `prefix_cache_capacity` | `0` | Evictable exact intermediate-prefix endpoints; zero disables capture. |
+| `session_cache_capacity` | automatic | Evictable idle histories beyond resident rows. An explicit count is exact; zero disables this cache. Nonzero counts also reserve one admission-exchange endpoint. |
+| `prefix_cache_capacity` | automatic | Evictable exact intermediate-prefix endpoints. An explicit count is exact; zero disables capture. |
+| `cache_target_bytes` | automatic | Soft sizing target for additional initial cache storage. Omission uses 2 GiB, reduced to 1/16 of a configured shared physical-memory budget. Zero disables automatic counts without changing explicit counts. |
 | `admission_overtakes` | `rows` | Successful fitting admissions allowed to pass a blocked oldest request; zero selects FIFO. |
 | `max_tokens` | `512` | Default request output limit, from 1 through 16384. |
 | `draft_depth` | `0` | Proposed tokens after each anchor, from 0 through 7; requires matching source support. |
@@ -321,6 +322,37 @@ It must fit an anchor plus every draft proposal.
 Two-epoch continuation requires nonzero draft depth. A source can impose tighter
 shape limits or reject unsupported drafting modes. Endpoint capacities are
 nonnegative and their combined native index space must fit signed 32-bit indices.
+
+A minimal text deployment automatically retains useful shared prefixes and
+displaced named conversations. During preparation, the server evaluates the
+model's declared storage sizes, gives up to two automatic prefix endpoints
+priority, and fits detached histories into the remaining sizing target. The
+automatic detached directory is at most one endpoint per physical KV page;
+explicit counts can exceed that policy. Counts are independent of `rows` and
+`max_sessions`: evicting a saved history does not limit active concurrency.
+The selected declaration alone proceeds to device JIT and parameter loading.
+
+`cache_target_bytes` measures additional source-declared state extents and
+native checkpoint maps over the explicit configuration, including initial
+copy-on-write headroom. It is neither a physical reservation nor a lifetime
+memory cap. Elastic backing commits slabs as they are used, subject to the
+shared physical budget; fixed backing allocates the declared extents. Growing
+resident sessions adds working-set headroom through ordinary admission. KV
+pages remain shared with active sessions and are reclaimed under pressure.
+
+For example, setting `definition.cache_target_bytes` to `536870912` selects a
+512 MiB soft target.
+
+Setting both cache capacities to zero disables automatic capture and detached
+history retention. Existing idle resident rows can still serve exact
+continuations without extra endpoint storage. Manual `checkpoint_capacity`
+remains a separate explicit reservation.
+
+The `text_memory` heartbeat record reports resolved `session_cache.capacity`
+and `prefix_cache.capacity`, `cache_target_bytes`, and the selected cold
+`cache_additional_bytes` estimate. Actual committed state and parameter bytes
+remain separate measurements; the cold estimate does not change with resident
+growth.
 
 The shared pool can grow independently of the per-session context limit and
 prefill shape. Its token count must fit both host indexing and a signed 64-bit
@@ -385,7 +417,8 @@ known positions, rounded to cache blocks; it does not reserve generated tokens.
 Execution uses packed epochs and the same row/cache/checkpoint ownership.
 
 `tokenizer`, `max_tokens`, `draft_depth`, `continuation_epochs`,
-`prefix_cache_capacity`, and `image` are not sequence fields. Reuse is explicit
+`prefix_cache_capacity`, `cache_target_bytes`, and `image` are not sequence fields.
+Sequence cache counts default to zero. Reuse is explicit
 through a retained sequence handle or a named checkpoint, not automatic chat
 prefix matching. Source-defined request policy belongs in `options`.
 See the [sequence HTTP profile](http-profiles.md#known-token-sequences) and

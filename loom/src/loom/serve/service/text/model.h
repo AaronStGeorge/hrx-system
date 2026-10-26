@@ -16,6 +16,7 @@
 #include "loom/serve/runtime/program/sources.h"
 #include "loom/serve/runtime/program/variant_pool.h"
 #include "loom/serve/runtime/storage/memory.h"
+#include "loom/serve/service/text/cache_policy.h"
 #include "loom/serve/service/text/capture.h"
 #include "loom/serve/service/text/chat.h"
 #include "loom/serve/service/text/media_input.h"
@@ -138,10 +139,17 @@ typedef struct loom_serve_text_options_t {
   // Requires pooled execution. Source reserves reader/writer slot headroom;
   // elastic backing commits only used ranges, fixed backing reserves it all.
   iree_host_size_t checkpoint_capacity;
+  // Service-owned automatic histories, additional to explicit checkpoints.
+  // Zero initialization retains the exact checkpoint-only native contract.
+  loom_serve_text_cache_options_t cache;
   // Opaque bootstrap JSON object interpreted by source; empty means {}.
   // Borrowed through load completion, independently of per-request options.
   iree_string_view_t options;
 } loom_serve_text_options_t;
+
+// Cold resolved cache counts retained independently of resident growth.
+loom_serve_text_cache_selection_t loom_serve_text_model_cache_selection(
+    const loom_serve_text_model_t* model);
 
 enum loom_serve_text_span_flag_bits_e {
   // Select the next token after consuming this span. An intermediate input

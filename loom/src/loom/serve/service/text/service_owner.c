@@ -75,6 +75,10 @@ void loom_serve_text_observe(loom_serve_text_service_t* service,
   state->prefix_cache.endpoints = service->prefixes.count;
   state->checkpoint_host_bytes =
       loom_serve_text_model_checkpoint_suspended_bytes(service->model);
+  const loom_serve_text_cache_selection_t cache =
+      loom_serve_text_model_cache_selection(service->model);
+  state->cache_target_bytes = cache.target_bytes;
+  state->cache_additional_bytes = cache.additional_bytes;
   state->state_memory = loom_serve_text_model_memory_statistics(service->model);
   state->weight_memory =
       loom_serve_text_model_weight_statistics(service->model);

@@ -82,6 +82,35 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    cache_policy
+  HDRS
+    "cache_policy.h"
+  SRCS
+    "cache_policy.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    cache_policy_test
+  SRCS
+    "cache_policy_test.cc"
+  DEPS
+    ::cache_policy
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
     admission_test
@@ -664,6 +693,7 @@ loom_cc_library(
     "variant.c"
     "warmup.c"
   DEPS
+    ::cache_policy
     ::capture
     ::chat
     ::epoch_upload

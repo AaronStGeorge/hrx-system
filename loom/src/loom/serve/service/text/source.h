@@ -58,6 +58,8 @@ typedef struct loom_serve_text_source_t {
   iree_host_size_t prefill_capacity;
   // Leading stages sharing one immutable parameter placement.
   iree_host_size_t shared_stage_count;
+  // Resolved service caches and exact cold storage sizing evidence.
+  loom_serve_text_cache_selection_t cache;
 } loom_serve_text_source_t;
 
 // Consumes validated model options and produces source metadata plus the

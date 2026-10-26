@@ -199,6 +199,7 @@ loom_cc_library(
     loom::serve::runtime::program::sources
     loom::serve::runtime::program::variant_pool
     loom::serve::service::kind
+    loom::serve::service::text::cache_policy
   PUBLIC
 )
 endif()
@@ -304,6 +305,7 @@ loom_cc_library(
     loom::serve::service::speech::model
     loom::serve::service::speech::service
     loom::serve::service::speech::voice_load
+    loom::serve::service::text::cache_policy
     loom::serve::service::text::model
     loom::serve::service::text::schedule
     loom::serve::service::text::service

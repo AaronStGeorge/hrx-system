@@ -132,6 +132,8 @@ static iree_status_t loom_serve_text_load_prepare(
       loom_serve_host_target_environment(
           loom_serve_device_host(model->device_owner)),
       options, model->host_allocator, &model->source, &model->state.storage));
+  model->state.checkpoints.capacity =
+      (uint32_t)model->source.cache.checkpoint_capacity;
   const iree_host_size_t stage_count =
       loom_serve_preparation_stage_count(model->source.preparation);
   for (iree_host_size_t i = 0; i < stage_count; ++i) {
@@ -329,6 +331,24 @@ iree_status_t loom_serve_text_load_allocate(
   if (options->row_count < 1 || options->row_count > INT32_MAX) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "text resident count must fit a positive i32");
+  }
+  const iree_host_size_t session_capacity =
+      options->cache.session_capacity == LOOM_SERVE_TEXT_CACHE_AUTOMATIC
+          ? 0
+          : options->cache.session_capacity;
+  const iree_host_size_t prefix_capacity =
+      options->cache.prefix_capacity == LOOM_SERVE_TEXT_CACHE_AUTOMATIC
+          ? 0
+          : options->cache.prefix_capacity;
+  if (session_capacity >= INT32_MAX || prefix_capacity > INT32_MAX ||
+      options->checkpoint_capacity > INT32_MAX ||
+      (uint64_t)options->checkpoint_capacity + prefix_capacity +
+              (session_capacity ? session_capacity + 1 : 0) >
+          INT32_MAX ||
+      ((session_capacity || prefix_capacity) && !options->pool_capacity)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "cache endpoints require pooled storage and a "
+                            "combined capacity fitting i32");
   }
   if (options->prefill_capacity < 1 || options->prefill_capacity > INT32_MAX ||
       options->context_capacity < 1 || options->context_capacity > 262144 ||
@@ -816,6 +836,11 @@ iree_host_size_t loom_serve_text_model_draft_depth(
 iree_host_size_t loom_serve_text_model_checkpoint_capacity(
     const loom_serve_text_model_t* model) {
   return model->state.checkpoints.capacity;
+}
+
+loom_serve_text_cache_selection_t loom_serve_text_model_cache_selection(
+    const loom_serve_text_model_t* model) {
+  return model->source.cache;
 }
 
 loom_serve_text_pool_usage_t loom_serve_text_model_pool_usage(

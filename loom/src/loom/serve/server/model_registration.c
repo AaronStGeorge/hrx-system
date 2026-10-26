@@ -20,6 +20,7 @@
 #include "loom/serve/service/speech/model.h"
 #include "loom/serve/service/speech/service.h"
 #include "loom/serve/service/speech/voice_load.h"
+#include "loom/serve/service/text/cache_policy.h"
 #include "loom/serve/service/text/schedule.h"
 #include "loom/serve/service/text/service.h"
 
@@ -842,6 +843,8 @@ static iree_status_t loom_serve_text_registration_prepare(
     const loom_serve_model_configuration_t* configuration =
         registration->configuration;
     const loom_serve_text_configuration_t* text = &configuration->text;
+    const loom_serve_text_cache_selection_t cache =
+        loom_serve_text_model_cache_selection(registration->model);
     const loom_serve_text_service_options_t options = {
         .name = configuration->name,
         .image = registration->image,
@@ -851,8 +854,8 @@ static iree_status_t loom_serve_text_registration_prepare(
         .chunk_size = text->prefill_capacity,
         .default_max_tokens = text->max_tokens,
         .pending_capacity = configuration->pending_requests,
-        .session_cache_capacity = text->session_cache_capacity,
-        .prefix_cache_capacity = text->prefix_cache_capacity,
+        .session_cache_capacity = cache.session_capacity,
+        .prefix_cache_capacity = cache.prefix_capacity,
         .admission_overtakes = text->admission_overtakes,
         .heartbeat_interval = registration->options->heartbeat_interval,
         .schedule_mode = LOOM_SERVE_TEXT_SCHEDULE_PACKED,
@@ -1012,6 +1015,8 @@ static iree_status_t loom_serve_text_registration_create(
   registration->shapes =
       (loom_serve_packing_shape_t*)((uint8_t*)registration + shapes_offset);
   loom_serve_text_default_shapes(text->prefill_capacity, registration->shapes);
+  loom_serve_memory_pool_t* memory_pool =
+      loom_serve_device_memory_pool(registration->device);
   const loom_serve_text_options_t model_options = {
       .mode = configuration->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE
                   ? LOOM_SERVE_TEXT_MODE_ENCODE
@@ -1028,9 +1033,16 @@ static iree_status_t loom_serve_text_registration_create(
       .weights_path = text->weights,
       .tokenizer_path = text->tokenizer,
       .row_count = text->rows,
-      .checkpoint_capacity =
-          text->checkpoint_capacity + text->prefix_cache_capacity +
-          (text->session_cache_capacity ? text->session_cache_capacity + 1 : 0),
+      .checkpoint_capacity = text->checkpoint_capacity,
+      .cache = {.target_bytes =
+                    text->cache_target_bytes == IREE_HOST_SIZE_MAX
+                        ? loom_serve_text_cache_default_target(
+                              memory_pool
+                                  ? loom_serve_memory_pool_limit(memory_pool)
+                                  : 0)
+                        : text->cache_target_bytes,
+                .session_capacity = text->session_cache_capacity,
+                .prefix_capacity = text->prefix_cache_capacity},
       .options = configuration->options};
   iree_status_t status = iree_ok_status();
   if (text->image.contract || text->image.prepare.size) {

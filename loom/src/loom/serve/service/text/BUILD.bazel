@@ -55,6 +55,23 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
+loom_cc_library(
+    name = "cache_policy",
+    srcs = ["cache_policy.c"],
+    hdrs = ["cache_policy.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_test(
+    name = "cache_policy_test",
+    srcs = ["cache_policy_test.cc"],
+    deps = [
+        ":cache_policy",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_test(
     name = "admission_test",
     srcs = ["admission_test.cc"],
@@ -578,6 +595,7 @@ loom_cc_library(
         "warmup.h",
     ],
     deps = [
+        ":cache_policy",
         ":capture",
         ":chat",
         ":epoch_upload",
