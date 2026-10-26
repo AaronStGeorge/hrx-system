@@ -183,7 +183,6 @@ loom_cc_test(
     loom::target::provider
     loom::target::test::provider
     loom::testing::test_file
-    loom::transforms::cleanup::configured
 )
 
 loom_cc_library(
@@ -366,7 +365,6 @@ loom_cc_library(
     loom::binding::c::interop
     loom::binding::c::loomc
     loom::tooling::input::format
-    loom::transforms::cleanup::configured
   PUBLIC
 )
 

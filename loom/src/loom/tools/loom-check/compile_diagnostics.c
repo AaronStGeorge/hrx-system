@@ -9,6 +9,23 @@
 #include "loom/testing/test_diagnostic_loomc.h"
 #include "loom/tooling/cli/loomc_diagnostic_json.h"
 
+iree_status_t loom_check_compile_append_result(
+    loom_check_diagnostic_collector_t* collector, const loomc_result_t* result,
+    bool* out_succeeded) {
+  *out_succeeded = loomc_result_succeeded(result);
+  IREE_RETURN_IF_ERROR(
+      loom_check_compile_append_result_diagnostics(collector, result));
+  // An operation may reject input without a diagnostic. Empty annotation
+  // matching must not turn that failed operation into a successful check.
+  if (!*out_succeeded &&
+      !loom_check_diagnostic_collector_has_error(collector)) {
+    return iree_make_status(
+        (iree_status_code_t)loomc_result_status_code(result),
+        "compiler operation failed without an error diagnostic");
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_check_compile_append_result_diagnostics(
     loom_check_diagnostic_collector_t* collector,
     const loomc_result_t* source_result) {

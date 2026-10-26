@@ -19,7 +19,6 @@
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/source_low.h"
-#include "loom/transforms/cleanup/configured.h"
 #include "loomc/interop.h"
 #include "loomc/iree.h"
 #include "loomc/source.h"
@@ -259,16 +258,12 @@ const loom_check_environment_t kExecuteTestEnvironment = {
     .input_formats = {},
     .target_environment = {},
     .compile_session = nullptr,
-    .cleanup_pattern_provider_set =
-        loom_cleanup_configured_pattern_provider_set(),
 };
 
 const loom_check_environment_t kExecuteTestProviderEnvironment = {
     .input_formats = {},
     .target_environment = {},
     .compile_session = nullptr,
-    .cleanup_pattern_provider_set =
-        loom_cleanup_configured_pattern_provider_set(),
     .emit_providers =
         {
             .providers = kTestEmitProviders,

@@ -21,15 +21,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::binding::c::interop
     loom::binding::c::loomc
-    loom::codegen::low::text_asm
-    loom::format::text::printer
-    loom::ir
-    loom::link::module_index
-    loom::ops::command
-    loom::pass::registry
-    loom::target::arch::cmd::artifact_set
-    loom::target::arch::cmd::lower::program_plan
-    loom::target::arch::cmd::lower::program_plan_index
+    loom::binding::c::target::cmd
     loom::target::arch::cmd::program
     loom::tools::loom-check::execute
   PUBLIC

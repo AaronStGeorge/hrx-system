@@ -90,23 +90,6 @@ iree_status_t loom_check_compile_session_select_target_profile(
       loomc_allocator_from_iree(session->host_allocator), out_target_profile));
 }
 
-static iree_status_t loom_check_compile_append_result(
-    loom_check_diagnostic_collector_t* collector, const loomc_result_t* result,
-    bool* out_succeeded) {
-  *out_succeeded = loomc_result_succeeded(result);
-  IREE_RETURN_IF_ERROR(
-      loom_check_compile_append_result_diagnostics(collector, result));
-  // An operation may reject input without a diagnostic. Empty annotation
-  // matching must not turn that failed operation into a successful check.
-  if (!*out_succeeded &&
-      !loom_check_diagnostic_collector_has_error(collector)) {
-    return iree_make_status(
-        (iree_status_code_t)loomc_result_status_code(result),
-        "compiler operation failed without an error diagnostic");
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_check_compile_admit_module(
     const loom_test_case_t* test_case, iree_string_view_t filename,
     const loom_check_input_t* input_request,

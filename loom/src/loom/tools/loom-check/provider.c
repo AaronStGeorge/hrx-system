@@ -10,7 +10,6 @@
 
 #include "loom/tools/loom-check/main.h"
 #include "loom/tools/loom-check/source_low.h"
-#include "loom/transforms/cleanup/configured.h"
 #include "loomc/interop.h"
 
 enum {
@@ -95,8 +94,6 @@ int loom_check_provider_main(int argc, char** argv,
       .input_formats = input_formats,
       .target_environment = loomc_target_environment_get_interop_view(
           provider_set->target_environment),
-      .cleanup_pattern_provider_set =
-          loom_cleanup_configured_pattern_provider_set(),
       .emit_providers =
           {
               .providers = state.emit_providers,
