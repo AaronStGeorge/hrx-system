@@ -157,6 +157,67 @@ def _test_other_python_version_uses_upstream_runtime_impl(env, target):
     ]:
         env.expect.that_collection(owners.keys()).not_contains(repository)
 
+def _test_windows_runtime_is_tree_compacted(name):
+    util.helper_target(
+        iree_py_binary,
+        name = name + "_subject",
+        srcs = [name + "_subject.py"],
+    )
+    analysis_test(
+        name = name,
+        attr_values = {
+            "target_compatible_with": ["@platforms//os:windows", "@platforms//cpu:x86_64"],
+        },
+        config_settings = {
+            str(Label("//build_tools/bazel:sanitizer")): False,
+            "//command_line_option:cc_output_directory_tag": "",
+            "//command_line_option:platforms": [Label("//build_tools/windows:windows_x86_64")],
+            str(Label("//build_tools/bazel:python_runtime_debug")): False,
+        },
+        impl = _test_windows_runtime_is_tree_compacted_impl,
+        target = name + "_subject",
+    )
+
+def _test_windows_runtime_is_tree_compacted_impl(env, target):
+    runfiles = target[DefaultInfo].default_runfiles.files.to_list()
+    runtime_owner = Label("//build_tools/bazel/python_runtime:windows_runtime")
+    runtime_files = [file for file in runfiles if file.owner == runtime_owner]
+    if len(runtime_files) > 16:
+        env.fail("compact Windows runtime expanded into {} runfiles".format(len(runtime_files)))
+    runtime_basenames = [file.basename for file in runtime_files]
+    for expected_basename in ["DLLs", "Lib", "python.exe", "python312.dll"]:
+        if expected_basename not in runtime_basenames:
+            env.fail("compact Windows runtime is missing {} from {}".format(expected_basename, runtime_basenames))
+
+def _test_windows_debug_runtime_retains_symbols(name):
+    util.helper_target(
+        iree_py_binary,
+        name = name + "_subject",
+        srcs = [name + "_subject.py"],
+    )
+    analysis_test(
+        name = name,
+        attr_values = {
+            "target_compatible_with": ["@platforms//os:windows", "@platforms//cpu:x86_64"],
+        },
+        config_settings = {
+            str(Label("//build_tools/bazel:python_runtime_debug")): True,
+            str(Label("//build_tools/bazel:sanitizer")): False,
+            "//command_line_option:cc_output_directory_tag": "",
+            "//command_line_option:platforms": [Label("//build_tools/windows:windows_x86_64")],
+        },
+        impl = _test_windows_debug_runtime_retains_symbols_impl,
+        target = name + "_subject",
+    )
+
+def _test_windows_debug_runtime_retains_symbols_impl(env, target):
+    runfiles = target[DefaultInfo].default_runfiles.files.to_list()
+    runtime_owner = Label("//build_tools/bazel/python_runtime:windows_runtime")
+    compact_runtime_files = [file for file in runfiles if file.owner == runtime_owner]
+    env.expect.that_collection(compact_runtime_files).contains_exactly([])
+    if not any([file.basename.endswith(".pdb") for file in runfiles]):
+        env.fail("debug Windows runtime contains no interpreter symbols")
+
 def python_rules_test_suite(name):
     test_suite(
         name = name,
@@ -169,5 +230,7 @@ def python_rules_test_suite(name):
             _test_default_runtime_is_compact,
             _test_debug_runtime_retains_symbols,
             _test_other_python_version_uses_upstream_runtime,
+            _test_windows_runtime_is_tree_compacted,
+            _test_windows_debug_runtime_retains_symbols,
         ],
     )

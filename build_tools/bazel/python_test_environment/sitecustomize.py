@@ -9,6 +9,10 @@
 from __future__ import annotations
 
 import os
+import sys
+
+# Hermetic runtimes are action inputs and must remain immutable while tests run.
+sys.dont_write_bytecode = True
 
 
 def _configure_windows_test_home() -> None:

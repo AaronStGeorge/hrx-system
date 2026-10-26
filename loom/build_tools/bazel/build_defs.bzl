@@ -93,6 +93,7 @@ def _loom_generate_outputs(
         tags = [],
         testonly = False,
         target_compatible_with = None,
+        use_param_file = False,
         visibility = None,
         comment = None):
     if not outputs:
@@ -122,6 +123,7 @@ def _loom_generate_outputs(
         args = _loom_bazel_generator_args(args),
         output_args = _loom_output_args(output_flags, outputs),
         tool = generator,
+        use_param_file = use_param_file,
         **rule_kwargs
     )
 
@@ -556,6 +558,7 @@ def loom_target_contract_table_cc_libraries(
         args = _loom_bazel_generator_args(args),
         output_args = _loom_output_args(output_flags, outputs),
         tool = generator,
+        use_param_file = True,
         **rule_kwargs
     )
 
@@ -639,6 +642,7 @@ def loom_target_contract_file_family(
         inputs = inputs,
         tags = tags,
         target_compatible_with = target_compatible_with,
+        use_param_file = True,
         visibility = visibility,
         comment = comment,
     )

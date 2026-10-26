@@ -72,6 +72,9 @@ def _register_generated_action(ctx, outputs_by_name):
 
     args = ctx.actions.args()
     args.add_all(command_args)
+    if ctx.attr.use_param_file:
+        args.use_param_file("@%s", use_always = True)
+        args.set_param_file_format("multiline")
 
     ctx.actions.run(
         arguments = [args],
@@ -136,6 +139,9 @@ _GENERATOR_ATTRS = {
         executable = True,
         mandatory = True,
         doc = "Executable generator tool.",
+    ),
+    "use_param_file": attr.bool(
+        doc = "Passes generator arguments through an @response file. The generator must support one argument per line.",
     ),
 }
 
@@ -216,6 +222,7 @@ def iree_generated_sources(
         tags = [],
         testonly = False,
         target_compatible_with = None,
+        use_param_file = False,
         visibility = None):
     """Generates sources whose bytes do not vary across target/exec transition.
 
@@ -243,6 +250,8 @@ def iree_generated_sources(
       tags: Tags applied to the public targets and private generator.
       testonly: Whether the generated sources are restricted to tests.
       target_compatible_with: Compatibility constraints for public targets.
+      use_param_file: Whether to pass generator arguments through an @response
+        file containing one argument per line.
       visibility: Visibility of public targets.
     """
     if not outs:
@@ -263,6 +272,7 @@ def iree_generated_sources(
         srcs = srcs,
         tags = tags + ["manual"],
         testonly = testonly,
+        use_param_file = use_param_file,
         visibility = ["//visibility:private"],
     )
 
