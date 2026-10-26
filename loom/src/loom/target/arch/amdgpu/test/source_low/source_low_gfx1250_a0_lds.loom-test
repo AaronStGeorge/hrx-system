@@ -49,30 +49,30 @@ low.kernel.def target<amdgpu.rdna4.gfx1250_a0.core>(@target) workgroup_size(32, 
   %pair_b64 = concat(%25, %29, %25, %29) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   ds_write_b32 %29, %25
   ds_write_b32 %29, %25 {offset = 8}
-  %38 = ds_read_b32 %29
-  %40 = ds_read_b32 %29 {offset = 8}
-  ds_write_b32 %29, %38
-  ds_write_b32 %29, %40 {offset = 8}
-  %46 = slice %pair_b64[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
-  ds_write_b64 %29, %46
-  %48 = slice %pair_b64[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %37 = ds_read_b32 %29
+  %38 = ds_read_b32 %29 {offset = 8}
+  ds_write_b32 %29, %37
+  ds_write_b32 %29, %38 {offset = 8}
+  %43 = slice %pair_b64[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  ds_write_b64 %29, %43
+  %45 = slice %pair_b64[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  ds_write_b64 %29, %45 {offset = 16}
+  %47 = ds_read_b64 %29
+  %48 = ds_read_b64 %29 {offset = 16}
+  ds_write_b64 %29, %47
   ds_write_b64 %29, %48 {offset = 16}
-  %51 = ds_read_b64 %29
-  %53 = ds_read_b64 %29 {offset = 16}
-  ds_write_b64 %29, %51
-  ds_write_b64 %29, %53 {offset = 16}
   ds_write_b32 %29, %25
   ds_write_b32 %29, %25 {offset = 1024}
-  %64 = ds_read_b32 %29
-  %66 = ds_read_b32 %29 {offset = 1024}
-  ds_write_b32 %29, %64
-  ds_write_b32 %29, %66 {offset = 1024}
-  ds_write_b64 %29, %46
-  ds_write_b64 %29, %48 {offset = 2048}
-  %77 = ds_read_b64 %29
-  %79 = ds_read_b64 %29 {offset = 2048}
-  ds_write_b64 %29, %77
-  ds_write_b64 %29, %79 {offset = 2048}
+  %57 = ds_read_b32 %29
+  %58 = ds_read_b32 %29 {offset = 1024}
+  ds_write_b32 %29, %57
+  ds_write_b32 %29, %58 {offset = 1024}
+  ds_write_b64 %29, %43
+  ds_write_b64 %29, %45 {offset = 2048}
+  %67 = ds_read_b64 %29
+  %68 = ds_read_b64 %29 {offset = 2048}
+  ds_write_b64 %29, %67
+  ds_write_b64 %29, %68 {offset = 2048}
   %word = v_mov_b32 16843009
   ds_write_b32 %lane, %word
   %loaded_word = ds_read_b32 %lane

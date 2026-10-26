@@ -60,8 +60,8 @@ low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @copy_vector_f64() asm 
   %output = resource<hal_binding> {extent = 32, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %8 = v_mov_b32 0
   %9 = global_load_b128_saddr %8, %input
-  %11 = global_load_b128_saddr %8, %input {offset = 16}
+  %10 = global_load_b128_saddr %8, %input {offset = 16}
   global_store_b128_saddr %8, %9, %output
-  global_store_b128_saddr %8, %11, %output {offset = 16}
+  global_store_b128_saddr %8, %10, %output {offset = 16}
   return
 }

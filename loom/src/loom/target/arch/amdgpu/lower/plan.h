@@ -1157,6 +1157,8 @@ enum loom_amdgpu_memory_access_plan_flag_bits_e {
   LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_PRESERVE_INACTIVE = 1u << 0,
   // An exact view descriptor makes every inactive packet read positive zero.
   LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_DESCRIPTOR_ZERO_FILL = 1u << 1,
+  // Every packet consumes the same materialized address operands.
+  LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_SHARED_ADDRESS = 1u << 2,
 };
 
 // Immutable function-retained direct-memory packet plan.

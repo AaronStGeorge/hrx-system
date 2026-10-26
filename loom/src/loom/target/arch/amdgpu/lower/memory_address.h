@@ -31,6 +31,12 @@ typedef struct loom_amdgpu_memory_dynamic_term_sequence_t {
       kinds[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
   // Number of populated term and kind entries.
   uint8_t count;
+  // First term supplied by |descriptor_view_base|.
+  uint8_t descriptor_view_base_start;
+  // Number of terms supplied by |descriptor_view_base|.
+  uint8_t descriptor_view_base_count;
+  // Source SSA value materialized while constructing the descriptor bound.
+  loom_value_id_t descriptor_view_base;
 } loom_amdgpu_memory_dynamic_term_sequence_t;
 
 // Retains numeric operand decisions for every source term alternative. Entries
@@ -56,6 +62,8 @@ void loom_amdgpu_memory_access_select_vaddr_realizations(
 // components have demanded storage; optional local realizations are used only
 // when mapped. Same-bank local realizations preserve the selected operand path;
 // mixed-bank local promotion requires its entire selected set to be available.
+// A descriptor-bound dynamic view base also supplies its matching contiguous
+// scalar prefix while that descriptor and packet are emitted together.
 void loom_amdgpu_memory_access_resolve_dynamic_terms(
     const loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_t* access,

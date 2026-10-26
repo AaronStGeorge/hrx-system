@@ -105,26 +105,26 @@ low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) abi(hal_kernel) @native_
 
 low.func.def target<amdgpu.rdna4.gfx125x.core>(@target) abi(hal_kernel) @native_grouped_e8m0_decode(%e4: reg<amdgpu.vgpr x4>, %e5: reg<amdgpu.vgpr x4>, %scale: reg<amdgpu.vgpr>) asm {
   %output_view = resource<hal_binding> {extent = 64, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %28 = slice %e4[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %29 = slice %e4[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %30 = concat(%28, %29) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %31 = v_cvt_scale_pk8_bf16_fp8 %30, %scale
-  %36 = slice %e4[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %37 = slice %e4[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %38 = concat(%36, %37) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %39 = v_cvt_scale_pk8_bf16_fp8 %38, %scale {scale_sel = 1}
-  %45 = slice %e5[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %46 = slice %e5[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %47 = concat(%45, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %48 = v_cvt_scale_pk8_bf16_bf8 %47, %scale
-  %53 = slice %e5[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %54 = slice %e5[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %55 = concat(%53, %54) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %56 = v_cvt_scale_pk8_bf16_bf8 %55, %scale {scale_sel = 1}
-  %63 = v_mov_b32 0
-  global_store_b128_saddr %63, %31, %output_view
-  global_store_b128_saddr %63, %39, %output_view {offset = 16}
-  global_store_b128_saddr %63, %48, %output_view {offset = 32}
-  global_store_b128_saddr %63, %56, %output_view {offset = 48}
+  %27 = slice %e4[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %28 = slice %e4[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %29 = concat(%27, %28) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %30 = v_cvt_scale_pk8_bf16_fp8 %29, %scale
+  %35 = slice %e4[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %36 = slice %e4[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %37 = concat(%35, %36) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %38 = v_cvt_scale_pk8_bf16_fp8 %37, %scale {scale_sel = 1}
+  %44 = slice %e5[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %45 = slice %e5[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = concat(%44, %45) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %47 = v_cvt_scale_pk8_bf16_bf8 %46, %scale
+  %52 = slice %e5[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %53 = slice %e5[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %54 = concat(%52, %53) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %55 = v_cvt_scale_pk8_bf16_bf8 %54, %scale {scale_sel = 1}
+  %62 = v_mov_b32 0
+  global_store_b128_saddr %62, %30, %output_view
+  global_store_b128_saddr %62, %38, %output_view {offset = 16}
+  global_store_b128_saddr %62, %47, %output_view {offset = 32}
+  global_store_b128_saddr %62, %55, %output_view {offset = 48}
   return
 }

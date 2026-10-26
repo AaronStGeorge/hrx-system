@@ -70,11 +70,11 @@ low.kernel.def target<amdgpu.cdna3.core> abi_layout({constant_count = 0, direct_
   %right = s_load_dword %source, %24 {offset = 4}
   %28 = v_mov_b32_copy %right
   %29 = v_pk_add_f32.broadcast_lhs_rhs %left, %28
-  %39 = concat(%29, %29) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
-  %35 = v_lshlrev_b32_src0_inline %lane, 5
-  global_store_dwordx4_saddr %35, %39, %output_view
   %38 = concat(%29, %29) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
-  global_store_dwordx4_saddr %35, %38, %output_view {offset = 16}
+  %35 = v_lshlrev_b32_src0_inline %lane, 5
+  global_store_dwordx4_saddr %35, %38, %output_view
+  %37 = concat(%29, %29) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  global_store_dwordx4_saddr %35, %37, %output_view {offset = 16}
   return
 }
 

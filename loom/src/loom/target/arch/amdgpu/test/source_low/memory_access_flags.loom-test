@@ -39,21 +39,21 @@ low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @observe_vector() asm {
   %destination = resource<hal_binding> {extent = 128, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %11 = v_mov_b32 0
   %12 = global_load_b128_saddr<volatile> %11, %source
-  %14 = global_load_b128_saddr<volatile> %11, %source {offset = 16}
-  %16 = global_load_b128_saddr<volatile> %11, %source {offset = 32}
-  %18 = global_load_b128_saddr<volatile> %11, %source {offset = 48}
-  %21 = global_load_b128_saddr<volatile> %11, %source
-  %23 = global_load_b128_saddr<volatile> %11, %source {offset = 16}
-  %25 = global_load_b128_saddr<volatile> %11, %source {offset = 32}
-  %27 = global_load_b128_saddr<volatile> %11, %source {offset = 48}
+  %13 = global_load_b128_saddr<volatile> %11, %source {offset = 16}
+  %14 = global_load_b128_saddr<volatile> %11, %source {offset = 32}
+  %15 = global_load_b128_saddr<volatile> %11, %source {offset = 48}
+  %18 = global_load_b128_saddr<volatile> %11, %source
+  %19 = global_load_b128_saddr<volatile> %11, %source {offset = 16}
+  %20 = global_load_b128_saddr<volatile> %11, %source {offset = 32}
+  %21 = global_load_b128_saddr<volatile> %11, %source {offset = 48}
   global_store_b128_saddr<volatile> %11, %12, %destination
-  global_store_b128_saddr<volatile> %11, %14, %destination {offset = 16}
-  global_store_b128_saddr<volatile> %11, %16, %destination {offset = 32}
-  global_store_b128_saddr<volatile> %11, %18, %destination {offset = 48}
-  global_store_b128_saddr<volatile> %11, %21, %destination {offset = 64}
-  global_store_b128_saddr<volatile> %11, %23, %destination {offset = 80}
-  global_store_b128_saddr<volatile> %11, %25, %destination {offset = 96}
-  global_store_b128_saddr<volatile> %11, %27, %destination {offset = 112}
+  global_store_b128_saddr<volatile> %11, %13, %destination {offset = 16}
+  global_store_b128_saddr<volatile> %11, %14, %destination {offset = 32}
+  global_store_b128_saddr<volatile> %11, %15, %destination {offset = 48}
+  global_store_b128_saddr<volatile> %11, %18, %destination {offset = 64}
+  global_store_b128_saddr<volatile> %11, %19, %destination {offset = 80}
+  global_store_b128_saddr<volatile> %11, %20, %destination {offset = 96}
+  global_store_b128_saddr<volatile> %11, %21, %destination {offset = 112}
   return
 }
 

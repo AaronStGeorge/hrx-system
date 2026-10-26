@@ -12,6 +12,7 @@
 #include "loom/codegen/low/lower/realization.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/lower/buffer_descriptor.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/source_integer_representation.h"
@@ -321,6 +322,24 @@ void loom_amdgpu_memory_access_resolve_dynamic_terms(
           : 0;
   uint16_t consumed_term_mask = retained_mask;
   uint8_t term_index = 0;
+  const uint16_t view_base_mask =
+      source->dynamic_view_base_term_count == 0
+          ? 0
+          : (uint16_t)((1u << source->dynamic_view_base_term_count) - 1u);
+  bool view_base_is_scalar = view_base_mask != 0;
+  for (uint8_t i = 0; i < source->dynamic_view_base_term_count; ++i) {
+    view_base_is_scalar &=
+        dynamic_term_kinds[i] == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
+  }
+  const bool reuse_descriptor_view_base =
+      view_base_is_scalar && (retained_mask & view_base_mask) == 0 &&
+      access->realization.descriptor == NULL &&
+      source->dynamic_view_base_value_static_byte_offset == 0 &&
+      loom_amdgpu_buffer_extent_uses_dynamic_view_base(access->buffer_extent);
+  if (reuse_descriptor_view_base) {
+    out_sequence->descriptor_view_base_start = out_sequence->count;
+    out_sequence->descriptor_view_base = source->dynamic_view_base_value_id;
+  }
   while (term_index < source->dynamic_term_count) {
     if (consumed_term_mask & (1u << term_index)) {
       ++term_index;
@@ -357,6 +376,10 @@ void loom_amdgpu_memory_access_resolve_dynamic_terms(
       }
     }
     const uint8_t sequence_index = out_sequence->count++;
+    if (reuse_descriptor_view_base &&
+        term_index < source->dynamic_view_base_term_count) {
+      ++out_sequence->descriptor_view_base_count;
+    }
     if (use_realization) {
       out_sequence->terms[sequence_index] = &realization->term;
       out_sequence->plans[sequence_index] =
@@ -375,6 +398,15 @@ void loom_amdgpu_memory_access_resolve_dynamic_terms(
     }
     ++term_index;
   }
+}
+
+static bool loom_amdgpu_memory_term_uses_descriptor_view_base(
+    const loom_amdgpu_memory_dynamic_term_sequence_t* sequence,
+    uint8_t term_index) {
+  return sequence->descriptor_view_base_count != 0 &&
+         term_index >= sequence->descriptor_view_base_start &&
+         term_index < sequence->descriptor_view_base_start +
+                          sequence->descriptor_view_base_count;
 }
 
 static iree_status_t loom_amdgpu_lookup_memory_u32_operand(
@@ -744,7 +776,14 @@ iree_status_t loom_amdgpu_emit_sgpr_byte_offset_terms(
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
 
   loom_value_id_t low_accumulator = LOOM_VALUE_ID_INVALID;
+  if (sequence->descriptor_view_base_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_memory_u32_operand(
+        context, source_op, sequence->descriptor_view_base, &low_accumulator));
+  }
   for (uint8_t i = 0; i < sequence->count; ++i) {
+    if (loom_amdgpu_memory_term_uses_descriptor_view_base(sequence, i)) {
+      continue;
+    }
     switch (sequence->kinds[i]) {
       case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET:
         break;
@@ -925,7 +964,17 @@ iree_status_t loom_amdgpu_emit_sgpr_base_byte_offset_terms(
   }
 
   loom_value_id_t low_offset = LOOM_VALUE_ID_INVALID;
+  if (sequence->descriptor_view_base_count != 0) {
+    loom_value_id_t low_prefix = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_memory_u32_operand(
+        context, source_op, sequence->descriptor_view_base, &low_prefix));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_from_u32(
+        context, source_op, low_prefix, &low_offset));
+  }
   for (uint8_t i = 0; i < sequence->count; ++i) {
+    if (loom_amdgpu_memory_term_uses_descriptor_view_base(sequence, i)) {
+      continue;
+    }
     if (sequence->kinds[i] != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET) {
       continue;
     }

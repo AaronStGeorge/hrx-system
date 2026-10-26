@@ -246,6 +246,11 @@ iree_status_t loom_amdgpu_plan_buffer_view_extent(
       LOOM_AMDGPU_BUFFER_EXTENT_PLAN_FLAG_OVERRIDE_RESOURCE, out_plan);
 }
 
+bool loom_amdgpu_buffer_extent_uses_dynamic_view_base(
+    const loom_amdgpu_buffer_extent_plan_t* plan) {
+  return plan != NULL && plan->base == LOOM_AMDGPU_BUFFER_EXTENT_BASE_VALUE;
+}
+
 static iree_status_t loom_amdgpu_emit_buffer_extent(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_source_memory_access_plan_t* source,
