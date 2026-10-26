@@ -13,6 +13,14 @@
 
 namespace {
 
+TEST(TextCachePolicy, DefaultTargetUsesConfiguredBudgetNotAvailableMemory) {
+  EXPECT_EQ(loom_serve_text_cache_default_target(0), UINT64_C(2) << 30);
+  EXPECT_EQ(loom_serve_text_cache_default_target(UINT64_C(1) << 30),
+            UINT64_C(64) << 20);
+  EXPECT_EQ(loom_serve_text_cache_default_target(UINT64_C(128) << 30),
+            UINT64_C(2) << 30);
+}
+
 struct CacheStorage {
   // Counts requested from the source, including the final retained candidate.
   std::vector<iree_host_size_t> evaluations;

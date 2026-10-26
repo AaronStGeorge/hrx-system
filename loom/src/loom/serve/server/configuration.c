@@ -13,6 +13,7 @@
 #include "iree/base/internal/unicode.h"
 #include "iree/io/file_contents.h"
 #include "loom/serve/service/kind.h"
+#include "loom/serve/service/text/cache_policy.h"
 
 typedef struct loom_serve_model_configuration_field_t {
   // Literal model key; escaped keys are rejected.
@@ -250,6 +251,7 @@ typedef enum loom_serve_model_definition_field_e {
   DEFINITION_SESSION_CACHE_CAPACITY,
   DEFINITION_ADMISSION_OVERTAKES,
   DEFINITION_PREFIX_CACHE_CAPACITY,
+  DEFINITION_CACHE_TARGET_BYTES,
   DEFINITION_COMMAND_QUANTUM,
   DEFINITION_VARIANT_CAPACITY,
   DEFINITION_SPECIALIZATION_CACHE,
@@ -262,12 +264,16 @@ static iree_status_t loom_serve_model_configuration_text(
     iree_allocator_t host_allocator) {
   const bool pending = sources->reference.path.size != 0;
   const bool card = sources->card || pending;
-  *text = (loom_serve_text_configuration_t){.rows = 4,
-                                            .context_capacity = 16384,
-                                            .pool_capacity = 65536,
-                                            .prefill_capacity = 512,
-                                            .max_tokens = encodes ? 0 : 512,
-                                            .continuation_epochs = 1};
+  *text = (loom_serve_text_configuration_t){
+      .rows = 4,
+      .context_capacity = 16384,
+      .pool_capacity = 65536,
+      .prefill_capacity = 512,
+      .session_cache_capacity = encodes ? 0 : LOOM_SERVE_TEXT_CACHE_AUTOMATIC,
+      .prefix_cache_capacity = encodes ? 0 : LOOM_SERVE_TEXT_CACHE_AUTOMATIC,
+      .cache_target_bytes = IREE_HOST_SIZE_MAX,
+      .max_tokens = encodes ? 0 : 512,
+      .continuation_epochs = 1};
   if (!card) {
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
         &fields[DEFINITION_WEIGHTS], host_allocator, &text->weights));
@@ -306,9 +312,20 @@ static iree_status_t loom_serve_model_configuration_text(
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
       &fields[DEFINITION_PREFIX_CACHE_CAPACITY], 0, INT32_MAX,
       &text->prefix_cache_capacity));
+  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
+      &fields[DEFINITION_CACHE_TARGET_BYTES], 0, IREE_HOST_SIZE_MAX - 1,
+      &text->cache_target_bytes));
+  const iree_host_size_t prefix_capacity =
+      text->prefix_cache_capacity == LOOM_SERVE_TEXT_CACHE_AUTOMATIC
+          ? 0
+          : text->prefix_cache_capacity;
+  const iree_host_size_t session_capacity =
+      text->session_cache_capacity == LOOM_SERVE_TEXT_CACHE_AUTOMATIC
+          ? 0
+          : text->session_cache_capacity;
   const uint64_t endpoint_capacity =
-      (uint64_t)text->checkpoint_capacity + text->prefix_cache_capacity +
-      (text->session_cache_capacity ? text->session_cache_capacity + 1 : 0);
+      (uint64_t)text->checkpoint_capacity + prefix_capacity +
+      (session_capacity ? session_capacity + 1 : 0);
   if (endpoint_capacity > INT32_MAX) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "combined endpoint capacity exceeds INT32_MAX");
@@ -438,6 +455,9 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                                           .kinds = retained_kinds},
       [DEFINITION_PREFIX_CACHE_CAPACITY] =
           {"prefix_cache_capacity", IREE_JSON_VALUE_TYPE_NUMBER,
+           .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+      [DEFINITION_CACHE_TARGET_BYTES] =
+          {"cache_target_bytes", IREE_JSON_VALUE_TYPE_NUMBER,
            .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
       [DEFINITION_COMMAND_QUANTUM] = {"command_quantum",
                                       IREE_JSON_VALUE_TYPE_NUMBER,

@@ -6,6 +6,11 @@
 
 #include "loom/serve/service/text/cache_policy.h"
 
+uint64_t loom_serve_text_cache_default_target(uint64_t memory_limit) {
+  const uint64_t target = UINT64_C(2) * 1024 * 1024 * 1024;
+  return memory_limit ? iree_min(target, memory_limit / 16) : target;
+}
+
 static iree_host_size_t loom_serve_text_cache_endpoints(
     iree_host_size_t explicit_capacity, iree_host_size_t session_capacity,
     iree_host_size_t prefix_capacity) {
@@ -24,7 +29,8 @@ iree_status_t loom_serve_text_cache_select(
       options->prefix_capacity == LOOM_SERVE_TEXT_CACHE_AUTOMATIC;
   *out_selection = (loom_serve_text_cache_selection_t){
       .session_capacity = automatic_sessions ? 0 : options->session_capacity,
-      .prefix_capacity = automatic_prefixes ? 0 : options->prefix_capacity};
+      .prefix_capacity = automatic_prefixes ? 0 : options->prefix_capacity,
+      .target_bytes = options->target_bytes};
   out_selection->checkpoint_capacity = loom_serve_text_cache_endpoints(
       explicit_capacity, out_selection->session_capacity,
       out_selection->prefix_capacity);

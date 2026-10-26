@@ -590,8 +590,9 @@ TEST_F(ConfigurationTest,
   EXPECT_EQ(model_.text.max_tokens, 512u);
   EXPECT_EQ(model_.text.draft_depth, 0u);
   EXPECT_EQ(model_.text.continuation_epochs, 1u);
-  EXPECT_EQ(model_.text.session_cache_capacity, 0u);
-  EXPECT_EQ(model_.text.prefix_cache_capacity, 0u);
+  EXPECT_EQ(model_.text.session_cache_capacity, IREE_HOST_SIZE_MAX);
+  EXPECT_EQ(model_.text.prefix_cache_capacity, IREE_HOST_SIZE_MAX);
+  EXPECT_EQ(model_.text.cache_target_bytes, IREE_HOST_SIZE_MAX);
   EXPECT_EQ(String(model_.options), "{}");
   IREE_ASSERT_OK(Parse(Text(
       R"(,"rows":8,"context_capacity":262144,"pool_capacity":4096,"prefill_capacity":128,"draft_depth":3,"continuation_epochs":2,"checkpoint_capacity":2,"session_cache_capacity":24,"prefix_cache_capacity":4,"pending_requests":17,"max_tokens":128,"admission_overtakes":0,"options":{"draft_weights":"draft.gguf"})")));
@@ -606,6 +607,37 @@ TEST_F(ConfigurationTest,
   EXPECT_EQ(model_.pending_requests, 17u);
   EXPECT_EQ(model_.text.max_tokens, 128u);
   EXPECT_EQ(String(model_.options), R"({"draft_weights":"draft.gguf"})");
+}
+
+TEST_F(ConfigurationTest, CacheOmissionAndExplicitZeroRemainDistinct) {
+  IREE_ASSERT_OK(Parse(Text(R"(,"cache_target_bytes":0)")));
+  EXPECT_EQ(model_.text.cache_target_bytes, 0u);
+  EXPECT_EQ(model_.text.session_cache_capacity, IREE_HOST_SIZE_MAX);
+  EXPECT_EQ(model_.text.prefix_cache_capacity, IREE_HOST_SIZE_MAX);
+  IREE_ASSERT_OK(
+      Parse(Text(R"(,"cache_target_bytes":65536,"session_cache_capacity":0)")));
+  EXPECT_EQ(model_.text.cache_target_bytes, 65536u);
+  EXPECT_EQ(model_.text.session_cache_capacity, 0u);
+  EXPECT_EQ(model_.text.prefix_cache_capacity, IREE_HOST_SIZE_MAX);
+  IREE_ASSERT_OK(Parse(Text(R"(,"prefix_cache_capacity":0)")));
+  EXPECT_EQ(model_.text.session_cache_capacity, IREE_HOST_SIZE_MAX);
+  EXPECT_EQ(model_.text.prefix_cache_capacity, 0u);
+  IREE_ASSERT_OK(
+      Parse(Text(R"(,"session_cache_capacity":0,"prefix_cache_capacity":0)")));
+  EXPECT_EQ(model_.text.session_cache_capacity, 0u);
+  EXPECT_EQ(model_.text.prefix_cache_capacity, 0u);
+  for (const char* field :
+       {R"(,"cache_target_bytes":-1)", R"(,"cache_target_bytes":1.5)",
+        R"(,"cache_target_bytes":"auto")"}) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(Text(field)));
+  }
+  IREE_ASSERT_OK(Parse(Document("sequence", R"(,"weights":"model.irpa")")));
+  EXPECT_EQ(model_.text.session_cache_capacity, 0u);
+  EXPECT_EQ(model_.text.prefix_cache_capacity, 0u);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Parse(Document("sequence",
+                     R"(,"weights":"model.irpa","cache_target_bytes":0)")));
 }
 
 TEST_F(ConfigurationTest, SessionMaximumBoundsInitialCapacityNotEpochShape) {

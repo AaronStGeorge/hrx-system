@@ -81,6 +81,43 @@ TEST_F(AutomaticCacheTextServiceTest,
       << response;
 }
 
+TEST_F(RegisteredSourceTextServiceTest,
+       AutomaticCacheDefaultsAndExplicitDisablement) {
+  StartManaged();
+  for (bool automatic : {true, false}) {
+    const std::string fields =
+        std::string(R"(,"max_sessions":1)") +
+        (automatic
+             ? ""
+             : R"(,"session_cache_capacity":0,"prefix_cache_capacity":0)");
+    ASSERT_EQ(Read(Send(Declaration("fixture-text", directory_, "open", fields),
+                        "", "/v1/models/register"))
+                  .find("HTTP/1.1 202"),
+              0u);
+    const auto first = Content(Read(Send(Request(Message("user", "abxa"), 2),
+                                         "X-Loom-Session: first\r\n")));
+    EXPECT_EQ(first, Oracle::Complete("abxa", 2));
+    EXPECT_EQ(Content(Read(Send(Request(Message("user", "xbbx"), 2),
+                                "X-Loom-Session: peer\r\n"))),
+              Oracle::Complete("xbbx", 2));
+    const auto response = Read(Send(
+        Request(Message("user", "abxa") + "," + Message("assistant", first) +
+                    "," + Message("user", "b"),
+                2),
+        "X-Loom-Session: first\r\n"));
+    EXPECT_EQ(Content(response), Oracle::Complete("abxa" + first + "#b", 2));
+    EXPECT_NE(response.find(automatic ? R"("cached_tokens":5})"
+                                      : R"("cached_tokens":0})"),
+              std::string::npos)
+        << response;
+    ASSERT_EQ(
+        Read(Send(R"({"model":"fixture-text"})", "", "/v1/models/unregister"))
+            .find("HTTP/1.1 202"),
+        0u);
+    WaitModel("fixture-text", {});
+  }
+}
+
 class UntaggedTextServiceTest : public SourceTextServiceTest {
  protected:
   loom_serve_text_options_t ModelOptions() const override {
@@ -694,8 +731,25 @@ TEST_F(RegisteredSourceTextServiceTest,
   const auto replacement = inspect("/v1/sessions");
   EXPECT_NE(replacement.find(R"("incarnation":2,)"), std::string::npos)
       << replacement;
-  EXPECT_NE(replacement.find(R"("data":[],"next_offset":null)"),
-            std::string::npos);
+  // Pagination addresses the retained directory, including empty cache slots.
+  // A fresh incarnation can have several empty pages without any old history.
+  std::string page = replacement;
+  uint64_t offset = 0;
+  const std::string next_key = R"("next_offset":)";
+  while (true) {
+    EXPECT_NE(page.find(R"("data":[])"), std::string::npos) << page;
+    const auto begin = page.find(next_key);
+    ASSERT_NE(begin, std::string::npos) << page;
+    const auto next = page.substr(begin + next_key.size());
+    if (next.starts_with("null")) {
+      break;
+    }
+    const auto next_offset = std::stoull(next);
+    ASSERT_GT(next_offset, offset);
+    offset = next_offset;
+    page = inspect("/v1/sessions",
+                   "X-Loom-Offset: " + std::to_string(offset) + "\r\n");
+  }
   const auto old_inventory = inspector.Read();
   EXPECT_NE(old_inventory.find(R"("incarnation":1,)"), std::string::npos);
   EXPECT_NE(old_inventory.find(R"("name":"conversation0",)"),

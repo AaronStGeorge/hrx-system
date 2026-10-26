@@ -16,6 +16,10 @@ extern "C" {
 // Omission requests cold sizing; an explicit zero disables the cache.
 #define LOOM_SERVE_TEXT_CACHE_AUTOMATIC IREE_HOST_SIZE_MAX
 
+// Default soft target: 2 GiB, reduced to 1/16 of a nonzero shared physical
+// budget. This consumes configured policy, never allocator availability.
+uint64_t loom_serve_text_cache_default_target(uint64_t memory_limit);
+
 typedef struct loom_serve_text_cache_options_t {
   // Soft target for additional initial storage, not a physical reservation or
   // a limit on growing active-session COW headroom. Zero disables auto sizing.
@@ -33,6 +37,8 @@ typedef struct loom_serve_text_cache_selection_t {
   iree_host_size_t prefix_capacity;
   // Total source endpoints, including explicit pins and admission exchange.
   iree_host_size_t checkpoint_capacity;
+  // Soft target used for automatic selection, not a lifetime memory ceiling.
+  uint64_t target_bytes;
   // Additional initial declared state and checkpoint maps over explicit counts.
   uint64_t additional_bytes;
 } loom_serve_text_cache_selection_t;

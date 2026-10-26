@@ -66,6 +66,10 @@ typedef struct loom_serve_text_memory_record_t {
   uint64_t resident;
   // Explicitly suspended endpoint payload.
   uint64_t checkpoint_host_bytes;
+  // Cold automatic sizing target, independent of active working-set admission.
+  uint64_t cache_target_bytes;
+  // Selected initial extra declared state and native checkpoint maps.
+  uint64_t cache_additional_bytes;
   // Detached idle endpoints, independent of active execution rows.
   struct {
     // Configured retained endpoint bound.
@@ -172,11 +176,14 @@ static iree_status_t loom_serve_text_memory_format(
       ",\"resident_tokens\":%" PRIu64 "},\"checkpoint_host_bytes\":%" PRIu64
       ",\"session_cache\":{\"capacity\":%" PRIu64 ",\"endpoints\":%" PRIu64
       "}"
-      ",\"prefix_cache\":{\"capacity\":%" PRIu64 ",\"endpoints\":%" PRIu64 "}",
+      ",\"prefix_cache\":{\"capacity\":%" PRIu64 ",\"endpoints\":%" PRIu64
+      "}"
+      ",\"cache_target_bytes\":%" PRIu64 ",\"cache_additional_bytes\":%" PRIu64,
       value.capacity, value.reserved, value.resident,
       value.checkpoint_host_bytes, value.session_cache.capacity,
       value.session_cache.endpoints, value.prefix_cache.capacity,
-      value.prefix_cache.endpoints);
+      value.prefix_cache.endpoints, value.cache_target_bytes,
+      value.cache_additional_bytes);
 }
 
 static iree_status_t loom_serve_text_backing_format(
@@ -269,6 +276,8 @@ static void loom_serve_text_heartbeat_report(
       .reserved = state.pool.reserved,
       .resident = state.pool.resident,
       .checkpoint_host_bytes = state.checkpoint_host_bytes,
+      .cache_target_bytes = state.cache_target_bytes,
+      .cache_additional_bytes = state.cache_additional_bytes,
       .session_cache = {state.session_cache.capacity,
                         state.session_cache.endpoints},
       .prefix_cache = {state.prefix_cache.capacity,

@@ -57,12 +57,17 @@ typedef struct loom_serve_text_configuration_t {
   iree_host_size_t prefill_capacity;
   // Explicit pinned endpoint slots, independent of active rows.
   iree_host_size_t checkpoint_capacity;
-  // Evictable idle endpoints retained beyond execution rows; zero disables.
-  // Native storage includes one additional endpoint for an admission exchange.
+  // Evictable idle endpoints beyond resident rows; zero disables and
+  // IREE_HOST_SIZE_MAX requests automatic sizing. A nonzero resolved count
+  // requires one additional native endpoint for an admission exchange.
   iree_host_size_t session_cache_capacity;
-  // Exact intermediate token-prefix endpoints shared across requests. Zero
-  // disables capture; these evictable slots are independent of other caches.
+  // Shared intermediate prefixes; zero disables and IREE_HOST_SIZE_MAX
+  // requests automatic sizing, independently of the detached-history cache.
   iree_host_size_t prefix_cache_capacity;
+  // Soft additional initial storage target for automatic counts, in bytes.
+  // IREE_HOST_SIZE_MAX selects the default from the configured device budget.
+  // Zero disables automatic counts without altering explicit endpoint counts.
+  iree_host_size_t cache_target_bytes;
   // Default output limit when a request omits max_tokens.
   iree_host_size_t max_tokens;
   // Proposed tokens after each anchor (0-7), validated by the model source.
