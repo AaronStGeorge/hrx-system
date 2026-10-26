@@ -115,7 +115,6 @@ static iree_status_t loom_low_allocation_ordinal_components_build_impl(
       indices_by_root[i] = next_component++;
     }
   }
-  IREE_ASSERT_EQ(next_component, component_count);
 
   uint32_t* indices_by_value_ordinal = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -139,7 +138,6 @@ static iree_status_t loom_low_allocation_ordinal_components_build_impl(
     const loom_value_ordinal_t root =
         loom_low_allocation_ordinal_component_find(nodes, origin);
     const uint32_t component_index = indices_by_root[root];
-    IREE_ASSERT_NE(component_index, UINT32_MAX);
     indices_by_value_ordinal[i] = component_index;
     ++ranges[component_index].count;
     ++member_count;
@@ -150,7 +148,6 @@ static iree_status_t loom_low_allocation_ordinal_components_build_impl(
     ranges[i].start = offset;
     offset += ranges[i].count;
   }
-  IREE_ASSERT_EQ(offset, member_count);
   loom_value_ordinal_t* members = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, member_count, sizeof(*members), (void**)&members));

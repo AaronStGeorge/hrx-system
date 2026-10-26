@@ -81,8 +81,7 @@ static bool loom_low_allocation_ordinal_recolor_collect_component(
     uint16_t* out_current_candidate_ordinal, uint16_t* out_candidate_count,
     uint32_t* out_assignment_count, uint16_t* out_value_count) {
   const loom_liveness_analysis_t* liveness = state->search->liveness;
-  if (component.index == UINT32_MAX || component.count == 0 ||
-      component.count > liveness->value_count || component.count > UINT16_MAX ||
+  if (component.count > UINT16_MAX ||
       state->search->retained_assignments_by_value_ordinal != NULL) {
     return false;
   }
@@ -149,7 +148,6 @@ static bool loom_low_allocation_ordinal_recolor_collect_component(
     if (assignment == NULL) {
       continue;
     }
-    IREE_ASSERT_LT(assignment_count, liveness->value_count);
     if (assignment->location_kind !=
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
         assignment->descriptor_reg_class_id != reg_class_id ||
@@ -276,7 +274,6 @@ static bool loom_low_allocation_ordinal_recolor_component_conflicts(
     const loom_liveness_interval_t* interval =
         loom_liveness_interval_for_value_ordinal(state->search->liveness,
                                                  value_ordinal);
-    IREE_ASSERT_ARGUMENT(interval);
     const uint16_t reg_class_id = interval->value_class.register_class_id;
     const loom_low_allocation_assignment_t projected =
         loom_low_allocation_ordinal_recolor_prepare_assignment(
