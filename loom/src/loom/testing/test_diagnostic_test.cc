@@ -71,6 +71,29 @@ TEST_F(TestDiagnosticTest, MatchesStructuredConstraints) {
       &diagnostic, &annotation, IREE_SV("case.loom-test")));
 }
 
+TEST_F(TestDiagnosticTest, MatchesPublicDiagnosticCode) {
+  loom_test_diagnostic_t diagnostic = {
+      .severity = LOOM_DIAGNOSTIC_ERROR,
+      .domain = LOOM_ERROR_DOMAIN_COUNT_,
+      .public_code = IREE_SV("SPIRV/PROFILE"),
+  };
+  diagnostic.origin.filename = IREE_SV("case.loom-test");
+  diagnostic.origin.line = 3;
+
+  loom_test_annotation_t annotation = {
+      .severity = LOOM_DIAGNOSTIC_ERROR,
+      .domain = LOOM_ERROR_DOMAIN_COUNT_,
+      .public_code = IREE_SV("SPIRV/PROFILE"),
+      .target_line = 3,
+  };
+  EXPECT_TRUE(loom_test_diagnostic_matches_annotation(
+      &diagnostic, &annotation, IREE_SV("case.loom-test")));
+
+  annotation.public_code = IREE_SV("CONFIG/INVALID");
+  EXPECT_FALSE(loom_test_diagnostic_matches_annotation(
+      &diagnostic, &annotation, IREE_SV("case.loom-test")));
+}
+
 TEST_F(TestDiagnosticTest, FindsMaximumOneToOneMatching) {
   loom_test_diagnostic_t diagnostics[2] = {};
   diagnostics[0].severity = LOOM_DIAGNOSTIC_ERROR;

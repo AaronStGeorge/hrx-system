@@ -12,6 +12,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/target/test/target_records.h"
@@ -91,6 +92,26 @@ static const loom_target_emitter_t* const kTargetEmitters[] = {
     &kAlternateEmitter,
 };
 
+struct CapturedDiagnostic {
+  iree_host_size_t count;
+  const loom_op_t* op;
+  const loom_error_def_t* error;
+  iree_string_view_t symbol_name;
+};
+
+static iree_status_t CaptureDiagnostic(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  CapturedDiagnostic* capture = static_cast<CapturedDiagnostic*>(user_data);
+  ++capture->count;
+  capture->op = emission->op;
+  capture->error = emission->error;
+  if (emission->param_count == 1 &&
+      emission->params[0].kind == LOOM_PARAM_STRING) {
+    capture->symbol_name = emission->params[0].string;
+  }
+  return iree_ok_status();
+}
+
 class CompileRequestTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -135,7 +156,9 @@ class CompileRequestTest : public ::testing::Test {
                                  loom_compile_request_options_t options) {
     loom_compile_request_t request = {};
     IREE_EXPECT_OK(loom_compile_request_resolve(module, &options, &environment_,
-                                                &request_arena_, &request));
+                                                &request_arena_, &request,
+                                                &request_error_count_));
+    EXPECT_EQ(request_error_count_, 0u);
     EXPECT_NE(request.target_emitter, nullptr);
     return request;
   }
@@ -214,6 +237,7 @@ kernel.def @Kernel123() {
   const loom_target_provider_t* target_providers_[2] = {};
   loom_target_provider_set_t target_provider_set_ = {};
   loom_target_environment_t environment_;
+  uint32_t request_error_count_ = 0;
 };
 
 TEST_F(CompileRequestTest, InfersKernelAndCanonicalFormat) {
@@ -230,6 +254,50 @@ TEST_F(CompileRequestTest, InfersKernelAndCanonicalFormat) {
   ASSERT_EQ(request.selection.roots.count, 1u);
   EXPECT_TRUE(iree_string_view_equal(request.selection.roots.values[0],
                                      IREE_SV("Kernel123")));
+}
+
+TEST_F(CompileRequestTest, RejectsDeclarationRootsWithSourceDiagnostic) {
+  ModulePtr module = Parse(R"(
+func.decl @function()
+kernel.decl @configured() launch()
+kernel.entry.decl @physical()
+pipeline.decl<kernel> @pipeline() run()
+command.program.decl @command() launch()
+)");
+  const iree_string_view_t roots[] = {
+      IREE_SV("function"), IREE_SV("configured"), IREE_SV("physical"),
+      IREE_SV("pipeline"), IREE_SV("command"),
+  };
+
+  for (const iree_string_view_t root : roots) {
+    CapturedDiagnostic capture = {};
+    const loom_compile_request_options_t options = {
+        .roots = {1, &root},
+        .diagnostic_emitter =
+            {
+                .fn = CaptureDiagnostic,
+                .user_data = &capture,
+            },
+    };
+    loom_compile_request_t request = {};
+    request_error_count_ = 0;
+    IREE_ASSERT_OK(loom_compile_request_resolve(
+        module.get(), &options, &environment_, &request_arena_, &request,
+        &request_error_count_));
+
+    EXPECT_EQ(request_error_count_, 1u);
+    EXPECT_EQ(request.target_emitter, nullptr);
+    ASSERT_EQ(capture.count, 1u);
+    EXPECT_EQ(capture.error, LOOM_ERR_SYMBOL_002);
+    EXPECT_TRUE(iree_string_view_equal(capture.symbol_name, root));
+    const loom_string_id_t name_id =
+        loom_module_lookup_string(module.get(), root);
+    ASSERT_NE(name_id, LOOM_STRING_ID_INVALID);
+    const loom_symbol_id_t symbol_id =
+        loom_module_find_symbol(module.get(), name_id);
+    ASSERT_NE(symbol_id, LOOM_SYMBOL_ID_INVALID);
+    EXPECT_EQ(capture.op, module->symbols.entries[symbol_id].defining_op);
+  }
 }
 
 TEST_F(CompileRequestTest, MaterializesSelectedModuleRootClosure) {
@@ -528,10 +596,10 @@ func.def public @other() {
       .excluded_roots = {IREE_ARRAYSIZE(excluded_roots), excluded_roots},
   };
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 }
 
 TEST_F(CompileRequestTest, RejectsMissingExcludedRoot) {
@@ -546,10 +614,10 @@ func.def public @entry() {
       .excluded_roots = {IREE_ARRAYSIZE(excluded_roots), excluded_roots},
   };
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_NOT_FOUND,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 }
 
 TEST_F(CompileRequestTest, RejectsNonCanonicalExcludedRoot) {
@@ -567,10 +635,10 @@ func.def @private_helper() {
       .excluded_roots = {IREE_ARRAYSIZE(excluded_roots), excluded_roots},
   };
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 }
 
 TEST_F(CompileRequestTest, RejectsRepeatedExcludedRoots) {
@@ -588,10 +656,10 @@ func.def public @entry() {
       .excluded_roots = {IREE_ARRAYSIZE(repeated_roots), repeated_roots},
   };
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 }
 
 TEST_F(CompileRequestTest, RequiresExplicitSelectionOfPrivateArrayPrograms) {
@@ -608,7 +676,8 @@ func.def abi(array_program) @entry() {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &rejected_request));
+                                   &request_arena_, &rejected_request,
+                                   &request_error_count_));
 
   options.roots = {IREE_ARRAYSIZE(roots), roots};
   const loom_compile_request_t request = Resolve(module.get(), options);
@@ -657,7 +726,8 @@ command.program.def public @Command123() launch() {
   const loom_compile_request_options_t options = {};
   loom_compile_request_t request = {};
   iree::Status status(loom_compile_request_resolve(
-      module.get(), &options, &environment_, &request_arena_, &request));
+      module.get(), &options, &environment_, &request_arena_, &request,
+      &request_error_count_));
   EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
   EXPECT_THAT(status.ToString(), HasSubstr("mixed default entry categories"));
 }
@@ -674,7 +744,8 @@ command.program.def public @Command123() launch() {
     options.roots = {root_count, roots};
     loom_compile_request_t request = {};
     iree::Status status(loom_compile_request_resolve(
-        module.get(), &options, &environment_, &request_arena_, &request));
+        module.get(), &options, &environment_, &request_arena_, &request,
+        &request_error_count_));
     EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
     EXPECT_THAT(status.ToString(),
                 HasSubstr("loomc_cmd_program_product_build"));
@@ -736,10 +807,10 @@ command.program.def public @Command123() launch() {
           },
   };
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 }
 
 TEST_F(CompileRequestTest, ExplicitTargetPreservesDefaultRoots) {
@@ -774,31 +845,33 @@ func.def public @Function123() {
 )");
   loom_compile_request_t request = {};
   loom_compile_request_options_t options = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 
   options.format = IREE_SV("DiagnosticFormat123");
-  IREE_ASSERT_OK(loom_compile_request_resolve(
-      module.get(), &options, &environment_, &request_arena_, &request));
+  IREE_ASSERT_OK(loom_compile_request_resolve(module.get(), &options,
+                                              &environment_, &request_arena_,
+                                              &request, &request_error_count_));
   EXPECT_EQ(request.selection.kind, LOOM_COMPILE_ENTRY_KIND_MODULE);
   EXPECT_EQ(request.target_emitter, &kDiagnosticEmitter);
 
   options.format = iree_string_view_empty();
   options.target_profile = &kTargetProfile;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 
   loom_target_environment_deinitialize(&environment_);
   emission_provider_.canonical_module_emitter = &kDiagnosticEmitter;
   emission_provider_.canonical_module_fact_type = &loom_test_target_fact_type;
   IREE_ASSERT_OK(
       loom_target_environment_initialize(&target_provider_set_, &environment_));
-  IREE_ASSERT_OK(loom_compile_request_resolve(
-      module.get(), &options, &environment_, &request_arena_, &request));
+  IREE_ASSERT_OK(loom_compile_request_resolve(module.get(), &options,
+                                              &environment_, &request_arena_,
+                                              &request, &request_error_count_));
   EXPECT_EQ(request.selection.kind, LOOM_COMPILE_ENTRY_KIND_MODULE);
   EXPECT_EQ(request.target_emitter, &kDiagnosticEmitter);
   EXPECT_EQ(request.target_profile, &kTargetProfile);
@@ -848,10 +921,10 @@ TEST_F(CompileRequestTest, MissingCanonicalKernelEmitterFailsClosed) {
   ModulePtr module = ParseKernel(this, true);
   const loom_compile_request_options_t options = {};
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &environment_,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &environment_,
+                            &request_arena_, &request, &request_error_count_));
 }
 
 TEST_F(CompileRequestTest, MissingOptionalTargetFamilyFailsClosed) {
@@ -864,10 +937,10 @@ TEST_F(CompileRequestTest, MissingOptionalTargetFamilyFailsClosed) {
 
   const loom_compile_request_options_t options = {};
   loom_compile_request_t request = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_compile_request_resolve(module.get(), &options, &empty_environment,
-                                   &request_arena_, &request));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_compile_request_resolve(
+                            module.get(), &options, &empty_environment,
+                            &request_arena_, &request, &request_error_count_));
 
   loom_target_environment_deinitialize(&empty_environment);
 }
@@ -876,13 +949,15 @@ TEST_F(CompileRequestTest, ExplicitFormatSelectsNoncanonicalAlternative) {
   ModulePtr module = ParseKernel(this, true);
   loom_compile_request_options_t options = {};
   loom_compile_request_t request = {};
-  IREE_ASSERT_OK(loom_compile_request_resolve(
-      module.get(), &options, &environment_, &request_arena_, &request));
+  IREE_ASSERT_OK(loom_compile_request_resolve(module.get(), &options,
+                                              &environment_, &request_arena_,
+                                              &request, &request_error_count_));
   EXPECT_EQ(request.target_emitter, &kDiagnosticEmitter);
 
   options.format = IREE_SV("AlternateFormat123");
-  IREE_ASSERT_OK(loom_compile_request_resolve(
-      module.get(), &options, &environment_, &request_arena_, &request));
+  IREE_ASSERT_OK(loom_compile_request_resolve(module.get(), &options,
+                                              &environment_, &request_arena_,
+                                              &request, &request_error_count_));
   EXPECT_EQ(request.target_emitter, &kAlternateEmitter);
 }
 
@@ -893,8 +968,9 @@ TEST_F(CompileRequestTest, DiagnosticFormatCanInspectKernelEntries) {
       .format = IREE_SV("DiagnosticFormat123"),
   };
   loom_compile_request_t request = {};
-  IREE_ASSERT_OK(loom_compile_request_resolve(
-      module.get(), &options, &environment_, &request_arena_, &request));
+  IREE_ASSERT_OK(loom_compile_request_resolve(module.get(), &options,
+                                              &environment_, &request_arena_,
+                                              &request, &request_error_count_));
   EXPECT_EQ(request.selection.kind, LOOM_COMPILE_ENTRY_KIND_KERNEL);
   EXPECT_EQ(request.target_emitter, &kDiagnosticEmitter);
 }

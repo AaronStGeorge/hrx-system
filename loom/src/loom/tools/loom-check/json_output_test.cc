@@ -429,10 +429,11 @@ TEST_F(JsonOutputTest, EmitsVerifyAnnotationsWithMatchedState) {
       "// RUN: verify\n"
       "// ERROR@+1: PARSE/006 \"unknown\" \"operation\"\n"
       "bogus.nonexistent\n"
-      "// WARNING: \"left unmatched\"\n");
+      "// WARNING: \"left unmatched\"\n"
+      "// ERROR: SPIRV/PROFILE\n");
 
   ASSERT_EQ(file.case_count, 1u);
-  ASSERT_EQ(file.cases[0].annotation_count, 2u);
+  ASSERT_EQ(file.cases[0].annotation_count, 3u);
 
   loom_check_file_report_t report = MakeReport(file);
   IREE_ASSERT_OK(loom_check_file_report_mark_annotation_matched(&report, 0, 0));
@@ -449,7 +450,7 @@ TEST_F(JsonOutputTest, EmitsVerifyAnnotationsWithMatchedState) {
       LookupArrayElement(LookupObject(root, IREE_SV("cases")), 0);
   const iree_string_view_t annotations =
       LookupObject(test_case, IREE_SV("annotations"));
-  ExpectArrayLength(annotations, 2);
+  ExpectArrayLength(annotations, 3);
 
   const iree_string_view_t first = LookupArrayElement(annotations, 0);
   ExpectObjectUint64Equals(first, IREE_SV("index"), 1);
@@ -460,6 +461,8 @@ TEST_F(JsonOutputTest, EmitsVerifyAnnotationsWithMatchedState) {
       LookupObject(first, IREE_SV("expected"));
   ExpectObjectValueEquals(first_expected, IREE_SV("severity"),
                           IREE_SV("error"));
+  ExpectObjectValueEquals(first_expected, IREE_SV("diagnostic_code"),
+                          IREE_SV("null"));
   ExpectObjectValueEquals(first_expected, IREE_SV("domain"), IREE_SV("PARSE"));
   ExpectObjectUint64Equals(first_expected, IREE_SV("code"), 6);
   const iree_string_view_t first_messages =
@@ -476,6 +479,8 @@ TEST_F(JsonOutputTest, EmitsVerifyAnnotationsWithMatchedState) {
       LookupObject(second, IREE_SV("expected"));
   ExpectObjectValueEquals(second_expected, IREE_SV("severity"),
                           IREE_SV("warning"));
+  ExpectObjectValueEquals(second_expected, IREE_SV("diagnostic_code"),
+                          IREE_SV("null"));
   ExpectObjectValueEquals(second_expected, IREE_SV("domain"), IREE_SV("null"));
   ExpectObjectValueEquals(second_expected, IREE_SV("code"), IREE_SV("null"));
   const iree_string_view_t second_messages =
@@ -484,6 +489,17 @@ TEST_F(JsonOutputTest, EmitsVerifyAnnotationsWithMatchedState) {
   EXPECT_TRUE(iree_string_view_equal(LookupArrayElement(second_messages, 0),
                                      IREE_SV("left unmatched")));
   ExpectObjectBoolEquals(second, IREE_SV("matched"), false);
+
+  const iree_string_view_t third = LookupArrayElement(annotations, 2);
+  const iree_string_view_t third_expected =
+      LookupObject(third, IREE_SV("expected"));
+  ExpectObjectValueEquals(third_expected, IREE_SV("severity"),
+                          IREE_SV("error"));
+  ExpectObjectValueEquals(third_expected, IREE_SV("diagnostic_code"),
+                          IREE_SV("SPIRV/PROFILE"));
+  ExpectObjectValueEquals(third_expected, IREE_SV("domain"), IREE_SV("null"));
+  ExpectObjectValueEquals(third_expected, IREE_SV("code"), IREE_SV("null"));
+  ExpectObjectBoolEquals(third, IREE_SV("matched"), false);
 
   loom_check_result_deinitialize(&results[0]);
 }

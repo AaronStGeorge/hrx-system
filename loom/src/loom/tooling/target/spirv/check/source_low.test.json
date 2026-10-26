@@ -342,6 +342,7 @@
           "run": {
             "tool": "loom-check",
             "args": [
+              "--json=failures",
               "{tmp}/fixture.loom-test"
             ]
           },
@@ -350,9 +351,17 @@
           },
           "stderr": {
             "contains": [
+              "unexpected error at line 0:",
+              "SPIRV/PROFILE",
               "SPIR-V feature 'spirv.physical_storage_buffer' has contradictory facts",
               "'spirv:vulkan1.3+bda+hal' says true",
               "'spirv-low features option' says false"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "\"detail\":\"unexpected error at line 0:",
+              "\"diagnostic_code\":\"SPIRV/PROFILE\""
             ]
           }
         }

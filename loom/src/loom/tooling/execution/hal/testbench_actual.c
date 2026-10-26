@@ -631,16 +631,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
           uses_direct_dispatch
               ? LOOM_RUN_HAL_DISPATCH_SEQUENCE_REPRESENTATION_DIRECT
               : LOOM_RUN_HAL_DISPATCH_SEQUENCE_REPRESENTATION_COMMAND_BUFFER;
-      if (uses_direct_dispatch) {
-        // Directly dispatched artifacts retain the source entry name across
-        // lowering. Function-like HAL kernels may instead override the symbol
-        // exported by their executable container.
-        provider->invocation_options.function_name = entry_symbol;
-      } else {
-        status = loom_run_hal_testbench_resolve_export_name(
-            provider->module, entry_symbol,
-            &provider->invocation_options.function_name);
-      }
     }
   }
   loomc_result_release(result);
@@ -725,10 +715,23 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
         "compiler did not return executable and launch-config artifacts");
   }
 
-  status = iree_status_from_loomc(loomc_launch_config_program_load(
-      provider->artifacts.launch_config,
-      loomc_allocator_from_iree(provider->context->host_allocator),
-      &provider->launch_config_program));
+  if (provider->sequence_representation ==
+      LOOM_RUN_HAL_DISPATCH_SEQUENCE_REPRESENTATION_DIRECT) {
+    // Directly dispatched artifacts retain the source entry name across
+    // lowering. Function-like HAL kernels may instead override the symbol
+    // exported by their executable container.
+    provider->invocation_options.function_name = entry_symbol;
+  } else {
+    status = loom_run_hal_testbench_resolve_export_name(
+        provider->module, entry_symbol,
+        &provider->invocation_options.function_name);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_status_from_loomc(loomc_launch_config_program_load(
+        provider->artifacts.launch_config,
+        loomc_allocator_from_iree(provider->context->host_allocator),
+        &provider->launch_config_program));
+  }
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(loomc_launch_config_program_lookup_function(
         provider->launch_config_program,

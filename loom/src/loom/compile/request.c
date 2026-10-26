@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
+#include "loom/error/parameter.h"
 #include "loom/link/linker.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/pipeline/ops.h"
@@ -59,6 +61,23 @@ static iree_status_t loom_compile_entry_selection_lookup_root(
   }
   *out_symbol = symbol;
   return iree_ok_status();
+}
+
+static iree_status_t loom_compile_entry_selection_emit_unresolved_root(
+    const loom_compile_request_options_t* options, const loom_module_t* module,
+    const loom_symbol_t* symbol) {
+  const iree_string_view_t symbol_name =
+      loom_string_table_get(&module->strings, symbol->name_id);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(symbol_name),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = symbol->defining_op,
+      .error = LOOM_ERR_SYMBOL_002,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(options->diagnostic_emitter, &emission);
 }
 
 static bool loom_compile_entry_selection_is_array_program(
@@ -417,13 +436,17 @@ static iree_status_t loom_compile_entry_selection_copy_default_roots(
 }
 
 static iree_status_t loom_compile_entry_selection_resolve(
-    const loom_module_t* module, iree_string_view_list_t explicit_roots,
-    iree_string_view_list_t excluded_roots, iree_arena_allocator_t* arena,
-    loom_compile_entry_selection_t* out_selection) {
+    const loom_module_t* module, const loom_compile_request_options_t* options,
+    iree_arena_allocator_t* arena,
+    loom_compile_entry_selection_t* out_selection, uint32_t* out_error_count) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_selection);
+  IREE_ASSERT_ARGUMENT(out_error_count);
   *out_selection = (loom_compile_entry_selection_t){0};
+  *out_error_count = 0;
+  const iree_string_view_list_t explicit_roots = options->roots;
+  const iree_string_view_list_t excluded_roots = options->excluded_roots;
   if (explicit_roots.count != 0 && explicit_roots.values == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "root count is nonzero but roots are NULL");
@@ -447,6 +470,12 @@ static iree_status_t loom_compile_entry_selection_resolve(
       const loom_symbol_t* symbol = NULL;
       IREE_RETURN_IF_ERROR(loom_compile_entry_selection_lookup_root(
           module, explicit_roots.values[i], &symbol));
+      if (loom_symbol_definition_is_declaration(symbol->definition)) {
+        IREE_RETURN_IF_ERROR(loom_compile_entry_selection_emit_unresolved_root(
+            options, module, symbol));
+        *out_error_count = 1;
+        return iree_ok_status();
+      }
       IREE_RETURN_IF_ERROR(
           loom_compile_entry_selection_merge_root(module, symbol, &selection));
     }
@@ -570,17 +599,23 @@ static iree_status_t loom_compile_request_select_emitter(
 iree_status_t loom_compile_request_resolve(
     const loom_module_t* module, const loom_compile_request_options_t* options,
     const loom_target_environment_t* target_environment,
-    iree_arena_allocator_t* arena, loom_compile_request_t* out_request) {
+    iree_arena_allocator_t* arena, loom_compile_request_t* out_request,
+    uint32_t* out_error_count) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(target_environment);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_request);
+  IREE_ASSERT_ARGUMENT(out_error_count);
   *out_request = (loom_compile_request_t){0};
+  *out_error_count = 0;
 
   loom_compile_entry_selection_t selection = {0};
   IREE_RETURN_IF_ERROR(loom_compile_entry_selection_resolve(
-      module, options->roots, options->excluded_roots, arena, &selection));
+      module, options, arena, &selection, out_error_count));
+  if (*out_error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_compile_request_t request = {
       .selection = selection,

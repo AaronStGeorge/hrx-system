@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "unresolved kernel roots fail at the compile boundary",
+      "run": {
+        "tool": "loom-test",
+        "args": [
+          "{srcdir}/testdata/unresolved_kernel.loom",
+          "--case=@probe",
+          "--device=task"
+        ]
+      },
+      "exit": {"nonzero": true},
+      "stderr": {
+        "contains": [
+          "unresolved_kernel.loom:1:1: error [SYMBOL/002]",
+          "symbol '@unresolved' is referenced but not defined",
+          "kernel.decl @unresolved() launch()",
+          "^"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"category\":\"compile_rejected\"",
+          "\"provider\":\"actual\"",
+          "\"stage\":\"compile\"",
+          "\"kind\":\"SYMBOL/002\""
+        ]
+      }
+    }
+  ]
+}

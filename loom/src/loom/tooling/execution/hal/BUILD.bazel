@@ -6,6 +6,7 @@
 
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 load("//build_tools/bazel:test_resources.bzl", "GPU_DEVICE_RESOURCE_GROUP")
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
@@ -53,7 +54,16 @@ exports_files([
     "testdata/launch_schedule_hal_actual.loom",
     "testdata/scenario_batch_hal_actual.loom",
     "testdata/scenario_compare_hal_vm.loom",
+    "testdata/unresolved_kernel.loom",
 ])
+
+iree_execution_test_suite(
+    name = "compile_diagnostics_test",
+    data = ["testdata/unresolved_kernel.loom"],
+    manifests = ["compile_diagnostics.test.json"],
+    target_compatible_with = _TASK_EXECUTION_COMPATIBLE_WITH,
+    tools = {"loom-test": "//loom/src/loom/tools/loom-test"},
+)
 
 iree_executable_test(
     name = "command_count_observations_test",

@@ -69,6 +69,9 @@ iree_status_t loom_test_diagnostic_materialize_loomc(
   *out_diagnostic = (loom_test_diagnostic_t){0};
   out_diagnostic->severity =
       loom_test_diagnostic_severity_from_loomc(source->severity);
+  IREE_RETURN_IF_ERROR(loom_test_diagnostic_copy_string(
+      arena, iree_string_view_from_loomc(source->code),
+      &out_diagnostic->public_code));
   loom_test_diagnostic_error_from_loomc(source->code, &out_diagnostic->domain,
                                         &out_diagnostic->code);
   IREE_RETURN_IF_ERROR(loom_test_diagnostic_source_filename(

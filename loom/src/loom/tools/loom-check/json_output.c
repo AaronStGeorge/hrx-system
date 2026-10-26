@@ -140,6 +140,13 @@ static iree_status_t loom_check_json_write_annotation(
       &expected_object, IREE_SV("severity"),
       iree_make_cstring_view(
           loom_diagnostic_severity_name(annotation->severity))));
+  if (iree_string_view_is_empty(annotation->public_code)) {
+    IREE_RETURN_IF_ERROR(loom_json_object_write_null_field(
+        &expected_object, IREE_SV("diagnostic_code")));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+        &expected_object, IREE_SV("diagnostic_code"), annotation->public_code));
+  }
   if (annotation->domain == LOOM_ERROR_DOMAIN_COUNT_) {
     IREE_RETURN_IF_ERROR(
         loom_json_object_write_null_field(&expected_object, IREE_SV("domain")));

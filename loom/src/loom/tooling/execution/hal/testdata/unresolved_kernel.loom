@@ -1,0 +1,6 @@
+kernel.decl @unresolved() launch()
+
+check.case @probe {
+  kernel.launch @unresolved() : ()
+  check.return
+}

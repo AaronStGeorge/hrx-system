@@ -89,17 +89,20 @@
 //
 // Annotations (for verify mode — uppercase to distinguish from comments):
 //   // ERROR: DOMAIN/CODE "substring"
+//   // ERROR: PUBLIC/CODE
 //   // WARNING: DOMAIN/CODE
 //   // REMARK: "substring"
 //   // ERROR@+1: DOMAIN/CODE "substring"
 //   // ERROR@-2: "substring"
 //   // ERROR@+1: DOMAIN/CODE "first" "second"
 //
-// Multiple quoted substrings may follow the DOMAIN/CODE (or appear
-// alone). All listed substrings must appear in the diagnostic message
-// for the annotation to match. Order does not matter; substrings may
-// overlap. Up to LOOM_TEST_MAX_ANNOTATION_SUBSTRINGS substrings per
-// annotation are supported.
+// A numeric code in a generated compiler domain uses the structured generated
+// identity. Other complete PUBLIC/CODE tokens match the stable LoomC diagnostic
+// code exactly, without requiring core tooling to know optional component
+// vocabularies. Multiple quoted substrings may follow the code (or appear
+// alone). All listed substrings must appear in the diagnostic message for the
+// annotation to match. Order does not matter; substrings may overlap. Up to
+// LOOM_TEST_MAX_ANNOTATION_SUBSTRINGS substrings per annotation are supported.
 //
 // The offset (@+N / @-N) targets a line relative to the annotation.
 // Without an offset, the annotation targets its own line.
@@ -246,6 +249,9 @@ typedef struct loom_test_annotation_t {
   loom_error_domain_t domain;
   // Error code within the domain. 0 matches any code.
   uint16_t code;
+  // Exact public diagnostic code, or empty when |domain| and |code| select a
+  // generated compiler diagnostic.
+  iree_string_view_t public_code;
   // Source range of the annotation comment line.
   loom_test_source_range_t source_range;
   // 1-based line in the input that this annotation targets.

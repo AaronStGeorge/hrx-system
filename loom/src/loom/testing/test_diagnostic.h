@@ -37,6 +37,10 @@ typedef struct loom_test_diagnostic_t {
   // Structured error code to match against DOMAIN/CODE annotations.
   uint16_t code;
 
+  // Stable public diagnostic code copied from LoomC, or empty for a native
+  // diagnostic represented directly by |domain| and |code|.
+  iree_string_view_t public_code;
+
   // Original diagnostic source, independent of its rendered message.
   struct {
     // Source identity copied into the diagnostic arena.

@@ -27,6 +27,11 @@ bool loom_test_diagnostic_matches_annotation(
   if (diagnostic->severity != annotation->severity) {
     return false;
   }
+  if (!iree_string_view_is_empty(annotation->public_code) &&
+      !iree_string_view_equal(diagnostic->public_code,
+                              annotation->public_code)) {
+    return false;
+  }
   if (annotation->domain != LOOM_ERROR_DOMAIN_COUNT_ &&
       diagnostic->domain != annotation->domain) {
     return false;

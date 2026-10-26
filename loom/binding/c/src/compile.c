@@ -951,6 +951,32 @@ loomc_status_t loomc_compile_artifact(
         &excluded_roots);
   }
 
+  loom_source_table_projection_t sources = {
+      .table = *loomc_module_source_table(module),
+      .arena = function_versions->arena,
+  };
+  const loom_source_resolver_t source_resolver = {
+      .fn = loom_source_table_resolve,
+      .user_data = &sources.table,
+  };
+  const loomc_target_pass_environment_t* pass_environment =
+      loomc_target_environment_pass_environment(target_environment);
+  loomc_diagnostic_capture_t capture;
+  loomc_diagnostic_capture_initialize(
+      result, /*source=*/NULL, internal_module, source_resolver,
+      LOOM_EMITTER_PASS,
+      pass_environment ? &pass_environment->diagnostic_type_print_options
+                       : NULL,
+      &capture);
+  const loom_target_entry_options_t entry_options = {
+      .diagnostic_sink =
+          {
+              .fn = loomc_diagnostic_capture,
+              .user_data = &capture,
+          },
+      .source_resolver = source_resolver,
+  };
+
   loom_compile_request_t request = {0};
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     const loom_compile_request_options_t request_options = {
@@ -962,14 +988,22 @@ loomc_status_t loomc_compile_artifact(
                                     options->target_profile)
                               : NULL,
         .excluded_roots = excluded_roots,
+        .diagnostic_emitter =
+            {
+                .fn = loomc_diagnostic_capture_emission,
+                .user_data = &capture,
+            },
     };
+    uint32_t error_count = 0;
     status = loomc_status_from_iree(loom_compile_request_resolve(
         internal_module, &request_options,
         loomc_target_environment_loom_target_environment(target_environment),
-        function_versions->arena, &request));
+        function_versions->arena, &request, &error_count));
     if (!loomc_status_is_ok(status)) {
       status = loomc_compile_fail_result_from_status(
           result, loomc_make_cstring_view("COMPILE/REQUEST"), status);
+    } else if (error_count != 0) {
+      loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
     }
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
@@ -991,31 +1025,6 @@ loomc_status_t loomc_compile_artifact(
 
   loom_target_specialization_request_list_t target_specializations = {0};
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
-    loom_source_table_projection_t sources = {
-        .table = *loomc_module_source_table(module),
-        .arena = function_versions->arena,
-    };
-    const loom_source_resolver_t source_resolver = {
-        .fn = loom_source_table_resolve,
-        .user_data = &sources.table,
-    };
-    const loomc_target_pass_environment_t* pass_environment =
-        loomc_target_environment_pass_environment(target_environment);
-    loomc_diagnostic_capture_t capture;
-    loomc_diagnostic_capture_initialize(
-        result, /*source=*/NULL, internal_module, source_resolver,
-        LOOM_EMITTER_PASS,
-        pass_environment ? &pass_environment->diagnostic_type_print_options
-                         : NULL,
-        &capture);
-    const loom_target_entry_options_t entry_options = {
-        .diagnostic_sink =
-            {
-                .fn = loomc_diagnostic_capture,
-                .user_data = &capture,
-            },
-        .source_resolver = source_resolver,
-    };
     uint32_t error_count = 0;
     status = loomc_status_from_iree(loom_compile_request_materialize(
         &request,
