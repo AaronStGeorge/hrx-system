@@ -559,6 +559,7 @@ loom_corpus_test(
   RUNNER_ARGS
     "--device=legacy-amdgpu"
   LABELS
+    "loom-corpus"
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
     "iree-build-requirement=loom.execute.iree_hal"
@@ -768,6 +769,7 @@ loom_corpus_test(
   RUNNER_ARGS
     "--device=amdgpu"
   LABELS
+    "loom-corpus"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -803,6 +805,7 @@ loom_corpus_test(
     "--device=legacy-amdgpu"
     "--sanitizer=access"
   LABELS
+    "loom-corpus"
     "notsan"
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"

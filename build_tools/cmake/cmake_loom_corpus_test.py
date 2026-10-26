@@ -124,6 +124,13 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                             for name in expected_profiles
                         },
                     )
+                    for test in tests:
+                        labels = next(
+                            property["value"]
+                            for property in test["properties"]
+                            if property["name"] == "LABELS"
+                        )
+                        self.assertIn("loom-corpus", labels)
 
 
 if __name__ == "__main__":

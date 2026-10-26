@@ -1186,6 +1186,7 @@ loom_corpus_test(
     "@vector_bfloat_dot_reduction_values"
     "TARGET/001"
   LABELS
+    "loom-corpus"
     "iree-build-requirement=loom.target.arch.vm"
     "iree-build-requirement=loom.target.arch.wasm"
     "iree-build-requirement=loom.emit.wasm"

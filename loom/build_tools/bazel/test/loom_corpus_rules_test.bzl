@@ -239,6 +239,8 @@ def _test_execution_partitions_profiles_and_xfails_impl(env, target):
         env.fail("unexpected corpus correctness arguments %r" % info.test_runner_args)
     if info.benchmark_runner != None or info.benchmark_runner_args:
         env.fail("corpus execution must remain correctness-only")
+    if "loom-corpus" not in target[TestingAspectInfo].attrs.tags:
+        env.fail("corpus execution must carry its semantic test tag")
 
 def _test_execution_carries_allowed_failures(name, **kwargs):
     analysis_test(

@@ -9,6 +9,8 @@
 load(":loom_corpus_catalog.bzl", "loom_corpus_validate_catalog")
 load(":loom_library.bzl", "loom_test")
 
+_CORPUS_TEST_TAG = "loom-corpus"
+
 def _profile_with_runner_args(profile, runner_args):
     return struct(
         build_requirements = profile.build_requirements,
@@ -112,6 +114,7 @@ def loom_corpus_test(
       target_compatible_with: Build constraints applied to every source test.
     """
     catalog = loom_corpus_validate_catalog(catalog)
+    tags = tags + [_CORPUS_TEST_TAG]
     if not execution_profiles:
         fail("loom_corpus_test requires at least one execution profile")
     if name in [manifest.name for manifest in catalog.manifests]:

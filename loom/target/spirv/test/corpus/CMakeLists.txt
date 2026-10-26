@@ -2303,6 +2303,7 @@ loom_corpus_test(
     "--device=vulkan"
     "--vulkan_validation_layers=false"
   LABELS
+    "loom-corpus"
     "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
     "iree-build-requirement=loom.execute.iree_hal"

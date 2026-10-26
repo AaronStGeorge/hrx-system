@@ -128,6 +128,7 @@ loom_corpus_test(
   RUNNER_ARGS
     "--device=xdna"
   LABELS
+    "loom-corpus"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.xdna"
     "iree-build-requirement=loom.target.arch.xdna"

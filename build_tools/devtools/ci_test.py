@@ -931,6 +931,12 @@ class CiTest(unittest.TestCase):
             "--test_tag_filters=" + ",".join(ci_config.CPU_RESOURCE_TAG_EXCLUDES),
             integration_test_step.argv,
         )
+        self.assertFalse(
+            any(
+                arg.startswith("--test_lang_filters=")
+                for arg in integration_test_step.argv
+            )
+        )
         self.assertEqual(
             steps[4].argv[-1],
             ci_config.BAZEL_REPOSITORY_INTEGRATION_DYNAMIC_LIBRARY_TARGET,
@@ -961,7 +967,9 @@ class CiTest(unittest.TestCase):
         for step in steps[:6]:
             self.assertNotIn("--//loom/config:shared_tools", step.argv)
 
-    def test_bazel_repository_integration_skips_ordinary_repository_build(self):
+    def test_bazel_repository_integration_secondary_lane_skips_duplicate_coverage(
+        self,
+    ):
         args = ci.parse_arguments(["iree-bazel-repository-integration"])
 
         with mock.patch.dict(
@@ -979,6 +987,15 @@ class CiTest(unittest.TestCase):
             "Build AMDGPU device toolchain smoke", [step.name for step in steps]
         )
         self.assertIn("Test repository", [step.name for step in steps])
+        integration_test_step = next(
+            step for step in steps if step.name == "Test repository"
+        )
+        self.assertIn(
+            "--test_tag_filters="
+            + ",".join(ci_config.CPU_RESOURCE_TAG_EXCLUDES + ("-loom-corpus",)),
+            integration_test_step.argv,
+        )
+        self.assertIn("--test_lang_filters=-py", integration_test_step.argv)
 
     def test_bazel_repository_integration_requires_rocm_device_tools(self):
         args = ci.parse_arguments(["iree-bazel-repository-integration"])
@@ -997,12 +1014,6 @@ class CiTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "repository-wide"):
-            ci.steps_from_args(args)
-
-    def test_python_test_exclusion_rejects_non_repository_commands(self):
-        args = ci.parse_arguments(["iree-bazel-cpu", "--exclude-python-tests"])
-
-        with self.assertRaisesRegex(ValueError, "repository-integration"):
             ci.steps_from_args(args)
 
     def test_cmake_repository_build_covers_supported_graph_with_prebuilts(self):
