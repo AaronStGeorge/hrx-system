@@ -569,6 +569,108 @@ template.def<@request.schedule> priority(1) @small(%size: index) {
   EXPECT_GT(loomc_byte_sequence_length(private_program.artifact.contents), 0u);
 }
 
+TEST(TargetCmdProgramTest,
+     DiagnosesUnresolvedConfigurationHelpersBeforePublishingRequests) {
+  for (bool export_helper : {false, true}) {
+    SCOPED_TRACE(export_helper);
+    ContextPtr context = CreateContext();
+    WorkspacePtr workspace = CreateWorkspace();
+    const char* helper_definition =
+        export_helper
+            ? "func.def public pure inline @group_count() -> (index) {\n"
+            : "func.def pure inline @group_count() -> (index) {\n";
+    std::string helper_text = helper_definition;
+    helper_text += R"(
+  %count = index.constant 4 : index
+  func.return %count : index
+}
+)";
+    SourcePtr helper_source =
+        CreateTextSource("helper.loom", helper_text.c_str());
+    SourcePtr kernel_source = CreateTextSource("kernel.loom", R"(
+func.decl pure @group_count() -> (index)
+
+kernel.def @configured() {
+  %one = index.constant 1 : index
+  %count = func.call pure @group_count() : () -> (index)
+  kernel.launch.config workgroups(%one, %count, %one) workgroup_size(%one, %one, %one) : index
+} launch() {
+  kernel.return
+}
+)");
+    SourcePtr command_source = CreateTextSource("command.loom", R"(
+kernel.decl @configured() launch()
+kernel.entry.decl @external()
+
+command.program.def public @entry() launch() {
+  %one = index.constant 1 : index
+  kernel.launch @configured() : ()
+  kernel.dispatch @external[%one]() : [index]()
+  command.return
+}
+)");
+
+    BuilderPtr builder = CreateIndexBuilder(context.get());
+    const auto add_library = [&](const char* name, loomc_source_t* source) {
+      const loomc_link_index_source_options_t source_options = {
+          .provider_name = loomc_make_cstring_view(name),
+          .role = LOOMC_LINK_PROVIDER_ROLE_LIBRARY,
+      };
+      LOOMC_ASSERT_OK(loomc_link_index_builder_add_source(
+          builder.get(), source, &source_options, nullptr));
+    };
+    add_library("helper", helper_source.get());
+    add_library("kernel", kernel_source.get());
+    add_library("command", command_source.get());
+    LinkIndexPtr index = FinishIndex(builder.get());
+
+    loomc_link_index_symbol_t entry = {};
+    ASSERT_TRUE(loomc_link_index_lookup_global(
+        index.get(), loomc_make_cstring_view("entry"), &entry));
+    const loomc_host_size_t root_symbol_ordinals[] = {entry.ordinal};
+    RequestCapture capture;
+    const loomc_cmd_program_product_options_t options = {
+        .type = LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_PRODUCT_OPTIONS,
+        .structure_size = sizeof(options),
+        .link_index = index.get(),
+        .root_symbol_ordinals = root_symbol_ordinals,
+        .root_symbol_count = std::size(root_symbol_ordinals),
+        .request_sink = {.publish = CaptureRequest, .user_data = &capture},
+    };
+    loomc_product_t* product_raw = nullptr;
+    loomc_result_t* result_raw = nullptr;
+    LOOMC_ASSERT_OK(loomc_cmd_program_product_build(workspace.get(), &options,
+                                                    loomc_allocator_system(),
+                                                    &product_raw, &result_raw));
+    ProductPtr product(product_raw);
+    ResultPtr result(result_raw);
+    ASSERT_NE(result, nullptr);
+
+    if (export_helper) {
+      ExpectSucceededResult(result.get());
+      ASSERT_NE(product, nullptr);
+      EXPECT_EQ(loomc_cmd_program_product_program_count(product.get()), 1u);
+      EXPECT_EQ(
+          loomc_cmd_program_product_entry_requirement_count(product.get()), 2u);
+      EXPECT_EQ(capture.requests.size(), 1u);
+    } else {
+      EXPECT_EQ(product, nullptr);
+      EXPECT_FALSE(loomc_result_succeeded(result.get()));
+      EXPECT_TRUE(capture.requests.empty());
+      ASSERT_EQ(loomc_result_diagnostic_count(result.get()), 1u);
+      const loomc_diagnostic_t* diagnostic =
+          loomc_result_diagnostic_at(result.get(), 0);
+      EXPECT_EQ(ToString(diagnostic->code), "SYMBOL/002");
+      EXPECT_NE(ToString(diagnostic->message).find("@group_count"),
+                std::string::npos);
+      ASSERT_NE(diagnostic->range.source, nullptr);
+      EXPECT_EQ(ToString(loomc_source_identifier(diagnostic->range.source)),
+                "kernel.loom");
+      EXPECT_GT(diagnostic->range.start_line, 0u);
+    }
+  }
+}
+
 TEST(TargetCmdProgramTest, PublishesOwnedPipelineSpecializations) {
   ContextPtr context = CreateContext();
   WorkspacePtr workspace = CreateWorkspace();

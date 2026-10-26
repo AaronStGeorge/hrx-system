@@ -6,9 +6,57 @@
 
 #include "loom/target/arch/cmd/lower/program_plan_index.h"
 
+#include "loom/error/error_catalog.h"
+#include "loom/error/parameter.h"
 #include "loom/ir/module.h"
 #include "loom/link/index_materializer.h"
 #include "loom/link/planner.h"
+
+static iree_status_t loom_cmd_program_plan_diagnose_unresolved_definitions(
+    const loom_link_module_index_t* index,
+    const loom_link_index_materialization_t* materialization,
+    iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid) {
+  *out_valid = true;
+  const iree_host_size_t plan_symbol_count =
+      loom_link_plan_symbol_count(materialization->plan);
+  for (iree_host_size_t i = 0; i < plan_symbol_count; ++i) {
+    const loom_link_plan_symbol_t* selection =
+        loom_link_plan_symbol_at(materialization->plan, i);
+    if (!selection->has_unresolved_definition_dependency) {
+      continue;
+    }
+
+    const loom_link_module_index_symbol_t* source_symbol =
+        loom_link_module_index_symbol_at(index, selection->symbol_ordinal);
+    IREE_ASSERT(source_symbol);
+    IREE_ASSERT_LT(selection->symbol_ordinal,
+                   materialization->product.target_symbols.count);
+    const loom_symbol_ref_t target_ref = materialization->product.target_symbols
+                                             .values[selection->symbol_ordinal];
+    IREE_ASSERT(loom_symbol_ref_is_valid(target_ref));
+    IREE_ASSERT_EQ(target_ref.module_id, 0u);
+    IREE_ASSERT_LT(target_ref.symbol_id,
+                   materialization->product.module->symbols.count);
+    const loom_op_t* target_op =
+        materialization->product.module->symbols.entries[target_ref.symbol_id]
+            .defining_op;
+    IREE_ASSERT(target_op);
+
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(source_symbol->name),
+    };
+    const loom_diagnostic_emission_t emission = {
+        .module = materialization->product.module,
+        .op = target_op,
+        .error = LOOM_ERR_SYMBOL_002,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    *out_valid = false;
+    IREE_RETURN_IF_ERROR(iree_diagnostic_emit(diagnostic_emitter, &emission));
+  }
+  return iree_ok_status();
+}
 
 static bool loom_cmd_program_plan_has_source_kernels(
     const loom_link_module_index_t* index,
@@ -92,7 +140,11 @@ iree_status_t loom_cmd_program_plan_build_from_index(
       index, &link_options, materialization_environment,
       IREE_SV("command_program_roots"), &materialization);
   bool source_valid = true;
-  if (iree_status_is_ok(status) && options != NULL &&
+  if (iree_status_is_ok(status)) {
+    status = loom_cmd_program_plan_diagnose_unresolved_definitions(
+        index, &materialization, diagnostic_emitter, &source_valid);
+  }
+  if (iree_status_is_ok(status) && source_valid && options != NULL &&
       options->verification.fn != NULL) {
     status =
         options->verification.fn(options->verification.user_data,

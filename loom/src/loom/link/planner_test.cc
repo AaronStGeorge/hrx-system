@@ -1392,6 +1392,10 @@ TEST_F(LinkPlannerTest, UnresolvedDeclarationIgnoresPrivateLibraryDefinition) {
   EXPECT_TRUE(ContainsSymbol(plan.get(), callee_decl));
   EXPECT_FALSE(ContainsSymbol(plan.get(), callee_def));
   EXPECT_FALSE(ContainsSymbol(plan.get(), helper));
+  const loom_link_plan_symbol_t* callee_selection =
+      FindPlannedSymbol(plan.get(), callee_decl);
+  ASSERT_NE(callee_selection, nullptr);
+  EXPECT_TRUE(callee_selection->has_unresolved_definition_dependency);
 }
 
 TEST_F(LinkPlannerTest, RuntimeImportDoesNotResolveFromLoomLibrary) {

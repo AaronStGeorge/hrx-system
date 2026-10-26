@@ -689,6 +689,7 @@ static iree_status_t loom_link_plan_append_symbol(
               .cause_ordinal = cause.symbol_plan_ordinal,
               .primary_facet_ordinal = LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL,
               .selected_facet_count = 0,
+              .has_unresolved_definition_dependency = false,
               .root_name = cause.root_name,
           },
       .last_facet_plan_ordinal = LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL,
@@ -934,16 +935,25 @@ static iree_status_t loom_link_plan_resolve_declaration(
   if (!exact_declaration && !target_declaration) {
     return iree_ok_status();
   }
+  const bool requires_definition =
+      exact_declaration && loom_link_plan_facet_request_requires_definition(
+                               declaration, definition_request);
+  const bool records_unresolved_definition_dependency =
+      requires_definition &&
+      definition_request.mode == LOOM_LINK_PLAN_FACET_REQUEST_COMPLETE;
   loom_link_plan_symbol_work_item_t* declaration_work_item =
       &plan->symbols.values[declaration_plan_ordinal];
   const loom_link_module_index_symbol_t* selected_symbol = NULL;
   if (declaration_work_item->resolved_definition_symbol_ordinal ==
       LOOM_LINK_PLAN_DEFINITION_ABSENT_ORDINAL) {
-    if (exact_declaration &&
-        loom_link_plan_facet_request_requires_definition(declaration,
-                                                         definition_request) &&
-        !loom_link_plan_allows_unresolved(plan, options)) {
-      return loom_link_plan_unresolved_exact_declaration_status(declaration);
+    if (records_unresolved_definition_dependency) {
+      declaration_work_item->selection.has_unresolved_definition_dependency =
+          true;
+    }
+    if (requires_definition) {
+      if (!loom_link_plan_allows_unresolved(plan, options)) {
+        return loom_link_plan_unresolved_exact_declaration_status(declaration);
+      }
     }
     return iree_ok_status();
   } else if (declaration_work_item->resolved_definition_symbol_ordinal !=
@@ -965,6 +975,10 @@ static iree_status_t loom_link_plan_resolve_declaration(
                         : LOOM_LINK_PLAN_DEFINITION_ABSENT_ORDINAL;
   }
   if (!selected_symbol) {
+    if (records_unresolved_definition_dependency) {
+      declaration_work_item->selection.has_unresolved_definition_dependency =
+          true;
+    }
     return iree_ok_status();
   }
   const loom_link_plan_symbol_t* declaration_selection =

@@ -154,6 +154,8 @@ typedef struct loom_link_plan_symbol_t {
   iree_host_size_t primary_facet_ordinal;
   // Number of selected semantic facets.
   uint16_t selected_facet_count;
+  // Whether a complete-symbol dependency lacks an accessible definition.
+  bool has_unresolved_definition_dependency;
   // Root name that caused this selection when reason is ROOT.
   iree_string_view_t root_name;
 } loom_link_plan_symbol_t;
