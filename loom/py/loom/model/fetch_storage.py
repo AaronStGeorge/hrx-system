@@ -19,6 +19,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .fetch_hf import HuggingFace, hf_url_source
+from .fetch_progress import ByteProgress, Progress, ProgressEvent
 from .fetch_safetensors import repack
 from .fetch_source import Document, FetchError, Source, document_source, open_source
 from .fetch_transfer import run_transfer
@@ -126,7 +127,12 @@ class AcquiredFile:
 
 
 def _copy_source(
-    source: Source, identity: FileIdentity | None, offline: bool, temporary: Path
+    source: Source,
+    identity: FileIdentity | None,
+    offline: bool,
+    temporary: Path,
+    *,
+    progress=None,
 ) -> tuple[int, str]:
     with open_source(
         source, offline=offline, size=identity.size if identity else None
@@ -134,6 +140,10 @@ def _copy_source(
         expected_size = identity.size if identity else transport_size
         digest = hashlib.sha256()
         size = 0
+        counter = ByteProgress(
+            progress, "download" if source.transport["kind"] == "url" else "read"
+        )
+        counter(0, expected_size)
         with temporary.open("wb") as output:
             while True:
                 limit = (
@@ -149,11 +159,15 @@ def _copy_source(
                     raise FetchError("source exceeded its declared byte count")
                 digest.update(chunk)
                 output.write(chunk)
+                counter(size, expected_size)
             output.flush()
             os.fsync(output.fileno())
     if expected_size is not None and size != expected_size:
         raise FetchError("source transfer ended before its declared byte count")
     digest = digest.hexdigest()
+    if progress is not None:
+        # HTTP integrity is computed during the transfer, without a second read.
+        progress(ProgressEvent("verify", completed_bytes=size, total_bytes=size))
     if identity is not None and digest != identity.sha256:
         raise ManifestError("source SHA-256 does not match its lock")
     return size, digest
@@ -174,13 +188,17 @@ def _read_document_bytes(source: Source, offline: bool) -> bytes:
 class ContentCache:
     """Whole files are shared by verified content, not by model/preset name."""
 
-    def __init__(self, root: Path, *, huggingface=None, wait_for_access=None):
+    def __init__(
+        self, root: Path, *, huggingface=None, wait_for_access=None, progress=None
+    ):
         # Loom-owned document/content storage, independent of the Hub's cache.
         self.root = root.absolute()
         # Optional per-operation provider, constructed only when HF is needed.
         self._huggingface = huggingface
         # Human interaction belongs to the caller, including plain or visual modes.
         self.wait_for_access = wait_for_access
+        # Optional serialized observations; never receives provider logs or URLs.
+        self.progress = Progress(progress)
         # Shared operation lifetime across local hashing and every transfer provider.
         self.cancelled = (
             huggingface.cancelled if huggingface is not None else threading.Event()
@@ -223,6 +241,7 @@ class ContentCache:
             return replace(source, transport={"kind": "local", "path": str(cached)})
         if offline:
             raise FetchError("--offline Hugging Face source is not cached")
+        self.progress.emit("access")
         metadata = self.huggingface.metadata(source.transport)
         if metadata.commit_hash != source.transport["revision"]:
             raise FetchError("Hugging Face file metadata changed the pinned revision")
@@ -233,14 +252,20 @@ class ContentCache:
     def blob_path(self, digest: str) -> Path:
         return self.root / "blob" / "sha256" / digest
 
-    def find(self, identity: FileIdentity) -> Path | None:
+    def find(self, identity: FileIdentity, *, progress=None) -> Path | None:
         path = self.blob_path(identity.sha256)
         if not path.exists():
             return None
-        identity.verify(path, cancelled=self.cancelled)
+        identity.verify(
+            path,
+            cancelled=self.cancelled,
+            progress=ByteProgress(progress, "verify"),
+        )
         return path
 
-    def _publish(self, temporary: Path, identity: FileIdentity) -> Path:
+    def _publish(
+        self, temporary: Path, identity: FileIdentity, *, progress=None
+    ) -> Path:
         path = self.blob_path(identity.sha256)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -248,7 +273,11 @@ class ContentCache:
         except FileExistsError:
             # Keep the existing shared inode: replacing it would leave two whole
             # copies alive when an installation still links the older inode.
-            identity.verify(path, cancelled=self.cancelled)
+            identity.verify(
+                path,
+                cancelled=self.cancelled,
+                progress=ByteProgress(progress, "verify"),
+            )
         return path
 
     def acquire_transformed(
@@ -259,14 +288,16 @@ class ContentCache:
         *,
         offline: bool,
         preserve_sources: bool,
+        progress=None,
     ) -> AcquiredFile:
+        progress = self.progress if progress is None else progress
         if self.cancelled.is_set():
             raise FetchError("model acquisition cancelled")
         key = hashlib.sha256(file_key(source.transport, transform).encode()).hexdigest()
         receipt = self.root / "preserved" / (key + ".json")
         cached = None
         if identity is not None:
-            cached = self.find(identity)
+            cached = self.find(identity, progress=progress)
             if cached is not None:
                 if (
                     not preserve_sources
@@ -287,6 +318,7 @@ class ContentCache:
                             retained.verify(
                                 self.blob_path(retained.sha256),
                                 cancelled=self.cancelled,
+                                progress=ByteProgress(progress, "verify"),
                             )
                         return AcquiredFile(cached, identity)
         source = self.prepare_source(source, None, offline=offline)
@@ -308,10 +340,15 @@ class ContentCache:
                 else None
             )
             result = (
-                self.huggingface.repack(source, transform, destination, preserve)
+                self.huggingface.repack(
+                    source, transform, destination, preserve, progress=progress
+                )
                 if kind == "hf"
                 else run_transfer(
-                    repack, (source, transform, destination, preserve), self.cancelled
+                    repack,
+                    (source, transform, destination, preserve),
+                    self.cancelled,
+                    progress=progress if progress else None,
                 )
             )
             observed = FileIdentity(
@@ -320,6 +357,9 @@ class ContentCache:
                 result["sha256"],
                 source.resolved,
                 transform,
+            )
+            progress.emit(
+                "verify", completed_bytes=observed.size, total_bytes=observed.size
             )
             if identity is not None and (observed.size, observed.sha256) != (
                 identity.size,
@@ -336,7 +376,9 @@ class ContentCache:
                     retained = FileIdentity(
                         source.origin, interval["length"], interval["sha256"]
                     )
-                    self._publish(preserve / interval["path"], retained)
+                    self._publish(
+                        preserve / interval["path"], retained, progress=progress
+                    )
                     records.append(
                         {
                             name: value
@@ -361,11 +403,14 @@ class ContentCache:
                     ).encode(),
                 )
             path = (
-                cached if cached is not None else self._publish(destination, observed)
+                cached
+                if cached is not None
+                else self._publish(destination, observed, progress=progress)
             )
             return AcquiredFile(path, observed)
 
     def read_document(self, location: str, *, offline: bool) -> Document:
+        self.progress.emit("discover")
         if self.cancelled.is_set():
             raise FetchError("model acquisition cancelled")
         source = document_source(location)
@@ -394,6 +439,7 @@ class ContentCache:
                 raise FetchError("cached model/lock document is invalid") from error
         recognized = self._hf_url(location) if remote else None
         if recognized is not None:
+            self.progress.emit("access")
             transport, endpoint = recognized
             transport["revision"] = self.huggingface.resolve_revision(
                 transport, offline=offline
@@ -429,8 +475,14 @@ class ContentCache:
         return Document(location, text)
 
     def acquire(
-        self, source: Source, identity: FileIdentity | None, *, offline: bool
+        self,
+        source: Source,
+        identity: FileIdentity | None,
+        *,
+        offline: bool,
+        progress=None,
     ) -> AcquiredFile:
+        progress = self.progress if progress is None else progress
         if self.cancelled.is_set():
             raise FetchError("model acquisition cancelled")
         kind = source.transport["kind"]
@@ -438,9 +490,15 @@ class ContentCache:
             path = (
                 Path(source.transport["path"])
                 if kind == "local"
-                else self.huggingface.download(source.transport, offline=offline)
+                else self.huggingface.download(
+                    source.transport, offline=offline, progress=progress
+                )
             )
-            size, digest = file_digest(path, cancelled=self.cancelled)
+            size, digest = file_digest(
+                path,
+                cancelled=self.cancelled,
+                progress=ByteProgress(progress, "verify"),
+            )
             observed = FileIdentity(source.origin, size, digest, source.resolved)
             if identity is not None and (size, digest) != (
                 identity.size,
@@ -467,7 +525,9 @@ class ContentCache:
                 identity = replace(
                     identity, origin=source.origin, resolved=source.resolved
                 )
-        cached = self.find(identity) if identity is not None else None
+        cached = (
+            self.find(identity, progress=progress) if identity is not None else None
+        )
         if cached is not None:
             acquired = AcquiredFile(cached, identity)
         else:
@@ -479,12 +539,19 @@ class ContentCache:
             try:
                 arguments = (source, identity, offline, temporary)
                 size, digest = (
-                    run_transfer(_copy_source, arguments, self.cancelled)
+                    run_transfer(
+                        _copy_source,
+                        arguments,
+                        self.cancelled,
+                        progress=progress if progress else None,
+                    )
                     if kind == "url" and not offline
-                    else _copy_source(*arguments)
+                    else _copy_source(
+                        *arguments, progress=progress if progress else None
+                    )
                 )
                 observed = FileIdentity(source.origin, size, digest, source.resolved)
-                path = self._publish(temporary, observed)
+                path = self._publish(temporary, observed, progress=progress)
                 acquired = AcquiredFile(path, observed)
             finally:
                 temporary.unlink(missing_ok=True)

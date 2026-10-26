@@ -7,7 +7,8 @@
 """Human-readable guidance from validated, author-supplied memory estimates."""
 
 
-def _bytes(value: int | None) -> str:
+def format_bytes(value: int | None) -> str:
+    """Formats an exact byte count or an explicitly unknown extent."""
     if value is None:
         return "unknown"
     if value < 1024:
@@ -21,9 +22,9 @@ def describe_memory(memory: dict) -> str:
     """Formats informational counts without inferring a total or hardware fit."""
     return (
         "Estimated memory: weights "
-        + _bytes(memory.get("weights_bytes"))
+        + format_bytes(memory.get("weights_bytes"))
         + "; transients "
-        + _bytes(memory.get("transient_bytes"))
+        + format_bytes(memory.get("transient_bytes"))
         + ". "
         + memory["workload"]
     )

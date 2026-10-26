@@ -115,6 +115,34 @@ def serving(content, mode="normal"):
             release.set()
 
 
+def test_transform_progress_counts_selected_reads_not_the_parent_file(tmp_path):
+    content = archive(
+        [
+            ("selected", "U8", [4], b"abcd"),
+            ("unused", "U8", [32], bytes(32)),
+        ]
+    )
+    events = []
+    with serving(content) as (source, requests, _, _):
+        cache = ContentCache(tmp_path / "cache", progress=events.append)
+        result = cache.acquire_transformed(
+            source,
+            transform("selected"),
+            None,
+            offline=False,
+            preserve_sources=False,
+        )
+        selected_bytes = sum(length for _, length in requests)
+        transfers = [event for event in events if event.phase == "transform"]
+        assert transfers[0].total_bytes is None
+        assert (
+            transfers[-1].completed_bytes == transfers[-1].total_bytes == selected_bytes
+        )
+        assert selected_bytes < len(content)
+        assert events[-1].phase == "verify"
+        assert events[-1].completed_bytes == result.identity.size
+
+
 @pytest.mark.parametrize(
     ("dtype", "size"),
     [

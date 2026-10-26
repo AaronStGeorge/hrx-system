@@ -17,7 +17,7 @@ from pathlib import Path
 from loom.model import ManifestError, ModelCard
 from loom.model.fetch import check_output, install, plan_fetch, plan_lock, update_lock
 from loom.model.fetch_catalog import installed_catalog, load_catalog
-from loom.model.fetch_console import AccessWaiter, display_text
+from loom.model.fetch_console import AccessWaiter, ConsoleProgress, display_text
 from loom.model.fetch_hf import AccessRequired
 from loom.model.fetch_picker import Picker
 from loom.model.fetch_source import FetchError, document_location
@@ -119,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--json", action="store_true", help="emit structured JSON on stdout"
+    )
+    parser.add_argument(
+        "--quiet", action="store_true", help="suppress progress on stderr"
     )
     parser.add_argument(
         "--no-input",
@@ -254,7 +257,11 @@ def main(argv: list[str] | None = None) -> int:
             if interactive or args.wait_for_access
             else None
         )
-        cache = ContentCache(args.cache, wait_for_access=wait)
+        cache = ContentCache(
+            args.cache,
+            wait_for_access=wait,
+            progress=None if args.quiet else ConsoleProgress(sys.stderr),
+        )
         snapshot = None
         if args.card is None:
             snapshot = load_catalog(

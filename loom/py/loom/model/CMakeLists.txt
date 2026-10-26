@@ -156,12 +156,38 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    fetch_progress
+  SRCS
+    "fetch_progress.py"
+)
+
+iree_py_library(
+  NAME
     fetch_transfer
   SRCS
     "fetch_transfer.py"
   DEPS
     loom::py::loom::model::fetch_source
     loom::py::loom::model::manifest
+)
+
+iree_py_test(
+  NAME
+    fetch_progress_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "fetch_progress_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.fetch_progress_test"
+  DEPS
+    loom::py::loom::model::fetch_console
+    loom::py::loom::model::fetch_progress
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
 )
 
 iree_py_test(
@@ -199,6 +225,7 @@ iree_py_library(
   SRCS
     "fetch_safetensors.py"
   DEPS
+    loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_range
     loom::py::loom::model::fetch_source
     loom::py::loom::model::manifest
@@ -210,6 +237,7 @@ iree_py_library(
   SRCS
     "fetch_hf.py"
   DEPS
+    loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_safetensors
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_transfer
@@ -223,6 +251,7 @@ iree_py_library(
     "fetch_storage.py"
   DEPS
     loom::py::loom::model::fetch_hf
+    loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_safetensors
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_transfer
@@ -237,6 +266,7 @@ iree_py_library(
     "fetch.py"
   DEPS
     loom::py::loom::model::fetch_hf
+    loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::lock
@@ -252,6 +282,7 @@ iree_py_library(
   DEPS
     loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_source
+    loom::py::loom::model::memory
 )
 
 iree_py_library(

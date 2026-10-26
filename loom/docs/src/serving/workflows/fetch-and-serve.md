@@ -42,6 +42,32 @@ does not select a file format.
 loom-fetch "$model_url/model.json" --preset=streaming --output=./moonshine
 ```
 
+Fetch reports its current phase, file counts, and available byte counts on
+stderr. Known byte totals include a compact bar and percentage. These updates
+also appear in redirected logs and with `--no-input`; they require no terminal.
+For example, a large file can produce these status lines (illustrative counts):
+
+```text
+loom-fetch  Download  [###.........]  25%  1.0 GiB / 4.0 GiB  model.safetensors  2/3 files
+loom-fetch  Transfer  384.0 MiB (total unknown)  model.safetensors  2/3 files
+loom-fetch  Verify    [############] 100%  4.0 GiB / 4.0 GiB  model.safetensors  2/3 files
+loom-fetch  Complete  3/3 files
+```
+
+stdout contains only the installed card path, or the final JSON result with
+`--json`:
+
+```sh
+loom-fetch "$model_url/model.json" --preset=streaming --output=./moonshine --no-input --json >installed.json 2>fetch.log
+```
+
+Use `--quiet` to suppress progress while retaining errors and access guidance.
+Download progress describes file bytes; Hugging Face may additionally report
+network transfer bytes separately when reconstructing a file from cached or
+compressed chunks. Verification reports bytes checked, including cache hits.
+Unknown totals stay unknown. A complete installation is reported only after
+its model card has been published.
+
 On Windows PowerShell, the same acquisition is:
 
 ```powershell

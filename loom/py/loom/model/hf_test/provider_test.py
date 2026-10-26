@@ -10,12 +10,68 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
+from types import SimpleNamespace
 
 import pytest
 
-from loom.model.fetch_hf import AccessRequired, HuggingFace, hf_url_source
+from loom.model.fetch_hf import (
+    AccessRequired,
+    HuggingFace,
+    _download_progress_class,
+    hf_url_source,
+)
 from loom.model.fetch_source import FetchError
 from loom.model.hf_test.hub import running_hub
+
+
+def test_download_progress_uses_real_provider_counters_without_logs(tmp_path):
+    with running_hub(tmp_path) as hub:
+        hub.credentials.write_text("fixture-first")
+        hub.approved = True
+        events = []
+        provider = HuggingFace(endpoint=hub.endpoint, cache_dir=hub.cache_dir)
+        path = provider.download(hub.source(), offline=False, progress=events.append)
+        assert path.read_bytes() == b"code"
+        file_events = [event for event in events if event.phase == "download"]
+        assert (file_events[0].completed_bytes, file_events[0].total_bytes) == (0, 4)
+        assert (file_events[-1].completed_bytes, file_events[-1].total_bytes) == (4, 4)
+        assert all(event.path is None for event in events)
+        assert hub.endpoint not in repr(events)
+        events.clear()
+        assert (
+            provider.download(hub.source(), offline=True, progress=events.append)
+            == path
+        )
+        assert events == []
+
+
+def test_xet_reconstruction_and_network_bytes_remain_separate():
+    from huggingface_hub.utils._xet_progress_reporting import (
+        XetDownloadProgressReporter,
+    )
+
+    events = []
+    with XetDownloadProgressReporter(
+        reconstruction_desc="private signed URL",
+        transfer_desc="private credential",
+        total=100,
+        log_level=20,
+        tqdm_class=_download_progress_class(events.append),
+    ) as progress:
+        progress.update_progress(
+            SimpleNamespace(
+                total_bytes_completed=100,
+                total_transfer_bytes_completed=32,
+                total_bytes=100,
+                total_bytes_completion_rate=1000,
+                total_transfer_bytes_completion_rate=320,
+            )
+        )
+    file_event = [event for event in events if event.phase == "download"][-1]
+    transfer = [event for event in events if event.phase == "transfer"][-1]
+    assert (file_event.completed_bytes, file_event.total_bytes) == (100, 100)
+    assert (transfer.completed_bytes, transfer.total_bytes) == (32, None)
+    assert "private" not in repr(events)
 
 
 def test_gate_refreshes_credentials_and_preserves_selected_revision(tmp_path):

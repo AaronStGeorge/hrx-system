@@ -268,6 +268,54 @@ The fetched card retains its preset, and requests use its `model.id` as the
 model name. An authored card with multiple presets can be served directly with
 `--preset=NAME` alongside one `--model` argument.
 
+Acquisition progress uses stderr, including when redirected or running with
+`--no-input`. Aligned phase rows include a compact bar and percentage when a
+byte total is known. It reports each new phase promptly and throttles ongoing
+updates to one line every five seconds. stdout remains the final path or
+`--json` result. `--quiet` suppresses progress without suppressing errors or
+access actions. Reports contain destination paths and numeric facts, never
+provider logs, credentials, or signed redirect URLs.
+
+Python callers can observe the same work through `ContentCache(progress=...)`:
+
+```python
+from pathlib import Path
+import sys
+
+from loom.model import ModelCard
+from loom.model.fetch import install, plan_fetch
+from loom.model.fetch_storage import ContentCache
+
+cache = ContentCache(
+    Path("./cache"), progress=lambda event: print(event, file=sys.stderr)
+)
+document = cache.read_document("./model.json", offline=False)
+selection = ModelCard.parse(document.text).select(preset="streaming")
+plan = plan_fetch(document, selection, cache)
+installed_card = install(plan, cache, Path("./installed"))
+```
+
+Each immutable `ProgressEvent` has a `phase`, optional authored destination
+`path`, and optional `completed_bytes`/`total_bytes` and
+`completed_files`/`total_files` pairs. Callbacks are serialized across transfer
+workers, can run on a worker thread, and should return promptly. Raising from a
+callback fails the operation through its normal cancellation and cleanup path;
+a completion callback runs after publication. An exception remains the API's
+failure result. Applications should consume events as they arrive instead of
+retaining an unbounded history for large acquisitions.
+
+Phases are `discover` (metadata), `access`, `acquire` (unique source counts),
+`download` (file reconstruction), `transfer` (provider-reported network bytes),
+`read` (local/inline reads), `verify`, `transform`, `install` (destination
+counts), and `complete`. Byte counts apply to one file and phase, not to the
+whole model. Unknown totals are `None`. Download/reconstruction and transfer
+counts can differ because of provider caching and compression. Transform
+counts cover selected source ranges, including their header, rather than an
+entire checkpoint or the padded output. Verification can happen during a
+streaming download or separately over cached bytes; observing it does not mean
+another copy or read was required. A file is acquired only after its integrity
+checks succeed, and `complete` follows publication of the card or updated lock.
+
 On Windows and Unix terminals, missing selections open a keyboard picker. Type
 to filter, use arrows or Home/End/Page Up/Page Down to move, and press Enter to
 select. Ctrl-U clears the filter; Escape or Ctrl-C cancels. Service, preset,

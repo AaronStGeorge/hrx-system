@@ -18,6 +18,7 @@ from typing import TextIO
 
 from .fetch_hf import AccessRequired
 from .fetch_source import FetchError
+from .memory import format_bytes
 
 
 def display_text(text: str) -> str:
@@ -26,6 +27,76 @@ def display_text(text: str) -> str:
         character if character.isprintable() else f"\\u{ord(character):04x}"
         for character in text
     )
+
+
+class ConsoleProgress:
+    """Plain stderr observations for terminals, pipes, and redirected logs."""
+
+    def __init__(self, output: TextIO):
+        # Caller-owned status stream, independent of result stdout.
+        self.output = output
+        # First occurrence of each stage prints promptly, even for short fetches.
+        self.phases = set()
+        # Coarse steady-state cadence prevents large downloads from flooding logs.
+        self.last_time = 0.0
+        # Most recent count from the acquisition or installation owner.
+        self.files = None
+
+    def __call__(self, event):
+        if event.total_files is not None:
+            self.files = (event.completed_files, event.total_files)
+        now = time.monotonic()
+        if (
+            event.phase in self.phases
+            and event.phase != "complete"
+            and now - self.last_time < 5.0
+        ):
+            return
+        self.phases.add(event.phase)
+        self.last_time = now
+        labels = {
+            "discover": "Metadata",
+            "access": "Access",
+            "acquire": "Fetch",
+            "download": "Download",
+            "transfer": "Transfer",
+            "read": "Read",
+            "verify": "Verify",
+            "transform": "Transform",
+            "install": "Install",
+            "complete": "Complete",
+        }
+        details = []
+        if event.completed_bytes is not None:
+            extent = format_bytes(event.completed_bytes)
+            if event.total_bytes is not None:
+                percentage = (
+                    event.completed_bytes * 100 // event.total_bytes
+                    if event.total_bytes
+                    else 100
+                )
+                filled = min(12, percentage * 12 // 100)
+                bar = "#" * filled + "." * (12 - filled)
+                extent = (
+                    f"[{bar}] {percentage:3d}%  "
+                    + extent
+                    + " / "
+                    + format_bytes(event.total_bytes)
+                )
+            else:
+                extent += " (total unknown)"
+            details.append(extent)
+        if event.path is not None:
+            details.append(display_text(event.path))
+        if self.files is not None:
+            details.append(f"{self.files[0]}/{self.files[1]} files")
+        if event.phase == "discover":
+            details.append("reading model metadata")
+        elif event.phase == "access":
+            details.append("checking source access")
+        text = f"loom-fetch  {labels[event.phase]:9s} " + "  ".join(details)
+        self.output.write(text + "\n")
+        self.output.flush()
 
 
 class TerminalInput:

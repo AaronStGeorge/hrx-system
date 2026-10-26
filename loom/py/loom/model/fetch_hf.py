@@ -18,6 +18,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
+from .fetch_progress import ByteProgress
 from .fetch_source import FetchError
 from .fetch_transfer import run_transfer
 from .manifest import _origin_object, _url
@@ -97,7 +98,43 @@ def _response_failure(error, errors) -> _ResponseFailure:
     )
 
 
-def _hub_request(operation: str, options: dict):
+def _download_progress_class(progress):
+    # tqdm is already part of the optional HF provider, never a Loom dependency.
+    from tqdm.auto import tqdm
+
+    class DownloadProgress(tqdm):
+        def __init__(self, *args, **kwargs):
+            # Provider counters describe reconstructed file bytes, not wire bytes.
+            self.file_progress = ByteProgress(progress, "download")
+            # Xet reports transfer bytes independently, without a known total.
+            self.transfer_progress = ByteProgress(progress, "transfer")
+            # Transfer extent is local to this one provider download.
+            self.transferred = 0
+            kwargs["disable"] = False
+            super().__init__(*args, **kwargs)
+            self.file_progress(self.n, self.total)
+
+        def display(self, *args, **kwargs):
+            # Descriptions can contain signed URLs; only numeric facts escape.
+            pass
+
+        def update(self, count=1):
+            result = super().update(count)
+            self.file_progress(self.n, self.total)
+            return result
+
+        def update_transfer(self, count):
+            self.transferred += count
+            self.transfer_progress(self.transferred, None)
+
+        def set_transfer_postfix_str(self, *args, **kwargs):
+            # Throughput labels are presentation, not an additional observation.
+            pass
+
+    return DownloadProgress
+
+
+def _hub_request(operation: str, options: dict, *, progress=None):
     import httpx2
     import huggingface_hub as hub
     from huggingface_hub import errors
@@ -107,8 +144,10 @@ def _hub_request(operation: str, options: dict):
             from .fetch_safetensors import repack
 
             options.pop("library_name")
-            return repack(**options)
+            return repack(**options, progress=progress)
         if operation == "download":
+            if progress is not None:
+                options["tqdm_class"] = _download_progress_class(progress)
             return hub.hf_hub_download(**options)
         if operation == "metadata":
             return hub.get_hf_file_metadata(**options)
@@ -220,7 +259,7 @@ class HuggingFace:
             return None
         return self.hub.get_token()
 
-    def _call(self, operation: str, **options):
+    def _call(self, operation: str, *, progress=None, **options):
         return run_transfer(
             _hub_request,
             (
@@ -228,6 +267,7 @@ class HuggingFace:
                 {"endpoint": self.endpoint, "library_name": "loom-fetch", **options},
             ),
             self.cancelled,
+            progress=progress if progress else None,
         )
 
     def _repository(self, repository: str):
@@ -460,7 +500,7 @@ class HuggingFace:
             lambda token: self._call("metadata", url=url, token=token),
         )
 
-    def download(self, source: dict, *, offline: bool) -> Path:
+    def download(self, source: dict, *, offline: bool, progress=None) -> Path:
         self._check_cancelled()
         cached = self.cached_file(source)
         if cached is not None:
@@ -481,11 +521,12 @@ class HuggingFace:
                     revision=source["revision"],
                     cache_dir=str(self.cache_directory),
                     token=token,
+                    progress=progress,
                 ),
             )
         )
 
-    def repack(self, source, transform, destination, preserve):
+    def repack(self, source, transform, destination, preserve, *, progress=None):
         """Runs streaming IO under the same credential and approval ownership."""
         repository = source.transport["repository"]
         self.ensure_access(repository)
@@ -499,6 +540,7 @@ class HuggingFace:
                 preserve=preserve,
                 endpoint=self.endpoint,
                 token=token,
+                progress=progress,
             ),
         )
 
