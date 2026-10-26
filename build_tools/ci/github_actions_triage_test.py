@@ -14,13 +14,14 @@ from build_tools.ci import github_actions_triage as triage
 def job(
     *,
     job_id: int = 7,
+    job_name: str = "Bazel / Linux x86-64 / Clang / ASAN",
     failed_step: str | None = "Run IREE Bazel CI",
     skipped_steps: tuple[str, ...] = (),
     steps: bool = True,
 ) -> dict:
     result = {
         "id": job_id,
-        "name": "Bazel / Linux x86-64 / Clang / ASAN",
+        "name": job_name,
         "html_url": f"https://github.example/jobs/{job_id}",
         "started_at": "2026-10-21T12:00:00Z",
         "completed_at": "2026-10-21T12:10:00Z",
@@ -194,6 +195,26 @@ class GitHubActionsTriageTest(unittest.TestCase):
                 confirmed = self.classify(log, open_issues=frozenset({issue}))
                 self.assertEqual(confirmed.category, category)
                 self.assertEqual(confirmed.issue, issue)
+
+    def test_windows_application_control_precedes_reported_test_failure(self):
+        log = (
+            "FAIL: //loom/example:test (see log)\n"
+            "CreateProcessW failed (error: 4551)\n"
+            "An Application Control policy has blocked this file."
+        )
+        input_job = job(job_name="Bazel / Windows x86-64 / Clang CL / Fastbuild")
+        unconfirmed = self.classify(log, input_job=input_job)
+        self.assertEqual(unconfirmed.category, triage.REPOSITORY)
+        self.assertEqual(unconfirmed.issue, "hrx-vvf9c")
+
+        confirmed = self.classify(
+            log,
+            input_job=input_job,
+            open_issues=frozenset({"hrx-vvf9c"}),
+        )
+        self.assertEqual(confirmed.category, triage.INFRASTRUCTURE)
+        self.assertEqual(confirmed.code, "windows_application_control_denial")
+        self.assertEqual(confirmed.issue, "hrx-vvf9c")
 
     def test_unknown_failures_do_not_share_an_identity_across_jobs(self):
         first = self.classify("opaque", input_job=job(job_id=10))

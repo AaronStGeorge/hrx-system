@@ -20,7 +20,7 @@ REPOSITORY = "repository"
 KNOWN_PRODUCT = "known_product"
 KNOWN_FLAKE = "known_flake"
 UNKNOWN = "unknown"
-TRACKED_ISSUES = ("hrx-78tqc", "hrx-b1gxf3")
+TRACKED_ISSUES = ("hrx-78tqc", "hrx-b1gxf3", "hrx-vvf9c")
 
 RUNNER_LOST_MESSAGE = (
     "The self-hosted runner lost communication with the server. Verify the "
@@ -243,6 +243,20 @@ def classify_failure(
             code="speech_cold_retained_memory_accounting",
             subject="ColdStateTransitionsPreserveWarmWaveformProgress/0",
             summary="cold speech retained-memory accounting observed zero pending bytes",
+        )
+
+    if (
+        "Windows" in str(job.get("name", ""))
+        and "An Application Control policy has blocked this file" in log
+        and re.search(r"(?:error:\s*|\[WinError\s+)4551\b", log, re.IGNORECASE)
+    ):
+        return _tracked_finding(
+            open_issues=open_issues,
+            issue="hrx-vvf9c",
+            tracked_category=INFRASTRUCTURE,
+            code="windows_application_control_denial",
+            subject="Windows Application Control",
+            summary="Windows policy denied a generated executable before launch",
         )
 
     undefined_symbol_match = re.search(
