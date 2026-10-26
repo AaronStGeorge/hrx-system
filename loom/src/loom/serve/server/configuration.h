@@ -102,8 +102,10 @@ typedef struct loom_serve_model_configuration_t {
   loom_serve_model_kind_t kind;
   // Owned visible ASCII identifier used in JSON and HTTP header selectors.
   iree_string_view_t name;
-  // Device-group ordinal, or IREE_HOST_SIZE_MAX when the document omits it.
-  // The registry replaces omission with zero only for a one-device group.
+  // Owned machine-local device key; empty until singleton admission resolves
+  // it.
+  iree_string_view_t device;
+  // Resolved group ordinal, assigned once by registry admission. Not authored.
   iree_host_size_t device_index;
   // Owned program paths, provider array/strings, local directory base, and
   // retained source package when registration supplied one.
@@ -147,7 +149,7 @@ typedef struct loom_serve_model_configuration_t {
 // modality-specific inputs/capacities, and source-owned options.
 // Unknown, duplicate, wrong-kind and invalid fields reject before any model
 // I/O. Admission defaults to "open"; "drained" defers preparation. Device
-// selection is a nonnegative group ordinal; membership is resolved separately.
+// selection is an application device key; membership is resolved separately.
 // document_directory supplies the local base for file input; a relative
 // base_directory resolves within it. HTTP passes an empty document directory:
 // relative filesystem references then require an explicit absolute base.
@@ -183,14 +185,14 @@ iree_status_t loom_serve_model_configuration_load(
     iree_allocator_t host_allocator,
     loom_serve_model_configuration_t* out_model);
 
-// Resolves this deployment's device against the caller's immutable group size.
+// Resolves this deployment's device against the caller's immutable group keys.
 // Omission is accepted only with exactly one device. Both explicit and implied
-// bindings must name an available ordinal. Does not mutate the declaration or
+// bindings must name an available device. Does not mutate the declaration or
 // access source files/devices. Call once at admission, before publishing a
 // model.
 iree_status_t loom_serve_model_configuration_resolve_device(
     const loom_serve_model_configuration_t* model,
-    iree_host_size_t device_count, iree_host_size_t* out_device_index);
+    iree_string_view_list_t device_names, iree_host_size_t* out_device_index);
 
 #ifdef __cplusplus
 }  // extern "C"

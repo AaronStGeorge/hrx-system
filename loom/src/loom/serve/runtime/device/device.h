@@ -39,6 +39,9 @@ typedef struct loom_serve_device_options_t {
   iree_hal_driver_t* driver;
   // HAL device URI, borrowed during creation.
   iree_string_view_t uri;
+  // Application-selected key, copied at creation. Empty is accepted only for
+  // a singleton group, where the key is "device". Keys are visible ASCII.
+  iree_string_view_t name;
   // Physical backing strategy for all models sharing this owner.
   loom_serve_device_backing_t backing;
   // Parameter/workspace slab bytes; zero selects the allocator recommendation.
@@ -80,6 +83,13 @@ iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group);
 // Number of immutable device records owned by the group.
 iree_host_size_t loom_serve_device_group_count(
     const loom_serve_device_group_t* group);
+
+// Immutable application keys in native group order, borrowed through teardown.
+iree_string_view_list_t loom_serve_device_group_names(
+    const loom_serve_device_group_t* group);
+
+// Application key, distinct from the HAL identity or hardware display name.
+iree_string_view_t loom_serve_device_name(const loom_serve_device_t* device);
 
 // Borrows a record through group destruction. device_index is a caller-resolved
 // ordinal less than the group's count.

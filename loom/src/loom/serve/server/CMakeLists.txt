@@ -26,6 +26,41 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    device_configuration
+  HDRS
+    "device_configuration.h"
+  SRCS
+    "device_configuration.c"
+  DEPS
+    iree::base
+    iree::base::internal::json
+    iree::base::internal::unicode
+    iree::hal
+    loom::serve::runtime::device
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    device_configuration_test
+  SRCS
+    "device_configuration_test.cc"
+  DEPS
+    ::device_configuration
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::runtime::device
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     router
   HDRS
     "router.h"
@@ -111,7 +146,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
     maintenance_test
@@ -123,6 +158,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::serve::runtime::device
+    loom::serve::runtime::host
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

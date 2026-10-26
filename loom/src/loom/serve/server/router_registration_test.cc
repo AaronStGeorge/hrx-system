@@ -9,6 +9,8 @@
 
 namespace {
 
+const iree_string_view_t kDeviceNames[] = {IREE_SV("device")};
+
 using loom_serve::testing::HttpRouterTest;
 using loom_serve::testing::loom_serve_test_model_service_t;
 using loom_serve::testing::ObservationClient;
@@ -328,7 +330,7 @@ class HttpRouterRegistrationTest : public HttpRouterTest {
         .self = &managed_,
         .kinds = (1u << LOOM_SERVE_MODEL_KIND_EMBEDDING) |
                  (1u << LOOM_SERVE_MODEL_KIND_ACTIVITY),
-        .device_count = 1,
+        .device_names = {1, kDeviceNames},
         .create = loom_serve_test_registration_dependency_t::Create,
         .query_status = loom_serve_test_registration_dependency_t::QueryStatus,
     };

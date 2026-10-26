@@ -459,46 +459,50 @@ TEST_F(ConfigurationTest, OmittedDeviceRequiresExactlyOneGroupMember) {
   IREE_ASSERT_OK(Parse(Document("embedding", R"(,"assets":".")")));
   EXPECT_EQ(model_.device_index, IREE_HOST_SIZE_MAX);
   iree_host_size_t index = 17;
+  const iree_string_view_t names[] = {IREE_SV("gpu"), IREE_SV("npu")};
   for (iree_host_size_t count : {0u, 2u}) {
-    IREE_EXPECT_STATUS_IS(
-        IREE_STATUS_INVALID_ARGUMENT,
-        loom_serve_model_configuration_resolve_device(&model_, count, &index));
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_model_configuration_resolve_device(
+                              &model_, {count, names}, &index));
     EXPECT_EQ(index, 17u);
   }
-  IREE_ASSERT_OK(
-      loom_serve_model_configuration_resolve_device(&model_, 1, &index));
+  IREE_ASSERT_OK(loom_serve_model_configuration_resolve_device(
+      &model_, {1, names}, &index));
   EXPECT_EQ(index, 0u);
   EXPECT_EQ(model_.device_index, IREE_HOST_SIZE_MAX);
 }
 
 TEST_F(ConfigurationTest, ExplicitDeviceResolvesAtGroupAdmission) {
-  for (iree_host_size_t index : {0u, 1u, 31u}) {
-    IREE_ASSERT_OK(Parse(Document("embedding", R"(,"assets":".")",
-                                  ",\"device\":" + std::to_string(index))));
-    EXPECT_EQ(model_.device_index, index);
+  const iree_string_view_t names[] = {IREE_SV("gpu"), IREE_SV("npu")};
+  for (iree_host_size_t index : {0u, 1u}) {
+    IREE_ASSERT_OK(
+        Parse(Document("embedding", R"(,"assets":".")",
+                       ",\"device\":\"" + String(names[index]) + "\"")));
+    EXPECT_EQ(String(model_.device), String(names[index]));
     iree_host_size_t resolved = IREE_HOST_SIZE_MAX;
     IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                           loom_serve_model_configuration_resolve_device(
-                              &model_, index, &resolved));
+                              &model_, {index, names}, &resolved));
     EXPECT_EQ(resolved, IREE_HOST_SIZE_MAX);
     IREE_ASSERT_OK(loom_serve_model_configuration_resolve_device(
-        &model_, index + 1, &resolved));
+        &model_, {index + 1, names}, &resolved));
     EXPECT_EQ(resolved, index);
   }
 }
 
-TEST_F(ConfigurationTest, InvalidDeviceOrdinalsRejectBeforeIo) {
+TEST_F(ConfigurationTest, InvalidDeviceNamesRejectBeforeIo) {
   for (const char* field :
-       {R"(,"device":-1)", R"(,"device":1.5)", R"(,"device":"0")",
-        R"(,"device":null)", R"(,"device":false)",
-        R"(,"device":18446744073709551615)", R"(,"device":0,"device":1)"}) {
+       {R"(,"device":-1)", R"(,"device":1.5)", R"(,"device":0)",
+        R"(,"device":"")", R"(,"device":null)", R"(,"device":false)",
+        R"(,"device":18446744073709551615)",
+        R"(,"device":"gpu","device":"npu")"}) {
     SCOPED_TRACE(field);
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
         Parse(Document("embedding", R"(,"assets":".")", field)));
     EXPECT_EQ(model_.name.data, nullptr);
   }
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse(Document("embedding", R"(,"assets":".")",
                                        R"(,"device":18446744073709551616)")));
   EXPECT_EQ(model_.name.data, nullptr);

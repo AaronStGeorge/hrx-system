@@ -118,8 +118,8 @@ typedef struct loom_serve_registration_factory_t {
   void* self;
   // Supported configuration kinds as bit positions; zero disables management.
   uint32_t kinds;
-  // Immutable group cardinality used to resolve deployment device bindings.
-  iree_host_size_t device_count;
+  // Borrowed immutable group keys, live through registry destruction.
+  iree_string_view_list_t device_names;
   // Shared cold-work sink for resolving local model cards before create.
   // An empty sink supports direct declarations only.
   loomc_task_sink_t resolution_sink;

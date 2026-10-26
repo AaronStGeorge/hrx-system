@@ -640,9 +640,10 @@ static iree_status_t loom_serve_router_describe_service(
   if (admission->incarnation) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         output,
-        ",\"incarnation\":%" PRIu64 ",\"device\":%zu,\"registration\":\"%s\"",
-        admission->incarnation, admission->configuration.device_index,
-        loom_serve_registry_phase(admission)));
+        ",\"incarnation\":%" PRIu64 ",\"registration\":\"%s\",\"device\":",
+        admission->incarnation, loom_serve_registry_phase(admission)));
+    IREE_RETURN_IF_ERROR(
+        loom_serve_router_quote(output, admission->configuration.device));
     if (!iree_status_is_ok(admission->status)) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           output, ",\"error\":{\"code\":%d,\"message\":",
@@ -707,17 +708,13 @@ static iree_status_t loom_serve_router_describe_server(
       "\"header_capacity\":%zu,\"multipart_header_byte_capacity\":%zu,"
       "\"multipart_part_capacity\":%zu},\"held_request_capacity\":%zu,"
       "\"held_requests\":%zu,\"observer_capacity\":%zu,\"observers\":%zu,"
-      "\"idle\":{\"workspace_ms\":%" PRId64 ",\"parameter_ms\":%" PRId64
-      "},"
       "\"resources\":",
       iree_task_executor_worker_count(router->executor), router->capacity,
       loom_serve_http_server_connection_capacity(router->server),
       limits.header_byte_capacity, limits.body_byte_capacity,
       limits.header_capacity, limits.multipart_header_byte_capacity,
       limits.multipart_part_capacity, router->held.capacity, router->held.count,
-      router->logs.capacity, router->logs.count,
-      router->maintenance.policy.workspace_timeout / 1000000,
-      router->maintenance.policy.parameter_timeout / 1000000));
+      router->logs.capacity, router->logs.count));
   loom_output_stream_t stream;
   loom_output_stream_for_builder(output, &stream);
   IREE_RETURN_IF_ERROR(
@@ -1062,7 +1059,8 @@ static iree_status_t loom_serve_router_trim(
   iree_host_size_t device_index = 0;
   uint64_t target_bytes = 0;
   iree_status_t status = loom_serve_resources_parse_trim(
-      &router->resources, request->body, &device_index, &target_bytes);
+      &router->resources, request->body, router->host_allocator, &device_index,
+      &target_bytes);
   if (!iree_status_is_ok(status)) {
     return loom_serve_http_response_error(router->server, connection, status,
                                           &router->output);
@@ -1659,7 +1657,8 @@ iree_status_t loom_serve_router_run(iree_task_executor_t* executor,
       .logs = {.capacity =
                    loom_serve_http_server_connection_capacity(server) - 1}};
   iree_status_t status = loom_serve_maintenance_initialize(
-      options.resources.device_group, options.idle, &router.maintenance);
+      options.resources.device_group, options.resources.idle_policy_count,
+      options.resources.idle_policies, &router.maintenance);
   if (iree_status_is_ok(status) && options.holding_capacity) {
     status = iree_allocator_malloc_array(
         host_allocator, options.holding_capacity, sizeof(*router.held.values),

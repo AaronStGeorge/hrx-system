@@ -171,8 +171,9 @@ class SourceTextServiceTest : public ::testing::Test {
           {
               .request_quota = 16,
               .holding_capacity = 8,
-              .resources = {.device_group = group_},
-              .idle = idle,
+              .resources = {.device_group = group_,
+                            .idle_policy_count = 1,
+                            .idle_policies = &idle},
           },
           host_allocator_);
       return iree_status_join(status, loom_serve_registry_free(registry));

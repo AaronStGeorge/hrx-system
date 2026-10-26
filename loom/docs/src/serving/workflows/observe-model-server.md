@@ -18,7 +18,7 @@ curl --fail --silent --show-error http://127.0.0.1:8080/metrics
 
 Status includes the current registrations plus a `server` object, even when
 no models are loaded. That object reports actual worker count, admission limits,
-bound addresses and the ordered device inventory. Worker count is provisioned
+bound addresses and the named device inventory. Worker count is provisioned
 capacity, not merely the requested maximum.
 
 Each model's `loom.status` contains phase, queued/active counts and the oldest

@@ -439,7 +439,7 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
             "POST",
             "/v1/devices/trim",
             200,
-            body=json.dumps({"device": 0, "target_bytes": 0}),
+            body=json.dumps({"device": "device", "target_bytes": 0}),
             headers={"Content-Type": "application/json"},
         )
         while memory["committed_bytes"]:

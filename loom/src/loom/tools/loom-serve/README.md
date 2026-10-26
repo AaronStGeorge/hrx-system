@@ -21,14 +21,15 @@ iree-bazel-run //loom/src/loom/tools/loom-serve -- \
 ```
 
 The installed command is `loom-serve` with the same arguments and no subcommand.
-At least one explicit HAL device URI is required. Repeating `--device` builds
-one ordered group; model documents select a top-level `device` index when the
-group has multiple members. A URI is interpreted by its linked HAL driver,
+An explicit HAL device URI or `--devices=devices.json` file is required. The
+file declares one group with named entries and per-device memory and idle
+policy. Deployment documents select a top-level `device` string key when the
+group has multiple members; portable model cards contain no placement. The
+single-device shortcut uses the key `device`. A URI is interpreted by its linked HAL driver,
 without an implicit local device or fallback. Fixed backing needs no virtual
 reservation. Elastic backing demand-commits retained slabs through the HAL
-allocator-level virtual-memory contract. Task and Vulkan have device-group VMM
-support, but serving's retained pool does not yet consume that interface; use
-fixed backing for those drivers. The [command reference](../../../../docs/src/serving/index.md#devices-and-listeners)
+memory-scope virtual-memory contract. Task uses host VMM where available;
+Vulkan requires appropriate sparse-memory capabilities. The [command reference](../../../../docs/src/serving/index.md#devices-and-listeners)
 describes the backend and serving requirements separately.
 
 Generic URI parameters request immutable device runtime services. For example,
@@ -136,7 +137,7 @@ entry points and their runtime requirements belong to the tooling providers.
 The same executable accepts learned model documents with `--fixture=false`,
 `--model`, and optional `--transcription_model`. `--input` supplies mono F32LE
 audio at `--sample_rate`; `--reference` supplies independent per-hop F32LE
-activity probabilities. Model documents retain their explicit device indices.
+activity probabilities. Deployment documents retain their named device selections.
 Composition qualification supplies `--pre_roll_frames`, `--hangover_frames`,
 `--retained_frames`, `--expected_begin`, `--expected_end`, and `--expected_text`.
 These are test workload inputs. They do not establish conversation defaults or

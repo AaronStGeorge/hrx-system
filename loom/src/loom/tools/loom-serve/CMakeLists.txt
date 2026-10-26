@@ -19,12 +19,15 @@ loom_cc_library(
     "options.c"
   DEPS
     iree::base
+    iree::base::internal::json
     iree::base::internal::path
     iree::base::tooling::flags
     iree::hal
+    iree::io::file_handle
     iree::tooling::device_flags
     loom::serve::runtime::device
     loom::serve::runtime::host
+    loom::serve::server::device_configuration
   PUBLIC
 )
 endif()
@@ -84,6 +87,7 @@ loom_cc_library(
     loom::serve::runtime::device
     loom::serve::runtime::host
     loom::serve::server::configuration
+    loom::serve::server::device_configuration
     loom::serve::server::model_registration
     loom::serve::server::registry
     loom::serve::service::recognition::stream
@@ -110,6 +114,7 @@ loom_cc_library(
     iree::base::tooling::flags
     loom::serve::runtime::device
     loom::serve::server::configuration
+    loom::serve::server::device_configuration
     loom::serve::server::model_registration
     loom::serve::server::registry
     loom::serve::server::router

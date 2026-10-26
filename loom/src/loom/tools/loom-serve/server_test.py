@@ -32,11 +32,11 @@ class ServerTest(unittest.TestCase):
                     text=True,
                 )
                 self.assertNotEqual(result.returncode, 0, result.stderr)
-                self.assertIn("heartbeat/idle intervals", result.stderr)
+                self.assertIn("INVALID_ARGUMENT", result.stderr)
                 self.assertNotIn('"event":"ready"', result.stderr)
 
     def test_device_is_required_before_listening(self):
-        for arguments in ([], ["--device="], ["--device=task", "--device="]):
+        for arguments in ([], ["--device="]):
             with self.subTest(arguments=arguments):
                 result = subprocess.run(
                     [
@@ -75,7 +75,7 @@ class ServerTest(unittest.TestCase):
                 self.assertIn(diagnostic, result.stderr)
                 self.assertNotIn('"event":"ready"', result.stderr)
 
-    def test_shared_byte_limit_requires_one_device(self):
+    def test_multiple_devices_require_named_configuration(self):
         result = subprocess.run(
             [
                 str(SERVER),
@@ -89,8 +89,28 @@ class ServerTest(unittest.TestCase):
             text=True,
         )
         self.assertNotEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--memory_bytes requires one device", result.stderr)
+        self.assertIn("multiple devices require named entries", result.stderr)
         self.assertNotIn('"event":"ready"', result.stderr)
+
+    def test_named_devices_do_not_merge_single_device_flags(self):
+        for flag in (
+            "--device=task",
+            "--pool_backing=elastic",
+            "--weight_slab_bytes=1073741824",
+            "--state_slab_bytes=67108864",
+            "--memory_bytes=0",
+            "--workspace_idle_ms=0",
+            "--parameter_idle_ms=0",
+        ):
+            with self.subTest(flag=flag):
+                result = subprocess.run(
+                    [str(SERVER), "--devices=not-opened.json", flag],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertIn("--devices cannot be combined", result.stderr)
+                self.assertNotIn('"event":"ready"', result.stderr)
 
     def test_positional_model_is_rejected_before_listening(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -182,7 +202,9 @@ class ServerTest(unittest.TestCase):
                         control(address, "GET", "/v1/models", 200)["data"], []
                     )
                     self.assertEqual(
-                        control(address, "GET", "/v1/status", 200)["server"]["idle"],
+                        control(address, "GET", "/v1/status", 200)["server"][
+                            "resources"
+                        ]["devices"][0]["idle"],
                         {"workspace_ms": 1, "parameter_ms": 0},
                     )
                     registration = self.post(
@@ -258,16 +280,32 @@ class ServerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             documents = []
+            device_keys = ("cpu.primary", "cpu.secondary")
             for index, name in enumerate(("alpha", "beta")):
                 package = directory / "models" / name
                 shutil.copytree(PACKAGE, package, copy_function=shutil.copyfile)
                 document = json.loads((package / "model.json").read_text())
                 document["name"] = name
-                document["device"] = index
+                document["device"] = device_keys[index]
                 (package / "model.json").write_text(json.dumps(document))
                 documents.append((package, document))
             settings = directory / "settings"
             settings.mkdir()
+            (settings / "devices.json").write_text(
+                json.dumps(
+                    {
+                        "devices": {
+                            device_keys[0]: {"uri": "task", "pool_backing": "fixed"},
+                            device_keys[1]: {
+                                "uri": "task",
+                                "pool_backing": "fixed",
+                                "workspace_idle_ms": 60000,
+                                "parameter_idle_ms": 120000,
+                            },
+                        }
+                    }
+                )
+            )
             # Flagfile arguments keep ordinary process-CWD semantics; the model
             # document's own references instead use its containing directory.
             (settings / "server.flags").write_text("--model=models/alpha/model.json\n")
@@ -275,13 +313,11 @@ class ServerTest(unittest.TestCase):
             with running_server(
                 [
                     str(SERVER),
-                    "--device=task",
-                    "--pool_backing=fixed",
+                    "--devices=settings/devices.json",
                     "--workers=2",
                     "--listen=127.0.0.1:0",
                     "--flagfile=settings/server.flags",
                     "--model=models/beta/model.json",
-                    "--device=task",
                 ],
                 log,
                 cwd=directory,
@@ -290,7 +326,16 @@ class ServerTest(unittest.TestCase):
                 address = urlsplit(f"http://{bound_address}")
                 snapshot = control(address, "GET", "/v1/status", 200)
                 devices = snapshot["server"]["resources"]["devices"]
-                self.assertEqual([device["index"] for device in devices], [0, 1])
+                self.assertEqual(
+                    [device["key"] for device in devices], list(device_keys)
+                )
+                self.assertEqual(
+                    [device["idle"] for device in devices],
+                    [
+                        {"workspace_ms": 0, "parameter_ms": 0},
+                        {"workspace_ms": 60000, "parameter_ms": 120000},
+                    ],
+                )
                 self.assertEqual(
                     [device["driver"] for device in devices], ["task", "task"]
                 )
@@ -299,13 +344,13 @@ class ServerTest(unittest.TestCase):
                         entry["id"]: entry["loom"]["device"]
                         for entry in snapshot["data"]
                     },
-                    {"alpha": 0, "beta": 1},
+                    {"alpha": device_keys[0], "beta": device_keys[1]},
                 )
 
                 # Both admission modes reject ambiguous/out-of-group bindings
                 # before publishing a slot, even when no model I/O is needed.
                 for admission in ("open", "drained"):
-                    for binding in ({}, {"device": 2}):
+                    for binding in ({}, {"device": "absent"}, {"device": 0}):
                         invalid = dict(documents[0][1])
                         invalid.pop("device")
                         invalid.update(
@@ -317,6 +362,36 @@ class ServerTest(unittest.TestCase):
                         self.post(address, "/v1/models/register", invalid, expected=400)
                 self.assertEqual(
                     len(control(address, "GET", "/v1/status", 200)["data"]), 2
+                )
+                self.post(
+                    address,
+                    "/v1/devices/trim",
+                    {
+                        "device": 0,
+                        "target_bytes": 0,
+                    },
+                    expected=400,
+                )
+                self.post(
+                    address,
+                    "/v1/devices/trim",
+                    {
+                        "device": "absent",
+                        "target_bytes": 0,
+                    },
+                    expected=404,
+                )
+                trimmed = self.post(
+                    address,
+                    "/v1/devices/trim",
+                    {
+                        "device": device_keys[1],
+                        "target_bytes": 0,
+                    },
+                )
+                self.assertEqual(trimmed["device"], devices[1])
+                self.assertEqual(
+                    control(address, "GET", "/healthz", 200), {"status": "ready"}
                 )
 
                 def reservations():

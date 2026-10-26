@@ -67,10 +67,15 @@ TEST_F(DeviceGroupTest, LaterDeviceFailureReleasesEarlierHandle) {
     invalid_uri.append("x&");
   }
   const loom_serve_device_options_t options[] = {
-      {.driver = driver_, .uri = loom_serve_test_device()->device_uri},
+      {
+          .driver = driver_,
+          .uri = loom_serve_test_device()->device_uri,
+          .name = IREE_SV("first"),
+      },
       {
           .driver = driver_,
           .uri = iree_make_string_view(invalid_uri.data(), invalid_uri.size()),
+          .name = IREE_SV("second"),
       }};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -85,6 +90,7 @@ TEST_F(DeviceGroupTest, LaterPoolFailureReleasesSealedGroupAndEarlierPool) {
         {
             .driver = driver_,
             .uri = loom_serve_test_device()->device_uri,
+            .name = IREE_SV("first"),
             .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
             .weight_slab_size = kSlabBytes,
             .state_slab_size = kSlabBytes,
@@ -92,6 +98,7 @@ TEST_F(DeviceGroupTest, LaterPoolFailureReleasesSealedGroupAndEarlierPool) {
         {
             .driver = driver_,
             .uri = loom_serve_test_device()->device_uri,
+            .name = IREE_SV("second"),
             .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
             .weight_slab_size = invalid_size,
             .state_slab_size = invalid_size,
@@ -145,6 +152,7 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
       {
           .driver = driver_,
           .uri = loom_serve_test_device()->device_uri,
+          .name = IREE_SV("first"),
           .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
           .weight_slab_size = kSlabBytes,
           .state_slab_size = kSlabBytes,
@@ -153,6 +161,7 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
       {
           .driver = driver_,
           .uri = loom_serve_test_device()->device_uri,
+          .name = IREE_SV("second"),
           .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
           .weight_slab_size = kSlabBytes,
           .state_slab_size = kSlabBytes,

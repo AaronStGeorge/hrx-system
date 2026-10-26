@@ -28,15 +28,33 @@ class CpuDeviceTest : public ::testing::TestWithParam<uint32_t> {
 };
 
 TEST_P(CpuDeviceTest, DevicesUseApplicationWorkerBudgetAndOneGroup) {
+  char first_name[] = "first";
   const loom_serve_device_options_t options[] = {
-      {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")},
-      {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")}};
+      {
+          .driver = loom_serve_host_task_driver(host_),
+          .uri = IREE_SV("task"),
+          .name = iree_make_cstring_view(first_name),
+      },
+      {
+          .driver = loom_serve_host_task_driver(host_),
+          .uri = IREE_SV("task"),
+          .name = IREE_SV("second"),
+      }};
   IREE_ASSERT_OK(
       loom_serve_device_group_allocate(host_, IREE_ARRAYSIZE(options), options,
                                        iree_allocator_system(), &group_));
   EXPECT_EQ(loom_serve_device_group_count(group_), 2u);
+  first_name[0] = 'x';
+  const auto names = loom_serve_device_group_names(group_);
+  ASSERT_EQ(names.count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(names.values[0], IREE_SV("first")));
+  EXPECT_TRUE(iree_string_view_equal(names.values[1], IREE_SV("second")));
   auto* first = loom_serve_device_group_at(group_, 0);
   auto* second = loom_serve_device_group_at(group_, 1);
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_serve_device_name(first), names.values[0]));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_serve_device_name(second), names.values[1]));
   EXPECT_EQ(loom_serve_device_group(first), loom_serve_device_group(second));
   EXPECT_NE(loom_serve_device_handle(first), loom_serve_device_handle(second));
   EXPECT_NE(loom_serve_device_dispatch_queue(first),
@@ -52,10 +70,15 @@ TEST_P(CpuDeviceTest, DevicesUseApplicationWorkerBudgetAndOneGroup) {
 
 TEST_P(CpuDeviceTest, LaterUriFailureReleasesBorrowedWorkers) {
   const loom_serve_device_options_t options[] = {
-      {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")},
+      {
+          .driver = loom_serve_host_task_driver(host_),
+          .uri = IREE_SV("task"),
+          .name = IREE_SV("first"),
+      },
       {
           .driver = loom_serve_host_task_driver(host_),
           .uri = IREE_SV("task://missing"),
+          .name = IREE_SV("second"),
       }};
   iree::Status status =
       loom_serve_device_group_allocate(host_, IREE_ARRAYSIZE(options), options,

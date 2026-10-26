@@ -18,18 +18,20 @@ extern "C" {
 typedef struct loom_serve_maintenance_t {
   // Borrowed immutable device membership; NULL only with disabled policies.
   loom_serve_device_group_t* group;
-  // Independent opt-in idle durations shared by the group's devices.
-  loom_serve_device_idle_policy_t policy;
+  // Borrowed per-device policies, in group order, through final timer join.
+  const loom_serve_device_idle_policy_t* policies;
   // Shared-proactor alarm; inactive when no retained work awaits expiry.
   loom_serve_timer_t timer;
 } loom_serve_maintenance_t;
 
-// Configures a timer without scheduling work. Enabled policy requires a group.
+// Configures one timer without scheduling work. Zero policy_count disables
+// reclamation; otherwise policies must cover exactly the group's records.
 // The check interval is the smaller timeout capped at one second. Disabled
 // policy creates no proactor and scans no resources. Even on failure, the owner
 // calls deinitialize; no callbacks have been accepted by initialization.
 iree_status_t loom_serve_maintenance_initialize(
-    loom_serve_device_group_t* group, loom_serve_device_idle_policy_t policy,
+    loom_serve_device_group_t* group, iree_host_size_t policy_count,
+    const loom_serve_device_idle_policy_t* policies,
     loom_serve_maintenance_t* out_maintenance);
 
 // Installs the router wake before advancing; detach only after pending is

@@ -475,9 +475,11 @@ def check_device_trim(client, backing, workers):
                 held_requests=1,
             )
             pinned = client.request(
-                "/v1/devices/trim", {"device": 0, "target_bytes": 0}
+                "/v1/devices/trim", {"device": "device", "target_bytes": 0}
             )
-            assert pinned["target_bytes"] == pinned["device"]["index"] == 0, pinned
+            assert (
+                pinned["target_bytes"] == 0 and pinned["device"]["key"] == "device"
+            ), pinned
             assert snapshot()["parameters"]["primary"] == {
                 **before["parameters"]["primary"],
                 "pinned": True,
@@ -488,7 +490,7 @@ def check_device_trim(client, backing, workers):
                 unpinned["parameters"]["primary"] == before["parameters"]["primary"]
             ), unpinned
             trimmed = client.request(
-                "/v1/devices/trim", {"device": 0, "target_bytes": 0}
+                "/v1/devices/trim", {"device": "device", "target_bytes": 0}
             )
             device = settled_device()
             memory_cold = device["memory"]["retained"]
@@ -529,7 +531,7 @@ def check_device_trim(client, backing, workers):
                 assert (
                     cold["parameters"]["primary"] == before["parameters"]["primary"]
                 ), cold
-            client.request("/v1/devices/trim", {"device": 0, "target_bytes": 0})
+            client.request("/v1/devices/trim", {"device": "device", "target_bytes": 0})
             assert snapshot()["parameters"]["primary"] == cold["parameters"]["primary"]
             assert not continuation.done()
         finally:
@@ -715,14 +717,14 @@ def check_empty_server(server_command, directory, device, backing):
                 "held_requests": 0,
                 "observer_capacity": 18,
                 "observers": 0,
-                "idle": {"workspace_ms": 0, "parameter_ms": 0},
             }, server
             assert resources["listeners"] == [
                 {"address": address, "waiting_for_capacity": False}
             ], resources
             assert len(resources["devices"]) == 1, resources
             actual = resources["devices"][0]
-            assert actual["index"] == 0 and actual["driver"] == device, actual
+            assert actual["idle"] == {"workspace_ms": 0, "parameter_ms": 0}, actual
+            assert actual["key"] == "device" and actual["driver"] == device, actual
             assert actual["id"] and actual["name"] and actual["backend"], actual
             assert actual["physical_devices"], actual
             for physical in actual["physical_devices"]:
@@ -770,14 +772,14 @@ def check_empty_server(server_command, directory, device, backing):
             }, memory
             for target in (0, 2**64 - 1):
                 assert client.request(
-                    "/v1/devices/trim", {"device": 0, "target_bytes": target}
+                    "/v1/devices/trim", {"device": "device", "target_bytes": target}
                 ) == {"target_bytes": target, "device": actual}
             for value in (
                 {},
                 {"device": 1, "target_bytes": 0},
-                {"device": 0, "target_bytes": -1},
-                {"device": 0, "target_bytes": 1.5},
-                {"device": 0, "target_bytes": 2**64},
+                {"device": "device", "target_bytes": -1},
+                {"device": "device", "target_bytes": 1.5},
+                {"device": "device", "target_bytes": 2**64},
             ):
                 client.request("/v1/devices/trim", value, status=400)
             for target in ("/v1/embeddings", "/tokenize", "/detokenize"):
@@ -1549,7 +1551,7 @@ def check_multiple_bindings(server_command, directory, catalog, connection_count
             connection.request(
                 "POST",
                 "/v1/devices/trim",
-                json.dumps({"device": 0, "target_bytes": 0}),
+                json.dumps({"device": "device", "target_bytes": 0}),
                 {"Content-Type": "application/json"},
             )
             response = connection.getresponse()
@@ -1557,7 +1559,9 @@ def check_multiple_bindings(server_command, directory, catalog, connection_count
             trimmed = json.loads(response.read())
         finally:
             connection.close()
-        assert trimmed["target_bytes"] == trimmed["device"]["index"] == 0, trimmed
+        assert trimmed["target_bytes"] == 0 and trimmed["device"]["key"] == "device", (
+            trimmed
+        )
         assert [
             (item["id"], item["loom"]["incarnation"])
             for item in client.request("/v1/models")["data"]

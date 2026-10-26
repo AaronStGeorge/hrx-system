@@ -39,9 +39,10 @@ IREE_FLAG(int32_t, sample_rate, 16000, "Input audio sample rate.");
 IREE_FLAG(int32_t, stream_count, 4, "Independent membership histories.");
 IREE_FLAG(bool, fixture, false,
           "Use deterministic fixture inputs and model roles.");
-IREE_FLAG(
-    int32_t, fixture_transcription_device, 0,
-    "Device index for the fixture recognizer; activity uses device zero.");
+IREE_FLAG(string, fixture_activity_device, "device",
+          "Named device for the fixture activity model.");
+IREE_FLAG(string, fixture_transcription_device, "device",
+          "Named device for the fixture recognizer.");
 IREE_FLAG(int32_t, pre_roll_frames, 12,
           "Test policy: retained onset pre-roll.");
 IREE_FLAG(int32_t, hangover_frames, 18,
@@ -101,11 +102,12 @@ class ActivityEnvironment : public ::testing::Environment {
     IREE_ASSERT_OK(loom_serve_host_create_from_flags(
         compiler_options_, iree_allocator_system(), &host_));
     IREE_ASSERT_OK(loom_serve_device_group_allocate_from_flags(
-        host_, driver_registry_, iree_allocator_system(), &group_));
+        host_, driver_registry_, iree_allocator_system(), &devices_, &group_));
   }
 
   void TearDown() override {
     IREE_EXPECT_OK(loom_serve_device_group_free(group_));
+    loom_serve_device_configuration_deinitialize(&devices_);
     loom_serve_host_release(host_);
   }
 
@@ -121,6 +123,8 @@ class ActivityEnvironment : public ::testing::Environment {
   loom_serve_host_t* host_ = nullptr;
   // Ordered explicit device records, retained through all model retirement.
   loom_serve_device_group_t* group_ = nullptr;
+  // Decoded per-device policy and URI storage.
+  loom_serve_device_configuration_t devices_ = {};
 };
 
 // Installed by the physical executable before gtest starts the application.
@@ -195,7 +199,16 @@ class NativeActivityTest : public ::testing::Test {
         iree_make_cstring_view(path), iree_string_view_empty(), allocator_,
         &configuration));
     if (FLAG_fixture) {
-      configuration.device_index = role ? FLAG_fixture_transcription_device : 0;
+      const auto device =
+          iree_make_cstring_view(role ? FLAG_fixture_transcription_device
+                                      : FLAG_fixture_activity_device);
+      iree_allocator_free(allocator_, (void*)configuration.device.data);
+      configuration.device = {};
+      char* name = nullptr;
+      IREE_ASSERT_OK(iree_allocator_clone(
+          allocator_, iree_make_const_byte_span(device.data, device.size),
+          (void**)&name));
+      configuration.device = iree_make_string_view(name, device.size);
     }
     names_[role].assign(configuration.name.data, configuration.name.size);
     iree_host_size_t index = 0;
