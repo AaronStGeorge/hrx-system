@@ -8,6 +8,7 @@
 #define LOOM_TARGET_ARCH_AMD_XDNA_AIE2P_EMIT_CONFIGURATION_H_
 
 #include "loom/target/arch/amd/xdna/aie2p/emit/artifact.h"
+#include "loom/target/arch/amd/xdna/aie2p/emit/program_compile.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/xdna_product.h"
 
 #ifdef __cplusplus
@@ -119,9 +120,11 @@ iree_status_t loom_aie2p_configuration_plan_build(
 // Product-wide source-known limits must be admitted before this call. On
 // success the product entry produced with |plan| owns a complete tile array.
 // Authored native code or storage overflow leaves |out_materialized| false.
+// |compiler| owns the native helpers shared by all plans in the request module.
 // Status reports infrastructure failures.
 iree_status_t loom_aie2p_configuration_plan_materialize(
-    loom_aie2p_configuration_plan_t* plan, bool* out_materialized);
+    loom_aie2p_configuration_plan_t* plan,
+    loom_aie2p_program_compiler_t* compiler, bool* out_materialized);
 
 #ifdef __cplusplus
 }  // extern "C"

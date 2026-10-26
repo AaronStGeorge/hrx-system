@@ -825,6 +825,7 @@ loom_cc_library(
   DEPS
     ::artifact
     ::leaf_compile
+    ::program_compile
     ::target_facts
     iree::base
     loom::analysis::symbol_facts

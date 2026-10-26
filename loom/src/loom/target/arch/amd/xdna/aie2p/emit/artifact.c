@@ -425,7 +425,8 @@ static iree_status_t loom_aie2p_xdna_plan_tile_link(
 
 static iree_status_t loom_aie2p_xdna_compile_resident_tiles(
     const loom_aie2p_xdna_artifact_request_t* request,
-    loom_module_t* resident_module, const loom_aie2p_array_plan_t* plan,
+    loom_aie2p_program_compiler_t* compiler,
+    const loom_aie2p_array_plan_t* plan,
     const loom_aie2p_array_resident_program_t* resident_program,
     loom_aie2p_xdna_tile_t** out_tiles, bool* out_compiled) {
   *out_compiled = false;
@@ -483,13 +484,12 @@ static iree_status_t loom_aie2p_xdna_compile_resident_tiles(
     }
     bool program_compiled = false;
     iree_status_t status = loom_aie2p_program_compile(
-        resident_module, resident->function_op,
+        compiler, resident->function_op,
         (loom_aie2p_program_helper_list_t){
             .values = direct_helpers,
             .count = resident->direct_helper_count,
         },
-        &worker_compile_options, request->scratch_arena, &program_compiled,
-        contribution);
+        &worker_compile_options, &program_compiled, contribution);
     if (worker_report_ptr != NULL) {
       iree_status_t report_status =
           program_compiled ? loom_target_compile_report_record_entry_report(
@@ -630,6 +630,9 @@ static iree_status_t loom_aie2p_xdna_compile_resident_entries(
   IREE_RETURN_IF_ERROR(loom_aie2p_array_materialize_resident_programs(
       request->module, resident_module, array_plans, entry_count,
       request->scratch_arena, resident_programs));
+  loom_aie2p_program_compiler_t* compiler = NULL;
+  IREE_RETURN_IF_ERROR(loom_aie2p_program_compiler_create(
+      resident_module, request->scratch_arena, &compiler));
   for (iree_host_size_t i = 0; i < entry_count; ++i) {
     if (array_plans[i].function_op == NULL) {
       continue;
@@ -639,7 +642,7 @@ static iree_status_t loom_aie2p_xdna_compile_resident_entries(
     loom_aie2p_xdna_tile_t* tiles = NULL;
     bool tiles_compiled = false;
     IREE_RETURN_IF_ERROR(loom_aie2p_xdna_compile_resident_tiles(
-        request, resident_module, &array_plans[i], resident_program, &tiles,
+        request, compiler, &array_plans[i], resident_program, &tiles,
         &tiles_compiled));
     if (!tiles_compiled) {
       return iree_ok_status();
@@ -838,13 +841,16 @@ iree_status_t loom_aie2p_xdna_compile_artifact(
                                               entry_count, &product_issue);
   }
 
+  loom_aie2p_program_compiler_t* compiler = NULL;
+  IREE_RETURN_IF_ERROR(loom_aie2p_program_compiler_create(
+      request->module, request->scratch_arena, &compiler));
   for (iree_host_size_t i = 0; i < entry_count; ++i) {
     if (configuration_plans[i] == NULL) {
       continue;
     }
     bool materialized = false;
     IREE_RETURN_IF_ERROR(loom_aie2p_configuration_plan_materialize(
-        configuration_plans[i], &materialized));
+        configuration_plans[i], compiler, &materialized));
     if (!materialized) {
       return iree_ok_status();
     }

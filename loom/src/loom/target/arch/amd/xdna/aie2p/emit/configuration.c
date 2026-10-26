@@ -209,7 +209,8 @@ static iree_status_t loom_aie2p_configuration_plan_load(
 }
 
 static iree_status_t loom_aie2p_configuration_compile_worker(
-    loom_aie2p_configuration_plan_t* emitter, loom_symbol_ref_t symbol,
+    loom_aie2p_configuration_plan_t* emitter,
+    loom_aie2p_program_compiler_t* compiler, loom_symbol_ref_t symbol,
     loom_aie2p_leaf_contribution_t** out_worker) {
   const loom_aie2p_xdna_artifact_request_t* request = emitter->request;
   loom_aie2p_leaf_contribution_t* worker = emitter->workers[symbol.symbol_id];
@@ -296,12 +297,12 @@ static iree_status_t loom_aie2p_configuration_compile_worker(
     };
     bool compiled = false;
     iree_status_t status = loom_aie2p_program_compile(
-        request->module, function,
+        compiler, function,
         (loom_aie2p_program_helper_list_t){
             .values = direct_helpers,
             .count = requirements.direct_callees.count,
         },
-        &options, request->scratch_arena, &compiled, worker);
+        &options, &compiled, worker);
     if (report_ptr) {
       iree_status_t report_status =
           compiled ? loom_target_compile_report_record_entry_report(
@@ -919,7 +920,8 @@ iree_status_t loom_aie2p_configuration_plan_build(
 }
 
 iree_status_t loom_aie2p_configuration_plan_materialize(
-    loom_aie2p_configuration_plan_t* plan, bool* out_materialized) {
+    loom_aie2p_configuration_plan_t* plan,
+    loom_aie2p_program_compiler_t* compiler, bool* out_materialized) {
   *out_materialized = false;
   const loom_aie2p_xdna_artifact_request_t* request = plan->request;
   loom_aie2p_xdna_tile_t* tiles = NULL;
@@ -936,8 +938,8 @@ iree_status_t loom_aie2p_configuration_plan_materialize(
   for (iree_host_size_t i = 0; i < plan->entry->tile_count; ++i) {
     const loom_aie2p_configuration_load_t* load = &plan->loads[i];
     loom_aie2p_leaf_contribution_t* worker = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_aie2p_configuration_compile_worker(plan, load->symbol, &worker));
+    IREE_RETURN_IF_ERROR(loom_aie2p_configuration_compile_worker(
+        plan, compiler, load->symbol, &worker));
     if (plan->error_count) {
       return iree_ok_status();
     }

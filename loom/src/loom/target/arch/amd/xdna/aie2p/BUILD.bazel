@@ -710,6 +710,7 @@ loom_cc_library(
     deps = [
         ":artifact",
         ":leaf_compile",
+        ":program_compile",
         ":target_facts",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:target_binding",
