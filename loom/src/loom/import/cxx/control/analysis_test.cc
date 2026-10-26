@@ -552,18 +552,30 @@ TEST(ControlFlowTest, ReturnSummariesRetainFallthroughAndNestedExits) {
     const char* body;
     // Expected function-body return summary.
     ExitFlow flow;
+    // Whether the function body can reach its lexical successor.
+    bool falls_through;
   };
   const Case cases[] = {
-      {"", ExitFlow::None},
-      {"return;", ExitFlow::All},
-      {"if (x) return;", ExitFlow::Some},
-      {"if (x) return; else return;", ExitFlow::All},
-      {"if (x) { if (y) return; }", ExitFlow::Some},
-      {"if (x) { if (y) return; } return;", ExitFlow::All},
-      {"while (x) { return; }", ExitFlow::Some},
-      {"do { return; } while (x);", ExitFlow::All},
-      {"for (unsigned i=0; i<4u; ++i) { if (y) return; }", ExitFlow::Some},
-      {"while (x) { --x; }", ExitFlow::None},
+      {"", ExitFlow::None, true},
+      {"return;", ExitFlow::All, false},
+      {"if (x) return;", ExitFlow::Some, true},
+      {"if (x) return; else return;", ExitFlow::All, false},
+      {"if (x) { if (y) return; }", ExitFlow::Some, true},
+      {"if (x) { if (y) return; } return;", ExitFlow::All, false},
+      {"while (x) { return; }", ExitFlow::Some, true},
+      {"do { return; } while (x);", ExitFlow::All, false},
+      {"for (unsigned i=0; i<4u; ++i) { if (y) return; }", ExitFlow::Some,
+       true},
+      {"while (x) { --x; }", ExitFlow::None, true},
+      {"while (true) {}", ExitFlow::None, false},
+      {"for (;;) { continue; }", ExitFlow::None, false},
+      {"do {} while (1.0);", ExitFlow::None, false},
+      {"while (true) { return; }", ExitFlow::All, false},
+      {"while (true) { if (x) return; }", ExitFlow::Some, false},
+      {"while (true) { if (x) break; }", ExitFlow::None, true},
+      {"while (true) { break; }", ExitFlow::None, true},
+      {"do { break; } while (true);", ExitFlow::None, true},
+      {"while (x) { while (true) {} return; }", ExitFlow::None, true},
   };
   loom_cxx_import_options_t options;
   loom_cxx_import_options_initialize(&options);
@@ -580,6 +592,7 @@ TEST(ControlFlowTest, ReturnSummariesRetainFallthroughAndNestedExits) {
     Types types(source.unit(), source.diagnostics());
     ControlFlow analysis(source.unit(), source.diagnostics(), types, body);
     EXPECT_EQ(analysis.returns(body), test.flow);
+    EXPECT_EQ(analysis.falls_through(body), test.falls_through);
   }
 }
 

@@ -7,6 +7,7 @@
 #include "loom/import/cxx/control/analysis.h"
 
 #include <cxx/ast.h>
+#include <cxx/ast_interpreter.h>
 #include <cxx/ast_rewriter.h>
 #include <cxx/function_body.h>
 #include <cxx/initialization.h>
@@ -140,6 +141,19 @@ std::optional<IntegerIncrement> classify_integer_increment(
   return IntegerIncrement{cxx::ast_cast<cxx::IdExpressionAST>(
                               unwrap_expression(compound->targetExpression)),
                           static_cast<unsigned>(*amount)};
+}
+
+std::optional<bool> constant_truth(cxx::TranslationUnit& unit,
+                                   cxx::ExpressionAST* expression) {
+  if (!expression) {
+    return true;
+  }
+  auto constant = scalar_constant(unit, expression);
+  if (!constant) {
+    return std::nullopt;
+  }
+  cxx::ASTInterpreter interpreter(&unit);
+  return interpreter.toBool(*constant);
 }
 
 }  // namespace
@@ -282,6 +296,10 @@ ExitFlow ControlFlow::returns(cxx::StatementAST* statement) const {
   return exits(statement, Return);
 }
 
+bool ControlFlow::falls_through(cxx::StatementAST* statement) const {
+  return paths(statement) & Fallthrough;
+}
+
 ExitFlow ControlFlow::continues(cxx::StatementAST* statement) const {
   return exits(statement, Continue);
 }
@@ -410,18 +428,41 @@ unsigned ControlFlow::classify_paths(cxx::StatementAST* statement) const {
     return (outcomes & ~Break) | (outcomes & Break ? unsigned(Fallthrough) : 0);
   }
   cxx::StatementAST* body = nullptr;
+  cxx::ExpressionAST* condition = nullptr;
   if (auto* loop = cxx::ast_cast<cxx::ForStatementAST>(statement)) {
     body = loop->statement;
+    condition = loop->condition;
   } else if (auto* loop = cxx::ast_cast<cxx::WhileStatementAST>(statement)) {
     body = loop->statement;
+    condition = loop->condition;
   } else if (auto* loop = cxx::ast_cast<cxx::DoStatementAST>(statement)) {
     auto body_paths = paths(loop->statement);
-    return (body_paths & Return) |
-           (body_paths & (Fallthrough | Continue | Break)
-                ? unsigned(Fallthrough)
-                : 0);
+    unsigned outcomes = body_paths & (Return | Diverge);
+    if (body_paths & Break) {
+      outcomes |= Fallthrough;
+    }
+    if (body_paths & (Fallthrough | Continue)) {
+      auto truth = constant_truth(unit_, loop->expression);
+      outcomes |= truth && *truth ? unsigned(Diverge) : unsigned(Fallthrough);
+    }
+    return outcomes;
   }
-  return Fallthrough | (paths(body) & Return);
+  if (!body) {
+    return Fallthrough;
+  }
+  auto body_paths = paths(body);
+  unsigned outcomes = body_paths & (Return | Diverge);
+  auto truth = constant_truth(unit_, condition);
+  if (!truth || !*truth) {
+    return outcomes | Fallthrough;
+  }
+  if (body_paths & Break) {
+    outcomes |= Fallthrough;
+  }
+  if (body_paths & (Fallthrough | Continue)) {
+    outcomes |= Diverge;
+  }
+  return outcomes;
 }
 
 void ControlFlow::visit(cxx::CaseStatementAST* ast) {
