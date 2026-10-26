@@ -708,7 +708,7 @@ loom_bytecode_body_reader_read_block(loom_bytecode_body_reader_t* body_reader,
   uint64_t op_count = 0;
   IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
       body_reader->values.decoder, cursor, &op_count));
-  if (op_count > UINT16_MAX || op_count > IREE_HOST_SIZE_MAX) {
+  if (op_count > UINT32_MAX || op_count > IREE_HOST_SIZE_MAX) {
     return loom_bytecode_value_scope_emit_invalid(
         &body_reader->values, arg_count_offset,
         IREE_SV("block_operation_count_exceeds_field_width"));
