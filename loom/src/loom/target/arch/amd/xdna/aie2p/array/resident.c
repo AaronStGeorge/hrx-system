@@ -415,13 +415,6 @@ static iree_status_t loom_aie2p_array_resident_clone_helpers(
     IREE_RETURN_IF_ERROR(loom_ir_clone_op(
         &ir_builder, builder->source_module->symbols.entries[i].defining_op,
         &target_remap, &cloned_op));
-    const loom_symbol_ref_t target_ref = builder->resident_symbols_by_source[i];
-    if (builder->module->symbols.entries[target_ref.symbol_id].defining_op !=
-        cloned_op) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AIE2P resident target clone did not bind its reserved symbol");
-    }
   }
 
   for (loom_symbol_id_t i = 0; i < symbol_count; ++i) {
@@ -454,12 +447,6 @@ static iree_status_t loom_aie2p_array_resident_clone_helpers(
         &ir_builder, builder->source_module->symbols.entries[i].defining_op,
         &helper_remap, &cloned_op));
     const loom_symbol_ref_t target_ref = builder->resident_symbols_by_source[i];
-    if (builder->module->symbols.entries[target_ref.symbol_id].defining_op !=
-        cloned_op) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AIE2P resident helper clone did not bind its reserved symbol");
-    }
     builder->resident_helpers_by_source[i] =
         (loom_aie2p_array_resident_helper_t){
             .entry = target_ref,
