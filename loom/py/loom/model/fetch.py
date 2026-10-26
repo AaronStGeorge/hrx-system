@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import urljoin
 
 from .fetch_hf import AccessRequired
+from .fetch_progress import ByteProgress
 from .fetch_source import (
     Document,
     FetchError,
@@ -244,6 +245,8 @@ class LockPlan:
     selections: list[dict[str, str]]
     # One source per origin/transform pair, independent of installation paths.
     sources: dict[str, Source]
+    # First authored destination for each unique source, retained for observation.
+    paths: dict[str, str]
     # Fixed operations included in each unique output's identity.
     transforms: dict[str, dict]
     # Selected authored roots and their immutable repository resolutions.
@@ -309,6 +312,7 @@ def plan_lock(
         ),
     )
     sources = {}
+    paths = {}
     transforms = {}
     local_inputs = set()
     for choice in selections:
@@ -319,10 +323,11 @@ def plan_lock(
             local = resolver.local_file(file.origin)
             if local is not None:
                 local_inputs.add(local)
-        for file in lock_files(selected, lock_scope).values():
+        for name, file in lock_files(selected, lock_scope).items():
             key = file_key(file.origin, file.transform)
             if key not in sources:
                 sources[key] = resolver.resolve(file.origin, None)
+                paths[key] = name
                 if file.transform is not None:
                     transforms[key] = file.transform
     sources = _prepare_sources(
@@ -333,6 +338,7 @@ def plan_lock(
         authored["model"]["id"],
         selections,
         sources,
+        paths,
         transforms,
         resolver.origins,
         lock_scope,
@@ -392,12 +398,21 @@ def _acquire_sources(
     *,
     offline: bool,
     transforms: dict[str, dict],
+    paths: dict[str, str],
     preserve_sources: bool = False,
     present: dict[str, AcquiredFile] | None = None,
 ) -> dict[str, AcquiredFile]:
     """Joins a bounded transfer batch, deduplicated by logical source identity."""
     acquired = dict(present or {})
     unique = {}
+    total = len(
+        set(acquired)
+        | {
+            file_key(source.origin, transforms.get(name))
+            for name, source in sources.items()
+        }
+    )
+    cache.progress.emit("acquire", completed_files=len(acquired), total_files=total)
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix="loom-fetch") as executor:
         try:
             for name, source in sources.items():
@@ -412,10 +427,15 @@ def _acquire_sources(
                             identities.get(name),
                             offline=offline,
                             preserve_sources=preserve_sources,
+                            progress=cache.progress.file(paths[name]),
                         )
                         if transform is not None
                         else executor.submit(
-                            cache.acquire, source, identities.get(name), offline=offline
+                            cache.acquire,
+                            source,
+                            identities.get(name),
+                            offline=offline,
+                            progress=cache.progress.file(paths[name]),
                         )
                     )
             names = {future: key for key, future in unique.items()}
@@ -428,6 +448,9 @@ def _acquire_sources(
                 )
                 for future in completed:
                     acquired[names[future]] = future.result()
+                    cache.progress.emit(
+                        "acquire", completed_files=len(acquired), total_files=total
+                    )
         except BaseException:
             cache.cancel()
             for future in unique.values():
@@ -447,6 +470,7 @@ def update_lock(
             cache,
             offline=plan.offline,
             transforms=plan.transforms,
+            paths=plan.paths,
             preserve_sources=preserve_sources,
         )
         document = ModelLock.snapshot(
@@ -456,7 +480,9 @@ def update_lock(
         )
         if cache.cancelled.is_set():
             raise FetchError("model acquisition cancelled")
+        cache.progress.emit("install", completed_files=0, total_files=1)
         atomic_write(plan.path, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
+        cache.progress.emit("complete", completed_files=1, total_files=1)
     return plan.path
 
 
@@ -580,7 +606,7 @@ def _check_installation_lock(path: Path, document: dict) -> None:
 
 
 def _check_outputs(
-    plan: FetchPlan, directory: Path, card: dict
+    plan: FetchPlan, directory: Path, card: dict, *, cancelled=None, progress=None
 ) -> dict[str, AcquiredFile]:
     _check_document(_destination(directory, "model.json"), card)
     _destination(directory, "model.json.lock")
@@ -591,6 +617,7 @@ def _check_outputs(
         destination = _destination(directory, name)
         if not destination.exists():
             continue
+        counter = ByteProgress(progress.file(name) if progress else None, "verify")
         identity = plan.identities.get(name)
         if identity is None:
             editable = plan.selection.files[name].roles <= {"program", "auxiliary"}
@@ -604,10 +631,12 @@ def _check_outputs(
                     "before transfer; "
                     "use a matching lock or choose another output"
                 )
-            size, digest = file_digest(destination)
+            size, digest = file_digest(
+                destination, cancelled=cancelled, progress=counter
+            )
             identity = FileIdentity(source.origin, size, digest, source.resolved)
         else:
-            identity.verify(destination)
+            identity.verify(destination, cancelled=cancelled, progress=counter)
         present[name] = AcquiredFile(destination, identity)
     return present
 
@@ -716,7 +745,9 @@ def install(
                     "lock update destination overlaps installation content"
                 )
     with installation_lock(directory):
-        present = _check_outputs(plan, directory, card)
+        present = _check_outputs(
+            plan, directory, card, cancelled=cache.cancelled, progress=cache.progress
+        )
         _check_lock_output(plan, directory, relocated, roots)
         if shared:
             _probe_sharing(plan, cache, directory, shared)
@@ -739,6 +770,7 @@ def install(
                 for name, file in plan.selection.files.items()
                 if file.transform is not None
             },
+            paths={name: name for name in plan.sources},
             preserve_sources=preserve_sources,
             present={
                 file_key(
@@ -772,6 +804,9 @@ def install(
             )
         published = []
         try:
+            cache.progress.emit(
+                "install", completed_files=len(present), total_files=len(plan.sources)
+            )
             with tempfile.TemporaryDirectory(
                 prefix=".loom-fetch-", dir=directory
             ) as temporary:
@@ -782,6 +817,7 @@ def install(
                     if name in present:
                         continue
                     destination = directory / name
+                    cache.progress.file(name).emit("install")
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     path = acquired[
                         file_key(source.origin, plan.selection.files[name].transform)
@@ -794,6 +830,11 @@ def install(
                     else:
                         share_file(path, destination)
                     published.append(destination)
+                    cache.progress.emit(
+                        "install",
+                        completed_files=len(present) + len(published),
+                        total_files=len(plan.sources),
+                    )
                 # The complete card is the publication boundary. No runtime ever
                 # sees a card advertising a partially acquired closure.
                 metadata = {
@@ -830,4 +871,7 @@ def install(
             for path in reversed(published):
                 path.unlink()
             raise
+    cache.progress.emit(
+        "complete", completed_files=len(plan.sources), total_files=len(plan.sources)
+    )
     return directory / "model.json"

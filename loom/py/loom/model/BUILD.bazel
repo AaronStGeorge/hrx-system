@@ -128,11 +128,30 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "fetch_progress",
+    srcs = ["fetch_progress.py"],
+)
+
+iree_py_library(
     name = "fetch_transfer",
     srcs = ["fetch_transfer.py"],
     deps = [
         ":fetch_source",
         ":manifest",
+    ],
+)
+
+iree_py_test(
+    name = "fetch_progress_test",
+    srcs = [
+        "fetch_progress_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.fetch_progress_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":fetch_console",
+        ":fetch_progress",
     ],
 )
 
@@ -163,6 +182,7 @@ iree_py_library(
     name = "fetch_safetensors",
     srcs = ["fetch_safetensors.py"],
     deps = [
+        ":fetch_progress",
         ":fetch_range",
         ":fetch_source",
         ":manifest",
@@ -173,6 +193,7 @@ iree_py_library(
     name = "fetch_hf",
     srcs = ["fetch_hf.py"],
     deps = [
+        ":fetch_progress",
         ":fetch_safetensors",
         ":fetch_source",
         ":fetch_transfer",
@@ -185,6 +206,7 @@ iree_py_library(
     srcs = ["fetch_storage.py"],
     deps = [
         ":fetch_hf",
+        ":fetch_progress",
         ":fetch_safetensors",
         ":fetch_source",
         ":fetch_transfer",
@@ -198,6 +220,7 @@ iree_py_library(
     srcs = ["fetch.py"],
     deps = [
         ":fetch_hf",
+        ":fetch_progress",
         ":fetch_source",
         ":fetch_storage",
         ":lock",
@@ -214,6 +237,7 @@ iree_py_library(
     deps = [
         ":fetch_hf",
         ":fetch_source",
+        ":memory",
     ],
 )
 

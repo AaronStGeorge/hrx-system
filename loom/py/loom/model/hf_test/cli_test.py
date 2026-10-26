@@ -45,11 +45,52 @@ def _publish(hub):
     hub.files["model.json"] = json.dumps(_card()).encode()
 
 
-def test_headless_gate_is_one_structured_action_without_waiting(tmp_path):
+def test_redirected_progress_arrives_before_hf_download_completes(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _publish(hub)
+        hub.approved = True
+        hub.held_file = "code.loom"
+        output = tmp_path / "output"
+        with subprocess.Popen(
+            _arguments(
+                hub, "--no-lock", "--json", "--no-input", "--output=" + str(output)
+            ),
+            env=hub.environment(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ) as process:
+            try:
+                observed = []
+                for line in process.stderr:
+                    observed.append(line)
+                    if "Downloading file bytes: code.loom" in line:
+                        assert not hub.release_body.is_set()
+                        assert not (output / "model.json").exists()
+                        hub.release_body.set()
+                        break
+                else:
+                    raise AssertionError(
+                        "no live download progress: " + "".join(observed)
+                    )
+                result, error = process.communicate()
+                assert process.returncode == 0, error
+                assert json.loads(result)["card"] == str(output / "model.json")
+                assert "Complete" in error
+                assert "fixture-first" not in "".join(observed) + result + error
+                assert "\x1b" not in "".join(observed) + error
+            finally:
+                hub.release_body.set()
+
+
+@pytest.mark.parametrize("quiet", [False, True])
+def test_headless_gate_is_one_structured_action_without_waiting(tmp_path, quiet):
     with running_hub(tmp_path) as hub:
         _publish(hub)
         result = subprocess.run(
-            _arguments(hub, "--list", "--json", "--no-input"),
+            _arguments(
+                hub, "--list", "--json", "--no-input", *(["--quiet"] if quiet else [])
+            ),
             env=hub.environment(),
             capture_output=True,
             text=True,

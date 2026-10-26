@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,18 +58,25 @@ def lock_files(selection: Selection, scope: str) -> dict[str, ModelFile]:
     }
 
 
-def file_digest(path: Path, *, cancelled: Event | None = None) -> tuple[int, str]:
+def file_digest(
+    path: Path, *, cancelled: Event | None = None, progress=None
+) -> tuple[int, str]:
     """Hashes bytes with bounded working storage, including empty inputs."""
     if cancelled is not None and cancelled.is_set():
         raise InterruptedError("file verification cancelled")
     size = 0
     digest = hashlib.sha256()
     with path.open("rb") as stream:
+        total = os.fstat(stream.fileno()).st_size if progress is not None else None
+        if progress is not None:
+            progress(0, total)
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             if cancelled is not None and cancelled.is_set():
                 raise InterruptedError("file verification cancelled")
             size += len(chunk)
             digest.update(chunk)
+            if progress is not None:
+                progress(size, total)
     return size, digest.hexdigest()
 
 
@@ -92,8 +100,10 @@ class FileIdentity:
     # Normalized operation producing these bytes from the authored origin.
     transform: dict | None = None
 
-    def verify(self, path: Path, *, cancelled: Event | None = None) -> None:
-        size, digest = file_digest(path, cancelled=cancelled)
+    def verify(
+        self, path: Path, *, cancelled: Event | None = None, progress=None
+    ) -> None:
+        size, digest = file_digest(path, cancelled=cancelled, progress=progress)
         if size != self.size or digest != self.sha256:
             raise ManifestError(
                 f"integrity mismatch for {path}: expected {self.size} bytes / "

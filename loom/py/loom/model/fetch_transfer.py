@@ -56,6 +56,13 @@ def _worker(directory):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     idle_directory = os.getcwd()
     with os.fdopen(os.dup(sys.stdout.fileno()), "wb", buffering=0) as result_stream:
+        result_lock = threading.Lock()
+
+        def progress(event):
+            # Provider callbacks may arrive from native transfer threads.
+            with result_lock:
+                _send(result_stream, ("progress", event))
+
         # SDK logs can contain signed redirects. Keep their Python and native
         # output separate from the private result channel.
         with open(os.devnull, "wb") as sink:
@@ -69,8 +76,9 @@ def _worker(directory):
             operation = arguments = None
             try:
                 os.chdir(directory)
-                operation, arguments = pickle.loads(request)
-                result = (True, operation(*arguments))
+                operation, arguments, observe = pickle.loads(request)
+                options = {"progress": progress} if observe else {}
+                result = (True, operation(*arguments, **options))
             except (FetchError, ManifestError, OSError) as error:
                 result = (False, error)
             except BaseException as error:
@@ -86,7 +94,8 @@ def _worker(directory):
                 # Windows keeps the current directory open. An idle worker must
                 # not prevent its caller from removing a completed workspace.
                 os.chdir(idle_directory)
-            _send(result_stream, result)
+            with result_lock:
+                _send(result_stream, ("result", result))
             del request, operation, arguments, result
 
 
@@ -133,14 +142,25 @@ class _TransferWorker:
             process.stdin.close()
             process.stdout.close()
 
-    def run(self, operation, arguments, cancelled):
+    def run(self, operation, arguments, cancelled, progress):
         result = Future()
         process = self.process
 
         def exchange():
             try:
-                _send(process.stdin, (operation, arguments))
-                result.set_result(pickle.loads(_read_frame(process.stdout)))
+                _send(process.stdin, (operation, arguments, progress is not None))
+                while True:
+                    kind, value = pickle.loads(_read_frame(process.stdout))
+                    if kind == "result":
+                        result.set_result((kind, value))
+                        break
+                    try:
+                        progress(value)
+                    except BaseException as error:
+                        # Observer IO failures belong to the caller's sink, not
+                        # the worker pipe. Preserve their original diagnostic.
+                        result.set_result(("observer_failure", error))
+                        break
             except BaseException as error:
                 result.set_exception(error)
 
@@ -154,7 +174,7 @@ class _TransferWorker:
                     raise FetchError("model acquisition cancelled")
             if cancelled.is_set():
                 raise FetchError("model acquisition cancelled")
-            return result.result()
+            kind, value = result.result()
         except (EOFError, BrokenPipeError, pickle.UnpicklingError) as error:
             self.close()
             raise FetchError(
@@ -166,6 +186,10 @@ class _TransferWorker:
             raise
         finally:
             thread.join()
+        if kind == "observer_failure":
+            self.close()
+            raise value
+        return value
 
 
 class _TransferPool:
@@ -275,10 +299,12 @@ if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_after_fork)
 
 
-def run_transfer(operation, arguments: tuple, cancelled: threading.Event):
+def run_transfer(
+    operation, arguments: tuple, cancelled: threading.Event, *, progress=None
+):
     """Runs internal IO with reusable imports and joined writer cancellation."""
     with _pool.borrow(cancelled) as worker:
-        succeeded, value = worker.run(operation, arguments, cancelled)
+        succeeded, value = worker.run(operation, arguments, cancelled, progress)
         if not succeeded:
             raise value
         return value

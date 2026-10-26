@@ -231,6 +231,89 @@ def _remote_plan(base, cache, **kwargs):
     )
 
 
+@pytest.mark.parametrize("quiet", [False, True])
+def test_cli_progress_preserves_json_stdout_and_quiet_mode(tmp_path, capsys, quiet):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(_card(), files, parallel=True) as (base, _, _):
+        output = tmp_path / "installed"
+        arguments = [
+            base + "/model.json",
+            "--no-input",
+            "--json",
+            "--output=" + str(output),
+            "--cache=" + str(tmp_path / "cache"),
+        ]
+        assert main(arguments + (["--quiet"] if quiet else [])) == 0
+        captured = capsys.readouterr()
+        assert json.loads(captured.out)["card"] == str(output / "model.json")
+        if quiet:
+            assert captured.err == ""
+        else:
+            for label in (
+                "Reading model metadata",
+                "Acquiring files",
+                "Downloading file bytes",
+                "Verifying file bytes",
+                "Installing files",
+                "Complete",
+            ):
+                assert label in captured.err
+            assert "2/2 files complete" in captured.err
+            assert base not in captured.err
+            assert "\x1b" not in captured.err
+
+
+def test_progress_failure_never_reports_completion_or_publishes_card(tmp_path, capsys):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(_card(), files) as (base, _, resources):
+        resources["/weights.data"] = b"corrupt"
+        output = tmp_path / "installed"
+        assert (
+            main(
+                [
+                    base + "/model.json",
+                    "--no-input",
+                    "--json",
+                    "--output=" + str(output),
+                    "--cache=" + str(tmp_path / "cache"),
+                ]
+            )
+            == 1
+        )
+        captured = capsys.readouterr()
+        assert json.loads(captured.out)["kind"] == "error"
+        assert "SHA-256" in captured.err
+        assert "Complete" not in captured.err
+        assert not (output / "model.json").exists()
+        assert not (output / "code.loom").exists()
+
+
+def test_progress_tracks_unique_sources_then_installed_destinations(tmp_path):
+    events = []
+    card = _card()
+    card["programs"]["p"]["libraries"] = [{"path": "copy.loom", "origin": "code.loom"}]
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    with _server(card, files, parallel=True) as (base, requests, _):
+        cache = ContentCache(tmp_path / "cache", progress=events.append)
+        plan = _remote_plan(base, cache)
+        install(plan, cache, tmp_path / "installed")
+        acquired = [event for event in events if event.phase == "acquire"]
+        assert [(event.completed_files, event.total_files) for event in acquired] == [
+            (0, 2),
+            (1, 2),
+            (2, 2),
+        ]
+        assert events[-1].phase == "complete"
+        assert events[-1].completed_files == events[-1].total_files == 3
+        assert requests.count("/code.loom") == 1
+        events.clear()
+        offline = _remote_plan(base, cache, offline=True)
+        install(offline, cache, tmp_path / "offline")
+        assert not any(event.phase in ("download", "transfer") for event in events)
+        assert any(event.phase == "verify" for event in events)
+        assert events[-1].phase == "complete"
+
+
 def _publication_card():
     document = _card()
     document["programs"]["alternate"] = {
@@ -313,6 +396,7 @@ def test_parameter_verification_exception_does_not_compose_with_other_lock_modes
 
 
 def test_publication_lock_unions_sources_without_merging_destinations(tmp_path):
+    events = []
     files = {
         "code.loom": b"code",
         "weights.data": b"weights",
@@ -323,7 +407,7 @@ def test_publication_lock_unions_sources_without_merging_destinations(tmp_path):
         requests,
         resources,
     ):
-        cache = ContentCache(tmp_path / "cache")
+        cache = ContentCache(tmp_path / "cache", progress=events.append)
         document = cache.read_document(base + "/model.json", offline=False)
         card = ModelCard.parse(document.text)
         lock_path = tmp_path / "publication.json.lock"
@@ -335,6 +419,20 @@ def test_publication_lock_unions_sources_without_merging_destinations(tmp_path):
         assert len(plan.selections) == 4
         assert len(plan.sources) == 3
         assert update_lock(plan, cache) == lock_path
+        assert {event.path for event in events if event.path is not None} <= {
+            "code.loom",
+            "renamed.loom",
+            "weights.data",
+        }
+        acquired = [event for event in events if event.phase == "acquire"]
+        assert [(event.completed_files, event.total_files) for event in acquired] == [
+            (0, 3),
+            (1, 3),
+            (2, 3),
+            (3, 3),
+        ]
+        assert events[-1].phase == "complete"
+        assert events[-1].completed_files == events[-1].total_files == 1
         assert set(requests) == {"/model.json", *("/" + name for name in files)}
         assert len(requests) == 4
         lock = ModelLock.parse(lock_path.read_text())

@@ -16,6 +16,7 @@ import struct
 from contextlib import ExitStack, nullcontext
 from pathlib import Path
 
+from .fetch_progress import ByteProgress
 from .fetch_range import RangeReader
 from .fetch_source import FetchError
 from .manifest import ManifestError, _object, _unique_object
@@ -125,13 +126,19 @@ def repack(
     *,
     endpoint=None,
     token=False,
+    progress=None,
 ):
     """Hashes final bytes, writing them only when the cache needs a new result."""
     if preserve is not None:
         preserve.mkdir(exist_ok=True)
     preserved = []
+    completed = 0
+    total = None
+    counter = ByteProgress(progress, "transform")
+    counter(0, total)
 
     def copy_range(reader, offset, length, output):
+        nonlocal completed
         with ExitStack() as stack:
             digest = hashlib.sha256()
             retained = (
@@ -144,6 +151,8 @@ def repack(
                 if retained is not None:
                     retained.write(chunk)
                     digest.update(chunk)
+                completed += len(chunk)
+                counter(completed, total)
             if retained is not None:
                 retained.flush()
                 os.fsync(retained.fileno())
@@ -200,6 +209,8 @@ def repack(
             # Preserve original payload order so a full checkpoint is one streaming
             # request, with no tensor-sized buffers or second local hashing pass.
             transfers = [(base, reader.size - base)]
+        total = completed + sum(length for _, length in transfers)
+        counter(completed, total)
         encoded = json.dumps(
             result, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
