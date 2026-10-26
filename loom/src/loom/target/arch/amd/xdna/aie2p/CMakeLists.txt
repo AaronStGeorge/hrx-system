@@ -80,6 +80,27 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_XDNA)
+loom_cc_test(
+  NAME
+    facts_test
+  SRCS
+    "facts_test.cc"
+  DEPS
+    ::target_facts
+    ::target_profile
+    ::target_records
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::target::arch::amd::xdna::device_profile
+    loom::target::facts_builder
+    loom::target::profile
+  LABELS
+    "iree-build-requirement=loom.target.arch.xdna"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_XDNA)
 loom_cc_library(
   NAME
     array_descriptors
@@ -635,24 +656,29 @@ loom_cc_library(
   NAME
     pipeline_pass
   HDRS
+    "pipeline/configuration_entry.h"
     "pipeline/kernel_realization.h"
     "pipeline/pass.h"
   SRCS
+    "pipeline/configuration_entry.c"
     "pipeline/kernel_realization.c"
     "pipeline/pass.c"
   DEPS
+    ::array_abi_layout
     ::pipeline_native
     ::target_facts
     iree::base
     loom::analysis::storage_access
     loom::analysis::symbolic_expr
     loom::analysis::view_regions
+    loom::codegen::low::launch_config_program
     loom::error::parameter
     loom::ir
     loom::ops::buffer
     loom::ops::channel
     loom::ops::index
     loom::ops::kernel
+    loom::ops::low
     loom::ops::op_defs
     loom::ops::pipeline
     loom::ops::type_builders
@@ -1047,6 +1073,7 @@ loom_check_test_suite(
     "test/configuration.loom-test"
     "test/configuration_contracts.loom-test"
     "test/configuration_data.loom-test"
+    "test/configuration_entry.loom-test"
     "test/configuration_limits.loom-test"
     "test/configuration_measurement.loom-test"
     "test/configuration_report.loom-test"
@@ -1630,6 +1657,7 @@ loom_cc_library(
     "emit/configuration_report.c"
     "emit/configuration_report.h"
   DEPS
+    ::array_abi_layout
     ::array_plan
     ::array_program
     ::array_resident

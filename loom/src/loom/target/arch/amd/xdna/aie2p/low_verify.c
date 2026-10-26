@@ -229,6 +229,11 @@ static iree_status_t loom_aie2p_low_verify_begin_function(
   }
   if (target->descriptor_set->stable_id ==
       AIE2P_CONFIGURATION_DESCRIPTOR_SET_ID) {
+    IREE_RETURN_IF_ERROR(
+        loom_aie2p_low_verify_array_abi_layout(context, state, function));
+    if (!state->abi_layout_valid) {
+      return iree_ok_status();
+    }
     const loom_region_t* body = loom_low_verify_context_function_body(context);
     const loom_block_t* entry = loom_region_const_entry_block(body);
     if (entry->arg_count || function->result_count) {
@@ -707,7 +712,7 @@ static iree_status_t loom_aie2p_low_verify_end_function(
     loom_low_verify_context_t* context, void* provider_state) {
   (void)provider;
   const loom_aie2p_low_verify_state_t* state = provider_state;
-  if (!state || state->skip_body_checks ||
+  if (!state || state->skip_body_checks || !state->abi_layout_valid ||
       state->target->descriptor_set->stable_id !=
           AIE2P_CONFIGURATION_DESCRIPTOR_SET_ID) {
     return iree_ok_status();

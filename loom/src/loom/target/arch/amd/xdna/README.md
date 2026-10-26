@@ -39,6 +39,12 @@ firmware protocol identity, partition constraints, and native memory alignment.
 | Strix Halo NPU5 | `amd.xdna.strix_halo.17f0_11` | `17f0:11` |
 | Krackan NPU6 | `amd.xdna.krackan.17f0_20` | `17f0:20` |
 
+Each device profile can bind either a logical-array or a physical-configuration
+entry. The authored root selects its input contract while the profile retains
+the exact deployment constraints. Once selected, callers and callees keep that
+contract; selecting configuration does not permit calls across array and
+configuration representations. An unconstrained entry selects logical-array.
+
 All profiles use the NPU2 array family and AIE2P cores. Strix and Krackan share
 an executable profile identity; Strix Halo uses a separate identity. Admission
 compares the executable profile, revision, firmware ABI, and context geometry.
@@ -98,6 +104,24 @@ configuration is not cancellation or a drain mechanism. Externally prefixed
 routes are not an undeclared input to this native materialization. Authored
 physical configurations and logical-array programs retain their explicit
 composition boundaries.
+
+A physical configuration can also implement a typed `kernel.def` targeting
+`aie2p.target<configuration>`. One static workgroup with one workitem owns the
+whole array. Its buffer launch arguments supply the dense external binding
+ordinals; the configuration's invocation function declares each ordinal's
+access, byte extent, and alignment. Unused arguments have explicit
+`binding.unused` records. The compiler preserves the exact argument count as
+the configuration entry's `abi_layout.binding_count` and checks the completed
+invocation table against it. Buffer values are addressed through those binding
+records, rather than used as configuration arithmetic operands.
+
+This entry participates in ordinary `kernel.launch` and command-owned storage.
+Realization preserves the authored worker and DMA programs and captures the
+unit launch configuration; it adds no device dispatch or host execution step.
+The [configuration entry fixtures](aie2p/test/configuration_entry.loom-test)
+show source realization and binding-table diagnostics. A directly authored Low
+configuration can use the same explicit layout contract or derive its binding
+count from its invocation records.
 
 Hardware FIFO credits describe a completed prefix, not an arbitrary count of
 finished records. If a strand reserves A then B and publishes B first, that

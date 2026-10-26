@@ -96,6 +96,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "facts_test",
+    srcs = ["facts_test.cc"],
+    deps = [
+        ":target_facts",
+        ":target_profile",
+        ":target_records",
+        "//loom/src/loom/target:facts_builder",
+        "//loom/src/loom/target:profile",
+        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "array_descriptors",
     srcs = [":descriptors/array_descriptors.c"],
@@ -532,19 +548,23 @@ loom_cc_library(
 loom_cc_library(
     name = "pipeline_pass",
     srcs = [
+        "pipeline/configuration_entry.c",
         "pipeline/kernel_realization.c",
         "pipeline/pass.c",
     ],
     hdrs = [
+        "pipeline/configuration_entry.h",
         "pipeline/kernel_realization.h",
         "pipeline/pass.h",
     ],
     deps = [
+        ":array_abi_layout",
         ":pipeline_native",
         ":target_facts",
         "//loom/src/loom/analysis:storage_access",
         "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/analysis:view_regions",
+        "//loom/src/loom/codegen/low:launch_config_program",
         "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -553,6 +573,7 @@ loom_cc_library(
         "//loom/src/loom/ops/channel",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/pipeline",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
@@ -861,6 +882,7 @@ loom_check_test_suite(
         "test/configuration.loom-test",
         "test/configuration_contracts.loom-test",
         "test/configuration_data.loom-test",
+        "test/configuration_entry.loom-test",
         "test/configuration_limits.loom-test",
         "test/configuration_measurement.loom-test",
         "test/configuration_report.loom-test",
@@ -1365,6 +1387,7 @@ loom_cc_library(
         "//loom/src/loom/tooling/target/amd/xdna:__pkg__",
     ],
     deps = [
+        ":array_abi_layout",
         ":array_plan",
         ":array_program",
         ":array_resident",

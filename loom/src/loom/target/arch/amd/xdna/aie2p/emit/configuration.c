@@ -13,6 +13,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/codegen/low/schedule/run.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amd/xdna/aie2p/array/abi_layout.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/configuration_descriptors.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/configuration_report.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/configuration_storage.h"
@@ -881,6 +882,23 @@ iree_status_t loom_aie2p_configuration_plan_build(
       request->module->symbols.entries[plan->invoke.symbol_id].defining_op,
       LOOM_AIE2P_CONFIGURATION_INVOKE));
   if (plan->error_count) {
+    *out_entry = (loom_aie2p_xdna_entry_t){0};
+    return iree_ok_status();
+  }
+  const loom_aie2p_array_abi_layout_t layout =
+      loom_aie2p_array_abi_layout_from_verified(entry_op);
+  if (layout.has_binding_slot_count &&
+      out_entry->binding_count != layout.binding_slot_count) {
+    const bool missing = out_entry->binding_count < layout.binding_slot_count;
+    const loom_diagnostic_param_t params[] = {
+        loom_param_u32(missing ? (uint32_t)out_entry->binding_count
+                               : layout.binding_slot_count),
+        loom_param_string(missing ? IREE_SV("missing from the invocation table")
+                                  : IREE_SV("outside the declared table")),
+        loom_param_u32(layout.binding_slot_count),
+    };
+    IREE_RETURN_IF_ERROR(loom_aie2p_configuration_diagnose(
+        plan, entry_op, LOOM_ERR_XDNA_031, params, IREE_ARRAYSIZE(params)));
     *out_entry = (loom_aie2p_xdna_entry_t){0};
     return iree_ok_status();
   }
