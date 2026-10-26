@@ -216,7 +216,10 @@ class SourceTextServiceTest : public ::testing::Test {
                          : state.find(marker) != std::string::npos) {
         return state;
       }
-      if (state.find(R"("registration":"failed")") != std::string::npos) {
+      // Failed registrations remain observable until asynchronous removal
+      // retires them. Failure prevents readiness, not eventual disappearance.
+      if (!marker.empty() &&
+          state.find(R"("registration":"failed")") != std::string::npos) {
         [&] {
           FAIL() << "Model failed before reaching " << marker << ": " << state;
         }();
