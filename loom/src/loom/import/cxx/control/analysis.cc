@@ -296,6 +296,16 @@ ExitFlow ControlFlow::returns(cxx::StatementAST* statement) const {
   return exits(statement, Return);
 }
 
+bool ControlFlow::requires_callable_exit(cxx::StatementAST* statement) const {
+  return callable_exits_.contains(statement);
+}
+
+size_t ControlFlow::callable_exit_count(
+    cxx::CompoundStatementAST* statement) const {
+  auto found = callable_exit_counts_.find(statement);
+  return found == callable_exit_counts_.end() ? 0 : found->second;
+}
+
 bool ControlFlow::falls_through(cxx::StatementAST* statement) const {
   return paths(statement) & Fallthrough;
 }
@@ -373,6 +383,9 @@ void ControlFlow::postVisit(cxx::AST* ast) {
     auto outcomes = classify_paths(statement);
     if (outcomes != Fallthrough) {
       paths_.emplace(statement, outcomes);
+    }
+    if (classify_callable_exit(statement)) {
+      callable_exits_.insert(statement);
     }
   }
   if (auto* loop = cxx::ast_cast<cxx::ForStatementAST>(ast)) {
@@ -463,6 +476,34 @@ unsigned ControlFlow::classify_paths(cxx::StatementAST* statement) const {
     outcomes |= Diverge;
   }
   return outcomes;
+}
+
+bool ControlFlow::classify_callable_exit(cxx::StatementAST* statement) {
+  if (cxx::ast_cast<cxx::ForStatementAST>(statement) ||
+      cxx::ast_cast<cxx::WhileStatementAST>(statement) ||
+      cxx::ast_cast<cxx::DoStatementAST>(statement) ||
+      cxx::ast_cast<cxx::SwitchStatementAST>(statement)) {
+    return returns(statement) != ExitFlow::None;
+  }
+  if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(statement)) {
+    size_t count = std::ranges::count_if(cxx::ListView{compound->statementList},
+                                         [&](cxx::StatementAST* child) {
+                                           return requires_callable_exit(child);
+                                         });
+    if (count) {
+      callable_exit_counts_.emplace(compound, count);
+    }
+    return count != 0;
+  }
+  if (auto* branch = cxx::ast_cast<cxx::IfStatementAST>(statement)) {
+    if (branch->constexprValue.has_value()) {
+      return requires_callable_exit(
+          *branch->constexprValue ? branch->statement : branch->elseStatement);
+    }
+    return requires_callable_exit(branch->statement) ||
+           requires_callable_exit(branch->elseStatement);
+  }
+  return false;
 }
 
 void ControlFlow::visit(cxx::CaseStatementAST* ast) {

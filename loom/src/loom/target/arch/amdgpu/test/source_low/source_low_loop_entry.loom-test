@@ -1199,3 +1199,128 @@ low.kernel.def target<amdgpu.gfx11.generic.core>(@loop_entry_wave64) abi_layout(
   %92 = concat(%91, %91) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   low.br ^_bb24(%90: reg<amdgpu.vgpr>, %92: reg<amdgpu.sgpr x2>, %86: reg<amdgpu.sgpr x2>)
 }
+
+// ====
+// RUN: pass cfg-converge,source-to-low,low-dce
+
+// An enclosing lane-varying return bypasses a loop whose own exits carry the
+// same result. CFG convergence gives the loop an exclusive result frontier so
+// the enclosing decision and loop retain independent EXEC lifetimes.
+amdgpu.target<gfx11-generic> @loop_entry_wave64 {subgroup_size = 64}
+
+kernel.def target(@loop_entry_wave64) @outer_bypass_and_loop_results() {
+  %workgroup_count = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%workgroup_count, %workgroup_count, %workgroup_count) workgroup_size(%workgroup_size, %workgroup_count, %workgroup_count) : index
+} launch(%output: buffer) {
+  %lane = kernel.subgroup.lane.id : index
+  %origin = index.constant 0 : index
+  %byte_origin = index.constant 0 : offset
+  %limit = index.constant 64 : index
+  %increment = index.constant 1 : index
+  %early_value = scalar.constant -2 : i32
+  %fallback_value = scalar.constant -1 : i32
+  %early = index.cmp eq, %lane, %origin : index
+  %output_view = buffer.view %output[%byte_origin] : buffer -> view<64xi32>
+  cfg.cond_br %early, ^early_exit, ^preheader
+^early_exit:
+  cfg.br ^result(%early_value: i32)
+^preheader:
+  cfg.br ^header(%origin: index)
+^header(%position: index):
+  %more = index.cmp ult, %position, %limit : index
+  cfg.cond_br %more, ^body, ^normal_exit
+^body:
+  %matched = index.cmp eq, %position, %lane : index
+  cfg.cond_br %matched, ^matched_exit, ^latch
+^matched_exit:
+  %matched_value = index.cast %position : index to i32
+  cfg.br ^result(%matched_value: i32)
+^latch:
+  %next = index.add %position, %increment : index
+  cfg.br ^header(%next: index)
+^normal_exit:
+  cfg.br ^result(%fallback_value: i32)
+^result(%value: i32):
+  view.store %value, %output_view[%lane] : i32, view<64xi32>
+  kernel.return
+}
+
+// ----
+amdgpu.target<gfx11-generic> @loop_entry_wave64 {subgroup_size = 64}
+
+low.kernel.def target<amdgpu.gfx11.generic.core>(@loop_entry_wave64) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], direct_arg_parameter_indices = [], direct_arg_sizes = [], parameter_count = 1, resource_count = 1, resource_offsets = [0], resource_parameter_indices = [0], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) workgroup_count(1, 1, 1) @outer_bypass_and_loop_results() asm {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %origin = s_mov_b32 0
+  %increment = s_mov_b32 1
+  %early = v_cmp_eq_i32_src1_inline %lane {rhs = 0}
+  %36, %37 = s_and_saveexec_b64 %early
+  low.cond_br %37, ^early_exit, ^_bb11 : reg<amdgpu.scc>
+^early_exit:
+  %41 = v_mov_b32 4294967294
+  low.br ^_bb10(%41: reg<amdgpu.vgpr>)
+^_bb10(%value$22: reg<amdgpu.vgpr>):
+  %40 = s_andn2_b64_exec %36, %early
+  low.cond_br %40, ^preheader, ^_bb12 : reg<amdgpu.scc>
+^preheader:
+  %42 = v_mov_b32_copy %origin
+  low.br ^_bb14(%42: reg<amdgpu.vgpr>)
+^_bb14(%position: reg<amdgpu.vgpr>):
+  %48 = s_mov_b64_exec_read
+  low.br ^header(%position: reg<amdgpu.vgpr>)
+^header(%matched_value: reg<amdgpu.vgpr>):
+  %more = v_cmp_lt_u32_src1_inline %matched_value {rhs = 64}
+  %44 = s_mov_b64_exec_read
+  %45, %46 = s_and_b64_scc %more, %44
+  low.cond_br %46, ^body, ^normal_exit : reg<amdgpu.scc>
+^body:
+  %matched = v_cmp_eq_i32 %matched_value, %lane
+  %53, %54 = s_and_saveexec_b64 %matched
+  low.cond_br %54, ^matched_exit, ^_bb20 : reg<amdgpu.scc>
+^matched_exit:
+  low.br ^_bb18(%matched_value: reg<amdgpu.vgpr>)
+^latch:
+  %next = v_add_u32 %increment, %matched_value
+  low.br ^header(%next: reg<amdgpu.vgpr>)
+^normal_exit:
+  %58 = v_mov_b32 4294967295
+  low.br ^_bb17(%58: reg<amdgpu.vgpr>)
+^_bb15(%25: reg<amdgpu.vgpr>, %26: reg<amdgpu.sgpr x2>):
+  %49, %50 = s_and_b64_scc %26, %26
+  s_mov_b64_exec %49
+  low.cond_br %50, ^_bb19, ^_bb16 : reg<amdgpu.scc>
+^_bb16:
+  s_mov_b64_exec %48
+  low.br ^_bb8(%25: reg<amdgpu.vgpr>)
+^_bb8(%20: reg<amdgpu.vgpr>):
+  low.br ^_bb13(%20: reg<amdgpu.vgpr>)
+^result(%value$21: reg<amdgpu.vgpr>):
+  %59 = v_lshlrev_b32_src0_inline %lane, 2
+  global_store_b32_saddr %59, %value$21, %output_view
+  return
+^_bb11:
+  s_mov_b64_exec %36
+  %38 = v_mov_b32 0
+  low.br ^_bb10(%38: reg<amdgpu.vgpr>)
+^_bb12:
+  s_mov_b64_exec %36
+  low.br ^result(%value$22: reg<amdgpu.vgpr>)
+^_bb13(%value$23: reg<amdgpu.vgpr>):
+  s_mov_b64_exec %36
+  %39 = v_cndmask_b32 %value$23, %value$22, %early
+  low.br ^result(%39: reg<amdgpu.vgpr>)
+^_bb17(%27: reg<amdgpu.vgpr>):
+  %51 = s_mov_b32 0
+  %52 = concat(%51, %51) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb15(%27: reg<amdgpu.vgpr>, %52: reg<amdgpu.sgpr x2>)
+^_bb18(%28: reg<amdgpu.vgpr>):
+  %55 = s_mov_b64_exec_read
+  %56 = s_xor_b64 %53, %55
+  low.br ^_bb15(%28: reg<amdgpu.vgpr>, %56: reg<amdgpu.sgpr x2>)
+^_bb19:
+  low.br ^latch
+^_bb20:
+  s_mov_b64_exec %53
+  low.br ^latch
+}

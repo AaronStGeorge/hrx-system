@@ -709,6 +709,46 @@ TEST(ControlFlowTest, ReturnSummariesRetainFallthroughAndNestedExits) {
   }
 }
 
+TEST(ControlFlowTest, ReturnSummariesRetainCallableExitRequirements) {
+  struct Case {
+    // Source body whose return projection is classified.
+    const char* body;
+    // Whether a loop or switch return requires callable-exit projection.
+    bool requires_callable_exit;
+    // Direct function-body children with a callable exit.
+    size_t callable_exit_count;
+  };
+  const Case cases[] = {
+      {"if (x) return; else return;", false, 0},
+      {"if (x) { if (y) return; } else return;", false, 0},
+      {"if (x) { while (y) return; } else return;", true, 1},
+      {"if (x) { switch (y) { case 0: return; default: return; } } "
+       "else return;",
+       true, 1},
+      {"if constexpr(false) { while (y) return; } else return;", false, 0},
+      {"if (x) return; for (;;) { if (y) return; }", true, 1},
+      {"while (x) return; for (;;) { if (y) return; }", true, 2},
+  };
+  loom_cxx_import_options_t options;
+  loom_cxx_import_options_initialize(&options);
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.body);
+    std::string text =
+        std::string("void entry(int x, int y) {") + test.body + "}";
+    Source source(view(text), IREE_SV("callable_exits.cpp"), options);
+    auto* function = definition(source);
+    ASSERT_NE(function, nullptr);
+    auto* body = cxx::ast_cast<cxx::CompoundStatementFunctionBodyAST>(
+                     function->functionBody)
+                     ->statement;
+    Types types(source.unit(), source.diagnostics());
+    ControlFlow analysis(source.unit(), source.diagnostics(), types, body);
+    EXPECT_EQ(analysis.requires_callable_exit(body),
+              test.requires_callable_exit);
+    EXPECT_EQ(analysis.callable_exit_count(body), test.callable_exit_count);
+  }
+}
+
 TEST(ControlFlowTest, ConditionalValuesRetainOrderedBindingMutations) {
   loom_cxx_import_options_t options;
   loom_cxx_import_options_initialize(&options);

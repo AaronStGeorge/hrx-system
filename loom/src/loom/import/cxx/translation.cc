@@ -558,6 +558,9 @@ class Translator final : private Initialization::Evaluation {
     const ReturnSequence* continuation;
     // Floating-point permissions at the lexical block boundary.
     uint8_t fastmath;
+    // Remaining direct children containing a loop/switch return, including
+    // enclosing lexical tails. Translation decrements this without rescanning.
+    size_t callable_exit_count;
   };
 
   struct Returned {
@@ -822,8 +825,9 @@ class Translator final : private Initialization::Evaluation {
       }
       ++parameter_index;
     }
-    auto returned = return_sequence(
-        {body->statementList, nullptr, lexical_fastmath_flags_});
+    auto returned =
+        return_sequence({body->statementList, nullptr, lexical_fastmath_flags_,
+                         control_->callable_exit_count(body)});
     if (defined.implicit_object) {
       leave_receiver();
     }
@@ -889,6 +893,10 @@ class Translator final : private Initialization::Evaluation {
       }
       auto* child = sequence.remaining->value;
       sequence.remaining = sequence.remaining->next;
+      if (control_->requires_callable_exit(child)) {
+        IREE_ASSERT_GT(sequence.callable_exit_count, 0);
+        --sequence.callable_exit_count;
+      }
       if (control_->returns(child) != ExitFlow::None) {
         return returning_statement(child, sequence);
       }
@@ -1106,13 +1114,20 @@ class Translator final : private Initialization::Evaluation {
       return return_values(ret);
     }
     if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(ast)) {
-      return return_sequence(
-          {compound->statementList, &continuation, lexical_fastmath_flags_});
+      return return_sequence({
+          compound->statementList,
+          &continuation,
+          lexical_fastmath_flags_,
+          control_->callable_exit_count(compound) +
+              continuation.callable_exit_count,
+      });
     }
     if (auto* branch = cxx::ast_cast<cxx::IfStatementAST>(ast);
         branch && control_->returns(branch) != ExitFlow::None) {
-      if (control_->returns(branch->statement) != ExitFlow::All &&
-          control_->returns(branch->elseStatement) != ExitFlow::All) {
+      if ((control_->returns(branch->statement) != ExitFlow::All &&
+           control_->returns(branch->elseStatement) != ExitFlow::All) ||
+          control_->requires_callable_exit(branch) ||
+          continuation.callable_exit_count != 0) {
         if (!supports_function_exit()) {
           fail(ast,
                "returns inside structured control require a runtime function "
