@@ -9,8 +9,6 @@
 #include "loom/error/diagnostic.h"
 #include "loom/error/json_sink.h"
 #include "loom/error/source.h"
-#include "loom/pass/report.h"
-#include "loom/target/reporting/format.h"
 #include "loom/tools/loom-check/comparison.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/compile_diagnostics.h"
@@ -19,6 +17,7 @@
 #include "loom/util/diff.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
+#include "loomc/compile_report.h"
 #include "loomc/iree.h"
 
 void loom_check_result_initialize(iree_allocator_t allocator,
@@ -396,6 +395,13 @@ static iree_status_t loom_check_parse_pass_target(
   return iree_ok_status();
 }
 
+static loomc_status_t loom_check_append_report_segment(
+    void* user_data, loomc_byte_span_t segment) {
+  return loomc_status_from_iree(iree_string_builder_append_string(
+      (iree_string_builder_t*)user_data,
+      iree_make_string_view((const char*)segment.data, segment.data_length)));
+}
+
 static iree_status_t loom_check_execute_pass_with_output(
     const loom_test_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -478,41 +484,17 @@ static iree_status_t loom_check_execute_pass_with_output(
     }
     loomc_result_release(preparation);
   }
-  loom_pass_report_t pass_report = {0};
-  if (iree_status_is_ok(status) &&
-      output_kind == LOOM_CHECK_PASS_OUTPUT_PASS_REPORT) {
-    loom_pass_report_initialize(allocator, &pass_report);
-  }
-  loom_target_compile_report_t compile_report = {0};
-  if (iree_status_is_ok(status) &&
-      output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT) {
-    loom_target_compile_report_initialize(
-        &compile_report, iree_arena_allocator(&diagnostic_arena));
-    compile_report.requested_detail_flags =
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_SUMMARY_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_CAPABILITY_ROWS |
-        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_INSERTION_ROWS;
-  }
+  loomc_result_t* execution = NULL;
   if (iree_status_is_ok(status) && succeeded) {
-    const loomc_native_pass_report_options_t pass_report_options = {
-        .type = LOOMC_STRUCTURE_TYPE_NATIVE_PASS_REPORT_OPTIONS,
+    const loomc_pass_report_options_t pass_report_options = {
+        .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
         .structure_size = sizeof(pass_report_options),
-        .report = &pass_report,
     };
-    const loomc_native_compile_report_options_t compile_report_options = {
-        .type = LOOMC_STRUCTURE_TYPE_NATIVE_COMPILE_REPORT_OPTIONS,
+    const loomc_compile_report_options_t compile_report_options = {
+        .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
         .structure_size = sizeof(compile_report_options),
-        .report = &compile_report,
+        .mode = LOOMC_COMPILE_REPORT_MODE_DETAILS,
+        .format = LOOMC_COMPILE_REPORT_FORMAT_TEXT,
     };
     const void* report_options = NULL;
     if (output_kind == LOOM_CHECK_PASS_OUTPUT_PASS_REPORT) {
@@ -520,7 +502,6 @@ static iree_status_t loom_check_execute_pass_with_output(
     } else if (output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT) {
       report_options = &compile_report_options;
     }
-    loomc_result_t* execution = NULL;
     if (target_profile != NULL) {
       const loomc_target_specialization_t specialization = {
           .function_symbol =
@@ -557,7 +538,6 @@ static iree_status_t loom_check_execute_pass_with_output(
       status = loom_check_compile_append_result_diagnostics(
           &diagnostic_collector, execution);
     }
-    loomc_result_release(execution);
   }
   bool verified = false;
   if (iree_status_is_ok(status) && succeeded) {
@@ -587,21 +567,21 @@ static iree_status_t loom_check_execute_pass_with_output(
       }
     }
   }
-  if (emit_output && output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT) {
-    loom_target_compile_report_format_options_t report_options;
-    loom_target_compile_report_format_options_initialize(&report_options);
-    report_options.mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
-    status = loom_target_compile_report_format_text(
-        &compile_report, &report_options, &result->actual_output);
-  } else if (emit_output && output_kind == LOOM_CHECK_PASS_OUTPUT_PASS_REPORT) {
-    // Wall-clock duration is observational data, not part of the stable
-    // compiler-semantic contract checked by golden fixtures.
-    for (iree_host_size_t i = 0; i < pass_report.invocation_count; ++i) {
-      pass_report.invocations[i].duration_nanoseconds = 0;
+  if (emit_output && output_kind != LOOM_CHECK_PASS_OUTPUT_IR) {
+    const iree_string_view_t format =
+        output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT
+            ? IREE_SV(LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_TEXT)
+            : IREE_SV(LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON);
+    const loomc_artifact_t* artifact = NULL;
+    status = loom_check_compile_select_artifact(
+        execution, LOOMC_ARTIFACT_KIND_REPORT, format, &artifact);
+    if (iree_status_is_ok(status)) {
+      status = iree_status_from_loomc(loomc_byte_sequence_enumerate(
+          artifact->contents, (loomc_byte_sequence_callback_t){
+                                  .fn = loom_check_append_report_segment,
+                                  .user_data = &result->actual_output,
+                              }));
     }
-    loom_output_stream_t output_stream;
-    loom_output_stream_for_builder(&result->actual_output, &output_stream);
-    status = loom_pass_report_format_json(&pass_report, &output_stream);
   } else if (emit_output) {
     const loomc_module_serialize_options_t print_options = {
         .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
@@ -636,9 +616,7 @@ static iree_status_t loom_check_execute_pass_with_output(
       }
     }
   }
-  // Reports borrow target and module identities until formatting completes.
-  loom_pass_report_deinitialize(&pass_report);
-  loom_target_compile_report_deinitialize(&compile_report);
+  loomc_result_release(execution);
   loomc_pass_program_release(pass_program);
   loomc_target_profile_release(target_profile);
   loomc_module_release(module);

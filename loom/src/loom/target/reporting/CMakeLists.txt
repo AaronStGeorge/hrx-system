@@ -53,6 +53,7 @@ loom_cc_library(
     "pipeline_plan.h"
     "report.h"
     "residency.h"
+    "row_list.h"
     "target_insertion.h"
   SRCS
     "config_bindings.c"
@@ -65,7 +66,6 @@ loom_cc_library(
     "report.c"
     "residency.c"
     "row_list.c"
-    "row_list.h"
     "target_insertion.c"
   DEPS
     iree::base
@@ -236,6 +236,7 @@ loom_cc_test(
     "format_test.cc"
     "memory_summary_test.cc"
     "memory_summary_test_util.h"
+    "pipeline_plan_test.cc"
     "selection_summary_test.cc"
   DEPS
     ::format

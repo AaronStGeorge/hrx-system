@@ -10,6 +10,7 @@
 #define LOOM_TARGET_REPORTING_FORMAT_H_
 
 #include "iree/base/api.h"
+#include "iree/base/byte_sequence.h"
 #include "loom/target/reporting/report.h"
 #include "loom/util/stream.h"
 
@@ -37,8 +38,9 @@ typedef struct loom_target_compile_report_format_options_t {
   loom_target_compile_report_format_mode_t mode;
   // Diagnostic detail available to report formatters.
   struct {
-    // Canonical diagnostic JSON object bodies retained for detail reports.
-    iree_string_view_t json_objects;
+    // Borrowed comma-separated canonical JSON objects, or NULL. Segments may
+    // split objects; no contiguous copy is required for formatting.
+    const iree_byte_sequence_t* json_objects;
     // Total diagnostics observed, including those without retained JSON.
     iree_host_size_t count;
   } diagnostics;

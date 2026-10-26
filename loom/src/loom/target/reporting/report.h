@@ -17,6 +17,7 @@
 #include "loom/target/reporting/loop_pipeline.h"
 #include "loom/target/reporting/pipeline_plan.h"
 #include "loom/target/reporting/residency.h"
+#include "loom/target/reporting/row_list.h"
 #include "loom/target/reporting/target_insertion.h"
 #include "loom/target/residency.h"
 #include "loom/target/types.h"
@@ -1889,44 +1890,8 @@ typedef struct loom_target_compile_report_legalization_row_t {
   uint64_t erased_op_count;
 } loom_target_compile_report_legalization_row_t;
 
-// Linked storage block for homogeneous compile report detail rows.
-//
-// Row payloads are stored immediately after this header. Blocks are allocator
-// owned by the report that contains the list, and their payload row type is
-// determined by the report field that references the list.
-typedef struct loom_target_compile_report_vec_t {
-  // Next row block in allocation order, or NULL for the final block.
-  struct loom_target_compile_report_vec_t* next;
-  // Number of rows populated in this block.
-  iree_host_size_t count;
-  // Maximum number of rows that fit in this block.
-  iree_host_size_t capacity;
-} loom_target_compile_report_vec_t;
-
-// Owned linked list of homogeneous compile report detail rows.
-typedef struct loom_target_compile_report_row_list_t {
-  // First row storage block, or NULL when empty.
-  loom_target_compile_report_vec_t* head;
-  // Last row storage block, or NULL when empty.
-  loom_target_compile_report_vec_t* tail;
-  // Total number of rows stored across all blocks.
-  iree_host_size_t count;
-} loom_target_compile_report_row_list_t;
-
 // Releases storage whose lifetime is retained by a compile report.
 typedef void (*loom_target_compile_report_storage_release_fn_t)(void* storage);
-
-// Returns mutable row storage for |vec|.
-static inline void* loom_target_compile_report_vec_rows(
-    loom_target_compile_report_vec_t* vec) {
-  return (void*)(vec + 1);
-}
-
-// Returns immutable row storage for |vec|.
-static inline const void* loom_target_compile_report_vec_const_rows(
-    const loom_target_compile_report_vec_t* vec) {
-  return (const void*)(vec + 1);
-}
 
 // Structured feedback from one module-to-artifact compilation.
 //
@@ -2089,7 +2054,7 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_target_insertion_summary_t
       target_insertion_summary;
   // Selected pipeline realizations and optional physical-plan rows.
-  loom_target_compile_report_pipeline_plan_list_t pipeline_plans;
+  loom_target_compile_report_row_list_t pipeline_plans;
   // Owned emitted artifact entry summary rows.
   loom_target_compile_report_row_list_t entry_rows;
   // Owned final residency constraints, keyed by emitted entry function.

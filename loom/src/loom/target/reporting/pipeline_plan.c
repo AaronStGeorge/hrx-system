@@ -83,37 +83,18 @@ static iree_status_t loom_target_compile_report_pipeline_plan_clone(
 }
 
 void loom_target_compile_report_pipeline_plan_list_deinitialize(
-    loom_target_compile_report_pipeline_plan_list_t* list,
+    loom_target_compile_report_row_list_t* list,
     iree_allocator_t host_allocator) {
-  if (list == NULL) {
-    return;
-  }
-  for (iree_host_size_t i = 0; i < list->count; ++i) {
-    loom_target_compile_report_pipeline_plan_deinitialize(&list->values[i],
-                                                          host_allocator);
-  }
-  iree_allocator_free(host_allocator, list->values);
-  *list = (loom_target_compile_report_pipeline_plan_list_t){0};
-}
-
-static iree_status_t loom_target_compile_report_pipeline_plan_list_reserve(
-    loom_target_compile_report_pipeline_plan_list_t* list,
-    iree_host_size_t minimum_capacity, iree_allocator_t host_allocator) {
-  if (minimum_capacity <= list->capacity) {
-    return iree_ok_status();
-  }
-  iree_host_size_t new_capacity = iree_max((iree_host_size_t)1, list->capacity);
-  while (new_capacity < minimum_capacity) {
-    if (!iree_host_size_checked_mul(new_capacity, 2, &new_capacity)) {
-      new_capacity = minimum_capacity;
-      break;
+  for (loom_target_compile_report_vec_t* block = list->head; block;
+       block = block->next) {
+    loom_target_compile_report_pipeline_plan_t* plans =
+        loom_target_compile_report_vec_rows(block);
+    for (iree_host_size_t i = 0; i < block->count; ++i) {
+      loom_target_compile_report_pipeline_plan_deinitialize(&plans[i],
+                                                            host_allocator);
     }
   }
-  IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
-      host_allocator, new_capacity, sizeof(*list->values),
-      (void**)&list->values));
-  list->capacity = new_capacity;
-  return iree_ok_status();
+  loom_target_compile_report_row_list_deinitialize(host_allocator, list);
 }
 
 iree_status_t loom_target_compile_report_record_pipeline_plan(
@@ -131,22 +112,14 @@ iree_status_t loom_target_compile_report_record_pipeline_plan(
     IREE_RETURN_IF_ERROR(loom_target_compile_report_pipeline_plan_clone(
         plan, &copied_plan, report->allocator));
   }
-  iree_host_size_t required_capacity = 0;
-  iree_status_t status = iree_ok_status();
-  if (!iree_host_size_checked_add(report->pipeline_plans.count, 1,
-                                  &required_capacity)) {
-    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "compile report pipeline count is too large");
-  } else {
-    status = loom_target_compile_report_pipeline_plan_list_reserve(
-        &report->pipeline_plans, required_capacity, report->allocator);
-  }
+  iree_status_t status = loom_target_compile_report_row_list_append(
+      &report->pipeline_plans, sizeof(copied_plan), report->allocator,
+      &copied_plan);
   if (!iree_status_is_ok(status)) {
     loom_target_compile_report_pipeline_plan_deinitialize(&copied_plan,
                                                           report->allocator);
     return status;
   }
-  report->pipeline_plans.values[report->pipeline_plans.count++] = copied_plan;
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PIPELINE_PLAN;
   if (copied_plan.worker_row_count != 0 || copied_plan.channel_row_count != 0 ||
       copied_plan.memory_row_count != 0) {

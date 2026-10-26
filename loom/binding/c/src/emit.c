@@ -11,9 +11,7 @@
 #include "context.h"
 #include "diagnostic.h"
 #include "iree/base/internal/arena.h"
-#include "loom/error/json_sink.h"
 #include "loom/target/provider.h"
-#include "loom/target/reporting/format.h"
 #include "loomc/compile_report.h"
 #include "loomc/iree.h"
 #include "module.h"
@@ -184,60 +182,6 @@ static loomc_status_t loomc_emit_validate_artifact_manifest_options(
   return loomc_ok_status();
 }
 
-static bool loomc_emit_compile_report_mode_is_valid(
-    loomc_compile_report_mode_t mode) {
-  switch (mode) {
-    case LOOMC_COMPILE_REPORT_MODE_NONE:
-    case LOOMC_COMPILE_REPORT_MODE_SUMMARY:
-    case LOOMC_COMPILE_REPORT_MODE_DETAILS:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loomc_emit_compile_report_format_is_valid(
-    loomc_compile_report_format_t format) {
-  switch (format) {
-    case LOOMC_COMPILE_REPORT_FORMAT_JSON:
-    case LOOMC_COMPILE_REPORT_FORMAT_TEXT:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static loomc_status_t loomc_emit_validate_compile_report_options(
-    const loomc_compile_report_options_t* options) {
-  if (options->type != LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "compile report options have an unknown structure type");
-  }
-  if (options->structure_size != 0 &&
-      options->structure_size < sizeof(*options)) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "compile report options structure_size is too small");
-  }
-  if (!loomc_emit_compile_report_mode_is_valid(options->mode)) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "compile report mode is invalid");
-  }
-  if (!loomc_emit_compile_report_format_is_valid(options->format)) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "compile report format is invalid");
-  }
-  LOOMC_RETURN_IF_ERROR(loomc_emit_validate_string_view(options->identifier));
-  if (options->mode == LOOMC_COMPILE_REPORT_MODE_NONE &&
-      !loomc_string_view_is_empty(options->identifier)) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "compile report identifier requires a non-NONE report mode");
-  }
-  return loomc_ok_status();
-}
-
 static loomc_status_t loomc_emit_validate_unknown_descriptor(
     const loomc_descriptor_prefix_t* prefix) {
   if (prefix->structure_size != 0 && prefix->structure_size < sizeof(*prefix)) {
@@ -334,7 +278,7 @@ static loomc_status_t loomc_emit_resolve_options(
         const loomc_compile_report_options_t* report_options =
             (const loomc_compile_report_options_t*)next;
         LOOMC_RETURN_IF_ERROR(
-            loomc_emit_validate_compile_report_options(report_options));
+            loomc_compile_report_options_validate(report_options));
         out_options->compile_report_mode = report_options->mode;
         out_options->compile_report_format = report_options->format;
         out_options->compile_report_identifier = report_options->identifier;
@@ -390,19 +334,6 @@ static loom_target_artifact_manifest_mode_t loomc_emit_target_manifest_mode(
   }
 }
 
-static loom_target_compile_report_format_mode_t
-loomc_emit_target_compile_report_mode(loomc_compile_report_mode_t mode) {
-  switch (mode) {
-    case LOOMC_COMPILE_REPORT_MODE_SUMMARY:
-      return LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
-    case LOOMC_COMPILE_REPORT_MODE_DETAILS:
-      return LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
-    case LOOMC_COMPILE_REPORT_MODE_NONE:
-    default:
-      return LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE;
-  }
-}
-
 static loomc_status_t loomc_emit_result_fail_format_message(
     loomc_result_t* result, const char* message, loomc_string_view_t format,
     loomc_allocator_t allocator) {
@@ -451,22 +382,6 @@ static loomc_status_t loomc_emit_select_emitter(
         allocator);
   }
   return loomc_ok_status();
-}
-
-static iree_status_t loomc_emit_capture_compile_report_diagnostic(
-    void* user_data, const loom_diagnostic_t* diagnostic) {
-  loomc_emit_transaction_t* transaction = (loomc_emit_transaction_t*)user_data;
-  loom_output_stream_t stream;
-  IREE_RETURN_IF_ERROR(loom_json_value_list_begin_value(
-      &transaction->compile_report_diagnostics, &stream));
-  const loomc_diagnostic_type_printer_t type_printer = {
-      .module = diagnostic->module,
-      .text_print_options = transaction->diagnostic_text_print_options,
-  };
-  const loom_type_formatter_t type_formatter =
-      loomc_diagnostic_type_printer_formatter(diagnostic->module ? &type_printer
-                                                                 : NULL);
-  return loom_diagnostic_json_write_object(&stream, diagnostic, type_formatter);
 }
 
 static loomc_status_t loomc_emit_sidecar_artifact_metadata(
@@ -569,59 +484,6 @@ static loomc_status_t loomc_emit_make_compile_report_identifier(
   return loomc_ok_status();
 }
 
-static loomc_status_t loomc_emit_add_compile_report_artifact(
-    loomc_result_t* result, const loomc_emit_resolved_options_t* options,
-    const loomc_string_view_t identifier,
-    const loom_target_compile_report_t* report,
-    iree_string_view_t diagnostic_json_objects) {
-  loomc_allocator_t allocator = loomc_result_allocator(result);
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_from_loomc(allocator),
-                                 &builder);
-  const loom_target_compile_report_format_options_t format_options = {
-      .mode =
-          loomc_emit_target_compile_report_mode(options->compile_report_mode),
-      .diagnostics =
-          {
-              .json_objects = diagnostic_json_objects,
-              .count = loomc_result_diagnostic_count(result),
-          },
-  };
-  loomc_status_t status = loomc_ok_status();
-  if (options->compile_report_format == LOOMC_COMPILE_REPORT_FORMAT_TEXT) {
-    status = loomc_status_from_iree(loom_target_compile_report_format_text(
-        report, &format_options, &builder));
-  } else {
-    loom_output_stream_t stream;
-    loom_output_stream_for_builder(&builder, &stream);
-    status = loomc_status_from_iree(loom_target_compile_report_format_json(
-        report, &format_options, &stream));
-  }
-
-  char* report_storage = NULL;
-  iree_host_size_t report_length = 0;
-  if (loomc_status_is_ok(status)) {
-    report_length = iree_string_builder_size(&builder);
-    report_storage = iree_string_builder_take_storage(&builder);
-  }
-  if (loomc_status_is_ok(status)) {
-    const loomc_string_view_t artifact_format =
-        options->compile_report_format == LOOMC_COMPILE_REPORT_FORMAT_TEXT
-            ? loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_TEXT)
-            : loomc_make_cstring_view(
-                  LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_JSON);
-    status = loomc_result_add_artifact_take_contents(
-        result, LOOMC_ARTIFACT_KIND_REPORT, artifact_format, identifier,
-        loomc_make_byte_span(report_storage, report_length));
-  }
-  if (loomc_status_is_ok(status)) {
-    report_storage = NULL;
-  }
-  loomc_allocator_free(allocator, report_storage);
-  iree_string_builder_deinitialize(&builder);
-  return status;
-}
-
 static loomc_status_t loomc_emit_add_byte_sequence_artifact(
     loomc_result_t* result, loomc_artifact_kind_t kind,
     loomc_string_view_t format, loomc_string_view_t identifier,
@@ -710,12 +572,8 @@ static loomc_status_t loomc_emit_add_artifact(
 }
 
 loomc_status_t loomc_emit_transaction_initialize(
-    const loomc_emit_options_t* options, loomc_result_t* result,
-    loomc_emit_transaction_t* out_transaction) {
-  if (result == NULL || out_transaction == NULL) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "result and out_transaction must not be NULL");
-  }
+    const loomc_emit_options_t* options, loomc_workspace_t* workspace,
+    loomc_result_t* result, loomc_emit_transaction_t* out_transaction) {
   *out_transaction = (loomc_emit_transaction_t){
       .result = result,
   };
@@ -725,30 +583,11 @@ loomc_status_t loomc_emit_transaction_initialize(
   if (loomc_status_is_ok(status) &&
       out_transaction->options.compile_report_mode !=
           LOOMC_COMPILE_REPORT_MODE_NONE) {
-    loom_target_compile_report_initialize(
-        &out_transaction->compile_report,
-        iree_allocator_from_loomc(loomc_result_allocator(result)));
-    out_transaction->compile_report.requested_detail_flags =
-        loom_target_compile_report_requested_detail_flags(
-            loomc_emit_target_compile_report_mode(
-                out_transaction->options.compile_report_mode));
-    out_transaction->compile_report_initialized = true;
-  }
-  if (loomc_status_is_ok(status) &&
-      out_transaction->options.compile_report_mode ==
-          LOOMC_COMPILE_REPORT_MODE_DETAILS &&
-      out_transaction->options.compile_report_format ==
-          LOOMC_COMPILE_REPORT_FORMAT_JSON) {
-    loom_json_value_list_initialize(
-        iree_allocator_from_loomc(loomc_result_allocator(result)),
-        &out_transaction->compile_report_diagnostics);
-    out_transaction->compile_report_diagnostic_sink = (loom_diagnostic_sink_t){
-        .fn = loomc_emit_capture_compile_report_diagnostic,
-        .user_data = out_transaction,
-    };
-    loomc_result_set_loom_diagnostic_sink(
-        result, &out_transaction->compile_report_diagnostic_sink);
-    out_transaction->compile_report_diagnostics_initialized = true;
+    loomc_compile_report_state_initialize(
+        out_transaction->options.compile_report_mode,
+        out_transaction->options.compile_report_format,
+        loomc_workspace_block_pool(workspace), result,
+        &out_transaction->compile_report);
   }
   return status;
 }
@@ -766,7 +605,7 @@ void loomc_emit_transaction_set_diagnostic_environment(
   IREE_ASSERT_ARGUMENT(target_environment);
   const loomc_target_pass_environment_t* pass_environment =
       loomc_target_environment_pass_environment(target_environment);
-  transaction->diagnostic_text_print_options =
+  transaction->compile_report.diagnostic_text_print_options =
       pass_environment ? &pass_environment->diagnostic_type_print_options
                        : NULL;
 }
@@ -777,13 +616,13 @@ void loomc_emit_transaction_bind_emitter(loomc_emit_transaction_t* transaction,
   IREE_ASSERT_ARGUMENT(emitter);
   IREE_ASSERT(!transaction->emitter, "emitter can only be selected once");
   transaction->emitter = emitter;
-  if (!transaction->compile_report_initialized) {
+  if (!transaction->compile_report.mode) {
     return;
   }
-  transaction->compile_report.artifact_kind =
+  transaction->compile_report.report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_TARGET_ARTIFACT;
-  transaction->compile_report.backend_name = emitter->name;
-  transaction->compile_report.artifact_format =
+  transaction->compile_report.report.backend_name = emitter->name;
+  transaction->compile_report.report.artifact_format =
       loom_target_artifact_format_name(emitter->target_artifact_format);
 }
 
@@ -806,16 +645,16 @@ loomc_status_t loomc_emit_transaction_select_emitter(
 loom_target_compile_report_t* loomc_emit_transaction_compile_report(
     loomc_emit_transaction_t* transaction) {
   IREE_ASSERT_ARGUMENT(transaction);
-  return transaction->compile_report_initialized ? &transaction->compile_report
-                                                 : NULL;
+  return transaction->compile_report.mode ? &transaction->compile_report.report
+                                          : NULL;
 }
 
 void loomc_emit_transaction_record_status(loomc_emit_transaction_t* transaction,
                                           iree_status_code_t status_code) {
   IREE_ASSERT_ARGUMENT(transaction);
-  if (transaction->compile_report_initialized) {
-    loom_target_compile_report_record_status(&transaction->compile_report,
-                                             status_code);
+  if (transaction->compile_report.mode) {
+    loom_target_compile_report_record_status(
+        &transaction->compile_report.report, status_code);
   }
 }
 
@@ -863,25 +702,15 @@ loomc_status_t loomc_emit_transaction_emit(
     status = loomc_emit_make_manifest_identifier(
         options, emitter, loomc_result_allocator(result), &manifest_identifier);
   }
-  if (loomc_status_is_ok(status) && transaction->compile_report_initialized) {
+  if (loomc_status_is_ok(status) && transaction->compile_report.mode) {
     status =
         loomc_status_from_iree(loom_target_compile_report_record_loop_pipelines(
-            &transaction->compile_report, internal_module,
+            &transaction->compile_report.report, internal_module,
             loomc_module_function_versions(module)));
   }
-  if (transaction->compile_report_initialized) {
-    for (const loomc_config_binding_record_t* binding =
-             loomc_module_config_bindings(module)->head;
-         binding != NULL && loomc_status_is_ok(status);
-         binding = binding->next) {
-      const loom_target_compile_report_config_binding_row_t row = {
-          .key = binding->key,
-          .value = binding->value,
-      };
-      status = loomc_status_from_iree(
-          loom_target_compile_report_record_config_binding_row(
-              &transaction->compile_report, &row));
-    }
+  if (loomc_status_is_ok(status) && transaction->compile_report.mode) {
+    status = loomc_compile_report_record_config_bindings(
+        &transaction->compile_report, module);
   }
   loom_target_emit_request_flags_t request_flags =
       LOOM_TARGET_EMIT_REQUEST_FLAG_NONE;
@@ -928,10 +757,9 @@ loomc_status_t loomc_emit_transaction_emit(
       report_status = IREE_STATUS_FAILED_PRECONDITION;
     }
     loomc_emit_transaction_record_status(transaction, report_status);
-    if (transaction->compile_report_initialized &&
-        target_artifact.contents != NULL) {
+    if (transaction->compile_report.mode && target_artifact.contents != NULL) {
       loom_target_compile_report_record_artifact_size(
-          &transaction->compile_report,
+          &transaction->compile_report.report,
           iree_byte_sequence_length(target_artifact.contents));
     }
     status = loomc_status_from_iree(emit_status);
@@ -967,39 +795,25 @@ loomc_status_t loomc_emit_transaction_emit(
 loomc_status_t loomc_emit_transaction_finish(
     loomc_emit_transaction_t* transaction) {
   IREE_ASSERT_ARGUMENT(transaction);
-  if (!transaction->compile_report_initialized) {
+  if (!transaction->compile_report.mode) {
     return loomc_ok_status();
   }
   loomc_string_view_t identifier = loomc_string_view_empty();
-  loomc_allocator_t allocator = loomc_result_allocator(transaction->result);
+  loomc_allocator_t scratch_allocator = loomc_allocator_from_iree(
+      iree_arena_allocator(&transaction->compile_report.arena));
   loomc_status_t status = loomc_emit_make_compile_report_identifier(
-      &transaction->options, transaction->emitter, allocator, &identifier);
+      &transaction->options, transaction->emitter, scratch_allocator,
+      &identifier);
   if (loomc_status_is_ok(status)) {
-    const iree_string_view_t diagnostic_json_objects =
-        transaction->compile_report_diagnostics_initialized
-            ? loom_json_value_list_body(
-                  &transaction->compile_report_diagnostics)
-            : iree_string_view_empty();
-    status = loomc_emit_add_compile_report_artifact(
-        transaction->result, &transaction->options, identifier,
-        &transaction->compile_report, diagnostic_json_objects);
+    status = loomc_compile_report_state_finish(&transaction->compile_report,
+                                               identifier);
   }
-  loomc_allocator_free(allocator, (void*)identifier.data);
   return status;
 }
 
 void loomc_emit_transaction_deinitialize(
     loomc_emit_transaction_t* transaction) {
-  if (transaction == NULL) {
-    return;
-  }
-  if (transaction->compile_report_diagnostics_initialized) {
-    loomc_result_set_loom_diagnostic_sink(transaction->result, NULL);
-    loom_json_value_list_deinitialize(&transaction->compile_report_diagnostics);
-  }
-  if (transaction->compile_report_initialized) {
-    loom_target_compile_report_deinitialize(&transaction->compile_report);
-  }
+  loomc_compile_report_state_deinitialize(&transaction->compile_report);
   *transaction = (loomc_emit_transaction_t){0};
 }
 
@@ -1039,7 +853,8 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
       &result);
   loomc_emit_transaction_t transaction = {0};
   if (loomc_status_is_ok(status)) {
-    status = loomc_emit_transaction_initialize(options, result, &transaction);
+    status = loomc_emit_transaction_initialize(options, workspace, result,
+                                               &transaction);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_emit_transaction_select_emitter(

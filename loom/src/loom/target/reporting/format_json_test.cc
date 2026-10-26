@@ -66,6 +66,49 @@ static void ExpectArrayLength(iree_string_view_t array,
   EXPECT_EQ(actual, expected);
 }
 
+TEST(CompileReportFormatTest, DiagnosticObjectsCanCrossStorageSegments) {
+  const iree_string_view_t pieces[] = {
+      IREE_SV("{\"message\":\"split"),
+      IREE_SV(" message\"},{\"message\":\"next\"}"),
+  };
+  iree_byte_sequence_t* sequences[IREE_ARRAYSIZE(pieces)] = {};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(pieces); ++i) {
+    iree_byte_span_t span = {.data_length = pieces[i].size};
+    IREE_ASSERT_OK(iree_allocator_malloc(iree_allocator_system(),
+                                         span.data_length,
+                                         reinterpret_cast<void**>(&span.data)));
+    memcpy(span.data, pieces[i].data, pieces[i].size);
+    IREE_ASSERT_OK(iree_byte_sequence_create_from_span_move(
+        &span, iree_allocator_system(), &sequences[i]));
+  }
+  iree_byte_sequence_t* diagnostics = nullptr;
+  IREE_ASSERT_OK(
+      iree_byte_sequence_create_concat(IREE_ARRAYSIZE(sequences), sequences,
+                                       iree_allocator_system(), &diagnostics));
+  for (auto* sequence : sequences) {
+    iree_byte_sequence_release(sequence);
+  }
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report, iree_allocator_system());
+  const loom_target_compile_report_format_options_t options = {
+      .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS,
+      .diagnostics = {.json_objects = diagnostics, .count = 2},
+  };
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(
+      loom_target_compile_report_format_json(&report, &options, &stream));
+  const auto document = ParseJsonDocument(iree_string_builder_view(&builder));
+  ExpectObjectValueEquals(document, IREE_SV("diagnostics"),
+                          IREE_SV("[{\"message\":\"split message\"},"
+                                  "{\"message\":\"next\"}]"));
+  iree_string_builder_deinitialize(&builder);
+  loom_target_compile_report_deinitialize(&report);
+  iree_byte_sequence_release(diagnostics);
+}
+
 TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
   loom_target_compile_report_pressure_row_t pressure_rows[] = {
       {
@@ -676,12 +719,15 @@ TEST(CompileReportFormatTest, OwnsAndFormatsPipelinePlans) {
   IREE_ASSERT_OK(
       loom_target_compile_report_record_pipeline_plan(&report, &pipeline_plan));
   ASSERT_EQ(report.pipeline_plans.count, 2u);
-  ASSERT_NE(report.pipeline_plans.values[0].worker_rows, &worker);
-  ASSERT_NE(report.pipeline_plans.values[0].channel_rows, &channel);
-  ASSERT_NE(report.pipeline_plans.values[1].worker_rows, &worker);
-  ASSERT_NE(report.pipeline_plans.values[1].channel_rows, &channel);
-  ASSERT_NE(report.pipeline_plans.values[0].worker_rows,
-            report.pipeline_plans.values[1].worker_rows);
+  const auto* stored_plans =
+      static_cast<const loom_target_compile_report_pipeline_plan_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.pipeline_plans.head));
+  ASSERT_NE(stored_plans[0].worker_rows, &worker);
+  ASSERT_NE(stored_plans[0].channel_rows, &channel);
+  ASSERT_NE(stored_plans[1].worker_rows, &worker);
+  ASSERT_NE(stored_plans[1].channel_rows, &channel);
+  ASSERT_NE(stored_plans[0].worker_rows, stored_plans[1].worker_rows);
 
   worker = {};
   channel = {};
@@ -758,7 +804,11 @@ TEST(CompileReportFormatTest, PhysicalInventoryOmitsUnavailableChannelFacts) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PIPELINE_PLAN_ROWS;
   IREE_ASSERT_OK(
       loom_target_compile_report_record_pipeline_plan(&report, &plan));
-  ASSERT_NE(report.pipeline_plans.values[0].memory_rows, &memory);
+  const auto* plans =
+      static_cast<const loom_target_compile_report_pipeline_plan_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.pipeline_plans.head));
+  ASSERT_NE(plans[0].memory_rows, &memory);
   memory = {};
 
   iree_string_builder_t builder;

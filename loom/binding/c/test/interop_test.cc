@@ -10,6 +10,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -19,6 +20,7 @@
 #include "loom/pass/registry.h"
 #include "loom/target/math_policy.h"
 #include "loom/util/stream.h"
+#include "loomc/compile_report.h"
 #include "loomc/context.h"
 #include "loomc/module.h"
 #include "loomc/source.h"
@@ -119,8 +121,17 @@ PassProgramPtr PrepareText(loomc_context_t* context, const char* text) {
 }
 
 struct PassReport {
-  PassReport() { loom_pass_report_initialize(iree_allocator_system(), &value); }
-  ~PassReport() { loom_pass_report_deinitialize(&value); }
+  explicit PassReport(iree_host_size_t block_size = 4096) {
+    iree_arena_block_pool_initialize(block_size, iree_allocator_system(),
+                                     &block_pool);
+    loom_pass_report_initialize(&block_pool, &value);
+  }
+  ~PassReport() {
+    loom_pass_report_deinitialize(&value);
+    iree_arena_block_pool_deinitialize(&block_pool);
+  }
+  // Reusable blocks backing native report records.
+  iree_arena_block_pool_t block_pool = {};
   // Invocation records owned by this execution.
   loom_pass_report_t value = {};
 };
@@ -603,7 +614,7 @@ TEST(InteropTest, ComposesReportsAndTraceForRunAndCompile) {
         EXPECT_EQ(loomc_result_diagnostic_count(result.get()), fail ? 1u : 0u);
       }
       ASSERT_EQ(passes.value.invocation_count, 4u);
-      EXPECT_EQ(passes.value.invocations[1].status_code,
+      EXPECT_EQ(passes.value.invocation_head->next->status_code,
                 fail ? IREE_STATUS_OUT_OF_RANGE : IREE_STATUS_OK);
       ASSERT_EQ(compilation.value.target_capability_rows.count, fail ? 4u : 2u);
       const auto* rows = static_cast<
@@ -618,7 +629,7 @@ TEST(InteropTest, ComposesReportsAndTraceForRunAndCompile) {
         module.reset();
       }
       program.reset();
-      const auto& invocation = passes.value.invocations[0];
+      const auto& invocation = *passes.value.invocation_head;
       ASSERT_EQ(invocation.detail_count, 1u);
       EXPECT_TRUE(iree_string_view_equal(
           invocation.details->fields[0].string_value, IREE_SV("identity")));
@@ -634,10 +645,10 @@ TEST(InteropTest, RetainsCompletedReportsWhenTraceOrReportAllocationFails) {
   auto program = PrepareText(context.get(), "dce,cse");
   for (bool fail_trace : {false, true}) {
     auto module = Deserialize(context.get(), workspace.get(), source.get());
-    PassReport passes;
+    PassReport passes(128);
     // Fail subsequent record allocation after the first completed invocation.
     if (!fail_trace) {
-      passes.value.allocator = {
+      passes.block_pool.block_allocator = {
           .self = &passes.value,
           .ctl =
               [](void* self, iree_allocator_command_t command,
@@ -682,9 +693,9 @@ TEST(InteropTest, RetainsCompletedReportsWhenTraceOrReportAllocationFails) {
                                &options, loomc_allocator_system(), &result));
     EXPECT_EQ(result, nullptr);
     ASSERT_EQ(passes.value.invocation_count, 1u);
-    EXPECT_TRUE(iree_string_view_equal(passes.value.invocations[0].pass_key,
+    EXPECT_TRUE(iree_string_view_equal(passes.value.invocation_head->pass_key,
                                        IREE_SV("dce")));
-    EXPECT_EQ(passes.value.invocations[0].status_code, IREE_STATUS_OK);
+    EXPECT_EQ(passes.value.invocation_head->status_code, IREE_STATUS_OK);
   }
 }
 
@@ -778,7 +789,7 @@ TEST(InteropTest, SharesPreparedProgramAcrossIndependentReportOwners) {
 }
 
 TEST(InteropTest,
-     RequestCompilationRetainsPassReportsAndRejectsBorrowedReports) {
+     RequestCompilationRetainsReportsAndRejectsBorrowedTargetReports) {
   auto context = CreateReportingContext();
   auto workspace = CreateWorkspace();
   auto source = CreateSource("input.loom", kReportInput);
@@ -831,8 +842,31 @@ TEST(InteropTest,
   EXPECT_GT(trace_writes, 0);
   ASSERT_EQ(passes.value.invocation_count, 2u);
   EXPECT_TRUE(iree_string_view_equal(
-      passes.value.invocations[0].details->fields[0].string_value,
+      passes.value.invocation_head->details->fields[0].string_value,
       IREE_SV("identity")));
+
+  const loomc_compile_report_options_t public_target_report = {
+      .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
+      .next = &trace,
+      .mode = LOOMC_COMPILE_REPORT_MODE_DETAILS,
+  };
+  const loomc_pass_report_options_t public_report = {
+      .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
+      .next = &public_target_report,
+  };
+  const loomc_compile_options_t public_options = {.next = &public_report};
+  raw_product = nullptr;
+  raw_result = nullptr;
+  LOOMC_ASSERT_OK(loomc_compile_request(
+      compiler.get(), workspace.get(), program.get(), request.get(),
+      &public_options, loomc_allocator_system(), &raw_product, &raw_result));
+  product.reset(raw_product);
+  result.reset(raw_result);
+  EXPECT_TRUE(loomc_result_succeeded(result.get()));
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 2u);
+  EXPECT_TRUE(loomc_string_view_equal(
+      loomc_result_artifact_at(result.get(), 0)->format,
+      loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON)));
 
   CompileReport compilation;
   const loomc_native_compile_report_options_t compile_report = {
@@ -851,6 +885,27 @@ TEST(InteropTest,
   EXPECT_EQ(raw_product, nullptr);
   EXPECT_EQ(raw_result, nullptr);
   EXPECT_EQ(compilation.value.target_capability_rows.count, 0u);
+  product.reset();
+  compiler.reset();
+  request.reset();
+  bytecode.reset();
+  program.reset();
+  source.reset();
+  workspace.reset();
+  context.reset();
+  const auto* artifact = loomc_result_artifact_at(result.get(), 1);
+  EXPECT_TRUE(loomc_string_view_equal(
+      artifact->format,
+      loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_JSON)));
+  loomc_byte_span_t contents = {};
+  LOOMC_ASSERT_OK(loomc_byte_sequence_clone(
+      artifact->contents, loomc_allocator_system(), &contents));
+  EXPECT_NE(std::string_view(reinterpret_cast<const char*>(contents.data),
+                             contents.data_length)
+                .find("identity"),
+            std::string_view::npos);
+  loomc_allocator_free(loomc_allocator_system(),
+                       const_cast<uint8_t*>(contents.data));
 }
 
 }  // namespace

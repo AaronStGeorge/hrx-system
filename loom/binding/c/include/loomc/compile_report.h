@@ -10,20 +10,19 @@
 #include "loomc/base.h"
 
 /// @file
-/// Compile report emission controls.
+/// Compile report controls.
 ///
 /// Compile reports are optional structured or human-readable sidecars for
-/// target emission. They describe the selected backend, target, terminal
-/// status, artifact size, and target-provided compiler analysis facts available
-/// at the selected verbosity. Summary and detail reports include configuration
-/// bindings applied by the module's last successful compilation. These bindings
-/// survive release of the configuration module and compile result, workspace
-/// trimming, and module cloning. IR serialization alone does not carry
-/// invocation bindings.
+/// pass execution and target emission. They describe the backend, target,
+/// terminal status, artifact size, and target-provided compiler analysis facts
+/// available at the selected verbosity. Summary and detail reports include
+/// configuration bindings applied by the module's last successful compilation.
+/// These bindings survive release of the configuration module and compile
+/// result, workspace trimming, and module cloning. IR serialization alone does
+/// not carry invocation bindings.
 ///
 /// Report generation is opt-in. Omitting this descriptor, or setting `mode` to
-/// `LOOMC_COMPILE_REPORT_MODE_NONE`, keeps emission on the normal artifact
-/// path and avoids detail-only report collection.
+/// `LOOMC_COMPILE_REPORT_MODE_NONE`, avoids report collection and formatting.
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,15 +55,24 @@ typedef enum loomc_compile_report_mode_e {
   LOOMC_COMPILE_REPORT_MODE_DETAILS = 2,
 } loomc_compile_report_mode_t;
 
-/// Compile report emission options.
+/// Requests a result-owned target compile report.
 ///
-/// Attach this descriptor through `loomc_emit_options_t::next`. The descriptor
-/// controls report production for the target-artifact transaction, including
-/// transactions rejected before emission. It does not run compilation passes,
-/// force target analyses, or write filesystem paths.
+/// Attach through `loomc_pass_run_options_t::next` or
+/// `loomc_compile_options_t::next` to report facts from an attempted pass
+/// program. Rejection before the program starts produces no report. A diagnosed
+/// pass failure retains completed observations in its failed result.
+///
+/// Attach through `loomc_emit_options_t::next` to report the target-artifact
+/// transaction, including transactions rejected before emission. For combined
+/// compilation and emission, attach to the nested emission options so one
+/// report covers both stages.
+///
+/// Reports do not run extra passes, force target analyses, or write filesystem
+/// paths. Result bytes retain no module or target owners. An infrastructure
+/// failure returns no result and stops further report serialization. This
+/// extension and native compile report options are mutually exclusive.
 typedef struct loomc_compile_report_options_t {
-  /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS`
-  /// when nonzero.
+  /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS`.
   loomc_structure_type_t type;
 
   /// Size of this structure in bytes.
@@ -79,8 +87,9 @@ typedef struct loomc_compile_report_options_t {
   /// Report serialization format. Zero selects structured JSON.
   loomc_compile_report_format_t format;
 
-  /// Result artifact identifier for the compile report. Empty derives from the
-  /// emitted artifact identifier by appending `.compile-report.json` or
+  /// Result artifact identifier. Empty stays empty for pass execution and
+  /// standalone compilation. During emission, an empty identifier derives from
+  /// the emitted artifact identifier by appending `.compile-report.json` or
   /// `.compile-report.txt` according to `format`. It remains empty when
   /// compilation fails before selecting an emitter and no artifact identifier
   /// was provided.

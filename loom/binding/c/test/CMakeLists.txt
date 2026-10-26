@@ -319,6 +319,20 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    invocation_report_test
+  SRCS
+    "invocation_report_test.cc"
+  DEPS
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::interop
+    loom::binding::c::loomc
+    loom::pass::registry
+)
+
+loom_cc_test(
+  NAME
     result_test
   SRCS
     "result_test.cc"

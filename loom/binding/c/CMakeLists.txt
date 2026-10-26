@@ -65,6 +65,7 @@ loom_cc_library(
     "include/loomc/target.h"
     "include/loomc/task.h"
     "include/loomc/workspace.h"
+    "src/compile_report.h"
     "src/config.h"
     "src/context.h"
     "src/diagnostic.h"

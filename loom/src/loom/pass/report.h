@@ -15,6 +15,7 @@
 #define LOOM_PASS_REPORT_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/pass/types.h"
 #include "loom/util/stream.h"
 
@@ -74,8 +75,8 @@ struct loom_pass_report_detail_t {
 };
 
 typedef struct loom_pass_report_invocation_t {
-  // Descriptor selected by this pass.run invocation.
-  const loom_pass_descriptor_t* descriptor;
+  // Next invocation in execution order, or NULL for the last record.
+  struct loom_pass_report_invocation_t* next;
   // Canonical pass key used by textual pipelines.
   iree_string_view_t pass_key;
   // Static pass kind declared by the descriptor metadata.
@@ -105,14 +106,16 @@ typedef struct loom_pass_report_invocation_t {
 } loom_pass_report_invocation_t;
 
 struct loom_pass_report_t {
-  // Invocation records in execution order.
-  loom_pass_report_invocation_t* invocations;
+  // First completed invocation, or NULL for an empty report.
+  loom_pass_report_invocation_t* invocation_head;
+  // Last completed invocation, used for constant-time append.
+  loom_pass_report_invocation_t* invocation_tail;
   // Number of populated invocation records.
   iree_host_size_t invocation_count;
-  // Allocated invocation record count.
-  iree_host_size_t invocation_capacity;
-  // Host allocator that owns report arrays.
-  iree_allocator_t allocator;
+  // Whether the interpreter measures invocation duration. Defaults to true.
+  bool include_timing;
+  // Scoped storage for records, copied names, statistics, and detail rows.
+  iree_arena_allocator_t arena;
 };
 
 typedef struct loom_pass_report_invocation_options_t {
@@ -188,8 +191,9 @@ loom_pass_report_detail_bool_field(iree_string_view_t name, bool value) {
   return field;
 }
 
-// Initializes an empty report.
-void loom_pass_report_initialize(iree_allocator_t allocator,
+// Initializes an empty report using blocks borrowed from |block_pool|. The
+// pool must outlive the report; deinitialization returns all report storage.
+void loom_pass_report_initialize(iree_arena_block_pool_t* block_pool,
                                  loom_pass_report_t* out_report);
 
 // Releases all report-owned storage.
@@ -209,8 +213,8 @@ iree_status_t loom_pass_report_append_detail(
     loom_pass_t* pass, iree_string_view_t category,
     const loom_pass_report_detail_field_t* fields, uint16_t field_count);
 
-// Releases pending detail rows that were emitted by |pass| but not moved into
-// an invocation record.
+// Detaches pending detail rows not moved into an invocation record. Their
+// storage remains in the report arena until deinitialization.
 void loom_pass_report_discard_pass_details(loom_pass_t* pass);
 
 // Writes the report as stable JSON for tools and tests.

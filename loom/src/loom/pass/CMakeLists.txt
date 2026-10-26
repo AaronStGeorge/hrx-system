@@ -251,6 +251,7 @@ loom_cc_library(
     ::registry
     ::types
     iree::base
+    iree::base::internal::arena
     loom::util::json
     loom::util::stream
   LINKABLE_MORE_THAN_ONCE
@@ -488,15 +489,13 @@ loom_cc_test(
   SRCS
     "report_test.cc"
   DEPS
+    ::registry
     ::report
-    ::tooling
+    ::types
+    iree::base
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
-    loom::format::text::parser
-    loom::ir
-    loom::pass::test::harness
-    loom::util::stream
 )
 
 loom_cc_test(

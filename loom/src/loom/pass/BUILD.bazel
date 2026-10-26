@@ -209,7 +209,7 @@ loom_cc_library(
     name = "report",
     srcs = ["report.c"],
     hdrs = ["report.h"],
-    # Reports own caller-allocated storage and borrow compiler descriptors.
+    # Reports own pooled invocation storage and borrow compiler descriptors.
     tags = ["LINKABLE_MORE_THAN_ONCE"],
     deps = [
         ":environment",
@@ -218,6 +218,7 @@ loom_cc_library(
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -444,12 +445,10 @@ loom_cc_test(
     name = "report_test",
     srcs = ["report_test.cc"],
     deps = [
+        ":registry",
         ":report",
-        ":tooling",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/pass/test:harness",
-        "//loom/src/loom/util:stream",
+        ":types",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

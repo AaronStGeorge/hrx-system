@@ -943,9 +943,9 @@
       },
       "stderr": {
         "contains": [
-          "not-a-pass",
-          "\"invocations\":[]"
-        ]
+          "not-a-pass"
+        ],
+        "not_contains": ["\"invocations\""]
       },
       "files": [
         {

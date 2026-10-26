@@ -157,7 +157,8 @@ typedef struct loomc_compile_options_t {
 
   /// Extension chain for compile invocation options such as
   /// `loomc_target_specialization_options_t`, `loomc_pass_trace_options_t`,
-  /// and native report options from loomc/interop.h.
+  /// `loomc_pass_report_options_t`, `loomc_compile_report_options_t`, and
+  /// native report options from loomc/interop.h.
   const void* next;
 
   /// Runtime artifact module name for this invocation. Empty uses the
@@ -192,6 +193,7 @@ typedef struct loomc_compile_options_t {
 /// is NULL to override the emitter default pipeline's sanitizer settings.
 /// `loomc_pass_trace_options_t` may be attached to stream selected
 /// pass-boundary IR while either a supplied or default program executes.
+/// `loomc_pass_report_options_t` requests result-owned pass statistics.
 /// Artifact manifests apply only to loadable kernel requests; requesting one
 /// for module roots fails at compile-request resolution before passes run.
 typedef struct loomc_compile_artifact_options_t {

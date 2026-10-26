@@ -338,10 +338,14 @@ TEST(TargetWasmTest, CompilesArtifactWithEmitterDefaultPipeline) {
   const loomc_string_view_t excluded_roots[] = {
       loomc_make_cstring_view("dead_config_user"),
   };
+  const loomc_pass_report_options_t pass_report_options = {
+      .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
+      .next = &pass_trace_options,
+  };
   const loomc_compile_artifact_options_t compile_options = {
       .type = LOOMC_STRUCTURE_TYPE_COMPILE_ARTIFACT_OPTIONS,
       .structure_size = sizeof(compile_options),
-      .next = &pass_trace_options,
+      .next = &pass_report_options,
       .roots = nullptr,
       .root_count = 0,
       .excluded_roots = excluded_roots,
@@ -444,7 +448,14 @@ TEST(TargetWasmTest, CompilesArtifactWithEmitterDefaultPipeline) {
       &compile_options, loomc_allocator_system(), &raw_result));
   result.reset(raw_result);
   ASSERT_TRUE(Succeeded(result.get()));
-  ASSERT_EQ(loomc_result_artifact_count(result.get()), 2u);
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 3u);
+  const loomc_artifact_t* pass_report =
+      loomc_result_artifact_at(result.get(), 0);
+  EXPECT_EQ(pass_report->kind, LOOMC_ARTIFACT_KIND_REPORT);
+  EXPECT_EQ(ToString(pass_report->format),
+            LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON);
+  EXPECT_NE(ToString(pass_report->contents).find("\"duration_ns\":0"),
+            std::string::npos);
   EXPECT_NE(pass_trace.find("\"tool\":\"loomc-wasm-test\""), std::string::npos);
   EXPECT_NE(pass_trace.find("\"input\":\"exports.loom\""), std::string::npos);
   EXPECT_NE(pass_trace.find("\"stage\":\"prepared-low\""), std::string::npos);
@@ -459,7 +470,7 @@ TEST(TargetWasmTest, CompilesArtifactWithEmitterDefaultPipeline) {
     EXPECT_FALSE(contents.empty());
   }
 
-  const loomc_artifact_t* artifact = loomc_result_artifact_at(result.get(), 0);
+  const loomc_artifact_t* artifact = loomc_result_artifact_at(result.get(), 1);
   ASSERT_NE(artifact, nullptr);
   EXPECT_EQ(artifact->kind, LOOMC_ARTIFACT_KIND_EXECUTABLE);
   EXPECT_EQ(ToString(artifact->format), LOOMC_ARTIFACT_FORMAT_WASM_BINARY);
@@ -475,7 +486,7 @@ TEST(TargetWasmTest, CompilesArtifactWithEmitterDefaultPipeline) {
   EXPECT_EQ(export_names, expected_export_names);
   loomc_allocator_free(loomc_allocator_system(), (void*)contents.data);
 
-  const loomc_artifact_t* report = loomc_result_artifact_at(result.get(), 1);
+  const loomc_artifact_t* report = loomc_result_artifact_at(result.get(), 2);
   ASSERT_NE(report, nullptr);
   EXPECT_EQ(report->kind, LOOMC_ARTIFACT_KIND_REPORT);
   EXPECT_EQ(ToString(report->format),
