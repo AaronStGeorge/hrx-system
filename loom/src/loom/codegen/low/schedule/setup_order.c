@@ -220,12 +220,26 @@ static void loom_low_schedule_setup_order_classify_storage_continuation(
                           LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION)) {
       continue;
     }
-    if (!loom_low_schedule_setup_order_mark_node(state, node)) {
-      continue;
-    }
     const loom_value_ordinal_t source_ordinal =
         operand_ordinals[tied.operand_index];
     const uint32_t producer = state->value_producer_nodes[source_ordinal];
+    // Input-free constant recipes remain available to pressure scheduling.
+    // Forcing their partial writes behind consumer prerequisites can retain
+    // those inputs while the constant is constructed. Explicit private
+    // placement still orders these nodes through ordinary setup membership.
+    if (node->operand_count == 1 &&
+        loom_low_descriptor_result_can_rematerialize(
+            descriptor_set, node->descriptor, tied.result_index) &&
+        producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
+        state->nodes[producer].descriptor != NULL &&
+        loom_low_descriptor_layout(descriptor_set,
+                                   state->nodes[producer].descriptor)
+                ->op_kind == LOOM_LOW_DESCRIPTOR_OP_KIND_CONST) {
+      continue;
+    }
+    if (!loom_low_schedule_setup_order_mark_node(state, node)) {
+      continue;
+    }
     if (producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
         state->nodes[producer].block_index == node->block_index) {
       loom_low_schedule_setup_order_mark_continuation_source(

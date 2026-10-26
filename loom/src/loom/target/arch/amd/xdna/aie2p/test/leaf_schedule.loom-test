@@ -223,6 +223,67 @@ edge order 2 -> 0: separation=0 source=structural quality=unknown producer-event
 
 // ====
 
+// Both words of a constant predicate can be pressure-scheduled before the
+// vector input is ready. The partial writes do not impose a vector lifetime
+// extension while constructing the mask.
+// RUN: emit low-schedule-query @constant_predicate_setup kind=order consumer=0,1
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @constant_predicate_setup(%lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %low = predicate.constant.low32 56
+  %predicate = predicate.complete.zero.high32 %low, 0
+  %prepared = vsub.32 %lhs, %rhs
+  %result = vsel.8 %lhs, %prepared, %predicate
+  return %result
+}
+
+// ----
+node 0 <- none
+node 1 <- none
+
+// ====
+
+// A nonzero high word has the same input-free construction contract.
+// RUN: emit low-schedule-query @wide_constant_predicate_setup kind=order consumer=0,1
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @wide_constant_predicate_setup(%lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %low = predicate.constant.low32 56
+  %predicate = predicate.complete.constant.high32 %low, 112
+  %prepared = vsub.32 %lhs, %rhs
+  %result = vsel.8 %lhs, %prepared, %predicate
+  return %result
+}
+
+// ----
+node 0 <- none
+node 1 <- none
+
+// ====
+
+// Allocation repair can require private placement of the constant recipe.
+// That retained requirement still closes the consumer's other prerequisites
+// before either word acquires storage.
+// RUN: emit low-schedule-query @private_constant_predicate_setup kind=order consumer=0,1 per-user-placement-values=%low,%predicate required-register-values=%low,%predicate
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @private_constant_predicate_setup(%lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %low = predicate.constant.low32 56
+  %predicate = predicate.complete.constant.high32 %low, 112
+  %prepared = vsub.32 %lhs, %rhs
+  %result = vsel.8 %lhs, %prepared, %predicate
+  return %result
+}
+
+// ----
+node 0 <- 2
+node 1 <- none
+
+// ====
+
 // Five rematerializable shifts share four es registers. Independent SRS
 // packets retain their configuration reads but have no ordering through
 // unread sticky overflow status. Later shifts can issue beside earlier
