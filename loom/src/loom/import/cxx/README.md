@@ -1995,14 +1995,79 @@ reject record parameters.
 
 The admitted records are complete aggregates with public fields, trivial copying
 and destruction, and no unions or base classes. Fields recursively admit scalar,
-vector, pointer, and record values. Braced construction includes normalized
-positional, designated and omitted-field initialization, plus default member
-expressions that do not access the object under construction. Bitfields,
-references, array fields and addresses of automatic records are rejected.
-Implicit default construction such as `Result()` and default member expressions
-accessing another member require source object initialization phases and receive
-explicit diagnostics; substituting aggregate braces would not preserve their
-semantics.
+vector, pointer, record, and fixed-array values. Braced and parenthesized
+aggregate construction preserve positional, designated, and omitted-field
+initialization. Implicit default construction such as `Result()` executes the
+frontend's declaration-order member-initialization plan, including nested
+records and arrays. Bitfields and nontrivial lifecycle operations remain outside
+the SSA record contract.
+
+Automatic record objects become private storage when their identity is required.
+Their field and array-element addresses share that storage, while unaddressed
+records remain partitioned SSA values. Aggregate copies preserve value semantics
+in either representation, and shared private-storage promotion can remove the
+allocation after inlining.
+
+### Ordinary overloaded operators
+
+Admitted values can use ordinary member and free operator functions. The C++
+frontend owns overload resolution, promotions, conversions, and cv qualification;
+the selected function lowers through the same Loom callable contract as a named
+helper. This makes small numeric wrappers and accumulator records natural kernel
+source without hiding their operations behind an intrinsic:
+
+```cpp
+struct Pair {
+  unsigned x;
+  unsigned y;
+
+  Pair operator+(const Pair& other) const {
+    return {x + other.x, y + other.y};
+  }
+  Pair& operator+=(const Pair& other) {
+    x += other.x;
+    y += other.y;
+    return *this;
+  }
+};
+
+static Pair operator*(unsigned scale, Pair value) {
+  return {scale * value.x, scale * value.y};
+}
+
+[[loom::kernel, loom::workgroup_size(64, 1, 1), loom::workgroup_count(1, 1, 1)]]
+void accumulate_pairs(const unsigned* input, unsigned* output) {
+  unsigned lane = loom::kernel::workitem::id.x;
+  unsigned base = lane * 2u;
+  Pair value{input[base], input[base + 1u]};
+  Pair bias{1u, 2u};
+  Pair result = 3u * (value + bias);
+  output[base] = result.x;
+  output[base + 1u] = result.y;
+}
+```
+
+The record components remain explicit at the call boundary:
+
+```loom
+%sum_x, %sum_y = func.call pure @Pair__operator_add_value(%value_x, %value_y, %bias_x, %bias_y) : (i32, i32, i32, i32) -> (i32, i32)
+%result_x, %result_y = func.call pure @operator_multiply(%scale, %sum_x, %sum_y) : (i32, i32, i32) -> (i32, i32)
+```
+
+Binary and unary operators, compound assignments, and prefix and postfix
+increment or decrement support member and free definitions. Mutable reference
+arguments and receivers use tied callable results, so `value += bias` updates
+the caller's SSA value. A reference result that aliases `*this` reuses that tied
+result; using any reference result as an object identity materializes storage
+only where the source semantics require it. Source evaluation order, including
+the distinct compound-assignment and postfix rules, is retained.
+
+`[[loom::op]]` declarations continue to bind facade operations directly to a
+specific High operation and take precedence over an ordinary function body.
+Reachable private operators receive readable module-local names. A
+namespace-scope linkable operator declaration or exported definition uses
+`[[loom::symbol("name")]]`, just like any other overloaded function whose C++
+spelling is not a stable cross-module identity.
 
 Record pointers project named fields from existing storage using the C++ object
 layout. Nested fields, field addresses, pointer arithmetic and scalar/vector
@@ -2049,9 +2114,9 @@ Both pointers address `view<1xi8>` storage; `previous` and the function result
 remain `i1`. Arrays advance by one byte and fields keep their source-layout
 offsets. Shared private storage promotion can eliminate addressed objects, and
 ordinary canonicalization folds direct predicate-to-byte-to-predicate conversions
-back to the original value. Packed Boolean vectors, typed Loom views and atomic
-bindings have separate representation contracts; admitting Boolean objects does not change
-their element-type requirements.
+back to the original value. Packed Boolean vectors, typed Loom views, and atomic
+bindings have separate representation contracts; admitting Boolean objects does
+not change their element-type requirements.
 
 Memory records admit scalar, enum, vector and nested named fields,
 including fixed arrays of those types and multidimensional arrays. Array
@@ -2099,10 +2164,8 @@ float decode(const IQ4XSBlock* blocks, unsigned block_index, unsigned index,
 The block pointer advances by 136 bytes; `scales_low` and `quants` start at
 offsets 4 and 8. Their elements use byte loads, the base scale uses an FP16
 load, and the codebook uses signed integer-to-float conversion. No record or
-array is copied or allocated. Arrays in by-value records and addresses of
-automatic records require aggregate object initialization and copy projections.
-Automatic scalars, vectors, and fixed scalar arrays use the storage contract
-below.
+array is copied or allocated. By-value records flatten fixed arrays recursively;
+addressed automatic records use the private-storage contract below.
 
 Packed fields use the same typed memory operations, with their exact byte
 origins and record strides:
@@ -2527,10 +2590,11 @@ running the importer.
 
 The current translation surface covers scalar and explicit vector arithmetic,
 conversions, typed-pointer indexing and arithmetic, aggregate record values,
-record field storage, local SSA values, automatic scalar, vector, and array storage,
-conditional regions, short-circuit `&&` and `||`, counted and general `for`
-loops, `while` and `do/while` loops, scalar/vector/fixed-array workgroup
-storage, and direct calls.
+record field storage, local SSA values, automatic scalar, vector, record, and
+array storage, conditional regions, short-circuit `&&` and `||`, counted and
+general `for` loops, `while` and `do/while` loops,
+scalar/vector/fixed-array workgroup storage, direct calls, and ordinary
+overloaded value operators.
 Unsupported reachable types and statements produce source diagnostics. Integral
 subscripts preserve their source width and signedness. Interior pointers carry a
 buffer root and an
@@ -2642,8 +2706,9 @@ additional type projections and produces a source diagnostic. Pointer
 differences, comparisons, and truth conversions also produce source diagnostics.
 Distinct-root choices import as ordinary buffer values; executing them requires
 the selected Loom target to support buffer transport through those control-flow
-edges. Objects with constructors, exceptions, and indirect calls need additional
-storage and control-flow projections before they can be imported.
+edges. Nonaggregate construction, nontrivial destruction, exceptions, and
+indirect calls need additional storage and control-flow projections before they
+can be imported.
 
 Volatile scalar and vector accesses through pointers, automatic objects, and
 workgroup objects become `view.load/store<volatile>` and
@@ -2689,12 +2754,17 @@ recurrences. Each iteration uses ordinary conditional regions; there is no
 extra loop-carried exit state.
 
 Kernels and ordinary functions can return early through guard chains, nested
-blocks and returning `if`/`else` trees. A returning conditional must have at
-least one arm that always returns. The remaining source then executes only on
-the path that continues, without copying that source into both arms. Returning
-helpers retain structured bodies and can inline inside ordinary loops. A return
-from within a loop, or a returning conditional with two continuing arms, is
-diagnosed: those forms require a shared continuation or scoped exit contract.
+blocks, conditionals, switches, and `for`, `while`, or `do/while` loops. The
+importer emits `func.exit` around the real callable return, so no synthetic
+returned flag, inactive payload, or private result slot flows through the
+lexical continuation. A callable tail that cannot execute becomes
+`func.unreachable`. Returning helpers retain structured bodies and can inline
+inside ordinary loops on CPU, NPU, GPU, Wasm, and SPIR-V targets.
+
+Serial unrolling preserves an exit-bearing loop in source order. Interleaved
+unrolling and pipelining reject such a loop because executing later iterations
+after an earlier return would change its effects. An authored incompatible
+schedule therefore receives a diagnostic instead of being silently discarded.
 
 Logical operators preserve contextual boolean conversions and evaluate their
 right operand only in the selected `scf.if` region. Guarded loads and effectful
