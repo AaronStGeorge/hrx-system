@@ -233,6 +233,16 @@ LOOM_CHECK_CASE(forged_workload) {
 }
 
 // ====
+#include <loomcxx/kernel.h>
+
+static loom::kernel::configuration exiting_configuration(unsigned count) {
+  // ERROR@+1: LOWERING/059 "returns inside structured control require a runtime function or kernel body"
+  while (count) return {{count, 1, 1}, {1, 1, 1}};
+  return {{1, 1, 1}, {1, 1, 1}};
+}
+[[loom::kernel(exiting_configuration)]] void structured_exit() {}
+
+// ====
 // Iota periods are static positive element counts.
 #include <loomcxx/check.h>
 

@@ -101,3 +101,13 @@ LOOM_TEMPLATE_DECL("test.value") unsigned value(unsigned input);
 // ERROR@+1: LOWERING/059 "calling convention must match"
 LOOM_TEMPLATE_DEF(value)
 LOOM_DEVICE unsigned device_provider(unsigned input) { return input; }
+
+// ====
+#include <loomcxx/kernel.h>
+LOOM_TEMPLATE_DECL("test.loop_exit") unsigned loop_exit(unsigned input);
+LOOM_TEMPLATE_DEF(loop_exit)
+unsigned loop_exit_provider(unsigned input) {
+  // ERROR@+1: LOWERING/059 "returns inside structured control require a runtime function or kernel body"
+  while (input) return input;
+  return 0;
+}

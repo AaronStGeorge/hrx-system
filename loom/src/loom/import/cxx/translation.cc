@@ -565,6 +565,8 @@ class Translator final : private Initialization::Evaluation {
     std::vector<loom_value_id_t> values;
     // Return or branch whose source location owns the resulting exit.
     cxx::AST* source;
+    // Whether the callable's ordinary return is unreachable on this path.
+    bool unreachable = false;
   };
 
   const ReferenceParameter* reference_parameter(size_t ordinal) const {
@@ -619,6 +621,67 @@ class Translator final : private Initialization::Evaluation {
       }
     }
     return returned;
+  }
+
+  bool supports_function_exit() const {
+    return current_function_.kind == FunctionKind::Ordinary ||
+           current_function_.kind == FunctionKind::Kernel;
+  }
+
+  Returned return_values(cxx::ReturnStatementAST* statement) {
+    bool returns_void =
+        unit_.typeTraits().is_void(current_function_.return_type);
+    if (!statement->expression) {
+      if (!returns_void) {
+        fail(statement, "non-void return requires a value");
+      }
+      return complete_return({{}, statement});
+    }
+    if (unit_.typeTraits().is_void(statement->expression->type)) {
+      if (!returns_void) {
+        fail(statement, "non-void return requires a value");
+      }
+      effect(statement->expression);
+      return complete_return({{}, statement});
+    }
+    if (returns_void) {
+      fail(statement, "void return cannot carry a value");
+    }
+    Returned returned = {{}, statement};
+    if (unit_.typeTraits().is_lvalue_reference(current_function_.return_type)) {
+      reference_value(statement->expression, statement)
+          .append_to(returned.values);
+    } else {
+      convert(statement->expression, current_function_.return_type, statement)
+          .append_to(returned.values);
+    }
+    return complete_return(std::move(returned));
+  }
+
+  void function_exit(cxx::ReturnStatementAST* statement) {
+    if (!supports_function_exit()) {
+      fail(statement,
+           "returns inside structured control require a runtime function or "
+           "kernel body");
+    }
+    auto outer_values = values_;
+    auto returned = return_values(statement);
+    auto source = locations_.get(statement);
+    auto condition = scalars_.integer(true, LOOM_SCALAR_TYPE_I1, source);
+    loom_op_t* op;
+    check(loom_func_exit_build(&builder_, condition, source, &op));
+    auto saved =
+        loom_builder_enter_region(&builder_, op, loom_func_exit_body(op));
+    loom_op_t* terminator;
+    if (current_function_.kind == FunctionKind::Kernel) {
+      check(loom_kernel_return_build(&builder_, source, &terminator));
+    } else {
+      check(loom_func_return_build(&builder_, returned.values.data(),
+                                   returned.values.size(), source,
+                                   &terminator));
+    }
+    loom_builder_restore(&builder_, saved);
+    values_ = std::move(outer_values);
   }
 
   void function(FunctionInstance instance) {
@@ -752,7 +815,10 @@ class Translator final : private Initialization::Evaluation {
       leave_receiver();
     }
     loom_op_t* terminator;
-    if (defined.kind == FunctionKind::Kernel) {
+    if (returned.unreachable) {
+      check(loom_func_unreachable_build(
+          &builder_, locations_.get(returned.source), &terminator));
+    } else if (defined.kind == FunctionKind::Kernel) {
       check(loom_kernel_return_build(&builder_, locations_.get(returned.source),
                                      &terminator));
     } else if (defined.kind == FunctionKind::TemplateDefinition) {
@@ -814,6 +880,9 @@ class Translator final : private Initialization::Evaluation {
         return returning_statement(child, sequence);
       }
       statement(child);
+      if (supports_function_exit() && !control_->falls_through(child)) {
+        return {{}, child, true};
+      }
     }
   }
 
@@ -1021,33 +1090,7 @@ class Translator final : private Initialization::Evaluation {
         resolve_fastmath(ast ? fastmath_.statement(ast) : std::nullopt));
     ast = selected_statement(ast);
     if (auto* ret = cxx::ast_cast<cxx::ReturnStatementAST>(ast)) {
-      bool returns_void =
-          unit_.typeTraits().is_void(current_function_.return_type);
-      if (!ret->expression) {
-        if (!returns_void) {
-          fail(ast, "non-void return requires a value");
-        }
-        return complete_return({{}, ret});
-      }
-      if (unit_.typeTraits().is_void(ret->expression->type)) {
-        if (!returns_void) {
-          fail(ast, "non-void return requires a value");
-        }
-        effect(ret->expression);
-        return complete_return({{}, ret});
-      }
-      if (returns_void) {
-        fail(ast, "void return cannot carry a value");
-      }
-      Returned returned = {{}, ret};
-      if (unit_.typeTraits().is_lvalue_reference(
-              current_function_.return_type)) {
-        reference_value(ret->expression, ret).append_to(returned.values);
-      } else {
-        convert(ret->expression, current_function_.return_type, ret)
-            .append_to(returned.values);
-      }
-      return complete_return(std::move(returned));
+      return return_values(ret);
     }
     if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(ast)) {
       return return_sequence(
@@ -1057,9 +1100,16 @@ class Translator final : private Initialization::Evaluation {
         branch && control_->returns(branch) != ExitFlow::None) {
       if (control_->returns(branch->statement) != ExitFlow::All &&
           control_->returns(branch->elseStatement) != ExitFlow::All) {
-        fail(ast,
-             "conditional returns require at most one fallthrough arm; "
-             "shared continuations need a scoped exit projection");
+        if (!supports_function_exit()) {
+          fail(ast,
+               "returns inside structured control require a runtime function "
+               "or kernel body");
+        }
+        statement(ast);
+        if (!control_->falls_through(ast)) {
+          return {{}, ast, true};
+        }
+        return return_sequence(continuation);
       }
       auto condition = branch_condition(branch);
       auto outer_values = values_;
@@ -1095,15 +1145,17 @@ class Translator final : private Initialization::Evaluation {
       returned.source = ast;
       return returned;
     }
-    if (cxx::ast_cast<cxx::SwitchStatementAST>(ast) &&
-        control_->returns(ast) != ExitFlow::None) {
-      fail(ast,
-           "returns inside runtime switches require a structured switch-exit "
-           "projection");
-    }
     if (control_->returns(ast) != ExitFlow::None) {
-      fail(ast,
-           "returns inside loops require a structured loop-exit projection");
+      if (!supports_function_exit()) {
+        fail(ast,
+             "returns inside structured control require a runtime function or "
+             "kernel body");
+      }
+      statement(ast);
+      if (!control_->falls_through(ast)) {
+        return {{}, ast, true};
+      }
+      return return_sequence(continuation);
     }
     if (ast) {
       statement(ast);
@@ -3306,6 +3358,9 @@ class Translator final : private Initialization::Evaluation {
       auto flow = iteration_exit_flow(child, tracks_break);
       if (flow == ExitFlow::None) {
         statement(child);
+        if (!control_->falls_through(child)) {
+          return constant_iteration_flow(false, false, tracks_break, child);
+        }
         continue;
       }
       return iteration_tail(owner, child, remaining, fastmath, tracks_break,
@@ -3328,6 +3383,9 @@ class Translator final : private Initialization::Evaluation {
     if (flow == ExitFlow::None) {
       if (ast) {
         statement(ast);
+      }
+      if (!control_->falls_through(ast)) {
+        return constant_iteration_flow(false, false, tracks_break, ast);
       }
       return iteration_sequence(owner, remaining, continuation_fastmath,
                                 tracks_break, mutations);
@@ -3644,7 +3702,9 @@ class Translator final : private Initialization::Evaluation {
     }
     if (iteration_exit_flow(ast, tracks_break) == ExitFlow::None) {
       statement(ast);
-      return constant_iteration_flow(true, true, tracks_break, ast);
+      auto falls_through = control_->falls_through(ast);
+      return constant_iteration_flow(falls_through, falls_through, tracks_break,
+                                     ast);
     }
     if (cxx::ast_cast<cxx::ContinueStatementAST>(ast)) {
       return constant_iteration_flow(false, true, tracks_break, ast);
@@ -3704,7 +3764,14 @@ class Translator final : private Initialization::Evaluation {
     if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(ast)) {
       for (auto* child : cxx::ListView{compound->statementList}) {
         statement(child);
+        if (!control_->falls_through(child)) {
+          break;
+        }
       }
+      return;
+    }
+    if (auto* returned = cxx::ast_cast<cxx::ReturnStatementAST>(ast)) {
+      function_exit(returned);
       return;
     }
     if (auto* declaration = cxx::ast_cast<cxx::DeclarationStatementAST>(ast)) {
