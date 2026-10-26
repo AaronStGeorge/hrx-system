@@ -26,6 +26,7 @@ LOOM_TARGETS = ("amdgpu", "spirv", "vm", "wasm", "xdna", "x86")
 LOOM_EMITTERS = ("amdgpu", "spirv", "wasm", "xdna")
 AMDF_FAMILIES = ("rdna", "cdna", "xdna")
 HOST_DRIVERS = ("task",)
+DEFAULT_DRIVERS = (*HOST_DRIVERS, "amd")
 DEFAULT_LOOM_EXECUTE = LOOM_EXECUTE_SUBSTRATES
 DEFAULT_LOOM_TARGETS = ("amdgpu", "spirv", "vm", "xdna", "x86")
 
@@ -119,7 +120,7 @@ FALSE_VALUES = frozenset(("0", "OFF", "FALSE", "NO"))
 @dataclass
 class ConfigRequest:
     output: Path
-    enabled_drivers: set[str] = field(default_factory=lambda: set(HOST_DRIVERS))
+    enabled_drivers: set[str] = field(default_factory=lambda: set(DEFAULT_DRIVERS))
     driver_source: str | None = None
     # Explicit engine selections override the AMD umbrella in either order.
     amd_engine_overrides: dict[str, bool] = field(default_factory=dict)

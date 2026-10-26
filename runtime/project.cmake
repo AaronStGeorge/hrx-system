@@ -91,7 +91,7 @@ option(IREE_HAL_DRIVER_WEBGPU
   "Enables the WebGPU runtime HAL driver."
   ${IREE_HAL_DRIVER_WEBGPU_DEFAULT})
 option(IREE_HAL_DRIVER_AMD
-  "Default value for the native libamdf AMD GPU and XDNA HAL engines." OFF)
+  "Default value for the native libamdf AMD GPU and XDNA HAL engines." ON)
 option(IREE_HAL_DRIVER_AMD_GPU
   "Enables the native AMD GPU HAL (amdgpu, rdna, and cdna)."
   ${IREE_HAL_DRIVER_AMD})
