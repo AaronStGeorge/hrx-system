@@ -108,6 +108,23 @@ static iree_status_t loom_target_pipeline_build_run_with_string_option(
       loom_make_named_attr_slice(&option_attr, 1), &run_op);
 }
 
+static iree_status_t loom_target_pipeline_build_inline_callables(
+    loom_builder_t* builder, iree_string_view_t stage) {
+  loom_named_attr_t option_attrs[2] = {0};
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+      builder, IREE_SV("policy"), IREE_SV("target"), &option_attrs[0]));
+  iree_host_size_t option_count = 1;
+  if (!iree_string_view_is_empty(stage)) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+        builder, IREE_SV("stage"), stage, &option_attrs[option_count++]));
+  }
+  loom_op_t* run_op = NULL;
+  return loom_pass_ir_build_run(
+      builder, LOOM_PASS_RUN_BUILD_FLAG_HAS_OPTIONS,
+      IREE_SV("inline-callables"),
+      loom_make_named_attr_slice(option_attrs, option_count), &run_op);
+}
+
 static iree_status_t loom_target_pipeline_build_target_legalize(
     loom_builder_t* builder, iree_string_view_t mode) {
   return loom_target_pipeline_build_run_with_string_option(
@@ -452,6 +469,12 @@ static iree_status_t loom_target_pipeline_build_source_cfg_lowering(
   return loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify"));
 }
 
+static iree_status_t loom_target_pipeline_build_source_cfg_lowering_body(
+    loom_builder_t* builder, void* user_data) {
+  (void)user_data;
+  return loom_target_pipeline_build_source_cfg_lowering(builder);
+}
+
 static iree_status_t loom_target_pipeline_build_structured_source_finalization(
     loom_builder_t* builder, void* user_data) {
   IREE_RETURN_IF_ERROR(
@@ -543,18 +566,23 @@ static iree_status_t loom_target_pipeline_build_inlined_source_cleanup(
       &for_op);
 }
 
-static iree_status_t loom_target_pipeline_build_required_source_inlining(
-    loom_builder_t* builder, void* user_data) {
-  // Remove boundaries without a target ABI before target legalization so
-  // caller facts guide representation selection. Inlining CFG bodies introduces
-  // entry and return forwarding blocks; restore source normal form afterward.
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
-      builder, IREE_SV("inline-callables"), IREE_SV("policy"),
-      IREE_SV("target")));
+static iree_status_t loom_target_pipeline_build_source_inlining(
+    loom_builder_t* builder, void* user_data, iree_string_view_t stage) {
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_inline_callables(builder, stage));
   loom_op_t* if_changed_op = NULL;
   return loom_pass_ir_build_if_changed(
       builder, loom_target_pipeline_build_inlined_source_cleanup, user_data,
       &if_changed_op);
+}
+
+static iree_status_t loom_target_pipeline_build_preparatory_source_inlining(
+    loom_builder_t* builder, void* user_data) {
+  // Remove boundaries without a target ABI before target legalization so
+  // caller facts guide representation selection. A callable exit retains its
+  // semantic boundary until target control flow has made completion legal.
+  return loom_target_pipeline_build_source_inlining(builder, user_data,
+                                                    IREE_SV("prepare"));
 }
 
 static iree_status_t
@@ -754,8 +782,8 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   // any target-aware function pass observes those callees.
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("specialize-target-callgraph")));
-  IREE_RETURN_IF_ERROR(
-      loom_target_pipeline_build_required_source_inlining(builder, user_data));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_preparatory_source_inlining(
+      builder, user_data));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
       builder, IREE_SV("source"), loom_target_pipeline_build_lexical_workers,
       user_data, &for_op));
@@ -836,6 +864,11 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
         builder, IREE_SV("source"),
         loom_target_pipeline_build_cfg_source_finalization_after_bank_sroa,
         user_data, &for_op));
+    // func.exit is now ordinary CFG control. Finish only the source call graph
+    // that preparation recorded, before independent callee lowering can choose
+    // representations incompatible with its callers.
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_source_inlining(
+        builder, user_data, IREE_SV("resume")));
   }
   if (loom_target_pipeline_sanitizer_has_checks(
           context, LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
@@ -881,9 +914,8 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       loom_target_pipeline_build_predicate_lifetimes, NULL, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_to_low(builder, context->options));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
-      builder, IREE_SV("inline-callables"), IREE_SV("policy"),
-      IREE_SV("target")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_inline_callables(
+      builder, iree_string_view_empty()));
   if (context->source_low_artifact_preparation) {
     IREE_RETURN_IF_ERROR(
         loom_target_pipeline_build_low_cleanup(builder, user_data));
@@ -914,8 +946,20 @@ loom_target_pipeline_build_source_low_diagnostic_artifacts_body(
         loom_target_pipeline_build_vector_memory_footprint, user_data,
         &for_op));
   }
-  IREE_RETURN_IF_ERROR(
-      loom_target_pipeline_build_required_source_inlining(builder, user_data));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_preparatory_source_inlining(
+      builder, user_data));
+  loom_target_control_flow_lowering_t control_flow_lowering =
+      LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_resolve_control_flow_lowering(
+      context->options, &control_flow_lowering));
+  if (control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+        builder, IREE_SV("source"),
+        loom_target_pipeline_build_source_cfg_lowering_body, user_data,
+        &for_op));
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_source_inlining(
+        builder, user_data, IREE_SV("resume")));
+  }
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_boundary_projection(builder, user_data));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
@@ -923,9 +967,8 @@ loom_target_pipeline_build_source_low_diagnostic_artifacts_body(
       loom_target_pipeline_build_predicate_lifetimes, NULL, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_to_low(builder, context->options));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
-      builder, IREE_SV("inline-callables"), IREE_SV("policy"),
-      IREE_SV("target")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_inline_callables(
+      builder, iree_string_view_empty()));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
       builder, IREE_SV("low"),
       loom_target_pipeline_build_source_low_artifact_preparation, user_data,

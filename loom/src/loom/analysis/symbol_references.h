@@ -196,6 +196,10 @@ typedef struct loom_symbol_reference_table_t {
   // their target environment. Explicit nested execution targets are excluded.
   // NULL when there are no such operations; storage belongs to the table arena.
   const uint64_t* contextual_symbols;
+  // Dense membership of symbols directly owning func.exit operations. Calls
+  // do not propagate membership: each bit describes only the symbol body
+  // visited by this structural analysis. NULL when no callable exits exist.
+  const uint64_t* callable_exit_symbols;
   // Target environments selected by independently executing regions. Nested
   // regions inheriting an existing worker environment share its scope.
   struct {
@@ -232,6 +236,15 @@ static inline bool loom_symbol_reference_symbol_is_contextual(
     const loom_symbol_reference_table_t* table, loom_symbol_id_t symbol_id) {
   return table->contextual_symbols &&
          (table->contextual_symbols[symbol_id >> 6] &
+          (UINT64_C(1) << (symbol_id & 63u))) != 0;
+}
+
+// Returns whether this symbol directly owns a callable exit. Transitive call
+// closure remains the responsibility of the consuming call-graph analysis.
+static inline bool loom_symbol_reference_symbol_has_callable_exit(
+    const loom_symbol_reference_table_t* table, loom_symbol_id_t symbol_id) {
+  return table->callable_exit_symbols &&
+         (table->callable_exit_symbols[symbol_id >> 6] &
           (UINT64_C(1) << (symbol_id & 63u))) != 0;
 }
 

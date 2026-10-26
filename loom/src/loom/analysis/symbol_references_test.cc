@@ -327,6 +327,7 @@ TEST_F(SymbolReferencesTest, EmptyRowsNeedNoAnalysisStorage) {
   EXPECT_EQ(table.symbol_count, kSymbolCount);
   EXPECT_EQ(table.symbol_segments, nullptr);
   EXPECT_EQ(table.occurrence_count, 0u);
+  EXPECT_EQ(table.callable_exit_symbols, nullptr);
   EXPECT_EQ(storage.allocation_count, 0u);
   const loom_symbol_id_t probe_symbol_ids[] = {
       0, 127, 128, (loom_symbol_id_t)(kSymbolCount - 1)};
@@ -339,6 +340,35 @@ TEST_F(SymbolReferencesTest, EmptyRowsNeedNoAnalysisStorage) {
     EXPECT_EQ(symbol.first_template_demand_id, LOOM_TEMPLATE_DEMAND_ID_INVALID);
     EXPECT_EQ(symbol.template_demand_count, 0u);
   }
+}
+
+TEST_F(SymbolReferencesTest, CallableExitMembershipIsDirectAndSparse) {
+  ModulePtr module = ParseModule(R"(
+func.def @exiting(%done: i1) {
+  func.exit %done : i1 {
+    func.return
+  }
+  func.return
+}
+
+func.def @caller(%done: i1) {
+  func.call @exiting(%done) : (i1)
+  func.return
+}
+
+func.def @plain() {
+  func.return
+}
+)");
+
+  const loom_symbol_reference_table_t table = BuildTable(module.get());
+  EXPECT_NE(table.callable_exit_symbols, nullptr);
+  EXPECT_TRUE(loom_symbol_reference_symbol_has_callable_exit(
+      &table, FindSymbol(module.get(), IREE_SV("exiting"))));
+  EXPECT_FALSE(loom_symbol_reference_symbol_has_callable_exit(
+      &table, FindSymbol(module.get(), IREE_SV("caller"))));
+  EXPECT_FALSE(loom_symbol_reference_symbol_has_callable_exit(
+      &table, FindSymbol(module.get(), IREE_SV("plain"))));
 }
 
 TEST_F(SymbolReferencesTest, LargeProviderModuleNeedsNoDenseIndex) {
