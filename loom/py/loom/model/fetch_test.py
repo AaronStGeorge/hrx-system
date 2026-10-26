@@ -328,7 +328,9 @@ def test_publication_lock_unions_sources_without_merging_destinations(tmp_path):
         card = ModelCard.parse(document.text)
         lock_path = tmp_path / "publication.json.lock"
         lock_path.write_text('{"stale":"record"}')
-        plan = plan_lock(document, card, cache, lock_location=str(lock_path))
+        plan = plan_lock(
+            document, card, cache, lock_location=str(lock_path), lock_scope="all"
+        )
         assert requests == ["/model.json"]
         assert len(plan.selections) == 4
         assert len(plan.sources) == 3
@@ -407,7 +409,14 @@ def test_publication_cli_dry_run_and_offline_exact_update(tmp_path, capsys):
     card.write_text(json.dumps(_publication_card()))
     for name in ("code.loom", "weights.data", "alternate.data"):
         (tmp_path / name).write_bytes(name.encode())
-    arguments = [str(card), "--update-lock", "--all-variants", "--offline", "--json"]
+    arguments = [
+        str(card),
+        "--update-lock",
+        "--lock-scope=all",
+        "--all-variants",
+        "--offline",
+        "--json",
+    ]
     assert main([*arguments, "--dry-run"]) == 0
     summary = json.loads(capsys.readouterr().out)
     assert len(summary["files"]) == 3
@@ -438,6 +447,7 @@ def test_publication_program_filter_locks_every_compatible_variant(tmp_path, cap
                 "--update-lock",
                 "--all-variants",
                 "--programs=p",
+                "--lock-scope=all",
                 "--offline",
                 "--json",
             ]
@@ -497,6 +507,7 @@ def test_publication_program_filter_rejects_empty_selection_before_io(
         ["--all-variants", "--update-lock", "--output=installed"],
         ["--all-variants", "--update-lock", "--list"],
         ["--all-variants", "--update-lock", "--materialize=copy"],
+        ["--all-variants", "--update-lock", "--materialize=share"],
     ],
 )
 def test_publication_cli_rejects_ambiguous_modes_before_io(arguments):
@@ -552,6 +563,10 @@ def test_parallel_verified_install_and_offline_reuse(tmp_path):
     assert installed.files["code.loom"].origin == "@document/code.loom"
     assert installed.document["origins"]["document"]["url"] == base + "/"
     assert len(locked.files) == 2
+    legacy = json.loads((output / "model.json.lock").read_text())
+    legacy["schema_version"] = 1
+    legacy.pop("scope")
+    (output / "model.json.lock").write_text(json.dumps(legacy))
     install(offline, cache, output)
 
 
@@ -663,11 +678,114 @@ def test_update_replaces_exact_set_without_accumulating_records(tmp_path):
     )
     install(plan, cache, tmp_path / "output")
     updated = json.loads(lock_path.read_text())
-    assert {record["origin"] for record in updated["files"]} == {
-        "code.loom",
-        "weights.data",
-    }
+    assert updated["scope"] == "assets"
+    assert {record["origin"] for record in updated["files"]} == {"weights.data"}
     assert updated["origins"] == {}
+
+
+def test_asset_lock_update_never_reads_programs_or_retains_their_hashes(
+    tmp_path, capsys
+):
+    document = _card()
+    document["origins"] = {
+        "library": {"kind": "hf", "repository": "fixture/library", "revision": "main"}
+    }
+    document["programs"]["p"]["libraries"] = [
+        {"path": "absent.loombc", "origin": "@library/absent.loombc"}
+    ]
+    card = tmp_path / "model.json"
+    card.write_text(json.dumps(document))
+    for name in ("weights.data", "large.data"):
+        (tmp_path / name).write_bytes(name.encode())
+    arguments = [
+        str(card),
+        "--update-lock",
+        "--all-variants",
+        "--offline",
+        "--json",
+        "--cache=" + str(tmp_path / "cache"),
+    ]
+    assert main(arguments) == 0, capsys.readouterr().err
+    lock_path = tmp_path / "model.json.lock"
+    original = lock_path.read_bytes()
+    locked = ModelLock.parse(original.decode())
+    assert locked.scope == "assets"
+    assert locked.origins == {}
+    assert {file.origin for file in locked.files.values()} == {
+        "weights.data",
+        "large.data",
+    }
+    document["programs"]["p"]["inputs"].append("another-absent.loom")
+    card.write_text(json.dumps(document))
+    assert main(arguments) == 0, capsys.readouterr().err
+    assert lock_path.read_bytes() == original
+
+
+def test_asset_lock_allows_aliased_source_edits_and_offline_reuse(tmp_path):
+    card = _card()
+    card["origins"] = {
+        "library": {"kind": "url", "url": "https://example.org/library/"}
+    }
+    card["programs"]["p"]["origin"] = "@library/"
+    card["programs"]["p"]["libraries"] = [
+        {"path": "copy.loom", "origin": "@library/code.loom"}
+    ]
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    cache = ContentCache(tmp_path / "cache")
+    with _server(card, files) as (base, requests, resources):
+        asset_lock = _lock({"weights.data": b"weights"})
+        asset_lock["scope"] = "assets"
+        resources["/model.json.lock"] = json.dumps(asset_lock).encode()
+        original_lock = resources["/model.json.lock"]
+        overrides = {"library": base}
+        plan = _remote_plan(base, cache, overrides=overrides)
+        assert set(plan.identities) == {"weights.data"}
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        install(plan, cache, first)
+        installed_lock = (first / "model.json.lock").read_bytes()
+        (first / "code.loom").write_bytes(b"locally edited")
+        (first / "copy.loom").unlink()
+        install(plan, cache, first)
+        assert (first / "code.loom").read_bytes() == b"locally edited"
+        assert (first / "copy.loom").read_bytes() == b"code"
+        assert (first / "model.json.lock").read_bytes() == installed_lock
+        install(plan, cache, second)
+        assert (second / "code.loom").read_bytes() == b"code"
+        assert os.path.samefile(first / "weights.data", second / "weights.data")
+        assert resources["/model.json.lock"] == original_lock
+        assert requests.count("/weights.data") == 1
+        resources["/code.loom"] = b"upstream edit"
+        install(plan, cache, tmp_path / "third")
+        assert (tmp_path / "third/code.loom").read_bytes() == b"upstream edit"
+        assert (first / "code.loom").read_bytes() == b"locally edited"
+        before = list(requests)
+    offline = _remote_plan(base, cache, overrides=overrides, offline=True)
+    install(offline, cache, tmp_path / "offline")
+    assert requests == before
+    assert (tmp_path / "offline/code.loom").read_bytes() == b"upstream edit"
+    assert os.path.samefile(first / "weights.data", tmp_path / "offline/weights.data")
+
+
+def test_program_only_asset_lock_is_empty_and_repeatable(tmp_path):
+    document = _card()
+    document["variants"]["v"]["services"]["text"].pop("parameters")
+    (tmp_path / "code.loom").write_bytes(b"code")
+    lock = ModelLock.snapshot({}, [], scope="assets")
+    (tmp_path / "model.json.lock").write_text(json.dumps(lock))
+    cache = ContentCache(tmp_path / "cache")
+    plan = plan_fetch(
+        Document(str(tmp_path / "model.json"), json.dumps(document)),
+        ModelCard(document).select(),
+        cache,
+        offline=True,
+    )
+    assert plan.summary()["lock"] == "verify"
+    install(plan, cache, tmp_path / "output")
+    (tmp_path / "output/code.loom").write_bytes(b"edited")
+    install(plan, cache, tmp_path / "output")
+    assert (tmp_path / "output/code.loom").read_bytes() == b"edited"
+    assert json.loads((tmp_path / "output/model.json.lock").read_text()) == lock
 
 
 def test_override_retains_logical_hf_identity_in_installed_card(tmp_path):
@@ -737,6 +855,62 @@ def test_copy_is_an_explicit_independent_materialization(tmp_path):
     assert (tmp_path / "output/weights.data").read_bytes() == b"weights"
 
 
+@pytest.mark.parametrize("materialize", [None, "auto", "share", "copy"])
+def test_program_edits_are_independent_by_default_while_assets_share(
+    tmp_path, materialize
+):
+    card = _card()
+    card["programs"]["p"]["inputs"] = [{"path": "code.loom", "data": ["source.inc"]}]
+    card["programs"]["p"]["libraries"] = ["library.loombc"]
+    files = {
+        "code.loom": b"code",
+        "source.inc": b"auxiliary",
+        "library.loombc": b"library",
+        "weights.data": b"weights",
+    }
+    cache = ContentCache(tmp_path / "cache")
+    with _server(card, files) as (base, requests, _):
+        plan = _remote_plan(base, cache)
+        options = {} if materialize is None else {"materialize": materialize}
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        install(plan, cache, first, **options)
+        install(plan, cache, second, **options)
+        for name, content in files.items():
+            assert requests.count("/" + name) == 1
+            cached = cache.blob_path(hashlib.sha256(content).hexdigest())
+            shared = materialize == "share" or (
+                materialize != "copy" and name == "weights.data"
+            )
+            assert os.path.samefile(first / name, cached) == shared
+            assert os.path.samefile(second / name, cached) == shared
+            (first / name).write_bytes(b"edited")
+            expected = b"edited" if shared else content
+            assert (second / name).read_bytes() == expected
+            assert cached.read_bytes() == expected
+
+
+def test_cli_default_copies_programs_from_a_local_checkout(tmp_path, capsys):
+    (tmp_path / "model.json").write_text(json.dumps(_card()))
+    (tmp_path / "code.loom").write_bytes(b"code")
+    (tmp_path / "weights.data").write_bytes(b"weights")
+    output = tmp_path / "output"
+    arguments = [
+        str(tmp_path / "model.json"),
+        "--no-lock",
+        "--offline",
+        "--no-input",
+        "--cache=" + str(tmp_path / "cache"),
+        "--output=" + str(output),
+    ]
+    assert main(arguments) == 0, capsys.readouterr().err
+    (output / "code.loom").write_bytes(b"edited")
+    assert (tmp_path / "code.loom").read_bytes() == b"code"
+    assert os.path.samefile(output / "weights.data", tmp_path / "weights.data")
+    assert main(arguments) == 0, capsys.readouterr().err
+    assert (output / "code.loom").read_bytes() == b"edited"
+
+
 def test_shared_logical_source_is_downloaded_only_once(tmp_path):
     card = _card()
     card["programs"]["p"]["libraries"] = [{"path": "copy.loom", "origin": "code.loom"}]
@@ -748,9 +922,11 @@ def test_shared_logical_source_is_downloaded_only_once(tmp_path):
     ):
         install(_remote_plan(base, cache), cache, tmp_path / "output")
         assert requests.count("/code.loom") == 1
-        assert os.path.samefile(
+        assert not os.path.samefile(
             tmp_path / "output/code.loom", tmp_path / "output/copy.loom"
         )
+        assert (tmp_path / "output/code.loom").read_bytes() == b"code"
+        assert (tmp_path / "output/copy.loom").read_bytes() == b"code"
 
 
 def test_voice_recording_lock_and_fetch_preserve_original_bytes_and_content_type(

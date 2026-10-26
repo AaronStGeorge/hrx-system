@@ -224,7 +224,7 @@ def test_publication_resolves_one_snapshot_and_checks_each_shared_source_once(tm
         cache = _cache(tmp_path, hub)
         document = cache.read_document(str(card_path), offline=False)
         card = ModelCard.parse(document.text)
-        plan = plan_lock(document, card, cache)
+        plan = plan_lock(document, card, cache, lock_scope="all")
         assert len(plan.selections) == 4
         assert len(plan.sources) == 3
         assert sum("/revision/main" in path for _, path in hub.requests) == 1
@@ -281,7 +281,9 @@ def test_hf_document_pins_its_closure_and_reuses_shared_cache(tmp_path):
         assert not (cache.root / "blob").exists()
         for filename in ("code.loom", "weights.data"):
             cached = cache.huggingface.cached_file(hub.source(filename))
-            assert os.path.samefile(first.parent / filename, cached)
+            assert os.path.samefile(first.parent / filename, cached) == (
+                filename == "weights.data"
+            )
         before = list(hub.requests)
         hub.approved = False
         # A fresh operation keeps the document's resolved snapshot while offline.
@@ -293,6 +295,10 @@ def test_hf_document_pins_its_closure_and_reuses_shared_cache(tmp_path):
         assert os.path.samefile(
             first.parent / "weights.data", second.parent / "weights.data"
         )
+        (first.parent / "code.loom").write_bytes(b"edited")
+        cached_code = cache.huggingface.cached_file(hub.source("code.loom"))
+        assert (second.parent / "code.loom").read_bytes() == cached_code.read_bytes()
+        assert cached_code.read_bytes() != b"edited"
         assert hub.requests == before
         assert sum("/revision/main" in path for _, path in hub.requests) == 1
 
@@ -320,7 +326,8 @@ def test_hf_origin_update_records_revision_and_only_selected_files(tmp_path):
         assert lock.origins == {
             "hub": {"requested": root, "resolved": {"revision": hub.revision}}
         }
-        assert len(lock.cover(selection)) == 2
+        assert lock.scope == "assets"
+        assert set(lock.cover(selection)) == {"weights.data"}
         assert not any("unused.data" in path for _, path in hub.requests)
         assert (installed.parent / "weights.data").read_bytes() == b"weights"
 

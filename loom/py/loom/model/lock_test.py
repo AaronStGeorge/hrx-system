@@ -93,6 +93,73 @@ def test_incomplete_lock_rejects_before_any_file_is_opened():
         ModelLock(lock).cover(ModelCard(_card()).select())
 
 
+def test_asset_scope_excludes_local_and_aliased_programs_and_auxiliary_files():
+    card = _card()
+    card["origins"]["library"] = {
+        "kind": "url",
+        "url": "https://example.org/library/revision/",
+    }
+    program = card["programs"]["mixed"]
+    program["inputs"] = [{"path": "prepare.loom", "data": ["header.h"]}]
+    program["libraries"] = [
+        {"path": "library.loombc", "origin": "@library/bundle.loombc"}
+    ]
+    document = _lock()
+    document["scope"] = "assets"
+    document["files"] = [
+        file for file in document["files"] if file["origin"] != "prepare.loom"
+    ]
+    lock = ModelLock(document)
+    assert set(lock.cover(ModelCard(card).select())) == {"shard.bin"}
+    program["inputs"].append("new-program.loom")
+    assert set(lock.cover(ModelCard(card).select())) == {"shard.bin"}
+    document["files"] = []
+    with pytest.raises(ManifestError, match=r"does not cover 'shard\.bin'"):
+        ModelLock(document).cover(ModelCard(card).select())
+
+
+def test_asset_used_as_program_at_another_destination_remains_locked():
+    card = _card()
+    card["programs"]["mixed"]["libraries"] = [
+        {"path": "same.loom", "origin": "@weights/shard.bin"}
+    ]
+    document = _lock()
+    document["scope"] = "assets"
+    document["files"] = [
+        file for file in document["files"] if file["origin"] != "prepare.loom"
+    ]
+    coverage = ModelLock(document).cover(ModelCard(card).select())
+    assert set(coverage) == {"shard.bin", "same.loom"}
+    assert coverage["shard.bin"] == coverage["same.loom"]
+
+
+def test_version_one_always_requires_complete_program_coverage():
+    document = _lock()
+    document["schema_version"] = 1
+    document.pop("scope")
+    assert ModelLock(document).scope == "all"
+    assert set(ModelLock(document).cover(ModelCard(_card()).select())) == {
+        "prepare.loom",
+        "shard.bin",
+    }
+    document["files"] = [
+        file for file in document["files"] if file["origin"] != "prepare.loom"
+    ]
+    with pytest.raises(ManifestError, match=r"does not cover 'prepare\.loom'"):
+        ModelLock(document).cover(ModelCard(_card()).select())
+
+
+@pytest.mark.parametrize("scope", [None, "programs", True])
+def test_version_two_requires_an_explicit_valid_scope(scope):
+    document = _lock()
+    if scope is None:
+        document.pop("scope")
+    else:
+        document["scope"] = scope
+    with pytest.raises(ManifestError, match="scope"):
+        ModelLock(document)
+
+
 def test_conflicting_logical_sources_are_rejected():
     identities = [FileIdentity("a", 1, "0" * 64), FileIdentity("a", 2, "1" * 64)]
     with pytest.raises(ManifestError, match="conflicting content"):

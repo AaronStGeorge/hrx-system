@@ -69,7 +69,7 @@ def _source(
             kind = descriptor["kind"]
             if kind == "hf":
                 origin = descriptor | {"path": suffix}
-                if lock:
+                if identity is not None and lock:
                     revision = lock.origins[alias]["resolved"]["revision"]
             elif kind == "url":
                 origin = {
@@ -208,8 +208,10 @@ def render_markdown(
         "This reference describes the card's declared choices. "
         "Execution qualification belongs to the model's published checks.",
         "",
-        "Source links use the supplied lock's immutable revisions; byte counts and "
-        "SHA-256 values commit to output files. Generation does not verify payloads."
+        "Locked source links use the supplied lock's immutable revisions; byte "
+        "counts and SHA-256 values commit to output files within its "
+        + _code(lock.scope)
+        + " scope. Generation does not verify payloads."
         if lock
         else "Source links use authored revisions, including moving names when "
         "declared. No acquisition lock was supplied.",
@@ -324,7 +326,9 @@ def render_markdown(
                 "| --- | --- | --- |",
             ]
             for path in uses:
-                identity = identities[path]
+                identity = identities.get(path)
+                if identity is None:
+                    continue
                 lines.append(
                     f"| {_code(path)} | {identity.size} | {_code(identity.sha256)} |"
                 )

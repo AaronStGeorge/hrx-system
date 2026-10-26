@@ -18,6 +18,7 @@ from threading import Event
 
 from .manifest import (
     ManifestError,
+    ModelFile,
     Selection,
     _json_value,
     _mapping,
@@ -34,6 +35,26 @@ def file_key(origin: str | dict, transform: dict | None = None) -> str:
     """Logical output identity, independent of placement and transport override."""
     value = {"origin": origin, "transform": transform} if transform else origin
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def lock_files(selection: Selection, scope: str) -> dict[str, ModelFile]:
+    """Selects required commitments by declared use, independent of file format."""
+    if scope == "all":
+        return selection.files
+    if scope != "assets":
+        raise ManifestError("lock scope must be 'assets' or 'all'")
+    assets = {
+        file_key(file.origin, file.transform)
+        for file in selection.files.values()
+        if file.roles - {"program", "auxiliary"}
+    }
+    # A logical source used as an asset remains protected at every destination,
+    # including an additional program or auxiliary use of the same bytes.
+    return {
+        name: file
+        for name, file in selection.files.items()
+        if file_key(file.origin, file.transform) in assets
+    }
 
 
 def file_digest(path: Path, *, cancelled: Event | None = None) -> tuple[int, str]:
@@ -93,17 +114,26 @@ class FileIdentity:
 
 
 class ModelLock:
-    """An owned publication lock; selection never mutates or expands it."""
+    """Explicit asset or complete coverage; selection never expands the lock."""
 
     def __init__(self, document: dict):
         doc = copy.deepcopy(document)
         _json_value(doc, "lock")
         _mapping(doc, "lock")
-        if type(doc.get("schema_version")) is not int or doc["schema_version"] != 1:
+        version = doc.get("schema_version")
+        if type(version) is not int or version not in (1, 2):
             raise ManifestError(
-                "lock.schema_version: unsupported lock version; supported: 1"
+                "lock.schema_version: unsupported lock version; supported: 1, 2"
             )
-        _object(doc, "lock", ("schema_version", "origins", "files"), ("$schema",))
+        required = ("schema_version", "origins", "files")
+        _object(
+            doc, "lock", required + (("scope",) if version == 2 else ()), ("$schema",)
+        )
+        # Version 1 committed to every file. Only an explicit version 2 scope
+        # changes coverage; a missing identity never implies editable content.
+        self.scope = doc["scope"] if version == 2 else "all"
+        if self.scope not in ("assets", "all"):
+            raise ManifestError("lock.scope: expected 'assets' or 'all'")
         if "$schema" in doc:
             _string(doc["$schema"], "lock.$schema")
         self.origins = _mapping(doc["origins"], "lock.origins", empty=True)
@@ -172,10 +202,10 @@ class ModelLock:
         return cls(parse_json(source))
 
     def cover(self, selection: Selection) -> dict[str, FileIdentity]:
-        """Checks complete selected coverage before any source payload is read."""
+        """Checks complete coverage within scope before reading source payloads."""
         roots = selection.document.get("origins", {})
         covered = {}
-        for name, file in selection.files.items():
+        for name, file in lock_files(selection, self.scope).items():
             if isinstance(file.origin, str) and file.origin.startswith("@"):
                 alias = file.origin[1:].split("/", 1)[0]
                 if (
@@ -195,8 +225,12 @@ class ModelLock:
         return covered
 
     @staticmethod
-    def snapshot(origins: dict, identities: list[FileIdentity]) -> dict:
+    def snapshot(
+        origins: dict, identities: list[FileIdentity], *, scope: str = "all"
+    ) -> dict:
         """Writes exactly this verified set, with no historical accumulation."""
+        if scope not in ("assets", "all"):
+            raise ManifestError("lock.scope: expected 'assets' or 'all'")
         files = {}
         used_origins = set()
         for identity in identities:
@@ -209,7 +243,8 @@ class ModelLock:
             if isinstance(identity.origin, str) and identity.origin.startswith("@"):
                 used_origins.add(identity.origin[1:].split("/", 1)[0])
         return {
-            "schema_version": 1,
+            "schema_version": 2,
+            "scope": scope,
             "origins": {
                 name: copy.deepcopy(origins[name]) for name in sorted(used_origins)
             },

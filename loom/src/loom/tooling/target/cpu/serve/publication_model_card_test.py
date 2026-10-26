@@ -84,7 +84,7 @@ def main(server, fixture):
             )
             check_model(server, deployment, completion(bias))
             installed.append(output)
-        assert os.path.samefile(
+        assert not os.path.samefile(
             installed[0] / "control.loom", installed[1] / "control.loom"
         )
         assert not os.path.samefile(

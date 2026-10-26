@@ -213,6 +213,20 @@ def test_offline_reuses_verified_blob_without_touching_url(tmp_path):
     assert acquired.path == cached.path
 
 
+def test_offline_editable_source_uses_and_verifies_its_local_receipt(tmp_path):
+    cache = ContentCache(tmp_path / "cache")
+    with _held_http_body() as (url, _, release):
+        release.set()
+        source = Source("program.loom", {"kind": "url", "url": url})
+        acquired = cache.acquire(source, None, offline=False)
+    offline = ContentCache(cache.root).acquire(source, None, offline=True)
+    assert offline.path == acquired.path
+    assert offline.identity == acquired.identity
+    acquired.path.write_bytes(b"evil")
+    with pytest.raises(ManifestError, match="integrity mismatch"):
+        cache.acquire(source, None, offline=True)
+
+
 def test_cache_corruption_fails_instead_of_silently_refetching(tmp_path):
     cache = ContentCache(tmp_path / "cache")
     identity = _identity(b"code")

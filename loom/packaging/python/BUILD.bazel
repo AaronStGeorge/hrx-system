@@ -108,6 +108,7 @@ filegroup(
         "//loom/py/loom/model:model-card.v1.schema.json",
         "//loom/py/loom/model:model-catalog.v1.schema.json",
         "//loom/py/loom/model:model-lock.v1.schema.json",
+        "//loom/py/loom/model:model-lock.v2.schema.json",
     ],
 )
 

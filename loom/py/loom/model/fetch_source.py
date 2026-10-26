@@ -241,6 +241,27 @@ class SourceResolver:
             )
         return {**root, "path": path}
 
+    def local_file(self, origin: str | dict) -> Path | None:
+        """Locates local inputs for output-overlap checks without provider IO."""
+        caller_owned = False
+        if isinstance(origin, str):
+            if origin.startswith("@"):
+                name, suffix = origin[1:].split("/", 1)
+                root = self.overrides.get(name, self.roots[name])
+                if root["kind"] != "local":
+                    return None
+                caller_owned = name in self.overrides
+                descriptor = self._root_file(root, suffix, caller_owned=caller_owned)
+            elif "://" in origin or self.document.remote:
+                return None
+            else:
+                descriptor = {"kind": "local", "path": origin}
+        elif origin["kind"] == "local":
+            descriptor = origin
+        else:
+            return None
+        return Path(self._file(descriptor, caller_owned=caller_owned)["path"])
+
     def resolve(self, origin: str | dict, identity: FileIdentity | None) -> Source:
         if isinstance(origin, str) and origin.startswith("@"):
             name, path = origin[1:].split("/", 1)
@@ -249,12 +270,15 @@ class SourceResolver:
             if name not in self.origins:
                 record = {"requested": copy.deepcopy(requested)}
                 if requested["kind"] == "hf" and (not overridden or self.pin_revisions):
-                    locked = (
-                        self.lock.origins[name].get("resolved") if self.lock else None
+                    locked = self.lock.origins.get(name) if self.lock else None
+                    resolution = (
+                        locked.get("resolved")
+                        if locked and locked["requested"] == requested
+                        else None
                     )
                     record["resolved"] = {
                         "revision": self._revision(
-                            requested, locked, overridden=overridden
+                            requested, resolution, overridden=overridden
                         )
                     }
                 self.origins[name] = record

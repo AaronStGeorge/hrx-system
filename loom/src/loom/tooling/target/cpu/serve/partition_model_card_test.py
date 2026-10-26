@@ -106,7 +106,7 @@ def main(fetch, serve, fixture, *built):
             finally:
                 server.shutdown()
                 thread.join()
-        assert os.path.samefile(
+        assert not os.path.samefile(
             outputs[0][0] / "control.loom", outputs[1][0] / "control.loom"
         )
         assert not os.path.samefile(
