@@ -191,7 +191,7 @@ void iree_hal_amd_gpu_device_options_initialize(
     iree_hal_amd_gpu_device_options_t* out_options) {
   *out_options = (iree_hal_amd_gpu_device_options_t){
       .queue_family_ordinal = UINT32_MAX,
-      .queue_count = 1,
+      .queue_count = 4,
       .host_numa_node = UINT32_MAX,
       .completion_spin_ns = 100000,
       .queue = {.ring_byte_length = 0,

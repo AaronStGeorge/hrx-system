@@ -91,10 +91,12 @@ packet bodies are visible. Both protocols share memory, dependency admission,
 and device progress owners. Other native services fail explicitly at construction
 or operation admission.
 
-`rdna://0?queue_count=2` provisions two queues sharing the device's execution
-workers. `queue_family` selects an exact native family ordinal instead of the
-architecture preference. `cdna://0?queue_count=2` provisions the same HAL queue
-interface on the first CDNA endpoint. `host_numa_node` selects CPU placement
+GPU devices provision four compute queues by default, sharing the device's
+execution workers. `rdna://0`, `cdna://0`, and `amdgpu://0` use this default
+on their selected endpoint. An explicit `queue_count` selects a different
+inventory; for example, `rdna://0?queue_count=1` provisions a single compute
+queue. `queue_family` selects an exact native family ordinal instead of the
+architecture preference. `host_numa_node` selects CPU placement
 for the workers and shared proactor; GPU-local memory node IDs are not CPU
 NUMA node IDs.
 

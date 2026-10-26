@@ -53,7 +53,7 @@ extern "C" {
 // across aliases; they are not the public URI ordinals. Visibility is device
 // selection policy, not access control.
 // The `columns` XDNA parameter selects context width (default 1). GPU options
-// are `queue_count` (default 1), `queue_family` (an exact native family
+// are `queue_count` (default 4), `queue_family` (an exact native family
 // ordinal; otherwise prefer AQL on CDNA and PM4 on RDNA), and `host_numa_node`
 // (an explicit CPU NUMA node; otherwise placement is unspecified).
 iree_status_t iree_hal_amd_driver_create(amdf_native_lifetime_t native_lifetime,

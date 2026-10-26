@@ -86,16 +86,18 @@ selected queue family; removing and reloading a model reuses the available
 inventory. A single-queue device is supported, and models share queues when
 there are more live executions than queues.
 
-For independent AMDGPU model submissions, provision extra queues at startup:
+AMDGPU devices provision four compute queues by default, so independent models
+need no extra queue configuration:
 
 ```sh
-loom-serve --device='amdgpu://0?queue_count=2' \
+loom-serve --device=amdgpu://0 \
   --model=models/chat/model.json --model=models/speech/model.json
 ```
 
 Both model documents select the same device and share its storage and residency
-policy. `queue_count` defaults to one per selected GPU and remains fixed for the
-device lifetime. Separate queues allow independent submissions to overlap, but
+policy. The provisioned queue count remains fixed for the device lifetime;
+an explicit URI parameter such as `?queue_count=1` overrides the default.
+Separate queues allow independent submissions to overlap, but
 do not reserve compute or memory bandwidth and provide no latency guarantee.
 Assignment counts live executions; request batching and residency pinning remain
 separate controls. Vulkan uses its provisioned inventory, and task devices use
