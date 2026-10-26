@@ -251,6 +251,37 @@ LOOMC_API_EXPORT void loomc_pass_program_retain(
 LOOMC_API_EXPORT void loomc_pass_program_release(
     loomc_pass_program_t* pass_program);
 
+/// Prints the prepared program's pipeline IR as textual `.loom`.
+///
+/// The listing contains the pipeline selected at creation and its called
+/// pipelines, preserving source-level control flow and pass options. It does
+/// not expand calls into the flattened instruction program. Programs created
+/// from a module symbol print their owned snapshot, independently of later
+/// changes to the original module.
+///
+/// Printing is optional: preparing and running programs do not select the
+/// text printer. Link-time optimization can omit it from nonprinting clients.
+///
+/// @param pass_program Immutable prepared program to inspect.
+/// @param options Module text presentation, location, and source identifier
+/// options. `NULL` selects defaults. `format` must be unknown or text.
+/// @param allocator Host allocator used for source-owned storage.
+/// @param out_source Receives one retained text source on success, or NULL on
+/// failure.
+/// @return OK when printing succeeded.
+///
+/// @ownership
+/// The caller releases the returned source with `loomc_source_release`. Its
+/// bytes remain valid independently of the pass program and context.
+///
+/// @thread_safety
+/// Printing is read-only and may run concurrently with other uses of the
+/// immutable program.
+LOOMC_API_EXPORT loomc_status_t loomc_pass_program_print_text_to_source(
+    const loomc_pass_program_t* pass_program,
+    const loomc_module_serialize_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source);
+
 /// Executes a prepared pipeline, transforming a caller-owned module in place.
 ///
 /// Structural and target-Low input invariants are established before execution,

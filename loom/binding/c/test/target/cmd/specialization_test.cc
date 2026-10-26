@@ -381,6 +381,7 @@ command.program.def public @dispatch() launch() {
         .type = LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_REQUEST_OPTIONS,
         .structure_size = sizeof(options),
         .next = &target_options,
+        .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING,
         .request_sink = sink,
     };
     LOOMC_ASSERT_OK(loomc_cmd_program_product_build_request(
@@ -393,6 +394,7 @@ command.program.def public @dispatch() launch() {
         .next = &target_options,
         .link_index = index.get(),
         .flags = LOOMC_CMD_PROGRAM_PRODUCT_FLAG_INCLUDE_INPUT_EXPORTS,
+        .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING,
         .request_sink = sink,
     };
     LOOMC_ASSERT_OK(loomc_cmd_program_product_build(workspace.get(), &options,
@@ -403,6 +405,12 @@ command.program.def public @dispatch() launch() {
   ResultPtr result_owner(result);
   ExpectSucceededResult(result);
   ASSERT_EQ(capture.requests.size(), 2u);
+  ASSERT_EQ(loomc_result_artifact_count(result), 1u);
+  const loomc_artifact_t* listing = loomc_result_artifact_at(result, 0);
+  EXPECT_EQ(listing->kind, LOOMC_ARTIFACT_KIND_TEXT);
+  EXPECT_EQ(ToString(listing->format),
+            LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING);
+  EXPECT_GT(loomc_byte_sequence_length(listing->contents), 0u);
 
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pipeline = CreatePreparedLowPassProgram(context.get());

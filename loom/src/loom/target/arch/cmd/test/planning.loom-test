@@ -2,9 +2,9 @@
 // before the helpers are inlined into the target-neutral command root.
 // RUN: emit command-program @target_counts
 
-amdgpu.target<gfx11-generic> @wave32 {subgroup_size = 32}
+test.target<low_core> @wave32 {subgroup_size = 32}
 
-amdgpu.target<gfx11-generic> @wave64 {subgroup_size = 64}
+test.target<low_core> @wave64 {subgroup_size = 64}
 
 kernel.def target(@wave32) @narrow() {
   %width = target.subgroup.size : index

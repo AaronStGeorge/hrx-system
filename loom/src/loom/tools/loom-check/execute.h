@@ -41,8 +41,6 @@
 extern "C" {
 #endif
 
-typedef struct loom_cleanup_pattern_provider_set_t
-    loom_cleanup_pattern_provider_set_t;
 typedef struct loom_target_environment_t loom_target_environment_t;
 typedef struct loom_check_diagnostic_collector_t
     loom_check_diagnostic_collector_t;
@@ -286,8 +284,6 @@ struct loom_check_environment_t {
   const loom_target_environment_t* target_environment;
   // Lazy public session shared by all check modes.
   loom_check_compile_session_t* compile_session;
-  // Cleanup rewrite providers linked into this runner.
-  const loom_cleanup_pattern_provider_set_t* cleanup_pattern_provider_set;
   // Optional emit providers linked into this runner.
   loom_check_emit_provider_registry_t emit_providers;
   // Optional requirement providers linked into this runner.

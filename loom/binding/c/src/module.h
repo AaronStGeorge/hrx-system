@@ -112,6 +112,10 @@ LOOMC_API_PRIVATE loom_module_t* loomc_module_loom_module(
 LOOMC_API_PRIVATE const loom_module_t* loomc_module_const_loom_module(
     const loomc_module_t* module);
 
+// Validates a public module argument and requires its internal IR storage.
+LOOMC_API_PRIVATE loomc_status_t loomc_module_require_internal(
+    const loomc_module_t* module, const loom_module_t** out_internal_module);
+
 // Returns the exact-source resolver owned by |module|.
 LOOMC_API_PRIVATE loom_source_resolver_t
 loomc_module_source_resolver(const loomc_module_t* module);
@@ -173,6 +177,12 @@ LOOMC_API_PRIVATE loomc_status_t loomc_module_deserialize_explicit_source(
 // Validates source serialization options without selecting a format.
 LOOMC_API_PRIVATE loomc_status_t loomc_module_validate_serialize_options(
     const loomc_module_serialize_options_t* options);
+
+// Resolves public presentation options for one statically selected format.
+LOOMC_API_PRIVATE loomc_status_t loomc_module_resolve_serialize_options(
+    const loomc_module_serialize_options_t* options,
+    loomc_source_format_t required_format,
+    loomc_module_resolved_serialize_options_t* out_options);
 
 // Serializes a module through one statically selected format encoder.
 LOOMC_API_PRIVATE loomc_status_t loomc_module_serialize_explicit_source(

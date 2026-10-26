@@ -10,6 +10,7 @@
 #include "loomc/artifact.h"
 #include "loomc/config.h"
 #include "loomc/context.h"
+#include "loomc/emit.h"
 #include "loomc/link_index.h"
 #include "loomc/module.h"
 #include "loomc/product.h"
@@ -23,8 +24,8 @@
 /// Command product construction selects command roots from a reusable frozen
 /// link index, lowers their host-side orchestration to portable command bytes,
 /// and optionally publishes independently compilable kernel requests.
-/// The operation never prints or reparses a module. Exact root ordinals let a
-/// high-throughput embedding resolve human-readable names once at ingress and
+/// Construction never roundtrips a module through text. Exact root ordinals let
+/// a high-throughput embedding resolve human-readable names once at ingress and
 /// use indexed identity throughout planning.
 ///
 /// Without a request sink, construction leaves kernel implementation facets
@@ -32,6 +33,15 @@
 /// sites and publishes one ordinary bytecode request per live semantic class.
 /// Published requests transfer independently and are never retained by the
 /// product.
+///
+/// Setting `artifact_flags` to `LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING` also
+/// returns one text artifact in the result, with format
+/// `LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING` and identifier
+/// `command-program.listing`. It contains the lowered command roots in product
+/// order, including repeated roots. Listing bytes belong to the result, not
+/// the product; neither retains the temporary compiler plan. Zero flags skip
+/// formatting entirely. The primary executable product is always returned,
+/// with or without `LOOMC_EMIT_ARTIFACT_FLAG_PRIMARY`.
 ///
 /// @par Example
 /// Build one command product from an already resolved root:
@@ -64,6 +74,9 @@ extern "C" {
 
 /// Stable format name for serialized portable command-program bytes.
 #define LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM "loom-command"
+
+/// Stable format name for lowered command-program assembly text.
+#define LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING "cmd-assembly"
 
 /// Command-product operation flag bits.
 typedef enum loomc_cmd_program_product_flag_bits_e {
@@ -110,6 +123,10 @@ typedef struct loomc_cmd_program_product_options_t {
   /// Product construction flags.
   loomc_cmd_program_product_flags_t flags;
 
+  /// Optional result artifacts. TARGET_LISTING captures lowered command text;
+  /// zero returns only the executable product and diagnostics.
+  loomc_emit_artifact_flags_t artifact_flags;
+
   /// Per-invocation config bindings applied during selective materialization.
   loomc_config_options_t config;
 
@@ -155,6 +172,10 @@ typedef struct loomc_cmd_program_request_options_t {
   /// Optional frozen library-only index used to resolve request declarations.
   /// Passing NULL plans against the request source alone.
   const loomc_link_index_t* library_index;
+
+  /// Optional result artifacts. TARGET_LISTING captures lowered command text;
+  /// zero returns only the executable product and diagnostics.
+  loomc_emit_artifact_flags_t artifact_flags;
 
   /// Per-invocation config bindings applied during selective materialization.
   loomc_config_options_t config;
@@ -214,6 +235,10 @@ typedef struct loomc_cmd_program_module_options_t {
   /// Product construction flags. INPUT exports selected by the include flag
   /// are appended after explicit roots that do not already name them.
   loomc_cmd_program_product_flags_t flags;
+
+  /// Optional result artifacts. TARGET_LISTING captures lowered command text;
+  /// zero returns only the executable product and diagnostics.
+  loomc_emit_artifact_flags_t artifact_flags;
 
   /// Per-invocation config bindings applied during selective materialization.
   loomc_config_options_t config;
@@ -313,7 +338,7 @@ LOOMC_API_EXPORT loomc_status_t loomc_cmd_program_product_build(
 ///
 /// The operation indexes only `request`, maps its exact roots into an overlay
 /// over `options->library_index`, and directly plans the command product. It
-/// does not print, reparse names, or serialize an intermediate linked request.
+/// does not reparse names or serialize an intermediate linked request.
 /// The returned product preserves request-root order as export order. Published
 /// kernel requests carry provisional bindings to its executable-entry
 /// requirements.
@@ -356,7 +381,7 @@ LOOMC_API_EXPORT loomc_status_t loomc_cmd_program_product_build_request(
 ///
 /// The operation creates an invocation-local index over `module`, resolves
 /// named roots in that exact provider, and directly plans the command product.
-/// It does not print, serialize, or reparse the module. An optional frozen
+/// It does not serialize or reparse the input module. An optional frozen
 /// library index supplies dependencies without being traversed or copied.
 ///
 /// @param workspace Invocation-local compiler workspace.

@@ -20,7 +20,9 @@
 #include "loom/tools/loom-benchmark/case_execution.h"
 #include "loom/tools/loom-benchmark/hal_actual.h"
 #include "loom/tools/loom-benchmark/input_ring.h"
+#include "loom/tools/loom-benchmark/output.h"
 #include "loom/tools/loom-benchmark/profile_report.h"
+#include "loomc/iree.h"
 
 struct loom_benchmark_scenario_execution_t {
   // Borrowed run dependencies shared by every scenario work item.
@@ -41,6 +43,8 @@ struct loom_benchmark_scenario_execution_t {
   // Materialized values for |prepared_scenario| and
   // |prepared_configuration_ordinal|.
   loom_testbench_scenario_configuration_values_t configuration;
+  // Disambiguates compiler results within the configuration being prepared.
+  iree_host_size_t compile_result_ordinal;
   // True when |configuration| owns initialized storage.
   bool configuration_initialized;
   // Products prepared from |configuration| before any trial values exist.
@@ -104,6 +108,77 @@ static void loom_benchmark_scenario_reset_configuration(
   execution->prepared_configuration_ordinal = 0;
 }
 
+static iree_status_t loom_benchmark_scenario_observe_compile_result(
+    void* user_data, const loomc_result_t* result) {
+  loom_benchmark_scenario_execution_t* execution =
+      (loom_benchmark_scenario_execution_t*)user_data;
+  const loom_benchmark_work_plan_execution_options_t* options =
+      execution->options;
+  IREE_RETURN_IF_ERROR(loom_testbench_observe_compile_result(
+      options->compilation->result_callback, result));
+  loom_benchmark_artifact_bundle_t* bundle =
+      options->hal_context->artifact_bundle;
+  if (!loom_benchmark_artifact_bundle_wants_debug_artifacts(bundle)) {
+    return iree_ok_status();
+  }
+
+  const loom_testbench_scenario_configuration_values_t* configuration =
+      &execution->configuration;
+  const iree_host_size_t scenario_index =
+      configuration->scenario_plan - options->module_plan->scenarios;
+  const iree_host_size_t result_ordinal = execution->compile_result_ordinal++;
+  iree_string_builder_t leaf;
+  iree_string_builder_initialize(options->host_allocator, &leaf);
+  iree_status_t status = iree_ok_status();
+  for (loomc_host_size_t i = 0;
+       i < loomc_result_artifact_count(result) && iree_status_is_ok(status);
+       ++i) {
+    const loomc_artifact_t* artifact = loomc_result_artifact_at(result, i);
+    if (artifact->kind != LOOMC_ARTIFACT_KIND_TEXT) {
+      continue;
+    }
+    iree_string_builder_reset(&leaf);
+    status = loom_benchmark_append_sanitized_path_component(
+        options->run->run_id, &leaf);
+    if (iree_status_is_ok(status)) {
+      status = iree_string_builder_append_format(&leaf, "_scenario%" PRIhsz "_",
+                                                 scenario_index);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_benchmark_append_sanitized_path_component(
+          configuration->scenario_plan->name, &leaf);
+    }
+    if (iree_status_is_ok(status)) {
+      status = iree_string_builder_append_format(
+          &leaf,
+          "_configuration%" PRIhsz "_compile%" PRIhsz "_artifact%" PRIhsz "_",
+          configuration->configuration_ordinal, result_ordinal, i);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_benchmark_append_sanitized_path_component(
+          iree_string_view_from_loomc(artifact->identifier), &leaf);
+    }
+    if (iree_status_is_ok(status)) {
+      status = iree_string_builder_append_cstring(&leaf, ".");
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_benchmark_append_sanitized_path_component(
+          iree_string_view_from_loomc(artifact->format), &leaf);
+    }
+    char* path = NULL;
+    if (iree_status_is_ok(status)) {
+      status = loom_benchmark_artifact_bundle_write_file(
+          bundle, LOOM_BENCHMARK_BUNDLE_FILE_TARGET_LISTING,
+          bundle->target_listing_dir, iree_string_builder_view(&leaf),
+          iree_byte_sequence_from_loomc(artifact->contents),
+          options->host_allocator, &path);
+    }
+    iree_allocator_free(options->host_allocator, path);
+  }
+  iree_string_builder_deinitialize(&leaf);
+  return status;
+}
+
 static iree_status_t loom_benchmark_scenario_ensure_profile(
     loom_benchmark_scenario_execution_t* execution) {
   if (execution->profile_initialized) {
@@ -127,7 +202,11 @@ static iree_status_t loom_benchmark_scenario_ensure_profile(
   loom_run_hal_testbench_actual_provider_options_t provider_options;
   loom_benchmark_hal_provider_options_initialize(
       options->hal_context, compilation, /*invocation=*/NULL,
-      compilation->result_callback, &provider_options);
+      (loom_testbench_compile_result_callback_t){
+          .fn = loom_benchmark_scenario_observe_compile_result,
+          .user_data = execution,
+      },
+      &provider_options);
   loom_run_hal_testbench_scenario_profile_initialize(
       iree_string_view_is_empty(target)
           ? options->hal_context->execution.driver_name
@@ -174,6 +253,7 @@ static iree_status_t loom_benchmark_scenario_ensure_configuration(
               : execution->entropy_domain,
           configuration_ordinal, &execution->configuration);
   if (iree_status_is_ok(status)) {
+    execution->compile_result_ordinal = 0;
     status = loom_testbench_prepare_scenario_configuration(
         &execution->scenario_options, &execution->configuration,
         &execution->prepared);

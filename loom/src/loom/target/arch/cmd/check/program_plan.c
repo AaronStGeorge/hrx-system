@@ -6,23 +6,15 @@
 
 #include "loom/target/arch/cmd/check/program_plan.h"
 
-#include "loom/codegen/low/text_asm.h"
-#include "loom/format/text/printer.h"
-#include "loom/ir/module.h"
-#include "loom/link/module_index.h"
-#include "loom/ops/command/ops.h"
-#include "loom/pass/registry.h"
-#include "loom/target/arch/cmd/artifact_set.h"
-#include "loom/target/arch/cmd/lower/program_plan.h"
-#include "loom/target/arch/cmd/lower/program_plan_index.h"
 #include "loom/target/arch/cmd/program.h"
-#include "loom/tools/loom-check/diagnostics.h"
-#include "loomc/interop.h"
+#include "loom/tools/loom-check/compile.h"
+#include "loom/tools/loom-check/compile_diagnostics.h"
 #include "loomc/iree.h"
+#include "loomc/target/cmd/program.h"
 
 typedef struct loom_cmd_program_plan_check_options_t {
   // Command program symbol names selected in caller order.
-  iree_string_view_t* root_names;
+  loomc_string_view_t* root_names;
   // Number of entries in |root_names|.
   iree_host_size_t root_count;
 } loom_cmd_program_plan_check_options_t;
@@ -65,13 +57,14 @@ static iree_status_t loom_cmd_program_plan_check_parse_roots(
     }
     root = iree_string_view_substr(root, 1, IREE_HOST_SIZE_MAX);
     for (iree_host_size_t j = 0; j < i; ++j) {
-      if (iree_string_view_equal(root, options->root_names[j])) {
+      if (iree_string_view_equal(
+              root, iree_string_view_from_loomc(options->root_names[j]))) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "duplicate command program root '@%.*s'",
                                 (int)root.size, root.data);
       }
     }
-    options->root_names[i] = root;
+    options->root_names[i] = loomc_string_view_from_iree(root);
     remaining = tail;
   }
   options->root_count = root_count;
@@ -102,204 +95,87 @@ static iree_status_t loom_cmd_program_plan_check_parse_options(
   return iree_ok_status();
 }
 
-static iree_status_t loom_cmd_program_plan_check_resolve_roots(
-    loom_module_t* module, const loom_cmd_program_plan_check_options_t* options,
-    iree_arena_allocator_t* arena, loom_symbol_ref_t** out_root_refs) {
-  *out_root_refs = NULL;
-  loom_symbol_ref_t* root_refs = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, options->root_count, sizeof(*root_refs), (void**)&root_refs));
-  for (iree_host_size_t i = 0; i < options->root_count; ++i) {
-    const iree_string_view_t name = options->root_names[i];
-    const loom_string_id_t name_id = loom_module_lookup_string(module, name);
-    if (name_id == LOOM_STRING_ID_INVALID) {
-      return iree_make_status(IREE_STATUS_NOT_FOUND,
-                              "command program root '@%.*s' was not found",
-                              (int)name.size, name.data);
-    }
-    const loom_symbol_id_t symbol_id = loom_module_find_symbol(module, name_id);
-    if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
-      return iree_make_status(IREE_STATUS_NOT_FOUND,
-                              "command program root '@%.*s' was not found",
-                              (int)name.size, name.data);
-    }
-    loom_op_t* defining_op = module->symbols.entries[symbol_id].defining_op;
-    if (!defining_op || !loom_command_program_def_isa(defining_op)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "symbol '@%.*s' is not a command.program.def",
-                              (int)name.size, name.data);
-    }
-    root_refs[i] = (loom_symbol_ref_t){
-        .module_id = 0,
-        .symbol_id = symbol_id,
-    };
-  }
-  *out_root_refs = root_refs;
-  return iree_ok_status();
-}
-
-// Indexes the check module and plans only the command implementation and
-// exact kernel facets requested by its roots. Kernel bodies remain unopened.
-static iree_status_t loom_cmd_program_plan_check_build_from_roots(
-    loom_module_t* source_module, const loom_symbol_ref_t* source_root_refs,
-    iree_host_size_t root_count, iree_arena_allocator_t* arena,
-    iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
-    const loom_cleanup_pattern_provider_set_t* cleanup_pattern_provider_set,
-    iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
-    loom_cmd_program_plan_t* out_plan) {
-  *out_valid = false;
-  *out_plan = (loom_cmd_program_plan_t){0};
-
-  loom_pass_registry_storage_t pass_registry_storage;
-  IREE_RETURN_IF_ERROR(
-      iree_status_from_loomc(loomc_target_environment_get_native_pass_registry(
-          /*target_environment=*/NULL, &pass_registry_storage)));
-
-  loom_link_module_index_t* index = NULL;
-  IREE_RETURN_IF_ERROR(loom_link_module_index_allocate(
-      source_module->context, block_pool, host_allocator, &index));
-  iree_host_size_t provider_ordinal = 0;
-  iree_status_t status = loom_link_module_index_add_materialized(
-      index, source_module,
-      &(loom_link_module_index_add_options_t){
-          .provider_name = IREE_SV("command_program_check"),
-      },
-      &provider_ordinal);
-
-  const loom_link_module_index_module_t* indexed_module = NULL;
-  if (iree_status_is_ok(status)) {
-    const loom_link_module_index_provider_t* provider =
-        loom_link_module_index_provider_at(index, provider_ordinal);
-    IREE_ASSERT(provider != NULL);
-    IREE_ASSERT_EQ(provider->module_count, 1u);
-    indexed_module =
-        loom_link_module_index_module_at(index, provider->module_start_ordinal);
-    IREE_ASSERT(indexed_module != NULL);
-  }
-
-  iree_host_size_t* root_symbol_ordinals = NULL;
-  if (iree_status_is_ok(status)) {
-    status = iree_arena_allocate_array(arena, root_count,
-                                       sizeof(*root_symbol_ordinals),
-                                       (void**)&root_symbol_ordinals);
-  }
-  for (iree_host_size_t i = 0; i < root_count && iree_status_is_ok(status);
-       ++i) {
-    IREE_ASSERT_EQ(source_root_refs[i].module_id, 0u);
-    root_symbol_ordinals[i] =
-        indexed_module->symbol_start_ordinal + source_root_refs[i].symbol_id;
-  }
-  if (iree_status_is_ok(status)) {
-    const loom_link_plan_materialization_environment_t environment = {
-        .context = source_module->context,
-        .block_pool = block_pool,
-        .allocator = host_allocator,
-    };
-    status = loom_cmd_program_plan_build_from_index(
-        index, root_symbol_ordinals, root_count, /*options=*/NULL,
-        loom_pass_registry_storage_registry(&pass_registry_storage),
-        cleanup_pattern_provider_set, diagnostic_emitter, &environment, arena,
-        out_valid, out_plan);
-  }
-
-  loom_link_module_index_free(index);
-  return status;
-}
-
-static iree_status_t loom_cmd_program_plan_check_print_roots(
-    const loom_check_emit_provider_request_t* request,
-    const loom_cmd_program_plan_t* plan) {
-  loom_text_low_asm_environment_t low_asm_environment = {0};
-  loom_low_descriptor_text_asm_environment_initialize(
-      &request->low_registry->registry, &low_asm_environment);
-  const loom_text_print_options_t print_options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
-      .low_asm_environment = low_asm_environment,
-  };
-  for (iree_host_size_t i = 0; i < plan->root_count; ++i) {
-    if (i != 0) {
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-          &request->result->actual_output, "\n"));
-    }
-    IREE_RETURN_IF_ERROR(loom_text_print_operation_to_builder_with_options(
-        plan->root_module, plan->roots[i].function_op,
-        &request->result->actual_output, &print_options));
-  }
-  return iree_ok_status();
-}
-
-// Exercises the complete portable artifact boundary for every planned root.
-// Textual expectations continue to describe the source and Low semantics while
-// this closure proves that the same production plan serializes into an artifact
-// accepted by the artifact's untrusted-byte parser.
+// Validates every executable returned by the public transaction with the
+// runtime's untrusted-byte parser, independently of its textual listing.
 static iree_status_t loom_cmd_program_plan_check_roundtrip_artifacts(
-    const loom_cmd_program_plan_t* plan, iree_allocator_t host_allocator) {
-  loom_cmd_program_artifact_set_t artifact_set = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_cmd_program_artifact_set_build(plan, &artifact_set, host_allocator));
+    const loomc_product_t* product, iree_allocator_t host_allocator) {
+  const loomc_host_size_t artifact_count =
+      loomc_product_artifact_count(product);
   iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       i < artifact_set.programs.count && iree_status_is_ok(status); ++i) {
-    const loom_cmd_program_artifact_t* artifact =
-        &artifact_set.programs.values[i];
+  for (iree_host_size_t i = 0; i < artifact_count && iree_status_is_ok(status);
+       ++i) {
+    const loomc_artifact_t* artifact = loomc_product_artifact_at(product, i);
+    loomc_source_t* source = NULL;
+    status = iree_status_from_loomc(loomc_artifact_create_source(
+        artifact, LOOMC_SOURCE_FORMAT_UNKNOWN,
+        loomc_allocator_from_iree(host_allocator), &source));
     if (iree_status_is_ok(status)) {
-      iree_const_byte_span_t artifact_data = iree_const_byte_span_empty();
-      const bool is_contiguous = iree_byte_sequence_try_get_contiguous_span(
-          artifact->data, &artifact_data);
-      IREE_ASSERT(is_contiguous);
+      const loomc_byte_span_t bytes = loomc_source_contents(source);
       loom_cmd_program_t program = {0};
-      status = loom_cmd_program_parse(artifact_data, &program);
+      status = loom_cmd_program_parse(
+          iree_make_const_byte_span(bytes.data, bytes.data_length), &program);
     }
+    loomc_source_release(source);
   }
-  loom_cmd_program_artifact_set_deinitialize(&artifact_set);
   return status;
+}
+
+static loomc_status_t loom_cmd_program_plan_check_append_listing_segment(
+    void* user_data, loomc_byte_span_t segment) {
+  return loomc_status_from_iree(iree_string_builder_append_string(
+      (iree_string_builder_t*)user_data,
+      iree_make_string_view((const char*)segment.data, segment.data_length)));
 }
 
 static iree_status_t loom_cmd_program_plan_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
-    const loom_check_emit_provider_request_t* request,
-    const loom_check_emit_native_module_t* native_module) {
+    const loom_check_emit_provider_request_t* request) {
   (void)provider;
   loom_cmd_program_plan_check_options_t options = {0};
   IREE_RETURN_IF_ERROR(
       loom_cmd_program_plan_check_parse_options(request, &options));
 
-  loom_symbol_ref_t* source_root_refs = NULL;
-  iree_status_t status = loom_cmd_program_plan_check_resolve_roots(
-      native_module->module, &options, request->case_arena, &source_root_refs);
-  loom_cmd_program_plan_t plan = {0};
-  bool plan_valid = false;
+  const loomc_cmd_program_module_options_t product_options = {
+      .type = LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_MODULE_OPTIONS,
+      .structure_size = sizeof(product_options),
+      .provider_name = loomc_make_cstring_view("command_program_check"),
+      .root_symbols = options.root_names,
+      .root_symbol_count = options.root_count,
+      .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_TARGET_LISTING,
+  };
+  loomc_product_t* product = NULL;
+  loomc_result_t* result = NULL;
+  iree_status_t status =
+      iree_status_from_loomc(loomc_cmd_program_product_build_module(
+          request->environment->compile_session->workspace,
+          request->public_module, &product_options,
+          loomc_allocator_from_iree(request->host_allocator), &product,
+          &result));
+  bool succeeded = false;
   if (iree_status_is_ok(status)) {
-    loom_check_diagnostic_emitter_capture_t capture = {
-        .diagnostic_collector = request->diagnostic_collector,
-        .module = native_module->module,
-        .source_resolver = native_module->source_resolver,
-        .emitter = LOOM_EMITTER_PASS,
-    };
-    status = loom_cmd_program_plan_check_build_from_roots(
-        native_module->module, source_root_refs, options.root_count,
-        request->case_arena, request->block_pool, request->host_allocator,
-        request->environment->cleanup_pattern_provider_set,
-        (iree_diagnostic_emitter_t){
-            .fn = loom_check_diagnostic_emitter_capture_emit,
-            .user_data = &capture,
-        },
-        &plan_valid, &plan);
-    if (iree_status_is_ok(status) && !plan_valid &&
-        capture.emission_count == 0) {
-      status = iree_make_status(
-          IREE_STATUS_INTERNAL,
-          "command program planning failed without a diagnostic");
-    }
+    status = loom_check_compile_append_result(request->diagnostic_collector,
+                                              result, &succeeded);
   }
-  if (iree_status_is_ok(status) && plan_valid) {
+  if (iree_status_is_ok(status) && succeeded) {
     status = loom_cmd_program_plan_check_roundtrip_artifacts(
-        &plan, request->host_allocator);
+        product, request->host_allocator);
   }
-  if (iree_status_is_ok(status) && plan_valid) {
-    status = loom_cmd_program_plan_check_print_roots(request, &plan);
+  const loomc_artifact_t* listing = NULL;
+  if (iree_status_is_ok(status) && succeeded) {
+    status = loom_check_compile_select_artifact(
+        result, LOOMC_ARTIFACT_KIND_TEXT,
+        IREE_SV(LOOMC_ARTIFACT_FORMAT_CMD_PROGRAM_LISTING), &listing);
   }
-  loom_cmd_program_plan_deinitialize(&plan);
+  if (iree_status_is_ok(status) && listing != NULL) {
+    status = iree_status_from_loomc(loomc_byte_sequence_enumerate(
+        listing->contents,
+        (loomc_byte_sequence_callback_t){
+            .fn = loom_cmd_program_plan_check_append_listing_segment,
+            .user_data = &request->result->actual_output,
+        }));
+  }
+  loomc_result_release(result);
+  loomc_product_release(product);
   return status;
 }
 
@@ -313,6 +189,6 @@ static iree_status_t loom_cmd_program_plan_check_emit_provider_append_names(
 const loom_check_emit_provider_t loom_cmd_program_plan_check_emit_provider = {
     .name = IREE_SVL("command program plan"),
     .match = loom_cmd_program_plan_check_emit_provider_matches,
-    .execute_native = loom_cmd_program_plan_check_emit_provider_execute,
+    .execute = loom_cmd_program_plan_check_emit_provider_execute,
     .append_names = loom_cmd_program_plan_check_emit_provider_append_names,
 };

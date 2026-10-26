@@ -4,7 +4,8 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test", "loom_check_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -13,12 +14,28 @@ package(
 )
 
 loom_check_test_suite(
-    name = "test",
+    name = "generic_test",
     srcs = [
         "exponent.loom-test",
         "grouped_product_evaluation.loom-test",
         "legalize.loom-test",
-        "trigonometry.loom-test",
         "widen_f32_round.loom-test",
+    ],
+)
+
+loom_check_test(
+    name = "trigonometry",
+    src = "trigonometry.loom-test",
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target:amdgpu",
+        "//loom/config/target:xdna",
+    ]),
+)
+
+test_suite(
+    name = "test",
+    tests = [
+        ":generic_test",
+        ":trigonometry",
     ],
 )

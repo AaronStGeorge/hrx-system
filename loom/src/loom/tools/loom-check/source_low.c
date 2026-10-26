@@ -14,11 +14,10 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/entry_selection.h"
-#include "loom/target/pipeline.h"
 #include "loom/target/provider.h"
 #include "loom/tools/loom-check/compile.h"
+#include "loom/tools/loom-check/compile_diagnostics.h"
 #include "loom/tools/loom-check/diagnostics.h"
-#include "loomc/interop.h"
 #include "loomc/iree.h"
 
 static iree_status_t loom_check_emit_parse_source_low_option(
@@ -249,51 +248,70 @@ static iree_status_t loom_check_emit_write_source_low_pipeline_text(
         "source-low pipeline outputs cannot be combined with diagnostics");
   }
 
-  loomc_module_interop_view_t view = {0};
-  bool projected = false;
-  IREE_RETURN_IF_ERROR(loom_check_compile_project_module(
-      provider_request->public_module, provider_request->diagnostic_collector,
-      provider_request->host_allocator, &view, &projected));
-  if (!projected) {
-    return iree_ok_status();
+  const loomc_allocator_t allocator =
+      loomc_allocator_from_iree(provider_request->host_allocator);
+  loomc_result_t* verification = NULL;
+  iree_status_t status = iree_status_from_loomc(loomc_module_verify(
+      provider_request->public_module, NULL, allocator, &verification));
+  bool verified = false;
+  if (iree_status_is_ok(status)) {
+    status = loom_check_compile_append_result(
+        provider_request->diagnostic_collector, verification, &verified);
   }
-  loom_module_t* pipeline_module = NULL;
-  iree_status_t status = loom_module_allocate(
-      view.module->context, IREE_SV("__loom_check_source_low_pipeline"),
-      provider_request->block_pool, NULL, provider_request->host_allocator,
-      &pipeline_module);
-  loom_op_t* pipeline_op = NULL;
-  const loom_target_pipeline_options_t target_pipeline_options = {
-      .control_flow_lowering = request->control_flow_lowering,
-      .sanitizer = request->sanitizer,
+  loomc_result_release(verification);
+  if (!iree_status_is_ok(status) || !verified) {
+    return status;
+  }
+
+  const bool prepared =
+      request->output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PREPARED_PIPELINE;
+  const loomc_sanitizer_options_t sanitizer = {
+      .type = LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      .structure_size = sizeof(sanitizer),
+      .checks = (loomc_sanitizer_checks_t)request->sanitizer.checks,
+      .flags = (loomc_sanitizer_flags_t)request->sanitizer.flags,
+      .reporting_mode =
+          (loomc_sanitizer_reporting_mode_t)request->sanitizer.reporting_mode,
   };
+  const loomc_target_pipeline_options_t pipeline_options = {
+      .type = LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
+      .structure_size = sizeof(pipeline_options),
+      .next = &sanitizer,
+      .identifier = prepared
+                        ? loomc_make_cstring_view("__loom_check_prepared_low")
+                        : loomc_make_cstring_view("__loom_check_source_low"),
+      .kind = prepared ? LOOMC_TARGET_PIPELINE_KIND_PREPARED_LOW
+                       : LOOMC_TARGET_PIPELINE_KIND_SOURCE_LOW,
+      .control_flow_lowering =
+          (loomc_target_control_flow_lowering_t)request->control_flow_lowering,
+  };
+  loomc_pass_program_t* pass_program = NULL;
+  loomc_result_t* result = NULL;
+  status =
+      iree_status_from_loomc(loomc_pass_program_create_from_target_pipeline(
+          provider_request->environment->compile_session->context,
+          &pipeline_options, allocator, &pass_program, &result));
+  bool succeeded = false;
   if (iree_status_is_ok(status)) {
-    if (request->output ==
-        LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PREPARED_PIPELINE) {
-      status = loom_target_pipeline_build_to_prepared_low(
-          pipeline_module, IREE_SV("__loom_check_prepared_low"),
-          &target_pipeline_options,
-          provider_request->environment->target_environment,
-          loom_pass_environment_empty(), &pipeline_op);
-    } else {
-      status = loom_target_pipeline_build_to_source_low(
-          pipeline_module, IREE_SV("__loom_check_source_low"),
-          &target_pipeline_options,
-          provider_request->environment->target_environment,
-          loom_pass_environment_empty(), &pipeline_op);
-    }
+    status = loom_check_compile_append_result(
+        provider_request->diagnostic_collector, result, &succeeded);
   }
-  if (iree_status_is_ok(status)) {
-    status = loom_text_print_module_to_builder(
-        pipeline_module, &provider_request->result->actual_output,
-        LOOM_TEXT_PRINT_DEFAULT);
+  loomc_result_release(result);
+  loomc_source_t* source = NULL;
+  if (iree_status_is_ok(status) && succeeded) {
+    status = iree_status_from_loomc(loomc_pass_program_print_text_to_source(
+        pass_program, NULL, allocator, &source));
   }
-  if (pipeline_module != NULL) {
-    loom_module_free(pipeline_module);
-  }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && succeeded) {
+    const loomc_byte_span_t contents = loomc_source_contents(source);
+    status = iree_string_builder_append_string(
+        &provider_request->result->actual_output,
+        iree_make_string_view((const char*)contents.data,
+                              contents.data_length));
     provider_request->result->has_actual_output = true;
   }
+  loomc_source_release(source);
+  loomc_pass_program_release(pass_program);
   return status;
 }
 

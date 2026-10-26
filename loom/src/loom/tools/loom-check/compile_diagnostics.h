@@ -16,6 +16,13 @@
 extern "C" {
 #endif
 
+// Copies result diagnostics and reports compiler success in |out_succeeded|.
+// Compiler rejection with an error diagnostic returns OK for annotation
+// matching; rejection without an error diagnostic fails the check.
+iree_status_t loom_check_compile_append_result(
+    loom_check_diagnostic_collector_t* collector, const loomc_result_t* result,
+    bool* out_succeeded);
+
 // Copies every diagnostic in |source_result| into |collector|. Source
 // identifiers already carry their logical identity from source admission.
 iree_status_t loom_check_compile_append_result_diagnostics(

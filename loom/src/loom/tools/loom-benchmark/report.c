@@ -1680,20 +1680,8 @@ static iree_status_t loom_benchmark_write_candidate_byte_artifact(
   }
 
   char* path_storage = NULL;
-  iree_status_t status =
-      loom_tooling_file_path_join(directory, leaf, allocator, &path_storage);
-  if (iree_status_is_ok(status)) {
-    status = loom_tooling_create_parent_directory(
-        iree_make_cstring_view(path_storage), allocator);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_tooling_write_output_byte_sequence(
-        iree_make_cstring_view(path_storage), contents, allocator);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_benchmark_artifact_bundle_record_file(
-        bundle, kind, iree_make_cstring_view(path_storage));
-  }
+  iree_status_t status = loom_benchmark_artifact_bundle_write_file(
+      bundle, kind, directory, leaf, contents, allocator, &path_storage);
   if (iree_status_is_ok(status)) {
     iree_allocator_free(allocator, *inout_path_storage);
     *inout_path_storage = path_storage;

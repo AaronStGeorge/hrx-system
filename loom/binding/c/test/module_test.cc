@@ -212,15 +212,18 @@ func.def @entry() {
           .text_presentation = presentation,
           .print_locations = print_locations,
       };
-      loomc_source_t* raw_output = nullptr;
-      LOOMC_ASSERT_OK(loomc_module_serialize_text_to_source(
-          module.get(), &options, loomc_allocator_system(), &raw_output));
-      SourcePtr output(raw_output);
-      auto contents = loomc_source_contents(output.get());
-      std::string text(reinterpret_cast<const char*>(contents.data),
-                       contents.data_length);
-      EXPECT_EQ(text.find("loc(\"authored.loom\":7:3)") != std::string::npos,
-                print_locations);
+      for (auto write_text : {loomc_module_serialize_text_to_source,
+                              loomc_module_print_text_to_source}) {
+        loomc_source_t* raw_output = nullptr;
+        LOOMC_ASSERT_OK(write_text(module.get(), &options,
+                                   loomc_allocator_system(), &raw_output));
+        SourcePtr output(raw_output);
+        auto contents = loomc_source_contents(output.get());
+        std::string text(reinterpret_cast<const char*>(contents.data),
+                         contents.data_length);
+        EXPECT_EQ(text.find("loc(\"authored.loom\":7:3)") != std::string::npos,
+                  print_locations);
+      }
     }
   }
   struct SerializeOptionsPrefix {
@@ -246,21 +249,25 @@ func.def @entry() {
   prefix.format = LOOMC_SOURCE_FORMAT_TEXT;
   prefix.identifier = loomc_string_view_empty();
   prefix.text_presentation = LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT;
-  loomc_source_t* raw_output = nullptr;
-  LOOMC_ASSERT_OK(loomc_module_serialize_text_to_source(
-      module.get(),
-      reinterpret_cast<const loomc_module_serialize_options_t*>(&prefix),
-      loomc_allocator_system(), &raw_output));
-  SourcePtr output(raw_output);
-  auto contents = loomc_source_contents(output.get());
-  EXPECT_EQ(std::string(reinterpret_cast<const char*>(contents.data),
-                        contents.data_length)
-                .find("loc("),
-            std::string::npos);
+  for (auto write_text : {loomc_module_serialize_text_to_source,
+                          loomc_module_print_text_to_source}) {
+    loomc_source_t* raw_output = nullptr;
+    LOOMC_ASSERT_OK(write_text(
+        module.get(),
+        reinterpret_cast<const loomc_module_serialize_options_t*>(&prefix),
+        loomc_allocator_system(), &raw_output));
+    SourcePtr output(raw_output);
+    auto contents = loomc_source_contents(output.get());
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(contents.data),
+                          contents.data_length)
+                  .find("loc("),
+              std::string::npos);
+  }
 
+  loomc_source_t* raw_output = nullptr;
   LOOMC_ASSERT_OK(loomc_module_serialize_bytecode_to_source(
       module.get(), nullptr, loomc_allocator_system(), &raw_output));
-  output.reset(raw_output);
+  SourcePtr output(raw_output);
   loomc_module_t* raw_module = nullptr;
   loomc_result_t* raw_result = nullptr;
   LOOMC_ASSERT_OK(loomc_module_deserialize_bytecode_from_source(
@@ -273,18 +280,24 @@ func.def @entry() {
       .structure_size = sizeof(options),
       .print_locations = true,
   };
-  LOOMC_ASSERT_OK(loomc_module_serialize_text_to_source(
-      module.get(), &options, loomc_allocator_system(), &raw_output));
-  output.reset(raw_output);
+  std::vector<SourcePtr> outputs;
+  for (auto write_text : {loomc_module_serialize_text_to_source,
+                          loomc_module_print_text_to_source}) {
+    LOOMC_ASSERT_OK(write_text(module.get(), &options, loomc_allocator_system(),
+                               &raw_output));
+    outputs.emplace_back(raw_output);
+  }
   module.reset();
   source.reset();
   workspace.reset();
   context.reset();
-  contents = loomc_source_contents(output.get());
-  EXPECT_NE(std::string(reinterpret_cast<const char*>(contents.data),
-                        contents.data_length)
-                .find("loc(\"authored.loom\":7:3)"),
-            std::string::npos);
+  for (const auto& printed : outputs) {
+    auto contents = loomc_source_contents(printed.get());
+    EXPECT_NE(std::string(reinterpret_cast<const char*>(contents.data),
+                          contents.data_length)
+                  .find("loc(\"authored.loom\":7:3)"),
+              std::string::npos);
+  }
 }
 
 TEST(ModuleTest, VerificationBoundsAndRetainsDiagnostics) {
@@ -453,11 +466,14 @@ TEST(ModuleTest, RejectsContradictoryExplicitSerializeFormat) {
       .next = nullptr,
       .format = LOOMC_SOURCE_FORMAT_BYTECODE,
   };
-  loomc_source_t* serialized_source = reinterpret_cast<loomc_source_t*>(0x1);
-  loomc_status_t status = loomc_module_serialize_text_to_source(
-      module.get(), &options, loomc_allocator_system(), &serialized_source);
-  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(serialized_source, nullptr);
+  for (auto write_text : {loomc_module_serialize_text_to_source,
+                          loomc_module_print_text_to_source}) {
+    loomc_source_t* serialized_source = reinterpret_cast<loomc_source_t*>(0x1);
+    loomc_status_t status = write_text(
+        module.get(), &options, loomc_allocator_system(), &serialized_source);
+    LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
+    EXPECT_EQ(serialized_source, nullptr);
+  }
 }
 
 TEST(ModuleTest, DeserializeRequestPreservesExactRootOrderAndOwnership) {
@@ -744,11 +760,31 @@ TEST(ModuleTest, RejectsMalformedSerializeIdentifier) {
       .format = LOOMC_SOURCE_FORMAT_TEXT,
       .identifier = loomc_make_string_view(nullptr, 1),
   };
-  loomc_source_t* serialized_source = reinterpret_cast<loomc_source_t*>(0x1);
-  loomc_status_t status = loomc_module_serialize_text_to_source(
-      module.get(), &options, loomc_allocator_system(), &serialized_source);
-  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(serialized_source, nullptr);
+  for (auto write_text : {loomc_module_serialize_text_to_source,
+                          loomc_module_print_text_to_source}) {
+    loomc_source_t* serialized_source = reinterpret_cast<loomc_source_t*>(0x1);
+    loomc_status_t status = write_text(
+        module.get(), &options, loomc_allocator_system(), &serialized_source);
+    LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
+    EXPECT_EQ(serialized_source, nullptr);
+  }
+}
+
+TEST(ModuleTest, RejectsMissingTextOutputArguments) {
+  auto context = CreateContext();
+  auto workspace = CreateWorkspace();
+  auto module = CreateFunctionModule(context.get(), workspace.get());
+  for (auto write_text : {loomc_module_serialize_text_to_source,
+                          loomc_module_print_text_to_source}) {
+    LOOMC_EXPECT_STATUS_IS(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        write_text(module.get(), nullptr, loomc_allocator_system(), nullptr));
+    loomc_source_t* output = reinterpret_cast<loomc_source_t*>(0x1);
+    LOOMC_EXPECT_STATUS_IS(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        write_text(nullptr, nullptr, loomc_allocator_system(), &output));
+    EXPECT_EQ(output, nullptr);
+  }
 }
 
 TEST(ModuleTest, RejectsContradictoryExplicitSourceFormat) {

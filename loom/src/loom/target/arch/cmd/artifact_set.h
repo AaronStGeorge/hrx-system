@@ -80,6 +80,12 @@ iree_status_t loom_cmd_program_artifact_set_build(
 void loom_cmd_program_artifact_set_deinitialize(
     loom_cmd_program_artifact_set_t* artifact_set);
 
+// Appends lowered command roots in product order, separated by a blank line.
+// Uses the command assembly vocabulary independently of configured targets.
+// The caller owns the output bytes; no plan state escapes the call.
+iree_status_t loom_cmd_program_plan_format_listing(
+    const loom_cmd_program_plan_t* plan, iree_string_builder_t* builder);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
