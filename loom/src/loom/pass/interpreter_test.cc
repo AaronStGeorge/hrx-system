@@ -10,8 +10,10 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/error/parameter.h"
 #include "loom/ops/test/ops.h"
+#include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/pass/test/harness.h"
+#include "loom/pass/test/registry.h"
 #include "loom/pass/trace.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/stream.h"
@@ -33,6 +35,72 @@ struct DiagnosticCapture {
   // Bounded diagnostic parameter copy for assertions.
   loom_diagnostic_param_t params[4] = {};
 };
+
+struct InfrastructureFailureObserver {
+  // Synthetic pass state defining the failure boundary.
+  const loom_test_pass_trace_t* pass_trace = nullptr;
+  // Number of host allocation attempts after infrastructure failure.
+  iree_host_size_t allocation_attempts_after_failure = 0;
+  // Number of trace stream writes after infrastructure failure.
+  iree_host_size_t trace_writes_after_failure = 0;
+  // Number of host allocations currently owned by the observer.
+  iree_host_size_t live_allocations = 0;
+
+  iree_allocator_t allocator() { return {this, Allocate}; }
+
+  static iree_status_t Allocate(void* self, iree_allocator_command_t command,
+                                const void* parameters, void** pointer) {
+    auto* observer = static_cast<InfrastructureFailureObserver*>(self);
+    const bool had_allocation = (command == IREE_ALLOCATOR_COMMAND_FREE ||
+                                 command == IREE_ALLOCATOR_COMMAND_REALLOC) &&
+                                *pointer != nullptr;
+    if (command != IREE_ALLOCATOR_COMMAND_FREE && observer->pass_trace &&
+        observer->pass_trace->infrastructure_failure_returned) {
+      ++observer->allocation_attempts_after_failure;
+    }
+    const iree_allocator_t system_allocator = iree_allocator_system();
+    iree_status_t status = system_allocator.ctl(system_allocator.self, command,
+                                                parameters, pointer);
+    if (iree_status_is_ok(status)) {
+      if (command == IREE_ALLOCATOR_COMMAND_FREE) {
+        observer->live_allocations -= had_allocation;
+      } else {
+        observer->live_allocations += !had_allocation;
+      }
+    }
+    return status;
+  }
+
+  static iree_status_t WriteTrace(void* self, iree_string_view_t value) {
+    (void)value;
+    auto* observer = static_cast<InfrastructureFailureObserver*>(self);
+    if (observer->pass_trace &&
+        observer->pass_trace->infrastructure_failure_returned) {
+      ++observer->trace_writes_after_failure;
+    }
+    return iree_ok_status();
+  }
+};
+
+static loom_pass_program_t MakeDirectModuleProgram(
+    const loom_pass_descriptor_t* descriptor,
+    loom_pass_program_instruction_t* out_instruction) {
+  *out_instruction = {
+      .kind = LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE,
+      .anchor_kind = LOOM_PASS_MODULE,
+      .invoke =
+          {
+              .descriptor = descriptor,
+              .info = descriptor->info(),
+              .module_run = descriptor->module_run,
+          },
+  };
+  return {
+      .root_kind = LOOM_PASS_MODULE,
+      .instructions = out_instruction,
+      .instruction_count = 1,
+  };
+}
 
 static const loom_pass_report_detail_t* FindReportDetail(
     const loom_pass_report_invocation_t& invocation,
@@ -181,12 +249,7 @@ TEST_F(PassInterpreterTest, StopsExecutionAtFailedTraceBoundary) {
         if (!fail_before && function_anchor) {
           EXPECT_EQ(pass_trace.decoded_options_count_value, 5u);
         }
-        ASSERT_EQ(report_storage.report.invocation_count,
-                  !fail_before && enable_report ? 1u : 0u);
-        if (!fail_before && enable_report) {
-          EXPECT_EQ(report_storage.report.invocation_head->status_code,
-                    IREE_STATUS_OK);
-        }
+        EXPECT_EQ(report_storage.report.invocation_count, 0u);
       }
     }
   }
@@ -839,52 +902,103 @@ TEST_F(PassInterpreterTest, ExposesDecodedOptionsToPassInstance) {
                                      IREE_SV("decoded")));
 }
 
-TEST_F(PassInterpreterTest, PropagatesDescriptorCallbackFailure) {
-  loom_module_t* pipeline_module =
-      Parse(IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
-                    "  test.fail\n"
-                    "}\n"));
-  ASSERT_NE(pipeline_module, nullptr);
-  loom_module_t* target_module = AllocateModule(IREE_SV("target"));
-  ASSERT_NE(target_module, nullptr);
+TEST_F(PassInterpreterTest, InfrastructureFailurePerformsCleanupOnly) {
+  const loom_pass_descriptor_t* descriptor = loom_pass_registry_lookup(
+      loom_test_pass_registry(), IREE_SV("test.fail"));
+  ASSERT_NE(descriptor, nullptr);
+  loom_pass_program_instruction_t instruction = {};
+  loom_pass_program_t program =
+      MakeDirectModuleProgram(descriptor, &instruction);
+  loom_module_t* module = AllocateModule(IREE_SV("target"));
+  ASSERT_NE(module, nullptr);
 
-  PassProgramStorage storage;
-  IREE_ASSERT_OK(
-      Compile(pipeline_module, Pipeline(pipeline_module, 0), &storage.program));
-
-  loom_test_pass_trace_t trace = {};
+  loom_test_pass_trace_t pass_trace = {};
+  InfrastructureFailureObserver observer = {
+      .pass_trace = &pass_trace,
+  };
+  iree_arena_block_pool_t failure_block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, observer.allocator(),
+                                   &failure_block_pool);
+  loom_pass_report_t report;
+  loom_pass_report_initialize(&failure_block_pool, &report);
+  loom_output_stream_t trace_stream = {
+      .write = InfrastructureFailureObserver::WriteTrace,
+      .user_data = &observer,
+  };
+  loom_pass_trace_options_t trace_options;
+  loom_pass_trace_options_initialize(&trace_options);
+  trace_options.stream = &trace_stream;
+  trace_options.dump_before_all = true;
+  trace_options.dump_after_all = true;
+  loom_pass_trace_t trace;
+  loom_pass_trace_initialize(&trace_options, &trace);
   DiagnosticCapture diagnostic_capture;
   loom_pass_interpreter_options_t options =
-      InterpreterOptions(&trace, iree_diagnostic_emitter_t{
-                                     .fn = CaptureDiagnostic,
-                                     .user_data = &diagnostic_capture,
-                                 });
+      InterpreterOptions(&pass_trace,
+                         {
+                             .fn = CaptureDiagnostic,
+                             .user_data = &diagnostic_capture,
+                         },
+                         &report);
+  options.block_pool = &failure_block_pool;
+  options.trace = &trace;
+
   loom_pass_run_result_t result = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INTERNAL,
-      loom_pass_interpreter_run_module(&storage.program, target_module,
-                                       &options, &result));
-  EXPECT_EQ(trace.fail_invocation_count, 1);
+  iree_status_t status =
+      loom_pass_interpreter_run_module(&program, module, &options, &result);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_RESOURCE_EXHAUSTED);
+  EXPECT_TRUE(iree_string_view_is_empty(iree_status_message(status)));
+  iree_status_free(status);
+
+  EXPECT_EQ(pass_trace.fail_create_count, 1);
+  EXPECT_EQ(pass_trace.fail_invocation_count, 1);
+  EXPECT_EQ(pass_trace.fail_destroy_count, 1);
+  EXPECT_EQ(trace.next_event_ordinal, 1u);
+  EXPECT_EQ(observer.trace_writes_after_failure, 0u);
+  EXPECT_EQ(observer.allocation_attempts_after_failure, 0u);
+  EXPECT_EQ(diagnostic_capture.emission_count, 0);
+  EXPECT_EQ(report.invocation_count, 0u);
+  EXPECT_EQ(result.error_count, 0u);
+
+  loom_pass_report_deinitialize(&report);
+  iree_arena_block_pool_deinitialize(&failure_block_pool);
+  EXPECT_EQ(observer.live_allocations, 0u);
+}
+
+TEST_F(PassInterpreterTest, DiagnosedRejectionRetainsInvocationReport) {
+  const loom_pass_descriptor_t* descriptor = loom_pass_registry_lookup(
+      loom_test_pass_registry(), IREE_SV("test.error"));
+  ASSERT_NE(descriptor, nullptr);
+  loom_pass_program_instruction_t instruction = {};
+  loom_pass_program_t program =
+      MakeDirectModuleProgram(descriptor, &instruction);
+  loom_module_t* module = AllocateModule(IREE_SV("target"));
+  ASSERT_NE(module, nullptr);
+
+  loom_test_pass_trace_t pass_trace = {};
+  DiagnosticCapture diagnostic_capture;
+  PassReportStorage report_storage;
+  loom_pass_interpreter_options_t options =
+      InterpreterOptions(&pass_trace,
+                         {
+                             .fn = CaptureDiagnostic,
+                             .user_data = &diagnostic_capture,
+                         },
+                         &report_storage.report);
+  loom_pass_run_result_t result = {};
+  IREE_ASSERT_OK(
+      loom_pass_interpreter_run_module(&program, module, &options, &result));
+
+  EXPECT_EQ(pass_trace.error_invocation_count, 1);
   EXPECT_EQ(diagnostic_capture.emission_count, 1);
-  ASSERT_NE(diagnostic_capture.error, nullptr);
-  EXPECT_EQ(loom_error_def_domain(diagnostic_capture.error),
-            LOOM_ERROR_DOMAIN_STRUCTURE);
-  EXPECT_EQ(loom_error_def_code(diagnostic_capture.error), 28);
-  EXPECT_EQ(diagnostic_capture.module, pipeline_module);
-  EXPECT_EQ(diagnostic_capture.op, storage.program.instructions[0].source.op);
-  ASSERT_EQ(diagnostic_capture.param_count, 4);
-  EXPECT_EQ(diagnostic_capture.params[0].kind, LOOM_PARAM_STRING);
-  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[0].string,
-                                     IREE_SV("test.fail")));
-  EXPECT_EQ(diagnostic_capture.params[1].kind, LOOM_PARAM_STRING);
-  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[1].string,
-                                     IREE_SV("module")));
-  EXPECT_EQ(diagnostic_capture.params[2].kind, LOOM_PARAM_STRING);
-  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[2].string,
-                                     IREE_SV("<none>")));
-  EXPECT_EQ(diagnostic_capture.params[3].kind, LOOM_PARAM_STRING);
-  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[3].string,
-                                     IREE_SV("pipeline")));
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(report_storage.report.invocation_count, 1u);
+  const loom_pass_report_invocation_t* invocation =
+      report_storage.report.invocation_head;
+  ASSERT_NE(invocation, nullptr);
+  EXPECT_EQ(invocation->status_code, IREE_STATUS_FAILED_PRECONDITION);
+  ASSERT_EQ(invocation->statistic_count, 1u);
+  EXPECT_EQ(invocation->statistics[0].value, 1);
 }
 
 TEST_F(PassInterpreterTest, ExecutesPassFailAndHalt) {

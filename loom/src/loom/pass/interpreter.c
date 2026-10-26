@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "iree/base/internal/fpu_state.h"
-#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
@@ -62,8 +61,6 @@ typedef struct loom_pass_interpreter_diagnostic_counter_t {
   const loom_module_t* module;
   // Caller-provided emitter that receives pass diagnostics.
   iree_diagnostic_emitter_t target;
-  // Number of diagnostics emitted by the current pass invocation.
-  iree_host_size_t emission_count;
   // Number of error diagnostics emitted by the current pass invocation.
   uint32_t error_count;
   // Number of warning diagnostics emitted by the current pass invocation.
@@ -87,17 +84,6 @@ typedef struct loom_pass_interpreter_symbol_snapshot_entry_t {
   // Concrete compiler version of |function|, or NULL.
   loom_function_version_t* function_version;
 } loom_pass_interpreter_symbol_snapshot_entry_t;
-
-static const char* loom_pass_interpreter_anchor_name(loom_pass_kind_t kind) {
-  switch (kind) {
-    case LOOM_PASS_MODULE:
-      return "module";
-    case LOOM_PASS_FUNCTION:
-      return "func";
-    default:
-      return "unknown";
-  }
-}
 
 static loom_pass_interpreter_epoch_t loom_pass_interpreter_epoch(
     const loom_module_t* module) {
@@ -180,7 +166,6 @@ static iree_status_t loom_pass_interpreter_count_diagnostic(
     void* user_data, const loom_diagnostic_emission_t* emission) {
   loom_pass_interpreter_diagnostic_counter_t* counter =
       (loom_pass_interpreter_diagnostic_counter_t*)user_data;
-  ++counter->emission_count;
   switch (loom_error_def_severity(emission->error)) {
     case LOOM_DIAGNOSTIC_ERROR:
       ++counter->error_count;
@@ -324,38 +309,6 @@ static iree_status_t loom_pass_interpreter_make_pass(
   return iree_ok_status();
 }
 
-static iree_status_t loom_pass_interpreter_emit_failure_diagnostic(
-    loom_pass_interpreter_state_t* state,
-    const loom_pass_interpreter_frame_t* frame,
-    const loom_pass_program_instruction_t* instruction) {
-  if (!state->options->diagnostic_emitter.fn) {
-    return iree_ok_status();
-  }
-  const loom_error_def_t* error = LOOM_ERR_STRUCTURE_028;
-  if (!error) {
-    IREE_ASSERT_UNREACHABLE(
-        "missing structured pass interpreter failure diagnostic");
-    IREE_BUILTIN_UNREACHABLE();
-  }
-  const loom_pass_program_invoke_t* invoke = &instruction->invoke;
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(invoke->descriptor->key),
-      loom_param_string(iree_make_cstring_view(
-          loom_pass_interpreter_anchor_name(frame->kind))),
-      loom_param_string(loom_pass_interpreter_symbol_name(state, frame)),
-      loom_param_string(
-          loom_pass_interpreter_pipeline_name(state, instruction)),
-  };
-  const loom_diagnostic_emission_t emission = {
-      .module = state->program->source_module,
-      .op = instruction->source.op,
-      .error = error,
-      .params = params,
-      .param_count = IREE_ARRAYSIZE(params),
-  };
-  return iree_diagnostic_emit(state->options->diagnostic_emitter, &emission);
-}
-
 static iree_status_t loom_pass_interpreter_invoke_module(
     loom_pass_interpreter_state_t* state,
     const loom_pass_program_instruction_t* instruction, loom_pass_t* pass,
@@ -433,7 +386,7 @@ static iree_status_t loom_pass_interpreter_invoke(
   if (include_timing) {
     start_time = iree_time_now();
   }
-  iree_status_t trace_status = loom_pass_trace_emit(
+  iree_status_t status = loom_pass_trace_emit(
       state->options->trace, &(loom_pass_trace_event_t){
                                  .module = state->module,
                                  .instruction = instruction,
@@ -446,12 +399,8 @@ static iree_status_t loom_pass_interpreter_invoke(
                                  .changed = false,
                                  .status_code = IREE_STATUS_OK,
                              });
-  if (!iree_status_is_ok(trace_status)) {
-    return iree_status_annotate_f(
-        trace_status, "while tracing pass '%.*s' at %s anchor on @%.*s",
-        (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
-        loom_pass_interpreter_anchor_name(frame->kind), (int)symbol_name.size,
-        symbol_name.data);
+  if (!iree_status_is_ok(status)) {
+    return status;
   }
 
   IREE_TRACE_ZONE_BEGIN_NAMED_DYNAMIC(z_pass, invoke->descriptor->key.data,
@@ -472,7 +421,7 @@ static iree_status_t loom_pass_interpreter_invoke(
   if (state->options->report) {
     state->value_facts.lifecycle_counts = &value_fact_lifecycle_counts;
   }
-  iree_status_t status = loom_pass_interpreter_make_pass(
+  status = loom_pass_interpreter_make_pass(
       state, instruction, pass_diagnostic_emitter, &instance_arena, &pass);
   pass.function_version = frame->function_version;
   diagnostic_counter.pass = &pass;
@@ -507,88 +456,68 @@ static iree_status_t loom_pass_interpreter_invoke(
     invoke->descriptor->destroy(&pass);
   }
   state->value_facts.lifecycle_counts = NULL;
-
-  iree_status_code_t status_code = loom_pass_interpreter_invocation_status_code(
-      iree_status_code(status), &diagnostic_counter);
-  trace_status = loom_pass_trace_emit(
-      state->options->trace,
-      &(loom_pass_trace_event_t){
-          .module = state->module,
-          .instruction = instruction,
-          .instruction_index = instruction_index,
-          .invocation_ordinal = invocation_ordinal,
-          .pipeline_symbol = pipeline_symbol,
-          .symbol_name = symbol_name,
-          .anchor_kind = frame->kind,
-          .point = LOOM_PASS_TRACE_POINT_AFTER,
-          .changed = invocation_changed,
-          .status_code = status_code,
-          .error_count = diagnostic_counter.error_count,
-          .warning_count = diagnostic_counter.warning_count,
-          .remark_count = diagnostic_counter.remark_count,
-      });
-
-  iree_status_t report_status = iree_ok_status();
   loom_pass_interpreter_accumulate_diagnostics(state, &diagnostic_counter);
 
-  if (state->options->report) {
-    iree_duration_t duration_nanoseconds =
-        include_timing ? iree_time_now() - start_time : 0;
-    report_status = loom_pass_interpreter_append_value_fact_lifecycle_detail(
-        &pass, &value_fact_lifecycle_counts);
-    if (iree_status_is_ok(report_status)) {
-      report_status = loom_pass_report_append_invocation(
-          state->options->report,
-          &(loom_pass_report_invocation_options_t){
-              .descriptor = invoke->descriptor,
-              .info = invoke->info,
-              .instruction_index = instruction_index,
-              .anchor_kind = frame->kind,
-              .pipeline_symbol = pipeline_symbol,
-              .symbol_name = symbol_name,
-              .duration_nanoseconds = duration_nanoseconds,
-              .changed = invocation_changed,
-              .status_code = status_code,
-              .statistic_storage = pass.statistic_storage,
-              .detail_head = pass.report_detail_head,
-              .detail_count = pass.report_detail_count,
-          });
-    }
-    if (iree_status_is_ok(report_status)) {
-      pass.report_detail_head = NULL;
-      pass.report_detail_tail = NULL;
-      pass.report_detail_count = 0;
+  // A non-OK callback status is an infrastructure failure. From this point on
+  // only infallible cleanup is permitted: trace/report sinks and diagnostic
+  // formatting may allocate and cannot improve the original failure.
+  if (iree_status_is_ok(status)) {
+    const iree_status_code_t status_code =
+        loom_pass_interpreter_invocation_status_code(iree_status_code(status),
+                                                     &diagnostic_counter);
+    status = loom_pass_trace_emit(
+        state->options->trace,
+        &(loom_pass_trace_event_t){
+            .module = state->module,
+            .instruction = instruction,
+            .instruction_index = instruction_index,
+            .invocation_ordinal = invocation_ordinal,
+            .pipeline_symbol = pipeline_symbol,
+            .symbol_name = symbol_name,
+            .anchor_kind = frame->kind,
+            .point = LOOM_PASS_TRACE_POINT_AFTER,
+            .changed = invocation_changed,
+            .status_code = status_code,
+            .error_count = diagnostic_counter.error_count,
+            .warning_count = diagnostic_counter.warning_count,
+            .remark_count = diagnostic_counter.remark_count,
+        });
+
+    if (iree_status_is_ok(status) && state->options->report) {
+      const iree_duration_t duration_nanoseconds =
+          include_timing ? iree_time_now() - start_time : 0;
+      status = loom_pass_interpreter_append_value_fact_lifecycle_detail(
+          &pass, &value_fact_lifecycle_counts);
+      if (iree_status_is_ok(status)) {
+        status = loom_pass_report_append_invocation(
+            state->options->report,
+            &(loom_pass_report_invocation_options_t){
+                .descriptor = invoke->descriptor,
+                .info = invoke->info,
+                .instruction_index = instruction_index,
+                .anchor_kind = frame->kind,
+                .pipeline_symbol = pipeline_symbol,
+                .symbol_name = symbol_name,
+                .duration_nanoseconds = duration_nanoseconds,
+                .changed = invocation_changed,
+                .status_code = status_code,
+                .statistic_storage = pass.statistic_storage,
+                .detail_head = pass.report_detail_head,
+                .detail_count = pass.report_detail_count,
+            });
+      }
+      if (iree_status_is_ok(status)) {
+        pass.report_detail_head = NULL;
+        pass.report_detail_tail = NULL;
+        pass.report_detail_count = 0;
+      }
     }
   }
 
-  const bool pass_failed = !iree_status_is_ok(status);
   loom_pass_report_discard_pass_details(&pass);
   iree_arena_deinitialize(&instance_arena);
-  iree_status_t terminal_status = iree_status_join(status, trace_status);
-  terminal_status = iree_status_join(terminal_status, report_status);
-  if (pass_failed) {
-    if (diagnostic_counter.emission_count == 0) {
-      terminal_status = iree_status_join(
-          terminal_status, loom_pass_interpreter_emit_failure_diagnostic(
-                               state, frame, instruction));
-    }
-    IREE_TRACE_ZONE_END(z_pass);
-    return iree_status_annotate_f(
-        terminal_status, "while executing pass '%.*s' at %s anchor on @%.*s",
-        (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
-        loom_pass_interpreter_anchor_name(frame->kind), (int)symbol_name.size,
-        symbol_name.data);
-  }
-  if (!iree_status_is_ok(terminal_status)) {
-    IREE_TRACE_ZONE_END(z_pass);
-    return iree_status_annotate_f(
-        terminal_status, "while tracing pass '%.*s' at %s anchor on @%.*s",
-        (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
-        loom_pass_interpreter_anchor_name(frame->kind), (int)symbol_name.size,
-        symbol_name.data);
-  }
   IREE_TRACE_ZONE_END(z_pass);
-  return terminal_status;
+  return status;
 }
 
 static iree_status_t loom_pass_interpreter_build_function_snapshot(

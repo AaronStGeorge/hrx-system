@@ -153,9 +153,10 @@ loomc_pass_program_create_from_native_source_low_pipeline(
 /// `loomc_compile_options_t::next`. The caller initializes the collector with
 /// `loom_pass_report_initialize` and releases its storage with
 /// `loom_pass_report_deinitialize`. Execution appends completed records,
-/// including partial progress when the operation fails or returns a non-OK
-/// status with no result. Failure to allocate the last record leaves earlier
-/// records available.
+/// including partial progress before an operation fails or returns a non-OK
+/// status with no result. The infrastructure-failed invocation itself is not
+/// appended. Failure to allocate the last record leaves earlier records
+/// available.
 ///
 /// @lifetime
 /// The collector has exclusive access during the synchronous invocation. Its

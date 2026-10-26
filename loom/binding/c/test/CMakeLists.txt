@@ -64,7 +64,6 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::binding::c::interop
     loom::binding::c::loomc
-    loom::error::parameter
     loom::ir
     loom::pass::registry
     loom::pass::report
@@ -314,6 +313,7 @@ loom_cc_test(
     ::test_util
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::binding::c::interop
     loom::binding::c::loomc
 )
 

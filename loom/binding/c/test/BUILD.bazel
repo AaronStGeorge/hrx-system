@@ -66,7 +66,6 @@ loom_cc_test(
         ":test_util",
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
-        "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:report",
@@ -299,6 +298,7 @@ loom_cc_test(
     srcs = ["pass_program_test.cc"],
     deps = [
         ":test_util",
+        "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

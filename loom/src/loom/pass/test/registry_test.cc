@@ -90,8 +90,11 @@ TEST_F(PassTestRegistryHarness, RunsThroughToolingInterpreter) {
 TEST_F(PassTestRegistryHarness, FailingPassPropagatesStatusThroughTooling) {
   loom_module_t* module = AllocateModule();
   loom_test_pass_trace_t trace = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
                         RunFlatPipeline(module, IREE_SV("test.fail"), &trace));
+  EXPECT_EQ(trace.fail_create_count, 1);
+  EXPECT_EQ(trace.fail_invocation_count, 1);
+  EXPECT_EQ(trace.fail_destroy_count, 1);
 }
 
 TEST_F(PassTestRegistryHarness, UnavailablePassFailsThroughTooling) {

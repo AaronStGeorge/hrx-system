@@ -14,6 +14,7 @@
 
 #include "iree/testing/gtest.h"
 #include "loomc/context.h"
+#include "loomc/interop.h"
 #include "loomc/module.h"
 #include "loomc/pass.h"
 #include "loomc/pass_trace.h"
@@ -615,6 +616,48 @@ TEST(PassProgramTest, RunPropagatesTraceFailureAndClosesOpenedArtifacts) {
                              &options, loomc_allocator_system(), &result));
   EXPECT_EQ(result, nullptr);
   EXPECT_EQ(closes, 1);
+}
+
+TEST(PassProgramTest, RunStopsReportingAfterTraceInfrastructureFailure) {
+  auto context = CreateContext();
+  auto workspace = CreateWorkspace();
+  auto source = CreateTextSource("input.loom", kRunInput);
+  auto module = DeserializeModule(context.get(), workspace.get(), source.get());
+  auto program = PrepareText(context.get(), "dce");
+  const loomc_pass_trace_options_t trace = {
+      .type = LOOMC_STRUCTURE_TYPE_PASS_TRACE_OPTIONS,
+      .structure_size = sizeof(trace),
+      .flags = LOOMC_PASS_TRACE_FLAG_AFTER_ALL,
+      .sink =
+          {
+              .write =
+                  [](void*, loomc_string_view_t) {
+                    return loomc_status_from_code(
+                        LOOMC_STATUS_RESOURCE_EXHAUSTED);
+                  },
+          },
+  };
+  iree_arena_block_pool_t report_block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                   &report_block_pool);
+  loom_pass_report_t report;
+  loom_pass_report_initialize(&report_block_pool, &report);
+  const loomc_native_pass_report_options_t report_options = {
+      .type = LOOMC_STRUCTURE_TYPE_NATIVE_PASS_REPORT_OPTIONS,
+      .structure_size = sizeof(report_options),
+      .next = &trace,
+      .report = &report,
+  };
+  const loomc_pass_run_options_t options = {.next = &report_options};
+  loomc_result_t* result = nullptr;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_RESOURCE_EXHAUSTED,
+      loomc_pass_program_run(program.get(), workspace.get(), module.get(),
+                             &options, loomc_allocator_system(), &result));
+  EXPECT_EQ(result, nullptr);
+  EXPECT_EQ(report.invocation_count, 0u);
+  loom_pass_report_deinitialize(&report);
+  iree_arena_block_pool_deinitialize(&report_block_pool);
 }
 
 TEST(PassProgramTest, RunAllocationFailureLeavesNoResultOrMutation) {

@@ -55,8 +55,16 @@ typedef struct loom_test_pass_trace_t {
   uint16_t decoded_options_mode_index;
   // Last decoded string option observed by test.options create.
   iree_string_view_t decoded_options_string_value;
-  // Number of times test.fail ran before returning its intentional failure.
+  // Number of times test.error emitted its diagnosed compiler rejection.
+  int error_invocation_count;
+  // Number of successfully created test.fail pass instances.
+  int fail_create_count;
+  // Number of times test.fail ran before returning infrastructure failure.
   int fail_invocation_count;
+  // Number of test.fail pass instances destroyed after successful creation.
+  int fail_destroy_count;
+  // True once test.fail has reached its infrastructure failure boundary.
+  bool infrastructure_failure_returned;
   // Number of populated entries in events.
   iree_host_size_t event_count;
   // Bounded chronological callback trace.

@@ -158,6 +158,12 @@ typedef struct loom_pass_info_t {
   const loom_pass_statistic_layout_t* statistic_layout;
 } loom_pass_info_t;
 
+// Pass callbacks return non-OK only when infrastructure prevented completion.
+// Ordinary compiler rejection is reported through pass->diagnostic_emitter;
+// after a successful emission the callback returns OK and the interpreter
+// stops the pipeline using the accumulated error count. This distinction lets
+// infrastructure failures propagate without allocating traces, reports, or
+// diagnostic formatting after the failure boundary.
 typedef iree_status_t (*loom_module_pass_fn_t)(loom_pass_t* pass,
                                                loom_module_t* module);
 typedef iree_status_t (*loom_function_pass_fn_t)(loom_pass_t* pass,

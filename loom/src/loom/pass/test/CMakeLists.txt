@@ -26,6 +26,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::analysis::ownership_lifetime
+    loom::error::error_defs
     loom::ir
     loom::ops::op_defs
     loom::ops::test
