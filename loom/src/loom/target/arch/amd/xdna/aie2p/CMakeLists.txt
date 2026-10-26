@@ -1076,7 +1076,6 @@ loom_check_test_suite(
     "test/kernel_realization.loom-test"
     "test/leaf_alignment.loom-test"
     "test/leaf_allocation.loom-test"
-    "test/leaf_constant_reuse.loom-test"
     "test/leaf_expansion_timing.loom-test"
     "test/leaf_immediates.loom-test"
     "test/leaf_interfaces.loom-test"

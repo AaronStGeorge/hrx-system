@@ -7,6 +7,8 @@
 #include "loom/target/arch/amd/xdna/aie2p/emit/program_compile.h"
 
 #include <algorithm>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "iree/base/internal/arena.h"
@@ -337,6 +339,108 @@ class Aie2pProgramCompileTest : public ::testing::Test {
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t low_registry_ = {};
 };
+
+TEST_F(Aie2pProgramCompileTest, ReusesOnlyIdenticalAdjacentPhysicalConstants) {
+  struct TestCase {
+    // Immediate written by the second materialization.
+    uint32_t second_constant;
+    // Physical destination of the second materialization.
+    const char* second_register;
+    // Number of distinct writes that native emission must preserve.
+    size_t expected_write_count;
+  };
+  const TestCase cases[] = {{780, "r0", 1}, {781, "r0", 2}, {780, "r1", 2}};
+  const loom_aie2p_instruction_id_t move =
+      loom_aie2p_encoding_find_instruction(IREE_SV("MOVA"));
+  ASSERT_NE(move, LOOM_AIE2P_INSTRUCTION_ID_INVALID);
+  const auto destination_field = loom_aie2p_encoding_find_field(IREE_SV("dst"));
+  const auto immediate_field = loom_aie2p_encoding_find_field(IREE_SV("i"));
+  const auto destination_adapter =
+      loom_aie2p_machine_find_register_adapter(IREE_SV("OP_mLdaCg"));
+  for (const TestCase& test_case : cases) {
+    SCOPED_TRACE(test_case.second_constant);
+    SCOPED_TRACE(test_case.second_register);
+    std::string source = R"(
+aie2p.target<core> @target
+low.func.def target<amd.xdna.aie2p.core>(@target) @entry(%input: reg<aie2p.ep>, %accumulator: reg<aie2p.mbms x4>, %lhs: reg<aie2p.mexa>, %rhs: reg<aie2p.mexa>) -> (reg<aie2p.mbms x4>, reg<aie2p.vec256 x2>) asm {
+  %first_control = mova.i32 780
+  %loaded = vlda.512.i32x16 %input, 0
+  %first = mma.bfp16ebs8.m8n8k8 %accumulator, %lhs, %rhs, %first_control
+  %second_control = mova.i32 SECOND_CONSTANT
+  %second = mma.bfp16ebs8.m8n8k8 %first, %lhs, %rhs, %second_control
+  return %second, %loaded
+}
+)";
+    source.replace(source.find("SECOND_CONSTANT"), 15,
+                   std::to_string(test_case.second_constant));
+    ModulePtr module =
+        ParseModule(iree_make_string_view(source.data(), source.size()));
+    loom_op_t* entry = FindFunction(module.get(), IREE_SV("entry"));
+    ASSERT_NE(entry, nullptr);
+    loom_block_t* block =
+        loom_region_entry_block(loom_low_func_def_body(entry));
+    const auto first_register =
+        loom_aie2p_machine_find_physical_register(IREE_SV("r0"));
+    const auto second_register = loom_aie2p_machine_find_physical_register(
+        iree_make_cstring_view(test_case.second_register));
+    const loom_low_allocation_fixed_value_t fixed_values[] = {
+        {.value_id = loom_op_const_results(loom_block_op(block, 0))[0],
+         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+         .location_base = first_register,
+         .location_count = 1},
+        {.value_id = loom_op_const_results(loom_block_op(block, 3))[0],
+         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+         .location_base = second_register,
+         .location_count = 1},
+    };
+    const loom_aie2p_leaf_compile_options_t options = {
+        .descriptor_registry = &low_registry_.registry,
+        .allocation_fixed_values = fixed_values,
+        .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
+    };
+    bool compiled = false;
+    loom_aie2p_leaf_contribution_t contribution = {};
+    IREE_ASSERT_OK(CompileProgram(module.get(), entry, &options, &compiled,
+                                  &contribution));
+    ASSERT_TRUE(compiled);
+    const auto& symbol =
+        contribution.object
+            .symbols[contribution.realization.entry_symbol_index];
+    std::vector<DecodedProgramBundle> bundles;
+    IREE_ASSERT_OK(DecodeProgram(
+        contribution.object.sections[symbol.section_contribution_index]
+            .contents,
+        &bundles));
+    std::vector<std::pair<uint64_t, uint64_t>> writes;
+    for (const auto& bundle : bundles) {
+      const auto* slot = FindInstructionSlot(bundle, move);
+      if (!slot) {
+        continue;
+      }
+      loom_aie2p_encoding_field_value_t fields[2];
+      iree_host_size_t field_count = 0;
+      IREE_ASSERT_OK(loom_aie2p_encoding_unpack_instruction(
+          move, slot->value, IREE_ARRAYSIZE(fields), fields, &field_count));
+      ASSERT_EQ(field_count, 2u);
+      ASSERT_EQ(fields[0].field_id, destination_field);
+      ASSERT_EQ(fields[1].field_id, immediate_field);
+      writes.emplace_back(fields[0].value, fields[1].value);
+    }
+    ASSERT_EQ(writes.size(), test_case.expected_write_count);
+    uint8_t first_destination;
+    ASSERT_TRUE(loom_aie2p_machine_encode_register(
+        destination_adapter, first_register, &first_destination));
+    EXPECT_EQ(writes[0].first, first_destination);
+    EXPECT_EQ(writes[0].second, 780u);
+    if (test_case.expected_write_count == 2) {
+      uint8_t second_destination;
+      ASSERT_TRUE(loom_aie2p_machine_encode_register(
+          destination_adapter, second_register, &second_destination));
+      EXPECT_EQ(writes[1].first, second_destination);
+      EXPECT_EQ(writes[1].second, test_case.second_constant);
+    }
+  }
+}
 
 TEST_F(Aie2pProgramCompileTest,
        LinksDirectHelperAndPreservesIncomingLinkRegister) {
