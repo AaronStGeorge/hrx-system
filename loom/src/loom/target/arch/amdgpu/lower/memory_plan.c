@@ -15,6 +15,7 @@
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
+#include "loom/target/arch/amdgpu/lower/memory_packet.h"
 #include "loom/target/arch/amdgpu/lower/source_alloca_layout.h"
 #include "loom/target/arch/amdgpu/lower/source_value_analysis.h"
 
@@ -398,6 +399,107 @@ iree_status_t loom_amdgpu_select_memory_store_plan(
   return loom_amdgpu_select_memory_plan(context, source_op, out_plan);
 }
 
+static bool loom_amdgpu_memory_accesses_share_saddr_terms(
+    const loom_amdgpu_memory_access_t* lhs,
+    const loom_amdgpu_memory_access_t* rhs) {
+  if (lhs->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR ||
+      rhs->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR ||
+      lhs->source != rhs->source ||
+      lhs->retained_component_kind != rhs->retained_component_kind ||
+      lhs->vaddr_realization_mask != rhs->vaddr_realization_mask ||
+      lhs->realization.vaddr != rhs->realization.vaddr) {
+    return false;
+  }
+  return memcmp(lhs->dynamic_term_kinds, rhs->dynamic_term_kinds,
+                lhs->source->dynamic_term_count *
+                    sizeof(*lhs->dynamic_term_kinds)) == 0;
+}
+
+static bool loom_amdgpu_memory_access_offset_immediate_info(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_descriptor_offset_immediate_info_t* out_info) {
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set,
+                                                 access->descriptor);
+  return descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE &&
+         loom_amdgpu_descriptor_offset_immediate_info(
+             descriptor_set, descriptor_ordinal, 1,
+             LOOM_LOW_IMMEDIATE_KIND_SIGNED, out_info) &&
+         out_info->unit_byte_count == 1;
+}
+
+static bool loom_amdgpu_memory_plan_try_share_saddr(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_memory_access_plan_t* plan) {
+  const loom_amdgpu_memory_access_t* first = &plan->packets[0].access;
+  // Choose the smallest non-negative common base that leaves every packet at
+  // or below its positive immediate ceiling. This preserves the u32 offset
+  // path whenever possible; wide packets retain the alignment used by direct
+  // packet selection when that ceiling is saturated.
+  int64_t common_base_byte_offset = 0;
+  int64_t immediate_offsets[LOOM_AMDGPU_MAX_MEMORY_PACKET_COUNT];
+  for (uint32_t i = 0; i < plan->packet_count; ++i) {
+    const loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
+    if (!loom_amdgpu_memory_accesses_share_saddr_terms(first, access)) {
+      return false;
+    }
+    loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
+    if (!loom_amdgpu_memory_access_offset_immediate_info(descriptor_set, access,
+                                                         &offset_info)) {
+      return false;
+    }
+    int64_t immediate_maximum = offset_info.unsigned_max > INT64_MAX
+                                    ? INT64_MAX
+                                    : (int64_t)offset_info.unsigned_max;
+    if (access->payload_register_count == 4) {
+      immediate_maximum &= ~INT64_C(15);
+    }
+    if (access->static_byte_offset > immediate_maximum) {
+      const int64_t required_base =
+          access->static_byte_offset - immediate_maximum;
+      if (required_base > common_base_byte_offset) {
+        common_base_byte_offset = required_base;
+      }
+    }
+  }
+
+  for (uint32_t i = 0; i < plan->packet_count; ++i) {
+    loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
+    loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
+    if (!loom_amdgpu_memory_access_offset_immediate_info(descriptor_set, access,
+                                                         &offset_info)) {
+      return false;
+    }
+    if (!iree_checked_sub_i64(access->static_byte_offset,
+                              common_base_byte_offset, &immediate_offsets[i])) {
+      return false;
+    }
+    if (immediate_offsets[i] < offset_info.signed_min ||
+        (immediate_offsets[i] >= 0 &&
+         (uint64_t)immediate_offsets[i] > offset_info.unsigned_max)) {
+      return false;
+    }
+  }
+
+  for (uint32_t i = 0; i < plan->packet_count; ++i) {
+    loom_amdgpu_memory_access_t* access = &plan->packets[i].access;
+    access->immediate_offset = immediate_offsets[i];
+    if (common_base_byte_offset <= UINT32_MAX) {
+      access->scalar_byte_offset = (uint32_t)common_base_byte_offset;
+      access->scalar_base_byte_offset = 0;
+      access->scalar_offset_placement =
+          LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_SOFFSET;
+    } else {
+      access->scalar_byte_offset = 0;
+      access->scalar_base_byte_offset = (uint64_t)common_base_byte_offset;
+      access->scalar_offset_placement =
+          LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_BASE;
+    }
+  }
+  return true;
+}
+
 iree_status_t loom_amdgpu_finalize_memory_plan(
     loom_low_lower_context_t* context, loom_amdgpu_memory_access_plan_t* plan) {
   const loom_amdgpu_memory_access_t* first = &plan->packets[0].access;
@@ -413,6 +515,11 @@ iree_status_t loom_amdgpu_finalize_memory_plan(
   }
   for (uint32_t i = 0; i < plan->packet_count; ++i) {
     plan->packets[i].access.buffer_extent = buffer_extent;
+  }
+  if (plan->packet_count > 1 &&
+      loom_amdgpu_memory_plan_try_share_saddr(
+          loom_low_lower_context_descriptor_set(context), plan)) {
+    plan->flags |= LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_SHARED_SADDR;
   }
   return iree_ok_status();
 }
