@@ -672,6 +672,7 @@ loom_cc_library(
     loom::codegen::low::allocation::assignment_map
     loom::codegen::low::allocation::call
     loom::codegen::low::allocation::coalescing
+    loom::codegen::low::allocation::concat_affinity
     loom::codegen::low::allocation::copy_decision
     loom::codegen::low::allocation::destructive_reuse
     loom::codegen::low::allocation::diagnostics

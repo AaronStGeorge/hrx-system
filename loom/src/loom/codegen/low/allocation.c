@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/allocation/concat_affinity.h"
 #include "loom/codegen/low/allocation/copy_decision.h"
 #include "loom/codegen/low/allocation/destructive_reuse.h"
 #include "loom/codegen/low/allocation/edge_copy.h"
@@ -725,7 +726,8 @@ static iree_status_t loom_low_allocate_function_impl(
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_concat_affinity_build(
-        &state.placement, &decision_arena, &state.concat_affinity);
+        state.target.descriptor_set, &state.placement, &state.liveness,
+        &state.unit_liveness, &decision_arena, &state.concat_affinity);
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_storage_identity_initialize(

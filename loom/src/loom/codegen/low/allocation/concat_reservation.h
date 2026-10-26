@@ -54,6 +54,10 @@ typedef struct loom_low_allocation_concat_reservation_sources_t {
 // share a value class; |result_range| contains the assembly's retained
 // placement relations. |sources| retains both the concat source set and its
 // placement feasibility so candidate search does not rescan the aggregate.
+// |source_has_unique_affinity_path| proves that allocation derived this
+// relation from one producer path even when the source has no authored
+// placement relation. The relation's alias flag distinguishes a storage
+// handoff from an early reservation trigger whose source remains live.
 // The result may instead be the assembly's exclusive whole-value
 // edge destination when the caller proves that source storage is consumed
 // before destination acquisition.
@@ -72,6 +76,7 @@ iree_status_t loom_low_allocation_concat_reservation_find(
     const loom_liveness_interval_t* result_interval,
     const loom_low_placement_relation_range_t* result_range,
     const loom_low_allocation_concat_reservation_sources_t* sources,
+    bool source_has_unique_affinity_path,
     loom_low_allocation_assignment_t* out_assignment);
 
 #ifdef __cplusplus

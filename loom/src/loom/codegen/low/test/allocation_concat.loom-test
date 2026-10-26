@@ -436,8 +436,9 @@ value %tuple: test.phys -> physical_register[0:4]
 
 test.target<low_core> @target
 
-// An independent live value already occupies the preferred first state unit.
-// A transitive preference must not relocate it to place a nested concat leaf.
+// Linear last-use producers do not reserve the nested aggregate before its
+// direct sources. The independent blocker therefore keeps the ordinary first
+// location instead of being moved for a speculative future assembly.
 low.func.def schedule(locked) target<test.low.core>(@target) @nested_concat_preserves_blocker(%condition: reg<test.i32>, %initial: reg<test.phys x4>, %seed: reg<test.phys>) -> (reg<test.phys x4>) asm {
   low.br ^loop(%initial: reg<test.phys x4>)
 ^loop(%state: reg<test.phys x4>):
@@ -505,6 +506,85 @@ value %source: test.i32 -> target_id[0:1]
 value %packed: test.i32 -> spill_slot[0:2]
 value %candidate: test.i32 -> target_id[0:1]
 spill %packed: private[0] bytes=8 align=8 stores=1 reloads=1
+
+// ====
+
+// RUN: emit low-allocation-query @last_use_fanout_inherits_concat_slice spill-count values=%seed,%lower,%upper,%tuple copies=%lower,%upper fixed=%tuple:physical_register:4:2
+
+test.target<low_core> @target
+
+// The seed remains live through the lower copy and dies at the upper copy. Its
+// competing producer paths require choosing the fixed aggregate orientation
+// before the lower half occupies the wrong slice.
+low.func.def schedule(locked) target<test.low.core>(@target) @last_use_fanout_inherits_concat_slice(%seed: reg<test.explicit32>) -> (reg<test.explicit32 x2>) asm {
+  %lower = copy %seed : reg<test.explicit32> -> reg<test.explicit32>
+  %upper = copy %seed : reg<test.explicit32> -> reg<test.explicit32>
+  %tuple = concat(%lower, %upper) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
+  return %tuple
+}
+
+// ----
+spills: 0
+value %seed: test.explicit32 -> physical_register[2:1]
+value %lower: test.explicit32 -> physical_register[0:1]
+value %upper: test.explicit32 -> physical_register[2:1]
+value %tuple: test.explicit32 -> physical_register[4:2]
+copy %seed -> %lower: materialized
+copy %seed -> %upper: coalesced
+
+// ====
+
+// RUN: emit low-allocation-query @retained_source_rejects_concat_handoff spill-count values=%seed,%upper,%lower,%tuple copies=%upper fixed=%tuple:physical_register:0:4
+
+test.target<low_core> @target
+
+// A source returned after producing the upper half remains physically live
+// across the concat. It keeps independent storage, and its copy materializes
+// into the fixed result slice.
+low.func.def schedule(locked) target<test.low.core>(@target) @retained_source_rejects_concat_handoff(%seed: reg<test.phys x2>, %lower: reg<test.phys x2>) -> (reg<test.phys x4>, reg<test.phys x2>) asm {
+  %upper = copy %seed : reg<test.phys x2> -> reg<test.phys x2>
+  %tuple = concat(%lower, %upper) : (reg<test.phys x2>, reg<test.phys x2>) -> reg<test.phys x4>
+  return %tuple, %seed
+}
+
+// ----
+spills: 0
+value %seed: test.phys -> physical_register[4:2]
+value %upper: test.phys -> physical_register[2:2]
+value %lower: test.phys -> physical_register[0:2]
+value %tuple: test.phys -> physical_register[0:4]
+copy %seed -> %upper: materialized
+
+// ====
+
+// RUN: emit low-allocation-query @loop_live_source_reserves_concat spill-count values=%source,%blocker,%high,%low,%pair fixed=%blocker:physical_register:1:1
+
+test.target<low_core> @target
+
+// The loop-live source cannot alias the future pair, but its unique producer
+// path reserves l0 before ordinary source placement. The source takes r3 while
+// the fixed blocker occupies r1, leaving r0 and r2 for the pair. Without the
+// early reservation, the source claims r0 and neither pair remains available.
+low.func.def schedule(locked) target<test.low.core>(@target) @loop_live_source_reserves_concat(%condition: reg<test.i32>, %source: reg<test.explicit32>, %blocker: reg<test.explicit32>) -> (reg<test.explicit32>) asm {
+  low.br ^loop
+^loop:
+  low.cond_br %condition, ^body, ^exit : reg<test.i32>
+^body:
+  %high = copy %source : reg<test.explicit32> -> reg<test.explicit32>
+  %low = test.const.explicit32 11
+  %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
+  low.br ^loop
+^exit:
+  return %blocker
+}
+
+// ----
+spills: 0
+value %source: test.explicit32 -> physical_register[3:1]
+value %blocker: test.explicit32 -> physical_register[1:1]
+value %high: test.explicit32 -> physical_register[2:1]
+value %low: test.explicit32 -> physical_register[0:1]
+value %pair: test.explicit32 -> physical_register[4:2]
 
 // ====
 
