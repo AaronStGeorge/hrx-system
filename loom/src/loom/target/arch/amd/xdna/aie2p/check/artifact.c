@@ -15,6 +15,7 @@
 #include "loom/target/arch/amd/xdna/aie2p/encoding/encoding.h"
 #include "loom/target/arch/amd/xdna/aie2p/machine/machine.h"
 #include "loom/tools/loom-check/compile.h"
+#include "loomc/iree.h"
 
 enum {
   LOOM_AIE2P_ARTIFACT_CHECK_SECTION_FLAG_ALLOCATE = 2u,
@@ -515,10 +516,28 @@ static iree_status_t loom_aie2p_artifact_check_execute(
       .lower_source_to_low = source_low,
       .report = output == OUTPUT_PIPELINE_REPORT ? &report_options : NULL,
   };
+  loomc_result_t* compile_result = NULL;
+  iree_status_t status =
+      loom_check_compile_artifact(request, &compile_options, &compile_result);
+  const loomc_artifact_t* artifact = NULL;
+  if (iree_status_is_ok(status) && compile_result != NULL) {
+    const loomc_artifact_kind_t kind = output == OUTPUT_PIPELINE_REPORT
+                                           ? LOOMC_ARTIFACT_KIND_REPORT
+                                           : LOOMC_ARTIFACT_KIND_EXECUTABLE;
+    const iree_string_view_t format =
+        output == OUTPUT_PIPELINE_REPORT
+            ? IREE_SV(LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_TEXT)
+            : compile_options.artifact_format;
+    status = loom_check_compile_select_artifact(compile_result, kind, format,
+                                                &artifact);
+  }
   loomc_source_t* artifact_source = NULL;
-  loomc_source_t* report_source = NULL;
-  iree_status_t status = loom_check_compile_artifact(
-      request, &compile_options, &artifact_source, &report_source);
+  if (iree_status_is_ok(status) && artifact != NULL) {
+    status = iree_status_from_loomc(loomc_artifact_create_source(
+        artifact, LOOMC_SOURCE_FORMAT_UNKNOWN,
+        loomc_allocator_from_iree(request->host_allocator), &artifact_source));
+  }
+  loomc_result_release(compile_result);
   const loomc_byte_span_t source_contents =
       loomc_source_contents(artifact_source);
   const iree_const_byte_span_t bytes = iree_make_const_byte_span(
@@ -527,10 +546,8 @@ static iree_status_t loom_aie2p_artifact_check_execute(
       output == OUTPUT_PIPELINE_REPORT) {
     // Select the canonical inventory from the public report. Per-function
     // scheduling and compiler allocation statistics are separate contracts.
-    const loomc_byte_span_t report_contents =
-        loomc_source_contents(report_source);
-    iree_string_view_t remaining = iree_make_string_view(
-        (const char*)report_contents.data, report_contents.data_length);
+    iree_string_view_t remaining =
+        iree_make_string_view((const char*)bytes.data, bytes.data_length);
     while (iree_status_is_ok(status) && !iree_string_view_is_empty(remaining)) {
       iree_string_view_t line;
       iree_string_view_split(remaining, '\n', &line, &remaining);
@@ -553,7 +570,6 @@ static iree_status_t loom_aie2p_artifact_check_execute(
     status =
         loom_aie2p_artifact_check_print(bytes, &request->result->actual_output);
   }
-  loomc_source_release(report_source);
   loomc_source_release(artifact_source);
   return status;
 }

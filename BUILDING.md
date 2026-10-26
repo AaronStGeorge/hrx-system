@@ -231,7 +231,7 @@ up that sanitizer environment separately.
 
 Loom tools link statically by default. Release bundles can share the compiler
 and runtime used by `loom-compile`, `loom-opt`, `loom-format`, `loom-link`,
-`loom-import-cxx`, `loom-run`, and `loom-serve`:
+`loom-import-cxx`, `loom-run`, `loom-serve`, `loom-test`, and `loom-benchmark`:
 
 ```bash
 iree-bazel-build --config=opt --//loom/config:shared_tools \
@@ -245,10 +245,11 @@ iree-cmake-configure -DLOOM_LINK_SHARED_TOOLS=ON
 The shared mode packages one `libloomc` and one `libiree` alongside the compiler
 tools and server. `loom-serve` keeps its serving implementation in the executable
 while reusing the same compiler and runtime companions as the other shared tools.
-`loom-check`, `loom-test`, and `loom-benchmark` share the same IREE runtime but
-keep their compiler implementations in each executable. They do not load
-`libloomc`; their native compiler helpers and compiler state retain one local
-owner. Installing one of these tools alone requires only its `libiree` companion.
+`loom-test` and `loom-benchmark` also use both companions, keeping only their
+tool-specific execution and IR construction helpers in each executable.
+`loom-check` shares the IREE runtime but keeps its compiler implementation local
+for native compiler inspection. It does not load `libloomc`; installing it alone
+requires only its `libiree` companion.
 The IREE companion includes the configured HAL drivers. Deploy all files from
 the same build; these companion libraries have no independent ABI version.
 Shared tools trade some cross-library optimization for a smaller bundle. Local

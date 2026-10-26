@@ -9,6 +9,7 @@
 #include "iree/vm/bytecode/disassembler.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/execute.h"
+#include "loomc/iree.h"
 
 typedef struct loom_vm_check_request_t {
   // Optional root function name without a leading '@'.
@@ -86,10 +87,22 @@ static iree_status_t loom_vm_check_emit(
       .lower_source_to_low = true,
       .control_flow_lowering = LOOMC_TARGET_CONTROL_FLOW_LOWERING_CFG,
   };
-  loomc_source_t* artifact_source = NULL;
+  loomc_result_t* compile_result = NULL;
   iree_status_t status =
-      loom_check_compile_artifact(request, &compile_options, &artifact_source,
-                                  /*out_report_source=*/NULL);
+      loom_check_compile_artifact(request, &compile_options, &compile_result);
+  const loomc_artifact_t* artifact = NULL;
+  if (iree_status_is_ok(status) && compile_result != NULL) {
+    status = loom_check_compile_select_artifact(
+        compile_result, LOOMC_ARTIFACT_KIND_EXECUTABLE,
+        compile_options.artifact_format, &artifact);
+  }
+  loomc_source_t* artifact_source = NULL;
+  if (iree_status_is_ok(status) && artifact != NULL) {
+    status = iree_status_from_loomc(loomc_artifact_create_source(
+        artifact, LOOMC_SOURCE_FORMAT_UNKNOWN,
+        loomc_allocator_from_iree(request->host_allocator), &artifact_source));
+  }
+  loomc_result_release(compile_result);
   const loomc_byte_span_t source_contents =
       loomc_source_contents(artifact_source);
   const iree_const_byte_span_t contents = iree_make_const_byte_span(

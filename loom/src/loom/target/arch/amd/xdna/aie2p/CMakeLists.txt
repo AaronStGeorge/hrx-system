@@ -768,6 +768,7 @@ loom_cc_library(
     iree::base
     iree::schemas::xdna_executable
     loom::analysis::symbol_facts
+    loom::binding::c::loomc
     loom::codegen::low::diagnostics
     loom::codegen::low::function_requirements
     loom::codegen::low::storage_layout
