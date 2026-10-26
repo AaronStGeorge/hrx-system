@@ -2047,6 +2047,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
         },
     .source_plan_observer = &loom_amdgpu_source_representation_observer,
     .prepare_source_memory = {.fn = loom_amdgpu_prepare_source_memory},
+    .retain_source_memory_term_recurrences = true,
     .visibility_model = loom_amdgpu_memory_visibility_model,
     .preselect_op = {.fn = loom_amdgpu_preselect_op, .user_data = NULL},
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},

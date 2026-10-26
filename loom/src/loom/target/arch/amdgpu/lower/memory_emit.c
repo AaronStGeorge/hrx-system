@@ -456,13 +456,6 @@ static iree_status_t loom_amdgpu_bind_memory_load_result(
   return loom_low_lower_bind_value(context, source_result, low_result);
 }
 
-static bool loom_amdgpu_memory_access_needs_hal_resource(
-    const loom_amdgpu_memory_access_t* access) {
-  return access->source->memory_space !=
-             LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP &&
-         access->source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE;
-}
-
 // All address and fallback operands are ready before EXEC narrows. The tied
 // load preserves inactive lanes without a result merge that would drain it.
 // Repairs run after restoration so their new results cover fallback lanes too.
@@ -554,7 +547,7 @@ static iree_status_t loom_amdgpu_lower_memory_packet_load(
   loom_amdgpu_memory_dynamic_term_sequence_t sequence = {0};
   loom_amdgpu_memory_access_resolve_dynamic_terms(context, access, &sequence);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  if (loom_amdgpu_memory_access_needs_hal_resource(access)) {
+  if (loom_amdgpu_memory_access_uses_resource_operand(access)) {
     low_resource = loom_low_lower_lookup_value(
         context,
         loom_low_source_memory_access_base_view_value_id(access->source));
@@ -697,7 +690,7 @@ static iree_status_t loom_amdgpu_lower_memory_packet_store(
         register_byte_offset * 8u, low_value, lane_type, &low_value));
   }
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  if (loom_amdgpu_memory_access_needs_hal_resource(access)) {
+  if (loom_amdgpu_memory_access_uses_resource_operand(access)) {
     low_resource = loom_low_lower_lookup_value(
         context,
         loom_low_source_memory_access_base_view_value_id(access->source));

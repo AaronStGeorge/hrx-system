@@ -28,6 +28,8 @@ typedef enum loom_amdgpu_address_realization_kind_e {
   LOOM_AMDGPU_ADDRESS_REALIZATION_DESCRIPTOR_ROOT = 1,
   LOOM_AMDGPU_ADDRESS_REALIZATION_DESCRIPTOR_OFFSET = 2,
   LOOM_AMDGPU_ADDRESS_REALIZATION_SCALAR_OFFSET = 3,
+  LOOM_AMDGPU_ADDRESS_REALIZATION_COMPLETE_OFFSET = 4,
+  LOOM_AMDGPU_ADDRESS_REALIZATION_COMPLETE_OFFSET_STRIDE = 5,
 } loom_amdgpu_address_realization_kind_t;
 
 typedef struct loom_amdgpu_address_component_key_t {
@@ -281,6 +283,200 @@ static iree_status_t loom_amdgpu_request_scalar_offset(
                                             out_realization);
 }
 
+typedef struct loom_amdgpu_complete_offset_key_t {
+  // Canonical identity of the complete dynamic byte sum.
+  uint64_t dynamic_byte_offset_identity;
+  // Physical static bytes assigned to the VADDR operand.
+  uint64_t vaddr_static_byte_offset;
+} loom_amdgpu_complete_offset_key_t;
+
+typedef struct loom_amdgpu_complete_offset_stride_key_t {
+  // Canonical identity of the induction term defining the increment.
+  uint64_t term_identity;
+  // Low-word byte coefficient after applying the loop step and exact factors.
+  uint64_t byte_stride;
+} loom_amdgpu_complete_offset_stride_key_t;
+
+typedef struct loom_amdgpu_complete_offset_t {
+  // Packet plan replaced only after the shared cost group succeeds.
+  loom_amdgpu_memory_access_t* access;
+  // Exact loop domain owning the carried offset.
+  const loom_low_lower_realization_loop_t* loop;
+  // Invariant terms materialized once to initialize the complete offset.
+  loom_amdgpu_memory_dynamic_term_sequence_t initializer;
+  // Dynamic invariant product materialized once for each backedge increment.
+  loom_amdgpu_memory_dynamic_term_sequence_t stride_initializer;
+  // Function-owned synthetic term backing |stride_initializer|.
+  loom_low_source_memory_dynamic_term_t stride_term;
+  // Deferred complete-offset recipe requested only when the offer wins.
+  loom_low_lower_realization_recipe_t recipe;
+  // Deferred invariant-stride recipe, or empty for a literal increment.
+  loom_low_lower_realization_recipe_t stride_recipe;
+  // Interned invariant stride used by the update, or NULL for a literal.
+  const loom_low_lower_realization_t* stride_realization;
+  // Complete-offset physical identity.
+  loom_amdgpu_complete_offset_key_t key;
+  // Invariant-stride physical identity.
+  loom_amdgpu_complete_offset_stride_key_t stride_key;
+  // Low-word literal increment used when every stride factor is exact.
+  uint32_t literal_increment;
+} loom_amdgpu_complete_offset_t;
+
+static int loom_amdgpu_compare_address_terms(
+    const loom_low_source_memory_dynamic_term_t* left,
+    const loom_low_source_memory_dynamic_term_t* right) {
+  if (left->index != right->index) {
+    return left->index < right->index ? -1 : 1;
+  }
+  if (left->stride_value_count != right->stride_value_count) {
+    return left->stride_value_count < right->stride_value_count ? -1 : 1;
+  }
+  for (uint8_t i = 0; i < left->stride_value_count; ++i) {
+    if (left->stride_values[i] != right->stride_values[i]) {
+      return left->stride_values[i] < right->stride_values[i] ? -1 : 1;
+    }
+  }
+  if (left->byte_stride != right->byte_stride) {
+    return left->byte_stride < right->byte_stride ? -1 : 1;
+  }
+  if (left->source != right->source) {
+    return left->source < right->source ? -1 : 1;
+  }
+  if (left->dimension != right->dimension) {
+    return left->dimension < right->dimension ? -1 : 1;
+  }
+  if (left->axis != right->axis) {
+    return left->axis < right->axis ? -1 : 1;
+  }
+  return 0;
+}
+
+static void loom_amdgpu_sort_address_terms(
+    loom_amdgpu_memory_dynamic_term_sequence_t* sequence) {
+  for (uint8_t i = 1; i < sequence->count; ++i) {
+    const loom_low_source_memory_dynamic_term_t* term = sequence->terms[i];
+    uint8_t position = i;
+    while (position != 0 && loom_amdgpu_compare_address_terms(
+                                term, sequence->terms[position - 1]) < 0) {
+      sequence->terms[position] = sequence->terms[position - 1];
+      --position;
+    }
+    sequence->terms[position] = term;
+  }
+}
+
+static iree_status_t loom_amdgpu_set_address_recipe_inputs(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_memory_dynamic_term_sequence_t* sequence,
+    loom_low_lower_realization_recipe_t* recipe) {
+  uint16_t input_count = 0;
+  for (uint8_t i = 0; i < sequence->count; ++i) {
+    input_count += (uint16_t)(1u + sequence->terms[i]->stride_value_count);
+  }
+  if (input_count == 0) {
+    return iree_ok_status();
+  }
+  loom_low_lower_realization_input_t* inputs = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_function_array(
+      context, input_count, sizeof(*inputs), (void**)&inputs));
+  uint16_t input_index = 0;
+  for (uint8_t i = 0; i < sequence->count; ++i) {
+    const loom_low_source_memory_dynamic_term_t* term = sequence->terms[i];
+    inputs[input_index++] = (loom_low_lower_realization_input_t){
+        .kind = LOOM_LOW_LOWER_REALIZATION_INPUT_SOURCE,
+        .value.identity = term->index,
+    };
+    for (uint8_t j = 0; j < term->stride_value_count; ++j) {
+      inputs[input_index++] = (loom_low_lower_realization_input_t){
+          .kind = LOOM_LOW_LOWER_REALIZATION_INPUT_SOURCE,
+          .value.identity = term->stride_values[j],
+      };
+    }
+  }
+  recipe->inputs = inputs;
+  recipe->input_count = input_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_initialize_complete_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const void* data, loom_value_id_t carried_value,
+    loom_value_id_t* out_value) {
+  (void)carried_value;
+  const loom_amdgpu_complete_offset_t* offset = data;
+  const loom_amdgpu_memory_access_t access = {
+      .vaddr_static_byte_offset = offset->key.vaddr_static_byte_offset,
+  };
+  return loom_amdgpu_emit_memory_vaddr(context, source_op, &access,
+                                       &offset->initializer,
+                                       LOOM_VALUE_ID_INVALID, out_value);
+}
+
+static iree_status_t loom_amdgpu_initialize_complete_offset_stride(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const void* data, loom_value_id_t carried_value,
+    loom_value_id_t* out_value) {
+  (void)carried_value;
+  const loom_amdgpu_complete_offset_t* offset = data;
+  const loom_amdgpu_memory_access_t access = {0};
+  return loom_amdgpu_emit_memory_vaddr(context, source_op, &access,
+                                       &offset->stride_initializer,
+                                       LOOM_VALUE_ID_INVALID, out_value);
+}
+
+static iree_status_t loom_amdgpu_update_complete_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const void* data, loom_value_id_t carried_value,
+    loom_value_id_t* out_value) {
+  const loom_amdgpu_complete_offset_t* offset = data;
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+  if (offset->stride_realization == NULL) {
+    return loom_amdgpu_emit_vgpr_binary_immediate(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
+        carried_value, offset->literal_increment, vgpr_type, out_value);
+  }
+  return loom_amdgpu_emit_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32, carried_value,
+      loom_low_lower_realization_value(offset->stride_realization), vgpr_type,
+      out_value);
+}
+
+static iree_status_t loom_amdgpu_apply_complete_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_realization_t* realization, void* data) {
+  (void)realization;
+  loom_amdgpu_complete_offset_t* offset = data;
+  if (offset->stride_recipe.initialize != NULL) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_realization_request(
+        context, offset->loop->entry, /*loop=*/NULL, &offset->stride_recipe,
+        &offset->stride_realization));
+    IREE_ASSERT(offset->stride_realization != NULL,
+                "proved invariant address stride became unplaceable");
+    loom_low_lower_realization_input_t* inputs = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_function_array(
+        context, offset->recipe.input_count + 1, sizeof(*inputs),
+        (void**)&inputs));
+    if (offset->recipe.input_count != 0) {
+      memcpy(inputs, offset->recipe.inputs,
+             offset->recipe.input_count * sizeof(*inputs));
+    }
+    inputs[offset->recipe.input_count] = (loom_low_lower_realization_input_t){
+        .kind = LOOM_LOW_LOWER_REALIZATION_INPUT_REALIZATION,
+        .value.realization = offset->stride_realization,
+    };
+    offset->recipe.inputs = inputs;
+    ++offset->recipe.input_count;
+  }
+  const loom_low_lower_realization_t* carried_offset = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_realization_request(
+      context, source_op, offset->loop, &offset->recipe, &carried_offset));
+  IREE_ASSERT(carried_offset != NULL,
+              "proved complete address offset became unplaceable");
+  offset->access->realization.vaddr = carried_offset;
+  return iree_ok_status();
+}
+
 typedef struct loom_amdgpu_descriptor_offset_t {
   // Immutable descriptor retaining the original resource's extent and control.
   const loom_low_lower_realization_t* root;
@@ -457,7 +653,8 @@ static iree_status_t loom_amdgpu_apply_global_address_realizations(
 static iree_status_t loom_amdgpu_prepare_global_address_realizations(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_realization_loop_t* loop,
-    loom_amdgpu_memory_access_t* access) {
+    loom_amdgpu_memory_access_t* access, bool* out_offered) {
+  *out_offered = false;
   const loom_low_source_memory_access_plan_t* source = access->source;
   if (source->operation_kind != LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD ||
       access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR ||
@@ -606,6 +803,261 @@ static iree_status_t loom_amdgpu_prepare_global_address_realizations(
       .apply = loom_amdgpu_apply_global_address_realizations,
       .data = replacement,
   };
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_realization_offer(context, source_op, loop, &offer));
+  *out_offered = true;
+  return iree_ok_status();
+}
+
+static bool loom_amdgpu_address_form_supports_complete_offset(
+    loom_amdgpu_memory_address_form_t address_form) {
+  switch (address_form) {
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_SCRATCH_VADDR:
+      return true;
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM:
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_COUNT_:
+      return false;
+  }
+  IREE_ASSERT_UNREACHABLE("unknown AMDGPU memory address form");
+  IREE_BUILTIN_UNREACHABLE();
+}
+
+static uint32_t loom_amdgpu_complete_offset_direct_cost(
+    const loom_amdgpu_memory_access_t* access) {
+  uint32_t vaddr_term_count = 0;
+  uint32_t vaddr_product_cost = 0;
+  uint32_t vaddr_scale_count = 0;
+  uint32_t soffset_term_count = 0;
+  uint32_t soffset_cost = 0;
+  const loom_low_source_memory_access_plan_t* source = access->source;
+  uint16_t covered_mask = 0;
+  if (access->retained_component_kind !=
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE &&
+      source->retained_component.term != NULL) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        source->retained_component.term;
+    covered_mask = source->retained_component.term_mask;
+    if (access->retained_component_kind ==
+        LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR) {
+      ++vaddr_term_count;
+      vaddr_product_cost += term->stride_value_count;
+      vaddr_scale_count += term->byte_stride != 1;
+    } else {
+      ++soffset_term_count;
+      soffset_cost += term->stride_value_count + (term->byte_stride != 1);
+    }
+  }
+  for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
+    if (covered_mask & (1u << i)) {
+      continue;
+    }
+    const loom_low_source_memory_dynamic_term_t* term =
+        &source->dynamic_terms[i];
+    if (access->dynamic_term_kinds[i] ==
+        LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR) {
+      ++vaddr_term_count;
+      vaddr_product_cost += term->stride_value_count;
+      vaddr_scale_count += term->byte_stride != 1;
+    } else {
+      ++soffset_term_count;
+      soffset_cost += term->stride_value_count + (term->byte_stride != 1);
+    }
+  }
+  // VADDR scale-and-add forms can fuse one scale into each sum edge. SOFFSET
+  // terms use separate scalar scale and add instructions.
+  const uint32_t vaddr_sum_count = vaddr_term_count ? vaddr_term_count - 1 : 0;
+  uint32_t cost =
+      vaddr_product_cost + iree_max(vaddr_scale_count, vaddr_sum_count);
+  cost += soffset_cost + (soffset_term_count ? soffset_term_count - 1 : 0);
+  cost += access->vaddr_static_byte_offset != 0;
+  // A pure dynamic scalar base on GLOBAL_SADDR also rebuilds the 64-bit root.
+  // Static scalar bytes retain that root calculation after replacement.
+  if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR &&
+      soffset_term_count != 0 && access->scalar_byte_offset == 0 &&
+      access->scalar_base_byte_offset == 0) {
+    cost += 2;
+  }
+  return cost;
+}
+
+static uint32_t loom_amdgpu_complete_offset_initializer_cost(
+    const loom_low_source_memory_access_plan_t* source,
+    uint8_t varying_term_ordinal, uint64_t vaddr_static_byte_offset) {
+  uint32_t term_count = 0;
+  uint32_t cost = 0;
+  for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
+    if (i == varying_term_ordinal) {
+      continue;
+    }
+    const loom_low_source_memory_dynamic_term_t* term =
+        &source->dynamic_terms[i];
+    // One conservative bank materialization plus every product/scale op.
+    cost += 1 + term->stride_value_count + (term->byte_stride != 1);
+    ++term_count;
+  }
+  cost += term_count ? term_count - 1 : 0;
+  cost += vaddr_static_byte_offset != 0;
+  return cost;
+}
+
+static iree_status_t loom_amdgpu_prepare_complete_offset_realization(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_realization_loop_t* loop,
+    loom_amdgpu_memory_access_t* access) {
+  if (source_op->parent_block != loop->backedge->parent_block ||
+      loop->initial_value != 0 || access->realization.vaddr != NULL ||
+      access->vaddr_realization_mask != 0 ||
+      !loom_amdgpu_address_form_supports_complete_offset(
+          access->address_form) ||
+      access->vaddr_static_byte_offset > INT64_MAX ||
+      !loom_amdgpu_source_memory_offset_fits_u32(
+          access->source, (int64_t)access->vaddr_static_byte_offset)) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t dynamic_byte_offset_identity = 0;
+  const loom_low_lower_source_memory_term_recurrence_t* recurrence =
+      loom_low_lower_source_memory_term_recurrence(
+          context, &dynamic_byte_offset_identity);
+  const loom_low_source_memory_access_plan_t* source = access->source;
+  if (recurrence == NULL || !recurrence->can_carry_complete_offset) {
+    return iree_ok_status();
+  }
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
+    if (!loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(
+            module, &source->dynamic_terms[i])) {
+      return iree_ok_status();
+    }
+  }
+
+  const uint32_t direct_cost = loom_amdgpu_complete_offset_direct_cost(access);
+  if (direct_cost <= 1) {
+    return iree_ok_status();
+  }
+  loom_amdgpu_complete_offset_t* offset = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+      context, sizeof(*offset), (void**)&offset));
+  *offset = (loom_amdgpu_complete_offset_t){
+      .access = access,
+      .loop = loop,
+      .key =
+          {
+              .dynamic_byte_offset_identity = dynamic_byte_offset_identity,
+              .vaddr_static_byte_offset = access->vaddr_static_byte_offset,
+          },
+      .stride_key =
+          {
+              .term_identity = recurrence->term_identity,
+          },
+  };
+  for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
+    if (i == recurrence->term_ordinal) {
+      continue;
+    }
+    offset->initializer.terms[offset->initializer.count] =
+        &source->dynamic_terms[i];
+    offset->initializer.kinds[offset->initializer.count] =
+        LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
+    ++offset->initializer.count;
+  }
+  loom_amdgpu_sort_address_terms(&offset->initializer);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_plan_memory_term_sequence(context, &offset->initializer));
+
+  const loom_low_source_memory_dynamic_term_t* varying_term =
+      &source->dynamic_terms[recurrence->term_ordinal];
+  uint32_t increment_coefficient =
+      (uint32_t)varying_term->byte_stride * (uint32_t)loop->step;
+  loom_value_id_t dynamic_factors[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
+  uint8_t dynamic_factor_count = 0;
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  for (uint8_t i = 0; i < varying_term->stride_value_count; ++i) {
+    int64_t factor = 0;
+    const loom_value_id_t factor_value = varying_term->stride_values[i];
+    if (loom_value_facts_as_exact_i64(
+            loom_value_fact_table_lookup(fact_table, factor_value), &factor)) {
+      increment_coefficient *= (uint32_t)factor;
+    } else {
+      dynamic_factors[dynamic_factor_count++] = factor_value;
+    }
+  }
+  if (increment_coefficient == 0) {
+    return iree_ok_status();
+  }
+
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+  offset->recipe = (loom_low_lower_realization_recipe_t){
+      .type = vgpr_type,
+      .id = LOOM_AMDGPU_ADDRESS_REALIZATION_COMPLETE_OFFSET,
+      .key = iree_make_const_byte_span(&offset->key, sizeof(offset->key)),
+      .initialize = loom_amdgpu_initialize_complete_offset,
+      .update = loom_amdgpu_update_complete_offset,
+      .data = offset,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_set_address_recipe_inputs(
+      context, &offset->initializer, &offset->recipe));
+
+  uint32_t stride_setup_cost = 0;
+  if (dynamic_factor_count == 0) {
+    offset->literal_increment = increment_coefficient;
+  } else {
+    offset->stride_key.byte_stride = increment_coefficient;
+    offset->stride_term = *varying_term;
+    offset->stride_term.index = dynamic_factors[0];
+    offset->stride_term.stride_value_count = dynamic_factor_count - 1;
+    memcpy(offset->stride_term.stride_values, &dynamic_factors[1],
+           offset->stride_term.stride_value_count *
+               sizeof(*offset->stride_term.stride_values));
+    offset->stride_term.byte_stride = increment_coefficient;
+    offset->stride_term.byte_facts = loom_value_facts_unknown();
+    offset->stride_term.byte_shift =
+        iree_math_is_power_of_two_i64(increment_coefficient)
+            ? (uint32_t)iree_math_count_trailing_zeros_u32(
+                  increment_coefficient)
+            : LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE;
+    offset->stride_initializer = (loom_amdgpu_memory_dynamic_term_sequence_t){
+        .terms = {&offset->stride_term},
+        .kinds = {LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR},
+        .count = 1,
+    };
+    IREE_RETURN_IF_ERROR(loom_amdgpu_plan_memory_term_sequence(
+        context, &offset->stride_initializer));
+    offset->stride_recipe = (loom_low_lower_realization_recipe_t){
+        .type = vgpr_type,
+        .id = LOOM_AMDGPU_ADDRESS_REALIZATION_COMPLETE_OFFSET_STRIDE,
+        .key = iree_make_const_byte_span(&offset->stride_key,
+                                         sizeof(offset->stride_key)),
+        .initialize = loom_amdgpu_initialize_complete_offset_stride,
+        .data = offset,
+    };
+    IREE_RETURN_IF_ERROR(loom_amdgpu_set_address_recipe_inputs(
+        context, &offset->stride_initializer, &offset->stride_recipe));
+    stride_setup_cost = dynamic_factor_count + (increment_coefficient != 1);
+  }
+
+  const loom_low_lower_realization_offer_t offer = {
+      .id = LOOM_AMDGPU_ADDRESS_REALIZATION_COMPLETE_OFFSET,
+      .key = iree_make_const_byte_span(&offset->key, sizeof(offset->key)),
+      .group_setup_cost = loom_amdgpu_complete_offset_initializer_cost(
+                              source, recurrence->term_ordinal,
+                              access->vaddr_static_byte_offset) +
+                          stride_setup_cost,
+      .group_iteration_cost = 1,
+      .removed_key = (uint64_t)(uintptr_t)access,
+      .removed_iteration_cost = direct_cost,
+      .minimum_removed_count = 1,
+      .apply = loom_amdgpu_apply_complete_offset,
+      .data = offset,
+  };
   return loom_low_lower_realization_offer(context, source_op, loop, &offer);
 }
 
@@ -618,33 +1070,46 @@ iree_status_t loom_amdgpu_prepare_memory_address_realizations(
     return iree_ok_status();
   }
   if (access->source->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) {
-    return loom_amdgpu_prepare_global_address_realizations(context, source_op,
-                                                           loop, access);
+    bool descriptor_offered = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_prepare_global_address_realizations(
+        context, source_op, loop, access, &descriptor_offered));
+    if (descriptor_offered) {
+      // Descriptor rebasing and a complete VADDR rewrite both replace this
+      // packet, but share across different identities: resource roots versus
+      // canonical byte sums. Offering both would let independent cost groups
+      // select conflicting rewrites. The descriptor family owns its narrower
+      // admissible domain; complete offsets cover the remaining packets.
+      return iree_ok_status();
+    }
+  } else if (access->source->memory_space ==
+                 LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP &&
+             access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT &&
+             access->static_byte_offset >= 0 &&
+             access->vaddr_static_byte_offset == 0) {
+    const uint16_t invariant_mask =
+        loom_low_lower_source_memory_invariant_terms(context);
+    uint32_t bank_bit = 0;
+    uint32_t initial_byte_offset = 0;
+    uint64_t invariant_maximum = 0;
+    if (loom_amdgpu_address_alternating_bank(context, loop, access->source,
+                                             invariant_mask, &bank_bit,
+                                             &initial_byte_offset) &&
+        loom_amdgpu_address_invariant_bound(access->source, invariant_mask,
+                                            &invariant_maximum) &&
+        invariant_maximum + (uint64_t)access->static_byte_offset +
+                access->packet_byte_count <=
+            bank_bit) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_request_address_component(
+          context, source_op, loop, access->source, NULL, invariant_mask,
+          /*retained_component=*/NULL, bank_bit, initial_byte_offset,
+          &access->realization.vaddr));
+      if (access->realization.vaddr != NULL) {
+        return iree_ok_status();
+      }
+    }
   }
-  if (access->source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP ||
-      access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT ||
-      access->static_byte_offset < 0 || access->vaddr_static_byte_offset != 0) {
-    return iree_ok_status();
-  }
-  const uint16_t invariant_mask =
-      loom_low_lower_source_memory_invariant_terms(context);
-  uint32_t bank_bit = 0;
-  uint32_t initial_byte_offset = 0;
-  uint64_t invariant_maximum = 0;
-  if (!loom_amdgpu_address_alternating_bank(context, loop, access->source,
-                                            invariant_mask, &bank_bit,
-                                            &initial_byte_offset) ||
-      !loom_amdgpu_address_invariant_bound(access->source, invariant_mask,
-                                           &invariant_maximum) ||
-      invariant_maximum + (uint64_t)access->static_byte_offset +
-              access->packet_byte_count >
-          bank_bit) {
-    return iree_ok_status();
-  }
-  return loom_amdgpu_request_address_component(
-      context, source_op, loop, access->source, NULL, invariant_mask,
-      /*retained_component=*/NULL, bank_bit, initial_byte_offset,
-      &access->realization.vaddr);
+  return loom_amdgpu_prepare_complete_offset_realization(context, source_op,
+                                                         loop, access);
 }
 
 iree_status_t loom_amdgpu_prepare_fragment_address_realization(

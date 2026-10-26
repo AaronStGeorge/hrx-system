@@ -861,10 +861,21 @@ static bool loom_amdgpu_branch_arg_payload_prefers_vgpr(
                               incoming_value_id, excluded_value_id)) {
     return true;
   }
-  return loom_value_def_index(incoming_value) == 0 &&
-         loom_amdgpu_source_memory_access_prefers_vgpr(
-             module, fact_table, view_regions, analysis, defining_op,
-             loom_module_value_type(module, incoming_value_id));
+  if (loom_value_def_index(incoming_value) == 0 &&
+      loom_amdgpu_source_memory_access_prefers_vgpr(
+          module, fact_table, view_regions, analysis, defining_op,
+          loom_module_value_type(module, incoming_value_id))) {
+    return true;
+  }
+  // An expression wrapping a VGPR producer can cross the recurrence backedge.
+  // Follow the complete expression only when distribution facts do not prove
+  // that selecting one lane is safe; proven-uniform expressions retain their
+  // scalar carrier even when their producer happens to use vector registers.
+  return analysis != NULL && fact_table != NULL &&
+         !loom_value_facts_is_subgroup_uniform(
+             loom_value_fact_table_lookup(fact_table, incoming_value_id)) &&
+         loom_amdgpu_analyzed_source_value_prefers_vgpr(
+             module, fact_table, view_regions, analysis, incoming_value_id);
 }
 
 static bool loom_amdgpu_block_arg_incoming_payload_prefers_vgpr(

@@ -401,6 +401,11 @@ void loom_amdgpu_mark_memory_access_plan_storage_demands(
     const loom_amdgpu_memory_access_t* access =
         &plan->packets[packet_index].access;
     if (access->realization.vaddr) {
+      if (loom_amdgpu_memory_access_uses_resource_operand(access)) {
+        loom_low_lower_require_source_value_storage(
+            context,
+            loom_low_source_memory_access_base_view_value_id(access->source));
+      }
       continue;
     }
     loom_amdgpu_mark_source_memory_plan_storage_demands(context,

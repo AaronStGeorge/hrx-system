@@ -664,9 +664,11 @@ static iree_status_t loom_low_lower_finalize_selected_plans(
       .arena = &construction_arena,
   };
   iree_status_t status = iree_ok_status();
-  const bool prepare_recurrences = source_plan->has_source_memory_recurrences &&
-                                   source_plan->realizations != NULL;
-  if (prepare_recurrences) {
+  const bool prepare_rule_recurrences =
+      (source_plan->has_source_memory_producer_recurrences ||
+       source_plan->has_source_memory_rule_term_recurrences) &&
+      source_plan->realizations != NULL;
+  if (prepare_rule_recurrences) {
     if (source_plan->has_source_memory_producer_recurrences) {
       status = loom_low_lower_rule_source_memory_plan_prepare_producers(
           context, &source_memory_builder);
@@ -680,7 +682,8 @@ static iree_status_t loom_low_lower_finalize_selected_plans(
           context, &source_memory_builder, /*finalize_rules_only=*/true,
           /*skip_elided_rules=*/false);
     }
-    if (iree_status_is_ok(status) && context->result->error_count == 0) {
+    if (source_plan->has_source_memory_producer_recurrences &&
+        iree_status_is_ok(status) && context->result->error_count == 0) {
       status = loom_low_lower_rule_source_memory_plan_offer_recurrences(
           context, &source_memory_builder);
     }
@@ -697,7 +700,7 @@ static iree_status_t loom_low_lower_finalize_selected_plans(
   if (iree_status_is_ok(status) && context->result->error_count == 0) {
     status = loom_low_lower_finalize_selected_plan_phase(
         context, &source_memory_builder, /*finalize_rules_only=*/false,
-        /*skip_elided_rules=*/prepare_recurrences);
+        /*skip_elided_rules=*/prepare_rule_recurrences);
   }
   iree_arena_deinitialize(&construction_arena);
   return status;

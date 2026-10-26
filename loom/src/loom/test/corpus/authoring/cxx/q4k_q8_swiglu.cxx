@@ -576,3 +576,5 @@ LOOM_CHECK_SCENARIO(q4k_q8_swiglu_values) {
         });
   });
 }
+
+LOOM_CHECK_BENCHMARK(q4k_q8_swiglu_latency, q4k_q8_swiglu_values);
