@@ -16,6 +16,9 @@ low.func.def target<test.low.core>(@test_target) @structured_control_bytecode(%c
   } do(%body: reg<test.i32 : i32>) {
     low.scf.yield %body : reg<test.i32 : i32>
   }
+  low.func.exit %condition : reg<test.i32 : i32> {
+    return %if_result, %for_result, %while_result
+  }
   return %if_result, %for_result, %while_result
 }
 

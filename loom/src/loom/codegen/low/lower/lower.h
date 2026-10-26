@@ -1572,9 +1572,9 @@ iree_status_t loom_low_lower_remap_values(loom_low_lower_context_t* context,
                                           const loom_type_t* required_types,
                                           loom_value_id_t** out_low_values);
 
-// Returns true when |source_op| is a direct exit from the active source
-// callable body. Nested-region terminators are never callable exits, even when
-// they have the same operation kind.
+// Returns true when |source_op| exits the active source callable directly or
+// through a func.exit region. Other nested-region terminators are not callable
+// exits even when they have the same operation kind.
 bool loom_low_lower_source_op_is_callable_exit(
     const loom_low_lower_context_t* context, const loom_op_t* source_op);
 

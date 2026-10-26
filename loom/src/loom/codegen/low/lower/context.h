@@ -88,8 +88,9 @@ typedef struct loom_low_lowering_frame_t {
   // Stable source IDs and ordinals; borrows module scratch only while this
   // plan is being built or executed.
   loom_local_value_domain_t value_domain;
-  // Declared terminator kind for direct exits from the source callable body,
-  // or unknown while querying a bodyless callable.
+  // Declared terminator kind for exits from the source callable body or its
+  // callable-specific exit regions, or unknown while querying a bodyless
+  // callable.
   loom_op_kind_t source_callable_exit_kind;
   // Retained source lowering decisions and value materialization demands.
   loom_low_lower_source_plan_t source_plan;

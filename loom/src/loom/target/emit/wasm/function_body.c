@@ -738,6 +738,26 @@ static iree_status_t loom_wasm_emit_structured_region_before_terminator(
   return iree_ok_status();
 }
 
+static iree_status_t loom_wasm_emit_low_func_exit(loom_wasm_emit_state_t* state,
+                                                  const loom_op_t* op) {
+  const loom_region_t* body = loom_low_func_exit_body(op);
+  const loom_block_t* block = loom_region_const_entry_block(body);
+  const loom_op_t* return_op = block->last_op;
+  IREE_ASSERT(return_op != NULL && loom_low_return_isa(return_op),
+              "verified low.func.exit must terminate with low.return");
+
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_emit_local_get(state, loom_low_func_exit_condition(op)));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_IF));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_BLOCK_TYPE_EMPTY));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_structured_region_before_terminator(
+      state, body, return_op));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_low_return(state, return_op));
+  return loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
+}
+
 typedef struct loom_wasm_value_move_span_t {
   // Values read before any target local is overwritten.
   const loom_value_id_t* source_values;
@@ -1079,6 +1099,9 @@ static iree_status_t loom_wasm_emit_structural_op(loom_wasm_emit_state_t* state,
   }
   if (loom_low_return_isa(op)) {
     return loom_wasm_emit_low_return(state, op);
+  }
+  if (loom_low_func_exit_isa(op)) {
+    return loom_wasm_emit_low_func_exit(state, op);
   }
   if (loom_low_scf_if_isa(op)) {
     return loom_wasm_emit_low_scf_if(state, op);

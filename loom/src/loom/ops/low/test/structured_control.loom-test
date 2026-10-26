@@ -222,3 +222,14 @@ low.func.def target<test.low.core>(@test_target) @unsigned_counter(%lower: reg<t
   }
   return %last
 }
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @conditional_return(%condition: reg<test.i32>, %value: reg<test.i32>, %fallback: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.func.exit %condition : reg<test.i32> {
+    return %value
+  }
+  return %fallback
+}

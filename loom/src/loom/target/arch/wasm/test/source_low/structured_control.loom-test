@@ -196,6 +196,20 @@ low.func.def target<wasm.core.simd128>(@target) @scf_if_condition_requires_i32(%
 
 wasm.target<simd128> @target
 
+low.func.def target<wasm.core.simd128>(@target) @func_exit_condition_requires_i32(%condition: reg<wasm.v128>) asm {
+  // ERROR@+1: TARGET/035 {target_key="target", export_name="func_exit_condition_requires_i32", config_key="target", function_name="func_exit_condition_requires_i32", op_name="low.func.exit", actual_type="reg<wasm.v128>", type_constraint="reg<wasm.i32>"}
+  low.func.exit %condition : reg<wasm.v128> {
+    return
+  }
+  return
+}
+
+// ====
+
+// RUN: verify
+
+wasm.target<simd128> @target
+
 low.func.def target<wasm.core.simd128>(@target) @scf_while_condition_requires_i32(%condition: reg<wasm.v128>) asm {
   low.scf.while {
     // ERROR@+1: TARGET/035 {target_key="target", export_name="scf_while_condition_requires_i32", config_key="target", function_name="scf_while_condition_requires_i32", op_name="low.scf.condition", actual_type="reg<wasm.v128>", type_constraint="reg<wasm.i32>"}
@@ -333,5 +347,34 @@ func.def target(@target) @scalar_i32_select(%condition: i1, %true_value: i32, %f
 // ----
 low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @scalar_i32_select(%condition: reg<wasm.i32>, %true_value: reg<wasm.i32>, %false_value: reg<wasm.i32>) -> (reg<wasm.i32>) asm {
   %result = i32.select %true_value, %false_value, %condition
+  return %result
+}
+
+// ====
+
+// RUN: pass source-to-low{control-flow=structured-low}
+
+wasm.target<simd128> @target
+
+func.def target(@target) @return_inside_for(%condition: i1, %lower: index, %upper: index, %step: index, %found: i32, %fallback: i32) -> (i32) {
+  %result = scf.for %iv = [%lower to %upper step %step](%current = %fallback : i32) -> (i32) {
+    func.exit %condition : i1 {
+      func.return %found : i32
+    }
+    scf.yield %current : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+wasm.target<simd128> @target
+
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @return_inside_for(%condition: reg<wasm.i32>, %lower: reg<wasm.i32>, %upper: reg<wasm.i32>, %step: reg<wasm.i32>, %found: reg<wasm.i32>, %fallback: reg<wasm.i32>) -> (reg<wasm.i32>) asm {
+  %result = low.scf.for signed [%lower to %upper step %step] iter_args(%fallback: reg<wasm.i32>) -> (reg<wasm.i32>) do(%iv: reg<wasm.i32>, %current: reg<wasm.i32>) {
+    low.func.exit %condition : reg<wasm.i32> {
+      return %found
+    }
+    low.scf.yield %current : reg<wasm.i32>
+  }
   return %result
 }

@@ -914,3 +914,27 @@ low.kernel.def target<test.low.core>(@test_target) @storage_view_rejects_loop_ca
   }
   return
 }
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @exit_result_count_must_match(%condition: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.func.exit %condition : reg<test.i32> {
+    // ERROR@+1: STRUCTURE/008 {actual_count="0", expected_count="1"}
+    return
+  }
+  return %condition
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @exit_result_type_must_match(%condition: reg<test.i32>, %wrong: reg<test.ptr>) -> (reg<test.i32>) asm {
+  low.func.exit %condition : reg<test.i32> {
+    // ERROR@+1: TYPE/009
+    return %wrong
+  }
+  return %condition
+}

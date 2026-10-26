@@ -53,7 +53,8 @@ enum {
   LOOM_OP_LOW_SCHEDULE_PHASE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 29),
   LOOM_OP_LOW_SCHEDULE_END = LOOM_OP_KIND(LOOM_DIALECT_LOW, 30),
   LOOM_OP_LOW_OP_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 31),
-  LOOM_OP_LOW_COUNT_ = 32,
+  LOOM_OP_LOW_FUNC_EXIT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 32),
+  LOOM_OP_LOW_COUNT_ = 33,
 };
 
 // Symbol visibility. Absent (0) means private (module-internal).
@@ -918,6 +919,22 @@ LOOM_DEFINE_SUCCESSOR(loom_low_op_cond_br_false_dest, 1)
 LOOM_DEFINE_ATTR_SCOPED_ENUM(loom_low_op_cond_br_descriptor, 0)
 LOOM_DEFINE_ATTR_DICT(loom_low_op_cond_br_attrs, 1)
 iree_status_t loom_low_op_cond_br_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_FUNC_EXIT: Conditionally return from the nearest enclosing low function or kernel. The exit region evaluates only when the register predicate is true and terminates with the enclosing callable's low.return result contract.
+// low.func.exit %done : reg<wasm.i32> {
+//   low.return
+// }
+LOOM_DEFINE_ISA(loom_low_func_exit_isa, LOOM_OP_LOW_FUNC_EXIT)
+LOOM_DEFINE_OPERAND(loom_low_func_exit_condition, 0)
+LOOM_DEFINE_REGION(loom_low_func_exit_body, 0)
+iree_status_t loom_low_func_exit_build(
+    loom_builder_t* builder,
+    loom_value_id_t condition,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_func_exit_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

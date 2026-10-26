@@ -88,11 +88,11 @@ static iree_status_t loom_wasm_low_emit_type_constraint_mismatch(
       IREE_ARRAYSIZE(extra_params));
 }
 
-static iree_status_t loom_wasm_low_verify_scf_if(
+static iree_status_t loom_wasm_low_verify_branch_condition(
     loom_low_verify_context_t* context, loom_wasm_low_verify_state_t* state,
-    const loom_op_t* op) {
+    const loom_op_t* op, loom_value_id_t condition) {
   const loom_type_t condition_type =
-      loom_module_value_type(state->module, loom_low_scf_if_condition(op));
+      loom_module_value_type(state->module, condition);
   if (loom_wasm_low_type_is_i32(condition_type)) {
     return iree_ok_status();
   }
@@ -110,18 +110,6 @@ static iree_status_t loom_wasm_low_verify_scf_for(
                                                        lower_bound_type);
   }
   return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_low_verify_scf_condition(
-    loom_low_verify_context_t* context, loom_wasm_low_verify_state_t* state,
-    const loom_op_t* op) {
-  const loom_type_t condition_type = loom_module_value_type(
-      state->module, loom_low_scf_condition_condition(op));
-  if (loom_wasm_low_type_is_i32(condition_type)) {
-    return iree_ok_status();
-  }
-  return loom_wasm_low_emit_branch_condition_type_mismatch(context, state, op,
-                                                           condition_type);
 }
 
 static iree_status_t loom_wasm_low_begin_function(
@@ -162,13 +150,20 @@ static iree_status_t loom_wasm_low_verify_op(
     return iree_ok_status();
   }
   if (loom_low_scf_if_isa(packet->op)) {
-    return loom_wasm_low_verify_scf_if(context, state, packet->op);
+    return loom_wasm_low_verify_branch_condition(
+        context, state, packet->op, loom_low_scf_if_condition(packet->op));
+  }
+  if (loom_low_func_exit_isa(packet->op)) {
+    return loom_wasm_low_verify_branch_condition(
+        context, state, packet->op, loom_low_func_exit_condition(packet->op));
   }
   if (loom_low_scf_for_isa(packet->op)) {
     return loom_wasm_low_verify_scf_for(context, state, packet->op);
   }
   if (loom_low_scf_condition_isa(packet->op)) {
-    return loom_wasm_low_verify_scf_condition(context, state, packet->op);
+    return loom_wasm_low_verify_branch_condition(
+        context, state, packet->op,
+        loom_low_scf_condition_condition(packet->op));
   }
   return iree_ok_status();
 }

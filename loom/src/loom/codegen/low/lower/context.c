@@ -761,8 +761,12 @@ bool loom_low_lower_source_op_is_callable_exit(
       source_op->parent_block == NULL) {
     return false;
   }
-  return source_op->parent_block->parent_region ==
-         loom_func_like_body(context->source_function);
+  if (source_op->parent_block->parent_region ==
+      loom_func_like_body(context->source_function)) {
+    return true;
+  }
+  return source_op->parent_op != NULL &&
+         source_op->parent_op->kind == LOOM_OP_FUNC_EXIT;
 }
 
 iree_status_t loom_low_lower_materialize_structural_operand(

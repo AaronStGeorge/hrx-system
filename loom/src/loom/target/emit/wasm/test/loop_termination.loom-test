@@ -262,3 +262,100 @@ Disassembly of section CODE:
   local.get  1
   return
   end
+
+// ====
+
+// RUN: emit wasm-dis
+// REQUIRES: wasm-objdump
+
+wasm.target<simd128> @target
+
+// A return nested in structured loop control terminates only its helper. The
+// caller resumes after the call and consumes the selected result.
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @find_or_default(%condition: reg<wasm.i32>, %lower: reg<wasm.i32>, %upper: reg<wasm.i32>, %step: reg<wasm.i32>, %found: reg<wasm.i32>, %fallback: reg<wasm.i32>) -> (reg<wasm.i32>) asm {
+  %result = low.scf.for unsigned [%lower to %upper step %step] iter_args(%fallback: reg<wasm.i32>) -> (reg<wasm.i32>) do(%iv: reg<wasm.i32>, %current: reg<wasm.i32>) {
+    low.func.exit %condition : reg<wasm.i32> {
+      return %found
+    }
+    low.scf.yield %current : reg<wasm.i32>
+  }
+  return %result
+}
+
+low.func.def public target<wasm.core.simd128>(@target) abi(wasm_function) @call_and_continue(%condition: reg<wasm.i32>, %lower: reg<wasm.i32>, %upper: reg<wasm.i32>, %step: reg<wasm.i32>, %found: reg<wasm.i32>, %fallback: reg<wasm.i32>) -> (reg<wasm.i32>) asm {
+  %selected = low.func.call @find_or_default(%condition, %lower, %upper, %step, %found, %fallback) : (reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>) -> (reg<wasm.i32>)
+  %one = i32.const 1
+  %continued = i32.add %selected, %one
+  return %continued
+}
+
+// ----
+Disassembly of section CODE:
+
+<CODE>:
+        # 2 functions in section.
+
+<find_or_default>:
+        .local i32
+  local.get  2
+  local.get  3
+  i32.sub
+  local.get  1
+  local.get  3
+  local.get  2
+  local.get  1
+  i32.sub
+  i32.lt_u
+  f32.select
+  local.set  6
+  block
+  local.get  1
+  local.get  2
+  i32.lt_u
+  i32.eqz
+  if
+  br        1
+  end
+  loop
+  local.get  0
+  if
+  local.get  4
+  return
+  end
+  local.get  1
+  local.get  6
+  i32.lt_u
+  i32.eqz
+  if
+  br        2
+  end
+  local.get  1
+  local.get  3
+  i32.add
+  local.set  1
+  br        0
+  end
+  end
+  local.get  5
+  return
+  end
+
+<call_and_continue>:
+
+  local.get  0
+  local.get  1
+  local.get  2
+  local.get  3
+  local.get  4
+  local.get  5
+  call  0
+  local.set  0
+  i32.const  1
+  local.set  1
+  local.get  0
+  local.get  1
+  i32.add
+  local.set  0
+  local.get  0
+  return
+  end
