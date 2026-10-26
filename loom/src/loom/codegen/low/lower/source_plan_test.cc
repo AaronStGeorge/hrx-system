@@ -80,6 +80,8 @@ class LowLowerSourcePlanTest : public ::testing::Test {
       loom_low_lower_block_ref_t second = 0;
       // Authored destination reached after both interpositions.
       loom_low_lower_block_ref_t destination = 0;
+      // Independent block extending the canonical destination tuple.
+      loom_low_lower_block_ref_t extended = 0;
       // Number of callbacks observed before any Low construction.
       unsigned planning_count = 0;
       // Injects a target constraint rejection after a complete topology plan.
@@ -191,6 +193,17 @@ class LowLowerSourcePlanTest : public ::testing::Test {
     EXPECT_TRUE(loom_type_equal(
         loom_low_lower_control_argument_type(context, control.second, 0),
         loom_low_lower_control_argument_type(context, control.destination, 0)));
+    const loom_type_t appended_type =
+        loom_low_lower_control_argument_type(context, control.destination, 0);
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_control_add_block_with_appended_arguments(
+            context, /*before=*/0, control.second, &appended_type, 1,
+            &control.extended));
+    EXPECT_EQ(loom_low_lower_control_argument_count(context, control.extended),
+              2u);
+    EXPECT_TRUE(loom_type_equal(
+        loom_low_lower_control_argument_type(context, control.extended, 1),
+        appended_type));
     if (control.reject) {
       return loom_low_lower_emit_branch_constraint(
           context, source_op, IREE_SV("test_control_constraint"));
@@ -232,6 +245,17 @@ class LowLowerSourcePlanTest : public ::testing::Test {
         status = loom_low_br_build(
             builder, loom_low_lower_control_block(context, blocks[i + 1]),
             block->arg_ids, block->arg_count, LOOM_LOCATION_UNKNOWN, &branch);
+      }
+      if (iree_status_is_ok(status)) {
+        loom_block_t* block =
+            loom_low_lower_control_block(context, observer->control.extended);
+        loom_builder_set_block(builder, block);
+        loom_op_t* branch = nullptr;
+        status = loom_low_br_build(builder,
+                                   loom_low_lower_control_block(
+                                       context, observer->control.destination),
+                                   block->arg_ids, /*args_count=*/1,
+                                   LOOM_LOCATION_UNKNOWN, &branch);
       }
       loom_builder_restore(builder, saved_ip);
       return status;
@@ -562,7 +586,7 @@ TEST_F(LowLowerSourcePlanTest, ExecutesExpandedControlAfterFactStorageRetires) {
   EXPECT_EQ(observer_.type_mapping.emission_queries, 0u);
   const loom_region_t* body =
       loom_func_like_body(loom_func_like_cast(module_, result_.low_func_op));
-  ASSERT_EQ(body->block_count, 4u);
+  ASSERT_EQ(body->block_count, 5u);
   // Before-placement and nested edge rewrites preserve the same linear chain.
   for (uint16_t i = 0; i < 3; ++i) {
     const loom_block_t* block = loom_region_const_block(body, i);
@@ -576,6 +600,13 @@ TEST_F(LowLowerSourcePlanTest, ExecutesExpandedControlAfterFactStorageRetires) {
         loom_module_value_type(module_, loom_low_br_args(branch).values[0]),
         loom_block_arg_type(module_, next, 0)));
   }
+  const loom_block_t* extended = loom_region_const_block(body, 4);
+  EXPECT_EQ(extended->arg_count, 2u);
+  const loom_op_t* extended_branch = loom_block_const_last_op(extended);
+  ASSERT_TRUE(loom_low_br_isa(extended_branch));
+  EXPECT_EQ(loom_low_br_args(extended_branch).count, 1u);
+  EXPECT_EQ(loom_low_br_dest(extended_branch),
+            loom_region_const_block(body, 3));
 }
 
 TEST_F(LowLowerSourcePlanTest, RejectsControlPlanWithoutPublishingBlocks) {
