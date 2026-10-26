@@ -255,7 +255,6 @@ loom_cc_library(
   DEPS
     ::execute
     iree::base
-    loom::binding::c::interop
     loom::binding::c::loomc
     loom::codegen::low::text_asm
     loom::error::error_defs
@@ -266,7 +265,6 @@ loom_cc_library(
     loom::ops::op_defs
     loom::sanitizer::options
     loom::target::entry_selection
-    loom::target::pipeline
     loom::target::pipeline_options
     loom::target::provider
   PUBLIC

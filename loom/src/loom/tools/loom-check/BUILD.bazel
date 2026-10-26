@@ -342,7 +342,6 @@ loom_cc_library(
     hdrs = ["source_low.h"],
     deps = [
         ":execute",
-        "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:error_defs",
@@ -353,7 +352,6 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/sanitizer:options",
         "//loom/src/loom/target:entry_selection",
-        "//loom/src/loom/target:pipeline",
         "//loom/src/loom/target:pipeline_options",
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",

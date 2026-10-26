@@ -9,6 +9,7 @@
 #include "loom/format/text/printer.h"
 #include "loomc/iree.h"
 #include "module.h"
+#include "pass_program.h"
 #include "source.h"
 #include "target.h"
 
@@ -35,7 +36,7 @@ static loomc_status_t loomc_module_decode_text_source(
 }
 
 static void loomc_module_text_print_options(
-    const loomc_module_t* module,
+    const loomc_context_t* context,
     const loomc_module_resolved_serialize_options_t* options,
     loom_text_print_options_t* out_options) {
   *out_options = (loom_text_print_options_t){
@@ -45,7 +46,7 @@ static void loomc_module_text_print_options(
     out_options->flags |= LOOM_TEXT_PRINT_LOCATIONS;
   }
   loomc_target_pass_environment_initialize_text_asm_environment(
-      loomc_context_target_pass_environment(loomc_module_context(module)),
+      loomc_context_target_pass_environment(context),
       &out_options->low_asm_environment);
   switch (options->text_presentation) {
     case LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT:
@@ -63,8 +64,8 @@ static void loomc_module_text_print_options(
   }
 }
 
-static loomc_status_t loomc_module_encode_text_source(
-    const loomc_module_t* module, const loom_module_t* internal_module,
+static loomc_status_t loomc_module_print_internal_text_to_source(
+    const loomc_context_t* context, const loom_module_t* internal_module,
     const loomc_module_resolved_serialize_options_t* options,
     loomc_allocator_t allocator, loomc_source_t** out_source) {
   *out_source = NULL;
@@ -72,7 +73,7 @@ static loomc_status_t loomc_module_encode_text_source(
   iree_string_builder_initialize(iree_allocator_from_loomc(allocator),
                                  &builder);
   loom_text_print_options_t print_options;
-  loomc_module_text_print_options(module, options, &print_options);
+  loomc_module_text_print_options(context, options, &print_options);
   loomc_status_t status =
       loomc_status_from_iree(loom_text_print_module_to_builder_with_options(
           internal_module, &builder, &print_options));
@@ -89,6 +90,15 @@ static loomc_status_t loomc_module_encode_text_source(
   }
   iree_string_builder_deinitialize(&builder);
   return status;
+}
+
+static loomc_status_t loomc_module_encode_text_source(
+    const loomc_module_t* module, const loom_module_t* internal_module,
+    const loomc_module_resolved_serialize_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source) {
+  return loomc_module_print_internal_text_to_source(
+      loomc_module_context(module), internal_module, options, allocator,
+      out_source);
 }
 
 loomc_status_t loomc_module_deserialize_text_from_source(
@@ -137,4 +147,29 @@ loomc_status_t loomc_module_serialize_text_to_source(
       loomc_module_encode_text_source, allocator, out_source);
   IREE_TRACE_ZONE_END(z0);
   return return_status;
+}
+
+loomc_status_t loomc_pass_program_print_text_to_source(
+    const loomc_pass_program_t* pass_program,
+    const loomc_module_serialize_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source) {
+  if (out_source == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_source must not be NULL");
+  }
+  *out_source = NULL;
+  if (pass_program == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "pass_program must not be NULL");
+  }
+  loomc_module_resolved_serialize_options_t resolved_options = {0};
+  LOOMC_RETURN_IF_ERROR(loomc_module_resolve_serialize_options(
+      options, LOOMC_SOURCE_FORMAT_TEXT, &resolved_options));
+  IREE_TRACE_ZONE_BEGIN(z0);
+  loomc_status_t status = loomc_module_print_internal_text_to_source(
+      loomc_pass_program_context(pass_program),
+      loomc_pass_program_loom_pass_program(pass_program)->source_module,
+      &resolved_options, allocator, out_source);
+  IREE_TRACE_ZONE_END(z0);
+  return status;
 }
