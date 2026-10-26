@@ -14,7 +14,7 @@ import tkinter
 def main() -> None:
     assert sys.version_info[:3] == (3, 12, 13)
     assert sys.dont_write_bytecode
-    assert pathlib.Path(sys.executable).suffix.lower() == ".cmd"
+    assert pathlib.Path(sys.executable).suffix.lower() == ".exe"
 
     pathlib.Path(ssl.__file__).read_bytes()
     email_resources = importlib.resources.files("email")

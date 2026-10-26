@@ -35,8 +35,6 @@ def _is_runtime_file(relative_path):
 
 def _compact_python_runtime_impl(ctx):
     interpreter_relative_path = _runtime_relative_path(ctx.file.interpreter)
-    if not interpreter_relative_path.lower().endswith(".exe"):
-        fail("Compact Windows Python interpreter must be an .exe: {}".format(interpreter_relative_path))
     included_sources = []
     source_by_relative_path = {}
     directory_names = {}
@@ -68,28 +66,25 @@ def _compact_python_runtime_impl(ctx):
         relative_path: ctx.actions.declare_file("{}/{}".format(output_root, relative_path))
         for relative_path in sorted(root_file_names)
     }
-    output_interpreter_actual = output_files[interpreter_relative_path]
-    output_interpreter = ctx.actions.declare_file(
-        "{}/{}".format(output_root, interpreter_relative_path[:-4] + ".cmd"),
-    )
-    archive_outputs = output_directories + output_files.values()
-    runtime_outputs = archive_outputs + [output_interpreter]
+    output_interpreter = output_files[interpreter_relative_path]
+    runtime_outputs = output_directories + output_files.values()
     venv_bin_files = [
         output
         for relative_path, output in output_files.items()
         if relative_path.lower().endswith(".dll")
-    ] + [output_interpreter_actual]
+    ]
 
     archive = ctx.actions.declare_file(ctx.label.name + ".zip")
     archive_inputs = ctx.actions.args()
     for source in included_sources:
         archive_inputs.add("{}={}".format(_runtime_relative_path(source), source.path))
+    archive_inputs.add("Lib/sitecustomize.py={}".format(ctx.file._sitecustomize.path))
     archive_inputs.use_param_file("@%s", use_always = True)
     archive_inputs.set_param_file_format("multiline")
     ctx.actions.run(
         arguments = ["c", archive.path, archive_inputs],
         executable = ctx.executable._zipper,
-        inputs = included_sources,
+        inputs = included_sources + [ctx.file._sitecustomize],
         mnemonic = "PyCompactRuntimeArchive",
         outputs = [archive],
         progress_message = "Archiving compact Python runtime %{label}",
@@ -99,27 +94,14 @@ def _compact_python_runtime_impl(ctx):
     extract_arguments.add("x")
     extract_arguments.add(archive)
     extract_arguments.add("-d")
-    extract_arguments.add(output_interpreter_actual.dirname)
+    extract_arguments.add(output_interpreter.dirname)
     ctx.actions.run(
         arguments = [extract_arguments],
         executable = ctx.executable._zipper,
         inputs = [archive],
         mnemonic = "PyCompactRuntimeExpand",
-        outputs = archive_outputs,
+        outputs = runtime_outputs,
         progress_message = "Expanding compact Python runtime %{label}",
-    )
-
-    # CPython must not create __pycache__ entries inside Bazel's declared tree
-    # outputs. Preserve the launcher as sys.executable so child interpreters
-    # also receive -B, including children that otherwise ignore PYTHON* state.
-    ctx.actions.write(
-        content = """@echo off
-set "PYTHONEXECUTABLE=%~f0"
-"%~dp0{}" -B %*
-exit /b %ERRORLEVEL%
-""".format(interpreter_relative_path),
-        is_executable = True,
-        output = output_interpreter,
     )
 
     return [
@@ -141,6 +123,10 @@ compact_python_runtime = rule(
         "srcs": attr.label_list(
             allow_files = True,
             allow_empty = False,
+        ),
+        "_sitecustomize": attr.label(
+            allow_single_file = True,
+            default = ":sitecustomize.py",
         ),
         "_zipper": attr.label(
             cfg = "exec",
