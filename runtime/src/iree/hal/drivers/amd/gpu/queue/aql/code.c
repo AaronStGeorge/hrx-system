@@ -226,6 +226,17 @@ amdf_status_t iree_hal_amd_gpu_aql_code_close(iree_hal_amd_gpu_aql_code_t* code,
                      : AMDF_STATUS_OK;
 }
 
+bool iree_hal_amd_gpu_aql_code_is_host_idle(iree_hal_amd_gpu_aql_code_t* code) {
+  if (!code) {
+    return true;
+  }
+  if (!iree_slim_mutex_try_lock(&code->mutex)) {
+    return false;
+  }
+  iree_slim_mutex_unlock(&code->mutex);
+  return true;
+}
+
 bool iree_hal_amd_gpu_aql_code_try_inactivate(iree_hal_amd_gpu_aql_code_t* code,
                                               amdf_status_t* out_status) {
   if (!code) {

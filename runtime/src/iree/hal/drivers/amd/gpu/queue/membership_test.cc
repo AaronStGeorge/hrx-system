@@ -17,7 +17,7 @@ namespace {
 
 // The protocol queue is a dependency. The actual membership implementation
 // owns construction, worker/source handoffs, final release, and terminal joins.
-class MembershipTest : public ::testing::Test {
+class MembershipTest : public ::testing::TestWithParam<uint32_t> {
  protected:
   struct Queue {
     // Real refcounted HAL identity, destroyed by public final release.
@@ -139,7 +139,8 @@ class MembershipTest : public ::testing::Test {
     IREE_ASSERT_OK(iree_hal_amd_gpu_completion_initialize(
         &context_, 0, nullptr, 0, {}, iree_allocator_system(), &completion_));
     iree_hal_amd_gpu_failure_initialize(&context_.endpoint_info, nullptr,
-                                        context_.event_sink, 30000, &failure_);
+                                        context_.event_sink, GetParam(),
+                                        &failure_);
     membership_.failure = &failure_;
   }
 
@@ -185,7 +186,7 @@ class MembershipTest : public ::testing::Test {
   std::atomic<uint32_t> destroyed_{0};
 };
 
-TEST_F(MembershipTest, FailedObservationWaitsForTerminalOwnership) {
+TEST_P(MembershipTest, FailedObservationWaitsForTerminalOwnership) {
   iree_hal_queue_params_t params;
   iree_hal_queue_params_initialize(&params);
   iree_hal_queue_t* base = nullptr;
@@ -221,5 +222,8 @@ TEST_F(MembershipTest, FailedObservationWaitsForTerminalOwnership) {
   EXPECT_EQ(destroyed_.load(), 1u);
   EXPECT_TRUE(iree_hal_amd_gpu_queue_membership_is_empty(&membership_));
 }
+
+INSTANTIATE_TEST_SUITE_P(Deadline, MembershipTest,
+                         ::testing::Values(0u, 30000u));
 
 }  // namespace

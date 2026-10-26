@@ -25,6 +25,8 @@ typedef struct iree_hal_amd_gpu_queue_lifecycle_t {
   void (*close)(iree_hal_queue_t* queue);
   // Proves every accepted native/host owner has retired.
   bool (*is_idle)(iree_hal_queue_t* queue);
+  // Joins CPU borrowers without certifying native capture retirement.
+  bool (*is_host_idle)(iree_hal_queue_t* queue);
   // Joins the publisher and stops native access without releasing captures.
   bool (*try_inactivate)(iree_hal_queue_t* queue, amdf_status_t* out_status);
   // Releases failed issued captures only after every native owner stopped.

@@ -39,6 +39,10 @@ iree_status_t iree_hal_amd_gpu_aql_code_publish(
 amdf_status_t iree_hal_amd_gpu_aql_code_close(iree_hal_amd_gpu_aql_code_t* code,
                                               amdf_status_t failure);
 
+// After close, proves the synchronous loading caller has relinquished its CPU
+// publication borrow. Native accesses may remain unproven. NULL is idle.
+bool iree_hal_amd_gpu_aql_code_is_host_idle(iree_hal_amd_gpu_aql_code_t* code);
+
 // Attempts to join the loading publisher and stops its native queue while code
 // backing stays retained. False means a loading caller still owns publication;
 // true supplies the sticky native stop result. The parent retains this owner

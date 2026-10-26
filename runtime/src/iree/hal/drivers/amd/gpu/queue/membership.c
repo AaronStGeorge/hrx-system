@@ -237,15 +237,20 @@ static bool iree_hal_amd_gpu_queue_membership_release(void* user_data,
         membership->context, status, "GPU acquired queue release observation");
     // The first failed observation is not a lifetime proof. The terminal
     // owner uses slots_mutex, never this release's cold serialization mutex.
-    if (membership->failure &&
+    if (membership->failure) {
+      if (!iree_notification_await(
+              &membership->notification,
+              iree_hal_amd_gpu_queue_membership_terminal_joined, membership,
+              iree_make_deadline(membership->failure->deadline))) {
+        iree_hal_amd_gpu_failure_poll(membership->failure, iree_time_now());
+        // A diagnostic deadline cannot detach accepted CPU callbacks. The
+        // terminal owner still joins them even when native access is unproven.
         iree_notification_await(
             &membership->notification,
             iree_hal_amd_gpu_queue_membership_terminal_joined, membership,
-            iree_make_deadline(membership->failure->deadline))) {
+            iree_infinite_timeout());
+      }
       status = membership->terminal.status;
-    } else if (membership->failure) {
-      iree_hal_amd_gpu_failure_poll(membership->failure, iree_time_now());
-      status = amdf_make_api_status(AMDF_STATUS_CODE_DEADLINE_EXCEEDED);
     }
   }
   // The final source replacement joins the release observer too. Its last
@@ -520,7 +525,7 @@ static bool iree_hal_amd_gpu_queue_membership_step_failure(
     case IREE_HAL_AMD_GPU_FAILURE_RETIRING:
       return membership->lifecycle->retire_failed(queue, code);
     case IREE_HAL_AMD_GPU_FAILURE_JOINING:
-      return membership->lifecycle->is_idle(queue);
+      return membership->lifecycle->is_host_idle(queue);
     default:
       IREE_BUILTIN_UNREACHABLE();
   }

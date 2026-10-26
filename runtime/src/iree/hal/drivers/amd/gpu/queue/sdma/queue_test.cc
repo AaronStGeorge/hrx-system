@@ -445,6 +445,7 @@ TEST_F(QueueTest, FailureReportingJoinsAnActiveObserver) {
   hold_refresh_.store(true);
   std::thread observer([&] { Poll(); });
   entered_.acquire();
+  EXPECT_FALSE(iree_hal_amd_gpu_sdma_queue_is_host_idle(queue_));
   notification_status_ = amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL);
   iree_hal_amd_gpu_sdma_queue_submit(queue_, &copies[1].operation);
   Publish();
@@ -474,6 +475,8 @@ TEST_F(QueueTest, NativeStopRetiresFaultedCopiesWithoutCompletionWrites) {
     const auto failure = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
     Poll(failure);
     Publish();
+    EXPECT_TRUE(iree_hal_amd_gpu_sdma_queue_is_host_idle(queue_));
+    EXPECT_FALSE(iree_hal_amd_gpu_sdma_queue_is_idle(queue_));
     for (auto& copy : copies) {
       EXPECT_EQ(copy.retirement, IREE_HAL_AMD_GPU_SDMA_UNRETIRED);
     }

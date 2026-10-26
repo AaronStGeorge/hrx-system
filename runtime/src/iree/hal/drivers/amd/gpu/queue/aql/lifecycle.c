@@ -86,20 +86,25 @@ void iree_hal_amd_gpu_aql_queue_close(iree_hal_queue_t* base) {
                     iree_memory_order_release);
 }
 
-bool iree_hal_amd_gpu_aql_queue_is_idle(iree_hal_queue_t* base) {
+bool iree_hal_amd_gpu_aql_queue_is_host_idle(iree_hal_queue_t* base) {
   iree_hal_amd_gpu_aql_queue_t* queue = (void*)base;
   iree_slim_mutex_lock(&queue->pending.completion_mutex);
-  const bool idle =
-      !iree_atomic_load(&queue->pending.host_owners,
-                        iree_memory_order_acquire) &&
-      !iree_atomic_load(&queue->growth.pending_count,
-                        iree_memory_order_acquire) &&
-      !iree_hal_amd_gpu_aql_scratch_is_pending(&queue->scratch) &&
-      iree_hal_amd_gpu_publisher_is_idle(&queue->publisher) &&
-      iree_atomic_load(&queue->producer.count, iree_memory_order_acquire) ==
-          iree_atomic_load(&queue->completed.count, iree_memory_order_acquire);
+  const bool idle = !iree_atomic_load(&queue->pending.host_owners,
+                                      iree_memory_order_acquire) &&
+                    !iree_atomic_load(&queue->growth.pending_count,
+                                      iree_memory_order_acquire) &&
+                    !iree_hal_amd_gpu_aql_scratch_is_pending(&queue->scratch) &&
+                    iree_hal_amd_gpu_publisher_is_idle(&queue->publisher);
   iree_slim_mutex_unlock(&queue->pending.completion_mutex);
   return idle;
+}
+
+bool iree_hal_amd_gpu_aql_queue_is_idle(iree_hal_queue_t* base) {
+  iree_hal_amd_gpu_aql_queue_t* queue = (void*)base;
+  return iree_hal_amd_gpu_aql_queue_is_host_idle(base) &&
+         iree_atomic_load(&queue->producer.count, iree_memory_order_acquire) ==
+             iree_atomic_load(&queue->completed.count,
+                              iree_memory_order_acquire);
 }
 
 void iree_hal_amd_gpu_aql_queue_assign_frontier(

@@ -89,6 +89,12 @@ iree_hal_amd_gpu_sdma_queue_completion_source(
 // Cold query after the device has joined its copy producers.
 bool iree_hal_amd_gpu_sdma_queue_is_idle(iree_hal_amd_gpu_sdma_queue_t* queue);
 
+// Joins CPU publication and failure-notification borrowers after admission has
+// closed. Unretired native copies retain both operands and are not certified
+// safe by this predicate. NULL is idle.
+bool iree_hal_amd_gpu_sdma_queue_is_host_idle(
+    iree_hal_amd_gpu_sdma_queue_t* queue);
+
 // Stops native access while retaining command, mapping, and operand ownership.
 // The parent excludes completion observers first. False means a CPU publisher
 // is still active and leaves out_status unchanged; true supplies the native

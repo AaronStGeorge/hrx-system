@@ -547,6 +547,14 @@ bool iree_hal_amd_gpu_sdma_queue_is_idle(iree_hal_amd_gpu_sdma_queue_t* queue) {
               iree_atomic_load(&queue->retired, iree_memory_order_acquire));
 }
 
+bool iree_hal_amd_gpu_sdma_queue_is_host_idle(
+    iree_hal_amd_gpu_sdma_queue_t* queue) {
+  return !queue ||
+         (iree_hal_amd_gpu_publisher_is_idle(&queue->publisher) &&
+          !(iree_atomic_load(&queue->observer, iree_memory_order_acquire) &
+            IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE));
+}
+
 bool iree_hal_amd_gpu_sdma_queue_try_inactivate(
     iree_hal_amd_gpu_sdma_queue_t* queue, amdf_status_t* out_status) {
   if (!queue) {

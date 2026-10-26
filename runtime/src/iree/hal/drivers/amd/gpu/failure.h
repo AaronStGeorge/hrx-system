@@ -34,7 +34,7 @@ typedef struct iree_hal_amd_gpu_failure_t {
   // Borrowed HAL identity, live through completion and publication worker
   // joins.
   iree_hal_device_t* device;
-  // Software join budget and native-stall reporting threshold in milliseconds.
+  // Native-stop software wait budget and report threshold in milliseconds.
   uint32_t timeout_ms;
   // Host progress/callback notification, independent of the failed native wake.
   iree_notification_t changed;
@@ -44,7 +44,7 @@ typedef struct iree_hal_amd_gpu_failure_t {
   const char* operation;
   // First-fault monotonic timestamp, immutable after status publication.
   iree_time_t started;
-  // One absolute monotonic deadline for every controlled ownership join.
+  // Absolute attempt/report deadline; expiry cannot detach live CPU borrowers.
   iree_time_t deadline;
   // Cached phase and logical queue ordinal for a possibly blocked native call.
   iree_atomic_int64_t position;
@@ -85,8 +85,8 @@ void iree_hal_amd_gpu_failure_set_phase(iree_hal_amd_gpu_failure_t* failure,
 iree_time_t iree_hal_amd_gpu_failure_poll(iree_hal_amd_gpu_failure_t* failure,
                                           iree_time_t now);
 
-// Ends the attempt after either joined ownership or an explicitly reported
-// cleanup failure. This does not itself supply a native lifetime proof.
+// Ends monitoring after CPU borrowers join, with either native access cessation
+// or explicitly retained backing. This does not itself supply a native proof.
 void iree_hal_amd_gpu_failure_finish(iree_hal_amd_gpu_failure_t* failure);
 
 // Wakes software ownership joins only while terminal failure is active.

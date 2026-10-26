@@ -17,10 +17,11 @@ extern "C" {
 #endif
 
 // Device-owned terminal coordination. The existing completion worker joins
-// native access before failed captures; the existing publication worker joins
-// CPU tails and independently reports a blocked native removal. All pointers
-// are borrowed and remain live through both worker joins. No child retains the
-// device, and this owner creates no thread or background destruction task.
+// native access before failed captures and joins CPU callback tails even on
+// unsuccessful cleanup. The existing publication worker independently reports
+// a blocked join or native removal. All pointers are borrowed and remain live
+// through both worker joins. No child retains the device, and this owner
+// creates no thread or background destruction task.
 typedef struct iree_hal_amd_gpu_device_failure_t {
   // First native fault, absolute software deadline, and cached diagnostics.
   iree_hal_amd_gpu_failure_t state;

@@ -141,6 +141,11 @@ void iree_hal_amd_gpu_aql_queue_close(iree_hal_queue_t* queue);
 // After external callers join, proves all accepted host/native uses retired.
 bool iree_hal_amd_gpu_aql_queue_is_idle(iree_hal_queue_t* queue);
 
+// After close/failure, joins CPU publishers, scratch/growth callbacks, and host
+// borrowers without requiring native capture retirement. Native access and
+// capture lifetimes remain unproven until successful inactivation.
+bool iree_hal_amd_gpu_aql_queue_is_host_idle(iree_hal_queue_t* queue);
+
 // Attempts exclusive publication ownership and stops native access while
 // retaining mappings and captures. False leaves out_status unchanged when a
 // CPU publisher still owns the queue. True supplies the native stop result;

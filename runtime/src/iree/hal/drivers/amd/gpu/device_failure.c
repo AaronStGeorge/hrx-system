@@ -76,7 +76,12 @@ static bool iree_hal_amd_gpu_device_failure_step(
   if (phase == IREE_HAL_AMD_GPU_FAILURE_JOINING) {
     iree_hal_amd_gpu_failure_set_phase(&failure->state, phase, UINT32_MAX - 1,
                                        0, 1);
-    return iree_hal_amd_gpu_sdma_queue_is_idle(failure->transfers);
+    if (!iree_hal_amd_gpu_sdma_queue_is_host_idle(failure->transfers)) {
+      return false;
+    }
+    iree_hal_amd_gpu_failure_set_phase(&failure->state, phase, UINT32_MAX, 0,
+                                       1);
+    return iree_hal_amd_gpu_aql_code_is_host_idle(failure->code);
   }
   return true;
 }
@@ -101,7 +106,7 @@ static void iree_hal_amd_gpu_device_failure_join(void* user_data,
   bool expired = false;
   for (iree_hal_amd_gpu_failure_phase_t phase =
            IREE_HAL_AMD_GPU_FAILURE_CLOSING;
-       phase != IREE_HAL_AMD_GPU_FAILURE_FINISHED &&
+       phase != IREE_HAL_AMD_GPU_FAILURE_JOINING &&
        amdf_status_is_ok(cleanup_status);
        ++phase) {
     bool ready = false;
@@ -126,6 +131,33 @@ static void iree_hal_amd_gpu_device_failure_join(void* user_data,
         failure->context, cleanup_status,
         "GPU terminal native access unproven; preserving ownership");
   }
+  // Native stop failure preserves issued captures, but cannot detach a live
+  // CPU borrower. In particular, retaining GPU storage does not extend the
+  // application's callback-data or allocator lifetime past final release.
+  // After one deadline diagnostic, await real host handoffs without repeatedly
+  // polling an expired deadline or retrying consumed native identifiers.
+  iree_time_t deadline =
+      expired ? IREE_TIME_INFINITE_FUTURE : failure->state.deadline;
+  bool ready = false;
+  while (!ready) {
+    const iree_wait_token_t token =
+        iree_notification_prepare_wait(&failure->state.changed);
+    amdf_status_t host_status = AMDF_STATUS_OK;
+    ready = iree_hal_amd_gpu_device_failure_step(
+        failure, IREE_HAL_AMD_GPU_FAILURE_JOINING, code, &host_status);
+    if (ready) {
+      iree_notification_cancel_wait(&failure->state.changed);
+    } else if (!iree_notification_commit_wait(&failure->state.changed, token, 0,
+                                              deadline)) {
+      // Reporting a late CPU join does not revoke an established native stop.
+      iree_hal_amd_gpu_failure_poll(&failure->state, iree_time_now());
+      deadline = IREE_TIME_INFINITE_FUTURE;
+    }
+  }
+  // An acquisition callback can enqueue a nested native release before its
+  // final context access. Keep independent deadline reporting armed until
+  // those callback tails join, including when native backing stays retained.
+  iree_hal_amd_gpu_context_join_memory(failure->context);
   iree_hal_amd_gpu_failure_finish(&failure->state);
   iree_hal_amd_gpu_queue_membership_finish_failure(failure->membership,
                                                    cleanup_status);

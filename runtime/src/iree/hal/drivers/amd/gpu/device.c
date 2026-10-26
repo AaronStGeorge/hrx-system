@@ -42,6 +42,7 @@ static const iree_hal_amd_gpu_queue_lifecycle_t
     iree_hal_amd_gpu_pm4_queue_lifecycle = {
         .close = iree_hal_amd_gpu_pm4_queue_close,
         .is_idle = iree_hal_amd_gpu_pm4_queue_is_idle,
+        .is_host_idle = iree_hal_amd_gpu_pm4_queue_is_host_idle,
         .try_inactivate = iree_hal_amd_gpu_pm4_queue_try_inactivate,
         .retire_failed = iree_hal_amd_gpu_pm4_queue_retire_failed,
         .shutdown = iree_hal_amd_gpu_pm4_queue_shutdown,
@@ -59,6 +60,7 @@ static const iree_hal_amd_gpu_queue_lifecycle_t
     iree_hal_amd_gpu_aql_queue_lifecycle = {
         .close = iree_hal_amd_gpu_aql_queue_close,
         .is_idle = iree_hal_amd_gpu_aql_queue_is_idle,
+        .is_host_idle = iree_hal_amd_gpu_aql_queue_is_host_idle,
         .try_inactivate = iree_hal_amd_gpu_aql_queue_try_inactivate,
         .retire_failed = iree_hal_amd_gpu_aql_queue_retire_failed,
         .shutdown = iree_hal_amd_gpu_aql_queue_shutdown,
@@ -581,8 +583,7 @@ static bool iree_hal_amd_gpu_device_release_children(
       (iree_atomic_load(&device->membership.terminal.completed,
                         iree_memory_order_acquire) &&
        !amdf_status_is_ok(device->membership.terminal.status))) {
-    // Unproven native access keeps the complete callback/publication graph.
-    // Stopping just one supporting worker would strand still-live borrowers.
+    // Unproven native access keeps backing, after CPU callback owners joined.
     return false;
   }
   iree_hal_amd_gpu_context_join_memory(device->context);
@@ -734,6 +735,12 @@ static void iree_hal_amd_gpu_device_destroy(iree_hal_device_t* base) {
   // after its final retirement round; joining includes every callback tail.
   iree_thread_release(device->completion.thread);
   device->completion.thread = NULL;
+  // The terminal callback joins accepted CPU work even when native removal
+  // fails. Join the remaining source-table readers before any retained-backing
+  // return: application-owned callbacks and allocators outlive the device, not
+  // an abandoned worker.
+  iree_hal_amd_gpu_context_join_memory(device->context);
+  iree_hal_amd_gpu_publication_deinitialize(&device->publication);
   if (!iree_hal_amd_gpu_device_is_idle(device) ||
       (iree_atomic_load(&device->membership.terminal.completed,
                         iree_memory_order_acquire) &&

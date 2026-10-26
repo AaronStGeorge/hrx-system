@@ -237,6 +237,8 @@ class AqlLifecycleTest : public ::testing::Test {
 
 TEST_F(AqlLifecycleTest, NativeStopPrecedesSixBufferReleases) {
   Capture();
+  EXPECT_TRUE(iree_hal_amd_gpu_aql_queue_is_host_idle(&queue_.base));
+  EXPECT_FALSE(iree_hal_amd_gpu_aql_queue_is_idle(&queue_.base));
   ASSERT_TRUE(iree_hal_amd_gpu_publisher_try_acquire(&queue_.publisher));
   amdf_status_t status = amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL);
   EXPECT_FALSE(

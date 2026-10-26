@@ -73,6 +73,18 @@ class DeviceFailureTest : public ::testing::Test {
     lifecycle_ = {
         .close = iree_hal_amd_gpu_pm4_queue_close,
         .is_idle = iree_hal_amd_gpu_pm4_queue_is_idle,
+        .is_host_idle =
+            [](iree_hal_queue_t* base) {
+              const bool idle = iree_hal_amd_gpu_pm4_queue_is_host_idle(base);
+              auto* queue =
+                  reinterpret_cast<iree_hal_amd_gpu_pm4_queue_t*>(base);
+              auto* native =
+                  reinterpret_cast<NativeQueue*>(queue->storage.queue);
+              if (!idle && native->owner->observe_host_join_) {
+                native->owner->host_join_entered_.release();
+              }
+              return idle;
+            },
         .try_inactivate = iree_hal_amd_gpu_pm4_queue_try_inactivate,
         .retire_failed = iree_hal_amd_gpu_pm4_queue_retire_failed,
         .notify_failure = iree_hal_amd_gpu_pm4_queue_notify_failure,
@@ -249,6 +261,10 @@ class DeviceFailureTest : public ::testing::Test {
   std::binary_semaphore resume_stop_{0};
   // Error sink receipt, independent of the blocked native removal.
   std::binary_semaphore deadline_reported_{0};
+  // Immutable test observation policy, installed before either worker starts.
+  bool observe_host_join_ = false;
+  // Receipts from the real idle predicate, independently of monitor scheduling.
+  std::counting_semaphore<> host_join_entered_{0};
   // Native owners whose access has ended.
   std::atomic<uint32_t> stopped_{0};
   // Final application buffer callbacks after all native owners stopped.
@@ -295,10 +311,13 @@ TEST_F(DeviceFailureTest, ExistingPublisherReportsBlockedNativeStop) {
 
 TEST_F(DeviceFailureTest, PublisherJoinExpiryRetainsUnprovenCaptures) {
   ASSERT_TRUE(iree_hal_amd_gpu_publisher_try_acquire(&queues_[0].publisher));
+  observe_host_join_ = true;
   Start(0);
-  Join();
-  EXPECT_EQ(membership_.terminal.status,
-            amdf_make_api_status(AMDF_STATUS_CODE_DEADLINE_EXCEEDED));
+  host_join_entered_.acquire();
+  deadline_reported_.acquire();
+  EXPECT_EQ(iree_atomic_load(&membership_.terminal.completed,
+                             iree_memory_order_acquire),
+            0);
   EXPECT_EQ(stopped_.load(), 0u);
   EXPECT_EQ(released_.load(), 0u);
   EXPECT_EQ(deadlines_.load(), 1u);
@@ -306,6 +325,63 @@ TEST_F(DeviceFailureTest, PublisherJoinExpiryRetainsUnprovenCaptures) {
   // No queued entries exist and the subject did not steal that ownership.
   EXPECT_FALSE(
       iree_hal_amd_gpu_publisher_handoff(&queues_[0].publisher, nullptr));
+  // Production publishers end this borrow with the closed-queue wake. This
+  // direct borrow has no submitted entry, so its controller supplies the wake.
+  EXPECT_TRUE(iree_hal_amd_gpu_context_wake_failure(&context_));
+  Join();
+  EXPECT_EQ(membership_.terminal.status,
+            amdf_make_api_status(AMDF_STATUS_CODE_DEADLINE_EXCEEDED));
+  EXPECT_EQ(stopped_.load(), 0u);
+  EXPECT_EQ(released_.load(), 0u);
+}
+
+TEST_F(DeviceFailureTest, NativeRemovalFailureStillJoinsHostCallbacks) {
+  // An accepted external host callback has an independent lifetime from the
+  // unread native captures. Its dependency keeps that borrower live until the
+  // test explicitly returns it through the production count/notification pair.
+  iree_atomic_store(&queues_[0].pending.host_owners, 1,
+                    iree_memory_order_release);
+  observe_host_join_ = true;
+  stop_status_ = amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL);
+  Start(0);
+  host_join_entered_.acquire();
+  deadline_reported_.acquire();
+  EXPECT_EQ(iree_atomic_load(&membership_.terminal.completed,
+                             iree_memory_order_acquire),
+            0);
+  EXPECT_EQ(stopped_.load(), 1u);
+  EXPECT_EQ(released_.load(), 0u);
+  iree_slim_mutex_lock(&queues_[0].pending.completion_mutex);
+  iree_atomic_store(&queues_[0].pending.host_owners, 0,
+                    iree_memory_order_release);
+  EXPECT_TRUE(iree_hal_amd_gpu_context_wake_failure(&context_));
+  iree_slim_mutex_unlock(&queues_[0].pending.completion_mutex);
+  Join();
+  EXPECT_EQ(membership_.terminal.status, stop_status_);
+  EXPECT_EQ(released_.load(), 0u);
+  EXPECT_EQ(deadlines_.load(), 1u);
+}
+
+TEST_F(DeviceFailureTest, HostJoinPastDeadlinePreservesProvenNativeCleanup) {
+  iree_atomic_store(&queues_[0].pending.host_owners, 1,
+                    iree_memory_order_release);
+  observe_host_join_ = true;
+  Start(0);
+  host_join_entered_.acquire();
+  deadline_reported_.acquire();
+  EXPECT_EQ(iree_atomic_load(&membership_.terminal.completed,
+                             iree_memory_order_acquire),
+            0);
+  EXPECT_EQ(stopped_.load(), 2u);
+  EXPECT_EQ(released_.load(), 6u);
+  iree_slim_mutex_lock(&queues_[0].pending.completion_mutex);
+  iree_atomic_store(&queues_[0].pending.host_owners, 0,
+                    iree_memory_order_release);
+  EXPECT_TRUE(iree_hal_amd_gpu_context_wake_failure(&context_));
+  iree_slim_mutex_unlock(&queues_[0].pending.completion_mutex);
+  Join();
+  EXPECT_EQ(membership_.terminal.status, AMDF_STATUS_OK);
+  EXPECT_EQ(deadlines_.load(), 1u);
 }
 
 TEST_F(DeviceFailureTest,
