@@ -487,6 +487,107 @@ TEST_F(LowEmissionFrameTest, ResidencyQueryConsumesRetainedFunctionFacts) {
   EXPECT_EQ(frame.residency.tier_limit, 2u);
 }
 
+TEST_F(LowEmissionFrameTest,
+       RepacksAggregateTopologyBlockingInstructionPreferences) {
+  // First-fit places the odd-width connector across the boundary between the
+  // later equal-width operands. Physical numbering must translate that entire
+  // overlap-connected range rigidly and cannot satisfy the low-bit preference.
+  // Packing the scalar lifetimes above dense aggregates aligns the connector
+  // with one operand, leaving the other independently numberable.
+  ModulePtr module = ParseModule(R"(
+low.func.def target<test.low.core> @fragmented_preferences(%source: reg<test.phys>, %seed: reg<test.phys x8>, %persistent0: reg<test.phys>, %persistent1: reg<test.phys>, %persistent2: reg<test.phys>, %persistent3: reg<test.phys>, %persistent4: reg<test.phys>, %persistent5: reg<test.phys>, %persistent6: reg<test.phys>) -> (reg<test.phys>, reg<test.phys x8>) asm {
+  %temporary0 = test.event.write.fast.phys %source
+  %temporary1 = test.event.write.fast.phys %source
+  %connector0 = test.event.write.fast.phys %source
+  %connector1 = test.event.write.fast.phys %source
+  %connector2 = test.event.write.fast.phys %source
+  %connector = concat(%connector0, %connector1, %connector2) : (reg<test.phys>, reg<test.phys>, reg<test.phys>) -> reg<test.phys x3>
+  %connector_first = slice %connector[0] : reg<test.phys x3> -> reg<test.phys>
+  test.event.read.late.phys %connector_first
+  test.event.read.late.phys %temporary0
+  test.event.read.late.phys %temporary1
+  %lhs0 = test.event.write.fast.phys %source
+  %lhs1 = test.event.write.fast.phys %source
+  %lhs2 = test.event.write.fast.phys %source
+  %lhs3 = test.event.write.fast.phys %source
+  %lhs = concat(%lhs0, %lhs1, %lhs2, %lhs3) : (reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>) -> reg<test.phys x4>
+  %rhs0 = test.event.write.fast.phys %source
+  %rhs1 = test.event.write.fast.phys %source
+  %rhs2 = test.event.write.fast.phys %source
+  %rhs3 = test.event.write.fast.phys %source
+  %rhs = concat(%rhs0, %rhs1, %rhs2, %rhs3) : (reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>) -> reg<test.phys x4>
+  %lhs_first = slice %lhs[0] : reg<test.phys x4> -> reg<test.phys>
+  %rhs_first = slice %rhs[0] : reg<test.phys x4> -> reg<test.phys>
+  %result = test.add.phys %lhs_first, %rhs_first
+  test.event.read.late.phys %persistent0
+  test.event.read.late.phys %persistent1
+  test.event.read.late.phys %persistent2
+  test.event.read.late.phys %persistent3
+  test.event.read.late.phys %persistent4
+  test.event.read.late.phys %persistent5
+  test.event.read.late.phys %persistent6
+  return %result, %seed
+}
+)");
+  static const loom_low_placement_value_ref_t values[] = {
+      {0, LOOM_LOW_PLACEMENT_VALUE_OPERAND, 0},
+      {0, LOOM_LOW_PLACEMENT_VALUE_OPERAND, 1},
+  };
+  static const loom_low_placement_predicate_t predicates[] = {
+      {0, 1, 0, 0, 1, LOOM_LOW_PLACEMENT_RELATION_DIFFERENT_MASKED_LOCATION, 3},
+  };
+  static const loom_low_placement_clause_t clauses[] = {
+      {0, 1, 1, LOOM_LOW_PLACEMENT_CLAUSE_ANY},
+  };
+  static const loom_low_placement_preference_t preferences[] = {{
+      values,
+      predicates,
+      clauses,
+      IREE_ARRAYSIZE(values),
+      IREE_ARRAYSIZE(clauses),
+  }};
+  uint16_t indices[TEST_LOW_CORE_DESCRIPTOR_REF_TEST_PACKING_EARLY_EXPAND + 1] =
+      {};
+  indices[TEST_LOW_CORE_DESCRIPTOR_REF_TEST_ADD_PHYS] = 1;
+  loom_low_emission_frame_options_t options = {
+      .descriptor_registry = &registry_.registry,
+      .function_target_facts = &target_facts_,
+      .instruction_preferences = {indices, preferences},
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+  };
+  loom_low_emission_frame_t frame = {};
+  bool accepted = false;
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module.get(), loom_block_op(loom_module_block(module.get()), 0), &options,
+      &arena_, &frame, &accepted));
+  ASSERT_TRUE(accepted);
+  ASSERT_EQ(frame.allocation.error_count, 0u);
+  EXPECT_EQ(frame.allocation.spill_count, 0u);
+  EXPECT_EQ(frame.allocation.physical_extents
+                .ends_by_reg_class[TEST_LOW_CORE_REG_CLASS_ID_TEST_PHYS],
+            23u);
+
+  uint32_t preferred_instruction_count = 0;
+  for (iree_host_size_t i = 0; i < loom_low_packet_count(&frame.schedule);
+       ++i) {
+    const loom_low_packet_view_t packet =
+        loom_low_packet_at(&frame.schedule, i);
+    if (packet.descriptor_ordinal !=
+        TEST_LOW_CORE_DESCRIPTOR_REF_TEST_ADD_PHYS) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* lhs =
+        loom_low_packet_operand_assignment(&frame.allocation, &packet, 0);
+    const loom_low_allocation_assignment_t* rhs =
+        loom_low_packet_operand_assignment(&frame.allocation, &packet, 1);
+    ASSERT_NE(lhs, nullptr);
+    ASSERT_NE(rhs, nullptr);
+    EXPECT_NE(lhs->location_base & 3, rhs->location_base & 3);
+    ++preferred_instruction_count;
+  }
+  EXPECT_EQ(preferred_instruction_count, 1u);
+}
+
 TEST_F(LowEmissionFrameTest, StorageLeaseFrameRetainsValueProducers) {
   ModulePtr module = ParseModule();
   const loom_low_storage_lease_provider_t storage_lease_provider = {

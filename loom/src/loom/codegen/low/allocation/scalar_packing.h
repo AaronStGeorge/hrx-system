@@ -34,13 +34,15 @@ typedef struct loom_low_allocation_scalar_packing_t {
 // candidate order instead. Two sweeps over |order| index overlap in linear
 // work, without a per-scalar scan through all intervals.
 //
-// |liveness| and |order| contain classes from |descriptor_set|. The returned
-// bitmap is empty when no applicable aggregate exists.
+// |liveness| and |order| contain classes from |descriptor_set|. A nonempty
+// |repair_reg_classes| bitmap restricts packing to those classes; an empty
+// bitmap selects every applicable class. The returned overlap bitmap is empty
+// when no applicable aggregate exists.
 iree_status_t loom_low_allocation_scalar_packing_build(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_interval_order_t* order,
-    iree_arena_allocator_t* arena,
+    iree_bitmap_t repair_reg_classes, iree_arena_allocator_t* arena,
     loom_low_allocation_scalar_packing_t* out_packing);
 
 #ifdef __cplusplus

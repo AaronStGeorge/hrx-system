@@ -862,7 +862,8 @@ TEST_F(LowAllocationSearchTest,
   IREE_ASSERT_OK(loom_low_allocation_interval_order_build(
       &descriptor_set, &liveness, &unit_liveness, &placement, &arena_, &order));
   IREE_ASSERT_OK(loom_low_allocation_scalar_packing_build(
-      &descriptor_set, &liveness, &order, &arena_, &context.scalar_packing));
+      &descriptor_set, &liveness, &order,
+      /*repair_reg_classes=*/{}, &arena_, &context.scalar_packing));
   location_base = UINT32_MAX;
   EXPECT_TRUE(loom_low_allocation_search_find_free_location(
       &context, &intervals[0], Capacity(/*max_units=*/8), &location_base));

@@ -49,7 +49,8 @@ class LowAllocationScalarPackingTest : public ::testing::Test {
   }
 
   iree_status_t Build(std::vector<loom_liveness_interval_t> intervals,
-                      loom_low_allocation_scalar_packing_t* out_packing) {
+                      loom_low_allocation_scalar_packing_t* out_packing,
+                      iree_bitmap_t repair_reg_classes = {}) {
     std::vector<uint32_t> interval_indices(intervals.size());
     std::vector<loom_value_id_t> value_ids(intervals.size());
     std::vector<loom_low_allocation_unit_liveness_value_t> values(
@@ -80,8 +81,9 @@ class LowAllocationScalarPackingTest : public ::testing::Test {
     IREE_RETURN_IF_ERROR(loom_low_allocation_interval_order_build(
         &descriptor_set_, &liveness, &unit_liveness, &placement, &arena_,
         &order));
-    return loom_low_allocation_scalar_packing_build(
-        &descriptor_set_, &liveness, &order, &arena_, out_packing);
+    return loom_low_allocation_scalar_packing_build(&descriptor_set_, &liveness,
+                                                    &order, repair_reg_classes,
+                                                    &arena_, out_packing);
   }
 
   // Pool shared by the fixture's planning arena.
@@ -145,6 +147,21 @@ TEST_F(LowAllocationScalarPackingTest,
   EXPECT_EQ(packing.overlapping_intervals.bit_count, 0u);
   EXPECT_EQ(packing.overlapping_intervals.words, nullptr);
   EXPECT_EQ(packing.frontiers_by_reg_class, nullptr);
+}
+
+TEST_F(LowAllocationScalarPackingTest, RestrictsPlanToSelectedClasses) {
+  std::vector<loom_liveness_interval_t> intervals = {
+      Interval(0, 4, 1, 0), Interval(1, 3, 4, 0), Interval(0, 4, 1, 1),
+      Interval(1, 3, 4, 1)};
+  uint64_t class_words[1] = {};
+  iree_bitmap_t classes = {IREE_ARRAYSIZE(classes_), class_words};
+  iree_bitmap_set(classes, 1);
+  loom_low_allocation_scalar_packing_t packing = {};
+  IREE_ASSERT_OK(Build(intervals, &packing, classes));
+  EXPECT_EQ(packing.frontiers_by_reg_class[0], 0u);
+  EXPECT_EQ(packing.frontiers_by_reg_class[1], 9u);
+  EXPECT_FALSE(iree_bitmap_test(packing.overlapping_intervals, 0));
+  EXPECT_TRUE(iree_bitmap_test(packing.overlapping_intervals, 2));
 }
 
 }  // namespace

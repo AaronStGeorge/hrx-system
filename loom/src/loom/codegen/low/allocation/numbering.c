@@ -105,6 +105,18 @@ static uint32_t loom_low_numbering_space_index(
                         : (uint32_t)descriptors->reg_class_count + class_id;
 }
 
+static void loom_low_numbering_mark_storage_space_classes(
+    const loom_low_numbering_state_t* state, uint16_t class_id,
+    iree_bitmap_t classes) {
+  const uint32_t space_index =
+      loom_low_numbering_space_index(state->descriptors, class_id);
+  for (uint16_t i = 0; i < state->descriptors->reg_class_count; ++i) {
+    if (loom_low_numbering_space_index(state->descriptors, i) == space_index) {
+      iree_bitmap_set(classes, i);
+    }
+  }
+}
+
 static const loom_low_allocation_assignment_t* loom_low_numbering_binding(
     const loom_low_numbering_state_t* state, uint32_t binding_index) {
   const loom_low_allocation_interval_assignment_result_t* allocation =
@@ -415,6 +427,93 @@ static bool loom_low_numbering_predicate_violated(
       predicate->location_mask, result, source);
 }
 
+// Returns true only when a predicate violation survives every legal rigid
+// block permutation. Predicates spanning independent movable blocks may still
+// be impossible for other reasons, but treating them as unknown keeps this a
+// conservative lower bound instead of rediscovering the complete search.
+static bool loom_low_numbering_predicate_unavoidably_violated(
+    const loom_low_numbering_state_t* state,
+    const loom_low_placement_predicate_t* predicate, uint32_t result_index,
+    uint32_t source_index) {
+  if (predicate->kind !=
+      LOOM_LOW_PLACEMENT_RELATION_DIFFERENT_MASKED_LOCATION) {
+    return loom_low_numbering_predicate_violated(state, predicate, result_index,
+                                                 source_index, state->bases);
+  }
+  const uint32_t result_unit = state->locations[result_index];
+  const uint32_t source_unit = state->locations[source_index];
+  if (result_unit == UINT32_MAX || source_unit == UINT32_MAX) {
+    return result_unit == source_unit &&
+           loom_low_numbering_predicate_violated(state, predicate, result_index,
+                                                 source_index, state->bases);
+  }
+  if (state->unit_blocks[result_unit] != state->unit_blocks[source_unit]) {
+    return false;
+  }
+  return loom_low_numbering_predicate_violated(state, predicate, result_index,
+                                               source_index, state->bases);
+}
+
+static uint32_t loom_low_numbering_unavoidable_use_cost(
+    const loom_low_numbering_state_t* state, uint32_t use_index,
+    iree_bitmap_t unavoidable_reg_classes) {
+  const loom_low_placement_preference_use_t* use =
+      &state->context->preferences->uses[use_index];
+  const loom_low_placement_preference_t* preference = use->preference;
+  uint32_t score = 0;
+  for (uint16_t i = 0; i < preference->clause_count; ++i) {
+    const loom_low_placement_clause_t* clause = &preference->clauses[i];
+    bool established = clause->kind == LOOM_LOW_PLACEMENT_CLAUSE_ALL;
+    for (uint16_t j = 0; j < clause->predicate_count; ++j) {
+      const loom_low_placement_predicate_t* predicate =
+          &preference->predicates[clause->predicate_start + j];
+      const bool unavoidable =
+          loom_low_numbering_predicate_unavoidably_violated(
+              state, predicate, use->binding_start + predicate->result,
+              use->binding_start + predicate->source);
+      if (clause->kind == LOOM_LOW_PLACEMENT_CLAUSE_ALL) {
+        established &= unavoidable;
+        if (!established) {
+          break;
+        }
+      } else {
+        established |= unavoidable;
+        if (established) {
+          break;
+        }
+      }
+    }
+    if (established) {
+      const uint32_t contribution = (uint32_t)clause->weight * use->priority;
+      score =
+          contribution > UINT32_MAX - score ? UINT32_MAX : score + contribution;
+      if (unavoidable_reg_classes.bit_count != 0) {
+        for (uint16_t j = 0; j < clause->predicate_count; ++j) {
+          const loom_low_placement_predicate_t* predicate =
+              &preference->predicates[clause->predicate_start + j];
+          const uint32_t result_index = use->binding_start + predicate->result;
+          const uint32_t source_index = use->binding_start + predicate->source;
+          if (!loom_low_numbering_predicate_unavoidably_violated(
+                  state, predicate, result_index, source_index)) {
+            continue;
+          }
+          loom_low_numbering_mark_storage_space_classes(
+              state,
+              loom_low_numbering_binding(state, result_index)
+                  ->descriptor_reg_class_id,
+              unavoidable_reg_classes);
+          loom_low_numbering_mark_storage_space_classes(
+              state,
+              loom_low_numbering_binding(state, source_index)
+                  ->descriptor_reg_class_id,
+              unavoidable_reg_classes);
+        }
+      }
+    }
+  }
+  return score;
+}
+
 static uint32_t loom_low_numbering_score_use(loom_low_numbering_state_t* state,
                                              uint32_t use_index,
                                              const uint32_t* bases) {
@@ -720,6 +819,149 @@ static void loom_low_numbering_publish(
   }
 }
 
+static iree_status_t loom_low_numbering_initialize_spaces(
+    loom_low_numbering_state_t* state, iree_arena_allocator_t* arena) {
+  const loom_low_placement_preference_index_t* preferences =
+      state->context->preferences;
+  state->space_count = (uint32_t)state->descriptors->reg_class_count * 2;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, state->space_count,
+                                                 sizeof(*state->spaces),
+                                                 (void**)&state->spaces));
+  memset(state->spaces, 0, state->space_count * sizeof(*state->spaces));
+  for (uint32_t i = 0; i < preferences->instruction_use_count; ++i) {
+    const loom_low_placement_preference_use_t* use = &preferences->uses[i];
+    if (use->memo.location_bit_count == 0) {
+      continue;
+    }
+    for (uint16_t j = 0; j < use->preference->value_count; ++j) {
+      const loom_low_allocation_assignment_t* assignment =
+          loom_low_numbering_binding(state, use->binding_start + j);
+      const uint16_t class_id = assignment->descriptor_reg_class_id;
+      const loom_low_reg_class_t* reg_class =
+          &state->descriptors->reg_classes[class_id];
+      if (assignment->location_kind ==
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
+          reg_class->allocatable_count != 0 &&
+          !loom_low_reg_class_uses_explicit_physical_registers(reg_class)) {
+        state
+            ->spaces[loom_low_numbering_space_index(state->descriptors,
+                                                    class_id)]
+            .active = true;
+      }
+    }
+  }
+  // Only finite linear inventories define a bounded numbering domain. An
+  // alias set containing an unbounded physical class remains unchanged.
+  for (uint16_t i = 0; i < state->descriptors->reg_class_count; ++i) {
+    const loom_low_reg_class_t* reg_class = &state->descriptors->reg_classes[i];
+    if (reg_class->allocatable_count == 0 &&
+        iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL)) {
+      state->spaces[loom_low_numbering_space_index(state->descriptors, i)]
+          .active = false;
+    }
+  }
+  for (uint16_t i = 0; i < state->descriptors->reg_class_count; ++i) {
+    loom_low_numbering_space_t* space =
+        &state->spaces[loom_low_numbering_space_index(state->descriptors, i)];
+    if (space->active) {
+      space->count = iree_max(space->count,
+                              state->context->target_constraints
+                                  ->max_assigned_location_end_by_reg_class[i]);
+    }
+  }
+  for (uint32_t i = 0; i < state->space_count; ++i) {
+    state->spaces[i].start = state->extent;
+    state->extent += state->spaces[i].count;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_allocation_numbering_analyze(
+    const loom_low_allocation_numbering_context_t* context,
+    iree_bitmap_t unavoidable_instruction_reg_classes,
+    iree_arena_allocator_t* scratch_arena,
+    loom_low_allocation_numbering_analysis_t* out_analysis) {
+  *out_analysis = (loom_low_allocation_numbering_analysis_t){0};
+  if (unavoidable_instruction_reg_classes.bit_count != 0) {
+    IREE_ASSERT_EQ(
+        unavoidable_instruction_reg_classes.bit_count,
+        context->target_constraints->target->descriptor_set->reg_class_count);
+    iree_bitmap_reset_all(unavoidable_instruction_reg_classes);
+  }
+  const loom_low_placement_preference_index_t* preferences =
+      context->preferences;
+  if (preferences->instruction_use_count == 0) {
+    return iree_ok_status();
+  }
+
+  const iree_arena_checkpoint_t checkpoint =
+      iree_arena_checkpoint_save(scratch_arena);
+  loom_low_numbering_state_t state = {
+      .context = context,
+      .descriptors = context->target_constraints->target->descriptor_set,
+  };
+  iree_status_t status =
+      loom_low_numbering_initialize_spaces(&state, scratch_arena);
+  if (iree_status_is_ok(status) && state.extent != 0) {
+    const uint64_t word_count =
+        (uint64_t)state.extent * 4 + preferences->binding_count;
+    const uint64_t workspace_size =
+        (uint64_t)state.extent * sizeof(*state.blocks) +
+        word_count * sizeof(uint32_t);
+    if (workspace_size > IREE_HOST_SIZE_MAX) {
+      status =
+          iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                           "register analysis workspace exceeds host size");
+    }
+    void* workspace = NULL;
+    if (iree_status_is_ok(status)) {
+      status = iree_arena_allocate(
+          scratch_arena, (iree_host_size_t)workspace_size, &workspace);
+    }
+    if (iree_status_is_ok(status)) {
+      memset(workspace, 0, (iree_host_size_t)workspace_size);
+      state.blocks = workspace;
+      uint32_t* cursor = (uint32_t*)(state.blocks + state.extent);
+      state.scratch = cursor;
+      cursor += state.extent;
+      state.unit_blocks = cursor;
+      cursor += state.extent;
+      state.order = cursor;
+      cursor += state.extent;
+      state.bases = cursor;
+      cursor += state.extent;
+      state.locations = cursor;
+      loom_low_numbering_build_blocks(&state);
+      for (uint32_t i = 0; i < preferences->binding_count; ++i) {
+        const loom_low_allocation_assignment_t* assignment =
+            loom_low_numbering_binding(&state, i);
+        state.locations[i] = loom_low_numbering_unit(
+            &state, assignment->descriptor_reg_class_id,
+            assignment->location_kind, assignment->location_base);
+      }
+      for (uint32_t i = 0; i < preferences->use_count; ++i) {
+        const uint64_t cost =
+            loom_low_numbering_score_use(&state, i, state.bases);
+        const uint64_t unavoidable_cost =
+            loom_low_numbering_unavoidable_use_cost(
+                &state, i,
+                i < preferences->instruction_use_count
+                    ? unavoidable_instruction_reg_classes
+                    : (iree_bitmap_t){0});
+        if (i < preferences->instruction_use_count) {
+          out_analysis->instruction_cost += cost;
+          out_analysis->unavoidable_instruction_cost += unavoidable_cost;
+        } else {
+          out_analysis->scheduled_pair_cost += cost;
+          out_analysis->unavoidable_scheduled_pair_cost += unavoidable_cost;
+        }
+      }
+    }
+  }
+  iree_arena_checkpoint_restore(&checkpoint);
+  return status;
+}
+
 iree_status_t loom_low_allocation_number_registers(
     const loom_low_allocation_numbering_context_t* context,
     iree_arena_allocator_t* scratch_arena) {
@@ -732,55 +974,8 @@ iree_status_t loom_low_allocation_number_registers(
       .context = context,
       .descriptors = context->target_constraints->target->descriptor_set,
   };
-  state.space_count = (uint32_t)state.descriptors->reg_class_count * 2;
   IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(scratch_arena, state.space_count,
-                                sizeof(*state.spaces), (void**)&state.spaces));
-  memset(state.spaces, 0, state.space_count * sizeof(*state.spaces));
-  for (uint32_t i = 0; i < preferences->instruction_use_count; ++i) {
-    const loom_low_placement_preference_use_t* use = &preferences->uses[i];
-    if (use->memo.location_bit_count == 0) {
-      continue;
-    }
-    for (uint16_t j = 0; j < use->preference->value_count; ++j) {
-      const loom_low_allocation_assignment_t* assignment =
-          loom_low_numbering_binding(&state, use->binding_start + j);
-      const uint16_t class_id = assignment->descriptor_reg_class_id;
-      const loom_low_reg_class_t* reg_class =
-          &state.descriptors->reg_classes[class_id];
-      if (assignment->location_kind ==
-              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
-          reg_class->allocatable_count != 0 &&
-          !loom_low_reg_class_uses_explicit_physical_registers(reg_class)) {
-        state
-            .spaces[loom_low_numbering_space_index(state.descriptors, class_id)]
-            .active = true;
-      }
-    }
-  }
-  // Only finite linear inventories define a bounded numbering domain. An
-  // alias set containing an unbounded physical class remains unchanged.
-  for (uint16_t i = 0; i < state.descriptors->reg_class_count; ++i) {
-    const loom_low_reg_class_t* reg_class = &state.descriptors->reg_classes[i];
-    if (reg_class->allocatable_count == 0 &&
-        iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL)) {
-      state.spaces[loom_low_numbering_space_index(state.descriptors, i)]
-          .active = false;
-    }
-  }
-  for (uint16_t i = 0; i < state.descriptors->reg_class_count; ++i) {
-    loom_low_numbering_space_t* space =
-        &state.spaces[loom_low_numbering_space_index(state.descriptors, i)];
-    if (space->active) {
-      space->count = iree_max(space->count,
-                              context->target_constraints
-                                  ->max_assigned_location_end_by_reg_class[i]);
-    }
-  }
-  for (uint32_t i = 0; i < state.space_count; ++i) {
-    state.spaces[i].start = state.extent;
-    state.extent += state.spaces[i].count;
-  }
+      loom_low_numbering_initialize_spaces(&state, scratch_arena));
   if (state.extent == 0) {
     return iree_ok_status();
   }

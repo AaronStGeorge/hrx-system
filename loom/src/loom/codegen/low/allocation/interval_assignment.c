@@ -167,6 +167,19 @@ static uint32_t loom_low_allocation_interval_assignment_peak_live_units(
   return fallback_units;
 }
 
+static bool loom_low_allocation_interval_assignment_repairs_fragmentation(
+    const loom_low_allocation_interval_assignment_context_t* context,
+    uint16_t descriptor_reg_class_id) {
+  if (context->search_strategy !=
+      LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR) {
+    return false;
+  }
+  const iree_bitmap_t repair_reg_classes =
+      context->fragmentation_repair_reg_classes;
+  return repair_reg_classes.bit_count == 0 ||
+         iree_bitmap_test(repair_reg_classes, descriptor_reg_class_id);
+}
+
 // Incoming locations are preferences for the complete interval, not fixed
 // storage. The fragmentation attempt must be free to repack them. Implicit
 // instruction writes can also force entry transport even when no other SSA
@@ -180,8 +193,8 @@ static bool loom_low_allocation_interval_assignment_find_entry_location(
   const loom_low_allocation_interval_assignment_context_t* context =
       state->context;
   if (value_ordinal >= context->entry_location_count ||
-      context->search_strategy ==
-          LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR) {
+      loom_low_allocation_interval_assignment_repairs_fragmentation(
+          context, interval->value_class.register_class_id)) {
     return false;
   }
   const loom_low_allocation_abi_location_t* entry =
@@ -1628,7 +1641,8 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
       LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_scalar_packing_build(
         context->target->descriptor_set, context->liveness, &order,
-        state->scratch_arena, &state->scalar_packing));
+        context->fragmentation_repair_reg_classes, state->scratch_arena,
+        &state->scalar_packing));
   }
 
   for (iree_host_size_t i = 0; i < order.interval_count; ++i) {
@@ -1783,8 +1797,8 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
         search_context.retained_fixed_value_index_plus_one;
     if (!assigned && context->entry_location_count != 0 &&
         capacity.is_bounded &&
-        context->search_strategy !=
-            LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR) {
+        !loom_low_allocation_interval_assignment_repairs_fragmentation(
+            context, interval->value_class.register_class_id)) {
       IREE_RETURN_IF_ERROR(
           loom_low_allocation_interval_assignment_try_relocate_entry_blocker(
               state, &search_context, entry, value_ordinal, &capacity,

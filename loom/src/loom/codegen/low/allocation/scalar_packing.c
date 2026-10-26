@@ -14,7 +14,7 @@ iree_status_t loom_low_allocation_scalar_packing_build(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_interval_order_t* order,
-    iree_arena_allocator_t* arena,
+    iree_bitmap_t repair_reg_classes, iree_arena_allocator_t* arena,
     loom_low_allocation_scalar_packing_t* out_packing) {
   *out_packing = (loom_low_allocation_scalar_packing_t){0};
   if (!order->has_packable_aggregates) {
@@ -22,6 +22,9 @@ iree_status_t loom_low_allocation_scalar_packing_build(
   }
 
   const iree_host_size_t class_count = descriptor_set->reg_class_count;
+  if (repair_reg_classes.bit_count != 0) {
+    IREE_ASSERT_EQ(repair_reg_classes.bit_count, class_count);
+  }
   uint32_t* frontiers = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, class_count, sizeof(*frontiers), (void**)&frontiers));
@@ -33,6 +36,10 @@ iree_status_t loom_low_allocation_scalar_packing_build(
       continue;
     }
     const uint16_t class_id = summary->value_class.register_class_id;
+    if (repair_reg_classes.bit_count != 0 &&
+        !iree_bitmap_test(repair_reg_classes, class_id)) {
+      continue;
+    }
     if (!loom_low_reg_class_uses_explicit_physical_registers(
             &descriptor_set->reg_classes[class_id])) {
       frontiers[class_id] = summary->peak_live_units;
