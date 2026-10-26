@@ -78,8 +78,8 @@ TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
 TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
   const auto package = iree::testing::MakeTempFilePath("failed_text_link");
   ASSERT_TRUE(std::filesystem::create_directory(package));
-  for (const char* file : {"prepare.loom", "advance.loom", "model.json",
-                           "weights.loom", "tokenizer.json"}) {
+  for (const char* file : {"prepare.loom", "advance.loom", "storage.loom",
+                           "model.json", "weights.loom", "tokenizer.json"}) {
     ASSERT_TRUE(std::filesystem::copy_file(directory_ + "/" + file,
                                            package + "/" + file));
   }
@@ -224,6 +224,169 @@ class PooledTextServiceTest
     return options;
   }
 };
+
+class WideCohortTextServiceTest : public SourceTextServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.context_capacity = 256;
+    options.pool_capacity = 4096;
+    options.row_count = 257;
+    options.epoch_count = IREE_ARRAYSIZE(wide_shapes_);
+    options.epoch_shapes = wide_shapes_;
+    return options;
+  }
+
+  const loom_serve_packing_shape_t wide_shapes_[2] = {{1, 1}, {256, 129}};
+};
+
+class GrowingTextServiceTest : public SourceTextServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.context_capacity = 256;
+    options.pool_capacity = 4096;
+    options.epoch_count = IREE_ARRAYSIZE(growth_shapes_);
+    options.epoch_shapes = growth_shapes_;
+    return options;
+  }
+
+  // Large input staging makes 129 residents cross physical slab boundaries,
+  // while the actual numerical workload remains a few tokens per resident.
+  const loom_serve_packing_shape_t growth_shapes_[1] = {{4096, 129}};
+};
+
+TEST_F(GrowingTextServiceTest, GrowthKeepsLiveHistoriesHandlesAndCheckpoints) {
+  std::vector<Oracle> references(129);
+  auto* original = loom_serve_text_model_row(model_, 0);
+  const int32_t prompt[] = {0, 1, 2};
+  IREE_ASSERT_OK(loom_serve_text_row_prefill(original, 3, prompt));
+  references[0].Consume("abx");
+  loom_serve_text_checkpoint_t* checkpoint = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_row_try_pin(original, &checkpoint));
+  ASSERT_NE(checkpoint, nullptr);
+  const auto activity = loom_serve_text_model_weight_activity(model_);
+  const auto initial = loom_serve_text_model_memory_statistics(model_);
+  for (size_t capacity : {17u, 129u}) {
+    const auto previous_count = loom_serve_text_model_row_count(model_);
+    const auto previous = loom_serve_text_model_memory_statistics(model_);
+    loom_serve_text_resize_t* resize = nullptr;
+    IREE_ASSERT_OK(
+        loom_serve_text_model_prepare_resize(model_, capacity, &resize));
+    ASSERT_NE(resize, nullptr);
+    // The worker prepares host state only. Pool accounting and visible model
+    // ownership remain unchanged until the serialized owner submits growth.
+    EXPECT_EQ(loom_serve_text_model_row_count(model_), previous_count);
+    EXPECT_EQ(loom_serve_text_model_row(model_, 0), original);
+    const auto prepared = loom_serve_text_model_memory_statistics(model_);
+    EXPECT_EQ(prepared.reserved_bytes, previous.reserved_bytes);
+    EXPECT_EQ(prepared.committed_bytes, previous.committed_bytes);
+    EXPECT_EQ(prepared.pending_bytes, previous.pending_bytes);
+    EXPECT_EQ(prepared.releasing_bytes, previous.releasing_bytes);
+    EXPECT_EQ(prepared.released_bytes, previous.released_bytes);
+    loom_serve_execution_frontier_t frontier;
+    auto status =
+        loom_serve_text_model_submit_resize(model_, resize, &frontier);
+    loom_serve_text_resize_free(resize);
+    IREE_ASSERT_OK(status);
+    for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
+      IREE_ASSERT_OK(loom_serve_workspace_wait(
+          loom_serve_device_workspace(device_), frontier.semaphores[i],
+          frontier.values[i]));
+    }
+    loom_serve_text_model_complete_resize(model_);
+    EXPECT_EQ(loom_serve_text_model_row_count(model_), capacity);
+    EXPECT_EQ(loom_serve_text_model_row(model_, 0), original);
+    EXPECT_EQ(loom_serve_text_model_memory_statistics(model_).committed_bytes,
+              initial.committed_bytes);
+    std::vector<int32_t> tokens(capacity);
+    std::vector<loom_serve_text_span_t> spans(capacity);
+    for (size_t i = 0; i < capacity; ++i) {
+      tokens[i] = i % 3;
+      references[i].Consume(tokens[i]);
+      spans[i] = {i, 1, &tokens[i], LOOM_SERVE_TEXT_SPAN_FLAG_SELECT};
+    }
+    IREE_ASSERT_OK(
+        loom_serve_text_model_epoch(model_, 0, capacity, spans.data()));
+    for (size_t i = 0; i < capacity; ++i) {
+      EXPECT_EQ(loom_serve_text_row_token(loom_serve_text_model_row(model_, i)),
+                references[i].Predict())
+          << i;
+    }
+  }
+  auto* fork = loom_serve_text_model_row(model_, 128);
+  IREE_ASSERT_OK(loom_serve_text_row_reset(fork));
+  bool restored = false;
+  IREE_ASSERT_OK(loom_serve_text_row_try_restore(fork, checkpoint, &restored));
+  ASSERT_TRUE(restored);
+  Oracle fork_reference;
+  fork_reference.Consume("abx");
+  EXPECT_EQ(loom_serve_text_row_token(fork), fork_reference.Predict());
+  IREE_ASSERT_OK(loom_serve_text_row_decode(fork));
+  fork_reference.Consume(fork_reference.Predict());
+  EXPECT_EQ(loom_serve_text_row_token(fork), fork_reference.Predict());
+  EXPECT_EQ(loom_serve_text_row_token(original), references[0].Predict());
+  loom_serve_text_checkpoint_release(checkpoint);
+  const auto after = loom_serve_text_model_weight_activity(model_);
+  EXPECT_EQ(after.activations, activity.activations);
+  EXPECT_EQ(after.read_bytes, activity.read_bytes);
+}
+
+TEST_F(WideCohortTextServiceTest, WideEpochsPreserveSparseResidentsAndForks) {
+  constexpr size_t kCount = 129;
+  std::vector<Oracle> references(kCount);
+  std::vector<int32_t> tokens(2 * kCount);
+  std::vector<loom_serve_text_span_t> spans(kCount);
+  for (size_t epoch = 0; epoch < 3; ++epoch) {
+    for (size_t i = 0; i < kCount; ++i) {
+      const size_t row = 256 - 2 * i;
+      const size_t count = epoch ? 1 : 1 + i % 2;
+      tokens[2 * i] = epoch ? references[i].Predict() : i % 3;
+      tokens[2 * i + 1] = (i + 1) % 3;
+      for (size_t j = 0; j < count; ++j) {
+        references[i].Consume(tokens[2 * i + j]);
+      }
+      spans[i] = {row, count, &tokens[2 * i], LOOM_SERVE_TEXT_SPAN_FLAG_SELECT};
+    }
+    const loom_serve_text_span_t duplicate[] = {spans[0], spans[0]};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_text_model_epoch(model_, 1, 2, duplicate));
+    IREE_ASSERT_OK(
+        loom_serve_text_model_epoch(model_, 1, kCount, spans.data()));
+    for (size_t i = 0; i < kCount; ++i) {
+      EXPECT_EQ(loom_serve_text_row_token(
+                    loom_serve_text_model_row(model_, spans[i].row_index)),
+                references[i].Predict());
+    }
+  }
+
+  // Retained identity 256 forks into 255, neither a bit in a machine word nor
+  // an ordinal in the previous cohort. Each writer must detach shared state.
+  auto* original = loom_serve_text_model_row(model_, 256);
+  auto* fork = loom_serve_text_model_row(model_, 255);
+  loom_serve_text_checkpoint_t* checkpoint = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_row_try_pin(original, &checkpoint));
+  ASSERT_NE(checkpoint, nullptr);
+  bool restored = false;
+  IREE_ASSERT_OK(loom_serve_text_row_try_restore(fork, checkpoint, &restored));
+  ASSERT_TRUE(restored);
+  const int32_t a = 0, b = 1;
+  const loom_serve_text_span_t branches[] = {
+      {255, 1, &a, LOOM_SERVE_TEXT_SPAN_FLAG_SELECT},
+      {256, 1, &b, LOOM_SERVE_TEXT_SPAN_FLAG_SELECT}};
+  IREE_ASSERT_OK(loom_serve_text_model_epoch(model_, 1, 2, branches));
+  Oracle fork_reference = references[0];
+  fork_reference.Consume(a);
+  references[0].Consume(b);
+  EXPECT_EQ(loom_serve_text_row_token(fork), fork_reference.Predict());
+  EXPECT_EQ(loom_serve_text_row_token(original), references[0].Predict());
+  loom_serve_text_checkpoint_release(checkpoint);
+  for (size_t i = 0; i < 257; ++i) {
+    IREE_ASSERT_OK(
+        loom_serve_text_row_reset(loom_serve_text_model_row(model_, i)));
+  }
+  EXPECT_EQ(loom_serve_text_model_pool_usage(model_).available, 4096u);
+}
 
 INSTANTIATE_TEST_SUITE_P(PoolCapacity, PooledTextServiceTest,
                          ::testing::Values(iree_host_size_t{256},

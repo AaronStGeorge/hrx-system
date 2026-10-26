@@ -297,7 +297,7 @@ Native capacity fields are:
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `rows` | `4` | Concurrent execution rows, from 1 through 16. |
+| `rows` | `4` | Initial resident state records, not a session limit. The directory grows as requests arrive, independently of epoch token/span capacity; request admission reserves actual memory credit. |
 | `context_capacity` | `16384` | Per-row logical context limit in token positions, at most 262144. |
 | `pool_capacity` | `65536` | Shared logical cache token positions, in whole source-defined pages. |
 | `prefill_capacity` | `512` | Largest automatically specialized packed token shape; not a prompt-length limit. |
@@ -309,8 +309,9 @@ Native capacity fields are:
 | `draft_depth` | `0` | Proposed tokens after each anchor, from 0 through 7; requires matching source support. |
 | `continuation_epochs` | `1` | Device-fed epochs per scheduling turn, either 1 or 2. |
 
-Context, pool and prefill capacities are positive. Prefill capacity cannot
-exceed context capacity and must fit an anchor plus every draft proposal.
+Context, pool and prefill capacities are positive. Packed token capacity may
+exceed an individual context limit: one epoch can combine many short sessions.
+It must fit an anchor plus every draft proposal.
 Two-epoch continuation requires nonzero draft depth. A source can impose tighter
 shape limits or reject unsupported drafting modes. Endpoint capacities are
 nonnegative and their combined native index space must fit signed 32-bit indices.

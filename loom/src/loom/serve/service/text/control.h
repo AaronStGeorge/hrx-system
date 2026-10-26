@@ -28,7 +28,9 @@ enum {
   TEXT_HOST_PROGRESS = 7,
   TEXT_HOST_STATE_BINDINGS = 8,
   TEXT_HOST_STATE_ORIGINS = 9,
-  TEXT_HOST_BUFFER_COUNT = 10,
+  // LE u32 continuation flags indexed by first-plan ordinal, not resident ID.
+  TEXT_HOST_CONTINUATIONS = 10,
+  TEXT_HOST_BUFFER_COUNT = 11,
 };
 
 // Linked model-wide VM control and its borrowed native capabilities. The
@@ -49,6 +51,8 @@ typedef struct loom_serve_text_control_t {
   iree_vm_function_t publish_epoch;
   // Row-table encoding after recurrent slot ownership changes.
   iree_vm_function_t encode_state;
+  // Cold retained-layout growth and migration of source-owned host policy.
+  iree_vm_function_t resize_state;
   // Request options to retained row policy.
   iree_vm_function_t bind_request;
   // Source-owned ranges for independent known-input activation capture.

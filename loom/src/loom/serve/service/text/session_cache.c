@@ -10,12 +10,12 @@
 
 bool loom_serve_text_session_cache_inspect(
     const loom_serve_text_session_cache_t* cache, iree_host_size_t row_count,
-    const loom_serve_text_session_t* rows, iree_host_size_t index,
+    loom_serve_text_session_t* const* rows, iree_host_size_t index,
     loom_serve_http_session_snapshot_t* out_snapshot) {
   const loom_serve_text_session_lifetime_t* lifetime = NULL;
   *out_snapshot = (loom_serve_http_session_snapshot_t){0};
   if (index < row_count) {
-    const loom_serve_text_session_t* row = &rows[index];
+    const loom_serve_text_session_t* row = rows[index];
     lifetime = &row->lifetime;
     out_snapshot->storage = "row";
     if (row->request.consumer.self) {
@@ -140,13 +140,13 @@ void loom_serve_text_session_cache_release(
 
 bool loom_serve_text_session_cache_evict(
     loom_serve_text_session_cache_t* cache, iree_host_size_t row_count,
-    loom_serve_text_session_t* rows,
+    loom_serve_text_session_t* const* rows,
     const loom_serve_text_session_t* protected_row,
     const loom_serve_text_session_cache_entry_t* protected_entry,
     loom_serve_text_telemetry_t* telemetry) {
   loom_serve_text_session_t* oldest = NULL;
   for (iree_host_size_t i = 0; i < row_count; ++i) {
-    loom_serve_text_session_t* row = &rows[i];
+    loom_serve_text_session_t* row = rows[i];
     if (row != protected_row && !row->request.consumer.self &&
         !row->preparing && loom_serve_text_row_position(row->row) &&
         (!oldest || row->lifetime.serial < oldest->lifetime.serial)) {

@@ -161,8 +161,8 @@ TEST_F(RegisteredReconfigurationHttpTextTest,
   StartManaged();
   {
     loom_serve::testing::SourcePackage package;
-    for (const auto* file :
-         {"prepare.loom", "advance.loom", "weights.loom", "tokenizer.json"}) {
+    for (const auto* file : {"prepare.loom", "advance.loom", "storage.loom",
+                             "weights.loom", "tokenizer.json"}) {
       IREE_ASSERT_OK(package.AddFile(std::string("model/") + file,
                                      directory_ + "/" + file));
     }
@@ -172,7 +172,7 @@ TEST_F(RegisteredReconfigurationHttpTextTest,
     const std::string declaration =
         R"({"name":"fixture-text","admission":"drained","definition":{)"
         R"("kind":"text","prepare":"prepare.loom","control":"control.loombc",)"
-        R"("sources":["advance.loom"],"tokenizer":"tokenizer.json","weights":")" +
+        R"("sources":["advance.loom","storage.loom"],"tokenizer":"tokenizer.json","weights":")" +
         std::filesystem::absolute(weights_).string() +
         R"(","rows":4,"context_capacity":96,"pool_capacity":256,"prefill_capacity":32}})";
     int client = -1;

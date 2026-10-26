@@ -15,6 +15,7 @@
           ]
         },
         "control.loom",
+        "storage.loom",
         "service.loom",
         "image/service.loom",
         "image/control.loom"
@@ -48,6 +49,7 @@
           ]
         },
         "service.loom",
+        "storage.loom",
         "control_module.loombc",
         "image/service.loom",
         "image/control.loom"

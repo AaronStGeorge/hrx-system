@@ -265,7 +265,7 @@ iree_status_t loom_serve_text_media_epoch_initialize(
                                       plan.data, &record_index,
                                       &metadata_offset, &epoch);
     loom_serve_text_media_epoch_store(next_span_count, next_spans,
-                                      LOOM_SERVE_TEXT_ROW_CAPACITY, plan.data,
+                                      first_span_count, plan.data,
                                       &record_index, &metadata_offset, &epoch);
   }
   if (iree_status_is_ok(status)) {

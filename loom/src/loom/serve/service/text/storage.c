@@ -91,13 +91,13 @@ iree_status_t loom_serve_text_storage_initialize(
   const uint8_t* arena =
       out_storage->bytes[LOOM_SERVE_TEXT_STORAGE_ALLOCATIONS].data + 24;
   const uint64_t arena_length = iree_unaligned_load_le_u64(arena);
-  const uint64_t private_length = iree_unaligned_load_le_u64(arena + 16);
+  const uint64_t clear_length = iree_unaligned_load_le_u64(arena + 16);
   if (!slot_length || slot_stride < slot_length || slot_count < row_count ||
-      slot_count > UINT32_MAX || private_length > arena_length ||
-      private_length > INT64_MAX || slot_origin > private_length ||
-      slot_length > private_length - slot_origin ||
+      slot_count > UINT32_MAX || clear_length > arena_length ||
+      arena_length > INT64_MAX || slot_origin > arena_length ||
+      slot_length > arena_length - slot_origin ||
       slot_count - 1 >
-          (private_length - slot_origin - slot_length) / slot_stride) {
+          (arena_length - slot_origin - slot_length) / slot_stride) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source recurrent slots exceed private storage");
   }
@@ -105,6 +105,9 @@ iree_status_t loom_serve_text_storage_initialize(
   out_storage->recurrent.stride = slot_stride;
   out_storage->recurrent.length = slot_length;
   out_storage->recurrent.capacity = (uint32_t)slot_count;
+  uint64_t private_begin = slot_origin;
+  uint64_t private_end =
+      slot_origin + (slot_count - 1) * slot_stride + slot_length;
   // Row-private views must not alias any independently reusable state slot.
   for (iree_host_size_t i = 0; i < row_count * 4; ++i) {
     const uint8_t* view =
@@ -112,8 +115,8 @@ iree_status_t loom_serve_text_storage_initialize(
     const uint64_t origin = iree_unaligned_load_le_u64(view);
     const uint64_t length = iree_unaligned_load_le_u64(view + 8);
     const bool required = i % 4 != 1 || !pool_capacity;
-    if ((length != 0) != required || origin > private_length ||
-        length > private_length - origin) {
+    if ((length != 0) != required || origin > arena_length ||
+        length > arena_length - origin) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "source private view %zu exceeds storage", i);
     }
@@ -127,6 +130,10 @@ iree_status_t loom_serve_text_storage_initialize(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "source private view %zu aliases recurrent state",
                               i);
+    }
+    if (length) {
+      private_begin = iree_min(private_begin, origin);
+      private_end = iree_max(private_end, origin + length);
     }
   }
   // The native owner interprets page maps, not the model's preceding origin
@@ -181,16 +188,24 @@ iree_status_t loom_serve_text_storage_initialize(
     const uint64_t length = iree_unaligned_load_le_u64(
         out_storage->bytes[LOOM_SERVE_TEXT_STORAGE_ALLOCATIONS].data +
         allocation * 24);
-    const uint64_t private_length = iree_unaligned_load_le_u64(
+    const uint64_t clear_length = iree_unaligned_load_le_u64(
         out_storage->bytes[LOOM_SERVE_TEXT_STORAGE_ALLOCATIONS].data +
         allocation * 24 + 16);
     const uint64_t blocks = pool_capacity / block_size;
-    if (origin < private_length || origin > length ||
+    if (origin < clear_length || origin > length ||
         count - 1 > (length - origin) / stride ||
         block_bytes > (length - origin - (count - 1) * stride) / blocks ||
         block_bytes > stride / blocks) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "cache region %zu exceeds its allocation", i);
+    }
+    // Cache planes may precede or follow private storage. Initialization's
+    // clear extent is independent of that placement: demand-backed private
+    // views are initialized when acquired, not when reserving the arena.
+    const uint64_t end = origin + (count - 1) * stride + block_bytes * blocks;
+    if (allocation == 1 && origin < private_end && private_begin < end) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "cache region %zu overlaps private storage", i);
     }
     out_storage->regions[i] = (loom_serve_text_cache_region_t){
         .allocation = allocation,

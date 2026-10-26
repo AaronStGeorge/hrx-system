@@ -802,7 +802,7 @@ typedef struct loom_serve_text_registration_t {
   // Registration-wide history retained beyond service retirement.
   loom_serve_telemetry_stream_t* stream;
   // Shape inputs borrowed by asynchronous preparation until publication.
-  loom_serve_packing_shape_t shapes[LOOM_SERVE_TEXT_DEFAULT_SHAPE_CAPACITY];
+  loom_serve_packing_shape_t* shapes;
   // Owned preparation operation, transferred on every terminal outcome.
   loom_serve_text_load_t* load;
   // Partial or prepared model retained through actual consumer retirement.
@@ -990,9 +990,17 @@ static iree_status_t loom_serve_text_registration_create(
     iree_allocator_t host_allocator,
     loom_serve_registration_t* out_registration) {
   const loom_serve_model_registration_options_t* options = self;
+  const loom_serve_text_configuration_t* text = &configuration->text;
+  const iree_host_size_t shape_count =
+      loom_serve_text_default_shapes(text->prefill_capacity, NULL);
+  iree_host_size_t total = 0, shapes_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(loom_serve_text_registration_t), &total,
+      IREE_STRUCT_FIELD(shape_count, loom_serve_packing_shape_t,
+                        &shapes_offset)));
   loom_serve_text_registration_t* registration = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      host_allocator, sizeof(*registration), (void**)&registration));
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(host_allocator, total, (void**)&registration));
   registration->host_allocator = host_allocator;
   registration->options = options;
   registration->device = loom_serve_device_group_at(
@@ -1000,9 +1008,9 @@ static iree_status_t loom_serve_text_registration_create(
   registration->configuration = configuration;
   registration->observer = observer;
   registration->stream = stream;
-  const loom_serve_text_configuration_t* text = &configuration->text;
-  const iree_host_size_t shape_count = loom_serve_text_default_shapes(
-      text->rows, text->prefill_capacity, registration->shapes);
+  registration->shapes =
+      (loom_serve_packing_shape_t*)((uint8_t*)registration + shapes_offset);
+  loom_serve_text_default_shapes(text->prefill_capacity, registration->shapes);
   const loom_serve_text_options_t model_options = {
       .mode = configuration->kind == LOOM_SERVE_MODEL_KIND_SEQUENCE
                   ? LOOM_SERVE_TEXT_MODE_ENCODE

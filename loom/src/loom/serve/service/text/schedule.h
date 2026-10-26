@@ -30,18 +30,14 @@ typedef enum loom_serve_text_packing_mode_e {
   LOOM_SERVE_TEXT_PACKING_SEPARATE,
 } loom_serve_text_packing_mode_t;
 
-// Nineteen token classes through 262144 and five span classes through 16,
-// excluding the ten pairs with more spans than tokens.
-enum { LOOM_SERVE_TEXT_DEFAULT_SHAPE_CAPACITY = 85 };
-
-// Cold catalog construction for validated row_count in [1, 16] and maximum
-// token capacity in [1, 262144]. Both axes start at one, double, and include
-// their exact terminal capacity, including odd counts. Shapes with more spans
-// than tokens are omitted. Writes at most DEFAULT_SHAPE_CAPACITY entries and
-// returns the nonzero count.
+// Cold catalog construction for a positive token capacity fitting signed i32.
+// Token buckets start at one, double, and include the exact terminal capacity.
+// Each bucket includes span counts from one through its token count with the
+// same progression. Every token can therefore advance a distinct session;
+// initial resident storage does not constrain the reusable dispatch catalog.
+// Returns the nonzero count; shapes may be NULL to query storage first.
 iree_host_size_t loom_serve_text_default_shapes(
-    iree_host_size_t row_count, iree_host_size_t token_capacity,
-    loom_serve_packing_shape_t* shapes);
+    iree_host_size_t token_capacity, loom_serve_packing_shape_t* shapes);
 
 // Reserves page-rounded capacity for a validated request through completion.
 // input_count includes retained and appended input. The final selected output

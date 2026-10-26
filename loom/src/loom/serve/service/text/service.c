@@ -429,9 +429,9 @@ static void loom_serve_text_separate_ready(
       continue;
     }
     const loom_serve_text_request_phase_t phase =
-        service->sessions[first].request.phase;
+        service->sessions[first]->request.phase;
     for (iree_host_size_t row = 0; row < service->row_count; ++row) {
-      if (service->sessions[row].request.phase != phase) {
+      if (service->sessions[row]->request.phase != phase) {
         ready[row] = (loom_serve_ready_span_t){0};
       }
     }
@@ -447,13 +447,13 @@ static iree_status_t loom_serve_text_submit_epoch(
   IREE_TRACE_ZONE_APPEND_VALUE_I64(
       z0,
       loom_serve_telemetry_stream_identity(service->telemetry.stream).ordinal);
-  loom_serve_text_epoch_row_t rows[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  loom_serve_text_epoch_row_t* rows = service->epoch.planning.rows;
   for (iree_host_size_t i = 0; i < count; ++i) {
     const iree_host_size_t row = scheduled[i].row_index;
-    const loom_serve_text_session_t* session = &service->sessions[row];
+    const loom_serve_text_session_t* session = service->sessions[row];
     const bool prefill =
         session->request.phase == LOOM_SERVE_TEXT_REQUEST_PREFILL;
-    rows[row] = (loom_serve_text_epoch_row_t){
+    rows[i] = (loom_serve_text_epoch_row_t){
         .input_tokens = prefill
                             ? session->tokens + session->request.input_origin +
                                   session->request.input_offset
@@ -472,7 +472,7 @@ static iree_status_t loom_serve_text_submit_epoch(
         .token = prefill ? 0 : loom_serve_text_row_token(session->row),
     };
   }
-  loom_serve_text_epoch_continuation_t continuation;
+  loom_serve_text_continuation_t continuation;
   loom_serve_text_epoch_prepare(&service->scheduling, rows, shape_index, count,
                                 scheduled, &service->epoch, &continuation);
   loom_serve_text_observe(service, "execute");
@@ -514,7 +514,7 @@ static void loom_serve_text_publish_epoch(loom_serve_text_service_t* service) {
   loom_serve_text_observe(service, "output");
   for (iree_host_size_t i = 0; i < service->epoch.count; ++i) {
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     const bool prefill = service->epoch.prefill[i];
     if (prefill) {
       session->request.input_offset += service->epoch.results[i].known_count;
@@ -547,7 +547,7 @@ static iree_status_t loom_serve_text_process_output(void* user_data) {
        i < service->epoch.count && iree_status_is_ok(status); ++i) {
     const loom_serve_text_result_t* output = &service->epoch.results[i];
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     if (session->mode == LOOM_SERVE_TEXT_MODE_ENCODE) {
       const bool final =
           session->request.input_offset == session->request.input_count;
@@ -580,7 +580,7 @@ static void loom_serve_text_complete_output(
   service->capture = NULL;
   for (iree_host_size_t i = 0; i < service->epoch.count; ++i) {
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     if (session->request.diagnostic.code) {
       loom_serve_telemetry_record_t record = {
           .time_ns = iree_time_now(),
@@ -623,7 +623,7 @@ static iree_status_t loom_serve_text_capture_prefix(
   for (iree_host_size_t i = 0;
        i < service->epoch.count && iree_status_is_ok(status); ++i) {
     loom_serve_text_session_t* session =
-        &service->sessions[service->epoch.spans[i].row_index];
+        service->sessions[service->epoch.spans[i].row_index];
     const iree_host_size_t count =
         session->request.input_origin + session->request.input_offset;
     if (!service->epoch.prefill[i] ||
@@ -703,7 +703,15 @@ static iree_status_t loom_serve_text_complete_epoch(
 }
 
 static iree_status_t loom_serve_text_service_initialize(
-    loom_serve_text_service_t* service, loom_serve_telemetry_stream_t* stream) {
+    loom_serve_text_service_t* service, iree_host_size_t initial_count,
+    loom_serve_telemetry_stream_t* stream) {
+  iree_host_size_t span_capacity = 0;
+  for (iree_host_size_t i = 0; i < service->scheduling.shape_count; ++i) {
+    span_capacity =
+        iree_max(span_capacity, service->scheduling.shapes[i].span_capacity);
+  }
+  IREE_RETURN_IF_ERROR(loom_serve_text_epoch_initialize(
+      span_capacity, service->host_allocator, &service->epoch));
   IREE_RETURN_IF_ERROR(loom_serve_text_telemetry_initialize(
       stream, service->host_allocator, &service->telemetry));
   IREE_RETURN_IF_ERROR(loom_serve_text_input_count_initialize(
@@ -723,14 +731,20 @@ static iree_status_t loom_serve_text_service_initialize(
       service->pending.admission.budget, service->host_allocator,
       &service->pending));
   iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       i < service->row_count && iree_status_is_ok(status); ++i) {
-    status = loom_serve_text_session_initialize(
-        loom_serve_text_model_row(service->model, i),
-        service->scheduling.model_mode,
-        loom_serve_text_model_tokenizer(service->model),
-        service->scheduling.context_capacity, service->host_allocator,
-        &service->sessions[i]);
+  for (iree_host_size_t i = 0; i < initial_count && iree_status_is_ok(status);
+       ++i) {
+    status = iree_arena_allocate(&service->session_records,
+                                 sizeof(**service->sessions),
+                                 (void**)&service->sessions[i]);
+    if (iree_status_is_ok(status)) {
+      ++service->row_count;
+      status = loom_serve_text_session_initialize(
+          service->scheduling.model_mode,
+          loom_serve_text_model_tokenizer(service->model),
+          service->scheduling.context_capacity, service->host_allocator,
+          service->sessions[i]);
+      service->sessions[i]->row = loom_serve_text_model_row(service->model, i);
+    }
   }
   return status;
 }
@@ -744,7 +758,7 @@ static void loom_serve_text_stop(loom_serve_text_service_t* service,
   loom_serve_residency_cancel_admission(
       loom_serve_text_model_residency(service->model));
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    loom_serve_text_session_t* session = &service->sessions[i];
+    loom_serve_text_session_t* session = service->sessions[i];
     if (session->request.consumer.self) {
       // Failed device readiness keeps pins and reserved views until model
       // destruction actually retires accepted work. Normal shutdown is at a
@@ -799,9 +813,13 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   loom_serve_text_media_projector_free(service->projector);
   const iree_allocator_t host_allocator = service->host_allocator;
   loom_serve_execution_reconfiguration_free(service->reconfiguration);
+  loom_serve_text_service_capacity_discard(service);
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    loom_serve_text_session_deinitialize(&service->sessions[i]);
+    loom_serve_text_session_deinitialize(service->sessions[i]);
   }
+  iree_arena_deinitialize(&service->session_records);
+  iree_allocator_free(host_allocator, service->sessions);
+  iree_allocator_free(host_allocator, service->ready);
   loom_serve_text_readiness_deinitialize(&service->readiness);
   loom_serve_text_tool_calls_deinitialize(&service->tool_calls);
   loom_serve_text_chat_scratch_deinitialize(&service->completion_scratch);
@@ -811,6 +829,7 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   loom_serve_text_checkpoint_registry_deinitialize(&service->checkpoints);
   loom_serve_text_session_cache_deinitialize(&service->cache);
   loom_serve_text_prefix_cache_deinitialize(&service->prefixes);
+  loom_serve_text_epoch_deinitialize(&service->epoch);
   loom_serve_text_heartbeat_deinitialize(&service->heartbeat);
   if (service->telemetry.owns_stream) {
     loom_serve_telemetry_stream_free(service->telemetry.stream);
@@ -824,6 +843,10 @@ iree_status_t loom_serve_text_service_allocate(
     loom_serve_telemetry_stream_t* stream, iree_allocator_t host_allocator,
     loom_serve_text_service_t** out_service) {
   *out_service = NULL;
+  if (options->row_count != loom_serve_text_model_row_count(model)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "initial service capacity must match its model");
+  }
   const iree_host_size_t draft_depth = loom_serve_text_model_draft_depth(model);
   const loom_serve_text_mode_t model_mode = loom_serve_text_model_mode(model);
   if (model_mode == LOOM_SERVE_TEXT_MODE_ENCODE &&
@@ -874,7 +897,6 @@ iree_status_t loom_serve_text_service_allocate(
       .name = options->name,
       .isolated_shape = {loom_serve_text_model_prefill_capacity(model),
                          options->row_count},
-      .row_count = options->row_count,
       .default_max_tokens = options->default_max_tokens,
       .pending = {.capacity = options->pending_capacity,
                   .admission = {.budget = options->admission_overtakes}},
@@ -902,7 +924,20 @@ iree_status_t loom_serve_text_service_allocate(
   loom_serve_text_tool_calls_initialize(host_allocator, &service->tool_calls);
   loom_serve_text_chat_scratch_initialize(host_allocator,
                                           &service->completion_scratch);
-  iree_status_t status = loom_serve_text_service_initialize(service, stream);
+  iree_arena_initialize(loom_serve_host_block_pool(host),
+                        &service->session_records);
+  iree_status_t status = iree_allocator_malloc_array(
+      host_allocator, options->row_count, sizeof(*service->sessions),
+      (void**)&service->sessions);
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(host_allocator, options->row_count,
+                                         sizeof(*service->ready),
+                                         (void**)&service->ready);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_serve_text_service_initialize(service, options->row_count, stream);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_serve_execution_reconfiguration_allocate(
         loom_serve_text_model_execution_update(model),
@@ -961,7 +996,7 @@ static bool loom_serve_text_is_active(void* self) {
     return true;
   }
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    if (service->sessions[i].request.consumer.self) {
+    if (service->sessions[i]->request.consumer.self) {
       return true;
     }
   }
@@ -1006,6 +1041,13 @@ static iree_status_t loom_serve_text_advance_work(
     IREE_RETURN_IF_ERROR(status);
     if (work == TEXT_CPU_WORK_OUTPUT) {
       loom_serve_text_complete_output(service);
+    } else if (work == TEXT_CPU_WORK_GROW) {
+      if (iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING)) {
+        loom_serve_text_service_capacity_discard(service);
+      } else {
+        IREE_RETURN_IF_ERROR(loom_serve_text_service_capacity_await(service));
+      }
+      yield_preparation = true;
     }
   }
   if (service->completion.work != TEXT_WORK_NONE) {
@@ -1037,6 +1079,9 @@ static iree_status_t loom_serve_text_advance_work(
         break;
       case TEXT_WORK_TRIM:
         status = loom_serve_text_complete_trim(service);
+        break;
+      case TEXT_WORK_GROW:
+        loom_serve_text_service_capacity_publish(service);
         break;
       case TEXT_WORK_RESERVE:
         status = loom_serve_text_complete_reservation(service, flags);
@@ -1073,7 +1118,7 @@ static iree_status_t loom_serve_text_advance_work(
     }
     *out_progress |= service->pending.count || service->control.consumer.self;
     for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-      *out_progress |= service->sessions[i].request.consumer.self != NULL;
+      *out_progress |= service->sessions[i]->request.consumer.self != NULL;
     }
     loom_serve_text_stop(service, service->telemetry.failure_code);
     return iree_ok_status();
@@ -1113,10 +1158,11 @@ static iree_status_t loom_serve_text_advance_work(
     *out_progress = true;
     return status;
   }
-  loom_serve_ready_span_t ready[LOOM_SERVE_TEXT_ROW_CAPACITY] = {0};
+  loom_serve_ready_span_t* ready = service->ready;
+  memset(ready, 0, service->row_count * sizeof(*ready));
   for (iree_host_size_t i = 0;
        i < service->row_count && iree_status_is_ok(status); ++i) {
-    status = loom_serve_text_prepare_ready(service, &service->sessions[i],
+    status = loom_serve_text_prepare_ready(service, service->sessions[i],
                                            out_progress, &ready[i]);
   }
   if (iree_status_is_ok(status)) {
@@ -1127,8 +1173,8 @@ static iree_status_t loom_serve_text_advance_work(
     if (service->scheduling.packing_mode == LOOM_SERVE_TEXT_PACKING_SEPARATE) {
       loom_serve_text_separate_ready(service, ready);
     }
-    loom_serve_packed_span_t spans[LOOM_SERVE_TEXT_ROW_CAPACITY];
-    loom_serve_packed_span_t scratch[LOOM_SERVE_TEXT_ROW_CAPACITY];
+    loom_serve_packed_span_t* spans = service->epoch.planning.scheduled;
+    loom_serve_packed_span_t* scratch = service->epoch.planning.candidate;
     iree_host_size_t shape_index = 0;
     const iree_host_size_t count = loom_serve_pack_shapes(
         service->row_count, ready, service->scheduling.shape_count,
@@ -1321,7 +1367,7 @@ static bool loom_serve_text_request_at(
         .counters = {.requests = 1}};
   } else if (index - service->pending.count < service->row_count) {
     *out_snapshot = loom_serve_text_session_request_snapshot(
-        &service->sessions[index - service->pending.count]);
+        service->sessions[index - service->pending.count]);
   } else if (index - service->pending.count == service->row_count) {
     *out_snapshot = (loom_serve_http_request_snapshot_t){
         .id = service->control.consumer.self ? service->control.receipt.serial

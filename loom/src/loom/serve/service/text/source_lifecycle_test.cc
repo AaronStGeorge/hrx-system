@@ -276,8 +276,8 @@ TEST_F(RegisteredSourceTextServiceTest,
        FailedTextSourceLeavesPeerAndDiagnosticsUsable) {
   const auto package = iree::testing::MakeTempFilePath("failed_text_source");
   ASSERT_TRUE(std::filesystem::create_directory(package));
-  for (const char* file :
-       {"prepare.loom", "control.loom", "model.json", "weights.loom"}) {
+  for (const char* file : {"prepare.loom", "control.loom", "storage.loom",
+                           "model.json", "weights.loom"}) {
     ASSERT_TRUE(std::filesystem::copy_file(directory_ + "/" + file,
                                            package + "/" + file));
   }

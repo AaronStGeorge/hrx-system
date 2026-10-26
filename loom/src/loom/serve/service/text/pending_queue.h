@@ -78,7 +78,7 @@ void loom_serve_text_pending_queue_deinitialize(
 iree_status_t loom_serve_text_pending_queue_select_request(
     const loom_serve_text_pending_queue_t* queue, iree_string_view_t name,
     iree_string_view_t checkpoint_name, iree_host_size_t row_count,
-    loom_serve_text_session_t* sessions,
+    loom_serve_text_session_t* const* sessions,
     loom_serve_text_checkpoint_registry_t* checkpoints,
     loom_serve_text_checkpoint_entry_t** out_checkpoint);
 
@@ -105,7 +105,7 @@ loom_serve_text_input_prefix_t loom_serve_text_pending_queue_prefix(
 iree_status_t loom_serve_text_pending_queue_prepare(
     loom_serve_text_pending_queue_t* queue, iree_string_view_t name,
     iree_host_size_t default_max_tokens, iree_host_size_t row_count,
-    loom_serve_text_session_t* sessions,
+    loom_serve_text_session_t* const* sessions,
     const loom_serve_text_pool_usage_t* geometry);
 
 // Transfers the prepared request and any cached logical history into its row
@@ -114,8 +114,7 @@ iree_status_t loom_serve_text_pending_queue_prepare(
 // Removes the stable queue slot and begins the row's consumer output.
 iree_status_t loom_serve_text_pending_queue_admit(
     loom_serve_text_pending_queue_t* queue,
-    loom_serve_text_session_cache_t* cache, loom_serve_text_session_t* sessions,
-    iree_string_view_t model_name);
+    loom_serve_text_session_cache_t* cache, iree_string_view_t model_name);
 
 // The caller has released or transferred request payloads and the consumer.
 // Returns the stable slot to the free suffix, releases checkpoint accounting,

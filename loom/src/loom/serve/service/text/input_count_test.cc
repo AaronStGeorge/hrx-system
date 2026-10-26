@@ -18,6 +18,12 @@ constexpr char kInputTokens[] = "/v1/chat/completions/input_tokens";
 
 class InputCountTest : public SourceTextServiceTest {
  protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.row_count = 1;
+    return options;
+  }
+
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
     auto options = ServiceOptions();

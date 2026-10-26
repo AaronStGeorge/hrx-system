@@ -15,6 +15,7 @@
           ]
         },
         "control.loom",
+        "storage.loom",
         "service.loom"
       ],
       "libraries": [

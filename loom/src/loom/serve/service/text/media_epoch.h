@@ -73,10 +73,9 @@ typedef struct loom_serve_text_media_epoch_t {
 } loom_serve_text_media_epoch_t;
 
 // Consumes checked text partitions and projected media facts. The optional
-// continuation uses source plan indices starting at
-// LOOM_SERVE_TEXT_ROW_CAPACITY. Selects image ranges by binary search and
-// copies only intersecting metadata; projected device rows remain borrowed
-// until enqueue returns.
+// continuation uses source plan indices starting at first_span_count. Selects
+// image ranges by binary search and copies only intersecting metadata;
+// projected device rows remain borrowed until enqueue returns.
 iree_status_t loom_serve_text_media_epoch_initialize(
     iree_host_size_t first_span_count,
     const struct loom_serve_text_span_t* first_spans,

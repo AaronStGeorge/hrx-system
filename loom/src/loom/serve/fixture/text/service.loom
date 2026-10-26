@@ -13,6 +13,23 @@ func.def public @text_prepare_v1(%prefill: i64, %context: i64, %pool: i64, %rows
   func.return %result_0, %result_1, %result_2, %result_3, %result_4, %result_5, %result_6, %result_7, %result_8 : i64, i32, buffer, buffer, buffer, buffer, buffer, buffer, buffer
 }
 
+func.decl @resize_state(%state: buffer, %rows: i64) -> (buffer, buffer, buffer, buffer, buffer, buffer)
+
+func.def public @text_resize_state(%state: buffer, %rows: i64) -> (buffer, buffer, buffer, buffer, buffer, buffer) {
+  %control, %allocations, %views, %origins, %draft, %geometry = func.call @resize_state(%state, %rows) : (buffer, i64) -> (buffer, buffer, buffer, buffer, buffer, buffer)
+  func.return %control, %allocations, %views, %origins, %draft, %geometry : buffer, buffer, buffer, buffer, buffer, buffer
+}
+
+func.def public @text_resize_state_v1(%state: buffer, %rows: i64) -> (buffer, buffer, buffer, buffer, buffer, buffer) {
+  %control, %allocations, %views, %origins, %draft, %geometry = func.call @resize_state(%state, %rows) : (buffer, i64) -> (buffer, buffer, buffer, buffer, buffer, buffer)
+  func.return %control, %allocations, %views, %origins, %draft, %geometry : buffer, buffer, buffer, buffer, buffer, buffer
+}
+
+func.def public @sequence_resize_state_v1(%state: buffer, %rows: i64) -> (buffer, buffer, buffer, buffer, buffer, buffer) {
+  %control, %allocations, %views, %origins, %draft, %geometry = func.call @resize_state(%state, %rows) : (buffer, i64) -> (buffer, buffer, buffer, buffer, buffer, buffer)
+  func.return %control, %allocations, %views, %origins, %draft, %geometry : buffer, buffer, buffer, buffer, buffer, buffer
+}
+
 func.decl @model_name() -> (buffer)
 
 func.def public @text_model_name() -> (buffer) {
@@ -205,15 +222,15 @@ func.def public @text_encode_epoch_v1(%control_state: buffer, %plan: buffer, %in
   func.return %count, %transfers, %transfer_begin, %transfer_length : i32, buffer, i64, i64
 }
 
-func.decl @publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative_mask: i32, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer)
+func.decl @publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative: buffer, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer)
 
-func.def public @text_publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative_mask: i32, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
-  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative_mask, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer)
+func.def public @text_publish_epoch(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative: buffer, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
+  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer, buffer)
   func.return
 }
 
-func.def public @text_publish_epoch_v1(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative_mask: i32, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
-  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative_mask, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer)
+func.def public @text_publish_epoch_v1(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative: buffer, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
+  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer, buffer)
   func.return
 }
 
@@ -256,8 +273,8 @@ func.def public @sequence_encode_epoch_v1(%control_state: buffer, %plan: buffer,
   func.return %count, %transfers, %transfer_begin, %transfer_length : i32, buffer, i64, i64
 }
 
-func.def public @sequence_publish_epoch_v1(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative_mask: i32, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
-  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative_mask, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer)
+func.def public @sequence_publish_epoch_v1(%plan: buffer, %media_plan: buffer, %count: i32, %first_media_count: i32, %next_media_count: i32, %verified: i32, %continues: i32, %next_speculative: buffer, %ordinary: buffer, %first_results: buffer, %next_results: buffer, %progress: buffer) {
+  func.call @publish_epoch(%plan, %media_plan, %count, %first_media_count, %next_media_count, %verified, %continues, %next_speculative, %ordinary, %first_results, %next_results, %progress) : (buffer, buffer, i32, i32, i32, i32, i32, buffer, buffer, buffer, buffer, buffer)
   func.return
 }
 

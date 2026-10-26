@@ -71,6 +71,18 @@ class TextStorageTest : public ::testing::Test {
     iree_unaligned_store_le_u64(bytes[0].data + 9 * 24, 512 + page_count * 64);
   }
 
+  void MovePrivateStorage(uint64_t origin) {
+    iree_unaligned_store_le_u64(bytes[0].data + 24 + 16, 0);
+    iree_unaligned_store_le_u64(bytes[4].data + 32, origin + 8);
+    for (size_t i = 0; i < 3 * 4; ++i) {
+      uint8_t* view = bytes[1].data + i * 16;
+      if (iree_unaligned_load_le_u64(view + 8)) {
+        iree_unaligned_store_le_u64(view,
+                                    origin + iree_unaligned_load_le_u64(view));
+      }
+    }
+  }
+
   // Allocator owning source values and parsed metadata.
   const iree_allocator_t host_allocator = iree_allocator_system();
   // Source buffer reference-type owner.
@@ -250,6 +262,22 @@ TEST_F(TextStorageTest, IndependentEndpointOmitsRowPrivateExecutionState) {
 
 TEST_F(TextStorageTest, RejectsPlanesOverlappingPrivateStorage) {
   iree_unaligned_store_le_u64(bytes[4].data + 72, 128);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_text_storage_initialize(&types, results, 3, 17, 32,
+                                         host_allocator, &storage));
+}
+
+TEST_F(TextStorageTest, CacheCanPrecedeDemandInitializedPrivateStorage) {
+  MovePrivateStorage(8192);
+  IREE_ASSERT_OK(loom_serve_text_storage_initialize(&types, results, 3, 17, 32,
+                                                    host_allocator, &storage));
+  EXPECT_EQ(storage.recurrent.origin, 8200u);
+  EXPECT_EQ(storage.regions[0].blocks.origin, 256u);
+}
+
+TEST_F(TextStorageTest, UninitializedPrivateStorageCannotOverlapCache) {
+  MovePrivateStorage(4608);
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_serve_text_storage_initialize(&types, results, 3, 17, 32,

@@ -259,7 +259,10 @@ static bool loom_serve_text_begin_preparation_at(
   loom_serve_text_session_t* session = loom_serve_text_session_select(
       service->row_count, service->sessions, pending->name,
       pending->chat.policy && !pending->checkpoint ? &pending->chat : NULL);
-  if (!session || session->preparing) {
+  if (!session) {
+    return loom_serve_text_service_capacity_begin(service);
+  }
+  if (session->preparing) {
     return false;
   }
   service->pending.prepared.request = pending;
@@ -505,7 +508,8 @@ iree_status_t loom_serve_text_complete_preparation(
     service->pending.prepared.session =
         service->pending.prepared.resolved_session;
     const loom_serve_text_admission_record_t value = {
-        .row = service->pending.prepared.session - service->sessions,
+        .row =
+            loom_serve_text_row_index(service->pending.prepared.session->row),
         .retained_tokens = pending->input.retained_count,
         .appended_tokens = pending->input.count,
         .reservation_tokens = pending->reservation,
@@ -534,7 +538,7 @@ static iree_status_t loom_serve_text_admit_request(
                                        service->pending.prepared.prefix);
   }
   const iree_status_t status = loom_serve_text_pending_queue_admit(
-      &service->pending, &service->cache, service->sessions, service->name);
+      &service->pending, &service->cache, service->name);
   loom_serve_text_pending_observe(service);
   return status;
 }
@@ -688,7 +692,7 @@ iree_status_t loom_serve_text_admit_pending(loom_serve_text_service_t* service,
                   service->pending.values[i]->continuation.session != NULL;
       }
       for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-        active |= service->sessions[i].request.consumer.self != NULL;
+        active |= service->sessions[i]->request.consumer.self != NULL;
       }
       if (active) {
         if (admission == TEXT_ADMISSION_CAPACITY) {

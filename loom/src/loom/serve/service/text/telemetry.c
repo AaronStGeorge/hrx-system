@@ -334,7 +334,7 @@ void loom_serve_text_telemetry_epoch(
     loom_serve_text_heartbeat_t* heartbeat,
     const loom_serve_text_epoch_options_t* options,
     const loom_serve_text_epoch_t* cohort,
-    loom_serve_text_session_t* sessions) {
+    loom_serve_text_session_t* const* sessions) {
   const iree_host_size_t count = cohort->count;
   const iree_host_size_t shape_index = cohort->shape_index;
   const loom_serve_text_span_t* spans = cohort->spans;
@@ -352,7 +352,7 @@ void loom_serve_text_telemetry_epoch(
   loom_serve_text_heartbeat_snapshot_t* state = &heartbeat->snapshot;
   const iree_time_t completed = iree_time_now();
   for (iree_host_size_t i = 0; i < count; ++i) {
-    loom_serve_text_session_t* session = &sessions[spans[i].row_index];
+    loom_serve_text_session_t* session = sessions[spans[i].row_index];
     const bool prefill = cohort->prefill[i];
     const bool select =
         iree_any_bit_set(spans[i].flags, LOOM_SERVE_TEXT_SPAN_FLAG_SELECT);

@@ -15,6 +15,7 @@
           ]
         },
         "control.loom",
+        "storage.loom",
         "service.loom"
       ],
       "libraries": [
@@ -46,6 +47,7 @@
           ]
         },
         "service.loom",
+        "storage.loom",
         "control_module.loombc"
       ],
       "libraries": [

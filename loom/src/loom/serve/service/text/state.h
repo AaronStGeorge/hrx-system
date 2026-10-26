@@ -7,6 +7,7 @@
 #ifndef LOOM_SERVE_SERVICE_TEXT_STATE_H_
 #define LOOM_SERVE_SERVICE_TEXT_STATE_H_
 
+#include "iree/base/internal/arena.h"
 #include "loom/serve/runtime/execution/retirement.h"
 #include "loom/serve/runtime/storage/block_pool.h"
 #include "loom/serve/service/text/model.h"
@@ -48,6 +49,8 @@ typedef struct loom_serve_text_state_t loom_serve_text_state_t;
 typedef struct loom_serve_text_state_row_t {
   // Borrowed single-owner state arena, outliving this row.
   loom_serve_text_state_t* owner;
+  // Stable source-visible identity, independent of this record's address.
+  iree_host_size_t index;
   // Private views in slots 1, 3-5; recurrence borrows its owned pool slot.
   // Residual borrows model-wide storage.
   iree_hal_buffer_t* buffers[TEXT_BINDING_COUNT];
@@ -57,6 +60,8 @@ typedef struct loom_serve_text_state_row_t {
     uint32_t slot;
     // Owned reader until the cohort retires, or UINT32_MAX when in-place.
     uint32_t anchor;
+    // Changed origins not yet captured by the source state encoder.
+    bool dirty;
   } recurrent;
   // Old partial KV tail owned through COW retirement, or UINT32_MAX.
   uint32_t retiring_tail;
@@ -109,10 +114,12 @@ struct loom_serve_text_state_t {
   loom_serve_retirement_t retirement;
   // Enabled packed and speculative storage roles.
   loom_serve_text_state_flags_t flags;
-  // Number of fixed row records and source-defined private views.
+  // Number of published resident records and source-defined private views.
   iree_host_size_t row_count;
-  // Owned rows, stable through final queue retirement.
-  loom_serve_text_state_row_t* rows;
+  // Stable records allocated from the shared application's host block pool.
+  iree_arena_allocator_t row_records;
+  // Owned directory; records outlive every asynchronous borrower.
+  loom_serve_text_state_row_t** rows;
   // Prepared logical plans whose selected IDs exclude compaction until freed.
   iree_host_size_t prepared_reservations;
   // Validated source geometry and retained initialization payloads.
@@ -134,8 +141,8 @@ struct loom_serve_text_state_t {
     loom_serve_block_pool_t pool;
     // Owned arena subviews, stable through final queue retirement.
     iree_hal_buffer_t** buffers;
-    // Rows whose new byte origins need source encoding before packed work.
-    uint32_t dirty_rows;
+    // Number of rows with unpublished origins; zero skips the row scan.
+    iree_host_size_t dirty_count;
   } recurrent;
   // Referenced page ownership shared by target and draft cache planes.
   struct {
@@ -147,6 +154,8 @@ struct loom_serve_text_state_t {
     uint32_t* maps;
     // Cold compaction plan indexed by original physical ID.
     uint32_t* destinations;
+    // Reusable target/draft map uploads, at most two per participating row.
+    iree_hal_transfer_operation_t* uploads;
   } cache;
   // Physical commitment, separate from logical row/block ownership.
   struct {
@@ -163,6 +172,17 @@ struct loom_serve_text_state_t {
       // Last admitted native readiness value.
       uint64_t value;
     } backing;
+    // Independent native mapping borrowers during cold reservation growth.
+    // Each owns its own readiness value; completion of one cannot publish
+    // another reservation's translations.
+    struct {
+      // Owned native operations, joined before replacing their directories.
+      loom_serve_memory_operation_t*
+          operations[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
+      // Owned readiness semaphores imported into the model timeline.
+      iree_hal_semaphore_t*
+          semaphores[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
+    } growth;
     // Compaction spans native releases and device copies on one model owner.
     struct {
       // Action admitted after successful readiness of the preceding phase.
@@ -177,7 +197,7 @@ struct loom_serve_text_state_t {
     iree_device_size_t
         private_lengths[LOOM_SERVE_TEXT_STORAGE_ALLOCATION_COUNT];
   } memory;
-  // Private row views followed by pooled KV, or dense row KV.
+  // Source-positioned private views, recurrent slots, and target KV planes.
   iree_hal_buffer_t* row_arena;
   // Model-wide residual storage serialized by the execution timeline.
   iree_hal_buffer_t* residual;
@@ -220,6 +240,23 @@ void loom_serve_text_state_initialize(const loom_serve_text_options_t* options,
 iree_status_t loom_serve_text_state_allocate(loom_serve_text_state_t* state,
                                              loom_serve_device_t* device,
                                              loom_serve_execution_t* execution);
+
+// Source slot to its owned root, shared by allocation and cold maintenance.
+iree_hal_buffer_t** loom_serve_text_state_allocation(
+    loom_serve_text_state_t* state, iree_host_size_t index);
+
+// Moves a validated enlarged source layout into retired state. Existing
+// private views, recurrent slots, and cache planes retain their byte offsets.
+// The caller has joined CPU/device consumers and prepared reservations.
+// Accepted copies and mappings remain owned through normal terminal cleanup.
+iree_status_t loom_serve_text_state_resize(loom_serve_text_state_t* state,
+                                           loom_serve_device_t* device,
+                                           iree_host_size_t row_count,
+                                           loom_serve_text_storage_t* storage);
+
+// Releases cold layout payloads and native mapping borrowers after successful
+// completion of the captured resize frontier.
+void loom_serve_text_state_complete_resize(loom_serve_text_state_t* state);
 
 // Begins irreversible retirement after external row/checkpoint users and
 // cached commands relinquish their references. Releases owned device views

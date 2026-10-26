@@ -214,6 +214,73 @@ TEST_F(MemoryTest, PhysicalPeakSurvivesCachedSlabDisposal) {
   CheckRetained(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
 }
 
+TEST_F(MemoryTest, ReservationGrowthPreservesSparseBackingWithoutCopying) {
+  ASSERT_NO_FATAL_FAILURE(UseBacking(false, 2 * kSlabSize, nullptr));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+  IREE_ASSERT_OK(
+      loom_serve_virtual_buffer_commit(first, 2 * kSlabSize, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+  RoundTrip(loom_serve_virtual_buffer_handle(first), 2 * kSlabSize, 0x87654321);
+  auto* const wrapper = first;
+  for (const uint64_t slabs : {5, 9}) {
+    auto* previous = loom_serve_virtual_buffer_handle(first);
+    iree_hal_buffer_retain(previous);
+    loom_serve_memory_operation_t* operation = nullptr;
+    IREE_ASSERT_OK(loom_serve_virtual_buffer_grow_async(
+        first, slabs * kSlabSize, nullptr, 0, &operation));
+    loom_serve_memory_operation_await(operation);
+    IREE_ASSERT_OK(loom_serve_memory_operation_query_status(operation));
+    loom_serve_memory_operation_free(operation);
+    EXPECT_EQ(first, wrapper);
+    EXPECT_NE(loom_serve_virtual_buffer_handle(first), previous);
+    iree_hal_buffer_release(previous);
+    CheckRetained(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+    CheckRetained(loom_serve_virtual_buffer_handle(first), 2 * kSlabSize,
+                  0x87654321);
+    EXPECT_EQ(statistics[0].reserved_bytes, slabs * kSlabSize);
+    EXPECT_EQ(statistics[0].committed_bytes, 2 * kSlabSize);
+    EXPECT_EQ(statistics[0].peak_bytes, 2 * kSlabSize);
+    EXPECT_EQ(loom_serve_virtual_buffer_slab_count(first), slabs);
+  }
+  // Trimming and recommitting use the enlarged directory with the same pool.
+  loom_serve_virtual_buffer_begin_trim(first);
+  loom_serve_virtual_buffer_keep(first, 0, kSlabSize);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+  IREE_ASSERT_OK(
+      loom_serve_virtual_buffer_commit(first, 8 * kSlabSize, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(first), 8 * kSlabSize, 0xaabbccdd);
+  CheckRetained(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes,
+            2 * kSlabSize);
+}
+
+TEST_F(MemoryTest, FailedReservationGrowthKeepsBackingUntilCheckedDetach) {
+  mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
+  ASSERT_NO_FATAL_FAILURE(UseBacking(false, kSlabSize, &mapping_queue));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+  mapping_queue.fail_next_map = true;
+  loom_serve_memory_operation_t* operation = nullptr;
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_grow_async(first, 4 * kSlabSize,
+                                                      nullptr, 0, &operation));
+  loom_serve_memory_operation_await(operation);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_memory_operation_query_status(operation));
+  loom_serve_memory_operation_free(operation);
+  EXPECT_EQ(statistics[0].reserved_bytes, 5 * kSlabSize);
+  EXPECT_EQ(statistics[0].committed_bytes, kSlabSize);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_free(first));
+  first = nullptr;
+  EXPECT_EQ(statistics[0].reserved_bytes, 0u);
+  EXPECT_EQ(statistics[0].committed_bytes, 0u);
+}
+
 TEST_F(DedicatedNativeWorkerMemoryTest,
        HeldGrowthAndUnrelatedReturnDoNotCreateOtherClassCredit) {
   const auto bulk = loom_serve_device_weight_geometry(device);

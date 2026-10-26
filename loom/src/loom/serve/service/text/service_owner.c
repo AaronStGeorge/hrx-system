@@ -44,7 +44,7 @@ void loom_serve_text_observe(loom_serve_text_service_t* service,
   iree_host_size_t active = 0, prefill = 0, decode = 0, backpressured = 0;
   iree_time_t oldest_active_arrival = IREE_TIME_INFINITE_FUTURE;
   for (iree_host_size_t i = 0; i < service->row_count; ++i) {
-    const loom_serve_text_session_t* session = &service->sessions[i];
+    const loom_serve_text_session_t* session = service->sessions[i];
     if (session->request.consumer.self) {
       ++active;
       const iree_time_t arrival =

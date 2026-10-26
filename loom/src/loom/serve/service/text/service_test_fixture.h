@@ -62,6 +62,10 @@ class SourceTextServiceTest : public ::testing::Test {
   // runs can exercise the same owner contract with additional workers.
   virtual iree_host_size_t WorkerCount() const { return 1; }
 
+  virtual loom_serve_http_server_options_t ServerOptions() const {
+    return loom_serve_http_server_options_default();
+  }
+
   // Document ownership covers every asynchronous native load in this fixture.
   loom_serve::testing::ModelDocument document_;
 
@@ -178,7 +182,7 @@ class SourceTextServiceTest : public ::testing::Test {
       const std::string& name, const std::string& source,
       const char* admission = "open", const std::string& definition_fields = "",
       const std::vector<std::string>& additional_sources = {}) {
-    std::string sources = "\"advance.loom\"";
+    std::string sources = "\"advance.loom\",\"storage.loom\"";
     for (const auto& path : additional_sources) {
       sources += ",\"" + path + "\"";
     }
@@ -211,6 +215,12 @@ class SourceTextServiceTest : public ::testing::Test {
       if (marker.empty() ? state.empty()
                          : state.find(marker) != std::string::npos) {
         return state;
+      }
+      if (state.find(R"("registration":"failed")") != std::string::npos) {
+        [&] {
+          FAIL() << "Model failed before reaching " << marker << ": " << state;
+        }();
+        return {};
       }
     }
     return {};

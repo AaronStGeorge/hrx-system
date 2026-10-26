@@ -17,6 +17,7 @@ loom_module(
     "control.loom"
     "prepare.loom"
     "service.loom"
+    "storage.loom"
   MODE merge
   OUTPUT_FORMAT bc
   STRICT_DEPS
@@ -29,6 +30,20 @@ loom_module(
     control_module
   SRCS
     "control.loom"
+  LIBRARIES
+    "::storage_module"
+  MODE merge
+  OUTPUT_FORMAT bc
+  STRICT_DEPS
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_module(
+  NAME
+    storage_module
+  SRCS
+    "storage.loom"
   MODE merge
   OUTPUT_FORMAT bc
   STRICT_DEPS
@@ -75,6 +90,7 @@ add_custom_command(OUTPUT native_source_files.stamp
     "native_card_assets.stamp"
     "prepare.loom"
     "service.loom"
+    "storage.loom"
 )
 
 add_custom_target(${_FILEGROUP_TARGET}
@@ -111,6 +127,7 @@ add_custom_command(OUTPUT native_mixed_files.stamp
     "native_card_assets.stamp"
     "prepare.loom"
     "service.loom"
+    "storage.loom"
 )
 
 add_custom_target(${_FILEGROUP_TARGET}
@@ -187,6 +204,7 @@ loom_module(
     "control.loom"
     "prepare.loom"
     "service.loom"
+    "storage.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/project.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/service.loom"

@@ -46,10 +46,16 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
         iree_vm_environment_lookup_ref_type_table(environment, IREE_SV("vm")),
         &types));
 
+    ASSERT_NO_FATAL_FAILURE(MakeStorage(2));
+  }
+
+  void MakeStorage(size_t row_count) {
     const bool cache = (GetParam() & 1) != 0;
     const bool table = (GetParam() & 2) != 0;
     const uint64_t carry_stride = (GetParam() & 4) ? 198 * 1024 : 0;
-    const iree_host_size_t lengths[] = {11 * 24, 2 * 4 * 16, 16, 16,
+    const uint64_t slot_count = 2 * row_count + 2;
+    const uint64_t table_length = 16 + row_count * 5 * sizeof(uint32_t);
+    const iree_host_size_t lengths[] = {11 * 24, row_count * 4 * 16, 16, 16,
                                         64 + (cache ? 2u : 1u) * 40};
     for (size_t i = 0; i < IREE_ARRAYSIZE(lengths); ++i) {
       iree_vm_buffer_t* buffer = nullptr;
@@ -60,37 +66,32 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
       memset(bytes[i].data, 0, lengths[i]);
       results[i] = iree_vm_buffer_variant_from_ptr_move(&types, &buffer);
     }
-    const uint64_t allocations[] = {64,
-                                    576,
-                                    64,
-                                    56,
-                                    64,
-                                    64,
-                                    4 * carry_stride,
-                                    (GetParam() & 8) ? 0u : 64u,
-                                    (GetParam() & 8) ? 0u : 64u,
-                                    cache ? 128u : 0u,
-                                    table ? 56u : 0u};
+    const uint64_t allocations[] = {
+        64, 128 + slot_count * 128, 64, table_length, 64, 64,
+        // Spare carry capacity does not make the
+        // checkpoint bank's old index stable.
+        iree_max(row_count + 2, 16u) * carry_stride,
+        (GetParam() & 8) ? 0u : 64u, (GetParam() & 8) ? 0u : 64u,
+        cache ? 128u : 0u, table ? table_length : 0u};
     for (size_t i = 0; i < IREE_ARRAYSIZE(allocations); ++i) {
       iree_unaligned_store_le_u64(bytes[0].data + i * 24, allocations[i]);
       iree_unaligned_store_le_u64(bytes[0].data + i * 24 + 8, 256);
       iree_unaligned_store_le_u64(bytes[0].data + i * 24 + 16,
-                                  i == 1   ? 448
-                                  : i == 6 ? allocations[i]
-                                           : 0);
+                                  i == 6 ? allocations[i] : 0);
     }
-    for (size_t row = 0; row < 2; ++row) {
-      const uint64_t views[] = {row * 128,      8, 0, 0, row * 128 + 16, 16,
-                                row * 128 + 48, 32};
+    for (size_t row = 0; row < row_count; ++row) {
+      const uint64_t origin = 128 + row * 128;
+      const uint64_t views[] = {origin + 32, 8,  0,           0,
+                                origin + 48, 16, origin + 80, 32};
       StoreWords(bytes[1].data + row * 64, views, IREE_ARRAYSIZE(views));
     }
     // Unallocated tables may still have source payloads, but no upload
     // consumer. Allocated tables preserve these bytes before their page maps.
     memset(bytes[2].data, 0x31, 16);
     memset(bytes[3].data, 0x72, 16);
-    const uint64_t geometry[] = {4, 16, carry_stride, 32, 256, 32, 16,
-                                 6, 1,  448,          1,  128, 16, 9,
-                                 0, 1,  128,          16};
+    const uint64_t geometry[] = {
+        4, 16, carry_stride, 32, 128, 128, 16, slot_count, 1,
+        0, 1,  128,          16, 9,   0,   1,  128,        16};
     StoreWords(bytes[4].data, geometry, lengths[4] / sizeof(uint64_t));
   }
 
@@ -164,7 +165,7 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
         continue;
       }
       for (size_t row = 0; row < state.row_count; ++row) {
-        const size_t block_count = state.rows[row].block_count;
+        const size_t block_count = state.rows[row]->block_count;
         if (!block_count) {
           continue;
         }
@@ -183,7 +184,7 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
 
   void CacheContents(loom_serve_text_state_row_t* row, bool upload) {
     const uint32_t* blocks =
-        state.cache.maps + (row - state.rows) * state.storage.blocks_per_row;
+        state.cache.maps + row->index * state.storage.blocks_per_row;
     for (size_t region = 0; region < state.storage.region_count; ++region) {
       const auto& layout = state.storage.regions[region];
       auto* buffer =
@@ -240,7 +241,7 @@ TEST_P(TextStateTest, OptionalRootsRetainOriginsMapsAndCheckpointCarry) {
   IREE_ASSERT_OK(loom_serve_text_state_grow(&state, 1, &span, &extent));
   IREE_ASSERT_OK(loom_serve_execution_drain(execution));
   ASSERT_NO_FATAL_FAILURE(CheckMaps());
-  auto* row = &state.rows[0];
+  auto* row = state.rows[0];
   ASSERT_NO_FATAL_FAILURE(CacheContents(row, true));
   const std::vector<uint8_t> recurrent(16, 0x58);
   IREE_ASSERT_OK(Upload(row->buffers[TEXT_RECURRENT], 0, recurrent));
@@ -263,7 +264,26 @@ TEST_P(TextStateTest, OptionalRootsRetainOriginsMapsAndCheckpointCarry) {
   if (!carry.empty()) {
     IREE_ASSERT_OK(Upload(state.carry, 0, changed));
   }
-  auto* fork = &state.rows[1];
+  // The pinned endpoint's carry follows the resident bank. Repeated capacity
+  // growth moves that small bank while retaining recurrent/KV identities.
+  for (size_t capacity : {5u, 9u}) {
+    ASSERT_NO_FATAL_FAILURE(MakeStorage(capacity));
+    loom_serve_text_storage_t storage;
+    IREE_ASSERT_OK(loom_serve_text_storage_initialize(
+        &types, results, capacity, 17, 32, host_allocator, &storage));
+    auto status =
+        loom_serve_text_state_resize(&state, device, capacity, &storage);
+    loom_serve_text_storage_deinitialize(&storage);
+    IREE_ASSERT_OK(status);
+    IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+    loom_serve_text_state_complete_resize(&state);
+    EXPECT_EQ(state.rows[0], row);
+    ASSERT_NO_FATAL_FAILURE(CheckMaps());
+    ASSERT_NO_FATAL_FAILURE(CacheContents(row, false));
+    ASSERT_NO_FATAL_FAILURE(
+        CheckBytes(row->buffers[TEXT_RECURRENT], 0, recurrent));
+  }
+  auto* fork = state.rows[1];
   bool restored = false;
   IREE_ASSERT_OK(
       loom_serve_text_state_row_try_restore(fork, checkpoint, &restored));

@@ -4,8 +4,8 @@
   "files": [
     {
       "origin": "advance.loom",
-      "size": 14132,
-      "sha256": "398f8dade7449fc3a697f4b7bfcb7231c8c76d8c675682c77b366c3c19c6a1ae"
+      "size": 14656,
+      "sha256": "0119bb776254f65285f11f0eb175fd1356a7ebcaafc4a2f974e8e1496c6bbb63"
     },
     {
       "origin": "bias.data",
@@ -14,8 +14,8 @@
     },
     {
       "origin": "control.loom",
-      "size": 36612,
-      "sha256": "dbb5f46e163715b64b1af48be513a24de8dc54e7f37d24b027e6f00042adac09"
+      "size": 39159,
+      "sha256": "2ded0047eddcf0c8aa87c0786b8f07a221c140ca5de3c37374ae7ac4516d78ca"
     },
     {
       "origin": "metadata.safetensors",
@@ -24,13 +24,18 @@
     },
     {
       "origin": "prepare.loom",
-      "size": 11557,
-      "sha256": "09d6e25e0c78c91897ddfcced6bf677b71df926011439be1fa1775f8b4b05527"
+      "size": 6869,
+      "sha256": "4625a42557f801ac371b423d34370dfbb3a98efa3d56ee1584ee215c5eba66d5"
     },
     {
       "origin": "service.loom",
-      "size": 23817,
-      "sha256": "c0137da9b7fafeb050deae0b1d90905c81b3bcbeb5218ca2372e0549f4b0180a"
+      "size": 25160,
+      "sha256": "d9239735a331d578eb5f370bfbc56e51157c8b42854ca6a8844117ccdec5bd1b"
+    },
+    {
+      "origin": "storage.loom",
+      "size": 7268,
+      "sha256": "463ee8622163d95b98a86ca6fc1d456b6691d3b55a468063d9b47152c95942f1"
     },
     {
       "origin": "tokenizer.json",

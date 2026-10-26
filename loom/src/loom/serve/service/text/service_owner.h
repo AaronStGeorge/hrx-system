@@ -7,6 +7,7 @@
 #ifndef LOOM_SERVE_SERVICE_TEXT_SERVICE_OWNER_H_
 #define LOOM_SERVE_SERVICE_TEXT_SERVICE_OWNER_H_
 
+#include "iree/base/internal/arena.h"
 #include "loom/serve/service/execution_reconfiguration.h"
 #include "loom/serve/service/text/checkpoint_request.h"
 #include "loom/serve/service/text/epoch.h"
@@ -15,6 +16,7 @@
 #include "loom/serve/service/text/pending_queue.h"
 #include "loom/serve/service/text/readiness.h"
 #include "loom/serve/service/text/service.h"
+#include "loom/serve/service/text/service_capacity.h"
 #include "loom/serve/telemetry/tracing.h"
 
 // Device work retained until readiness is consumed by the model owner.
@@ -26,6 +28,7 @@ typedef enum loom_serve_text_work_e {
   TEXT_WORK_RESERVE,
   TEXT_WORK_RETAIN,
   TEXT_WORK_PREFIX,
+  TEXT_WORK_GROW,
 } loom_serve_text_work_t;
 
 // Exclusive host/VM borrow; input preparation may overlap an accepted epoch.
@@ -34,6 +37,7 @@ typedef enum loom_serve_text_cpu_work_e {
   TEXT_CPU_WORK_PREPARE,
   TEXT_CPU_WORK_OUTPUT,
   TEXT_CPU_WORK_INPUT_COUNT,
+  TEXT_CPU_WORK_GROW,
 } loom_serve_text_cpu_work_t;
 
 // Serialized service ownership shared by request admission, device epochs,
@@ -58,6 +62,8 @@ struct loom_serve_text_service_t {
   loom_serve_packing_shape_t isolated_shape;
   // Number of allocated device/session rows.
   iree_host_size_t row_count;
+  // Cold replacement directory, private to its CPU task until readiness joins.
+  loom_serve_text_service_capacity_t growth;
   // Output bound when the client omits one.
   iree_host_size_t default_max_tokens;
   // Immutable model epoch geometry and execution choices.
@@ -123,8 +129,12 @@ struct loom_serve_text_service_t {
   loom_serve_text_tool_calls_t tool_calls;
   // Completion parser/formatter backing reused by all serialized output jobs.
   loom_serve_text_chat_scratch_t completion_scratch;
-  // Fixed retained rows sharing one model, command set and execution timeline.
-  loom_serve_text_session_t sessions[LOOM_SERVE_TEXT_ROW_CAPACITY];
+  // Stable retained records backed by the shared application host block pool.
+  iree_arena_allocator_t session_records;
+  // Owned directory sharing one model, command set and timeline.
+  loom_serve_text_session_t** sessions;
+  // Reusable readiness entries, indexed by resident identity, not span ordinal.
+  loom_serve_ready_span_t* ready;
 };
 
 // Whether a CPU or device loan excludes another model-owner operation.

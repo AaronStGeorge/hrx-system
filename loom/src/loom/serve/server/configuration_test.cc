@@ -717,6 +717,11 @@ TEST_F(ConfigurationTest, SpecializationCacheRejectsInvalidPolicy) {
 }
 
 TEST_F(ConfigurationTest, NativeCapacitiesAreNotOneModelShape) {
+  for (unsigned rows : {17u, 32u, 64u, 100u, 129u, 257u, 2147483647u}) {
+    IREE_ASSERT_OK(
+        Parse(Text(std::string(R"(,"rows":)") + std::to_string(rows))));
+    EXPECT_EQ(model_.text.rows, rows);
+  }
   for (unsigned depth = 0; depth <= 7; ++depth) {
     IREE_ASSERT_OK(
         Parse(Text(std::string(R"(,"draft_depth":)") + std::to_string(depth) +
@@ -726,7 +731,7 @@ TEST_F(ConfigurationTest, NativeCapacitiesAreNotOneModelShape) {
   }
   for (unsigned capacity : {513u, 1024u, 4097u, 262144u}) {
     IREE_ASSERT_OK(Parse(
-        Text(std::string(R"(,"context_capacity":262144,"prefill_capacity":)") +
+        Text(std::string(R"(,"context_capacity":96,"prefill_capacity":)") +
              std::to_string(capacity))));
     EXPECT_EQ(model_.text.prefill_capacity, capacity);
   }
@@ -735,7 +740,7 @@ TEST_F(ConfigurationTest, NativeCapacitiesAreNotOneModelShape) {
 TEST_F(ConfigurationTest, RejectsInvalidAndWrongModalityFields) {
   for (const char* field :
        {R"(,"rows":0)",
-        R"(,"rows":17)",
+        R"(,"rows":2147483648)",
         R"(,"variant_capacity":-1)",
         R"(,"variant_capacity":2147483648)",
         R"(,"rows":2,"rows":4)",
@@ -743,7 +748,6 @@ TEST_F(ConfigurationTest, RejectsInvalidAndWrongModalityFields) {
         R"(,"continuation_epochs":2)",
         R"(,"prefill_capacity":2,"draft_depth":3)",
         R"(,"prefill_capacity":262145)",
-        R"(,"prefill_capacity":1024,"context_capacity":513)",
         R"(,"pool_capacity":0)",
         R"(,"pending_requests":-1)",
         R"(,"max_tokens":1.5)",
