@@ -13,6 +13,8 @@ import tkinter
 
 def main() -> None:
     assert sys.version_info[:3] == (3, 12, 13)
+    assert sys.dont_write_bytecode
+    assert pathlib.Path(sys.executable).suffix.lower() == ".cmd"
 
     pathlib.Path(ssl.__file__).read_bytes()
     email_resources = importlib.resources.files("email")
@@ -28,7 +30,9 @@ def main() -> None:
             sys.executable,
             "-I",
             "-c",
-            "import hashlib, sqlite3, ssl, tkinter; print(hashlib.sha256(b'child').hexdigest())",
+            "import hashlib, sqlite3, ssl, sys, tkinter; "
+            "assert sys.dont_write_bytecode; "
+            "print(hashlib.sha256(b'child').hexdigest())",
         ],
         text=True,
     )

@@ -35,6 +35,8 @@ def _is_runtime_file(relative_path):
 
 def _compact_python_runtime_impl(ctx):
     interpreter_relative_path = _runtime_relative_path(ctx.file.interpreter)
+    if not interpreter_relative_path.lower().endswith(".exe"):
+        fail("Compact Windows Python interpreter must be an .exe: {}".format(interpreter_relative_path))
     included_sources = []
     source_by_relative_path = {}
     directory_names = {}
@@ -66,13 +68,17 @@ def _compact_python_runtime_impl(ctx):
         relative_path: ctx.actions.declare_file("{}/{}".format(output_root, relative_path))
         for relative_path in sorted(root_file_names)
     }
-    output_interpreter = output_files[interpreter_relative_path]
-    runtime_outputs = output_directories + output_files.values()
+    output_interpreter_actual = output_files[interpreter_relative_path]
+    output_interpreter = ctx.actions.declare_file(
+        "{}/{}".format(output_root, interpreter_relative_path[:-4] + ".cmd"),
+    )
+    archive_outputs = output_directories + output_files.values()
+    runtime_outputs = archive_outputs + [output_interpreter]
     venv_bin_files = [
         output
         for relative_path, output in output_files.items()
         if relative_path.lower().endswith(".dll")
-    ]
+    ] + [output_interpreter_actual]
 
     archive = ctx.actions.declare_file(ctx.label.name + ".zip")
     archive_inputs = ctx.actions.args()
@@ -93,14 +99,27 @@ def _compact_python_runtime_impl(ctx):
     extract_arguments.add("x")
     extract_arguments.add(archive)
     extract_arguments.add("-d")
-    extract_arguments.add(output_interpreter.dirname)
+    extract_arguments.add(output_interpreter_actual.dirname)
     ctx.actions.run(
         arguments = [extract_arguments],
         executable = ctx.executable._zipper,
         inputs = [archive],
         mnemonic = "PyCompactRuntimeExpand",
-        outputs = runtime_outputs,
+        outputs = archive_outputs,
         progress_message = "Expanding compact Python runtime %{label}",
+    )
+
+    # CPython must not create __pycache__ entries inside Bazel's declared tree
+    # outputs. Preserve the launcher as sys.executable so child interpreters
+    # also receive -B, including children that otherwise ignore PYTHON* state.
+    ctx.actions.write(
+        content = """@echo off
+set "PYTHONEXECUTABLE=%~f0"
+"%~dp0{}" -B %*
+exit /b %ERRORLEVEL%
+""".format(interpreter_relative_path),
+        is_executable = True,
+        output = output_interpreter,
     )
 
     return [

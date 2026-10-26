@@ -185,7 +185,7 @@ def _test_windows_runtime_is_tree_compacted_impl(env, target):
     if len(runtime_files) > 16:
         env.fail("compact Windows runtime expanded into {} runfiles".format(len(runtime_files)))
     runtime_basenames = [file.basename for file in runtime_files]
-    for expected_basename in ["DLLs", "Lib", "python.exe", "python312.dll"]:
+    for expected_basename in ["DLLs", "Lib", "python.cmd", "python.exe", "python312.dll"]:
         if expected_basename not in runtime_basenames:
             env.fail("compact Windows runtime is missing {} from {}".format(expected_basename, runtime_basenames))
 
