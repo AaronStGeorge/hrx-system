@@ -169,6 +169,13 @@ struct NativeRing {
     return status;
   }
 
+  static amdf_status_t AMDF_CALL Inactivate(amdf_user_queue_t* queue) {
+    auto* self = reinterpret_cast<NativeRing*>(queue);
+    EXPECT_TRUE(self->queue_live);
+    EXPECT_TRUE(self->mapping_live);
+    return self->Call("inactivate");
+  }
+
   static amdf_status_t AMDF_CALL Destroy(amdf_user_queue_t* queue) {
     auto* self = reinterpret_cast<NativeRing*>(queue);
     EXPECT_TRUE(self->queue_live);
@@ -193,6 +200,7 @@ class UserQueueTest : public ::testing::Test {
     api_.user_queue_mapping_destroy = NativeRing::Unmap;
     api_.user_queue_destroy = NativeRing::Destroy;
     gpu_.user_queue_create = NativeRing::Create;
+    gpu_.user_queue_inactivate = NativeRing::Inactivate;
     context_.api = &api_;
     context_.gpu = &gpu_;
     context_.device = reinterpret_cast<amdf_device_t*>(&native_);
@@ -213,6 +221,13 @@ class UserQueueTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    if (storage_.queue && !amdf_status_is_ok(storage_.removal_status)) {
+      // The dependency is stack-owned. Failed native stop intentionally leaves
+      // its opaque queue and mappings live instead of fabricating retirement.
+      EXPECT_TRUE(native_.mapping_live);
+      EXPECT_TRUE(native_.queue_live);
+      return;
+    }
     EXPECT_FALSE(native_.mapping_live);
     EXPECT_FALSE(native_.device_mapping_live);
     EXPECT_FALSE(native_.queue_live);
@@ -378,6 +393,37 @@ TEST_F(UserQueueTest, FailedConsumptionPreservesQueueAndMapping) {
   EXPECT_EQ(native_.calls.back(), "wait");
   native_.fail_operation.clear();
   EXPECT_EQ(Deinitialize(80), AMDF_STATUS_OK);
+}
+
+TEST_F(UserQueueTest, InactivationRetainsViewsAndReplacesFailedConsumption) {
+  amdf_user_queue_mapping_info_t device = {};
+  IREE_ASSERT_OK(Initialize(&device));
+  native_.fail_operation = "wait";
+  native_.failure = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+  EXPECT_EQ(Deinitialize(80), native_.failure);
+  native_.calls.clear();
+  EXPECT_EQ(iree_hal_amd_gpu_user_queue_inactivate(&storage_), AMDF_STATUS_OK);
+  EXPECT_TRUE(storage_.inactivated);
+  EXPECT_TRUE(native_.queue_live);
+  EXPECT_TRUE(native_.mapping_live);
+  EXPECT_TRUE(native_.device_mapping_live);
+  EXPECT_EQ(iree_hal_amd_gpu_user_queue_inactivate(&storage_), AMDF_STATUS_OK);
+  EXPECT_EQ(Deinitialize(80), AMDF_STATUS_OK);
+  EXPECT_EQ(native_.calls,
+            (std::vector<std::string>{"inactivate", "device_unmap", "unmap",
+                                      "destroy"}));
+}
+
+TEST_F(UserQueueTest, FailedInactivationPreservesBackingWithoutNativeRetry) {
+  IREE_ASSERT_OK(Initialize());
+  native_.fail_operation = "inactivate";
+  native_.failure = amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, 5);
+  native_.calls.clear();
+  EXPECT_EQ(iree_hal_amd_gpu_user_queue_inactivate(&storage_), native_.failure);
+  EXPECT_FALSE(storage_.inactivated);
+  EXPECT_EQ(iree_hal_amd_gpu_user_queue_inactivate(&storage_), native_.failure);
+  EXPECT_EQ(Deinitialize(80), native_.failure);
+  EXPECT_EQ(native_.calls, (std::vector<std::string>{"inactivate"}));
 }
 
 TEST_F(UserQueueTest, FailedUnmapPreservesQueueAndMapping) {

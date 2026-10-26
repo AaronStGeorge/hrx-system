@@ -26,9 +26,12 @@ typedef struct iree_hal_amd_gpu_user_queue_t {
   amdf_user_queue_mapping_t* mapping;
   // Optional exact-device producer view, removed before the host view.
   amdf_user_queue_mapping_t* device_mapping;
-  // Terminal native removal error after queue-handle consumption. Retaining
-  // this failure prevents a later cleanup attempt from certifying quiescence.
+  // Terminal native inactivation/removal error. Retaining this failure
+  // prevents a later cleanup attempt from certifying quiescence.
   amdf_status_t removal_status;
+  // Successful terminal inactivation joined native accesses without consuming
+  // the queue or its mappings. No consumed-index wait is needed afterward.
+  bool inactivated;
   // Achieved native primary-ring locality, captured once during construction.
   iree_hal_queue_placement_t placement;
   // Native release selected once before any command publication.
@@ -64,11 +67,20 @@ iree_status_t iree_hal_amd_gpu_user_queue_initialize(
 amdf_status_t iree_hal_amd_gpu_user_queue_flush(
     const iree_hal_amd_gpu_user_queue_t* storage);
 
+// Stops native execution after the caller joins every CPU/device publisher.
+// Success leaves the queue and mappings owned for failed-capture retirement.
+// Failure preserves all backing and the first removal error; neither another
+// call nor deinitialization retries a potentially consumed native identifier.
+// An empty partial owner is already inactive. This is exclusive cold work.
+amdf_status_t iree_hal_amd_gpu_user_queue_inactivate(
+    iree_hal_amd_gpu_user_queue_t* storage);
+
 // Joins the final already-published primary-ring index, then removes its device
 // and host mappings and native queue. Publishers, callbacks and execution uses
 // have separately joined. Prefix completion alone does not consume trailing
 // notification/padding packets; this cold wait joins that last native access.
 // A zero index also handles partial initialization without any publication.
+// Successful inactivation replaces the consumed-index join on terminal failure.
 //
 // Success permits releasing this embedded owner. Failure preserves remaining
 // handles, the original native status domain, and the context's required

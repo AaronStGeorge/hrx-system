@@ -39,8 +39,10 @@ typedef struct iree_hal_amd_gpu_pm4_kmq_storage_t {
   uint64_t* points;
   // Power-of-two point-array capacity minus one.
   uint32_t capacity_mask;
-  // Sticky failed removal after the native queue handle was consumed.
+  // Sticky failed native inactivation or queue removal.
   amdf_status_t removal_status;
+  // Native execution has stopped without consuming this library queue owner.
+  bool inactivated;
   // Prepared immutable command that has not yet been accepted. A zero length
   // means no prepared publication. BUSY retains the complete byte range. The
   // publisher's mutable state stays separate from the completion observer.
@@ -98,11 +100,18 @@ amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_refresh(
 amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_arm(
     iree_hal_amd_gpu_pm4_kmq_storage_t* storage, uint64_t submission);
 
+// Stops native execution while command backing and the library queue stay
+// owned. The caller exclusively owns publication and has joined observers.
+// Failure preserves backing and is sticky: removal is never blindly retried.
+amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_inactivate(
+    iree_hal_amd_gpu_pm4_kmq_storage_t* storage);
+
 // Joins the last accepted point and removes the native queue before releasing
 // its executable backing. All publishers and observers have already joined.
 // Success transfers storage to asynchronous native release; failure preserves
 // it and every unproven native use. NULL is an empty owner. Only cold teardown
 // may call this after execution and all host queue accesses have joined.
+// Successful inactivation replaces the accepted-point join on terminal failure.
 amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_free(
     iree_hal_amd_gpu_pm4_kmq_storage_t* storage);
 

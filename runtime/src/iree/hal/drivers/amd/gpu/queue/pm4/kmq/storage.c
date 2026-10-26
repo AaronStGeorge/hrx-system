@@ -112,6 +112,26 @@ static void iree_hal_amd_gpu_pm4_kmq_storage_released(void* user_data) {
   iree_allocator_free_aligned(storage->host_allocator, storage);
 }
 
+amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_inactivate(
+    iree_hal_amd_gpu_pm4_kmq_storage_t* storage) {
+  if (!storage) {
+    return AMDF_STATUS_OK;
+  }
+  if (!amdf_status_is_ok(storage->removal_status)) {
+    return storage->removal_status;
+  }
+  if (storage->queue && !storage->inactivated) {
+    const amdf_status_t status =
+        storage->context->gpu->kernel_queue_inactivate(storage->queue);
+    if (!amdf_status_is_ok(status)) {
+      storage->removal_status = status;
+      return status;
+    }
+    storage->inactivated = true;
+  }
+  return AMDF_STATUS_OK;
+}
+
 amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_free(
     iree_hal_amd_gpu_pm4_kmq_storage_t* storage) {
   if (!storage) {
@@ -121,7 +141,7 @@ amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_free(
     return storage->removal_status;
   }
   iree_hal_amd_gpu_context_t* context = storage->context;
-  if (storage->queue && storage->last_submission) {
+  if (storage->queue && storage->last_submission && !storage->inactivated) {
     amdf_status_t status = context->api->kernel_queue_wait(
         storage->queue, storage->last_submission, AMDF_TIMEOUT_INFINITE, 0);
     if (!amdf_status_is_ok(status)) {

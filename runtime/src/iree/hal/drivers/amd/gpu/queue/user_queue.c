@@ -96,13 +96,30 @@ amdf_status_t iree_hal_amd_gpu_user_queue_flush(
   return AMDF_STATUS_OK;
 }
 
+amdf_status_t iree_hal_amd_gpu_user_queue_inactivate(
+    iree_hal_amd_gpu_user_queue_t* storage) {
+  if (!amdf_status_is_ok(storage->removal_status)) {
+    return storage->removal_status;
+  }
+  if (storage->queue && !storage->inactivated) {
+    const amdf_status_t status =
+        storage->context->gpu->user_queue_inactivate(storage->queue);
+    if (!amdf_status_is_ok(status)) {
+      storage->removal_status = status;
+      return status;
+    }
+    storage->inactivated = true;
+  }
+  return AMDF_STATUS_OK;
+}
+
 amdf_status_t iree_hal_amd_gpu_user_queue_deinitialize(
     iree_hal_amd_gpu_user_queue_t* storage, uint64_t published_index) {
   if (!amdf_status_is_ok(storage->removal_status)) {
     return storage->removal_status;
   }
   const amdf_api_t* api = storage->context->api;
-  if (storage->queue && published_index) {
+  if (storage->queue && published_index && !storage->inactivated) {
     amdf_status_t status = api->user_queue_wait_consumed(
         storage->queue, published_index, AMDF_TIMEOUT_INFINITE, 0);
     if (!amdf_status_is_ok(status)) {
