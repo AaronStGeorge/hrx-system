@@ -169,11 +169,47 @@ class CTestTest(unittest.TestCase):
                 ):
                     ctest_dev.parse_ctest_selection(model, catalog)
 
-    def test_build_commands_are_stable_and_command_length_safe(self):
+    def test_ninja_build_uses_one_aggregate_root(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             build_dir = Path(temporary_dir)
             (build_dir / "CMakeCache.txt").write_text(
                 "CMAKE_GENERATOR:INTERNAL=Ninja\n"
+            )
+            with ctest_dev.cmake_build_commands(
+                "cmake",
+                build_dir,
+                tuple(f"target_{index:02d}" for index in range(20)),
+                build_config="RelWithDebInfo",
+                max_command_length=len(str(build_dir)) + 100,
+            ) as commands:
+                commands = list(commands)
+                manifest_path = Path(commands[0][-1])
+                manifest = manifest_path.read_text()
+
+                self.assertEqual(len(commands), 1)
+                self.assertEqual(
+                    commands[0][:6],
+                    [
+                        "cmake",
+                        "--build",
+                        str(build_dir),
+                        "--config",
+                        "RelWithDebInfo",
+                        "--target",
+                    ],
+                )
+                self.assertEqual(commands[0][-2], "-f")
+                self.assertTrue(manifest.startswith("include build.ninja\n"))
+                for index in range(20):
+                    self.assertIn(f"  target_{index:02d}", manifest)
+
+            self.assertFalse(manifest_path.exists())
+
+    def test_other_generators_keep_commands_below_platform_limit(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            build_dir = Path(temporary_dir)
+            (build_dir / "CMakeCache.txt").write_text(
+                "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022\n"
             )
             with ctest_dev.cmake_build_commands(
                 "cmake",

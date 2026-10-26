@@ -1051,6 +1051,12 @@ class CiTest(unittest.TestCase):
             )
         )
 
+    def test_cmake_build_honors_standard_parallelism_environment(self):
+        with mock.patch.dict(os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "40"}):
+            step = ci.cmake_build_step("iree-cmake-repository-build", "Build")
+
+        self.assertEqual(step.argv[-3:], ("build", "--parallel", "40"))
+
     def test_amdgpu_dry_run_does_not_embed_machine_paths(self):
         args = ci.parse_arguments(
             [

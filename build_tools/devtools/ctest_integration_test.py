@@ -52,7 +52,7 @@ class CTestIntegrationTest(unittest.TestCase):
             unselected_sentinel.write_text("unselected\n")
 
             def check(build_count):
-                # Exercise the real Make/shell boundary, including cleanup.
+                # Exercise the real native-build boundary, including cleanup.
                 with mock.patch.object(tempfile, "tempdir", str(make_temporary)):
                     self.assertEqual(step.run(), 0)
                 self.assertEqual(list(make_temporary.iterdir()), [])

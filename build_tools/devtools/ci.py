@@ -568,9 +568,11 @@ def cmake_build_step(
     name: str,
     targets: tuple[str, ...] = (),
 ) -> CiStep:
+    parallelism = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
+    parallel_args = ("--parallel", parallelism) if parallelism else ("--parallel",)
     return CiStep(
         name,
-        cmake_dev_command(command_name, "build", *targets, "--parallel"),
+        cmake_dev_command(command_name, "build", *targets, *parallel_args),
     )
 
 
