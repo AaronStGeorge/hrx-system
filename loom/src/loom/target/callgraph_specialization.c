@@ -175,7 +175,7 @@ typedef struct loom_target_callgraph_row_t {
   // Concrete symbol implementing this row after materialization.
   loom_symbol_ref_t concrete_ref;
 
-  // Planned concrete symbol name.
+  // Concrete symbol name retained by version-owned export facts.
   iree_string_view_t concrete_name;
 
   // True when materialization must clone the source callable.
@@ -1056,8 +1056,8 @@ static iree_status_t loom_target_callgraph_plan_clone_name(
                               "target specialization name overflow");
     }
     char* name_storage = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate(state->pass->arena, name_length,
-                                             (void**)&name_storage));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        state->version_owner->arena, name_length, (void**)&name_storage));
     memcpy(name_storage, source_name.data, source_name.size);
     memcpy(name_storage + source_name.size, suffix,
            (iree_host_size_t)suffix_length);
