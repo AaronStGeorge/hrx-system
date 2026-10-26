@@ -194,8 +194,10 @@ Registrations, sessions, KV/prefix history, and named checkpoints stay intact:
 these policies release reloadable backing, not conversation history. They
 therefore need not reduce an idle process to its minimum possible footprint.
 
-`/v1/status` publishes the configured durations in `server.idle.workspace_ms`
-and `server.idle.parameter_ms`. Device workspace commitment and per-model
+With `--devices=devices.json`, each entry supplies its own `workspace_idle_ms`
+and `parameter_idle_ms` instead of global flags. `/v1/status` publishes the
+durations in each `server.resources.devices` entry's `idle.workspace_ms` and
+`idle.parameter_ms`. Device workspace commitment and per-model
 parameter activity/accounting show reclamation and subsequent reloads. Expiry
 checks use the smaller enabled duration, capped at one second; physical release
 finishes asynchronously. When nothing awaits retirement or expiry, maintenance
@@ -319,9 +321,11 @@ overload rather than reclaiming live storage.
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8080/v1/devices/trim \
-  -H 'Content-Type: application/json' -d '{"device":0,"target_bytes":0}'
+  -H 'Content-Type: application/json' -d '{"device":"device","target_bytes":0}'
 ```
 
+Here `device` is the key assigned by the single-device shortcut. With a named
+device configuration, use the key shown in `/v1/status`, such as `gpu0`.
 This requests reduction of eligible serving-managed commitment toward the
 target. It releases idle workspace and unpinned reloadable parameters, not
 active work or retained conversations. HTTP 200 returns current accounting,

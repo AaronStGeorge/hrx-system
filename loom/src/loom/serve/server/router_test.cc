@@ -304,7 +304,7 @@ TEST_P(HttpRouterTest, UnrelatedCapacityNeverWaitsForHeldCompletion) {
                                 sizeof(storage), storage, &address));
   const std::string expected =
       "\"server\":{\"worker_count\":" + std::to_string(GetParam()) +
-      R"(,"model_capacity":5,"connection_capacity":64,"request_limits":{"header_byte_capacity":16384,"body_byte_capacity":8388608,"header_capacity":64,"multipart_header_byte_capacity":65536,"multipart_part_capacity":1024},"held_request_capacity":2,"held_requests":0,"observer_capacity":63,"observers":0,"idle":{"workspace_ms":0,"parameter_ms":0},"resources":{"listeners":[{"address":")" +
+      R"(,"model_capacity":5,"connection_capacity":64,"request_limits":{"header_byte_capacity":16384,"body_byte_capacity":8388608,"header_capacity":64,"multipart_header_byte_capacity":65536,"multipart_part_capacity":1024},"held_request_capacity":2,"held_requests":0,"observer_capacity":63,"observers":0,"resources":{"listeners":[{"address":")" +
       std::string(address.data, address.size) +
       R"(","waiting_for_capacity":false}],"devices":[]}})";
   EXPECT_NE(state.find(expected), std::string::npos) << state;
@@ -543,11 +543,15 @@ TEST_P(HttpRouterTest, AdmissionControlRejectsInvalidSelectorsWithoutClosing) {
 
 TEST_P(HttpRouterTest, TrimCannotSelectAnExternallyOwnedDevice) {
   for (const auto* body : {"{}", R"({"device":0,"target_bytes":0})",
-                           R"({"device":0,"target_bytes":-1})"}) {
+                           R"({"device":"device","target_bytes":-1})"}) {
     SCOPED_TRACE(body);
     EXPECT_EQ(Read(Send("POST", "/v1/devices/trim", body)).find("HTTP/1.1 400"),
               0u);
   }
+  EXPECT_EQ(Read(Send("POST", "/v1/devices/trim",
+                      R"({"device":"device","target_bytes":0})"))
+                .find("HTTP/1.1 404"),
+            0u);
   EXPECT_EQ(Read(Send("GET", "/v1/devices/trim", "")).find("HTTP/1.1 404"), 0u);
   EXPECT_NE(
       Read(Send("POST", "/v1/test", R"({"model":"a"})")).find("a:/v1/test:"),

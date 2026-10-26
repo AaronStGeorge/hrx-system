@@ -9,29 +9,38 @@
 #include "loom/serve/runtime/host/host.h"
 
 iree_status_t loom_serve_maintenance_initialize(
-    loom_serve_device_group_t* group, loom_serve_device_idle_policy_t policy,
+    loom_serve_device_group_t* group, iree_host_size_t policy_count,
+    const loom_serve_device_idle_policy_t* policies,
     loom_serve_maintenance_t* out_maintenance) {
   *out_maintenance =
-      (loom_serve_maintenance_t){.group = group, .policy = policy};
+      (loom_serve_maintenance_t){.group = group, .policies = policies};
   loom_serve_timer_initialize(&out_maintenance->timer);
-  if (policy.workspace_timeout < 0 || policy.parameter_timeout < 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "idle timeouts must be nonnegative");
-  }
-  if (!policy.workspace_timeout && !policy.parameter_timeout) {
+  if (!policy_count) {
     return iree_ok_status();
   }
-  if (!group) {
+  if (!group || !policies ||
+      policy_count != loom_serve_device_group_count(group)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "idle reclamation requires a device group");
+                            "idle policies must cover the entire device group");
   }
-  iree_duration_t interval = iree_make_duration_ms(1000);
-  if (policy.workspace_timeout) {
-    interval = iree_min(interval, policy.workspace_timeout);
+  iree_duration_t interval = IREE_DURATION_INFINITE;
+  for (iree_host_size_t i = 0; i < policy_count; ++i) {
+    const loom_serve_device_idle_policy_t policy = policies[i];
+    if (policy.workspace_timeout < 0 || policy.parameter_timeout < 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "idle timeouts must be nonnegative");
+    }
+    if (policy.workspace_timeout) {
+      interval = iree_min(interval, policy.workspace_timeout);
+    }
+    if (policy.parameter_timeout) {
+      interval = iree_min(interval, policy.parameter_timeout);
+    }
   }
-  if (policy.parameter_timeout) {
-    interval = iree_min(interval, policy.parameter_timeout);
+  if (interval == IREE_DURATION_INFINITE) {
+    return iree_ok_status();
   }
+  interval = iree_min(interval, iree_make_duration_ms(1000));
   loom_serve_host_t* host =
       loom_serve_device_host(loom_serve_device_group_at(group, 0));
   iree_async_proactor_t* proactor = NULL;
@@ -63,7 +72,7 @@ iree_status_t loom_serve_maintenance_advance(
       bool device_pending = false;
       status = loom_serve_device_trim_idle(
           loom_serve_device_group_at(maintenance->group, i),
-          maintenance->policy, now, &device_pending);
+          maintenance->policies[i], now, &device_pending);
       pending |= device_pending;
     }
     IREE_TRACE_ZONE_END(z0);

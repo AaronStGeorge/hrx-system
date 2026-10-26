@@ -15,6 +15,8 @@
 
 namespace {
 
+const iree_string_view_t kDeviceNames[] = {IREE_SV("device")};
+
 constexpr char kCard[] = R"json({
   "schema_version": 1,
   "model": {"id": "fixture/text", "name": "Text fixture"},
@@ -97,6 +99,13 @@ class ModelResolutionTest : public ::testing::Test {
 };
 
 TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
+  std::string deployment = kDeployment;
+  deployment.insert(deployment.find("\"name\""), R"("device":"gpu1",)");
+  Initialize(kCard, deployment);
+  const iree_string_view_t names[] = {IREE_SV("gpu0"), IREE_SV("gpu1")};
+  IREE_ASSERT_OK(loom_serve_model_configuration_resolve_device(
+      &configuration_, {IREE_ARRAYSIZE(names), names},
+      &configuration_.device_index));
   loom_serve_model_resolution_t* resolution = nullptr;
   IREE_ASSERT_OK(loom_serve_model_resolution_start(
       Sink(), &configuration_, Observer(), allocator_, &resolution));
@@ -112,6 +121,8 @@ TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   IREE_ASSERT_OK(status);
   EXPECT_EQ(resolution, nullptr);
   loom_serve_model_configuration_deinitialize(&configuration_);
+  EXPECT_EQ(resolved.device_index, 1u);
+  EXPECT_EQ(std::string(resolved.device.data, resolved.device.size), "gpu1");
   EXPECT_EQ(resolved.text.rows, 2u);
   EXPECT_EQ(resolved.text.context_capacity, 64u);
   EXPECT_EQ(resolved.text.prefill_capacity, 32u);
@@ -259,7 +270,7 @@ TEST_F(ModelResolutionTest, RejectedSubmissionOwesNoWakeOrBorrow) {
 TEST_F(ModelResolutionTest, RemovalJoinsResolutionBeforeReleasingDeclaration) {
   const loom_serve_registration_factory_t factory = {
       .kinds = 1u << LOOM_SERVE_MODEL_KIND_TEXT,
-      .device_count = 1,
+      .device_names = {1, kDeviceNames},
       .resolution_sink = Sink(),
       .create =
           +[](void*, const loom_serve_model_configuration_t*,

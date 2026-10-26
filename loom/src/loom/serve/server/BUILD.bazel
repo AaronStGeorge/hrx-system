@@ -34,6 +34,31 @@ loom_py_library(
 )
 
 loom_cc_library(
+    name = "device_configuration",
+    srcs = ["device_configuration.c"],
+    hdrs = ["device_configuration.h"],
+    deps = [
+        "//loom/src/loom/serve/runtime/device",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/base/internal:unicode",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+loom_cc_test(
+    name = "device_configuration_test",
+    srcs = ["device_configuration_test.cc"],
+    deps = [
+        ":device_configuration",
+        "//loom/src/loom/serve/runtime/device",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "router",
     srcs = ["router.c"],
     hdrs = ["router.h"],
@@ -109,9 +134,13 @@ loom_cc_library(
 loom_cc_test(
     name = "maintenance_test",
     srcs = ["maintenance_test.cc"],
+    target_compatible_with = loom_config_compatible_with([
+        "//runtime/config/hal:driver_task",
+    ]),
     deps = [
         ":maintenance",
         "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/host",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

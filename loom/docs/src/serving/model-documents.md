@@ -246,13 +246,29 @@ the server reads its `path` and `format` without interpreting that transform.
 | `definition` | Required object specifying a modality, programs, assets and capacities. |
 | `model` | Optional local card reference with `path` and optional `preset`, `service`, `variant`, `partition`, and `programs` selectors. Programs and assets then come from the card. |
 | `admission` | `"open"` by default; `"drained"` registers metadata without reading programs, loading weights or allocating model storage. |
-| `device` | Nonnegative index into the ordered CLI device group; required when the group has more than one member. |
+| `device` | String key in the server's named device configuration; required when the group has more than one member. The `--device=URI` shortcut uses the key `device`. |
 | `base_directory` | Optional local file base; relative values resolve from the containing document. |
 
 Placement is a deployment property, outside the reusable `definition`. Drained
-registrations still require a valid device selection. Indices are checked
+registrations still require a valid device selection. Names are resolved
 before publication or model I/O; `/v1/status` publishes the ordered group under
-`server.resources.devices`. A deployment executes on one selected device.
+`server.resources.devices`, with each entry's `key` identifying the selection.
+A deployment executes on one selected device. The fetched model card can remain
+unchanged while separate deployment documents select different devices:
+
+```json
+{
+  "name": "scout",
+  "device": "gpu0",
+  "model": {"path": "models/chat/model.json"},
+  "definition": {"kind": "text"}
+}
+```
+
+The selected card preset supplies the programs, assets, and settings omitted
+from `definition`. A second deployment can reference the same card with a
+different routing name and `device` key. Device configuration is described in
+the [command reference](index.md#devices-and-listeners).
 
 Unknown fields, duplicate keys, wrong JSON types and wrong-modality fields
 reject. Names already registered return a conflict instead of being replaced.

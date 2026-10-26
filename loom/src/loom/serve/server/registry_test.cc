@@ -20,6 +20,8 @@
 
 namespace {
 
+const iree_string_view_t kDeviceNames[] = {IREE_SV("first"), IREE_SV("second")};
+
 TEST(RegistryTimeTest, BorrowedServicesShareRegistrationTimestamp) {
   const loom_serve_service_t services[] = {{.name = IREE_SV("first")},
                                            {.name = IREE_SV("second")}};
@@ -42,7 +44,7 @@ class RegistryTest : public ::testing::TestWithParam<bool> {
     ASSERT_TRUE(path_);
     const loom_serve_registration_factory_t factory = {
         .kinds = 1u << LOOM_SERVE_MODEL_KIND_EMBEDDING,
-        .device_count = 2,
+        .device_names = {2, kDeviceNames},
         .create =
             [](void* self,
                const loom_serve_model_configuration_t* configuration,
@@ -86,7 +88,7 @@ TEST_P(RegistryTest, FileRegistrationOwnsAuthoredPathsAndSelectedBase) {
           ? "//files/models/vectors"
           : std::filesystem::path(path_.path()).parent_path().string();
   const std::string document =
-      R"({"name":"vectors","admission":"drained","device":1,)" +
+      R"({"name":"vectors","admission":"drained","device":"second",)" +
       std::string(explicit_base
                       ? R"("base_directory":"//files/models/vectors",)"
                       : "") +

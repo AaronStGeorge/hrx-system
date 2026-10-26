@@ -363,7 +363,7 @@ iree_status_t loom_serve_registry_register(
   }
   iree_host_size_t device_index = 0;
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_resolve_device(
-      configuration, registry->factory.device_count, &device_index));
+      configuration, registry->factory.device_names, &device_index));
   iree_host_size_t available = registry->capacity;
   for (iree_host_size_t i = 0; i < registry->capacity; ++i) {
     const iree_string_view_t name = registry->models[i].service.name;
@@ -378,6 +378,15 @@ iree_status_t loom_serve_registry_register(
   if (available == registry->capacity) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "model registration capacity is full");
+  }
+  if (!configuration->device.size) {
+    const iree_string_view_t name =
+        registry->factory.device_names.values[device_index];
+    char* storage = NULL;
+    IREE_RETURN_IF_ERROR(iree_allocator_clone(
+        configuration->host_allocator,
+        iree_make_const_byte_span(name.data, name.size), (void**)&storage));
+    configuration->device = iree_make_string_view(storage, name.size);
   }
   loom_serve_registered_model_t* model = &registry->models[available];
   IREE_RETURN_IF_ERROR(loom_serve_telemetry_stream_allocate(

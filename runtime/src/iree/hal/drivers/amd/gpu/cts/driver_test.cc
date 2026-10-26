@@ -148,38 +148,44 @@ class DriverTest : public ::testing::Test {
   }
 
   void Create(size_t index, iree_string_view_t path,
-              iree_string_view_t scheme = iree_string_view_empty()) {
+              iree_string_view_t scheme = iree_string_view_empty(),
+              iree_string_view_t queue_count = iree_string_view_empty()) {
     if (iree_string_view_is_empty(scheme)) {
       scheme = scheme_;
     }
     auto params = iree_hal_device_create_params_default();
     params.proactor_pool = proactors_;
     const iree_string_pair_t options[] = {
-        {.key = IREE_SV("queue_count"), .value = IREE_SV("2")}};
+        {.key = IREE_SV("queue_count"), .value = queue_count}};
     iree::Status status = iree_hal_driver_create_device_by_path(
-        driver_, scheme, path, IREE_ARRAYSIZE(options), options, &params,
-        allocators_[index].allocator(), &devices_[index]);
+        driver_, scheme, path, iree_string_view_is_empty(queue_count) ? 0 : 1,
+        options, &params, allocators_[index].allocator(), &devices_[index]);
     IREE_ASSERT_OK(status);
     EXPECT_TRUE(
         iree_string_view_equal(iree_hal_device_id(devices_[index]), scheme_));
-    ASSERT_NE(iree_hal_device_queue(devices_[index], 0, 0), nullptr);
-    ASSERT_NE(iree_hal_device_queue(devices_[index], 0, 1), nullptr);
   }
 
-  void Run(size_t index) {
+  void Run(size_t index, uint32_t queue_count) {
     iree_hal_device_t* device = devices_[index];
+    ASSERT_EQ(
+        iree_hal_queue_family_spec(iree_hal_device_queue_family(device, 0))
+            ->provisioned_queue_count,
+        queue_count);
     iree_hal_semaphore_t** semaphore = &semaphores_[index];
     IREE_ASSERT_OK(
         iree_hal_semaphore_create(device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
                                   IREE_HAL_SEMAPHORE_FLAG_NONE, semaphore));
-    uint64_t first = 1, second = 2;
-    IREE_ASSERT_OK(iree_hal_queue_barrier(
-        iree_hal_device_queue(device, 0, 1), {1, semaphore, &first},
-        {1, semaphore, &second}, nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
-    IREE_ASSERT_OK(iree_hal_queue_barrier(
-        iree_hal_device_queue(device, 0, 0), iree_hal_semaphore_list_empty(),
-        {1, semaphore, &first}, nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
-    IREE_ASSERT_OK(iree_hal_semaphore_wait(*semaphore, second,
+    // Submit consumers first so completion requires each provisioned queue
+    // to progress independently of the others' unresolved dependencies.
+    for (uint32_t i = queue_count; i > 0; --i) {
+      iree_hal_queue_t* queue = iree_hal_device_queue(device, 0, i - 1);
+      ASSERT_NE(queue, nullptr);
+      uint64_t before = i - 1, after = i;
+      IREE_ASSERT_OK(iree_hal_queue_barrier(
+          queue, {i > 1 ? 1u : 0u, semaphore, &before}, {1, semaphore, &after},
+          nullptr, IREE_HAL_QUEUE_BARRIER_FLAG_NONE));
+    }
+    IREE_ASSERT_OK(iree_hal_semaphore_wait(*semaphore, queue_count,
                                            iree_infinite_timeout(),
                                            IREE_ASYNC_WAIT_FLAG_NONE));
   }
@@ -261,8 +267,8 @@ TEST_F(DriverTest, DefaultAndNativeIdentityRetainOneOwner) {
   if (HasFatalFailure()) {
     return;
   }
-  Create(1, iree_make_cstring_view(gpu_path_storage.c_str()),
-         IREE_SV("amdgpu"));
+  Create(1, iree_make_cstring_view(gpu_path_storage.c_str()), IREE_SV("amdgpu"),
+         IREE_SV("1"));
   if (HasFatalFailure()) {
     return;
   }
@@ -270,8 +276,8 @@ TEST_F(DriverTest, DefaultAndNativeIdentityRetainOneOwner) {
   driver_ = nullptr;
   iree_hal_driver_registry_free(registry_);
   registry_ = nullptr;
-  Run(0);
-  Run(1);
+  Run(0, 4);
+  Run(1, 1);
 }
 
 }  // namespace

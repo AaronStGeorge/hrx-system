@@ -44,13 +44,6 @@ IREE_FLAG(int32_t, request_body_bytes, 8 * 1024 * 1024,
           "Maximum HTTP request body bytes per connection.");
 IREE_FLAG(int32_t, heartbeat_ms, 1000,
           "Per-model JSONL heartbeat interval; zero disables reporting.");
-IREE_FLAG(int32_t, workspace_idle_ms, 0,
-          "Release cached command-workspace backing after this idle interval; "
-          "zero disables automatic release.");
-IREE_FLAG(int32_t, parameter_idle_ms, 0,
-          "Deactivate unpinned elastic model parameters after this idle "
-          "interval; zero disables automatic deactivation. Sessions and "
-          "KV/prefix history remain resident.");
 
 static iree_status_t loom_serve_main_ready(loom_serve_http_listener_t* listener,
                                            iree_host_size_t model_count) {
@@ -86,11 +79,16 @@ static int loom_serve_main_agents_markdown(void) {
              "--listen=127.0.0.1:8080\n"
              "curl http://127.0.0.1:8080/v1/status\n"
              "```\n\n"
-             "At least one explicit `--device=URI` is required. The linked "
+             "Use `--device=URI` for one device named `device`, or "
+             "`--devices=path.json` for a group declared as "
+             "`{\"devices\":{\"gpu\":{\"uri\":\"amdgpu://0\"}}}`. "
+             "Each entry owns its backing, slab, memory and idle policy; "
+             "the file cannot be combined with single-device flags. Linked "
              "HAL drivers resolve URIs; the server adds no implicit device. "
-             "Repeated devices form one ordered group. A model document "
-             "needs a top-level `device` index when that group has more than "
-             "one member. Elastic backing requires virtual-memory support "
+             "A deployment needs a top-level `device` string naming a group "
+             "member when the group has more than one. Portable model cards "
+             "contain no placement. Elastic backing requires virtual-memory "
+             "support "
              "and shares physical backing for parameters, model state and "
              "invocation workspace. `--memory_bytes` caps that shared "
              "backing on a single device, not host snapshots or driver "
@@ -196,12 +194,14 @@ int loom_serve_main(int argc, char** argv,
       "\n"
       "Usage:\n"
       "  loom-serve --device=URI [--model=path/model.json ...] [options]\n"
+      "  loom-serve --devices=devices.json [--model=path/deployment.json ...]\n"
       "  loom-serve --device=task --pool_backing=fixed "
       "--listen=127.0.0.1:8080\n"
       "  loom-serve --flagfile=serve.flags\n"
       "  loom-serve --agents_md\n"
       "\n"
-      "At least one --device is required; repeat it to form the device group.\n"
+      "Use one --device URI or --devices JSON containing a named device "
+      "group.\n"
       "Omit --model to start empty and register models over HTTP. Startup and\n"
       "HTTP registration use the same JSON model document; .loom and .loombc\n"
       "programs are loaded at runtime. No model implementation is built in.\n"
@@ -224,11 +224,10 @@ int loom_serve_main(int argc, char** argv,
   }
   if (FLAG_model_capacity < 1 || FLAG_connections < 1 ||
       FLAG_held_requests < -1 || FLAG_held_requests >= FLAG_connections ||
-      FLAG_request_body_bytes < 1 || FLAG_heartbeat_ms < 0 ||
-      FLAG_workspace_idle_ms < 0 || FLAG_parameter_idle_ms < 0) {
+      FLAG_request_body_bytes < 1 || FLAG_heartbeat_ms < 0) {
     fprintf(stderr,
             "Provide positive model/connection/body capacities and nonnegative "
-            "heartbeat/idle intervals; held_requests must be -1 or below "
+            "heartbeat interval; held_requests must be -1 or below "
             "connection capacity.\n");
     return EXIT_FAILURE;
   }
@@ -268,6 +267,7 @@ int loom_serve_main(int argc, char** argv,
     status = iree_async_signal_ignore_broken_pipe();
   }
   loom_serve_device_group_t* group = NULL;
+  loom_serve_device_configuration_t devices = {0};
   loom_serve_host_t* host = NULL;
   loom_serve_http_server_t* server = NULL;
   loom_serve_http_listener_t** listeners = NULL;
@@ -284,7 +284,7 @@ int loom_serve_main(int argc, char** argv,
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_device_group_allocate_from_flags(
-        host, configuration->driver_registry, host_allocator, &group);
+        host, configuration->driver_registry, host_allocator, &devices, &group);
   }
   if (iree_status_is_ok(status)) {
     registration_options.device_group = group;
@@ -336,12 +336,10 @@ int loom_serve_main(int argc, char** argv,
         (loom_serve_router_options_t){
             .request_quota = (iree_host_size_t)FLAG_connections,
             .resources = {.device_group = group,
+                          .idle_policy_count = devices.count,
+                          .idle_policies = devices.idle,
                           .listener_count = listener_count,
                           .listeners = listeners},
-            .idle = {.workspace_timeout =
-                         iree_make_duration_ms(FLAG_workspace_idle_ms),
-                     .parameter_timeout =
-                         iree_make_duration_ms(FLAG_parameter_idle_ms)},
             .holding_capacity = (iree_host_size_t)(FLAG_held_requests < 0
                                                        ? FLAG_connections / 2
                                                        : FLAG_held_requests)},
@@ -367,6 +365,7 @@ int loom_serve_main(int argc, char** argv,
   if (!retained_resources) {
     loom_serve_host_release(host);
   }
+  loom_serve_device_configuration_deinitialize(&devices);
   for (iree_host_size_t i = 0; configurations && i < models.count; ++i) {
     loom_serve_model_configuration_deinitialize(&configurations[i]);
   }

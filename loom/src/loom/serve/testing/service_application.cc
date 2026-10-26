@@ -7,6 +7,7 @@
 #include "loom/serve/testing/service_application.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "iree/testing/gtest.h"
@@ -110,10 +111,14 @@ iree_status_t loom_serve_test_application_acquire(
         std::make_unique<loom_serve::testing::NativeAllocator>(host_allocator);
     std::vector<loom_serve_device_options_t> device_options(
         options->device_count);
-    for (auto& device_option : device_options) {
+    std::vector<std::string> device_names(options->device_count);
+    for (size_t i = 0; i < device_options.size(); ++i) {
+      device_names[i] = "device" + std::to_string(i);
+      auto& device_option = device_options[i];
       device_option = {
           .driver = driver,
           .uri = device_uri,
+          .name = iree_make_cstring_view(device_names[i].c_str()),
           .backing = options->backing,
           .weight_slab_size = options->slab_size,
           .state_slab_size = options->slab_size,

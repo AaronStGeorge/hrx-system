@@ -14,6 +14,8 @@
 struct loom_serve_device_t {
   // Borrowed enclosing application group, owning this record's storage.
   loom_serve_device_group_t* owner;
+  // Borrowed key in the enclosing group's single allocation.
+  iree_string_view_t name;
   // Owned device providing memory and queue resources.
   iree_hal_device_t* handle;
   // Exact dispatch queue borrowed from the device.
@@ -51,6 +53,8 @@ struct loom_serve_device_group_t {
   iree_hal_profiling_from_flags_t* profiling;
   // Number of initialized records, including nullable partial resources.
   iree_host_size_t device_count;
+  // Application key views into trailing string storage in this allocation.
+  iree_string_view_t names[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
   // Owned records with separate pools and budgets, borrowed by model owners.
   loom_serve_device_t devices[];
 };
@@ -230,7 +234,34 @@ iree_status_t loom_serve_device_group_allocate(
                             "serving group needs between 1 and %d devices",
                             IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT);
   }
+  iree_string_view_t names[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+  iree_host_size_t name_bytes = 0;
   for (iree_host_size_t i = 0; i < device_count; ++i) {
+    names[i] = !options[i].name.size && device_count == 1 ? IREE_SV("device")
+                                                          : options[i].name;
+    if (!names[i].size) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "each device in a multi-device group needs a name");
+    }
+    for (iree_host_size_t c = 0; c < names[i].size; ++c) {
+      if ((uint8_t)names[i].data[c] < 0x21 ||
+          (uint8_t)names[i].data[c] > 0x7e) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "device names must be visible ASCII");
+      }
+    }
+    for (iree_host_size_t j = 0; j < i; ++j) {
+      if (iree_string_view_equal(names[j], names[i])) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate device name '%.*s'",
+                                (int)names[i].size, names[i].data);
+      }
+    }
+    if (!iree_host_size_checked_add(name_bytes, names[i].size, &name_bytes)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "device names exceed addressable storage");
+    }
     if (options[i].backing != LOOM_SERVE_DEVICE_BACKING_FIXED &&
         options[i].backing != LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -242,16 +273,25 @@ iree_status_t loom_serve_device_group_allocate(
                               "a physical budget requires elastic backing");
     }
   }
+  iree_host_size_t total_size = 0, names_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(loom_serve_device_group_t) +
+          device_count * sizeof(loom_serve_device_t),
+      &total_size, IREE_STRUCT_FIELD(name_bytes, char, &names_offset)));
   loom_serve_device_group_t* group = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      host_allocator, sizeof(*group) + device_count * sizeof(group->devices[0]),
-      (void**)&group));
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(host_allocator, total_size, (void**)&group));
   group->host_allocator = host_allocator;
   group->host = host;
   group->device_count = device_count;
   loom_serve_host_retain(host);
+  char* name_storage = (char*)group + names_offset;
   for (iree_host_size_t i = 0; i < device_count; ++i) {
     group->devices[i].owner = group;
+    memcpy(name_storage, names[i].data, names[i].size);
+    group->names[i] = iree_make_string_view(name_storage, names[i].size);
+    group->devices[i].name = group->names[i];
+    name_storage += names[i].size;
   }
   iree_status_t status = loom_serve_device_group_initialize(group, options);
   for (iree_host_size_t i = 0; i < device_count && iree_status_is_ok(status);
@@ -331,6 +371,15 @@ iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group) {
 iree_host_size_t loom_serve_device_group_count(
     const loom_serve_device_group_t* group) {
   return group->device_count;
+}
+
+iree_string_view_list_t loom_serve_device_group_names(
+    const loom_serve_device_group_t* group) {
+  return (iree_string_view_list_t){group->device_count, group->names};
+}
+
+iree_string_view_t loom_serve_device_name(const loom_serve_device_t* device) {
+  return device->name;
 }
 
 loom_serve_device_t* loom_serve_device_group_at(

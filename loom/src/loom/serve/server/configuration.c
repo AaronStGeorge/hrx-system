@@ -640,6 +640,7 @@ void loom_serve_model_configuration_deinitialize(
     loom_serve_model_configuration_t* model) {
   const iree_allocator_t host_allocator = model->host_allocator;
   iree_allocator_free(host_allocator, (void*)model->name.data);
+  iree_allocator_free(host_allocator, (void*)model->device.data);
   iree_allocator_free(host_allocator, (void*)model->document.data);
   if (model->resolved_sources) {
     loom_serve_sources_free(model->resolved_sources, host_allocator);
@@ -716,7 +717,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
       {"definition", IREE_JSON_VALUE_TYPE_OBJECT},
       {"admission", IREE_JSON_VALUE_TYPE_STRING},
       {"base_directory", IREE_JSON_VALUE_TYPE_STRING},
-      {"device", IREE_JSON_VALUE_TYPE_NUMBER},
+      {"device", IREE_JSON_VALUE_TYPE_STRING},
       {"model", IREE_JSON_VALUE_TYPE_OBJECT}};
   loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
                                                      fields};
@@ -729,8 +730,10 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   }
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
       &fields[0], host_allocator, &out_model->name));
-  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
-      &fields[4], 0, IREE_HOST_SIZE_MAX - 1, &out_model->device_index));
+  if (fields[4].value.data) {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[4], host_allocator, &out_model->device));
+  }
   if (fields[5].value.data && !resolved_sources) {
     loom_serve_model_configuration_field_t reference_fields[] = {
         {"path", IREE_JSON_VALUE_TYPE_STRING},
@@ -877,7 +880,16 @@ iree_status_t loom_serve_model_configuration_resolve(
   loom_serve_sources_free(sources, host_allocator);
   if (iree_status_is_ok(status)) {
     out_model->device_index = model->device_index;
-  } else {
+    if (!out_model->device.size && model->device.size) {
+      char* name = NULL;
+      status = iree_allocator_clone(
+          host_allocator,
+          iree_make_const_byte_span(model->device.data, model->device.size),
+          (void**)&name);
+      out_model->device = iree_make_string_view(name, model->device.size);
+    }
+  }
+  if (!iree_status_is_ok(status)) {
     loom_serve_model_configuration_deinitialize(out_model);
   }
   return status;
@@ -965,24 +977,26 @@ iree_status_t loom_serve_model_configuration_load(
 
 iree_status_t loom_serve_model_configuration_resolve_device(
     const loom_serve_model_configuration_t* model,
-    iree_host_size_t device_count, iree_host_size_t* out_device_index) {
-  iree_host_size_t index = model->device_index;
-  if (index == IREE_HOST_SIZE_MAX) {
-    if (device_count != 1) {
+    iree_string_view_list_t device_names, iree_host_size_t* out_device_index) {
+  if (!model->device.size) {
+    if (device_names.count != 1) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "model '%.*s' requires an explicit device "
-                              "ordinal for a %zu-device group",
+                              "name for a %zu-device group",
                               (int)model->name.size, model->name.data,
-                              device_count);
+                              device_names.count);
     }
-    index = 0;
+    *out_device_index = 0;
+    return iree_ok_status();
   }
-  if (index >= device_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "model '%.*s' selects device %zu, but the group has %zu devices",
-        (int)model->name.size, model->name.data, index, device_count);
+  for (iree_host_size_t i = 0; i < device_names.count; ++i) {
+    if (iree_string_view_equal(model->device, device_names.values[i])) {
+      *out_device_index = i;
+      return iree_ok_status();
+    }
   }
-  *out_device_index = index;
-  return iree_ok_status();
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "model '%.*s' selects unknown device '%.*s'",
+                          (int)model->name.size, model->name.data,
+                          (int)model->device.size, model->device.data);
 }

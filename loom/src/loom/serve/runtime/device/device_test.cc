@@ -71,10 +71,15 @@ TEST_F(DeviceTest, InvalidCountRejectsBeforeReadingOptions) {
 TEST_F(DeviceTest, EveryOptionIsValidatedBeforeCreatingDevices) {
   loom_serve_device_group_t* group = nullptr;
   const loom_serve_device_options_t options[] = {
-      {.driver = loom_serve_host_task_driver(host), .uri = IREE_SV("task")},
       {
           .driver = loom_serve_host_task_driver(host),
           .uri = IREE_SV("task"),
+          .name = IREE_SV("first"),
+      },
+      {
+          .driver = loom_serve_host_task_driver(host),
+          .uri = IREE_SV("task"),
+          .name = IREE_SV("second"),
           .memory_limit = 1,
       }};
   IREE_EXPECT_STATUS_IS(
@@ -82,6 +87,23 @@ TEST_F(DeviceTest, EveryOptionIsValidatedBeforeCreatingDevices) {
       loom_serve_device_group_allocate(host, IREE_ARRAYSIZE(options), options,
                                        iree_allocator_system(), &group));
   EXPECT_EQ(group, nullptr);
+}
+
+TEST_F(DeviceTest, InvalidNamesRejectBeforeNativeCreation) {
+  const iree_string_view_t invalid[] = {
+      IREE_SV(""), IREE_SV("first"), IREE_SV("bad name"), IREE_SV("bad\nname")};
+  for (const auto name : invalid) {
+    // No driver is present: invalid names must reject before native creation.
+    const loom_serve_device_options_t options[] = {
+        {.uri = IREE_SV("task"), .name = IREE_SV("first")},
+        {.uri = IREE_SV("task"), .name = name}};
+    loom_serve_device_group_t* group = nullptr;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        loom_serve_device_group_allocate(host, IREE_ARRAYSIZE(options), options,
+                                         iree_allocator_system(), &group));
+    EXPECT_EQ(group, nullptr);
+  }
 }
 
 }  // namespace

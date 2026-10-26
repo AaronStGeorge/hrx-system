@@ -165,13 +165,20 @@ static iree_status_t loom_serve_resources_write_memory(
 }
 
 static iree_status_t loom_serve_resources_write_device(
-    loom_serve_device_t* device, iree_host_size_t index,
+    const loom_serve_resources_t* resources, iree_host_size_t device_index,
     loom_output_stream_t* output) {
+  loom_serve_device_t* device =
+      loom_serve_device_group_at(resources->device_group, device_index);
+  const loom_serve_device_idle_policy_t idle =
+      resources->idle_policy_count ? resources->idle_policies[device_index]
+                                   : (loom_serve_device_idle_policy_t){0};
   const iree_hal_device_identity_spec_t* identity =
       iree_hal_device_spec_identity(
           iree_hal_device_spec(loom_serve_device_handle(device)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(output, "{\"key\":"));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_format(output, "{\"index\":%zu,\"id\":", index));
+      loom_json_write_escaped_string(output, loom_serve_device_name(device)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(output, ",\"id\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(output, identity->logical_device_id));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(output, ",\"name\":"));
@@ -189,8 +196,11 @@ static iree_status_t loom_serve_resources_write_device(
       loom_output_stream_write_cstring(output, ",\"physical_devices\":"));
   IREE_RETURN_IF_ERROR(
       loom_serve_resources_write_physical_devices(identity, output));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(output, ",\"memory\":"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      output,
+      ",\"idle\":{\"workspace_ms\":%" PRId64 ",\"parameter_ms\":%" PRId64
+      "},\"memory\":",
+      idle.workspace_timeout / 1000000, idle.parameter_timeout / 1000000));
   IREE_RETURN_IF_ERROR(loom_serve_resources_write_memory(device, output));
   return loom_output_stream_write_cstring(output, "}");
 }
@@ -235,8 +245,7 @@ iree_status_t loom_serve_resources_write_json(
       status = loom_output_stream_write_cstring(output, ",");
     }
     if (iree_status_is_ok(status)) {
-      status = loom_serve_resources_write_device(
-          loom_serve_device_group_at(resources->device_group, i), i, output);
+      status = loom_serve_resources_write_device(resources, i, output);
     }
   }
   if (iree_status_is_ok(status)) {
@@ -246,7 +255,7 @@ iree_status_t loom_serve_resources_write_json(
 }
 
 typedef struct loom_serve_resources_trim_fields_t {
-  // Borrowed JSON integer spelling; null data marks an absent device field.
+  // Borrowed escaped key; null data marks an absent device field.
   iree_string_view_t device;
   // Borrowed JSON integer spelling; null data marks an absent target field.
   iree_string_view_t target_bytes;
@@ -257,12 +266,14 @@ static iree_status_t loom_serve_resources_trim_field(
     iree_string_view_t value) {
   loom_serve_resources_trim_fields_t* fields = self;
   iree_string_view_t* field = NULL;
+  iree_json_value_type_t expected = IREE_JSON_VALUE_TYPE_NUMBER;
   if (iree_string_view_equal(key, IREE_SV("device"))) {
     field = &fields->device;
+    expected = IREE_JSON_VALUE_TYPE_STRING;
   } else if (iree_string_view_equal(key, IREE_SV("target_bytes"))) {
     field = &fields->target_bytes;
   }
-  if (!field || field->data || type != IREE_JSON_VALUE_TYPE_NUMBER) {
+  if (!field || field->data || type != expected) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown, duplicate or wrongly typed trim field "
                             "'%.*s'",
@@ -274,7 +285,8 @@ static iree_status_t loom_serve_resources_trim_field(
 
 iree_status_t loom_serve_resources_parse_trim(
     const loom_serve_resources_t* resources, iree_string_view_t value,
-    iree_host_size_t* out_device_index, uint64_t* out_target_bytes) {
+    iree_allocator_t host_allocator, iree_host_size_t* out_device_index,
+    uint64_t* out_target_bytes) {
   iree_string_view_t object;
   IREE_RETURN_IF_ERROR(iree_json_consume_object(&value, &object));
   IREE_RETURN_IF_ERROR(iree_json_consume_insignificant(&value));
@@ -289,24 +301,42 @@ iree_status_t loom_serve_resources_parse_trim(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "trim requires device and target_bytes");
   }
-  uint64_t index = 0;
   uint64_t target_bytes = 0;
-  IREE_RETURN_IF_ERROR(iree_json_parse_uint64(fields.device, &index));
   IREE_RETURN_IF_ERROR(
       iree_json_parse_uint64(fields.target_bytes, &target_bytes));
-  const iree_host_size_t count =
-      resources->device_group
-          ? loom_serve_device_group_count(resources->device_group)
-          : 0;
-  if (index >= count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "trim device index %" PRIu64
-                            " is outside the published device group",
-                            index);
+  if (!fields.device.size) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "trim requires a nonempty device key");
   }
-  *out_device_index = (iree_host_size_t)index;
-  *out_target_bytes = target_bytes;
-  return iree_ok_status();
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, fields.device.size,
+                                             (void**)&storage));
+  iree_host_size_t length = 0;
+  iree_status_t status = iree_json_unescape_string(
+      fields.device, fields.device.size, storage, &length);
+  const iree_string_view_list_t names =
+      resources->device_group
+          ? loom_serve_device_group_names(resources->device_group)
+          : (iree_string_view_list_t){0};
+  iree_host_size_t index = 0;
+  if (iree_status_is_ok(status)) {
+    const iree_string_view_t name = iree_make_string_view(storage, length);
+    while (index < names.count &&
+           !iree_string_view_equal(name, names.values[index])) {
+      ++index;
+    }
+    if (index == names.count) {
+      status =
+          iree_make_status(IREE_STATUS_NOT_FOUND, "unknown trim device '%.*s'",
+                           (int)name.size, name.data);
+    }
+  }
+  iree_allocator_free(host_allocator, storage);
+  if (iree_status_is_ok(status)) {
+    *out_device_index = index;
+    *out_target_bytes = target_bytes;
+  }
+  return status;
 }
 
 iree_status_t loom_serve_resources_trim(const loom_serve_resources_t* resources,
@@ -319,6 +349,6 @@ iree_status_t loom_serve_resources_trim(const loom_serve_resources_t* resources,
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       output, "{\"target_bytes\":%" PRIu64 ",\"device\":", target_bytes));
   IREE_RETURN_IF_ERROR(
-      loom_serve_resources_write_device(device, device_index, output));
+      loom_serve_resources_write_device(resources, device_index, output));
   return loom_output_stream_write_cstring(output, "}");
 }

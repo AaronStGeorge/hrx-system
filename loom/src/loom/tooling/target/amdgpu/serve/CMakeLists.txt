@@ -21,6 +21,7 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/serve/activity_devices.json"
   DEPS
     iree::base
     iree::hal
@@ -36,12 +37,11 @@ loom_cc_test(
     "--fixture=true"
     "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/activity.json}}"
     "--transcription_model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
-    "--device=task"
-    "--pool_backing=fixed"
+    "--devices={{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/serve/activity_devices.json}}"
     "--workers=8"
     "--stream_count=8"
-    "--device=legacy-amdgpu"
-    "--fixture_transcription_device=1"
+    "--fixture_activity_device=cpu"
+    "--fixture_transcription_device=gpu"
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "notsan"

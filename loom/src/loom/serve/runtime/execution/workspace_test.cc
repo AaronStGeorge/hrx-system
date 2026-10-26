@@ -41,8 +41,16 @@ class WorkspaceTest : public ::testing::TestWithParam<uint32_t> {
     IREE_ASSERT_OK(loom_serve_host_create(GetParam(), nullptr,
                                           iree_allocator_system(), &host_));
     const loom_serve_device_options_t options[] = {
-        {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")},
-        {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")}};
+        {
+            .driver = loom_serve_host_task_driver(host_),
+            .uri = IREE_SV("task"),
+            .name = IREE_SV("first"),
+        },
+        {
+            .driver = loom_serve_host_task_driver(host_),
+            .uri = IREE_SV("task"),
+            .name = IREE_SV("second"),
+        }};
     IREE_ASSERT_OK(loom_serve_device_group_allocate(
         host_, IREE_ARRAYSIZE(options), options, iree_allocator_system(),
         &group_));

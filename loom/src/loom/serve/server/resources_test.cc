@@ -35,8 +35,16 @@ class ResourcesTest : public ::testing::Test {
     IREE_RETURN_IF_ERROR(
         loom_serve_host_create(1, nullptr, iree_allocator_system(), &host_));
     const loom_serve_device_options_t options[] = {
-        {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")},
-        {.driver = loom_serve_host_task_driver(host_), .uri = IREE_SV("task")}};
+        {
+            .driver = loom_serve_host_task_driver(host_),
+            .uri = IREE_SV("task"),
+            .name = IREE_SV("first"),
+        },
+        {
+            .driver = loom_serve_host_task_driver(host_),
+            .uri = IREE_SV("task"),
+            .name = IREE_SV("second"),
+        }};
     return loom_serve_device_group_allocate(host_, IREE_ARRAYSIZE(options),
                                             options, iree_allocator_system(),
                                             &group_);
@@ -59,7 +67,7 @@ TEST_F(ResourcesTest, EveryRecordOfOneCpuGroupIsPublishedWithoutModelWork) {
   const loom_serve_resources_t resources = {.device_group = group_};
   EXPECT_EQ(
       Write(resources),
-      R"({"listeners":[],"devices":[{"index":0,"id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}},{"index":1,"id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}]})");
+      R"({"listeners":[],"devices":[{"key":"first","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}},{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}]})");
 }
 
 TEST_F(ResourcesTest, TrimRequiresExplicitDeviceAndIntegerTarget) {
@@ -70,63 +78,57 @@ TEST_F(ResourcesTest, TrimRequiresExplicitDeviceAndIntegerTarget) {
            "[]",
            "null",
            "{}",
-           R"({"device":0})",
+           R"({"device":"first"})",
            R"({"target_bytes":0})",
-           R"({"device":"0","target_bytes":0})",
-           R"({"device":0,"target_bytes":null})",
+           R"({"device":0,"target_bytes":0})",
+           R"({"device":"first","target_bytes":null})",
            R"({"device":true,"target_bytes":0})",
-           R"({"device":0,"target_bytes":[]})",
-           R"({"device":0,"target_bytes":0,"unknown":1})",
-           R"({"device":0,"device":1,"target_bytes":0})",
-           R"({"device":0,"target_bytes":0,"target_bytes":1})",
+           R"({"device":"first","target_bytes":[]})",
+           R"({"device":"first","target_bytes":0,"unknown":1})",
+           R"({"device":"first","device":"second","target_bytes":0})",
+           R"({"device":"first","target_bytes":0,"target_bytes":1})",
            R"({"device":0.0,"target_bytes":0})",
            R"({"device":-1,"target_bytes":0})",
-           R"({"device":0,"target_bytes":-1})",
-           R"({"device":0,"target_bytes":0.5})",
-           R"({"device":0,"target_bytes":1e3})",
-           R"({"device":0,"target_bytes":0} trailing)",
+           R"({"device":"first","target_bytes":-1})",
+           R"({"device":"first","target_bytes":0.5})",
+           R"({"device":"first","target_bytes":1e3})",
+           R"({"device":"first","target_bytes":0} trailing)",
        }) {
     SCOPED_TRACE(value);
     iree_host_size_t index = 99;
     uint64_t target = 99;
-    IREE_EXPECT_STATUS_IS(
-        IREE_STATUS_INVALID_ARGUMENT,
-        loom_serve_resources_parse_trim(
-            &resources, iree_make_cstring_view(value), &index, &target));
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_resources_parse_trim(
+                              &resources, iree_make_cstring_view(value),
+                              iree_allocator_system(), &index, &target));
     EXPECT_EQ(index, 99u);
     EXPECT_EQ(target, 99u);
   }
 }
 
-TEST_F(ResourcesTest, TrimResolvesOnlyPublishedDeviceIndices) {
+TEST_F(ResourcesTest, TrimResolvesOnlyPublishedDeviceNames) {
   IREE_ASSERT_OK(CreateCpuGroup());
-  for (const loom_serve_resources_t resources :
-       {loom_serve_resources_t{},
-        loom_serve_resources_t{.device_group = group_}}) {
-    for (const auto* value : {
-             R"({"device":2,"target_bytes":0})",
-             R"({"device":18446744073709551615,"target_bytes":0})",
-             R"({"device":18446744073709551616,"target_bytes":0})",
-             R"({"device":0,"target_bytes":18446744073709551616})",
-         }) {
-      SCOPED_TRACE(value);
-      iree_host_size_t index = 99;
-      uint64_t target = 99;
-      IREE_EXPECT_STATUS_IS(
-          IREE_STATUS_OUT_OF_RANGE,
-          loom_serve_resources_parse_trim(
-              &resources, iree_make_cstring_view(value), &index, &target));
-      EXPECT_EQ(index, 99u);
-      EXPECT_EQ(target, 99u);
-    }
-  }
   const loom_serve_resources_t empty = {};
-  iree_host_size_t index = 0;
-  uint64_t target = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        loom_serve_resources_parse_trim(
-                            &empty, IREE_SV(R"({"device":0,"target_bytes":0})"),
-                            &index, &target));
+  const loom_serve_resources_t populated = {.device_group = group_};
+  iree_host_size_t index = 99;
+  uint64_t target = 99;
+  for (const auto* resources : {&empty, &populated}) {
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_NOT_FOUND,
+        loom_serve_resources_parse_trim(
+            resources, IREE_SV(R"({"device":"absent","target_bytes":0})"),
+            iree_allocator_system(), &index, &target));
+    EXPECT_EQ(index, 99u);
+    EXPECT_EQ(target, 99u);
+  }
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_serve_resources_parse_trim(
+          &populated,
+          IREE_SV(R"({"device":"first","target_bytes":18446744073709551616})"),
+          iree_allocator_system(), &index, &target));
+  EXPECT_EQ(index, 99u);
+  EXPECT_EQ(target, 99u);
 }
 
 TEST_F(ResourcesTest, TrimReportsSelectedResourceWithoutModelOwnership) {
@@ -136,8 +138,9 @@ TEST_F(ResourcesTest, TrimReportsSelectedResourceWithoutModelOwnership) {
   uint64_t target = 0;
   IREE_ASSERT_OK(loom_serve_resources_parse_trim(
       &resources,
-      IREE_SV(R"({"target_bytes":18446744073709551615,"device":1})"), &index,
-      &target));
+      IREE_SV(
+          R"({"target_bytes":18446744073709551615,"device":"sec\u006fnd"})"),
+      iree_allocator_system(), &index, &target));
   EXPECT_EQ(index, 1u);
   EXPECT_EQ(target, UINT64_MAX);
   loom_output_stream_t stream;
@@ -146,7 +149,7 @@ TEST_F(ResourcesTest, TrimReportsSelectedResourceWithoutModelOwnership) {
   auto value = iree_string_builder_view(&output_);
   EXPECT_EQ(
       std::string(value.data, value.size),
-      R"({"target_bytes":18446744073709551615,"device":{"index":1,"id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}})");
+      R"({"target_bytes":18446744073709551615,"device":{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}})");
 }
 
 }  // namespace

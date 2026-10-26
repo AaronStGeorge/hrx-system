@@ -7,6 +7,7 @@ independent lifetimes.
 
 ```sh
 loom-serve --device=URI [--model=path/model.json ...] [options]
+loom-serve --devices=devices.json [--model=path/deployment.json ...] [options]
 loom-serve --device=task --pool_backing=fixed --listen=127.0.0.1:8080
 loom-serve --flagfile=serve.flags
 loom-serve --help
@@ -32,7 +33,8 @@ controls, pressure, counters and telemetry cursors.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--device=URI` | Required, repeatable | HAL device URI; encounter order defines device indices. |
+| `--device=URI` | None | Single-device shortcut, with the key `device`. Mutually exclusive with `--devices`. |
+| `--devices=path` | None | Machine-local JSON file declaring named devices and each device's memory and idle policy. |
 | `--model=path` | None, repeatable | A local model card or serving deployment document; omission starts empty. |
 | `--preset=name` | Card selection | Select a preset when loading one card directly. Fetched cards retain the selection made during acquisition. |
 | `--listen=address` | `127.0.0.1:8080`, repeatable | Numeric IPv4 `host:port`, IPv6 `[host]:port`, or `unix:path`. |
@@ -49,10 +51,13 @@ controls, pressure, counters and telemetry cursors.
 | `--state_slab_bytes=N` | `67108864` | Elastic mutable-state commitment/reclamation size in bytes (64 MiB); `0` uses the allocator recommendation. Ignored for fixed backing. |
 | `--memory_bytes=N` | `0` | Shared serving-managed physical parameter/state/workspace limit; `0` imposes no serving limit. |
 
+The backing, slab, memory, and idle flags apply only to the `--device` shortcut.
+With `--devices`, those settings belong to each JSON entry; mixing the file with
+any single-device flag is rejected, including explicit default values.
+
 Model, connection and body capacities must be positive. Holding credit must
 remain below connection capacity. Heartbeat/idle intervals, slab sizes and memory
-limits are nonnegative. A nonzero memory limit requires elastic backing and
-exactly one device: independent device pools cannot enforce a shared byte limit.
+limits are nonnegative. A nonzero memory limit requires elastic backing.
 Invocation input/output storage and command workspace share this limit with
 parameters and mutable model state. Host snapshots, other host allocations and
 driver overhead remain outside it; it is not a whole-process or whole-device
@@ -64,10 +69,49 @@ Unexpected positional arguments fail instead of being interpreted as models.
 
 ## Devices and listeners
 
-Repeated devices form one ordered group. Each model selects one group member
-through its top-level `device` index; omission is accepted only for a singleton
-group. A URI is resolved by its linked HAL driver. The server neither chooses
-an implicit device nor falls back to a different backend.
+Exactly one of `--device` or `--devices` supplies the server's device group.
+For multiple devices, a machine-local file gives each member a key:
+
+```json
+{
+  "devices": {
+    "gpu": {
+      "uri": "amdgpu://0",
+      "pool_backing": "elastic",
+      "memory_bytes": 51539607552,
+      "workspace_idle_ms": 30000,
+      "parameter_idle_ms": 300000
+    },
+    "npu": {"uri": "xdna://0", "pool_backing": "fixed"}
+  }
+}
+```
+
+```sh
+loom-serve --devices=devices.json --model=chat-deployment.json
+```
+
+The keys are operator-chosen names, not hardware types or ordinals. `gpu0` and
+`gpu1` can refer to different drivers. Each deployment selects a member with a
+top-level string such as `"device": "gpu"`; omission is accepted only for a
+singleton group. The portable model card and its programs contain no machine
+placement. The same card can back several deployments with different names
+and devices. `/v1/status` publishes these keys in `server.resources.devices`.
+A URI is resolved by its linked HAL driver. The server neither chooses an
+implicit device nor falls back to a different backend.
+
+Each device entry requires `uri`. Optional `pool_backing`, `weight_slab_bytes`,
+`state_slab_bytes`, `memory_bytes`, `workspace_idle_ms`, and `parameter_idle_ms`
+have the same defaults and units as the single-device flags above. Unknown or
+duplicate fields, duplicate device keys, empty keys, and malformed values fail
+startup. Keys use nonempty visible ASCII; numeric device selectors are rejected.
+The file describes one group, not another set of servers or model lifecycles.
+
+Memory limits belong to individual serving device pools. Two devices accessing
+the same physical RAM still have independent limits; their sum is not a shared
+RAM cap. Conversely, a discrete GPU's limit does not account for another GPU's
+VRAM or host RAM. Hardware identity and model placement do not imply a common
+allocation or coherency domain.
 
 Device URI query parameters request immutable runtime services. `feedback`
 provisions device-to-host diagnostics used by authored kernel assertions and
@@ -86,16 +130,18 @@ selected queue family; removing and reloading a model reuses the available
 inventory. A single-queue device is supported, and models share queues when
 there are more live executions than queues.
 
-For independent AMDGPU model submissions, provision extra queues at startup:
+AMDGPU devices provision four compute queues by default, so independent models
+need no extra queue configuration:
 
 ```sh
-loom-serve --device='amdgpu://0?queue_count=2' \
+loom-serve --device=amdgpu://0 \
   --model=models/chat/model.json --model=models/speech/model.json
 ```
 
 Both model documents select the same device and share its storage and residency
-policy. `queue_count` defaults to one per selected GPU and remains fixed for the
-device lifetime. Separate queues allow independent submissions to overlap, but
+policy. The provisioned queue count remains fixed for the device lifetime;
+an explicit URI parameter such as `?queue_count=1` overrides the default.
+Separate queues allow independent submissions to overlap, but
 do not reserve compute or memory bandwidth and provide no latency guarantee.
 Assignment counts live executions; request batching and residency pinning remain
 separate controls. Vulkan uses its provisioned inventory, and task devices use
