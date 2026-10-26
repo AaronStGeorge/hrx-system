@@ -497,6 +497,7 @@ def test_publication_program_filter_rejects_empty_selection_before_io(
         ["--all-variants", "--update-lock", "--output=installed"],
         ["--all-variants", "--update-lock", "--list"],
         ["--all-variants", "--update-lock", "--materialize=copy"],
+        ["--all-variants", "--update-lock", "--materialize=share"],
     ],
 )
 def test_publication_cli_rejects_ambiguous_modes_before_io(arguments):
@@ -737,6 +738,62 @@ def test_copy_is_an_explicit_independent_materialization(tmp_path):
     assert (tmp_path / "output/weights.data").read_bytes() == b"weights"
 
 
+@pytest.mark.parametrize("materialize", [None, "auto", "share", "copy"])
+def test_program_edits_are_independent_by_default_while_assets_share(
+    tmp_path, materialize
+):
+    card = _card()
+    card["programs"]["p"]["inputs"] = [{"path": "code.loom", "data": ["source.inc"]}]
+    card["programs"]["p"]["libraries"] = ["library.loombc"]
+    files = {
+        "code.loom": b"code",
+        "source.inc": b"auxiliary",
+        "library.loombc": b"library",
+        "weights.data": b"weights",
+    }
+    cache = ContentCache(tmp_path / "cache")
+    with _server(card, files) as (base, requests, _):
+        plan = _remote_plan(base, cache)
+        options = {} if materialize is None else {"materialize": materialize}
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        install(plan, cache, first, **options)
+        install(plan, cache, second, **options)
+        for name, content in files.items():
+            assert requests.count("/" + name) == 1
+            cached = cache.blob_path(hashlib.sha256(content).hexdigest())
+            shared = materialize == "share" or (
+                materialize != "copy" and name == "weights.data"
+            )
+            assert os.path.samefile(first / name, cached) == shared
+            assert os.path.samefile(second / name, cached) == shared
+            (first / name).write_bytes(b"edited")
+            expected = b"edited" if shared else content
+            assert (second / name).read_bytes() == expected
+            assert cached.read_bytes() == expected
+
+
+def test_cli_default_copies_programs_from_a_local_checkout(tmp_path, capsys):
+    (tmp_path / "model.json").write_text(json.dumps(_card()))
+    (tmp_path / "code.loom").write_bytes(b"code")
+    (tmp_path / "weights.data").write_bytes(b"weights")
+    output = tmp_path / "output"
+    arguments = [
+        str(tmp_path / "model.json"),
+        "--no-lock",
+        "--offline",
+        "--no-input",
+        "--cache=" + str(tmp_path / "cache"),
+        "--output=" + str(output),
+    ]
+    assert main(arguments) == 0, capsys.readouterr().err
+    (output / "code.loom").write_bytes(b"edited")
+    assert (tmp_path / "code.loom").read_bytes() == b"code"
+    assert os.path.samefile(output / "weights.data", tmp_path / "weights.data")
+    assert main(arguments) == 0, capsys.readouterr().err
+    assert (output / "code.loom").read_bytes() == b"edited"
+
+
 def test_shared_logical_source_is_downloaded_only_once(tmp_path):
     card = _card()
     card["programs"]["p"]["libraries"] = [{"path": "copy.loom", "origin": "code.loom"}]
@@ -748,9 +805,11 @@ def test_shared_logical_source_is_downloaded_only_once(tmp_path):
     ):
         install(_remote_plan(base, cache), cache, tmp_path / "output")
         assert requests.count("/code.loom") == 1
-        assert os.path.samefile(
+        assert not os.path.samefile(
             tmp_path / "output/code.loom", tmp_path / "output/copy.loom"
         )
+        assert (tmp_path / "output/code.loom").read_bytes() == b"code"
+        assert (tmp_path / "output/copy.loom").read_bytes() == b"code"
 
 
 def test_voice_recording_lock_and_fetch_preserve_original_bytes_and_content_type(

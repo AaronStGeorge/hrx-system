@@ -281,7 +281,9 @@ def test_hf_document_pins_its_closure_and_reuses_shared_cache(tmp_path):
         assert not (cache.root / "blob").exists()
         for filename in ("code.loom", "weights.data"):
             cached = cache.huggingface.cached_file(hub.source(filename))
-            assert os.path.samefile(first.parent / filename, cached)
+            assert os.path.samefile(first.parent / filename, cached) == (
+                filename == "weights.data"
+            )
         before = list(hub.requests)
         hub.approved = False
         # A fresh operation keeps the document's resolved snapshot while offline.
@@ -293,6 +295,10 @@ def test_hf_document_pins_its_closure_and_reuses_shared_cache(tmp_path):
         assert os.path.samefile(
             first.parent / "weights.data", second.parent / "weights.data"
         )
+        (first.parent / "code.loom").write_bytes(b"edited")
+        cached_code = cache.huggingface.cached_file(hub.source("code.loom"))
+        assert (second.parent / "code.loom").read_bytes() == cached_code.read_bytes()
+        assert cached_code.read_bytes() != b"edited"
         assert hub.requests == before
         assert sum("/revision/main" in path for _, path in hub.requests) == 1
 

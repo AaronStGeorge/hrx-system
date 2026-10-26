@@ -179,9 +179,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--materialize",
-        choices=("share", "copy"),
-        default="share",
-        help="share source/cache files or explicitly create independent copies",
+        choices=("auto", "share", "copy"),
+        default="auto",
+        help="auto (default) copies programs and their auxiliary files while "
+        "sharing assets; share links every file to its source/cache; "
+        "copy makes every file independent",
     )
     parser.add_argument(
         "--preserve-sources",
@@ -212,10 +214,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         ):
             parser.error("--all-variants permits only --programs as a selection flag")
-        if args.output is not None or args.materialize != "share" or args.list:
+        if args.output is not None or args.materialize != "auto" or args.list:
             parser.error(
                 "--all-variants publishes only a lock; "
-                "--output, --materialize=copy, and --list do not apply"
+                "--output, --materialize=share/copy, and --list do not apply"
             )
     if args.card is not None and (args.model is not None or args.catalog is not None):
         parser.error("a direct card cannot be combined with --model or --catalog")

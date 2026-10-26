@@ -400,12 +400,19 @@ Forked callers create their own workers without taking ownership of the parent's
 transfers.
 
 Files stream into verified content storage with bounded buffers and concurrent
-transfers. The default `--materialize=share` links cache or local-source files
-into the installation, so changing only preset does not copy weights.
-Filesystems without sharing require an explicit `--materialize=copy` choice.
-Shared files remain shared: editing one view can alter another, and a later
-locked fetch detects that modification. Verified existing destinations can be
-reused; conflicts fail before payload transfer. Fetch never prunes an output.
+transfers. The default `--materialize=auto` makes independent copies of programs
+and their auxiliary files, so editing them cannot alter the cache, the source
+checkout, or another installation. This follows declared roles for every
+program format, including text, bytecode, and C++ inputs. Assets such as weights
+and tokenizers share cache or local-source storage, so changing only preset
+does not copy weights.
+
+`--materialize=share` explicitly shares every file, including programs;
+`--materialize=copy` makes every file independent, including weights. Shared
+files remain shared: editing one view can alter another, and a later locked
+fetch detects that modification. Filesystems without sharing require
+`--materialize=copy`. Verified existing destinations can be reused; conflicts
+fail before payload transfer. Fetch never prunes an output.
 
 The selected `model.json` is published after the complete closure verifies.
 An installation lock is a projection of those verified commitments. Relative

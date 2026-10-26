@@ -55,11 +55,14 @@ contains local program and asset paths and retains the chosen preset. Supply a
 new output directory for another selection; a changed selection never silently
 replaces an installed model.
 
-The default shared materialization reuses cached weights. Two installations
-that differ only in execution settings can share the same parameter files.
-`--materialize=copy` requests independent files when moving an installation or
-using a filesystem that cannot share them. Keep the backing cache and local
-source files available while using a shared installation.
+The default `--materialize=auto` copies programs and their auxiliary files so
+you can edit them independently. It shares cached weights and other assets;
+two installations that differ only in execution settings can share the same
+parameter files. `--materialize=copy` makes every file independent when moving
+an installation or using a filesystem that cannot share them.
+`--materialize=share` also shares programs with their source or cache, so edits
+can affect other installations. Keep the backing cache and local source files
+available while using shared files.
 
 Hugging Face gating is handled during acquisition. If access is required,
 fetch displays the repository's access URL and authentication guidance. Use

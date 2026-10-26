@@ -554,7 +554,8 @@ def _check_outputs(
             continue
         identity = plan.identities.get(name)
         if identity is None:
-            if (
+            editable = plan.selection.files[name].roles <= {"program", "auxiliary"}
+            if not editable and (
                 plan.selection.files[name].transform is not None
                 or source.transport["kind"] != "local"
                 or not os.path.samefile(source.transport["path"], destination)
@@ -603,16 +604,21 @@ def _check_lock_output(plan: FetchPlan, directory: Path, relocated: dict, roots:
     _check_document(path, expected)
 
 
-def _probe_sharing(plan: FetchPlan, cache: ContentCache, directory: Path) -> None:
+def _probe_sharing(
+    plan: FetchPlan,
+    cache: ContentCache,
+    directory: Path,
+    sources: dict[str, Source],
+) -> None:
     roots = {cache.root}
     if any(
         source.transport["kind"] == "hf"
         and plan.selection.files[name].transform is None
-        for name, source in plan.sources.items()
+        for name, source in sources.items()
     ):
         roots.add(cache.huggingface.cache_directory)
     with ExitStack() as stack:
-        sources = set()
+        paths = set()
         for root in roots:
             root.mkdir(parents=True, exist_ok=True)
             temporary = stack.enter_context(
@@ -620,17 +626,17 @@ def _probe_sharing(plan: FetchPlan, cache: ContentCache, directory: Path) -> Non
             )
             path = Path(temporary) / "probe"
             path.write_bytes(b"")
-            sources.add(path)
-        sources.update(
+            paths.add(path)
+        paths.update(
             Path(source.transport["path"])
-            for name, source in plan.sources.items()
+            for name, source in sources.items()
             if source.transport["kind"] == "local"
             and plan.selection.files[name].transform is None
         )
         with tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=directory) as probe:
             destination = Path(probe) / "shared"
             devices = set()
-            for source in sources:
+            for source in paths:
                 device = source.stat().st_dev
                 if device in devices:
                     continue
@@ -644,14 +650,23 @@ def install(
     cache: ContentCache,
     output: Path,
     *,
-    materialize: str = "share",
+    materialize: str = "auto",
     preserve_sources: bool = False,
 ) -> Path:
     """Publishes a card only after its complete selected acquisition succeeds."""
     if cache.cancelled.is_set():
         raise FetchError("model acquisition cancelled")
-    if materialize not in ("share", "copy"):
-        raise ManifestError("materialize must be 'share' or 'copy'")
+    if materialize not in ("auto", "share", "copy"):
+        raise ManifestError("materialize must be 'auto', 'share', or 'copy'")
+    shared = {
+        name: source
+        for name, source in plan.sources.items()
+        if materialize == "share"
+        or (
+            materialize == "auto"
+            and not plan.selection.files[name].roles & {"program", "auxiliary"}
+        )
+    }
     directory = output.absolute()
     card, relocated, roots = _installation_card(plan)
     if plan.update_path is not None:
@@ -663,8 +678,8 @@ def install(
     with installation_lock(directory):
         present = _check_outputs(plan, directory, card)
         _check_lock_output(plan, directory, relocated, roots)
-        if materialize == "share":
-            _probe_sharing(plan, cache, directory)
+        if shared:
+            _probe_sharing(plan, cache, directory, shared)
         acquired = _acquire_sources(
             plan.sources,
             plan.identities,
@@ -714,7 +729,7 @@ def install(
                     path = acquired[
                         file_key(source.origin, plan.selection.files[name].transform)
                     ].path
-                    if materialize == "copy":
+                    if name not in shared:
                         copied = staging / "payload"
                         shutil.copyfile(path, copied)
                         os.link(copied, destination)

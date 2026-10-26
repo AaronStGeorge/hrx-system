@@ -130,7 +130,9 @@ def main(fetch, serve, fixture):
                 assert (subset / "bias.data").stat().st_size == 4100
                 assert not (root / "client-cache/preserved").exists()
                 full = install("full", "full")
-                assert os.path.samefile(subset / "control.loom", full / "control.loom")
+                assert not os.path.samefile(
+                    subset / "control.loom", full / "control.loom"
+                )
                 assert not os.path.samefile(subset / "bias.data", full / "bias.data")
                 install("subset", "swatch", base, "--preserve-sources")
                 receipt = json.loads(
