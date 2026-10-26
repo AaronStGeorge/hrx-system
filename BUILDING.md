@@ -5,6 +5,10 @@ CMake build files. CMake supports package installation and embedding in other
 projects. `dev.py` prepares the developer tools and delegates to either build
 system; both can also be used directly.
 
+The [Loom SDK build guide](loom/packaging/python/README.md) covers Python wheels.
+[SDK release maintenance](loom/packaging/python/RELEASING.md) covers versioning,
+qualification, publishing, and recovery.
+
 - [Prerequisites and quick start](#quick-start)
 - [Build and test commands](#build-and-test-commands)
 - [Build configuration](#build-configuration)
