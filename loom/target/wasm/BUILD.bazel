@@ -14,7 +14,7 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 _WASM_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:wasm_artifacts",
+    "//loom/config/emit:wasm_artifacts",
 ])
 
 loom_target_profile(
@@ -28,7 +28,7 @@ loom_target_set(
     name = "all",
     allow_empty = True,
     targets = select({
-        "//loom/config/target:wasm_artifacts": [":simd128"],
+        "//loom/config/emit:wasm_artifacts": [":simd128"],
         "//conditions:default": [],
     }),
 )

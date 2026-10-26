@@ -500,7 +500,7 @@ iree_runtime_cc_library(
 )
 
 _PROGRAM_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:amdgpu_artifacts",
+    "//loom/config/emit:amdgpu_artifacts",
     "//loom/config/target/amdgpu:descriptor_set_cdna2_core",
     "//loom/config/target/amdgpu:descriptor_set_gfx9_4_generic_core",
     "//loom/config/target/amdgpu:descriptor_set_gfx11_generic_core",

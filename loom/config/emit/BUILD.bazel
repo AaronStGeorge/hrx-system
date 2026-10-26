@@ -6,6 +6,7 @@
 
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//build_tools/bazel:settings.bzl", "iree_string_list_flag")
+load("//loom/config/target:targets.bzl", "LOOM_SPLIT_ARTIFACT_TARGETS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -13,17 +14,10 @@ package(default_visibility = ["//visibility:public"])
 # emitters required for that target.
 DEFAULT_ENABLED = []
 
-SUPPORTED_VALUES = [
-    "amdgpu",
-    "spirv",
-    "wasm",
-    "xdna",
-]
-
 iree_string_list_flag(
     name = "enable",
     build_setting_default = DEFAULT_ENABLED,
-    values = SUPPORTED_VALUES,
+    values = LOOM_SPLIT_ARTIFACT_TARGETS,
 )
 
 [
@@ -33,7 +27,7 @@ iree_string_list_flag(
             ":enable": value,
         },
     )
-    for value in SUPPORTED_VALUES
+    for value in LOOM_SPLIT_ARTIFACT_TARGETS
 ]
 
 [
@@ -44,10 +38,27 @@ iree_string_list_flag(
             ":explicit_" + value,
         ],
     )
-    for value in [
-        "amdgpu",
-        "spirv",
-        "wasm",
-        "xdna",
-    ]
+    for value in LOOM_SPLIT_ARTIFACT_TARGETS
 ]
+
+# Complete artifact capabilities combine an emitter with the architecture data
+# it consumes. Source embedders can select these advanced leaves independently
+# of the public production target settings.
+[
+    selects.config_setting_group(
+        name = value + "_artifacts",
+        match_all = [
+            "//loom/config/target/arch:" + value,
+            ":" + value,
+        ],
+    )
+    for value in LOOM_SPLIT_ARTIFACT_TARGETS
+]
+
+selects.config_setting_group(
+    name = "spirv_vulkan_artifacts",
+    match_all = [
+        ":spirv_artifacts",
+        "//runtime/config/hal:driver_vulkan",
+    ],
+)

@@ -159,7 +159,7 @@ class RuntimeBuildFileFunctions(
             )
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         compatibility = (kwargs.pop("target_compatible_with", None) or []) + [
-            "//loom/config/target:amdgpu_artifacts"
+            "//loom/config/emit:amdgpu_artifacts"
         ]
         self._emit_platform_guard_begin(compatibility)
         self._converter.body += (

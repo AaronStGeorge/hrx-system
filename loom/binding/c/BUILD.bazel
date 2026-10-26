@@ -451,25 +451,25 @@ loomc_shared_libraries(
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target:amdgpu_artifacts": [
+        "//loom/config/emit:amdgpu_artifacts": [
             "//loom/binding/c/target/amdgpu",
             "//loom/binding/c/target/amdgpu:iree_hal",
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target:xdna_artifacts": [
+        "//loom/config/emit:xdna_artifacts": [
             "//loom/binding/c/target/amd/xdna",
             "//loom/binding/c/target/amd/xdna:iree_hal",
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target:spirv_artifacts": [
+        "//loom/config/emit:spirv_artifacts": [
             "//loom/binding/c/target/spirv",
             "//loom/binding/c/target/spirv/vulkaninfo",
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target:spirv_vulkan_artifacts": [
+        "//loom/config/emit:spirv_vulkan_artifacts": [
             "//loom/binding/c/target/spirv:iree_hal",
         ],
         "//conditions:default": [],
@@ -484,7 +484,7 @@ loomc_shared_libraries(
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target:wasm_artifacts": [
+        "//loom/config/emit:wasm_artifacts": [
             "//loom/binding/c/target/wasm",
         ],
         "//conditions:default": [],

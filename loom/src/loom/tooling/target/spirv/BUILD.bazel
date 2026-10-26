@@ -33,7 +33,7 @@ LOOM_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
 ])
 
 _SPIRV_COMPILE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:spirv_artifacts",
+    "//loom/config/emit:spirv_artifacts",
 ])
 
 _SPIRV_VULKAN_HAL_COMPATIBLE_WITH = loom_config_compatible_with([

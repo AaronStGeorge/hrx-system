@@ -50,7 +50,7 @@ class ConfigTest(unittest.TestCase):
         for label, condition in (
             ("//loom/config/import:cxx", "LOOM_IMPORT_CXX"),
             (
-                "//loom/config/target:xdna_artifacts",
+                "//loom/config/emit:xdna_artifacts",
                 "LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA",
             ),
             (
@@ -178,7 +178,7 @@ loom_generated_source_family(
         )
         compatibility = functions.loom_config_compatible_with(
             [
-                "//loom/config/target:amdgpu_artifacts",
+                "//loom/config/emit:amdgpu_artifacts",
                 "//loom/config/target/amdgpu:descriptor_set_rdna3_5_core",
             ]
         )
@@ -208,7 +208,7 @@ loom_generated_source_family(
         )
         compatibility = functions.select(
             {
-                "//loom/config/target:xdna_artifacts": [],
+                "//loom/config/emit:xdna_artifacts": [],
                 "//conditions:default": ["@platforms//:incompatible"],
             }
         )
@@ -331,7 +331,7 @@ loom_kernel_binary(name="program", srcs=["program.loom"], deps=[":support"], tar
 loomc_shared_libraries(
     name="loomc_shared",
     components=[":base"] + select({
-        "//loom/config/target:amdgpu_artifacts": ["//loom/binding/c/target/amdgpu"],
+        "//loom/config/emit:amdgpu_artifacts": ["//loom/binding/c/target/amdgpu"],
         "//conditions:default": [],
     }),
     runtime_deps=["//runtime/src/iree/base"],
@@ -372,7 +372,7 @@ loom_generated_cc_library(name="catalog", generator=":generate", instance_owned=
             tools={"loom-compile": "//loom/src/loom/tools/loom-compile"},
             target_compatible_with=functions.select(
                 {
-                    "//loom/config/target:xdna_artifacts": [],
+                    "//loom/config/emit:xdna_artifacts": [],
                     "//conditions:default": ["@platforms//:incompatible"],
                 }
             ),

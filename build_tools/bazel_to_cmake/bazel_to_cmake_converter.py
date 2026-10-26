@@ -167,7 +167,7 @@ class MixedDeps:
 
 _SPIRV_TOOL_TARGET_COMPATIBLE_WITH = ConditionSelect(
     {
-        "//loom/config/target:spirv_artifacts": [],
+        "//loom/config/emit:spirv_artifacts": [],
         "//runtime/config/hal:driver_vulkan": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }

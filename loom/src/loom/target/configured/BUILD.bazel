@@ -136,13 +136,13 @@ _CONFIGURED_COMPILER_COPTS = (
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:amdgpu_artifacts": [
+        "//loom/config/emit:amdgpu_artifacts": [
             "-DLOOM_CONFIG_COMPILER_HAVE_AMDGPU=1",
         ],
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:spirv_artifacts": [
+        "//loom/config/emit:spirv_artifacts": [
             "-DLOOM_CONFIG_COMPILER_HAVE_SPIRV=1",
         ],
         "//conditions:default": [],
@@ -154,13 +154,13 @@ _CONFIGURED_COMPILER_COPTS = (
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:wasm_artifacts": [
+        "//loom/config/emit:wasm_artifacts": [
             "-DLOOM_CONFIG_COMPILER_HAVE_WASM=1",
         ],
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:xdna_artifacts": [
+        "//loom/config/emit:xdna_artifacts": [
             "-DLOOM_CONFIG_COMPILER_HAVE_XDNA=1",
         ],
         "//conditions:default": [],
@@ -175,13 +175,13 @@ _CONFIGURED_COMPILER_DEPS = (
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:amdgpu_artifacts": [
+        "//loom/config/emit:amdgpu_artifacts": [
             "//loom/src/loom/target/emit/native/amdgpu:hal_kernel_library",
         ],
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:spirv_artifacts": [
+        "//loom/config/emit:spirv_artifacts": [
             "//loom/src/loom/target/arch/spirv:compiler_provider",
         ],
         "//conditions:default": [],
@@ -193,13 +193,13 @@ _CONFIGURED_COMPILER_DEPS = (
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:wasm_artifacts": [
+        "//loom/config/emit:wasm_artifacts": [
             "//loom/src/loom/target/emit/wasm:module_compiler",
         ],
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target:xdna_artifacts": [
+        "//loom/config/emit:xdna_artifacts": [
             "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact",
         ],
         "//conditions:default": [],

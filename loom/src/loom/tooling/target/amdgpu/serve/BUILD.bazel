@@ -51,7 +51,7 @@ loom_cc_test(
     tags = _ROCR_TEST_TAGS,
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/target/arch:x86",
-        "//loom/config/target:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_artifacts",
         "//runtime/config/hal:driver_amdgpu",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
@@ -78,7 +78,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["test_compiler.c"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_artifacts",
     ]),
     deps = [
         "//loom/binding/c/target/amdgpu",
@@ -92,7 +92,7 @@ loom_cc_binary(
     name = "loom-serve-test-tool",
     testonly = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_artifacts",
         "//runtime/config/hal:driver_amdgpu",
     ]),
     deps = [

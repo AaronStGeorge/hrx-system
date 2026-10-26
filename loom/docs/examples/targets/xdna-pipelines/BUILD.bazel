@@ -24,7 +24,7 @@ sh_test(
         "//loom/src/loom/tools/loom-format",
     ],
     target_compatible_with = select({
-        "//loom/config/target:xdna_artifacts": [],
+        "//loom/config/emit:xdna_artifacts": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
 )

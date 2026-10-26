@@ -23,7 +23,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["test_compiler.c"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:xdna_artifacts",
+        "//loom/config/emit:xdna_artifacts",
     ]),
     deps = [
         "//loom/binding/c/target/amd/xdna",

@@ -80,22 +80,14 @@ option(LOOM_TARGET_ARCH_SPIRV
 option(LOOM_TARGET_ARCH_WASM
   "Enables the WebAssembly Loom target architecture slice."
   OFF)
-option(LOOM_TARGET_ARCH_VM
-  "Enables the VM Loom target architecture slice."
-  OFF)
 option(LOOM_TARGET_ARCH_XDNA
   "Enables the AMD XDNA Loom target architecture slice."
-  OFF)
-option(LOOM_TARGET_ARCH_X86
-  "Enables the x86 Loom target architecture slice."
   OFF)
 mark_as_advanced(
   LOOM_TARGET_ARCH_AMDGPU
   LOOM_TARGET_ARCH_SPIRV
-  LOOM_TARGET_ARCH_VM
   LOOM_TARGET_ARCH_WASM
   LOOM_TARGET_ARCH_XDNA
-  LOOM_TARGET_ARCH_X86
 )
 
 option(LOOM_EMIT_AMDGPU
@@ -117,26 +109,32 @@ mark_as_advanced(
   LOOM_EMIT_XDNA
 )
 
-if(LOOM_TARGET_AMDGPU)
+# VM and x86 have no independently selectable artifact emitter. Keep their
+# effective architecture variables for generated package conditions, but derive
+# them exclusively from the public product settings below.
+set(LOOM_TARGET_ARCH_VM OFF)
+set(LOOM_TARGET_ARCH_X86 OFF)
+
+if(LOOM_BUILD AND LOOM_TARGET_AMDGPU)
   set(LOOM_TARGET_ARCH_AMDGPU ON)
   set(LOOM_EMIT_AMDGPU ON)
 endif()
-if(LOOM_TARGET_SPIRV)
+if(LOOM_BUILD AND LOOM_TARGET_SPIRV)
   set(LOOM_TARGET_ARCH_SPIRV ON)
   set(LOOM_EMIT_SPIRV ON)
 endif()
-if(LOOM_TARGET_WASM)
+if(LOOM_BUILD AND LOOM_TARGET_WASM)
   set(LOOM_TARGET_ARCH_WASM ON)
   set(LOOM_EMIT_WASM ON)
 endif()
-if(LOOM_TARGET_VM)
+if(LOOM_BUILD AND LOOM_TARGET_VM)
   set(LOOM_TARGET_ARCH_VM ON)
 endif()
-if(LOOM_TARGET_XDNA)
+if(LOOM_BUILD AND LOOM_TARGET_XDNA)
   set(LOOM_TARGET_ARCH_XDNA ON)
   set(LOOM_EMIT_XDNA ON)
 endif()
-if(LOOM_TARGET_X86)
+if(LOOM_BUILD AND LOOM_TARGET_X86)
   set(LOOM_TARGET_ARCH_X86 ON)
 endif()
 

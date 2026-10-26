@@ -21,7 +21,7 @@ package(
 # are derived from the compiler's configured descriptor sets. Non-executable
 # tests do not depend on these compiler inputs.
 _EXECUTABLE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:amdgpu_artifacts",
+    "//loom/config/emit:amdgpu_artifacts",
 ]) + select(dict([
     (
         "//loom/config/target/amdgpu:" + capability,

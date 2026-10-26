@@ -70,7 +70,7 @@ iree_runtime_cc_test(
 )
 
 _EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:amdgpu_artifacts",
+    "//loom/config/emit:amdgpu_artifacts",
 ]) + select(dict([
     (
         "//loom/config/target/amdgpu:" + capability,

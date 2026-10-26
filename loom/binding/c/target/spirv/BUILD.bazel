@@ -65,7 +65,7 @@ loom_cc_library(
     hdrs = ["//loom/binding/c:include/loomc/target/spirv/iree_hal.h"],
     linkstatic = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:spirv_vulkan_artifacts",
+        "//loom/config/emit:spirv_vulkan_artifacts",
     ]),
     deps = [
         ":spirv",

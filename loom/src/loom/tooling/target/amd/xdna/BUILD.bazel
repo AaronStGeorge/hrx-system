@@ -24,7 +24,7 @@ package(
 )
 
 _XDNA_COMPILE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:xdna_artifacts",
+    "//loom/config/emit:xdna_artifacts",
 ])
 
 iree_execution_test_suite(
