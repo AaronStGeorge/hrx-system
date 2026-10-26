@@ -211,7 +211,11 @@ AMD_CLIENT_WINDOWS_BAZEL_OPTIONS = AMD_CLIENT_BAZEL_OPTIONS + (
 AMD_GPU_BAZEL_TARGETS = (
     "//runtime/src/iree/hal/drivers/amd/...",
     "//loom/src/loom/tooling/target/amdgpu/serve/...",
-    "//loom/src/loom/tooling/target/amdgpu/test:amd_gpu_hal_tests_execute_amd_gpu_hardware_test",
+    "//loom/src/loom/tooling/target/amdgpu/test/...",
+    "//loom/src/loom/target/emit/native/amdgpu/...",
+    "//loom/target/amdgpu/test/...",
+    "//loom/docs/examples/getting-started/first-kernel/...",
+    "//loom/docs/examples/guide/functions-and-control/...",
 )
 AMD_GPU_WEIGHTS_TARGET = "//loom/src/loom/tooling/target/amdgpu/serve:gpu_weights_test"
 # The complete weights suite exercises shader assertions. Windows runs its
