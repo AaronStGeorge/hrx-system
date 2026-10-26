@@ -384,14 +384,18 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @entry(%input: reg<aie2p.ep>, 
     const auto second_register = loom_aie2p_machine_find_physical_register(
         iree_make_cstring_view(test_case.second_register));
     const loom_low_allocation_fixed_value_t fixed_values[] = {
-        {.value_id = loom_op_const_results(loom_block_op(block, 0))[0],
-         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-         .location_base = first_register,
-         .location_count = 1},
-        {.value_id = loom_op_const_results(loom_block_op(block, 3))[0],
-         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-         .location_base = second_register,
-         .location_count = 1},
+        {
+            .value_id = loom_op_const_results(loom_block_op(block, 0))[0],
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = first_register,
+            .location_count = 1,
+        },
+        {
+            .value_id = loom_op_const_results(loom_block_op(block, 3))[0],
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = second_register,
+            .location_count = 1,
+        },
     };
     const loom_aie2p_leaf_compile_options_t options = {
         .descriptor_registry = &low_registry_.registry,
