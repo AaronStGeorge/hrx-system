@@ -269,7 +269,8 @@ model name. An authored card with multiple presets can be served directly with
 `--preset=NAME` alongside one `--model` argument.
 
 Acquisition progress uses stderr, including when redirected or running with
-`--no-input`. It reports each new phase promptly and throttles ongoing
+`--no-input`. Aligned phase rows include a compact bar and percentage when a
+byte total is known. It reports each new phase promptly and throttles ongoing
 updates to one line every five seconds. stdout remains the final path or
 `--json` result. `--quiet` suppresses progress without suppressing errors or
 access actions. Reports contain destination paths and numeric facts, never

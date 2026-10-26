@@ -55,32 +55,46 @@ class ConsoleProgress:
         self.phases.add(event.phase)
         self.last_time = now
         labels = {
-            "discover": "Reading model metadata",
-            "access": "Checking source access",
-            "acquire": "Acquiring files",
-            "download": "Downloading file bytes",
-            "transfer": "Receiving transfer bytes",
-            "read": "Reading source bytes",
-            "verify": "Verifying file bytes",
-            "transform": "Reading transform source ranges",
-            "install": "Installing files",
+            "discover": "Metadata",
+            "access": "Access",
+            "acquire": "Fetch",
+            "download": "Download",
+            "transfer": "Transfer",
+            "read": "Read",
+            "verify": "Verify",
+            "transform": "Transform",
+            "install": "Install",
             "complete": "Complete",
         }
-        text = "loom-fetch: " + labels[event.phase]
-        if event.path is not None:
-            text += ": " + display_text(event.path)
         details = []
-        if self.files is not None:
-            details.append(f"{self.files[0]}/{self.files[1]} files complete")
         if event.completed_bytes is not None:
             extent = format_bytes(event.completed_bytes)
             if event.total_bytes is not None:
-                extent += " / " + format_bytes(event.total_bytes)
+                percentage = (
+                    event.completed_bytes * 100 // event.total_bytes
+                    if event.total_bytes
+                    else 100
+                )
+                filled = min(12, percentage * 12 // 100)
+                bar = "#" * filled + "." * (12 - filled)
+                extent = (
+                    f"[{bar}] {percentage:3d}%  "
+                    + extent
+                    + " / "
+                    + format_bytes(event.total_bytes)
+                )
             else:
-                extent += "; total unknown"
+                extent += " (total unknown)"
             details.append(extent)
-        if details:
-            text += " (" + "; ".join(details) + ")"
+        if event.path is not None:
+            details.append(display_text(event.path))
+        if self.files is not None:
+            details.append(f"{self.files[0]}/{self.files[1]} files")
+        if event.phase == "discover":
+            details.append("reading model metadata")
+        elif event.phase == "access":
+            details.append("checking source access")
+        text = f"loom-fetch  {labels[event.phase]:9s} " + "  ".join(details)
         self.output.write(text + "\n")
         self.output.flush()
 

@@ -50,6 +50,43 @@ def test_console_throttles_lines_without_hiding_new_phases_or_final_state():
     lines = output.getvalue().splitlines()
     assert len(lines) == 5
     assert "weight\\u001b\\u000a.data" in lines[1]
-    assert "1/2 files complete" in lines[3]
-    assert "Complete (2/2 files complete)" in lines[4]
+    assert "1/2 files" in lines[3]
+    assert lines[4] == "loom-fetch  Complete  2/2 files"
     assert "\x1b" not in output.getvalue()
+
+
+def test_console_renders_known_empty_and_unknown_extents():
+    output = io.StringIO()
+    progress = ConsoleProgress(output)
+    progress(ProgressEvent("acquire", completed_files=1, total_files=3))
+    progress(
+        ProgressEvent(
+            "download",
+            path="weights.data",
+            completed_bytes=1024**3,
+            total_bytes=4 * 1024**3,
+        )
+    )
+    progress(
+        ProgressEvent(
+            "transfer",
+            path="weights.data",
+            completed_bytes=384 * 1024**2,
+        )
+    )
+    progress(
+        ProgressEvent(
+            "verify",
+            path="empty.data",
+            completed_bytes=0,
+            total_bytes=0,
+        )
+    )
+    assert output.getvalue().splitlines() == [
+        "loom-fetch  Fetch     1/3 files",
+        "loom-fetch  Download  [###.........]  25%  1.0 GiB / 4.0 GiB"
+        "  weights.data  1/3 files",
+        "loom-fetch  Transfer  384.0 MiB (total unknown)  weights.data  1/3 files",
+        "loom-fetch  Verify    [############] 100%  0 bytes / 0 bytes"
+        "  empty.data  1/3 files",
+    ]

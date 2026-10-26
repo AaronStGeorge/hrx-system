@@ -250,15 +250,15 @@ def test_cli_progress_preserves_json_stdout_and_quiet_mode(tmp_path, capsys, qui
             assert captured.err == ""
         else:
             for label in (
-                "Reading model metadata",
-                "Acquiring files",
-                "Downloading file bytes",
-                "Verifying file bytes",
-                "Installing files",
+                "Metadata",
+                "Fetch",
+                "Download",
+                "Verify",
+                "Install",
                 "Complete",
             ):
-                assert label in captured.err
-            assert "2/2 files complete" in captured.err
+                assert "loom-fetch  " + label in captured.err
+            assert "2/2 files" in captured.err
             assert base not in captured.err
             assert "\x1b" not in captured.err
 
