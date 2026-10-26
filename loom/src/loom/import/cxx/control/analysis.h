@@ -196,6 +196,12 @@ class ControlFlow final : private cxx::ASTVisitor {
   const SwitchLayout& switch_layout(cxx::SwitchStatementAST* statement) const;
   // Retained return/fallthrough summary, including nested statements.
   ExitFlow returns(cxx::StatementAST* statement) const;
+  // Whether a return in this statement requires callable-exit projection
+  // instead of becoming a result of an enclosing structured conditional.
+  bool requires_callable_exit(cxx::StatementAST* statement) const;
+  // Number of direct children whose nested return crosses a loop or switch.
+  // A return sequence decrements this retained suffix count as it advances.
+  size_t callable_exit_count(cxx::CompoundStatementAST* statement) const;
   // Whether execution can reach the statement immediately following this
   // source statement. Diverging and function-returning paths do not.
   bool falls_through(cxx::StatementAST* statement) const;
@@ -316,6 +322,7 @@ class ControlFlow final : private cxx::ASTVisitor {
   unsigned paths(cxx::StatementAST* statement) const;
   unsigned sequence_paths(std::span<cxx::StatementAST* const> statements) const;
   unsigned classify_paths(cxx::StatementAST* statement) const;
+  bool classify_callable_exit(cxx::StatementAST* statement);
   ExitFlow exits(cxx::StatementAST* statement, unsigned selected_paths) const;
 
   // Resolved source types and literal interpretation for loop admission.
@@ -365,6 +372,11 @@ class ControlFlow final : private cxx::ASTVisitor {
   std::unordered_map<cxx::ForStatementAST*, CountedLoop> counted_;
   // Sparse path sets retain statements with function or iteration exits.
   std::unordered_map<cxx::StatementAST*, unsigned> paths_;
+  // Statements containing a return across a loop or switch boundary. Direct
+  // return trees remain absent and retain result-bearing projection.
+  std::unordered_set<cxx::StatementAST*> callable_exits_;
+  // Nonzero direct-child counts for compound return sequences.
+  std::unordered_map<cxx::CompoundStatementAST*, size_t> callable_exit_counts_;
   struct SwitchFacts {
     // Public lexical structure consumed directly by translation.
     SwitchLayout layout;

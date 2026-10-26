@@ -16,7 +16,9 @@ extern "C" {
 // Returns immutable metadata for final source CFG convergence.
 const loom_pass_info_t* loom_cfg_converge_pass_info(void);
 
-// Factors overlapping decisions through ordinary predicate joins.
+// Factors overlapping decisions through ordinary predicate joins and gives
+// natural loops exclusive exit frontiers when enclosing decisions bypass the
+// same continuation.
 // Effects stay in their original blocks; scalar live-ins that lose dominance
 // travel through join arguments. Unobservable incoming values are defined zero.
 // Inside natural loops, factoring stays within one iteration and preserves the

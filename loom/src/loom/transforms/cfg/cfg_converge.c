@@ -19,6 +19,9 @@
 #define LOOM_CFG_CONVERGE_STATISTICS(V, statistics_type)                  \
   V(statistics_type, decisions_factored, "decisions-factored",            \
     "Number of overlapping decisions factored through a predicate join.") \
+  V(statistics_type, loop_exit_frontiers_isolated,                        \
+    "loop-exit-frontiers-isolated",                                       \
+    "Number of loop exit frontiers isolated from enclosing decisions.")   \
   V(statistics_type, values_carried, "values-carried",                    \
     "Number of scalar live-ins carried across predicate joins.")
 
@@ -28,7 +31,8 @@ LOOM_PASS_STATISTICS_DEFINE(loom_cfg_converge_statistics,
 
 static const loom_pass_info_t loom_cfg_converge_pass_info_storage = {
     .name = IREE_SVL("cfg-converge"),
-    .description = IREE_SVL("Converge overlapping CFG decisions."),
+    .description =
+        IREE_SVL("Converge overlapping CFG decisions and loop frontiers."),
     .kind = LOOM_PASS_FUNCTION,
     .statistic_layout = &loom_cfg_converge_statistics_layout,
 };
@@ -95,6 +99,183 @@ typedef struct loom_cfg_converge_plan_t {
   // False when a capture cannot travel through an ordinary scalar argument.
   bool representable;
 } loom_cfg_converge_plan_t;
+
+// Returns the semantic continuation shared by every supported exit from a
+// natural loop. Direct destinations are retained when they agree; otherwise
+// the loop header's immediate postdominator names the continuation beyond the
+// exit regions.
+static uint16_t loom_cfg_converge_loop_continuation(
+    const loom_value_fact_cfg_region_t* facts,
+    const loom_cfg_natural_loop_t* loop) {
+  if (loop->continuation_index != LOOM_CFG_LOOP_CONTINUATION_NONE) {
+    return loop->continuation_index;
+  }
+  if (!facts->control_structure.postdominance.available) {
+    return LOOM_CFG_LOOP_CONTINUATION_NONE;
+  }
+  uint32_t continuation =
+      facts->control_structure.postdominance.nodes[loop->header_index]
+          .immediate_postdominator;
+  return continuation < facts->graph.block_count
+             ? (uint16_t)continuation
+             : LOOM_CFG_LOOP_CONTINUATION_NONE;
+}
+
+// Isolates one loop's result-producing exits from an enclosing decision that
+// reaches the same continuation. Without the gateway, target control planners
+// for the loop and enclosing decision would both own the same CFG edges. The
+// new block has the continuation's exact signature, so existing exit payloads
+// remain unchanged while each control owner receives a disjoint frontier.
+static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
+    loom_pass_t* pass, loom_module_t* module, loom_region_t* body,
+    loom_rewriter_t* rewriter, iree_arena_allocator_t* arena,
+    const loom_value_fact_cfg_region_t* facts, bool* out_changed) {
+  *out_changed = false;
+  const loom_cfg_graph_t* graph = &facts->graph;
+  const loom_cfg_loop_nest_t* loops = &facts->loops;
+  if (!loops->reducible) {
+    return iree_ok_status();
+  }
+
+  for (iree_host_size_t loop_index = 0; loop_index < loops->loop_count;
+       ++loop_index) {
+    const loom_cfg_natural_loop_t* loop = &loops->loops[loop_index];
+    if (loop->exits.count == 0 ||
+        loop->direct_exit_count != loop->exits.count) {
+      continue;
+    }
+    const uint16_t continuation =
+        loom_cfg_converge_loop_continuation(facts, loop);
+    if (continuation == LOOM_CFG_LOOP_CONTINUATION_NONE ||
+        loom_cfg_loop_nest_contains(loops, (uint16_t)loop_index,
+                                    continuation)) {
+      continue;
+    }
+
+    // A loop header that dominates its continuation already owns the complete
+    // frontier. This is the ordinary-loop fast path: no edge walk or transient
+    // allocation is needed unless an enclosing decision bypasses the loop.
+    if (loom_cfg_dominance_block_dominates(&facts->dominance,
+                                           loop->header_index, continuation)) {
+      continue;
+    }
+
+    iree_arena_reset(arena);
+    loom_cfg_edge_index_t* direct_exits = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, loop->direct_exit_count, sizeof(*direct_exits),
+        (void**)&direct_exits));
+    iree_host_size_t direct_exit_count = 0;
+    for (iree_host_size_t edge_index = 0; edge_index < graph->edge_count;
+         ++edge_index) {
+      const loom_cfg_edge_info_t* edge = &graph->edges[edge_index];
+      if (!graph->blocks[edge->source_block_index].reachable ||
+          loom_cfg_loop_nest_innermost(loops, edge->source_block_index) !=
+              loop_index ||
+          loom_cfg_loop_nest_contains(loops, (uint16_t)loop_index,
+                                      edge->target_block_index)) {
+        continue;
+      }
+      direct_exits[direct_exit_count++] = (loom_cfg_edge_index_t)edge_index;
+    }
+    IREE_ASSERT_EQ(direct_exit_count, loop->direct_exit_count);
+
+    uint8_t* visited_targets = NULL;
+    uint8_t* visited_edges = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, graph->block_count,
+                                                   sizeof(*visited_targets),
+                                                   (void**)&visited_targets));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, graph->edge_count,
+                                                   sizeof(*visited_edges),
+                                                   (void**)&visited_edges));
+    memset(visited_targets, 0, graph->block_count * sizeof(*visited_targets));
+    memset(visited_edges, 0, graph->edge_count * sizeof(*visited_edges));
+
+    iree_host_size_t frontier_capacity = 0;
+    bool supported = true;
+    for (iree_host_size_t i = 0; i < direct_exit_count && supported; ++i) {
+      const loom_cfg_edge_info_t* edge = &graph->edges[direct_exits[i]];
+      const uint16_t target = edge->target_block_index;
+      if (target == continuation) {
+        ++frontier_capacity;
+        continue;
+      }
+      const loom_cfg_region_t* region = &facts->regions.blocks[target];
+      if (visited_targets[target] ||
+          region->continuation_index != continuation ||
+          region->exit_edges.count == 0) {
+        supported = false;
+        break;
+      }
+      visited_targets[target] = 1;
+      frontier_capacity += region->exit_edges.count;
+    }
+    if (!supported || frontier_capacity == 0) {
+      continue;
+    }
+
+    loom_cfg_edge_index_t* frontier = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, frontier_capacity, sizeof(*frontier), (void**)&frontier));
+    iree_host_size_t frontier_count = 0;
+    for (iree_host_size_t i = 0; i < direct_exit_count && supported; ++i) {
+      const loom_cfg_edge_info_t* exit = &graph->edges[direct_exits[i]];
+      loom_cfg_edge_index_span_t edges =
+          exit->target_block_index == continuation
+              ? (loom_cfg_edge_index_span_t){
+                    .values = &direct_exits[i],
+                    .count = 1,
+                }
+              : facts->regions.blocks[exit->target_block_index].exit_edges;
+      for (iree_host_size_t j = 0; j < edges.count; ++j) {
+        const loom_cfg_edge_index_t edge_index = edges.values[j];
+        const loom_cfg_edge_info_t* edge = &graph->edges[edge_index];
+        if (visited_edges[edge_index] ||
+            edge->target_block_index != continuation) {
+          supported = false;
+          break;
+        }
+        visited_edges[edge_index] = 1;
+        frontier[frontier_count++] = edge_index;
+      }
+    }
+    if (!supported || frontier_count != frontier_capacity) {
+      continue;
+    }
+
+    loom_block_t* continuation_block =
+        (loom_block_t*)graph->blocks[continuation].block;
+    loom_block_t* gateway = NULL;
+    IREE_RETURN_IF_ERROR(loom_region_insert_block(
+        module, body, continuation_block->region_index, &gateway));
+    loom_builder_t* builder = &rewriter->builder;
+    builder->ip.parent_op = graph->edges[frontier[0]].terminator->parent_op;
+    loom_builder_set_block(builder, gateway);
+    for (uint16_t i = 0; i < continuation_block->arg_count; ++i) {
+      loom_value_id_t argument = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
+          builder, gateway,
+          loom_module_value_type(module, continuation_block->arg_ids[i]),
+          &argument));
+    }
+    loom_op_t* branch = NULL;
+    IREE_RETURN_IF_ERROR(loom_cfg_br_build(
+        builder, continuation_block, gateway->arg_ids, gateway->arg_count,
+        graph->edges[frontier[0]].terminator->location, &branch));
+    for (iree_host_size_t i = 0; i < frontier_count; ++i) {
+      const loom_cfg_edge_info_t* edge = &graph->edges[frontier[i]];
+      loom_op_successors(edge->terminator)[edge->successor_index] = gateway;
+    }
+
+    IREE_RETURN_IF_ERROR(loom_rewriter_refresh_cfg_facts(rewriter, body));
+    loom_cfg_converge_statistics_t* statistics =
+        loom_cfg_converge_statistics(pass);
+    ++statistics->loop_exit_frontiers_isolated;
+    *out_changed = true;
+    return iree_ok_status();
+  }
+  return iree_ok_status();
+}
 
 static bool loom_cfg_converge_is_forwarding(const loom_block_t* block,
                                             const loom_block_t* continuation) {
@@ -485,17 +666,11 @@ static iree_status_t loom_cfg_converge_apply(loom_cfg_converge_plan_t* plan,
   return loom_rewriter_refresh_cfg_facts(rewriter, body);
 }
 
-static iree_status_t loom_cfg_converge_once(loom_pass_t* pass,
-                                            loom_module_t* module,
-                                            loom_region_t* body,
-                                            loom_rewriter_t* rewriter,
-                                            iree_arena_allocator_t* arena,
-                                            bool* out_changed) {
+static iree_status_t loom_cfg_converge_once(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    iree_arena_allocator_t* arena, const loom_value_fact_cfg_region_t* facts,
+    bool* out_changed) {
   *out_changed = false;
-  IREE_RETURN_IF_ERROR(loom_rewriter_propagate_value_facts(rewriter));
-  const loom_value_fact_cfg_region_t* facts = NULL;
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_get_or_build_cfg_region(
-      rewriter->fact_table, module, body, &facts));
   const loom_cfg_graph_t* graph = &facts->graph;
   for (iree_host_size_t i = 0; i < graph->reverse_postorder.count; ++i) {
     uint16_t source = graph->reverse_postorder.values[i];
@@ -568,8 +743,20 @@ iree_status_t loom_cfg_converge_run(loom_pass_t* pass, loom_module_t* module,
   bool changed = true;
   bool any_changed = false;
   while (iree_status_is_ok(status) && changed) {
-    status =
-        loom_cfg_converge_once(pass, module, body, &rewriter, &arena, &changed);
+    const loom_value_fact_cfg_region_t* facts = NULL;
+    status = loom_rewriter_propagate_value_facts(&rewriter);
+    if (iree_status_is_ok(status)) {
+      status = loom_value_fact_table_get_or_build_cfg_region(
+          rewriter.fact_table, module, body, &facts);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_cfg_converge_isolate_loop_exit_frontier(
+          pass, module, body, &rewriter, &arena, facts, &changed);
+    }
+    if (iree_status_is_ok(status) && !changed) {
+      status = loom_cfg_converge_once(pass, module, &rewriter, &arena, facts,
+                                      &changed);
+    }
     any_changed |= changed;
   }
   if (iree_status_is_ok(status) && any_changed) {

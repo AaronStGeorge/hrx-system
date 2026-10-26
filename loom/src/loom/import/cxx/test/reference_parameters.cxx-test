@@ -377,3 +377,172 @@ func.def @trim(%rows_dim0$35: index, %rows_layout: encoding<layout>, %rows$37: v
   %rows$50 = view.subview %rows$37[%48, %49] : view<[%rows_dim0$35]x4xf32, %rows_layout> -> view<[%rows_dim0$47]x4xf32, %rows_layout>
   func.return %rows_dim0$47, %rows_layout, %rows$50 : index, encoding<layout>, view<[%rows_dim0$47]x4xf32, %rows_layout>
 }
+
+// ====
+struct NestedState { unsigned value; };
+struct MemberState {
+  unsigned scalar;
+  unsigned lanes[3];
+  NestedState nested;
+};
+
+static unsigned observe_member(const unsigned& value) { return value; }
+
+static unsigned sum_members(const unsigned (&values)[3]) {
+  return values[0] + values[1] + values[2];
+}
+
+static unsigned inspect_members(const MemberState& state) {
+  return observe_member(state.scalar) + sum_members(state.lanes) +
+         observe_member(state.nested.value);
+}
+
+static void update_members(MemberState& state) {
+  state.scalar += observe_member(state.nested.value);
+  state.lanes[1] = observe_member(state.scalar);
+  state.nested.value = observe_member(state.lanes[2]);
+}
+
+unsigned storage_reference_members(MemberState* state) {
+  unsigned before = inspect_members(*state);
+  update_members(*state);
+  return before + state->scalar + state->lanes[1] + state->nested.value;
+}
+
+// ----
+func.def public @storage_reference_members(%state: buffer, %state_byte_offset: offset) -> (i32) {
+  %before = func.call readonly @inspect_members(%state, %state_byte_offset) : (buffer, offset) -> (i32)
+  func.call @update_members(%state, %state_byte_offset) : (buffer, offset)
+  %4 = index.constant 0 : offset
+  %5 = index.add %state_byte_offset, %4 : offset
+  %6 = buffer.view %state[%5] : buffer -> view<1xi32>
+  %scalar = view.load %6[0] : view<1xi32> -> i32
+  %8 = scalar.addi %before, %scalar : i32
+  %9 = index.constant 4 : offset
+  %lanes_byte_offset = index.add %state_byte_offset, %9 : offset
+  %11 = scalar.constant 1 : i32
+  %12 = scalar.extsi %11 : i32 to i64
+  %13 = scalar.constant 4 : i64
+  %14 = scalar.muli %12, %13 : i64
+  %15 = index.cast %lanes_byte_offset : offset to i64
+  %16 = scalar.addi %15, %14 : i64
+  %17 = scalar.assume %16 [range(%16, 0, 9223372036854775807)] : i64
+  %18 = index.cast %17 : i64 to offset
+  %19 = buffer.view %state[%18] : buffer -> view<1xi32>
+  %20 = view.load %19[0] : view<1xi32> -> i32
+  %21 = scalar.addi %8, %20 : i32
+  %22 = index.constant 16 : offset
+  %23 = index.add %state_byte_offset, %22 : offset
+  %24 = index.constant 0 : offset
+  %25 = index.add %23, %24 : offset
+  %26 = buffer.view %state[%25] : buffer -> view<1xi32>
+  %value = view.load %26[0] : view<1xi32> -> i32
+  %28 = scalar.addi %21, %value : i32
+  func.return %28 : i32
+}
+
+func.def @inspect_members(%state: buffer, %state_byte_offset: offset) -> (i32) {
+  %32 = index.constant 0 : offset
+  %33 = index.add %state_byte_offset, %32 : offset
+  %34 = func.call readonly @observe_member(%state, %33) : (buffer, offset) -> (i32)
+  %35 = index.constant 4 : offset
+  %36 = index.add %state_byte_offset, %35 : offset
+  %37 = func.call readonly @sum_members(%state, %36) : (buffer, offset) -> (i32)
+  %38 = scalar.addi %34, %37 : i32
+  %39 = index.constant 16 : offset
+  %40 = index.add %state_byte_offset, %39 : offset
+  %41 = index.constant 0 : offset
+  %42 = index.add %40, %41 : offset
+  %43 = func.call readonly @observe_member(%state, %42) : (buffer, offset) -> (i32)
+  %44 = scalar.addi %38, %43 : i32
+  func.return %44 : i32
+}
+
+func.def @update_members(%state: buffer, %state_byte_offset: offset) {
+  %47 = index.constant 16 : offset
+  %48 = index.add %state_byte_offset, %47 : offset
+  %49 = index.constant 0 : offset
+  %50 = index.add %48, %49 : offset
+  %51 = func.call readonly @observe_member(%state, %50) : (buffer, offset) -> (i32)
+  %52 = index.constant 0 : offset
+  %53 = index.add %state_byte_offset, %52 : offset
+  %54 = buffer.view %state[%53] : buffer -> view<1xi32>
+  %55 = view.load %54[0] : view<1xi32> -> i32
+  %56 = scalar.addi %55, %51 : i32
+  view.store %56, %54[0] : i32, view<1xi32>
+  %57 = index.constant 0 : offset
+  %58 = index.add %state_byte_offset, %57 : offset
+  %59 = func.call readonly @observe_member(%state, %58) : (buffer, offset) -> (i32)
+  %60 = index.constant 4 : offset
+  %lanes_byte_offset$61 = index.add %state_byte_offset, %60 : offset
+  %62 = scalar.constant 1 : i32
+  %63 = scalar.extsi %62 : i32 to i64
+  %64 = scalar.constant 4 : i64
+  %65 = scalar.muli %63, %64 : i64
+  %66 = index.cast %lanes_byte_offset$61 : offset to i64
+  %67 = scalar.addi %66, %65 : i64
+  %68 = scalar.assume %67 [range(%67, 0, 9223372036854775807)] : i64
+  %69 = index.cast %68 : i64 to offset
+  %70 = buffer.view %state[%69] : buffer -> view<1xi32>
+  view.store %59, %70[0] : i32, view<1xi32>
+  %71 = index.constant 4 : offset
+  %lanes_byte_offset$72 = index.add %state_byte_offset, %71 : offset
+  %73 = scalar.constant 2 : i32
+  %74 = scalar.extsi %73 : i32 to i64
+  %75 = scalar.constant 4 : i64
+  %76 = scalar.muli %74, %75 : i64
+  %77 = index.cast %lanes_byte_offset$72 : offset to i64
+  %78 = scalar.addi %77, %76 : i64
+  %79 = scalar.assume %78 [range(%78, 0, 9223372036854775807)] : i64
+  %80 = index.cast %79 : i64 to offset
+  %81 = func.call readonly @observe_member(%state, %80) : (buffer, offset) -> (i32)
+  %82 = index.constant 16 : offset
+  %83 = index.add %state_byte_offset, %82 : offset
+  %84 = index.constant 0 : offset
+  %85 = index.add %83, %84 : offset
+  %86 = buffer.view %state[%85] : buffer -> view<1xi32>
+  view.store %81, %86[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def @observe_member(%value$87: buffer, %value_byte_offset: offset) -> (i32) {
+  %90 = buffer.view %value$87[%value_byte_offset] : buffer -> view<1xi32>
+  %value$91 = view.load %90[0] : view<1xi32> -> i32
+  func.return %value$91 : i32
+}
+
+func.def @sum_members(%values: buffer, %values_byte_offset: offset) -> (i32) {
+  %95 = scalar.constant 0 : i32
+  %96 = scalar.extsi %95 : i32 to i64
+  %97 = scalar.constant 4 : i64
+  %98 = scalar.muli %96, %97 : i64
+  %99 = index.cast %values_byte_offset : offset to i64
+  %100 = scalar.addi %99, %98 : i64
+  %101 = scalar.assume %100 [range(%100, 0, 9223372036854775807)] : i64
+  %102 = index.cast %101 : i64 to offset
+  %103 = buffer.view %values[%102] : buffer -> view<1xi32>
+  %104 = view.load %103[0] : view<1xi32> -> i32
+  %105 = scalar.constant 1 : i32
+  %106 = scalar.extsi %105 : i32 to i64
+  %107 = scalar.constant 4 : i64
+  %108 = scalar.muli %106, %107 : i64
+  %109 = index.cast %values_byte_offset : offset to i64
+  %110 = scalar.addi %109, %108 : i64
+  %111 = scalar.assume %110 [range(%110, 0, 9223372036854775807)] : i64
+  %112 = index.cast %111 : i64 to offset
+  %113 = buffer.view %values[%112] : buffer -> view<1xi32>
+  %114 = view.load %113[0] : view<1xi32> -> i32
+  %115 = scalar.addi %104, %114 : i32
+  %116 = scalar.constant 2 : i32
+  %117 = scalar.extsi %116 : i32 to i64
+  %118 = scalar.constant 4 : i64
+  %119 = scalar.muli %117, %118 : i64
+  %120 = index.cast %values_byte_offset : offset to i64
+  %121 = scalar.addi %120, %119 : i64
+  %122 = scalar.assume %121 [range(%121, 0, 9223372036854775807)] : i64
+  %123 = index.cast %122 : i64 to offset
+  %124 = buffer.view %values[%123] : buffer -> view<1xi32>
+  %125 = view.load %124[0] : view<1xi32> -> i32
+  %126 = scalar.addi %115, %125 : i32
+  func.return %126 : i32
+}

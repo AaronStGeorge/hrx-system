@@ -758,6 +758,20 @@ func.def @loop_boundaries(%enter: i1, %active: i1, %repeat: i1) {
   func.return
 }
 
+// ----
+func.def @loop_boundaries(%enter: i1, %active: i1, %repeat: i1) {
+  cfg.cond_br %enter, ^header, ^exit
+^header:
+  cfg.cond_br %active, ^body, ^_bb3
+^body:
+  test.use %active : i1
+  cfg.cond_br %repeat, ^header, ^_bb3
+^_bb3:
+  cfg.br ^exit
+^exit:
+  func.return
+}
+
 // ====
 
 // RUN: pass cfg-converge,cfg-converge
@@ -1032,4 +1046,54 @@ func.def @argument_type_capture(%outer: i1, %inner: i1, %size: index, %seed: i32
   cfg.br ^exit
 ^exit:
   func.return
+}
+
+// ====
+
+// RUN: pass cfg-converge,cfg-converge
+
+// A loop and its enclosing early-exit decision need distinct result frontiers.
+// Isolate the loop exits behind one payload-preserving gateway before both
+// paths reach the function result.
+func.def @loop_exit_under_outer_bypass(%early: i1, %running: i1, %matched: i1, %early_value: i32, %matched_value: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %early, ^early_exit, ^preheader
+^early_exit:
+  cfg.br ^result(%early_value: i32)
+^preheader:
+  cfg.br ^header
+^header:
+  cfg.cond_br %running, ^body, ^normal_exit
+^body:
+  cfg.cond_br %matched, ^matched_exit, ^latch
+^matched_exit:
+  cfg.br ^result(%matched_value: i32)
+^latch:
+  cfg.br ^header
+^normal_exit:
+  cfg.br ^result(%fallback: i32)
+^result(%value: i32):
+  func.return %value : i32
+}
+
+// ----
+func.def @loop_exit_under_outer_bypass(%early: i1, %running: i1, %matched: i1, %early_value: i32, %matched_value: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %early, ^early_exit, ^preheader
+^early_exit:
+  cfg.br ^result(%early_value: i32)
+^preheader:
+  cfg.br ^header
+^header:
+  cfg.cond_br %running, ^body, ^normal_exit
+^body:
+  cfg.cond_br %matched, ^matched_exit, ^latch
+^matched_exit:
+  cfg.br ^_bb8(%matched_value: i32)
+^latch:
+  cfg.br ^header
+^normal_exit:
+  cfg.br ^_bb8(%fallback: i32)
+^_bb8(%8: i32):
+  cfg.br ^result(%8: i32)
+^result(%value: i32):
+  func.return %value : i32
 }
