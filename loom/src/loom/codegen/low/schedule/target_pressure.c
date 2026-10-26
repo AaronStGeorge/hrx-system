@@ -597,20 +597,9 @@ iree_status_t loom_low_schedule_target_pressure_initialize_packing_resources(
   for (uint16_t resource_id = 0; resource_id < resource_count; ++resource_id) {
     const loom_low_register_packing_resource_t* resource =
         &descriptor_set->register_packing_resources[resource_id];
-    const uint16_t member_end = resource->member_start + resource->member_count;
-    const loom_low_register_packing_resource_member_t* capacity_member = NULL;
-    for (uint16_t member_index = resource->member_start;
-         member_index < member_end; ++member_index) {
-      const loom_low_register_packing_resource_member_t* member =
-          &descriptor_set->register_packing_resource_members[member_index];
-      if (iree_any_bit_set(
-              member->flags,
-              LOOM_LOW_REGISTER_PACKING_RESOURCE_MEMBER_FLAG_CAPACITY_SOURCE)) {
-        IREE_ASSERT_EQ(capacity_member, NULL);
-        capacity_member = member;
-      }
-    }
-    IREE_ASSERT_NE(capacity_member, NULL);
+    const loom_low_register_packing_resource_member_t* capacity_member =
+        &descriptor_set->register_packing_resource_members
+             [resource->capacity_member_index];
     const uint32_t source_capacity =
         loom_low_allocation_target_constraints_reg_class_schedulable_unit_capacity(
             state->allocation_constraints, capacity_member->reg_class_id);

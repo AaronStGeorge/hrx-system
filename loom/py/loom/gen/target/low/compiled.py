@@ -39,7 +39,6 @@ from loom.target.low_descriptors import (
     RegClassAltFlag,
     RegisterPackingResource,
     RegisterPackingResourceFlag,
-    RegisterPackingResourceMemberFlag,
     RegisterPart,
     Resource,
     ScheduleClass,
@@ -70,6 +69,8 @@ class CompiledRegisterPackingResource:
     member_start: int
     # Number of register-class contribution rows.
     member_count: int
+    # Packed member-table row providing the physical capacity domain.
+    capacity_member_index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,8 +81,6 @@ class CompiledRegisterPackingResourceMember:
     register_unit_count: int
     # Packing-resource units consumed by one contribution group.
     resource_unit_count: int
-    # Immutable properties derived during descriptor generation.
-    flags: tuple[RegisterPackingResourceMemberFlag, ...]
 
 
 @dataclass(frozen=True, slots=True)

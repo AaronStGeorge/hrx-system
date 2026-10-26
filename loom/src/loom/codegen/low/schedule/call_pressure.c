@@ -80,28 +80,6 @@ static bool loom_low_schedule_call_pressure_class_limit(
   return *out_limit != UINT32_MAX;
 }
 
-static const loom_low_register_packing_resource_member_t*
-loom_low_schedule_call_pressure_resource_capacity_member(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_register_packing_resource_t* resource) {
-  const loom_low_register_packing_resource_member_t* capacity_member = NULL;
-  const uint16_t member_end = resource->member_start + resource->member_count;
-  for (uint16_t member_index = resource->member_start;
-       member_index < member_end; ++member_index) {
-    const loom_low_register_packing_resource_member_t* member =
-        &descriptor_set->register_packing_resource_members[member_index];
-    if (!iree_any_bit_set(
-            member->flags,
-            LOOM_LOW_REGISTER_PACKING_RESOURCE_MEMBER_FLAG_CAPACITY_SOURCE)) {
-      continue;
-    }
-    IREE_ASSERT_EQ(capacity_member, NULL);
-    capacity_member = member;
-  }
-  IREE_ASSERT_NE(capacity_member, NULL);
-  return capacity_member;
-}
-
 static iree_host_size_t loom_low_schedule_call_pressure_build_limits(
     const loom_low_schedule_build_state_t* state,
     const loom_low_call_contract_t* contract,
@@ -148,8 +126,8 @@ static iree_host_size_t loom_low_schedule_call_pressure_build_limits(
     const loom_low_register_packing_resource_t* resource =
         &descriptor_set->register_packing_resources[resource_id];
     const loom_low_register_packing_resource_member_t* capacity_member =
-        loom_low_schedule_call_pressure_resource_capacity_member(descriptor_set,
-                                                                 resource);
+        &descriptor_set->register_packing_resource_members
+             [resource->capacity_member_index];
     const uint32_t preserved_member_capacity =
         loom_low_allocation_target_constraints_reg_class_call_preserved_unit_capacity(
             state->allocation_constraints, capacity_member->reg_class_id,

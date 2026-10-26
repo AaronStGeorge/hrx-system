@@ -143,10 +143,6 @@ class RegisterPackingResourceFlag(CEnum):
     )
 
 
-class RegisterPackingResourceMemberFlag(CEnum):
-    CAPACITY_SOURCE = "LOOM_LOW_REGISTER_PACKING_RESOURCE_MEMBER_FLAG_CAPACITY_SOURCE"
-
-
 class ImmediateKind(CEnum):
     SIGNED = "LOOM_LOW_IMMEDIATE_KIND_SIGNED"
     UNSIGNED = "LOOM_LOW_IMMEDIATE_KIND_UNSIGNED"

@@ -69,7 +69,6 @@ from loom.target.low_descriptors import (
     RegisterPackingResource,
     RegisterPackingResourceFlag,
     RegisterPackingResourceMember,
-    RegisterPackingResourceMemberFlag,
     ScheduleModel,
     StorageLease,
     StorageLeaseAttachment,
@@ -773,21 +772,38 @@ def test_compiler_emits_register_packing_resources() -> None:
     assert resource.capacity == 2
     assert resource.member_start == 0
     assert resource.member_count == 2
+    assert resource.capacity_member_index == 0
     assert resource.flags == (
         RegisterPackingResourceFlag.UNSPILLABLE,
         RegisterPackingResourceFlag.HAS_AGGREGATE_MEMBER,
     )
     assert [compiled.reg_classes[member.reg_class_id].name for member in compiled.register_packing_resource_members] == ["test.packed.narrow", "test.packed.wide"]
     assert [(member.register_unit_count, member.resource_unit_count) for member in compiled.register_packing_resource_members] == [(1, 1), (2, 1)]
-    assert [member.flags for member in compiled.register_packing_resource_members] == [
-        (RegisterPackingResourceMemberFlag.CAPACITY_SOURCE,),
-        (),
-    ]
 
     generated = generate_descriptor_set(TEST_LOW_CORE_DESCRIPTOR_SET)
     assert "kTestLowCoreRegisterPackingResources" in generated.source
     assert "kTestLowCoreRegisterPackingResourceMembers" in generated.source
     assert ".register_packing_resource_count = IREE_ARRAYSIZE(" in generated.source
+
+
+@pytest.mark.parametrize("capacity_register_class", ["test.packed.narrow", "test.packed.wide"])
+@pytest.mark.parametrize("reverse_members", [False, True])
+def test_compiler_indexes_packing_capacity_members(capacity_register_class: str, reverse_members: bool) -> None:
+    source = TEST_LOW_CORE_DESCRIPTOR_SET
+    resource = source.register_packing_resources[0]
+    members = tuple(reversed(resource.members)) if reverse_members else resource.members
+    resources = tuple(replace(resource, name=f"test.pair_slots_{index}", capacity_register_class=capacity_register_class, members=members) for index in range(2))
+    source = replace(source, register_packing_resources=resources)
+    compiled = compiler.compile_descriptor_set(source)
+    member_offset = [member.register_class for member in members].index(capacity_register_class)
+    for index, resource in enumerate(compiled.register_packing_resources):
+        assert resource.capacity_member_index == index * len(members) + member_offset
+        capacity_member = compiled.register_packing_resource_members[resource.capacity_member_index]
+        assert compiled.reg_classes[capacity_member.reg_class_id].name == capacity_register_class
+
+    generated = generate_descriptor_set(source)
+    for resource in compiled.register_packing_resources:
+        assert f".capacity_member_index = {resource.capacity_member_index}," in generated.source
 
 
 @pytest.mark.parametrize("spillable_members", [(), ("test.packed.narrow",), ("test.packed.wide",), ("test.packed.narrow", "test.packed.wide")])

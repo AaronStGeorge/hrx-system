@@ -70,7 +70,6 @@ from loom.target.low_descriptors import (
     RegClassAltFlag,
     RegClassFlag,
     RegisterPackingResourceFlag,
-    RegisterPackingResourceMemberFlag,
     Resource,
     ResourceKind,
     ScheduleClass,
@@ -1657,7 +1656,6 @@ def compile_descriptor_set(
                 reg_class_id=reg_class_ids[member.register_class],
                 register_unit_count=member.register_unit_count,
                 resource_unit_count=member.resource_unit_count,
-                flags=((RegisterPackingResourceMemberFlag.CAPACITY_SOURCE,) if member.register_class == resource.capacity_register_class else ()),
             )
             for member in resource.members
         )
@@ -1668,6 +1666,7 @@ def compile_descriptor_set(
                 flags=tuple(resource_flags),
                 member_start=member_start,
                 member_count=len(resource.members),
+                capacity_member_index=member_start + next(index for index, member in enumerate(resource.members) if member.register_class == resource.capacity_register_class),
             )
         )
 
