@@ -1261,7 +1261,12 @@ static iree_status_t loom_serve_text_chat_parameter_value(
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       tool->properties, 1, &property,
       LOOM_SERVE_TEXT_CHAT_FIELDS_IGNORE_UNKNOWN));
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&property));
+  if (!property.value.data) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "generated tool '%.*s' uses undeclared parameter '%.*s'",
+        (int)tool->name.size, tool->name.data, (int)name.size, name.data);
+  }
   loom_serve_text_chat_field_t schema[] = {
       {"type", LOOM_SERVE_TEXT_CHAT_STRING}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
@@ -1363,8 +1368,10 @@ static iree_status_t loom_serve_text_chat_parameters_parse(
     for (iree_host_size_t i = 0; i < names.count && iree_status_is_ok(status);
          ++i) {
       if (iree_string_view_equal(names.values[i], name)) {
-        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                  "duplicate generated parameter");
+        status = iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "generated tool '%.*s' repeats parameter '%.*s'",
+            (int)tool->name.size, tool->name.data, (int)name.size, name.data);
       }
     }
     iree_host_size_t required_capacity = 0;
@@ -1460,7 +1467,8 @@ static iree_status_t loom_serve_text_chat_parse_xml(
     }
     if (iree_status_is_ok(status) && !tool) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "unknown generated tool call");
+                                "generated tool '%.*s' is not declared",
+                                (int)name.size, name.data);
     }
     iree_string_builder_reset(&arguments);
     if (iree_status_is_ok(status)) {

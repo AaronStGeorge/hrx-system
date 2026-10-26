@@ -428,9 +428,11 @@ loom_cc_test(
     srcs = ["chat_test.cc"],
     deps = [
         ":chat",
+        "//loom/src/loom/serve/runtime/program",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
     ],
 )
 

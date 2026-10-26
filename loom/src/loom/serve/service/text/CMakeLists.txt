@@ -496,6 +496,8 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm
+    loom::serve::runtime::program
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

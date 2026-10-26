@@ -20,6 +20,7 @@ static iree_status_t loom_serve_text_http_quote(iree_string_builder_t* output,
 // failures have already been copied for owner publication; failure to construct
 // the response propagates.
 static iree_status_t loom_serve_text_http_error(iree_status_t failure,
+                                                const char* type,
                                                 iree_string_builder_t* output) {
   iree_status_t status =
       iree_string_builder_append_cstring(output, "{\"error\":{\"message\":");
@@ -32,8 +33,8 @@ static iree_status_t loom_serve_text_http_error(iree_status_t failure,
     status = loom_serve_text_http_quote(output, message);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_cstring(
-        output, ",\"type\":\"loom_request_error\"}}");
+    status =
+        iree_string_builder_append_format(output, ",\"type\":\"%s\"}}", type);
   }
   iree_status_free(failure);
   return status;
@@ -53,7 +54,8 @@ static iree_status_t loom_serve_text_http_reply_failure(
       "close\r\n\r\n",
       code, reason);
   if (iree_status_is_ok(status)) {
-    status = loom_serve_text_http_error(failure, &response);
+    status =
+        loom_serve_text_http_error(failure, "loom_request_error", &response);
   } else {
     status = iree_status_join(status, failure);
   }
@@ -195,7 +197,8 @@ static iree_status_t loom_serve_text_http_fail(
           : "HTTP/1.1 500 Internal Server Error\r\n"
             "Content-Type: application/json\r\nConnection: close\r\n\r\n");
   if (iree_status_is_ok(status)) {
-    status = loom_serve_text_http_error(failure, &consumer->packet);
+    status = loom_serve_text_http_error(failure, "loom_output_error",
+                                        &consumer->packet);
   } else {
     status = iree_status_join(status, failure);
   }
