@@ -88,6 +88,51 @@ Continue with [fetch and serve a model](../serving/workflows/fetch-and-serve.md)
 for a complete speech-recognition request, or [run your first
 kernel](first-kernel.md) to author and execute Loom programs.
 
+### Check device access inside a sandbox
+
+Device discovery and execution access are separate. For example:
+
+```sh
+loom-run --list_devices=xdna
+```
+
+An NPU can appear in this list through host discovery metadata even when the
+process cannot open it. On Linux, a container or agent sandbox needs the host's
+selected `/dev/accel/accelN` device node, permission to open it for reading and
+writing, and a device-access policy that allows it. Seeing `/sys/class/accel`
+does not provide that access. GPU exposure through `/dev/kfd` and `/dev/dri`
+does not expose the NPU.
+
+Inspect the selected node from the same environment that will run the server:
+
+```sh
+ls -ld /sys/class/accel /dev/accel
+ls -l /dev/accel/accel0
+id
+```
+
+Here `accel0` is an example; use the node for the intended device. If it exists
+on the host but not inside the sandbox, the launcher owns exposing it. If it
+is visible but opening it returns `EACCES` or `EPERM`, check the account's access
+and the sandbox's device policy. An `ENOENT` while opening the accelerator node
+means the path is absent; changing model programs or tokenizer files cannot
+repair it. The launcher may need to recreate the sandbox after its device
+configuration changes.
+
+Starting an empty server checks device creation before downloading weights or
+debugging a model. For the first discovered NPU:
+
+```sh
+loom-serve --device=xdna://0 --pool_backing=fixed --listen=127.0.0.1:8080
+```
+
+The listener's `ready` record establishes server/device startup, not model
+execution. A registered model's readiness and a completed inference request
+establish the later steps. Device creation can also reject an incompatible
+host driver or firmware; the [native AMD requirements](https://github.com/ROCm/hrx-system/tree/main/libamdf#native-drivers)
+describe those prerequisites. Ctrl-C stops the empty server. Windows uses its
+native device-access mechanism, not Linux device-node mounts.
+
 ## Building from source
 
 Compiler contributors can build the tools from the

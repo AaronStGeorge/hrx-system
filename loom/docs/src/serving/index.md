@@ -154,6 +154,11 @@ programs rather than assuming a GPU command program also runs on the NPU.
 Device-group membership alone does not distribute a model or share its memory
 between members.
 
+Discovery does not prove that a container or agent sandbox can open a device.
+The [device-access checklist](../getting-started/acquiring-loom.md#check-device-access-inside-a-sandbox)
+separates compiled drivers, discovered hardware, device-node access, and an
+empty server's successful startup from model execution.
+
 Elastic backing supports shared physical-memory budgets and reclamation of idle,
 unpinned parameters on task and AMDGPU. It requires virtual reservations,
 mapping-source allocations, and bind/unbind operations from the selected device.

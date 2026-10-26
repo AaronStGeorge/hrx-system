@@ -109,6 +109,41 @@ approval can be delayed. Fetch never accepts terms on your behalf. In scripts,
 `--no-input` fails with the required action instead of waiting for a terminal.
 `--wait-for-access` explicitly enables automatic rechecking for unattended use.
 
+### Resolve publication and access failures
+
+A card URL, publisher approval, and downloader credentials are separate inputs.
+If a GitHub card or its adjacent lock returns HTTP 404, check that both files
+are published at the selected path and revision. A local checkout or unmerged
+branch can contain a model that is not on the published branch. The pinned
+example above keeps the card, lock, programs, and recording together; changing
+only the card's revision does not update the rest of that example.
+
+For a Hugging Face access request, approval belongs to the account downloading
+the files. Browser approval with one account does not authorize another account's
+credential. In the environment performing acquisition, these commands identify
+the effective account and establish a saved login:
+
+```sh
+hf auth whoami
+hf auth login
+```
+
+An `HF_TOKEN` environment variable overrides the saved login. With `--json`,
+the fetch access diagnostic reports the credential source, not its value. After
+changing an environment override, restart fetch so it sees the new environment.
+A container or agent sandbox may intentionally have no access to the host's
+saved login.
+Acquisition can instead run in an authorized host shell with
+`--materialize=copy`, followed by exposing that self-contained installation to
+the server. Serving local files requires no Hugging Face credential.
+
+Without `--wait-for-access`, `--no-input` reports an unmet access requirement and
+exits unsuccessfully. It does not accept terms for the user. `--wait-for-access`
+is the explicit waiting policy, not a remedy for a missing published file. The
+publisher's [gated-model instructions](https://huggingface.co/docs/hub/models-gated)
+explain approval, and the [authentication guide](https://huggingface.co/docs/huggingface_hub/guides/cli#hf-auth-login)
+describes credential setup.
+
 ## Start the server
 
 ```sh
