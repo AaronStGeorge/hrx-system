@@ -98,8 +98,6 @@ loom_cc_benchmark(
     loom::ir
     loom::ops::test
     loom::util::stream
-  ARGS
-    "--benchmark_filter=BM_((ScalarType|LocationTag)Classify.*|Predicate(Classify|Name).*|(Parse|Print)(ScalarTypes|ShapedTypes|TaggedLocations)/16)"
   TESTONLY
 )
 

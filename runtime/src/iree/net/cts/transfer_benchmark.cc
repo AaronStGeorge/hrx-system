@@ -126,9 +126,9 @@ class TransferBenchmarks {
               RunBenchmark(state, create_proactor, policy, consumer_mode);
             })
             ->ArgNames({"peers", "bytes", "batch", "window", "sg", "records"})
+            ->Args({1, 64, 32, 128, 1, 2048})
             ->Args({1, 64, 1, 1, 1, 2048})
             ->Args({1, 64, 1, 128, 1, 2048})
-            ->Args({1, 64, 32, 128, 1, 2048})
             ->Args({16, 64, 1, 128, 1, 2048})
             ->Args({16, 64, 32, 128, 1, 2048})
             ->Args({1, 4096, 16, 128, 4, 1024})

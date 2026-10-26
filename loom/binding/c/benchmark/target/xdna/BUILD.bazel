@@ -19,9 +19,6 @@ package(
 loom_cc_benchmark(
     name = "compile_throughput_benchmark",
     srcs = ["compile_throughput_benchmark.cc"],
-    args = [
-        "--benchmark_filter=Smoke|BM_FfnGateUpQuadraticBF16/CompileAndEmit/.*/1/512/",
-    ],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/emit:xdna_artifacts",
     ]),

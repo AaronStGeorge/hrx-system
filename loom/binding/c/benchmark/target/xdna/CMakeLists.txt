@@ -23,8 +23,6 @@ loom_cc_benchmark(
     loom::binding::c::benchmark::workload_compile_benchmark
     loom::binding::c::loomc
     loom::binding::c::target::amd::xdna
-  ARGS
-    "--benchmark_filter=Smoke|BM_FfnGateUpQuadraticBF16/CompileAndEmit/.*/1/512/"
   TESTONLY
 )
 endif()

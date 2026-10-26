@@ -676,7 +676,6 @@ loom_cc_benchmark(
     name = "allocation_benchmark",
     size = "medium",
     srcs = ["allocation_benchmark.cc"],
-    args = ["--benchmark_filter=^LowAllocation/(linear/model/length:8/components:1/width:1|loop/allocation/length:8/components:1/width:1|loop_relocation/allocation/length:1/components:32/width:1|leased_alias_tree/allocation/length:32/components:1/width:1)"],
     deps = [
         ":allocation",
         ":function_model",
@@ -1107,8 +1106,6 @@ loom_cc_library(
 loom_cc_benchmark(
     name = "source_memory_plan_benchmark",
     srcs = ["source_memory_plan_benchmark.cc"],
-    # Large producer/refinement/access sweeps are explicit benchmark runs.
-    args = ["--benchmark_filter=^(BM_AnalyzeAndPlanSymbolicMemory/16/16|BM_AnalyzeAndPlanDigitMemory/(ConstantDivisor|RuntimeDivisor)/1/|BM_AnalyzeAndPlanRefinedMemory/1/8/1)"],
     deps = [
         ":source_memory_plan",
         "//loom/src/loom/analysis:view_regions",

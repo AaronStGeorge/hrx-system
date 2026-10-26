@@ -103,9 +103,6 @@ loom_cc_test(
 loom_cc_benchmark(
     name = "encoding_benchmark",
     srcs = ["encoding_benchmark.cc"],
-    args = [
-        "--benchmark_filter=BM_.*Encoding.*/32",
-    ],
     deps = [
         ":encoding",
         "//loom/src/loom/format/bytecode:reader",

@@ -315,10 +315,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_benchmark(
     name = "queue_benchmark",
     srcs = ["queue_benchmark.cc"],
-    args = [
-        "--benchmark_dry_run",
-        "--benchmark_filter=^(BM_Dispatch/(BindingsDefaultCompletion|AqlBindingsDefaultCompletion)/1/|BM_Execute/(DirectCompletion|AqlDirectCompletion)/1/|BM_Transfer/UploadDefaultCompletion/1/)",
-    ],
+    args = ["--benchmark_filter=^(BM_Dispatch/(BindingsDefaultCompletion|AqlBindingsDefaultCompletion)/1/|BM_Execute/(DirectCompletion|AqlDirectCompletion)/1/|BM_Transfer/UploadDefaultCompletion/1/)"],
     deps = [
         ":testdata",
         "//libamdf:amdf_static",

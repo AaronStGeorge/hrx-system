@@ -477,10 +477,6 @@ static void BM_LinkRequest_BodySize(benchmark::State& state) {
   BenchmarkLinkRequest(state);
 }
 
-static void BM_LinkRequest_Smoke(benchmark::State& state) {
-  BenchmarkLinkRequest(state);
-}
-
 static void LibraryUniverseScales(benchmark::Benchmark* benchmark) {
   for (int64_t library_symbols : {1, 16, 64, 512, 4096}) {
     benchmark->Args({library_symbols, 1, 0, 16});
@@ -509,10 +505,6 @@ BENCHMARK(BM_LinkRequest_RootCount)
                 "links/batch"});
 BENCHMARK(BM_LinkRequest_BodySize)
     ->Apply(BodySizeScales)
-    ->ArgNames({"library_symbols", "request_roots", "values/root",
-                "links/batch"});
-BENCHMARK(BM_LinkRequest_Smoke)
-    ->Args({16, 4, 4, 2})
     ->ArgNames({"library_symbols", "request_roots", "values/root",
                 "links/batch"});
 

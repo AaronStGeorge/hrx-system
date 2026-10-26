@@ -361,15 +361,12 @@ static std::unique_ptr<CompileScenario> CreateTunerFlowWorkspaceScenario(
                                              (iree_host_size_t)state.range(2));
 }
 
-static void BM_TunerFlowSmoke(::benchmark::State& state) {
-  RunCompileBenchmark(state, CreateTunerFlowScenario, nullptr);
-}
-BENCHMARK(BM_TunerFlowSmoke)->Args({1, 2})->Args({2, 4})->UseRealTime();
-
 static void BM_TunerFlow(::benchmark::State& state) {
   RunCompileBenchmark(state, CreateTunerFlowScenario, nullptr);
 }
 BENCHMARK(BM_TunerFlow)
+    ->Args({1, 2})
+    ->Args({2, 4})
     ->Args({1, 64})
     ->Args({2, 128})
     ->Args({4, 256})
@@ -380,18 +377,11 @@ BENCHMARK(BM_TunerFlow)
     ->Args({96, 6144})
     ->UseRealTime();
 
-static void BM_TunerFlowWorkspaceSmoke(::benchmark::State& state) {
-  RunCompileBenchmark(state, CreateTunerFlowWorkspaceScenario, nullptr);
-}
-BENCHMARK(BM_TunerFlowWorkspaceSmoke)
-    ->ArgsProduct({{1}, {2}, {32 * 1024, 64 * 1024, 128 * 1024}})
-    ->UseRealTime();
-
 static void BM_TunerFlowWorkspace(::benchmark::State& state) {
   RunCompileBenchmark(state, CreateTunerFlowWorkspaceScenario, nullptr);
 }
 BENCHMARK(BM_TunerFlowWorkspace)
-    ->ArgsProduct({{1}, {64}, {32 * 1024, 64 * 1024, 128 * 1024}})
+    ->ArgsProduct({{1}, {2, 64}, {32 * 1024, 64 * 1024, 128 * 1024}})
     ->UseRealTime();
 
 static std::unique_ptr<CompileScenario> CreateModelFlowScenario(
@@ -401,15 +391,12 @@ static std::unique_ptr<CompileScenario> CreateModelFlowScenario(
                                              (iree_host_size_t)state.range(2));
 }
 
-static void BM_ModelFlowSmoke(::benchmark::State& state) {
-  RunCompileBenchmark(state, CreateModelFlowScenario, nullptr);
-}
-BENCHMARK(BM_ModelFlowSmoke)->Args({1, 4, 1})->Args({2, 4, 1})->UseRealTime();
-
 static void BM_ModelFlow(::benchmark::State& state) {
   RunCompileBenchmark(state, CreateModelFlowScenario, nullptr);
 }
 BENCHMARK(BM_ModelFlow)
+    ->Args({1, 4, 1})
+    ->Args({2, 4, 1})
     ->Args({1, 32, 10})
     ->Args({2, 32, 10})
     ->Args({4, 32, 10})

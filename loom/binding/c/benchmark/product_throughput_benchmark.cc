@@ -388,22 +388,6 @@ static void BM_CommandProductRequestsUnrelatedCatalog(benchmark::State& state) {
   BM_CommandProductRequests(state);
 }
 
-static void BM_CommandProductBodyBlind_Smoke(benchmark::State& state) {
-  BM_CommandProductBodyBlind(state);
-}
-
-static void BM_CommandProductRequests_Smoke(benchmark::State& state) {
-  BM_CommandProductRequests(state);
-}
-
-static void BM_CommandRequestBodyBlind_Smoke(benchmark::State& state) {
-  BM_CommandRequestBodyBlind(state);
-}
-
-static void BM_CommandRequestRequests_Smoke(benchmark::State& state) {
-  BM_CommandRequestRequests(state);
-}
-
 BENCHMARK(BM_CommandProductBodyBlind)
     ->Apply(ProductScales)
     ->Complexity(benchmark::oN);
@@ -418,10 +402,6 @@ BENCHMARK(BM_CommandRequestRequests)
     ->Complexity(benchmark::oN);
 BENCHMARK(BM_CommandProductBodyBlindUnrelatedCatalog)->Apply(CatalogScales);
 BENCHMARK(BM_CommandProductRequestsUnrelatedCatalog)->Apply(CatalogScales);
-BENCHMARK(BM_CommandProductBodyBlind_Smoke)->Args({4, 4});
-BENCHMARK(BM_CommandProductRequests_Smoke)->Args({4, 4});
-BENCHMARK(BM_CommandRequestBodyBlind_Smoke)->Args({4, 4});
-BENCHMARK(BM_CommandRequestRequests_Smoke)->Args({4, 4});
 
 }  // namespace
 }  // namespace loomc::bench

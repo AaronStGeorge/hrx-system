@@ -120,18 +120,6 @@ BENCHMARK_TEMPLATE(BenchmarkModuleConfig, ConfigOperation::kSchema)
     ->Name("BM_ModuleConfigSchema")
     ->Arg(1)
     ->Arg(32);
-BENCHMARK_TEMPLATE(BenchmarkModuleConfig, ConfigOperation::kApply)
-    ->Name("BM_ModuleConfigApplySmoke")
-    ->Arg(1)
-    ->Iterations(1);
-BENCHMARK_TEMPLATE(BenchmarkModuleConfig, ConfigOperation::kRequireResolved)
-    ->Name("BM_ModuleConfigRequireResolvedSmoke")
-    ->Arg(1)
-    ->Iterations(1);
-BENCHMARK_TEMPLATE(BenchmarkModuleConfig, ConfigOperation::kSchema)
-    ->Name("BM_ModuleConfigSchemaSmoke")
-    ->Arg(1)
-    ->Iterations(1);
 
 }  // namespace
 }  // namespace loomc::bench
