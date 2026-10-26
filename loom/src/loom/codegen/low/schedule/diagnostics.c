@@ -223,11 +223,6 @@ static iree_status_t loom_low_schedule_emit_state_clobber(
                                 IREE_ARRAYSIZE(params));
 }
 
-static bool loom_low_schedule_interval_contains_point(
-    const loom_liveness_interval_t* interval, uint32_t point) {
-  return interval->start_point <= point && point < interval->end_point;
-}
-
 static iree_host_size_t loom_low_schedule_collect_pressure_contributors(
     const loom_low_schedule_table_t* table,
     const loom_liveness_analysis_t* liveness,
@@ -235,27 +230,24 @@ static iree_host_size_t loom_low_schedule_collect_pressure_contributors(
     iree_string_view_t* contributors) {
   iree_host_size_t contributor_count = 0;
   bool overflowed = false;
-  for (uint32_t point_attempt = 0; point_attempt < 2; ++point_attempt) {
-    if (point_attempt != 0 && contributor_count != 0) {
-      break;
+  for (loom_value_ordinal_t ordinal = 0; ordinal < liveness->value_count;
+       ++ordinal) {
+    const loom_liveness_interval_t* interval =
+        loom_liveness_interval_for_value_ordinal(liveness, ordinal);
+    if (interval == NULL ||
+        !loom_liveness_value_class_equal(interval->value_class,
+                                         summary->value_class) ||
+        !loom_liveness_segment_range_contains(
+            liveness->segments,
+            loom_liveness_segment_range_for_value_ordinal(liveness, ordinal),
+            summary->peak_point)) {
+      continue;
     }
-    if (point_attempt != 0 && summary->peak_point == UINT32_MAX) {
-      break;
-    }
-    uint32_t point = summary->peak_point + point_attempt;
-    for (iree_host_size_t i = 0; i < liveness->interval_count; ++i) {
-      const loom_liveness_interval_t* interval = &liveness->intervals[i];
-      if (!loom_liveness_value_class_equal(interval->value_class,
-                                           summary->value_class) ||
-          !loom_low_schedule_interval_contains_point(interval, point)) {
-        continue;
-      }
-      if (contributor_count < LOOM_LOW_SCHEDULE_MAX_PRESSURE_CONTRIBUTORS) {
-        contributors[contributor_count++] =
-            loom_low_diagnostic_value_name(table->module, interval->value_id);
-      } else {
-        overflowed = true;
-      }
+    if (contributor_count < LOOM_LOW_SCHEDULE_MAX_PRESSURE_CONTRIBUTORS) {
+      contributors[contributor_count++] =
+          loom_low_diagnostic_value_name(table->module, interval->value_id);
+    } else {
+      overflowed = true;
     }
   }
   if (overflowed &&

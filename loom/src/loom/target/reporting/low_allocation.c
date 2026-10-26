@@ -525,11 +525,6 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
   return status;
 }
 
-static bool loom_target_compile_report_interval_is_live_at_point(
-    const loom_liveness_interval_t* interval, uint32_t point) {
-  return interval->start_point <= point && point < interval->end_point;
-}
-
 static bool loom_target_compile_report_pressure_origin_row_matches(
     const loom_target_compile_report_pressure_origin_row_t* row,
     const loom_target_compile_report_pressure_origin_row_t* candidate) {
@@ -601,8 +596,11 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
       if (interval == NULL ||
           !loom_liveness_value_class_equal(interval->value_class,
                                            summary->value_class) ||
-          !loom_target_compile_report_interval_is_live_at_point(
-              interval, summary->peak_point)) {
+          !loom_liveness_segment_range_contains(
+              liveness->segments,
+              loom_liveness_segment_range_for_value_ordinal(
+                  liveness, (loom_value_ordinal_t)value_ordinal),
+              summary->peak_point)) {
         continue;
       }
       loom_target_compile_report_pressure_origin_info_t origin_info =

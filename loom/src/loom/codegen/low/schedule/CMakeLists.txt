@@ -234,6 +234,19 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    diagnostics_test
+  SRCS
+    "diagnostics_test.cc"
+  DEPS
+    ::schedule
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::error::error_defs
+    loom::error::parameter
+)
+
+loom_cc_test(
+  NAME
     block_test
   SRCS
     "block.h"
