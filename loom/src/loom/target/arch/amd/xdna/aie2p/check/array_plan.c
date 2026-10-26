@@ -732,16 +732,23 @@ static iree_status_t loom_aie2p_array_plan_check_resident_program_in_module(
       .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
       .low_asm_environment = low_asm_environment,
   };
-  for (iree_host_size_t i = 0; i < program.worker_count; ++i) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&request->result->actual_output, &stream);
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(resident_module, &printer);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < program.worker_count && iree_status_is_ok(status); ++i) {
     if (!low_only || i != 0) {
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-          &request->result->actual_output, "\n"));
+      status = loom_output_stream_write_char(&stream, '\n');
     }
-    IREE_RETURN_IF_ERROR(loom_text_print_operation_to_builder_with_options(
-        resident_module, program.workers[i].function_op,
-        &request->result->actual_output, &print_options));
+    if (iree_status_is_ok(status)) {
+      status = loom_text_printer_write_operation(
+          &printer, program.workers[i].function_op, &stream, &print_options);
+    }
   }
-  return iree_ok_status();
+  loom_text_printer_deinitialize(&printer);
+  return status;
 }
 
 static iree_status_t loom_aie2p_array_plan_check_resident_program(

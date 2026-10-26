@@ -67,22 +67,18 @@ static iree_status_t loom_liveness_json_write_scalar_name_or_null(
 }
 
 static iree_status_t loom_liveness_json_write_type(
-    const loom_module_t* module,
+    loom_text_printer_t* printer,
     const loom_text_print_options_t* type_print_options, loom_type_t type,
     loom_output_stream_t* stream) {
   loom_json_string_writer_t string;
   IREE_RETURN_IF_ERROR(loom_json_string_begin(stream, &string));
-  if (type_print_options) {
-    IREE_RETURN_IF_ERROR(loom_text_print_type_with_options(
-        type, module, &string.stream, type_print_options));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_text_print_type(type, module, &string.stream));
-  }
+  IREE_RETURN_IF_ERROR(loom_text_printer_write_type(
+      printer, type, &string.stream, type_print_options));
   return loom_json_string_end(&string);
 }
 
 static iree_status_t loom_liveness_json_write_value(
-    const loom_liveness_analysis_t* analysis,
+    const loom_liveness_analysis_t* analysis, loom_text_printer_t* printer,
     const loom_text_print_options_t* type_print_options,
     loom_value_id_t value_id, loom_output_stream_t* stream) {
   const loom_module_t* module = analysis->module;
@@ -99,7 +95,7 @@ static iree_status_t loom_liveness_json_write_value(
     IREE_RETURN_IF_ERROR(
         loom_json_object_begin_field(&object, IREE_SV("type")));
     IREE_RETURN_IF_ERROR(loom_liveness_json_write_type(
-        module, type_print_options, value->type, stream));
+        printer, type_print_options, value->type, stream));
   } else {
     IREE_RETURN_IF_ERROR(
         loom_json_object_write_null_field(&object, IREE_SV("name")));
@@ -210,14 +206,14 @@ static iree_status_t loom_liveness_json_write_block(
 }
 
 static iree_status_t loom_liveness_json_write_interval(
-    const loom_liveness_analysis_t* analysis,
+    const loom_liveness_analysis_t* analysis, loom_text_printer_t* printer,
     const loom_text_print_options_t* type_print_options,
     const loom_liveness_interval_t* interval, loom_output_stream_t* stream) {
   loom_json_object_writer_t object;
   IREE_RETURN_IF_ERROR(loom_json_object_begin(stream, &object));
   IREE_RETURN_IF_ERROR(loom_json_object_begin_field(&object, IREE_SV("value")));
   IREE_RETURN_IF_ERROR(loom_liveness_json_write_value(
-      analysis, type_print_options, interval->value_id, stream));
+      analysis, printer, type_print_options, interval->value_id, stream));
   IREE_RETURN_IF_ERROR(loom_json_object_begin_field(&object, IREE_SV("class")));
   IREE_RETURN_IF_ERROR(loom_liveness_json_write_value_class(
       analysis, interval->value_class, stream));
@@ -298,11 +294,20 @@ iree_status_t loom_liveness_format_json(
       loom_json_object_begin_field(&object, IREE_SV("intervals")));
   loom_json_array_writer_t intervals;
   IREE_RETURN_IF_ERROR(loom_json_array_begin(&stream, &intervals));
-  for (iree_host_size_t i = 0; i < analysis->interval_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_json_array_begin_element(&intervals));
-    IREE_RETURN_IF_ERROR(loom_liveness_json_write_interval(
-        analysis, type_print_options, &analysis->intervals[i], &stream));
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(analysis->module, &printer);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < analysis->interval_count && iree_status_is_ok(status); ++i) {
+    status = loom_json_array_begin_element(&intervals);
+    if (iree_status_is_ok(status)) {
+      status = loom_liveness_json_write_interval(
+          analysis, &printer, type_print_options, &analysis->intervals[i],
+          &stream);
+    }
   }
+  loom_text_printer_deinitialize(&printer);
+  IREE_RETURN_IF_ERROR(status);
   IREE_RETURN_IF_ERROR(loom_json_array_end(&intervals));
   IREE_RETURN_IF_ERROR(
       loom_json_object_begin_field(&object, IREE_SV("pressure_summaries")));
