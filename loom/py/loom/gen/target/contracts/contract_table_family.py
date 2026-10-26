@@ -38,7 +38,10 @@ from loom.target.contracts import compile_lower_rule_set  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate target contract and lower-rule C tables from Python data.")
+    parser = argparse.ArgumentParser(
+        description="Generate target contract and lower-rule C tables from Python data.",
+        fromfile_prefix_chars="@",
+    )
     parser.add_argument(
         "--contract-fragment",
         action="append",
