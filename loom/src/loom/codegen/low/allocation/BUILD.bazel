@@ -55,6 +55,7 @@ loom_cc_library(
     srcs = ["concat_affinity.c"],
     hdrs = ["concat_affinity.h"],
     deps = [
+        ":unit_liveness",
         "//loom/src/loom/codegen/low:placement",
         "//loom/src/loom/util:segmented_storage",
         "//runtime/src/iree/base",

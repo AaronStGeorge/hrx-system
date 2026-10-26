@@ -62,8 +62,12 @@ class LowConcatAffinityTest : public ::testing::Test {
         .storage_value_order_count =
             static_cast<loom_value_ordinal_t>(order.size()),
     };
-    return loom_low_allocation_concat_affinity_build(&placement, &arena_,
-                                                     out_affinity);
+    const loom_low_descriptor_set_t descriptor_set = {};
+    const loom_liveness_analysis_t empty_liveness = {};
+    const loom_low_allocation_unit_liveness_t empty_unit_liveness = {};
+    return loom_low_allocation_concat_affinity_build(
+        &descriptor_set, &placement, &empty_liveness, &empty_unit_liveness,
+        &arena_, out_affinity);
   }
 
   static loom_low_placement_relation_t Concat(loom_value_ordinal_t source,
@@ -144,17 +148,16 @@ TEST_F(LowConcatAffinityTest, RejectsAmbiguousUsers) {
   const auto leaf = Concat(0, 1, 0, 0, 2);
   const auto parent = Concat(1, 2, 0, 4, 2);
   loom_low_allocation_concat_affinity_t* affinity = nullptr;
-  IREE_ASSERT_OK(Build({leaf, parent, Concat(2, 3, 0, 0, 8), Edge(2, 4)},
-                       {4, 3, 2, 1, 0}, &affinity));
+  IREE_ASSERT_OK(
+      Build({leaf, parent, Concat(1, 3, 0, 0, 2)}, {3, 2, 1, 0}, &affinity));
   auto projected = leaf;
   EXPECT_FALSE(
       loom_low_allocation_concat_affinity_project(affinity, &projected));
   EXPECT_EQ(projected.result_ordinal, leaf.result_ordinal);
   EXPECT_EQ(projected.result_unit_offset, leaf.result_unit_offset);
-  IREE_ASSERT_OK(Build({leaf, parent, Edge(2, 3), Edge(2, 4)}, {4, 3, 2, 1, 0},
-                       &affinity));
-  EXPECT_FALSE(
-      loom_low_allocation_concat_affinity_project(affinity, &projected));
+  loom_low_placement_relation_t relation;
+  EXPECT_FALSE(loom_low_allocation_concat_affinity_relation_for_source(
+      affinity, parent.source_ordinal, &relation));
 }
 
 TEST_F(LowConcatAffinityTest, DisjointProjectionLeavesInputUnchanged) {
@@ -169,14 +172,20 @@ TEST_F(LowConcatAffinityTest, DisjointProjectionLeavesInputUnchanged) {
   EXPECT_EQ(projected.unit_count, leaf.unit_count);
 }
 
-TEST_F(LowConcatAffinityTest, RequiresBothConcatsAndTransfers) {
+TEST_F(LowConcatAffinityTest, RetainsDirectConcatWithoutTransfer) {
   const auto leaf = Concat(0, 1, 0, 0, 2);
   loom_low_allocation_concat_affinity_t* affinity = nullptr;
   IREE_ASSERT_OK(Build({leaf}, {1, 0}, &affinity));
-  EXPECT_EQ(affinity, nullptr);
-  auto projected = leaf;
-  EXPECT_FALSE(
-      loom_low_allocation_concat_affinity_project(affinity, &projected));
+  ASSERT_NE(affinity, nullptr);
+  loom_low_placement_relation_t relation;
+  ASSERT_TRUE(loom_low_allocation_concat_affinity_relation_for_source(
+      affinity, leaf.source_ordinal, &relation));
+  EXPECT_EQ(relation.source_ordinal, leaf.source_ordinal);
+  EXPECT_EQ(relation.result_ordinal, leaf.result_ordinal);
+  EXPECT_EQ(relation.source_unit_offset, leaf.source_unit_offset);
+  EXPECT_EQ(relation.result_unit_offset, leaf.result_unit_offset);
+  EXPECT_EQ(relation.unit_count, leaf.unit_count);
+  EXPECT_TRUE(loom_low_placement_relation_can_alias(&relation));
   IREE_ASSERT_OK(Build({Edge(0, 1)}, {1, 0}, &affinity));
   EXPECT_EQ(affinity, nullptr);
 }

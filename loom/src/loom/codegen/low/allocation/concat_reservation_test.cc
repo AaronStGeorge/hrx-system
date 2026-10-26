@@ -222,7 +222,8 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
         loom_low_allocation_assignment_t reservation;
         IREE_EXPECT_OK(loom_low_allocation_concat_reservation_find(
             &context, &intervals[0], &relations[0], &intervals[2],
-            &result_ranges[2], &reservation_sources, &reservation));
+            &result_ranges[2], &reservation_sources,
+            /*source_has_unique_affinity_path=*/false, &reservation));
         if (future_start == 5) {
           EXPECT_EQ(reservation.value_id, value_ids[2]);
           EXPECT_EQ(reservation.location_count, 4u);
@@ -270,7 +271,8 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
     loom_low_allocation_assignment_t reservation;
     IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
         &context, &intervals[0], &relations[0], &intervals[2],
-        &result_ranges[2], &reservation_sources, &reservation));
+        &result_ranges[2], &reservation_sources,
+        /*source_has_unique_affinity_path=*/false, &reservation));
     EXPECT_EQ(reservation.value_id, value_ids[2]);
     EXPECT_EQ(reservation.location_base, tier_limit == 8 ? 3u : 4u);
   }
@@ -295,7 +297,8 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
     loom_low_allocation_assignment_t reservation;
     IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
         &context, &intervals[0], &relations[0], &intervals[2],
-        &result_ranges[2], &reservation_sources, &reservation));
+        &result_ranges[2], &reservation_sources,
+        /*source_has_unique_affinity_path=*/false, &reservation));
     EXPECT_EQ(reservation.value_id, LOOM_VALUE_ID_INVALID);
   }
 
@@ -376,7 +379,8 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   loom_low_allocation_assignment_t swept_reservation;
   IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
       &context, &intervals[1], &relations[1], &intervals[2], &result_ranges[2],
-      &reservation_sources, &swept_reservation));
+      &reservation_sources, /*source_has_unique_affinity_path=*/false,
+      &swept_reservation));
   EXPECT_EQ(swept_reservation.value_id, value_ids[2]);
   EXPECT_EQ(swept_reservation.location_base, 2u);
 

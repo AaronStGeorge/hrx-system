@@ -56,6 +56,7 @@ loom_cc_library(
   SRCS
     "concat_affinity.c"
   DEPS
+    ::unit_liveness
     iree::base
     iree::base::internal::arena
     loom::codegen::low::placement
