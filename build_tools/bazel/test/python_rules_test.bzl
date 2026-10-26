@@ -165,6 +165,9 @@ def _test_windows_runtime_is_tree_compacted(name):
     )
     analysis_test(
         name = name,
+        attr_values = {
+            "target_compatible_with": ["@platforms//os:windows", "@platforms//cpu:x86_64"],
+        },
         config_settings = {
             str(Label("//build_tools/bazel:sanitizer")): False,
             "//command_line_option:cc_output_directory_tag": "",
@@ -194,6 +197,9 @@ def _test_windows_debug_runtime_retains_symbols(name):
     )
     analysis_test(
         name = name,
+        attr_values = {
+            "target_compatible_with": ["@platforms//os:windows", "@platforms//cpu:x86_64"],
+        },
         config_settings = {
             str(Label("//build_tools/bazel:python_runtime_debug")): True,
             str(Label("//build_tools/bazel:sanitizer")): False,
