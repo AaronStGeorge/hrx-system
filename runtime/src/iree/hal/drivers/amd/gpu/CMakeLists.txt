@@ -129,6 +129,7 @@ iree_cc_test(
     iree::base::threading
     iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::queue::aql::code
     iree::hal::drivers::amd::gpu::queue::sdma::queue
     iree::testing::gtest
     iree::testing::gtest_main

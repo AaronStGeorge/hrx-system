@@ -33,6 +33,19 @@ iree_status_t iree_hal_amd_gpu_aql_code_allocate(
 iree_status_t iree_hal_amd_gpu_aql_code_publish(
     iree_hal_amd_gpu_aql_code_t* code, iree_hal_amd_fabric_memory_t* memory);
 
+// Closes code publication and wakes its synchronous loading caller so it can
+// return a failed result and relinquish the native publisher. No native access
+// cessation is implied. NULL represents a device without this private queue.
+amdf_status_t iree_hal_amd_gpu_aql_code_close(iree_hal_amd_gpu_aql_code_t* code,
+                                              amdf_status_t failure);
+
+// Attempts to join the loading publisher and stops its native queue while code
+// backing stays retained. False means a loading caller still owns publication;
+// true supplies the sticky native stop result. The parent retains this owner
+// until ordinary final teardown, including on failure.
+bool iree_hal_amd_gpu_aql_code_try_inactivate(iree_hal_amd_gpu_aql_code_t* code,
+                                              amdf_status_t* out_status);
+
 // Called after all loaders have returned. Success joins native notification
 // tails and frees the owner; failure preserves it and its context. NULL is
 // safe.

@@ -39,7 +39,9 @@ iree_status_t iree_hal_amd_gpu_code_allocate(
 //
 // Consumes upload on every outcome. Successful copies submit staging release
 // without waiting for the native allocator. An accepted-but-unretired failure
-// preserves both allocations and clears memory's native handles: the failed
+// transfers both existing operands into the copy's retained upload record and
+// clears memory's native handles. Final failed retirement releases that record
+// and both operands; an unproven native stop keeps them owned. The failed
 // executable can be destroyed without releasing a possible GPU operand.
 // Mapped code needs no queue and allocates no upload metadata.
 iree_status_t iree_hal_amd_gpu_code_publish(
