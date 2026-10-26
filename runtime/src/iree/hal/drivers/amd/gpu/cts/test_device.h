@@ -56,6 +56,13 @@ class NativeMemoryGate {
       uint64_t maximum_byte_length = UINT64_MAX,
       amdf_native_lifetime_t lifetime = AMDF_NATIVE_LIFETIME_PROCESS);
 
+  // Selects this serial fixture's forwarding policy before native operations.
+  // All users must be quiescent before switching the process-wide API table.
+  void Activate(uint64_t maximum_byte_length = UINT64_MAX);
+
+  // Clears this fixture's forwarding policy after all borrowers have joined.
+  void Deactivate();
+
   // PROCESS native bindings share one fabric across fixtures, as the registered
   // driver does. Reopening a different render file cannot replace that VM.
   static iree_status_t AcquireProcessFabric(iree_hal_amd_fabric_t** out_fabric);
@@ -74,7 +81,7 @@ class NativeMemoryGate {
   };
 
   // Removes host publication for local code without changing native backing.
-  void RequireCodeUpload() { require_code_upload_ = true; }
+  void RequireCodeUpload() { require_code_upload_.store(true); }
 
   MemoryUsage ResetPeak();
   MemoryUsage QueryUsage();
@@ -114,17 +121,23 @@ class NativeMemoryGate {
   static amdf_status_t AMDF_CALL DestroyMemory(
       amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info);
 
+  static iree_status_t QueryNativeApi(const amdf_api_t** out_api);
+
   // Exact native API table, borrowed for all forwarded calls.
   inline static const amdf_api_t* native_api_ = nullptr;
+  // Publishes the native API exactly once before forwarding workers start.
+  inline static std::once_flag native_api_once_;
+  // Cached result from the one native API query.
+  inline static amdf_status_t native_api_status_ = AMDF_STATUS_OK;
   // Same native API with an allocation-entry gate, never a substitute
   // allocator.
   amdf_api_t forwarding_api_ = {};
   // Maximum backing size advertised and accepted by this native dependency.
-  uint64_t maximum_byte_length_ = UINT64_MAX;
+  std::atomic<uint64_t> maximum_byte_length_{UINT64_MAX};
   // Exercise staged loading even on a device with a usable CPU aperture.
-  bool require_code_upload_ = false;
+  std::atomic<bool> require_code_upload_{false};
   // Serial fixture identity required by the native ABI's context-free table.
-  inline static NativeMemoryGate* active_ = nullptr;
+  inline static std::atomic<NativeMemoryGate*> active_{nullptr};
   // One-shot hold consumed by the next native backing acquisition.
   std::atomic<bool> hold_{false};
   // Publishes entry and thread identity of the held native call.
@@ -191,6 +204,8 @@ struct CompletionPause {
 class GpuNativeTest : public ::testing::Test {
  protected:
   // Native packet protocol exercised by this fixture, independent of ISA.
+  // UNKNOWN accepts any compute protocol and lets device creation select the
+  // production default for the endpoint architecture.
   virtual amdf_queue_command_type_t command_type() const {
     return AMDF_QUEUE_COMMAND_TYPE_GPU_PM4;
   }

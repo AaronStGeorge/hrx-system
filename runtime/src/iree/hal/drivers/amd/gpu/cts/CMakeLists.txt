@@ -522,6 +522,7 @@ iree_cc_binary_benchmark(
     iree::third_party::google_benchmark
   ARGS
     "--benchmark_dry_run"
+    "--benchmark_filter=^(BM_Dispatch/(BindingsDefaultCompletion|AqlBindingsDefaultCompletion)/1/|BM_Execute/(DirectCompletion|AqlDirectCompletion)/1/|BM_Transfer/UploadDefaultCompletion/1/)"
   TESTONLY
   LABELS
     "iree-build-requirement=runtime.hal.amd_gpu"

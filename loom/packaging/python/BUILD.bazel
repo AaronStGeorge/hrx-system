@@ -99,6 +99,7 @@ loom_native_files(
         "@platforms//os:linux": "@patchelf//:patchelf",
         "//conditions:default": None,
     }),
+    tags = ["manual"],
 )
 
 filegroup(
@@ -134,6 +135,7 @@ loom_python_wheel(
 iree_py_binary(
     name = "manylinux",
     srcs = ["manylinux.py"],
+    tags = ["manual"],
     visibility = ["//visibility:private"],
     deps = ["@loom_wheel_pip//auditwheel"],
 )
@@ -141,6 +143,7 @@ iree_py_binary(
 manylinux_wheel(
     name = "manylinux_wheel",
     platform = "manylinux_2_39_x86_64",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -154,6 +157,7 @@ alias(
         ":linux_x86_64": ":manylinux_wheel",
         ":windows_x86_64": ":wheel",
     }),
+    tags = ["manual"],
 )
 
 iree_py_library(
