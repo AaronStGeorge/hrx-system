@@ -80,6 +80,7 @@ def loom_python_wheel(name, version, catalog = "", testonly = False):
         stamp = 0,
         strip_path_prefixes = ["loom/py"],
         summary = "Loom compiler, serving and authoring tools, and Python SDK",
+        tags = ["manual"],
         twine_binary = None,
         version = _distribution_version(version),
         deps = [
