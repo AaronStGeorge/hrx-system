@@ -89,8 +89,8 @@ typedef struct loom_serve_registration_t {
   // Advances explicit warmup after admitted service activity has retired.
   // Capacity waiting owns no device work; submitted readiness owes an owner
   // wake. Cancellation withdraws admission or joins accepted work. Terminal
-  // native failure preserves resources until retirement and terminates shared
-  // serving. A source preparation failure instead transfers a diagnostic to
+  // native failure preserves resources until that registration retires. A
+  // source preparation failure instead transfers a diagnostic to
   // out_component_status and completes without failing the parent service;
   // the component retains its own diagnostic for observation. The registry
   // checks the factory's shared failure channel before keeping service open.
@@ -104,7 +104,8 @@ typedef struct loom_serve_registration_t {
   // recreate fixed backing. Nonterminal success owes an owner wake after native
   // release or ownership retirement; repeated calls join that operation.
   // Called only when its snapshot permits deactivation. No wait.
-  // Failure terminates shared serving through normal owner draining.
+  // Failure retires the registration; shared-resource failure is reported
+  // independently by the factory.
   iree_status_t (*deactivate)(void* self,
                               loom_serve_model_component_t component,
                               bool* out_complete);
@@ -131,9 +132,9 @@ typedef struct loom_serve_registration_factory_t {
                           loom_serve_telemetry_stream_t* stream,
                           iree_allocator_t host_allocator,
                           loom_serve_registration_t* out_registration);
-  // Optional shared-resource failure query after preparation fails. Returns
-  // owned terminal failure if preparation disturbed shared backing, otherwise
-  // OK so source/package errors remain local. Never guesses from status codes,
+  // Optional shared-resource failure query after a model operation fails.
+  // Returns owned terminal failure if shared backing was disturbed, otherwise
+  // OK so the registration retires independently. Never guesses from codes,
   // clears failure, waits or releases ownership. The factory owns this evidence
   // independently of any model that may have failed before service publication.
   iree_status_t (*query_status)(void* self);
@@ -365,17 +366,24 @@ bool loom_serve_registry_has_component(
     const loom_serve_registered_model_t* model,
     loom_serve_model_component_t component);
 
-// Returns STOPPING only for abort or after graceful admitted work has finished.
+// Returns STOPPING for failure, abort, or completed graceful work.
 // The router still owns held claims and external tokenizer lifetimes.
 loom_serve_service_flags_t loom_serve_registry_service_flags(
     const loom_serve_registered_model_t* model);
 
+// Consumes a terminal operation error and seals this managed model's admission.
+// Accepted service, tokenizer, and native borrowers retire through advance;
+// the failed slot and diagnostic remain inspectable until explicit removal.
+// Returns only factory-owned shared failure. Borrowed services have no managed
+// retirement owner, so their error is returned to their external owner instead.
+iree_status_t loom_serve_registry_fail(loom_serve_registry_t* registry,
+                                       iree_host_size_t index,
+                                       iree_status_t status);
+
 // Advances one lifecycle after the router advances its ready service. Package
-// errors remain in the slot unless the factory reports shared-resource failure.
-// Accepted native parameter-operation errors terminate the serving owner, which
-// must stop admission and drain every accepted borrower before releasing
-// models. Reports actual progress; otherwise waits for an installed ownership
-// wake.
+// and native operation errors remain in the slot unless the factory reports
+// shared-resource failure. Accepted borrowers retire before model destruction.
+// Reports actual progress; otherwise waits for an installed ownership wake.
 iree_status_t loom_serve_registry_advance(loom_serve_registry_t* registry,
                                           iree_host_size_t index,
                                           loom_serve_wake_callback_t observer,

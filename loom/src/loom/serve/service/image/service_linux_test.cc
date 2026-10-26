@@ -515,6 +515,11 @@ class ImageServiceTestBase : public SharedImageServiceFixture<WorkerCount, 1> {
       EXPECT_NE(response.find("200 OK"), std::string::npos);
       EXPECT_NE(response.find("\"b64_json\":\"iVBOR"), std::string::npos);
       loom_serve_http_server_request_stop(server_);
+    } else if (mode == CompletionMode::kDeviceFailure) {
+      IREE_ASSERT_OK(http_.Read(client.release(), false, &response));
+      EXPECT_EQ(response.find("HTTP/1.1 500"), 0u) << response;
+      EXPECT_NE(response.find(R"("type":"loom_execution_error")"),
+                std::string::npos);
     }
     ExpectCompletion(http_.Join());
     const auto counters = *services_[0].telemetry.counters;

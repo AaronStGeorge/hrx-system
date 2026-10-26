@@ -223,12 +223,11 @@ static loom_serve_telemetry_outcome_t loom_serve_finite_send(
 static iree_status_t loom_serve_finite_reject(
     loom_serve_finite_service_t* service, uint64_t id,
     loom_serve_http_connection_t* connection, const char* code,
-    iree_string_view_t message) {
+    const char* type, iree_string_view_t message) {
   iree_status_t status = loom_serve_finite_begin(&service->response, code);
   if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_cstring(
-        &service->response,
-        "{\"error\":{\"type\":\"finite_request_error\",\"message\":");
+    status = iree_string_builder_append_format(
+        &service->response, "{\"error\":{\"type\":\"%s\",\"message\":", type);
   }
   if (iree_status_is_ok(status)) {
     loom_output_stream_t stream;
@@ -257,8 +256,8 @@ static iree_status_t loom_serve_finite_decline(
     loom_serve_finite_service_t* service, uint64_t id, iree_time_t arrival_time,
     loom_serve_http_connection_t* connection, const char* code,
     iree_string_view_t message) {
-  iree_status_t status =
-      loom_serve_finite_reject(service, id, connection, code, message);
+  iree_status_t status = loom_serve_finite_reject(
+      service, id, connection, code, "finite_request_error", message);
   loom_serve_finite_request_end(service, id, arrival_time, 0,
                                 iree_status_is_ok(status)
                                     ? LOOM_SERVE_TELEMETRY_REJECTED
@@ -267,12 +266,38 @@ static iree_status_t loom_serve_finite_decline(
   return status;
 }
 
+// Network completion does not retire a job still borrowed by CPU/device work.
+static void loom_serve_finite_job_disconnect(
+    loom_serve_finite_service_t* service, loom_serve_finite_job_t* job,
+    const iree_status_t terminal_status) {
+  if (job->connection) {
+    if (iree_status_is_ok(terminal_status)) {
+      loom_serve_http_connection_abort(job->connection);
+    } else {
+      iree_string_view_t message = iree_status_message(terminal_status);
+      if (!message.size) {
+        message = iree_make_cstring_view(
+            iree_status_code_string(iree_status_code(terminal_status)));
+      }
+      iree_status_t response_status = loom_serve_finite_reject(
+          service, job->id, job->connection,
+          iree_status_is_resource_exhausted(terminal_status)
+              ? "503 Service Unavailable"
+              : "500 Internal Server Error",
+          "loom_execution_error", message);
+      if (!iree_status_is_ok(response_status)) {
+        loom_serve_finite_error(service, job->id, response_status);
+        iree_status_free(response_status);
+      }
+    }
+    job->connection = NULL;
+  }
+}
+
 static void loom_serve_finite_job_destroy(loom_serve_finite_service_t* service,
                                           loom_serve_finite_job_t* job,
                                           const iree_status_t terminal_status) {
-  if (job->connection) {
-    loom_serve_http_connection_abort(job->connection);
-  }
+  loom_serve_finite_job_disconnect(service, job, terminal_status);
   loom_serve_finite_request_end(
       service, job->id, job->arrival_time, job->input_tokens,
       iree_status_is_ok(terminal_status) ? job->outcome
@@ -312,8 +337,9 @@ static iree_status_t loom_serve_finite_reject_cohort(
     job->outcome = LOOM_SERVE_TELEMETRY_REJECTED;
     if (job->connection) {
       status = iree_status_join(
-          status, loom_serve_finite_reject(service, job->id, job->connection,
-                                           code, message));
+          status,
+          loom_serve_finite_reject(service, job->id, job->connection, code,
+                                   "finite_request_error", message));
       job->connection = NULL;
     }
   }
@@ -491,7 +517,7 @@ static iree_status_t loom_serve_finite_prepared(
         status = iree_status_join(
             status, loom_serve_finite_reject(service, job->id, job->connection,
                                              service->protocol->invalid_status,
-                                             message));
+                                             "finite_request_error", message));
         job->connection = NULL;
       }
       loom_serve_finite_job_destroy(service, job, iree_ok_status());
@@ -804,6 +830,15 @@ static iree_status_t loom_serve_finite_advance(void* self,
   *out_progress |= timer_progress;
   if (tick) {
     loom_serve_finite_heartbeat(service);
+  }
+  if (!iree_status_is_ok(status)) {
+    for (iree_host_size_t i = 0; i < service->pending_count; ++i) {
+      loom_serve_finite_job_destroy(service, service->pending[i], status);
+    }
+    service->pending_count = 0;
+    for (iree_host_size_t i = 0; i < service->cohort_count; ++i) {
+      loom_serve_finite_job_disconnect(service, service->cohort[i], status);
+    }
   }
   return status;
 }
