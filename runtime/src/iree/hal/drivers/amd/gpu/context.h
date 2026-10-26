@@ -66,6 +66,20 @@ typedef struct iree_hal_amd_gpu_context_t {
   amdf_memory_scope_t** memory_scopes;
   // Borrowed diagnostic destination, live through final native cleanup.
   iree_hal_device_event_sink_t event_sink;
+  // Device-owned terminal execution coordination, installed before workers
+  // start. All callbacks borrow the parent without retaining it; final device
+  // release joins workers and callback tails before clearing these borrows.
+  struct {
+    // Records the first execution fault and interrupts native observation.
+    void (*notify)(void* user_data, amdf_status_t status,
+                   const char* operation);
+    // Completion worker joins native access and failed captures before exit.
+    void (*join)(void* user_data, amdf_status_t status);
+    // Wakes a terminal ownership join; false keeps ordinary native wake logic.
+    bool (*wake)(void* user_data);
+    // Borrowed terminal owner, live through every worker and callback join.
+    void* user_data;
+  } execution_failure;
   // Native backing ownership, initialized after selecting host NUMA placement.
   struct {
     // Retained fabric allocation domain shared with other engines on this node.
@@ -81,6 +95,20 @@ typedef struct iree_hal_amd_gpu_context_t {
   // latch with final cleanup; no context resource may be released afterward.
   bool cleanup_blocked;
 } iree_hal_amd_gpu_context_t;
+
+// Reports a native execution failure and requests the parent's terminal join.
+// Allocation, construction, and ordinary cleanup diagnostics use report
+// instead. An unbound construction/test context reports through its existing
+// sink.
+void iree_hal_amd_gpu_context_fail_execution(
+    const iree_hal_amd_gpu_context_t* context, amdf_status_t status,
+    const char* operation);
+
+// Routes a closed queue's final host/callback wake to terminal coordination.
+// False means no execution failure is active and the caller still signals the
+// native event. Called only on an existing cold terminal-wake path.
+bool iree_hal_amd_gpu_context_wake_failure(
+    const iree_hal_amd_gpu_context_t* context);
 
 // Opens one exact GPU endpoint, creates its address domain,
 // and captures family/storage facts. The caller transfers this unique owner

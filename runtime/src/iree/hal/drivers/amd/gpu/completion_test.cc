@@ -596,6 +596,78 @@ TEST_F(CompletionTest, NativeWaitFailureReachesEverySourceAndStops) {
   EXPECT_EQ(reports_, (std::vector<uint64_t>{failure}));
 }
 
+TEST_F(CompletionTest, FinalReleaseJoinsTerminalOwnerOutsideDrainMutex) {
+  struct Terminal {
+    // Completion owner whose worker executes this cold terminal join.
+    iree_hal_amd_gpu_completion_t* completion;
+    // Native stop has begun after the error source round.
+    std::binary_semaphore entered{0};
+    // Allows the test dependency to finish its synchronous native stop.
+    std::binary_semaphore finish{0};
+    // Final callback access, observed only after the destruction owner joins.
+    bool final_access = false;
+  } terminal{.completion = &completion_};
+  context_.execution_failure.user_data = &terminal;
+  context_.execution_failure.join = [](void* data, amdf_status_t status) {
+    auto* terminal = static_cast<Terminal*>(data);
+    EXPECT_EQ(status, amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST));
+    const bool acquired =
+        iree_slim_mutex_try_lock(&terminal->completion->drain_mutex);
+    EXPECT_TRUE(acquired);
+    if (acquired) {
+      iree_slim_mutex_unlock(&terminal->completion->drain_mutex);
+    }
+    terminal->entered.release();
+    terminal->finish.acquire();
+    terminal->final_access = true;
+  };
+  IREE_ASSERT_OK(iree_hal_amd_gpu_completion_initialize(
+      &context_, 0, nullptr, 0, {}, iree_allocator_system(), &completion_));
+  event_.AwaitWaitCount(1);
+  event_.SetWaitStatus(amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST));
+  terminal.entered.acquire();
+  std::atomic<bool> joined = false;
+  std::thread owner([&] {
+    IREE_EXPECT_OK(iree_hal_amd_gpu_completion_deinitialize(&completion_));
+    joined.store(true, std::memory_order_release);
+  });
+  event_.AwaitSignalCount(2);
+  EXPECT_FALSE(joined.load(std::memory_order_acquire));
+  terminal.finish.release();
+  owner.join();
+  EXPECT_TRUE(joined.load());
+  EXPECT_TRUE(terminal.final_access);
+}
+
+TEST_F(CompletionTest,
+       SourceFailureRequestsTerminalRoundWithoutRecursiveDrain) {
+  std::atomic<bool> fail = false;
+  uint32_t failures = 0;
+  const auto native_failure =
+      amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+  Callback callback = [&](amdf_status_t status) {
+    if (!amdf_status_is_ok(status)) {
+      EXPECT_EQ(status, native_failure);
+      ++failures;
+    } else if (fail.exchange(false)) {
+      EXPECT_EQ(iree_hal_amd_gpu_completion_request_failure(&completion_,
+                                                            native_failure),
+                AMDF_STATUS_OK);
+    }
+    return false;
+  };
+  auto source = Source(callback);
+  IREE_ASSERT_OK(iree_hal_amd_gpu_completion_initialize(
+      &context_, 1, &source, 0, {}, iree_allocator_system(), &completion_));
+  event_.AwaitWaitCount(1);
+  fail.store(true);
+  iree_hal_amd_gpu_completion_try_drain(&completion_);
+  EXPECT_EQ(iree_hal_amd_gpu_completion_query_status(&completion_),
+            native_failure);
+  IREE_ASSERT_OK(iree_hal_amd_gpu_completion_deinitialize(&completion_));
+  EXPECT_EQ(failures, 1u);
+}
+
 TEST_F(CompletionTest, CallerRetiresWhileWorkerParks) {
   uint32_t calls = 0;
   uint32_t retired = 0;
