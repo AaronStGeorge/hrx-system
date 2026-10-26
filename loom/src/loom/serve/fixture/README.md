@@ -39,7 +39,7 @@ provider paths. No compiler CLI, generated model binaries or downloaded weights
 are required by the running process. One worker intentionally exercises shared
 CPU scheduling; it is not the recommended configuration for measuring speed.
 
-The same catalog runs on AMDGPU or Vulkan by selecting `--device=legacy-amdgpu` or
+The same catalog runs on AMDGPU or Vulkan by selecting `--device=amdgpu` or
 `--device=vulkan` instead. Each selected compiler target and HAL driver must
 be enabled in the build. Fixed backing works with all three; the source packages
 and HTTP requests are unchanged. The CPU task device shares the server's
@@ -124,6 +124,14 @@ modality code stays unchanged for compatible packages. The embedding fixture's
 parameter and its [policy](embedding/variants/policy.loom) through source only;
 its service test exercises load/admission/eviction rather than hiding weights
 in a native callback. A real model supplies its actual checkpoint file.
+
+Portable cards accompany the image, embedding, decision, speech, recognition,
+and text packages. Their `loom_model` targets produce text and bytecode packages
+with a separate serving configuration. Explicit service facades share each
+fixture's numerical implementation and output oracle. The text card additionally
+exposes sequence encoding; the recognition card exposes both transcription and
+activity. The CPU serving tests consume these built packages through ordinary
+model registration and check actual outputs and clean retirement.
 
 `prepare.loom` declares model capacities, tokenizer and commands. `control.loom`
 owns request preparation, batch packing and result mapping. The model document's `definition.sources` lists

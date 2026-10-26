@@ -250,6 +250,24 @@ loom_py_test(
 )
 
 loom_cc_library(
+    name = "audio_source",
+    srcs = ["audio_source.c"],
+    hdrs = ["audio_source.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_test(
+    name = "audio_source_test",
+    srcs = ["audio_source_test.cc"],
+    deps = [
+        ":audio_source",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "audio_resampler",
     srcs = ["audio_resampler.c"],
     hdrs = ["audio_resampler.h"],
@@ -283,6 +301,34 @@ loom_cc_library(
         "//loom/config/serve:audio_decoding": ["//third_party:miniaudio"],
         "//conditions:default": [],
     }),
+)
+
+loom_cc_library(
+    name = "audio_recording",
+    srcs = ["audio_recording.c"],
+    hdrs = ["audio_recording.h"],
+    deps = [
+        ":audio_decoder",
+        ":audio_source",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "audio_recording_test",
+    srcs = ["audio_recording_test.cc"],
+    defines = iree_select({
+        "//loom/config/serve:wav": ["LOOM_TEST_AUDIO_WAV=1"],
+        "//conditions:default": ["LOOM_TEST_AUDIO_WAV=0"],
+    }),
+    deps = [
+        ":audio_recording",
+        ":audio_source",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm:test_support",
+    ],
 )
 
 loom_cc_test(

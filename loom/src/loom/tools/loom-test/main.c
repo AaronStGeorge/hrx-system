@@ -519,8 +519,9 @@ static iree_status_t loom_test_configure_hal_actual_sequence(
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_context_ensure_runtime(hal_context));
 
-  execution_options->materializer.target_pool =
-      hal_context->runtime.staging_pool;
+  // CPU oracles and comparisons own the fixture values. The launch sequence
+  // stages their allocation roots into device memory and reads results back;
+  // a host-mappable device pool may expose uncached VRAM to CPU observations.
   execution_options->materializer.staging_pool =
       hal_context->runtime.staging_pool;
   execution_options->materializer.transfer_queue =
@@ -833,7 +834,7 @@ static void loom_test_print_agents_markdown(FILE* stream) {
       "loom-test module.loom --file-output-root=artifacts\n"
       "loom-test module.loom --max-samples-per-case=16\n"
       "loom-test module.loom --pipeline=@hal_actual_pipeline\n"
-      "loom-test module.loom --device=legacy-amdgpu "
+      "loom-test module.loom --device=amdgpu "
       "--target=amdgpu:gfx11-generic\n"
       "loom-test module.loom --config=model.hidden_size=4096\n"
       "loom-test module.loom --config-file=model_config.jsonc\n"

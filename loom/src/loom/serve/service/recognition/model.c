@@ -468,19 +468,12 @@ static iree_status_t loom_serve_recognition_prepare(
         "source initial conditioning exceeds declared storage");
   }
   if (iree_status_is_ok(status) && metadata[0].data_length) {
-    char* path = NULL;
-    status = loom_serve_path_resolve(
-        options->asset_directory,
+    status = loom_serve_tokenizer_load_start(
+        loom_serve_host_compiler_sink(loom_serve_device_host(model->owner)),
+        &options->sources, options->asset_directory,
         iree_make_string_view((const char*)metadata[0].data,
                               metadata[0].data_length),
-        host_allocator, &path);
-    if (iree_status_is_ok(status)) {
-      status = loom_serve_tokenizer_load_start(
-          loom_serve_host_compiler_sink(loom_serve_device_host(model->owner)),
-          &options->sources, iree_make_cstring_view(path), wake, user_data,
-          host_allocator, out_tokenizer_load);
-    }
-    iree_allocator_free(host_allocator, path);
+        wake, user_data, host_allocator, out_tokenizer_load);
   }
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
@@ -631,9 +624,11 @@ static iree_status_t loom_serve_recognition_create_control(
         model->parameter_sources, host_allocator, &native_modules[3]);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_program_link(module,
-                                     (iree_vm_module_span_t){native_modules, 4},
-                                     host_allocator, &model->control.program);
+    status = loom_serve_program_link_service(
+        module, loom_serve_preparation_card(model->preparation),
+        loom_serve_preparation_component(model->preparation),
+        (iree_vm_module_span_t){native_modules, 4}, host_allocator,
+        &model->control.program);
   }
   iree_vm_module_release(native_modules[0]);
   iree_vm_module_release(native_modules[1]);
@@ -691,8 +686,8 @@ static iree_status_t loom_serve_recognition_create_control(
        {complete_results, IREE_ARRAYSIZE(complete_results)},
        &model->control.complete},
   };
-  return loom_serve_program_bind(model->control.program,
-                                 IREE_ARRAYSIZE(bindings), bindings);
+  return loom_serve_program_bind_service(model->control.program,
+                                         IREE_ARRAYSIZE(bindings), bindings);
 }
 
 // Cold binding records retain the source's checkpoint identity until all
@@ -783,7 +778,7 @@ static iree_status_t loom_serve_recognition_bind_parameters(
         loom_serve_device_dispatch_queue(model->owner),
         loom_serve_device_storage_pool(model->owner),
         loom_serve_device_memory_pool(model->owner),
-        loom_serve_device_weight_geometry(model->owner),
+        loom_serve_device_weight_geometry(model->owner), NULL,
         loom_serve_device_workspace(model->owner), 0, count, roots,
         host_allocator, &model->weights.plans[domain]);
   }
@@ -907,7 +902,7 @@ static iree_status_t loom_serve_recognition_load_prepare(
       iree_vm_buffer_wrap(IREE_VM_BUFFER_ACCESS_FLAG_READ, model->output,
                           iree_vm_buffer_release_callback_null(),
                           host_allocator, &model->control.feedback));
-  const iree_string_view_list_t* paths = NULL;
+  const loom_model_file_list_t* paths = NULL;
   const uint32_t source_count =
       loom_serve_preparation_local_sources(model->preparation, &paths);
   IREE_RETURN_IF_ERROR(loom_serve_parameter_sources_create(
@@ -921,11 +916,12 @@ static iree_status_t loom_serve_recognition_load_prepare(
   const iree_string_view_t roots[] = {
       IREE_SVL("prepare_request"), IREE_SVL("prepare_work"),
       IREE_SVL("prepare_batch"), IREE_SVL("generate"), IREE_SVL("complete")};
-  iree_status_t status = loom_serve_program_compile(
+  iree_status_t status = loom_serve_program_compile_service(
       loom_serve_host_target_environment(loom_serve_device_host(model->owner)),
       model->control.environment, &load->options.sources,
       load->options.sources.control, IREE_ARRAYSIZE(roots), roots,
-      &model->compilation, host_allocator, &load->module);
+      (iree_string_view_list_t){0}, &model->compilation, host_allocator,
+      &load->module);
   IREE_RETURN_IF_ERROR(status);
   return loom_serve_jit_create(
       loom_serve_device_handle(model->owner),

@@ -1,8 +1,9 @@
 # loom-serve
 
-`loom-serve` serves source-defined models over HTTP. There is no subcommand and
-no built-in model. Devices are explicit process resources; model registrations
-have independent lifetimes.
+`loom-serve` runs models over HTTP from portable model cards or serving
+deployment documents. Programs may be Loom source, bytecode, or a combination
+of both. Devices are explicit process resources; model registrations have
+independent lifetimes.
 
 ```sh
 loom-serve --device=URI [--model=path/model.json ...] [options]
@@ -12,8 +13,10 @@ loom-serve --help
 loom-serve --agents_md
 ```
 
-The [serving walkthrough](workflows/serve-models.md) reaches a first response
-without weights. [Stream speech](workflows/stream-speech.md) receives incremental
+[Fetch and serve a model](workflows/fetch-and-serve.md) installs a published
+Moonshine model and reaches an actual transcription response. The
+[arithmetic embedding walkthrough](workflows/serve-models.md) exercises the CPU
+server without learned weights. [Stream speech](workflows/stream-speech.md) receives incremental
 audio and explains how voices share numerical batches while advancing
 independently. [Audio transcription](http-profiles.md#audio-transcription) accepts
 recorded audio, and the
@@ -30,7 +33,8 @@ controls, pressure, counters and telemetry cursors.
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--device=URI` | Required, repeatable | HAL device URI; encounter order defines device indices. |
-| `--model=path` | None, repeatable | One JSON deployment document per value; omission starts empty. |
+| `--model=path` | None, repeatable | A local model card or serving deployment document; omission starts empty. |
+| `--preset=name` | Card selection | Select a preset when loading one card directly. Fetched cards retain the selection made during acquisition. |
 | `--listen=address` | `127.0.0.1:8080`, repeatable | Numeric IPv4 `host:port`, IPv6 `[host]:port`, or `unix:path`. |
 | `--workers=N` | `8` | Shared CPU workers for JIT, model scheduling and media work. |
 | `--model_capacity=N` | `32` | Registered names, including drained, failed and removing entries. |
@@ -69,8 +73,8 @@ Device URI query parameters request immutable runtime services. `feedback`
 provisions device-to-host diagnostics used by authored kernel assertions and
 other UBSAN-style reports. `asan` and `tsan` provision address- and race-
 sanitizer state and start the report transport each requires. They are bare,
-additive parameters. `--device=legacy-amdgpu:?feedback` configures the default AMDGPU
-device, while `--device=legacy-amdgpu://GPU-0e12865a3bf5b7ab?feedback&asan` configures
+additive parameters. `--device=amdgpu:?feedback` configures the default AMDGPU
+device, while `--device=amdgpu://0?feedback&asan` configures
 a specific device. `?feedback&asan&tsan` is also valid; explicit `feedback`
 adds general authored diagnostics to the sanitizer services. A backend that
 cannot provide a requested service rejects the URI during device creation.
@@ -85,7 +89,7 @@ there are more live executions than queues.
 For independent AMDGPU model submissions, provision extra queues at startup:
 
 ```sh
-loom-serve --device='legacy-amdgpu://0?queue_count=2' \
+loom-serve --device='amdgpu://0?queue_count=2' \
   --model=models/chat/model.json --model=models/speech/model.json
 ```
 

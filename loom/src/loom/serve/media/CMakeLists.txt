@@ -311,6 +311,36 @@ file(GLOB _GLOB_TESTDATA_IMAGE_FUZZ_X_TXT LIST_DIRECTORIES false RELATIVE ${CMAK
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    audio_source
+  HDRS
+    "audio_source.h"
+  SRCS
+    "audio_source.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    audio_source_test
+  SRCS
+    "audio_source_test.cc"
+  DEPS
+    ::audio_source
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     audio_resampler
   HDRS
     "audio_resampler.h"
@@ -361,6 +391,48 @@ loom_cc_library(
     iree::base
     ${_audio_decoder_platform_deps}
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    audio_recording
+  HDRS
+    "audio_recording.h"
+  SRCS
+    "audio_recording.c"
+  DEPS
+    ::audio_decoder
+    ::audio_source
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+set(_audio_recording_test_platform_defines "")
+if(LOOM_SERVE_AUDIO_CODEC_WAV)
+  list(APPEND _audio_recording_test_platform_defines "LOOM_TEST_AUDIO_WAV=1")
+else()
+  list(APPEND _audio_recording_test_platform_defines "LOOM_TEST_AUDIO_WAV=0")
+endif()
+loom_cc_test(
+  NAME
+    audio_recording_test
+  SRCS
+    "audio_recording_test.cc"
+  DEFINES
+    ${_audio_recording_test_platform_defines}
+  DEPS
+    ::audio_recording
+    ::audio_source
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm::test_support
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 

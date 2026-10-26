@@ -39,9 +39,9 @@ const char* WeightSourcePath();
 // Optional URI including feedback requirements selected by the test target.
 const char* WeightDeviceUri();
 
-// Borrows a process-owned group for one immutable backing configuration.
-// Suites with matching options share native devices through environment
-// teardown.
+// Borrows the current immutable configuration for fixed or elastic backing.
+// All previous borrowers must have retired before changing that policy's slab
+// size or budget; its native device and allocator retire before replacement.
 iree_status_t AcquireWeightDeviceGroup(bool elastic, uint64_t slab_size,
                                        uint64_t memory_limit,
                                        loom_serve_device_group_t** out_group);
@@ -391,6 +391,13 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     }
     for (auto* plan : plans_) {
       IREE_EXPECT_OK(loom_serve_weights_await_retirement(plan));
+      if (arena_ && plan) {
+        bool complete = false;
+        IREE_EXPECT_OK(loom_serve_weights_deactivate(plan, &complete));
+        IREE_EXPECT_OK(loom_serve_memory_pool_await(pool_));
+        IREE_EXPECT_OK(loom_serve_weights_deactivate(plan, &complete));
+        EXPECT_TRUE(complete);
+      }
     }
     for (auto* residency : residencies_) {
       loom_serve_residency_free(residency);
@@ -402,6 +409,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
       IREE_EXPECT_OK(loom_serve_weights_free(plan));
     }
     IREE_EXPECT_OK(loom_serve_virtual_buffer_free(state_));
+    loom_serve_memory_arena_free(arena_);
     if (owned_pool_) {
       loom_serve_memory_pool_trim(owned_pool_, 0);
       IREE_EXPECT_STATUS_IS(retirement_code_,
@@ -517,7 +525,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     IREE_RETURN_IF_ERROR(loom_serve_weights_allocate(
         device_, transfer_, dispatch_,
         loom_serve_device_storage_pool(device_owner_), pool_,
-        loom_serve_device_weight_geometry(device_owner_),
+        loom_serve_device_weight_geometry(device_owner_), arena_,
         loom_serve_device_workspace(device_owner_), shared_count, root_count,
         roots, host_allocator_, plan));
     return PrepareSources(*plan, sources, policy_name);
@@ -533,13 +541,13 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     preparation.weights = plan;
     preparation.host = loom_serve_device_host(device_owner_);
     preparation.jit = jit_;
-    std::vector<std::vector<iree_string_view_t>> shards;
-    std::vector<iree_string_view_list_t> checkpoints;
+    std::vector<std::vector<loom_model_file_t>> shards;
+    std::vector<loom_model_file_list_t> checkpoints;
     std::vector<uint32_t> ordinals;
     for (const auto& source : sources) {
       auto& paths = shards.emplace_back();
       for (const auto& path : source) {
-        paths.push_back(iree_make_cstring_view(path.c_str()));
+        paths.push_back({iree_make_cstring_view(path.c_str()), {}});
       }
       checkpoints.push_back({paths.size(), paths.data()});
       ordinals.push_back(static_cast<uint32_t>(ordinals.size()));
@@ -701,6 +709,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree_hal_semaphore_t* consumer_gate_ = nullptr;
   // Explicitly elastic backing or NULL for the fixed comparison arm.
   loom_serve_memory_pool_t* pool_ = nullptr;
+  // Optional shared address owner, destroyed after all parameter ranges retire.
+  loom_serve_memory_arena_t* arena_ = nullptr;
   // Terminal pool result expected while all accepted native work is drained.
   iree_status_code_t retirement_code_ = IREE_STATUS_OK;
   // Optional real pool whose parent reservations can outlive logical return.

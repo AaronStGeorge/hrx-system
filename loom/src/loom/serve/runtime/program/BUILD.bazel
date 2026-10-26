@@ -200,6 +200,7 @@ loom_cc_library(
     deps = [
         ":package",
         "//loom/binding/c:loomc",
+        "//loom/src/loom/model:card",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:path",
     ],
@@ -302,9 +303,11 @@ loom_cc_test(
     deps = [
         ":input",
         ":jit",
+        ":package",
         ":program",
         "//loom/binding/c:loomc",
         "//loom/binding/c/target/vm",
+        "//loom/src/loom/model:card",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/module/hal:types",
@@ -334,6 +337,7 @@ loom_cc_library(
     deps = [
         ":sources",
         "//loom/binding/c:loomc",
+        "//loom/src/loom/model:card",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/tokenizer",
@@ -348,6 +352,7 @@ loom_cc_test(
         ":package",
         ":tokenizer_load",
         "//loom/binding/c:loomc",
+        "//loom/src/loom/model:card",
         "//loom/src/loom/serve/runtime/host",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",
@@ -417,6 +422,7 @@ loom_cc_test(
         ":program",
         "//loom/binding/c:loomc",
         "//loom/binding/c/target/vm",
+        "//loom/src/loom/model:card",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/testing:gtest",

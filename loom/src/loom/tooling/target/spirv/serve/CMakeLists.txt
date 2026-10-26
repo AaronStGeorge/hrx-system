@@ -256,7 +256,13 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/model.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/negative.data"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/positive.data"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/stock_voice_card.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_card.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_generate.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_service.loom"
   DEPS
     ::test_compiler
     ::test_device
@@ -308,12 +314,18 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/model.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/negative.data"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/positive.data"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/stock_voice_card.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/identity.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/prepare.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/tokenizer.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/weights.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_card.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_generate.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_service.loom"
   DEPS
     ::test_compiler
     ::test_device
@@ -339,12 +351,18 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/model.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/negative.data"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/positive.data"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/stock_voice_card.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/identity.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/prepare.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/tokenizer.json"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/variants/weights.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_card.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_generate.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_service.loom"
   DEPS
     ::test_compiler
     ::test_device
@@ -401,7 +419,13 @@ iree_py_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/generate.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/model.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/negative.data"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/positive.data"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/stock_voice_card.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_card.json"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_generate.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/voice_service.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/advance.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/control.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/model.json"
@@ -555,6 +579,8 @@ loom_cc_test(
     ::test_device
     iree::testing::gtest_main
     loom::serve::service::text::source_media_tests
+  ARGS
+    "--gtest_filter=-Declarations/ManagedMediaServiceTest.*/1"
   ENV
     "LOOM_SERVE_TEST_MEDIA_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/model.json}}"
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"

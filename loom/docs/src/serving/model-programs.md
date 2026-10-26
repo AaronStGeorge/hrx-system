@@ -97,6 +97,7 @@ configuration and checkpoint domains. Shared preparation capabilities include:
 | `memory_forecast(root)` | Select a finite component's host control entry for complete-request memory estimates. |
 | `source(directory, path)` | Declare the first shard of a checkpoint and return its source ordinal. |
 | `source_append(source, directory, path)` | Append a shard to that checkpoint's ordered index. |
+| `source_scope(scope)` | Select a model card's named, typed parameter files as one shared checkpoint source. |
 | `parameter(stage, binding, input, source, policy)` | Bind a checkpoint to one policy-local input of a reflected fixed parameter binding. |
 
 A split checkpoint uses `source` for its first file and `source_append` for
@@ -404,6 +405,30 @@ The [model declaration](https://github.com/ROCm/hrx-system/blob/main/loom/src/lo
 owns the exact signatures, scalar widths and buffer layouts. `prepare_batch`
 receives the prepared stage-tag catalog separately from the packed request work;
 the source chooses its numerical stage and packing representation.
+
+Speech ABI 2 adds reusable uploaded voices. `speech_prepare_v2` appends
+`voice_capacity` and `voice_audio_capacity` to the eleven scalar preparation
+results, followed by the existing four metadata buffers. The latter capacity
+bounds decoded original F32 audio bytes. Initial conditioning can populate a
+prefix of the declared conditioning buffer; the service copies it once.
+
+`speech_prepare_voice_v2(model, slot, samples, rate, channels)` runs on a CPU
+worker with interleaved F32 audio at its original rate and channel count.
+The shared decoder has checked complete frames and finite normalized samples.
+The program owns model-specific mixing, resampling, trimming, and resource
+limits. It returns an opaque voice buffer, retained upload state, and immutable
+request bytes. Learned encoding then uses the ordinary `prepare_work`,
+`prepare_batch`, `generate`, and `complete` lifecycle. Upload completion publishes
+no audio; EOF publishes the voice only after accepted work retires.
+
+`speech_prepare_request_v2` receives that opaque voice buffer in place of a
+voice-ID string. The native service maps IDs to slots and captures each voice
+at admission, including queued requests. Removing an ID hides it immediately
+but preserves conditioning for captured readers. A slot has one preparation
+writer and is reused only after that writer and every reader retire. Programs
+need neither a name table nor a second readiness protocol. The other roots use
+the same `speech_*_v2` suffix. Speech ABI 1 retains its source-defined voices and
+rejects uploads.
 
 Consider a request A already decoding when B arrives with another voice and a
 longer prefix. B first runs its required conditioning and prefix work. At a

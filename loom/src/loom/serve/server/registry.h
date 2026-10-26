@@ -12,6 +12,7 @@
 #include "loom/serve/runtime/parameter/residency.h"
 #include "loom/serve/runtime/program/compilation.h"
 #include "loom/serve/server/configuration.h"
+#include "loom/serve/server/model_resolution.h"
 #include "loom/serve/service/service.h"
 
 #ifdef __cplusplus
@@ -118,6 +119,9 @@ typedef struct loom_serve_registration_factory_t {
   uint32_t kinds;
   // Immutable group cardinality used to resolve deployment device bindings.
   iree_host_size_t device_count;
+  // Shared cold-work sink for resolving local model cards before create.
+  // An empty sink supports direct declarations only.
+  loomc_task_sink_t resolution_sink;
   // Allocates an unstarted operation; performs no source I/O, model allocation
   // or submission. Failure returns no operation. Invoked after admission opens
   // or explicit activation, never for metadata-only registration alone.
@@ -171,6 +175,9 @@ typedef struct loom_serve_registered_model_t {
   loom_serve_service_t service;
   // Owned declaration for managed entries; empty name denotes borrowed service.
   loom_serve_model_configuration_t configuration;
+  // Accepted cold card resolution, joined before modality construction or
+  // removal. Borrows configuration until its terminal publication.
+  loom_serve_model_resolution_t* resolution;
   // Owned modality operation, created lazily by admission or explicit
   // activation.
   loom_serve_registration_t registration;
@@ -269,6 +276,19 @@ iree_status_t loom_serve_registry_try_open_speech(
     loom_serve_registry_t* registry, iree_string_view_t name,
     loom_serve_speech_request_t* request,
     loom_serve_speech_stream_t** out_stream);
+
+// Uses the same speech admission and ownership policy for one-time uploads.
+// The receipt publishes success only after the named voice is ready to use.
+iree_status_t loom_serve_registry_try_upload_voice(
+    loom_serve_registry_t* registry, iree_string_view_t name,
+    loom_serve_speech_voice_request_t* request,
+    loom_serve_speech_voice_upload_t** out_upload);
+
+// Removes a published voice without activating a cold or drained model. Already
+// accepted speech retains its captured voice through physical retirement.
+iree_status_t loom_serve_registry_remove_voice(loom_serve_registry_t* registry,
+                                               iree_string_view_t name,
+                                               iree_string_view_t id);
 
 // Resolves the current recognition registration under the same admission
 // policy. A stream copies request options and accepts continuing normalized PCM

@@ -3,6 +3,7 @@
 // Licensed under the Apache License v2.0 with LLVM Exceptions.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <array>
 #include <memory>
 
 #include "iree/base/tooling/flags.h"
@@ -19,17 +20,15 @@ const char* WeightDeviceUri() { return FLAG_weight_device_uri; }
 namespace {
 
 struct WeightDeviceGroup {
-  // Immutable physical backing policy.
-  bool elastic;
   // Requested slab bytes, zero for fixed backing.
   uint64_t slab_size;
   // Committed-byte budget, zero for fixed backing.
   uint64_t memory_limit;
   // Native allocator dependency outliving all resources allocated through it.
   NativeAllocator allocator;
-  // Process-owned device group, shared across suites with matching options.
+  // Device group borrowed by sequential tests with matching options.
   loom_serve_device_group_t* group = nullptr;
-  // Retained initialization result; a failed creation is never retried.
+  // Retained initialization result while this configuration is selected.
   iree_status_t status = iree_ok_status();
 };
 
@@ -42,18 +41,20 @@ class WeightDeviceEnvironment : public ::testing::Environment {
       slab_size = 0;
       memory_limit = 0;
     }
-    for (auto& entry : groups_) {
-      if (entry->elastic == elastic && entry->slab_size == slab_size &&
-          entry->memory_limit == memory_limit) {
-        if (iree_status_is_ok(entry->status)) {
-          *out_group = entry->group;
-        }
-        return iree_status_clone(entry->status);
+    auto& entry = entries_[elastic ? 1 : 0];
+    if (entry && entry->slab_size == slab_size &&
+        entry->memory_limit == memory_limit) {
+      if (iree_status_is_ok(entry->status)) {
+        *out_group = entry->group;
       }
+      return iree_status_clone(entry->status);
     }
 
-    auto& entry = groups_.emplace_back(std::make_unique<WeightDeviceGroup>());
-    entry->elastic = elastic;
+    // Fixtures retire their borrowers before changing a policy's configuration.
+    // Retaining one of each policy amortizes alternating fixed/elastic cases
+    // while bounding native queues independently of slab and budget variants.
+    ReleaseGroup(entry);
+    entry = std::make_unique<WeightDeviceGroup>();
     entry->slab_size = slab_size;
     entry->memory_limit = memory_limit;
     auto& status = entry->status;
@@ -89,12 +90,9 @@ class WeightDeviceEnvironment : public ::testing::Environment {
   }
 
   void TearDown() override {
-    for (auto& entry : groups_) {
-      IREE_EXPECT_OK(loom_serve_device_group_free(entry->group));
-      entry->allocator.AwaitReleased();
-      iree_status_free(entry->status);
+    for (auto& entry : entries_) {
+      ReleaseGroup(entry);
     }
-    groups_.clear();
     iree_hal_driver_release(driver_);
     driver_ = nullptr;
     loom_serve_host_release(host_);
@@ -102,12 +100,24 @@ class WeightDeviceEnvironment : public ::testing::Environment {
   }
 
  private:
+  void ReleaseGroup(std::unique_ptr<WeightDeviceGroup>& entry) {
+    if (!entry) {
+      return;
+    }
+    // A failed retirement must stop this fixture before its allocator dies or
+    // another native configuration is constructed.
+    IREE_CHECK_OK(loom_serve_device_group_free(entry->group));
+    entry->allocator.AwaitReleased();
+    iree_status_free(entry->status);
+    entry.reset();
+  }
+
   // Shared host services retained through every native device's final release.
   loom_serve_host_t* host_ = nullptr;
   // Retained driver supplying every immutable fixture configuration.
   iree_hal_driver_t* driver_ = nullptr;
-  // Stable allocator storage for process-owned configurations.
-  std::vector<std::unique_ptr<WeightDeviceGroup>> groups_;
+  // One current configuration per backing policy: fixed, then elastic.
+  std::array<std::unique_ptr<WeightDeviceGroup>, 2> entries_;
 };
 
 auto* const weight_device_environment = static_cast<WeightDeviceEnvironment*>(
@@ -266,7 +276,7 @@ TEST_P(WeightsTest, PreparationPublishesOnlyRecordableRootAddresses) {
     return loom_serve_weights_allocate(
         device_, transfer_, dispatch_,
         loom_serve_device_storage_pool(device_owner_), pool_,
-        loom_serve_device_weight_geometry(device_owner_),
+        loom_serve_device_weight_geometry(device_owner_), nullptr,
         loom_serve_device_workspace(device_owner_), 0, 1, &root,
         host_allocator_, &plans_[plan_count_++]);
   };
@@ -481,7 +491,7 @@ TEST_P(WeightsTest, InitialBackingRetirementMatchesAcceptedWork) {
     IREE_ASSERT_OK(loom_serve_weights_allocate(
         device_, transfer_, dispatch_,
         loom_serve_device_storage_pool(device_owner_), pool_,
-        loom_serve_device_weight_geometry(device_owner_),
+        loom_serve_device_weight_geometry(device_owner_), nullptr,
         loom_serve_device_workspace(device_owner_), 0, 1, &root,
         host_allocator_, &plans_[0]));
     iree_hal_buffer_release(buffers_[0][0]);
@@ -1602,6 +1612,304 @@ INSTANTIATE_TEST_SUITE_P(Backing, SmallRootWeightsTest,
                          ::testing::Values(false, true));
 
 INSTANTIATE_TEST_SUITE_P(Backing, WeightsTest, ::testing::Values(false, true));
+
+class ArenaWeightsTest : public WeightsTest {
+ protected:
+  // A large address-only prefix needs few slab records and no payload.
+  uint64_t SlabSize() const override { return 64 * 1024 * 1024; }
+};
+
+TEST_P(ArenaWeightsTest, IndependentPreparedRangesReloadAndRecycleAbove4GiB) {
+  WriteCheckpoint(adapter_path_.path(), 100);
+  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  constexpr uint64_t kPrefixBytes = UINT64_C(1) << 32;
+  const uint64_t arena_bytes = kPrefixBytes + 2 * geometry.minimum_size;
+  const auto before = loom_serve_memory_pool_statistics(pool_);
+  IREE_ASSERT_OK(
+      loom_serve_memory_arena_allocate(pool_, geometry, arena_bytes, &arena_));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate_in_arena(
+      arena_, kPrefixBytes, 256, &state_statistics_, &state_));
+  EXPECT_EQ(state_statistics_.committed_bytes, 0u);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool_).reserved_bytes,
+            before.reserved_bytes + arena_bytes);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool_).committed_bytes,
+            before.committed_bytes);
+
+  for (size_t i = 0; i < 2; ++i) {
+    IREE_ASSERT_OK(Compile(i, "target"));
+    const auto root = Root(i, 0, 0);
+    ASSERT_LE(root.root.required_byte_length, geometry.minimum_size);
+    IREE_ASSERT_OK(
+        CreateRoots(0, 1, &root, {i ? adapter_path_.path() : path_.path()}));
+    IREE_ASSERT_OK(Register(i, i, 1));
+    const auto usage = loom_serve_weights_memory_usage(plans_[i]);
+    EXPECT_EQ(usage.reserved_bytes, geometry.minimum_size);
+    EXPECT_EQ(usage.committed_bytes, 0u);
+  }
+  const auto first_view = iree_hal_buffer_virtual_view(buffers_[0][0]);
+  const auto second_view = iree_hal_buffer_virtual_view(buffers_[1][0]);
+  EXPECT_EQ(first_view.root, second_view.root);
+  EXPECT_EQ(first_view.root,
+            iree_hal_buffer_virtual_view(loom_serve_memory_arena_handle(arena_))
+                .root);
+  EXPECT_EQ(first_view.byte_offset, kPrefixBytes);
+  EXPECT_EQ(second_view.byte_offset, kPrefixBytes + geometry.minimum_size);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool_).reserved_bytes,
+            before.reserved_bytes + arena_bytes);
+
+  loom_serve_residency_set_pinned(residencies_[1], true);
+  ASSERT_NO_FATAL_FAILURE(RunPinned(0, 70));
+  ASSERT_NO_FATAL_FAILURE(RunPinned(1, 370));
+  const auto peer_activity = loom_serve_weights_activity(plans_[1]);
+  EXPECT_EQ(loom_serve_weights_memory_usage(plans_[0]).committed_bytes,
+            geometry.minimum_size);
+  EXPECT_EQ(loom_serve_weights_memory_usage(plans_[1]).committed_bytes,
+            geometry.minimum_size);
+
+  // Deactivation preserves the first recording and its address while returning
+  // only that bank's backing. The peer remains live throughout native return.
+  bool complete = false;
+  IREE_ASSERT_OK(loom_serve_residency_deactivate(residencies_[0], &complete));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool_));
+  IREE_ASSERT_OK(loom_serve_residency_deactivate(residencies_[0], &complete));
+  ASSERT_TRUE(complete);
+  EXPECT_EQ(loom_serve_weights_memory_usage(plans_[0]).committed_bytes, 0u);
+  EXPECT_EQ(loom_serve_weights_memory_usage(plans_[1]).committed_bytes,
+            geometry.minimum_size);
+  ASSERT_NO_FATAL_FAILURE(RunPinned(1, 370));
+  ASSERT_NO_FATAL_FAILURE(RunPinned(0, 70));
+  EXPECT_EQ(loom_serve_weights_activity(plans_[0]).activations, 2u);
+  EXPECT_EQ(loom_serve_weights_activity(plans_[1]).activations,
+            peer_activity.activations);
+  EXPECT_EQ(loom_serve_weights_activity(plans_[1]).prepared_bytes,
+            peer_activity.prepared_bytes);
+
+  // A recorded view keeps its lease after the caller drops the public view.
+  // Only actual recording retirement permits the same offset to name a new
+  // checkpoint. Neither the peer range nor the untouched prefix is recycled.
+  iree_hal_buffer_release(buffers_[0][0]);
+  buffers_[0][0] = nullptr;
+  EXPECT_FALSE(loom_serve_weights_is_retired(plans_[0]));
+  iree_hal_command_buffer_release(commands_[0]);
+  commands_[0] = nullptr;
+  IREE_ASSERT_OK(loom_serve_weights_await_retirement(plans_[0]));
+  IREE_ASSERT_OK(loom_serve_residency_deactivate(residencies_[0], &complete));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool_));
+  IREE_ASSERT_OK(loom_serve_residency_deactivate(residencies_[0], &complete));
+  ASSERT_TRUE(complete);
+  loom_serve_residency_free(residencies_[0]);
+  residencies_[0] = nullptr;
+  loom_serve_residency_group_free(parameter_groups_[0]);
+  parameter_groups_[0] = nullptr;
+  IREE_ASSERT_OK(loom_serve_weights_free(plans_[0]));
+  plans_[0] = nullptr;
+
+  WriteCheckpoint(path_.path(), 200);
+  IREE_ASSERT_OK(Compile(2, "target"));
+  const auto replacement = Root(2, 0, 0);
+  IREE_ASSERT_OK(CreateRoots(0, 1, &replacement, {path_.path()}));
+  IREE_ASSERT_OK(Register(2, 2, 1));
+  const auto replacement_view = iree_hal_buffer_virtual_view(buffers_[2][0]);
+  EXPECT_EQ(replacement_view.root, first_view.root);
+  EXPECT_EQ(replacement_view.byte_offset, first_view.byte_offset);
+  ASSERT_NO_FATAL_FAILURE(RunPinned(2, 670));
+  ASSERT_NO_FATAL_FAILURE(RunPinned(1, 370));
+  EXPECT_EQ(loom_serve_weights_activity(plans_[1]).prepared_bytes,
+            peer_activity.prepared_bytes);
+  EXPECT_EQ(state_statistics_.committed_bytes, 0u);
+  loom_serve_residency_set_pinned(residencies_[1], false);
+}
+
+TEST_P(ArenaWeightsTest, SelectedPreparedBanksShareOneParameterBinding) {
+  WriteCheckpoint(adapter_path_.path(), 100);
+  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  constexpr uint64_t kPrefixBytes = UINT64_C(1) << 32;
+  IREE_ASSERT_OK(loom_serve_memory_arena_allocate(
+      pool_, geometry, kPrefixBytes + 2 * geometry.minimum_size, &arena_));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate_in_arena(
+      arena_, kPrefixBytes, 256, &state_statistics_, &state_));
+  for (size_t i = 0; i < 2; ++i) {
+    IREE_ASSERT_OK(Compile(i, "target"));
+    const auto root = Root(i, 0, 0);
+    ASSERT_LE(root.root.required_byte_length, geometry.minimum_size);
+    IREE_ASSERT_OK(
+        CreateRoots(0, 1, &root, {i ? adapter_path_.path() : path_.path()}));
+  }
+  IREE_ASSERT_OK(Compile(2, "selected_target"));
+  const auto* selected = loom_serve_jit_stage_program(compiled_[2]);
+  ASSERT_EQ(selected->parameter_roots.count, 1u);
+  const auto selected_root = Root(2, 0, 0);
+  EXPECT_EQ(selected_root.root.required_byte_length,
+            Root(0, 0, 0).root.required_byte_length);
+  EXPECT_EQ(selected->requirements.rebindable_binding_count, 2u);
+  IREE_ASSERT_OK(Register(2, 0, 2));
+
+  const std::array<uint64_t, 2> bank_offsets = {
+      iree_hal_buffer_virtual_view(buffers_[0][0]).byte_offset,
+      iree_hal_buffer_virtual_view(buffers_[1][0]).byte_offset};
+  EXPECT_EQ(bank_offsets[0], kPrefixBytes);
+  EXPECT_EQ(bank_offsets[1], kPrefixBytes + geometry.minimum_size);
+  std::array<uint64_t, 8> request_offsets;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      loom_serve_device_storage_pool(device_owner_),
+      iree_hal_make_pool_reservation_request(sizeof(request_offsets), 0),
+      iree_infinite_timeout(), &workspace_));
+
+  // Both views end exactly at the last bank's final parameter byte. The second
+  // borrows a nonzero-origin arena subspan; request offsets remain relative to
+  // that binding, not the native reservation or a factor's packed position.
+  const uint64_t binding_end =
+      bank_offsets[1] + selected_root.root.required_byte_length;
+  for (uint64_t binding_origin : {UINT64_C(0), UINT64_C(256)}) {
+    iree_hal_command_buffer_release(commands_[2]);
+    commands_[2] = nullptr;
+    iree_hal_buffer_release(buffers_[2][0]);
+    buffers_[2][0] = nullptr;
+    IREE_ASSERT_OK(iree_hal_buffer_subspan(
+        loom_serve_memory_arena_handle(arena_), binding_origin,
+        binding_end - binding_origin, host_allocator_, &buffers_[2][0]));
+    IREE_ASSERT_OK(loom_serve_jit_stage_record(
+        compiled_[2], iree_hal_queue_family(dispatch_),
+        IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT, nullptr, buffers_[2].data(),
+        &commands_[2]));
+    for (size_t i = 0; i < request_offsets.size(); ++i) {
+      request_offsets[i] = bank_offsets[i % 2] - binding_origin;
+    }
+    IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residencies_[2]));
+    auto run = [&]() -> iree_status_t {
+      uint64_t completion = 0;
+      iree_hal_transfer_operation_t upload = {
+          .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
+      };
+      upload.upload.source = request_offsets.data();
+      upload.upload.target_buffer = workspace_;
+      upload.upload.length = sizeof(request_offsets);
+      IREE_RETURN_IF_ERROR(
+          loom_serve_execution_transfer(execution_, 1, &upload, &completion));
+      const iree_hal_buffer_binding_t bindings[] = {
+          {workspace_, 0, sizeof(request_offsets)},
+          {output_buffer_, 0, sizeof(output_)}};
+      IREE_RETURN_IF_ERROR(loom_serve_execution_execute(
+          execution_, commands_[2], {IREE_ARRAYSIZE(bindings), bindings},
+          &completion));
+      iree_hal_transfer_operation_t download = {
+          .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      };
+      download.download.source_buffer = output_buffer_;
+      download.download.target = output_.data();
+      download.download.length = sizeof(output_);
+      IREE_RETURN_IF_ERROR(
+          loom_serve_execution_feedback(execution_, 1, &download, &completion));
+      return loom_serve_execution_feedback_wait(execution_, completion);
+    };
+    auto status = run();
+    // Keep the host upload alive through accepted work on every error path.
+    status = iree_status_join(status, loom_serve_execution_drain(execution_));
+    loom_serve_residency_release(residencies_[2]);
+    IREE_ASSERT_OK(status);
+    for (size_t i = 0; i < output_.size(); ++i) {
+      EXPECT_EQ(output_[i], (i % 2 ? 370 : 70) + 3 * i);
+    }
+  }
+  EXPECT_EQ(state_statistics_.committed_bytes, 0u);
+  for (size_t i = 0; i < 2; ++i) {
+    EXPECT_EQ(loom_serve_weights_memory_usage(plans_[i]).committed_bytes,
+              geometry.minimum_size);
+    EXPECT_EQ(loom_serve_weights_activity(plans_[i]).activations, 1u);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Elastic, ArenaWeightsTest, ::testing::Values(true));
+
+class RejectedPreparationWeightsTest : public ArenaWeightsTest {
+ protected:
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(ArenaWeightsTest::SetUp());
+    const iree_hal_queue_params_t params = {
+        .priority = dispatch_->priority,
+        .features = dispatch_->features,
+        .execution_resources = dispatch_->execution_resources,
+    };
+    static const iree_hal_queue_vtable_t vtable = {
+        .destroy = [](iree_hal_queue_t*) {},
+        .execute =
+            [](iree_hal_queue_t*, iree_hal_semaphore_list_t,
+               iree_hal_semaphore_list_t, iree_hal_command_buffer_t*,
+               iree_hal_buffer_binding_table_t,
+               iree_hal_queue_execute_flags_t) {
+              return iree_status_from_code(IREE_STATUS_RESOURCE_EXHAUSTED);
+            },
+    };
+    iree_hal_queue_initialize(iree_hal_queue_family(dispatch_), &params,
+                              &vtable, &rejected_dispatch_);
+    initialized_ = true;
+  }
+
+  void TearDown() override {
+    ArenaWeightsTest::TearDown();
+    if (initialized_) {
+      iree_hal_queue_release(&rejected_dispatch_);
+    }
+  }
+
+  // Rejects preparation dispatch after the real mapping and file submissions.
+  iree_hal_queue_t rejected_dispatch_ = {};
+  // The queue is released only if device setup reached its initialization.
+  bool initialized_ = false;
+};
+
+TEST_P(RejectedPreparationWeightsTest,
+       FailedActivationDeactivatesAcceptedArenaBacking) {
+  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  IREE_ASSERT_OK(loom_serve_memory_arena_allocate(
+      pool_, geometry, 2 * geometry.minimum_size, &arena_));
+  IREE_ASSERT_OK(Compile(0, "target"));
+  const auto root = Root(0, 0, 0);
+  IREE_ASSERT_OK(loom_serve_weights_allocate(
+      device_, transfer_, &rejected_dispatch_,
+      loom_serve_device_storage_pool(device_owner_), pool_, geometry, arena_,
+      loom_serve_device_workspace(device_owner_), 0, 1, &root, host_allocator_,
+      &plans_[0]));
+  IREE_ASSERT_OK(Prepare(plans_[0], {path_.path()}));
+  const auto original = iree_hal_buffer_virtual_view(buffers_[0][0]);
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_weights_activate(plans_[0]));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_weights_await(plans_[0]));
+  EXPECT_EQ(loom_serve_weights_activity(plans_[0]).activations, 0u);
+  EXPECT_GT(loom_serve_weights_activity(plans_[0]).read_bytes, 0u);
+  EXPECT_EQ(loom_serve_weights_statistics(plans_[0]).committed_bytes,
+            geometry.minimum_size);
+
+  // Submission failure did not publish an active plan, but accepted backing
+  // still needs ordinary asynchronous deactivation before its lease is free.
+  iree_hal_buffer_release(buffers_[0][0]);
+  buffers_[0][0] = nullptr;
+  IREE_ASSERT_OK(loom_serve_weights_await_retirement(plans_[0]));
+  bool complete = false;
+  IREE_ASSERT_OK(loom_serve_weights_deactivate(plans_[0], &complete));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool_));
+  IREE_ASSERT_OK(loom_serve_weights_deactivate(plans_[0], &complete));
+  ASSERT_TRUE(complete);
+  EXPECT_EQ(loom_serve_weights_statistics(plans_[0]).committed_bytes, 0u);
+  IREE_ASSERT_OK(loom_serve_weights_free(plans_[0]));
+  plans_[0] = nullptr;
+
+  // A healthy plan prepares into the retired offset without replacing the
+  // native arena or inheriting the failed preparation's private readiness.
+  WriteCheckpoint(path_.path(), 100);
+  IREE_ASSERT_OK(Compile(1, "target"));
+  const auto replacement = Root(1, 0, 0);
+  IREE_ASSERT_OK(CreateRoots(0, 1, &replacement, {path_.path()}));
+  const auto reused = iree_hal_buffer_virtual_view(buffers_[1][0]);
+  EXPECT_EQ(reused.root, original.root);
+  EXPECT_EQ(reused.byte_offset, original.byte_offset);
+  IREE_ASSERT_OK(Register(1, 0, 1));
+  ASSERT_NO_FATAL_FAILURE(RunPinned(1, 370));
+}
+
+INSTANTIATE_TEST_SUITE_P(Elastic, RejectedPreparationWeightsTest,
+                         ::testing::Values(true));
 
 // The failed reclaimer belongs to a private pool; native devices remain shared.
 class RejectedAdmissionWeightsTest : public WeightsTest {};
