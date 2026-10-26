@@ -1,0 +1,39 @@
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
+
+func.def @index_zero_comparisons(%value: index, %other: index) -> (i1, i1, i1, i1, i1) {
+  %c0 = index.constant 0 : index
+  %eq_rhs = index.cmp eq, %value, %c0 : index
+  %eq_lhs = index.cmp eq, %c0, %value : index
+  %ne_rhs = index.cmp ne, %value, %c0 : index
+  %ne_lhs = index.cmp ne, %c0, %value : index
+  %binary = index.cmp ne, %value, %other : index
+  func.return %eq_rhs, %eq_lhs, %ne_rhs, %ne_lhs, %binary : i1, i1, i1, i1, i1
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @index_zero_comparisons(%value: reg<aie2p.er>, %other: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
+  %eq_rhs = eqz %value
+  %ne_rhs = nez %value
+  %binary = ne %value, %other
+  return %eq_rhs, %eq_rhs, %ne_rhs, %ne_rhs, %binary
+}
+
+// ====
+
+func.def @offset_zero_comparisons(%value: offset, %other: offset) -> (i1, i1, i1, i1, i1) {
+  %c0 = index.constant 0 : offset
+  %eq_rhs = index.cmp eq, %value, %c0 : offset
+  %eq_lhs = index.cmp eq, %c0, %value : offset
+  %ne_rhs = index.cmp ne, %value, %c0 : offset
+  %ne_lhs = index.cmp ne, %c0, %value : offset
+  %binary = index.cmp ne, %value, %other : offset
+  func.return %eq_rhs, %eq_lhs, %ne_rhs, %ne_lhs, %binary : i1, i1, i1, i1, i1
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @offset_zero_comparisons(%value: reg<aie2p.er>, %other: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) asm {
+  %eq_rhs = eqz %value
+  %ne_rhs = nez %value
+  %binary = ne %value, %other
+  return %eq_rhs, %eq_rhs, %ne_rhs, %ne_rhs, %binary
+}

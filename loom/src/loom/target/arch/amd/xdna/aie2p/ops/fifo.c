@@ -12,16 +12,39 @@
 #include "loom/ir/module.h"
 #include "loom/target/arch/amd/xdna/aie2p/ops/ops.h"
 
-bool loom_aie2p_load_fifo_type_isa(const loom_module_t* module,
-                                   loom_type_t type) {
+static bool loom_aie2p_fifo_type_name_is(const loom_module_t* module,
+                                         loom_type_t type,
+                                         iree_string_view_t expected_name) {
   if (!loom_type_is_dialect(type) || loom_type_dialect_param_count(type) != 0) {
     return false;
   }
   const loom_string_id_t name_id = loom_type_dialect_name_id(type);
   return name_id != LOOM_STRING_ID_INVALID && name_id < module->strings.count &&
          iree_string_view_equal(
-             loom_string_table_get(&module->strings, name_id),
-             IREE_SV("aie2p.load_fifo"));
+             loom_string_table_get(&module->strings, name_id), expected_name);
+}
+
+bool loom_aie2p_load_fifo_type_isa(const loom_module_t* module,
+                                   loom_type_t type) {
+  return loom_aie2p_fifo_type_name_is(module, type, IREE_SV("aie2p.load_fifo"));
+}
+
+bool loom_aie2p_store_fifo_type_isa(const loom_module_t* module,
+                                    loom_type_t type) {
+  return loom_aie2p_fifo_type_name_is(module, type,
+                                      IREE_SV("aie2p.store_fifo"));
+}
+
+bool loom_aie2p_store_fifo_pointer_type_isa(const loom_module_t* module,
+                                            loom_type_t type) {
+  return loom_aie2p_fifo_type_name_is(module, type,
+                                      IREE_SV("aie2p.store_fifo.pointer"));
+}
+
+bool loom_aie2p_store_fifo_position_type_isa(const loom_module_t* module,
+                                             loom_type_t type) {
+  return loom_aie2p_fifo_type_name_is(module, type,
+                                      IREE_SV("aie2p.store_fifo.position"));
 }
 
 static iree_status_t loom_aie2p_emit_load_fifo_result_type(

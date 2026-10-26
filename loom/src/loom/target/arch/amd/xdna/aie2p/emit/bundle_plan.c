@@ -273,6 +273,50 @@ static iree_status_t loom_aie2p_bundle_plan_align_call_continuation(
   return iree_ok_status();
 }
 
+static uint16_t loom_aie2p_bundle_plan_resolve_instruction_register(
+    const loom_aie2p_bundle_plan_builder_t* builder,
+    const loom_aie2p_planned_slot_t* slot,
+    const loom_low_descriptor_t* descriptor,
+    const loom_aie2p_register_move_t* move, uint16_t operand_index) {
+  const loom_low_descriptor_set_t* descriptor_set = builder->descriptor_set;
+  const loom_low_operand_t* operand =
+      loom_low_descriptor_operand(descriptor_set, descriptor, operand_index);
+  if (operand->read_event_id == LOOM_LOW_TIMING_EVENT_NONE &&
+      operand->write_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
+    return 0;
+  }
+  if (operand->source_value_index == LOOM_LOW_ID_NONE) {
+    const uint16_t reg_class_id =
+        descriptor_set->reg_class_alts[operand->reg_class_alt_start]
+            .reg_class_id;
+    const loom_low_reg_class_t* reg_class =
+        &descriptor_set->reg_classes[reg_class_id];
+    return descriptor_set->physical_register_candidate_ids
+        [reg_class->physical_register_candidate_start];
+  }
+  if (move != NULL) {
+    return operand_index == 0 ? move->destination : move->source;
+  }
+  const loom_low_packet_view_t packet = loom_low_packet_at(
+      &builder->frame->schedule, slot->scheduled_packet_index);
+  const loom_low_allocation_assignment_t* assignment;
+  if (iree_any_bit_set(
+          slot->flags,
+          LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_STORAGE_ADDRESS)) {
+    assignment = loom_low_packet_result_assignment(&builder->frame->allocation,
+                                                   &packet, 0);
+  } else if (iree_any_bit_set(
+                 slot->flags,
+                 LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_CONTROL)) {
+    assignment = loom_low_packet_operand_assignment(&builder->frame->allocation,
+                                                    &packet, 0);
+  } else {
+    assignment = loom_low_packet_descriptor_operand_assignment(
+        &builder->frame->allocation, &packet, operand_index);
+  }
+  return (uint16_t)assignment->location_base;
+}
+
 static void loom_aie2p_bundle_plan_instruction(
     loom_aie2p_bundle_plan_builder_t* builder,
     const loom_aie2p_planned_slot_t* slot,
@@ -294,41 +338,8 @@ static void loom_aie2p_bundle_plan_instruction(
   builder->instructions[group_index] = loom_low_physical_instruction_make(
       descriptor_set, builder->schedule_model, descriptor_ordinal, registers);
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
-    const loom_low_operand_t* operand =
-        loom_low_descriptor_operand(descriptor_set, descriptor, i);
-    if (operand->read_event_id == LOOM_LOW_TIMING_EVENT_NONE &&
-        operand->write_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
-      registers[i] = 0;
-    } else if (operand->source_value_index == LOOM_LOW_ID_NONE) {
-      const uint16_t reg_class_id =
-          descriptor_set->reg_class_alts[operand->reg_class_alt_start]
-              .reg_class_id;
-      const loom_low_reg_class_t* reg_class =
-          &descriptor_set->reg_classes[reg_class_id];
-      registers[i] = descriptor_set->physical_register_candidate_ids
-                         [reg_class->physical_register_candidate_start];
-    } else if (move != NULL) {
-      registers[i] = i == 0 ? move->destination : move->source;
-    } else {
-      const loom_low_packet_view_t packet = loom_low_packet_at(
-          &builder->frame->schedule, slot->scheduled_packet_index);
-      const loom_low_allocation_assignment_t* assignment;
-      if (iree_any_bit_set(
-              slot->flags,
-              LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_STORAGE_ADDRESS)) {
-        assignment = loom_low_packet_result_assignment(
-            &builder->frame->allocation, &packet, 0);
-      } else if (iree_any_bit_set(
-                     slot->flags,
-                     LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_CONTROL)) {
-        assignment = loom_low_packet_operand_assignment(
-            &builder->frame->allocation, &packet, 0);
-      } else {
-        assignment = loom_low_packet_descriptor_operand_assignment(
-            &builder->frame->allocation, &packet, i);
-      }
-      registers[i] = (uint16_t)assignment->location_base;
-    }
+    registers[i] = loom_aie2p_bundle_plan_resolve_instruction_register(
+        builder, slot, descriptor, move, i);
   }
 }
 
@@ -357,40 +368,99 @@ static iree_status_t loom_aie2p_bundle_plan_advance(
   return iree_ok_status();
 }
 
+static void loom_aie2p_bundle_plan_collect_register_part_writes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint16_t physical_register_id, uint16_t register_part_id,
+    loom_aie2p_register_unit_set_t* writes) {
+  const loom_low_physical_register_t* physical_register =
+      &descriptor_set->physical_registers[physical_register_id];
+  uint32_t part_units =
+      loom_aie2p_descriptor_register_part_units(register_part_id) &
+      (UINT32_MAX >> (32u - physical_register->atomic_unit_count));
+  do {
+    const uint32_t k = iree_math_count_trailing_zeros_u32(part_units);
+    const uint16_t unit = descriptor_set->physical_register_atomic_units
+                              [physical_register->atomic_unit_start + k];
+    writes->words[unit / 64] |= UINT64_C(1) << (unit % 64);
+    part_units &= part_units - 1u;
+  } while (part_units != 0);
+}
+
+static void loom_aie2p_bundle_plan_collect_instruction_writes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_physical_instruction_t* instruction,
+    loom_aie2p_register_unit_set_t* writes) {
+  const loom_low_descriptor_t* descriptor =
+      &descriptor_set->descriptors[instruction->descriptor_ordinal];
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const loom_low_operand_t* operand =
+        loom_low_descriptor_operand(descriptor_set, descriptor, i);
+    if (operand->write_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
+      continue;
+    }
+    IREE_ASSERT_EQ(operand->reg_class_alt_count, 1,
+                   "AIE2P write operand register-class alternative");
+    loom_aie2p_bundle_plan_collect_register_part_writes(
+        descriptor_set, instruction->physical_registers[i],
+        descriptor_set->reg_class_alts[operand->reg_class_alt_start]
+            .register_part_id,
+        writes);
+  }
+}
+
+static void loom_aie2p_bundle_plan_collect_slot_writes(
+    const loom_aie2p_bundle_plan_builder_t* builder,
+    const loom_aie2p_planned_slot_t* slot,
+    loom_aie2p_slot_realization_t realization,
+    loom_aie2p_register_unit_set_t* writes) {
+  const loom_low_descriptor_set_t* descriptor_set = builder->descriptor_set;
+  const loom_aie2p_register_move_t* move = NULL;
+  uint32_t descriptor_ordinal = realization.descriptor_ordinal;
+  if (iree_any_bit_set(slot->flags,
+                       LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_MOVE)) {
+    move = &realization.move;
+    descriptor_ordinal =
+        loom_aie2p_descriptor_select_move(move->source, move->destination);
+  }
+  const loom_low_descriptor_t* descriptor =
+      &descriptor_set->descriptors[descriptor_ordinal];
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const loom_low_operand_t* operand =
+        loom_low_descriptor_operand(descriptor_set, descriptor, i);
+    if (operand->write_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
+      continue;
+    }
+    IREE_ASSERT_EQ(operand->reg_class_alt_count, 1,
+                   "AIE2P write operand register-class alternative");
+    const uint16_t physical_register =
+        loom_aie2p_bundle_plan_resolve_instruction_register(
+            builder, slot, descriptor, move, i);
+    loom_aie2p_bundle_plan_collect_register_part_writes(
+        descriptor_set, physical_register,
+        descriptor_set->reg_class_alts[operand->reg_class_alt_start]
+            .register_part_id,
+        writes);
+  }
+}
+
+static bool loom_aie2p_register_unit_sets_equal(
+    const loom_aie2p_register_unit_set_t* lhs,
+    const loom_aie2p_register_unit_set_t* rhs) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(lhs->words); ++i) {
+    if (lhs->words[i] != rhs->words[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static void loom_aie2p_bundle_plan_record_writes(
     loom_aie2p_bundle_plan_builder_t* builder,
     const loom_low_physical_instruction_t* instructions,
     iree_host_size_t slot_count) {
-  const loom_low_descriptor_set_t* descriptor_set = builder->descriptor_set;
   for (iree_host_size_t i = 0; i < slot_count; ++i) {
-    const loom_low_physical_instruction_t* instruction = &instructions[i];
-    const loom_low_descriptor_t* descriptor =
-        &descriptor_set->descriptors[instruction->descriptor_ordinal];
-    for (uint16_t j = 0; j < descriptor->operand_count; ++j) {
-      const loom_low_operand_t* operand =
-          loom_low_descriptor_operand(descriptor_set, descriptor, j);
-      if (operand->write_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
-        continue;
-      }
-      const loom_low_physical_register_t* physical_register =
-          &descriptor_set
-               ->physical_registers[instruction->physical_registers[j]];
-      IREE_ASSERT_EQ(operand->reg_class_alt_count, 1,
-                     "AIE2P write operand register-class alternative");
-      const loom_low_reg_class_alt_t* alternative =
-          &descriptor_set->reg_class_alts[operand->reg_class_alt_start];
-      uint32_t part_units =
-          loom_aie2p_descriptor_register_part_units(
-              alternative->register_part_id) &
-          (UINT32_MAX >> (32u - physical_register->atomic_unit_count));
-      do {
-        const uint32_t k = iree_math_count_trailing_zeros_u32(part_units);
-        const uint16_t unit = descriptor_set->physical_register_atomic_units
-                                  [physical_register->atomic_unit_start + k];
-        builder->register_writes.words[unit / 64] |= UINT64_C(1) << (unit % 64);
-        part_units &= part_units - 1u;
-      } while (part_units != 0);
-    }
+    loom_aie2p_bundle_plan_collect_instruction_writes(
+        builder->descriptor_set, &instructions[i], &builder->register_writes);
   }
 }
 
@@ -462,6 +532,97 @@ static iree_status_t loom_aie2p_bundle_plan_append_single_slot(
       builder, logical_issue_cycle, slot_start, 1, format, issue_cycle);
 }
 
+// Returns true when the preceding issue position already established this
+// exact pure constant in the same physical destination. Allocation repair may
+// create such adjacent materializations after Low CSE has run. Their source
+// timing remains committed, but the repeated physical write has no additional
+// effect and need not occupy a slot in the encoded bundle.
+static bool loom_aie2p_bundle_plan_reuses_previous_constant(
+    loom_aie2p_bundle_plan_builder_t* builder, uint32_t issue_cycle,
+    const loom_aie2p_pending_bundle_t* pending, uint8_t slot_index) {
+  const loom_aie2p_planned_slot_t* slot = &pending->slots[slot_index];
+  const loom_aie2p_slot_realization_t realization =
+      pending->realizations[slot_index];
+  if (slot->flags != 0 ||
+      builder->bundle_count <= builder->execution_bundle_start) {
+    return false;
+  }
+  const loom_aie2p_planned_bundle_t* previous_bundle =
+      &builder->bundles[builder->bundle_count - 1u];
+  if ((uint64_t)previous_bundle->issue_cycle + 1u != issue_cycle ||
+      previous_bundle->block_index != builder->current_block_index) {
+    return false;
+  }
+  const loom_low_descriptor_t* descriptor =
+      &builder->descriptor_set->descriptors[realization.descriptor_ordinal];
+  if (loom_low_descriptor_layout(builder->descriptor_set, descriptor)
+          ->op_kind != LOOM_LOW_DESCRIPTOR_OP_KIND_CONST) {
+    return false;
+  }
+  iree_host_size_t previous_constant_index = IREE_HOST_SIZE_MAX;
+  for (uint8_t i = 0; i < previous_bundle->slot_count; ++i) {
+    const iree_host_size_t previous_slot_index =
+        previous_bundle->slot_start + i;
+    const loom_aie2p_planned_slot_t* previous_slot =
+        &builder->slots[previous_slot_index];
+    const loom_aie2p_slot_realization_t previous_realization =
+        builder->slot_realizations[previous_slot_index];
+    if (previous_slot->flags == 0 &&
+        previous_realization.descriptor_ordinal ==
+            realization.descriptor_ordinal &&
+        previous_slot->encoded_slot.slot == slot->encoded_slot.slot &&
+        previous_slot->encoded_slot.value == slot->encoded_slot.value) {
+      previous_constant_index = i;
+      break;
+    }
+  }
+  if (previous_constant_index == IREE_HOST_SIZE_MAX) {
+    return false;
+  }
+
+  loom_aie2p_register_unit_set_t constant_writes = {0};
+  loom_aie2p_bundle_plan_collect_slot_writes(builder, slot, realization,
+                                             &constant_writes);
+  const iree_host_size_t previous_slot_index =
+      previous_bundle->slot_start + previous_constant_index;
+  loom_aie2p_register_unit_set_t previous_constant_writes = {0};
+  loom_aie2p_bundle_plan_collect_slot_writes(
+      builder, &builder->slots[previous_slot_index],
+      builder->slot_realizations[previous_slot_index],
+      &previous_constant_writes);
+  if (!loom_aie2p_register_unit_sets_equal(&constant_writes,
+                                           &previous_constant_writes)) {
+    return false;
+  }
+
+  loom_aie2p_register_unit_set_t concurrent_writes = {0};
+  for (uint8_t i = 0; i < previous_bundle->slot_count; ++i) {
+    if (i == previous_constant_index) {
+      continue;
+    }
+    const iree_host_size_t previous_other_slot_index =
+        previous_bundle->slot_start + i;
+    loom_aie2p_bundle_plan_collect_slot_writes(
+        builder, &builder->slots[previous_other_slot_index],
+        builder->slot_realizations[previous_other_slot_index],
+        &concurrent_writes);
+  }
+  for (uint8_t i = 0; i < pending->slot_count; ++i) {
+    if (i == slot_index) {
+      continue;
+    }
+    loom_aie2p_bundle_plan_collect_slot_writes(builder, &pending->slots[i],
+                                               pending->realizations[i],
+                                               &concurrent_writes);
+  }
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(constant_writes.words); ++i) {
+    if ((constant_writes.words[i] & concurrent_writes.words[i]) != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Closes only issue positions that no later instruction can reach. Empty
 // positions remain implicit gaps rather than growing per-cycle plan records.
 static iree_status_t loom_aie2p_bundle_plan_flush_pending(
@@ -476,14 +637,48 @@ static iree_status_t loom_aie2p_bundle_plan_flush_pending(
       IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_advance(builder, cycle + 1));
       continue;
     }
-    const iree_host_size_t slot_start = builder->slot_count;
+    uint8_t retained_indices[LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+    uint8_t retained_slot_count = 0;
     for (uint8_t i = 0; i < pending->slot_count; ++i) {
-      loom_aie2p_bundle_plan_append_slot(builder, pending->slots[i],
-                                         pending->realizations[i]);
+      if (!loom_aie2p_bundle_plan_reuses_previous_constant(builder, cycle,
+                                                           pending, i)) {
+        retained_indices[retained_slot_count++] = i;
+      }
+    }
+    loom_aie2p_bundle_format_id_t format = pending->format;
+    if (retained_slot_count != 0 &&
+        retained_slot_count != pending->slot_count) {
+      loom_aie2p_slot_t
+          physical_slots[LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+      for (uint8_t i = 0; i < retained_slot_count; ++i) {
+        physical_slots[i] =
+            pending->slots[retained_indices[i]].encoded_slot.slot;
+      }
+      format = loom_aie2p_encoding_find_bundle_format_for_slots(
+          physical_slots, retained_slot_count);
+      if (format == LOOM_AIE2P_BUNDLE_FORMAT_ID_INVALID) {
+        retained_slot_count = pending->slot_count;
+        for (uint8_t i = 0; i < pending->slot_count; ++i) {
+          retained_indices[i] = i;
+        }
+        format = pending->format;
+      }
+    }
+    if (retained_slot_count == 0) {
+      pending->slot_count = 0;
+      IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_advance(builder, cycle + 1));
+      continue;
+    }
+    const iree_host_size_t slot_start = builder->slot_count;
+    for (uint8_t i = 0; i < retained_slot_count; ++i) {
+      const uint8_t retained_index = retained_indices[i];
+      loom_aie2p_bundle_plan_append_slot(builder,
+                                         pending->slots[retained_index],
+                                         pending->realizations[retained_index]);
     }
     IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_append_bundle(
-        builder, pending->logical_issue_cycle, slot_start, pending->slot_count,
-        pending->format, cycle));
+        builder, pending->logical_issue_cycle, slot_start, retained_slot_count,
+        format, cycle));
     pending->slot_count = 0;
   }
   return loom_aie2p_bundle_plan_advance(builder, end_cycle);

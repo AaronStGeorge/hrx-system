@@ -13,7 +13,6 @@ from enum import Enum
 
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import bitwise as scalar_bitwise
-from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
@@ -2077,6 +2076,8 @@ def _compare_rule(
 
 
 def _zero_compare_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
     predicate: str,
     descriptor_key: str,
     *,
@@ -2085,11 +2086,11 @@ def _zero_compare_rule(
     descriptor = _descriptor(descriptor_key)
     nonzero_field = "rhs" if zero_field == "lhs" else "lhs"
     return DescriptorRule(
-        source_op=scalar_comparison.scalar_cmpi,
+        source_op=source_op,
         descriptor=descriptor,
         guards=(
             Guard.enum_attr_equals("predicate", predicate),
-            *_typed_guards(("lhs", "rhs"), _I32),
+            *_typed_guards(("lhs", "rhs"), type_pattern),
             Guard.value_type("result", _I1),
             Guard.value_exact_i64(zero_field),
             Guard.value_i64_range(zero_field, 0, 0),

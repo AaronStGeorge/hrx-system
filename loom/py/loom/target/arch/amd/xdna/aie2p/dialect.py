@@ -64,6 +64,39 @@ aie2p_load_fifo_type = TypeDef(
     ),
 )
 
+aie2p_store_fifo_type = TypeDef(
+    "aie2p.store_fifo",
+    doc=(
+        "One architectural AIE2P store-FIFO state chain. The state must remain "
+        "paired with its pointer and position carriers across every push and flush."
+    ),
+)
+
+aie2p_store_fifo_pointer_type = TypeDef(
+    "aie2p.store_fifo.pointer",
+    doc=(
+        "The architectural output pointer paired with an aie2p.store_fifo state "
+        "chain. Values originate from and return to target-Low helpers."
+    ),
+)
+
+aie2p_store_fifo_position_type = TypeDef(
+    "aie2p.store_fifo.position",
+    doc=(
+        "The architectural available-position carrier paired with an "
+        "aie2p.store_fifo state chain. Values originate from and return to "
+        "target-Low helpers."
+    ),
+)
+
+aie2p_bfp16ebs8_operand_type = TypeDef(
+    "aie2p.bfp16ebs8.operand",
+    doc=(
+        "One native 8x8 BFP16EBS8 matrix operand retained across source and "
+        "target-Low helper boundaries."
+    ),
+)
+
 aie2p_load_fifo_state = Op(
     "aie2p.load_fifo.state",
     group=aie2p_ops,
@@ -130,4 +163,10 @@ aie2p_target = Op(
 
 ALL_AIE2P_OPS: tuple[Op, ...] = (aie2p_target, aie2p_load_fifo_state)
 
-ALL_AIE2P_TYPES: tuple[TypeDef, ...] = (aie2p_load_fifo_type,)
+ALL_AIE2P_TYPES: tuple[TypeDef, ...] = (
+    aie2p_load_fifo_type,
+    aie2p_store_fifo_type,
+    aie2p_store_fifo_pointer_type,
+    aie2p_store_fifo_position_type,
+    aie2p_bfp16ebs8_operand_type,
+)

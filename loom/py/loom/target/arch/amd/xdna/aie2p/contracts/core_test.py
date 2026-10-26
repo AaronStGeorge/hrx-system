@@ -176,9 +176,25 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
     assert [len(rule.emit) for rule in index_count_rules] == [1, 7, 1]
 
     index_compare_rules = [rule for rule in rules if rule.source_op is index.index_cmp]
-    assert len(index_compare_rules) == 20
-    assert [rule.descriptor.key for rule in index_compare_rules[:10]] == [
-        rule.descriptor.key for rule in index_compare_rules[10:]
+    assert len(index_compare_rules) == 28
+    index_zero_compare_rules = index_compare_rules[:8]
+    assert [rule.descriptor.key for rule in index_zero_compare_rules] == [
+        "amd.xdna.aie2p.cmp.eqz.i32",
+        "amd.xdna.aie2p.cmp.eqz.i32",
+        "amd.xdna.aie2p.cmp.nez.i32",
+        "amd.xdna.aie2p.cmp.nez.i32",
+    ] * 2
+    assert [rule.guards[-2].field for rule in index_zero_compare_rules] == [
+        "rhs",
+        "lhs",
+    ] * 4
+    assert all(
+        Guard.value_i64_range(rule.guards[-2].field, 0, 0) == rule.guards[-1]
+        for rule in index_zero_compare_rules
+    )
+    index_binary_compare_rules = index_compare_rules[8:]
+    assert [rule.descriptor.key for rule in index_binary_compare_rules[:10]] == [
+        rule.descriptor.key for rule in index_binary_compare_rules[10:]
     ]
 
     constant_rules = [
