@@ -112,6 +112,8 @@ struct loom_pass_report_t {
   loom_pass_report_invocation_t* invocation_tail;
   // Number of populated invocation records.
   iree_host_size_t invocation_count;
+  // Whether the interpreter measures invocation duration. Defaults to true.
+  bool include_timing;
   // Scoped storage for records, copied names, statistics, and detail rows.
   iree_arena_allocator_t arena;
 };

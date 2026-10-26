@@ -15,7 +15,7 @@
 
 void loom_pass_report_initialize(iree_arena_block_pool_t* block_pool,
                                  loom_pass_report_t* out_report) {
-  *out_report = (loom_pass_report_t){0};
+  *out_report = (loom_pass_report_t){.include_timing = true};
   iree_arena_initialize(block_pool, &out_report->arena);
 }
 

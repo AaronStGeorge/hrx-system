@@ -87,6 +87,45 @@ extern "C" {
 /// threads. Retain/release operations are safe from multiple threads.
 typedef struct loomc_pass_program_t loomc_pass_program_t;
 
+/// Structured pass invocation report artifact format.
+#define LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON "loom-pass-report-json"
+
+/// Pass report observation flags.
+enum loomc_pass_report_flag_bits_e {
+  /// Measure elapsed time for each invocation. Without this flag, duration_ns
+  /// is zero and collection performs no clock reads.
+  LOOMC_PASS_REPORT_FLAG_TIMING = 1u << 0,
+};
+typedef uint32_t loomc_pass_report_flags_t;
+
+/// Requests a result-owned JSON report of executed passes.
+///
+/// Attach through `loomc_pass_run_options_t::next`,
+/// `loomc_compile_options_t::next`, or
+/// `loomc_compile_artifact_options_t::next`. Each attempted program produces
+/// one REPORT artifact with pass identity, status, change flags, statistics,
+/// and details. A diagnosed pass failure retains completed observations in its
+/// failed result. Rejection before the program starts produces no pass report;
+/// a non-OK infrastructure status returns no result and never attempts report
+/// serialization.
+///
+/// Omitting this extension disables collection. Attaching it with zero flags
+/// collects deterministic statistics without timing. Reports neither select
+/// passes nor retain modules, programs, or target providers after returning.
+/// This extension and native pass report options are mutually exclusive.
+typedef struct loomc_pass_report_options_t {
+  /// Structure type. Must be LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS.
+  loomc_structure_type_t type;
+  /// Size of this structure in bytes, or zero.
+  loomc_host_size_t structure_size;
+  /// Next invocation option extension.
+  const void* next;
+  /// Additional observations. Zero collects statistics and details only.
+  loomc_pass_report_flags_t flags;
+  /// Result artifact identifier. Empty leaves the identifier empty.
+  loomc_string_view_t identifier;
+} loomc_pass_report_options_t;
+
 /// Pass program creation options.
 ///
 /// Callers zero-initialize this descriptor, set `type` to
@@ -119,7 +158,8 @@ typedef struct loomc_pass_run_options_t {
   /// Size of this structure in bytes, or zero.
   loomc_host_size_t structure_size;
   /// Invocation extensions, borrowed until execution returns. Supports
-  /// loomc_pass_trace_options_t and native report options from loomc/interop.h.
+  /// loomc_pass_trace_options_t, loomc_pass_report_options_t, and native report
+  /// options from loomc/interop.h.
   const void* next;
 } loomc_pass_run_options_t;
 

@@ -843,6 +843,24 @@ TEST(InteropTest,
       passes.value.invocation_head->details->fields[0].string_value,
       IREE_SV("identity")));
 
+  const loomc_pass_report_options_t public_report = {
+      .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
+      .next = &trace,
+  };
+  const loomc_compile_options_t public_options = {.next = &public_report};
+  raw_product = nullptr;
+  raw_result = nullptr;
+  LOOMC_ASSERT_OK(loomc_compile_request(
+      compiler.get(), workspace.get(), program.get(), request.get(),
+      &public_options, loomc_allocator_system(), &raw_product, &raw_result));
+  product.reset(raw_product);
+  result.reset(raw_result);
+  EXPECT_TRUE(loomc_result_succeeded(result.get()));
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 1u);
+  EXPECT_TRUE(loomc_string_view_equal(
+      loomc_result_artifact_at(result.get(), 0)->format,
+      loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON)));
+
   CompileReport compilation;
   const loomc_native_compile_report_options_t compile_report = {
       .type = LOOMC_STRUCTURE_TYPE_NATIVE_COMPILE_REPORT_OPTIONS,

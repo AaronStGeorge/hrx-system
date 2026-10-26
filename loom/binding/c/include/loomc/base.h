@@ -319,6 +319,9 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_cmd_program_module_options_t`.
   LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_MODULE_OPTIONS = 49,
+
+  /// `loomc_pass_report_options_t`.
+  LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS = 50,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

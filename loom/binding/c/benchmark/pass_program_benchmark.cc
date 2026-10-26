@@ -38,7 +38,7 @@ struct ResultAllocator {
   loomc_allocator_t allocator() { return {this, Control}; }
 };
 
-enum class Operation { kRun, kCompile, kVerify };
+enum class Operation { kRun, kRunReport, kRunTimedReport, kCompile, kVerify };
 
 class PreparedExecutionFixture {
  public:
@@ -88,9 +88,21 @@ class PreparedExecutionFixture {
     iree_status_t status = iree_ok_status();
     for (size_t i = 0; i < kBatchSize && iree_status_is_ok(status); ++i) {
       loomc_result_t* result = nullptr;
-      if constexpr (operation == Operation::kRun) {
+      if constexpr (operation == Operation::kRun ||
+                    operation == Operation::kRunReport ||
+                    operation == Operation::kRunTimedReport) {
+        const loomc_pass_report_options_t report = {
+            .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
+            .flags = operation == Operation::kRunTimedReport
+                         ? LOOMC_PASS_REPORT_FLAG_TIMING
+                         : 0u,
+        };
+        const loomc_pass_run_options_t options = {
+            .next = operation == Operation::kRun ? nullptr : &report,
+        };
         status = to_iree_status(loomc_pass_program_run(
-            program_.get(), workspace_.get(), modules_[i].get(), nullptr,
+            program_.get(), workspace_.get(), modules_[i].get(),
+            operation == Operation::kRun ? nullptr : &options,
             result_allocator_.allocator(), &result));
       } else if constexpr (operation == Operation::kCompile) {
         status = to_iree_status(
@@ -209,6 +221,16 @@ BENCHMARK(BM_PassProgramRun)
     ->Name("BM_PassProgramRunSmoke")
     ->Args({1, 16})
     ->Iterations(1);
+
+void BM_PassProgramRunReport(benchmark::State& state) {
+  BenchmarkPreparedExecution<Operation::kRunReport>(state);
+}
+BENCHMARK(BM_PassProgramRunReport)->Args({1, 16})->Args({32, 128});
+
+void BM_PassProgramRunTimedReport(benchmark::State& state) {
+  BenchmarkPreparedExecution<Operation::kRunTimedReport>(state);
+}
+BENCHMARK(BM_PassProgramRunTimedReport)->Args({1, 16})->Args({32, 128});
 
 void BM_CompileModule(benchmark::State& state) {
   BenchmarkPreparedExecution<Operation::kCompile>(state);

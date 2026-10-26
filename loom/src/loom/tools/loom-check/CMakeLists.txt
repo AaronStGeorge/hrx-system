@@ -98,7 +98,6 @@ loom_cc_library(
     loom::ops::type_registry
     loom::pass::pipeline
     loom::pass::registry
-    loom::pass::report
     loom::rewrite::rewriter
     loom::sanitizer::options
     loom::target::entry_selection

@@ -428,7 +428,9 @@ static iree_status_t loom_pass_interpreter_invoke(
   const iree_string_view_t symbol_name =
       loom_pass_interpreter_symbol_name(state, frame);
   iree_time_t start_time = 0;
-  if (state->options->report) {
+  const bool include_timing =
+      state->options->report && state->options->report->include_timing;
+  if (include_timing) {
     start_time = iree_time_now();
   }
   iree_status_t trace_status = loom_pass_trace_emit(
@@ -530,7 +532,8 @@ static iree_status_t loom_pass_interpreter_invoke(
   loom_pass_interpreter_accumulate_diagnostics(state, &diagnostic_counter);
 
   if (state->options->report) {
-    iree_duration_t duration_nanoseconds = iree_time_now() - start_time;
+    iree_duration_t duration_nanoseconds =
+        include_timing ? iree_time_now() - start_time : 0;
     report_status = loom_pass_interpreter_append_value_fact_lifecycle_detail(
         &pass, &value_fact_lifecycle_counts);
     if (iree_status_is_ok(report_status)) {

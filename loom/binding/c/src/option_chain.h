@@ -8,6 +8,7 @@
 #define LOOMC_OPTION_CHAIN_H_
 
 #include "loom/sanitizer/options.h"
+#include "loomc/pass.h"
 #include "loomc/pass_trace.h"
 #include "loomc/sanitizer.h"
 #include "loomc/target.h"
@@ -26,6 +27,7 @@ enum loomc_option_chain_allowed_bit_e {
   LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE = 1u << 2,
   LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT = 1u << 3,
   LOOMC_OPTION_CHAIN_ALLOW_NATIVE_COMPILE_REPORT = 1u << 4,
+  LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT = 1u << 5,
 };
 typedef uint32_t loomc_option_chain_allowed_t;
 
@@ -38,6 +40,8 @@ typedef struct loomc_option_chain_t {
   loom_sanitizer_options_t sanitizer;
   // Pass trace descriptor found in the option chain, or NULL.
   const loomc_pass_trace_options_t* pass_trace;
+  // Result-owned pass report request, or NULL. Exclusive with pass_report.
+  const loomc_pass_report_options_t* pass_report_options;
   // Caller-owned pass invocation collector, or NULL.
   loom_pass_report_t* pass_report;
   // Caller-owned target compilation collector, or NULL.

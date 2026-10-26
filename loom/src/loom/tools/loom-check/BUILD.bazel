@@ -202,7 +202,6 @@ loom_cc_library(
         "//loom/src/loom/ops/target",
         "//loom/src/loom/pass:pipeline",
         "//loom/src/loom/pass:registry",
-        "//loom/src/loom/pass:report",
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/sanitizer:options",
         "//loom/src/loom/target:entry_selection",

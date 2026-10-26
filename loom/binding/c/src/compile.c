@@ -149,7 +149,8 @@ static loomc_status_t loomc_compile_validate_artifact_options(
   }
   LOOMC_RETURN_IF_ERROR(loomc_option_chain_resolve(
       options->next,
-      LOOMC_OPTION_CHAIN_ALLOW_SANITIZER | LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE,
+      LOOMC_OPTION_CHAIN_ALLOW_SANITIZER | LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
+          LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT,
       out_option_chain));
   if (options->root_count != 0 && options->roots == NULL) {
     return loomc_make_status(
@@ -789,6 +790,7 @@ static loomc_status_t loomc_compile_module_impl(
       compiler, options,
       LOOMC_OPTION_CHAIN_ALLOW_TARGET_SPECIALIZATION |
           LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
+          LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_COMPILE_REPORT,
       &option_chain));
@@ -1159,6 +1161,7 @@ loomc_status_t loomc_compile_request(
               compiler, options,
               LOOMC_OPTION_CHAIN_ALLOW_TARGET_SPECIALIZATION |
                   LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
+                  LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT |
                   LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT,
               &option_chain));
   IREE_RETURN_AND_END_ZONE_IF_ERROR(

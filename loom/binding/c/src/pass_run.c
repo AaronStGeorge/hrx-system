@@ -8,7 +8,9 @@
 
 #include "context.h"
 #include "diagnostic.h"
+#include "iree/io/vec_stream.h"
 #include "loom/pass/interpreter.h"
+#include "loom/pass/report.h"
 #include "loom/target/predicate.h"
 #include "loomc/iree.h"
 #include "module.h"
@@ -19,7 +21,46 @@
 #include "target.h"
 #include "workspace.h"
 
-loomc_status_t loomc_pass_program_run_into_result(
+static iree_status_t loomc_pass_report_write(void* user_data,
+                                             iree_string_view_t text) {
+  return iree_io_stream_write((iree_io_stream_t*)user_data, text.size,
+                              text.data);
+}
+
+static loomc_status_t loomc_pass_report_add_artifact(
+    const loom_pass_report_t* report,
+    const loomc_pass_report_options_t* options, loomc_result_t* result) {
+  iree_io_stream_t* storage = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE, 4096,
+      iree_allocator_from_loomc(loomc_result_allocator(result)), &storage)));
+  loom_output_stream_t stream = {
+      .write = loomc_pass_report_write,
+      .user_data = storage,
+  };
+  loomc_status_t status =
+      loomc_status_from_iree(loom_pass_report_format_json(report, &stream));
+  iree_byte_sequence_t* contents = NULL;
+  if (loomc_status_is_ok(status)) {
+    status = loomc_status_from_iree(
+        iree_io_vec_stream_move_contents(storage, &contents));
+  }
+  if (loomc_status_is_ok(status)) {
+    const loomc_artifact_t artifact = {
+        .kind = LOOMC_ARTIFACT_KIND_REPORT,
+        .format =
+            loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON),
+        .identifier = options->identifier,
+        .contents = loomc_byte_sequence_from_iree(contents),
+    };
+    status = loomc_result_add_artifact(result, &artifact);
+  }
+  iree_byte_sequence_release(contents);
+  iree_io_stream_release(storage);
+  return status;
+}
+
+static loomc_status_t loomc_pass_program_execute_into_result(
     const loomc_pass_program_t* pass_program, loomc_workspace_t* workspace,
     loomc_module_t* module,
     const loom_pass_environment_capability_t* launch_config_capability,
@@ -101,6 +142,33 @@ loomc_status_t loomc_pass_program_run_into_result(
   return status;
 }
 
+loomc_status_t loomc_pass_program_run_into_result(
+    const loomc_pass_program_t* pass_program, loomc_workspace_t* workspace,
+    loomc_module_t* module,
+    const loom_pass_environment_capability_t* launch_config_capability,
+    const loomc_option_chain_t* options, loomc_result_t* result) {
+  if (!options->pass_report_options) {
+    return loomc_pass_program_execute_into_result(
+        pass_program, workspace, module, launch_config_capability, options,
+        result);
+  }
+  loom_pass_report_t report;
+  loom_pass_report_initialize(loomc_workspace_block_pool(workspace), &report);
+  report.include_timing = iree_all_bits_set(options->pass_report_options->flags,
+                                            LOOMC_PASS_REPORT_FLAG_TIMING);
+  loomc_option_chain_t report_options = *options;
+  report_options.pass_report = &report;
+  loomc_status_t status = loomc_pass_program_execute_into_result(
+      pass_program, workspace, module, launch_config_capability,
+      &report_options, result);
+  if (loomc_status_is_ok(status)) {
+    status = loomc_pass_report_add_artifact(
+        &report, options->pass_report_options, result);
+  }
+  loom_pass_report_deinitialize(&report);
+  return status;
+}
+
 static loomc_status_t loomc_pass_run_options_resolve(
     const loomc_pass_run_options_t* options,
     loomc_option_chain_t* out_option_chain) {
@@ -120,6 +188,7 @@ static loomc_status_t loomc_pass_run_options_resolve(
   return loomc_option_chain_resolve(
       options ? options->next : NULL,
       LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
+          LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_COMPILE_REPORT,
       out_option_chain);
