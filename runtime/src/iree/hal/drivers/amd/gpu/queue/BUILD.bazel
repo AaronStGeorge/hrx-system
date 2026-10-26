@@ -136,6 +136,7 @@ iree_runtime_cc_library(
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
+        ":file_completion",
         "//libamdf:headers",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
@@ -697,6 +698,31 @@ iree_runtime_cc_test(
         ":inputs",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "file_completion",
+    srcs = ["file_completion.c"],
+    hdrs = ["file_completion.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//libamdf:headers",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amd:status",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "file_completion_test",
+    srcs = ["file_completion_test.cc"],
+    deps = [
+        ":file_completion",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/async:platform",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

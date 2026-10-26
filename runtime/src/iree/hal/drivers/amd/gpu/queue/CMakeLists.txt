@@ -141,6 +141,7 @@ iree_cc_library(
   SRCS
     "file_staging.c"
   DEPS
+    ::file_completion
     amdf::headers
     iree::async
     iree::base
@@ -1027,6 +1028,34 @@ iree_cc_test(
     ::inputs
     iree::base
     iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+iree_cc_library(
+  NAME
+    file_completion
+  HDRS
+    "file_completion.h"
+  SRCS
+    "file_completion.c"
+  DEPS
+    amdf::headers
+    iree::async
+    iree::base
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    file_completion_test
+  SRCS
+    "file_completion_test.cc"
+  DEPS
+    ::file_completion
+    iree::async
+    iree::async::platform
     iree::testing::gtest
     iree::testing::gtest_main
 )
