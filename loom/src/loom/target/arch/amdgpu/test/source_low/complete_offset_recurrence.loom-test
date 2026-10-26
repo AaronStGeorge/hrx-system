@@ -1,0 +1,287 @@
+// RUN: emit source-low target=amdgpu:gfx1151 output=low
+
+// A dynamic outer extent prevents descriptor rebasing while leaving the row
+// stride exact. The complete byte offset advances by one literal row stride.
+kernel.def @literal_complete_offset() {
+  %unit = index.constant 1 : index
+  %lane_count = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%lane_count, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %row_count_input: index) {
+  %lane = kernel.workitem.id<x> : index
+  %row_count = index.assume %row_count_input [range(%row_count_input, 8, 64)] : index
+  %base = index.constant 0 : offset
+  %source = buffer.view %input[%base] : buffer -> view<[%row_count]x32xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<32xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %initial = scalar.constant 0 : i32
+  %sum = scf.for %row = [%begin to %end step %step](%total = %initial : i32) -> (i32) {
+    %value = view.load<volatile> %source[%row, %lane] : view<[%row_count]x32xi32> -> i32
+    %next = scalar.addi %total, %value : i32
+    scf.yield %next : i32
+  }
+  view.store %sum, %destination[%lane] : i32, view<32xi32>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direct_arg_count = 1, direct_arg_names = {arg0 = "row_count_input"}, direct_arg_offsets = [16], direct_arg_parameter_indices = [2], direct_arg_sizes = [4], parameter_count = 3, resource_count = 2, resource_offsets = [0, 8], resource_parameter_indices = [0, 1], uses_kernarg_segment_ptr = true}) workgroup_size(32, 1, 1) workgroup_count(1, 1, 1) @literal_complete_offset(%row_count: reg<amdgpu.sgpr>) asm {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %source = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %destination = resource<hal_binding> {extent = 128, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %32 = v_lshlrev_b32_src0_inline %lane, 2
+  %begin = s_mov_b32 0
+  %end = s_mov_b32 8
+  %step = s_mov_b32 1
+  %37 = v_mov_b32 0
+  low.br ^_bb1(%begin: reg<amdgpu.sgpr>, %37: reg<amdgpu.vgpr>, %32: reg<amdgpu.vgpr>)
+^_bb1(%row: reg<amdgpu.sgpr>, %total: reg<amdgpu.vgpr>, %28: reg<amdgpu.vgpr>):
+  %38 = s_cmp_lt_i32 %row, %end
+  low.cond_br %38, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+^_bb2:
+  %value = global_load_b32_saddr<volatile> %28, %source
+  %40 = v_add_u32_lit %28, 128
+  %next = v_add_u32 %total, %value
+  %42 = s_add_u32 %row, %step
+  low.br ^_bb1(%42: reg<amdgpu.sgpr>, %next: reg<amdgpu.vgpr>, %40: reg<amdgpu.vgpr>)
+^_bb3:
+  global_store_b32_saddr %32, %total, %destination
+  return
+}
+
+// ====
+// RUN: emit source-low target=amdgpu:gfx1151 output=low
+
+// Two roots spell the same byte sum in opposite producer order. The dynamic
+// column count is materialized once as the carried offset's invariant stride.
+kernel.def @shared_dynamic_stride() {
+  %unit = index.constant 1 : index
+  %lane_count = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%lane_count, %unit, %unit) : index
+} launch(%left: buffer, %right: buffer, %output: buffer, %column_count_input: index) {
+  %lane = kernel.workitem.id<x> : index
+  %column_count = index.assume %column_count_input [range(%column_count_input, 32, 64)] : index
+  %base = index.constant 0 : offset
+  %left_layout = encoding.layout.strided [%column_count, 1] : encoding<layout>
+  %right_layout = encoding.layout.strided [1, %column_count] : encoding<layout>
+  %left_source = buffer.view %left[%base] : buffer -> view<8x[%column_count]xi32, %left_layout>
+  %right_source = buffer.view %right[%base] : buffer -> view<[%column_count]x8xi32, %right_layout>
+  %destination = buffer.view %output[%base] : buffer -> view<32xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %initial = scalar.constant 0 : i32
+  %sum = scf.for %row = [%begin to %end step %step](%total = %initial : i32) -> (i32) {
+    %left_value = view.load<volatile> %left_source[%row, %lane] : view<8x[%column_count]xi32, %left_layout> -> i32
+    %right_value = view.load<volatile> %right_source[%lane, %row] : view<[%column_count]x8xi32, %right_layout> -> i32
+    %pair = scalar.addi %left_value, %right_value : i32
+    %next = scalar.addi %total, %pair : i32
+    scf.yield %next : i32
+  }
+  view.store %sum, %destination[%lane] : i32, view<32xi32>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direct_arg_count = 1, direct_arg_names = {arg0 = "column_count_input"}, direct_arg_offsets = [24], direct_arg_parameter_indices = [3], direct_arg_sizes = [4], parameter_count = 4, resource_count = 3, resource_offsets = [0, 8, 16], resource_parameter_indices = [0, 1, 2], uses_kernarg_segment_ptr = true}) workgroup_size(32, 1, 1) workgroup_count(1, 1, 1) @shared_dynamic_stride(%column_count: reg<amdgpu.sgpr>) asm {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %left_source = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %right_source = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %destination = resource<hal_binding> {extent = 128, index = 2, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %39 = v_mov_b32_copy %column_count
+  %40 = v_lshlrev_b32_src0_inline %39, 2
+  %41 = v_lshlrev_b32_src0_inline %lane, 2
+  %begin = s_mov_b32 0
+  %end = s_mov_b32 8
+  %step = s_mov_b32 1
+  %46 = v_mov_b32 0
+  low.br ^_bb1(%begin: reg<amdgpu.sgpr>, %46: reg<amdgpu.vgpr>, %41: reg<amdgpu.vgpr>)
+^_bb1(%row: reg<amdgpu.sgpr>, %total: reg<amdgpu.vgpr>, %34: reg<amdgpu.vgpr>):
+  %47 = s_cmp_lt_i32 %row, %end
+  low.cond_br %47, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+^_bb2:
+  %left_value = global_load_b32_saddr<volatile> %34, %left_source
+  %right_value = global_load_b32_saddr<volatile> %34, %right_source
+  %50 = v_add_u32 %34, %40
+  %pair = v_add_u32 %left_value, %right_value
+  %next = v_add_u32 %total, %pair
+  %53 = s_add_u32 %row, %step
+  low.br ^_bb1(%53: reg<amdgpu.sgpr>, %next: reg<amdgpu.vgpr>, %50: reg<amdgpu.vgpr>)
+^_bb3:
+  global_store_b32_saddr %41, %total, %destination
+  return
+}
+
+// ====
+// RUN: emit source-low target=amdgpu:gfx942 output=low
+
+// CDNA uses the same complete-offset contract with its wave64 descriptor set.
+kernel.def @cdna_complete_offset() {
+  %unit = index.constant 1 : index
+  %lane_count = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%lane_count, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %row_count_input: index) {
+  %lane = kernel.workitem.id<x> : index
+  %row_count = index.assume %row_count_input [range(%row_count_input, 8, 64)] : index
+  %base = index.constant 0 : offset
+  %source = buffer.view %input[%base] : buffer -> view<[%row_count]x64xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<64xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %initial = scalar.constant 0 : i32
+  %sum = scf.for %row = [%begin to %end step %step](%total = %initial : i32) -> (i32) {
+    %value = view.load<volatile> %source[%row, %lane] : view<[%row_count]x64xi32> -> i32
+    %next = scalar.addi %total, %value : i32
+    scf.yield %next : i32
+  }
+  view.store %sum, %destination[%lane] : i32, view<64xi32>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<amdgpu.cdna3.core> abi_layout({constant_count = 1, direct_arg_count = 1, direct_arg_names = {arg0 = "row_count_input"}, direct_arg_offsets = [16], direct_arg_parameter_indices = [2], direct_arg_sizes = [4], parameter_count = 3, resource_count = 2, resource_offsets = [0, 8], resource_parameter_indices = [0, 1], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) workgroup_count(1, 1, 1) @cdna_complete_offset(%row_count: reg<amdgpu.sgpr>) asm {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %source = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %destination = resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %32 = v_lshlrev_b32_src0_inline %lane, 2
+  %begin = s_mov_b32 0
+  %end = s_mov_b32 8
+  %step = s_mov_b32 1
+  %37 = v_mov_b32 0
+  low.br ^_bb1(%begin: reg<amdgpu.sgpr>, %37: reg<amdgpu.vgpr>, %32: reg<amdgpu.vgpr>)
+^_bb1(%row: reg<amdgpu.sgpr>, %total: reg<amdgpu.vgpr>, %28: reg<amdgpu.vgpr>):
+  %38 = s_cmp_lt_i32 %row, %end
+  low.cond_br %38, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+^_bb2:
+  %value = global_load_dword_saddr<volatile> %28, %source : reg<amdgpu.vgpr>
+  %40 = v_add_u32_lit %28, 256
+  %next = v_add_u32 %total, %value
+  %42 = s_add_u32 %row, %step
+  low.br ^_bb1(%42: reg<amdgpu.sgpr>, %next: reg<amdgpu.vgpr>, %40: reg<amdgpu.vgpr>)
+^_bb3:
+  global_store_dword_saddr %32, %total, %destination
+  return
+}
+
+// ====
+// RUN: emit source-low target=amdgpu:gfx1151 output=low
+
+// The same carried VADDR serves both sides of a workgroup-memory round trip.
+// A two-dimensional workgroup keeps the address out of the DS add-thread-id
+// form without interposing an authored address producer.
+kernel.def @workgroup_complete_offset() {
+  %unit = index.constant 1 : index
+  %x_count = index.constant 16 : index
+  %y_count = index.constant 2 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%x_count, %y_count, %unit) : index
+} launch(%output: buffer, %row_count_input: index) {
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %row_count = index.assume %row_count_input [range(%row_count_input, 8, 16)] : index
+  %base = index.constant 0 : offset
+  %byte_count = index.constant 2048 : offset
+  %scratch = buffer.alloca<workgroup> align(16) %byte_count : buffer
+  %rows = buffer.view %scratch[%base] : buffer -> view<[%row_count]x2x16xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<2x16xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %initial = scalar.constant 0 : i32
+  %sum = scf.for %row = [%begin to %end step %step](%total = %initial : i32) -> (i32) {
+    view.store<volatile> %total, %rows[%row, %y, %x] : i32, view<[%row_count]x2x16xi32>
+    %value = view.load<volatile> %rows[%row, %y, %x] : view<[%row_count]x2x16xi32> -> i32
+    %next = scalar.addi %total, %value : i32
+    scf.yield %next : i32
+  }
+  view.store %sum, %destination[%y, %x] : i32, view<2x16xi32>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direct_arg_count = 1, direct_arg_names = {arg0 = "row_count_input"}, direct_arg_offsets = [8], direct_arg_parameter_indices = [1], direct_arg_sizes = [4], parameter_count = 2, resource_count = 1, resource_offsets = [0], resource_parameter_indices = [0], uses_kernarg_segment_ptr = true}) workgroup_size(16, 2, 1) workgroup_count(1, 1, 1) @workgroup_complete_offset(%row_count: reg<amdgpu.sgpr>) asm {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
+  %destination = resource<hal_binding> {extent = 128, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %37 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %x = v_and_b32_lit %packed_tid, 1023
+  %39 = v_lshrrev_b32_src0_inline %packed_tid, 10
+  %y = v_and_b32_lit %39, 1023
+  %41 = v_lshl_add_u32_shift_imm %y, %x, 4
+  %42 = v_lshlrev_b32_src0_inline %41, 2
+  %begin = s_mov_b32 0
+  %end = s_mov_b32 8
+  %step = s_mov_b32 1
+  %47 = v_mov_b32 0
+  low.br ^_bb1(%begin: reg<amdgpu.sgpr>, %47: reg<amdgpu.vgpr>, %42: reg<amdgpu.vgpr>)
+^_bb1(%row: reg<amdgpu.sgpr>, %total: reg<amdgpu.vgpr>, %34: reg<amdgpu.vgpr>):
+  %48 = s_cmp_lt_i32 %row, %end
+  low.cond_br %48, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+^_bb2:
+  ds_write_b32<volatile> %34, %total
+  %value = ds_read_b32<volatile> %34
+  %50 = v_add_u32_lit %34, 128
+  %next = v_add_u32 %total, %value
+  %52 = s_add_u32 %row, %step
+  low.br ^_bb1(%52: reg<amdgpu.sgpr>, %next: reg<amdgpu.vgpr>, %50: reg<amdgpu.vgpr>)
+^_bb3:
+  global_store_b32_saddr %42, %total, %destination
+  return
+}
+
+// ====
+// RUN: emit source-low target=amdgpu:gfx1151 output=low
+
+// Private scratch consumes the same carried byte offset through its VADDR
+// packet form; no resource operand is retained for the realized address.
+kernel.def @private_complete_offset() {
+  %unit = index.constant 1 : index
+  %lane_count = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%lane_count, %unit, %unit) : index
+} launch(%output: buffer, %row_count_input: index) {
+  %lane = kernel.workitem.id<x> : index
+  %row_count = index.assume %row_count_input [range(%row_count_input, 8, 16)] : index
+  %base = index.constant 0 : offset
+  %byte_count = index.constant 2048 : offset
+  %scratch = buffer.alloca<private> align(16) %byte_count : buffer
+  %rows = buffer.view %scratch[%base] : buffer -> view<[%row_count]x32xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<32xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %initial = scalar.constant 0 : i32
+  %sum = scf.for %row = [%begin to %end step %step](%total = %initial : i32) -> (i32) {
+    view.store<volatile> %total, %rows[%row, %lane] : i32, view<[%row_count]x32xi32>
+    %value = view.load<volatile> %rows[%row, %lane] : view<[%row_count]x32xi32> -> i32
+    %next = scalar.addi %total, %value : i32
+    scf.yield %next : i32
+  }
+  view.store %sum, %destination[%lane] : i32, view<32xi32>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 1, direct_arg_count = 1, direct_arg_names = {arg0 = "row_count_input"}, direct_arg_offsets = [8], direct_arg_parameter_indices = [1], direct_arg_sizes = [4], parameter_count = 2, resource_count = 1, resource_offsets = [0], resource_parameter_indices = [0], uses_kernarg_segment_ptr = true}) workgroup_size(32, 1, 1) workgroup_count(1, 1, 1) @private_complete_offset(%row_count: reg<amdgpu.sgpr>) asm {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %destination = resource<hal_binding> {extent = 128, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %32 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<private>
+  %33 = v_lshlrev_b32_src0_inline %lane, 2
+  %begin = s_mov_b32 0
+  %end = s_mov_b32 8
+  %step = s_mov_b32 1
+  %38 = v_mov_b32 0
+  low.br ^_bb1(%begin: reg<amdgpu.sgpr>, %38: reg<amdgpu.vgpr>, %33: reg<amdgpu.vgpr>)
+^_bb1(%row: reg<amdgpu.sgpr>, %total: reg<amdgpu.vgpr>, %29: reg<amdgpu.vgpr>):
+  %39 = s_cmp_lt_i32 %row, %end
+  low.cond_br %39, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+^_bb2:
+  scratch_store_b32_vaddr<volatile> %29, %total
+  %value = scratch_load_b32_vaddr<volatile> %29
+  %41 = v_add_u32_lit %29, 128
+  %next = v_add_u32 %total, %value
+  %43 = s_add_u32 %row, %step
+  low.br ^_bb1(%43: reg<amdgpu.sgpr>, %next: reg<amdgpu.vgpr>, %41: reg<amdgpu.vgpr>)
+^_bb3:
+  global_store_b32_saddr %33, %total, %destination
+  return
+}

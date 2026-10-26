@@ -154,6 +154,15 @@ iree_status_t loom_low_lower_materialize_source_memory_complete_byte_offset(
 uint16_t loom_low_lower_source_memory_invariant_terms(
     const loom_low_lower_context_t* context);
 
+// Returns the current access's sole canonical-term recurrence, or NULL when
+// the source observer did not prove exactly one varying induction term. The
+// returned identity names the complete canonical dynamic byte sum; targets
+// decide whether the remaining terms admit a complete-offset realization.
+const loom_low_lower_source_memory_term_recurrence_t*
+loom_low_lower_source_memory_term_recurrence(
+    const loom_low_lower_context_t* context,
+    iree_host_size_t* out_dynamic_byte_offset_identity);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

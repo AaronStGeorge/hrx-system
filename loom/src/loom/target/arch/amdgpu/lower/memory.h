@@ -139,6 +139,15 @@ typedef struct loom_amdgpu_memory_access_diagnostic_t {
   uint32_t dynamic_term_index;
 } loom_amdgpu_memory_access_diagnostic_t;
 
+// Returns true when the selected packet carries a separately lowered resource
+// operand in addition to its physical address operands.
+static inline bool loom_amdgpu_memory_access_uses_resource_operand(
+    const loom_amdgpu_memory_access_t* access) {
+  return access->source->memory_space !=
+             LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP &&
+         access->source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE;
+}
+
 // Returns the source integer width that an unsigned LDS load must sign-extend
 // to satisfy its narrow signed payload contract, or zero when no repair is
 // required. Packed byte vectors use the unsigned payload format and therefore

@@ -188,6 +188,9 @@ typedef struct loom_low_lower_source_plan_t {
   // True when a retained recurrence replaces an authored source producer and
   // therefore needs the transient value-to-plan index during finalization.
   bool has_source_memory_producer_recurrences;
+  // True when selected rule finalization produces canonical-term offers that
+  // must be recorded before realization selection closes.
+  bool has_source_memory_rule_term_recurrences;
   // Canonical accesses joined across observation and selection without an op
   // lookup table or a second address-analysis walk.
   struct {
