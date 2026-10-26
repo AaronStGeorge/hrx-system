@@ -14,6 +14,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/pass/builder.h"
 #include "loom/testing/module_ptr.h"
@@ -322,9 +323,71 @@ class TargetProviderTest : public ::testing::Test {
     return loom_string_table_get(&module->strings, loom_pass_run_key(op));
   }
 
+  void BuildFunction(loom_module_t* module, iree_string_view_t name,
+                     bool tied_result, loom_func_like_t* out_function) {
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_intern_string(module, name, &name_id));
+    loom_symbol_id_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    const loom_symbol_ref_t symbol = {
+        .module_id = 0,
+        .symbol_id = symbol_id,
+    };
+    const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    const loom_tied_result_t tie = {
+        .result_index = 0,
+        .operand_index = 0,
+        .has_type_change = false,
+    };
+    loom_op_t* function_op = nullptr;
+    IREE_ASSERT_OK(loom_func_def_build(
+        &builder, /*build_flags=*/0, /*visibility=*/0, /*linkage=*/0,
+        /*retain=*/0, /*cc=*/0, /*effect_contract=*/0, /*temperature=*/0,
+        /*inline_policy=*/0, loom_symbol_ref_null(),
+        /*source_signature=*/loom_attr_absent(), /*abi=*/0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), symbol, &type, 1, &type, 1,
+        tied_result ? &tie : nullptr, tied_result ? 1 : 0,
+        /*predicates=*/nullptr, /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN,
+        &function_op));
+    *out_function = loom_func_like_cast(module, function_op);
+    ASSERT_TRUE(loom_func_like_isa(*out_function));
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
+
+TEST_F(TargetProviderTest, TiedSemanticResultsRequireInlining) {
+  const loom_target_provider_t provider = {
+      .select_call_policy = loom_target_select_call_policy_direct,
+  };
+  const loom_resolved_target_t target = {
+      .provider = &provider,
+  };
+  ModulePtr module;
+  IREE_ASSERT_OK(AllocateModule(IREE_SV("call_policy"), &module));
+  loom_func_like_t untied;
+  BuildFunction(module.get(), IREE_SV("untied"), false, &untied);
+  loom_func_like_t tied;
+  BuildFunction(module.get(), IREE_SV("tied"), true, &tied);
+
+  EXPECT_EQ(loom_target_provider_select_call_policy(
+                &target, module.get(), LOOM_CALL_LIKE_KIND_SEMANTIC,
+                loom_call_like_t{}, untied),
+            LOOM_TARGET_CALL_POLICY_DIRECT);
+  EXPECT_EQ(loom_target_provider_select_call_policy(
+                &target, module.get(), LOOM_CALL_LIKE_KIND_SEMANTIC,
+                loom_call_like_t{}, tied),
+            LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE);
+  EXPECT_EQ(loom_target_provider_select_call_policy(
+                &target, module.get(), LOOM_CALL_LIKE_KIND_LOW_INTERNAL,
+                loom_call_like_t{}, tied),
+            LOOM_TARGET_CALL_POLICY_DIRECT);
+}
 
 TEST_F(TargetProviderTest, ContributesPassIrByPhase) {
   static const loom_target_provider_t materialization_provider = {

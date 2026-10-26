@@ -37,6 +37,14 @@ loom_target_call_policy_t loom_target_provider_select_call_policy(
     const loom_resolved_target_t* resolved_target, const loom_module_t* module,
     loom_call_like_kind_t kind, loom_call_like_t call,
     loom_func_like_t callee) {
+  // Source-to-Low cannot preserve source-level ownership ties across a direct
+  // callable ABI. Inline those edges while their tied values are still
+  // semantic values; Low call ties already describe physical register
+  // ownership and remain available to providers that support direct calls.
+  if (kind == LOOM_CALL_LIKE_KIND_SEMANTIC && callee.op != NULL &&
+      callee.op->tied_result_count != 0) {
+    return LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE;
+  }
   if (resolved_target == NULL || resolved_target->provider == NULL ||
       resolved_target->provider->select_call_policy == NULL) {
     return LOOM_TARGET_CALL_POLICY_DIRECT;

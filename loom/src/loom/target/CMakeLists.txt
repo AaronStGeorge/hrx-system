@@ -797,6 +797,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir
+    loom::ops::func
     loom::ops::op_registry
     loom::ops::pass
     loom::pass::builder

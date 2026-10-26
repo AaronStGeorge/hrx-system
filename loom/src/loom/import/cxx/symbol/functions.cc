@@ -23,6 +23,9 @@
 #include <cctype>
 #include <deque>
 #include <limits>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include "loom/import/cxx/source/attributes.h"
 #include "loom/import/cxx/source/error.h"
@@ -37,6 +40,113 @@
 #include "loom/ops/template/ops.h"
 
 namespace loom::cxx_import {
+namespace {
+
+std::string_view private_operator_name(cxx::FunctionSymbol* function) {
+  auto* operator_id = cxx::name_cast<cxx::OperatorId>(function->name());
+  if (!operator_id) {
+    return {};
+  }
+  const size_t operand_count =
+      function->parameters().size() +
+      (function->isImplicitObjectMemberFunction() ? 1u : 0u);
+  switch (operator_id->op()) {
+    case cxx::TokenKind::T_PLUS:
+      return operand_count == 1 ? "operator_positive" : "operator_add";
+    case cxx::TokenKind::T_MINUS:
+      return operand_count == 1 ? "operator_negate" : "operator_subtract";
+    case cxx::TokenKind::T_STAR:
+      return operand_count == 1 ? "operator_dereference" : "operator_multiply";
+    case cxx::TokenKind::T_AMP:
+      return operand_count == 1 ? "operator_address" : "operator_bit_and";
+    case cxx::TokenKind::T_PLUS_PLUS:
+      return operand_count == 1 ? "operator_pre_increment"
+                                : "operator_post_increment";
+    case cxx::TokenKind::T_MINUS_MINUS:
+      return operand_count == 1 ? "operator_pre_decrement"
+                                : "operator_post_decrement";
+    case cxx::TokenKind::T_SLASH:
+      return "operator_divide";
+    case cxx::TokenKind::T_PERCENT:
+      return "operator_remainder";
+    case cxx::TokenKind::T_CARET:
+      return "operator_bit_xor";
+    case cxx::TokenKind::T_BAR:
+      return "operator_bit_or";
+    case cxx::TokenKind::T_TILDE:
+      return "operator_complement";
+    case cxx::TokenKind::T_EXCLAIM:
+      return "operator_not";
+    case cxx::TokenKind::T_EQUAL:
+      return "operator_assign";
+    case cxx::TokenKind::T_LESS:
+      return "operator_less";
+    case cxx::TokenKind::T_GREATER:
+      return "operator_greater";
+    case cxx::TokenKind::T_PLUS_EQUAL:
+      return "operator_add_assign";
+    case cxx::TokenKind::T_MINUS_EQUAL:
+      return "operator_subtract_assign";
+    case cxx::TokenKind::T_STAR_EQUAL:
+      return "operator_multiply_assign";
+    case cxx::TokenKind::T_SLASH_EQUAL:
+      return "operator_divide_assign";
+    case cxx::TokenKind::T_PERCENT_EQUAL:
+      return "operator_remainder_assign";
+    case cxx::TokenKind::T_CARET_EQUAL:
+      return "operator_bit_xor_assign";
+    case cxx::TokenKind::T_AMP_EQUAL:
+      return "operator_bit_and_assign";
+    case cxx::TokenKind::T_BAR_EQUAL:
+      return "operator_bit_or_assign";
+    case cxx::TokenKind::T_LESS_LESS:
+      return "operator_left_shift";
+    case cxx::TokenKind::T_GREATER_GREATER:
+      return "operator_right_shift";
+    case cxx::TokenKind::T_GREATER_GREATER_EQUAL:
+      return "operator_right_shift_assign";
+    case cxx::TokenKind::T_LESS_LESS_EQUAL:
+      return "operator_left_shift_assign";
+    case cxx::TokenKind::T_EQUAL_EQUAL:
+      return "operator_equal";
+    case cxx::TokenKind::T_EXCLAIM_EQUAL:
+      return "operator_not_equal";
+    case cxx::TokenKind::T_LESS_EQUAL:
+      return "operator_less_equal";
+    case cxx::TokenKind::T_GREATER_EQUAL:
+      return "operator_greater_equal";
+    case cxx::TokenKind::T_LESS_EQUAL_GREATER:
+      return "operator_compare";
+    case cxx::TokenKind::T_AMP_AMP:
+      return "operator_logical_and";
+    case cxx::TokenKind::T_BAR_BAR:
+      return "operator_logical_or";
+    case cxx::TokenKind::T_COMMA:
+      return "operator_comma";
+    case cxx::TokenKind::T_MINUS_GREATER_STAR:
+      return "operator_member_pointer";
+    case cxx::TokenKind::T_MINUS_GREATER:
+      return "operator_arrow";
+    case cxx::TokenKind::T_LPAREN:
+      return "operator_call";
+    case cxx::TokenKind::T_LBRACKET:
+      return "operator_subscript";
+    case cxx::TokenKind::T_NEW:
+      return "operator_new";
+    case cxx::TokenKind::T_NEW_ARRAY:
+      return "operator_new_array";
+    case cxx::TokenKind::T_DELETE:
+      return "operator_delete";
+    case cxx::TokenKind::T_DELETE_ARRAY:
+      return "operator_delete_array";
+    case cxx::TokenKind::T_CO_AWAIT:
+      return "operator_co_await";
+    default:
+      return {};
+  }
+}
+
+}  // namespace
 
 void Functions::select(std::span<const iree_string_view_t> roots) {
   auto* root = cxx::ast_cast<cxx::TranslationUnitAST>(unit_.ast());
@@ -824,12 +934,10 @@ loom_symbol_ref_t Functions::create_symbol(FunctionInstance instance,
   } else {
     spelling = qualified_name(function);
     const std::string source_name = cxx::to_string(function->name());
-    if (source_name == "operator ()") {
+    if (auto operator_name = private_operator_name(function);
+        !operator_name.empty()) {
       spelling.replace(spelling.size() - source_name.size(), source_name.size(),
-                       "operator_call");
-    } else if (source_name == "operator []") {
-      spelling.replace(spelling.size() - source_name.size(), source_name.size(),
-                       "operator_subscript");
+                       operator_name);
     }
     for (const auto& argument : function->templateArguments()) {
       spelling += "_" + cxx::to_string(argument);
@@ -936,6 +1044,12 @@ bool Functions::receiver_requires_storage(cxx::FunctionSymbol* symbol) const {
   return analysis && analysis->receiver_requires_storage();
 }
 
+bool Functions::returns_current_receiver_reference(
+    cxx::FunctionSymbol* symbol) const {
+  auto* analysis = control_flow(symbol);
+  return analysis && analysis->returns_current_receiver_reference();
+}
+
 std::span<cxx::FieldSymbol* const> Functions::receiver_writes(
     cxx::FunctionSymbol* symbol) const {
   auto* analysis = control_flow(symbol);
@@ -1004,6 +1118,10 @@ BoundSignature Functions::bind_callable_signature(
   const bool returns_void = unit_.typeTraits().is_void(signature->returnType());
   const bool returns_reference =
       unit_.typeTraits().is_lvalue_reference(signature->returnType());
+  const bool returns_receiver_alias =
+      returns_reference && receiver &&
+      receiver->abi == ImplicitObjectABI::Value &&
+      returns_current_receiver_reference(symbol);
   sources.reserve(receiver.has_value() + parameters.size() + !returns_void +
                   references.size() +
                   (receiver ? receiver->written_fields.size() : 0));
@@ -1042,7 +1160,7 @@ BoundSignature Functions::bind_callable_signature(
     reference_index += is_reference;
   }
   size_t ordinary_result_count = 0;
-  if (!returns_void) {
+  if (!returns_void && !returns_receiver_alias) {
     auto* result_type =
         returns_reference
             ? unit_.typeTraits().add_pointer(

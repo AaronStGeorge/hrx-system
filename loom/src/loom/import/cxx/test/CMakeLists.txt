@@ -141,6 +141,7 @@ loom_check_test_suite(
     "offsetof_roundtrip.cxx-test"
     "opaque_pointers.cxx-test"
     "opaque_pointers_invalid.cxx-test"
+    "operators.cxx-test"
     "packed_group_dot.cxx-test"
     "packed_memory.cxx-test"
     "padded_vectors.cxx-test"
@@ -239,6 +240,7 @@ loom_check_test_suite(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/locations.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/mxfp_group_dot.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/offsetof_layout.h"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/operator_values.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/packed_enums.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/packed_group_dot.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/packed_layout.h"
@@ -530,6 +532,32 @@ loom_execution_test(
     local_arrays_test_execute_vm_reference_test
   MODULE
     "::local_arrays_test_module"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+    "loom-execution-profile=vm_reference"
+    "loom-target-family=vm"
+    "loom-target-class=cpu"
+    "loom-executor=reference"
+)
+endif()
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+loom_test_module(
+  NAME
+    operator_values_test_module
+  SRCS
+    "operator_values.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_TARGET_ARCH_VM)
+loom_execution_test(
+  NAME
+    operator_values_test_execute_vm_reference_test
+  MODULE
+    "::operator_values_test_module"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
     "loom-execution-profile=vm_reference"

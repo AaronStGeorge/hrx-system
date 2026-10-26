@@ -1,0 +1,337 @@
+// RUN: roundtrip
+// INPUT: cxx root=arithmetic_values root=member_update_values root=member_order root=temporary_reference root=free_order root=free_increment_values root=void_update root=nonreceiver_reference root=accumulate_pairs
+#include "operator_values.cxx"
+
+// ----
+func.def public @arithmetic_values() -> (i32) {
+  %left_x = scalar.constant 2 : i32
+  %left_y = scalar.constant 3 : i32
+  %right_x = scalar.constant 5 : i32
+  %right_y = scalar.constant 7 : i32
+  %sum_x, %sum_y = func.call pure @Pair__operator_add_value(%left_x, %left_y, %right_x, %right_y) : (i32, i32, i32, i32) -> (i32, i32)
+  %7 = scalar.constant 3 : i32
+  %scaled_x, %scaled_y = func.call pure @operator_multiply(%7, %sum_x, %sum_y) : (i32, i32, i32) -> (i32, i32)
+  %negated_x, %negated_y = func.call pure @Pair__operator_negate_value(%scaled_x, %scaled_y) : (i32, i32) -> (i32, i32)
+  %12 = scalar.constant 7 : i32
+  %13 = scalar.constant 10 : i32
+  %14 = func.call pure @operator_equal(%sum_x, %sum_y, %12, %13) : (i32, i32, i32, i32) -> (i1)
+  %15 = scf.if %14 -> (i32) {
+    %16 = scalar.constant 1 : i32
+    scf.yield %16 : i32
+  } else {
+    %17 = scalar.constant 0 : i32
+    scf.yield %17 : i32
+  }
+  %18 = scalar.constant 21 : i32
+  %19 = scalar.constant 30 : i32
+  %20 = func.call pure @operator_equal(%scaled_x, %scaled_y, %18, %19) : (i32, i32, i32, i32) -> (i1)
+  %21 = scf.if %20 -> (i32) {
+    %22 = scalar.constant 2 : i32
+    scf.yield %22 : i32
+  } else {
+    %23 = scalar.constant 0 : i32
+    scf.yield %23 : i32
+  }
+  %24 = scalar.ori %15, %21 : i32
+  %25 = scalar.constant 0 : i32
+  %26 = scalar.constant 21 : i32
+  %27 = scalar.subi %25, %26 : i32
+  %28 = scalar.cmpi eq, %negated_x, %27 : i32
+  %29 = scf.if %28 -> (i1) {
+    %30 = scalar.constant 0 : i32
+    %31 = scalar.constant 30 : i32
+    %32 = scalar.subi %30, %31 : i32
+    %33 = scalar.cmpi eq, %negated_y, %32 : i32
+    scf.yield %33 : i1
+  } else {
+    scf.yield %28 : i1
+  }
+  %34 = scf.if %29 -> (i32) {
+    %35 = scalar.constant 4 : i32
+    scf.yield %35 : i32
+  } else {
+    %36 = scalar.constant 0 : i32
+    scf.yield %36 : i32
+  }
+  %37 = scalar.ori %24, %34 : i32
+  func.return %37 : i32
+}
+
+func.def public @member_update_values() -> (i32) {
+  %value_x$39 = scalar.constant 5 : i32
+  %value_y$40 = scalar.constant 9 : i32
+  %41 = scalar.constant 0 : i32
+  %previous_x, %previous_y, %value_x$44, %value_y$45 = func.call pure @Pair__operator_post_increment_value(%value_x$39, %value_y$40, %41) : (i32, i32, i32) -> (i32, i32, %value_x$39 as i32, %value_y$40 as i32)
+  %value_x$46, %value_y$47 = func.call pure @Pair__operator_pre_increment_value(%value_x$44, %value_y$45) : (i32, i32) -> (%value_x$44 as i32, %value_y$45 as i32)
+  %48 = scalar.constant 10 : i32
+  %49 = scalar.muli %previous_y, %48 : i32
+  %50 = scalar.addi %previous_x, %49 : i32
+  %51 = scalar.constant 100 : i32
+  %52 = scalar.muli %value_x$46, %51 : i32
+  %53 = scalar.addi %50, %52 : i32
+  %54 = scalar.constant 1000 : i32
+  %55 = scalar.muli %value_y$47, %54 : i32
+  %observed = scalar.addi %53, %55 : i32
+  %value_x$57, %value_y$58 = func.call pure @Pair__operator_add_assign_value(%value_x$46, %value_y$47, %previous_x, %previous_y) : (i32, i32, i32, i32) -> (%value_x$46 as i32, %value_y$47 as i32)
+  %59 = scalar.constant 10000 : i32
+  %60 = scalar.muli %value_x$57, %59 : i32
+  %61 = scalar.addi %observed, %60 : i32
+  %62 = scalar.constant 1000000 : i32
+  %63 = scalar.muli %value_y$58, %62 : i32
+  %64 = scalar.addi %61, %63 : i32
+  func.return %64 : i32
+}
+
+func.def public @member_order() -> (i32) {
+  %value_value$66 = scalar.constant 1 : i32
+  %67, %value_value$68 = func.call pure @mutate(%value_value$66) : (i32) -> (i32, %value_value$66 as i32)
+  %value_value$69 = func.call pure @MemberOrder__operator_add_assign_value(%value_value$68, %67) : (i32, i32) -> (%value_value$68 as i32)
+  func.return %value_value$69 : i32
+}
+
+func.def public @temporary_reference() -> (i32) {
+  %71 = scalar.constant 3 : i32
+  %72 = scalar.constant 2 : i32
+  %73 = scalar.constant 5 : i32
+  %74 = index.constant 4 : offset
+  %75 = buffer.alloca<private> align(4) %74 : buffer
+  %76 = index.constant 0 : offset
+  %77 = buffer.view %75[%76] : buffer -> view<4xi8>
+  %78 = index.constant 0 : offset
+  %79 = index.add %76, %78 : offset
+  %80 = index.assume %79 [range(%79, 0, 0)] : offset
+  %81 = buffer.view %75[%80] : buffer -> view<1xi32>
+  view.store %73, %81[0] : i32, view<1xi32>
+  %82, %83 = func.call @MemberOrder__operator_add_assign_storage(%75, %76, %72) : (buffer, offset, i32) -> (buffer, offset)
+  %84 = index.constant 0 : offset
+  %85 = index.add %83, %84 : offset
+  %86 = buffer.view %82[%85] : buffer -> view<1xi32>
+  %87 = view.load %86[0] : view<1xi32> -> i32
+  %88 = scalar.addi %87, %71 : i32
+  view.store %88, %86[0] : i32, view<1xi32>
+  func.return %88 : i32
+}
+
+func.def public @free_order() -> (i32) {
+  %value_value$90 = scalar.constant 2 : i32
+  %91, %value_value$92 = func.call pure @mutate_free(%value_value$90) : (i32) -> (i32, %value_value$90 as i32)
+  %93, %value_value$94 = func.call pure @operator_add_assign(%value_value$92, %91) : (i32, i32) -> (i32, %value_value$92 as i32)
+  func.return %value_value$94 : i32
+}
+
+func.def public @free_increment_values() -> (i32) {
+  %value_value$96 = scalar.constant 8 : i32
+  %97 = scalar.constant 0 : i32
+  %previous_value, %value_value$99 = func.call pure @operator_post_increment(%value_value$96, %97) : (i32, i32) -> (i32, %value_value$96 as i32)
+  %updated_value, %value_value$101 = func.call pure @operator_pre_increment(%value_value$99) : (i32) -> (i32, %value_value$99 as i32)
+  %102 = scalar.constant 100 : i32
+  %103 = scalar.muli %previous_value, %102 : i32
+  %104 = scalar.constant 10 : i32
+  %105 = scalar.muli %updated_value, %104 : i32
+  %106 = scalar.addi %103, %105 : i32
+  %107 = scalar.addi %106, %value_value$101 : i32
+  func.return %107 : i32
+}
+
+func.def public @void_update() -> (i32) {
+  %sink_value$109 = scalar.constant 9 : i32
+  %110 = scalar.constant 4 : i32
+  %sink_value$111 = func.call pure @Sink__operator_add_assign_value(%sink_value$109, %110) : (i32, i32) -> (%sink_value$109 as i32)
+  func.return %sink_value$111 : i32
+}
+
+func.def public @nonreceiver_reference() -> (i32) {
+  %selector_own = scalar.constant 2 : i32
+  %114 = index.constant 4 : offset
+  %other_storage = buffer.alloca<private> align(4) %114 : buffer
+  %other_storage_byte_offset = index.constant 0 : offset
+  %other_view = buffer.view %other_storage[%other_storage_byte_offset] : buffer -> view<1xi32>
+  %118 = scalar.constant 4 : i32
+  view.store %118, %other_view[0] : i32, view<1xi32>
+  %119 = scalar.constant 3 : i32
+  %120, %121 = func.call pure @ReferenceSelector__operator_add_assign_value(%selector_own, %other_storage, %other_storage_byte_offset) : (i32, buffer, offset) -> (buffer, offset)
+  %122 = buffer.view %120[%121] : buffer -> view<1xi32>
+  %123 = view.load %122[0] : view<1xi32> -> i32
+  %124 = scalar.addi %123, %119 : i32
+  view.store %124, %122[0] : i32, view<1xi32>
+  %125 = scalar.constant 10 : i32
+  %126 = scalar.muli %selector_own, %125 : i32
+  %other = view.load %other_view[0] : view<1xi32> -> i32
+  %128 = scalar.addi %126, %other : i32
+  func.return %128 : i32
+}
+
+kernel.def @accumulate_pairs() {
+  %131 = index.constant 1 : index
+  %132 = index.constant 1 : index
+  %133 = index.constant 1 : index
+  %134 = index.constant 64 : index
+  %135 = index.constant 1 : index
+  %136 = index.constant 1 : index
+  kernel.launch.config workgroups(%131, %132, %133) workgroup_size(%134, %135, %136) : index
+} launch(%input: buffer, %output: buffer) {
+  %input_byte_offset = index.constant 0 : offset
+  %output_byte_offset = index.constant 0 : offset
+  %workitem_id_x = kernel.workitem.id<x> : index
+  %lane = index.cast %workitem_id_x : index to i32
+  %141 = scalar.constant 2 : i32
+  %base = scalar.muli %lane, %141 : i32
+  %143 = scalar.extui %base : i32 to i64
+  %144 = scalar.constant 4 : i64
+  %145 = scalar.muli %143, %144 : i64
+  %146 = index.cast %input_byte_offset : offset to i64
+  %147 = scalar.addi %146, %145 : i64
+  %148 = scalar.assume %147 [range(%147, 0, 9223372036854775807)] : i64
+  %149 = index.cast %148 : i64 to offset
+  %150 = buffer.view %input[%149] : buffer -> view<1xi32>
+  %value_x = view.load %150[0] : view<1xi32> -> i32
+  %152 = scalar.constant 1 : i32
+  %153 = scalar.addi %base, %152 : i32
+  %154 = scalar.extui %153 : i32 to i64
+  %155 = scalar.constant 4 : i64
+  %156 = scalar.muli %154, %155 : i64
+  %157 = index.cast %input_byte_offset : offset to i64
+  %158 = scalar.addi %157, %156 : i64
+  %159 = scalar.assume %158 [range(%158, 0, 9223372036854775807)] : i64
+  %160 = index.cast %159 : i64 to offset
+  %161 = buffer.view %input[%160] : buffer -> view<1xi32>
+  %value_y = view.load %161[0] : view<1xi32> -> i32
+  %bias_x = scalar.constant 1 : i32
+  %bias_y = scalar.constant 2 : i32
+  %165 = scalar.constant 3 : i32
+  %166, %167 = func.call pure @Pair__operator_add_value(%value_x, %value_y, %bias_x, %bias_y) : (i32, i32, i32, i32) -> (i32, i32)
+  %result_x, %result_y = func.call pure @operator_multiply(%165, %166, %167) : (i32, i32, i32) -> (i32, i32)
+  %170 = scalar.extui %base : i32 to i64
+  %171 = scalar.constant 4 : i64
+  %172 = scalar.muli %170, %171 : i64
+  %173 = index.cast %output_byte_offset : offset to i64
+  %174 = scalar.addi %173, %172 : i64
+  %175 = scalar.assume %174 [range(%174, 0, 9223372036854775807)] : i64
+  %176 = index.cast %175 : i64 to offset
+  %177 = buffer.view %output[%176] : buffer -> view<1xi32>
+  view.store %result_x, %177[0] : i32, view<1xi32>
+  %178 = scalar.constant 1 : i32
+  %179 = scalar.addi %base, %178 : i32
+  %180 = scalar.extui %179 : i32 to i64
+  %181 = scalar.constant 4 : i64
+  %182 = scalar.muli %180, %181 : i64
+  %183 = index.cast %output_byte_offset : offset to i64
+  %184 = scalar.addi %183, %182 : i64
+  %185 = scalar.assume %184 [range(%184, 0, 9223372036854775807)] : i64
+  %186 = index.cast %185 : i64 to offset
+  %187 = buffer.view %output[%186] : buffer -> view<1xi32>
+  view.store %result_y, %187[0] : i32, view<1xi32>
+  kernel.return
+}
+
+func.def @Pair__operator_add_value(%this_x: i32, %this_y: i32, %other_x: i32, %other_y: i32) -> (i32, i32) {
+  %zero$i32$194 = scalar.constant 0 : i32
+  %zero$i32$195 = scalar.constant 0 : i32
+  %result_x = scalar.addi %this_x, %other_x : i32
+  %result_y = scalar.addi %this_y, %other_y : i32
+  func.return %result_x, %result_y : i32, i32
+}
+
+func.def @operator_multiply(%scale: i32, %value_x: i32, %value_y: i32) -> (i32, i32) {
+  %203 = scalar.muli %scale, %value_x : i32
+  %204 = scalar.muli %scale, %value_y : i32
+  func.return %203, %204 : i32, i32
+}
+
+func.def @Pair__operator_negate_value(%this_x: i32, %this_y: i32) -> (i32, i32) {
+  %zero$i32$209 = scalar.constant 0 : i32
+  %zero$i32$210 = scalar.constant 0 : i32
+  %211 = scalar.constant 0 : i32
+  %result_x = scalar.subi %211, %this_x : i32
+  %213 = scalar.constant 0 : i32
+  %result_y = scalar.subi %213, %this_y : i32
+  func.return %result_x, %result_y : i32, i32
+}
+
+func.def @operator_equal(%left_x: i32, %left_y: i32, %right_x: i32, %right_y: i32) -> (i1) {
+  %220 = scalar.cmpi eq, %left_x, %right_x : i32
+  %221 = scf.if %220 -> (i1) {
+    %222 = scalar.cmpi eq, %left_y, %right_y : i32
+    scf.yield %222 : i1
+  } else {
+    scf.yield %220 : i1
+  }
+  func.return %221 : i1
+}
+
+func.def @Pair__operator_post_increment_value(%this_x: i32, %this_y: i32, %225: i32) -> (i32, i32, %this_x as i32, %this_y as i32) {
+  %zero$i32$230 = scalar.constant 0 : i32
+  %zero$i32$231 = scalar.constant 0 : i32
+  %232 = scalar.constant 1 : i32
+  %x = scalar.addi %this_x, %232 : i32
+  %234 = scalar.constant 1 : i32
+  %y = scalar.addi %this_y, %234 : i32
+  func.return %this_x, %this_y, %x, %y : i32, i32, i32, i32
+}
+
+func.def @Pair__operator_pre_increment_value(%this_x: i32, %this_y: i32) -> (%this_x as i32, %this_y as i32) {
+  %240 = scalar.constant 1 : i32
+  %x = scalar.addi %this_x, %240 : i32
+  %242 = scalar.constant 1 : i32
+  %y = scalar.addi %this_y, %242 : i32
+  func.return %x, %y : i32, i32
+}
+
+func.def @Pair__operator_add_assign_value(%this_x: i32, %this_y: i32, %other_x: i32, %other_y: i32) -> (%this_x as i32, %this_y as i32) {
+  %x = scalar.addi %this_x, %other_x : i32
+  %y = scalar.addi %this_y, %other_y : i32
+  func.return %x, %y : i32, i32
+}
+
+func.def @mutate(%value_value$252: i32) -> (i32, %value_value$252 as i32) {
+  %value_value$255 = scalar.constant 7 : i32
+  %256 = scalar.constant 3 : i32
+  func.return %256, %value_value$255 : i32, i32
+}
+
+func.def @MemberOrder__operator_add_assign_value(%this_value: i32, %amount: i32) -> (%this_value as i32) {
+  %value = scalar.addi %this_value, %amount : i32
+  func.return %value : i32
+}
+
+func.def @MemberOrder__operator_add_assign_storage(%this: buffer, %this_byte_offset: offset, %amount: i32) -> (buffer, offset) {
+  %266 = index.constant 0 : offset
+  %267 = index.add %this_byte_offset, %266 : offset
+  %268 = buffer.view %this[%267] : buffer -> view<1xi32>
+  %269 = view.load %268[0] : view<1xi32> -> i32
+  %270 = scalar.addi %269, %amount : i32
+  view.store %270, %268[0] : i32, view<1xi32>
+  func.return %this, %this_byte_offset : buffer, offset
+}
+
+func.def @mutate_free(%value_value$271: i32) -> (i32, %value_value$271 as i32) {
+  %value_value$274 = scalar.constant 11 : i32
+  %275 = scalar.constant 4 : i32
+  func.return %275, %value_value$274 : i32, i32
+}
+
+func.def @operator_add_assign(%left_value$276: i32, %right: i32) -> (i32, %left_value$276 as i32) {
+  %left_value$280 = scalar.addi %left_value$276, %right : i32
+  func.return %left_value$280, %left_value$280 : i32, i32
+}
+
+func.def @operator_post_increment(%value_value$281: i32, %282: i32) -> (i32, %value_value$281 as i32) {
+  %285 = scalar.constant 1 : i32
+  %value_value$286 = scalar.addi %value_value$281, %285 : i32
+  func.return %value_value$281, %value_value$286 : i32, i32
+}
+
+func.def @operator_pre_increment(%value_value$287: i32) -> (i32, %value_value$287 as i32) {
+  %290 = scalar.constant 1 : i32
+  %value_value$291 = scalar.addi %value_value$287, %290 : i32
+  func.return %value_value$291, %value_value$291 : i32, i32
+}
+
+func.def @Sink__operator_add_assign_value(%this_value: i32, %amount: i32) -> (%this_value as i32) {
+  %value = scalar.addi %this_value, %amount : i32
+  func.return %value : i32
+}
+
+func.def @ReferenceSelector__operator_add_assign_value(%this_own: i32, %other: buffer, %other_byte_offset: offset) -> (buffer, offset) {
+  func.return %other, %other_byte_offset : buffer, offset
+}

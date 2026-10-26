@@ -588,31 +588,60 @@ void ControlFlow::visit(cxx::SwitchStatementAST* ast) {
 }
 
 void ControlFlow::visit(cxx::AssignmentExpressionAST* ast) {
-  record(ast->leftExpression);
+  if (!record(ast->leftExpression)) {
+    require_identity(ast->leftExpression);
+  }
   record_callable_write(ast->leftExpression);
   cxx::ASTVisitor::visit(ast);
 }
 
-void ControlFlow::visit(cxx::CompoundAssignmentExpressionAST* ast) {
-  record(ast->targetExpression);
-  record_callable_write(ast->targetExpression);
+void ControlFlow::visit(cxx::BinaryExpressionAST* ast) {
   cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+  }
+}
+
+void ControlFlow::visit(cxx::CompoundAssignmentExpressionAST* ast) {
+  if (!ast->symbol) {
+    if (!record(ast->targetExpression)) {
+      require_identity(ast->targetExpression);
+    }
+    record_callable_write(ast->targetExpression);
+  }
+  cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+  }
 }
 
 void ControlFlow::visit(cxx::PostIncrExpressionAST* ast) {
-  record(ast->baseExpression);
-  record_callable_write(ast->baseExpression);
+  if (!ast->symbol) {
+    if (!record(ast->baseExpression)) {
+      require_identity(ast->baseExpression);
+    }
+    record_callable_write(ast->baseExpression);
+  }
   cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+  }
 }
 
 void ControlFlow::visit(cxx::UnaryExpressionAST* ast) {
   cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+    return;
+  }
   if (!ast->symbol && ast->op == cxx::TokenKind::T_AMP) {
     require_identity(ast->expression);
   }
   if (ast->op == cxx::TokenKind::T_PLUS_PLUS ||
       ast->op == cxx::TokenKind::T_MINUS_MINUS) {
-    record(ast->expression);
+    if (!record(ast->expression)) {
+      require_identity(ast->expression);
+    }
     record_callable_write(ast->expression);
   }
 }
@@ -625,7 +654,19 @@ void ControlFlow::visit(cxx::ReturnStatementAST* ast) {
   if (signature &&
       unit_.typeTraits().is_lvalue_reference(signature->returnType()) &&
       ast->expression) {
-    require_identity(ast->expression);
+    if (is_current_object(ast->expression)) {
+      if (reference_return_ == ReferenceReturn::Storage) {
+        receiver_requires_storage_ = true;
+      } else {
+        reference_return_ = ReferenceReturn::CurrentReceiver;
+      }
+    } else {
+      if (reference_return_ == ReferenceReturn::CurrentReceiver) {
+        receiver_requires_storage_ = true;
+      }
+      reference_return_ = ReferenceReturn::Storage;
+      require_identity(ast->expression);
+    }
   }
 }
 
@@ -749,8 +790,72 @@ void ControlFlow::retain_call(cxx::SubscriptExpressionAST* call,
   calls_.push_back(std::move(retained));
 }
 
+void ControlFlow::retain_call(const DirectOperatorCall& call,
+                              cxx::AST* source) {
+  DirectCall retained = {call.function, source, {}, std::nullopt, false, false};
+  retained.arguments.reserve(call.argument_count + call.has_postfix_dummy);
+  for (size_t index = 0; index < call.argument_count; ++index) {
+    retained.arguments.push_back(retain_call_argument(call.arguments[index]));
+  }
+  if (call.has_postfix_dummy) {
+    retained.arguments.push_back({nullptr, {}, nullptr, false, false, {}});
+  }
+  if (call.receiver) {
+    retained.current_receiver = is_current_object(call.receiver);
+    if (!retained.current_receiver) {
+      retained.receiver = retain_call_argument(call.receiver);
+      retained.storage_receiver = retained.receiver->inherent_storage;
+    }
+  }
+  calls_.push_back(std::move(retained));
+
+  auto parameters = call.function->parameters();
+  auto traits = unit_.typeTraits();
+  for (size_t ordinal = 0; ordinal < call.argument_count; ++ordinal) {
+    auto* argument = call.arguments[ordinal];
+    auto* parameter_type = parameters[ordinal]->type();
+    if (!traits.is_lvalue_reference(parameter_type) ||
+        argument->valueCategory != cxx::ValueCategory::kLValue) {
+      continue;
+    }
+    if (traits.is_const(traits.remove_reference(parameter_type))) {
+      retain_destination(argument);
+    } else {
+      record(argument);
+    }
+  }
+  if (!call.receiver || !call.function->isImplicitObjectMemberFunction()) {
+    return;
+  }
+  if (!is_current_object(call.receiver)) {
+    if (call.receiver->valueCategory == cxx::ValueCategory::kLValue) {
+      if (implicit_object_may_mutate(call.function)) {
+        record(call.receiver);
+      } else {
+        retain_destination(call.receiver);
+      }
+    }
+    return;
+  }
+  if (!implicit_object_may_mutate(call.function)) {
+    return;
+  }
+  auto* object_type = implicit_object_type(unit_, function_);
+  auto* receiver = object_type
+                       ? types_.record(types_.unqualified(object_type), source)
+                       : nullptr;
+  if (!receiver) {
+    diagnostics_.reject(unit_, source,
+                        "implicit operator call requires a current record "
+                        "object");
+  }
+  for (const auto& member : receiver->members) {
+    record(member.field);
+  }
+}
+
 CallArgument ControlFlow::retain_call_argument(cxx::ExpressionAST* expression) {
-  CallArgument argument = {expression, {}, nullptr, false, false};
+  CallArgument argument = {expression, {}, nullptr, false, false, {}};
   collect_identity(expression, argument);
   auto target = classify_destination(unwrap_expression(expression));
   argument.write_binding = target ? target->binding : nullptr;
@@ -808,8 +913,9 @@ void ControlFlow::collect_identity(cxx::ExpressionAST* expression,
   if (auto* subscript =
           cxx::ast_cast<cxx::SubscriptExpressionAST>(expression)) {
     if (subscript->symbol) {
-      argument.inherent_storage =
-          expression->valueCategory == cxx::ValueCategory::kLValue;
+      if (expression->valueCategory == cxx::ValueCategory::kLValue) {
+        argument.reference_calls.push_back(expression);
+      }
       return;
     }
     auto* base_type = subscript->baseExpression->type;
@@ -836,6 +942,13 @@ void ControlFlow::collect_identity(cxx::ExpressionAST* expression,
     collect_identity(conditional->iffalseExpression, argument);
     return;
   }
+  if (auto call = direct_operator_call(expression)) {
+    auto* signature = cxx::type_cast<cxx::FunctionType>(call->function->type());
+    if (signature && traits.is_lvalue_reference(signature->returnType())) {
+      argument.reference_calls.push_back(expression);
+      return;
+    }
+  }
   if (auto* unary = cxx::ast_cast<cxx::UnaryExpressionAST>(expression)) {
     if (!unary->symbol && unary->op == cxx::TokenKind::T_STAR) {
       argument.inherent_storage = true;
@@ -847,7 +960,7 @@ void ControlFlow::collect_identity(cxx::ExpressionAST* expression,
     auto* signature =
         callee ? cxx::type_cast<cxx::FunctionType>(callee->type()) : nullptr;
     if (signature && traits.is_lvalue_reference(signature->returnType())) {
-      argument.inherent_storage = true;
+      argument.reference_calls.push_back(expression);
       return;
     }
   }
@@ -862,8 +975,11 @@ bool ControlFlow::require_identity(cxx::ExpressionAST* expression) {
 
 bool ControlFlow::require_identity(const CallArgument& argument) {
   bool changed = false;
+  for (auto* call : argument.reference_calls) {
+    changed = identity_call_results_.insert(call).second || changed;
+  }
   if (argument.current_receiver) {
-    changed = !receiver_requires_storage_;
+    changed = !receiver_requires_storage_ || changed;
     receiver_requires_storage_ = true;
   }
   auto traits = unit_.typeTraits();
@@ -980,6 +1096,17 @@ CallPropagation ControlFlow::propagate_call(const DirectCall& call,
   }
   if (!call.function->isImplicitObjectMemberFunction()) {
     return {caller_changed, callee_changed};
+  }
+  if (identity_call_results_.contains(call.source) &&
+      callee.returns_current_receiver_reference()) {
+    caller_changed =
+        storage_call_results_.insert(call.source).second || caller_changed;
+    if (call.current_receiver) {
+      caller_changed = !receiver_requires_storage_ || caller_changed;
+      receiver_requires_storage_ = true;
+    } else if (!call.storage_receiver && call.receiver) {
+      caller_changed = require_identity(*call.receiver) || caller_changed;
+    }
   }
   if (callee.receiver_requires_storage()) {
     if (call.current_receiver) {
@@ -1101,12 +1228,13 @@ std::optional<Destination> ControlFlow::retain_destination(
   return target;
 }
 
-void ControlFlow::record(cxx::ExpressionAST* expression) {
+bool ControlFlow::record(cxx::ExpressionAST* expression) {
   auto target = retain_destination(expression);
   if (!target) {
-    return;
+    return false;
   }
   record(target->binding);
+  return true;
 }
 
 void ControlFlow::record(cxx::Symbol* binding) {

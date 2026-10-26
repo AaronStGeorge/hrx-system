@@ -98,7 +98,10 @@ typedef enum loom_target_loop_predicate_carrier_e {
   LOOM_TARGET_LOOP_PREDICATE_CARRIER_I32 = 1,
 } loom_target_loop_predicate_carrier_t;
 
-// Selects call policy for one verified semantic or Low boundary.
+// Selects call policy for one verified semantic or Low boundary. The common
+// dispatcher requires inlining when a semantic callee carries source-level
+// tied results because no direct target ABI owns those ties yet. Providers
+// select among the remaining representable boundaries.
 //
 // The query is intentionally per resolved caller rather than per module: one
 // module may carry versions owned by different target providers. Semantic
