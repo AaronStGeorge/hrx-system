@@ -9,6 +9,7 @@
 #include "loom/ir/module.h"
 #include "loom/pass/builder.h"
 #include "loom/target/arch/amd/xdna/aie2p/call_abi.h"
+#include "loom/target/arch/amd/xdna/aie2p/descriptors/configuration_descriptors.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/low_registry.h"
 #include "loom/target/arch/amd/xdna/aie2p/facts.h"
 #include "loom/target/arch/amd/xdna/aie2p/legalization.h"
@@ -117,7 +118,6 @@ static loom_target_call_policy_t loom_aie2p_select_call_policy(
     const loom_resolved_target_t* resolved_target, const loom_module_t* module,
     loom_call_like_kind_t kind, loom_call_like_t call,
     loom_func_like_t callee) {
-  (void)resolved_target;
   (void)call;
   if ((kind != LOOM_CALL_LIKE_KIND_SEMANTIC &&
        kind != LOOM_CALL_LIKE_KIND_LOW_INTERNAL) ||
@@ -125,6 +125,13 @@ static loom_target_call_policy_t loom_aie2p_select_call_policy(
       loom_func_like_inline_policy(callee) != LOOM_INLINE_POLICY_NOINLINE ||
       !loom_func_like_is_module_internal(callee) ||
       !loom_func_like_body(callee)) {
+    return LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE;
+  }
+  // Configuration calls must expand before physical materialization. Semantic
+  // array-strand helpers can retain calls until worker outlining selects the
+  // core contract and its native ABI.
+  if (resolved_target->facts->storage.config.contract_set.stable_id ==
+      AIE2P_CONFIGURATION_DESCRIPTOR_SET_ID) {
     return LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE;
   }
 

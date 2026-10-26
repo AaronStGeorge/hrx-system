@@ -526,10 +526,10 @@ ERR_XDNA_050 = ErrorDef(
     domain=ErrorDomain.XDNA,
     code=50,
     severity=Severity.ERROR,
-    summary="Configuration function has a runtime signature.",
+    summary="Configuration entry has a runtime signature.",
     message=(
-        "configuration function '@{function_name}' has {argument_count} arguments "
-        "and {result_count} results; configuration functions have neither"
+        "configuration entry '@{function_name}' has {argument_count} arguments "
+        "and {result_count} results; physical entries have neither"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
@@ -890,6 +890,19 @@ ERR_XDNA_058 = ErrorDef(
     fix_hint="Reduce or split the program's native instruction footprint.",
 )
 
+ERR_XDNA_059 = ErrorDef(
+    domain=ErrorDomain.XDNA,
+    code=59,
+    severity=Severity.ERROR,
+    summary="Configuration calls require expansion before artifact emission.",
+    message=(
+        "configuration function '@{function_name}' contains unexpanded calls; "
+        "physical configuration emission requires inlined commands"
+    ),
+    params=(ErrorParam("function_name", ParamKind.STRING),),
+    fix_hint="Compile the source through the shared callable inliner before emission.",
+)
+
 ALL_XDNA_ERRORS = (
     ERR_XDNA_001,
     ERR_XDNA_005,
@@ -941,4 +954,5 @@ ALL_XDNA_ERRORS = (
     ERR_XDNA_056,
     ERR_XDNA_057,
     ERR_XDNA_058,
+    ERR_XDNA_059,
 )

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function_model.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/codegen/low/schedule/run.h"
@@ -94,6 +95,20 @@ struct loom_aie2p_configuration_plan_t {
   loom_symbol_ref_t invoke;
 };
 
+static iree_status_t loom_aie2p_configuration_diagnose(
+    loom_aie2p_configuration_plan_t* emitter, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  ++emitter->error_count;
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+  };
+  return iree_diagnostic_emit(emitter->request->diagnostic_emitter, &emission);
+}
+
 static iree_status_t loom_aie2p_configuration_schedule(
     loom_aie2p_configuration_plan_t* emitter, const loom_op_t* function,
     loom_low_schedule_table_t* out_schedule) {
@@ -111,6 +126,15 @@ static iree_status_t loom_aie2p_configuration_schedule(
       LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL,
       request->scratch_arena, &model);
   emitter->error_count += model.context.error_count;
+  if (iree_status_is_ok(status) && !emitter->error_count &&
+      model.context.requirements.direct_callees.count != 0) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(
+            loom_low_diagnostic_function_name(request->module, function)),
+    };
+    status = loom_aie2p_configuration_diagnose(
+        emitter, function, LOOM_ERR_XDNA_059, params, IREE_ARRAYSIZE(params));
+  }
   if (iree_status_is_ok(status) && !emitter->error_count) {
     const loom_low_schedule_options_t options = {
         .emitter = request->diagnostic_emitter,
@@ -122,20 +146,6 @@ static iree_status_t loom_aie2p_configuration_schedule(
   loom_low_function_model_deinitialize(&model);
   emitter->error_count += out_schedule->error_count;
   return status;
-}
-
-static iree_status_t loom_aie2p_configuration_diagnose(
-    loom_aie2p_configuration_plan_t* emitter, const loom_op_t* op,
-    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
-    iree_host_size_t param_count) {
-  ++emitter->error_count;
-  const loom_diagnostic_emission_t emission = {
-      .op = op,
-      .error = error,
-      .params = params,
-      .param_count = param_count,
-  };
-  return iree_diagnostic_emit(emitter->request->diagnostic_emitter, &emission);
 }
 
 static iree_status_t loom_aie2p_configuration_check_scalar(

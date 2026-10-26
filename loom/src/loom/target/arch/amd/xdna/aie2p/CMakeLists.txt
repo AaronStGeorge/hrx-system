@@ -612,6 +612,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::call_abi
+    ::configuration_descriptors
     ::legalization
     ::low_registry
     ::low_verify
@@ -1071,6 +1072,7 @@ loom_check_test_suite(
     "test/array_plan/worker_storage_admission.loom-test"
     "test/canonicalize/adjacent_add.loom-test"
     "test/configuration.loom-test"
+    "test/configuration_calls.loom-test"
     "test/configuration_contracts.loom-test"
     "test/configuration_data.loom-test"
     "test/configuration_entry.loom-test"

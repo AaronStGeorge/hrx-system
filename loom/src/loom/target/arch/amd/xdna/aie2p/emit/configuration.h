@@ -88,8 +88,13 @@ typedef struct loom_aie2p_configuration_plan_t loom_aie2p_configuration_plan_t;
 //
 // Initialization executes once; subsequent invocations reuse its state. The
 // invocation function supplies external bindings and all relocated writes.
-// Configuration functions are statically evaluated straight-line Low programs;
-// worker functions retain their complete authored control flow. Each distinct
+// Configuration functions are statically evaluated straight-line Low programs.
+// Source helpers accept and return the three configuration operand classes.
+// Ordinary Low calls compose those helpers through shared inlining; there is
+// no configuration call instruction. The entry and its referenced phases keep
+// closed signatures, and physical emission rejects unexpanded calls. Phase and
+// measurement contracts apply to the complete expanded functions.
+// Worker functions retain their complete authored control flow. Each distinct
 // worker is named once in the plan and is later compiled once and linked at
 // each placement with that tile's data reservations and core-visible address
 // apertures.
