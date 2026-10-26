@@ -124,3 +124,87 @@ node 1 <- 0
 node 2 <- 1
 node 3 <- 1
 node 4 <- 1
+
+// ====
+
+// Private replay keeps its preceding call boundary even when a two-input
+// contraction cannot join the consumer's complete setup chain.
+// RUN: emit low-schedule-query @call_replay kind=order consumer=1,2 order=* per-user-placement-values=%literal,%private required-register-values=%seed,%literal,%private repair-private-setup
+
+test.target<low_core> @target
+
+low.func.decl target<test.low.core>(@target) @clobber()
+
+low.func.def target<test.low.core>(@target) @call_replay(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.func.call @clobber() : ()
+  %literal = test.const.i32 6
+  %private = test.add.i32 %seed, %literal
+  return %private
+}
+
+// ----
+block 0 order: 0, 1, 2, 3
+node 1 <- 0
+node 2 <- 0
+
+// ====
+
+// Pure calls still have physical clobbers. Private input-free setup retains
+// the same boundary without imposing consumer-chain ordering.
+// RUN: emit low-schedule-query @pure_call_replay kind=order consumer=1 order=* per-user-placement-values=%private
+
+test.target<low_core> @target
+
+low.func.decl pure target<test.low.core>(@target) @pure_callee()
+
+low.func.def target<test.low.core>(@target) @pure_call_replay() -> (reg<test.i32>) asm {
+  low.func.call pure @pure_callee() : ()
+  %private = test.const.i32 7
+  return %private
+}
+
+// ----
+block 0 order: 0, 1, 2
+node 1 <- 0
+
+// ====
+
+// Ordinary values remain freely scheduled around calls. Only repair-owned
+// private placement establishes the additional lifetime boundary.
+// RUN: emit low-schedule-query @ordinary_call_setup kind=order consumer=1
+
+test.target<low_core> @target
+
+low.func.decl target<test.low.core>(@target) @clobber()
+
+low.func.def target<test.low.core>(@target) @ordinary_call_setup() -> (reg<test.i32>) asm {
+  low.func.call @clobber() : ()
+  %ordinary = test.const.i32 7
+  return %ordinary
+}
+
+// ----
+node 1 <- none
+
+// ====
+
+// A preceding call belongs to its block. A successor's private setup does
+// not introduce a cross-block edge into the local scheduling graph.
+// RUN: emit low-schedule-query @successor_replay kind=order consumer=* order=* per-user-placement-values=%private
+
+test.target<low_core> @target
+
+low.func.decl target<test.low.core>(@target) @clobber()
+
+low.func.def target<test.low.core>(@target) @successor_replay() -> (reg<test.i32>) asm {
+  low.func.call @clobber() : ()
+  low.br ^next
+^next:
+  %private = test.const.i32 7
+  return %private
+}
+
+// ----
+block 0 order: 0, 1
+block 1 order: 2, 3
+none

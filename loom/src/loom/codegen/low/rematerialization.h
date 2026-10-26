@@ -21,7 +21,8 @@
 // facts. Rematerialization computes closure once per original value in a repair
 // batch, then applies consumer-first repairs using fresh operand uses. Private
 // producer placement survives schedule rebuilds until another rewrite changes
-// its uses.
+// its uses. Scheduling retains the preceding same-block call boundary so a
+// replayed value does not regain a call-crossing lifetime through hoisting.
 
 #ifndef LOOM_CODEGEN_LOW_REMATERIALIZATION_H_
 #define LOOM_CODEGEN_LOW_REMATERIALIZATION_H_

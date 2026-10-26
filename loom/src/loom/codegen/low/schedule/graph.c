@@ -1751,9 +1751,32 @@ iree_status_t loom_low_schedule_build_dependencies(
     }
     const uint32_t block_node_end =
         block_record->node_start + block_record->node_count;
+    uint32_t preceding_call = LOOM_LOW_SCHEDULE_NODE_NONE;
     for (uint32_t node_index = block_record->node_start;
          node_index < block_node_end; ++node_index) {
       const loom_low_schedule_node_t* node = &state->nodes[node_index];
+      if (loom_low_func_call_isa(node->op)) {
+        preceding_call = node_index;
+      } else if (preceding_call != LOOM_LOW_SCHEDULE_NODE_NONE &&
+                 node->result_count == 1) {
+        // Repair placed this private producer after the call. Hoisting it
+        // across that boundary would recreate the preserved-register pressure
+        // that rematerialization removed, even for an input-free constant.
+        const loom_value_id_t value_id =
+            state->value_domain
+                ->value_ids[loom_low_schedule_node_const_result_ordinals(
+                    node)[0]];
+        const iree_bitmap_t private_values =
+            state->options->per_user_placement_values;
+        if (value_id < private_values.bit_count &&
+            iree_bitmap_test(private_values, value_id)) {
+          IREE_RETURN_IF_ERROR(loom_low_schedule_add_dependency(
+              state, preceding_call, node_index,
+              LOOM_LOW_SCHEDULE_DEPENDENCY_ORDER, LOOM_LOW_ID_NONE,
+              loom_low_schedule_dependency_endpoint_none(),
+              loom_low_schedule_dependency_endpoint_none()));
+        }
+      }
 
       // Process tied writes before recording this node's operand reads. This
       // keeps overlapping tied operands from depending on their own writer,
