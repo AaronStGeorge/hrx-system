@@ -1101,6 +1101,102 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
   return iree_ok_status();
 }
 
+static const loom_spirv_function_emission_plan_t*
+loom_spirv_emit_lookup_function(loom_spirv_emit_state_t* state,
+                                loom_symbol_ref_t function_ref) {
+  IREE_ASSERT(loom_symbol_ref_is_valid(function_ref) &&
+              function_ref.module_id == 0 &&
+              function_ref.symbol_id < state->context->program->symbol_count);
+  const uint32_t function_index =
+      state->context->program
+          ->function_indices_by_symbol[function_ref.symbol_id];
+  IREE_ASSERT_NE(function_index, LOOM_SPIRV_PROGRAM_FUNCTION_INDEX_NONE);
+  IREE_ASSERT_LT(function_index, state->context->program->function_count);
+  return &state->context->emission_plans[function_index];
+}
+
+static void loom_spirv_emit_merge_function_requirements(
+    loom_spirv_emit_state_t* state,
+    const loom_spirv_function_emission_plan_t* callee) {
+  IREE_ASSERT(callee->emission_complete,
+              "SPIR-V functions must be emitted callee-before-caller");
+  state->required_feature_bits |= callee->required_feature_bits;
+  for (iree_host_size_t i = 0; i < LOOM_SPIRV_BUILTIN_VARIABLE_COUNT; ++i) {
+    const uint32_t variable_id = callee->builtin_interface_variable_ids[i];
+    if (variable_id == 0) {
+      continue;
+    }
+    IREE_ASSERT(state->builtin_interface_variable_ids[i] == 0 ||
+                state->builtin_interface_variable_ids[i] == variable_id);
+    state->builtin_interface_variable_ids[i] = variable_id;
+  }
+}
+
+static iree_status_t loom_spirv_emit_low_func_call(
+    loom_spirv_emit_state_t* state, const loom_op_t* op) {
+  const loom_spirv_function_emission_plan_t* callee =
+      loom_spirv_emit_lookup_function(state, loom_low_func_call_callee(op));
+  const loom_value_slice_t arguments = loom_low_func_call_operands(op);
+  const iree_host_size_t operand_count = arguments.count + 3;
+  uint32_t inline_operands[16] = {0};
+  uint32_t* operands = inline_operands;
+  if (operand_count > IREE_ARRAYSIZE(inline_operands)) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(state->scratch_arena, operand_count,
+                                  sizeof(*operands), (void**)&operands));
+  }
+
+  const uint32_t call_result_id = loom_spirv_emit_allocate_id(state);
+  operands[0] = callee->result_type_id;
+  operands[1] = call_result_id;
+  operands[2] = callee->function_id;
+  for (iree_host_size_t i = 0; i < arguments.count; ++i) {
+    loom_spirv_module_value_ref_t argument = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_spirv_emit_lookup_value(state, arguments.values[i], &argument));
+    operands[3 + i] = argument.id;
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      LOOM_SPIRV_OP_FUNCTION_CALL, operands, operand_count));
+  loom_spirv_emit_merge_function_requirements(state, callee);
+
+  const loom_value_slice_t results = loom_low_func_call_results(op);
+  if (results.count == 0) {
+    return iree_ok_status();
+  }
+  if (results.count == 1) {
+    const loom_spirv_module_value_ref_t result_ref = {
+        .id = call_result_id,
+        .type_id = callee->result_type_ids[0],
+        .value_type = callee->function->result_types[0],
+    };
+    return loom_spirv_emit_define_value(state, results.values[0], result_ref,
+                                        /*emit_name=*/true);
+  }
+  for (uint16_t i = 0; i < results.count; ++i) {
+    const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+    const uint32_t extract_operands[] = {
+        callee->result_type_ids[i],
+        result_id,
+        call_result_id,
+        i,
+    };
+    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_COMPOSITE_EXTRACT, extract_operands,
+        IREE_ARRAYSIZE(extract_operands)));
+    const loom_spirv_module_value_ref_t result_ref = {
+        .id = result_id,
+        .type_id = callee->result_type_ids[i],
+        .value_type = callee->function->result_types[i],
+    };
+    IREE_RETURN_IF_ERROR(loom_spirv_emit_define_value(
+        state, results.values[i], result_ref, /*emit_name=*/true));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
                                      const loom_op_t* op) {
   if (loom_traits_are_compile_time_only(op->traits)) {
@@ -1123,11 +1219,22 @@ iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
   if (loom_low_scf_if_isa(op)) {
     return loom_spirv_emit_scf_if(state, op);
   }
+  if (loom_low_unreachable_isa(op)) {
+    return loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_UNREACHABLE, NULL, 0);
+  }
   if (loom_low_scf_for_isa(op)) {
     return loom_spirv_emit_scf_for(state, op);
   }
   if (loom_low_scf_while_isa(op)) {
     return loom_spirv_emit_scf_while(state, op);
+  }
+  if (loom_low_func_call_isa(op)) {
+    return loom_spirv_emit_low_func_call(state, op);
+  }
+  if (loom_low_func_exit_isa(op)) {
+    return loom_spirv_emit_func_exit(state, op);
   }
   if (loom_low_scf_yield_isa(op) || loom_low_scf_condition_isa(op)) {
     IREE_CHECK_UNREACHABLE("verified SPIR-V low.scf terminator parent");
@@ -1168,14 +1275,60 @@ iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
   return loom_spirv_emit_descriptor_packet(state, op, &packet);
 }
 
-static iree_status_t loom_spirv_emit_return(loom_spirv_emit_state_t* state,
-                                            const loom_op_t* op) {
-  loom_spirv_module_abi_context_t context = loom_spirv_emit_abi_context(state);
-  IREE_RETURN_IF_ERROR(loom_spirv_module_abi_store_return_values(
-      &context, &state->abi_plan, op));
+iree_status_t loom_spirv_emit_return(loom_spirv_emit_state_t* state,
+                                     const loom_op_t* op) {
+  if (state->function_plan->is_entry) {
+    loom_spirv_module_abi_context_t context =
+        loom_spirv_emit_abi_context(state);
+    IREE_RETURN_IF_ERROR(loom_spirv_module_abi_store_return_values(
+        &context, &state->abi_plan, op));
+    return loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_RETURN, NULL, 0);
+  }
+
+  const loom_value_slice_t values = loom_low_return_values(op);
+  if (values.count == 0) {
+    return loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_RETURN, NULL, 0);
+  }
+  loom_spirv_module_value_ref_t inline_values[8] = {0};
+  loom_spirv_module_value_ref_t* value_refs = inline_values;
+  if (values.count > IREE_ARRAYSIZE(inline_values)) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(state->scratch_arena, values.count,
+                                  sizeof(*value_refs), (void**)&value_refs));
+  }
+  for (uint16_t i = 0; i < values.count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_spirv_emit_lookup_value(state, values.values[i], &value_refs[i]));
+  }
+  uint32_t return_value_id = value_refs[0].id;
+  if (values.count > 1) {
+    const iree_host_size_t operand_count = values.count + 2;
+    uint32_t inline_operands[10] = {0};
+    uint32_t* operands = inline_operands;
+    if (operand_count > IREE_ARRAYSIZE(inline_operands)) {
+      IREE_RETURN_IF_ERROR(
+          iree_arena_allocate_array(state->scratch_arena, operand_count,
+                                    sizeof(*operands), (void**)&operands));
+    }
+    return_value_id = loom_spirv_emit_allocate_id(state);
+    operands[0] = state->emission_plan->result_type_id;
+    operands[1] = return_value_id;
+    for (uint16_t i = 0; i < values.count; ++i) {
+      operands[2 + i] = value_refs[i].id;
+    }
+    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_COMPOSITE_CONSTRUCT, operands, operand_count));
+  }
+  const uint32_t return_operands[] = {return_value_id};
   return loom_spirv_binary_write_instruction(
       loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
-      LOOM_SPIRV_OP_RETURN, NULL, 0);
+      LOOM_SPIRV_OP_RETURN_VALUE, return_operands,
+      IREE_ARRAYSIZE(return_operands));
 }
 
 static iree_status_t loom_spirv_emit_float_execution_mode(
@@ -1267,18 +1420,107 @@ static iree_status_t loom_spirv_emit_entry_point(
   return iree_ok_status();
 }
 
-static iree_status_t loom_spirv_emit_function_signature(
-    loom_spirv_emit_state_t* state, uint32_t* out_result_type_id,
-    uint32_t* out_function_type_id) {
-  uint32_t result_type_id = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_spirv_emit_type_void(state->type_context, &result_type_id));
-  uint32_t function_type_id = 0;
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_function(
-      state->type_context, result_type_id, /*parameter_type_ids=*/NULL,
-      /*parameter_count=*/0, &function_type_id));
-  *out_result_type_id = result_type_id;
-  *out_function_type_id = function_type_id;
+static iree_status_t loom_spirv_emit_prepare_function_signature(
+    loom_spirv_emit_state_t* state) {
+  loom_spirv_function_emission_plan_t* emission = state->emission_plan;
+  const loom_spirv_function_plan_t* function = emission->function;
+  if (function->is_entry) {
+    IREE_RETURN_IF_ERROR(loom_spirv_emit_type_void(state->type_context,
+                                                   &emission->result_type_id));
+  } else {
+    uint32_t* parameter_type_ids = NULL;
+    if (function->parameter_count != 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->scratch_arena, function->parameter_count,
+          sizeof(*parameter_type_ids), (void**)&parameter_type_ids));
+    }
+    for (uint16_t i = 0; i < function->parameter_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+          state->type_context, function->parameter_types[i],
+          &parameter_type_ids[i]));
+    }
+    emission->parameter_type_ids = parameter_type_ids;
+
+    uint32_t* result_type_ids = NULL;
+    if (function->result_count != 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->scratch_arena, function->result_count,
+          sizeof(*result_type_ids), (void**)&result_type_ids));
+    }
+    for (uint16_t i = 0; i < function->result_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+          state->type_context, function->result_types[i], &result_type_ids[i]));
+    }
+    emission->result_type_ids = result_type_ids;
+    if (function->result_count == 0) {
+      IREE_RETURN_IF_ERROR(loom_spirv_emit_type_void(
+          state->type_context, &emission->result_type_id));
+    } else if (function->result_count == 1) {
+      emission->result_type_id = result_type_ids[0];
+    } else {
+      IREE_RETURN_IF_ERROR(loom_spirv_emit_type_struct(
+          state->type_context, result_type_ids, function->result_count,
+          &emission->result_type_id, /*out_emitted=*/NULL));
+    }
+  }
+  return loom_spirv_emit_type_function(
+      state->type_context, emission->result_type_id,
+      emission->parameter_type_ids,
+      function->is_entry ? 0 : function->parameter_count,
+      &emission->function_type_id);
+}
+
+static iree_status_t loom_spirv_emit_function_declaration(
+    loom_spirv_emit_state_t* state) {
+  const loom_func_like_t function =
+      loom_func_like_cast(state->module, state->function_op);
+  uint32_t function_control = LOOM_SPIRV_FUNCTION_CONTROL_NONE;
+  switch (loom_func_like_inline_policy(function)) {
+    case LOOM_INLINE_POLICY_INLINE:
+      function_control = LOOM_SPIRV_FUNCTION_CONTROL_INLINE_MASK;
+      break;
+    case LOOM_INLINE_POLICY_NOINLINE:
+      function_control = LOOM_SPIRV_FUNCTION_CONTROL_DONT_INLINE_MASK;
+      break;
+    case LOOM_INLINE_POLICY_UNSPECIFIED:
+    case LOOM_INLINE_POLICY_COUNT_:
+      break;
+  }
+  const uint32_t function_operands[] = {
+      state->emission_plan->result_type_id,
+      state->function_id,
+      function_control,
+      state->emission_plan->function_type_id,
+  };
+  return loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      LOOM_SPIRV_OP_FUNCTION, function_operands,
+      IREE_ARRAYSIZE(function_operands));
+}
+
+static iree_status_t loom_spirv_emit_function_parameters(
+    loom_spirv_emit_state_t* state, const loom_block_t* block) {
+  if (state->function_plan->is_entry) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT_EQ(block->arg_count, state->function_plan->parameter_count);
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    const uint32_t parameter_id = loom_spirv_emit_allocate_id(state);
+    const uint32_t operands[] = {
+        state->emission_plan->parameter_type_ids[i],
+        parameter_id,
+    };
+    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_FUNCTION_PARAMETER, operands, IREE_ARRAYSIZE(operands)));
+    const loom_spirv_module_value_ref_t parameter_ref = {
+        .id = parameter_id,
+        .type_id = state->emission_plan->parameter_type_ids[i],
+        .value_type = state->function_plan->parameter_types[i],
+    };
+    IREE_RETURN_IF_ERROR(loom_spirv_emit_define_value(
+        state, loom_block_arg_id(block, i), parameter_ref, /*emit_name=*/true));
+  }
   return iree_ok_status();
 }
 
@@ -1286,9 +1528,12 @@ static iree_status_t loom_spirv_emit_function_entry_block(
     loom_spirv_emit_state_t* state, const loom_block_t* block) {
   IREE_RETURN_IF_ERROR(
       loom_spirv_emit_label_id(state, loom_spirv_emit_allocate_id(state)));
-  loom_spirv_module_abi_context_t context = loom_spirv_emit_abi_context(state);
-  IREE_RETURN_IF_ERROR(
-      loom_spirv_module_abi_materialize_entry_args(&context, &state->abi_plan));
+  if (state->function_plan->is_entry) {
+    loom_spirv_module_abi_context_t context =
+        loom_spirv_emit_abi_context(state);
+    IREE_RETURN_IF_ERROR(loom_spirv_module_abi_materialize_entry_args(
+        &context, &state->abi_plan));
+  }
   for (const loom_op_t* op = block->first_op; op != NULL; op = op->next_op) {
     if (loom_low_return_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_spirv_emit_return(state, op));
@@ -1315,30 +1560,29 @@ static iree_status_t loom_spirv_emit_function_contents(
   IREE_ASSERT_NE(body->block_count, 0u);
   state->body = body;
   const loom_block_t* entry_block = loom_region_const_entry_block(body);
+  IREE_ASSERT_EQ(state->emission_plan->function_id, 0u);
   state->function_id = loom_spirv_emit_allocate_id(state);
+  state->emission_plan->function_id = state->function_id;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_op_name(
       state, state->function_id, loom_spirv_emit_function_name(state)));
-  loom_spirv_module_abi_context_t context = loom_spirv_emit_abi_context(state);
-  IREE_RETURN_IF_ERROR(loom_spirv_module_abi_build_plan(&context, entry_block,
-                                                        &state->abi_plan));
-
-  uint32_t result_type_id = 0;
-  uint32_t function_type_id = 0;
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_function_signature(
-      state, &result_type_id, &function_type_id));
-
-  const uint32_t function_operands[] = {
-      result_type_id,
-      state->function_id,
-      LOOM_SPIRV_FUNCTION_CONTROL_NONE,
-      function_type_id,
-  };
-  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
-      LOOM_SPIRV_OP_FUNCTION, function_operands,
-      IREE_ARRAYSIZE(function_operands)));
+  if (state->function_plan->is_entry) {
+    loom_spirv_module_abi_context_t context =
+        loom_spirv_emit_abi_context(state);
+    IREE_RETURN_IF_ERROR(loom_spirv_module_abi_build_plan(&context, entry_block,
+                                                          &state->abi_plan));
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_prepare_function_signature(state));
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_function_declaration(state));
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_function_parameters(state, entry_block));
   IREE_RETURN_IF_ERROR(loom_spirv_emit_function_body(state));
-  return loom_spirv_emit_entry_point(state);
+  state->emission_plan->required_feature_bits = state->required_feature_bits;
+  for (iree_host_size_t i = 0; i < LOOM_SPIRV_BUILTIN_VARIABLE_COUNT; ++i) {
+    state->emission_plan->builtin_interface_variable_ids[i] =
+        state->builtin_interface_variable_ids[i];
+  }
+  state->emission_plan->emission_complete = true;
+  return state->function_plan->is_entry ? loom_spirv_emit_entry_point(state)
+                                        : iree_ok_status();
 }
 
 static void loom_spirv_emit_function_state_deinitialize(
@@ -1350,14 +1594,16 @@ static void loom_spirv_emit_function_state_deinitialize(
 
 static iree_status_t loom_spirv_emit_function_state_initialize(
     loom_spirv_function_emission_context_t* context,
-    const loom_spirv_function_plan_t* function_plan,
+    loom_spirv_function_emission_plan_t* emission_plan,
     loom_spirv_emit_state_t* out_state) {
+  const loom_spirv_function_plan_t* function_plan = emission_plan->function;
   loom_op_t* low_function_op = function_plan->function_op;
   *out_state = (loom_spirv_emit_state_t){
       .context = context,
       .module = context->module,
       .function_op = low_function_op,
       .function_plan = function_plan,
+      .emission_plan = emission_plan,
       .scratch_arena = context->scratch_arena,
       .builder = context->builder,
       .type_context = context->type_context,
@@ -1384,10 +1630,10 @@ static iree_status_t loom_spirv_emit_function_state_initialize(
 
 iree_status_t loom_spirv_emit_low_function(
     loom_spirv_function_emission_context_t* context,
-    const loom_spirv_function_plan_t* function_plan) {
+    loom_spirv_function_emission_plan_t* emission_plan) {
   loom_spirv_emit_state_t function_state = {0};
   iree_status_t status = loom_spirv_emit_function_state_initialize(
-      context, function_plan, &function_state);
+      context, emission_plan, &function_state);
   if (iree_status_is_ok(status)) {
     status = loom_spirv_emit_function_contents(&function_state);
   }

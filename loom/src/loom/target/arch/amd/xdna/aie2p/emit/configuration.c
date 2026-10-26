@@ -425,7 +425,7 @@ static iree_status_t loom_aie2p_configuration_phase_emit(
         loom_low_schedule_node_const_operand_ordinals(node);
     const loom_value_ordinal_t* results =
         loom_low_schedule_node_const_result_ordinals(node);
-    if (loom_low_return_isa(op)) {
+    if (loom_low_return_isa(op) || loom_low_unreachable_isa(op)) {
       continue;
     }
     if (loom_low_assume_isa(op)) {

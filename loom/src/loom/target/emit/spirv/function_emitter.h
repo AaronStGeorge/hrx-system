@@ -32,10 +32,36 @@
 extern "C" {
 #endif
 
+// Module-planned physical identity and signature for one emitted function.
+typedef struct loom_spirv_function_emission_plan_t {
+  // Semantic function plan owning the Low body and value types.
+  const loom_spirv_function_plan_t* function;
+  // SPIR-V ID assigned when this function begins emission.
+  uint32_t function_id;
+  // SPIR-V result type ID (void, scalar, or aggregate struct).
+  uint32_t result_type_id;
+  // SPIR-V function type ID.
+  uint32_t function_type_id;
+  // SPIR-V parameter type IDs in boundary order.
+  const uint32_t* parameter_type_ids;
+  // SPIR-V result member type IDs in boundary order.
+  const uint32_t* result_type_ids;
+  // Transitive descriptor feature requirements, including called helpers.
+  loom_spirv_feature_bits_t required_feature_bits;
+  // Transitive Input variables used by this function and called helpers.
+  uint32_t builtin_interface_variable_ids[LOOM_SPIRV_BUILTIN_VARIABLE_COUNT];
+  // True after this function body and its transitive requirements are emitted.
+  bool emission_complete;
+} loom_spirv_function_emission_plan_t;
+
 // Module-owned resources shared by each function emitted into one module.
 typedef struct loom_spirv_function_emission_context_t {
   // Module containing the target-low function.
   loom_module_t* module;
+  // Immutable semantic program plan.
+  const loom_spirv_program_plan_t* program;
+  // Physical plans indexed identically to |program->functions|.
+  loom_spirv_function_emission_plan_t* emission_plans;
   // Scratch arena reset and managed by the module-emission call.
   iree_arena_allocator_t* scratch_arena;
   // Sectioned SPIR-V module builder receiving the emitted function.
@@ -64,6 +90,8 @@ typedef struct loom_spirv_emit_state_t {
   const loom_region_t* body;
   // Prepared target and representation binding for |function_op|.
   const loom_spirv_function_plan_t* function_plan;
+  // Module-planned physical identity and signature for |function_op|.
+  loom_spirv_function_emission_plan_t* emission_plan;
   // Function-local scratch arena.
   iree_arena_allocator_t* scratch_arena;
   // Sectioned SPIR-V module builder.
@@ -135,6 +163,10 @@ static inline bool loom_spirv_emit_value_ref_exists(
 iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
                                      const loom_op_t* op);
 
+// Emits a verified low.return for the current entry or internal function.
+iree_status_t loom_spirv_emit_return(loom_spirv_emit_state_t* state,
+                                     const loom_op_t* op);
+
 // Emits one target-low function into |context->builder|.
 //
 // |function_plan| is borrowed for the call. Module-wide IDs and ABI state are
@@ -142,7 +174,7 @@ iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
 // released before return.
 iree_status_t loom_spirv_emit_low_function(
     loom_spirv_function_emission_context_t* context,
-    const loom_spirv_function_plan_t* function_plan);
+    loom_spirv_function_emission_plan_t* emission_plan);
 
 #ifdef __cplusplus
 }  // extern "C"

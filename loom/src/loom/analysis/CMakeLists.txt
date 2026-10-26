@@ -1654,6 +1654,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::ir
     loom::ops::func
+    loom::ops::low
     loom::ops::op_defs
     loom::ops::scf
     loom::ops::template

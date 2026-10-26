@@ -83,12 +83,24 @@ static const loom_pass_option_enum_value_t kInlineCallablesPolicyValues[] = {
     {.value = IREE_SVL("target")},
 };
 
+static const loom_pass_option_enum_value_t kInlineCallablesStageValues[] = {
+    {.value = IREE_SVL("complete")},
+    {.value = IREE_SVL("prepare")},
+    {.value = IREE_SVL("resume")},
+};
+
 static const loom_pass_option_schema_t kInlineCallablesOptionSchema[] = {
     {
         .name = IREE_SVL("policy"),
         .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
         .enum_values = kInlineCallablesPolicyValues,
         .enum_value_count = IREE_ARRAYSIZE(kInlineCallablesPolicyValues),
+    },
+    {
+        .name = IREE_SVL("stage"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kInlineCallablesStageValues,
+        .enum_value_count = IREE_ARRAYSIZE(kInlineCallablesStageValues),
     },
 };
 

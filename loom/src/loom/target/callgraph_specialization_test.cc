@@ -242,7 +242,8 @@ class TargetCallgraphSpecializationTest : public ::testing::Test {
     iree_arena_allocator_t pass_arena;
     iree_arena_initialize(&block_pool_, &pass_arena);
     const loom_target_pass_capability_t target_capability =
-        loom_target_pass_capability_make_mutable(&environment_, owner);
+        loom_target_pass_capability_make_mutable(&environment_, owner,
+                                                 /*state=*/nullptr);
     const loom_pass_environment_capability_t* capabilities[] = {
         &target_capability.base,
     };

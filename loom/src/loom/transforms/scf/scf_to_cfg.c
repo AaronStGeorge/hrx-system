@@ -16,6 +16,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/index/carrier.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
@@ -33,6 +34,8 @@
 //===----------------------------------------------------------------------===//
 
 #define LOOM_SCF_TO_CFG_STATISTICS(V, statistics_type)     \
+  V(statistics_type, exits_lowered, "exits-lowered",       \
+    "Number of callable exits lowered.")                   \
   V(statistics_type, ifs_lowered, "ifs-lowered",           \
     "Number of scf.if ops lowered.")                       \
   V(statistics_type, fors_lowered, "fors-lowered",         \
@@ -48,7 +51,9 @@ LOOM_PASS_STATISTICS_DEFINE(loom_scf_to_cfg_statistics,
 
 static const loom_pass_info_t loom_scf_to_cfg_pass_info_storage = {
     .name = IREE_SVL("scf-to-cfg"),
-    .description = IREE_SVL("Lower structured SCF control flow to CFG blocks."),
+    .description =
+        IREE_SVL("Lower structured control flow and callable exits to CFG "
+                 "blocks."),
     .kind = LOOM_PASS_FUNCTION,
     .statistic_layout = &loom_scf_to_cfg_statistics_layout,
 };
@@ -74,10 +79,11 @@ typedef struct loom_scf_to_cfg_region_stack_t {
 } loom_scf_to_cfg_region_stack_t;
 
 typedef enum loom_scf_to_cfg_lowering_kind_e {
-  LOOM_SCF_TO_CFG_LOWERING_IF = 0,
-  LOOM_SCF_TO_CFG_LOWERING_FOR = 1,
-  LOOM_SCF_TO_CFG_LOWERING_WHILE = 2,
-  LOOM_SCF_TO_CFG_LOWERING_SWITCH = 3,
+  LOOM_SCF_TO_CFG_LOWERING_EXIT = 0,
+  LOOM_SCF_TO_CFG_LOWERING_IF = 1,
+  LOOM_SCF_TO_CFG_LOWERING_FOR = 2,
+  LOOM_SCF_TO_CFG_LOWERING_WHILE = 3,
+  LOOM_SCF_TO_CFG_LOWERING_SWITCH = 4,
 } loom_scf_to_cfg_lowering_kind_t;
 
 typedef struct loom_scf_to_cfg_block_insertion_t {
@@ -113,6 +119,8 @@ typedef struct loom_scf_to_cfg_frontier_t {
 typedef struct loom_scf_to_cfg_state_t {
   // Current pass instance used for diagnostics and statistics.
   loom_pass_t* pass;
+  // Function-like body receiving the projected CFG blocks.
+  loom_func_like_t function;
   // Typed statistics storage for the current pass invocation.
   loom_scf_to_cfg_statistics_t* statistics;
   // Module being transformed.
@@ -409,6 +417,46 @@ static iree_status_t loom_scf_to_cfg_verify_op_preconditions(
     return iree_ok_status();
   }
   return loom_scf_to_cfg_emit(state, op, LOOM_ERR_STRUCTURE_036);
+}
+
+//===----------------------------------------------------------------------===//
+// func.exit
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_scf_to_cfg_lower_exit(
+    loom_scf_to_cfg_state_t* state, loom_op_t* op,
+    loom_scf_to_cfg_block_insertion_t* out_block_insertion) {
+  iree_arena_reset(state->lowering_arena);
+
+  loom_block_t* exit_source_block =
+      loom_region_entry_block(loom_func_exit_body(op));
+  loom_block_t* source_block = op->parent_block;
+  loom_op_t* parent_op = op->parent_op;
+  loom_scf_to_cfg_block_insertion_t insertion =
+      loom_scf_to_cfg_begin_block_insertion(source_block);
+
+  loom_block_t* exit_block = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scf_to_cfg_insert_block(state, &insertion, &exit_block));
+  loom_block_t* continuation_block = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scf_to_cfg_insert_block(state, &insertion, &continuation_block));
+  IREE_RETURN_IF_ERROR(
+      loom_scf_to_cfg_move_tail_after_op(state, op, continuation_block));
+
+  while (exit_source_block->first_op) {
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_move_op_to_block_end(
+        state, exit_source_block->first_op, exit_block, parent_op));
+  }
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_cond_br(
+      state, source_block, parent_op, loom_func_exit_condition(op), exit_block,
+      continuation_block, op->location));
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
+  ++state->statistics->exits_lowered;
+  *out_block_insertion = insertion;
+  iree_arena_reset(state->lowering_arena);
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1378,8 +1426,12 @@ static iree_status_t loom_scf_to_cfg_lower_switch(
 //===----------------------------------------------------------------------===//
 
 static bool loom_scf_to_cfg_classify_op(
-    loom_op_t* op, loom_scf_to_cfg_lowering_kind_t* out_lowering_kind) {
-  if (loom_scf_if_isa(op)) {
+    const loom_scf_to_cfg_state_t* state, loom_op_t* op,
+    loom_scf_to_cfg_lowering_kind_t* out_lowering_kind) {
+  if (loom_func_exit_isa(op) &&
+      op->parent_block->parent_region == loom_func_like_body(state->function)) {
+    *out_lowering_kind = LOOM_SCF_TO_CFG_LOWERING_EXIT;
+  } else if (loom_scf_if_isa(op)) {
     *out_lowering_kind = LOOM_SCF_TO_CFG_LOWERING_IF;
   } else if (loom_scf_for_isa(op)) {
     *out_lowering_kind = LOOM_SCF_TO_CFG_LOWERING_FOR;
@@ -1411,7 +1463,7 @@ static iree_status_t loom_scf_to_cfg_collect_block_frontier(
       continue;
     }
     loom_scf_to_cfg_lowering_kind_t lowering_kind;
-    if (loom_scf_to_cfg_classify_op(op, &lowering_kind)) {
+    if (loom_scf_to_cfg_classify_op(state, op, &lowering_kind)) {
       IREE_RETURN_IF_ERROR(loom_scf_to_cfg_frontier_push(
           state->pass->arena, &state->frontier, op, lowering_kind));
       continue;
@@ -1525,6 +1577,11 @@ static iree_status_t loom_scf_to_cfg_lower_frontier(
   for (iree_host_size_t i = state->frontier.count; i > 0; --i) {
     loom_scf_to_cfg_frontier_entry_t* entry = &state->frontier.entries[i - 1];
     switch (entry->lowering_kind) {
+      case LOOM_SCF_TO_CFG_LOWERING_EXIT: {
+        IREE_RETURN_IF_ERROR(loom_scf_to_cfg_lower_exit(
+            state, entry->op, &entry->block_insertion));
+        break;
+      }
       case LOOM_SCF_TO_CFG_LOWERING_IF: {
         IREE_RETURN_IF_ERROR(loom_scf_to_cfg_lower_if(state, entry->op,
                                                       &entry->block_insertion));
@@ -1569,6 +1626,7 @@ iree_status_t loom_scf_to_cfg_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_scf_to_cfg_state_t state = {
       .pass = pass,
+      .function = function,
       .statistics = loom_scf_to_cfg_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
@@ -1584,12 +1642,19 @@ iree_status_t loom_scf_to_cfg_run(loom_pass_t* pass, loom_module_t* module,
     if (!iree_status_is_ok(status) || state.frontier.count == 0) {
       break;
     }
-    status = loom_pass_value_facts_acquire(
-        pass, module,
-        loom_pass_value_fact_scope_function_for_target(
-            function,
-            loom_target_function_version_target_facts(pass->function_version)),
-        &state.fact_table);
+    bool exits_only = true;
+    for (iree_host_size_t i = 0; i < state.frontier.count; ++i) {
+      exits_only &= state.frontier.entries[i].lowering_kind ==
+                    LOOM_SCF_TO_CFG_LOWERING_EXIT;
+    }
+    if (!exits_only) {
+      status = loom_pass_value_facts_acquire(
+          pass, module,
+          loom_pass_value_fact_scope_function_for_target(
+              function, loom_target_function_version_target_facts(
+                            pass->function_version)),
+          &state.fact_table);
+    }
     if (!iree_status_is_ok(status)) {
       break;
     }

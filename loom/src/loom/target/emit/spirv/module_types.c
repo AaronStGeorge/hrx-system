@@ -442,19 +442,45 @@ iree_status_t loom_spirv_emit_type_array(loom_spirv_type_context_t* context,
   return iree_ok_status();
 }
 
+static iree_status_t loom_spirv_emit_uncached_type(
+    loom_spirv_type_context_t* context, uint16_t opcode,
+    const uint32_t* type_operands, iree_host_size_t type_operand_count,
+    uint32_t* out_type_id) {
+  uint32_t* operands = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(context->scratch_arena, type_operand_count + 1,
+                                sizeof(*operands), (void**)&operands));
+  const uint32_t type_id =
+      loom_spirv_module_builder_allocate_id(context->builder);
+  operands[0] = type_id;
+  for (iree_host_size_t i = 0; i < type_operand_count; ++i) {
+    operands[i + 1] = type_operands[i];
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_type_context_section(context,
+                                      LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+      opcode, operands, type_operand_count + 1));
+  *out_type_id = type_id;
+  return iree_ok_status();
+}
+
 iree_status_t loom_spirv_emit_type_struct(loom_spirv_type_context_t* context,
                                           const uint32_t* member_type_ids,
-                                          uint8_t member_count,
+                                          iree_host_size_t member_count,
                                           uint32_t* out_type_id,
                                           bool* out_emitted) {
   if (member_count > LOOM_SPIRV_TYPE_KEY_MAX_OPERAND_COUNT) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "SPIR-V struct type exceeds the emitter type-key "
-                            "operand capacity");
+    IREE_RETURN_IF_ERROR(loom_spirv_emit_uncached_type(
+        context, LOOM_SPIRV_OP_TYPE_STRUCT, member_type_ids, member_count,
+        out_type_id));
+    if (out_emitted != NULL) {
+      *out_emitted = true;
+    }
+    return iree_ok_status();
   }
   loom_spirv_type_key_t key = {
       .kind = LOOM_SPIRV_TYPE_KEY_STRUCT,
-      .operand_count = member_count,
+      .operand_count = (uint8_t)member_count,
   };
   for (uint8_t i = 0; i < member_count; ++i) {
     key.operands[i] = member_type_ids[i];
@@ -494,20 +520,28 @@ iree_status_t loom_spirv_emit_decorate_member_offset(
 iree_status_t loom_spirv_emit_type_function(loom_spirv_type_context_t* context,
                                             uint32_t result_type_id,
                                             const uint32_t* parameter_type_ids,
-                                            uint8_t parameter_count,
+                                            iree_host_size_t parameter_count,
                                             uint32_t* out_type_id) {
   if ((iree_host_size_t)parameter_count + 1 >
       LOOM_SPIRV_TYPE_KEY_MAX_OPERAND_COUNT) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "SPIR-V function type exceeds the emitter "
-                            "type-key operand capacity");
+    uint32_t* type_operands = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        context->scratch_arena, parameter_count + 1, sizeof(*type_operands),
+        (void**)&type_operands));
+    type_operands[0] = result_type_id;
+    for (iree_host_size_t i = 0; i < parameter_count; ++i) {
+      type_operands[i + 1] = parameter_type_ids[i];
+    }
+    return loom_spirv_emit_uncached_type(context, LOOM_SPIRV_OP_TYPE_FUNCTION,
+                                         type_operands, parameter_count + 1,
+                                         out_type_id);
   }
   loom_spirv_type_key_t key = {
       .kind = LOOM_SPIRV_TYPE_KEY_FUNCTION,
       .operand_count = (uint8_t)(parameter_count + 1),
       .operands = {result_type_id},
   };
-  for (uint8_t i = 0; i < parameter_count; ++i) {
+  for (iree_host_size_t i = 0; i < parameter_count; ++i) {
     key.operands[1 + i] = parameter_type_ids[i];
   }
   return loom_spirv_emit_type_id(context, &key, out_type_id,

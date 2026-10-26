@@ -89,7 +89,7 @@ iree_status_t loom_spirv_emit_type_array(loom_spirv_type_context_t* context,
                                          uint32_t* out_type_id);
 iree_status_t loom_spirv_emit_type_struct(loom_spirv_type_context_t* context,
                                           const uint32_t* member_type_ids,
-                                          uint8_t member_count,
+                                          iree_host_size_t member_count,
                                           uint32_t* out_type_id,
                                           bool* out_emitted);
 iree_status_t loom_spirv_emit_decorate_block(loom_spirv_type_context_t* context,
@@ -100,7 +100,7 @@ iree_status_t loom_spirv_emit_decorate_member_offset(
 iree_status_t loom_spirv_emit_type_function(loom_spirv_type_context_t* context,
                                             uint32_t result_type_id,
                                             const uint32_t* parameter_type_ids,
-                                            uint8_t parameter_count,
+                                            iree_host_size_t parameter_count,
                                             uint32_t* out_type_id);
 iree_status_t loom_spirv_emit_type_pointer(loom_spirv_type_context_t* context,
                                            uint32_t storage_class,

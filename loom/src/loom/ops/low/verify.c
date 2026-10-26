@@ -1403,6 +1403,25 @@ iree_status_t loom_low_op_cond_br_verify(const loom_module_t* module,
       loom_low_op_cond_br_false_dest(op), NULL, 0);
 }
 
+iree_status_t loom_low_func_exit_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  const loom_op_t* enclosing_callable = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_verify_nested_under_low_entry(
+      module, op, IREE_SV("low executable"), emitter, &enclosing_callable));
+  IREE_RETURN_IF_ERROR(loom_low_verify_region_has_no_entry_args(
+      loom_low_func_exit_body(op), IREE_SV("body"), op, emitter));
+
+  const loom_block_t* exit_block =
+      loom_low_region_entry_block_or_null(loom_low_func_exit_body(op));
+  if (!exit_block || !exit_block->last_op) {
+    return iree_ok_status();  // Generic structure verification diagnoses this.
+  }
+  return loom_function_exit_contract_verify(
+      module, loom_func_like_const_cast(module, enclosing_callable),
+      exit_block->last_op, emitter);
+}
+
 iree_status_t loom_low_scf_if_verify(const loom_module_t* module,
                                      const loom_op_t* op,
                                      iree_diagnostic_emitter_t emitter) {

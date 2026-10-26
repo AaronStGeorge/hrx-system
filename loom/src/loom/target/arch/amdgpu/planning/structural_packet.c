@@ -135,7 +135,7 @@ loom_amdgpu_structural_packet_info_t loom_amdgpu_structural_packet_analyze(
     }
     return info;
   }
-  if (loom_low_return_isa(op)) {
+  if (loom_low_return_isa(op) || loom_low_unreachable_isa(op)) {
     info.flags = LOOM_AMDGPU_STRUCTURAL_PACKET_FLAG_MATERIALIZES;
     info.instruction_count = 1;
     info.scalar_alu_instruction_count = 1;

@@ -38,6 +38,8 @@
 #define LOOM_INLINE_CALLABLES_STATISTICS(V, statistics_type)     \
   V(statistics_type, required_edges, "required-edges",           \
     "Number of call edges required to inline by policy.")        \
+  V(statistics_type, deferred_edges, "deferred-edges",           \
+    "Number of required callable-exit edges deferred.")          \
   V(statistics_type, kept_edges, "kept-edges",                   \
     "Number of call edges left unchanged by policy.")            \
   V(statistics_type, calls_cloned, "calls-cloned",               \
@@ -54,6 +56,9 @@ LOOM_PASS_STATISTICS_DEFINE(loom_inline_callables_statistics,
 static const loom_pass_option_def_t kInlineCallablesOptions[] = {
     {IREE_SVL("policy"),
      IREE_SVL("Policy source: authored or target emission requirements.")},
+    {IREE_SVL("stage"),
+     IREE_SVL("Inlining stage: prepare, resume, or complete callable "
+              "boundaries.")},
 };
 
 static const loom_pass_info_t loom_inline_callables_pass_info_storage = {
@@ -75,9 +80,17 @@ typedef enum loom_inline_policy_source_e {
   LOOM_INLINE_POLICY_SOURCE_TARGET = 1,
 } loom_inline_policy_source_t;
 
+typedef enum loom_inline_stage_e {
+  LOOM_INLINE_STAGE_COMPLETE = 0,
+  LOOM_INLINE_STAGE_PREPARE = 1,
+  LOOM_INLINE_STAGE_RESUME = 2,
+} loom_inline_stage_t;
+
 typedef struct loom_inline_callables_pass_state_t {
   // Additional policy applied after authored inline/noinline resolution.
   loom_inline_policy_source_t policy_source;
+  // Whether callable exits may retain required boundaries for completion.
+  loom_inline_stage_t stage;
 } loom_inline_callables_pass_state_t;
 
 static iree_status_t loom_inline_callables_parse_policy(
@@ -95,10 +108,34 @@ static iree_status_t loom_inline_callables_parse_policy(
       "inline-callables option 'policy' must be 'authored' or 'target'");
 }
 
+static iree_status_t loom_inline_callables_parse_stage(
+    iree_string_view_t value, loom_inline_callables_pass_state_t* state) {
+  if (iree_string_view_equal(value, IREE_SV("complete"))) {
+    state->stage = LOOM_INLINE_STAGE_COMPLETE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("prepare"))) {
+    state->stage = LOOM_INLINE_STAGE_PREPARE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("resume"))) {
+    state->stage = LOOM_INLINE_STAGE_RESUME;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "inline-callables option 'stage' must be 'prepare', 'resume', or "
+      "'complete'");
+}
+
 static iree_status_t loom_inline_callables_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   if (iree_string_view_equal(name, IREE_SV("policy"))) {
     return loom_inline_callables_parse_policy(
+        value, (loom_inline_callables_pass_state_t*)user_data);
+  }
+  if (iree_string_view_equal(name, IREE_SV("stage"))) {
+    return loom_inline_callables_parse_stage(
         value, (loom_inline_callables_pass_state_t*)user_data);
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -113,6 +150,7 @@ iree_status_t loom_inline_callables_create(loom_pass_t* pass,
                                            (void**)&state));
   *state = (loom_inline_callables_pass_state_t){
       .policy_source = LOOM_INLINE_POLICY_SOURCE_AUTHORED,
+      .stage = LOOM_INLINE_STAGE_COMPLETE,
   };
   if (pass->decoded_options) {
     for (uint16_t i = 0; i < pass->decoded_options->option_count; ++i) {
@@ -123,6 +161,12 @@ iree_status_t loom_inline_callables_create(loom_pass_t* pass,
       }
       if (iree_string_view_equal(option->schema->name, IREE_SV("policy"))) {
         IREE_RETURN_IF_ERROR(loom_inline_callables_parse_policy(
+            option->schema->enum_values[option->enum_value_index].value,
+            state));
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name, IREE_SV("stage"))) {
+        IREE_RETURN_IF_ERROR(loom_inline_callables_parse_stage(
             option->schema->enum_values[option->enum_value_index].value,
             state));
         continue;
@@ -195,6 +239,8 @@ typedef struct loom_inline_symbol_info_t {
   // Whether the function body remains linear after its required call closure
   // is flattened in callee-before-caller order.
   bool body_will_be_linear;
+  // Whether this symbol directly owns a func.exit operation.
+  bool body_has_callable_exit;
   // Whether the expanded body still depends on its inherited target context.
   bool body_is_contextual;
 } loom_inline_symbol_info_t;
@@ -450,6 +496,9 @@ static void loom_inline_initialize_symbol_infos(
         loom_func_like_cast(state->module, info->symbol->defining_op);
     info->body_will_be_linear =
         loom_callable_body_is_linear(state->module, info->function);
+    info->body_has_callable_exit =
+        loom_symbol_reference_symbol_has_callable_exit(
+            state->options.references, (loom_symbol_id_t)i);
     info->body_is_contextual = loom_symbol_reference_symbol_is_contextual(
         state->options.references, (loom_symbol_id_t)i);
   }
@@ -603,6 +652,17 @@ static void loom_inline_resolve_entry_policy(
 
   if (callee_inline || call_inline || target_requires_inline) {
     entry->effective_policy = LOOM_INLINE_POLICY_INLINE;
+    const bool preserves_callable_exit =
+        (state->options.defer_callable_exits &&
+         call_kind == LOOM_CALL_LIKE_KIND_SEMANTIC) ||
+        call_kind == LOOM_CALL_LIKE_KIND_LOW_INTERNAL;
+    if (preserves_callable_exit &&
+        entry->target_symbol_id < state->module->symbols.count &&
+        state->symbols[entry->target_symbol_id].body_has_callable_exit) {
+      entry->action = LOOM_INLINE_PLAN_ACTION_KEEP;
+      ++state->statistics.deferred_edges;
+      return;
+    }
     entry->action = LOOM_INLINE_PLAN_ACTION_REQUIRED;
     ++state->statistics.required_edges;
     return;
@@ -1837,12 +1897,27 @@ iree_status_t loom_inline_callables_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   const loom_inline_callables_pass_state_t default_options = {
       .policy_source = LOOM_INLINE_POLICY_SOURCE_AUTHORED,
+      .stage = LOOM_INLINE_STAGE_COMPLETE,
   };
   const loom_inline_callables_pass_state_t* options =
       pass->state ? (const loom_inline_callables_pass_state_t*)pass->state
                   : &default_options;
   const loom_target_pass_capability_t* target_capability =
       loom_target_pass_capability_from_pass(pass);
+  loom_target_pass_state_t* target_state =
+      loom_target_pass_capability_state(target_capability);
+  if (options->stage == LOOM_INLINE_STAGE_RESUME) {
+    if (target_state == NULL) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "inline-callables stage 'resume' requires target pipeline state");
+    }
+    if (!target_state->source_inline_completion_pending) {
+      *loom_inline_callables_statistics(pass) =
+          (loom_inline_callables_statistics_t){0};
+      return iree_ok_status();
+    }
+  }
   loom_symbol_reference_table_t references = {0};
   loom_target_function_version_snapshot_t target_versions = {0};
   IREE_RETURN_IF_ERROR(
@@ -1856,6 +1931,7 @@ iree_status_t loom_inline_callables_run(loom_pass_t* pass,
       .demanded_families = references.template_demands.family_bits,
       .target_policy =
           options->policy_source == LOOM_INLINE_POLICY_SOURCE_TARGET,
+      .defer_callable_exits = options->stage == LOOM_INLINE_STAGE_PREPARE,
   };
   loom_inline_callables_plan_t state;
   IREE_RETURN_IF_ERROR(loom_inline_callables_plan_initialize(
@@ -1864,8 +1940,17 @@ iree_status_t loom_inline_callables_run(loom_pass_t* pass,
   iree_status_t status = loom_inline_callables_plan_execute(&state);
   *loom_inline_callables_statistics(pass) = state.statistics;
   if (iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
+      options->stage == LOOM_INLINE_STAGE_PREPARE &&
+      references.callable_exit_symbols != NULL && target_state != NULL) {
+    target_state->source_inline_completion_pending = true;
+  }
+  if (iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
       pass->changed) {
     status = loom_module_compact_symbols(module, pass->arena, NULL);
+  }
+  if (iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
+      options->stage == LOOM_INLINE_STAGE_RESUME) {
+    target_state->source_inline_completion_pending = false;
   }
   return status;
 }

@@ -13,6 +13,7 @@ loom_check_test_suite(
   NAME
     test
   SRCS
+    "inline_callable_exits.loom-test"
     "inline_callable_types.loom-test"
     "inline_callables.loom-test"
     "inline_cfg_batches.loom-test"

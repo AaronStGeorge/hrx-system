@@ -448,7 +448,7 @@ func.def public @spin(%value: buffer, %value_byte_offset: offset) {
     view.store<volatile> %37, %34[0] : i32, view<1xi32>
     scf.yield
   }
-  func.return
+  func.unreachable
 }
 
 // ====

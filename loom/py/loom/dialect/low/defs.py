@@ -102,6 +102,7 @@ from loom.dsl import (
     OpPhase,
     RegionBranchInterface,
     RegionDef,
+    RegionExecution,
     RegisterUnitsSumTo,
     Result,
     SameRegisterClass,
@@ -550,7 +551,7 @@ low_func_def = Op(
     ),
     results=[Result("results", REGISTER, variadic=True)],
     regions=[RegionDef("body", doc="Low function body.", terminator="low.return")],
-    interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body")],
+    interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body", unreachable="low.unreachable")],
     verify="loom_low_func_def_verify",
     constraints=[
         BlockArgsSatisfy("body", REGISTER),
@@ -591,7 +592,7 @@ low_kernel_def = Op(
         retain="retain",
     ),
     regions=[RegionDef("body", doc="Low kernel body.", terminator="low.return")],
-    interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body")],
+    interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body", unreachable="low.unreachable")],
     verify="loom_low_kernel_def_verify",
     constraints=[
         BlockArgsSatisfy("body", REGISTER),
@@ -681,6 +682,58 @@ low_return = Op(
         "low.return",
         "low.return %value : reg<amdgpu.vgpr x1>",
     ],
+)
+
+# ============================================================================
+# low.func.exit — conditional return from the enclosing low callable
+# ============================================================================
+
+low_func_exit = Op(
+    "low.func.exit",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Conditionally return from the nearest enclosing low function or "
+        "kernel. The exit region evaluates only when the register predicate "
+        "is true and terminates with the enclosing callable's low.return "
+        "result contract."
+    ),
+    operands=[Operand("condition", REGISTER, doc="Register predicate controlling the exit.")],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Work and returned register values evaluated only on the taken exit.",
+            single_block=True,
+            execution=RegionExecution.EXIT,
+            terminator="low.return",
+        )
+    ],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_func_exit_verify",
+    format=[
+        Ref("condition"),
+        COLON,
+        TypeOf("condition"),
+        Region("body", syntax="low.asm.optional"),
+    ],
+    examples=[
+        "low.func.exit %done : reg<wasm.i32> {\n  low.return\n}",
+        "low.func.exit %found : reg<spirv.id : i1> {\n  low.return %value : reg<spirv.id : i32>\n}",
+    ],
+)
+
+# ============================================================================
+# low.unreachable — terminate a low function path that cannot return
+# ============================================================================
+
+low_unreachable = Op(
+    "low.unreachable",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Terminate a direct low function-body path that cannot reach the ordinary result-bearing return. Reaching this operation is undefined; it is not a runtime trap or assertion."),
+    traits=[TERMINATOR],
+    format=[],
+    examples=["low.unreachable"],
 )
 
 # ============================================================================
@@ -1878,4 +1931,6 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_schedule_end,
     # Appended to preserve every existing serialized Low operation ordinal.
     low_op_cond_br,
+    low_func_exit,
+    low_unreachable,
 )

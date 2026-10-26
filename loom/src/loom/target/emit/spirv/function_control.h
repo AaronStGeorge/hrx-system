@@ -18,6 +18,10 @@ extern "C" {
 
 typedef struct loom_spirv_emit_state_t loom_spirv_emit_state_t;
 
+// Emits a verified low.func.exit operation.
+iree_status_t loom_spirv_emit_func_exit(loom_spirv_emit_state_t* state,
+                                        const loom_op_t* op);
+
 // Emits a verified low.scf.if operation.
 iree_status_t loom_spirv_emit_scf_if(loom_spirv_emit_state_t* state,
                                      const loom_op_t* op);

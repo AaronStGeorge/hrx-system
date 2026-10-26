@@ -21,6 +21,45 @@ vm.module core(0.0) {
 
 vm.target<core> @vm
 
+// A direct body path that source control proves cannot reach its ordinary
+// result-bearing return uses the normal VM return control without fabricating
+// a result register value.
+low.func.def public target<vm.core>(@vm) abi(vm_function) @unreachable_tail() -> (reg<vm.value : i32>) asm {
+  low.unreachable
+}
+
+// ----
+vm.module core(0.0) {
+  section strings alignment(8) {
+    string @string0 = "unreachable_tail"
+  }
+
+  section signatures alignment(8) {
+    signature @signature0 () -> (i32)
+  }
+
+  section callable_types alignment(8) {
+    callable @callable0 flags([]) depth(0) : @signature0
+  }
+
+  section exports alignment(8) {
+    export @export0 name(@string0) : @callable0 = @function0
+  }
+
+  section functions alignment(8) {
+    func @function0 : @callable0 flags([]) frame(local_bytes = 0, value_registers = 1, ref_registers = 0, function_registers = 0, local_refs = 0, local_functions = 0) {
+    ^bb0:
+      control.block
+      control.return
+    }
+  }
+
+}
+
+// ====
+
+vm.target<core> @vm
+
 // Retained imports require callable tables but no local function definitions.
 low.func.decl retain import(native, "observe", module = "host") target<vm.core>(@vm) @observe(%value: reg<vm.value : i32>)
 

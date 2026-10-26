@@ -190,6 +190,9 @@ class ControlFlow final : private cxx::ASTVisitor {
   const SwitchLayout& switch_layout(cxx::SwitchStatementAST* statement) const;
   // Retained return/fallthrough summary, including nested statements.
   ExitFlow returns(cxx::StatementAST* statement) const;
+  // Whether execution can reach the statement immediately following this
+  // source statement. Diverging and function-returning paths do not.
+  bool falls_through(cxx::StatementAST* statement) const;
   // Continues escaping this statement to its enclosing loop. A nested loop
   // consumes its own continues rather than propagating them to its parent.
   ExitFlow continues(cxx::StatementAST* statement) const;
@@ -226,6 +229,7 @@ class ControlFlow final : private cxx::ASTVisitor {
     Return = 2,
     Continue = 4,
     Break = 8,
+    Diverge = 16,
   };
 
   bool preVisit(cxx::AST* ast) override;

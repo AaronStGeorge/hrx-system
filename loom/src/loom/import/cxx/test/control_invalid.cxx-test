@@ -38,30 +38,6 @@ void entry(int value) {
 }
 
 // ====
-// Runtime switch returns await the shared structured-exit projection.
-int entry(int value) {
-  // ERROR@+1: LOWERING/059 "returns inside runtime switches require a structured switch-exit projection"
-  switch (value) {
-    case 1: return value;
-    default: break;
-  }
-  return 0;
-}
-
-// ====
-// Continue does not admit other unsupported transfers or conditions.
-unsigned entry(unsigned count) {
-  // ERROR@+1: LOWERING/059 "returns inside loops require a structured loop-exit projection"
-  while (count) {
-    if (--count) {
-      continue;
-    }
-    return count;
-  }
-  return 0;
-}
-
-// ====
 // Rejects incomplete returns and unprojected exit joins.
 // ERROR@+1: LOWERING/059 "non-void function can reach its end without returning a value"
 int entry(int x) {
@@ -80,45 +56,3 @@ int entry() { return; }
 // Rejects incomplete returns and unprojected exit joins.
 // ERROR@+1: PARSE/036 "void function should not return a value"
 void entry() { return 1; }
-
-// ====
-// Rejects incomplete returns and unprojected exit joins.
-int entry(int x, int y) {
-  // ERROR@+1: LOWERING/059 "conditional returns require at most one fallthrough arm; shared continuations need a scoped exit projection"
-  if (x) {
-    if (y) {
-      return 1;
-    }
-    x = 2;
-  }
-  return x;
-}
-
-// ====
-// Rejects incomplete returns and unprojected exit joins.
-int entry(int x) {
-  // ERROR@+1: LOWERING/059 "returns inside loops require a structured loop-exit projection"
-  while (x) {
-    return x;
-  }
-  return 0;
-}
-
-// ====
-// Rejects incomplete returns and unprojected exit joins.
-int entry(int x) {
-  // ERROR@+1: LOWERING/059 "returns inside loops require a structured loop-exit projection"
-  do {
-    return x;
-  } while (x);
-}
-
-// ====
-// Rejects incomplete returns and unprojected exit joins.
-int entry() {
-  // ERROR@+1: LOWERING/059 "returns inside loops require a structured loop-exit projection"
-  for (unsigned i = 0; i < 4u; ++i) {
-    return 1;
-  }
-  return 0;
-}

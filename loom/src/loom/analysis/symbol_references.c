@@ -12,6 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/template/ops.h"
@@ -81,6 +82,8 @@ typedef struct loom_symbol_reference_builder_t {
   uint32_t template_provider_count;
   // Symbols with contextual operations inheriting the symbol's target.
   uint64_t* contextual_symbols;
+  // Symbols directly owning func.exit operations.
+  uint64_t* callable_exit_symbols;
 } loom_symbol_reference_builder_t;
 
 // Symbol definition and root region currently owning a reference occurrence.
@@ -123,6 +126,21 @@ static void loom_symbol_reference_builder_initialize(
           sizeof(loom_symbol_reference_occurrence_t),
       iree_alignof(loom_symbol_reference_occurrence_t),
       &builder->occurrences.segments);
+}
+
+static iree_status_t loom_symbol_reference_builder_set_symbol_bit(
+    loom_symbol_reference_builder_t* builder, loom_symbol_id_t symbol_id,
+    uint64_t** bitset) {
+  if (*bitset == NULL) {
+    const iree_host_size_t word_count =
+        builder->module->symbols.count / 64 +
+        (builder->module->symbols.count % 64 != 0);
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        builder->arena, word_count, sizeof(**bitset), (void**)bitset));
+    memset(*bitset, 0, word_count * sizeof(**bitset));
+  }
+  (*bitset)[symbol_id >> 6] |= UINT64_C(1) << (symbol_id & 63u);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_symbol_reference_builder_get_or_create_symbol(
@@ -591,17 +609,15 @@ static iree_status_t loom_symbol_reference_visit_region(
            !loom_symbol_ref_is_valid(
                builder->execution_targets
                    .values[nested_source_scope.execution_scope - 1]))) {
-        if (builder->contextual_symbols == NULL) {
-          const iree_host_size_t word_count =
-              builder->module->symbols.count / 64 +
-              (builder->module->symbols.count % 64 != 0);
-          IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-              iree_arena_allocator(builder->arena), word_count,
-              sizeof(*builder->contextual_symbols),
-              (void**)&builder->contextual_symbols));
-        }
-        builder->contextual_symbols[nested_source_scope.symbol_id >> 6] |=
-            UINT64_C(1) << (nested_source_scope.symbol_id & 63u);
+        IREE_RETURN_IF_ERROR(loom_symbol_reference_builder_set_symbol_bit(
+            builder, nested_source_scope.symbol_id,
+            &builder->contextual_symbols));
+      }
+      if ((loom_func_exit_isa(op) || loom_low_func_exit_isa(op)) &&
+          nested_source_scope.symbol_id != LOOM_SYMBOL_ID_INVALID) {
+        IREE_RETURN_IF_ERROR(loom_symbol_reference_builder_set_symbol_bit(
+            builder, nested_source_scope.symbol_id,
+            &builder->callable_exit_symbols));
       }
       if (loom_template_apply_isa(op)) {
         IREE_RETURN_IF_ERROR(loom_symbol_reference_append_template_demand(
@@ -706,6 +722,7 @@ iree_status_t loom_symbol_reference_table_build(
       .calls = builder.calls,
       .template_provider_count = builder.template_provider_count,
       .contextual_symbols = builder.contextual_symbols,
+      .callable_exit_symbols = builder.callable_exit_symbols,
       .execution_targets =
           {
               .values = builder.execution_targets.values,

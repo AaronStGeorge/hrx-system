@@ -30,6 +30,7 @@ loom_codegen_pass_environment_storage_initialize_with_target(
     const loom_codegen_pass_environment_options_t* options,
     loom_target_pass_capability_t target_capability,
     loom_codegen_pass_environment_storage_t* out_storage) {
+  *out_storage = (loom_codegen_pass_environment_storage_t){0};
   out_storage->target_capability = target_capability;
   out_storage->low_capability = loom_low_pass_capability_make(
       options->descriptor_registry, options->lower_policy_registry,
@@ -67,7 +68,8 @@ loom_pass_environment_t loom_codegen_pass_environment_storage_initialize(
   return loom_codegen_pass_environment_storage_initialize_with_target(
       options,
       loom_target_pass_capability_make(options->target_environment,
-                                       function_versions),
+                                       function_versions,
+                                       &out_storage->target_state),
       out_storage);
 }
 
@@ -79,6 +81,7 @@ loom_codegen_pass_environment_storage_initialize_mutable(
   return loom_codegen_pass_environment_storage_initialize_with_target(
       options,
       loom_target_pass_capability_make_mutable(options->target_environment,
-                                               function_version_owner),
+                                               function_version_owner,
+                                               &out_storage->target_state),
       out_storage);
 }

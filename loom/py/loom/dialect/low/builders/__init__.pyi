@@ -382,3 +382,15 @@ class LowBuilder(DialectBuilder):
         false_dest: Block,
         location_id: int | None = ...,
     ) -> None: ...
+    def exit(
+        self,
+        *,
+        condition: ValueRef,
+        body: Region | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def unreachable(
+        self,
+        *,
+        location_id: int | None = ...,
+    ) -> None: ...

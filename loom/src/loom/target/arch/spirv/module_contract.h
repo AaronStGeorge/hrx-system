@@ -43,9 +43,13 @@ loom_spirv_module_contract_t loom_spirv_module_contract_make(
     iree_string_view_t target_name, const loom_target_bundle_t* target_bundle,
     uint64_t descriptor_set_stable_id, uint64_t contract_feature_bits);
 
-// Returns true when both contracts can be emitted into one SPIR-V module.
-bool loom_spirv_module_contract_equal(const loom_spirv_module_contract_t* lhs,
-                                      const loom_spirv_module_contract_t* rhs);
+// Merges |candidate| into |accumulator| when both can be emitted into one
+// SPIR-V module. Internal functions carry an unknown export ABI; this acts as
+// the bottom value and adopts the module's concrete entry ABI without making
+// source order part of compatibility.
+bool loom_spirv_module_contract_merge(
+    loom_spirv_module_contract_t* accumulator,
+    const loom_spirv_module_contract_t* candidate);
 
 #ifdef __cplusplus
 }  // extern "C"

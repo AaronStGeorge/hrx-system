@@ -165,10 +165,11 @@ def _load_index_generation() -> DialectGeneration:
 
 
 def _load_kernel_generation() -> DialectGeneration:
+    from loom.dialect.func.defs import func_unreachable
     from loom.dialect.kernel import ALL_KERNEL_OPS, kernel_ops
     from loom.dialect.pipeline.defs import pipeline_strand
 
-    return DialectGeneration(kernel_ops, list(ALL_KERNEL_OPS), None, referenced_ops=(pipeline_strand,))
+    return DialectGeneration(kernel_ops, list(ALL_KERNEL_OPS), None, referenced_ops=(func_unreachable, pipeline_strand))
 
 
 def _load_target_generation() -> DialectGeneration:

@@ -206,7 +206,12 @@ low.func.def target<spirv.logical.core> abi(shader_entry_point) @kernel() asm {
 
 TEST_F(SpirvModuleCompilerTest, RetainsRequestedArtifactMetadata) {
   ModulePtr module = ParseModule(IREE_SV(R"(
+low.func.def target<spirv.logical.core> @helper() asm {
+  return
+}
+
 low.kernel.def target<spirv.logical.core> workgroup_size(1, 1, 1) @loom_kernel() asm {
+  low.func.call @helper() : ()
   return
 }
 )"));
@@ -219,7 +224,17 @@ low.kernel.def target<spirv.logical.core> workgroup_size(1, 1, 1) @loom_kernel()
       iree_make_cstring_view(export_symbol);
   loom_target_function_version_t function_version =
       MakeFunctionVersion(module.get(), IREE_SV("loom_kernel"), &target_facts);
-  loom_function_version_t* version_values[] = {&function_version.base};
+  function_version.base.flags = LOOM_FUNCTION_VERSION_FLAG_RETAIN;
+  loom_target_facts_t helper_target_facts = {};
+  InitializeTargetFacts(&loom_spirv_low_target_bundle_hal_kernel,
+                        &helper_target_facts);
+  helper_target_facts.storage.export_plan.abi_kind = LOOM_TARGET_ABI_UNKNOWN;
+  loom_target_function_version_t helper_version = MakeFunctionVersion(
+      module.get(), IREE_SV("helper"), &helper_target_facts);
+  loom_function_version_t* version_values[] = {
+      &helper_version.base,
+      &function_version.base,
+  };
   const loom_function_version_list_t function_versions = {
       .values = version_values,
       .count = IREE_ARRAYSIZE(version_values),
@@ -290,6 +305,7 @@ low.kernel.def target<spirv.logical.core> workgroup_size(1, 1, 1) @loom_kernel()
       << manifest_text;
   EXPECT_NE(manifest_text.find("\"name\":\"module.spv\""), std::string::npos)
       << manifest_text;
+  EXPECT_EQ(manifest_text.find("helper"), std::string::npos) << manifest_text;
 
   loom_target_emit_artifact_release(&artifact);
 }

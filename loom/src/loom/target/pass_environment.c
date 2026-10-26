@@ -35,7 +35,8 @@ const loom_pass_environment_capability_type_t loom_target_pass_capability_type =
 
 loom_target_pass_capability_t loom_target_pass_capability_make(
     const loom_target_environment_t* target_environment,
-    const loom_function_version_list_t* function_versions) {
+    const loom_function_version_list_t* function_versions,
+    loom_target_pass_state_t* state) {
   return (loom_target_pass_capability_t){
       .base =
           {
@@ -44,13 +45,15 @@ loom_target_pass_capability_t loom_target_pass_capability_make(
       .target_environment = target_environment,
       .function_versions = function_versions,
       .function_version_owner = NULL,
+      .state = state,
       .supports_mutable_function_versions = false,
   };
 }
 
 loom_target_pass_capability_t loom_target_pass_capability_make_mutable(
     const loom_target_environment_t* target_environment,
-    loom_function_version_owner_t* function_version_owner) {
+    loom_function_version_owner_t* function_version_owner,
+    loom_target_pass_state_t* state) {
   return (loom_target_pass_capability_t){
       .base =
           {
@@ -60,6 +63,7 @@ loom_target_pass_capability_t loom_target_pass_capability_make_mutable(
       .function_versions =
           loom_function_version_owner_list(function_version_owner),
       .function_version_owner = function_version_owner,
+      .state = state,
       .supports_mutable_function_versions = true,
   };
 }
@@ -96,6 +100,11 @@ loom_function_version_owner_t*
 loom_target_pass_capability_function_version_owner(
     const loom_target_pass_capability_t* capability) {
   return capability ? capability->function_version_owner : NULL;
+}
+
+loom_target_pass_state_t* loom_target_pass_capability_state(
+    const loom_target_pass_capability_t* capability) {
+  return capability ? capability->state : NULL;
 }
 
 static bool loom_target_function_symbol_id(const loom_module_t* module,

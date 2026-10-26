@@ -575,7 +575,7 @@ static void BM_InlineComposition(benchmark::State& state, CallableMode mode,
       IREE_CHECK_OK(PrepareTargetVersions(module, &pass_arena, &target_versions,
                                           &version_owner));
       target_capability = loom_target_pass_capability_make_mutable(
-          /*target_environment=*/nullptr, &version_owner);
+          /*target_environment=*/nullptr, &version_owner, /*state=*/nullptr);
       capabilities[0] = &target_capability.base;
       pass_environment = loom_pass_environment_make(
           capabilities, IREE_ARRAYSIZE(capabilities));

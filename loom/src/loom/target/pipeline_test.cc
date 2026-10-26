@@ -41,6 +41,10 @@ typedef struct PipelineRunCounts {
   int boundary_cleanup_ordinal = 0;
   // Lexical pass-run ordinal of the first target-required call inlining.
   int first_target_inlining_ordinal = 0;
+  // Lexical pass-run ordinal of preparatory source call inlining.
+  int preparatory_target_inlining_ordinal = 0;
+  // Lexical pass-run ordinal of deferred source call completion.
+  int resumed_target_inlining_ordinal = 0;
   // Lexical pass-run ordinal of the last target-required call inlining.
   int last_target_inlining_ordinal = 0;
   // Last source combination before target legalization.
@@ -215,12 +219,22 @@ iree_status_t InspectPipelineRun(void* user_data, loom_op_t* op,
                  FindStringOption(count_context->module,
                                   loom_pass_run_options(op), IREE_SV("policy")),
                  IREE_SV("target"))) {
+    const iree_string_view_t stage = FindStringOption(
+        count_context->module, loom_pass_run_options(op), IREE_SV("stage"));
     if (counts->first_target_inlining_ordinal == 0) {
       counts->first_target_inlining_ordinal =
           count_context->current_run_ordinal;
     }
+    if (iree_string_view_equal(stage, IREE_SV("prepare"))) {
+      counts->preparatory_target_inlining_ordinal =
+          count_context->current_run_ordinal;
+    } else if (iree_string_view_equal(stage, IREE_SV("resume"))) {
+      counts->resumed_target_inlining_ordinal =
+          count_context->current_run_ordinal;
+    }
     counts->last_target_inlining_ordinal = count_context->current_run_ordinal;
-  } else if (iree_string_view_equal(key, IREE_SV("combine"))) {
+  } else if (iree_string_view_equal(key, IREE_SV("combine")) &&
+             counts->first_target_legalization_ordinal == 0) {
     counts->last_source_combination_ordinal =
         count_context->current_run_ordinal;
   } else if (iree_string_view_equal(key, IREE_SV("target-legalize"))) {
@@ -434,6 +448,14 @@ TEST_F(TargetPipelineTest, ZeroChecksStillMaterializesAuthoredAssertions) {
             counts.sink_single_use_reads_ordinal);
   EXPECT_LT(counts.sink_single_use_reads_ordinal,
             counts.first_scf_to_cfg_ordinal);
+  EXPECT_EQ(counts.first_target_inlining_ordinal,
+            counts.preparatory_target_inlining_ordinal);
+  EXPECT_LT(counts.preparatory_target_inlining_ordinal,
+            counts.first_scf_to_cfg_ordinal);
+  EXPECT_LT(counts.first_scf_to_cfg_ordinal,
+            counts.resumed_target_inlining_ordinal);
+  EXPECT_LT(counts.resumed_target_inlining_ordinal,
+            counts.boundary_projection_ordinal);
   EXPECT_LT(counts.first_target_legalization_ordinal,
             counts.boundary_projection_ordinal);
   EXPECT_LT(counts.boundary_projection_ordinal, counts.source_to_low_ordinal);
@@ -480,6 +502,7 @@ TEST_F(TargetPipelineTest, StructuredControlFlowExpandsSourceLoopPolicies) {
             counts.boundary_projection_ordinal);
   EXPECT_LT(counts.source_loop_unrolling_ordinal, counts.source_to_low_ordinal);
   EXPECT_EQ(counts.scf_to_cfg, 0);
+  EXPECT_EQ(counts.resumed_target_inlining_ordinal, 0);
 }
 
 TEST_F(TargetPipelineTest, DiagnosticArtifactsPreserveRawSourceBoundary) {
@@ -506,6 +529,10 @@ TEST_F(TargetPipelineTest, DiagnosticArtifactsPreserveRawSourceBoundary) {
   EXPECT_LT(counts.target_callgraph_specialization_ordinals[1],
             counts.first_target_inlining_ordinal);
   EXPECT_LT(counts.first_target_inlining_ordinal,
+            counts.first_scf_to_cfg_ordinal);
+  EXPECT_LT(counts.first_scf_to_cfg_ordinal,
+            counts.resumed_target_inlining_ordinal);
+  EXPECT_LT(counts.resumed_target_inlining_ordinal,
             counts.boundary_projection_ordinal);
   EXPECT_LT(counts.boundary_projection_ordinal, counts.source_to_low_ordinal);
   EXPECT_LT(counts.source_to_low_ordinal, counts.last_target_inlining_ordinal);

@@ -38,6 +38,10 @@ typedef struct loom_low_lower_control_block_t {
   // Authored block supplying the complete signature, or zero for no arguments.
   // Synthetic signature references are resolved once when this row is created.
   loom_low_lower_block_ref_t signature;
+  // Target-private argument types appended after the copied signature.
+  const loom_type_t* argument_types;
+  // Number of target-private appended arguments.
+  uint16_t argument_count;
 } loom_low_lower_control_block_t;
 
 struct loom_low_lower_control_plan_t {
@@ -81,49 +85,103 @@ uint16_t loom_low_lower_control_argument_count(
     const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block) {
   const loom_low_lower_block_ref_t signature =
       loom_low_lower_control_signature(context, block);
-  if (signature == 0) {
-    return 0;
+  uint16_t count = 0;
+  if (signature != 0) {
+    const uint16_t index = (uint16_t)(signature - 1);
+    const loom_block_t* source =
+        loom_region_block(loom_func_like_body(context->source_function), index);
+    const uint16_t authored_count =
+        index == 0 ? context->lowering->boundary.argument_count
+                   : source->arg_count;
+    count = authored_count +
+            loom_low_lower_realization_block_argument_count(context, source);
   }
-  const uint16_t index = (uint16_t)(signature - 1);
-  const loom_block_t* source =
-      loom_region_block(loom_func_like_body(context->source_function), index);
-  const uint16_t authored_count =
-      index == 0 ? context->lowering->boundary.argument_count
-                 : source->arg_count;
-  return authored_count +
-         loom_low_lower_realization_block_argument_count(context, source);
+  const uint16_t source_count =
+      loom_func_like_body(context->source_function)->block_count;
+  if (block > source_count) {
+    count += context->lowering->control_plan->blocks[block - source_count - 1]
+                 .argument_count;
+  }
+  return count;
 }
 
 loom_type_t loom_low_lower_control_argument_type(
     const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block,
     uint16_t argument_index) {
-  const uint16_t index =
-      (uint16_t)(loom_low_lower_control_signature(context, block) - 1);
-  const loom_block_t* source =
-      loom_region_block(loom_func_like_body(context->source_function), index);
-  const uint16_t authored_count =
-      index == 0 ? context->lowering->boundary.argument_count
-                 : source->arg_count;
+  const loom_low_lower_block_ref_t signature =
+      loom_low_lower_control_signature(context, block);
+  uint16_t authored_count = 0;
+  uint16_t source_argument_count = 0;
+  uint16_t source_index = 0;
+  const loom_block_t* source = NULL;
+  if (signature != 0) {
+    source_index = (uint16_t)(signature - 1);
+    source = loom_region_block(loom_func_like_body(context->source_function),
+                               source_index);
+    authored_count = source_index == 0
+                         ? context->lowering->boundary.argument_count
+                         : source->arg_count;
+    source_argument_count =
+        authored_count +
+        loom_low_lower_realization_block_argument_count(context, source);
+  }
+  if (argument_index >= source_argument_count) {
+    const uint16_t source_count =
+        loom_func_like_body(context->source_function)->block_count;
+    IREE_ASSERT_GT(block, source_count);
+    return context->lowering->control_plan->blocks[block - source_count - 1]
+        .argument_types[argument_index - source_argument_count];
+  }
   if (argument_index >= authored_count) {
     return loom_low_lower_realization_block_argument_type(
         context, source, argument_index - authored_count);
   }
-  return index == 0 ? context->lowering->boundary.argument_types[argument_index]
-                    : loom_low_lower_structural_block_argument_type(
-                          context, index, argument_index);
+  return source_index == 0
+             ? context->lowering->boundary.argument_types[argument_index]
+             : loom_low_lower_structural_block_argument_type(
+                   context, source_index, argument_index);
 }
 
 iree_status_t loom_low_lower_control_add_block(
     loom_low_lower_context_t* context, loom_low_lower_block_ref_t before,
     loom_low_lower_block_ref_t signature,
     loom_low_lower_block_ref_t* out_block) {
+  return loom_low_lower_control_add_block_with_appended_arguments(
+      context, before, signature, /*argument_types=*/NULL,
+      /*argument_count=*/0, out_block);
+}
+
+iree_status_t loom_low_lower_control_add_block_with_appended_arguments(
+    loom_low_lower_context_t* context, loom_low_lower_block_ref_t before,
+    loom_low_lower_block_ref_t signature, const loom_type_t* argument_types,
+    uint16_t argument_count, loom_low_lower_block_ref_t* out_block) {
   loom_low_lower_control_plan_t* plan = context->lowering->control_plan;
+  const loom_low_lower_block_ref_t canonical_signature =
+      loom_low_lower_control_signature(context, signature);
+  const uint16_t base_argument_count =
+      canonical_signature
+          ? loom_low_lower_control_argument_count(context, canonical_signature)
+          : 0;
+  if ((uint32_t)base_argument_count + argument_count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "planned control block argument count exceeds u16");
+  }
+  loom_type_t* retained_argument_types = NULL;
+  if (argument_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_function_array(
+        context, argument_count, sizeof(*retained_argument_types),
+        (void**)&retained_argument_types));
+    memcpy(retained_argument_types, argument_types,
+           argument_count * sizeof(*retained_argument_types));
+  }
   IREE_RETURN_IF_ERROR(iree_arena_grow_array(
       context->function_arena, plan->block_count, plan->block_count + 1,
       sizeof(*plan->blocks), &plan->block_capacity, (void**)&plan->blocks));
   plan->blocks[plan->block_count++] = (loom_low_lower_control_block_t){
       .before = before,
-      .signature = loom_low_lower_control_signature(context, signature),
+      .signature = canonical_signature,
+      .argument_types = retained_argument_types,
+      .argument_count = argument_count,
   };
   *out_block =
       (loom_low_lower_block_ref_t)loom_low_lower_control_block_count(context);
@@ -498,6 +556,12 @@ iree_status_t loom_low_lower_control_create_blocks(
         status =
             loom_module_copy_value_name(context->module, original, argument);
       }
+    }
+    for (uint16_t j = 0;
+         j < recipe->argument_count && iree_status_is_ok(status); ++j) {
+      loom_value_id_t argument = LOOM_VALUE_ID_INVALID;
+      status = loom_builder_define_block_arg(
+          &context->builder, block, recipe->argument_types[j], &argument);
     }
   }
   return status;

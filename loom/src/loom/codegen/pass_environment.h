@@ -47,6 +47,8 @@ typedef struct loom_codegen_pass_environment_options_t {
 } loom_codegen_pass_environment_options_t;
 
 typedef struct loom_codegen_pass_environment_storage_t {
+  // Mutable state shared by target passes in this pipeline execution.
+  loom_target_pass_state_t target_state;
   // Target compiler capability entry stored for the borrowed environment view.
   loom_target_pass_capability_t target_capability;
   // Low capability entry stored for the borrowed environment view.

@@ -47,6 +47,16 @@ iree_status_t loom_low_lower_control_add_block(
     loom_low_lower_block_ref_t signature,
     loom_low_lower_block_ref_t* out_block);
 
+// Plans one synthetic block whose tuple appends |argument_types| after the
+// copied |signature|. Appended arguments belong only to the new block; using
+// it as another block's signature still resolves to the canonical authored
+// tuple. This lets target control expansion retain private dispatch state
+// without changing authored block signatures.
+iree_status_t loom_low_lower_control_add_block_with_appended_arguments(
+    loom_low_lower_context_t* context, loom_low_lower_block_ref_t before,
+    loom_low_lower_block_ref_t signature, const loom_type_t* argument_types,
+    uint16_t argument_count, loom_low_lower_block_ref_t* out_block);
+
 // Returns the planned argument count and type without constructing SSA values.
 uint16_t loom_low_lower_control_argument_count(
     const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block);

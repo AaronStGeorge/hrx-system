@@ -413,3 +413,18 @@ low.func.def target<x86.avx2.core>(@target) @vector_move(%input: reg<x86.xmm>) -
 
 // ----
 callee-preserved: none
+
+// ====
+
+// A result-bearing function may have a direct body path that source control
+// proves cannot reach its ordinary return. The undefined path uses the common
+// epilogue without fabricating a result value.
+// RUN: emit x86-native-bytes @unreachable_tail
+x86.target<scalar> @target
+
+low.func.def target<x86.scalar.core>(@target) @unreachable_tail() -> (reg<x86.gpr32>) asm {
+  low.unreachable
+}
+
+// ----
+code: c3

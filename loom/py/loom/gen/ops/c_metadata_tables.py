@@ -1156,7 +1156,7 @@ def generate_tables_c(
 
         # Interface vtables.
         for spec in c_interfaces.INTERFACES:
-            c_interfaces.emit_interface_vtable(op, spec, lines)
+            c_interfaces.emit_interface_vtable(op, spec, lines, ops_by_name)
 
         # Symbol definition descriptor.
         if op.symbol_def is not None:
@@ -1295,7 +1295,7 @@ def generate_tables_c(
         type_transfer_fn = op.type_transfer or "NULL"
         verify_fn = op.verify or "NULL"
         eff_traits = op.effective_traits or "NULL"
-        interface_initializers = {spec.vtable_field: c_interfaces.interface_vtable_initializer(op, spec) for spec in c_interfaces.INTERFACES}
+        interface_initializers = {spec.vtable_field: c_interfaces.interface_vtable_initializer(op, spec, ops_by_name) for spec in c_interfaces.INTERFACES}
         symbol_def_ptr = f"&{prefix}_symbol_def" if op.symbol_def is not None else "NULL"
         has_placement = any(trait.name in ("HasParent", "HasAncestor", "HasAnyAncestor", "NoAncestor") for trait in op.traits)
         placement_ptr = f"&{prefix}_placement" if has_placement else "NULL"

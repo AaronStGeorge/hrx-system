@@ -1581,6 +1581,7 @@ iree_status_t loom_template_selection_run(loom_pass_t* pass,
         .target_versions = &target_versions,
         .live_symbols = state.liveness.live_symbols,
         .demanded_families = state.demanded_families,
+        .defer_callable_exits = true,
         .template_eligibility =
             {
                 .fn = loom_template_selection_check_inline_eligibility,

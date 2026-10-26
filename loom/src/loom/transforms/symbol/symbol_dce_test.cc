@@ -120,8 +120,8 @@ class SymbolDCETest : public ::testing::Test {
         .arena = &pass_arena,
         .statistic_storage = statistic_storage.data(),
     };
-    const auto target_capability =
-        loom_target_pass_capability_make_mutable(nullptr, versions);
+    const auto target_capability = loom_target_pass_capability_make_mutable(
+        nullptr, versions, /*state=*/nullptr);
     const loom_pass_environment_capability_t* capabilities[] = {
         &target_capability.base,
     };

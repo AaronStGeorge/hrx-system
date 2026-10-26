@@ -48,6 +48,9 @@ typedef struct loom_inline_callables_plan_options_t {
   iree_host_size_t additional_call_capacity;
   // Applies target emission requirements in addition to authored call policy.
   bool target_policy;
+  // Defers required semantic calls whose callee directly owns func.exit until
+  // a later completion plan can preserve the callable exit destination.
+  bool defer_callable_exits;
 } loom_inline_callables_plan_options_t;
 
 // Arena-owned call plan shared with the driver that establishes applicability.

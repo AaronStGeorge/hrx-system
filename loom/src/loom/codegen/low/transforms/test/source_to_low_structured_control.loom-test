@@ -195,3 +195,33 @@ low.func.def target<test.low.core>(@test_target) abi(object_function) @projects_
   }
   return %result
 }
+
+// ====
+// RUN: pass source-to-low{control-flow=structured-low}
+
+test.target<low_core> @test_target
+
+func.def target(@test_target) @return_inside_for(%condition: i1, %lower: index, %upper: index, %step: index, %value: i32, %fallback: i32) -> (i32) {
+  %result = scf.for %iv = [%lower to %upper step %step](%current = %fallback : i32) -> (i32) {
+    func.exit %condition : i1 {
+      %returned = scalar.addi %value, %current : i32
+      func.return %returned : i32
+    }
+    scf.yield %current : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) abi(object_function) @return_inside_for(%condition: reg<test.i32>, %lower: reg<test.i32>, %upper: reg<test.i32>, %step: reg<test.i32>, %value: reg<test.i32>, %fallback: reg<test.i32>) -> (reg<test.i32>) asm {
+  %result = low.scf.for signed [%lower to %upper step %step] iter_args(%fallback: reg<test.i32>) -> (reg<test.i32>) do(%iv: reg<test.i32>, %current: reg<test.i32>) {
+    low.func.exit %condition : reg<test.i32> {
+      %returned = test.add.i32 %value, %current
+      return %returned
+    }
+    low.scf.yield %current : reg<test.i32>
+  }
+  return %result
+}

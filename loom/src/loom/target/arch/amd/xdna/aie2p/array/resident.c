@@ -1506,7 +1506,7 @@ static iree_status_t loom_aie2p_array_resident_rewrite_returns(
     loom_op_t* op = block->first_op;
     while (op != NULL) {
       loom_op_t* next_op = op->next_op;
-      if (loom_low_return_isa(op)) {
+      if (loom_low_return_isa(op) || loom_low_unreachable_isa(op)) {
         loom_builder_set_before(ir_builder, op);
         loom_op_t* branch_op = NULL;
         IREE_RETURN_IF_ERROR(loom_low_br_build(ir_builder, latch, /*args=*/NULL,

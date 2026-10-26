@@ -31,6 +31,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
@@ -298,6 +299,22 @@ static iree_status_t loom_low_lower_emit_scf_condition(
   return loom_low_scf_condition_build(&context->builder, low_condition,
                                       low_forwarded, forwarded.count,
                                       source_op->location, &low_condition_op);
+}
+
+static iree_status_t loom_low_lower_emit_func_exit(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  const loom_value_id_t low_condition =
+      loom_low_lower_lookup_value(context, loom_func_exit_condition(source_op));
+  loom_op_t* low_exit_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_func_exit_build(
+      &context->builder, low_condition, source_op->location, &low_exit_op));
+
+  loom_builder_ip_t saved_ip = loom_builder_enter_region(
+      &context->builder, low_exit_op, loom_low_func_exit_body(low_exit_op));
+  iree_status_t status = loom_low_lower_emit_region_ops(
+      context, loom_func_exit_body(source_op), /*map_source_blocks=*/false);
+  loom_builder_restore(&context->builder, saved_ip);
+  return status;
 }
 
 static iree_status_t loom_low_lower_emit_scf_if(
@@ -582,6 +599,13 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_lower_structural_op(
       }
       return loom_low_lower_control_emit_cond_branch(
           context, source_op, low_condition, low_true_dest, low_false_dest);
+    }
+    case LOOM_OP_FUNC_EXIT:
+      return loom_low_lower_emit_func_exit(context, source_op);
+    case LOOM_OP_FUNC_UNREACHABLE: {
+      loom_op_t* low_unreachable_op = NULL;
+      return loom_low_unreachable_build(&context->builder, source_op->location,
+                                        &low_unreachable_op);
     }
     case LOOM_OP_SCF_YIELD:
       return loom_low_lower_emit_scf_yield(context, source_op);

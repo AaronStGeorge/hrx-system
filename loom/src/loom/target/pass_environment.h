@@ -30,6 +30,18 @@ typedef struct loom_target_environment_t loom_target_environment_t;
 extern const loom_pass_environment_capability_type_t
     loom_target_pass_capability_type;
 
+// Mutable state shared by passes in one target-lowering pipeline execution.
+//
+// This state has no IR representation and is reset for every compiler
+// invocation. Producers publish pending cross-pass work here so later passes
+// can avoid rediscovering it from the module.
+typedef struct loom_target_pass_state_t {
+  // True when preparatory call inlining observed callable exits. Later source
+  // transforms may expose required edges to those callables, so CFG pipelines
+  // run one completion plan before boundary projection.
+  bool source_inline_completion_pending;
+} loom_target_pass_state_t;
+
 typedef struct loom_target_pass_capability_t {
   // Base capability header. Must remain the first field.
   loom_pass_environment_capability_t base;
@@ -43,22 +55,27 @@ typedef struct loom_target_pass_capability_t {
   // Mutable owner of |function_versions|, or NULL for read-only capabilities.
   loom_function_version_owner_t* function_version_owner;
 
+  // Mutable pipeline execution state, or NULL when unavailable.
+  loom_target_pass_state_t* state;
+
   // True when pass-program executions supply a mutable function-version
   // owner. The owner may be NULL while compiling a pass program before an
   // invocation exists.
   bool supports_mutable_function_versions;
 } loom_target_pass_capability_t;
 
-// Creates a borrowed target pass capability.
+// Creates a borrowed target pass capability. |state| may be NULL.
 loom_target_pass_capability_t loom_target_pass_capability_make(
     const loom_target_environment_t* target_environment,
-    const loom_function_version_list_t* function_versions);
+    const loom_function_version_list_t* function_versions,
+    loom_target_pass_state_t* state);
 
 // Creates a borrowed target pass capability whose function versions may be
-// extended by module passes. |function_version_owner| may be NULL.
+// extended by module passes. |function_version_owner| and |state| may be NULL.
 loom_target_pass_capability_t loom_target_pass_capability_make_mutable(
     const loom_target_environment_t* target_environment,
-    loom_function_version_owner_t* function_version_owner);
+    loom_function_version_owner_t* function_version_owner,
+    loom_target_pass_state_t* state);
 
 // Looks up the target capability from |environment|. Returns NULL when absent.
 const loom_target_pass_capability_t*
@@ -83,6 +100,10 @@ loom_target_pass_capability_function_versions(
 // the capability exposes only a read-only list.
 loom_function_version_owner_t*
 loom_target_pass_capability_function_version_owner(
+    const loom_target_pass_capability_t* capability);
+
+// Returns mutable target-pipeline execution state, or NULL when unavailable.
+loom_target_pass_state_t* loom_target_pass_capability_state(
     const loom_target_pass_capability_t* capability);
 
 // Resolves immutable function target facts for the active function pass.
