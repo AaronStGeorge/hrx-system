@@ -35,6 +35,10 @@ IREE_FLAG(int32_t, model_capacity, 32,
 IREE_FLAG_LIST(string, listen,
                "HTTP binding: IPv4 host:port, [IPv6]:port, or unix:path. "
                "Repeat for multiple listeners; default 127.0.0.1:8080.");
+IREE_FLAG_LIST(string, observation_origin,
+               "Browser origin allowed for the live dashboard, such as "
+               "http://127.0.0.1:8080. Repeat for additional public origins; "
+               "omit to allow only native clients without an Origin header.");
 IREE_FLAG(int32_t, connections, 64,
           "Maximum simultaneous HTTP connections across all listeners.");
 IREE_FLAG(int32_t, held_requests, -1,
@@ -335,6 +339,7 @@ int loom_serve_main(int argc, char** argv,
         loom_serve_host_executor(host), server, registry,
         (loom_serve_router_options_t){
             .request_quota = (iree_host_size_t)FLAG_connections,
+            .observation_origins = FLAG_observation_origin_list(),
             .resources = {.device_group = group,
                           .idle_policy_count = devices.count,
                           .idle_policies = devices.idle,

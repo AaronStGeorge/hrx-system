@@ -460,6 +460,45 @@ TEST_P(HttpRouterRegistrationTest, StalledObserverDoesNotRetainRemovedModel) {
   EXPECT_EQ(Control("unregister", "dynamic").find("HTTP/1.1 202"), 0u);
 }
 
+TEST_P(HttpRouterRegistrationTest, LiveCreditDoesNotRetainRemovedModel) {
+  Register();
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(server_));
+  // Hold the handshake's only carrier credit while destroying the source.
+  observer.WaitCredit(false);
+  Remove();
+  EXPECT_EQ(managed_.destroyed.load(), 1u);
+  EXPECT_EQ(
+      Read(Send("POST", "/v1/test", R"({"model":"a"})")).find("HTTP/1.1 200"),
+      0u);
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  const auto first = observer.WebSocketFrame();
+  EXPECT_NE(first.find("\"type\":\"server\""), std::string::npos);
+  // A ping proves this reader's owner turn ran without acknowledging the
+  // snapshot. Its pong must be next: telemetry cannot spend more app credit.
+  observer.WriteFrame(9, "credit-held");
+  EXPECT_EQ(observer.WebSocketFrame(10), "credit-held");
+  EXPECT_EQ(
+      Read(
+          Send(
+              "POST", "/v1/models/register",
+              R"({"name":"dynamic","admission":"drained","definition":{"kind":"embedding","prepare":"/model/prepare.loom","control":"/model/control.loom","sources":["/model/kernel.loom"],"assets":"/assets"}})"))
+          .find("HTTP/1.1 202"),
+      0u);
+  observer.Ack(first);
+  bool replacement_seen = false;
+  for (size_t i = 0; i < 6; ++i) {
+    const auto frame = observer.WebSocketFrame();
+    if (frame.find("\"name\":\"dynamic\"") != std::string::npos) {
+      EXPECT_NE(frame.find("\"incarnation\":\"2\""), std::string::npos);
+      replacement_seen = true;
+    }
+    observer.Ack(frame);
+  }
+  EXPECT_TRUE(replacement_seen);
+  EXPECT_EQ(Control("unregister", "dynamic").find("HTTP/1.1 202"), 0u);
+}
+
 TEST_P(HttpRouterRegistrationTest,
        ParameterPressureUsesModelObservationsAndRetiresWithIncarnation) {
   {

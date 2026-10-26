@@ -9,6 +9,45 @@ The [serving walkthrough](serve-models.md) provides an arithmetic model for
 exercising these endpoints. [Operations](operate-model-server.md) explains the
 registration, admission and residency states they describe.
 
+## Watch the live dashboard
+
+Allow the origin you will open in your browser, then visit
+`http://127.0.0.1:8080/dashboard/`:
+
+```sh
+loom-serve --device=task --pool_backing=fixed \
+  --listen=127.0.0.1:8080 --observation_origin=http://127.0.0.1:8080 \
+  --model=vectors/model.json
+```
+
+The dashboard is embedded in the executable: no frontend installation,
+external assets, database, or second listener. Models appear as they register.
+Token and completion rates, active requests, per-model sparklines, logical KV
+occupancy, and source-defined numeric observations come from the running
+services. Elastic text-state bytes exclude fixed buffers, weights, and
+workspace; they are not whole-device memory usage. A modality without a
+particular observation leaves it unavailable rather than inventing a value.
+
+The browser retains a fixed history and redraws canvas plots as samples arrive.
+The chart's time-range button switches between 30 seconds and two minutes.
+Pause or a hidden tab releases the live connection. Resuming reads current
+state; it does not replay work that happened while disconnected.
+
+`--observation_origin` is repeatable and matches the exact browser origin,
+including scheme and port. It is a cross-origin check, not authentication.
+Without it, native clients may observe but browser upgrades are rejected.
+Behind a tunnel or reverse proxy, allow the externally visible origin and
+forward WebSocket upgrades along with HTTP. Relative URLs preserve a proxy
+mount prefix. The backend may bind only `unix:/run/loom/serve.sock`; the relay,
+not the browser, opens that Unix socket.
+
+The `/v1/observe` WebSocket sends bounded current-state pages, with at most
+one application-unacknowledged page per viewer. Slow clients skip intermediate
+states without queuing a history or retaining model resources. Registration
+incarnations distinguish a removed model from a replacement with the same
+name. Observation pages are live, not an atomic whole-server snapshot.
+Persistent collectors use `/metrics`; event history remains in `/logz`.
+
 ## Start with status and counters
 
 ```sh
@@ -48,6 +87,13 @@ model-specific controls such as text checkpoints, but exclude router-owned raw
 tokenization, health/observation calls and unknown-route rejections. Unavailable
 counters are reported as unavailable, not zero. Disabling periodic heartbeats
 with `--heartbeat_ms=0` does not disable counting.
+
+Source-owned numeric extensions appear in `loom_serve_model_observation`
+(gauges) and `loom_serve_model_observation_total` (counters). Their `topic`,
+`schema`, `field`, and `unit` labels describe the source's integer values,
+without implicit unit conversion. Text and image services publish these same
+facts to the live dashboard. Extension counters belong to their model
+incarnation and are not automatically added to server-lifetime totals.
 
 ## Read preparation timing
 

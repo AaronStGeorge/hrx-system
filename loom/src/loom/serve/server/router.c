@@ -10,7 +10,9 @@
 
 #include "iree/base/internal/json.h"
 #include "iree/base/threading/mutex.h"
+#include "loom/serve/dashboard/assets.h"
 #include "loom/serve/runtime/host/wake.h"
+#include "loom/serve/server/http/live.h"
 #include "loom/serve/server/http/logs.h"
 #include "loom/serve/server/http/metrics.h"
 #include "loom/serve/server/http/package.h"
@@ -90,6 +92,10 @@ typedef struct loom_serve_router_t {
   loom_serve_registry_t* registry;
   // Cold executable management, retired before registry and transport owners.
   loom_serve_http_variants_t* variants;
+  // Lazily allocated live readers; never owns a registration or model borrow.
+  loom_serve_http_live_t* live;
+  // Borrowed explicit browser origin policy, independent of listener type.
+  iree_string_view_list_t observation_origins;
   // Immutable borrowed resource view, outliving the outer routing call.
   loom_serve_resources_t resources;
   // Shared-proactor expiry, joined before this owner's wake target disappears.
@@ -728,7 +734,8 @@ static iree_status_t loom_serve_router_describe_server(
       limits.header_byte_capacity, limits.body_byte_capacity,
       limits.header_capacity, limits.multipart_header_byte_capacity,
       limits.multipart_part_capacity, router->held.capacity, router->held.count,
-      router->logs.capacity, router->logs.count));
+      router->logs.capacity,
+      router->logs.count + loom_serve_http_live_count(router->live)));
   loom_output_stream_t stream;
   loom_output_stream_for_builder(output, &stream);
   IREE_RETURN_IF_ERROR(
@@ -806,6 +813,7 @@ static iree_status_t loom_serve_router_logs(
   }
   if (streaming) {
     if (router->logs.count + router->held.count +
+            loom_serve_http_live_count(router->live) +
             loom_serve_http_variants_claims(router->variants) ==
         router->logs.capacity) {
       return loom_serve_http_response_reject(
@@ -1205,9 +1213,36 @@ static iree_status_t loom_serve_router_accept(
       loom_serve_registry_count(router->registry);
   iree_string_builder_t* output = &router->output;
   const bool get = iree_string_view_equal(request->method, IREE_SV("GET"));
+  if (get && loom_serve_dashboard_handles(request->target)) {
+    loom_serve_dashboard_send(router->server, connection, request->target);
+    return iree_ok_status();
+  }
+  if (get && iree_string_view_equal(request->target, IREE_SV("/v1/observe"))) {
+    if (router->held.count + router->logs.count +
+            loom_serve_http_live_count(router->live) +
+            loom_serve_http_variants_claims(router->variants) >=
+        router->logs.capacity) {
+      return loom_serve_http_response_reject(
+          router->server, connection, 429, "Too Many Requests",
+          IREE_SV("observation and holding capacity is full"), output);
+    }
+    if (!router->live) {
+      iree_status_t status = loom_serve_http_live_allocate(
+          router->server, router->registry, router->observation_origins,
+          (loom_serve_wake_callback_t){loom_serve_router_wake, router},
+          router->host_allocator, &router->live);
+      if (!iree_status_is_ok(status)) {
+        return loom_serve_http_response_error(router->server, connection,
+                                              status, output);
+      }
+    }
+    loom_serve_http_live_accept(router->live, connection, request);
+    return iree_ok_status();
+  }
   if (loom_serve_http_variants_handles(request->target)) {
     const bool allow_wait =
         router->held.count + router->logs.count +
+            loom_serve_http_live_count(router->live) +
             loom_serve_http_variants_claims(router->variants) <
         router->logs.capacity;
     return loom_serve_http_variants_accept(router->variants, connection,
@@ -1453,6 +1488,7 @@ static iree_status_t loom_serve_router_accept(
           state->phase != LOOM_SERVE_REGISTRATION_READY) {
         if (router->held.count == router->held.capacity ||
             router->held.count + router->logs.count +
+                    loom_serve_http_live_count(router->live) +
                     loom_serve_http_variants_claims(router->variants) ==
                 router->logs.capacity) {
           return loom_serve_http_response_reject(
@@ -1568,6 +1604,11 @@ static void loom_serve_router_advance(loom_serve_router_t* router,
   bool maintenance_progress = false;
   router->status = iree_status_join(
       router->status,
+      loom_serve_http_live_advance(router->live, router->stopping,
+                                   router->request_capacity, out_progress));
+  router->stopping |= !iree_status_is_ok(router->status);
+  router->status = iree_status_join(
+      router->status,
       loom_serve_maintenance_advance(&router->maintenance, router->stopping,
                                      &maintenance_progress));
   router->stopping |= !iree_status_is_ok(router->status);
@@ -1580,6 +1621,7 @@ static void loom_serve_router_advance(loom_serve_router_t* router,
                  loom_serve_http_variants_pending(router->variants);
   pending |= loom_serve_resources_is_pending(&router->resources);
   pending |= loom_serve_maintenance_is_pending(&router->maintenance);
+  pending |= loom_serve_http_live_is_pending(router->live);
   for (iree_host_size_t i = 0; i < router->capacity; ++i) {
     loom_serve_registered_model_t* model =
         loom_serve_router_model_at(router, i);
@@ -1665,6 +1707,7 @@ iree_status_t loom_serve_router_run(iree_task_executor_t* executor,
       .server = server,
       .registry = registry,
       .resources = options.resources,
+      .observation_origins = options.observation_origins,
       .capacity = loom_serve_registry_capacity(registry),
       .request_capacity = options.request_quota,
       .held = {.capacity = options.holding_capacity},
@@ -1725,6 +1768,7 @@ iree_status_t loom_serve_router_run(iree_task_executor_t* executor,
   iree_string_builder_deinitialize(&router.output);
   loom_serve_maintenance_deinitialize(&router.maintenance);
   loom_serve_http_variants_free(router.variants);
+  loom_serve_http_live_free(router.live);
   iree_allocator_free(host_allocator, router.logs.values);
   iree_allocator_free(host_allocator, router.held.values);
   iree_notification_deinitialize(&router.retirement.notification);

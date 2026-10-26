@@ -76,11 +76,13 @@ loom_cc_library(
     iree::base::threading
     iree::task
     iree::tokenizer
+    loom::serve::dashboard::assets
     loom::serve::runtime::device
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::program::compilation
     loom::serve::runtime::program::variant_pool
+    loom::serve::server::http::live
     loom::serve::server::http::logs
     loom::serve::server::http::metrics
     loom::serve::server::http::package
@@ -117,6 +119,27 @@ loom_cc_library(
     loom::serve::runtime::host
     loom::serve::runtime::host::timer
     loom::serve::runtime::host::wake
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    observation
+  HDRS
+    "observation.h"
+  SRCS
+    "observation.c"
+  DEPS
+    ::registry
+    iree::base
+    loom::serve::service
+    loom::serve::service::kind
+    loom::serve::telemetry::record
+    loom::serve::telemetry::sample
+    loom::util::json
+    loom::util::stream
   PUBLIC
 )
 endif()

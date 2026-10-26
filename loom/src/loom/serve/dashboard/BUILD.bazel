@@ -1,0 +1,38 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_config_compatible_with")
+
+package(
+    default_visibility = ["//loom/src/loom/serve:implementation"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+iree_c_embed_data(
+    name = "files",
+    srcs = [
+        "app.js",
+        "index.html",
+        "style.css",
+    ],
+    c_file_output = "files.c",
+    flatten = True,
+    h_file_output = "files.h",
+    identifier = "loom_serve_dashboard_files",
+    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+)
+
+loom_cc_library(
+    name = "assets",
+    srcs = ["assets.c"],
+    hdrs = ["assets.h"],
+    deps = [
+        ":files",
+        "//loom/src/loom/serve/server/http:response",
+        "//loom/src/loom/serve/transport/http:server",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/net:carrier",
+    ],
+)
