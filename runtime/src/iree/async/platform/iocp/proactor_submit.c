@@ -565,23 +565,10 @@ static void iree_async_proactor_iocp_commit_semaphore_wait(
     iree_async_proactor_iocp_t* proactor,
     iree_async_semaphore_wait_operation_t* wait_op,
     iree_async_iocp_carrier_t* carrier) {
-  bool all_satisfied = true;
-  for (iree_host_size_t i = 0; i < wait_op->count; ++i) {
-    uint64_t current = iree_async_semaphore_query(wait_op->semaphores[i]);
-    if (current >= wait_op->values[i]) {
-      if (wait_op->mode == IREE_ASYNC_WAIT_MODE_ANY) {
-        wait_op->satisfied_index = i;
-        iree_async_proactor_iocp_post_direct_completion(proactor, carrier,
-                                                        iree_ok_status());
-        return;
-      }
-    } else {
-      all_satisfied = false;
-    }
-  }
-  if (all_satisfied) {
-    iree_async_proactor_iocp_post_direct_completion(proactor, carrier,
-                                                    iree_ok_status());
+  bool ready = false;
+  iree_status_t status = iree_async_semaphore_wait_poll(wait_op, &ready);
+  if (!iree_status_is_ok(status) || ready) {
+    iree_async_proactor_iocp_post_direct_completion(proactor, carrier, status);
     return;
   }
 
@@ -590,7 +577,7 @@ static void iree_async_proactor_iocp_commit_semaphore_wait(
       .user_data = proactor,
   };
   iree_async_semaphore_wait_tracker_t* tracker = NULL;
-  iree_status_t status = iree_async_semaphore_wait_tracker_allocate(
+  status = iree_async_semaphore_wait_tracker_allocate(
       &proactor->semaphore_wait_context, wait_op, enqueue_callback,
       proactor->base.allocator, &tracker);
   if (!iree_status_is_ok(status)) {

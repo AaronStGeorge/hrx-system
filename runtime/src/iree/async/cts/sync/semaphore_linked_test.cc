@@ -475,6 +475,56 @@ TEST_P(SemaphoreLinkedTest, LinkedWaitFailureCancelsChain) {
   iree_async_semaphore_release(semaphore);
 }
 
+// An already-failed WAIT must not execute the following SIGNAL, even when the
+// failed semaphore's timeline would otherwise satisfy the wait.
+TEST_P(SemaphoreLinkedTest, AlreadyFailedWaitDoesNotSignalContinuation) {
+  iree_async_semaphore_t* source = nullptr;
+  iree_async_semaphore_t* target = nullptr;
+  IREE_ASSERT_OK(iree_async_semaphore_create(
+      proactor_, 10, IREE_ASYNC_SEMAPHORE_DEFAULT_FRONTIER_CAPACITY,
+      iree_allocator_system(), &source));
+  IREE_ASSERT_OK(iree_async_semaphore_create(
+      proactor_, 0, IREE_ASYNC_SEMAPHORE_DEFAULT_FRONTIER_CAPACITY,
+      iree_allocator_system(), &target));
+  iree_async_semaphore_fail(source,
+                            iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                             "producer allocation failed"));
+
+  uint64_t wait_value = 10;
+  CompletionTracker wait_tracker;
+  iree_async_semaphore_wait_operation_t wait = {};
+  wait.base.type = IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_WAIT;
+  wait.base.completion_fn = CompletionTracker::Callback;
+  wait.base.user_data = &wait_tracker;
+  wait.base.flags = IREE_ASYNC_OPERATION_FLAG_LINKED;
+  wait.semaphores = &source;
+  wait.values = &wait_value;
+  wait.count = 1;
+  wait.mode = IREE_ASYNC_WAIT_MODE_ALL;
+
+  uint64_t signal_value = 1;
+  CompletionTracker signal_tracker;
+  iree_async_semaphore_signal_operation_t signal = {};
+  signal.base.type = IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_SIGNAL;
+  signal.base.completion_fn = CompletionTracker::Callback;
+  signal.base.user_data = &signal_tracker;
+  signal.semaphores = &target;
+  signal.values = &signal_value;
+  signal.count = 1;
+
+  iree_async_operation_t* operations[] = {&wait.base, &signal.base};
+  IREE_ASSERT_OK(iree_async_proactor_submit(proactor_, {operations, 2}));
+  PollUntil(/*min_completions=*/2);
+  EXPECT_EQ(wait_tracker.call_count, 1);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        wait_tracker.ConsumeStatus());
+  EXPECT_EQ(signal_tracker.call_count, 1);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_CANCELLED, signal_tracker.ConsumeStatus());
+  EXPECT_EQ(iree_async_semaphore_query(target), 0u);
+  iree_async_semaphore_release(source);
+  iree_async_semaphore_release(target);
+}
+
 // SIGNAL(LINKED) → NOP: non-monotonic signal value, NOP gets CANCELLED.
 TEST_P(SemaphoreLinkedTest, LinkedSignalFailureCancelsChain) {
   iree_async_semaphore_t* semaphore = nullptr;
