@@ -180,9 +180,9 @@ static void loom_low_schedule_setup_order_mark_continuation_source(
           &state->values[source_ordinal])) {
     return;
   }
-  // Replayability permits moving the producer, but does not justify keeping
-  // larger inputs alive in another pressure domain. The partial write obeys
-  // the same storage-footprint contract as the rest of its setup chain.
+  // Ordinary replayability cannot justify keeping larger inputs alive in
+  // another pressure domain. Explicit private placement instead records an
+  // allocation failure that requires shortening this partial value's lifetime.
   const loom_value_ordinal_t* result_ordinals =
       loom_low_schedule_node_const_result_ordinals(node);
   for (uint16_t result_index = 0; result_index < node->result_count;
@@ -190,7 +190,14 @@ static void loom_low_schedule_setup_order_mark_continuation_source(
     if (result_ordinals[result_index] == source_ordinal &&
         loom_low_descriptor_result_can_rematerialize(
             state->target.descriptor_set, node->descriptor, result_index)) {
-      (void)loom_low_schedule_setup_order_mark_node(state, node);
+      bool requires_register = false;
+      if (loom_low_schedule_setup_order_has_per_user_placement(
+              state, node, &requires_register) ||
+          loom_low_schedule_setup_order_preserves_required_pressure(state,
+                                                                    node)) {
+        node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
+        state->setup_order.has_members = true;
+      }
       return;
     }
   }

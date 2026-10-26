@@ -1918,6 +1918,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::codegen::low::frame
     loom::codegen::low::function_requirements
     loom::codegen::low::text_asm
     loom::format::text::parser

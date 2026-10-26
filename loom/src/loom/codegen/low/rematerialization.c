@@ -799,9 +799,8 @@ static iree_status_t loom_low_rematerialization_prepare_value(
   }
 
   const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value) ||
-      !loom_low_capture_source_is_stable(module, value_id) ||
-      loom_value_has_attribute_uses(value) || value->use_count == 0 ||
+  if (loom_value_is_block_arg(value) || loom_value_has_attribute_uses(value) ||
+      value->use_count == 0 ||
       loom_module_value_has_type_uses(module, value_id)) {
     return iree_ok_status();
   }
@@ -905,6 +904,12 @@ static iree_status_t loom_low_rematerialization_prepare_value(
     action = LOOM_LOW_REMATERIALIZATION_ACTION_RETAIN_PLACEMENT;
   }
   if (action == LOOM_LOW_REMATERIALIZATION_ACTION_CLONE) {
+    // Cloning an observed owner requires stable contents. Placement retention
+    // keeps the original producer and consuming use intact, including a
+    // partial value whose following write completes its register.
+    if (!loom_low_capture_source_is_stable(module, value_id)) {
+      return iree_ok_status();
+    }
     // Predicted-spill rematerialization is optional. Do not replace one reload
     // with a multi-packet recipe in a different repeated execution domain.
     // Cloning also multiplies external input uses; register-required values
