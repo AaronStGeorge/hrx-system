@@ -15,27 +15,9 @@ loom_cc_library(
     digest
   HDRS
     "digest.h"
-  SRCS
-    "digest.c"
   DEPS
-    iree::base
+    loom::util::digest
   PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_VM)
-loom_cc_test(
-  NAME
-    digest_test
-  SRCS
-    "digest_test.cc"
-  DEPS
-    ::digest
-    iree::base
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 

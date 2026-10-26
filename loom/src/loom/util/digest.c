@@ -4,22 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/serve/media/digest.h"
+#include "loom/util/digest.h"
 
 #include <string.h>
 
-typedef struct loom_serve_media_sha256_t {
-  // Chaining state after complete input blocks.
-  uint32_t state[8];
-  // Total input length in bytes, excluding final padding.
-  uint64_t data_length;
-  // Pending input block or final padding block.
-  uint8_t block[64];
-  // Valid byte count in block.
-  uint8_t block_length;
-} loom_serve_media_sha256_t;
-
-static const uint32_t loom_serve_media_sha256_round_constants[64] = {
+static const uint32_t loom_sha256_round_constants[64] = {
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu,
     0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u, 0xd807aa98u, 0x12835b01u,
     0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u,
@@ -35,37 +24,36 @@ static const uint32_t loom_serve_media_sha256_round_constants[64] = {
     0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u,
 };
 
-static inline uint32_t loom_serve_media_rotate_right(uint32_t value,
-                                                     uint32_t count) {
+static inline uint32_t loom_sha256_rotate_right(uint32_t value,
+                                                uint32_t count) {
   return (value >> count) | (value << (32u - count));
 }
 
-static inline uint32_t loom_serve_media_load_be_u32(const uint8_t* data) {
+static inline uint32_t loom_sha256_load_be_u32(const uint8_t* data) {
   return ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) |
          ((uint32_t)data[2] << 8) | (uint32_t)data[3];
 }
 
-static inline void loom_serve_media_store_be_u32(uint32_t value,
-                                                 uint8_t* data) {
+static inline void loom_sha256_store_be_u32(uint32_t value, uint8_t* data) {
   data[0] = (uint8_t)(value >> 24);
   data[1] = (uint8_t)(value >> 16);
   data[2] = (uint8_t)(value >> 8);
   data[3] = (uint8_t)value;
 }
 
-static void loom_serve_media_sha256_transform(
-    loom_serve_media_sha256_t* context, const uint8_t block[64]) {
+static void loom_sha256_transform(loom_sha256_state_t* context,
+                                  const uint8_t block[64]) {
   uint32_t schedule[64];
   for (uint32_t i = 0; i < 16; ++i) {
-    schedule[i] = loom_serve_media_load_be_u32(block + i * 4);
+    schedule[i] = loom_sha256_load_be_u32(block + i * 4);
   }
   for (uint32_t i = 16; i < 64; ++i) {
     const uint32_t x = schedule[i - 15];
     const uint32_t y = schedule[i - 2];
-    const uint32_t sigma0 = loom_serve_media_rotate_right(x, 7) ^
-                            loom_serve_media_rotate_right(x, 18) ^ (x >> 3);
-    const uint32_t sigma1 = loom_serve_media_rotate_right(y, 17) ^
-                            loom_serve_media_rotate_right(y, 19) ^ (y >> 10);
+    const uint32_t sigma0 = loom_sha256_rotate_right(x, 7) ^
+                            loom_sha256_rotate_right(x, 18) ^ (x >> 3);
+    const uint32_t sigma1 = loom_sha256_rotate_right(y, 17) ^
+                            loom_sha256_rotate_right(y, 19) ^ (y >> 10);
     schedule[i] = schedule[i - 16] + sigma0 + schedule[i - 7] + sigma1;
   }
 
@@ -78,16 +66,15 @@ static void loom_serve_media_sha256_transform(
   uint32_t g = context->state[6];
   uint32_t h = context->state[7];
   for (uint32_t i = 0; i < 64; ++i) {
-    const uint32_t sum1 = loom_serve_media_rotate_right(e, 6) ^
-                          loom_serve_media_rotate_right(e, 11) ^
-                          loom_serve_media_rotate_right(e, 25);
+    const uint32_t sum1 = loom_sha256_rotate_right(e, 6) ^
+                          loom_sha256_rotate_right(e, 11) ^
+                          loom_sha256_rotate_right(e, 25);
     const uint32_t choice = (e & f) ^ (~e & g);
-    const uint32_t temporary1 = h + sum1 + choice +
-                                loom_serve_media_sha256_round_constants[i] +
-                                schedule[i];
-    const uint32_t sum0 = loom_serve_media_rotate_right(a, 2) ^
-                          loom_serve_media_rotate_right(a, 13) ^
-                          loom_serve_media_rotate_right(a, 22);
+    const uint32_t temporary1 =
+        h + sum1 + choice + loom_sha256_round_constants[i] + schedule[i];
+    const uint32_t sum0 = loom_sha256_rotate_right(a, 2) ^
+                          loom_sha256_rotate_right(a, 13) ^
+                          loom_sha256_rotate_right(a, 22);
     const uint32_t majority = (a & b) ^ (a & c) ^ (b & c);
     const uint32_t temporary2 = sum0 + majority;
     h = g;
@@ -109,8 +96,15 @@ static void loom_serve_media_sha256_transform(
   context->state[7] += h;
 }
 
-static void loom_serve_media_sha256_update(loom_serve_media_sha256_t* context,
-                                           iree_const_byte_span_t data) {
+void loom_sha256_initialize(loom_sha256_state_t* out_state) {
+  *out_state = (loom_sha256_state_t){
+      .state = {0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au, 0x510e527fu,
+                0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u},
+  };
+}
+
+void loom_sha256_update(loom_sha256_state_t* context,
+                        iree_const_byte_span_t data) {
   context->data_length += data.data_length;
   while (data.data_length > 0) {
     const iree_host_size_t available =
@@ -121,44 +115,41 @@ static void loom_serve_media_sha256_update(loom_serve_media_sha256_t* context,
     data.data += length;
     data.data_length -= length;
     if (context->block_length == sizeof(context->block)) {
-      loom_serve_media_sha256_transform(context, context->block);
+      loom_sha256_transform(context, context->block);
       context->block_length = 0;
     }
   }
 }
 
-static void loom_serve_media_sha256_finish(
-    loom_serve_media_sha256_t* context, loom_serve_media_digest_t* out_digest) {
+void loom_sha256_finalize(loom_sha256_state_t* context,
+                          loom_sha256_t* out_digest) {
   const uint64_t bit_length = context->data_length * 8u;
   context->block[context->block_length++] = 0x80;
   if (context->block_length > 56) {
     memset(context->block + context->block_length, 0,
            sizeof(context->block) - context->block_length);
-    loom_serve_media_sha256_transform(context, context->block);
+    loom_sha256_transform(context, context->block);
     context->block_length = 0;
   }
   memset(context->block + context->block_length, 0, 56 - context->block_length);
   for (uint32_t i = 0; i < 8; ++i) {
     context->block[63 - i] = (uint8_t)(bit_length >> (i * 8));
   }
-  loom_serve_media_sha256_transform(context, context->block);
+  loom_sha256_transform(context, context->block);
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(context->state); ++i) {
-    loom_serve_media_store_be_u32(context->state[i], out_digest->bytes + i * 4);
+    loom_sha256_store_be_u32(context->state[i], out_digest->bytes + i * 4);
   }
 }
 
-void loom_serve_media_digest_compute(iree_const_byte_span_t data,
-                                     loom_serve_media_digest_t* out_digest) {
-  loom_serve_media_sha256_t context = {
-      .state = {0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au, 0x510e527fu,
-                0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u},
-  };
-  loom_serve_media_sha256_update(&context, data);
-  loom_serve_media_sha256_finish(&context, out_digest);
+void loom_sha256_compute(iree_const_byte_span_t data,
+                         loom_sha256_t* out_digest) {
+  loom_sha256_state_t context;
+  loom_sha256_initialize(&context);
+  loom_sha256_update(&context, data);
+  loom_sha256_finalize(&context, out_digest);
 }
 
-bool loom_serve_media_digest_equal(const loom_serve_media_digest_t* lhs,
-                                   const loom_serve_media_digest_t* rhs) {
+bool loom_sha256_equal(const loom_sha256_t* lhs, const loom_sha256_t* rhs) {
   uint8_t difference = 0;
   for (iree_host_size_t i = 0; i < sizeof(lhs->bytes); ++i) {
     difference |= lhs->bytes[i] ^ rhs->bytes[i];
