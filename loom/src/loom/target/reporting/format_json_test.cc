@@ -676,12 +676,15 @@ TEST(CompileReportFormatTest, OwnsAndFormatsPipelinePlans) {
   IREE_ASSERT_OK(
       loom_target_compile_report_record_pipeline_plan(&report, &pipeline_plan));
   ASSERT_EQ(report.pipeline_plans.count, 2u);
-  ASSERT_NE(report.pipeline_plans.values[0].worker_rows, &worker);
-  ASSERT_NE(report.pipeline_plans.values[0].channel_rows, &channel);
-  ASSERT_NE(report.pipeline_plans.values[1].worker_rows, &worker);
-  ASSERT_NE(report.pipeline_plans.values[1].channel_rows, &channel);
-  ASSERT_NE(report.pipeline_plans.values[0].worker_rows,
-            report.pipeline_plans.values[1].worker_rows);
+  const auto* stored_plans =
+      static_cast<const loom_target_compile_report_pipeline_plan_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.pipeline_plans.head));
+  ASSERT_NE(stored_plans[0].worker_rows, &worker);
+  ASSERT_NE(stored_plans[0].channel_rows, &channel);
+  ASSERT_NE(stored_plans[1].worker_rows, &worker);
+  ASSERT_NE(stored_plans[1].channel_rows, &channel);
+  ASSERT_NE(stored_plans[0].worker_rows, stored_plans[1].worker_rows);
 
   worker = {};
   channel = {};
@@ -758,7 +761,11 @@ TEST(CompileReportFormatTest, PhysicalInventoryOmitsUnavailableChannelFacts) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PIPELINE_PLAN_ROWS;
   IREE_ASSERT_OK(
       loom_target_compile_report_record_pipeline_plan(&report, &plan));
-  ASSERT_NE(report.pipeline_plans.values[0].memory_rows, &memory);
+  const auto* plans =
+      static_cast<const loom_target_compile_report_pipeline_plan_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.pipeline_plans.head));
+  ASSERT_NE(plans[0].memory_rows, &memory);
   memory = {};
 
   iree_string_builder_t builder;

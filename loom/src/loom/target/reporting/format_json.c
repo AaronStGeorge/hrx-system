@@ -1653,10 +1653,17 @@ iree_status_t loom_target_compile_report_format_json(
         loom_json_object_begin_field(&object, IREE_SV("pipeline_plans")));
     loom_json_array_writer_t array;
     IREE_RETURN_IF_ERROR(loom_json_array_begin(stream, &array));
-    for (iree_host_size_t i = 0; i < report->pipeline_plans.count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_json_array_begin_element(&array));
-      IREE_RETURN_IF_ERROR(loom_target_compile_report_format_pipeline_plan_json(
-          &report->pipeline_plans.values[i], options->mode, stream));
+    for (const loom_target_compile_report_vec_t* block =
+             report->pipeline_plans.head;
+         block; block = block->next) {
+      const loom_target_compile_report_pipeline_plan_t* plans =
+          loom_target_compile_report_vec_const_rows(block);
+      for (iree_host_size_t i = 0; i < block->count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_json_array_begin_element(&array));
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_pipeline_plan_json(
+                &plans[i], options->mode, stream));
+      }
     }
     IREE_RETURN_IF_ERROR(loom_json_array_end(&array));
   }

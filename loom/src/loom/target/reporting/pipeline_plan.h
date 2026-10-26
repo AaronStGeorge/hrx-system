@@ -10,6 +10,7 @@
 #define LOOM_TARGET_REPORTING_PIPELINE_PLAN_H_
 
 #include "iree/base/api.h"
+#include "loom/target/reporting/row_list.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -296,19 +297,9 @@ typedef struct loom_target_compile_report_pipeline_plan_t {
   iree_host_size_t memory_row_count;
 } loom_target_compile_report_pipeline_plan_t;
 
-// Ordered owned pipeline realization snapshots in one compile report.
-typedef struct loom_target_compile_report_pipeline_plan_list_t {
-  // Contiguous plan storage in recording order.
-  loom_target_compile_report_pipeline_plan_t* values;
-  // Number of initialized plans in |values|.
-  iree_host_size_t count;
-  // Number of plans available in |values| before reallocation.
-  iree_host_size_t capacity;
-} loom_target_compile_report_pipeline_plan_list_t;
-
 // Releases every plan owned by |list| and resets it to empty.
 void loom_target_compile_report_pipeline_plan_list_deinitialize(
-    loom_target_compile_report_pipeline_plan_list_t* list,
+    loom_target_compile_report_row_list_t* list,
     iree_allocator_t host_allocator);
 
 // Records one pipeline realization, copying detail rows only when requested.

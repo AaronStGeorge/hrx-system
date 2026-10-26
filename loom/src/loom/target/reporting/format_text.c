@@ -944,9 +944,16 @@ iree_status_t loom_target_compile_report_format_text(
       report, options->mode, builder));
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PIPELINE_PLAN)) {
-    for (iree_host_size_t i = 0; i < report->pipeline_plans.count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_target_compile_report_format_pipeline_plan_text(
-          &report->pipeline_plans.values[i], options->mode, builder));
+    for (const loom_target_compile_report_vec_t* block =
+             report->pipeline_plans.head;
+         block; block = block->next) {
+      const loom_target_compile_report_pipeline_plan_t* plans =
+          loom_target_compile_report_vec_const_rows(block);
+      for (iree_host_size_t i = 0; i < block->count; ++i) {
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_pipeline_plan_text(
+                &plans[i], options->mode, builder));
+      }
     }
   }
   if (iree_any_bit_set(report->detail_flags,
