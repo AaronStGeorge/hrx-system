@@ -593,20 +593,41 @@ void ControlFlow::visit(cxx::AssignmentExpressionAST* ast) {
   cxx::ASTVisitor::visit(ast);
 }
 
-void ControlFlow::visit(cxx::CompoundAssignmentExpressionAST* ast) {
-  record(ast->targetExpression);
-  record_callable_write(ast->targetExpression);
+void ControlFlow::visit(cxx::BinaryExpressionAST* ast) {
   cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+  }
+}
+
+void ControlFlow::visit(cxx::CompoundAssignmentExpressionAST* ast) {
+  if (!ast->symbol) {
+    record(ast->targetExpression);
+    record_callable_write(ast->targetExpression);
+  }
+  cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+  }
 }
 
 void ControlFlow::visit(cxx::PostIncrExpressionAST* ast) {
-  record(ast->baseExpression);
-  record_callable_write(ast->baseExpression);
+  if (!ast->symbol) {
+    record(ast->baseExpression);
+    record_callable_write(ast->baseExpression);
+  }
   cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+  }
 }
 
 void ControlFlow::visit(cxx::UnaryExpressionAST* ast) {
   cxx::ASTVisitor::visit(ast);
+  if (auto call = direct_operator_call(ast)) {
+    retain_call(*call, ast);
+    return;
+  }
   if (!ast->symbol && ast->op == cxx::TokenKind::T_AMP) {
     require_identity(ast->expression);
   }
@@ -744,6 +765,26 @@ void ControlFlow::retain_call(cxx::SubscriptExpressionAST* call,
     retained.current_receiver = is_current_object(call->baseExpression);
     if (!retained.current_receiver) {
       retained.receiver = retain_call_argument(call->baseExpression);
+    }
+  }
+  calls_.push_back(std::move(retained));
+}
+
+void ControlFlow::retain_call(const DirectOperatorCall& call,
+                              cxx::AST* source) {
+  DirectCall retained = {call.function, source, {}, std::nullopt, false, false};
+  retained.arguments.reserve(call.argument_count + call.has_postfix_dummy);
+  for (size_t index = 0; index < call.argument_count; ++index) {
+    retained.arguments.push_back(retain_call_argument(call.arguments[index]));
+  }
+  if (call.has_postfix_dummy) {
+    retained.arguments.push_back({nullptr, {}, nullptr, false, false});
+  }
+  if (call.receiver) {
+    retained.current_receiver = is_current_object(call.receiver);
+    if (!retained.current_receiver) {
+      retained.receiver = retain_call_argument(call.receiver);
+      retained.storage_receiver = retained.receiver->inherent_storage;
     }
   }
   calls_.push_back(std::move(retained));

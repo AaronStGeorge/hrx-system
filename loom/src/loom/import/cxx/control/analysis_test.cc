@@ -32,6 +32,119 @@ cxx::FunctionDefinitionAST* definition(Source& source) {
   return nullptr;
 }
 
+TEST(ControlFlowTest,
+     DirectOperatorsRetainCallableOperandsAndEvaluationContracts) {
+  loom_cxx_import_options_t options;
+  loom_cxx_import_options_initialize(&options);
+  Source source(IREE_SV(R"(
+    struct Member {
+      unsigned value;
+      Member operator+(Member) const;
+      Member operator-() const;
+      Member& operator+=(Member);
+      Member& operator++();
+      Member operator++(int);
+    };
+    struct Free { unsigned value; };
+    Free operator+(Free, Free);
+    Free operator-(Free);
+    Free& operator+=(Free&, Free);
+    Free& operator++(Free&);
+    Free operator++(Free&, int);
+    void entry(Member lhs, Member rhs, Free free_lhs, Free free_rhs) {
+      (void)(lhs + rhs);
+      (void)-lhs;
+      lhs += rhs;
+      ++lhs;
+      lhs++;
+      (void)(free_lhs + free_rhs);
+      (void)-free_lhs;
+      free_lhs += free_rhs;
+      ++free_lhs;
+      free_lhs++;
+    }
+    Member Member::operator+(Member other) const {
+      return {value + other.value};
+    }
+    Member Member::operator-() const { return {0u - value}; }
+    Member& Member::operator+=(Member other) {
+      value += other.value;
+      return *this;
+    }
+    Member& Member::operator++() { ++value; return *this; }
+    Member Member::operator++(int) { Member old = *this; ++*this; return old; }
+    Free operator+(Free lhs, Free rhs) { return {lhs.value + rhs.value}; }
+    Free operator-(Free value) { return {0u - value.value}; }
+    Free& operator+=(Free& lhs, Free rhs) {
+      lhs.value += rhs.value;
+      return lhs;
+    }
+    Free& operator++(Free& value) { ++value.value; return value; }
+    Free operator++(Free& value, int) { Free old = value; ++value; return old; }
+  )"),
+                IREE_SV("direct_operators.cpp"), options);
+  auto* function = definition(source);
+  ASSERT_NE(function, nullptr);
+  auto* body = cxx::ast_cast<cxx::CompoundStatementFunctionBodyAST>(
+                   function->functionBody)
+                   ->statement;
+  Types types(source.unit(), source.diagnostics());
+  ControlFlow analysis(source.unit(), source.diagnostics(), types, body,
+                       function->symbol);
+  auto calls = analysis.calls();
+  ASSERT_EQ(calls.size(), 10u);
+
+  for (size_t index = 0; index < calls.size(); ++index) {
+    auto direct = direct_operator_call(
+        cxx::ast_cast<cxx::ExpressionAST>(calls[index].source));
+    ASSERT_TRUE(direct.has_value());
+    EXPECT_EQ(direct->function, calls[index].function);
+    EXPECT_EQ(calls[index].current_receiver, false);
+    EXPECT_EQ(calls[index].receiver.has_value(), index < 5);
+  }
+
+  auto member_binary =
+      direct_operator_call(cxx::ast_cast<cxx::ExpressionAST>(calls[0].source));
+  ASSERT_TRUE(member_binary.has_value());
+  EXPECT_NE(member_binary->receiver, nullptr);
+  EXPECT_EQ(member_binary->argument_count, 1u);
+  EXPECT_EQ(member_binary->evaluation_order, OperatorEvaluationOrder::Forward);
+
+  auto member_compound =
+      direct_operator_call(cxx::ast_cast<cxx::ExpressionAST>(calls[2].source));
+  ASSERT_TRUE(member_compound.has_value());
+  EXPECT_EQ(member_compound->evaluation_order,
+            OperatorEvaluationOrder::ArgumentsThenReceiver);
+
+  auto member_postfix =
+      direct_operator_call(cxx::ast_cast<cxx::ExpressionAST>(calls[4].source));
+  ASSERT_TRUE(member_postfix.has_value());
+  EXPECT_TRUE(member_postfix->has_postfix_dummy);
+  EXPECT_EQ(member_postfix->argument_count, 0u);
+  ASSERT_EQ(calls[4].arguments.size(), 1u);
+  EXPECT_EQ(calls[4].arguments[0].source, nullptr);
+
+  auto free_binary =
+      direct_operator_call(cxx::ast_cast<cxx::ExpressionAST>(calls[5].source));
+  ASSERT_TRUE(free_binary.has_value());
+  EXPECT_EQ(free_binary->receiver, nullptr);
+  EXPECT_EQ(free_binary->argument_count, 2u);
+
+  auto free_compound =
+      direct_operator_call(cxx::ast_cast<cxx::ExpressionAST>(calls[7].source));
+  ASSERT_TRUE(free_compound.has_value());
+  EXPECT_EQ(free_compound->evaluation_order,
+            OperatorEvaluationOrder::ReverseArguments);
+
+  auto free_postfix =
+      direct_operator_call(cxx::ast_cast<cxx::ExpressionAST>(calls[9].source));
+  ASSERT_TRUE(free_postfix.has_value());
+  EXPECT_TRUE(free_postfix->has_postfix_dummy);
+  EXPECT_EQ(free_postfix->argument_count, 1u);
+  ASSERT_EQ(calls[9].arguments.size(), 2u);
+  EXPECT_EQ(calls[9].arguments[1].source, nullptr);
+}
+
 TEST(ControlFlowTest, CountedAdmissionRetainsTheNonwrappingIntervalProof) {
   struct Case {
     // Source parameter type determines the comparison's promoted width.

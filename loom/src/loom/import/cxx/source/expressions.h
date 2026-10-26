@@ -11,6 +11,10 @@
 #include <cxx/symbols_fwd.h>
 #include <cxx/types_fwd.h>
 
+#include <array>
+#include <cstddef>
+#include <optional>
+
 namespace loom::cxx_import {
 
 // Returns the source expression beneath any implicit conversion sequence.
@@ -27,6 +31,44 @@ bool is_current_object(cxx::ExpressionAST* expression);
 // Returns the directly named function called by |call|, or null for indirect
 // calls and other callable expressions.
 cxx::FunctionSymbol* direct_callee(cxx::CallExpressionAST* call);
+
+// Evaluation sequence imposed by the source operator notation. Forward visits
+// the receiver followed by explicit arguments, or only the explicit arguments
+// when no receiver exists. Compound assignment is the only admitted form that
+// evaluates in another order.
+enum class OperatorEvaluationOrder {
+  Forward,
+  ArgumentsThenReceiver,
+  ReverseArguments,
+};
+
+// One ordinary function selected by operator syntax. The frontend has already
+// performed overload resolution and inserted conversions into each retained
+// expression. The receiver and explicit arguments describe the callable ABI;
+// the evaluation order preserves the distinct sequencing rules of operator
+// notation without requiring later users to classify the AST again.
+struct DirectOperatorCall {
+  // Concrete function selected by source overload resolution.
+  cxx::FunctionSymbol* function;
+  // Implicit object expression for a non-static member, or null otherwise.
+  cxx::ExpressionAST* receiver;
+  // Explicit parameter expressions in declaration order.
+  std::array<cxx::ExpressionAST*, 2> arguments;
+  // Number of populated explicit argument expressions.
+  size_t argument_count;
+  // Source evaluation sequence, independently of callable ABI order.
+  OperatorEvaluationOrder evaluation_order;
+  // Whether a postfix increment/decrement contributes an implicit zero.
+  bool has_postfix_dummy;
+  // Whether overload resolution selected virtual member dispatch.
+  bool is_virtual_dispatch;
+};
+
+// Returns the directly selected ordinary function and source operand contract
+// for unary, binary, compound-assignment, and postfix operator syntax. Builtin
+// operators and call/subscript syntax return no value.
+std::optional<DirectOperatorCall> direct_operator_call(
+    cxx::ExpressionAST* expression);
 
 // Returns the cv-qualified implicit object type of a non-static member
 // function, or null when the function has no implicit object parameter.

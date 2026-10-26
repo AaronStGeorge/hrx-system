@@ -23,6 +23,8 @@
 
 namespace loom::cxx_import {
 
+struct DirectOperatorCall;
+
 // Retained ownership of a source assignment destination. A field or vector-lane
 // write replaces a slice of its owning automatic binding; it is not a
 // storage-backed store. Dynamic lane selection remains on the source expression
@@ -240,6 +242,7 @@ class ControlFlow final : private cxx::ASTVisitor {
   void visit(cxx::IfStatementAST* ast) override;
   void visit(cxx::SwitchStatementAST* ast) override;
   void visit(cxx::AssignmentExpressionAST* ast) override;
+  void visit(cxx::BinaryExpressionAST* ast) override;
   void visit(cxx::CompoundAssignmentExpressionAST* ast) override;
   void visit(cxx::PostIncrExpressionAST* ast) override;
   void visit(cxx::UnaryExpressionAST* ast) override;
@@ -272,6 +275,7 @@ class ControlFlow final : private cxx::ASTVisitor {
   void retain_call(cxx::CallExpressionAST* call, cxx::FunctionSymbol* function);
   void retain_call(cxx::SubscriptExpressionAST* call,
                    cxx::FunctionSymbol* function);
+  void retain_call(const DirectOperatorCall& call, cxx::AST* source);
   void retain_reference_initializers(cxx::VariableSymbol* variable,
                                      cxx::ExpressionAST* initializer,
                                      cxx::AST* owner);

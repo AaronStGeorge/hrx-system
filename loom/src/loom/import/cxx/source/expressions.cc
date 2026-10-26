@@ -59,6 +59,82 @@ cxx::FunctionSymbol* direct_callee(cxx::CallExpressionAST* call) {
   return nullptr;
 }
 
+std::optional<DirectOperatorCall> direct_operator_call(
+    cxx::ExpressionAST* expression) {
+  if (auto* binary = cxx::ast_cast<cxx::BinaryExpressionAST>(expression);
+      binary && binary->symbol) {
+    const bool member = binary->symbol->isImplicitObjectMemberFunction();
+    return DirectOperatorCall{
+        .function = binary->symbol,
+        .receiver = member ? binary->leftExpression : nullptr,
+        .arguments =
+            member
+                ? std::array<cxx::ExpressionAST*, 2>{binary->rightExpression,
+                                                     nullptr}
+                : std::array<cxx::ExpressionAST*, 2>{binary->leftExpression,
+                                                     binary->rightExpression},
+        .argument_count = member ? 1u : 2u,
+        .evaluation_order = OperatorEvaluationOrder::Forward,
+        .has_postfix_dummy = false,
+        .is_virtual_dispatch = binary->isVirtualDispatch,
+    };
+  }
+  if (auto* assignment =
+          cxx::ast_cast<cxx::CompoundAssignmentExpressionAST>(expression);
+      assignment && assignment->symbol) {
+    const bool member = assignment->symbol->isImplicitObjectMemberFunction();
+    return DirectOperatorCall{
+        .function = assignment->symbol,
+        .receiver = member ? assignment->targetExpression : nullptr,
+        .arguments = member
+                         ? std::array<cxx::ExpressionAST*,
+                                      2>{assignment->rightExpression, nullptr}
+                         : std::array<cxx::ExpressionAST*,
+                                      2>{assignment->targetExpression,
+                                         assignment->rightExpression},
+        .argument_count = member ? 1u : 2u,
+        .evaluation_order = member
+                                ? OperatorEvaluationOrder::ArgumentsThenReceiver
+                                : OperatorEvaluationOrder::ReverseArguments,
+        .has_postfix_dummy = false,
+        .is_virtual_dispatch = assignment->isVirtualDispatch,
+    };
+  }
+  if (auto* postfix = cxx::ast_cast<cxx::PostIncrExpressionAST>(expression);
+      postfix && postfix->symbol) {
+    const bool member = postfix->symbol->isImplicitObjectMemberFunction();
+    return DirectOperatorCall{
+        .function = postfix->symbol,
+        .receiver = member ? postfix->baseExpression : nullptr,
+        .arguments =
+            member ? std::array<cxx::ExpressionAST*, 2>{nullptr, nullptr}
+                   : std::array<cxx::ExpressionAST*, 2>{postfix->baseExpression,
+                                                        nullptr},
+        .argument_count = member ? 0u : 1u,
+        .evaluation_order = OperatorEvaluationOrder::Forward,
+        .has_postfix_dummy = true,
+        .is_virtual_dispatch = postfix->isVirtualDispatch,
+    };
+  }
+  if (auto* unary = cxx::ast_cast<cxx::UnaryExpressionAST>(expression);
+      unary && unary->symbol) {
+    const bool member = unary->symbol->isImplicitObjectMemberFunction();
+    return DirectOperatorCall{
+        .function = unary->symbol,
+        .receiver = member ? unary->expression : nullptr,
+        .arguments = member
+                         ? std::array<cxx::ExpressionAST*, 2>{nullptr, nullptr}
+                         : std::array<cxx::ExpressionAST*, 2>{unary->expression,
+                                                              nullptr},
+        .argument_count = member ? 0u : 1u,
+        .evaluation_order = OperatorEvaluationOrder::Forward,
+        .has_postfix_dummy = false,
+        .is_virtual_dispatch = unary->isVirtualDispatch,
+    };
+  }
+  return std::nullopt;
+}
+
 const cxx::Type* implicit_object_type(cxx::TranslationUnit& unit,
                                       cxx::FunctionSymbol* function) {
   auto* record = function
