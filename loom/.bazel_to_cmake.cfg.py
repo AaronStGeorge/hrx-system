@@ -92,9 +92,14 @@ def _loom_amdgpu_config_cmake_options():
 _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config:shared_tools_enabled": "LOOM_LINK_SHARED_TOOLS",
     "//loom/config/emit:amdgpu": "LOOM_EMIT_AMDGPU",
+    "//loom/config/emit:amdgpu_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
     "//loom/config/emit:spirv": "LOOM_EMIT_SPIRV",
+    "//loom/config/emit:spirv_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV",
+    "//loom/config/emit:spirv_vulkan_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",
     "//loom/config/emit:wasm": "LOOM_EMIT_WASM",
+    "//loom/config/emit:wasm_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM",
     "//loom/config/emit:xdna": "LOOM_EMIT_XDNA",
+    "//loom/config/emit:xdna_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA",
     "//loom/config/execute:amdgpu_hal": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)",
     "//loom/config/execute:iree_hal": "LOOM_EXECUTE_IREE_HAL",
     "//loom/config/execute:iree_hal_amdgpu": "LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)",
@@ -122,16 +127,11 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/target/arch:x86": "LOOM_TARGET_ARCH_X86",
     "//loom/config/target/arch:xdna": "LOOM_TARGET_ARCH_XDNA",
     "//loom/config/target:amdgpu": "LOOM_TARGET_AMDGPU",
-    "//loom/config/target:amdgpu_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
     "//loom/config/target:spirv": "LOOM_TARGET_SPIRV",
-    "//loom/config/target:spirv_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV",
-    "//loom/config/target:spirv_vulkan_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",
     "//loom/config/target:vm": "LOOM_TARGET_VM",
     "//loom/config/target:wasm": "LOOM_TARGET_WASM",
-    "//loom/config/target:wasm_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM",
     "//loom/config/target:x86": "LOOM_TARGET_X86",
     "//loom/config/target:xdna": "LOOM_TARGET_XDNA",
-    "//loom/config/target:xdna_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA",
 }
 _LOOM_CONFIG_CMAKE_OPTIONS.update(_loom_amdgpu_config_cmake_options())
 

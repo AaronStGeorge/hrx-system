@@ -22,7 +22,7 @@ LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
 ])
 
 LOOMC_TARGET_SPIRV_IREE_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:spirv_vulkan_artifacts",
+    "//loom/config/emit:spirv_vulkan_artifacts",
 ])
 
 loom_cc_test(

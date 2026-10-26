@@ -12,13 +12,14 @@
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/registry.h"
 #include "iree/hal/cts/util/test_base.h"
-#include "iree/hal/drivers/amd/cts/cpu_executable.h"
+#include "iree/hal/drivers/amd/cts/cpu_add.h"
 #include "iree/hal/drivers/amd/gpu/cts/testdata.h"
 #include "iree/hal/drivers/amd/gpu/target/identity.h"
 #include "iree/hal/drivers/amd/registration/driver_module.h"
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32.h"
 #include "iree/hal/drivers/amd/xdna/image/testdata/mul_i32_npu4.h"
 #include "iree/hal/drivers/task/device.h"
+#include "iree/hal/drivers/task/executable/loaders/embedded_elf_loader.h"
 #include "iree/hal/memory/fixed_block_pool.h"
 #include "iree/task/executor.h"
 #include "iree/testing/gtest.h"
@@ -136,10 +137,15 @@ class ExecutionTest
                                                   &cpu_allocator_));
     iree_hal_task_device_params_t task_params;
     iree_hal_task_device_params_initialize(&task_params);
-    IREE_ASSERT_OK(iree_hal_task_device_create(
-        IREE_SV("cpu"), &task_params, 1, &cpu_executor_, 0, nullptr,
+    iree_hal_executable_loader_t* cpu_loader = nullptr;
+    IREE_ASSERT_OK(iree_hal_embedded_elf_loader_create(iree_allocator_system(),
+                                                       &cpu_loader));
+    status = iree_hal_task_device_create(
+        IREE_SV("cpu"), &task_params, 1, &cpu_executor_, 1, &cpu_loader,
         cpu_allocator_, context_.params(), iree_allocator_system(),
-        participants_[kCpu].device.out()));
+        participants_[kCpu].device.out());
+    iree_hal_executable_loader_release(cpu_loader);
+    IREE_ASSERT_OK(status);
 
     iree_hal_device_group_builder_t builder;
     iree_hal_device_group_builder_initialize(&builder,
@@ -301,27 +307,34 @@ class ExecutionTest
     *out_unit = unit;
   }
 
-  void Load(Engine engine, iree_const_byte_span_t bytes,
-            iree_string_view_t name) {
+  void LoadExecutable(Engine engine, iree_string_view_t target_family,
+                      iree_const_byte_span_t bytes,
+                      iree_string_view_t function_name) {
     auto& participant = participants_[engine];
-    const auto* targets = iree_hal_device_spec_executables(
-        iree_hal_device_spec(participant.device));
-    ASSERT_EQ(targets->target_count, 1u);
+    const iree_hal_executable_target_selection_t selection = {
+        .family = target_family,
+    };
+    const auto target = iree_hal_device_spec_select_executable_target(
+        iree_hal_device_spec(participant.device), &selection);
+    ASSERT_EQ(target.outcome,
+              IREE_HAL_EXECUTABLE_TARGET_SELECTION_OUTCOME_SELECTED);
     iree_hal_executable_load_params_t params;
     iree_hal_executable_load_params_initialize(&params);
     params.executable_data = bytes;
     IREE_ASSERT_OK(iree_hal_executable_load(
-        iree_hal_queue_family(participant.queue), &targets->targets[0], &params,
+        iree_hal_queue_family(participant.queue), target.target, &params,
         participant.executable.out()));
     IREE_ASSERT_OK(iree_hal_executable_lookup_function_by_name(
-        participant.executable, name, &participant.function));
+        participant.executable, function_name, &participant.function));
   }
 
   void LoadExecutables() {
-    auto& cpu = participants_[kCpu];
-    cpu.executable.reset(
-        CreateCpuAddExecutable(iree_hal_queue_family(cpu.queue)));
-    cpu.function = iree_hal_executable_function_from_index(0);
+    const auto* cpu_image = iree_hal_amd_cts_cpu_add_create();
+    ASSERT_EQ(iree_hal_amd_cts_cpu_add_size(), 1u);
+    ASSERT_NO_FATAL_FAILURE(LoadExecutable(
+        kCpu, IREE_SV("cpu"),
+        iree_make_const_byte_span(cpu_image[0].data, cpu_image[0].size),
+        IREE_SV("add_u32")));
     const auto* npu_targets = iree_hal_device_spec_executables(
         iree_hal_device_spec(participants_[kNpu].device));
     ASSERT_EQ(npu_targets->target_count, 1u);
@@ -330,8 +343,9 @@ class ExecutionTest
                                IREE_SV("amd.xdna.strix_halo.17f0_11"));
     const auto* npu_image = halo ? iree_hal_amd_xdna_test_mul_i32_create()
                                  : iree_hal_amd_xdna_test_mul_i32_npu4_create();
-    ASSERT_NO_FATAL_FAILURE(Load(
-        kNpu, iree_make_const_byte_span(npu_image[0].data, npu_image[0].size),
+    ASSERT_NO_FATAL_FAILURE(LoadExecutable(
+        kNpu, IREE_SV("xdna"),
+        iree_make_const_byte_span(npu_image[0].data, npu_image[0].size),
         IREE_SV("mul_i32")));
     const auto* gpu_targets = iree_hal_device_spec_executables(
         iree_hal_device_spec(participants_[kGpu].device));
@@ -343,9 +357,9 @@ class ExecutionTest
         iree::hal::cts::CtsRegistry::ListExecutableTargets("amd_cts_affine");
     const auto* image = gpu::cts::SelectExecutableTarget(images, identity);
     ASSERT_NE(image, nullptr);
-    ASSERT_NO_FATAL_FAILURE(Load(kGpu,
-                                 image->data_fn(IREE_SV("affine_i32.bin")),
-                                 IREE_SV("affine_i32")));
+    ASSERT_NO_FATAL_FAILURE(LoadExecutable(
+        kGpu, IREE_SV("amdgpu"), image->data_fn(IREE_SV("affine_i32.bin")),
+        IREE_SV("affine_i32")));
   }
 
   static iree_hal_dispatch_config_t Config(Engine engine) {

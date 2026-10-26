@@ -20,7 +20,7 @@ loom_cc_test(
     name = "xdna_test",
     srcs = ["xdna_test.cc"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:xdna_artifacts",
+        "//loom/config/emit:xdna_artifacts",
     ]),
     deps = [
         "//loom/binding/c:loomc",
@@ -35,7 +35,7 @@ loom_cc_test(
     name = "iree_hal_test",
     srcs = ["iree_hal_test.cc"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:xdna_artifacts",
+        "//loom/config/emit:xdna_artifacts",
     ]),
     deps = [
         "//loom/binding/c:loomc",

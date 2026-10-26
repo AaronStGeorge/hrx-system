@@ -123,13 +123,13 @@ loomc_cc_binary(
         "//loom/config/target/arch:x86": ["-DLOOM_SERVE_CONFIG_HAVE_X86=1"],
         "//conditions:default": [],
     }) + iree_select({
-        "//loom/config/target:amdgpu_artifacts": ["-DLOOM_SERVE_CONFIG_HAVE_AMDGPU=1"],
+        "//loom/config/emit:amdgpu_artifacts": ["-DLOOM_SERVE_CONFIG_HAVE_AMDGPU=1"],
         "//conditions:default": [],
     }) + iree_select({
-        "//loom/config/target:spirv_vulkan_artifacts": ["-DLOOM_SERVE_CONFIG_HAVE_SPIRV=1"],
+        "//loom/config/emit:spirv_vulkan_artifacts": ["-DLOOM_SERVE_CONFIG_HAVE_SPIRV=1"],
         "//conditions:default": [],
     }) + iree_select({
-        "//loom/config/target:xdna_artifacts": ["-DLOOM_SERVE_CONFIG_HAVE_XDNA=1"],
+        "//loom/config/emit:xdna_artifacts": ["-DLOOM_SERVE_CONFIG_HAVE_XDNA=1"],
         "//conditions:default": [],
     }),
     visibility = ["//visibility:public"],
@@ -143,13 +143,13 @@ loomc_cc_binary(
         "//loom/config/target/arch:x86": ["//loom/binding/c/target/cpu:iree_hal"],
         "//conditions:default": [],
     }) + iree_select({
-        "//loom/config/target:amdgpu_artifacts": ["//loom/binding/c/target/amdgpu:iree_hal"],
+        "//loom/config/emit:amdgpu_artifacts": ["//loom/binding/c/target/amdgpu:iree_hal"],
         "//conditions:default": [],
     }) + iree_select({
-        "//loom/config/target:spirv_vulkan_artifacts": ["//loom/binding/c/target/spirv:iree_hal"],
+        "//loom/config/emit:spirv_vulkan_artifacts": ["//loom/binding/c/target/spirv:iree_hal"],
         "//conditions:default": [],
     }) + iree_select({
-        "//loom/config/target:xdna_artifacts": ["//loom/binding/c/target/amd/xdna:iree_hal"],
+        "//loom/config/emit:xdna_artifacts": ["//loom/binding/c/target/amd/xdna:iree_hal"],
         "//conditions:default": [],
     }),
 )

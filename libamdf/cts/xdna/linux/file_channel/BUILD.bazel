@@ -16,7 +16,7 @@ amdf_cts_test_suite(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ] + select({
-        "//loom/config/target:xdna_artifacts": [],
+        "//loom/config/emit:xdna_artifacts": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     visibility = ["//visibility:public"],

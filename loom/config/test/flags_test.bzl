@@ -9,14 +9,18 @@
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test")
 load("@rules_testing//lib:truth.bzl", "matching")
-load("//loom/config/target:targets.bzl", "LOOM_TARGET_ARCHITECTURES")
+load(
+    "//loom/config/target:targets.bzl",
+    "LOOM_SPLIT_ARTIFACT_TARGETS",
+    "LOOM_TARGETS",
+)
 
 _VALID_VALUES = {
-    "loom/config/emit": ["amdgpu", "spirv", "wasm"],
+    "loom/config/emit": LOOM_SPLIT_ARTIFACT_TARGETS,
     "loom/config/execute": ["iree_hal"],
     "loom/config/import": ["mlir", "tilelang"],
-    "loom/config/target": LOOM_TARGET_ARCHITECTURES,
-    "loom/config/target/arch": LOOM_TARGET_ARCHITECTURES,
+    "loom/config/target": LOOM_TARGETS,
+    "loom/config/target/arch": LOOM_SPLIT_ARTIFACT_TARGETS,
 }
 
 def _expect_values(env, target):

@@ -811,7 +811,7 @@ as the runtime; `loom_defaults` keeps the compiler's full target set.
 | `LOOM_TARGET_VM` | `ON`, `OFF` | Builds Loom VM compilation and function execution. | Adds or removes `vm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_WASM` | `ON`, `OFF` | Builds Loom WebAssembly target support and production Wasm emission. | Adds or removes `wasm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_XDNA` | `ON`, `OFF` | Builds Loom XDNA target support and production XDNA emission. | Adds or removes `xdna` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_X86` | `ON`, `OFF` | Builds Loom x86 target support. | Adds or removes `x86` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_X86` | `ON`, `OFF` | Builds Loom x86 target support and native emission. | Adds or removes `x86` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_EXECUTE_IREE_HAL` | `ON`, `OFF` | Builds Loom execution providers that run through IREE HAL when a matching runtime HAL driver is enabled. | Adds or removes `iree_hal` from the Loom execute substrate set. | `--//loom/config/execute:enable=<complete-execute-list>` |
 
 The native Loom target flag is a complete list. The default target set is
@@ -867,10 +867,12 @@ python dev.py bazel configure \
 ```
 
 Compiling for AMDGPU does not require a GPU. Enable the runtime HAL only when
-execution support is needed. Advanced embedders can select architecture,
-emitter, and execution slices separately through `//loom/config/target/arch`,
-`//loom/config/emit`, and `//loom/config/execute`; ordinary builds use the
-`LOOM_TARGET_*` options above.
+execution support is needed. Advanced embedders can select architecture and
+emitter slices separately for AMDGPU, SPIR-V, Wasm, and XDNA through
+`//loom/config/target/arch` and `//loom/config/emit`. VM and x86 integrate their
+architecture and artifact support under the public target product. Execution
+slices remain independently selectable through `//loom/config/execute`;
+ordinary builds use the `LOOM_TARGET_*` options above.
 
 ### Loom importers
 

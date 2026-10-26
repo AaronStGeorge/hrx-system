@@ -28,7 +28,7 @@ _SPIRV_MODULE_COMPILER_VISIBILITY = [
 ]
 
 _SPIRV_COMPILE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:spirv_artifacts",
+    "//loom/config/emit:spirv_artifacts",
 ])
 
 _SPIRV_TOOL_DATA = [

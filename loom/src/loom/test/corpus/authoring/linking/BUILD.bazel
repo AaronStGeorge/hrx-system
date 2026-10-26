@@ -20,7 +20,7 @@ exports_files([
 ])
 
 _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:amdgpu_artifacts",
+    "//loom/config/emit:amdgpu_artifacts",
 ])
 
 iree_execution_test_suite(

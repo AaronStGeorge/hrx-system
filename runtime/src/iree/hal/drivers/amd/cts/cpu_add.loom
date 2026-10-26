@@ -1,0 +1,21 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// One CPU workgroup updates one element. The heterogeneous CTS selects the
+// dispatch count and owns all visibility transitions around this function.
+kernel.def export("add_u32") @add_u32() {
+  %count = index.constant 16 : index
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%count, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%buffer: buffer, %addend: i32) {
+  %element = kernel.workgroup.id<x> : index
+  %origin = index.constant 0 : offset
+  %values = buffer.view %buffer[%origin] : buffer -> view<16xi32>
+  %value = view.load %values[%element] : view<16xi32> -> i32
+  %result = scalar.addi %value, %addend : i32
+  view.store %result, %values[%element] : i32, view<16xi32>
+  kernel.return
+}
