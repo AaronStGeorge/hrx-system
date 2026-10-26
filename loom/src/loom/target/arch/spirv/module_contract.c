@@ -20,12 +20,23 @@ loom_spirv_module_contract_t loom_spirv_module_contract_make(
   };
 }
 
-bool loom_spirv_module_contract_equal(const loom_spirv_module_contract_t* lhs,
-                                      const loom_spirv_module_contract_t* rhs) {
-  return lhs->codegen_format == rhs->codegen_format &&
-         lhs->artifact_format == rhs->artifact_format &&
-         lhs->abi_kind == rhs->abi_kind &&
-         lhs->descriptor_set_stable_id == rhs->descriptor_set_stable_id &&
-         lhs->contract_set_stable_id == rhs->contract_set_stable_id &&
-         lhs->contract_feature_bits == rhs->contract_feature_bits;
+bool loom_spirv_module_contract_merge(
+    loom_spirv_module_contract_t* accumulator,
+    const loom_spirv_module_contract_t* candidate) {
+  if (accumulator->codegen_format != candidate->codegen_format ||
+      accumulator->artifact_format != candidate->artifact_format ||
+      accumulator->descriptor_set_stable_id !=
+          candidate->descriptor_set_stable_id ||
+      accumulator->contract_set_stable_id !=
+          candidate->contract_set_stable_id ||
+      accumulator->contract_feature_bits != candidate->contract_feature_bits) {
+    return false;
+  }
+  if (accumulator->abi_kind == LOOM_TARGET_ABI_UNKNOWN) {
+    accumulator->abi_kind = candidate->abi_kind;
+  } else if (candidate->abi_kind != LOOM_TARGET_ABI_UNKNOWN &&
+             accumulator->abi_kind != candidate->abi_kind) {
+    return false;
+  }
+  return true;
 }

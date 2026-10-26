@@ -1,0 +1,435 @@
+// RUN: emit spirv-dis input=source-low control-flow=structured-low validate
+// REQUIRES: spirv-dis, spirv-val
+
+spirv.target<vulkan1_3> @target
+
+// The caller deliberately precedes its helper to prove source order does not
+// constrain planning. The call returns an aggregate and then continues with
+// both selected values.
+func.def public target(@target) @call_and_continue(%condition: i1, %lower: index, %upper: index, %step: index, %found: i32, %fallback: i32) -> (i32, index) {
+  %selected, %position = func.call @find_pair(%condition, %lower, %upper, %step, %found, %fallback) : (i1, index, index, index, i32, i32) -> (i32, index)
+  %c1_i32 = scalar.constant 1 : i32
+  %continued_value = scalar.addi %selected, %c1_i32 : i32
+  %c1_index = index.constant 1 : index
+  %continued_position = index.add %position, %c1_index : index
+  func.return %continued_value, %continued_position : i32, index
+}
+
+// A return nested in structured loop control terminates only its helper.
+func.def inline target(@target) @find_pair(%condition: i1, %lower: index, %upper: index, %step: index, %found: i32, %fallback: i32) -> (i32, index) {
+  %selected, %position = scf.for %index = [%lower to %upper step %step](%current = %fallback : i32, %current_position = %upper : index) -> (i32, index) {
+    func.exit %condition : i1 {
+      func.return %found, %index : i32, index
+    }
+    scf.yield %current, %current_position : i32, index
+  }
+  func.return %selected, %position : i32, index
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %call_and_continue "call_and_continue"
+               OpExecutionMode %call_and_continue LocalSize 1 1 1
+               OpName %find_pair "find_pair"
+               OpName %condition "condition"
+               OpName %lower "lower"
+               OpName %upper "upper"
+               OpName %step "step"
+               OpName %found "found"
+               OpName %fallback "fallback"
+               OpName %index "index"
+               OpName %current "current"
+               OpName %current_position "current_position"
+               OpName %selected "selected"
+               OpName %position "position"
+               OpName %call_and_continue "call_and_continue"
+               OpName %condition_0 "condition"
+               OpName %lower_0 "lower"
+               OpName %upper_0 "upper"
+               OpName %step_0 "step"
+               OpName %found_0 "found"
+               OpName %fallback_0 "fallback"
+               OpName %selected_0 "selected"
+               OpName %position_0 "position"
+               OpName %c1_i32 "c1_i32"
+               OpName %continued_value "continued_value"
+               OpName %c1_index "c1_index"
+               OpName %continued_position "continued_position"
+               OpMemberDecorate %_struct_37 0 Offset 0
+               OpDecorate %_struct_37 Block
+               OpDecorate %36 DescriptorSet 0
+               OpDecorate %36 Binding 0
+               OpDecorate %40 DescriptorSet 0
+               OpDecorate %40 Binding 1
+               OpDecorate %41 DescriptorSet 0
+               OpDecorate %41 Binding 2
+               OpDecorate %42 DescriptorSet 0
+               OpDecorate %42 Binding 3
+               OpDecorate %43 DescriptorSet 0
+               OpDecorate %43 Binding 4
+               OpDecorate %44 DescriptorSet 0
+               OpDecorate %44 Binding 5
+               OpDecorate %45 DescriptorSet 0
+               OpDecorate %45 Binding 6
+               OpDecorate %46 DescriptorSet 0
+               OpDecorate %46 Binding 7
+       %bool = OpTypeBool
+        %int = OpTypeInt 32 1
+  %_struct_4 = OpTypeStruct %int %int
+          %5 = OpTypeFunction %_struct_4 %bool %int %int %int %int %int
+      %int_0 = OpConstant %int 0
+ %_struct_37 = OpTypeStruct %int
+%_ptr_StorageBuffer__struct_37 = OpTypePointer StorageBuffer %_struct_37
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+         %36 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %40 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %41 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %42 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %43 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %44 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %45 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+         %46 = OpVariable %_ptr_StorageBuffer__struct_37 StorageBuffer
+       %void = OpTypeVoid
+         %48 = OpTypeFunction %void
+     %c1_i32 = OpConstant %int 1
+   %c1_index = OpConstant %int 1
+  %find_pair = OpFunction %_struct_4 Inline %5
+  %condition = OpFunctionParameter %bool
+      %lower = OpFunctionParameter %int
+      %upper = OpFunctionParameter %int
+       %step = OpFunctionParameter %int
+      %found = OpFunctionParameter %int
+   %fallback = OpFunctionParameter %int
+         %12 = OpLabel
+         %13 = OpSLessThan %bool %lower %upper
+         %14 = OpISub %int %upper %lower
+         %15 = OpULessThan %bool %step %14
+         %16 = OpISub %int %upper %step
+         %17 = OpSelect %int %15 %16 %lower
+               OpBranch %18
+         %18 = OpLabel
+      %index = OpPhi %int %lower %12 %22 %21
+    %current = OpPhi %int %fallback %12 %current %21
+%current_position = OpPhi %int %upper %12 %current_position %21
+         %27 = OpPhi %bool %13 %12 %23 %21
+               OpLoopMerge %20 %21 None
+               OpBranchConditional %27 %19 %20
+         %19 = OpLabel
+               OpSelectionMerge %29 None
+               OpBranchConditional %condition %28 %29
+         %28 = OpLabel
+         %30 = OpCompositeConstruct %_struct_4 %found %index
+               OpReturnValue %30
+         %29 = OpLabel
+               OpBranch %21
+         %21 = OpLabel
+         %23 = OpSLessThan %bool %index %17
+         %22 = OpIAdd %int %index %step
+               OpBranch %18
+         %20 = OpLabel
+   %selected = OpPhi %int %current %18
+   %position = OpPhi %int %current_position %18
+         %33 = OpCompositeConstruct %_struct_4 %selected %position
+               OpReturnValue %33
+               OpFunctionEnd
+%call_and_continue = OpFunction %void None %48
+         %49 = OpLabel
+         %50 = OpAccessChain %_ptr_StorageBuffer_int %36 %int_0
+         %51 = OpLoad %int %50 Aligned 4
+%condition_0 = OpINotEqual %bool %51 %int_0
+         %53 = OpAccessChain %_ptr_StorageBuffer_int %40 %int_0
+    %lower_0 = OpLoad %int %53 Aligned 4
+         %55 = OpAccessChain %_ptr_StorageBuffer_int %41 %int_0
+    %upper_0 = OpLoad %int %55 Aligned 4
+         %57 = OpAccessChain %_ptr_StorageBuffer_int %42 %int_0
+     %step_0 = OpLoad %int %57 Aligned 4
+         %59 = OpAccessChain %_ptr_StorageBuffer_int %43 %int_0
+    %found_0 = OpLoad %int %59 Aligned 4
+         %61 = OpAccessChain %_ptr_StorageBuffer_int %44 %int_0
+ %fallback_0 = OpLoad %int %61 Aligned 4
+         %63 = OpFunctionCall %_struct_4 %find_pair %condition_0 %lower_0 %upper_0 %step_0 %found_0 %fallback_0
+ %selected_0 = OpCompositeExtract %int %63 0
+ %position_0 = OpCompositeExtract %int %63 1
+%continued_value = OpIAdd %int %selected_0 %c1_i32
+%continued_position = OpIAdd %int %position_0 %c1_index
+         %70 = OpAccessChain %_ptr_StorageBuffer_int %45 %int_0
+               OpStore %70 %continued_value Aligned 4
+         %71 = OpAccessChain %_ptr_StorageBuffer_int %46 %int_0
+               OpStore %71 %continued_position Aligned 4
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
+// Vulkan SPIR-V forbids recursive call cycles. Exit-bearing helpers retain a
+// physical function boundary, so reject recursion before binary emission.
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/032 {function_name="recursive"}
+func.def inline target(@target) @recursive(%done: i1, %value: i32) -> (i32) {
+  func.exit %done : i1 {
+    func.return %value : i32
+  }
+  %next = func.call @recursive(%done, %value) : (i1, i32) -> (i32)
+  func.return %next : i32
+}
+
+func.def public target(@target) @recursive_entry(%done: i1, %value: i32) -> (i32) {
+  %result = func.call @recursive(%done, %value) : (i1, i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// SPIR-V function types and calls admit signatures wider than the common
+// cached arity without imposing an artificial frontend limit.
+spirv.target<vulkan1_3> @target
+
+func.def inline target(@target) @sum_nine(%exit_early: i1, %v0: i32, %v1: i32, %v2: i32, %v3: i32, %v4: i32, %v5: i32, %v6: i32, %v7: i32, %v8: i32) -> (i32) {
+  func.exit %exit_early : i1 {
+    func.return %v8 : i32
+  }
+  %s01 = scalar.addi %v0, %v1 : i32
+  %s23 = scalar.addi %v2, %v3 : i32
+  %s45 = scalar.addi %v4, %v5 : i32
+  %s67 = scalar.addi %v6, %v7 : i32
+  %s0123 = scalar.addi %s01, %s23 : i32
+  %s4567 = scalar.addi %s45, %s67 : i32
+  %s07 = scalar.addi %s0123, %s4567 : i32
+  %sum = scalar.addi %s07, %v8 : i32
+  func.return %sum : i32
+}
+
+func.def public target(@target) @wide_call(%exit_early: i1, %v0: i32, %v1: i32, %v2: i32, %v3: i32, %v4: i32, %v5: i32, %v6: i32, %v7: i32, %v8: i32) -> (i32) {
+  %sum = func.call @sum_nine(%exit_early, %v0, %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8) : (i1, i32, i32, i32, i32, i32, i32, i32, i32, i32) -> (i32)
+  func.return %sum : i32
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %wide_call "wide_call"
+               OpExecutionMode %wide_call LocalSize 1 1 1
+               OpName %sum_nine "sum_nine"
+               OpName %exit_early "exit_early"
+               OpName %v0 "v0"
+               OpName %v1 "v1"
+               OpName %v2 "v2"
+               OpName %v3 "v3"
+               OpName %v4 "v4"
+               OpName %v5 "v5"
+               OpName %v6 "v6"
+               OpName %v7 "v7"
+               OpName %v8 "v8"
+               OpName %s01 "s01"
+               OpName %s23 "s23"
+               OpName %s45 "s45"
+               OpName %s67 "s67"
+               OpName %s0123 "s0123"
+               OpName %s4567 "s4567"
+               OpName %s07 "s07"
+               OpName %sum "sum"
+               OpName %wide_call "wide_call"
+               OpName %exit_early_0 "exit_early"
+               OpName %v0_0 "v0"
+               OpName %v1_0 "v1"
+               OpName %v2_0 "v2"
+               OpName %v3_0 "v3"
+               OpName %v4_0 "v4"
+               OpName %v5_0 "v5"
+               OpName %v6_0 "v6"
+               OpName %v7_0 "v7"
+               OpName %v8_0 "v8"
+               OpName %sum_0 "sum"
+               OpMemberDecorate %_struct_29 0 Offset 0
+               OpDecorate %_struct_29 Block
+               OpDecorate %28 DescriptorSet 0
+               OpDecorate %28 Binding 0
+               OpDecorate %32 DescriptorSet 0
+               OpDecorate %32 Binding 1
+               OpDecorate %33 DescriptorSet 0
+               OpDecorate %33 Binding 2
+               OpDecorate %34 DescriptorSet 0
+               OpDecorate %34 Binding 3
+               OpDecorate %35 DescriptorSet 0
+               OpDecorate %35 Binding 4
+               OpDecorate %36 DescriptorSet 0
+               OpDecorate %36 Binding 5
+               OpDecorate %37 DescriptorSet 0
+               OpDecorate %37 Binding 6
+               OpDecorate %38 DescriptorSet 0
+               OpDecorate %38 Binding 7
+               OpDecorate %39 DescriptorSet 0
+               OpDecorate %39 Binding 8
+               OpDecorate %40 DescriptorSet 0
+               OpDecorate %40 Binding 9
+               OpDecorate %41 DescriptorSet 0
+               OpDecorate %41 Binding 10
+       %bool = OpTypeBool
+        %int = OpTypeInt 32 1
+          %4 = OpTypeFunction %int %bool %int %int %int %int %int %int %int %int %int
+      %int_0 = OpConstant %int 0
+ %_struct_29 = OpTypeStruct %int
+%_ptr_StorageBuffer__struct_29 = OpTypePointer StorageBuffer %_struct_29
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+         %28 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %32 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %33 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %34 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %35 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %36 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %37 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %38 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %39 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %40 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+         %41 = OpVariable %_ptr_StorageBuffer__struct_29 StorageBuffer
+       %void = OpTypeVoid
+         %43 = OpTypeFunction %void
+   %sum_nine = OpFunction %int Inline %4
+ %exit_early = OpFunctionParameter %bool
+         %v0 = OpFunctionParameter %int
+         %v1 = OpFunctionParameter %int
+         %v2 = OpFunctionParameter %int
+         %v3 = OpFunctionParameter %int
+         %v4 = OpFunctionParameter %int
+         %v5 = OpFunctionParameter %int
+         %v6 = OpFunctionParameter %int
+         %v7 = OpFunctionParameter %int
+         %v8 = OpFunctionParameter %int
+         %15 = OpLabel
+               OpSelectionMerge %17 None
+               OpBranchConditional %exit_early %16 %17
+         %16 = OpLabel
+               OpReturnValue %v8
+         %17 = OpLabel
+        %s01 = OpIAdd %int %v0 %v1
+        %s23 = OpIAdd %int %v2 %v3
+        %s45 = OpIAdd %int %v4 %v5
+        %s67 = OpIAdd %int %v6 %v7
+      %s0123 = OpIAdd %int %s01 %s23
+      %s4567 = OpIAdd %int %s45 %s67
+        %s07 = OpIAdd %int %s0123 %s4567
+        %sum = OpIAdd %int %s07 %v8
+               OpReturnValue %sum
+               OpFunctionEnd
+  %wide_call = OpFunction %void None %43
+         %44 = OpLabel
+         %45 = OpAccessChain %_ptr_StorageBuffer_int %28 %int_0
+         %46 = OpLoad %int %45 Aligned 4
+%exit_early_0 = OpINotEqual %bool %46 %int_0
+         %48 = OpAccessChain %_ptr_StorageBuffer_int %32 %int_0
+       %v0_0 = OpLoad %int %48 Aligned 4
+         %50 = OpAccessChain %_ptr_StorageBuffer_int %33 %int_0
+       %v1_0 = OpLoad %int %50 Aligned 4
+         %52 = OpAccessChain %_ptr_StorageBuffer_int %34 %int_0
+       %v2_0 = OpLoad %int %52 Aligned 4
+         %54 = OpAccessChain %_ptr_StorageBuffer_int %35 %int_0
+       %v3_0 = OpLoad %int %54 Aligned 4
+         %56 = OpAccessChain %_ptr_StorageBuffer_int %36 %int_0
+       %v4_0 = OpLoad %int %56 Aligned 4
+         %58 = OpAccessChain %_ptr_StorageBuffer_int %37 %int_0
+       %v5_0 = OpLoad %int %58 Aligned 4
+         %60 = OpAccessChain %_ptr_StorageBuffer_int %38 %int_0
+       %v6_0 = OpLoad %int %60 Aligned 4
+         %62 = OpAccessChain %_ptr_StorageBuffer_int %39 %int_0
+       %v7_0 = OpLoad %int %62 Aligned 4
+         %64 = OpAccessChain %_ptr_StorageBuffer_int %40 %int_0
+       %v8_0 = OpLoad %int %64 Aligned 4
+      %sum_0 = OpFunctionCall %int %sum_nine %exit_early_0 %v0_0 %v1_0 %v2_0 %v3_0 %v4_0 %v5_0 %v6_0 %v7_0 %v8_0
+         %67 = OpAccessChain %_ptr_StorageBuffer_int %41 %int_0
+               OpStore %67 %sum_0 Aligned 4
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
+// Builtin interface variables used only by an internal helper propagate to the
+// exported entry through the physical call boundary.
+spirv.target<vulkan1_3> @target
+
+func.def inline target(@target) @workitem_helper(%exit_early: i1) -> (index) {
+  %lane = kernel.workitem.id<x> : index
+  func.exit %exit_early : i1 {
+    func.return %lane : index
+  }
+  func.return %lane : index
+}
+
+func.def public target(@target) @call_workitem_helper(%exit_early: i1) -> (index) {
+  %lane = func.call @workitem_helper(%exit_early) : (i1) -> (index)
+  func.return %lane : index
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %call_workitem_helper "call_workitem_helper" %local_invocation_id
+               OpExecutionMode %call_workitem_helper LocalSize 1 1 1
+               OpName %workitem_helper "workitem_helper"
+               OpName %exit_early "exit_early"
+               OpName %local_invocation_id "local_invocation_id"
+               OpName %lane "lane"
+               OpName %call_workitem_helper "call_workitem_helper"
+               OpName %exit_early_0 "exit_early"
+               OpName %lane_0 "lane"
+               OpDecorate %local_invocation_id BuiltIn LocalInvocationId
+               OpMemberDecorate %_struct_19 0 Offset 0
+               OpDecorate %_struct_19 Block
+               OpDecorate %18 DescriptorSet 0
+               OpDecorate %18 Binding 0
+               OpDecorate %22 DescriptorSet 0
+               OpDecorate %22 Binding 1
+       %bool = OpTypeBool
+        %int = OpTypeInt 32 1
+          %4 = OpTypeFunction %int %bool
+       %uint = OpTypeInt 32 0
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+%local_invocation_id = OpVariable %_ptr_Input_v3uint Input
+      %int_0 = OpConstant %int 0
+ %_struct_19 = OpTypeStruct %int
+%_ptr_StorageBuffer__struct_19 = OpTypePointer StorageBuffer %_struct_19
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+         %18 = OpVariable %_ptr_StorageBuffer__struct_19 StorageBuffer
+         %22 = OpVariable %_ptr_StorageBuffer__struct_19 StorageBuffer
+       %void = OpTypeVoid
+         %24 = OpTypeFunction %void
+%workitem_helper = OpFunction %int Inline %4
+ %exit_early = OpFunctionParameter %bool
+          %6 = OpLabel
+         %11 = OpLoad %v3uint %local_invocation_id
+         %12 = OpCompositeExtract %uint %11 0
+       %lane = OpBitcast %int %12
+               OpSelectionMerge %15 None
+               OpBranchConditional %exit_early %14 %15
+         %14 = OpLabel
+               OpReturnValue %lane
+         %15 = OpLabel
+               OpReturnValue %lane
+               OpFunctionEnd
+%call_workitem_helper = OpFunction %void None %24
+         %25 = OpLabel
+         %26 = OpAccessChain %_ptr_StorageBuffer_int %18 %int_0
+         %27 = OpLoad %int %26 Aligned 4
+%exit_early_0 = OpINotEqual %bool %27 %int_0
+     %lane_0 = OpFunctionCall %int %workitem_helper %exit_early_0
+         %30 = OpAccessChain %_ptr_StorageBuffer_int %22 %int_0
+               OpStore %30 %lane_0 Aligned 4
+               OpReturn
+               OpFunctionEnd

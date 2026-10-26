@@ -102,6 +102,7 @@ loom_cc_library(
     iree::base
     loom::codegen::low::descriptors
     loom::ir
+    loom::target::arch::spirv::value_types
     loom::target::facts
     loom::target::types
   PUBLIC
@@ -232,7 +233,9 @@ loom_cc_library(
     ::program
     iree::base
     iree::base::internal::arena
+    loom::analysis::scc
     loom::analysis::symbol_facts
+    loom::analysis::symbol_references
     loom::codegen::low::descriptors
     loom::codegen::low::diagnostics
     loom::codegen::low::function
@@ -240,9 +243,12 @@ loom_cc_library(
     loom::error::emitter
     loom::error::error_defs
     loom::ir
+    loom::ops::low
     loom::ops::op_defs
     loom::target::arch::spirv::descriptors
+    loom::target::arch::spirv::error_defs
     loom::target::arch::spirv::module_contract
+    loom::target::arch::spirv::registers
     loom::target::facts
     loom::target::function_version
     loom::target::provider
@@ -342,6 +348,7 @@ loom_check_test_suite(
     "test/immediate_enums.loom-test"
     "test/index_conversion.loom-test"
     "test/integer_boolean.loom-test"
+    "test/internal_functions.loom-test"
     "test/loop_termination.loom-test"
     "test/memory_access_flags.loom-test"
     "test/narrow_scalar_abi.loom-test"

@@ -768,8 +768,7 @@ static iree_status_t loom_spirv_low_emit_resource_result_type(
 static iree_status_t loom_spirv_low_verify_resource(
     loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
     const loom_op_t* op) {
-  if (state->abi_kind != LOOM_TARGET_ABI_UNKNOWN &&
-      state->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+  if (state->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return loom_spirv_low_emit_resource_abi(context, state, op);
   }
   const uint8_t import_kind = loom_low_resource_import_kind(op);
@@ -974,6 +973,27 @@ static iree_status_t loom_spirv_low_verify_return(
       IREE_RETURN_IF_ERROR(loom_spirv_low_emit_return_type_mismatch(
           context, state, op, i, operands[i], expected_type, actual_type));
     }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_func_call(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op) {
+  const loom_value_slice_t results = loom_low_func_call_results(op);
+  for (uint16_t i = 0; i < results.count; ++i) {
+    const loom_value_id_t result = results.values[i];
+    const loom_type_t result_type =
+        loom_module_value_type(state->module, result);
+    loom_spirv_value_type_t value_type = {0};
+    if (!loom_spirv_value_type_from_low_register_type(result_type,
+                                                      &value_type)) {
+      IREE_RETURN_IF_ERROR(loom_spirv_low_emit_unsupported_register_type(
+          context, state, op, result, result_type));
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_spirv_low_value_type_table_define(
+        &state->value_types, result, value_type, state->arena));
   }
   return iree_ok_status();
 }
@@ -1452,7 +1472,7 @@ static iree_status_t loom_spirv_low_verify_module_contract(
     module_state->flags |= LOOM_SPIRV_LOW_VERIFY_MODULE_FLAG_HAS_CONTRACT;
     return iree_ok_status();
   }
-  if (loom_spirv_module_contract_equal(&module_state->contract, &contract)) {
+  if (loom_spirv_module_contract_merge(&module_state->contract, &contract)) {
     return iree_ok_status();
   }
   return loom_spirv_low_emit_mixed_module_contract(
@@ -1545,6 +1565,13 @@ static iree_status_t loom_spirv_low_verify_op(
   }
   if (loom_low_return_isa(op)) {
     return loom_spirv_low_verify_return(context, state, op);
+  }
+  if (loom_low_func_call_isa(op)) {
+    return loom_spirv_low_verify_func_call(context, state, op);
+  }
+  if (loom_low_func_exit_isa(op)) {
+    return loom_spirv_low_verify_bool_condition(
+        context, state, op, loom_low_func_exit_condition(op));
   }
   if (loom_low_scf_if_isa(op)) {
     return loom_spirv_low_verify_scf_if(context, state, op);

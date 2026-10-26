@@ -90,3 +90,39 @@ func.def public @completed_caller(%condition: i1, %limit: index, %value: i32, %f
   %29 = index.add %index$27, %c1$13 : index
   cfg.br ^_bb1(%29: index, %next: i32)
 }
+
+// ====
+
+// A structured Low exit remains attached to its original callable. The final
+// target-policy pass cannot splice it into a caller without changing which
+// function low.return terminates.
+// RUN: pass inline-callables{stage=complete}
+
+test.target<low_core> @target
+
+low.func.def inline target<test.low.core>(@target) @structured_exit(%condition: reg<test.i32>, %value: reg<test.i32>, %fallback: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.func.exit %condition : reg<test.i32> {
+    return %value
+  }
+  return %fallback
+}
+
+low.func.def public target<test.low.core>(@target) @structured_exit_caller(%condition: reg<test.i32>, %value: reg<test.i32>, %fallback: reg<test.i32>) -> (reg<test.i32>) asm {
+  %selected = low.func.call @structured_exit(%condition, %value, %fallback) : (reg<test.i32>, reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
+  return %selected
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def inline target<test.low.core>(@target) @structured_exit(%condition: reg<test.i32>, %value: reg<test.i32>, %fallback: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.func.exit %condition : reg<test.i32> {
+    return %value
+  }
+  return %fallback
+}
+
+low.func.def public target<test.low.core>(@target) @structured_exit_caller(%condition: reg<test.i32>, %value: reg<test.i32>, %fallback: reg<test.i32>) -> (reg<test.i32>) asm {
+  %selected = low.func.call @structured_exit(%condition, %value, %fallback) : (reg<test.i32>, reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
+  return %selected
+}

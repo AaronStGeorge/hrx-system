@@ -472,6 +472,20 @@ ERR_SPIRV_031 = ErrorDef(
     ),
 )
 
+# ERR_SPIRV_032: SPIR-V internal function recursion is unsupported.
+ERR_SPIRV_032 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=32,
+    severity=Severity.ERROR,
+    summary="Recursive SPIR-V internal function call.",
+    message=(
+        "SPIR-V internal function '@{function_name}' participates in a "
+        "recursive call cycle, which Vulkan SPIR-V does not permit"
+    ),
+    params=(ErrorParam("function_name", ParamKind.STRING),),
+    fix_hint="Rewrite the recursive helper as structured iteration",
+)
+
 ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_005,
     ERR_SPIRV_006,
@@ -497,4 +511,5 @@ ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_029,
     ERR_SPIRV_030,
     ERR_SPIRV_031,
+    ERR_SPIRV_032,
 )

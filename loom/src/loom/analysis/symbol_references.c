@@ -12,6 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/template/ops.h"
@@ -612,7 +613,7 @@ static iree_status_t loom_symbol_reference_visit_region(
             builder, nested_source_scope.symbol_id,
             &builder->contextual_symbols));
       }
-      if (loom_func_exit_isa(op) &&
+      if ((loom_func_exit_isa(op) || loom_low_func_exit_isa(op)) &&
           nested_source_scope.symbol_id != LOOM_SYMBOL_ID_INVALID) {
         IREE_RETURN_IF_ERROR(loom_symbol_reference_builder_set_symbol_bit(
             builder, nested_source_scope.symbol_id,

@@ -13,12 +13,16 @@
 typedef struct loom_spirv_emit_module_state_t {
   // Module containing the prepared Low functions.
   loom_module_t* module;
+  // Immutable semantic program being emitted.
+  const loom_spirv_program_plan_t* program;
   // Module-emission scratch arena.
   iree_arena_allocator_t* scratch_arena;
   // Sectioned SPIR-V module builder shared by every emitted function.
   loom_spirv_module_builder_t builder;
   // SPIR-V type and constant emission cache shared by the module.
   loom_spirv_type_context_t type_context;
+  // Physical function identities and signatures in program order.
+  loom_spirv_function_emission_plan_t* emission_plans;
   // Physical push-constant storage shared by HAL kernel entries.
   loom_spirv_module_shared_bda_root_t shared_bda_root;
   // Shared Input variables for invocation and subgroup builtins.
@@ -33,14 +37,30 @@ static iree_status_t loom_spirv_emit_module_state_initialize(
     loom_spirv_emit_module_state_t* out_state) {
   *out_state = (loom_spirv_emit_module_state_t){
       .module = program->module,
+      .program = program,
       .scratch_arena = scratch_arena,
   };
   IREE_RETURN_IF_ERROR(loom_spirv_module_builder_initialize(
-      loom_spirv_function_plan_target_bundle(&program->functions[0]), allocator,
-      &out_state->builder));
+      loom_spirv_function_plan_target_bundle(
+          &program->functions[program->first_entry_index]),
+      allocator, &out_state->builder));
   out_state->builder_initialized = true;
   loom_spirv_type_context_initialize(&out_state->builder, scratch_arena,
                                      &out_state->type_context);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_emit_initialize_function_plans(
+    loom_spirv_emit_module_state_t* state) {
+  const loom_spirv_program_plan_t* program = state->program;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->scratch_arena, program->function_count,
+      sizeof(*state->emission_plans), (void**)&state->emission_plans));
+  for (iree_host_size_t i = 0; i < program->function_count; ++i) {
+    state->emission_plans[i] = (loom_spirv_function_emission_plan_t){
+        .function = &program->functions[i],
+    };
+  }
   return iree_ok_status();
 }
 
@@ -54,16 +74,18 @@ static void loom_spirv_emit_module_state_deinitialize(
 
 static iree_status_t loom_spirv_emit_function_into_module(
     loom_spirv_emit_module_state_t* state,
-    const loom_spirv_function_plan_t* function) {
+    loom_spirv_function_emission_plan_t* emission_plan) {
   loom_spirv_function_emission_context_t context = {
       .module = state->module,
+      .program = state->program,
+      .emission_plans = state->emission_plans,
       .scratch_arena = state->scratch_arena,
       .builder = &state->builder,
       .type_context = &state->type_context,
       .shared_bda_root = &state->shared_bda_root,
       .builtin_variable_ids = state->builtin_variable_ids,
   };
-  return loom_spirv_emit_low_function(&context, function);
+  return loom_spirv_emit_low_function(&context, emission_plan);
 }
 
 static iree_status_t loom_spirv_emit_module_state_finalize(
@@ -88,6 +110,10 @@ iree_status_t loom_spirv_program_emit_binary(
   IREE_ASSERT_ARGUMENT(program->module);
   IREE_ASSERT_ARGUMENT(program->functions);
   IREE_ASSERT_NE(program->function_count, 0u);
+  IREE_ASSERT_NE(program->entry_count, 0u);
+  IREE_ASSERT_NE(program->first_entry_index,
+                 LOOM_SPIRV_PROGRAM_FUNCTION_INDEX_NONE);
+  IREE_ASSERT_LT(program->first_entry_index, program->function_count);
   IREE_ASSERT_ARGUMENT(scratch_arena);
   IREE_ASSERT_ARGUMENT(out_module);
   *out_module = (loom_spirv_module_binary_t){0};
@@ -95,10 +121,13 @@ iree_status_t loom_spirv_program_emit_binary(
   loom_spirv_emit_module_state_t state = {0};
   iree_status_t status = loom_spirv_emit_module_state_initialize(
       program, scratch_arena, allocator, &state);
+  if (iree_status_is_ok(status)) {
+    status = loom_spirv_emit_initialize_function_plans(&state);
+  }
   for (iree_host_size_t i = 0;
        i < program->function_count && iree_status_is_ok(status); ++i) {
     status =
-        loom_spirv_emit_function_into_module(&state, &program->functions[i]);
+        loom_spirv_emit_function_into_module(&state, &state.emission_plans[i]);
   }
   if (iree_status_is_ok(status)) {
     status = loom_spirv_emit_module_state_finalize(&state, out_module);

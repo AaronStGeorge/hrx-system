@@ -652,8 +652,11 @@ static void loom_inline_resolve_entry_policy(
 
   if (callee_inline || call_inline || target_requires_inline) {
     entry->effective_policy = LOOM_INLINE_POLICY_INLINE;
-    if (state->options.defer_callable_exits &&
-        call_kind == LOOM_CALL_LIKE_KIND_SEMANTIC &&
+    const bool preserves_callable_exit =
+        (state->options.defer_callable_exits &&
+         call_kind == LOOM_CALL_LIKE_KIND_SEMANTIC) ||
+        call_kind == LOOM_CALL_LIKE_KIND_LOW_INTERNAL;
+    if (preserves_callable_exit &&
         entry->target_symbol_id < state->module->symbols.count &&
         state->symbols[entry->target_symbol_id].body_has_callable_exit) {
       entry->action = LOOM_INLINE_PLAN_ACTION_KEEP;

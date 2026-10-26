@@ -97,6 +97,45 @@ static iree_status_t loom_spirv_emit_scf_result_phi(
   return loom_spirv_emit_define_value(state, result_value_id, result_ref, true);
 }
 
+iree_status_t loom_spirv_emit_func_exit(loom_spirv_emit_state_t* state,
+                                        const loom_op_t* op) {
+  loom_spirv_module_value_ref_t condition = {0};
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_lookup_value(
+      state, loom_low_func_exit_condition(op), &condition));
+  const uint32_t return_label_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t merge_label_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t merge_operands[] = {
+      merge_label_id,
+      LOOM_SPIRV_SELECTION_CONTROL_NONE,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      LOOM_SPIRV_OP_SELECTION_MERGE, merge_operands,
+      IREE_ARRAYSIZE(merge_operands)));
+  const uint32_t branch_operands[] = {
+      condition.id,
+      return_label_id,
+      merge_label_id,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      LOOM_SPIRV_OP_BRANCH_CONDITIONAL, branch_operands,
+      IREE_ARRAYSIZE(branch_operands)));
+
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_label_id(state, return_label_id));
+  const loom_region_t* body = loom_low_func_exit_body(op);
+  const loom_block_t* block = loom_region_const_entry_block(body);
+  const loom_op_t* return_op = block->last_op;
+  IREE_ASSERT(return_op != NULL && loom_low_return_isa(return_op),
+              "verified low.func.exit must terminate with low.return");
+  for (const loom_op_t* nested_op = block->first_op; nested_op != return_op;
+       nested_op = nested_op->next_op) {
+    IREE_RETURN_IF_ERROR(loom_spirv_emit_low_op(state, nested_op));
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_return(state, return_op));
+  return loom_spirv_emit_label_id(state, merge_label_id);
+}
+
 iree_status_t loom_spirv_emit_scf_if(loom_spirv_emit_state_t* state,
                                      const loom_op_t* op) {
   loom_spirv_module_value_ref_t condition = {0};
