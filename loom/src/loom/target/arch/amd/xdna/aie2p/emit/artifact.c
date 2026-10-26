@@ -464,9 +464,30 @@ static iree_status_t loom_aie2p_xdna_compile_resident_tiles(
         .diagnostic_emitter = request->diagnostic_emitter,
         .compile_report = worker_report_ptr,
     };
+    loom_aie2p_program_helper_t* direct_helpers = NULL;
+    if (resident->direct_helper_count != 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          request->scratch_arena, resident->direct_helper_count,
+          sizeof(*direct_helpers), (void**)&direct_helpers));
+      for (iree_host_size_t helper_index = 0;
+           helper_index < resident->direct_helper_count; ++helper_index) {
+        const loom_aie2p_array_resident_helper_t* resident_helper =
+            &resident->direct_helpers[helper_index];
+        direct_helpers[helper_index] = (loom_aie2p_program_helper_t){
+            .function = resident_helper->entry,
+            .function_target_facts = resident_helper->function_target_facts,
+            .memory_accesses = resident_helper->memory_accesses,
+            .loop_execution = resident_helper->loop_execution,
+        };
+      }
+    }
     bool program_compiled = false;
     iree_status_t status = loom_aie2p_program_compile(
-        resident_module, resident->function_op, resident->direct_callees,
+        resident_module, resident->function_op,
+        (loom_aie2p_program_helper_list_t){
+            .values = direct_helpers,
+            .count = resident->direct_helper_count,
+        },
         &worker_compile_options, request->scratch_arena, &program_compiled,
         contribution);
     if (worker_report_ptr != NULL) {

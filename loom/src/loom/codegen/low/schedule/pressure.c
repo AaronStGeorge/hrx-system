@@ -1859,9 +1859,8 @@ void loom_low_schedule_pressure_score_candidate(
     loom_low_schedule_required_pressure_adjust_candidate(
         state, pressure_state, value, unit_count, false);
     if (unit_count != 0) {
-      // Repair retained this result's private consumer placement. Keep that
-      // placement for input-free clones too; the ready policy can still
-      // advance them to complete live storage groups.
+      // Repair may retain this result's private consumer placement. Input-free
+      // clones remain replayable without a retained placement fact.
       const loom_value_id_t value_id =
           state->value_domain->value_ids[result_ordinals[result_index]];
       has_per_user_placement |=

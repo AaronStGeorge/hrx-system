@@ -184,7 +184,7 @@ pipeline.def<kernel> public retain target(@device) @copy_records() run(%input: b
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %202 = mov.short 1
-  %110 = mov.acquire-delta -1
+  %110 = mov.short -1
   %begin = mov.short 0
   %count = mov.short 3
   low.br ^_bb1(%begin: reg<aie2p.er>)
@@ -215,8 +215,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   mov.ms %202
   mov.ms %78
   mov.ms.last %begin
-  %79 = mov.short -1
-  acq %79, 51
+  acq %110, 51
   rel %202, 49
   acq %110, 49
   %87 = mov.local-address 458768
@@ -441,7 +440,7 @@ pipeline.def<kernel> public retain target(@device) @pairwise_sum_difference() ru
 // ----
 low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %226 = mov.short 1
-  %119 = mov.acquire-delta -1
+  %119 = mov.short -1
   %108 = mov.local-address 459004
   %110 = mov.local-address 459508
   %112 = mov.local-address 459256

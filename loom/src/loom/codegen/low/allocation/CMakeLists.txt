@@ -78,6 +78,32 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    ordinal_component
+  HDRS
+    "ordinal_component.h"
+  SRCS
+    "ordinal_component.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::codegen::low::placement
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    ordinal_component_test
+  SRCS
+    "ordinal_component_test.cc"
+  DEPS
+    ::ordinal_component
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     placement
   HDRS
     "placement.h"
@@ -85,6 +111,7 @@ loom_cc_library(
     "placement.c"
   DEPS
     ::edge_affinity
+    ::ordinal_component
     ::target_constraints
     ::unit_location
     iree::base
@@ -826,6 +853,7 @@ loom_cc_library(
     "physical_domains.c"
   DEPS
     ::live_range
+    ::target_constraints
     ::unit_liveness
     iree::base
     iree::base::internal
@@ -924,6 +952,33 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    ordinal_recolor
+  HDRS
+    "ordinal_recolor.h"
+  SRCS
+    "ordinal_recolor.c"
+  DEPS
+    ::active_unit
+    ::assignment_map
+    ::live_range
+    ::search
+    ::storage
+    ::storage_lease
+    ::target_constraints
+    ::unit_liveness
+    ::write_interference
+    iree::base
+    iree::base::internal::arena
+    loom::analysis::liveness
+    loom::codegen::low::descriptors
+    loom::codegen::low::placement
+    loom::codegen::low::target_binding
+    loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     interval_assignment
   HDRS
     "interval_assignment.h"
@@ -937,6 +992,7 @@ loom_cc_library(
     ::coalescing
     ::interval_order
     ::live_range
+    ::ordinal_recolor
     ::physical_domains
     ::preference
     ::scalar_packing

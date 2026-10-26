@@ -325,9 +325,18 @@ class Aie2pProgramCompileTest : public ::testing::Test {
         module, loom_low_func_def_body(entry), &requirements_arena,
         &requirements);
     if (iree_status_is_ok(status)) {
-      status = loom_aie2p_program_compile(
-          module, entry, requirements.direct_callees, options, &program_arena_,
-          out_compiled, out_contribution);
+      std::vector<loom_aie2p_program_helper_t> direct_helpers(
+          requirements.direct_callees.count);
+      for (iree_host_size_t i = 0; i < direct_helpers.size(); ++i) {
+        direct_helpers[i].function = requirements.direct_callees.values[i];
+      }
+      status = loom_aie2p_program_compile(module, entry,
+                                          loom_aie2p_program_helper_list_t{
+                                              .values = direct_helpers.data(),
+                                              .count = direct_helpers.size(),
+                                          },
+                                          options, &program_arena_,
+                                          out_compiled, out_contribution);
     }
     iree_arena_deinitialize(&requirements_arena);
     return status;

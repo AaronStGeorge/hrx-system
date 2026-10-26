@@ -21,7 +21,8 @@
 // facts. Rematerialization computes closure once per original value in a repair
 // batch, then applies consumer-first repairs using fresh operand uses. Private
 // producer placement survives schedule rebuilds until another rewrite changes
-// its uses.
+// its uses. Scheduling retains the preceding same-block call boundary so a
+// replayed value does not regain a call-crossing lifetime through hoisting.
 
 #ifndef LOOM_CODEGEN_LOW_REMATERIALIZATION_H_
 #define LOOM_CODEGEN_LOW_REMATERIALIZATION_H_
@@ -91,14 +92,16 @@ iree_status_t loom_low_schedule_rematerialize_failure(
 
 // Repairs pressure from unspillable classes and register-required spill
 // traffic. Selects cross-block demand in over-budget unspillable classes first,
-// then the live failure frontier if that demand cannot be repaired. Each set
-// forms one consumer-first batch. Private placements retain the completed
-// schedule until the first clone invalidates it. Subsequent clones capture
-// fresh operand uses without consulting the allocation or schedule snapshot.
-// One optional diagnostic summarizes the complete batch. |schedule| is the
-// completed order that failed allocation when the caller will rebuild
-// scheduling with retained placement. Source-order allocation callers pass NULL
-// and only consume IR-rewriting repairs.
+// then the complete physical failure frontier if that demand cannot be
+// repaired. Each set tries input-free repairs before captured-input recipes,
+// retrying allocation after a successful input-free tier. Each tier is
+// consumer-first. Private placements retain the completed schedule until the
+// first clone invalidates it. Subsequent clones capture fresh operand uses
+// without consulting the allocation or schedule snapshot. One optional
+// diagnostic summarizes the complete batch. |schedule| is the completed order
+// that failed allocation when the caller will rebuild scheduling with retained
+// placement. Source-order allocation callers pass NULL and only consume
+// IR-rewriting repairs.
 //
 // Returns OK with a zero result when the failure is not a rematerialization
 // candidate. User IR failures remain allocation diagnostics; status failures

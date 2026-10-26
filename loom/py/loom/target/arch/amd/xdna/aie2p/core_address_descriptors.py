@@ -215,6 +215,8 @@ def _address_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
                 storage_overrides=(("dst", destination), ("src", source)),
                 asm_mnemonic=mnemonic,
                 allocation_move=destination == source,
+                rematerializable=destination != source,
+                flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
             )
         )
     for immediate, suffix in ((False, ""), (True, "_imm")):

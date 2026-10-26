@@ -55,6 +55,8 @@ class LowAllocationPhysicalDomainsTest : public ::testing::Test {
         descriptors_, IREE_SV("test.explicit32"), &broad_, nullptr));
     ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
         descriptors_, IREE_SV("test.packed.narrow"), &narrow_, nullptr));
+    target_.descriptor_set = descriptors_;
+    constraints_.target = &target_;
   }
 
   void TearDown() override {
@@ -107,8 +109,29 @@ class LowAllocationPhysicalDomainsTest : public ::testing::Test {
     placement.tied_storage_origins_by_value_ordinal =
         origins.empty() ? nullptr : origins.data();
     return loom_low_allocation_physical_domains_build(
-        descriptors_, &liveness, &unit_liveness, &placement, &arena_,
+        &constraints_, &liveness, &unit_liveness, &placement, &arena_,
         &domains_);
+  }
+
+  void ReserveBroadCandidate(uint16_t candidate_ordinal) {
+    reservation_ = {
+        .descriptor_reg_class_id = broad_,
+        .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+        .location_base = loom_low_descriptor_set_physical_register_candidate(
+            descriptors_, broad_, candidate_ordinal),
+        .location_count = 1,
+    };
+    constraints_.reserved_ranges = &reservation_;
+    constraints_.reserved_range_count = 1;
+  }
+
+  void LimitClass(uint16_t class_id, uint32_t max_units) {
+    budget_ = {
+        .descriptor_reg_class_id = class_id,
+        .max_units = max_units,
+    };
+    constraints_.budgets = &budget_;
+    constraints_.budget_count = 1;
   }
 
   loom_low_allocation_physical_domain_row_t Row(size_t index) const {
@@ -127,6 +150,14 @@ class LowAllocationPhysicalDomainsTest : public ::testing::Test {
   uint16_t broad_ = LOOM_LOW_REG_CLASS_NONE;
   // Restricted class in the canonical test descriptor set.
   uint16_t narrow_ = LOOM_LOW_REG_CLASS_NONE;
+  // Target binding supplying the canonical descriptors to allocation.
+  loom_low_resolved_target_t target_ = {};
+  // Whole-function allocation constraints consumed by the domain planner.
+  loom_low_allocation_target_constraints_t constraints_ = {};
+  // Optional whole-function reservation used by focused tests.
+  loom_low_allocation_resolved_reserved_range_t reservation_ = {};
+  // Optional whole-function budget used by focused tests.
+  loom_low_allocation_resolved_budget_t budget_ = {};
   // Pool backing retained preference rows.
   iree_arena_block_pool_t pool_;
   // Preference storage retained through each test.
@@ -136,6 +167,31 @@ class LowAllocationPhysicalDomainsTest : public ::testing::Test {
   // Preference plan under test.
   loom_low_allocation_physical_domains_t domains_ = {};
 };
+
+TEST_F(LowAllocationPhysicalDomainsTest,
+       ReservedAliasDoesNotConsumeNarrowCapacity) {
+  ReserveBroadCandidate(0);
+  IREE_ASSERT_OK(
+      Build({Interval(broad_, 0, 20), Interval(narrow_, 2, 18)}, {0, 1}));
+  const auto broad = Row(0);
+  EXPECT_FALSE(
+      loom_low_allocation_physical_domain_row_candidate_is_reserved(broad, 0));
+  EXPECT_TRUE(
+      loom_low_allocation_physical_domain_row_candidate_is_reserved(broad, 1));
+}
+
+TEST_F(LowAllocationPhysicalDomainsTest,
+       BudgetedGeneralCandidatesDoNotHideNarrowReuse) {
+  LimitClass(broad_, 3);
+  IREE_ASSERT_OK(Build({Interval(broad_, 0, 20), Interval(broad_, 0, 20),
+                        Interval(narrow_, 2, 18)},
+                       {0, 1, 2}));
+  const auto broad = Row(0);
+  EXPECT_TRUE(
+      loom_low_allocation_physical_domain_row_candidate_is_reserved(broad, 0));
+  EXPECT_LT(loom_low_allocation_physical_domain_row_candidate_rank(broad, 1),
+            loom_low_allocation_physical_domain_row_candidate_rank(broad, 2));
+}
 
 TEST_F(LowAllocationPhysicalDomainsTest, TiedNamesReserveOneNarrowCandidate) {
   IREE_ASSERT_OK(Build({Interval(broad_, 0, 20), Interval(narrow_, 2, 18),

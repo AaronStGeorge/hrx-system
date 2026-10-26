@@ -218,6 +218,12 @@ static iree_status_t loom_aie2p_configuration_compile_worker(
     IREE_RETURN_IF_ERROR(loom_low_function_requirements_build(
         request->module, loom_low_func_def_body(function),
         request->scratch_arena, &requirements));
+    loom_aie2p_program_helper_t* direct_helpers = NULL;
+    if (requirements.direct_callees.count != 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          request->scratch_arena, requirements.direct_callees.count,
+          sizeof(*direct_helpers), (void**)&direct_helpers));
+    }
     for (iree_host_size_t i = 0; i < requirements.direct_callees.count; ++i) {
       const loom_symbol_ref_t helper_ref =
           requirements.direct_callees.values[i];
@@ -246,6 +252,18 @@ static iree_status_t loom_aie2p_configuration_compile_worker(
             IREE_STATUS_UNIMPLEMENTED,
             "AIE2P native helpers must be direct, call-free leaves");
       }
+      const loom_target_function_version_t* helper_version =
+          loom_target_function_version_snapshot_at(&emitter->versions,
+                                                   helper_ref.symbol_id);
+      direct_helpers[i] = (loom_aie2p_program_helper_t){
+          .function = helper_ref,
+          .function_target_facts =
+              helper_version ? helper_version->function_target_facts : NULL,
+          .memory_accesses =
+              helper_version ? helper_version->memory_accesses : NULL,
+          .loop_execution =
+              helper_version ? helper_version->loop_execution : NULL,
+      };
     }
     loom_target_compile_report_t report;
     loom_target_compile_report_t* report_ptr = NULL;
@@ -267,8 +285,12 @@ static iree_status_t loom_aie2p_configuration_compile_worker(
     };
     bool compiled = false;
     iree_status_t status = loom_aie2p_program_compile(
-        request->module, function, requirements.direct_callees, &options,
-        request->scratch_arena, &compiled, worker);
+        request->module, function,
+        (loom_aie2p_program_helper_list_t){
+            .values = direct_helpers,
+            .count = requirements.direct_callees.count,
+        },
+        &options, request->scratch_arena, &compiled, worker);
     if (report_ptr) {
       iree_status_t report_status =
           compiled ? loom_target_compile_report_record_entry_report(

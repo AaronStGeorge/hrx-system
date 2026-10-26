@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/descriptor_traits.h"
 #include "loom/codegen/low/schedule/context.h"
 #include "loom/codegen/low/schedule/pressure.h"
 
@@ -159,14 +160,115 @@ static bool loom_low_schedule_setup_order_preserves_required_pressure(
                                LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS);
 }
 
+static bool loom_low_schedule_setup_order_mark_node(
+    loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node) {
+  if (!loom_low_schedule_setup_order_preserves_required_pressure(state, node)) {
+    return false;
+  }
+  node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
+  state->setup_order.has_members = true;
+  return true;
+}
+
+static void loom_low_schedule_setup_order_mark_continuation_source(
+    loom_low_schedule_build_state_t* state, loom_value_ordinal_t source_ordinal,
+    uint32_t producer) {
+  loom_low_schedule_node_t* node = &state->nodes[producer];
+  if (node->descriptor == NULL ||
+      iree_any_bit_set(node->traits, LOOM_TRAIT_OBSERVABLE_EFFECT) ||
+      !loom_low_schedule_value_requires_register(
+          &state->values[source_ordinal])) {
+    return;
+  }
+  // Ordinary replayability cannot justify keeping larger inputs alive in
+  // another pressure domain. Explicit private placement instead records an
+  // allocation failure that requires shortening this partial value's lifetime.
+  const loom_value_ordinal_t* result_ordinals =
+      loom_low_schedule_node_const_result_ordinals(node);
+  for (uint16_t result_index = 0; result_index < node->result_count;
+       ++result_index) {
+    if (result_ordinals[result_index] == source_ordinal &&
+        loom_low_descriptor_result_can_rematerialize(
+            state->target.descriptor_set, node->descriptor, result_index)) {
+      bool requires_register = false;
+      if (loom_low_schedule_setup_order_has_per_user_placement(
+              state, node, &requires_register) ||
+          loom_low_schedule_setup_order_preserves_required_pressure(state,
+                                                                    node)) {
+        node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
+        state->setup_order.has_members = true;
+      }
+      return;
+    }
+  }
+}
+
+// A storage continuation writes one register part while preserving a disjoint
+// part supplied by its tied source. Explicit repair retains the connected
+// partial writes through their completed value's consumer. Ordinary partial
+// writes stay pressure-scheduled: forcing them behind every prerequisite can
+// keep unrelated vector intermediates live while their consumers are blocked.
+static void loom_low_schedule_setup_order_classify_storage_continuation(
+    loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node) {
+  if (node->descriptor == NULL || node->op->tied_result_count == 0) {
+    return;
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->target.descriptor_set;
+  const loom_value_ordinal_t* operand_ordinals =
+      loom_low_schedule_node_const_operand_ordinals(node);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(node->op);
+  for (uint16_t i = 0; i < node->op->tied_result_count; ++i) {
+    const loom_tied_result_t tied = tied_results[i];
+    const loom_low_operand_t* result = loom_low_descriptor_operand(
+        descriptor_set, node->descriptor, tied.result_index);
+    if (!iree_any_bit_set(result->flags,
+                          LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION)) {
+      continue;
+    }
+    const loom_value_ordinal_t source_ordinal =
+        operand_ordinals[tied.operand_index];
+    const uint32_t producer = state->value_producer_nodes[source_ordinal];
+    bool requires_register = false;
+    if (!loom_low_schedule_setup_order_has_per_user_placement(
+            state, node, &requires_register) &&
+        (producer == LOOM_LOW_SCHEDULE_NODE_NONE ||
+         !loom_low_schedule_setup_order_has_per_user_placement(
+             state, &state->nodes[producer], &requires_register))) {
+      continue;
+    }
+    // Input-free constant recipes remain available to pressure scheduling.
+    // Forcing their partial writes behind consumer prerequisites can retain
+    // those inputs while the constant is constructed. Explicit private
+    // placement still orders these nodes through ordinary setup membership.
+    if (node->operand_count == 1 &&
+        loom_low_descriptor_result_can_rematerialize(
+            descriptor_set, node->descriptor, tied.result_index) &&
+        producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
+        state->nodes[producer].descriptor != NULL &&
+        loom_low_descriptor_layout(descriptor_set,
+                                   state->nodes[producer].descriptor)
+                ->op_kind == LOOM_LOW_DESCRIPTOR_OP_KIND_CONST) {
+      continue;
+    }
+    if (!loom_low_schedule_setup_order_mark_node(state, node)) {
+      continue;
+    }
+    if (producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
+        state->nodes[producer].block_index == node->block_index) {
+      loom_low_schedule_setup_order_mark_continuation_source(
+          state, source_ordinal, producer);
+    }
+  }
+}
+
 void loom_low_schedule_setup_order_classify_node(
     loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node,
     bool order_structural_setup) {
+  loom_low_schedule_setup_order_classify_storage_continuation(state, node);
   if (loom_low_schedule_setup_order_is_member(state, node,
-                                              order_structural_setup) &&
-      loom_low_schedule_setup_order_preserves_required_pressure(state, node)) {
-    node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
-    state->setup_order.has_members = true;
+                                              order_structural_setup)) {
+    (void)loom_low_schedule_setup_order_mark_node(state, node);
   }
 }
 

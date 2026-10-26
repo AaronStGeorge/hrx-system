@@ -165,10 +165,11 @@ static bool loom_low_schedule_candidate_defers_storage_setup(
          !advances_retained_unspillable_value && !advances_completion;
 }
 
-// A pinned completion can require several leaves before its consumer is ready.
-// Preserve that progress while their physical bank has headroom. Once a leaf
-// grows its bank beyond capacity, cone membership alone is insufficient: memory
-// or target-state ordering can still block its consumer behind earlier work.
+// A pinned completion can require several input-free setup operations before
+// its consumer is ready. Preserve that progress while their physical bank has
+// headroom. Once setup grows its bank beyond capacity, cone membership alone is
+// insufficient: memory or target-state ordering can still block its consumer
+// behind earlier work.
 static bool loom_low_schedule_candidate_defers_rematerializable_leaf(
     loom_low_schedule_candidate_compare_mode_t compare_mode,
     const loom_low_schedule_candidate_score_t* score) {
@@ -179,7 +180,7 @@ static bool loom_low_schedule_candidate_defers_rematerializable_leaf(
   uint16_t actionable_flags =
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR |
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXACT_PACKING_COMPLETION;
-  // A private repair leaf can expose another setup without making its final
+  // An input-free leaf can expose another setup without making its final
   // consumer ready. Completion-path membership does not justify opening that
   // live range when it incurs debt; retain its demand-driven placement.
   if (score->pressure_risk != LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT ||

@@ -10,6 +10,7 @@
 
 #include "iree/base/internal/math.h"
 #include "loom/codegen/low/allocation/edge_affinity.h"
+#include "loom/codegen/low/allocation/ordinal_component.h"
 #include "loom/codegen/low/allocation/unit_location.h"
 #include "loom/codegen/low/representation_binding.h"
 #include "loom/codegen/low/storage_relation.h"
@@ -1603,6 +1604,13 @@ static iree_status_t loom_low_placement_build(
   IREE_ASSERT_EQ(state->appended_source_relation_count, relation_count);
   IREE_ASSERT_EQ(state->appended_edge_relation_count,
                  state->edge_relation_count);
+  loom_low_allocation_ordinal_components_t ordinal_components = {0};
+  if (state->hard_location_relation_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_ordinal_components_build(
+        value_count, state->tied_storage_origins_by_value_ordinal,
+        state->relations, relation_count, state->arena, state->scratch_arena,
+        &ordinal_components));
+  }
   IREE_RETURN_IF_ERROR(loom_low_placement_build_storage_value_order(state));
   IREE_RETURN_IF_ERROR(
       loom_low_placement_index_preferences(state, out_preferences));
@@ -1637,6 +1645,11 @@ static iree_status_t loom_low_placement_build(
       .storage_value_order_count = state->storage_value_order_count,
       .tied_storage_origins_by_value_ordinal =
           state->tied_storage_origins_by_value_ordinal,
+      .hard_register_ordinal_components_by_value_ordinal =
+          ordinal_components.indices_by_value_ordinal,
+      .hard_register_ordinal_ranges = ordinal_components.ranges,
+      .hard_register_ordinal_members = ordinal_components.members,
+      .hard_register_ordinal_component_count = ordinal_components.count,
       .operand_constraints_by_interval = state->operand_constraints_by_interval,
   };
   return loom_low_placement_captures_build(state->liveness, out_table,

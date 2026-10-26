@@ -171,6 +171,33 @@ loom_low_placement_relation_range_for_source_value_ordinal(
   return table->ranges_by_source_ordinal[source_ordinal];
 }
 
+loom_low_placement_value_component_t
+loom_low_placement_hard_register_ordinal_component(
+    const loom_low_placement_table_t* table,
+    loom_value_ordinal_t value_ordinal) {
+  IREE_ASSERT_LT(value_ordinal, table->value_count);
+  if (table->hard_register_ordinal_components_by_value_ordinal == NULL) {
+    return (loom_low_placement_value_component_t){
+        .index = UINT32_MAX,
+    };
+  }
+  const uint32_t component_index =
+      table->hard_register_ordinal_components_by_value_ordinal[value_ordinal];
+  if (component_index == UINT32_MAX) {
+    return (loom_low_placement_value_component_t){
+        .index = UINT32_MAX,
+    };
+  }
+  IREE_ASSERT_LT(component_index, table->hard_register_ordinal_component_count);
+  const loom_low_placement_value_range_t range =
+      table->hard_register_ordinal_ranges[component_index];
+  return (loom_low_placement_value_component_t){
+      .members = table->hard_register_ordinal_members + range.start,
+      .count = range.count,
+      .index = component_index,
+  };
+}
+
 loom_value_id_t loom_low_placement_value_id(
     const loom_low_placement_table_t* table,
     loom_value_ordinal_t value_ordinal) {

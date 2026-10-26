@@ -12,6 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/liveness.h"
+#include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/allocation/unit_liveness.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/placement.h"
@@ -98,12 +99,15 @@ loom_low_allocation_physical_domains_for_interval(
     const loom_liveness_analysis_t* liveness,
     const loom_liveness_interval_t* interval);
 
-// Builds preferences from final producer-owned placement and unit liveness.
-// Inputs are borrowed; all retained storage belongs to |arena|. Construction
-// scratch is released before returning. Changed input facts require rebuilding
-// the plan. Linear classes and aggregate views have no preference rows.
+// Builds preferences from final producer-owned placement, unit liveness, and
+// target constraints. Whole-function budgets and reserved ranges remove
+// unavailable physical candidates before overlapping-domain capacity is
+// planned. Inputs are borrowed; all retained storage belongs to |arena|.
+// Construction scratch is released before returning. Changed input facts
+// require rebuilding the plan. Linear classes and aggregate views have no
+// preference rows.
 iree_status_t loom_low_allocation_physical_domains_build(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_target_constraints_t* target_constraints,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_unit_liveness_t* unit_liveness,
     const loom_low_placement_table_t* placement, iree_arena_allocator_t* arena,

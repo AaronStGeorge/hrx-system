@@ -687,6 +687,7 @@ def emit_source_for_views(
                 f".flags = {c_spelling.flag_expr(resource.flags)},",
                 f".member_start = {resource.member_start},",
                 f".member_count = {resource.member_count},",
+                f".capacity_member_index = {resource.capacity_member_index},",
             ]
             for resource in compiled.register_packing_resources
         ],
@@ -701,7 +702,6 @@ def emit_source_for_views(
                 f".reg_class_id = {member.reg_class_id},",
                 f".register_unit_count = {member.register_unit_count},",
                 f".resource_unit_count = {member.resource_unit_count},",
-                f".flags = {c_spelling.flag_expr(member.flags)},",
             ]
             for member in compiled.register_packing_resource_members
         ],

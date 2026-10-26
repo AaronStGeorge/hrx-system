@@ -427,3 +427,35 @@ low.func.def target<test.low.core>(@target) @coindexed_result_peer(%live: reg<te
 value %live: test.coindexed.partner -> physical_register[2:1]
 value %primary: test.packed.narrow -> physical_register[1:1]
 value %partner: test.coindexed.partner -> physical_register[3:1]
+
+// ====
+
+// The first tuple initially chooses ordinal zero. The later tuple cannot use
+// ordinal one while its partner overlaps the fixed r3 value, and its primary
+// cannot use ordinal zero while the first primary remains live. Recolor the
+// complete first tuple to ordinal one before assigning the second tuple.
+// RUN: emit low-allocation-query @recolor_coindexed_tuple values=%blocker,%a_primary,%w_primary,%w_partner,%a_partner fixed=%blocker:physical_register:3:1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @recolor_coindexed_tuple(%blocker: reg<test.coindexed.partner>) -> (reg<test.packed.narrow>, reg<test.coindexed.partner>, reg<test.packed.narrow>, reg<test.coindexed.partner>) asm {
+  %a_primary = test.const.packed.narrow 1
+  %w_primary = test.const.packed.narrow 2
+  %w_partner_seed = test.const.i32 3
+  %w_partner = copy %w_partner_seed : reg<test.i32> -> reg<test.coindexed.partner>
+  %blocker_value = copy %blocker : reg<test.coindexed.partner> -> reg<test.explicit32>
+  %blocker_virtual = copy %blocker_value : reg<test.explicit32> -> reg<test.i32>
+  test.event.memory.write.i32 %blocker_virtual
+  %a_partner_seed = test.const.i32 4
+  %a_partner = copy %a_partner_seed : reg<test.i32> -> reg<test.coindexed.partner>
+  test.coindexed.operands %w_primary, %w_partner
+  test.coindexed.operands %a_primary, %a_partner
+  return %a_primary, %a_partner, %w_primary, %w_partner
+}
+
+// ----
+value %blocker: test.coindexed.partner -> physical_register[3:1]
+value %a_primary: test.packed.narrow -> physical_register[1:1]
+value %w_primary: test.packed.narrow -> physical_register[0:1]
+value %w_partner: test.coindexed.partner -> physical_register[2:1]
+value %a_partner: test.coindexed.partner -> physical_register[3:1]

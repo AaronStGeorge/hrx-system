@@ -18,6 +18,18 @@
 extern "C" {
 #endif
 
+// One module-internal native helper cloned into the resident module.
+typedef struct loom_aie2p_array_resident_helper_t {
+  // Module-local symbol naming the cloned helper definition.
+  loom_symbol_ref_t entry;
+  // Invocation target facts borrowed from the source helper version.
+  const loom_target_facts_t* function_target_facts;
+  // Module-owned memory proofs translated to cloned helper operations.
+  loom_low_memory_access_map_t* memory_accesses;
+  // Module-owned loop facts translated to cloned helper controls.
+  loom_low_loop_execution_map_t* loop_execution;
+} loom_aie2p_array_resident_helper_t;
+
 // One materialized resident worker program.
 typedef struct loom_aie2p_array_resident_worker_t {
   // Index of the logical and physically planned worker.
@@ -32,8 +44,10 @@ typedef struct loom_aie2p_array_resident_worker_t {
   loom_low_memory_access_map_t* memory_accesses;
   // Module-owned loop facts translated into the resident invocation.
   loom_low_loop_execution_map_t* loop_execution;
-  // Direct helper symbols remapped into the resident module.
-  loom_symbol_ref_array_t direct_callees;
+  // Direct helpers remapped into the resident module in source call order.
+  const loom_aie2p_array_resident_helper_t* direct_helpers;
+  // Number of records in |direct_helpers|.
+  iree_host_size_t direct_helper_count;
 } loom_aie2p_array_resident_worker_t;
 
 // Materialized resident core programs for one physical array plan.

@@ -48,6 +48,42 @@ from loom.target.low_descriptors import (
 )
 
 _TARGET_KEY = "amd.xdna.aie2p"
+# State-free scalar leaves can be replayed at each consumer instead of keeping
+# their result live through unrelated register pressure. Carry/sticky-state,
+# tied-ownership, and architectural-state forms are deliberately absent: their
+# replay needs the corresponding state or ownership recipe rather than this
+# leaf contract.
+_STATE_FREE_SCALAR_REMATERIALIZABLE_KEYS = frozenset(
+    f"{_TARGET_KEY}.{suffix}"
+    for suffix in (
+        "add.no-carry.i32",
+        "add.no-carry.i32.immediate",
+        "mul.i32",
+        "and.i32",
+        "or.i32",
+        "xor.i32",
+        "ashl.i32",
+        "lshl.i32",
+        "clz.i32",
+        "popcount.i32",
+        "select.zero.i32",
+        "select.nonzero.i32",
+        "extend.signed.i8",
+        "extend.signed.i16",
+        "extend.unsigned.i8",
+        "extend.unsigned.i16",
+        "cmp.eq.i32",
+        "cmp.ne.i32",
+        "cmp.eqz.i32",
+        "cmp.nez.i32",
+        "cmp.slt.i32",
+        "cmp.sge.i32",
+        "cmp.ult.i32",
+        "cmp.uge.i32",
+        "cmp.slt.i32.select",
+        "cmp.ult.i32.select",
+    )
+)
 # AIEBaseInstrInfo's conservative lock model at LLVM_AIE_SCHEDULE_SOURCE_COMMIT
 # in core_schedule_data.py. AIE2P inherits these core stall/resume cycles and
 # uses the itinerary memory cycles for lock ordering; these are not calibration
@@ -1697,17 +1733,6 @@ _BASE_DESCRIPTOR_SPECS = (
         (("dst", "eR"),),
         DescriptorOpKind.CONST,
     ),
-    # Channel acquire deltas span the complete resident worker and are reused
-    # by every lock acquire. Keep this planner-owned materialization resident;
-    # ordinary constants remain rematerializable under register pressure.
-    _DescriptorSpec(
-        "MOV_alu_mv_mv_mv_cg",
-        f"{_TARGET_KEY}.lock.acquire-delta.i32",
-        "synchronization.lock.acquire-delta.i32",
-        "II_MOV_alu_mv_mv_mv_cg_eR",
-        (("dst", "eR"),),
-        asm_mnemonic="mov.acquire-delta",
-    ),
     _DescriptorSpec(
         "MOV_alu_mv_mv_mv_cg",
         f"{_TARGET_KEY}.constant.i32.shift",
@@ -2078,6 +2103,23 @@ _ASM_MNEMONIC_BY_FORM = {
 _MACHINE_FORMS = {form.name: form for form in CORE_MACHINE_TABLE.forms}
 
 
+def _with_state_free_scalar_rematerialization(
+    specifications: tuple[_DescriptorSpec, ...],
+) -> tuple[_DescriptorSpec, ...]:
+    """Marks deterministic scalar leaves for pressure-driven replay."""
+
+    result = []
+    for spec in specifications:
+        if spec.key not in _STATE_FREE_SCALAR_REMATERIALIZABLE_KEYS:
+            result.append(spec)
+            continue
+        flags = spec.flags
+        if DescriptorFlag.SAFE_TO_SPECULATE not in flags:
+            flags = (*flags, DescriptorFlag.SAFE_TO_SPECULATE)
+        result.append(replace(spec, flags=flags, rematerializable=True))
+    return tuple(result)
+
+
 def _with_ordered_memory_variants(
     specifications: tuple[_DescriptorSpec, ...],
 ) -> tuple[_DescriptorSpec, ...]:
@@ -2106,7 +2148,9 @@ def _with_ordered_memory_variants(
 
 
 _DESCRIPTOR_SPECS = (
-    *_with_ordered_memory_variants(_BASE_DESCRIPTOR_SPECS),
+    *_with_ordered_memory_variants(
+        _with_state_free_scalar_rematerialization(_BASE_DESCRIPTOR_SPECS)
+    ),
     *_scalar_stream_descriptor_specs(),
     *_cascade_descriptor_specs(),
     *_cascade_matrix_descriptor_specs(_DENSE_MATRIX_DESCRIPTOR_SPECS),

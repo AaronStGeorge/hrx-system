@@ -270,6 +270,7 @@ class TargetCallgraphSpecializationTest : public ::testing::Test {
     IREE_CHECK_OK(loom_target_callgraph_specialization_run(&pass, module));
     const bool changed = pass.changed;
     iree_arena_deinitialize(&pass_arena);
+    iree_arena_block_pool_trim(&block_pool_);
     return changed;
   }
 
@@ -430,6 +431,17 @@ func.def public @wide() -> (index) {
   EXPECT_EQ(
       middle64_version->function_target_facts->storage.export_plan.abi_kind,
       LOOM_TARGET_ABI_UNKNOWN);
+  // Run has released pass scratch. Export facts still own the concrete names
+  // used by later lowering, emission, and diagnostics for both clone levels.
+  for (const loom_symbol_ref_t ref :
+       {middle32_ref, middle64_ref, leaf32_ref, leaf64_ref}) {
+    const loom_target_function_version_t* version =
+        Version(module.get(), specialization.function_versions, ref);
+    const iree_string_view_t name = loom_string_table_get(
+        &module->strings, module->symbols.entries[ref.symbol_id].name_id);
+    EXPECT_TRUE(iree_string_view_equal(
+        version->function_target_facts->storage.export_plan.name, name));
+  }
   EXPECT_FALSE(loom_symbol_ref_is_valid(loom_func_like_target(middle32)));
   EXPECT_FALSE(loom_symbol_ref_is_valid(loom_func_like_target(middle64)));
 

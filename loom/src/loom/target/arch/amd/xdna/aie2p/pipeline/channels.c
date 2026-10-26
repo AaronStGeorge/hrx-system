@@ -59,9 +59,9 @@ typedef struct loom_aie2p_native_channel_emitter_t {
   loom_value_id_t origin;
   // Final completion publication followed by a quiescent stream wait.
   loom_symbol_ref_t complete;
-  // Canonical consuming-credit delta shared by all inlined lock helpers.
+  // Canonical consuming-credit delta supplied to lock helpers.
   loom_value_id_t acquire_delta;
-  // Canonical single-credit completion delta shared by lock helpers.
+  // Canonical single-credit completion delta supplied to lock helpers.
   loom_value_id_t release_delta;
 } loom_aie2p_native_channel_emitter_t;
 
@@ -131,12 +131,9 @@ static iree_status_t loom_aie2p_native_acquire_delta_helper(
   const loom_type_t scalar_type = context->scalar_type;
   IREE_RETURN_IF_ERROR(loom_aie2p_worker_helper(
       context, NULL, 0, &scalar_type, 1, &builder, out_symbol, &function));
-  const loom_named_attr_t attribute = {.name_id = context->integer_name,
-                                       .value = loom_attr_i64(-1)};
   loom_value_id_t delta;
-  IREE_RETURN_IF_ERROR(loom_aie2p_worker_op(
-      context, &builder, AIE2P_CORE_DESCRIPTOR_REF_LOCK_ACQUIRE_DELTA_I32, NULL,
-      0, loom_make_named_attr_slice(&attribute, 1), &scalar_type, &delta));
+  IREE_RETURN_IF_ERROR(
+      loom_aie2p_worker_constant(context, &builder, -1, &delta));
   return loom_aie2p_worker_return(&builder, &delta, 1);
 }
 
@@ -387,15 +384,18 @@ iree_status_t loom_aie2p_native_emit_worker(
   IREE_RETURN_IF_ERROR(
       loom_aie2p_native_materialize_buffer_accesses(context, rewriter, worker));
   const loom_type_t delta_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
-  // Establish one canonical +/-1 pair in every channel-bearing worker. Source
-  // CSE also reuses +1 for cursor and loop arithmetic when completions publish
-  // multiple credits, avoiding independent constants in the resident program.
+  // Establish one canonical +/-1 pair in every channel-bearing worker. Both
+  // lower to replayable constants: low-pressure workers retain and reuse them,
+  // while constrained workers can materialize them at lock-helper calls instead
+  // of consuming call-preserved registers across the complete worker. The
+  // acquire helper introduces its target-typed constant after helper expansion;
+  // release +1 remains available to source cursor and loop arithmetic.
   if (endpoint_count != 0) {
-    loom_op_t* delta;
-    IREE_RETURN_IF_ERROR(
-        loom_scalar_constant_build(&rewriter->builder, loom_attr_i64(1),
-                                   delta_type, LOOM_LOCATION_UNKNOWN, &delta));
-    emitter.release_delta = loom_scalar_constant_result(delta);
+    loom_op_t* release_delta;
+    IREE_RETURN_IF_ERROR(loom_scalar_constant_build(
+        &rewriter->builder, loom_attr_i64(1), delta_type, LOOM_LOCATION_UNKNOWN,
+        &release_delta));
+    emitter.release_delta = loom_scalar_constant_result(release_delta);
     loom_symbol_ref_t helper;
     IREE_RETURN_IF_ERROR(loom_aie2p_native_acquire_delta_helper(code, &helper));
     IREE_RETURN_IF_ERROR(loom_aie2p_native_invoke(&rewriter->builder, helper,

@@ -222,6 +222,24 @@ typedef struct loom_low_placement_relation_range_t {
   uint32_t count;
 } loom_low_placement_relation_range_t;
 
+// Contiguous local-value ordinal slice retained by placement analysis.
+typedef struct loom_low_placement_value_range_t {
+  // First value ordinal in the containing table's packed member array.
+  uint32_t start;
+  // Number of value ordinals in the slice.
+  uint32_t count;
+} loom_low_placement_value_range_t;
+
+// Borrowed members of one transitive hard register-ordinal component.
+typedef struct loom_low_placement_value_component_t {
+  // Local value ordinals in the component, including tied-storage aliases.
+  const loom_value_ordinal_t* members;
+  // Number of entries in |members|.
+  uint32_t count;
+  // Dense component index, or UINT32_MAX when the value is unconstrained.
+  uint32_t index;
+} loom_low_placement_value_component_t;
+
 // Operand requirements combined across every use of one live interval.
 typedef struct loom_low_placement_operand_constraints_t {
   // Smallest LOW_SUBSET addressable extent, or zero for no low-window bound.
@@ -329,6 +347,17 @@ typedef struct loom_low_placement_table_t {
   // ordinal. Unconnected values name themselves. NULL when the function has no
   // tied storage.
   const loom_value_ordinal_t* tied_storage_origins_by_value_ordinal;
+  // Hard register-ordinal component index by local value ordinal. Tied-storage
+  // aliases share their origin's component. UINT32_MAX denotes no constraint;
+  // NULL denotes a function without hard register-ordinal constraints.
+  const uint32_t* hard_register_ordinal_components_by_value_ordinal;
+  // Packed member ranges indexed by hard register-ordinal component.
+  const loom_low_placement_value_range_t* hard_register_ordinal_ranges;
+  // Local value ordinals packed by |hard_register_ordinal_ranges|. Every tied
+  // alias is retained so allocation can relocate all published assignments.
+  const loom_value_ordinal_t* hard_register_ordinal_members;
+  // Number of entries in |hard_register_ordinal_ranges|.
+  uint32_t hard_register_ordinal_component_count;
   // Operand requirements indexed by liveness interval. Exact tied-storage
   // components share their strongest requirements. NULL when unconstrained;
   // optional slice/concat aliases are checked at their concrete derived base.
@@ -436,6 +465,14 @@ loom_low_placement_relation_range_t
 loom_low_placement_relation_range_for_source_value_ordinal(
     const loom_low_placement_table_t* table,
     loom_value_ordinal_t source_ordinal);
+
+// Returns the retained transitive hard register-ordinal component containing
+// |value_ordinal|. An unconstrained value returns an empty component with an
+// invalid index. The returned member slice is borrowed from |table|.
+loom_low_placement_value_component_t
+loom_low_placement_hard_register_ordinal_component(
+    const loom_low_placement_table_t* table,
+    loom_value_ordinal_t value_ordinal);
 
 // Returns the local value ID for |value_ordinal|.
 loom_value_id_t loom_low_placement_value_id(
