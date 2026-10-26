@@ -44,7 +44,11 @@
             <span
               class="peak"
               title="Highest full five-second average observed in this page session."
-              >peak <b id="output-peak">—</b></span
+              >peak <b id="output-peak">—</b><br /><span
+                class="average"
+                title="Lifetime average, including idle time; independent of this page session."
+                >avg <b id="output-average">—</b></span
+              ></span
             >
           </div>
           <canvas
@@ -63,7 +67,11 @@
             <span
               class="peak"
               title="Highest full five-second average observed in this page session."
-              >peak <b id="input-peak">—</b></span
+              >peak <b id="input-peak">—</b><br /><span
+                class="average"
+                title="Lifetime average, including idle time; independent of this page session."
+                >avg <b id="input-average">—</b></span
+              ></span
             >
           </div>
           <canvas
@@ -79,7 +87,11 @@
             <span
               class="peak"
               title="Highest full five-second average observed in this page session."
-              >peak <b id="request-peak">—</b></span
+              >peak <b id="request-peak">—</b><br /><span
+                class="average"
+                title="Lifetime average, including idle time; independent of this page session."
+                >avg <b id="request-average">—</b></span
+              ></span
             >
           </div>
           <canvas
@@ -93,23 +105,30 @@
         </article>
         <article
           class="stat"
-          title="Current request ownership, not device utilization. Short requests can finish between observations."
+          title="Arrivals counted between observations, including requests that finish between samples. Buckets close after at least one second; this is work, not peak concurrency."
         >
-          <div class="stat-label">Active requests <span>now</span></div>
+          <div class="stat-label">
+            Requests received <span id="activity-span">~1s bucket</span>
+          </div>
           <div class="stat-value violet">
-            <strong id="active">—</strong><span>in flight</span>
+            <strong id="activity">—</strong><span>requests</span>
             <span
               class="peak"
-              title="Highest sampled active count in this page session; requests may finish between samples."
-              >peak <b id="active-peak">—</b></span
+              title="Largest observed arrival bucket in this page session, not peak concurrency."
+              >peak <b id="activity-peak">—</b></span
             >
           </div>
           <canvas
-            id="active-spark"
-            aria-label="Current active request history"
+            id="activity-spark"
+            aria-label="Received requests per observation bucket"
           ></canvas>
           <small
-            ><span id="queued">—</span> queued ·
+            ><span id="active">—</span> active ·
+            <span
+              title="Highest sampled concurrent active count; short requests may finish between samples."
+              >peak <span id="active-peak">—</span></span
+            >
+            · <span id="queued">—</span> queued ·
             <span id="held">—</span> held</small
           >
         </article>
@@ -191,20 +210,20 @@
         </article>
         <article
           class="panel"
-          title="Point-in-time samples can miss requests that finish between observations."
+          title="Exact differences of cumulative request counters over nonoverlapping, roughly one-second intervals. Finishes include success, rejection, cancellation, and failure. These are request counts, not concurrent activity."
         >
           <div class="panel-heading">
             <h2>Request activity</h2>
-            <span class="muted">sampled now</span>
+            <span class="muted">requests · ~1s buckets</span>
           </div>
           <div class="legend">
-            <span class="violet">● Active</span
-            ><span class="orange">● Queued + held</span>
+            <span class="violet">● Received</span
+            ><span class="orange">● Finished</span>
           </div>
           <canvas
             id="activity-flow"
             class="chart"
-            aria-label="Current active and waiting requests"
+            aria-label="Received and finished requests per observation bucket"
           ></canvas>
           <div class="chart-footer">
             <span>−30s</span><span>−22.5s</span><span>−15s</span
@@ -217,7 +236,7 @@
           <div class="models-heading">
             <h2>Models <span id="model-count">0</span></h2>
             <span class="muted"
-              >Rates: 5s avg · counts: now or lifetime totals</span
+              >Rates: 5s · avg: lifetime · peak: observed</span
             >
           </div>
           <div id="model-grid" class="model-grid">

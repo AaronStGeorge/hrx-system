@@ -45,7 +45,7 @@ parameter, session, or ring pointer survives that synchronous copy.
 configuration; native clients can omit Origin. A text frame contains:
 
 ```json
-{"version":1,"server":"1790000000000000000:1","sequence":"1","page":{"type":"server","model_capacity":32,"counters":null},"time_ns":"1000000000","revision":"1","previous_revision":"0","previous_time_ns":"0"}
+{"version":1,"server":"1790000000000000000:1","sequence":"1","page":{"type":"server","model_capacity":32,"counters":null,"since_ns":null},"time_ns":"1000000000","revision":"1","previous_revision":"0","previous_time_ns":"0"}
 ```
 
 The client applies the page, then sends a text frame containing only its
@@ -59,6 +59,15 @@ Model pages have `type:"models"`, a half-open `[first,next)` slot range,
 common counters, and source-owned `topics`. All 64-bit counters, times, and
 incarnations are decimal strings. The browser differences counters as `BigInt`
 before converting an interval into a plotted rate.
+
+Server and model sources carry an immutable `since_ns` counter epoch, or null
+when unavailable. Model stream construction establishes its zero-counter epoch.
+The registry retains its construction time or the earliest borrowed stream epoch;
+an unclocked borrowed source makes the aggregate epoch unavailable. Removed
+registrations' counters remain in the aggregate with that same epoch. Lifetime
+averages divide the cumulative count by elapsed time since this epoch, including
+idle time. They require no viewer baseline and survive reconnects and reloads.
+The epoch is a source fact, not a changing uptime field that defeats coalescing.
 
 A content change starts a sweep; unchanged snapshots do not produce traffic.
 After a sweep, small `type:"heartbeat"` pages advance sampled unchanged state
@@ -91,8 +100,20 @@ counter reset, non-increasing time, or an unobserved gap longer than the window
 clears that baseline. Revision-qualified unchanged intervals bridge quiet periods
 so the first burst after idleness remains measurable. Rates are never unweighted
 means of differently sized intervals.
+
+Request activity uses the same exact cumulative counters, not sampled concurrency.
+Two scalar accumulators count arrivals and all terminal outcomes in nonoverlapping
+intervals. Each closes at the first observation at least one second after its
+baseline; the received-request card displays the actual interval. Completed
+buckets remain visible while the next interval accumulates. The chart records
+their counts at interval endpoints without assigning individual event times.
+Long unobserved gaps and reconnects start new baselines; revision-qualified idle
+intervals preserve the first burst after quiet. This adds no producer work or
+network traffic and reuses the two fixed activity history rings.
+
 Rate peaks require a complete five-second window, excluding short warm-up
-intervals. Gauge peaks retain the highest received value. Peaks persist across
+intervals. Activity peaks retain the largest received-request bucket, not maximum
+concurrency. Gauge peaks retain the highest received value. Peaks persist across
 idleness and reconnects in this page session; server replacement resets global
 peaks and model incarnation replacement resets that model's peaks.
 

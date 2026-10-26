@@ -23,9 +23,17 @@ loom-serve --device=task --pool_backing=fixed \
 The dashboard is embedded in the executable: no frontend installation,
 external assets, database, or second listener. Models appear as they register.
 Token and completion rates use a five-second rolling window, with the available
-observed duration during warm-up. Serving mix shows recent completions by
-modality. Active and queued requests remain current samples: short requests can
-finish between observations even while throughput is nonzero. Per-model
+observed duration during warm-up. Lifetime averages divide cumulative work by
+elapsed source lifetime, including idle time and work before the page opened.
+They survive reloads and reconnects; a source without a known start time leaves
+its average unavailable. Serving mix shows recent completions by modality.
+
+Request activity counts arrivals and finishes in roughly one-second buckets, so
+short requests remain visible even when they finish between observations. Each
+bucket closes on a real sample after at least one second; the received-request
+card shows its actual duration. Finishes include all outcomes, while completion
+throughput counts only successes. These are counts of work, not concurrency.
+Active, queued, and held requests remain separate current samples. Per-model
 sparklines, logical KV occupancy, cache counts, and expandable source counters
 come from the running services. Logical KV positions are not physical RAM usage;
 elastic text-state bytes exclude fixed buffers, weights, and workspace. A modality
@@ -37,7 +45,8 @@ then backs off to once per minute while idle. New activity still appears at the
 normal sampling cadence; it does not wait for the idle heartbeat.
 
 Observed peaks remain visible after work finishes: rate peaks use full
-five-second windows, while activity and occupancy peaks use received samples.
+five-second windows, activity peaks count observed buckets, and active/occupancy
+peaks use received gauges.
 Peaks belong to this browser page session, survive pause/reconnect, and reset
 when the server or corresponding model is replaced. They describe observed work,
 not a benchmark of the server's maximum capacity.
@@ -48,7 +57,8 @@ value, not new samples. **Scroll off** keeps the last activity window visible
 while counters and peaks continue updating. Neither mode adds network traffic.
 The time-range button switches between 30 seconds and two minutes.
 Pause or a hidden tab releases the live connection. Resuming reads current
-state; it does not replay work that happened while disconnected.
+state; rolling rates and activity buckets do not replay work that happened while
+disconnected. Lifetime averages still include that work and elapsed time.
 
 `--observation_origin` is repeatable and matches the exact browser origin,
 including scheme and port. It is a cross-origin check, not authentication.

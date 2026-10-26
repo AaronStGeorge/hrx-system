@@ -177,7 +177,8 @@ header {
 .stat-value .peak {
   margin-left: auto;
 }
-.peak {
+.peak,
+.average {
   color: var(--muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -187,7 +188,8 @@ header {
   color: #c0c6d0;
   font-weight: 500;
 }
-.model-metrics .peak {
+.model-metrics .peak,
+.model-metrics .average {
   margin-left: 7px;
 }
 .stat canvas {

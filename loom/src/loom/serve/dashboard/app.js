@@ -9,6 +9,7 @@ const COLORS = {
   errors: "#f58c97",
 };
 const RATE_WINDOW_NS = 5000000000n;
+const ACTIVITY_BUCKET_NS = 1000000000n;
 let windowMs = 30000;
 const decimalFormat = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 1,
@@ -114,11 +115,71 @@ class CounterRate {
   }
 }
 
+// Nonoverlapping count intervals close on real observations, never interpolated
+// event times. The actual interval can exceed one second by the sampling delay.
+// Retaining the completed bucket avoids replacing a burst with partial zeros.
+class CounterBucket {
+  constructor() {
+    this.peak = NaN;
+    this.reset();
+  }
+  reset() {
+    this.lastTime = undefined;
+    this.value = NaN;
+    this.duration = 0n;
+  }
+  push(time, raw, unchangedUntil = 0n) {
+    if (raw === undefined || raw === null) {
+      this.reset();
+      return true;
+    }
+    const value = BigInt(raw);
+    if (this.lastTime !== undefined) {
+      if (time <= this.lastTime || value < this.lastValue) this.reset();
+      else if (time - this.lastTime > RATE_WINDOW_NS) {
+        if (unchangedUntil >= time - ACTIVITY_BUCKET_NS) {
+          this.start = time - ACTIVITY_BUCKET_NS;
+          this.baseline = this.lastValue;
+        } else this.reset();
+      }
+    }
+    const first = this.lastTime === undefined;
+    this.lastTime = time;
+    this.lastValue = value;
+    if (first) {
+      this.start = time;
+      this.baseline = value;
+      return true;
+    }
+    if (time - this.start < ACTIVITY_BUCKET_NS) return false;
+    this.value = Number(value - this.baseline);
+    this.duration = time - this.start;
+    this.start = time;
+    this.baseline = value;
+    this.peak = Math.max(this.peak || 0, this.value);
+    return true;
+  }
+}
+
+function lifetimeRate(time, since, raw) {
+  if (
+    since === undefined ||
+    since === null ||
+    raw === undefined ||
+    raw === null
+  )
+    return NaN;
+  const elapsed = time - BigInt(since);
+  return elapsed > 0n ? Number(BigInt(raw)) / (Number(elapsed) / 1e9) : NaN;
+}
+
 const $ = (id) => document.getElementById(id);
 const format = (value) =>
   Number.isFinite(value)
     ? (value < 10 ? decimalFormat : integerFormat).format(value)
     : "—";
+const formatAverage = (value) =>
+  value > 0 && value < 0.1 ? value.toPrecision(2) : format(value);
 const integer = (value) => integerFormat.format(BigInt(value));
 const scaled = (value, base, units) => {
   if (!Number.isFinite(value)) return "—";
@@ -131,7 +192,7 @@ const scaled = (value, base, units) => {
 };
 const bytes = (value) => scaled(value, 1024, ["B", "KiB", "MiB", "GiB", "TiB"]);
 const history = Object.fromEntries(
-  ["output", "input", "requests", "active", "queued", "kv", "errors"].map(
+  ["output", "input", "requests", "arrivals", "finishes", "kv", "errors"].map(
     (key) => [key, new Ring()],
   ),
 );
@@ -143,6 +204,11 @@ const serverRates = Object.fromEntries(
     new CounterRate(),
   ]),
 );
+const serverBuckets = {
+  arrivals: new CounterBucket(),
+  finishes: new CounterBucket(),
+};
+let activePeak = 0;
 let socket;
 let paused = false;
 let scrolling = true;
@@ -304,8 +370,8 @@ function redraw(all = false) {
     draw(
       $("activity-flow"),
       [
-        [history.active, COLORS.active],
-        [history.queued, COLORS.input],
+        [history.arrivals, COLORS.active],
+        [history.finishes, COLORS.input],
       ],
       now,
       true,
@@ -314,7 +380,7 @@ function redraw(all = false) {
       ["output-spark", "output", COLORS.output],
       ["input-spark", "input", COLORS.input],
       ["request-spark", "requests", COLORS.input],
-      ["active-spark", "active", COLORS.active],
+      ["activity-spark", "arrivals", COLORS.active],
       ["kv-spark", "kv", COLORS.memory],
       ["error-spark", "errors", COLORS.errors],
     ])
@@ -354,6 +420,7 @@ function createModel(model) {
         : "Batches";
   const numbers = {};
   const peaks = {};
+  const averages = {};
   for (const [key, label] of Object.entries({
     active: "Active now",
     queued: "Queued + held",
@@ -371,6 +438,13 @@ function createModel(model) {
         "Observed peak in this page session; rates require a full five-second window.";
       item.append(peak);
       peaks[key] = peak;
+    }
+    if (key === "work" || key === "requests") {
+      const average = element("span", "average", "avg —");
+      average.title =
+        "Lifetime average, including idle time; independent of this page session.";
+      item.append(average);
+      averages[key] = average;
     }
     metrics.append(item);
     numbers[key] = value;
@@ -400,6 +474,7 @@ function createModel(model) {
     phase,
     numbers,
     peaks,
+    averages,
     activePeak: 0,
     queuedPeak: 0,
     canvas,
@@ -504,6 +579,8 @@ function updateModel(model, time, timeNs, version, recordHistory) {
     : "—";
   state.numbers.requests.textContent = format(state.requests);
   state.numbers.work.textContent = format(workRate);
+  state.averages.work.textContent = `avg ${formatAverage(lifetimeRate(timeNs, model.since_ns, workTotal))}`;
+  state.averages.requests.textContent = `avg ${formatAverage(lifetimeRate(timeNs, model.since_ns, model.counters?.completed))}`;
   state.numbers.total.textContent =
     workTotal === undefined ? "—" : integer(workTotal);
   const capacity = value("text.pool_capacity");
@@ -578,6 +655,8 @@ function summarize(time, recordHistory) {
     hasCache ||= state.fields.has("text.session_cache_endpoints");
   }
   $("active").textContent = format(active);
+  activePeak = Math.max(activePeak, active);
+  $("active-peak").textContent = format(activePeak);
   $("queued").textContent = format(queued);
   $("held").textContent = format(held);
   const occupancy = capacity ? (100 * resident) / capacity : NaN;
@@ -589,11 +668,8 @@ function summarize(time, recordHistory) {
   $("cached-prefixes").textContent = hasCache ? format(cachedPrefixes) : "—";
   $("model-count").textContent = models.size;
   if (recordHistory) {
-    history.active.push(time, active);
-    history.queued.push(time, queued + held);
     history.kv.push(time, occupancy);
   }
-  $("active-peak").textContent = format(history.active.peak);
   $("kv-peak").textContent = format(history.kv.peak);
   const rows = [];
   let totalRate = 0;
@@ -652,6 +728,25 @@ function updateServer(page, time, timeNs, version, recordHistory) {
     page.counters?.completed,
     unchangedUntil,
   );
+  const finishes = page.counters
+    ? ["completed", "rejected", "cancelled", "failed"].reduce(
+        (total, key) => total + BigInt(page.counters[key]),
+        0n,
+      )
+    : undefined;
+  for (const [key, total] of [
+    ["arrivals", page.counters?.requests],
+    ["finishes", finishes],
+  ]) {
+    const bucket = serverBuckets[key];
+    if (bucket.push(timeNs, total, unchangedUntil) && recordHistory)
+      history[key].push(time, bucket.value);
+  }
+  $("activity").textContent = format(serverBuckets.arrivals.value);
+  $("activity-peak").textContent = format(serverBuckets.arrivals.peak);
+  $("activity-span").textContent = serverBuckets.arrivals.duration
+    ? `${(Number(serverBuckets.arrivals.duration) / 1e9).toFixed(2)}s bucket`
+    : "~1s bucket";
   if (recordHistory) {
     history.output.push(time, output);
     history.input.push(time, input);
@@ -667,6 +762,14 @@ function updateServer(page, time, timeNs, version, recordHistory) {
   $("output-peak").textContent = format(serverRates.output_tokens.peak);
   $("input-peak").textContent = format(serverRates.input_tokens.peak);
   $("request-peak").textContent = format(serverRates.completed.peak);
+  for (const [id, key] of [
+    ["output", "output_tokens"],
+    ["input", "input_tokens"],
+    ["request", "completed"],
+  ])
+    $(`${id}-average`).textContent = formatAverage(
+      lifetimeRate(timeNs, page.since_ns, page.counters?.[key]),
+    );
   for (const [id, key] of [
     ["completed", "completed"],
     ["output-total", "output_tokens"],
@@ -690,6 +793,9 @@ function apply(frame) {
     serverSample = undefined;
     for (const key of Object.keys(serverRates))
       serverRates[key] = new CounterRate();
+    for (const key of Object.keys(serverBuckets))
+      serverBuckets[key] = new CounterBucket();
+    activePeak = 0;
     pendingPlots.clear();
     models.clear();
     $("model-grid").replaceChildren();
@@ -707,6 +813,9 @@ function apply(frame) {
   const recordHistory =
     page.type !== "heartbeat" ||
     Object.values(serverRates).some((rate) => rate.count && rate.value !== 0) ||
+    Object.values(serverBuckets).some(
+      (bucket) => Number.isFinite(bucket.value) && bucket.value !== 0,
+    ) ||
     [...models.values()].some(
       (model) =>
         (model.workRate.count && model.workRate.value !== 0) ||
@@ -761,6 +870,7 @@ function connect() {
   if (paused || document.hidden) return;
   clearTimeout(retry);
   for (const rate of Object.values(serverRates)) rate.reset();
+  for (const bucket of Object.values(serverBuckets)) bucket.reset();
   for (const model of models.values()) {
     model.requestRate.reset();
     model.workRate.reset();
