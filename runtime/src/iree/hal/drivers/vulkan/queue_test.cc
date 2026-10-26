@@ -7,6 +7,7 @@
 #include "iree/hal/drivers/vulkan/queue.h"
 
 #include <atomic>
+#include <thread>
 
 #include "iree/base/internal/atomics.h"
 #include "iree/base/threading/mutex.h"
@@ -190,6 +191,57 @@ TEST_P(VulkanQueueTest, ReentrantCompletionKeepsWaitProgressMonotonic) {
   IREE_EXPECT_OK(iree_hal_semaphore_list_wait(
       final_signals, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
   EXPECT_GE(state.observed_epoch.load(), state.nested_epoch.load());
+}
+
+TEST_P(VulkanQueueTest, RetireWhileDeferredDependencyResolves) {
+  // Retirement consumes the queue's frontier, so use a private device rather
+  // than the fixture's shared device.
+  DeviceCreateContext create_context;
+  IREE_ASSERT_OK(create_context.Initialize(iree_allocator_system()));
+  Ref<iree_hal_device_t> device;
+  IREE_ASSERT_OK(iree_hal_driver_create_default_device(
+      driver_, create_context.params(), iree_allocator_system(), device.out()));
+  Ref<iree_hal_device_group_t> group;
+  IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
+      device, create_context.frontier_tracker(), iree_allocator_system(),
+      group.out()));
+  auto family_ordinal =
+      iree_hal_queue_family_ordinal(iree_hal_queue_family(transfer_queue_));
+  auto* queue = reinterpret_cast<iree_hal_vulkan_queue_t*>(
+      iree_hal_device_queue(device, family_ordinal, /*queue_ordinal=*/0));
+  ASSERT_NE(queue, nullptr);
+
+  SemaphoreList waits(device, {0}, {1});
+  SemaphoreList signals(device, {0}, {1});
+  CompletionState state;
+  auto action = MakeCompletionAction(&state);
+  Status status(iree_hal_vulkan_queue_submit_barrier_with_action(
+      queue, waits, signals, /*barriers=*/nullptr, action));
+  iree_hal_resource_release(action.resource);
+  IREE_ASSERT_OK(status.release());
+  EXPECT_EQ(state.callback_count.load(), 0);
+
+  // A dependency may resolve while shutdown joins accepted work. Both the
+  // dependency and retirement can wake the completion worker; cancellation or
+  // promotion must still complete the deferred submission exactly once.
+  std::thread signal_thread([&]() {
+    while (
+        !iree_atomic_load(&queue->stop_requested, iree_memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    IREE_EXPECT_OK(iree_hal_semaphore_signal(waits.semaphores[0], 1,
+                                             /*frontier=*/nullptr));
+  });
+  iree_hal_vulkan_queue_retire_frontier(queue);
+  signal_thread.join();
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_CANCELLED,
+      iree_hal_semaphore_list_wait(signals, iree_infinite_timeout(),
+                                   IREE_ASYNC_WAIT_FLAG_NONE));
+  EXPECT_EQ(state.callback_count.load(), 1);
+  EXPECT_EQ(state.status_code.load(), IREE_STATUS_CANCELLED);
+  EXPECT_EQ(state.destroy_count.load(), 1);
 }
 
 CTS_REGISTER_TEST_SUITE(VulkanQueueTest);

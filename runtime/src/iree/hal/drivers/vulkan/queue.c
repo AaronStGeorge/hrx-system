@@ -2892,7 +2892,9 @@ static iree_status_t iree_hal_vulkan_queue_check_error(
   return iree_status_clone(status);
 }
 
-static iree_status_t iree_hal_vulkan_queue_signal_wakeup(
+// The value reservation and native signal must be ordered together: a later
+// value cannot reach Vulkan before an earlier signal still in flight.
+static iree_status_t iree_hal_vulkan_queue_signal_wakeup_under_lock(
     iree_hal_vulkan_queue_t* queue) {
   const uint64_t new_value =
       (uint64_t)iree_atomic_fetch_add(&queue->wakeup_value, 1,
@@ -5090,7 +5092,7 @@ static void iree_hal_vulkan_queue_deferred_submission_ready(
     // Keep ownership until the wake succeeds. The completion thread takes this
     // same mutex before consuming ready nodes, so it sees the publication even
     // if it wakes before the node is linked.
-    status = iree_hal_vulkan_queue_signal_wakeup(queue);
+    status = iree_hal_vulkan_queue_signal_wakeup_under_lock(queue);
     if (!iree_status_is_ok(status)) {
       status = iree_hal_vulkan_queue_store_error(queue, status);
     }
@@ -5900,7 +5902,10 @@ void iree_hal_vulkan_queue_retire_frontier(iree_hal_vulkan_queue_t* queue) {
   iree_atomic_store(&queue->stop_requested, 1, iree_memory_order_release);
   iree_hal_vulkan_queue_cancel_memory(queue);
   if (queue->completion_thread) {
-    iree_status_t wake_status = iree_hal_vulkan_queue_signal_wakeup(queue);
+    iree_slim_mutex_lock(&queue->submission_mutex);
+    iree_status_t wake_status =
+        iree_hal_vulkan_queue_signal_wakeup_under_lock(queue);
+    iree_slim_mutex_unlock(&queue->submission_mutex);
     IREE_ASSERT(iree_status_is_ok(wake_status) ||
                     iree_status_code(wake_status) == IREE_STATUS_DATA_LOSS,
                 "Vulkan queue completion wakeup failed during teardown");
