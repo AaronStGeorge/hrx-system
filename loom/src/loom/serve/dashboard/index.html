@@ -18,6 +18,14 @@
           <span id="connection">Connecting</span>
           <button id="pause" type="button">Pause</button>
           <button
+            id="scroll"
+            type="button"
+            aria-pressed="true"
+            title="Advance charts with time. Turn off to retain the last activity window; counters stay live."
+          >
+            Scroll on
+          </button>
+          <button
             id="window"
             type="button"
             aria-label="Change chart time range"
@@ -33,6 +41,11 @@
           <div class="stat-label">Output throughput <span>5s avg</span></div>
           <div class="stat-value cyan">
             <strong id="output-rate">—</strong><span>tok/s</span>
+            <span
+              class="peak"
+              title="Highest full five-second average observed in this page session."
+              >peak <b id="output-peak">—</b></span
+            >
           </div>
           <canvas
             id="output-spark"
@@ -47,6 +60,11 @@
           <div class="stat-label">Input work <span>5s avg</span></div>
           <div class="stat-value orange">
             <strong id="input-rate">—</strong><span>tok/s</span>
+            <span
+              class="peak"
+              title="Highest full five-second average observed in this page session."
+              >peak <b id="input-peak">—</b></span
+            >
           </div>
           <canvas
             id="input-spark"
@@ -58,6 +76,11 @@
           <div class="stat-label">Completions <span>5s avg</span></div>
           <div class="stat-value">
             <strong id="request-rate">—</strong><span>req/s</span>
+            <span
+              class="peak"
+              title="Highest full five-second average observed in this page session."
+              >peak <b id="request-peak">—</b></span
+            >
           </div>
           <canvas
             id="request-spark"
@@ -75,6 +98,11 @@
           <div class="stat-label">Active requests <span>now</span></div>
           <div class="stat-value violet">
             <strong id="active">—</strong><span>in flight</span>
+            <span
+              class="peak"
+              title="Highest sampled active count in this page session; requests may finish between samples."
+              >peak <b id="active-peak">—</b></span
+            >
           </div>
           <canvas
             id="active-spark"
@@ -92,6 +120,11 @@
           <div class="stat-label">KV occupancy <span>now</span></div>
           <div class="stat-value green">
             <strong id="kv">—</strong><span>% resident</span>
+            <span
+              class="peak"
+              title="Highest sampled logical KV occupancy percentage in this page session."
+              >peak <b id="kv-peak">—</b></span
+            >
           </div>
           <canvas
             id="kv-spark"

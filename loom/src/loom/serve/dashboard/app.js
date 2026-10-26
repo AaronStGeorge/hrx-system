@@ -25,12 +25,14 @@ class Ring {
     this.values = new Float64Array(capacity);
     this.count = 0;
     this.next = 0;
+    this.peak = NaN;
   }
   push(time, value) {
     this.times[this.next] = time;
     this.values[this.next] = value;
     this.next = (this.next + 1) % this.times.length;
     this.count = Math.min(this.count + 1, this.times.length);
+    if (Number.isFinite(value)) this.peak = Math.max(this.peak || 0, value);
   }
   each(callback) {
     for (let i = 0; i < this.count; ++i) {
@@ -51,9 +53,12 @@ class CounterRate {
     this.values = new BigUint64Array(64);
     this.first = 0;
     this.count = 0;
+    this.peak = NaN;
+    this.value = NaN;
   }
   reset() {
     this.count = 0;
+    this.value = NaN;
   }
   push(time, raw, unchangedUntil = 0n) {
     if (raw === undefined || raw === null) {
@@ -97,9 +102,15 @@ class CounterRate {
       --this.count;
     }
     const elapsed = time - this.times[this.first];
-    return elapsed > 0n
-      ? Number(value - this.values[this.first]) / (Number(elapsed) / 1e9)
-      : NaN;
+    this.value =
+      elapsed > 0n
+        ? Number(value - this.values[this.first]) / (Number(elapsed) / 1e9)
+        : NaN;
+    // A short warm-up interval is not a five-second throughput peak. Baseline
+    // resets preserve observed peaks; replacing the source replaces this object.
+    if (elapsed >= RATE_WINDOW_NS)
+      this.peak = Math.max(this.peak || 0, this.value);
+    return this.value;
   }
 }
 
@@ -134,18 +145,28 @@ const serverRates = Object.fromEntries(
 );
 let socket;
 let paused = false;
+let scrolling = true;
+let pausedTime = 0;
 let retry;
 let retryDelay = 1000;
 let serverIdentity;
 let serverSample;
 let serverRevision;
 let latestTime = 0;
+let historyTime = 0;
 let receivedAt = 0;
 let sequence = 0n;
 let receivedBytes = 0;
 let receivedFrames = 0;
 let dirty = false;
 let framePending = false;
+
+function chartTime(now = performance.now()) {
+  if (paused) return pausedTime;
+  return scrolling && receivedAt
+    ? latestTime + Math.max(0, now - receivedAt)
+    : historyTime;
+}
 
 function draw(canvas, series, now, grid = false) {
   const width = canvas.clientWidth;
@@ -164,12 +185,17 @@ function draw(canvas, series, now, grid = false) {
   const left = grid ? 35 : 0;
   const top = grid ? 10 : 3;
   const bottom = height - 3;
+  const extend = socket?.readyState === WebSocket.OPEN && !paused;
   let maximum = 1;
-  for (const [ring] of series)
+  for (const [ring] of series) {
+    let last = NaN;
     ring.each((time, value) => {
-      if (time >= now - windowMs && Number.isFinite(value))
+      if (time <= now) last = value;
+      if (time >= now - windowMs && time <= now && Number.isFinite(value))
         maximum = Math.max(maximum, value);
     });
+    if (extend && Number.isFinite(last)) maximum = Math.max(maximum, last);
+  }
   maximum *= 1.15;
   if (grid) {
     context.font = "9px ui-monospace, monospace";
@@ -187,8 +213,14 @@ function draw(canvas, series, now, grid = false) {
   }
   for (const [ring, color] of series) {
     const points = [];
+    let lastTime = 0;
+    let lastValue = NaN;
     ring.each((time, value) => {
       if (time >= now - windowMs && time <= now) points.push([time, value]);
+      if (time <= now) {
+        lastTime = time;
+        lastValue = value;
+      }
     });
     const x = (time) =>
       left + ((time - now + windowMs) / windowMs) * (width - left);
@@ -232,6 +264,20 @@ function draw(canvas, series, now, grid = false) {
       segment.push(point);
     }
     paint();
+    // Local time moves the viewport, not the observations. A dotted tail shows
+    // only the last received value; it never enters history, rates, or peaks.
+    if (Number.isFinite(lastValue) && extend) {
+      context.beginPath();
+      context.moveTo(Math.max(left, x(lastTime)), y(lastValue));
+      context.lineTo(width, y(lastValue));
+      context.setLineDash([2, 4]);
+      context.lineWidth = 1;
+      context.strokeStyle = color;
+      context.globalAlpha = 0.5;
+      context.stroke();
+      context.globalAlpha = 1;
+      context.setLineDash([]);
+    }
   }
 }
 
@@ -244,28 +290,24 @@ function redraw(all = false) {
     framePending = false;
     if (!dirty) return;
     dirty = false;
+    const now = chartTime();
     draw(
       $("flow"),
       [
         [history.input, COLORS.input],
         [history.output, COLORS.output],
       ],
-      latestTime,
+      now,
       true,
     );
-    draw(
-      $("request-flow"),
-      [[history.requests, COLORS.input]],
-      latestTime,
-      true,
-    );
+    draw($("request-flow"), [[history.requests, COLORS.input]], now, true);
     draw(
       $("activity-flow"),
       [
         [history.active, COLORS.active],
         [history.queued, COLORS.input],
       ],
-      latestTime,
+      now,
       true,
     );
     for (const [id, key, color] of [
@@ -276,9 +318,9 @@ function redraw(all = false) {
       ["kv-spark", "kv", COLORS.memory],
       ["error-spark", "errors", COLORS.errors],
     ])
-      draw($(id), [[history[key], color]], latestTime);
+      draw($(id), [[history[key], color]], now);
     for (const model of pendingPlots)
-      draw(model.canvas, [[model.ring, model.color]], latestTime);
+      draw(model.canvas, [[model.ring, model.color]], now);
     pendingPlots.clear();
   });
 }
@@ -311,6 +353,7 @@ function createModel(model) {
         ? "Tokens"
         : "Batches";
   const numbers = {};
+  const peaks = {};
   for (const [key, label] of Object.entries({
     active: "Active now",
     queued: "Queued + held",
@@ -322,6 +365,13 @@ function createModel(model) {
     const item = element("div");
     const value = element("strong", "", "—");
     item.append(element("label", "", label), value);
+    if (key !== "completed" && key !== "total") {
+      const peak = element("span", "peak", "peak —");
+      peak.title =
+        "Observed peak in this page session; rates require a full five-second window.";
+      item.append(peak);
+      peaks[key] = peak;
+    }
     metrics.append(item);
     numbers[key] = value;
   }
@@ -349,6 +399,9 @@ function createModel(model) {
     card,
     phase,
     numbers,
+    peaks,
+    activePeak: 0,
+    queuedPeak: 0,
     canvas,
     pool,
     poolValue,
@@ -374,7 +427,7 @@ function unchangedBoundary(previous, version, timeNs) {
     : 0n;
 }
 
-function updateModel(model, time, timeNs, version) {
+function updateModel(model, time, timeNs, version, recordHistory) {
   let state = models.get(model.slot);
   if (state && state.id !== model.incarnation) {
     pendingPlots.delete(state);
@@ -428,13 +481,24 @@ function updateModel(model, time, timeNs, version) {
     unchangedUntil,
   );
   state.revision = version.revision;
-  state.ring.push(time, workRate);
-  pendingPlots.add(state);
+  if (recordHistory) {
+    state.ring.push(time, workRate);
+    pendingPlots.add(state);
+  }
   state.model = model;
   state.fields = fields;
   state.phase.textContent = model.phase;
   state.numbers.active.textContent = format(model.active);
   state.numbers.queued.textContent = format(model.queued + model.held);
+  state.activePeak = Math.max(state.activePeak, model.active);
+  state.queuedPeak = Math.max(state.queuedPeak, model.queued + model.held);
+  for (const [key, value] of Object.entries({
+    active: state.activePeak,
+    queued: state.queuedPeak,
+    work: state.workRate.peak,
+    requests: state.requestRate.peak,
+  }))
+    state.peaks[key].textContent = `peak ${format(value)}`;
   state.numbers.completed.textContent = model.counters
     ? integer(model.counters.completed)
     : "—";
@@ -470,7 +534,7 @@ function updateModel(model, time, timeNs, version) {
     : "";
 }
 
-function summarize(time) {
+function summarize(time, recordHistory) {
   let active = 0,
     queued = 0,
     held = 0,
@@ -524,9 +588,13 @@ function summarize(time) {
   $("cached-sessions").textContent = hasCache ? format(cachedSessions) : "—";
   $("cached-prefixes").textContent = hasCache ? format(cachedPrefixes) : "—";
   $("model-count").textContent = models.size;
-  history.active.push(time, active);
-  history.queued.push(time, queued + held);
-  history.kv.push(time, occupancy);
+  if (recordHistory) {
+    history.active.push(time, active);
+    history.queued.push(time, queued + held);
+    history.kv.push(time, occupancy);
+  }
+  $("active-peak").textContent = format(history.active.peak);
+  $("kv-peak").textContent = format(history.kv.peak);
   const rows = [];
   let totalRate = 0;
   for (const item of mix.values()) totalRate += item.rate;
@@ -565,7 +633,7 @@ function summarize(time) {
     );
 }
 
-function updateServer(page, time, timeNs, version) {
+function updateServer(page, time, timeNs, version, recordHistory) {
   const unchangedUntil = unchangedBoundary(serverRevision, version, timeNs);
   serverRevision = version.revision;
   serverSample = page;
@@ -584,12 +652,21 @@ function updateServer(page, time, timeNs, version) {
     page.counters?.completed,
     unchangedUntil,
   );
-  history.output.push(time, output);
-  history.input.push(time, input);
-  history.requests.push(time, requests);
+  if (recordHistory) {
+    history.output.push(time, output);
+    history.input.push(time, input);
+    history.requests.push(time, requests);
+    history.errors.push(
+      time,
+      page.counters ? Number(page.counters.failed) : NaN,
+    );
+  }
   $("output-rate").textContent = format(output);
   $("input-rate").textContent = format(input);
   $("request-rate").textContent = format(requests);
+  $("output-peak").textContent = format(serverRates.output_tokens.peak);
+  $("input-peak").textContent = format(serverRates.input_tokens.peak);
+  $("request-peak").textContent = format(serverRates.completed.peak);
   for (const [id, key] of [
     ["completed", "completed"],
     ["output-total", "output_tokens"],
@@ -601,7 +678,6 @@ function updateServer(page, time, timeNs, version) {
   ]) {
     $(id).textContent = page.counters ? integer(page.counters[key]) : "—";
   }
-  history.errors.push(time, page.counters ? Number(page.counters.failed) : NaN);
 }
 
 function apply(frame) {
@@ -612,19 +688,33 @@ function apply(frame) {
     serverIdentity = frame.server;
     serverRevision = undefined;
     serverSample = undefined;
-    for (const rate of Object.values(serverRates)) rate.reset();
+    for (const key of Object.keys(serverRates))
+      serverRates[key] = new CounterRate();
     pendingPlots.clear();
     models.clear();
     $("model-grid").replaceChildren();
     for (const key of Object.keys(history)) history[key] = new Ring();
+    latestTime = 0;
+    historyTime = 0;
   }
   const timeNs = BigInt(frame.time_ns);
   const time = Number(timeNs / 1000000n);
-  latestTime = time;
+  latestTime = Math.max(latestTime, time);
   receivedAt = performance.now();
   const page = frame.page;
+  // Settled heartbeats refresh facts without evicting the last activity window.
+  // Only real samples populate history; the local scroll clock adds no samples.
+  const recordHistory =
+    page.type !== "heartbeat" ||
+    Object.values(serverRates).some((rate) => rate.count && rate.value !== 0) ||
+    [...models.values()].some(
+      (model) =>
+        (model.workRate.count && model.workRate.value !== 0) ||
+        (model.requestRate.count && model.requestRate.value !== 0),
+    );
+  if (recordHistory) historyTime = latestTime;
   if (page.type === "server") {
-    updateServer(page, time, timeNs, frame);
+    updateServer(page, time, timeNs, frame, recordHistory);
   } else if (page.type === "models") {
     // A live page establishes absence only for its explicitly scanned slots.
     for (let slot = page.first; slot < page.next; ++slot) {
@@ -635,15 +725,27 @@ function apply(frame) {
         models.delete(slot);
       }
     }
-    if (page.model) updateModel(page.model, time, timeNs, frame);
-    if (page.done) summarize(time);
+    if (page.model) updateModel(page.model, time, timeNs, frame, recordHistory);
+    if (page.done) summarize(time, recordHistory);
   } else if (page.type === "heartbeat") {
     // All pages have been applied and the server has observed no content
     // change. This advances known idleness, not an estimate from silence.
-    updateServer(serverSample, time, timeNs, { revision: serverRevision });
+    updateServer(
+      serverSample,
+      time,
+      timeNs,
+      { revision: serverRevision },
+      recordHistory,
+    );
     for (const state of models.values())
-      updateModel(state.model, time, timeNs, { revision: state.revision });
-    summarize(time);
+      updateModel(
+        state.model,
+        time,
+        timeNs,
+        { revision: state.revision },
+        recordHistory,
+      );
+    summarize(time, recordHistory);
   } else throw Error("Unknown observation page");
   $("delivery").textContent =
     `${receivedFrames} frames · ${bytes(receivedBytes)}`;
@@ -694,6 +796,8 @@ function connect() {
   };
   peer.onclose = () => {
     if (socket !== peer) return;
+    for (const ring of Object.values(history)) ring.push(latestTime, NaN);
+    for (const model of models.values()) model.ring.push(latestTime, NaN);
     state(paused ? "Paused" : "Disconnected");
     if (!paused && !document.hidden) {
       $("notice").textContent =
@@ -706,6 +810,7 @@ function connect() {
 }
 
 $("pause").onclick = () => {
+  pausedTime = chartTime();
   paused = !paused;
   $("pause").textContent = paused ? "Resume" : "Pause";
   clearTimeout(retry);
@@ -714,13 +819,26 @@ $("pause").onclick = () => {
     socket?.close(1000, "Viewer paused");
   } else connect();
 };
+$("scroll").onclick = () => {
+  scrolling = !scrolling;
+  $("scroll").setAttribute("aria-pressed", String(scrolling));
+  $("scroll").textContent = scrolling ? "Scroll on" : "Scroll off";
+  document.querySelectorAll(".chart-footer").forEach((footer) => {
+    footer.lastElementChild.textContent = scrolling ? "NOW" : "LAST ACTIVITY";
+  });
+  redraw(true);
+};
 $("window").onclick = () => {
   windowMs = windowMs === 30000 ? 120000 : 30000;
   $("window").textContent = windowMs === 30000 ? "30 SEC" : "2 MIN";
   document.querySelectorAll(".chart-footer").forEach((footer) =>
     footer.querySelectorAll("span").forEach((tick, index) => {
       tick.textContent =
-        index === 4 ? "NOW" : `−${((windowMs / 1000) * (4 - index)) / 4}s`;
+        index === 4
+          ? scrolling
+            ? "NOW"
+            : "LAST ACTIVITY"
+          : `−${((windowMs / 1000) * (4 - index)) / 4}s`;
     }),
   );
   redraw(true);
@@ -735,11 +853,13 @@ document.addEventListener("visibilitychange", () => {
 });
 new ResizeObserver(() => redraw(true)).observe(document.querySelector("main"));
 setInterval(() => {
+  if (document.hidden) return;
   $("clock").textContent = new Date().toLocaleTimeString(undefined, {
     hour12: false,
   });
   if (receivedAt)
     $("freshness").textContent =
       `Last sample ${((performance.now() - receivedAt) / 1000).toFixed(1)}s ago`;
+  if (scrolling && !paused && receivedAt) redraw(true);
 }, 1000);
 connect();

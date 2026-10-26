@@ -36,8 +36,17 @@ Unchanged snapshots stay off the wire. A small heartbeat settles the rate window
 then backs off to once per minute while idle. New activity still appears at the
 normal sampling cadence; it does not wait for the idle heartbeat.
 
-The browser retains a fixed history and redraws canvas plots as samples arrive.
-The chart's time-range button switches between 30 seconds and two minutes.
+Observed peaks remain visible after work finishes: rate peaks use full
+five-second windows, while activity and occupancy peaks use received samples.
+Peaks belong to this browser page session, survive pause/reconnect, and reset
+when the server or corresponding model is replaced. They describe observed work,
+not a benchmark of the server's maximum capacity.
+
+The browser retains a fixed history. **Scroll on** moves the charts using the
+browser clock, even when the feed is quiet; a dotted tail marks the last received
+value, not new samples. **Scroll off** keeps the last activity window visible
+while counters and peaks continue updating. Neither mode adds network traffic.
+The time-range button switches between 30 seconds and two minutes.
 Pause or a hidden tab releases the live connection. Resuming reads current
 state; it does not replay work that happened while disconnected.
 

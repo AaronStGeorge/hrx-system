@@ -91,6 +91,19 @@ counter reset, non-increasing time, or an unobserved gap longer than the window
 clears that baseline. Revision-qualified unchanged intervals bridge quiet periods
 so the first burst after idleness remains measurable. Rates are never unweighted
 means of differently sized intervals.
+Rate peaks require a complete five-second window, excluding short warm-up
+intervals. Gauge peaks retain the highest received value. Peaks persist across
+idleness and reconnects in this page session; server replacement resets global
+peaks and model incarnation replacement resets that model's peaks.
+
+Scrolling advances the chart viewport on the existing one-second browser clock,
+not by requesting more samples. A dotted tail extends the last received value;
+it does not enter the rate windows, recorded history, or peaks. Disconnects end
+that tail and insert an explicit history gap. Turning scrolling off retains the
+last activity window while live counters continue updating. Settled unchanged
+heartbeats refresh rate baselines without overwriting that retained window.
+There is no additional history buffer, local storage, or dependency.
+
 Serving mix groups recent successful-request rates by modality, independently
 of current active/queued gauges. Short requests can finish between gauge samples;
 a zero current count does not imply zero work over the rate window. Logical KV
