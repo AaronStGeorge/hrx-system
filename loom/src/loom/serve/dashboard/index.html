@@ -191,24 +191,26 @@
             <div class="panel empty">Waiting for models.</div>
           </div>
         </div>
-        <article class="panel activity">
-          <div class="panel-heading">
+        <div>
+          <div class="models-heading">
             <h2>Serving mix</h2>
             <span class="muted">req/s · 5s avg</span>
           </div>
-          <div id="mix" class="mix">
-            <p class="empty">Waiting for models.</p>
-          </div>
-          <div class="cache-summary">
-            <h2>Text cache</h2>
-            <dl>
-              <dt>Cached sessions</dt>
-              <dd id="cached-sessions">—</dd>
-              <dt>Cached prefixes</dt>
-              <dd id="cached-prefixes">—</dd>
-            </dl>
-          </div>
-        </article>
+          <article class="panel activity">
+            <div id="mix" class="mix">
+              <p class="empty">Waiting for models.</p>
+            </div>
+            <div class="cache-summary">
+              <h2>Text cache</h2>
+              <dl>
+                <dt>Cached sessions</dt>
+                <dd id="cached-sessions">—</dd>
+                <dt>Cached prefixes</dt>
+                <dd id="cached-prefixes">—</dd>
+              </dl>
+            </div>
+          </article>
+        </div>
       </section>
       <footer>
         <span id="freshness">Awaiting first sample</span

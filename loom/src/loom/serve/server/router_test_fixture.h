@@ -180,15 +180,22 @@ class ObservationClient {
     while (!iree_net_carrier_query_send_budget(carrier_).slots) {
       Poll();
     }
+    bool completed = false;
     const iree_net_send_params_t params = {
         .generated_prefix = iree_net_send_prefix_from_bytes(
             iree_make_const_byte_span(bytes.data(), bytes.size())),
         .completion_callback = {
-            [](void*, iree_status_t status, iree_host_size_t) {
+            [](void* self, iree_status_t status, iree_host_size_t) {
               IREE_EXPECT_OK(status);
+              *static_cast<bool*>(self) = true;
             },
-            nullptr}};
+            &completed}};
     IREE_ASSERT_OK(iree_net_carrier_send(carrier_, &params));
+    // Join accepted send ownership before a final ACK can be cancelled by
+    // this client's destructor. Receiving server pages remains independent.
+    while (!completed) {
+      Poll();
+    }
   }
   void Ack(const std::string& frame) {
     const auto key = frame.find("\"sequence\":\"");

@@ -12,6 +12,83 @@
 #include "loom/serve/telemetry/sample.h"
 #include "loom/util/json.h"
 
+typedef struct loom_serve_observation_source_t {
+  // Owned serialized source facts, independent of the service lifetime.
+  iree_string_builder_t content;
+  // Content identity and its sampled unchanged boundary.
+  loom_serve_observation_version_t version;
+} loom_serve_observation_source_t;
+
+struct loom_serve_observation_t {
+  // Allocator for metadata and lazily grown, reusable source storage.
+  iree_allocator_t host_allocator;
+  // Borrowed registration truth, accessed only by the serialized owner.
+  loom_serve_registry_t* registry;
+  // Number of model slots, excluding the leading server source.
+  iree_host_size_t capacity;
+  // Monotonic revision advanced by exact source-content changes.
+  uint64_t revision;
+  // Server totals followed by registry-slot sources; empty content is absence.
+  loom_serve_observation_source_t sources[];
+};
+
+iree_status_t loom_serve_observation_allocate(
+    loom_serve_registry_t* registry, iree_allocator_t host_allocator,
+    loom_serve_observation_t** out_observation) {
+  *out_observation = NULL;
+  const iree_host_size_t capacity = loom_serve_registry_capacity(registry);
+  loom_serve_observation_t* observation = NULL;
+  // The already allocated registry has larger entries for this same capacity.
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      host_allocator,
+      sizeof(*observation) + (capacity + 1) * sizeof(*observation->sources),
+      (void**)&observation));
+  observation->host_allocator = host_allocator;
+  observation->registry = registry;
+  observation->capacity = capacity;
+  for (iree_host_size_t i = 0; i <= capacity; ++i) {
+    iree_string_builder_initialize(host_allocator,
+                                   &observation->sources[i].content);
+  }
+  *out_observation = observation;
+  return iree_ok_status();
+}
+
+void loom_serve_observation_free(loom_serve_observation_t* observation) {
+  if (!observation) {
+    return;
+  }
+  for (iree_host_size_t i = 0; i <= observation->capacity; ++i) {
+    iree_string_builder_deinitialize(&observation->sources[i].content);
+  }
+  iree_allocator_free(observation->host_allocator, observation);
+}
+
+uint64_t loom_serve_observation_revision(
+    const loom_serve_observation_t* observation) {
+  return observation->revision;
+}
+
+static iree_status_t loom_serve_observation_update(
+    loom_serve_observation_t* observation, iree_host_size_t index,
+    iree_time_t now, iree_string_view_t content) {
+  loom_serve_observation_source_t* source = &observation->sources[index];
+  if (!iree_string_view_equal(iree_string_builder_view(&source->content),
+                              content)) {
+    // Reserve before changing either the copied facts or their revision.
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_reserve(&source->content, content.size + 1));
+    iree_string_builder_reset(&source->content);
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_string(&source->content, content));
+    source->version.previous_revision = source->version.revision;
+    source->version.previous_time_ns = source->version.time_ns;
+    source->version.revision = ++observation->revision;
+  }
+  source->version.time_ns = now;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_serve_observation_counters(
     const loom_serve_telemetry_counters_t* counters,
     iree_string_builder_t* output) {
@@ -86,9 +163,11 @@ static iree_status_t loom_serve_observation_model(
   return iree_string_builder_append_cstring(output, "]}");
 }
 
-iree_status_t loom_serve_observation_write_page(loom_serve_registry_t* registry,
-                                                iree_host_size_t* cursor,
-                                                iree_string_builder_t* output) {
+iree_status_t loom_serve_observation_sample(
+    loom_serve_observation_t* observation, iree_time_t now,
+    iree_host_size_t* cursor, iree_string_builder_t* output) {
+  loom_serve_registry_t* registry = observation->registry;
+  iree_string_builder_reset(output);
   if (!*cursor) {
     loom_serve_telemetry_counters_t counters;
     const bool available = loom_serve_registry_counters(registry, &counters);
@@ -98,6 +177,8 @@ iree_status_t loom_serve_observation_write_page(loom_serve_registry_t* registry,
     IREE_RETURN_IF_ERROR(
         loom_serve_observation_counters(available ? &counters : NULL, output));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}"));
+    IREE_RETURN_IF_ERROR(loom_serve_observation_update(
+        observation, 0, now, iree_string_builder_view(output)));
     *cursor = 1;
     return iree_ok_status();
   }
@@ -105,22 +186,66 @@ iree_status_t loom_serve_observation_write_page(loom_serve_registry_t* registry,
   const iree_host_size_t capacity = loom_serve_registry_capacity(registry);
   const iree_host_size_t end = first + iree_min(capacity - first, 64);
   iree_host_size_t next = first;
-  const loom_serve_registered_model_t* model = NULL;
-  while (next < end && !model) {
-    const loom_serve_registered_model_t* candidate =
+  iree_status_t status = iree_ok_status();
+  while (next < end && iree_status_is_ok(status)) {
+    const loom_serve_registered_model_t* model =
         loom_serve_registry_at(registry, next++);
-    if (candidate->service.name.size) {
-      model = candidate;
+    if (model->service.name.size) {
+      status = loom_serve_observation_model(model, next - 1, output);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_observation_update(observation, next, now,
+                                             iree_string_builder_view(output));
+    }
+    if (model->service.name.size) {
+      break;
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    *cursor = next == capacity ? 0 : next + 1;
+  }
+  return status;
+}
+
+iree_status_t loom_serve_observation_write_page(
+    const loom_serve_observation_t* observation, iree_host_size_t* cursor,
+    iree_string_builder_t* output,
+    loom_serve_observation_version_t* out_version) {
+  *out_version = (loom_serve_observation_version_t){0};
+  if (!*cursor) {
+    const loom_serve_observation_source_t* source = &observation->sources[0];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+        output, iree_string_builder_view(&source->content)));
+    *out_version = source->version;
+    *cursor = 1;
+    return iree_ok_status();
+  }
+  const iree_host_size_t first = *cursor - 1;
+  const iree_host_size_t capacity = observation->capacity;
+  const iree_host_size_t end = first + iree_min(capacity - first, 64);
+  iree_host_size_t next = first;
+  const loom_serve_observation_source_t* source = NULL;
+  while (next < end && !source) {
+    const loom_serve_observation_source_t* candidate =
+        &observation->sources[++next];
+    if (iree_string_builder_size(&candidate->content)) {
+      source = candidate;
     }
   }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output,
       "{\"type\":\"models\",\"first\":%zu,\"next\":%zu,\"done\":%s,\"model\":",
       first, next, next == capacity ? "true" : "false"));
-  IREE_RETURN_IF_ERROR(
-      model ? loom_serve_observation_model(model, next - 1, output)
-            : iree_string_builder_append_cstring(output, "null"));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+      output,
+      source ? iree_string_builder_view(&source->content) : IREE_SV("null")));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}"));
+  if (source) {
+    *out_version = source->version;
+  } else {
+    // Empty ranges were sampled too; sending later does not refresh absence.
+    out_version->time_ns = observation->sources[next].version.time_ns;
+  }
   *cursor = next == capacity ? 0 : next + 1;
   return iree_ok_status();
 }

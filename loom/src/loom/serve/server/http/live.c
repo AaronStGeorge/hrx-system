@@ -21,10 +21,14 @@ typedef struct loom_serve_http_live_reader_t {
   loom_serve_websocket_t* socket;
   // Next current-state page; never a pointer into a model or event stream.
   iree_host_size_t cursor;
-  // Sampling generation at the start of the current sweep.
+  // Content revision at the start of the current sweep.
   uint64_t generation;
   // Last delivered sequence, echoed verbatim by the client after application.
   uint64_t sequence;
+  // Last accepted page or heartbeat, for this reader's idle cadence.
+  iree_time_t sent_ns;
+  // Short heartbeat cadence through the client's rolling-rate settling window.
+  iree_time_t settle_until_ns;
   // A delivered page has not yet been applied by the client.
   bool awaiting_ack;
 } loom_serve_http_live_reader_t;
@@ -34,14 +38,20 @@ struct loom_serve_http_live_t {
   iree_allocator_t host_allocator;
   // Existing HTTP owner, borrowed through final observer retirement.
   loom_serve_http_server_t* server;
-  // Registration truth, consulted only on the serialized serving turn.
-  loom_serve_registry_t* registry;
+  // Shared copied current state; sampling cost does not multiply with readers.
+  loom_serve_observation_t* observation;
   // Externally visible origins, borrowed from application configuration.
   iree_string_view_list_t origins;
   // Shared proactor alarm, enabled only while readers exist.
   loom_serve_timer_t timer;
-  // Monotonic sampling generation, independent of reader acknowledgement.
-  uint64_t generation;
+  // Cursor of an in-progress bounded sampling sweep; zero starts/ends a sweep.
+  iree_host_size_t sample_cursor;
+  // A timer tick has requested a sweep that has not yet completed.
+  bool sampling;
+  // Conservative time through which every source in the last sweep was sampled.
+  iree_time_t sample_time_ns;
+  // Start of the in-progress sweep, published only when that sweep completes.
+  iree_time_t sample_start_ns;
   // Total slots, one fewer than transport capacity to reserve control credit.
   iree_host_size_t capacity;
   // Occupied reader slots.
@@ -72,13 +82,16 @@ iree_status_t loom_serve_http_live_allocate(loom_serve_http_server_t* server,
       (void**)&live));
   live->host_allocator = host_allocator;
   live->server = server;
-  live->registry = registry;
   live->origins = origins;
   live->capacity = capacity;
   loom_serve_timer_initialize(&live->timer);
   iree_async_proactor_t* proactor = NULL;
   iree_status_t status = iree_async_proactor_pool_get(
       loom_serve_http_server_proactor_pool(server), 0, &proactor);
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_observation_allocate(registry, host_allocator,
+                                             &live->observation);
+  }
   if (iree_status_is_ok(status)) {
     loom_serve_timer_configure(&live->timer, proactor,
                                iree_make_duration_ms(250));
@@ -136,9 +149,12 @@ void loom_serve_http_live_accept(loom_serve_http_live_t* live,
       for (iree_host_size_t i = 0; i < live->capacity; ++i) {
         if (!live->readers[i].connection) {
           live->readers[i] = (loom_serve_http_live_reader_t){
-              .connection = connection,
-              .socket = socket,
-              .generation = live->generation - 1};
+              .connection = connection, .socket = socket};
+          // A new reader's baseline must not predate its admission, even when
+          // another reader kept the shared cache alive through disconnection.
+          live->sample_cursor = 0;
+          live->sampling = true;
+          live->sample_start_ns = iree_time_now();
           ++live->count;
           break;
         }
@@ -206,9 +222,38 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
       &live->timer, stopping, live->count != 0, &timer_progress, &tick);
   *out_progress |= timer_progress;
   stopping |= !iree_status_is_ok(timer_status);
-  if (tick) {
-    ++live->generation;
+  if (tick && !live->sampling) {
+    live->sampling = true;
+    live->sample_start_ns = iree_time_now();
   }
+  // Complete one shared sweep before publishing its copied state. Work stays
+  // under the router's quota, and no blocked reader delays this sampler.
+  iree_status_t sample_status = iree_ok_status();
+  while (!stopping && live->sampling && quota &&
+         iree_status_is_ok(sample_status)) {
+    --quota;
+    iree_string_builder_t scratch;
+    iree_string_builder_initialize_with_storage(
+        live->storage, sizeof(live->storage), &scratch);
+    sample_status = loom_serve_observation_sample(
+        live->observation, iree_time_now(), &live->sample_cursor, &scratch);
+    iree_string_builder_deinitialize(&scratch);
+    live->sampling = live->sample_cursor != 0;
+    if (!live->sampling) {
+      live->sample_time_ns = live->sample_start_ns;
+    }
+    *out_progress = true;
+  }
+  if (!iree_status_is_ok(sample_status)) {
+    // Shared observation storage failure closes its readers, not the server.
+    loom_serve_http_server_record_error(live->server, sample_status);
+    iree_status_free(sample_status);
+    live->sample_cursor = 0;
+    live->sampling = false;
+    stopping = true;
+  }
+  const uint64_t generation =
+      loom_serve_observation_revision(live->observation);
   const iree_host_size_t start = live->cursor;
   for (iree_host_size_t i = 0; i < live->capacity; ++i) {
     const iree_host_size_t index = (start + i) % live->capacity;
@@ -229,12 +274,18 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
     --quota;
     live->cursor = (index + 1) % live->capacity;
     iree_status_t status = loom_serve_http_live_receive(reader, out_progress);
-    if (reader->connection && iree_status_is_ok(status) &&
-        !reader->awaiting_ack &&
+    const iree_time_t now = iree_time_now();
+    const bool sweep =
+        reader->cursor || !reader->sequence || reader->generation != generation;
+    const iree_duration_t interval = iree_make_duration_ms(
+        reader->sent_ns <= reader->settle_until_ns ? 1000 : 60000);
+    if (reader->connection && iree_status_is_ok(status) && !live->sampling &&
+        !reader->awaiting_ack && generation &&
         loom_serve_http_connection_can_send(reader->connection) &&
-        (reader->cursor || reader->generation != live->generation)) {
-      if (!reader->cursor) {
-        reader->generation = live->generation;
+        (sweep || now - reader->sent_ns >= interval)) {
+      if (sweep && !reader->cursor) {
+        reader->generation = generation;
+        reader->settle_until_ns = now + iree_make_duration_ms(5000);
       }
       iree_string_builder_t output;
       iree_string_builder_initialize_with_storage(
@@ -245,16 +296,25 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
       status = iree_string_builder_append_format(
           &output,
           "{\"version\":1,\"server\":\"%" PRIu64 ":%" PRIu64
-          "\",\"sequence\":\"%" PRIu64 "\",\"time_ns\":\"%" PRId64
-          "\",\"page\":",
-          identity.created_ns, identity.ordinal, ++reader->sequence,
-          iree_time_now());
+          "\",\"sequence\":\"%" PRIu64 "\",\"page\":",
+          identity.created_ns, identity.ordinal, ++reader->sequence);
+      loom_serve_observation_version_t version = {.time_ns =
+                                                      live->sample_time_ns};
       if (iree_status_is_ok(status)) {
-        status = loom_serve_observation_write_page(live->registry,
-                                                   &reader->cursor, &output);
+        status =
+            sweep ? loom_serve_observation_write_page(
+                        live->observation, &reader->cursor, &output, &version)
+                  : iree_string_builder_append_cstring(
+                        &output, "{\"type\":\"heartbeat\"}");
       }
       if (iree_status_is_ok(status)) {
-        status = iree_string_builder_append_cstring(&output, "}");
+        status = iree_string_builder_append_format(
+            &output,
+            ",\"time_ns\":\"%" PRId64 "\",\"revision\":\"%" PRIu64
+            "\",\"previous_revision\":\"%" PRIu64
+            "\",\"previous_time_ns\":\"%" PRId64 "\"}",
+            version.time_ns ? version.time_ns : now, version.revision,
+            version.previous_revision, version.previous_time_ns);
       }
       if (iree_status_is_ok(status)) {
         const iree_string_view_t view = iree_string_builder_view(&output);
@@ -262,6 +322,7 @@ iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
             reader->socket, LOOM_SERVE_WEBSOCKET_TEXT,
             iree_make_const_byte_span(view.data, view.size));
         reader->awaiting_ack = iree_status_is_ok(status);
+        reader->sent_ns = now;
       }
       iree_string_builder_deinitialize(&output);
       *out_progress = true;
@@ -292,5 +353,6 @@ void loom_serve_http_live_free(loom_serve_http_live_t* live) {
   }
   loom_serve_timer_set_observer(&live->timer, (loom_serve_wake_callback_t){0});
   loom_serve_timer_deinitialize(&live->timer);
+  loom_serve_observation_free(live->observation);
   iree_allocator_free(live->host_allocator, live);
 }

@@ -32,6 +32,10 @@ elastic text-state bytes exclude fixed buffers, weights, and workspace. A modali
 without a particular observation leaves it unavailable rather than inventing a
 value.
 
+Unchanged snapshots stay off the wire. A small heartbeat settles the rate window,
+then backs off to once per minute while idle. New activity still appears at the
+normal sampling cadence; it does not wait for the idle heartbeat.
+
 The browser retains a fixed history and redraws canvas plots as samples arrive.
 The chart's time-range button switches between 30 seconds and two minutes.
 Pause or a hidden tab releases the live connection. Resuming reads current

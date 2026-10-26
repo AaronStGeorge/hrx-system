@@ -485,18 +485,48 @@ TEST_P(HttpRouterRegistrationTest, LiveCreditDoesNotRetainRemovedModel) {
               R"({"name":"dynamic","admission":"drained","definition":{"kind":"embedding","prepare":"/model/prepare.loom","control":"/model/control.loom","sources":["/model/kernel.loom"],"assets":"/assets"}})"))
           .find("HTTP/1.1 202"),
       0u);
+  {
+    // A new subscriber starts from an admission-time sample, not the previous
+    // shared cache retained by the stalled observer. Its first sweep must
+    // contain the new incarnation, without first publishing the retired one.
+    ObservationClient newcomer;
+    ASSERT_NO_FATAL_FAILURE(newcomer.OpenLive(server_));
+    ASSERT_NO_FATAL_FAILURE(newcomer.ReadUpgrade());
+    newcomer.Ack(newcomer.WebSocketFrame());
+    bool found = false;
+    for (size_t i = 0; i < 6; ++i) {
+      const auto page = newcomer.WebSocketFrame();
+      if (page.find("\"name\":\"dynamic\"") != std::string::npos) {
+        EXPECT_NE(page.find("\"incarnation\":\"2\""), std::string::npos);
+        found = true;
+      }
+      newcomer.Ack(page);
+    }
+    EXPECT_TRUE(found);
+  }
   observer.Ack(first);
   bool replacement_seen = false;
-  for (size_t i = 0; i < 6; ++i) {
+  // Shared current-state copies may have been sampled before removal. They
+  // retain bytes, not the destroyed service. The next sample must replace the
+  // incarnation even though this reader held credit through both mutations.
+  while (!replacement_seen) {
     const auto frame = observer.WebSocketFrame();
-    if (frame.find("\"name\":\"dynamic\"") != std::string::npos) {
-      EXPECT_NE(frame.find("\"incarnation\":\"2\""), std::string::npos);
+    if (frame.find("\"name\":\"dynamic\"") != std::string::npos &&
+        frame.find("\"incarnation\":\"2\"") != std::string::npos) {
       replacement_seen = true;
     }
     observer.Ack(frame);
   }
   EXPECT_TRUE(replacement_seen);
   EXPECT_EQ(Control("unregister", "dynamic").find("HTTP/1.1 202"), 0u);
+  bool removal_seen = false;
+  while (!removal_seen) {
+    const auto frame = observer.WebSocketFrame();
+    removal_seen = frame.find(
+                       "\"first\":5,\"next\":6,\"done\":true,"
+                       "\"model\":null") != std::string::npos;
+    observer.Ack(frame);
+  }
 }
 
 TEST_P(HttpRouterRegistrationTest,

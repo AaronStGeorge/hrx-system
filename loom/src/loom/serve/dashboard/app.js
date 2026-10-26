@@ -55,7 +55,7 @@ class CounterRate {
   reset() {
     this.count = 0;
   }
-  push(time, raw) {
+  push(time, raw, unchangedUntil = 0n) {
     if (raw === undefined || raw === null) {
       this.reset();
       return NaN;
@@ -63,6 +63,19 @@ class CounterRate {
     const value = BigInt(raw);
     if (this.count) {
       const last = (this.first + this.count - 1) % this.times.length;
+      // A matching source revision proves the old value persisted through a
+      // sampled boundary. Bridge quiet periods, never an unobserved gap or a
+      // reconnect, so the first burst after idleness remains measurable.
+      if (
+        time - this.times[last] > RATE_WINDOW_NS &&
+        unchangedUntil >= time - RATE_WINDOW_NS &&
+        unchangedUntil > this.times[last] &&
+        value >= this.values[last]
+      ) {
+        this.first = last;
+        this.count = 1;
+        this.times[last] = time - RATE_WINDOW_NS;
+      }
       if (
         time <= this.times[last] ||
         time - this.times[last] > RATE_WINDOW_NS ||
@@ -124,6 +137,8 @@ let paused = false;
 let retry;
 let retryDelay = 1000;
 let serverIdentity;
+let serverSample;
+let serverRevision;
 let latestTime = 0;
 let receivedAt = 0;
 let sequence = 0n;
@@ -350,7 +365,16 @@ function createModel(model) {
   };
 }
 
-function updateModel(model, time, timeNs) {
+// Only an exact revision match authorizes extending the last observed value.
+// Skipped revisions remain a gap even when the final counters happen to match.
+function unchangedBoundary(previous, version, timeNs) {
+  if (previous === version.revision) return timeNs;
+  return previous === version.previous_revision
+    ? BigInt(version.previous_time_ns)
+    : 0n;
+}
+
+function updateModel(model, time, timeNs, version) {
   let state = models.get(model.slot);
   if (state && state.id !== model.incarnation) {
     pendingPlots.delete(state);
@@ -396,8 +420,14 @@ function updateModel(model, time, timeNs) {
     model.kind === "image"
       ? imageTotal
       : model.counters?.[model.kind === "text" ? "output_tokens" : "batches"];
-  const workRate = state.workRate.push(timeNs, workTotal);
-  state.requests = state.requestRate.push(timeNs, model.counters?.completed);
+  const unchangedUntil = unchangedBoundary(state.revision, version, timeNs);
+  const workRate = state.workRate.push(timeNs, workTotal, unchangedUntil);
+  state.requests = state.requestRate.push(
+    timeNs,
+    model.counters?.completed,
+    unchangedUntil,
+  );
+  state.revision = version.revision;
   state.ring.push(time, workRate);
   pendingPlots.add(state);
   state.model = model;
@@ -535,12 +565,53 @@ function summarize(time) {
     );
 }
 
+function updateServer(page, time, timeNs, version) {
+  const unchangedUntil = unchangedBoundary(serverRevision, version, timeNs);
+  serverRevision = version.revision;
+  serverSample = page;
+  const output = serverRates.output_tokens.push(
+    timeNs,
+    page.counters?.output_tokens,
+    unchangedUntil,
+  );
+  const input = serverRates.input_tokens.push(
+    timeNs,
+    page.counters?.input_tokens,
+    unchangedUntil,
+  );
+  const requests = serverRates.completed.push(
+    timeNs,
+    page.counters?.completed,
+    unchangedUntil,
+  );
+  history.output.push(time, output);
+  history.input.push(time, input);
+  history.requests.push(time, requests);
+  $("output-rate").textContent = format(output);
+  $("input-rate").textContent = format(input);
+  $("request-rate").textContent = format(requests);
+  for (const [id, key] of [
+    ["completed", "completed"],
+    ["output-total", "output_tokens"],
+    ["input-total", "input_tokens"],
+    ["errors", "failed"],
+    ["rejected", "rejected"],
+    ["cancelled", "cancelled"],
+    ["batches", "batches"],
+  ]) {
+    $(id).textContent = page.counters ? integer(page.counters[key]) : "—";
+  }
+  history.errors.push(time, page.counters ? Number(page.counters.failed) : NaN);
+}
+
 function apply(frame) {
   if (frame.version !== 1 || BigInt(frame.sequence) !== sequence + 1n)
     throw Error("Unsupported or discontinuous observation stream");
   sequence = BigInt(frame.sequence);
   if (serverIdentity !== frame.server) {
     serverIdentity = frame.server;
+    serverRevision = undefined;
+    serverSample = undefined;
     for (const rate of Object.values(serverRates)) rate.reset();
     pendingPlots.clear();
     models.clear();
@@ -553,39 +624,7 @@ function apply(frame) {
   receivedAt = performance.now();
   const page = frame.page;
   if (page.type === "server") {
-    const output = serverRates.output_tokens.push(
-      timeNs,
-      page.counters?.output_tokens,
-    );
-    const input = serverRates.input_tokens.push(
-      timeNs,
-      page.counters?.input_tokens,
-    );
-    const requests = serverRates.completed.push(
-      timeNs,
-      page.counters?.completed,
-    );
-    history.output.push(time, output);
-    history.input.push(time, input);
-    history.requests.push(time, requests);
-    $("output-rate").textContent = format(output);
-    $("input-rate").textContent = format(input);
-    $("request-rate").textContent = format(requests);
-    for (const [id, key] of [
-      ["completed", "completed"],
-      ["output-total", "output_tokens"],
-      ["input-total", "input_tokens"],
-      ["errors", "failed"],
-      ["rejected", "rejected"],
-      ["cancelled", "cancelled"],
-      ["batches", "batches"],
-    ]) {
-      $(id).textContent = page.counters ? integer(page.counters[key]) : "—";
-    }
-    history.errors.push(
-      time,
-      page.counters ? Number(page.counters.failed) : NaN,
-    );
+    updateServer(page, time, timeNs, frame);
   } else if (page.type === "models") {
     // A live page establishes absence only for its explicitly scanned slots.
     for (let slot = page.first; slot < page.next; ++slot) {
@@ -596,8 +635,15 @@ function apply(frame) {
         models.delete(slot);
       }
     }
-    if (page.model) updateModel(page.model, time, timeNs);
+    if (page.model) updateModel(page.model, time, timeNs, frame);
     if (page.done) summarize(time);
+  } else if (page.type === "heartbeat") {
+    // All pages have been applied and the server has observed no content
+    // change. This advances known idleness, not an estimate from silence.
+    updateServer(serverSample, time, timeNs, { revision: serverRevision });
+    for (const state of models.values())
+      updateModel(state.model, time, timeNs, { revision: state.revision });
+    summarize(time);
   } else throw Error("Unknown observation page");
   $("delivery").textContent =
     `${receivedFrames} frames · ${bytes(receivedBytes)}`;

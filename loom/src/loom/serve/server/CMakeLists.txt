@@ -172,6 +172,27 @@ endif()
 if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
+    observation_test
+  SRCS
+    "observation_test.cc"
+  DEPS
+    ::observation
+    ::registry
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm::test_support
+    loom::serve::service
+    loom::serve::telemetry::record
+    loom::serve::telemetry::sample
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
     maintenance_test
   SRCS
     "maintenance_test.cc"

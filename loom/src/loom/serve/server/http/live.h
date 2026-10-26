@@ -16,9 +16,10 @@ extern "C" {
 
 typedef struct loom_serve_http_live_t loom_serve_http_live_t;
 
-// Allocates bounded reader metadata and one shared 16 KiB formatting buffer.
-// No timer runs without readers. Server, registry, origins, and wake target
-// remain borrowed until shutdown advance retires the timer and every reader.
+// Allocates bounded reader metadata, shared current-state copies, and one 16
+// KiB formatting buffer. No timer runs without readers. Server, registry,
+// origins, and wake target remain borrowed until shutdown advance retires the
+// timer and every reader.
 iree_status_t loom_serve_http_live_allocate(loom_serve_http_server_t* server,
                                             loom_serve_registry_t* registry,
                                             iree_string_view_list_t origins,
@@ -35,10 +36,13 @@ void loom_serve_http_live_accept(loom_serve_http_live_t* live,
                                  loom_serve_http_connection_t* connection,
                                  const loom_serve_http_request_t* request);
 
-// Advances at most quota reader messages/pages, after ordinary service work.
+// Advances at most quota sample pages/reader messages, after ordinary service
+// work.
 // One application-acknowledged page may be outstanding per reader. Timer ticks
-// coalesce state, not accepted transport bytes. Only a shared timer failure
-// propagates; invalid or disconnected peers cannot fail model execution.
+// sample shared state at four hertz. Changed state starts a sweep; otherwise a
+// small heartbeat settles rates at one hertz for five seconds, then one/minute.
+// No unchanged snapshot traffic or per-reader service sampling. Only timer
+// failure propagates; observation failures cannot fail model execution.
 iree_status_t loom_serve_http_live_advance(loom_serve_http_live_t* live,
                                            bool stopping,
                                            iree_host_size_t quota,
