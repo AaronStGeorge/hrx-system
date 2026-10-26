@@ -94,7 +94,17 @@ static iree_status_t loom_check_compile_append_result(
     loom_check_diagnostic_collector_t* collector, const loomc_result_t* result,
     bool* out_succeeded) {
   *out_succeeded = loomc_result_succeeded(result);
-  return loom_check_compile_append_result_diagnostics(collector, result);
+  IREE_RETURN_IF_ERROR(
+      loom_check_compile_append_result_diagnostics(collector, result));
+  // An operation may reject input without a diagnostic. Empty annotation
+  // matching must not turn that failed operation into a successful check.
+  if (!*out_succeeded &&
+      !loom_check_diagnostic_collector_has_error(collector)) {
+    return iree_make_status(
+        (iree_status_code_t)loomc_result_status_code(result),
+        "compiler operation failed without an error diagnostic");
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_check_compile_admit_module(
@@ -601,11 +611,8 @@ static iree_status_t loom_check_compile_get_artifact_pass_program(
 iree_status_t loom_check_compile_artifact(
     const loom_check_emit_provider_request_t* request,
     const loom_check_compile_artifact_options_t* options,
-    loomc_source_t** out_artifact_source, loomc_source_t** out_report_source) {
-  *out_artifact_source = NULL;
-  if (out_report_source != NULL) {
-    *out_report_source = NULL;
-  }
+    loomc_result_t** out_result) {
+  *out_result = NULL;
   loom_check_compile_session_t* session = request->environment->compile_session;
   loomc_module_t* module = request->public_module;
   iree_status_t status = iree_ok_status();
@@ -638,37 +645,32 @@ iree_status_t loom_check_compile_artifact(
       .target_profile = target_profile,
       .emit_options = &emit_options,
   };
-  loomc_result_t* result = NULL;
   if (iree_status_is_ok(status) && pass_program != NULL) {
     status = loom_check_compile_artifact_module(
         session, pass_program, module, &compile_options,
-        request->diagnostic_collector, request->host_allocator, &result);
-  }
-  if (iree_status_is_ok(status) && result != NULL) {
-    const loomc_artifact_t* artifact = loomc_result_artifact_at(result, 0);
-    status = iree_status_from_loomc(loomc_artifact_create_source(
-        artifact, LOOMC_SOURCE_FORMAT_UNKNOWN,
-        loomc_allocator_from_iree(request->host_allocator),
-        out_artifact_source));
-  }
-  if (iree_status_is_ok(status) && result != NULL &&
-      out_report_source != NULL) {
-    for (loomc_host_size_t i = 1;
-         iree_status_is_ok(status) && i < loomc_result_artifact_count(result);
-         ++i) {
-      const loomc_artifact_t* artifact = loomc_result_artifact_at(result, i);
-      if (artifact->kind == LOOMC_ARTIFACT_KIND_REPORT) {
-        status = iree_status_from_loomc(loomc_artifact_create_source(
-            artifact, LOOMC_SOURCE_FORMAT_UNKNOWN,
-            loomc_allocator_from_iree(request->host_allocator),
-            out_report_source));
-      }
-    }
+        request->diagnostic_collector, request->host_allocator, out_result);
   }
 
-  loomc_result_release(result);
   loomc_target_profile_release(target_profile);
   return status;
+}
+
+iree_status_t loom_check_compile_select_artifact(
+    const loomc_result_t* result, loomc_artifact_kind_t kind,
+    iree_string_view_t format, const loomc_artifact_t** out_artifact) {
+  *out_artifact = NULL;
+  for (loomc_host_size_t i = 0; i < loomc_result_artifact_count(result); ++i) {
+    const loomc_artifact_t* artifact = loomc_result_artifact_at(result, i);
+    if (artifact->kind == kind &&
+        iree_string_view_equal(iree_string_view_from_loomc(artifact->format),
+                               format)) {
+      *out_artifact = artifact;
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "compiler did not produce a '%.*s' artifact",
+                          (int)format.size, format.data);
 }
 
 iree_status_t loom_check_execute_compile(

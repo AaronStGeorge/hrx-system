@@ -179,15 +179,23 @@ iree_status_t loom_check_compile_with_native_module(
     const loom_check_emit_provider_request_t* request,
     loom_check_compile_native_module_consumer_fn_t consumer, void* user_data);
 
-// Compiles the request's admitted public module to one target artifact. Public
-// diagnostics are appended to |request->diagnostic_collector|. A successful
-// primary artifact is returned as an immutable source owned by the caller.
-// When requested, |out_report_source| receives the emitted compile report as a
-// second owned source. Both outputs remain NULL when compilation is rejected.
+// Compiles the request's admitted public module to target artifacts. Public
+// diagnostics are appended to |request->diagnostic_collector|. On success,
+// |out_result| owns the artifacts until loomc_result_release. Compiler
+// rejection with error diagnostics leaves it NULL for annotation matching;
+// rejection without an error diagnostic fails. Consumers select and map only
+// the artifacts they inspect.
 iree_status_t loom_check_compile_artifact(
     const loom_check_emit_provider_request_t* request,
     const loom_check_compile_artifact_options_t* options,
-    loomc_source_t** out_artifact_source, loomc_source_t** out_report_source);
+    loomc_result_t** out_result);
+
+// Selects a required output from a successful compiler result by kind and
+// format. The returned artifact borrows |result|. Missing requested output is
+// a check failure, including optional outputs unsupported by an emitter.
+iree_status_t loom_check_compile_select_artifact(
+    const loomc_result_t* result, loomc_artifact_kind_t kind,
+    iree_string_view_t format, const loomc_artifact_t** out_artifact);
 
 // Lowers the request's admitted public module through LoomC, then invokes
 // |consumer| on the successfully compiled module. User diagnostics suppress

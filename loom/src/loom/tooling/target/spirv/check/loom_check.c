@@ -11,6 +11,7 @@
 #include "loom/target/tool/spirv.h"
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/requirements.h"
+#include "loomc/iree.h"
 
 typedef struct loom_spirv_loom_check_emit_request_t {
   // Whether to lower source IR to Low before SPIR-V emission.
@@ -199,10 +200,22 @@ static iree_status_t loom_spirv_loom_check_emit_provider_execute(
       .lower_source_to_low = emit_request.lower_source_to_low,
       .control_flow_lowering = emit_request.control_flow_lowering,
   };
-  loomc_source_t* artifact_source = NULL;
+  loomc_result_t* compile_result = NULL;
   iree_status_t status =
-      loom_check_compile_artifact(request, &compile_options, &artifact_source,
-                                  /*out_report_source=*/NULL);
+      loom_check_compile_artifact(request, &compile_options, &compile_result);
+  const loomc_artifact_t* artifact = NULL;
+  if (iree_status_is_ok(status) && compile_result != NULL) {
+    status = loom_check_compile_select_artifact(
+        compile_result, LOOMC_ARTIFACT_KIND_EXECUTABLE,
+        compile_options.artifact_format, &artifact);
+  }
+  loomc_source_t* artifact_source = NULL;
+  if (iree_status_is_ok(status) && artifact != NULL) {
+    status = iree_status_from_loomc(loomc_artifact_create_source(
+        artifact, LOOMC_SOURCE_FORMAT_UNKNOWN,
+        loomc_allocator_from_iree(request->host_allocator), &artifact_source));
+  }
+  loomc_result_release(compile_result);
 
   const loomc_byte_span_t source_contents =
       loomc_source_contents(artifact_source);

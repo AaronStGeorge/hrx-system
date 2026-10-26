@@ -55,6 +55,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::vm::bytecode::disassembler
+    loom::binding::c::loomc
     loom::tools::loom-check::execute
   PUBLIC
 )
