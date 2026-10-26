@@ -700,6 +700,9 @@ static iree_status_t loom_parse_op_into(
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(
       loom_finalize_op(parser, kind, vtable, parsed, location, &op));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
+  }
   return loom_module_attach_op_comments(parser->module, op, comments,
                                         comment_count);
 }

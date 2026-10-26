@@ -2857,6 +2857,23 @@ TEST_F(ParserTest, DuplicateOpResultName) {
   EXPECT_EQ(diagnostics[0].origin_column, 5u);
 }
 
+TEST_F(ParserTest, CommentedDuplicateResultPreservesSourceDiagnostic) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%current = test.constant 0 : i32\n"
+      "// Retained source comment on the failed operation.\n"
+      "%current = test.constant 1 : i32\n"
+      "test.use %later_missing : i32\n");
+  ASSERT_EQ(diagnostics.size(), 2u);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "current");
+  EXPECT_EQ(diagnostics[0].origin_line, 3u);
+  ExpectError(diagnostics[1],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
+  EXPECT_EQ(GetStringParam(diagnostics[1], 0), "later_missing");
+  EXPECT_EQ(diagnostics[1].origin_line, 4u);
+}
+
 TEST_F(ParserTest, ResultBodyOpRequiresLhsNames) {
   const auto& diagnostics = ParseExpectErrors("test.constant 42 : i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
