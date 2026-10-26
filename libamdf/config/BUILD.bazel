@@ -10,7 +10,7 @@ package(default_visibility = ["//visibility:public"])
 
 bool_flag(
     name = "enabled",
-    build_setting_default = False,
+    build_setting_default = True,
 )
 
 SUPPORTED_FAMILIES = [
